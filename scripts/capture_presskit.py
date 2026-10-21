@@ -114,6 +114,17 @@ def showcase_index():
             label = f[len(m) + 1:-4].replace("_", " ", 1)
             out.append(f"<div class=c><a href='{f}'><img loading=lazy src='{f}'></a><div>{html.escape(label)}</div></div>")
         out.append("</div>")
+    # Trailers (scripts/capture_trailer.sh), each with its contact sheet.
+    videos = sorted(f for f in os.listdir(SHOWCASE) if f.endswith(".mp4"))
+    if videos:
+        out.append("<h2>Trailers</h2><div class=row>")
+        for v in videos:
+            sheet = "sheet_" + v[:-4] + ".jpg"
+            poster = f" poster='{sheet}'" if os.path.exists(os.path.join(SHOWCASE, sheet)) else ""
+            out.append(f"<div class=c style='width:820px'><video controls preload=none width=800{poster} "
+                       f"src='{v}'></video><div>{html.escape(v[:-4].replace('_', ' '))}"
+                       + (f" &middot; <a href='{sheet}'>contact sheet</a>" if poster else "") + "</div></div>")
+        out.append("</div>")
     others = [f for f in stills if not any(f.startswith(m + "_") for m in VALLEYS)]
     if others:
         out.append("<h2>Other</h2><div class=row>")

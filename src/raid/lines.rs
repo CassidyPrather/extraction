@@ -16,17 +16,44 @@ pub fn the(name: &str) -> String {
     }
 }
 
+/// A compass word for a direction on the map (north is -Z).
+pub fn bearing_word(d: bevy::math::Vec2) -> &'static str {
+    const WORDS: [&str; 8] = [
+        "north",
+        "north-east",
+        "east",
+        "south-east",
+        "south",
+        "south-west",
+        "west",
+        "north-west",
+    ];
+    // Clockwise from north.
+    let a = d.x.atan2(-d.y).rem_euclid(std::f32::consts::TAU);
+    WORDS[((a / (std::f32::consts::TAU / 8.0)).round() as usize) % 8]
+}
+
+/// Which way and about how far, from `from` to `to` (map x, z): "north-
+/// west, 480 m", to the nearest ten metres.
+pub fn way(from: [f32; 2], to: [f32; 2]) -> String {
+    let d = bevy::math::Vec2::from(to) - bevy::math::Vec2::from(from);
+    let m = (d.length() / 10.0).round() * 10.0;
+    format!("{}, {m:.0} m", bearing_word(d))
+}
+
 /// The `n`th way of saying something, round and round.
 pub fn pick<'a>(ways: &[&'a str], n: u32) -> &'a str {
     ways[n as usize % ways.len()]
 }
 
-/// Called to a rendezvous: `{rv}` is where.
+/// Called to a rendezvous: `{rv}` is where, `{b}` which way and how far
+/// from you ("north-west, 480 m": the map only says RV, so the name alone
+/// tells someone new nothing).
 pub const CALLED: &[&str] = &[
-    "Truck: \"Copy. Heading for {rv}. Give me two minutes.\"",
-    "Truck: \"On my way to {rv}. Two minutes.\"",
-    "Truck: \"{rv}. Two minutes. Keep your head down.\"",
-    "Truck: \"Heard you. {rv}, two minutes.\"",
+    "Truck: \"Copy. {rv}, {b}. Two minutes.\"",
+    "Truck: \"On my way to {rv}, {b}. Two minutes.\"",
+    "Truck: \"{rv}, {b}. Two minutes. Keep low.\"",
+    "Truck: \"Heard you. {rv}, {b}. Two minutes.\"",
 ];
 
 /// Called again while on the way: `{s}` is seconds left.
@@ -43,11 +70,11 @@ pub const ARRIVED: &[&str] = &[
     "Truck: \"At {rv}. Engine's running. Five minutes.\"",
 ];
 
-/// Called while waiting at `{rv}`.
+/// Called while waiting at `{rv}`, `{b}` from you.
 pub const WAITING: &[&str] = &[
-    "Truck: \"I'm at {rv}. Get in the back.\"",
-    "Truck: \"Still at {rv}. Don't make me wait.\"",
-    "Truck: \"{rv}. I can hear them. Hurry.\"",
+    "Truck: \"I'm at {rv}, {b}. Get in the back.\"",
+    "Truck: \"Still at {rv}, {b}. Hurry.\"",
+    "Truck: \"{rv}, {b}. I hear them.\"",
 ];
 
 pub const GAVE_UP: &[&str] = &[
@@ -281,15 +308,15 @@ pub const CALLED_OUT: &[&str] = &[
 /// capital.
 pub fn fill(line: &str, rv: &str, s: f32, b: &str) -> String {
     let place = the(rv);
-    let lead = format!("\"{{rv}}");
+    let mut c = place.chars();
+    let cap: String = c
+        .next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default();
     let mut out = line.to_string();
-    if out.contains(&lead) {
-        let mut c = place.chars();
-        let cap: String = c
-            .next()
-            .map(|f| f.to_uppercase().chain(c).collect())
-            .unwrap_or_default();
-        out = out.replace(&lead, &format!("\"{cap}"));
+    // Leading a sentence, it takes a capital.
+    for lead in ["\"", ". "] {
+        out = out.replace(&format!("{lead}{{rv}}"), &format!("{lead}{cap}"));
     }
     out.replace("{rv}", &place)
         .replace("{s}", &format!("{s:.0}"))
@@ -320,6 +347,15 @@ mod tests {
             );
         }
         out
+    }
+
+    /// Which way: clockwise from north (-Z), to the nearest ten metres.
+    #[test]
+    fn the_way_reads_like_a_compass() {
+        assert_eq!(way([0.0, 0.0], [0.0, -100.0]), "north, 100 m");
+        assert_eq!(way([0.0, 0.0], [141.0, -141.0]), "north-east, 200 m");
+        assert_eq!(way([40.0, 270.0], [-232.0, -128.0]), "north-west, 480 m");
+        assert_eq!(way([0.0, 0.0], [-50.0, 3.0]), "west, 50 m");
     }
 
     /// Every line, filled with every place, fits the wrist whole.
@@ -363,7 +399,13 @@ mod tests {
         for pool in pools {
             for line in pool {
                 for rv in rendezvous_names() {
-                    lines.push(fill(line, &rv, 120.0, "north-west"));
+                    // The truck gives a way and distance; chatter, a way.
+                    let b = if line.contains("{rv}") {
+                        "north-west, 1500 m"
+                    } else {
+                        "north-west"
+                    };
+                    lines.push(fill(line, &rv, 120.0, b));
                 }
             }
         }
@@ -409,12 +451,12 @@ mod tests {
         assert_eq!(the("The pass"), "the pass");
         assert_eq!(the("Bus depot"), "the bus depot");
         assert_eq!(
-            fill(CALLED[2], "The pass", 0.0, ""),
-            "Truck: \"The pass. Two minutes. Keep your head down.\""
+            fill(CALLED[2], "The pass", 0.0, "east, 300 m"),
+            "Truck: \"The pass, east, 300 m. Two minutes. Keep low.\""
         );
         assert_eq!(
-            fill(CALLED[0], "Hunting lodge", 0.0, ""),
-            "Truck: \"Copy. Heading for the hunting lodge. Give me two minutes.\""
+            fill(CALLED[0], "Hunting lodge", 0.0, "north-west, 480 m"),
+            "Truck: \"Copy. The hunting lodge, north-west, 480 m. Two minutes.\""
         );
     }
 

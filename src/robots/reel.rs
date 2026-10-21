@@ -13,7 +13,8 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
-//! hound running across), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
+//! hound running across), `rubble` (a walker over a heap of broken
+//! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
@@ -72,6 +73,8 @@ fn reel(
     mut zaps: MessageWriter<super::indoor::CrawlerZap>,
     mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -242,6 +245,41 @@ fn reel(
                     ));
                 });
                 e
+            }
+            "rubble" => {
+                // A heap of broken blocks across its way (Destruction's
+                // debris layer): do its feet stand on them?
+                use avian3d::prelude::*;
+                let mid = eye + flat * 6.0;
+                for (k, (dx, dz, w, h, d)) in [
+                    (0.0f32, 0.0f32, 1.4f32, 0.3f32, 1.0f32),
+                    (1.2, 0.3, 0.6, 0.18, 0.7),
+                    (-1.0, -0.2, 0.5, 0.45, 0.5),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let c = mid + right * dx + flat * dz;
+                    let y = zone.ground(c.x, c.z);
+                    commands.spawn((
+                        Name::new("Reel rubble"),
+                        RigidBody::Static,
+                        Collider::cuboid(w, h, d),
+                        CollisionLayers::new(
+                            crate::world::Layer::Debris,
+                            [crate::world::Layer::World],
+                        ),
+                        Mesh3d(meshes.add(Cuboid::new(w, h, d))),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::srgb(0.42, 0.4, 0.37),
+                            perceptual_roughness: 0.95,
+                            ..default()
+                        })),
+                        Transform::from_xyz(c.x, y + h * 0.5, c.z)
+                            .with_rotation(Quat::from_rotation_y(0.3 * k as f32)),
+                    ));
+                }
+                spawn_walker(&mut commands, &zone, walk_start, job(walk_start))
             }
             _ => spawn_walker(&mut commands, &zone, walk_start, job(walk_start)),
         };
