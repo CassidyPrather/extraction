@@ -263,8 +263,16 @@ Run on every valley, seeds 1-6 for two minutes each without robots and
   Depot ramp positions, as if Marrow's underground floors were built
   in every valley. Anything
   that uses it to tell "in a site" from "through the ground" (the lost
-  items' rescue, the monkey's own check) gets those wrong. Open, for
-  Underground.
+  items' rescue, the monkey's own check) gets those wrong. Underground
+  has since widened `floor_under` to count a point as in a site up to its
+  room's own roof (not a flat 4.5 m) and given Sallow its own site (the
+  gallery at (-6, 172)). On their tree the same seeds found no "under"
+  finding near any site; what's left clusters at the maps' ±329 m edges
+  (things thrown over the rim falling away, which the lost items' rescue
+  brings back). They couldn't reproduce Marrow's floors in Sallow. The
+  long run plays several maps in one process (`CHAOS_MAP=all`), so a
+  stale cache from the map before would explain it. Re-run after the
+  merge, and send Underground the seed, frame and item if it shows again.
 - Small items (rounds, ammunition boxes, a pistol) still go through the
   terrain now and then at 5-15 m/s, mostly dropped from a hand pushed
   into the ground; the lost items' rescue brings them back. Open:
@@ -333,9 +341,12 @@ Throws through something: 47 of ~1,600 before, 4 after.
 
 ### Open
 
-- A water tower's face (Marrow Creek, about (231, 21, -194)): a round and
-  an artifact shard thrown at it end up behind it. Not looked into: the
-  tower's colliders are Models: world's.
+- (Closed: not a hole.) A water tower's face (Marrow Creek, about
+  (231, 21, -194)). Models: world checked it: the colliders are solid
+  cylinders a little proud of the model. The two "crossings" were small
+  rounds sinking a few millimetres into the curved foot and shaft on
+  contact, and both came to rest on the near side. The crossing check
+  now ignores a step that ends within 2 cm past a face (`SHALLOW`).
 - A sliver (an old photo, a letter) thrown at the ground at 25-50 m/s
   now and then passes the terrain's surface for a tick before
   `ground_skin` has it back up; a cleaning rod thrown end-on, spinning,
