@@ -122,7 +122,8 @@ impl Block {
 }
 
 fn blocks(map: &MapDef, hm: &Heightmap) -> Vec<Block> {
-    map.placements
+    let mut out: Vec<Block> = map
+        .placements
         .iter()
         .filter(|p| !crate::underground::is_site(&p.prefab) && p.prefab != "anomaly_core")
         .map(|p| {
@@ -140,7 +141,22 @@ fn blocks(map: &MapDef, hm: &Heightmap) -> Vec<Block> {
                 top: base + f[1],
             }
         })
-        .collect()
+        .collect();
+    // Every underground kiosk, the entrances' and the exits', by its shell
+    // (its apron is ground): a kiosk in front of a sentry hides what's
+    // behind it like any shed.
+    for s in crate::map_lint::solids(map) {
+        if let Some(shell) = s.shell {
+            out.push(Block {
+                at: shell.at,
+                half: shell.half,
+                yaw: shell.yaw,
+                reach: crate::geom::len(shell.half),
+                top: hm.height(shell.at) + crate::underground::FOOTPRINT[1],
+            });
+        }
+    }
+    out
 }
 
 /// What one sentry sees, cell by cell of a walk grid.
