@@ -39,6 +39,9 @@ name the walker's; the other kinds play at the cue's gain plus their
 - **The dam slaps back.** A shot fired 100 m out from Sallow's dam face
   comes back (`echo.slap`, from its mirror image 200 m off) `SLAP_UNDER`
   LU under the shot as you hear it, and still clears the wind.
+- **Music stays under you.** A tape at 1 m sits `TAPE_UNDER_STEP` LU
+  under your own footstep, and the music (tapes, the gramophone, the
+  piano, the organ) joins the world sounds' masking gauge above.
 - **Your breath is heard as far as robots hear it.** Fully winded, a
   breath (`body.breath`) is audible over the wind to within `HEARD_RATIO`
   of `interact::gestures::BREATH` m.
@@ -63,7 +66,9 @@ KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
 HEARD_RATIO = (0.6, 1.6)  # a break heard by ears over robots' reach
-WORLD = ("break.", "flock.", "heavy.", "animal.", "water.")
+WORLD = ("break.", "flock.", "heavy.", "animal.", "water.", "tape.", "gramophone",
+         "piano.", "organ")
+TAPE_UNDER_STEP = 3.0  # LU a tape at 1 m sits under your own footstep
 SLAP_UNDER = (6.0, 20.0)  # LU the dam's echo sits under the shot
 NIGHT_KEPT = 0.75   # share of a warning's calm range kept over the night beds
 NIGHT_BED = [("wind", 0.0), ("insects", 0.0), ("rustle", 0.0)]
@@ -272,6 +277,15 @@ def run(sets, out):
         flags += bad
         row.append(f"{target} {margin:+.1f} dB at {band} Hz" + (" (masked)" if bad else ""))
     lines.append(f"  In a Hush (placed sounds muffled to {hush_fc:g} Hz): " + ", ".join(row))
+    # Music (src/radio): a tape in your hand stays under your own footstep.
+    names = {c["name"]: c for c in mix}
+    if "tape.music" in names and names["tape.music"]["set"] in sets:
+        tape = dict(names["tape.music"], dist=1.0)
+        under = am.heard(names["step"], sets) - am.heard(tape, sets)
+        bad = under < TAPE_UNDER_STEP
+        flags += bad
+        lines.append(f"  A tape at 1 m: {under:+.1f} LU under your footstep "
+                     f"(wants >= {TAPE_UNDER_STEP:g})" + (" (!)" if bad else ""))
     # Breath: ears against robots.
     if "body/breath" in sets:
         robots = float(re.search(r"pub const BREATH: f32 = ([\d.]+)",

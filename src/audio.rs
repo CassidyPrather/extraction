@@ -3388,6 +3388,7 @@ fn score_drive(
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut score: Query<&mut ScoreNode>,
     epilogue: Option<Res<crate::raid::epilogue::Epilogue>>,
+    music: Option<Res<crate::radio::MusicNear>>,
     mut spoke: MessageReader<crate::robot_voice::Spoke>,
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
@@ -3424,7 +3425,11 @@ fn score_drive(
     }
     // The ending (`raid::epilogue`) is played without it.
     let ending = epilogue.is_some_and(|e| e.active());
+    // A tape, a station, a piano or a gramophone near you (`radio`): one
+    // musical layer at a time, so the score steps aside.
+    let music = music.is_some_and(|m| m.0);
     let at_truck = ending
+        || music
         || match raid.as_deref().map(|r| &r.phase) {
             None | Some(Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. }) => true,
             Some(Phase::TruckWaiting { .. }) => {
