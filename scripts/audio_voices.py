@@ -39,6 +39,9 @@ name the walker's; the other kinds play at the cue's gain plus their
 - **The dam slaps back.** A shot fired 100 m out from Sallow's dam face
   comes back (`echo.slap`, from its mirror image 200 m off) `SLAP_UNDER`
   LU under the shot as you hear it, and still clears the wind.
+- **Your breath is heard as far as robots hear it.** Fully winded, a
+  breath (`body.breath`) is audible over the wind to within `HEARD_RATIO`
+  of `interact::gestures::BREATH` m.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -60,7 +63,7 @@ KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
 HEARD_RATIO = (0.6, 1.6)  # a break heard by ears over robots' reach
-WORLD = ("break.", "flock.", "heavy.")
+WORLD = ("break.", "flock.", "heavy.", "animal.", "water.")
 SLAP_UNDER = (6.0, 20.0)  # LU the dam's echo sits under the shot
 NIGHT_KEPT = 0.75   # share of a warning's calm range kept over the night beds
 NIGHT_BED = [("wind", 0.0), ("insects", 0.0), ("rustle", 0.0)]
@@ -85,8 +88,24 @@ def add_sets(sets, out):
     groups.append(("voice/heavy/horn", "horn.wav"))
     groups.append(("device/stone_ping", "ping.wav"))
     groups.append(("device/crackle", "crackle.wav"))
+    # Stand-ins for recordings not yet fetched (src/synth_foley.rs).
+    sd = out / "standins"
+    synth = ROOT / "src" / "synth_foley.rs"
+    swavs = sorted(sd.glob("*.wav")) if sd.exists() else []
+    if not swavs or min(p.stat().st_mtime for p in swavs) < synth.stat().st_mtime:
+        print("stand-ins: rendering (cargo test synth_foley::tests::renders_for_the_audit)")
+        subprocess.run(["cargo", "test", "--profile", "fast", "--lib", "--",
+                        "synth_foley::tests::renders_for_the_audit"],
+                       cwd=ROOT, check=True, capture_output=True)
+    for p in sorted(sd.glob("*_0.wav")):
+        name = p.name[:-len("_0.wav")].replace("__", "/")
+        if name not in sets:
+            groups.append((name, "../standins/" + p.name[:-len("0.wav")] + "*.wav"))
     for name, pattern in groups:
-        files = [aa.measure(p, "oneshot") for p in sorted(d.glob(pattern))]
+        base = d
+        if pattern.startswith("../standins/"):
+            base, pattern = sd, pattern[len("../standins/"):]
+        files = [aa.measure(p, "oneshot") for p in sorted(base.glob(pattern))]
         if not files:
             continue
         loud = [f["momentary_max"] for f in files]
@@ -253,6 +272,15 @@ def run(sets, out):
         flags += bad
         row.append(f"{target} {margin:+.1f} dB at {band} Hz" + (" (masked)" if bad else ""))
     lines.append(f"  In a Hush (placed sounds muffled to {hush_fc:g} Hz): " + ", ".join(row))
+    # Breath: ears against robots.
+    if "body/breath" in sets:
+        robots = float(re.search(r"pub const BREATH: f32 = ([\d.]+)",
+                                 (ROOT / "src" / "interact" / "gestures.rs").read_text()).group(1))
+        ears = am.audible_range("body.breath", sets, mix, [("wind", 0.0)])
+        bad = not HEARD_RATIO[0] <= ears / robots <= HEARD_RATIO[1]
+        flags += bad
+        lines.append(f"  Your breath, fully winded: heard {ears} m by you, {robots:g} m by robots"
+                     + (" (!)" if bad else ""))
     # The dam's slapback against the shot itself.
     if "echo.slap" in [c["name"] for c in mix]:
         shot = next(c for c in mix if c["name"] == "gun.shot")
