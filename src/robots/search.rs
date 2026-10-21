@@ -373,6 +373,9 @@ fn call_out(
     mut log: ResMut<MindLog>,
 ) {
     let now = time.elapsed_secs();
+    // A cooldown run out is the same as none (and the robot may be long
+    // gone): keep only the live ones.
+    last.retain(|_, t| now - *t < CALL_COOLDOWN);
     let mut director = director;
     for n in noticed.read() {
         if last.get(&n.robot).is_some_and(|t| now - t < CALL_COOLDOWN) {
@@ -480,6 +483,7 @@ fn wrist_lines(
     }
     let now = time.elapsed_secs();
     let (per_robot, last, n) = &mut *said;
+    per_robot.retain(|_, t| now - *t < LINE_PER_ROBOT);
     for (is_lost, robot, at, about) in events {
         if about != Some(me)
             || at.distance(gt.translation()) > LINE_NEAR

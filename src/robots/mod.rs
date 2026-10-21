@@ -362,6 +362,7 @@ fn wreck_loot(
             continue;
         }
         commands.entity(e).insert(Salvaged);
+        timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
         for (i, drop) in loot
             .0

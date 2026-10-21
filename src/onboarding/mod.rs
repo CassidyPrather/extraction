@@ -1154,6 +1154,8 @@ fn watch_uses(
             complete(&mut ob, Goal::Dressing, &mut out);
         }
     }
+    // Then forget what's no longer in hand (each dressing ever held stayed).
+    dressings.retain(|e| held.contains(*e));
     for c in calls.read() {
         // A call only counts once you're out where the truck can come.
         if locals.contains(c.player) && raid.phase != Phase::AtBase {

@@ -1977,6 +1977,8 @@ fn door_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_some_and(|b| b != door.open) {
@@ -2907,6 +2909,8 @@ fn gadget_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::climbing::Grapnel;
+    // (Only what still exists: every grapnel the Surge ever rolled stayed.)
+    grapnel_was.retain(|e, _| grapnels.contains(*e));
     let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
     for (e, g, gt) in &grapnels {
         let now = match g {
@@ -3057,6 +3061,7 @@ fn drone_and_zip_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::camera_drone::Flight;
+    flight_was.retain(|e, _| drones.contains(*e));
     let mut out: Vec<(&str, &str, Vec3)> = Vec::new();
     for (e, d, gt) in &drones {
         let before = flight_was.insert(e, d.flight);
