@@ -271,7 +271,8 @@ pixels a degree, and shoots it with and without the landmark, time
 frozen. What differs, inside the landmark's box in the picture, is the
 landmark as the eye gets it through fog, trees and dark. It counts if it
 covers 25 pixels at a contrast of 0.08, or its lamp shows (4 pixels at
-0.4). Every vantage needs one.
+0.4 anywhere in its box: a glow over a lattice mast needn't touch the
+lattice). Every vantage needs one.
 
 Marrow Creek, first run:
 
@@ -287,6 +288,11 @@ there, the fog and the dark say otherwise. So:
   enough to steer by carries a steady red lamp at its highest point, as
   masts and chimneys do (red and steady: the drones' beacons are amber
   and blink). A lamp a few pixels across outshines the fog and the dark.
+  Its glow is soft: after dark Visual design's fogged `Halo` (reach
+  320 m), by day a disc facing the eye fading to nothing at 1.4 m, unfogged
+  (fog on an added glow adds the fog's colour over all of it). The first
+  glow, a hard additive sphere, read in Capture's stills as a flat pink
+  coin wider than a steeple at 60 m: a marker on the sky.
   With them (first at 0.22 m, since enlarged to 0.35 m): drizzle 4 of 4,
   night 4 of 4. Fog stays hard past 150 m,
   which is what fog is for (`map_lint::FOG_SIGHT`).

@@ -453,11 +453,19 @@ fn sentry_mind(
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
     minds: Query<&super::senses::MindSeed>,
+    others: Query<(&Brain, &Awareness, &Robot), (Without<Sentry>, Without<super::heavy::Heavy>)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let heard: Vec<(Vec3, f32, Option<Entity>)> =
         noises.read().map(|n| (n.at, n.radius, n.source)).collect();
+    let engaged: Vec<Entity> = others
+        .iter()
+        .filter(|(brain, aware, robot)| {
+            !robot.wrecked && matches!(brain, Brain::Engage) && aware.can_see_target
+        })
+        .filter_map(|(_, aware, _)| aware.target)
+        .collect();
     let decoys: Vec<Vec3> = flying
         .iter()
         .filter(|(it, _, v)| {
@@ -556,7 +564,12 @@ fn sentry_mind(
         }
         *t = head_transform(s.foot, s.yaw, s.pitch);
         // The gun: in view and in its arc, a warning, then bursts.
-        let in_view = seen.is_some_and(|p| rules::in_view(bearing(p), s.yaw));
+        // Someone another machine is already shooting at, it leaves be: a
+        // sentry piling in on a player already under fire is no puzzle.
+        // (A heavy on your heels is another matter: lure it into the arc
+        // and it takes the rounds.)
+        let busy = aware.target.is_some_and(|t| engaged.contains(&t));
+        let in_view = !busy && seen.is_some_and(|p| rules::in_view(bearing(p), s.yaw));
         let gun = children.iter().find_map(|c| guns.get(c).ok());
         let armed = gun.is_some_and(|(_, part)| part.alive());
         match s.gun.step(in_view && armed, dt) {
@@ -572,7 +585,15 @@ fn sentry_mind(
                     continue;
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
-                let aim = p + Vec3::Y * 1.1;
+                // Its first burst is a warning: wide, and short of you,
+                // kicking up the ground at your feet.
+                let warning = s.gun.warning();
+                let aim = if warning {
+                    let back = (muzzle - p) * Vec3::new(1.0, 0.0, 1.0);
+                    p + back.normalize_or_zero() * 1.5
+                } else {
+                    p + Vec3::Y * 1.1
+                };
                 // Seeded by the machine and how many it has fired, so it
                 // scatters the same whatever else is in the world.
                 s.fired += 1;
@@ -585,7 +606,7 @@ fn sentry_mind(
                     speed: 600.0,
                     damage: DAMAGE,
                     projectiles: 1,
-                    spread: SPREAD,
+                    spread: if warning { SPREAD * 6.0 } else { SPREAD },
                     recoil: 0.0,
                     seed,
                 });
@@ -1072,7 +1093,7 @@ pub(crate) mod tests {
         let (sentry, heavy) = {
             let mut c = vr.app.world_mut().commands();
             let s = spawn_sentry(&mut c, &zone, at, 0.0, 120.0, Vec2::new(48.0, 236.0));
-            let h_at = zone.on_ground(40.0, 220.0);
+            let h_at = zone.on_ground(40.0, 223.0);
             let h = super::super::heavy::spawn_heavy(
                 &mut c,
                 &zone,
@@ -1089,7 +1110,7 @@ pub(crate) mod tests {
             vr.app.world_mut().flush();
             (s, h)
         };
-        vr.stand(zone.on_ground(40.0, 208.0), 0.0);
+        vr.stand(zone.on_ground(40.0, 214.0), 0.0);
         vr.step(90 * 15);
         let fired = vr
             .app

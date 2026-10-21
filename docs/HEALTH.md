@@ -20,6 +20,8 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| bdb219a | 17:30 | | rechecks: 4 of 6 pass | full suite next |
+| 7505d1e | 16:50 | | stopped at 615/790: 6 FAILED | |
 | 5d2ad52 | 15:00 | 7/7 clean, five valleys (Rime Fell seeds 1-3 all extracted); Sallow seed 1 timed out stuck | stopped at 132 (main moved): `a_stormglass_is_a_roof_in_the_surge` FAILED | |
 | 3037c2b | 13:40 | 8/8 clean | not run (main moved) | marrow_creek seed 2 still dies early (now to the sentry) |
 | 881fc3b | 13:15 | not run | 727 passed, 7 failed (render gauges not run) | |
@@ -31,24 +33,20 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of 881fc3b's full suite (727 passed, 7 failed). Det. = fails every time, alone too.
+As of bdb219a; det. = fails every time, alone too.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `destruction::tests::the_wrecks_come_apart_where_kit_modelled_them` (wreck_lorry 8 parts, 7 expected) | det. | model vs. table drift, since b08309d3 (kit-models) | Destruction | they're fixing |
-| `world::underground::tests::crawlers_walk_their_rounds_in_the_dark` (Sallow: a crawler out of the site at (-9.1, 26.8, 141.3)) | det. | | Underground | they're fixing |
-| `wildlife::flock::tests::birds_never_go_inside_walls_or_ground_and_settle_again` | det. | birds pinned on new tall geometry (the 56 m furnace stack, Sallow's dam) | Wildlife | fixed on claude/polish-wildlife 3c521d79 |
-| `soak::tests::entity_keyed_locals_forget_what_is_gone`: touch.rs:170 `last`, radio/visuals.rs:222-223 `arm` `crank`, destruction/breach.rs:535 `geos`, world/snow.rs:277 `last` | det. | entity-keyed Locals never pruned (a leak in a long session) | coordinator, Radio, Destruction, Visual design, Audio | each fixed on its branch; Soak listed touch.rs as bounded and tightened the lint (any `.remove(` no longer counts as pruning), which found a real leak in anomaly/harvest.rs |
-| `soak::save_fuzz::a_poisoned_career_loads_whole_and_in_the_world` (3 gone, 2 expected) | det. | a cassette player and its cell went "nowhere" together | Soak | fixed on claude/polish-soak |
-| `world::storm::tests::a_bolt_comes_down_to_where_it_struck` | det. | | Visual design | fixed on main by e16f7954 (after 881fc3b); to confirm |
-| Sim: Sallow seed 1's raider stuck 15 min at (-246, -157), 3 m short of a waypoint (-249, -155) on the way to Sallow Head; timed out | **intermittent**: same binary and seed extracted twice | the raider never gave up an unreachable waypoint (fixed on main, c2cdcf2: three sticks within 4 m block the cell and replan). Sims weren't reproducible: with the default thread pool, the same seed diverges by t=24 s; with `EXTRACTION_THREADS=1`, 438 events over 380 s are identical, so the source is multi-threaded execution (system-order ambiguity or Avian's parallel solver), not dt or RNG | coordinator (src/sim) | trap fixed; suggested sims default to one pool thread |
-| `anomaly::surge::tests::a_stormglass_is_a_roof_in_the_surge` | ? | | Anomalies | to confirm on 7505d1e |
-| `perf::tests::headless_ticks_hold_their_floor` (62.7 units > 60 at 4 threads) | **flaky**: passes alone 2/2 | load-sensitive gauge: reference and busy tick sampled at different moments | Performance | fixed on claude/polish-performance 5e2a955 (per-tick ratio to a reference timed right after, lower quartile: 21-26 units alone and loaded) |
+| `robots::sentry::tests::a_heavy_walks_into_its_fire` ("it opened up on you") | det. | | Heavy machine | routed 17:30 |
+| `soak::physics::items_spawned_inside_things_are_not_launched` (grenade_pin, ppsh_drum, ammo_762r_repack, crossbow_bolt launched at 12-15 m/s) | det. | new items' colliders/masses | Armoury (Soak cc) | routed 17:30 |
+| Sims weren't reproducible from their seed (multi-threaded) | det. | system order / parallel physics | Verifier | fixed on this branch (f9d69960): sims run single-threaded; `a_seed_plays_the_same_raid_twice` |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| stormglass, destruction shutters, `no_prefab_fights_or_floats`, `heaps_settle` (failed on 7505d1e) | bdb219a | Anomalies, Destruction, World models, Soak |
+| the wreck parts, crawlers' rounds, birds, Soak's lint and save fuzz, the storm bolt, the perf flake | by bdb219a | Destruction, Underground, Wildlife, Soak + owners, Visual design, Performance |
 | `persist::tests::save_and_restore_round_trip` (radio's tapes doubled by each load) | 881fc3b | Radio |
 | `animals_can_be_shot_and_their_carcasses_collected` | 6789739 | Wildlife |
 | `nothing_lies_on_a_scenes_note`, `sim::indoor` ×2 (Sallow's drowned prefabs), `animals_can_be_shot` | 6789739 | Story, World models, Wildlife |
