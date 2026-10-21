@@ -210,10 +210,11 @@ passes (15 minutes of Zone clock, so a real bite out of the hour between
 Surges, and refused if the Surge would come before morning); the hour
 moves on one step (dusk to night, night to dawn: "Grey light under the
 door."); a night behind a wedged door cools the Zone's attention. If you
-lie down loud (the second feeling or worse), the radio warns you in the
-dark and something comes to the door before light: two walkers from the
-Gate (Robot minds' `NightVisit`) that batter the wedge down and search the
-cabin for up to ten minutes.
+lie down loud (the second feeling or worse), you don't sleep through: the
+radio wakes you in the dark, 9 minutes into the night (the hour hasn't
+moved on), as two walkers set out from the Gate for your door (Robot
+minds' `NightVisit`). You have their walk to bar, hide or take the window;
+they batter a wedged door down and search the cabin for up to ten minutes.
 
 **The truck** waits one night if you radio it from the safehouse (press
 the radio); untold, it leaves the rendezvous while you sleep.
@@ -254,11 +255,9 @@ valley is loud enough that most nights there bring the walkers. (Before
 the raider counted only its waking time, bots that slept went home at once
 with nothing: the clock had spent their raid.)
 
-One thing to know: the night passes in a frame, and the visitors leave the
-Gate 20 s after the warning, so they arrive after you've woken, not while
-you sleep. It plays as being run out of the cabin at first light. If it
-should be a fight in the dark, the bed would have to hold you until they
-reach the door; that's a call for Robot minds and the coordinator.
+Those numbers are from when a visit came after you'd slept the whole night
+(the walkers arrived at first light). Since then a loud night wakes you in
+the dark as they set out (above); see the rerun below.
 
 Cut from this: hunger (there still is none; food is the kitchen's and the
 offerings'), a sleep timer or a menu (you lie down; a night is a night),
