@@ -11,10 +11,13 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use super::heavy_look::{lod_name, lod_range};
-use super::plough::{AUGER, BankPiece, CHUTE_TOP, HATCH, Plough, PloughCell, PloughHatch};
+use super::plough::{
+    AUGER, BANK_STEP, BankPiece, CHUTE_TOP, HATCH, LanePiece, Plough, PloughCell, PloughHatch,
+};
 use super::{PartRole, RobotPart};
 use crate::models::{ModelMaterials, ModelNode, ModelState, Models, model_nodes};
 use crate::render::materials::MaterialLibrary;
+use extraction_core::plough as rules;
 
 const MODEL: &str = "models/robots/plough.glb";
 /// Where the model's pieces sit on its root (each exported about its own
@@ -33,7 +36,7 @@ pub struct PloughLookPlugin;
 
 impl Plugin for PloughLookPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress, run_parts));
+        app.add_systems(Update, (dress, run_parts, dress_lanes, gallery));
     }
 }
 
@@ -337,5 +340,160 @@ fn run_parts(
                 ht.rotation = Quat::from_rotation_x(a);
             }
         }
+    }
+}
+
+/// The packed lane: a strip of trodden-flat snow, a little darker and
+/// smoother than what lies either side.
+fn dress_lanes(
+    mut commands: Commands,
+    lanes: Query<Entity, (With<LanePiece>, Without<Dressed>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut made: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+) {
+    if lanes.is_empty() {
+        return;
+    }
+    let (mesh, mat) = made
+        .get_or_insert_with(|| {
+            (
+                meshes.add(
+                    Plane3d::default()
+                        .mesh()
+                        .size(rules::BLADE, BANK_STEP * 1.6),
+                ),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.72, 0.74, 0.78),
+                    perceptual_roughness: 0.45,
+                    ..default()
+                }),
+            )
+        })
+        .clone();
+    for e in &lanes {
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(mat.clone()),
+            Transform::IDENTITY,
+            NotShadowCaster,
+            ChildOf(e),
+        ));
+        commands.entity(e).insert(Dressed);
+    }
+}
+
+/// `--gallery plough[:after]`: Rime Fell's plough on its road in front of
+/// the camera. `plough` puts it a little up the road, coming, a tin lying
+/// in its way; `plough:after` has it gone past, its lane and bank behind
+/// it and the tin buried.
+fn gallery(
+    mut commands: Commands,
+    opts: Res<crate::launch::LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
+    mut stage: Local<u32>,
+    mut held: Local<Option<(Entity, f32)>>,
+    mut ploughs: Query<&mut Plough>,
+) {
+    let (Some(spec), Some((cam, _, _)), Some(zone)) = (&opts.gallery, opts.camera, zone) else {
+        return;
+    };
+    let Some(state) = spec
+        .split(',')
+        .next()
+        .and_then(|s| s.strip_prefix("plough"))
+    else {
+        return;
+    };
+    *stage += 1;
+    // Held where it was put for the picture, its auger and plume going.
+    if let Some((e, at)) = *held {
+        if let Ok(mut p) = ploughs.get_mut(e) {
+            p.run.leg = rules::Leg::Up(at);
+            p.banked = at;
+        }
+    }
+    if *stage != 3 {
+        return;
+    }
+    let Some(road) = zone
+        .map
+        .roads
+        .iter()
+        .find(|r| r.name == super::plough::ROAD)
+    else {
+        warn!("gallery: no {} here", super::plough::ROAD);
+        return;
+    };
+    let points = road.points.clone();
+    // The road's nearest point to the camera.
+    let len = rules::length(&points);
+    let mut best = (0.0, f32::MAX);
+    let mut s = 0.0;
+    while s < len {
+        let (p, _) = rules::along(&points, s);
+        let d = Vec2::new(p[0] - cam.x, p[1] - cam.z).length();
+        if d < best.1 {
+            best = (s, d);
+        }
+        s += 1.0;
+    }
+    let here = best.0;
+    let after = state.contains("after");
+    let start = if after { here + 25.0 } else { here - 30.0 };
+    let e = super::plough::spawn_plough(&mut commands, &zone, points.clone());
+    *held = Some((e, start.max(0.0)));
+    commands.queue(move |w: &mut World| {
+        if let Some(mut p) = w.get_mut::<Plough>(e) {
+            p.run.leg = rules::Leg::Up(start.max(0.0));
+            p.banked = start.max(0.0);
+            p.needs_snow = false;
+            // Stopped for the picture (its plume and auger still going).
+            p.jammed = 0.0;
+        }
+    });
+    let (tin, _) = rules::along(&points, here);
+    if after {
+        // What it left: the lane and the bank from where it came to here,
+        // and the tin under it.
+        let mut s = (here - 40.0).max(0.0);
+        while s < start {
+            let (p, d) = rules::along(&points, s);
+            let g = zone.on_ground(p[0], p[1]);
+            let right = Vec3::new(-d[1], 0.0, d[0]);
+            let lo = |v: Vec3| {
+                let q = g + v * rules::BANK_OUT;
+                zone.ground(q.x, q.z)
+            };
+            let side = right * rules::bank_side(lo(-right), lo(right));
+            let b = g + side * rules::BANK_OUT;
+            let rot = Quat::from_rotation_y(
+                -extraction_core::sentry::bearing([0.0, 0.0], d).to_radians(),
+            );
+            commands.spawn((
+                LanePiece,
+                Transform::from_translation(g + Vec3::Y * 0.08).with_rotation(rot),
+                Visibility::default(),
+            ));
+            commands.spawn((
+                BankPiece,
+                Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(rot),
+                Visibility::default(),
+            ));
+            s += BANK_STEP;
+        }
+    } else if let Some(kind) = catalog.kind("canned_stew") {
+        crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(
+                    zone.on_ground(tin[0], tin[1]) + Vec3::Y * 0.1,
+                ),
+                condition: 1.0,
+            },
+        );
     }
 }

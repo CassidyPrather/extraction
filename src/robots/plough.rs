@@ -90,6 +90,10 @@ pub struct Buried {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct BankPiece;
 
+/// A stretch of packed lane behind it (for its look).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct LanePiece;
+
 /// Stretches of road it's cleared, and when (the raid clock): a lane takes
 /// no new prints while it's fresh (`rules::lane_fresh`).
 #[derive(Resource, Debug, Default)]
@@ -300,6 +304,18 @@ fn plough_drive(
                 p.banked = s;
                 let side = bank_dir(&zone, ground, dir);
                 let b = ground + side * rules::BANK_OUT;
+                // The packed lane it leaves (a strip over the snow).
+                commands.spawn((
+                    Name::new("Plough lane"),
+                    LanePiece,
+                    OfPlough(e),
+                    Transform::from_translation(ground + Vec3::Y * 0.08).with_rotation(
+                        Quat::from_rotation_y(
+                            -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
+                        ),
+                    ),
+                    Visibility::default(),
+                ));
                 commands.spawn((
                     Name::new("Plough bank"),
                     BankPiece,
