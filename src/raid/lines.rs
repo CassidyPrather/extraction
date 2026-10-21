@@ -142,6 +142,8 @@ pub fn coming_home(n: u32, recalled: bool) -> &'static str {
 
 /// On the drive home, when he notices what you've brought (and has none
 /// of his own story to tell that night): `raid::lev`.
+/// Hana's tape: Anna, his sister, at the piano as a girl.
+pub const CARGO_ANNA: &[&str] = &["Driver: \"Where did you get that? That's Anna playing.\""];
 pub const CARGO_ARTIFACT: &[&str] = &[
     "Driver: \"Something in your kit's humming. Box it before I drive.\"",
     "Driver: \"You've a stone on you. I can feel it in my teeth.\"",
@@ -161,13 +163,48 @@ pub const CARGO_FOOD: &[&str] = &[
 /// This much food and he says so.
 pub const FOOD_PLENTY: usize = 5;
 
-/// The drive-home line: his story when it's that homecoming, then what
-/// you've brought (a stone, an eye, a cell, a lot of food), then the rest.
-pub fn coming_home_with(n: u32, recalled: bool, c: super::lev::Cargo) -> &'static str {
+/// Home from a valley for the first time: what he knows of it from
+/// before, when he drove there (he's never been past the fence since).
+pub const FIRST_HOME_FROM: &[(&str, &str)] = &[
+    (
+        "marrow_creek",
+        "Driver: \"Marrow. Mind the well. Mum always said that.\"",
+    ),
+    (
+        "kettle_pass",
+        "Driver: \"Kettle. The miners sang on my bus. Every shift.\"",
+    ),
+    (
+        "cinder_works",
+        "Driver: \"Cinder. You smell of it. The ash gets in everything.\"",
+    ),
+    (
+        "sallow_reservoir",
+        "Driver: \"Sallow. We swam there as boys. They say it's dry now.\"",
+    ),
+];
+
+/// The drive-home line: his story when it's that homecoming, then his
+/// word on a valley you're home from for the first time (`first_from`),
+/// then what you've brought (a stone, an eye, a cell, a lot of food),
+/// then the rest.
+pub fn coming_home_with(
+    n: u32,
+    recalled: bool,
+    c: super::lev::Cargo,
+    first_from: Option<&str>,
+) -> &'static str {
     if !recalled && let Some((_, l)) = COMING_HOME.iter().find(|(at, _)| *at == n) {
         return l;
     }
-    if c.artifact {
+    if let Some(map) = first_from
+        && let Some((_, l)) = FIRST_HOME_FROM.iter().find(|(m, _)| *m == map)
+    {
+        return l;
+    }
+    if c.anna {
+        pick(CARGO_ANNA, n)
+    } else if c.artifact {
         pick(CARGO_ARTIFACT, n)
     } else if c.eye {
         pick(CARGO_EYE, n)
@@ -285,7 +322,7 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 26] = [
+        let pools: [&[&str]; 27] = [
             crate::raid::epilogue::FOUND,
             BEAT_ENDED,
             &[
@@ -294,6 +331,7 @@ mod tests {
                 crate::raid::epilogue::STACKS_SHUT,
                 crate::raid::epilogue::RELEASED,
             ],
+            CARGO_ANNA,
             CARGO_ARTIFACT,
             CARGO_EYE,
             CARGO_CELL,
@@ -326,6 +364,7 @@ mod tests {
             }
         }
         lines.extend(COMING_HOME.iter().map(|(_, l)| l.to_string()));
+        lines.extend(FIRST_HOME_FROM.iter().map(|(_, l)| l.to_string()));
         for line in &lines {
             let wrapped = wrap(line, 26, 3);
             assert_eq!(
@@ -335,6 +374,30 @@ mod tests {
             );
             assert!(!line.contains('{'), "unfilled: {line}");
         }
+    }
+
+    /// Home from a valley the first time, he says his piece about it,
+    /// unless it's the night for his own story; every valley has one.
+    #[test]
+    fn first_home_from_a_valley_he_speaks_of_it() {
+        let none = crate::raid::lev::Cargo::default();
+        for (map, _) in extraction_core::map::VALLEYS {
+            let line = coming_home_with(4, false, none, Some(map));
+            assert!(
+                FIRST_HOME_FROM.iter().any(|(m, l)| *m == map && *l == line),
+                "{map}: {line}"
+            );
+        }
+        // His own story comes first (the third homecoming: the bus).
+        assert_eq!(
+            coming_home_with(3, false, none, Some("sallow_reservoir")),
+            coming_home(3, false)
+        );
+        // Not the first time: the usual.
+        assert_eq!(
+            coming_home_with(4, false, none, None),
+            coming_home(4, false)
+        );
     }
 
     #[test]
