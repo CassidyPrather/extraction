@@ -714,11 +714,41 @@ pub fn setup_stains(
 /// Which of the building `prefab` at `at`'s window sashes time has
 /// smashed: one bool per `window_sash` model, in `Geo::props` order and
 /// each prop's models in order. All of a ruin's, 15 to 60% of a house's,
-/// from the building's seed. Pure, and the same headless: Destruction's
+/// from the building's seed, and every boarded one's (`boarded_sashes`:
+/// the glass went first). Pure, and the same headless: Destruction's
 /// panes start broken where this says so, and `dress_buildings` swaps
 /// those sashes for `window_sash_broken`.
 pub fn weathered_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
     super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| weathered(&geo, prefab, at))
+}
+
+/// Which of its sashes someone boarded up, the same way: a quarter of a
+/// damaged ruin's, one in twelve of a house's, none of a burnt or drowned
+/// one's. Destruction nails three `window_board`s across each, outside.
+pub fn boarded_sashes(prefab: &str, at: &Transform) -> Vec<bool> {
+    super::buildings::prefab(prefab).map_or_else(Vec::new, |geo| boarded(&geo, prefab, at))
+}
+
+fn sashes(geo: &Geo) -> usize {
+    geo.props
+        .iter()
+        .flat_map(|d| d.models.iter())
+        .filter(|(name, _)| *name == "window_sash")
+        .count()
+}
+
+/// [`boarded_sashes`] for a prefab's geometry in hand.
+pub(super) fn boarded(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
+    let xz = Vec2::new(at.translation.x, at.translation.z);
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(xz, prefab) ^ 0xb0a2d);
+    let share = if prefab.ends_with("_damaged") {
+        0.25
+    } else if extraction_core::map::prefab_base(prefab) != prefab {
+        0.0
+    } else {
+        1.0 / 12.0
+    };
+    (0..sashes(geo)).map(|_| rng.f32() < share).collect()
 }
 
 /// [`weathered_sashes`] for a prefab's geometry in hand.
@@ -730,11 +760,9 @@ pub(super) fn weathered(geo: &Geo, prefab: &str, at: &Transform) -> Vec<bool> {
     } else {
         0.15 + rng.f32() * 0.45
     };
-    geo.props
-        .iter()
-        .flat_map(|d| d.models.iter())
-        .filter(|(name, _)| *name == "window_sash")
-        .map(|_| rng.f32() < share)
+    boarded(geo, prefab, at)
+        .into_iter()
+        .map(|b| (rng.f32() < share) || b)
         .collect()
 }
 
@@ -870,5 +898,17 @@ mod tests {
         let ruin = weathered_sashes("house_plank_damaged", &at);
         assert!(!ruin.is_empty() && ruin.iter().all(|b| *b), "{ruin:?}");
         assert!(weathered_sashes("no_such_prefab", &at).is_empty());
+        // A boarded one's glass went first; a burnt house has none to
+        // board.
+        for (x, z) in [(-18.0, 95.0), (22.0, 85.0), (4.0, -30.0), (60.0, 12.0)] {
+            let at = Transform::from_xyz(x, 0.0, z);
+            for id in ["house_plank", "house_brick_damaged", "farmhouse"] {
+                let (w, b) = (weathered_sashes(id, &at), boarded_sashes(id, &at));
+                assert_eq!(w.len(), b.len());
+                assert!(w.iter().zip(&b).all(|(w, b)| *w || !*b), "{id}");
+                assert_eq!(b, boarded_sashes(id, &at));
+            }
+            assert!(!boarded_sashes("house_plank_burnt", &at).iter().any(|b| *b));
+        }
     }
 }

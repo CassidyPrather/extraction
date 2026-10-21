@@ -206,7 +206,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/items/salvage.py` | rotor assembly, servo, sensor eye, robot cell, the four artifacts | 0.5k to 1.7k |
 | `art/props/furniture.py` | `models/props/<name>.glb`: table, shelf, shelf_metal, bed, counter_cabinet, counter_drawers, counter_top, stove, workbench, chair, locker, pew | 0.1k to 1.8k |
 | `art/props/crates.py` | crate_slat, crate_army (unit cubes, scaled), supply_crate, stash_stand, barrel, pallet, hay_bale | 0.3k to 2.9k |
-| `art/props/openings.py` | door_leaf, door_metal, window_sash, window_casing (stretched to their openings) | 0.4k to 1.0k |
+| `art/props/openings.py` | door_leaf, door_metal, window_sash, window_sash_broken (time's: `decay::weathered_sashes`), window_casing (stretched to their openings), window_board (three across a boarded sash, outside: `decay::boarded_sashes`, placed and broken by Destruction) | 0.4k to 1.0k |
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
 | `art/props/heroes.py` | hero landmarks, each with `_lod1` (past 60 m) and `_lod2` (the far stand-in): mill_race (Marrow Creek), ropeway_station, ropeway_pylon, ropeway_pylon_down (Kettle Pass: a broken aerial ropeway), blast_furnace (Cinder Works) | 14.4k / 2.8k / 1.2k (mill_race), 5.9k / 2.1k / 0.5k (station), 2.8k / 1.3k / 0.2k (pylon), 11.2k / 4.3k / 1.4k (furnace) |
