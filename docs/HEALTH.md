@@ -20,6 +20,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 3037c2b | 13:40 | 8/8 clean | not run (main moved) | marrow_creek seed 2 still dies early (now to the sentry) |
 | 881fc3b | 13:15 | not run | 727 passed, 7 failed (render gauges not run) | |
 | 6789739 | 11:30 | (cbf9c3d's binary) | the 20 reported tests: 19 pass, birds fails; full suite running | |
 | cbf9c3d | 10:40 | 8/8 clean | the 20 reported tests: 7 fail | both marrow_creek bots now die to the sentry |
@@ -36,10 +37,10 @@ As of 881fc3b's full suite (727 passed, 7 failed). Det. = fails every time, alon
 | `destruction::tests::the_wrecks_come_apart_where_kit_modelled_them` (wreck_lorry 8 parts, 7 expected) | det. | model vs. table drift, since b08309d3 (kit-models) | Destruction | they're fixing |
 | `world::underground::tests::crawlers_walk_their_rounds_in_the_dark` (Sallow: a crawler out of the site at (-9.1, 26.8, 141.3)) | det. | | Underground | they're fixing |
 | `wildlife::flock::tests::birds_never_go_inside_walls_or_ground_and_settle_again` | det. | birds pinned on new tall geometry (the 56 m furnace stack, Sallow's dam) | Wildlife | fixed on claude/polish-wildlife 3c521d79 |
-| `soak::tests::entity_keyed_locals_forget_what_is_gone`: touch.rs:170 `last`, radio/visuals.rs:222-223 `arm` `crank`, destruction/breach.rs:535 `geos`, world/snow.rs:277 `last` | det. | entity-keyed Locals never pruned (a leak in a long session) | coordinator, Radio, Destruction, Visual design | routed 13:20 |
-| `soak::save_fuzz::a_poisoned_career_loads_whole_and_in_the_world` (3 gone, 2 expected) | det. | | Soak | routed 13:20 |
-| `world::storm::tests::a_bolt_comes_down_to_where_it_struck` | det. | | Visual design | routed 13:20 |
-| `perf::tests::headless_ticks_hold_their_floor` (62.7 units > 60 at 4 threads) | **flaky**: passes alone 2/2 | load-sensitive gauge: reference and busy tick sampled at different moments | Performance | routed 13:20 |
+| `soak::tests::entity_keyed_locals_forget_what_is_gone`: touch.rs:170 `last`, radio/visuals.rs:222-223 `arm` `crank`, destruction/breach.rs:535 `geos`, world/snow.rs:277 `last` | det. | entity-keyed Locals never pruned (a leak in a long session) | coordinator, Radio, Destruction, Visual design, Audio | each fixed on its branch; Soak listed touch.rs as bounded and tightened the lint (any `.remove(` no longer counts as pruning), which found a real leak in anomaly/harvest.rs |
+| `soak::save_fuzz::a_poisoned_career_loads_whole_and_in_the_world` (3 gone, 2 expected) | det. | a cassette player and its cell went "nowhere" together | Soak | fixed on claude/polish-soak |
+| `world::storm::tests::a_bolt_comes_down_to_where_it_struck` | det. | | Visual design | fixed on main by e16f7954 (after 881fc3b); to confirm |
+| `perf::tests::headless_ticks_hold_their_floor` (62.7 units > 60 at 4 threads) | **flaky**: passes alone 2/2 | load-sensitive gauge: reference and busy tick sampled at different moments | Performance | fixing: the tick runs on every core, its yardstick on one; moving to per-tick ratios, lower quartile |
 
 ## Closed
 
