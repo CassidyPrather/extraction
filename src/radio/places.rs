@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::items::{Catalog, SpawnItem, spawn_item};
+use crate::items::{SpawnItem, spawn_item};
 
 /// One thing laid by a note: the map, the item, where (x, z), and how
 /// far (m) to its right of the note as the note faces.
