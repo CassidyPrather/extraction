@@ -225,6 +225,17 @@ floor 97.25 under x 115-175, z -91 to 0. A roof over you, so the one
 warm place on the fell. Keep both kiosk pads clear; moving the adit
 house or the mill's apron means re-seating it (tell Underground).
 
+## The Plough
+
+Heavy's machine (`extraction_core::plough`): a Custodian snow-blower that
+works the Pass road from the roadmen's hut (the shed tagged `roadmen`) up
+the switchbacks, through both galleries, along the street and up the Col
+track, turning at (40, -240), short of the col's truck. It throws snow
+only where snow lies (over 84 m), banking it beside the road clear of the
+other roads' ends, the huts' doors and the galleries. Its packed lane
+takes no prints. Don't move or retag the roadmen's hut without telling
+Heavy.
+
 ## Frame budget
 
 Performance measured it on main (f4916fa): nothing to trim. Draws peak at
