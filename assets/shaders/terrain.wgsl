@@ -48,6 +48,33 @@ struct TerrainParams {
 @group(#{MATERIAL_BIND_GROUP}) @binding(105) var arm_tex: texture_2d_array<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(106) var arm_smp: sampler;
 
+// Lanes packed through the snow (world::snow::Packed): per lane its ends
+// (a.xz, b.xz), and its freshness (x) and half width (y).
+struct Lanes {
+    ends: array<vec4<f32>, 16>,
+    extra: array<vec4<f32>, 16>,
+}
+@group(#{MATERIAL_BIND_GROUP}) @binding(107) var<uniform> lanes: Lanes;
+
+// How packed the snow is here, 0..1: inside a fresh lane, soft-edged.
+fn packed_at(p: vec2<f32>) -> f32 {
+    var k = 0.0;
+    for (var i = 0u; i < 16u; i = i + 1u) {
+        let fresh = lanes.extra[i].x;
+        if (fresh <= 0.0) {
+            continue;
+        }
+        let a = lanes.ends[i].xy;
+        let b = lanes.ends[i].zw;
+        let ab = b - a;
+        let t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+        let d = length(p - (a + ab * t));
+        let w = lanes.extra[i].y;
+        k = max(k, fresh * (1.0 - smoothstep(w * 0.8, w, d)));
+    }
+    return k;
+}
+
 const LAYER_COUNT: u32 = 7u;
 
 // ---------------------------------------------------------------------
@@ -458,7 +485,10 @@ fn fragment(
         let flat = smoothstep(0.55, 0.88, n_geo.y);
         let patches = fbm(wp.xz * 0.9) * 0.55 + fbm(wp.xz * 0.12 + vec2<f32>(4.0, 9.0)) * 0.45;
         let lie = clamp((terrain.snow * 1.6 - patches * 0.75 - (1.0 - flat) * 1.1) * 3.0, 0.0, 1.0);
-        let s = above * lie;
+        var s = above * lie;
+        // A packed lane: the snow pressed flat and grey, the plough's
+        // tread lines along it.
+        let packed = packed_at(wp.xz) * s;
         if (s > 0.0) {
             // Blue in its hollows, a little uneven.
             let tone = vec3<f32>(0.74, 0.76, 0.8) * (0.94 + 0.08 * fine);
@@ -469,6 +499,11 @@ fn fragment(
             tn = normalize(mix(tn, vec3<f32>(0.0, 0.0, 1.0), s * 0.55));
             ao = mix(ao, 1.0, s * 0.5);
             puddle = puddle * (1.0 - s);
+            if (packed > 0.0) {
+                albedo = mix(albedo, vec3<f32>(0.56, 0.59, 0.64) * (0.95 + 0.1 * fine), packed);
+                rough = mix(rough, 0.55, packed);
+                tn = normalize(mix(tn, vec3<f32>(0.0, 0.0, 1.0), packed));
+            }
         }
     }
 

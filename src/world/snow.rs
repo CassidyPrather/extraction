@@ -257,6 +257,40 @@ impl Tracks {
     }
 }
 
+/// Lanes packed through the snow (a plough's, `robots::plough`): each
+/// from `a` to `b` across the ground, `half_width` either side, and how
+/// fresh it is (1 new, 0 gone). The terrain draws them packed (flatter,
+/// darker, greyer) for as long as they're fresh. The newest
+/// `render::terrain_material::LANES` are drawn; whoever packs them keeps
+/// the list (and only writes it when it changes).
+#[derive(Resource, Clone, Debug, Default, PartialEq)]
+pub struct Packed {
+    pub lanes: Vec<PackedLane>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PackedLane {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub half_width: f32,
+    pub fresh: f32,
+}
+
+impl Packed {
+    /// The lanes as the terrain's uniform wants them: the newest (last)
+    /// `LANES`.
+    pub fn params(&self) -> crate::render::terrain_material::LaneParams {
+        use crate::render::terrain_material::LANES;
+        let mut p = crate::render::terrain_material::LaneParams::default();
+        let skip = self.lanes.len().saturating_sub(LANES);
+        for (i, l) in self.lanes.iter().skip(skip).enumerate() {
+            p.ends[i] = Vec4::new(l.a.x, l.a.y, l.b.x, l.b.y);
+            p.extra[i] = Vec4::new(l.fresh.clamp(0.0, 1.0), l.half_width, 0.0, 0.0);
+        }
+        p
+    }
+}
+
 /// Where the snow is stepped and prints are laid: a system that drops
 /// prints (a ploughed lane takes none) runs `.after(Treading)`.
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
@@ -268,6 +302,7 @@ impl Plugin for SnowPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<crate::player::Footstep>()
             .init_resource::<Snow>()
+            .init_resource::<Packed>()
             .init_resource::<Tracks>()
             .add_systems(Update, (snow_with_weather, tread).chain().in_set(Treading));
     }
@@ -536,6 +571,7 @@ fn demo_trail(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     zone: Res<super::Zone>,
     mut tracks: ResMut<Tracks>,
+    mut packed: ResMut<Packed>,
     mut laid: Local<Option<Vec3>>,
 ) {
     if snow.cover <= 0.0 || std::env::var("EXTRACTION_DEMO_TRACKS").is_err() {
@@ -550,6 +586,19 @@ fn demo_trail(
     }
     *laid = Some(eye.translation());
     tracks.clear();
+    // And a ploughed lane beside it, 3 m to the right, 30 m out.
+    {
+        let f = eye.forward().as_vec3();
+        let d = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
+        let right = Vec2::new(-d.y, d.x);
+        let a = eye.translation().xz() + right * 3.5 + d * 2.0;
+        packed.lanes = vec![PackedLane {
+            a,
+            b: a + d * 30.0,
+            half_width: 1.5,
+            fresh: 1.0,
+        }];
+    }
     let f = eye.forward().as_vec3();
     let mut dir = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
     let mut at = eye.translation().xz() + dir * 1.5;
