@@ -103,8 +103,8 @@ deer's ways, a little quicker, a dark coat) on the highest open ground. A
 herd's home needs no forest edge in a valley without one. No ducks: the
 tarn, 37 m across and frozen at its edges, gives a flushed raft nowhere to
 go (a valley's rafts need water reaching at least 70 m, the shortest hop,
-`ducks::extent`). Its bats keep to the buildings; the tarn is two cells,
-too few to count on a group over it.
+`ducks::extent`). Its bats keep to the buildings: none hunt water above a
+valley's snow line (`snow::snow_line`), where nothing hatches.
 
 ### The heron
 
@@ -303,7 +303,7 @@ wind thin it. When the insects stop, something is close.
   whole game: bats on Marrow Creek's creek at dusk and night, none by
   day); four minutes per valley of someone walking round the groups with
   a torch on them, shooting now and then, and a walker coming by (bats
-  over the water wherever there are 8 cells of it): no bat
+  over the water wherever there are 8 cells of it below the snow line): no bat
   ever inside or under anything built or below 2 m, none faster than
   9 m/s, and they scatter, leave and come back; with a torch pointed
   across their beat they keep further from its beam than in the dark;

@@ -261,16 +261,19 @@ fn spot(
     None
 }
 
-/// Where in a cell bats hunt, if anywhere: its deepest water, or the
-/// nearest stretch of a wood's edge, or a building.
+/// Where in a cell bats hunt, if anywhere: its deepest water (below the
+/// snow line: nothing hatches off a frozen tarn), or the nearest stretch of
+/// a wood's edge, or a building.
 fn haunt_in(zone: &Zone, rng: &mut Rng, cell: (i32, i32)) -> Option<(Haunt, Vec3, f32, f32)> {
     let base = Vec2::new(cell.0 as f32, cell.1 as f32) * CELL;
     let mid = base + Vec2::splat(CELL * 0.5);
+    let line = crate::world::snow::snow_line(&zone.map);
     let water = (0..16)
         .map(|_| base + Vec2::new(rng.f32(), rng.f32()) * CELL)
         .filter_map(|p| {
-            let d = zone.hm.water_level([p.x, p.y])? - zone.ground(p.x, p.y);
-            (d > 0.2).then_some((d, p))
+            let top = zone.hm.water_level([p.x, p.y])?;
+            let d = top - zone.ground(p.x, p.y);
+            (d > 0.2 && line.is_none_or(|l| top < l)).then_some((d, p))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0));
     if let Some((_, p)) = water {
@@ -784,13 +787,13 @@ mod tests {
             let lamps = lamps(&zone);
             let every = all(&zone, &obstacles, 3);
             assert!(every.len() >= 4, "{map}: {} groups", every.len());
-            // Over the water wherever there's much of it: not over Rime
-            // Fell's one small tarn, two cells, which no group may draw.
+            // Over the water wherever there's much of it below the snow
+            // line: not over Rime Fell's one small tarn, high and frozen.
             let wet = wet_cells(&zone);
             let haunts: &[Haunt] = if wet >= 8 {
                 &[Haunt::Water, Haunt::Building]
             } else {
-                assert_eq!(map, "rime_fell", "{map}: {wet} cells over water");
+                assert_eq!((map, wet), ("rime_fell", 0), "cells over water");
                 &[Haunt::Building]
             };
             for &haunt in haunts {
