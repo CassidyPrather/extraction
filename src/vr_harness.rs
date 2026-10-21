@@ -3951,17 +3951,12 @@ mod body {
         let (mut vr, feet) = standing();
         look(&mut vr, Vec3::new(0.0, 1.65, 0.0), 2.2, 0.0);
         let mut stepping_both = false;
-        for n in 0..240 {
+        // The torso comes round lazily; the feet a step at a time, the last
+        // squaring up once the body's settled.
+        for _ in 0..420 {
             vr.step(1);
             let st = stance(&vr);
             stepping_both |= st.feet.iter().all(|f| !f.planted());
-            if n % 20 == 0 {
-                eprintln!(
-                    "{n}: body {} feet {:?}",
-                    st.pelvis.rotation.to_euler(EulerRot::YXZ).0,
-                    st.feet.map(|f| (f.yaw, f.t, f.uneasy))
-                );
-            }
         }
         assert!(!stepping_both, "one foot at a time");
         let st = stance(&vr);
@@ -4110,13 +4105,6 @@ mod body {
         vr.step(60);
         let st = stance(&vr);
         let shoulder = st.shoulder(Side::Right);
-        let h = vr.hand_state(Side::Right);
-        eprintln!(
-            "rest {rest} now {shoulder} grip {grip} world {} felt {:?} arm {}",
-            h.world.translation,
-            h.felt.map(|f| f.translation),
-            st.arm
-        );
         assert!(
             shoulder.distance(rest) <= PROTRACT + 1e-3,
             "the shoulder came {} forward",
