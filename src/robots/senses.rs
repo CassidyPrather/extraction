@@ -368,7 +368,15 @@ pub(crate) fn perceive(
         Has<super::indoor::Dormant>,
         Option<&MindSeed>,
     )>,
-    players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
+    players: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            &Body,
+            Option<&crate::health::Health>,
+        ),
+        With<Player>,
+    >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
     (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
@@ -419,7 +427,7 @@ pub(crate) fn perceive(
         .collect();
     // Footsteps: by what's underfoot, how fast, how low.
     for s in steps.read() {
-        let Ok((_, _, body)) = players.get(s.entity) else {
+        let Ok((_, _, body, _)) = players.get(s.entity) else {
             continue;
         };
         let p = [s.position.x, s.position.z];
@@ -457,8 +465,11 @@ pub(crate) fn perceive(
     }
     let targets: Vec<Seen> = players
         .iter()
-        .filter(|(_, gt, _)| !cloaks.hides(gt.translation()))
-        .map(|(e, gt, body)| {
+        // A player who's down isn't a target (`search::forget_the_downed`).
+        .filter(|(_, gt, _, health)| {
+            !cloaks.hides(gt.translation()) && !health.is_some_and(|h| h.down)
+        })
+        .map(|(e, gt, body, _)| {
             let feet = gt.translation();
             let height = if body.height > 0.0 {
                 body.height
