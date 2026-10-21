@@ -179,9 +179,20 @@ wind thin it. When the insects stop, something is close.
 - `wildlife::fish::tests`: every valley has shoals; walking to the bank,
   wading in and shooting, no fish leaves deep water or the space between
   bed and surface, and they dart.
+- The gauges (`render::budget`): everything far off is one mesh
+  (`visuals::FarParts`: flocks past 60 m, deer and dogs past 90 m), so
+  the animals cost a view one draw beyond the near ones.
 - The sim logs `flush` (`cause`, `birds`, `alarm`, `x`, `z`) and
   `bird_alarm` (a robot sent to look by an alarm: `robot`, `x`, `z`,
-  `dist`). `EXTRACTION_WILDLIFE=off` runs without animals, to compare.
+  `dist`). `EXTRACTION_WILDLIFE=off` runs without animals, to compare;
+  `=calm`, nothing scares them; `=restless`, flocks move on a second in
+  (both for screenshots).
+
+## Shots
+
+`docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
+Creek), `flock_up.png` (the same house a few seconds after they went up),
+`deer_grazing.png`, `dogs.png` (Cinder Works).
 
 ## Pacing
 

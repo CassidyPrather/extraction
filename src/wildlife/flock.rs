@@ -294,7 +294,13 @@ pub(crate) fn new_flock(species: Species, site: usize, at: &PerchSite, rng: &mut
         birds,
         orbit: (at.centre, 20.0, at.top() + 12.0),
         angle: 0.0,
-        restless: seed.range(RESTLESS.0, RESTLESS.1),
+        // `EXTRACTION_WILDLIFE=restless`: they move on a second in (to see
+        // them fly in a screenshot).
+        restless: if std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "restless") {
+            1.0
+        } else {
+            seed.range(RESTLESS.0, RESTLESS.1)
+        },
         rng: seed,
         wary: 0.0,
         alarm_cool: 0.0,
