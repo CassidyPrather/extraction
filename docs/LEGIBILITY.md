@@ -292,7 +292,7 @@ All five valleys, with the lamps (vantages with a landmark to steer by):
 | Valley | drizzle | night |
 | - | - | - |
 | Marrow Creek | 4 of 4 | 4 of 4 |
-| Kettle Pass | 4 of 4 (the hunting lodge by the mast's lamp, 170 m) | 3 of 4 before the mast was lit |
+| Kettle Pass | 4 of 4 (the hunting lodge by the mast's lamp, 170 m) | 4 of 4 (the hunting lodge by the mast's lamp; 3 of 4 before it was lit) |
 | Cinder Works | 4 of 4: the fire lookout steers by its own ranger tower (15 m; the gauge used to skip anything under 15 m) and the chimney's lamp at 300 m | 4 of 4 |
 | Sallow Reservoir | 4 of 4 | 4 of 4 |
 
