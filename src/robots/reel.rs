@@ -192,6 +192,9 @@ fn reel(
                 // Calm walkers at 30, 60 and 80 m, and one that sees you
                 // beside the far one: do their eyes read after dark?
                 let mut first = None;
+                // Bearings taken: a far walker straight behind a near one
+                // is hidden by it.
+                let mut taken: Vec<Vec3> = Vec::new();
                 for (k, (d, x, level)) in [
                     (30.0f32, -2.0f32, 0u8),
                     (60.0, 3.0, 0),
@@ -215,11 +218,18 @@ fn reel(
                         })
                         .collect();
                     let seen = |at: &Vec3| hidden(&zone, eye, *at + Vec3::Y * 1.1);
-                    // The nearest swing that's clear, else the least hidden.
+                    let free = |at: &Vec3| {
+                        let dir = (*at - eye).with_y(0.0).normalize_or_zero();
+                        taken
+                            .iter()
+                            .all(|t| t.angle_between(dir).to_degrees() > 5.0)
+                    };
+                    // The nearest swing that's clear and not behind another,
+                    // else the least hidden.
                     let at = tries
                         .iter()
                         .copied()
-                        .find(|at| seen(at) < 0.0)
+                        .find(|at| seen(at) < 0.0 && free(at))
                         .unwrap_or_else(|| {
                             tries
                                 .iter()
@@ -232,6 +242,7 @@ fn reel(
                         at.distance(eye),
                         hidden(&zone, eye, at + Vec3::Y * 1.1).max(0.0)
                     );
+                    taken.push((at - eye).with_y(0.0).normalize_or_zero());
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
                     commands
                         .entity(w)
