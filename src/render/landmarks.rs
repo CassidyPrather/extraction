@@ -100,6 +100,10 @@ fn light_landmarks(
                         base_color_texture: Some(images.add(falloff())),
                         unlit: true,
                         alpha_mode: AlphaMode::Add,
+                        // Fog on an added quad adds the fog's colour over
+                        // all of it: a pale square (or the old sphere's
+                        // flat pink coin).
+                        fog_enabled: false,
                         ..default()
                     }),
                 )
