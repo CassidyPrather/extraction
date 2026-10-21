@@ -14,6 +14,7 @@ noise floor).
     scripts/anomaly_legibility.py --measure  # measures the shots already taken
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
     scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
+    scripts/anomaly_legibility.py --noise    # and a second shot without, for the noise floor
 
 Writes a contact sheet, docs/shots/anomalies/legibility.png, and the
 numbers, legibility.json beside it (the shots stay in target/legibility). Exits non-zero when a kind falls under its
@@ -61,6 +62,9 @@ CONDITIONS = {
     "night": ["--weather", "drizzle", "--hour", "night", "--moon", "new"],
 }
 WEATHERS = list(CONDITIONS)
+# A second shot without, for the noise floor. Shots of the same view come
+# out the same to the pixel (fixed steps), so it's off unless asked for.
+NOISE = "--noise" in sys.argv
 
 # The box the anomaly fills at 20 m, in a 1600x900 shot: about 7 m across
 # and 5 m up from the ground.
@@ -103,9 +107,11 @@ def luma(path: str) -> np.ndarray:
 def measure(name: str, weather: str) -> dict:
     on = luma(os.path.join(RAW, f"{name}_{weather}_on0.png"))
     off = luma(os.path.join(RAW, f"{name}_{weather}_off0.png"))
-    off2 = luma(os.path.join(RAW, f"{name}_{weather}_off1.png"))
     changed = float((np.abs(on - off) > STEP).mean())
-    noise = float((np.abs(off2 - off) > STEP).mean())
+    noise = 0.0
+    second = os.path.join(RAW, f"{name}_{weather}_off1.png")
+    if os.path.exists(second):
+        noise = float((np.abs(luma(second) - off) > STEP).mean())
     floor = FLOOR.get(name, DEFAULT_FLOOR)
     return {
         "kind": name,
@@ -162,16 +168,27 @@ def main() -> int:
             for name, cam in TARGETS
             if name in kinds
             for w in conds
-            for hide, n in [(False, 0), (True, 0), (True, 1)]
+            for hide, n in [(False, 0), (True, 0)] + ([(True, 1)] if NOISE else [])
         ]
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             for out in pool.map(lambda j: shot(*j), jobs):
                 print("shot", os.path.relpath(out, ROOT), flush=True)
+    missing = [
+        f"{name} {w}"
+        for name, _ in TARGETS
+        if name in kinds
+        for w in conds
+        for k in ("on0", "off0")
+        if not os.path.exists(os.path.join(RAW, f"{name}_{w}_{k}.png"))
+    ]
+    if missing:
+        print("FAIL shots missing (the render failed?):", sorted(set(missing)))
+        return 2
     results = [
         measure(name, w)
         for name, _ in TARGETS
         for w in WEATHERS
-        if os.path.exists(os.path.join(RAW, f"{name}_{w}_off1.png"))
+        if os.path.exists(os.path.join(RAW, f"{name}_{w}_off0.png"))
     ]
     sheet(results)
     with open(OUT + ".json", "w") as f:
