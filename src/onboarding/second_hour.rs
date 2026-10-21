@@ -227,6 +227,11 @@ pub(super) fn direct(
                 ),
                 None => ("(no radio)", vec![]),
             },
+            // Indoors, walls between: keep still where you are.
+            First::Heard if world.entrances.building_at(root.translation).is_some() => (
+                "keep still behind the walls",
+                vec![Task::Wait(20.0), Task::Wait(20.0)],
+            ),
             // Off from where it heard you, low and away from it, then still.
             First::Heard => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 40.0);
@@ -1128,8 +1133,11 @@ impl World2<'_, '_> {
                     && sock.is_none()
                     && bag.is_none()
                     && gt.translation().xz().distance(near) < 6.0
-                    && self.catalog.get(it.kind()).category
-                        != extraction_core::items::Category::Artifact
+                    && !matches!(
+                        self.catalog.get(it.kind()).category,
+                        extraction_core::items::Category::Artifact
+                            | extraction_core::items::Category::Firearm
+                    )
             })
             .map(|(e, ..)| e)
             .next()
@@ -1187,8 +1195,11 @@ impl World2<'_, '_> {
                     && sock.is_none()
                     && bag.is_none()
                     && gt.translation().xz().distance(near) < 40.0
-                    && self.catalog.get(it.kind()).category
-                        != extraction_core::items::Category::Artifact
+                    && !matches!(
+                        self.catalog.get(it.kind()).category,
+                        extraction_core::items::Category::Artifact
+                            | extraction_core::items::Category::Firearm
+                    )
                     // Out in the open (not on a shelf indoors)...
                     && self.entrances.building_at(gt.translation()).is_none()
                     // ...and not from the edge of one: it was gone round.
