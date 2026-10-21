@@ -252,7 +252,8 @@ Can you find your way without a HUD? `--wayfind DIR`
 (`scripts/wayfind.sh MAP [OUT] [--weather fog] [--hour night]`) stands
 where you get your bearings (where the truck sets you down, every
 rendezvous), turns to each landmark in range (a placement at least
-`map_lint::LANDMARK_HEIGHT` tall, within `CLEAR_SIGHT`) at the headset's
+`map_lint::LANDMARK_HEIGHT` tall, 5–320 m off: past the lint's 200 m
+clear sight, out to its uniqueness range) at the headset's
 pixels a degree, and shoots it with and without the landmark, time
 frozen. What differs, inside the landmark's box in the picture, is the
 landmark as the eye gets it through fog, trees and dark. It counts if it
