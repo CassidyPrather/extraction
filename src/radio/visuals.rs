@@ -40,7 +40,12 @@ fn animate_decks(
     let dt = time.delta_secs();
     for (e, d) in &decks {
         // How far each key is down: pushed by a finger, or latched.
-        let mut down = [(Key::Play, 0.0f32), (Key::Stop, 0.0), (Key::Rewind, 0.0), (Key::FastForward, 0.0)];
+        let mut down = [
+            (Key::Play, 0.0f32),
+            (Key::Stop, 0.0),
+            (Key::Rewind, 0.0),
+            (Key::FastForward, 0.0),
+        ];
         for (k, b) in &keys {
             if k.deck != e {
                 continue;
@@ -67,10 +72,8 @@ fn animate_decks(
                 continue;
             };
             let name = name.as_str();
-            let moving = name == "door"
-                || name.starts_with("btn_")
-                || name == "reel_l"
-                || name == "reel_r";
+            let moving =
+                name == "door" || name.starts_with("btn_") || name == "reel_l" || name == "reel_r";
             if !moving {
                 continue;
             }

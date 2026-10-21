@@ -19,15 +19,20 @@ use crate::items::{Catalog, Item};
 
 /// The player's body, centred on its origin (m): width, height, depth.
 pub const BODY: Vec3 = Vec3::new(0.150, 0.090, 0.040);
-/// The keys along the top, left to right.
+/// The keys along the top, left to right (`art/items/music.py`: their
+/// top faces stand 6 mm proud of the body, at y 0.051).
 pub const KEYS: [(Key, f32); 4] = [
     (Key::Rewind, -0.051),
     (Key::FastForward, -0.017),
     (Key::Play, 0.017),
     (Key::Stop, 0.051),
 ];
-/// The cassette's well, behind the door.
-pub const WELL: Vec3 = Vec3::new(0.0, 0.0, 0.004);
+pub const KEY_TOP: f32 = 0.051;
+/// Where a cassette sits in the well, behind the door.
+pub const WELL: Vec3 = Vec3::new(0.0, -0.007, 0.0085);
+/// The door's hinge, along its bottom edge, and its height.
+pub const HINGE: Vec3 = Vec3::new(0.0, -0.0385, 0.0185);
+pub const DOOR_HEIGHT: f32 = 0.0655;
 /// How far the door swings open (rad).
 pub const DOOR_OPEN: f32 = 1.2;
 /// How far a tape let go of near the open well is taken in (m).
@@ -168,8 +173,7 @@ pub(super) fn deck_parts(
         commands.spawn((
             Name::new(format!("{key:?} key")),
             DeckKey { deck: e, key },
-            Transform::from_xyz(x, BODY.y * 0.5, 0.0)
-                .with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+            Transform::from_xyz(x, KEY_TOP, 0.0).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
             Visibility::default(),
             ChildOf(e),
         ));
@@ -190,10 +194,9 @@ pub fn door_plate(open: f32) -> Transform {
         return Transform::from_xyz(0.0, -50.0, 0.0);
     }
     let a = DOOR_OPEN * open;
-    let hinge = Vec3::new(0.0, -BODY.y * 0.5, BODY.z * 0.5);
     let swing = Quat::from_rotation_x(a);
     // Its middle, and its inside face (+Z of the plate) turned up.
-    Transform::from_translation(hinge + swing * Vec3::new(0.0, BODY.y * 0.45, 0.0))
+    Transform::from_translation(HINGE + swing * Vec3::new(0.0, DOOR_HEIGHT * 0.5, 0.0))
         .with_rotation(swing * Quat::from_rotation_y(std::f32::consts::PI))
 }
 
@@ -480,5 +483,44 @@ pub(super) fn deck_noise(
             radius: HEARD_AT * d.volume.sqrt(),
             source: None,
         });
+    }
+}
+
+/// A player that comes with a cell in it, this share charged (laid in the
+/// world, or set up by a test).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct WithCell(pub f32);
+
+/// Fits the promised cell once the player's cell socket is there.
+pub(super) fn fit_cells(
+    mut commands: Commands,
+    decks: Query<(Entity, &WithCell)>,
+    mut sockets: Query<(Entity, &mut Socket, &SocketOwner), With<DeckCell>>,
+    catalog: Res<Catalog>,
+) {
+    for (deck, with) in &decks {
+        let Some((se, mut socket, _)) = sockets.iter_mut().find(|(_, _, o)| o.0 == deck) else {
+            continue;
+        };
+        commands.entity(deck).remove::<WithCell>();
+        if socket.occupant.is_some() {
+            continue;
+        }
+        let Some(kind) = catalog.kind("power_cell") else {
+            continue;
+        };
+        let cell = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::IDENTITY,
+                condition: 1.0,
+            },
+        );
+        let mut state = extraction_core::items::ItemState::fresh(&catalog.0, kind, 1.0);
+        state.charge_wh *= with.0.clamp(0.0, 1.0);
+        commands.entity(cell).insert(Item(state));
+        crate::interact::seat_in_socket(&mut commands, cell, se, &mut socket);
     }
 }

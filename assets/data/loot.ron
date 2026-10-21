@@ -37,6 +37,7 @@
             Item(id: "tape_practice", weight: 1.0),
             Item(id: "tape_hymns", weight: 1.0),
             Item(id: "tape_lodge", weight: 1.0),
+            Item(id: "tape_duty", weight: 1.0),
         ]),
         "ammo_common": (rolls: (1, 2), entries: [
             Item(id: "ammo_9x18", weight: 3.0),

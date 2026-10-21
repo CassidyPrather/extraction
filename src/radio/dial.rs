@@ -148,7 +148,13 @@ pub(super) fn receive(
     };
     // The valley floor: the low tenth of its ground.
     let floor = *floor.get_or_insert_with(|| {
-        let mut h: Vec<f32> = zone.hm.heights.iter().copied().filter(|h| h.is_finite()).collect();
+        let mut h: Vec<f32> = zone
+            .hm
+            .heights
+            .iter()
+            .copied()
+            .filter(|h| h.is_finite())
+            .collect();
         h.sort_by(f32::total_cmp);
         h.get(h.len() / 10).copied().unwrap_or(0.0)
     });

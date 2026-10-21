@@ -108,32 +108,13 @@ fn put_tape(vr: &mut Vr, id: &str, rot: Quat) -> Entity {
     tape
 }
 
-/// A cell into the back.
+/// A cell into the back, full.
 fn put_cell(vr: &mut Vr, deck: Entity) {
-    let cell = vr.spawn("power_cell", Transform::from_xyz(0.0, -50.0, 0.0));
-    let socket = vr
-        .app
+    vr.app
         .world_mut()
-        .query_filtered::<(Entity, &crate::interact::SocketOwner), With<super::deck::DeckCell>>()
-        .iter(vr.app.world())
-        .find(|(_, o)| o.0 == deck)
-        .map(|(e, _)| e)
-        .unwrap();
-    // Seated the way a hand's release seats it (the cell's own fiddly
-    // placement is the gadgets' and tested there).
-    let world = vr.app.world_mut();
-    let mut s = world.get_mut::<Socket>(socket).unwrap();
-    let mut commands = world.commands();
-    let mut sock = Socket {
-        kind: s.kind.clone(),
-        occupant: None,
-        radius: s.radius,
-        seat: s.seat,
-    };
-    crate::interact::seat_in_socket(&mut commands, cell, socket, &mut sock);
-    s.occupant = sock.occupant;
-    world.flush();
-    vr.step(2);
+        .entity_mut(deck)
+        .insert(super::deck::WithCell(1.0));
+    vr.step(3);
 }
 
 /// Stop twice opens the door; a tape the right way round goes in, side A
@@ -174,14 +155,26 @@ fn the_right_way_round() {
     let (mut vr, deck, _) = setup();
     press(&mut vr, Key::Stop);
     vr.step(20);
-    let tape = put_tape(&mut vr, "tape_hymns", Quat::from_rotation_z(std::f32::consts::PI));
+    let tape = put_tape(
+        &mut vr,
+        "tape_hymns",
+        Quat::from_rotation_z(std::f32::consts::PI),
+    );
     assert!(vr.app.world().get::<InSocket>(tape).is_none(), "refused");
     assert!(
-        vr.app.world().resource::<Log>().0.contains(&DeckWhat::WrongWay),
+        vr.app
+            .world()
+            .resource::<Log>()
+            .0
+            .contains(&DeckWhat::WrongWay),
         "it said why"
     );
     assert!(deck_of(&vr, deck).tape.is_none());
-    let flipped = put_tape(&mut vr, "tape_lodge", Quat::from_rotation_y(std::f32::consts::PI));
+    let flipped = put_tape(
+        &mut vr,
+        "tape_lodge",
+        Quat::from_rotation_y(std::f32::consts::PI),
+    );
     assert!(vr.app.world().get::<InSocket>(flipped).is_some(), "seated");
     assert_eq!(deck_of(&vr, deck).tape.map(|t| t.1), Some(TapeSide::B));
 }

@@ -61,6 +61,9 @@ pub enum Render {
     Gramophone(usize),
     PianoTune(usize),
     OrganTune(usize),
+    /// One piano note, struck firmly and held (the dampers are the
+    /// player's volume): every third key, the rest shifted to it.
+    PianoKey(u8),
 }
 
 impl Render {
@@ -69,7 +72,19 @@ impl Render {
     /// so the mix's cue gains are all that set how loud it plays.
     fn run(&self, rate: u32) -> Vec<f32> {
         let mut x = self.render(rate);
-        level(&mut x);
+        match self {
+            // A note is levelled over its first second (its strike), so
+            // every key is as loud struck as another.
+            Render::PianoKey(_) => {
+                let head = ((rate as usize).min(x.len())).max(1);
+                let r = extraction_core::music::synth::rms(&x[..head]);
+                if r > 1e-6 {
+                    let g = LEVEL / r;
+                    x.iter_mut().for_each(|s| *s = (*s * g).clamp(-1.0, 1.0));
+                }
+            }
+            _ => level(&mut x),
+        }
         x
     }
 
@@ -91,6 +106,20 @@ impl Render {
             }
             Render::PianoTune(i) => tune_on(PIANO[i % PIANO.len()], sr),
             Render::OrganTune(i) => tune_on(ORGAN[i % ORGAN.len()], sr),
+            Render::PianoKey(k) => {
+                use extraction_core::music::{mml::Note, synth};
+                let part = synth::Part {
+                    instrument: synth::Instrument::Piano,
+                    notes: vec![Note {
+                        start: 0.0,
+                        len: 5.0,
+                        key: *k as i32,
+                        vel: 0.85,
+                    }],
+                    gain: 1.0,
+                };
+                synth::render(&[part], sr, *k as u64)
+            }
             Render::Station(id, day) => {
                 let seed = id.bytes().fold(*day, |h, b| h.wrapping_mul(131) ^ b as u64);
                 match stations::get(id).map(|s| s.kind) {
@@ -492,13 +521,111 @@ fn play_radios(
     }
 }
 
+/// The rendered key nearest `key`, and the speed that shifts it there.
+pub fn piano_source(key: u8) -> (u8, f64) {
+    use super::piano::{HIGH, LOW};
+    let base = (LOW + 1 + ((key.saturating_sub(LOW)) / 3) * 3).min(HIGH);
+    (base, 2f64.powf((key as f64 - base as f64) / 12.0))
+}
+
+/// A piano note sounding, and once damped how long it has left.
+#[derive(Component)]
+struct PianoVoice {
+    piano: Entity,
+    key: u8,
+    damping: Option<f32>,
+    level: f32,
+}
+
+/// The dampers' fall (s).
+const DAMP: f32 = 0.18;
+
+/// Notes struck sound from their key; notes let go are damped. Near a
+/// piano its notes are rendered ahead, so the first one isn't late.
+fn sound_pianos(
+    mut commands: Commands,
+    mut renders: ResMut<Renders>,
+    mut notes: MessageReader<super::piano::PianoNote>,
+    pianos: Query<&GlobalTransform, With<super::piano::Piano>>,
+    ears: Query<&GlobalTransform, With<SpatialListener3D>>,
+    mut voices: Query<(Entity, &mut PianoVoice, &SampleEffects)>,
+    mut volumes: Query<&mut VolumeNode>,
+    time: Res<Time>,
+) {
+    use super::piano::{HIGH, LOW};
+    let near = ears.iter().any(|e| {
+        pianos
+            .iter()
+            .any(|p| p.translation().distance(e.translation()) < 8.0)
+    });
+    if near {
+        for k in (LOW + 1..=HIGH).step_by(3) {
+            renders.want(Render::PianoKey(k));
+        }
+    }
+    for n in notes.read() {
+        // A key struck again, or let go: what was sounding is damped.
+        for (_, mut v, _) in &mut voices {
+            if v.piano == n.piano && v.key == n.key && v.damping.is_none() {
+                v.damping = Some(DAMP);
+            }
+        }
+        if !n.on {
+            continue;
+        }
+        let (base, speed) = piano_source(n.key);
+        let Some(sample) = renders.want(Render::PianoKey(base)) else {
+            continue;
+        };
+        let level = 20.0 * n.velocity.max(0.05).log10();
+        commands.spawn((
+            PianoVoice {
+                piano: n.piano,
+                key: n.key,
+                damping: None,
+                level,
+            },
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("piano.note"))),
+            PlaybackSettings::default().with_speed(speed),
+            Transform::from_translation(n.at),
+            sample_effects![
+                VolumeNode {
+                    volume: Volume::Decibels(level),
+                    ..default()
+                },
+                mix::spatial("piano.note"),
+                crate::audio::reverb_send("piano.note")
+            ],
+        ));
+    }
+    let dt = time.delta_secs();
+    for (e, mut v, effects) in &mut voices {
+        let Some(left) = v.damping.as_mut() else {
+            continue;
+        };
+        *left -= dt;
+        if *left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let k = (*left / DAMP).clamp(0.0, 1.0);
+        let db = v.level + 40.0 * k.log10().max(-2.0);
+        if let Ok(mut vol) = volumes.get_effect_mut(effects) {
+            vol.volume = Volume::Decibels(db);
+        }
+    }
+}
+
 pub struct MusicSoundPlugin;
 
 impl Plugin for MusicSoundPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Renders>()
             .init_resource::<StationFiles>()
-            .add_systems(Update, (collect_renders, play_decks, play_radios).chain());
+            .add_systems(
+                Update,
+                (collect_renders, play_decks, play_radios, sound_pianos).chain(),
+            );
     }
 }
 
