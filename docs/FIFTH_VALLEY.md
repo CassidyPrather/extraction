@@ -216,6 +216,16 @@ funicular is always cheaper, by design), the barracks, the compressor
 house. The open upper slopes kill: drones and walkers see you a long way
 off up there.
 
+## Frame budget
+
+Performance measured it on main (f4916fa): nothing to trim. Draws peak at
+388 of 1200 (Coldharbour's street), triangles at 419k of 900k, overdraw
+at most 2.47 (inside the mill). The tightest number is the gate view's
+sun-shadow triangles, 532k of 700k, most of it the guns at the truck.
+The scree draws about 140 merged rocks a view (35-40k triangles); the
+galleries, the funicular and the mill never make a view's top five. First
+frame in 4.3 s, the quickest valley; busy-moment hitches like the others.
+
 ## Status
 
 Lint-clean under every rule on main (doors, Surge, landmarks), the fit

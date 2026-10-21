@@ -1539,7 +1539,11 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
         shutters.len()
     );
     let fence = all.iter().filter(|p| p.2 == super::strip::FENCE_HP).count();
-    let bus: Vec<_> = all.iter().filter(|p| !p.3).collect();
+    // The bus's (the car wrecks' parts yield car_*).
+    let bus: Vec<_> = all
+        .iter()
+        .filter(|p| !p.3 && p.4.iter().all(|(id, _)| !id.starts_with("car_")))
+        .collect();
     assert_eq!(bus.len(), 5, "the depot's bus: a door and four panels");
     println!("{} shutters, {fence} fence panels", shutters.len());
 

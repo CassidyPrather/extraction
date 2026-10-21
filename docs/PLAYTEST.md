@@ -120,6 +120,14 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Your body.** Look down: a jacket, the chest rig and belt on it,
+  trousers and boots. Turn your head and your feet stay put; turn your
+  whole body, or step across the room, and they step after you. Crouch
+  and your knees come forward; bend over and the chest rig and pack lean
+  with you while the holster stays on your hip. Reach right out and your
+  shoulder comes forward. Seated, you sit, the belt on your hips. The
+  **BODY** card on the comfort board hides it. Say if your arms ever look
+  stretched or bent wrong, or if a limb goes through you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
