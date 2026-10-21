@@ -8,3 +8,5 @@ pub mod media;
 pub mod mml;
 pub mod stations;
 pub mod synth;
+pub mod tapes;
+pub mod tunes;

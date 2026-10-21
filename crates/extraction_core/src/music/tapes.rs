@@ -54,33 +54,67 @@ pub struct TapeDef {
 /// Blank tape after the last take, at least (s).
 pub const RUN_OUT: f32 = 6.0;
 
+/// Who made each, where it lies, and why (`docs/LORE.md`; owners and
+/// labels are Story's).
 pub const TAPES: &[TapeDef] = &[
+    // Hana Marek, the house by the well. Anna, Lev's sister, as a girl at
+    // the upright: the stumble and the restart. Side B, Hana humming to
+    // Rusty.
     TapeDef {
         item: "tape_practice",
         labels: ["for Anna - practice", "B"],
         sides: [
-            &[take("minuet_g_learner"), take("fur_elise"), take("skakal_pes")],
-            &[take("hajej_dadej"), take("brahms_lullaby")],
+            &[take("minuet_g_learner"), take("bratre_kubo"), cut("fur_elise", 30.0)],
+            &[take("brahms_lullaby")],
         ],
         wear: 0.5,
     },
+    // The sexton, Kettle chapel: the harmonium, one verse each.
     TapeDef {
         item: "tape_hymns",
-        labels: ["Harvest hymns", "Advent"],
-        sides: [
-            &[take("old_hundredth"), take("eventide"), take("nun_danket")],
-            &[take("silent_night"), take("bells_rounds")],
-        ],
+        labels: ["HARVEST HYMNS", "ADVENT"],
+        sides: [&[take("old_hundredth"), take("largo")], &[take("silent_night")]],
         wear: 0.3,
     },
+    // Old Fiala, the hunting lodge: dances taped off the wireless.
     TapeDef {
         item: "tape_lodge",
-        labels: ["Lodge dance", "off the wireless"],
+        labels: ["Lodge dance (off the wireless)", "Lodge dance 2"],
         sides: [
-            &[take("polka"), take("waltz_folk"), take("march")],
-            &[take("dance_band"), cut("ragtime", 40.0)],
+            &[take("polka"), take("waltz_folk")],
+            &[take("dance_band"), take("greensleeves")],
         ],
         wear: 0.7,
+    },
+    // A soldier, Marrow's south gate booth: it runs out mid-song.
+    TapeDef {
+        item: "tape_duty",
+        labels: ["DUTY MIX 2", "DUTY MIX 2 B"],
+        sides: [
+            &[take("dance_band"), take("ragtime")],
+            &[take("polka"), cut("ragtime", 35.0)],
+        ],
+        wear: 0.6,
+    },
+    // Vlasta Kralova, Cinder: her piano went into the furnace; this is
+    // what's left of it. A slow waltz, twice.
+    TapeDef {
+        item: "tape_birthday",
+        labels: ["Our piano. Ruben's birthday.", "B"],
+        sides: [&[take("gymnopedie"), take("gymnopedie")], &[take("minuet_g")]],
+        wear: 0.4,
+    },
+    // Alois Pech, Sallow: his copy of his father's wire recording of Old
+    // Sallow before the water. Hiss, the bells, a few bars of the organ,
+    // and the copy cuts off.
+    TapeDef {
+        item: "tape_bells",
+        labels: ["Old Sallow bells - from Dad's wire", ""],
+        sides: [
+            &[take("bells_rounds"), cut("hymn_to_joy", 14.0)],
+            &[take("carillon")],
+        ],
+        wear: 0.95,
     },
 ];
 
