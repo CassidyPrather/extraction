@@ -415,7 +415,7 @@ impl Plugin for AudioPlugin {
 /// At most this many one-shot sounds at once; past it the oldest go.
 pub const VOICE_CAP: usize = 256;
 /// No one-shot in the bank runs longer than a minute (the sirens), even
-/// slowed: one still "playing" after this never will.
+/// slowed: one still playing after this never will.
 pub const ONE_SHOT_MAX: f32 = 90.0;
 
 /// Retires one-shot voices that outlive any sound, and the oldest past
