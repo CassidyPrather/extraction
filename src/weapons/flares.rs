@@ -81,8 +81,9 @@ impl Flare {
     }
 }
 
-/// A gun that throws flares, not bullets: ballistics leaves its shots to
-/// [`launch`].
+/// A gun that throws something other than bullets (a flare, a crossbow's
+/// bolt): ballistics leaves its shots to [`launch`] and
+/// `crossbow::loose`.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Launcher;
 
@@ -122,7 +123,11 @@ fn launch(
     stars: Query<(Entity, &Flare)>,
 ) {
     for shot in shots.read() {
-        let Ok(gun) = guns.get(shot.gun) else {
+        let Some(gun) = guns
+            .get(shot.gun)
+            .ok()
+            .filter(|g| g.firearm.def.cartridge == "26mm")
+        else {
             continue;
         };
         // The oldest goes first.

@@ -168,6 +168,13 @@ pub const RECIPES: &[Recipe] = &[
         makes: Make::Items(&[("spare_parts", 1)]),
         seconds: 12.0,
     },
+    Recipe {
+        id: "make_bolts",
+        name: "File crossbow bolts (bundle of five)",
+        needs: &[(Need::Item("scrap_metal"), 1), (Need::Item("polymer"), 1)],
+        makes: Make::Items(&[("bolt_bundle", 1)]),
+        seconds: 12.0,
+    },
     // --- Repair ---------------------------------------------------------------
     Recipe {
         id: "repair_gun",
@@ -238,6 +245,18 @@ pub const VICE_RECIPES: &[Recipe] = &[
         ],
         makes: Make::Items(&[("ammo_762x25_repack", 1)]),
         seconds: 12.0,
+    },
+    Recipe {
+        id: "make_crossbow",
+        name: "Build a crossbow from a leaf spring",
+        needs: &[
+            // The leaf spring and its stirrup are most of its weight.
+            (Need::Item("scrap_metal"), 7),
+            (Need::Item("spare_parts"), 1),
+            (Need::Item("polymer"), 1),
+        ],
+        makes: Make::Items(&[("crossbow", 1)]),
+        seconds: 30.0,
     },
     Recipe {
         id: "pack_flare",

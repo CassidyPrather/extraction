@@ -193,3 +193,64 @@ fn no_cell_no_music() {
     assert_eq!(deck_of(&vr, deck).mode, Mode::Stopped);
     assert!(vr.app.world().resource::<Log>().0.contains(&DeckWhat::Dead));
 }
+
+/// Hold the radio, take its knob with the other hand's trigger and turn
+/// the wrist clockwise (seen from above): it clicks on and runs up the
+/// band, hearing what's there.
+#[test]
+fn turn_the_knob_to_a_station() {
+    use super::dial::{DIAL_HANDLE, Tuner};
+    use crate::interact::GripRole;
+    use extraction_core::music::stations::BAND;
+    let mut vr = Vr::new("training_yard");
+    let feet = vr
+        .app
+        .world()
+        .resource::<crate::world::Zone>()
+        .on_ground(0.0, 30.0);
+    vr.stand(feet, 0.0);
+    let at = feet + Vec3::new(-0.15, 1.2, -0.35);
+    let radio = vr.spawn("radio", Transform::from_translation(at));
+    vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+    vr.step(2);
+    vr.grip(Side::Left, 1.0);
+    vr.step(3);
+    assert_eq!(vr.hand_state(Side::Left).holding, Some(radio));
+    assert!(
+        !vr.app.world().get::<Tuner>(radio).unwrap().on(),
+        "starts off"
+    );
+    let knob = vr.point(radio, |r| *r == GripRole::Handle(DIAL_HANDLE));
+    vr.hand(Side::Right, knob, Quat::IDENTITY, 0.0, 0.0);
+    vr.step(2);
+    vr.trigger(Side::Right, 1.0);
+    vr.step(2);
+    assert_eq!(
+        vr.hand_state(Side::Right).handle.map(|h| h.1),
+        Some(DIAL_HANDLE),
+        "the knob taken"
+    );
+    // Clockwise from above, a little at a time: two wrist turns of about
+    // 2.2 rad, letting go between, as you would a real knob.
+    let mut khz = 0.0;
+    for _ in 0..2 {
+        for k in 1..=20 {
+            let rot = Quat::from_rotation_y(-(k as f32) * 0.11);
+            vr.hand(Side::Right, knob, rot, 0.0, 1.0);
+            vr.step(1);
+        }
+        khz = vr.app.world().get::<Tuner>(radio).unwrap().khz;
+        vr.trigger(Side::Right, 0.0);
+        vr.hand(Side::Right, knob, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.trigger(Side::Right, 1.0);
+        vr.step(2);
+    }
+    assert!(khz > BAND.0, "on and up the band ({khz})");
+    let tuner = vr.app.world().get::<Tuner>(radio).unwrap().clone();
+    assert!(tuner.on());
+    assert!(
+        tuner.reception.static_gain > 0.0 || !tuner.reception.stations.is_empty(),
+        "it hears something"
+    );
+}

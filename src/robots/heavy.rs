@@ -1414,6 +1414,7 @@ fn fell_heavy(
     catalog: Res<Catalog>,
     mut impacts: MessageWriter<super::wreck::WreckImpact>,
     mut out: MessageWriter<HeavyEvent>,
+    minds: Query<&super::senses::MindSeed>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -1425,9 +1426,9 @@ fn fell_heavy(
             commands
                 .entity(e)
                 .insert((super::wreck::Broken, super::Salvaged));
-            // Seeded by where it fell, not by its entity: the same fall
-            // lies the same whatever else is in the world.
-            let seed = (spot_seed(t.translation) % 10_007) as f32;
+            // Seeded by the machine (where it was spawned), not by its
+            // entity: it lies the same whatever else is in the world.
+            let seed = (minds.get(e).map_or(0, |m| m.0) % 10_007) as f32;
             // Forward onto its face or over on a side: seeded, so no two
             // lie the same.
             // (Well over: a wreck, not something parked.)
@@ -1657,17 +1658,6 @@ pub fn clear_wrecks(world: &mut World) {
 /// The salvage table a heavy's wreck answers to (its parts are its loot:
 /// see `fell_heavy`).
 pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];
-
-/// A seed for a machine from a spot in the world (to the centimetre):
-/// stable from run to run, and independent of entity ids.
-pub fn spot_seed(at: Vec3) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for v in [at.x, at.y, at.z] {
-        h ^= (v * 100.0).round() as i64 as u64;
-        h = h.wrapping_mul(0x0100_0000_01b3).rotate_left(29);
-    }
-    h ^ (h >> 31)
-}
 
 #[cfg(test)]
 pub(crate) mod tests {

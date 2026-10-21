@@ -194,13 +194,15 @@ fn dress_controls(
     controls: Query<(Entity, &Pressable, Option<&ChildOf>), Added<Pressable>>,
     benches: Query<(), With<crate::raid::bench::Bench>>,
     // Run-levers that have a look of their own (a breaker on its cabinet, a
-    // valve wheel, a pump, a mine tub).
+    // valve wheel, a pump, a mine tub, the furnace's lever boxes).
     own_look: Query<
         (),
         Or<(
             With<crate::world::underground::PowerSwitch>,
             With<crate::world::underground::DrainControl>,
             With<crate::world::workings::MineCart>,
+            With<crate::world::furnace::VentLever>,
+            With<crate::world::furnace::CraneLever>,
         )>,
     >,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -209,10 +211,10 @@ fn dress_controls(
     for (e, p, parent) in &controls {
         let on_bench = parent.is_some_and(|c| benches.contains(c.parent()));
         if *p == Pressable::BenchRun && !on_bench {
-            // Anything else that runs on a pull (the furnace's vent and
-            // crane levers) gets a wall lever you can see from across a
-            // room, unless it has a look of its own: the bench's little
-            // black stub, which every one got, read as nothing.
+            // Anything else that runs on a pull gets a wall lever you can
+            // see from across a room, unless it has a look of its own: the
+            // bench's little black stub, which every one got, read as
+            // nothing.
             if !own_look.contains(e) {
                 wall_lever(&mut commands, e, &mut meshes, &mut materials);
             }

@@ -43,6 +43,7 @@ pub const NAMES: &[&str] = &[
     "smallbore_drill",
     "lmg_drill",
     "flare_drill",
+    "crossbow_drill",
     "pack_mule",
     "drone_duel",
     "walker_hunt",
@@ -68,6 +69,9 @@ pub const NAMES: &[&str] = &[
 ///   default (`bot::crossing`).
 /// - `contract_<id>`: one of the driver's contracts from the card to its
 ///   pay, on its valley's map (`progression::contracts::scenario`).
+/// - `first_hour`, `first_hour_<persona>`: newcomers from the yard to the
+///   end of a first raid (`onboarding::first_hour`); each runs its two
+///   halves, `first_yard` and `first_raid`, as two sessions.
 pub const OPT_IN: &[&str] = &[
     crate::onboarding::second_hour::SCENARIO,
     crate::progression::safehouse::scenario::SCENARIO,
@@ -79,6 +83,13 @@ pub const OPT_IN: &[&str] = &[
     CONTRACTS[3].0,
     CONTRACTS[4].0,
     CONTRACTS[5].0,
+    CONTRACTS[6].0,
+    crate::onboarding::first_hour::SCENARIO,
+    crate::onboarding::first_hour::PERSONAS[0].scenario,
+    crate::onboarding::first_hour::PERSONAS[1].scenario,
+    crate::onboarding::first_hour::PERSONAS[2].scenario,
+    crate::onboarding::first_hour::PERSONAS[3].scenario,
+    crate::onboarding::first_hour::PERSONAS[4].scenario,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -367,6 +378,28 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::GunRounds(0, 0)),
             Stow(Side::Right),
         ],
+        "crossbow_drill" => vec![
+            Log(s(
+                "crossbow drill: draw to the latch, a bolt in the groove, loose; again",
+            )),
+            PickUp {
+                id: s("crossbow"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("bolt_bundle"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(1, 1)),
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 1 },
+            Gun(MacroKind::Reload),
+            Fire { at: t0, shots: 1 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Stow(Side::Right),
+        ],
         "pack_mule" => vec![
             Log(s("pack mule: stow everything that fits")),
             PickUp {
@@ -530,7 +563,10 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::Alive),
             ]
         }
-        crate::onboarding::bot::SCENARIO => crate::onboarding::bot::opening(),
+        crate::onboarding::bot::SCENARIO | crate::onboarding::first_hour::YARD => {
+            crate::onboarding::bot::opening()
+        }
+        crate::onboarding::first_hour::RAID => crate::onboarding::first_hour::opening(),
         crate::onboarding::second_hour::SCENARIO => crate::onboarding::second_hour::opening(),
         crate::destruction::scenario::SCENARIO => crate::destruction::scenario::tasks(zone),
         crate::progression::safehouse::scenario::SCENARIO => {

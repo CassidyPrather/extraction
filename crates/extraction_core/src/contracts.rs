@@ -91,6 +91,8 @@ pub struct Contract {
     pub offered: Offered,
     /// Raids needed in every one of the first valleys before it's offered.
     pub raided_all: bool,
+    /// Contracts done before it's offered.
+    pub after: &'static [&'static str],
     pub steps: &'static [Step],
     /// Handed over with the first step (a relay to leave, a camera).
     pub kit: &'static [(&'static str, u32)],
@@ -115,6 +117,7 @@ pub const CONTRACTS: &[Contract] = &[
         says: &["The Holm boy's grown. Wants his grandad's watch. The post office."],
         offered: Offered::Tier { tier: 0, at: 1 },
         raided_all: false,
+        after: &[],
         steps: &[Step::Bring {
             map: "marrow_creek",
             place: "Village",
@@ -137,6 +140,7 @@ pub const CONTRACTS: &[Contract] = &[
         ],
         offered: Offered::Tier { tier: 1, at: 0 },
         raided_all: false,
+        after: &[],
         steps: &[
             Step::Plant {
                 map: "marrow_creek",
@@ -163,6 +167,7 @@ pub const CONTRACTS: &[Contract] = &[
         ],
         offered: Offered::Tier { tier: 2, at: 0 },
         raided_all: false,
+        after: &[],
         steps: &[
             Step::Bring {
                 map: "kettle_pass",
@@ -190,6 +195,7 @@ pub const CONTRACTS: &[Contract] = &[
         ],
         offered: Offered::Tier { tier: 3, at: 0 },
         raided_all: false,
+        after: &[],
         steps: &[
             Step::Photograph {
                 subject: Subject::Walker,
@@ -214,6 +220,7 @@ pub const CONTRACTS: &[Contract] = &[
         ],
         offered: Offered::Deep { trust: 3 },
         raided_all: true,
+        after: &[],
         steps: &[
             Step::Plant {
                 map: "marrow_creek",
@@ -231,12 +238,42 @@ pub const CONTRACTS: &[Contract] = &[
         unlocks: &[Unlock::Valley("sallow_reservoir")],
     },
     Contract {
+        id: "scour_key",
+        name: "The scour key",
+        giver: "Lev",
+        says: &[
+            "The scours opened by themselves. Somebody left the key at the valve house. Bring it, so nobody opens them again.",
+            "Now the draw-off tower. Put a relay up there; that's where it all talks from.",
+        ],
+        offered: Offered::Deep { trust: 4 },
+        raided_all: false,
+        after: &["the_overflow"],
+        steps: &[
+            Step::Bring {
+                map: "sallow_reservoir",
+                place: "Valve house",
+                item: "scour_key",
+                near: None,
+            },
+            Step::Plant {
+                map: "sallow_reservoir",
+                place: "Draw-off tower",
+                item: "relay_box",
+            },
+        ],
+        kit: &[("relay_box", 1)],
+        pay: &[("emp_trap", 1), ("ammo_545_ap", 2)],
+        trust: 2,
+        unlocks: &[],
+    },
+    Contract {
         id: "the_heavy",
         name: "The heavy",
         giver: "the town paper",
         says: &["Now he wants the big one. Get close. Get home.", ""],
         offered: Offered::Deep { trust: 5 },
         raided_all: false,
+        after: &[],
         steps: &[
             Step::Photograph {
                 subject: Subject::Heavy,
@@ -280,6 +317,13 @@ pub fn next_contract(p: &Progress) -> Option<&'static Contract> {
             && !crate::progression::FIRST_VALLEYS
                 .iter()
                 .all(|v| p.raids_in(v) > 0)
+        {
+            return false;
+        }
+        if !c
+            .after
+            .iter()
+            .all(|a| p.contracts_done.iter().any(|d| d == a))
         {
             return false;
         }
@@ -383,17 +427,13 @@ pub fn opened(p: &Progress, map: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
+    /// Every valley, the late ones too (a contract may be in one).
     fn valleys() -> Vec<(&'static str, MapDef)> {
-        [
-            ("marrow_creek", MARROW_CREEK),
-            ("kettle_pass", KETTLE_PASS),
-            ("cinder_works", CINDER_WORKS),
-        ]
-        .into_iter()
-        .map(|(id, text)| (id, MapDef::from_ron(text).unwrap()))
-        .collect()
+        crate::map::VALLEYS
+            .into_iter()
+            .map(|(id, text)| (id, MapDef::from_ron(text).unwrap()))
+            .collect()
     }
 
     #[test]
@@ -448,6 +488,7 @@ mod tests {
                 "hajek_tin",
                 "walker_portrait",
                 "the_overflow",
+                "scour_key",
                 "the_heavy"
             ]
         );
@@ -521,6 +562,13 @@ mod tests {
         p.contracts_done.push("the_overflow".into());
         assert!(opened(&p, "sallow_reservoir"));
         assert!(p.opens("sallow_reservoir"));
+        assert!(
+            next_contract(&p).is_none(),
+            "the scour key wants more trust"
+        );
+        p.trust = 4;
+        assert_eq!(next_contract(&p).map(|c| c.id), Some("scour_key"));
+        p.contracts_done.push("scour_key".into());
         assert!(next_contract(&p).is_none(), "the heavy wants more trust");
         p.trust = 5;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("the_heavy"));

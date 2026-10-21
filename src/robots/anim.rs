@@ -1241,7 +1241,7 @@ mod tests {
             .unwrap();
         let y = |app: &App| app.world().get::<Transform>(walker).unwrap().translation.y;
         let standing = y(&app);
-        let mut hit = |app: &mut App, damage: f32| {
+        let hit = |app: &mut App, damage: f32| {
             let p = app.world().get::<Transform>(walker).unwrap().translation;
             app.world_mut()
                 .write_message(crate::weapons::ballistics::Hit {

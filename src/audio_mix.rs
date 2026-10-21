@@ -282,6 +282,7 @@ pub const MIX: &[Cue] = &[
     cue!("rain", "ambience/rain_light", -15.0, 60.0, 0.0, Bed),
     cue!("room", "ambience/room_tone", -18.0, 35.0, 0.0, Bed),
     cue!("creek", "ambience/creek", -4.0, 60.0, 15.0, Bed),
+    cue!("water.scour", "ambience/creek", -10.0, 80.0, 20.0, Bed, 25.0),
     cue!("insects", "ambience/insects_night", -27.0, 45.0, 0.0, Bed),
     cue!("rustle", "ambience/rustle_leaves", -30.0, 45.0, 0.0, Bed),
     cue!("birds", "ambience/crow", -2.0, 70.0, 45.0, Event),
@@ -289,6 +290,8 @@ pub const MIX: &[Cue] = &[
     cue!("works.groan", "machines/groan", -2.0, 85.0, 80.0, Event),
     cue!("works.clank", "machines/clank", -4.0, 85.0, 80.0, Event),
     cue!("thunder", "ambience/thunder_distant", -14.0, 75.0, 0.0, Event),
+    cue!("thunder.crack", "explosions/grenade_sharp", -1.0, 120.0, 120.0, Event, 120.0),
+    cue!("thunder.roll", "ambience/thunder_distant", -10.5, 110.0, 120.0, Event, 120.0),
     cue!("thunder.surge", "ambience/thunder_distant", -11.0, 80.0, 0.0, Event),
     // Music and broadcasts, synthesised (`radio`): a cassette player's
     // little speaker, a radio's, a gramophone's horn, a piano in a room.
@@ -455,6 +458,7 @@ mod tests {
             "svd",
             "toz8",
             "flare_pistol",
+            "crossbow",
             "factory_hall",
             "chimney",
             "rail_shed",

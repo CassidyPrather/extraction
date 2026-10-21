@@ -44,6 +44,8 @@ fn sweep_run(opts: Res<LaunchOptions>) -> bool {
 pub const STUDIO: Vec3 = Vec3::new(0.0, 900.0, 0.0);
 /// The grid of views: columns, rows.
 pub const GRID: (u32, u32) = (4, 2);
+/// The cameras' field of view, vertical, degrees.
+pub const FOV: f32 = 40.0;
 /// The cameras' near plane.
 pub const NEAR: f32 = 0.03;
 /// How far under the subjects the studio floor's top is, metres.
@@ -149,6 +151,8 @@ struct Record {
 enum Stage {
     #[default]
     Start,
+    /// The studio's first frames: its floor and cameras come up.
+    Warm,
     Spawn,
     Load,
     Shoot,
@@ -174,9 +178,14 @@ struct Sweep {
     records: Vec<Record>,
     /// The subject is hidden for its `_empty` picture.
     hidden: bool,
+    /// The light the studio last settled into.
+    warmed: Option<usize>,
     started: Option<std::time::Instant>,
 }
 
+/// Frames the studio settles for when it opens and at each new light
+/// (the sky and fog ease into a new weather).
+const WARM: u32 = 90;
 /// Frames a subject may take to load before it's shot as it is.
 const LOAD_LIMIT: u32 = 600;
 /// Frames the meshes must hold steady (count and bounds) before shooting.
@@ -324,6 +333,7 @@ fn sweep(
                 ..default()
             };
             cam.viewport = Some(cell(0));
+            commands.entity(cam_e).insert(super::Lens(FOV.to_radians()));
             let weather = crate::world::sky::Weather::default();
             for i in 1..8 {
                 st.extra.push(
@@ -331,6 +341,7 @@ fn sweep(
                         .spawn((
                             Name::new(format!("Sweep camera {i}")),
                             SweepCamera,
+                            super::Lens(FOV.to_radians()),
                             Camera {
                                 viewport: Some(cell(i)),
                                 order: i as isize,
@@ -342,8 +353,14 @@ fn sweep(
                         .id(),
                 );
             }
-            let _ = cam_e;
-            st.stage = Stage::Spawn;
+            st.frames = 0;
+            st.stage = Stage::Warm;
+        }
+        Stage::Warm => {
+            st.frames += 1;
+            if st.frames >= WARM {
+                st.stage = Stage::Spawn;
+            }
         }
         Stage::Spawn => {
             let Some(light) = st.lights.get(st.light).copied() else {
@@ -355,8 +372,9 @@ fn sweep(
                 st.i = 0;
                 return;
             };
-            if st.i == 0 {
-                // A new light: the hour and weather, and the lamp.
+            if st.i == 0 && st.warmed != Some(st.light) {
+                // A new light: the hour and weather, then time for the sky
+                // and fog to settle into them before the first subject.
                 let (hour, weather) = match light {
                     Light::Day => ("day", "clearing"),
                     Light::Dusk => ("dusk", "clearing"),
@@ -365,6 +383,10 @@ fn sweep(
                 opts.hour = Some(hour.into());
                 opts.weather = Some(weather.into());
                 let _ = std::fs::create_dir_all(out.join(light.dir()));
+                st.warmed = Some(st.light);
+                st.frames = 0;
+                st.stage = Stage::Warm;
+                return;
             }
             let root = commands
                 .spawn((
@@ -551,7 +573,7 @@ fn sweep(
             // Frame it: every view sees its bounding sphere whole.
             let centre = (lo + hi) * 0.5;
             let radius = ((hi - lo).length() * 0.5).max(0.05);
-            let fov = 40f32.to_radians();
+            let fov = FOV.to_radians();
             let dist = radius / (fov * 0.5).sin() * 1.05;
             let place = |i: usize, tf: &mut Transform, proj: &mut Projection| {
                 let (az, el) = angles()[i];
@@ -583,7 +605,7 @@ fn sweep(
             commands.entity(st.lamp.unwrap()).insert(PointLight {
                 color: Color::srgb(1.0, 0.88, 0.7),
                 intensity: if night {
-                    60_000.0 * (radius * 2.0).max(1.0).powi(2)
+                    20_000.0 * (radius * 2.0).max(1.0).powi(2)
                 } else {
                     0.0
                 },
@@ -642,6 +664,9 @@ fn sweep(
                 commands.entity(root).despawn();
             }
             st.i += 1;
+            if st.i % 10 == 0 && st.light == 0 {
+                write_report(st, &out);
+            }
             if st.i % 25 == 0 {
                 info!(
                     "sweep: {} {}/{} ({:.0} s)",
@@ -725,7 +750,10 @@ fn record(
     }
 }
 
-fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExit>) {
+/// `sweep.json`: what each subject measured. Written as the sweep goes
+/// (every ten subjects) as well as at the end, so a run that dies hours in
+/// still leaves its findings.
+fn write_report(st: &Sweep, out: &std::path::Path) {
     let json = serde_json::json!({
         "grid": [GRID.0, GRID.1],
         "angles": angles(),
@@ -736,6 +764,10 @@ fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExi
         out.join("sweep.json"),
         serde_json::to_string_pretty(&json).unwrap_or_default(),
     );
+}
+
+fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExit>) {
+    write_report(st, out);
     info!(
         "sweep: done, {} subjects in {:.0} s",
         st.records.len(),
