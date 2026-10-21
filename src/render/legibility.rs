@@ -412,6 +412,12 @@ pub const ART: &[ArtText] = &[
     // A charcoal burner's name on his bed, a shop's CLOSED card, a
     // chapel's hymn numbers: read across the room (World models).
     art("props/named.py", Need::MustRead, 2.0, "across the room"),
+    // A cassette player's nameplate and keys, a tape's A/B, a 78's label
+    // (Radio & music): read in the hand.
+    art("items/music.py", Need::Incidental, 0.35, "held in the hand"),
+    // The piano's and harmonium's names on their name rails: standing at
+    // the keys.
+    art("props/music.py", Need::Incidental, 0.7, "standing at the keys"),
 ];
 
 /// Text baked into a texture.
