@@ -737,9 +737,77 @@ fn settle(world: &mut World, e: Entity, bag: Option<Entity>, local: Vec3, fallba
     }
 }
 
+/// Out in the Zone: the raid as it stands, to resume where you stood if
+/// the game is closed (or crashes, or the headset's battery dies) mid-raid.
+/// At base, or pulling out with the truck: nothing to resume.
+fn raid_save(world: &mut World) -> Option<extraction_core::save::RaidSave> {
+    use extraction_core::save::{RaidPhaseSave as P, RaidSave};
+    let phase = match world.resource::<Raid>().phase {
+        Phase::Out => P::Out,
+        Phase::TruckCalled { rv, eta } => P::TruckCalled { rv, eta },
+        Phase::TruckWaiting { rv, left } => P::TruckWaiting { rv, left },
+        Phase::Down { .. } => P::Down,
+        Phase::AtBase | Phase::Extracting { .. } => return None,
+    };
+    let t = *world
+        .query_filtered::<&Transform, With<LocalPlayer>>()
+        .iter(world)
+        .next()?;
+    Some(RaidSave {
+        at: t.translation.to_array(),
+        yaw: t.rotation.to_euler(EulerRot::YXZ).0,
+        phase,
+    })
+}
+
+/// Back out where you quit: the player stood where they were (nudged up
+/// out of the ground, inside the map), the raid's phase and the truck's
+/// timer as they were. Whatever robots were about, the director sends its
+/// own (`docs/SOAK.md`, "Quitting mid-raid").
+fn resume_raid(world: &mut World, r: &extraction_core::save::RaidSave) -> Option<Vec3> {
+    use extraction_core::save::RaidPhaseSave as P;
+    let zone = world.resource::<crate::world::Zone>().clone();
+    let half = zone.map.size * 0.5 - 2.0;
+    let mut at = v3(r.at);
+    at.x = at.x.clamp(-half, half);
+    at.z = at.z.clamp(-half, half);
+    let ground = zone.ground(at.x, at.z);
+    // Underground sites lie a few metres to some tens down; further than
+    // that, or past the map's edge, is out of the world: back on the ground.
+    if at.y < ground - 40.0 || at.x.abs() >= half || at.z.abs() >= half {
+        at.y = ground;
+    }
+    at.y += 0.1;
+    let player = world
+        .query_filtered::<Entity, With<LocalPlayer>>()
+        .iter(world)
+        .next()?;
+    if let Some(mut t) = world.get_mut::<Transform>(player) {
+        t.translation = at;
+        t.rotation = Quat::from_rotation_y(r.yaw);
+    }
+    let mut raid = world.resource_mut::<Raid>();
+    raid.phase = match r.phase {
+        P::Out => Phase::Out,
+        P::TruckCalled { rv, eta } => Phase::TruckCalled { rv, eta },
+        P::TruckWaiting { rv, left } => Phase::TruckWaiting { rv, left },
+        // Down is down: the convoy's order goes out as it would have.
+        P::Down => Phase::Down { left: 1.0 },
+    };
+    raid.say("Back where you were. The raid goes on.");
+    info!("resuming the raid at {at:.1}");
+    Some(at)
+}
+
 fn apply_restore(world: &mut World) {
     let Some(Restore { save, zone }) = world.remove_resource::<Restore>() else {
         return;
+    };
+    // Mid-raid: back out there first, so what was in your hands lands at
+    // your feet out there (the stash is back at base).
+    let resumed = match (&save.zone.raid, zone) {
+        (Some(r), true) => resume_raid(world, r).is_some(),
+        _ => false,
     };
     let stash = world
         .query_filtered::<Entity, With<Stash>>()
@@ -755,12 +823,19 @@ fn apply_restore(world: &mut World) {
         .map(|t| t.translation + Vec3::new(0.3, 0.3, 0.3))
         .unwrap_or(Vec3::Y);
     let mut placed = 0;
-    // The stash, and anything that was in your hands.
-    for saved in save.stash.iter().chain(&save.loadout.hands) {
+    // The stash, and anything that was in your hands (at your feet if
+    // the raid resumes).
+    for (saved, held) in save
+        .stash
+        .iter()
+        .map(|s| (s, false))
+        .chain(save.loadout.hands.iter().map(|s| (s, true)))
+    {
         let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
             continue;
         };
-        settle(world, e, stash, v3(saved.local), feet);
+        let bag = if held && resumed { None } else { stash };
+        settle(world, e, bag, v3(saved.local), feet);
         placed += 1;
     }
     // What you were wearing.
@@ -932,6 +1007,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.zone.clock = raid.clock;
         save.zone.cycle = raid.cycle;
     }
+    save.zone.raid = raid_save(world);
     save.zone.rolled = true;
     if let Some(b) = world.get_resource::<crate::destruction::Broken>() {
         let mut keys: Vec<[i32; 3]> = b.0.iter().copied().collect();
@@ -1308,6 +1384,69 @@ mod tests {
         let p = dir.join(name);
         let _ = std::fs::remove_file(&p);
         p
+    }
+
+    /// Quitting mid-raid (or a crash, or a flat battery) resumes the raid
+    /// where you stood, with the truck's timer as it was, instead of
+    /// waking at base with everything you carried (an escape from any
+    /// danger). At base, a save opens at base.
+    #[test]
+    fn quitting_mid_raid_resumes_where_you_stood() {
+        let path = temp_save("mid_raid.ron");
+        let mut a = app_with_save(&path);
+        let zone = a.world().resource::<crate::world::Zone>().clone();
+        let out_there = zone.on_ground(40.0, -60.0);
+        let player = a
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(a.world())
+            .next()
+            .unwrap();
+        a.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = out_there;
+        {
+            let mut raid = a.world_mut().resource_mut::<Raid>();
+            raid.raids = 3;
+            raid.clock = 700.0;
+            raid.phase = Phase::TruckWaiting { rv: 1, left: 90.0 };
+        }
+        let raids = a.world().resource::<Raid>().raids;
+        let save = snapshot(a.world_mut());
+        let r = save.zone.raid.clone().expect("mid-raid is saved");
+        assert_eq!(
+            r.phase,
+            extraction_core::save::RaidPhaseSave::TruckWaiting { rv: 1, left: 90.0 }
+        );
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+
+        let mut b = app_with_save(&path);
+        let raid = b.world().resource::<Raid>();
+        assert!(
+            matches!(raid.phase, Phase::TruckWaiting { rv: 1, left } if left > 85.0),
+            "the truck still waiting: {:?}",
+            raid.phase
+        );
+        assert_eq!(raid.raids, raids, "the same raid, not a new one");
+        let at = b
+            .world_mut()
+            .query_filtered::<&Transform, With<LocalPlayer>>()
+            .iter(b.world())
+            .next()
+            .unwrap()
+            .translation;
+        assert!(
+            at.xz().distance(out_there.xz()) < 1.0 && (at.y - out_there.y).abs() < 1.5,
+            "back where they stood: {at} (was {out_there})"
+        );
+        // Home again, and saved at base: it opens at base.
+        b.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        let save = snapshot(b.world_mut());
+        assert!(save.zone.raid.is_none());
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
