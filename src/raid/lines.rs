@@ -263,7 +263,7 @@ mod tests {
     /// Every name a rendezvous can have, in every map.
     fn rendezvous_names() -> Vec<String> {
         let mut out = vec!["gate".to_string()];
-        for map in crate::world::story::VALLEYS {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let text = std::fs::read_to_string(
                 crate::asset_root_path()
                     .join("maps")

@@ -4366,7 +4366,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         }
         for s in &geo.loot {
             loot.0.push(LootSpot {
-                at: t.transform_point(s.at),
+                at: clear_of_notes(&zone.map, t.transform_point(s.at)),
                 table: s.table,
             });
         }
@@ -4385,6 +4385,28 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
     }
     info!("{} building loot spots", loot.0.len());
     commands.insert_resource(loot);
+}
+
+/// How far a loot spot keeps from a note or terminal on the same table,
+/// centre to centre: what's left there doesn't lie across the paper.
+const LOOT_CLEAR: f32 = 0.55;
+
+/// A loot spot moved along the table, away from a note or terminal that
+/// lies on it (notes sit 0.3 m off a table's middle, where its loot is).
+fn clear_of_notes(map: &extraction_core::map::MapDef, at: Vec3) -> Vec3 {
+    use extraction_core::map::MarkerKind;
+    let Some(m) = map.markers.iter().find(|m| {
+        matches!(
+            m.kind,
+            MarkerKind::Note { .. } | MarkerKind::Terminal { .. }
+        ) && Vec2::new(m.at[0] - at.x, m.at[1] - at.z).length() < LOOT_CLEAR
+    }) else {
+        return at;
+    };
+    let away = Vec2::new(at.x - m.at[0], at.z - m.at[1]);
+    let dir = away.try_normalize().unwrap_or(Vec2::X);
+    let to = Vec2::new(m.at[0], m.at[1]) + dir * LOOT_CLEAR;
+    Vec3::new(to.x, at.y, to.y)
 }
 
 /// A building's compound collider and its pieces' materials (also how a
@@ -5180,6 +5202,40 @@ pub fn dress_buildings(
 
 #[cfg(test)]
 mod tests {
+
+    /// A table's loot keeps clear of the note on it (the pump station's
+    /// log, read at its table, with the tools there too).
+    #[test]
+    fn loot_keeps_off_the_notes() {
+        use extraction_core::map::MarkerKind;
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
+            let zone = Zone::load(name);
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins)
+                .insert_resource(zone.clone())
+                .add_systems(Startup, spawn_buildings);
+            app.update();
+            let loot = app.world().resource::<BuildingLoot>();
+            assert!(loot.0.len() > 20, "{name}: {} loot spots", loot.0.len());
+            for m in &zone.map.markers {
+                if !matches!(
+                    m.kind,
+                    MarkerKind::Note { .. } | MarkerKind::Terminal { .. }
+                ) {
+                    continue;
+                }
+                for s in &loot.0 {
+                    let d = Vec2::new(m.at[0] - s.at.x, m.at[1] - s.at.z).length();
+                    assert!(
+                        d > LOOT_CLEAR - 0.01,
+                        "{name}: {} under loot ({d:.2} m)",
+                        m.name
+                    );
+                }
+            }
+        }
+    }
+
     use super::*;
 
     /// Every model a recipe dresses with is built (`art/props`), and
