@@ -222,7 +222,7 @@ impl LaunchOptions {
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
-                | "--one-handed" | "--no-captions" | "--no-machine-tick" => {}
+                | "--one-handed" | "--no-captions" | "--no-machine-tick" | "--no-body" => {}
                 "--vignette" => {
                     let _ = val();
                 }
