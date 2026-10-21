@@ -205,6 +205,14 @@ pub struct RoadDef {
     /// left alone and the game builds a bridge deck instead.
     #[serde(default)]
     pub bridges: Vec<BridgeDef>,
+    /// Spans where the road runs under an avalanche gallery: a concrete
+    /// roof on the uphill side's wall, open to the valley (on columns along
+    /// the downhill edge). Same form as `bridges`: centre `at` (snapped to
+    /// the road) and `length`. The road under it is graded as usual; the
+    /// gallery adds nothing to the nav grid (its wall stands on the cut
+    /// bank beyond the shoulder, its columns beyond the road's edge).
+    #[serde(default)]
+    pub galleries: Vec<BridgeDef>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -734,23 +742,44 @@ pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron
 pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.ron");
 /// The fourth (docs/FOURTH_VALLEY.md).
 pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_reservoir.ron");
+/// The fifth (docs/FIFTH_VALLEY.md).
+pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
 
 /// Every valley the truck drives to, (map id, map text), in the order a
 /// career meets them. Tests that hold "every valley" to something go over
 /// this list, so a new valley is checked by all of them; a test that a map
 /// file outside it fails keeps the list whole.
-pub const VALLEYS: [(&str, &str); 4] = [
+pub const VALLEYS: [(&str, &str); 5] = [
     ("marrow_creek", MARROW_CREEK),
     ("kettle_pass", KETTLE_PASS),
     ("cinder_works", CINDER_WORKS),
     ("sallow_reservoir", SALLOW_RESERVOIR),
+    ("rime_fell", RIME_FELL),
 ];
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    /// A road's avalanche galleries read like its bridges, and a road
+    /// written before galleries existed has none.
+    #[test]
+    fn road_galleries_parse_and_default_empty() {
+        let road = |extra: &str| -> RoadDef {
+            ron::from_str(&format!(
+                "(kind: Gravel, points: [(0.0, 0.0), (100.0, 0.0)], width: 6.0{extra})"
+            ))
+            .unwrap()
+        };
+        assert!(road("").galleries.is_empty());
+        let r = road(", galleries: [(at: (50.0, 1.0), length: 40.0)]");
+        assert_eq!(r.galleries.len(), 1);
+        assert_eq!(r.galleries[0].at, [50.0, 1.0]);
+        assert_eq!(r.galleries[0].length, 40.0);
+        assert!(r.bridges.is_empty());
+    }
 
     /// Every map file but the Training Yard is a valley on [`VALLEYS`], and
     /// the list's text is the file's.
@@ -885,6 +914,42 @@ mod tests {
                 // The truck stops on the far side of the dam.
                 assert!(m.at[1] < 100.0, "{} is below the dam", m.name);
             }
+        }
+    }
+
+    /// Rime Fell (docs/FIFTH_VALLEY.md): high and cold, climbing north the
+    /// whole way. The settlement's bench stands well over the Bottoms and
+    /// under the col; the observatory's summit is the valley's top; the
+    /// mill's levels step 4 m up the knoll.
+    #[test]
+    fn rime_fell_parses_and_builds() {
+        let map = MapDef::from_ron(RIME_FELL).expect("map parses");
+        assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
+        let hm = Heightmap::build(&map);
+        let gate = hm.height([-10.0, 266.0]);
+        let bench = hm.height([-30.0, 20.0]);
+        let col = hm.height([70.0, -262.0]);
+        let summit = hm.height([-208.0, -210.0]);
+        assert!(bench > gate + 30.0, "bench {bench} over the Bottoms {gate}");
+        assert!(col > bench + 30.0, "col {col} over the bench {bench}");
+        assert!(summit > col + 8.0, "summit {summit} over the col {col}");
+        for (k, z) in [45.0, 25.0, 15.0, 5.0].into_iter().enumerate() {
+            let h = hm.height([125.0, z]);
+            let want = 90.0 + 4.0 * k as f32;
+            assert!(
+                (h - want).abs() < 0.3,
+                "mill terrace {k} at {h}, not {want}"
+            );
+        }
+        assert!(hm.water_level([168.0, -185.0]).is_some(), "the tarn");
+        for m in map.markers.iter().filter(|m| {
+            matches!(
+                m.kind,
+                MarkerKind::Insertion | MarkerKind::Rendezvous | MarkerKind::Offering
+            )
+        }) {
+            assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
+            assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
         }
     }
 

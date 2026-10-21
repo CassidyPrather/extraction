@@ -1060,6 +1060,7 @@ mod tests {
             shoulder: 3.0,
             smoothing: 20.0,
             bridges: vec![],
+            galleries: vec![],
         });
         let hm = Heightmap::build(&map);
         // Cross-slope across the road is gentle.
@@ -1114,6 +1115,7 @@ mod tests {
                 shoulder,
                 smoothing,
                 bridges: vec![],
+                galleries: vec![],
             });
         }
         let hm = Heightmap::build(&map);

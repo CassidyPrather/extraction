@@ -338,6 +338,8 @@ const ON_ROADS: &[&str] = &[
     "robot_gate",
     "footbridge",
     "boxcar",
+    // Rime Fell's funicular car stands on its own line.
+    "funicular_car",
 ];
 
 /// An oriented rectangle in map space: centre, half extents, yaw (as the
@@ -1646,7 +1648,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, SALLOW_RESERVOIR, TRAINING_YARD};
+    use crate::map::{
+        CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, RIME_FELL, SALLOW_RESERVOIR, TRAINING_YARD,
+    };
 
     fn run(name: &str, text: &str) -> Report {
         let map = MapDef::from_ron(text).unwrap();
@@ -1687,6 +1691,11 @@ mod tests {
     #[test]
     fn sallow_reservoir_passes_the_map_lint() {
         assert_clean(&run("sallow_reservoir", SALLOW_RESERVOIR));
+    }
+
+    #[test]
+    fn rime_fell_passes_the_map_lint() {
+        assert_clean(&run("rime_fell", RIME_FELL));
     }
 
     /// The Training Yard belongs to onboarding: its findings are printed
