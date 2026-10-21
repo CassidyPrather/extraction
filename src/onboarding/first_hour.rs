@@ -251,11 +251,19 @@ impl Newcomer {
 /// The card's place: "Go up to the Old farm and look round..." gives the
 /// name, and the map sheet has the name written where it is.
 fn place_on_card(text: &str, zone: &crate::world::Zone) -> Option<(String, Vec2)> {
+    // The card wraps and lower-cases: read it as one line.
+    let flat = |t: &str| {
+        t.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    let text = flat(text);
     zone.map
         .markers
         .iter()
         .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
-        .filter(|m| text.contains(&m.name))
+        .filter(|m| text.contains(&flat(&m.name)))
         .max_by_key(|m| m.name.len())
         .map(|m| (m.name.clone(), Vec2::from(m.at)))
 }
@@ -558,7 +566,11 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Call => {
-            if let Phase::TruckCalled { .. } | Phase::TruckWaiting { .. } = raid.phase {
+            if raid.phase == Phase::AtBase {
+                // Still by the truck: out first (the radio's for the Zone).
+                let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
+                tasks.extend(world.legs(here, away));
+            } else if let Phase::TruckCalled { .. } | Phase::TruckWaiting { .. } = raid.phase {
                 // What it said: a name, maybe a way.
                 let reply = raid
                     .log
