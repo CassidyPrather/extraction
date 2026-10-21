@@ -1877,6 +1877,10 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     }
     assert!(app.world().get_entity(door).is_err(), "prised off");
     assert_eq!(doors(&mut app), before + 1, "a car door to carry");
+    assert!(
+        app.world().resource::<Broken>().0.contains(&key(door_at)),
+        "and it stays off till the Surge"
+    );
     super::surge(app.world_mut());
     run(&mut app, 2);
     assert_eq!(parts(&mut app).len(), 10, "the Surge hangs it back");
