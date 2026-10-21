@@ -320,3 +320,45 @@ fn end(commands: &mut Commands, player: Entity, on_hands: bool, roped: bool) {
         commands.entity(player).remove::<Climbing>();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::world::buildings::{Piece, Shape};
+
+    /// Whether a point is inside a building piece (its shapes are full
+    /// sizes, centred on its transform).
+    fn inside(p: &Piece, at: Vec3) -> bool {
+        let l = p.at.compute_affine().inverse().transform_point3(at);
+        match p.shape {
+            Shape::Box(s) | Shape::Prism(s) => (l.abs() * 2.0).cmple(s + 0.01).all(),
+            Shape::Cylinder(r, h) => l.y.abs() * 2.0 <= h + 0.01 && l.xz().length() <= r + 0.01,
+        }
+    }
+
+    /// The world's ladders (World models' prefabs): each runs up, and its
+    /// top puts you on something of the prefab's, not in the air.
+    #[test]
+    fn the_prefab_ladders_lead_somewhere() {
+        for id in ["water_tower", "boxcar", "ropeway_pylon"] {
+            let geo = crate::world::buildings::prefab(id).expect(id);
+            assert!(!geo.ladders.is_empty(), "{id} has no ladder");
+            for l in &geo.ladders {
+                assert!(l.top.y - l.bottom.y > 1.5, "{id}: {l:?} doesn't climb");
+                let over = l
+                    .over
+                    .unwrap_or_else(|| panic!("{id}: {l:?} leads nowhere"));
+                assert!(
+                    over.y > l.top.y - 1.0 && over.distance(l.top) < 2.5,
+                    "{id}: {l:?} tops out far from its top"
+                );
+                // Something of the prefab's just under the top-out point.
+                let under = geo
+                    .pieces
+                    .iter()
+                    .any(|p| p.collide && inside(p, over - Vec3::Y * 0.1));
+                assert!(under, "{id}: nothing to stand on at {over}");
+            }
+        }
+    }
+}

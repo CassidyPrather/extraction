@@ -131,6 +131,12 @@ fn debris_body(mass: f32, collider: Collider, inertia: Vec3) -> impl Bundle {
         Restitution::new(0.15),
         LinearDamping(0.15),
         AngularDamping(0.6),
+        // A piece never needs more (a wreck throws them at a few m/s); a
+        // leg caught between its joints and a slope was flung at 600 m/s,
+        // and its speculative contacts touched 15,000 ground triangles in
+        // a tick (`render::spikes`).
+        MaxLinearSpeed(25.0),
+        MaxAngularSpeed(40.0),
         // Item, not Robot: bullets and hands still meet it, but the
         // player's move-and-slide (World and Robot) walks through it.
         CollisionLayers::new(Layer::Item, [Layer::World, Layer::Robot, Layer::Item]),

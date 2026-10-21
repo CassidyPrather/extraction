@@ -65,6 +65,8 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             },
             Collider::cuboid(0.3, 0.26, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
+            crate::interact::read::Readable,
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.26),
@@ -282,7 +284,8 @@ fn place_cache(
         .0
         .iter()
         .map(|s| s.at)
-        .filter(|p| p.xz().distance(base) > CACHE_AWAY)
+        // The driver doesn't go below ground.
+        .filter(|p| p.xz().distance(base) > CACHE_AWAY && p.y >= zone.ground(p.x, p.z) - 1.5)
         .collect();
     if far.is_empty() {
         return None;
@@ -355,11 +358,15 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
                 .total_cmp(&extraction_core::geom::dist(b.at, here))
         });
     let place = match below {
-        Some(l) => format!("the {}", l.name.to_lowercase()),
+        Some(l) => {
+            let name = l.name.to_lowercase();
+            format!("the {}", name.trim_start_matches("the "))
+        }
         None => building.map_or("a spot".to_owned(), |b| format!("the {b}")),
     };
     let into = if below.is_some() { "down in" } else { "in" };
-    match landmark {
+    // Not "in the pump house by the Pump house".
+    match landmark.filter(|m| place != format!("the {}", m.name.to_lowercase())) {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };

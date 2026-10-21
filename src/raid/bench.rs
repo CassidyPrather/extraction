@@ -139,6 +139,7 @@ fn build_bench(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             // The display, on the canopy wall above the bench, facing in.
             c.spawn((
                 Name::new("Bench display"),
+                crate::render::legibility::TextSource::BenchDisplay,
                 ScreenText {
                     text: String::new(),
                     size: Vec2::new(0.62, 0.36),
@@ -449,7 +450,7 @@ mod tests {
         );
         run(&mut app, "pack_545");
         let have = names(&mut app);
-        assert!(have.contains(&"ammo_545".to_string()), "{have:?}");
+        assert!(have.contains(&"ammo_545_repack".to_string()), "{have:?}");
         assert!(
             have.contains(&"rotor_assembly".to_string()),
             "untouched: {have:?}"

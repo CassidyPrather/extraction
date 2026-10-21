@@ -282,6 +282,7 @@ fn burn_fuses(
                     shooter: thrower,
                     mass_g: 0.0,
                     load: Default::default(),
+                    blow: None,
                 });
             }
         }

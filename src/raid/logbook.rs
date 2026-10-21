@@ -74,14 +74,16 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             crate::interact::Grabbable {
                 points: vec![crate::interact::GrabPoint::free()],
             },
-            avian3d::prelude::Collider::cuboid(0.34, 0.25, 0.03),
+            avian3d::prelude::Collider::cuboid(0.36, 0.3, 0.03),
             avian3d::prelude::CollisionLayers::new(
                 crate::world::Layer::Item,
                 avian3d::prelude::LayerMask::NONE,
             ),
+            crate::render::legibility::TextSource::Logbook,
+            crate::interact::read::Readable,
             ScreenText {
                 text: String::new(),
-                size: Vec2::new(0.34, 0.25),
+                size: Vec2::new(0.36, 0.3),
                 style: ScreenStyle::Card,
             },
             Transform::from_xyz(-1.12, FLOOR + 1.66, 0.8)

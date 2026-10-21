@@ -812,7 +812,16 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
-            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
+            sneak(
+                me,
+                &mut bot,
+                r,
+                &scene,
+                &mut log,
+                eye,
+                body.swimming,
+                &mut input,
+            );
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1180,6 +1189,7 @@ const DISTRACT_RANGE: f32 = 45.0;
 ///   goes to look there instead.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
+#[allow(clippy::too_many_arguments)]
 fn sneak(
     me: Entity,
     bot: &mut Bot,
@@ -1187,6 +1197,7 @@ fn sneak(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
     let hurrying = bot.sprint
@@ -1245,9 +1256,12 @@ fn sneak(
             }
         }
     }
-    if wary != input.crouch {
-        input.crouch = wary;
-        if wary {
+    // Afloat it ducks too, as a player does: a flooded doorway's head is
+    // a hand over the water.
+    let low = wary || swimming;
+    if low != input.crouch {
+        input.crouch = low;
+        if low {
             r.crouched_since = Some(r.clock);
         } else if let Some(t) = r.crouched_since.take() {
             log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
@@ -1746,6 +1760,11 @@ fn fight_on(
 }
 
 /// Anomalies it can see get routed round (unless it's reckless).
+/// An anomaly that has caught a bot it gives this much berth past its
+/// danger radius from then on (m): a path round it cuts its corners by
+/// up to a waypoint's reach (1.2 m), and still keeps out.
+const BURNED_BERTH: f32 = 2.0;
+
 fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     // In one it didn't mean to walk into: out the way it came, and never
     // that one again, reckless or not (a dive ends when it leaves).
@@ -1760,11 +1779,11 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             r.grid.block(
                 Obstacle::Circle {
                     at: at.to_array(),
-                    radius: danger + 1.0,
+                    radius: danger + BURNED_BERTH,
                 },
                 0.0,
             );
-            let out = at + (here - at).normalize_or(Vec2::X) * (danger + 1.5);
+            let out = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
             r.interrupted = true;
             bot.replace([Task::WalkTo {
                 to: out,
@@ -1772,6 +1791,23 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
             }]);
             bot.sprint = true;
             return;
+        }
+    }
+    // Whatever it was going to (often the thing it was caught on the way
+    // to), it goes no nearer one that's caught it than the ring outside.
+    for (e, a, gt) in &scene.anomalies {
+        if !r.burned.contains(&e) {
+            continue;
+        }
+        let at = gt.translation().xz();
+        let danger = a.kind.danger_radius(a.radius);
+        let ring = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
+        for t in bot.tasks.iter_mut() {
+            if let Task::WalkTo { to, .. } = t {
+                if to.distance(at) < danger + BURNED_BERTH {
+                    *to = ring;
+                }
+            }
         }
     }
     let mut new = Vec::new();
@@ -2304,6 +2340,17 @@ fn kind_name(k: SiteKind) -> &'static str {
 /// Picks the next site: worth, distance, and the pull of the far side as
 /// the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
+    // `SIM_SITE=<prefab>`: that site first, while it's there to be done
+    // (a smoke test of one underground site, say).
+    if let Ok(want) = std::env::var("SIM_SITE") {
+        if let Some(i) = r
+            .sites
+            .iter()
+            .position(|s| s.name == want && !s.visited && s.tries < 3)
+        {
+            return Some(i);
+        }
+    }
     let late = (scene.awake() / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;

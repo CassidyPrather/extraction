@@ -451,18 +451,22 @@ pub fn scripted_views(zone: &Zone, file: &std::path::Path) -> Vec<View> {
         let (Some(name), Some(cam)) = (parts.next(), parts.next()) else {
             continue;
         };
-        // `~h` for the height: h metres over the ground.
+        // `~h` for the height: h metres over the ground; `=y` the world's
+        // height as given, under the ground too (an underground site).
         let above = cam.split(',').nth(1).is_some_and(|y| y.starts_with('~'));
+        let exact = cam.split(',').nth(1).is_some_and(|y| y.starts_with('='));
         let v: Vec<f32> = cam
             .split(',')
-            .filter_map(|s| s.trim_start_matches('~').parse().ok())
+            .filter_map(|s| s.trim_start_matches(['~', '=']).parse().ok())
             .collect();
         if v.len() < 5 {
             warn!("tour: bad view line {line:?}");
             continue;
         }
         let ground = zone.ground(v[0], v[2]);
-        let y = if above {
+        let y = if exact {
+            v[1]
+        } else if above {
             ground + v[1].max(0.3)
         } else if v[1] <= 0.0 {
             ground + 1.7

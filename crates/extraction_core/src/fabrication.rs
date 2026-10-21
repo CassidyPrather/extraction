@@ -113,7 +113,7 @@ pub const RECIPES: &[Recipe] = &[
             (Need::Item("brass"), 1),
             (Need::Item("scrap_metal"), 1),
         ],
-        makes: Make::Items(&[("ammo_9x18", 1)]),
+        makes: Make::Items(&[("ammo_9x18_repack", 1)]),
         seconds: 8.0,
     },
     Recipe {
@@ -124,7 +124,7 @@ pub const RECIPES: &[Recipe] = &[
             (Need::Item("brass"), 2),
             (Need::Item("scrap_metal"), 1),
         ],
-        makes: Make::Items(&[("ammo_545", 1)]),
+        makes: Make::Items(&[("ammo_545_repack", 1)]),
         seconds: 10.0,
     },
     Recipe {
@@ -135,7 +135,7 @@ pub const RECIPES: &[Recipe] = &[
             (Need::Item("brass"), 1),
             (Need::Item("scrap_metal"), 1),
         ],
-        makes: Make::Items(&[("ammo_762r", 1)]),
+        makes: Make::Items(&[("ammo_762r_repack", 1)]),
         seconds: 10.0,
     },
     Recipe {
@@ -147,7 +147,7 @@ pub const RECIPES: &[Recipe] = &[
             (Need::Item("scrap_metal"), 1),
             (Need::Item("polymer"), 1),
         ],
-        makes: Make::Items(&[("ammo_12ga", 1)]),
+        makes: Make::Items(&[("ammo_12ga_repack", 1)]),
         seconds: 10.0,
     },
     // --- Making things -----------------------------------------------------
@@ -225,7 +225,7 @@ pub const VICE_RECIPES: &[Recipe] = &[
             (Need::Item("brass"), 2),
             (Need::Item("scrap_metal"), 1),
         ],
-        makes: Make::Items(&[("ammo_762x39", 1)]),
+        makes: Make::Items(&[("ammo_762x39_repack", 1)]),
         seconds: 10.0,
     },
     Recipe {
@@ -236,7 +236,7 @@ pub const VICE_RECIPES: &[Recipe] = &[
             (Need::Item("brass"), 2),
             (Need::Item("scrap_metal"), 1),
         ],
-        makes: Make::Items(&[("ammo_762x25", 1)]),
+        makes: Make::Items(&[("ammo_762x25_repack", 1)]),
         seconds: 12.0,
     },
     Recipe {

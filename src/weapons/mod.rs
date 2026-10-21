@@ -12,6 +12,7 @@
 
 pub mod armour;
 pub mod ballistics;
+pub mod faults;
 pub mod feel;
 pub mod flat;
 pub mod grenades;
@@ -23,6 +24,7 @@ pub mod range;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
+pub mod wear;
 pub mod zero;
 
 use avian3d::prelude::*;
@@ -196,6 +198,7 @@ impl Plugin for WeaponsPlugin {
                 armour::ArmourPlugin,
                 ballistics::BallisticsPlugin,
                 zero::ZeroPlugin,
+                faults::FaultsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,
@@ -445,6 +448,13 @@ fn work_handles(
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
+                // A stuck bolt: only a palm slapped up under the handle
+                // breaks it free.
+                if gun.firearm.bolt_stuck
+                    && hand.velocity.dot(gt.rotation() * Vec3::Y) > faults::STICKY_SLAP
+                {
+                    ev.extend(gun.firearm.free_bolt());
+                }
                 if gun.firearm.bolt_travel < 0.05 {
                     let lift = (start_lift + d.y / 0.035).clamp(0.0, 1.0);
                     ev.extend(gun.firearm.set_handle_lift(lift));
@@ -778,6 +788,7 @@ fn triggers(
     mut guns: Query<(Entity, &mut Gun, Option<&Held>, &GlobalTransform, &Item)>,
     time: Res<Time>,
     mut rng: ResMut<GunRng>,
+    mut loose: Local<Option<Rng>>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut shots: MessageWriter<ballistics::Shot>,
@@ -790,7 +801,15 @@ fn triggers(
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
         gun.trigger = trigger;
-        let events = gun.firearm.update(dt, trigger > 0.55, &mut || rng.0.f32());
+        // Guns in hands roll from the shared generator; those lying about
+        // (a floating pin rolls every tick) from their own, so how many
+        // SKSs a valley's loot holds doesn't change how yours runs.
+        let events = if held.is_some() {
+            gun.firearm.update(dt, trigger > 0.55, &mut || rng.0.f32())
+        } else {
+            let r = loose.get_or_insert_with(|| Rng::new(0x1005E));
+            gun.firearm.update(dt, trigger > 0.55, &mut || r.f32())
+        };
         let name = catalog.get(item.kind()).id.clone();
         for ev in &events {
             if let FireEvent::Fired { barrel } = ev {
