@@ -395,7 +395,20 @@ fn plan_site(
                         && !levels[c as usize * n + a as usize].is_nan()
                 })
             });
-            if clear {
+            // A pit's floor, or heat nothing crosses: not a way at all.
+            let p = grid.centre(i, j);
+            let barred = r.cell_of(p).is_some_and(|(a, c)| {
+                let k = c * r.nx + a;
+                r.pit[k]
+                    || r.heat[k].is_some_and(|z| {
+                        extraction_core::underground::layout(&b.prefab).is_some_and(|l| {
+                            l.heat[z as usize].level >= extraction_core::underground::SCORCHING
+                        })
+                    })
+            });
+            if barred {
+                grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
+            } else if clear {
                 // Wading is slow; deep enough to swim, slower.
                 let w = r.water_at(grid.centre(i, j));
                 grid.cost[j * n + i] = if w >= extraction_core::underground::DEEP {
@@ -850,6 +863,21 @@ mod tests {
         }
     }
 
+    /// A spot under a site in a room only its works open (heat vented, the
+    /// crane ridden): the raider's plans bar those, as the raider can't.
+    fn behind_the_works(plan: &BuildingPlan, spot: Vec3) -> bool {
+        let Some(l) = extraction_core::underground::layout(&plan.name) else {
+            return false;
+        };
+        let p = plan.to_local(spot);
+        let open = l.open_rooms();
+        l.rooms.iter().zip(open).any(|(r, open)| {
+            !open
+                && (p.x - r.at[0]).abs() <= r.size[0] * 0.5
+                && (p.z - r.at[1]).abs() <= r.size[1] * 0.5
+        })
+    }
+
     /// Every loot spot in every building can be reached from somewhere a
     /// bot can stand, along a clear line: a barn's open gaps join its floor
     /// to the outside, which once left nothing in a barn reachable, and a
@@ -876,7 +904,7 @@ mod tests {
             let mut tried = 0;
             for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
                 for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
-                    if !plan.reachable_height(*spot) {
+                    if !plan.reachable_height(*spot) || behind_the_works(plan, *spot) {
                         continue;
                     }
                     tried += 1;
@@ -1046,7 +1074,7 @@ mod tests {
                 };
                 // A boxcar's floor is a climb up from the ground, which the
                 // indoor grid doesn't walk.
-                if plan.name == "boxcar" {
+                if plan.name == "boxcar" || behind_the_works(plan, at) {
                     continue;
                 }
                 let local = plan.to_local(at);

@@ -174,6 +174,30 @@ impl Heightmap {
     fn underground(&mut self, map: &MapDef) {
         const BLEND: f32 = 8.0;
         let sites = crate::underground::placed(map);
+        // The other buildings' pads stay as they were levelled: how much a
+        // pad holds a point (1 on it, easing out over its blend). A kiosk's
+        // 8 m blend reached the factory hall's back door at Cinder and
+        // left a lip in the doorway.
+        let pads: Vec<_> = map
+            .placements
+            .iter()
+            .filter(|p| {
+                !p.absolute
+                    && crate::map::prefab_wants_pad(&p.prefab)
+                    && !crate::underground::is_site(&p.prefab)
+            })
+            .map(|p| {
+                let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+                (p.at, p.rot, w * 0.5 + 0.8, d * 0.5 + 0.8)
+            })
+            .collect();
+        let held = |q: P2| {
+            pads.iter().fold(0.0f32, |h, (at, rot, hw, hd)| {
+                let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
+                let out = ((l[0].abs() - hw).max(0.0)).hypot((l[1].abs() - hd).max(0.0));
+                h.max(1.0 - geom::smoothstep(0.0, 5.0, out))
+            })
+        };
         for site in &sites {
             let footing = self.footing(&site.id, site.at, site.rot);
             for (at, rot, portal) in site.exits() {
@@ -189,7 +213,10 @@ impl Heightmap {
                     let l = crate::underground::turn([q[0] - at[0], q[1] - at[1]], -rot);
                     let out =
                         ((l[0].abs() - half_w).max(0.0)).hypot((l[1].abs() - half_d).max(0.0));
-                    let t = 1.0 - geom::smoothstep(0.0, BLEND, out);
+                    let mut t = 1.0 - geom::smoothstep(0.0, BLEND, out);
+                    if out > 0.0 {
+                        t *= 1.0 - held(q);
+                    }
                     hm.heights[k] += (target - hm.heights[k]) * t;
                 });
             }

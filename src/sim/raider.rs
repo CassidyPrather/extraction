@@ -812,7 +812,16 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
-            sneak(me, &mut bot, r, &scene, &mut log, eye, &mut input);
+            sneak(
+                me,
+                &mut bot,
+                r,
+                &scene,
+                &mut log,
+                eye,
+                body.swimming,
+                &mut input,
+            );
         }
 
         // Stuck: walking somewhere and getting nowhere.
@@ -1180,6 +1189,7 @@ const DISTRACT_RANGE: f32 = 45.0;
 ///   goes to look there instead.
 ///
 /// Never in a fight, never with the truck waiting, never hurrying home hurt.
+#[allow(clippy::too_many_arguments)]
 fn sneak(
     me: Entity,
     bot: &mut Bot,
@@ -1187,6 +1197,7 @@ fn sneak(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
     let hurrying = bot.sprint
@@ -1245,9 +1256,12 @@ fn sneak(
             }
         }
     }
-    if wary != input.crouch {
-        input.crouch = wary;
-        if wary {
+    // Afloat it ducks too, as a player does: a flooded doorway's head is
+    // a hand over the water.
+    let low = wary || swimming;
+    if low != input.crouch {
+        input.crouch = low;
+        if low {
             r.crouched_since = Some(r.clock);
         } else if let Some(t) = r.crouched_since.take() {
             log.event("crouch", json!({"secs": round(r.clock - t, 1)}));
@@ -2326,6 +2340,17 @@ fn kind_name(k: SiteKind) -> &'static str {
 /// Picks the next site: worth, distance, and the pull of the far side as
 /// the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
+    // `SIM_SITE=<prefab>`: that site first, while it's there to be done
+    // (a smoke test of one underground site, say).
+    if let Ok(want) = std::env::var("SIM_SITE") {
+        if let Some(i) = r
+            .sites
+            .iter()
+            .position(|s| s.name == want && !s.visited && s.tries < 3)
+        {
+            return Some(i);
+        }
+    }
     let late = (scene.awake() / (r.traits.minutes * 60.0)).clamp(0.0, 1.0);
     let rv_side = rv_centroid(&scene.zone);
     let heat = r.heat;
