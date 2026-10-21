@@ -65,9 +65,15 @@ which birds in flight keep out of.
 Boids round a goal: a point wheeling round a circle over the roof, then
 the next site. Each bird keeps its own place in the flock, apart from its
 neighbours, with them, at least 8 m off the ground, and steers up from
-anything built ahead of it; anything that still gets it inside a piece or
-under the ground puts it back and lifts it out. Landing, it comes in from
-above, slowing, onto a perch of its own.
+anything built ahead of it. A step that still takes it into a piece
+slides along the face instead (keeping whatever of the step is clear: up
+a dam's face with the roost beyond it), else pushes it out sideways (out
+from under a coping, not back under it), else the nearest way, else lifts
+it; never stopped dead against a wall it means to cross, which pinned
+Sallow's rooks to the dam and Cinder's to the new furnace stack. Landing,
+it comes in from above, slowing, onto a perch of its own; flushed while
+landing, it goes round with the rest, not on down onto the roof they're
+leaving.
 
 ### Looks
 
