@@ -303,7 +303,7 @@ impl Plugin for InteractPlugin {
                     )
                         .chain()
                         .in_set(InteractSystems::Grab),
-                    (leash_check, follow_hands)
+                    (drop_orphaned_holds, leash_check, follow_hands)
                         .chain()
                         .in_set(InteractSystems::Follow),
                 ),
@@ -1340,6 +1340,21 @@ fn leash_check(
                 .is_some()
         {
             blocked.0.insert(e);
+        }
+    }
+}
+
+/// Something marked held by a hand that's let go of it, or taken hold of
+/// something else since, drops. (A hoarder's hand took one thing after
+/// another; the stone it had held stayed stuck to it, hot, and nothing
+/// could make it let go.)
+fn drop_orphaned_holds(mut commands: Commands, held: Query<(Entity, &Held)>, hands: Query<&Hand>) {
+    for (e, h) in &held {
+        if hands.get(h.hand).is_ok_and(|hand| hand.holding != Some(e)) {
+            commands
+                .entity(e)
+                .remove::<(Held, Supported)>()
+                .insert(GravityScale(1.0));
         }
     }
 }

@@ -509,12 +509,16 @@ pub(super) fn direct_raid(
             state.leg = Leg::Kit;
         }
         Leg::Kit => {
-            let in_crate: Vec<(Entity, String)> = view
+            let mut in_crate: Vec<(Entity, String)> = view
                 .stash
                 .iter()
                 .flat_map(|b| b.contents.iter().copied())
                 .filter_map(|e| world.id(e).map(|id| (e, id.to_string())))
                 .collect();
+            // What the yard used first, to the pockets; anything more after
+            // (a hoarder's radio went to the bottom of the pack, out of
+            // reach of a hand).
+            in_crate.sort_by_key(|(_, id)| !KIT.contains(&id.as_str()));
             for (e, id) in in_crate {
                 if p.hoards || KIT.contains(&id.as_str()) {
                     tasks.push(Task::Grab {
