@@ -421,6 +421,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "rail_shed" => [20.0, 9.0, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
         "ranger_tower" => [6.0, 12.0, 5.0],
+        // The ranger tower's legs and stair, open on top under its survey
+        // mast and beacon.
+        "survey_tower" => [6.0, 16.6, 5.0],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 10.0, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
@@ -633,7 +636,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 0.95,
             clear: 2.98,
         }],
-        "ranger_tower" => &[Entrance {
+        "ranger_tower" | "survey_tower" => &[Entrance {
             at: [2.04, 1.2],
             out: [1.0, 0.0],
             width: 0.95,

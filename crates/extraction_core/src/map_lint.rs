@@ -230,6 +230,7 @@ pub const ENTERABLE: &[&str] = &[
     "rail_shed",
     "mast_hut",
     "ranger_tower",
+    "survey_tower",
     "factory_hall",
     "guard_booth",
 ];
