@@ -138,9 +138,18 @@ What changed, and worth a comment each:
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
   it, one in each hand (before, only flat mode could load one).
-- **Text.** Signposts are bigger, and every panel is checked to read
-  from where you'd stand (a signpost from 3 m, a card from 1 m). Mark
-  anything you still can't read, with how far away you were.
+- **Text.** Every piece of text is now held to a floor set for the
+  Beyond 2 at the auto render scale (`docs/LEGIBILITY.md`), measured
+  from where you'd read it, and checked by rendering it at the
+  headset's pixels a degree. The wrist and the radio show a few words a
+  line in capitals and page a long message every 3 seconds (watch it
+  turn over); notes are on bigger paper; the field map's names are
+  bigger and upright. Indoors stays lit after you've been underground
+  (rooms had been going black). **Squeeze on a note** (or the logbook,
+  or the driver's request card) and it comes up into your hand, facing
+  you: bring it to your face to read; open your hand and it goes back.
+  The logbook's pages now turn with its button. Mark anything you still can't read,
+  with how far away you were and the SHARPNESS setting.
 - **Magazines** seat when their top meets the well, and the bell cord
   is easier to catch.
 - **Things look like things.** About 70 items that were plain boxes

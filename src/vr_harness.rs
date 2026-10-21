@@ -1699,7 +1699,7 @@ mod tests {
     fn most_loot_in_the_zone_is_off_the_floor() {
         use bevy::ecs::system::RunSystemOnce;
         let mut report = Vec::new();
-        for map in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let dir =
                 std::env::temp_dir().join(format!("extraction-loot-{map}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);

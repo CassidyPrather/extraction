@@ -150,6 +150,10 @@ pub fn dress(
     let Some((w, d)) = plan(base) else {
         return Vec::new();
     };
+    // A drowned house's things went with the water.
+    if prefab.ends_with("_drowned") {
+        return Vec::new();
+    }
     let ruin = if prefab.ends_with("_burnt") {
         Some(Ruin::Burnt)
     } else if prefab.ends_with("_damaged") {
@@ -178,6 +182,7 @@ pub fn dress(
                 out.push(sill_ash(c, len, yaw));
             }
         }
+        Some(Ruin::Drowned) => {}
         Some(Ruin::Damaged) => {
             out.push(on(
                 "dishes_broken",
@@ -329,7 +334,7 @@ mod tests {
     #[test]
     fn every_clutter_model_exists() {
         let root = crate::asset_root_path();
-        for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
                 let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);

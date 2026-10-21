@@ -565,10 +565,11 @@ fn valley_air(
         "Kettle Pass" => (1.0, 16.0, 0.009, 52.0),
         // The practice ground is kinder: you should see what you're shown.
         "Training Yard" => (0.55, 8.0, 0.0, 0.0),
-        // The drained reservoir: wet fog thick in the silt bed (some 15-20 m
-        // under the dam's crest, the old water line about 50 m up) and thin
-        // on the crest, so the climb down reads as going into it.
-        "Sallow Reservoir" => (1.5, 38.0, 0.0, 0.0),
+        // The drained reservoir: wet fog pooling from the bed's floor (31-34 m
+        // by the dam, 41 at the head; the crest at 52), thin on the crest.
+        // (Based at 40, everything under it was at full density: the valley
+        // below the dam is as low, and the dam vanished from the gate.)
+        "Sallow Reservoir" => (1.1, 32.0, 0.0, 0.0),
         _ => (1.0, 16.0, 0.0, 0.0),
     };
     let (k, dz) = match conditions.kind {

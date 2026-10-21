@@ -97,12 +97,12 @@
     ],
     // A crawler on each dry level: the intake's round, two in the hall
     // (shut in till the first breaker), one in the stacks (till the
-    // second). Nothing walks the cistern: it's too deep.
+    // second); those two rounds asleep till the breakers wake them. Nothing walks the cistern: it's too deep.
     patrol: ["intake_bay", "guard_post", "tag_office", "guard_post"],
     crawlers: 1,
     rounds: [
-        (rooms: ["sorting_hall"], crawlers: 2),
-        (rooms: ["kept_stacks", "bay_k14"], crawlers: 1),
+        (rooms: ["sorting_hall"], crawlers: 2, dormant: true),
+        (rooms: ["kept_stacks", "bay_k14"], crawlers: 1, dormant: true),
     ],
     power: [
         (kind: Breaker, room: "guard_post", at: (0.8, -1.75), rot: 180.0, doors: ["sorting_hall"]),

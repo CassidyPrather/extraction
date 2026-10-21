@@ -50,6 +50,8 @@ pub enum Step {
     Rotate,
     /// Push the case at the gate out with the rod.
     EjectGate,
+    /// Slap a stuck turn-bolt's handle up (a palm under it).
+    Slap,
 }
 
 /// A player's queued gun-handling motions (flat input and bots both fill it).
@@ -168,6 +170,8 @@ fn rack_steps(action: ActionKind) -> Vec<(f32, Step)> {
             (0.08, Step::ReleaseBolt),
         ],
         ActionKind::BoltAction => vec![
+            // A stuck bolt takes a slap first (nothing if it isn't).
+            (0.0, Step::Slap),
             (0.08, Step::Lift(1.0)),
             (0.08, Step::Bolt(0.5)),
             (0.06, Step::Bolt(1.0)),
@@ -277,6 +281,7 @@ fn run_macros(
             Step::Bolt(t) => gun.firearm.set_bolt_travel(t),
             Step::ReleaseBolt => gun.firearm.release_bolt(),
             Step::Lift(t) => gun.firearm.set_handle_lift(t),
+            Step::Slap => gun.firearm.free_bolt(),
             Step::Break(open) => gun.firearm.set_break_open(open),
             Step::SlideStop => gun.firearm.release_slide_stop(),
             Step::Mode => gun.firearm.cycle_mode(),

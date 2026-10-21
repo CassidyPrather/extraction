@@ -11,6 +11,7 @@ pub mod clutter;
 pub mod cover;
 pub mod dam;
 pub mod decay;
+pub mod furnace;
 pub mod halos;
 pub mod impostors;
 pub mod notes;
@@ -29,6 +30,7 @@ pub mod trees;
 pub mod underground;
 pub mod water;
 pub mod weather;
+pub mod workings;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
