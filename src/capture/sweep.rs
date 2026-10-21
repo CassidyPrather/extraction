@@ -191,8 +191,10 @@ struct Sweep {
 }
 
 /// Meshes of the scene round the camera, not of any subject (the sky, the
-/// renderer's warm-up, the sun's shafts).
-const SCENE_MESHES: [&str; 3] = ["Sky dome", "Warm-up shelf", "Light shafts"];
+/// renderer's warm-up, the sun's shafts, and at night the moths round the
+/// lamp, which wildlife spawns afresh whenever they're cleared: the night
+/// sweep once cleared them for ever and never moved on).
+const SCENE_MESHES: [&str; 4] = ["Sky dome", "Warm-up shelf", "Light shafts", "Moth"];
 
 /// Frames the studio settles for when it opens and at each new light
 /// (the sky and fog ease into a new weather).
