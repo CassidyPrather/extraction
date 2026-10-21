@@ -515,13 +515,35 @@ fn part_gone(
                 &catalog,
                 crate::items::SpawnItem {
                     kind,
-                    transform: Transform::from_translation(c + rot * off),
+                    transform: Transform::from_translation(c + rot * off)
+                        .with_rotation(lying_flat(rot, catalog.get(kind).dims)),
                     condition: 0.6,
                 },
             );
             i += 1;
         }
     }
+}
+
+/// A dropped thing lying on its largest face (a door, a panel, a wheel
+/// that came off flat, never left on its edge), turned the way the part
+/// it came from was.
+pub fn lying_flat(part: Quat, dims: Option<[f32; 3]>) -> Quat {
+    use std::f32::consts::FRAC_PI_2;
+    let fwd = part * Vec3::NEG_Z;
+    let heading = Quat::from_rotation_y(fwd.x.atan2(fwd.z) + std::f32::consts::PI);
+    let Some(d) = dims else {
+        return heading;
+    };
+    // Its thinnest side up.
+    let flat = if d[0] <= d[1] && d[0] <= d[2] {
+        Quat::from_rotation_z(FRAC_PI_2)
+    } else if d[2] <= d[1] {
+        Quat::from_rotation_x(FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
+    heading * flat
 }
 
 fn half_z(collider: &Collider) -> f32 {
