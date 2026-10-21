@@ -373,6 +373,9 @@ pub const ART: &[ArtText] = &[
         5.0,
         "walking through the depot",
     ),
+    // A charcoal burner's name on his bed, a shop's CLOSED card, a
+    // chapel's hymn numbers: read across the room (World models).
+    art("props/named.py", Need::MustRead, 2.0, "across the room"),
 ];
 
 /// Text baked into a texture.

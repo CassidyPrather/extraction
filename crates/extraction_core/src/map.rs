@@ -411,6 +411,8 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A nave 10 x 14 with its steps at the west door, the bell tower
         // off the east end.
         "chapel" => [10.4, 19.0, 23.0],
+        // A garden fence's run: four panels between five posts.
+        "fence_garden" => [8.5, 1.3, 0.2],
         // Hero landmarks: a valley's one unmistakable silhouette.
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out
