@@ -3856,3 +3856,271 @@ mod touch {
         );
     }
 }
+
+/// The body you see: where its feet, knees, shoulders and slots are as the
+/// head and hands move (`rig::stance`).
+#[cfg(test)]
+mod body {
+    use super::*;
+    use crate::interact::body::BodySlot;
+    use crate::interact::{Socket, SocketKind};
+    use crate::rig::stance::{PROTRACT, Stance};
+    use extraction_core::inventory::SlotKind;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn standing() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        for side in [Side::Left, Side::Right] {
+            vr.hand_local(side, Vec3::new(0.25 * side.sign(), 0.95, -0.1), 0.0);
+        }
+        vr.step(90);
+        (vr, feet)
+    }
+
+    fn stance(vr: &Vr) -> Stance {
+        vr.app.world().get::<Stance>(vr.player).unwrap().clone()
+    }
+
+    fn look(vr: &mut Vr, at: Vec3, yaw: f32, pitch: f32) {
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .head = Transform::from_translation(at).with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            yaw,
+            pitch,
+            0.0,
+        ));
+    }
+
+    /// Where a body slot of `kind` is in the world.
+    fn slot(vr: &mut Vr, kind: SlotKind) -> Vec3 {
+        let mut q = vr
+            .app
+            .world_mut()
+            .query::<(&BodySlot, &Socket, &GlobalTransform)>();
+        q.iter(vr.app.world())
+            .find(|(_, s, _)| s.kind == SocketKind::Body(kind))
+            .map(|(_, _, g)| g.translation())
+            .unwrap()
+    }
+
+    /// Looking round (left, right, down at your feet) moves neither foot.
+    #[test]
+    fn feet_stay_planted_when_you_turn_your_head() {
+        let (mut vr, feet) = standing();
+        let st = stance(&vr);
+        assert!(st.ready);
+        let planted = st.feet.map(|f| f.at);
+        for f in planted {
+            assert!((f.y - feet.y).abs() < 0.01, "a foot on the ground: {f}");
+        }
+        assert!(planted[0].x < planted[1].x, "left foot on the left");
+        for (yaw, pitch) in [
+            (0.7, 0.0),
+            (-0.7, 0.0),
+            (0.0, -1.1),
+            (0.5, -0.8),
+            (0.0, 0.0),
+        ] {
+            look(&mut vr, Vec3::new(0.0, 1.65, 0.0), yaw, pitch);
+            vr.step(60);
+            let now = stance(&vr).feet.map(|f| f.at);
+            for i in 0..2 {
+                assert!(
+                    now[i].distance(planted[i]) < 0.005,
+                    "looking ({yaw}, {pitch}) moved a foot: {} to {}",
+                    planted[i],
+                    now[i]
+                );
+            }
+        }
+    }
+
+    /// Turning the whole body round (the head stays turned) and stepping
+    /// across the room: the feet follow, a step at a time, and end up
+    /// under you, toes the way you face.
+    #[test]
+    fn the_feet_step_after_a_body_that_turns_or_walks() {
+        let (mut vr, feet) = standing();
+        look(&mut vr, Vec3::new(0.0, 1.65, 0.0), 2.2, 0.0);
+        let mut stepping_both = false;
+        for _ in 0..240 {
+            vr.step(1);
+            let st = stance(&vr);
+            stepping_both |= st.feet.iter().all(|f| !f.planted());
+        }
+        assert!(!stepping_both, "one foot at a time");
+        let st = stance(&vr);
+        for f in &st.feet {
+            let diff = (f.yaw - 2.2).rem_euclid(std::f32::consts::TAU);
+            assert!(
+                diff < 0.6 || diff > std::f32::consts::TAU - 0.6,
+                "toes {} for 2.2",
+                f.yaw
+            );
+        }
+        // A room-scale step: the head (and the body) half a metre aside.
+        look(&mut vr, Vec3::new(0.6, 1.65, 0.0), 2.2, 0.0);
+        vr.step(240);
+        let st = stance(&vr);
+        let under = st.pelvis.translation;
+        for f in &st.feet {
+            let d = Vec2::new(f.at.x - under.x, f.at.z - under.z).length();
+            assert!(d < 0.3, "a foot {d} m from under the body");
+            assert!((f.at.y - feet.y).abs() < 0.01);
+        }
+    }
+
+    /// Crouching: the pelvis comes down, the knees bend forward, and the
+    /// feet stay put; the bones keep their lengths.
+    #[test]
+    fn a_crouch_bends_the_knees_over_planted_feet() {
+        let (mut vr, _) = standing();
+        let before = stance(&vr);
+        look(&mut vr, Vec3::new(0.0, 0.8, 0.0), 0.0, -0.3);
+        vr.step(90);
+        let st = stance(&vr);
+        assert!(
+            st.pelvis.translation.y < before.pelvis.translation.y - 0.3,
+            "the pelvis came down: {} to {}",
+            before.pelvis.translation.y,
+            st.pelvis.translation.y
+        );
+        for i in 0..2 {
+            assert!(
+                st.feet[i].at.distance(before.feet[i].at) < 0.005,
+                "a foot moved"
+            );
+            let ahead = st.pelvis.rotation * Vec3::NEG_Z;
+            assert!(
+                (st.knees[i] - st.hips[i]).dot(ahead) > 0.15,
+                "knee {} not forward of hip {}",
+                st.knees[i],
+                st.hips[i]
+            );
+            let thigh = crate::rig::stance::THIGH * st.legs;
+            assert!((st.knees[i].distance(st.hips[i]) - thigh).abs() < 0.01);
+        }
+    }
+
+    /// Seated, the lap is under the eyes and the knees ahead of it, at the
+    /// lap's height; the feet below the knees.
+    #[test]
+    fn seated_the_knees_are_ahead_of_the_lap() {
+        let (mut vr, _) = standing();
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .seated = true;
+        look(&mut vr, Vec3::new(0.0, 1.2, 0.0), 0.0, -0.6);
+        vr.step(120);
+        let st = stance(&vr);
+        assert!(st.seated);
+        let eye = vr
+            .app
+            .world()
+            .get::<RigInput>(vr.player)
+            .unwrap()
+            .head
+            .translation
+            .y
+            + vr.feet().y;
+        assert!(
+            (eye - st.pelvis.translation.y - 0.62).abs() < 0.05,
+            "the lap under the eyes"
+        );
+        let ahead = st.pelvis.rotation * Vec3::NEG_Z;
+        for i in 0..2 {
+            assert!((st.knees[i] - st.hips[i]).dot(ahead) > 0.3, "knees ahead");
+            assert!((st.knees[i].y - st.hips[i].y).abs() < 0.05, "thighs level");
+            assert!(st.ankles[i].y < st.knees[i].y - 0.3, "shins down");
+        }
+    }
+
+    /// The holster is on the gun hand's hip and the pockets on the thighs'
+    /// fronts, where the drawn body has them: reaching down to them, the
+    /// arm stays outside the body all the way.
+    #[test]
+    fn reaching_to_the_holster_keeps_the_arm_out_of_the_body() {
+        let (mut vr, _) = standing();
+        let holster = slot(&mut vr, SlotKind::Holster);
+        let st = stance(&vr);
+        assert!(
+            holster.distance(st.hips[Side::Right.index()]) < 0.16,
+            "the holster {holster} off the right hip {}",
+            st.hips[1]
+        );
+        // The hand down to it, from the front, grip over the holster.
+        vr.hand(
+            Side::Right,
+            holster + Vec3::Y * 0.06,
+            Quat::from_rotation_x(-1.3),
+            0.0,
+            0.0,
+        );
+        vr.step(30);
+        let st = stance(&vr);
+        let grip = vr.hand_state(Side::Right).world;
+        let wrist = grip.transform_point(Vec3::new(0.0, 0.0, 0.09));
+        let hint = st.chest.rotation * Vec3::new(0.6, -1.0, 0.3).normalize();
+        let axis = Vec2::new(st.chest.translation.x, st.chest.translation.z);
+        let shoulder = st.shoulder(Side::Right);
+        let (s, e) = crate::render::arms::arm_joints(shoulder, wrist, hint, axis, st.arm);
+        assert_eq!(s, shoulder, "the shoulder stays on the body");
+        // The body: an elliptic column round the spine, pelvis to neck.
+        let inv = st.chest.rotation.inverse();
+        let inside = |p: Vec3| {
+            let along = (p - st.pelvis.translation).dot(st.chest.rotation * Vec3::Y);
+            let q = inv * (p - st.pelvis.translation);
+            let span = st.neck.distance(st.pelvis.translation);
+            along > 0.0 && along < span && (q.x / 0.15).powi(2) + (q.z / 0.09).powi(2) < 1.0
+        };
+        for i in 1..20 {
+            let t = i as f32 / 20.0;
+            for p in [s.lerp(e, t), e.lerp(wrist, t)] {
+                assert!(!inside(p), "the arm through the body at {p}");
+            }
+        }
+    }
+
+    /// Straight out at arm's length and a little beyond: the shoulder
+    /// comes forward (no further than a shoulder goes) and the drawn arm
+    /// reaches the hand from it, not from somewhere off the body.
+    #[test]
+    fn a_full_reach_keeps_the_arm_on_its_shoulder() {
+        let (mut vr, feet) = standing();
+        let rest = stance(&vr).shoulder(Side::Right);
+        let grip = rest + Vec3::new(0.05, -0.05, -0.74);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(60);
+        let st = stance(&vr);
+        let shoulder = st.shoulder(Side::Right);
+        assert!(
+            shoulder.distance(rest) <= PROTRACT + 1e-3,
+            "the shoulder came {} forward",
+            shoulder.distance(rest)
+        );
+        assert!(shoulder.distance(rest) > 0.02, "it came forward");
+        let hand = vr.hand_state(Side::Right).world;
+        let wrist = hand.transform_point(Vec3::new(0.0, 0.0, 0.09));
+        let hint = st.chest.rotation * Vec3::new(0.6, -1.0, 0.3).normalize();
+        let axis = Vec2::new(st.chest.translation.x, st.chest.translation.z);
+        let (s, _) = crate::render::arms::arm_joints(shoulder, wrist, hint, axis, st.arm);
+        assert!(
+            s.distance(shoulder) < 1e-3,
+            "the arm pulled off its shoulder by {}",
+            s.distance(shoulder)
+        );
+        let _ = feet;
+    }
+}

@@ -55,6 +55,7 @@ LANDMARK_NAMES = {
     "ore_mill": "ore mill",
     "observatory": "observatory",
     "funicular_upper": "top station",
+    "survey_tower": "survey beacon",
 }
 RUIN_STATES = ("_damaged", "_burnt", "_drowned")
 

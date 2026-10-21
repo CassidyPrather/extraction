@@ -57,6 +57,9 @@ pub enum Render {
     Station(&'static str, u64),
     /// The hiss between stations.
     Static,
+    /// A 1 kHz tone, looping: the off-tune whistle, played at the speed
+    /// that makes its pitch.
+    Whistle,
     /// Piano and organ pieces, for the audit: what the instruments in the
     /// world sound like played.
     PianoTune(usize),
@@ -104,6 +107,10 @@ impl Render {
                 .unwrap_or_default(),
             Render::Motor => motor_loop(sr),
             Render::Static => media::static_bed((24.0 * sr) as usize, sr, 0x57),
+            // Whole cycles in a second: it loops clean.
+            Render::Whistle => (0..rate as usize)
+                .map(|i| (std::f32::consts::TAU * 1000.0 * i as f32 / sr).sin())
+                .collect(),
             Render::PianoTune(i) => tune_on(PIANO[i % PIANO.len()], sr),
             Render::OrganTune(i) => tune_on(ORGAN[i % ORGAN.len()], sr),
             Render::Record(id) => tapes::record(id)
@@ -711,6 +718,82 @@ fn play_gramophones(
     }
 }
 
+/// The whistle of a radio a little off a station.
+#[derive(Component)]
+struct WhistleVoice {
+    radio: Entity,
+}
+
+/// How loud the whistle is against the station at its strongest, as a
+/// share of it (a cheap set's beat note: plain, not piercing).
+const WHISTLE: f32 = 0.35;
+
+/// Tuned a little off a station, a set whistles: the beat between the
+/// carrier and where it's listening, falling in pitch as you close on it
+/// and gone when you're on it. It's how you find a station by ear.
+fn whistle_radios(
+    mut commands: Commands,
+    mut renders: ResMut<Renders>,
+    radios: Query<(Entity, &super::dial::Tuner)>,
+    mut voices: Query<(Entity, &WhistleVoice, &SampleEffects, &mut PlaybackSettings)>,
+    mut volumes: Query<&mut VolumeNode>,
+) {
+    let mut want: HashMap<Entity, (f32, f32)> = HashMap::new();
+    for (e, t) in &radios {
+        if !t.on() || !t.aloud {
+            continue;
+        }
+        let Some(h) = t.reception.stations.first() else {
+            continue;
+        };
+        let off = h.detune.abs();
+        if off < 0.4 {
+            continue;
+        }
+        let share = (off / stations::SPREAD).min(1.0);
+        let gain = h.gain * WHISTLE * share;
+        if gain > 0.005 {
+            want.insert(e, (gain, stations::heterodyne_hz(h.detune)));
+        }
+    }
+    for (v, w, effects, mut settings) in &mut voices {
+        let Some((gain, hz)) = want.remove(&w.radio) else {
+            commands.entity(v).despawn();
+            continue;
+        };
+        renders.want(Render::Whistle);
+        let speed = (hz / 1000.0).max(0.05) as f64;
+        if (settings.speed - speed).abs() > 0.002 {
+            settings.speed = speed;
+        }
+        if let Ok(mut vol) = volumes.get_effect_mut(effects) {
+            vol.volume = Volume::Decibels(20.0 * gain.max(1e-4).log10());
+        }
+    }
+    for (radio, (gain, hz)) in want {
+        let Some(sample) = renders.want(Render::Whistle) else {
+            continue;
+        };
+        commands.spawn((
+            WhistleVoice { radio },
+            SamplePlayer::new(sample)
+                .looping()
+                .with_volume(Volume::Decibels(mix::db("radio.hiss"))),
+            PlaybackSettings::default().with_speed((hz / 1000.0).max(0.05) as f64),
+            Transform::default(),
+            sample_effects![
+                VolumeNode {
+                    volume: Volume::Decibels(20.0 * gain.max(1e-4).log10()),
+                    ..default()
+                },
+                mix::spatial("radio.hiss"),
+                crate::audio::reverb_send("radio.hiss")
+            ],
+            ChildOf(radio),
+        ));
+    }
+}
+
 pub struct MusicSoundPlugin;
 
 impl Plugin for MusicSoundPlugin {
@@ -723,6 +806,7 @@ impl Plugin for MusicSoundPlugin {
                     collect_renders,
                     play_decks,
                     play_radios,
+                    whistle_radios,
                     sound_pianos,
                     play_gramophones,
                 )

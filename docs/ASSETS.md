@@ -227,6 +227,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/yards.py` | the common houses' yards, visual only, placed by `world::clutter::yard` by valley: clothes_line, clothes_line_bare (Cinder), garden_bed_cabbage, garden_bed_roots, bench_yard, bench_charred (Cinder), rain_barrel, woodpile_lean, washtub_stand, chopping_block, beehive, hen_coop, handcart, hand_pump, dog_kennel (Hana's house only), tub_iron (Cinder), coal_bunker (Kettle) | 0.2k to 1.4k |
 | `art/props/named.py` | the people Story's notes name, where they lived (`world::clutter::named`): till, chit_spike, closed_card, axe_pegs, whetstone, barometer, kettle, horseshoe, signal_flags, waders, level_staff, antlers, bed_name_mirek, charcoal_sack, hymn_board, child_drawing, tin_empty, bow_saw, cup_one, photo_church, key_hook_empty, rods_rack, landing_net, stuffed_pike, armchair, peg_empty, slippers (its letters in `legibility::ART`) | 0.05k to 0.8k |
 | `art/props/workplaces.py` | what the people who worked in the other buildings left (`world::clutter::workplace`, a few of each building's set, seeded): flour_sacks, price_board, shop_scales (the shop); woodpile, hurricane_lamp, washstand, snowshoes (the cabin); wall_clock, wall_telephone, gauge_board, oil_cans, toolbox (the offices and halls); pitchfork, milk_churn, harness_peg (the barn); tyre_stack (the halls); garden_tools, watering_can, wheelbarrow (the shed) | 0.2k to 1.4k |
+| `art/props/rime.py` | Rime Fell's snowed-in miners' houses (Coldharbour), visual only, dressed by `world::clutter`: felt_boots, snow_shovel, skis_wall, winter_stores, drying_line, ice_axe, firewood_basket, stove_pipe_rack (indoors); sledge, snow_shovel_out (outdoors, baked with the sky) | 0.45k to 1.2k |
 | `art/props/truck_kit.py` | stash_rack, stash_rack_2, bench_vice, aerial, med_cabinet (truck upgrades) | 0.2k to 0.9k |
 | `art/props/scenes.py` | remains_seated, remains_lying, bedroll, campfire, walker_wreck, flower_jars (staged scenes) | 0.3k to 4.0k |
 | `art/hands/gloves.py` | `models/hands/glove_{left,right}.glb`: the player's gloves, a palm (with cuff, knuckle guard, seams) and 14 finger segments | 5.1k each (palm 2.2k, plus the wrist display housing; fingers 2.7k) |
@@ -392,3 +393,62 @@ patches).
 `join` merges Parts into one object. Keep cuts on their own Part and
 join afterwards: the exact solver drops open pieces, such as a swept
 trigger guard, from the mesh it cuts.
+
+## Car wrecks
+
+`art/vehicles/wrecks.py` (the Lada, and the helpers), `wreck_uaz.py` and
+`wreck_lorry.py` write `assets/models/props/wreck_{lada,uaz,lorry}.glb`.
+They use car space: metres, +Y up from the ground, -Z the front, +X the
+right-hand side, and the origin on the ground under the middle of the
+wheelbase.
+
+Every part is a top-level node, and its origin is its pivot:
+- doors (`door_fl`, `door_fr`, `door_rl`, `door_rr`) sit on the front
+  hinge line and swing about Y;
+- the `bonnet` sits on its rear hinge and lifts about X;
+- the Lada's `boot` sits on its front hinge;
+- the UAZ's `tailgate` and the lorry's `tailboard` sit on their bottom
+  hinges and drop about X;
+- `wheel_*` sit on the hub. On the lorry, the twin rear wheels are one
+  node a side.
+
+A prefab draws only `body` (`wreck_lada#body`). Destruction draws each
+part as `wreck_lada#door_fl` and so on.
+
+Yields:
+- doors → `car_door`;
+- `bonnet`, `boot`, `tailgate` and `tailboard` → `car_bonnet`;
+- wheels → `car_wheel`.
+
+Each part's box in car space, from the models: centre, then size, in
+metres. Mirror x for the other side.
+
+| Wreck | Part | Centre | Size |
+|---|---|---|---|
+| lada | body | (-0.04, 0.80, -0.01) | (1.80, 1.19, 4.31) |
+| lada | bonnet | (0, 0.84, -1.49) | (1.52, 0.04, 1.01) |
+| lada | boot | (0, 0.85, 1.63) | (1.52, 0.04, 0.72) |
+| lada | door_fr | (0.77, 0.83, -0.47) | (0.09, 0.99, 1.00) |
+| lada | door_rr | (0.77, 0.83, 0.53) | (0.09, 0.99, 0.85) |
+| lada | wheel_fr, wheel_rr | (0.68, 0.27, ∓1.21) | (0.17, 0.58, 0.58) |
+| uaz | body | (-0.02, 1.10, -0.08) | (1.90, 1.72, 3.95) |
+| uaz | bonnet | (0, 1.10, -1.41) | (1.35, 0.06, 1.06) |
+| uaz | tailgate (with the spare wheel) | (0, 0.94, 1.88) | (1.54, 0.78, 0.29) |
+| uaz | door_fr | (0.84, 1.13, -0.39) | (0.10, 0.96, 0.90) |
+| uaz | door_rr | (0.84, 1.13, 0.46) | (0.10, 0.96, 0.69) |
+| uaz | wheel_fr, wheel_rr | (0.72, 0.37, ∓1.19) | (0.24, 0.78, 0.78) |
+| lorry | body | (-0.03, 1.22, 0.40) | (2.58, 1.91, 6.43) |
+| lorry | bonnet | (0, 1.24, -1.95) | (1.12, 0.47, 1.40) |
+| lorry | tailboard | (0, 1.44, 3.54) | (2.31, 0.53, 0.09) |
+| lorry | door_fr | (0.97, 1.46, -0.50) | (0.09, 0.96, 0.95) |
+| lorry | wheel_fr | (0.80, 0.43, -1.65) | (0.24, 0.90, 0.90) |
+| lorry | wheel_rr (twin) | (0.86, 0.43, 1.65) | (0.53, 0.90, 0.90) |
+
+Empties:
+- `pt_seat_driver`: lada (-0.36, 0.49, -0.12), uaz (-0.40, 0.79, -0.25),
+  lorry (-0.45, 1.28, -0.24);
+- `pt_bed`: lorry (0, 1.18, 2.03).
+
+The body boxes include mirrors and bumpers. For a collider, shrink them
+a little. The lorry's bed floor is at y 1.18 (`pt_bed`), well below the
+box's top.

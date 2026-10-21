@@ -413,6 +413,9 @@ fn building_name(prefab: &str) -> String {
         "funicular_lower" => "funicular's valley station".into(),
         "funicular_upper" => "funicular's top station".into(),
         "survey_tower" => "survey tower".into(),
+        "wreck_lada" => "wrecked car".into(),
+        "wreck_uaz" => "wrecked jeep".into(),
+        "wreck_lorry" => "wrecked lorry".into(),
         other => other.replace('_', " "),
     }
 }

@@ -23,5 +23,9 @@ name = "map-dump"
 path = "src/bin/map_dump.rs"
 
 [[bin]]
+name = "anomaly-views"
+path = "src/bin/anomaly_views.rs"
+
+[[bin]]
 name = "unity-export"
 path = "src/bin/unity_export.rs"

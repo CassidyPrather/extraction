@@ -161,12 +161,16 @@ pub(super) fn direct(
     if let Some(p) = persona.filter(|_| state.station != Some(station) && station > 0) {
         let post = |i: usize| Vec2::from(STATIONS[i].at);
         if p.lost {
-            // To the wrong post first; its board and the lit lamp put it
-            // right.
+            // Off up the track to the wrong lamp first; the lit lamp and
+            // the boards put it right.
             let wrong = (station + 2) % STATIONS.len();
             if wrong > 0 {
-                tasks.extend(world.go(here, post(wrong) + Vec2::new(1.5, 1.5), 1.0));
+                // Up the track the wrong way, to that one's lamp.
+                let lamp = Vec2::new(0.0, post(wrong).y);
+                tasks.extend(world.go(here, lamp, 1.5));
                 tasks.push(Task::Wait(2.0));
+                // Wrong lamp: back to where it went astray.
+                tasks.extend(world.go(lamp, here, 1.0));
                 bot.log
                     .push(format!("  (lost: went to {} first)", STATIONS[wrong].title));
             }
@@ -239,6 +243,7 @@ pub(super) struct DirectorWorld<'w, 's> {
     buildings: Query<'w, 's, (&'static Building, &'static GlobalTransform)>,
     hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     doorway: Option<Res<'w, super::Doorway>>,
+    hot: Query<'w, 's, (), With<crate::anomaly::harvest::Hot>>,
     comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
 }
 
@@ -269,6 +274,16 @@ impl DirectorWorld<'_, '_> {
     }
 
     /// The nearest loose item of `id` to `near`.
+    /// One of these on the body (a pouch, a pocket).
+    fn on_body(&self, id: &str) -> Option<Entity> {
+        self.items
+            .iter()
+            .find(|(_, it, _, _, held, sock)| {
+                held.is_none() && sock.is_some() && self.catalog.get(it.kind()).id == id
+            })
+            .map(|(e, ..)| e)
+    }
+
     /// Anything lying loose within `r` (not in the crate, not in a hand).
     fn loose_near(&self, near: Vec2, r: f32) -> Vec<Entity> {
         self.items
@@ -276,6 +291,8 @@ impl DirectorWorld<'_, '_> {
             .filter(|(e, _, gt, _, held, sock)| {
                 held.is_none()
                     && sock.is_none()
+                    // Not what it was just told is too hot to hold.
+                    && !self.hot.contains(*e)
                     && gt.translation().xz().distance(near) < r
                     && !self.stash.iter().any(|b| b.contents.contains(e))
             })
@@ -536,7 +553,9 @@ impl DirectorWorld<'_, '_> {
                 {
                     None
                 } else {
+                    // Lying there, or already in a pocket (a hoarder's).
                     self.loose("field_dressing", here)
+                        .or_else(|| self.on_body("field_dressing"))
                 };
                 if let Some(e) = dressing {
                     t.extend(self.free_hands());

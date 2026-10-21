@@ -20,22 +20,30 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 6789739 | 11:30 | (cbf9c3d's binary) | the 20 reported tests: 19 pass, birds fails; full suite running | |
+| cbf9c3d | 10:40 | 8/8 clean | the 20 reported tests: 7 fail | both marrow_creek bots now die to the sentry |
+| eb7b932 | 08:35 | 8/8 clean, every hit named | stopped at 339/681: round_trip, warmup, lev FAILED | marrow_creek seed 2's looter dies in the same Walker-Drone-Hound gauntlet at x -60..-110, z -257 on every sha, going for depot_marrow 570 m off (Map design) |
 | 073c684 | 06:45 | 8/8 clean (seeds 1, 2) | stopped at 228/611 (main moved): 4 FAILED | the Sallow seed-1 bot was killed by its own wet aegis (15 × 5 HP), and telemetry called it "fall"; fixed on this branch |
 | d0118ba | 05:30 | 8/8 clean (seeds 1, 2) | not run (main moved) | 7 of 8 raids died; the cinder_works looter dies to a Crawler at tunnel_cinder at ~3 min on both seeds |
 
 ## Open failures
 
-| test / run | since | det. / flaky | class | owner | status |
-| - | - | - | - | - | - |
-| `persist::tests::a_heavys_wreck_keeps_until_the_surge` | 073c684 | ? | Surge despawn (`insert` on a despawned entity) | Weapon feel / Heavy | fixed on eb7b932 by 36e66c5 and optics.rs:189 (coordinator); to check |
-| `persist::tests::surge_rerolls_the_zone_at_base` | 073c684 | ? | same | Weapon feel / Heavy | same |
-| `render::legibility::tests::no_loot_lands_on_a_note` | 073c684 | ? | ? | Legibility / Story | to check on eb7b932 |
-| `render::legibility::tests::nothing_lies_on_a_scenes_note` | 073c684 | ? | ? | Legibility / Story | to check on eb7b932 |
+As of 6789739; deterministic (fails every time, alone too).
+
+| test / run | since | class | owner | status |
+| - | - | - | - | - |
+| `wildlife::flock::tests::birds_never_go_inside_walls_or_ground_and_settle_again` (cinder_works flock 3 never settles: `Moving { to: 10 }`) | after 073c684 | same flock every run: a perch lost to new geometry? | Wildlife | routed 10:40 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| `persist::tests::save_and_restore_round_trip` (radio's tapes doubled by each load) | 6789739 | Radio |
+| `nothing_lies_on_a_scenes_note`, `sim::indoor` ×2 (Sallow's drowned prefabs), `animals_can_be_shot` | 6789739 | Story, World models, Wildlife |
+| `render::warmup::tests::every_material_is_shelved` (storm's Sheet/BoltMaterial, from 337a20a6) | this branch | Verifier (two shelve lines) |
+| `persist::tests::a_heavys_wreck_keeps_until_the_surge`, `surge_rerolls_the_zone_at_base` | eb7b932 | Weapon feel, Heavy |
+| `raid::lev::tests::home_with_a_stone_he_says_so`, `no_loot_lands_on_a_note`, capture fighting, contacts churn, destruction boards, `a_thrown_bolt_*`: pass on cbf9c3d | | |
+| sim telemetry called an aegis shock "fall" | 47e8772 | Verifier |
 
 ## Machine notes
 
