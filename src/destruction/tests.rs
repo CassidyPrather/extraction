@@ -1298,3 +1298,52 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
     assert_eq!(scrap(&mut app), before + 3, "for its scrap");
     assert!(app.world().resource::<Broken>().0.contains(&key(at)));
 }
+
+#[test]
+fn a_door_gone_leaves_nothing_in_its_frame() {
+    // Nothing of the leaf (its collider, its knobs, its hinges) stays
+    // standing in the doorway once it's broken: its children go with it,
+    // and what flies is debris on its own layer.
+    let mut app = app(None);
+    let (door, collider, mid, n) = plank_door(&mut app);
+    let kids: Vec<Entity> = app
+        .world()
+        .get::<Children>(door)
+        .map(|c| c.iter().collect())
+        .unwrap_or_default();
+    for _ in 0..12 {
+        app.world_mut().write_message(Hit {
+            entity: collider,
+            point: mid,
+            normal: n,
+            velocity: -n * 6.0,
+            damage: 60.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 3);
+    assert!(app.world().get_entity(door).is_err(), "the door went");
+    for k in kids {
+        assert!(app.world().get_entity(k).is_err(), "and all of its parts");
+    }
+    // The doorway, from knee to head height, holds no world collider.
+    let world = app.world_mut();
+    let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(world);
+    let spatial = state.get(world).unwrap();
+    for dy in [-0.6, 0.0, 0.5] {
+        let hits = spatial.shape_intersections(
+            &Collider::sphere(0.15),
+            mid + Vec3::Y * dy,
+            Quat::IDENTITY,
+            &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        );
+        assert!(
+            hits.is_empty(),
+            "something stands in the doorway at {dy}: {hits:?}"
+        );
+    }
+}
