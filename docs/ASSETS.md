@@ -197,6 +197,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/robots/walker.py` | `models/robots/walker.glb` | 14.9k |
 | `art/robots/dirigible.py` | `models/robots/dirigible.glb` | 16.5k |
 | `art/robots/logistics.py` | `models/robots/{cargo_pod,harpoon}.glb` | 2.4k, 2.5k |
+| `art/animals/rook.py` | `models/animals/rook.glb`: a rook in poses (sit, wingbeat up/mid/down, glide) and far stand-ins, swapped by `wildlife::visuals` (`docs/WILDLIFE.md`) | 0.33k a pose, 0.07-0.08k far |
 | `art/vehicles/truck.py` | `models/vehicles/truck.glb` | 26.0k (wheel once) |
 | `art/vehicles/stash_crate.py` | `models/vehicles/stash_crate.glb` | 2.1k |
 | `art/vehicles/bench.py` | `models/vehicles/bench.glb` (the bed's workbench) | 5.3k |
@@ -210,6 +211,7 @@ scripts/shot.sh target/shots/bed.png 39.7,26.6,298.9,177,-17 16     # in the bed
 | `art/props/outdoor.py` | signpost, fence_post, camp_table, camp_board, camp_post, lantern, road_block, gate_post, barrier_arm | 24 to 2.5k |
 | `art/props/landmarks.py` | water_tower, headframe, signal_box (its cab and stair), lever_frame, steeple (prefabs water_tower, headframe, signal_box, steeple, chapel) | 1.1k to 4.1k |
 | `art/props/heroes.py` | hero landmarks, each with `_lod1` (past 60 m) and `_lod2` (the far stand-in): mill_race (Marrow Creek), ropeway_station, ropeway_pylon, ropeway_pylon_down (Kettle Pass: a broken aerial ropeway), blast_furnace (Cinder Works) | 14.4k / 2.8k / 1.2k (mill_race), 5.9k / 2.1k / 0.5k (station), 2.8k / 1.3k / 0.2k (pylon), 11.2k / 4.3k / 1.4k (furnace) |
+| `art/props/dam.py` | Sallow Reservoir's kept stock (`src/world/dam.rs`): kept_bus, kept_bicycle, wheelie_bin | 1.4k / 1.3k / 0.4k |
 | `art/props/ruins.py` | for the damaged and burnt houses (prefabs `<house>_damaged`, `<house>_burnt`): rubble_planks, rubble_brick, beam_fallen, beam_charred, bed_burnt, table_burnt, ash_heap | 0.2k to 2.3k |
 | (Rust only, `buildings::house_drowned`) | the drowned houses (`<house>_drowned`, Sallow): walls without roof, floors or doors, silt (`Mat::Silt`) to under the sills banked up to a breach doorway, timber `Mat::Sodden`, a tide line (`decay` `Stain::Tide`) | — |
 | `art/props/interiors.py` | the hero landmarks' insides: winch, rope_coil, drive_motor, gearbox, brake_drum, control_stand, mud_gun, bar_rack, pig_bed, gate_valve, tool_chest | 0.1k to 2.4k |

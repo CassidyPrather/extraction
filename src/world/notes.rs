@@ -164,6 +164,7 @@ fn spawn_notes(
                 commands.spawn((
                     Name::new("Note"),
                     crate::render::legibility::TextSource::Note,
+                    crate::interact::read::readable(NOTE),
                     note_panel(text),
                     // Lying face up, its top edge away from whoever reads
                     // it from the marker's facing.

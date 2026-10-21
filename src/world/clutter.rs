@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn every_clutter_model_exists() {
         let root = crate::asset_root_path();
-        for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
                 let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);

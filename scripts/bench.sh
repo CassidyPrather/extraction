@@ -9,7 +9,7 @@
 # Env: OUT (default target/bench), SIZE (one eye, default 1024x1024),
 # HOLD (frames a view, default 12), WEATHER (default drizzle), HOUR (dawn,
 # day, dusk, night; default the cycle's), ONLY, EYES (1 for one eye;
-# default both).
+# default both), HITCHES (0 to skip the hitch gauge, scripts/hitches.sh).
 # Under Xvfb this is lavapipe, a CPU renderer: compare GPU times only
 # with each other, never with the headset's.
 set -euo pipefail
@@ -39,3 +39,10 @@ for MAP in "${MAPS[@]}"; do
     rm -rf "$DATA"
 done
 python3 scripts/bench_report.py "${MAPS[@]/#/$OUT/}"
+# The hitches (wall-clock, so here rather than in the test suite);
+# HITCHES=0 to skip.
+if [ "${HITCHES:-1}" != "0" ]; then
+    RAID=()
+    for MAP in "${MAPS[@]}"; do [ "$MAP" != training_yard ] && RAID+=("$MAP"); done
+    [ ${#RAID[@]} -gt 0 ] && scripts/hitches.sh "${RAID[@]}"
+fi

@@ -122,6 +122,19 @@ recover, scout) but never easy, and the cache they pay is three piles
 instead of two. Raid 40 is a raid to the Hollow or the quarry because the
 card says so, not because the loot table does.
 
+Half the deep fetches are one named **stone** (`progression::STONES`):
+a featherstone, a hearth, an aegis knot, a lodestone or a mirror shard,
+each asked for with a line that hints at its harvest trick ("A hearth.
+Don't pick it up with your hands. Let it cool first.", see
+`docs/ANOMALIES.md`), and now and then (15%) a stormglass, which means
+staying out into the Surge. A stone sealed in its lead case in the stash
+counts. After the epilogue the quiet jobs ask for none.
+
+**The fourth valley.** Sallow Reservoir (`docs/FOURTH_VALLEY.md`) doesn't
+come up on the route card until the career has raided Marrow Creek, Kettle
+Pass and Cinder Works (`Progress::opens`). It has no key; the capstone
+stays three.
+
 **Your order.** With the ladder done the driver will take an order: a
 second card under the job, pressed to cycle, says what you want his caches
 to lean to: ROUNDS (ammunition), MEDICINE, GADGETS, or ANYTHING (as
@@ -198,8 +211,9 @@ Surges, and refused if the Surge would come before morning); the hour
 moves on one step (dusk to night, night to dawn: "Grey light under the
 door."); a night behind a wedged door cools the Zone's attention. If you
 lie down loud (the second feeling or worse), the radio warns you in the
-dark and something comes to the door before light: a team of walkers
-that batters the wedge, while a drone hangs at the window.
+dark and something comes to the door before light: two walkers from the
+Gate (Robot minds' `NightVisit`) that batter the wedge down and search the
+cabin for up to ten minutes.
 
 **The truck** waits one night if you radio it from the safehouse (press
 the radio); untold, it leaves the rendezvous while you sleep.
@@ -214,6 +228,11 @@ third feeling, "the air hums around you", or worse) and the machines have
 followed your trail to it: the door's broken, the crate tipped out over
 the floor, and you'll find it like that next time. The Surge ends a claim
 (and empties the crate: the Zone takes what it's given).
+
+**Leftovers**: each cabin's table has a note from its last people
+(Story's), and what the note promises is there, each Surge cycle until you
+clear the cabin: the logging crew's tin under the Marrow bed, the
+woodward's matches by his stove in the Cinder wood.
 
 Cut from this: hunger (there still is none; food is the kitchen's and the
 offerings'), a sleep timer or a menu (you lie down; a night is a night),
