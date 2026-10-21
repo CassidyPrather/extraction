@@ -528,3 +528,92 @@ mod tests {
         assert!(text.iter().any(|t| t.contains("junction box")), "{text:?}");
     }
 }
+
+/// Where a sentry could stand over a thing: `SCOUT_SENTRY=map:x:z cargo
+/// test -p extraction_core scout_sentry -- --ignored --nocapture` tries
+/// spots round (x, z), every facing and two arc widths, a box behind, and
+/// prints the ones that pass, best field first.
+#[cfg(test)]
+mod scout {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn scout_sentry() {
+        let arg = std::env::var("SCOUT_SENTRY").unwrap();
+        let v: Vec<&str> = arg.split(':').collect();
+        let text = crate::map::VALLEYS
+            .iter()
+            .find(|m| m.0 == v[0])
+            .expect("a valley")
+            .1;
+        let target = [v[1].parse::<f32>().unwrap(), v[2].parse::<f32>().unwrap()];
+        let base = MapDef::from_ron(text).unwrap();
+        let hm = Heightmap::build(&base);
+        let walk = crate::map_nav::zone_grid(&base, &hm, crate::map_nav::MAX_SLOPE);
+        let ins = base.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let routes: Vec<(String, Vec<P2>)> = crate::map_lint::lint(&base, &hm)
+            .routes
+            .into_iter()
+            .map(|r| (r.to, r.points))
+            .collect();
+        let mut good = Vec::new();
+        for ring in [6.0f32, 12.0, 18.0, 26.0] {
+            for k in 0..12 {
+                let a = k as f32 * 30f32.to_radians();
+                let at = [target[0] + a.cos() * ring, target[1] + a.sin() * ring];
+                if !walk.walkable(at) || hm.water_level(at).is_some() {
+                    continue;
+                }
+                for c in 0..24 {
+                    let centre = sentry::wrap_deg(c as f32 * 15.0);
+                    for arc in [90.0f32, 140.0] {
+                        // The box behind it, off to one side.
+                        for (off, d) in [(150.0f32, 14.0f32), (210.0, 14.0), (180.0, 18.0)] {
+                            let b = (centre + off).to_radians();
+                            let power = [at[0] + b.sin() * d, at[1] - b.cos() * d];
+                            let mut map = base.clone();
+                            map.markers.push(crate::map::Marker {
+                                kind: MarkerKind::Sentry { arc, power },
+                                at,
+                                rot: centre,
+                                name: "S".into(),
+                                y: 0.0,
+                            });
+                            let c = check(&map, &hm, &walk, ins, &routes, |p| {
+                                crate::map_lint::inside_fence(&map, p)
+                            });
+                            if c.findings.is_empty() {
+                                let s = &sentries(&map)[0];
+                                let f = s.field(&map, &hm, &walk);
+                                let share = f.visible as f32 / f.reachable.max(1) as f32;
+                                good.push((share, f.visible, at, centre, arc, power));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Facing the way people come (toward the insertion), then the
+        // biggest field.
+        let facing = |g: &(f32, usize, P2, f32, f32, P2)| {
+            let want = sentry::bearing(g.2, ins);
+            (sentry::wrap_deg(g.3 - want).abs() / 30.0).round() as i32
+        };
+        good.sort_by(|a, b| facing(a).cmp(&facing(b)).then(b.1.cmp(&a.1)));
+        for g in good.iter().take(15) {
+            println!(
+                "at ({:.1}, {:.1}) rot {:.0} arc {:.0} power ({:.1}, {:.1}): sees {:.0}% ({} cells)",
+                g.2[0],
+                g.2[1],
+                g.3,
+                g.4,
+                g.5[0],
+                g.5[1],
+                g.0 * 100.0,
+                g.1
+            );
+        }
+        println!("{} passing", good.len());
+    }
+}
