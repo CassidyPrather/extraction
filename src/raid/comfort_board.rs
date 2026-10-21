@@ -31,6 +31,8 @@ pub enum ComfortCard {
     OneHanded,
     /// Captions on the wrist.
     Captions,
+    /// The wrist's tick when a machine nearby turns certain of you.
+    MachineTick,
     Climb,
 }
 
@@ -47,7 +49,7 @@ impl Plugin for ComfortBoardPlugin {
 
 fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
     for truck in &trucks {
-        // Two columns: above 1.9 m the canvas slopes into the canopy.
+        // In columns: above 1.9 m the canvas slopes into the canopy.
         for (card, y, z) in [
             (ComfortCard::Turning, 1.62, -1.25),
             (ComfortCard::Vignette, 1.44, -1.25),
@@ -63,6 +65,8 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Seated, 1.62, -0.50),
             (ComfortCard::OneHanded, 1.44, -0.50),
             (ComfortCard::Captions, 1.26, -0.50),
+            // And by the tailgate, the wrist's warning.
+            (ComfortCard::MachineTick, 1.80, -0.15),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -115,6 +119,7 @@ fn press_cards(
                 ComfortCard::Seated => comfort.seated = !comfort.seated,
                 ComfortCard::OneHanded => comfort.one_handed = !comfort.one_handed,
                 ComfortCard::Captions => comfort.captions = !comfort.captions,
+                ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
             }
             // Tests and sims don't touch the player's settings.
@@ -149,6 +154,7 @@ fn card_text(
             ComfortCard::Seated => comfort.seated_label(),
             ComfortCard::OneHanded => comfort.one_handed_label(),
             ComfortCard::Captions => comfort.captions_label(),
+            ComfortCard::MachineTick => comfort.machine_tick_label(),
             ComfortCard::Climb => comfort.climb_label(),
         };
         if text.text != t {
@@ -217,7 +223,8 @@ mod tests {
         }
     }
 
-    /// The binaural and score cards each switch their setting, and say so.
+    /// The binaural, score and warning-tick cards each switch their
+    /// setting, and say so.
     #[test]
     fn the_audio_cards_switch_binaural_and_the_score() {
         let mut app = crate::headless_app(Default::default(), false);
@@ -237,6 +244,7 @@ mod tests {
         for (which, off) in [
             (ComfortCard::Binaural, "STEREO"),
             (ComfortCard::Score, "OFF"),
+            (ComfortCard::MachineTick, "OFF"),
         ] {
             let card = app
                 .world_mut()
@@ -247,10 +255,10 @@ mod tests {
                 .unwrap_or_else(|| panic!("a {which:?} card in the truck"));
             let on = |app: &App| {
                 let c = app.world().resource::<Comfort>();
-                if which == ComfortCard::Binaural {
-                    c.binaural
-                } else {
-                    c.score
+                match which {
+                    ComfortCard::Binaural => c.binaural,
+                    ComfortCard::Score => c.score,
+                    _ => c.machine_tick,
                 }
             };
             assert!(on(&app), "{which:?} starts on");

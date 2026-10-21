@@ -284,6 +284,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | PLAYING | standing / seated | seated: the view and hands lifted to a standing eye (measured from how you sit, over a few seconds); the crouch button (right stick down, or the left with GUN HAND left) brings you down to the floor |
 | HANDS | two / one | one: bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
+| WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
 
 For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
 it on: is anything out of reach, or does anything need the hand you've
@@ -493,5 +494,5 @@ pump?
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
-| `--left-handed`, `--seated`, `--one-handed`, `--no-captions` | How you play, without the cards |
+| `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |
