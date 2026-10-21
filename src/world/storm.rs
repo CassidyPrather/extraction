@@ -205,7 +205,10 @@ fn lightning(
             };
             let a = if held {
                 // In view, a little off to the side (for the shot).
-                let f = cams.iter().next().map_or(Vec3::NEG_Z, |g| g.forward().as_vec3());
+                let f = cams
+                    .iter()
+                    .next()
+                    .map_or(Vec3::NEG_Z, |g| g.forward().as_vec3());
                 f.z.atan2(f.x) + 0.25
             } else {
                 rng.range(0.0, std::f32::consts::TAU)

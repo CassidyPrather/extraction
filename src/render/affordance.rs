@@ -277,7 +277,7 @@ pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, T
             Has<crate::world::workings::MineCart>,
             Has<crate::interact::poke::PokeButton>,
             Has<crate::interact::body::Backpack>,
-            Has<crate::interact::tools::crowbar::Pryable>,
+            Has<crate::destruction::hooks::Pryable>,
         ),
     )>();
     q.iter(world)
