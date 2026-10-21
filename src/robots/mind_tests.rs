@@ -1389,14 +1389,22 @@ fn a_night_visit_sends_two_walkers_to_the_door() {
     let inside = ent.mid - ent.out * 2.0;
     let visitors: Vec<_> = app
         .world_mut()
-        .query::<(&Robot, &Brain, &Job)>()
+        .query::<(&Robot, &Brain, &Job, &Transform)>()
         .iter(app.world())
-        .filter(|(r, _, j)| {
+        .filter(|(r, _, j, _)| {
             r.kind == super::RobotKind::Walker
                 && j.kind == JobKind::Response
                 && j.site.distance(inside) < 0.1
         })
-        .map(|(_, b, _)| b.clone())
+        .map(|(_, b, _, t)| {
+            // In from the woods, a couple of minutes off.
+            assert!(
+                flat(t.translation - inside) < super::director::VISIT_FROM + 8.0,
+                "close enough to come soon: {:.0} m",
+                flat(t.translation - inside)
+            );
+            b.clone()
+        })
         .collect();
     assert_eq!(visitors.len(), 2, "{visitors:?}");
     for b in visitors {
