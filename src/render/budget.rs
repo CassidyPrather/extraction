@@ -1703,6 +1703,7 @@ pub(crate) mod tests {
             "kettle_pass",
             "cinder_works",
             "sallow_reservoir",
+            "rime_fell",
         ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
@@ -1730,6 +1731,11 @@ pub(crate) mod tests {
     #[test]
     fn sallow_reservoir_holds_the_budget() {
         holds("sallow_reservoir");
+    }
+
+    #[test]
+    fn rime_fell_holds_the_budget() {
+        holds("rime_fell");
     }
 
     #[test]
