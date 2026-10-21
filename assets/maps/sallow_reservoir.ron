@@ -381,6 +381,8 @@
         // The downstream face, broken where the face stair comes up onto
         // the crest; the upstream face, broken where the slipway leaves it.
         (prefab: "dam_face", at: (-42.5, 148.0), rot: 0.0, y: 30.0, absolute: true),
+        // The face stair's outer wall (dam.rs STAIR_* holds it to the stair).
+        (prefab: "face_stair_wall", at: (30.0, 157.2), rot: 0.0, y: 29.0, absolute: true),
         (prefab: "dam_face_end", at: (112.5, 148.0), rot: 0.0, y: 30.0, absolute: true),
         (prefab: "dam_back_end", at: (-157.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
         (prefab: "dam_back", at: (2.5, 132.5), rot: 0.0, y: 31.0, absolute: true),
