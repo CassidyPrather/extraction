@@ -81,7 +81,8 @@ impl Plugin for ProgressionPlugin {
                     stock_cabinet,
                 )
                     .chain(),
-            );
+            )
+            .add_systems(Update, contracts::scenario::direct);
     }
 }
 
