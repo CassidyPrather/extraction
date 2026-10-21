@@ -526,11 +526,13 @@ within reach and still cast), as is the Marrow gate view.
 ## Small things' range
 
 Items fade where they'd be a few pixels (`item_range`). Other small
-things had no range. A merge added display guns (every round in a drum
-its own mesh) and pianos (keys, hammers) as props, not items. Marrow
-Creek's aerial view went from 998 to 1208 draws, with the top five kinds
-unchanged. `BUDGET_LIST=1` lists every kind a view draws, which is how
-the tail showed up.
+things had no range. Marrow Creek's aerial view went from 998 to 1208
+draws in one merge, with the top five kinds unchanged. `BUDGET_LIST=1`
+lists every kind a view draws, which is how the tail showed up: 96 piano
+parts (keys, hammers), 39 of the player's body and kit parts, 35 depot
+fittings, 18 terminals, 18 notes, 15 supply crates, 7 keys. None were
+items. (The guns in that view are items, on the gate's truck within
+their 60 m range, and rightly drawn.)
 
 `render::budget::small_ranges` gives any StandardMaterial mesh under 1 m
 (largest side, world) that isn't part of an item or under a `LodReach` a
