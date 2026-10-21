@@ -61,6 +61,12 @@ most of the work.
   the road are landmarks too, and a map should let you find one.
 - The rendezvous should be where a landmark is (a tower, a depot, a
   pass), so "head for the mast" is a plan.
+- Signs face the way you walk up to them: a Sign marker within 25 m of
+  a road or path turns its board within 60° of the road 10 m back
+  toward the insertion (or toward the insertion itself, away from
+  roads). The board stands at eye height by construction. This is
+  checked by `render::legibility::tests::every_sign_faces_its_approach`,
+  not by the map lint.
 
 ## Routes and choices
 
@@ -159,10 +165,16 @@ The sim's raiders (`src/sim/raider.rs`, `choose_site`) pick where to go by
 what a site holds (loot spots; artifact fields for hunters), how far it
 is, the rendezvous side late in the raid, and the region's loot
 richness, as a player reading the field map would: a site's pull is
-multiplied by `Region::richness`. So a rich region off the road is worth
+multiplied by `Region::richness`. Each raider also sets out for one
+region, chosen at the start weighted by richness (any region with loot
+and danger above 0). Sites near that region's middle score up to four
+times higher, so far quarters get tried and not only the cluster
+nearest the gate. So a rich region off the road is worth
 a bot's detour in proportion to what it pays; a picked-over village near
 the gate is worth less. If a place you meant to matter is never visited
 in the sims, check its richness and its loot spots before its routes.
+Offerings and work sites are never bot targets, so "never visited" for
+them says nothing about the map.
 
 ## Indoor and outdoor rhythm
 
