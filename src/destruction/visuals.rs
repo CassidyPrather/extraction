@@ -487,20 +487,26 @@ fn dress_crates(
             use_aabb: true,
         };
         let has_box = children.into_iter().flatten().any(|k| boxes.contains(*k));
-        match props.resolve_all([c.model].into_iter()) {
-            Resolved::Loading => {
-                if !has_box {
-                    let planks = props.lib.get(Mat::Planks, &props.server, &mut materials);
-                    commands.spawn((
-                        CrateBox,
-                        Mesh3d(meshes.add(crate::render::materials::metric_box(c.size))),
-                        MeshMaterial3d(planks),
-                        Transform::IDENTITY,
-                        range(),
-                        ChildOf(e),
-                    ));
-                }
+        let mut boxed = |props: &mut crate::render::world_props::PropModels| {
+            if !has_box {
+                let material = props.lib.get(c.mat, &props.server, &mut materials);
+                commands.spawn((
+                    CrateBox,
+                    Mesh3d(meshes.add(crate::render::materials::metric_box(c.size))),
+                    MeshMaterial3d(material),
+                    Transform::IDENTITY,
+                    range(),
+                    ChildOf(e),
+                ));
             }
+        };
+        let Some(model) = c.model else {
+            boxed(&mut props);
+            commands.entity(e).insert(CrateDressed);
+            continue;
+        };
+        match props.resolve_all([model].into_iter()) {
+            Resolved::Loading => boxed(&mut props),
             // Missing: the box stays.
             Resolved::Missing => {
                 commands.entity(e).insert(CrateDressed);
@@ -511,7 +517,7 @@ fn dress_crates(
                         commands.entity(*k).despawn();
                     }
                 }
-                for (mesh, t, mat) in props.primitives(c.model) {
+                for (mesh, t, mat) in props.primitives(model) {
                     let material = props.material(&mat, &mut materials);
                     commands.spawn((
                         Mesh3d(mesh),

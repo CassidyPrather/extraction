@@ -421,6 +421,12 @@ fn carve(
         rebuild(commands, e, b, t, &breaches.0);
         if floor {
             index_hole(commands, e, &b.prefab, t, centre);
+            // A way through: what keeps a map of the way can open it.
+            let across = frame_of(t, &p) * Vec3::new(half_of(hole).x, half_of(hole).y, s.z);
+            commands.write_message(super::Cleared {
+                min: centre - across.abs(),
+                max: centre + across.abs(),
+            });
         }
         out.write(Broke {
             at: centre,
@@ -477,6 +483,14 @@ fn carve(
         return Some(hole);
     }
     None
+}
+
+fn frame_of(t: &Transform, p: &crate::world::buildings::Piece) -> Quat {
+    t.rotation * p.at.rotation
+}
+
+fn half_of(h: Hole) -> Vec2 {
+    h.size * 0.5
 }
 
 /// A heavy's arm tears a doorway out where a breach lands in a wall.
