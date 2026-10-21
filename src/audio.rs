@@ -231,6 +231,7 @@ impl Plugin for AudioPlugin {
                         turret_sounds,
                         heavy_sounds,
                         heavy_loops,
+                        flock_sounds,
                     ),
                 ),
             )
@@ -2179,18 +2180,6 @@ enum NightLoop {
     Rustle,
 }
 
-/// How near a machine silences the insects, m: the big ones (walkers and
-/// their breeds, the dirigible), and a drone's whine from further, since
-/// the crickets would hide it (`scripts/audio_voices.py`: at night the
-/// hush is the warning where the machine itself is masked).
-pub const INSECTS_HUSH_BIG: f32 = 60.0;
-pub const INSECTS_HUSH_DRONE: f32 = 120.0;
-/// ...and a shot this near.
-pub const INSECTS_HUSH_SHOT: f32 = 150.0;
-/// After the last of it, they wait this long, then come back over this.
-pub const INSECTS_WAIT: f32 = 6.0;
-pub const INSECTS_RETURN: f32 = 15.0;
-
 /// How dark it is for the night's sounds: 1 at night, half at dusk.
 pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
     use crate::world::weather::Hour;
@@ -2201,66 +2190,39 @@ pub fn nightness(hour: crate::world::weather::Hour) -> f32 {
     }
 }
 
-/// The night: crickets everywhere outside, which fall silent when
-/// something big comes near or a shot goes off (and so tell you it's
-/// there) and come back a while after; wind in the leaves where it's
-/// overgrown. Quieter through walls, gone underground and in rain.
-#[allow(clippy::too_many_arguments)]
+/// The night: crickets everywhere outside, at the level Wildlife's chorus
+/// says (`wildlife::insects::Chorus`: silent near a machine or after a
+/// shot, a flush or a bolt, back over a minute, thinned by rain and wind;
+/// so they stopping tells you something's there), and wind in the leaves
+/// where it's overgrown. Quieter through walls, gone underground.
 fn night_ambience(
     conditions: Option<Res<crate::world::weather::Conditions>>,
+    chorus: Option<Res<crate::wildlife::insects::Chorus>>,
     listening: Res<Listening>,
     zone: Option<Res<Zone>>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
-    robots: Query<(&crate::robots::Robot, &GlobalTransform)>,
-    mut shots: MessageReader<crate::weapons::GunEvent>,
     loops: Query<(&NightLoop, &SampleEffects)>,
     mut volumes: Query<&mut VolumeNode>,
-    time: Res<Time>,
-    mut state: Local<(f32, f32, f32)>,
 ) {
     use crate::acoustics::SpaceKind;
+    use crate::wildlife::insects::Singers;
     let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
         return;
     };
-    let now = time.elapsed_secs();
-    let dt = time.delta_secs();
-    let (last_threat, hush, _) = &mut *state;
-    let near = robots.iter().any(|(r, gt)| {
-        let reach = match r.kind {
-            crate::robots::RobotKind::Drone => INSECTS_HUSH_DRONE,
-            crate::robots::RobotKind::Walker | crate::robots::RobotKind::Dirigible => {
-                INSECTS_HUSH_BIG
-            }
-            _ => 0.0,
-        };
-        !r.wrecked && gt.translation().distance(ear) < reach
+    let night = conditions.as_deref().map_or(0.0, |c| nightness(c.hour));
+    let crickets = chorus.as_deref().map_or(0.0, |c| {
+        if c.kind == Singers::Crickets {
+            c.level
+        } else {
+            0.0
+        }
     });
-    let shot = shots.read().any(|g| {
-        matches!(g.event, extraction_core::firearm::Event::Fired { .. })
-            && g.at.distance(ear) < INSECTS_HUSH_SHOT
-    });
-    if near || shot {
-        *last_threat = now;
-    }
-    // Silent in a second and a half; back slowly, once it's been quiet a
-    // while.
-    let quiet = now - *last_threat > INSECTS_WAIT || *last_threat == 0.0;
-    *hush = if quiet {
-        (*hush + dt / INSECTS_RETURN).min(1.0)
-    } else {
-        (*hush - dt / 1.5).max(0.0)
-    };
-    let (night, rain) = conditions
-        .as_deref()
-        .map_or((0.0, 0.0), |c| (nightness(c.hour), c.rain));
     let under = listening.space.kind == SpaceKind::Underground;
     let walls = listening.space.enclosed;
-    let cover = zone
-        .as_deref()
-        .map_or(0.5, |z| z.forest_cover(ear.x, ear.z));
+    let cover = overgrown(zone.as_deref(), ear);
     for (which, effects) in &loops {
         let (level, cue) = match which {
-            NightLoop::Insects => (night * (1.0 - rain * 2.0).max(0.0) * *hush, "insects"),
+            NightLoop::Insects => (crickets, "insects"),
             NightLoop::Rustle => (night * (0.35 + 0.65 * cover), "rustle"),
         };
         let level = if under { 0.0 } else { level };
@@ -2274,8 +2236,47 @@ fn night_ambience(
     }
 }
 
-/// Glass going and wood giving way (`destruction`): a shop window crashes
-/// lower and longer than a vent pane tinkles; a door coming down thuds.
+/// How overgrown it is round `at`, 0..1: the ivy and weeds on the
+/// buildings within [`OVERGROWN_NEAR`] (`world::overgrowth::amount`,
+/// nearer counting more; underground sites grow nothing), or the forest's
+/// cover where there are none.
+pub const OVERGROWN_NEAR: f32 = 40.0;
+
+fn overgrown(zone: Option<&Zone>, at: Vec3) -> f32 {
+    let Some(zone) = zone else {
+        return 0.5;
+    };
+    let here = Vec2::new(at.x, at.z);
+    let (mut sum, mut weight) = (0.0, 0.0);
+    for p in &zone.map.placements {
+        let d = Vec2::from(p.at).distance(here);
+        if d > OVERGROWN_NEAR || extraction_core::underground::is_site(&p.prefab) {
+            continue;
+        }
+        let w = 1.0 - d / OVERGROWN_NEAR;
+        sum += w * crate::world::overgrowth::amount(Vec2::from(p.at), &p.prefab);
+        weight += w;
+    }
+    let cover = zone.forest_cover(at.x, at.z);
+    if weight > 0.0 {
+        (sum / weight).max(cover)
+    } else {
+        cover
+    }
+}
+
+/// Glass going and wood giving way (`destruction`), each cue levelled at
+/// its biggest so the audit sees the worst (the code only takes it down):
+///
+/// - a step on broken glass: a short bright crunch (a pane's break, quick);
+/// - a pane: a shop window crashes lower and longer than a vent pane
+///   tinkles, quieter the smaller;
+/// - wood: a thump and splinters; a door coming down thuds as well;
+/// - a wall breached (the only break of 3 m² and over): masonry going,
+///   rubble pouring and the boom of it.
+///
+/// Robots hear each to `destruction::noise_radius`; the audit checks your
+/// ears hear about as far.
 fn break_sounds(
     mut commands: Commands,
     mut broke: MessageReader<crate::destruction::Broke>,
@@ -2283,7 +2284,6 @@ fn break_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
-    // A step on broken glass: a short, bright grind.
     for c in crunches.read() {
         play_at_speed(
             &mut commands,
@@ -2291,27 +2291,48 @@ fn break_sounds(
             &mut rng.0,
             "physical/glass_break",
             Some(c.at),
-            "hit.glass",
-            -12.0,
+            "break.crunch",
+            0.0,
             1.6,
             0.15,
         );
     }
     for b in broke.read() {
+        let at = Some(b.at);
         match b.stuff {
             crate::destruction::Stuff::Glass => {
                 let speed = (1.25 - b.size * 0.6).clamp(0.8, 1.25) as f64;
+                let db = (b.size * 6.0 - 8.0).clamp(-9.0, 0.0);
                 play_at_speed(
                     &mut commands,
                     &bank,
                     &mut rng.0,
                     "physical/glass_break",
-                    Some(b.at),
-                    "hit.glass",
-                    (b.size * 6.0 - 2.0).clamp(-3.0, 3.0),
+                    at,
+                    "break.glass",
+                    db,
                     speed,
                     0.1,
                 );
+            }
+            crate::destruction::Stuff::Wood if b.size >= BREACH_SIZE => {
+                for (set, cue, speed) in [
+                    ("impacts/concrete", "break.breach", 0.7),
+                    ("ambience/rockfall", "break.rubble", 1.0),
+                    ("physical/door_close", "break.wood_big", 0.6),
+                ] {
+                    play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        set,
+                        at,
+                        cue,
+                        0.0,
+                        speed,
+                        0.08,
+                    );
+                }
             }
             crate::destruction::Stuff::Wood => {
                 play(
@@ -2319,9 +2340,20 @@ fn break_sounds(
                     &bank,
                     &mut rng.0,
                     "impacts/wood",
-                    Some(b.at),
-                    "door.blow",
+                    at,
+                    "break.wood",
                     0.0,
+                    0.15,
+                );
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "impacts/wood",
+                    at,
+                    "break.splinter",
+                    0.0,
+                    1.6,
                     0.15,
                 );
                 if b.size > 1.0 {
@@ -2330,8 +2362,8 @@ fn break_sounds(
                         &bank,
                         &mut rng.0,
                         "physical/door_close",
-                        Some(b.at),
-                        "door.broken",
+                        at,
+                        "break.wood_big",
                         0.0,
                         0.2,
                     );
@@ -2340,6 +2372,66 @@ fn break_sounds(
         }
     }
 }
+
+/// A flock going up (`wildlife::Flushed`): the clatter of wings and the
+/// birds' own calls, rooks (as crows), ravens or jackdaws by the flock's
+/// species. Alarmed: a burst of calls; restless: one, softer. (The wings
+/// are a quick cloth flutter until a recording of wings can be fetched.)
+fn flock_sounds(
+    mut commands: Commands,
+    mut flushed: MessageReader<crate::wildlife::Flushed>,
+    flocks: Query<&crate::wildlife::flock::Flock>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::wildlife::FlushCause;
+    use crate::wildlife::flock::Species;
+    for f in flushed.read() {
+        let calls = match flocks.get(f.flock).map(|fl| fl.species) {
+            Ok(Species::Raven) => "ambience/raven",
+            Ok(Species::Jackdaw) => "ambience/jackdaw",
+            _ => "ambience/crow",
+        };
+        let restless = f.cause == FlushCause::Restless;
+        let up = Some(f.at + Vec3::Y * 2.0);
+        let wings = (f.birds as f32 / 5.0).clamp(1.0, 4.0) as usize;
+        for _ in 0..wings {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/cloth",
+                up,
+                "flock.wings",
+                if restless { -6.0 } else { 0.0 },
+                1.5,
+                0.15,
+            );
+        }
+        let n = if f.alarm {
+            3
+        } else if restless {
+            1
+        } else {
+            2
+        };
+        for _ in 0..n {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                calls,
+                Some(f.at + Vec3::Y * 4.0),
+                "flock.call",
+                if restless { -6.0 } else { 0.0 },
+                0.1,
+            );
+        }
+    }
+}
+
+/// A break this big (m²) is a wall breached (`destruction::breach`).
+const BREACH_SIZE: f32 = 2.5;
 
 /// The wind in the trees, and the hush of a room: which you hear depends
 /// on whether you're under a roof.
@@ -3838,9 +3930,6 @@ mod tests {
         assert_eq!(nightness(Hour::Dusk), 0.5);
         assert_eq!(nightness(Hour::Day), 0.0);
         assert_eq!(nightness(Hour::Dawn), 0.0);
-        // A drone's whine carries further than a walker's tread, so the
-        // crickets go quiet for it sooner.
-        const { assert!(INSECTS_HUSH_DRONE > INSECTS_HUSH_BIG) };
     }
 
     /// The ending's hush eases in, holds, and lets go.

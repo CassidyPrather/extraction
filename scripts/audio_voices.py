@@ -24,7 +24,14 @@ name the walker's; the other kinds play at the cue's gain plus their
   range in calm, and your own footstep still clears the masking. A
   walker's step and a drone's rotor are warned of to the mix's own
   target (`RANGE_TARGETS`): by the sound itself, or, where the crickets
-  would hide it, by the crickets falling silent (`INSECTS_HUSH_*`).
+  would hide it, by the crickets falling silent (Wildlife's
+  `wildlife::insects::HUSH_NEAR`, `HUSH_NEAR_DRONE`).
+- **The world's new sounds hide nothing.** Each sound the destruction,
+  the wildlife and the heavy machine make, at its usual distance over
+  the wind, leaves your footstep and a robot's call 30 m off still
+  clearing their masking. And what robots hear a break to
+  (`destruction::noise_radius`, the crunch's `CRUNCH_HEARD`) your ears
+  hear to within `HEARD_RATIO` of it.
 - **Calls carry.** `voice.calling` and `voice.answering` are heard to
   `RANGE_TARGETS` (200 m in calm) by the mix pass, like any signal: a call
   answered that far off is the warning that a response team is coming.
@@ -45,6 +52,8 @@ MINDS = ["idle", "noticed", "investigating", "searching", "engaging", "lost",
 KIND_SPREAD = 6.0   # LU between kinds saying the same thing
 NEAR = 6.0          # m: a robot this close, talking over your footsteps
 HEARD_DRIFT = 0.25  # robot_voice::heard_to against the measured range
+HEARD_RATIO = (0.6, 1.6)  # a break heard by ears over robots' reach
+WORLD = ("break.", "flock.", "heavy.")
 NIGHT_KEPT = 0.75   # share of a warning's calm range kept over the night beds
 NIGHT_BED = [("wind", 0.0), ("insects", 0.0), ("rustle", 0.0)]
 
@@ -101,9 +110,10 @@ def trims():
 
 
 def hush_radii():
-    """`INSECTS_HUSH_*` from src/audio.rs, m."""
-    text = (ROOT / "src" / "audio.rs").read_text()
-    return {k: float(v) for k, v in re.findall(r"INSECTS_HUSH_(\w+): f32 = ([\d.]+)", text)}
+    """Wildlife's chorus hush (`wildlife::insects::HUSH_NEAR`, `_DRONE`), m."""
+    text = (ROOT / "src" / "wildlife" / "insects.rs").read_text()
+    near = dict(re.findall(r"pub const (HUSH_NEAR\w*): f32 = ([\d.]+)", text))
+    return {"BIG": float(near["HUSH_NEAR"]), "DRONE": float(near["HUSH_NEAR_DRONE"])}
 
 
 def heard_to():
@@ -182,6 +192,44 @@ def run(sets, out):
             lines.append("    " + ", ".join(row[i:i + 4]))
         lines.append(f"    your footstep clears the night by {step:+.1f} dB"
                      + ("" if step > 0 else "  (masked)"))
+    # The world's new sounds against your footstep and a robot's call.
+    lines.append("  The world's sounds (at their distance, over the wind) against your "
+                 "footstep and a call at 30 m:")
+    worst_world = {}
+    for c in mix:
+        if not c["name"].startswith(WORLD) or c["set"] not in sets:
+            continue
+        for target, tdist, every in (("step", None, 0.5), ("voice.calling", 30.0, None)):
+            scene = [("wind", "loop", None, 0.0, None),
+                     (c["name"], 0.4, None, 0.0, 0.5),
+                     (target, 0.5, tdist, 0.0, every)]
+            total, parts = am.render(scene, sets, mix, seconds=3.0)
+            sig = parts[f"2:{target}"]
+            margin, band = am.margin(sig, total - sig, 0.5, 0.5)
+            if target not in worst_world or margin < worst_world[target][0]:
+                worst_world[target] = (margin, c["name"], band)
+    for target, (margin, name, band) in worst_world.items():
+        bad = margin <= 0
+        flags += bad
+        lines.append(f"    {target:14s} {margin:+5.1f} dB at {band} Hz (worst: {name})"
+                     + ("  masked" if bad else ""))
+    # Breaks: ears against robots.
+    text = (ROOT / "src" / "destruction" / "mod.rs").read_text()
+    glass = re.search(r"Stuff::Glass => \(([\d.]+) \+ ([\d.]+) \* size\)\.min\(([\d.]+)\)", text)
+    wood = re.search(r"Stuff::Wood => \(([\d.]+) \+ ([\d.]+) \* size\)\.min\(([\d.]+)\)", text)
+    crunch = float(re.search(r"CRUNCH_HEARD: f32 = ([\d.]+)",
+                             (ROOT / "src" / "destruction" / "glass.rs").read_text()).group(1))
+    big = lambda m, size: min(float(m.group(1)) + float(m.group(2)) * size, float(m.group(3)))
+    breaks = {"break.glass": big(glass, 2.0), "break.wood": big(wood, 2.0),
+              "break.breach": big(wood, 3.0), "break.crunch": crunch}
+    row = []
+    for name, robots in breaks.items():
+        ears = am.audible_range(name, sets, mix, [("wind", 0.0)])
+        bad = not HEARD_RATIO[0] <= ears / robots <= HEARD_RATIO[1]
+        flags += bad
+        row.append(f"{name} {ears}/{robots:g}" + (" (!)" if bad else ""))
+    lines.append(f"  Breaks heard by you / by robots (m), wants {HEARD_RATIO[0]}..{HEARD_RATIO[1]}x: "
+                 + ", ".join(row))
     # Masking: each kind's every word at NEAR m, against your footstep
     # (over the wind) and your shot.
     worst = {}
