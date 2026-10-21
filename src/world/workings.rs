@@ -413,6 +413,7 @@ fn ignite(
                         shooter: None,
                         mass_g: 0.0,
                         load: Default::default(),
+                        blow: None,
                     });
                 }
             }
@@ -1098,6 +1099,7 @@ mod tests {
                     shooter: Some(player),
                     mass_g: 8.0,
                     load: Default::default(),
+                    blow: None,
                 });
             app.update();
         }

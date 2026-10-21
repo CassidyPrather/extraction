@@ -287,6 +287,13 @@ you queasy — climbing, the zipline, being knocked about, swimming.
   hand's speed): does it go where you meant? Cook one (B) and see if the
   timing feels fair. Thrust the knife into something, then slash: does
   "hard enough" match what your arm did? Fix the SKS's bayonet (A).
+  Drive an AK's butt back into a robot's eye: does a real stroke land,
+  and a bump not?
+- Faults. Load a box of re-packed rounds and shoot until one pops weak
+  (it may take a few boxes). Can you tell it from a dud by the feel
+  alone? Rod it out with the cleaning rod before the next shot. Shoot a
+  filthy Mosin until its bolt sticks, then slap it free. Clean a gun by
+  bringing the kit to it: does the bore come up bright?
 - Cover by material: shoot through a shed's plank wall with the AK, then
   try the pistol; skip rounds off concrete at a slant. Does it read?
 - Ammunition. Thumb a few AP rounds onto a magazine of ball and fire:
@@ -366,6 +373,24 @@ session, now only at the ends of the day). Try it twice in Marrow Creek:
 
 Which looked better in the headset, and did the shadow lines bother you?
 
+### 4e. Night (10 minutes)
+
+Night is now lit by the moon, and only when the sky lets it through.
+Try three nights in Marrow Creek:
+
+1. `cargo run --release -- --map marrow_creek --hour night --weather clearing --moon full`
+   - Can you walk the meadow and the road without a torch?
+   - Do the moon and the shadows tell you which way is north?
+2. The same with `--moon new`: the stars, with no moon.
+3. `--weather fog --moon full`: this should be truly black. Turn the
+   torch on.
+   - Does the beam's haze look right, or does it look like a cone?
+   - Does the truck's lamp read as a light to walk to?
+
+Also come in from a lit room or the truck bed into the dark. Does it
+take a few seconds before you see again, and does the brightness ever
+pump?
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -420,6 +445,7 @@ Which looked better in the headset, and did the shadow lines bother you?
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
 | `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
 | `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |

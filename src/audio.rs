@@ -217,7 +217,7 @@ impl Plugin for AudioPlugin {
                     drone_and_zip_sounds,
                     kitchen_sounds,
                     mind_sounds,
-                    voice_sounds,
+                    (render_voices, voice_sounds).chain(),
                     casing_sounds,
                     detector_sounds,
                     power_sounds,
@@ -227,6 +227,7 @@ impl Plugin for AudioPlugin {
                         armour_sounds,
                         epilogue_sounds,
                         night_ambience,
+                        turret_sounds,
                     ),
                 ),
             )
@@ -658,6 +659,29 @@ fn armour_sounds(
                 0.06,
             );
         }
+    }
+}
+
+/// A scope's elevation drum turned one detent (`weapons::zero`): a small,
+/// quick click.
+fn turret_sounds(
+    mut commands: Commands,
+    mut clicks: MessageReader<crate::weapons::zero::TurretClicked>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for c in clicks.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "guns/safety",
+            Some(c.at),
+            "scope.click",
+            0.0,
+            1.7,
+            0.04,
+        );
     }
 }
 
@@ -3060,33 +3084,68 @@ fn kitchen_sounds(
     }
 }
 
-/// What robots say (`robot_voice::Spoke`): each utterance one cue, from
-/// the robot, through the head-related filter, walls and the room like
-/// any other sound. A kind's words are rendered the first time it says
-/// them, at the stream's rate, and kept as `voice/<kind>/<mind>` sets.
-fn voice_sounds(
-    mut commands: Commands,
-    mut spoke: MessageReader<crate::robot_voice::Spoke>,
+/// The robots' words being rendered, off the main thread: every kind's
+/// every word, started once the stream's rate is known.
+#[derive(Default)]
+struct VoiceRenders {
+    started: bool,
+    tasks: Vec<(String, bevy::tasks::Task<Vec<Vec<f32>>>)>,
+}
+
+/// Render every word in the background at start-up (a few hundred ms of
+/// synthesis in all, never on a frame) and add each to the bank as its
+/// `voice/<kind>/<mind>` set when it's done.
+fn render_voices(
+    mut renders: Local<VoiceRenders>,
     mut bank: ResMut<SoundBank>,
     mut samples: ResMut<Assets<AudioSample>>,
     rate: Option<Res<bevy_seedling::context::SampleRate>>,
+) {
+    use crate::robot_voice as rv;
+    let Some(rate) = rate.as_deref().map(|r| r.get()) else {
+        return;
+    };
+    if !renders.started {
+        renders.started = true;
+        let pool = bevy::tasks::AsyncComputeTaskPool::get();
+        for k in rv::VoiceKind::ALL {
+            for u in rv::Utterance::ALL {
+                let sr = rate.get() as f32;
+                let task = pool.spawn(async move {
+                    (0..rv::VARIANTS)
+                        .map(|v| rv::render(k, u, v, sr))
+                        .collect::<Vec<_>>()
+                });
+                renders.tasks.push((rv::set_name(k, u), task));
+            }
+        }
+    }
+    renders.tasks.retain_mut(|(set, task)| {
+        let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
+            return true;
+        };
+        let handles = buffers
+            .into_iter()
+            .map(|x| samples.add(AudioSample::new(vec![x], rate)))
+            .collect();
+        bank.sets.insert(set.clone(), handles);
+        false
+    });
+}
+
+/// What robots say (`robot_voice::Spoke`): each utterance one cue, from
+/// the robot, through the head-related filter, walls and the room like
+/// any other sound, from the sets [`render_voices`] made. (A word asked
+/// for in the first moments, before its render is done, isn't heard.)
+fn voice_sounds(
+    mut commands: Commands,
+    mut spoke: MessageReader<crate::robot_voice::Spoke>,
+    bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::robot_voice as rv;
     for s in spoke.read() {
         let set = rv::set_name(s.kind, s.said);
-        if !bank.has(&set) {
-            let Some(rate) = rate.as_deref().map(|r| r.get()) else {
-                continue;
-            };
-            let handles = (0..rv::VARIANTS)
-                .map(|v| {
-                    let x = rv::render(s.kind, s.said, v, rate.get() as f32);
-                    samples.add(AudioSample::new(vec![x], rate))
-                })
-                .collect();
-            bank.sets.insert(set.clone(), handles);
-        }
         play(
             &mut commands,
             &bank,

@@ -54,9 +54,11 @@ TIPS = {
 }
 
 
-def bullet(p, c, xf, segs, tip=None):
-    """The bullet, copper, its point painted for its `tip` type."""
+def bullet(p, c, xf, segs, tip=None, seat=0.0):
+    """The bullet, copper, its point painted for its `tip` type; `seat`
+    moves it along the case (a hand-loaded round's odd seating)."""
     prof = c[1]
+    xf = xf @ T(0, 0, seat)
     if not tip:
         p.lathe(prof, "Copper", segs=segs, xf=xf)
         return
@@ -69,26 +71,26 @@ def bullet(p, c, xf, segs, tip=None):
     p.lathe(prof, mat, segs=segs, xf=xf)
 
 
-def cartridge(p, c, xf, segs=14, base=True, tip=None):
+def cartridge(p, c, xf, segs=14, base=True, tip=None, brass="Brass", seat=0.0):
     """A brass case and copper bullet, base at z 0 (then `xf`); with
     `base`, the primer and its red lacquer seal; `tip` paints the point
-    (ap, api, tracer)."""
+    (ap, api, tracer); `brass` and `seat` for re-packed rounds."""
     case, _, _ = c
-    p.lathe(case, "Brass", segs=segs, xf=xf)
-    bullet(p, c, xf, segs, tip)
+    p.lathe(case, brass, segs=segs, xf=xf)
+    bullet(p, c, xf, segs, tip, seat)
     if base:
         p.cyl(0.0017, -0.0004, 0.00003, "Copper", segs=10, xf=xf)
         p.tube(0.0023, 0.0017, -0.0004, 0.00002, "Red", segs=10, xf=xf)
 
 
-def nose(p, c, z_from, xf, segs=10, tip=None):
+def nose(p, c, z_from, xf, segs=10, tip=None, brass="Brass", seat=0.0):
     """Only the front of a cartridge from `z_from` on (what shows out of a
     box), base at z 0 (then `xf`)."""
     case = c[0]
     front = [(r, z) for r, z in case if z <= z_from and r > 0]
-    p.lathe([(0.0, z_from), (front[0][0], z_from)] + front + [(0.0, front[-1][1])], "Brass",
+    p.lathe([(0.0, z_from), (front[0][0], z_from)] + front + [(0.0, front[-1][1])], brass,
             segs=segs, xf=xf)
-    bullet(p, c, xf, segs, tip)
+    bullet(p, c, xf, segs, tip, seat)
 
 
 def carton(p, sx, sy, sz, y0, mat, top=None, wall=0.0012, sides=True):
@@ -149,14 +151,14 @@ def round_762r():
     return [p]
 
 
-def shell_12ga():
+def shell_12ga(hull="Red", head="Brass"):
     p = Part("body")
     # A red plastic hull on a brass head, the star crimp closing the front.
     xf = T(0, 0, 0.035)
     p.lathe([(0.0, 0.0), (0.0099, 0.0), (0.01, -0.0004), (0.01, -0.0013), (0.0093, -0.0016),
-             (0.0093, -0.012), (0.0091, -0.0125), (0.0, -0.0125)], "Brass", segs=20, xf=xf)
+             (0.0093, -0.012), (0.0091, -0.0125), (0.0, -0.0125)], head, segs=20, xf=xf)
     p.lathe([(0.0, -0.011), (0.0091, -0.011), (0.0091, -0.066), (0.0085, -0.0685),
-             (0.006, -0.0697), (0.0, -0.07)], "Red", segs=20, xf=xf)
+             (0.006, -0.0697), (0.0, -0.07)], hull, segs=20, xf=xf)
     for k in range(6):
         p.box((0.0006, 0.0055, 0.0008), (0.0, 0.003, -0.0693), "Dark",
               xf=xf @ RZ(math.pi * k / 3))
@@ -461,6 +463,118 @@ TYPED = {
 }
 
 
+# --- Re-packed (made at the bench from scavenged brass and powder) ---------------------------
+
+# Each round's seating, a little off and never the same: offsets (m) along
+# the case, cycled through.
+SEATS = (0.0006, -0.0004, 0.0011, 0.0, -0.0008, 0.0003, 0.0009, -0.0002)
+
+
+def repack_round(c, segs, seat=0.0007):
+    def build():
+        p = Part("body")
+        cartridge(p, c, T(0, 0, c[2] / 2), segs=segs, brass="Tarnish", seat=seat)
+        return [p]
+    return build
+
+
+def repack_box(dims, c, calibre, shells=False):
+    """A plain kraft-card box the factory box's size, its lid flap folded
+    back, the re-packed rounds standing in it noses up (or shells heads
+    up), a pencilled paper label on the front."""
+    def build():
+        sx, sy, sz = dims
+        p = Part("body")
+        y0 = -sy / 2
+        wall = 0.0012
+        carton(p, sx, sy - 0.002, sz, y0, "Straw", wall=wall)
+        # The lid flap, hinged at the back's top edge and folded back.
+        hinge = (0.0, y0 + sy - 0.002, sz / 2)
+        p.box((sx, wall, sz), (0.0, hinge[1], 0.0), "Straw", bevel=0.0004, segs=1,
+              xf=RX(math.radians(-115), about=hinge))
+        top = y0 + sy - 0.006
+        p.box((sx - 0.004, 0.002, sz - 0.004), (0.0, top - 0.003, 0.0), "Black", segs=1)
+        r = 0.0099 if shells else max(rr for rr, _ in c[0])
+        pitch = 2 * r + 0.0012
+        cols = max(1, int((sx - 0.004) // pitch))
+        rows = max(1, int((sz - 0.004) // pitch))
+        # A home-made box is seldom full: at most 20 rounds, from the front
+        # corner, the rest of the floor bare.
+        k = 0
+        for i in range(cols):
+            for j in range(rows):
+                if k >= 20:
+                    break
+                x = (i - (cols - 1) / 2) * pitch
+                z = (j - (rows - 1) / 2) * pitch
+                if shells:
+                    xf = T(x, top + 0.002, z) @ UP
+                    p.lathe([(0.0, -0.009), (0.0092, -0.009), (0.0092, -0.0016), (0.0099, -0.0013),
+                             (0.0099, 0.0), (0.0, 0.0)], "Tarnish", segs=12, xf=xf)
+                    p.cyl(0.0028, -0.0004, 0.0003, "Steel", segs=8, xf=xf)
+                else:
+                    # The case's top `show` stands above the dark fill, the
+                    # bullet tips no higher than just over the box's top.
+                    show = 0.012
+                    case_end = min(z_ for _, z_ in c[0])
+                    zf = case_end + show
+                    base = min(top - 0.003 + case_end + show, top + 0.004 - c[2])
+                    nose(p, c, zf, T(x, base, z) @ RX(math.pi / 2), segs=7, brass="Tarnish",
+                         seat=SEATS[k % len(SEATS)])
+                k += 1
+        # The label: a torn paper slip, pencilled, a little askew.
+        lw, lh = min(0.06, sx - 0.006), min(0.026, sy * 0.6)
+        # A slip tucked under a string round the box (it stands off the card
+        # by the string's thickness, clear of both the wall's faces).
+        lab = T(0.0, -sy * 0.08, -sz / 2 - 0.0025) @ RZ(0.04)
+        p.box((lw, lh, 0.0012), (0.0, 0.0, 0.0), "Paper", xf=lab)
+        ys = -sy * 0.08
+        p.box((sx + 0.003, 0.0016, 0.0016), (0.0, ys, -sz / 2 - 0.0036), "Rope", segs=1)
+        p.box((sx + 0.003, 0.0016, 0.0016), (0.0, ys, sz / 2 + 0.0009), "Rope", segs=1)
+        for sx_ in (-1, 1):
+            p.box((0.0016, 0.0016, sz + 0.009), (sx_ * (sx / 2 + 0.0009), ys, -0.0014), "Rope",
+                  segs=1)
+        h1 = min(0.006, lw / 5.5)
+        text(p, "REPACK", h1, "Dark", lab @ T(0.0, lh * 0.2, -0.0006) @ RY(math.pi),
+             depth=0.0003)
+        text(p, calibre, h1 * 0.8, "Dark", lab @ T(0.0, -lh * 0.25, -0.0006) @ RY(math.pi),
+             depth=0.0003)
+        return [p]
+    return build
+
+
+def cleaning_rod():
+    p = Part("body")
+    # A steel rod along Z, 8 mm at its thickest: a slotted jag at the -Z
+    # end, a knurled handle with a brass ferrule at +Z.
+    p.cyl(0.0033, -0.27, 0.25, "Steel", segs=10)
+    p.lathe([(0.0, -0.3), (0.0025, -0.3), (0.0035, -0.297), (0.0035, -0.272), (0.0033, -0.27),
+             (0.0, -0.27)], "Steel", segs=10)
+    p.box((0.008, 0.0012, 0.02), (0.0, 0.0, -0.288), "Dark", segs=1)
+    p.cyl(0.004, 0.25, 0.258, "Brass", segs=12, chamfer=0.0008)
+    p.cyl(0.004, 0.258, 0.3, "Iron", segs=12, chamfer=0.001)
+    for k in range(5):
+        p.tube(0.0041, 0.0039, 0.262 + 0.007 * k, 0.264 + 0.007 * k, "Dark", segs=12)
+    return [p]
+
+
+REPACK = {
+    "cleaning_rod": cleaning_rod,
+    "round_9x18_repack": repack_round(C9, 14),
+    "round_545_repack": repack_round(C545, 14),
+    "round_762x39_repack": repack_round(C762X39, 14),
+    "round_762x25_repack": repack_round(C762X25, 14),
+    "round_762r_repack": repack_round(C762, 16),
+    "shell_12ga_repack": lambda: shell_12ga(hull="Brick", head="Tarnish"),
+    "ammo_9x18_repack": repack_box((0.04, 0.03, 0.07), C9, "9x18"),
+    "ammo_545_repack": repack_box((0.05, 0.035, 0.1), C545, "5.45"),
+    "ammo_762x39_repack": repack_box((0.06, 0.046, 0.03), C762X39, "7.62x39"),
+    "ammo_762x25_repack": repack_box((0.1, 0.036, 0.073), C762X25, "7.62x25"),
+    "ammo_762r_repack": repack_box((0.045, 0.03, 0.09), C762, "54R"),
+    "ammo_12ga_repack": repack_box((0.07, 0.07, 0.12), None, "12", shells=True),
+}
+
+
 # --- Robot belt ------------------------------------------------------------------------------
 
 def robot_ammo_belt():
@@ -502,13 +616,14 @@ def robot_ammo_belt():
 
 # The magazine scripts import the cartridges from here; build only when run.
 if __name__ == "__main__":
-    for item_id, fn in (("round_9x18", round_9x18), ("round_545", round_545),
+    for item_id, fn in ((("round_9x18", round_9x18), ("round_545", round_545),
                         ("round_762r", round_762r), ("shell_12ga", shell_12ga),
                         ("round_762x39", round_762x39), ("ammo_762x39", ammo_762x39),
                         ("round_762x38r", round_762x38r), ("ammo_762x38r", ammo_762x38r),
                         ("round_762x25", round_762x25), ("ammo_762x25", ammo_762x25),
                         ("ammo_9x18", ammo_9x18), ("ammo_545", ammo_545),
                         ("ammo_762r", ammo_762r), ("ammo_12ga", ammo_12ga),
-                        ("robot_ammo_belt", robot_ammo_belt)) + tuple(TYPED.items()):
+                        ("robot_ammo_belt", robot_ammo_belt)) + tuple(TYPED.items())
+                       + tuple(REPACK.items())):
         if wanted(item_id):
             item(item_id, fn)

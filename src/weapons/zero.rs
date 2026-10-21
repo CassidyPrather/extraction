@@ -33,8 +33,10 @@ pub const TURRET_HANDLE: u8 = 7;
 pub const CLICK: f32 = 0.5;
 /// Metres per click.
 pub const CLICK_M: u32 = 100;
-/// Where the elevation drum's top is, in the scope's space.
-pub const DRUM: Vec3 = Vec3::new(0.0, 0.0235, -0.01);
+/// Where the elevation drums sit, in their scopes' space (the models'
+/// `drum` nodes turn about their own +Y there).
+pub const PSO_DRUM: Vec3 = Vec3::new(0.0, 0.0235, -0.01);
+pub const PU_DRUM: Vec3 = Vec3::new(0.0, 0.01825, -0.012);
 /// How close a hand must come to take the drum.
 pub const DRUM_REACH: f32 = 0.04;
 /// The height a man is taken to be, for the rangefinder.
@@ -46,6 +48,8 @@ pub struct Turret {
     pub setting: u32,
     pub min: u32,
     pub max: u32,
+    /// Where its drum is, in the scope's space.
+    pub drum: Vec3,
 }
 
 impl Turret {
@@ -95,7 +99,16 @@ impl Plugin for ZeroPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<TurretClicked>()
             .add_observer(fit_turrets)
-            .add_systems(Update, (turret_points, turn_turrets, zero_scopes).chain());
+            .add_systems(
+                Update,
+                (
+                    turret_points,
+                    turn_turrets,
+                    flat_drum.run_if(resource_exists::<ButtonInput<KeyCode>>),
+                    zero_scopes,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -118,6 +131,7 @@ fn fit_turrets(
                     setting: 1,
                     min: 1,
                     max: 10,
+                    drum: PSO_DRUM,
                 },
                 Zero::default(),
                 Rangefinder,
@@ -129,6 +143,7 @@ fn fit_turrets(
                     setting: 1,
                     min: 1,
                     max: 13,
+                    drum: PU_DRUM,
                 },
                 Zero::default(),
             ));
@@ -141,13 +156,13 @@ fn fit_turrets(
 /// (where the scope's drum is now); one without, none.
 fn turret_points(
     mut guns: Query<(Entity, &GlobalTransform, &mut Grabbable), With<Gun>>,
-    scopes: Query<(&MountedOn, &GlobalTransform), With<Turret>>,
+    scopes: Query<(&MountedOn, &GlobalTransform, &Turret)>,
 ) {
     for (g, gt, mut grab) in &mut guns {
-        let want = scopes.iter().find(|(m, _)| m.0 == g).map(|(_, sgt)| {
+        let want = scopes.iter().find(|(m, ..)| m.0 == g).map(|(_, sgt, t)| {
             gt.affine()
                 .inverse()
-                .transform_point3(sgt.transform_point(DRUM))
+                .transform_point3(sgt.transform_point(t.drum))
         });
         // Read first: only a change marks the gun's grab points changed.
         let have = grab
@@ -215,7 +230,7 @@ fn turn_turrets(
             clicked.write(TurretClicked {
                 scope,
                 setting,
-                at: sgt.transform_point(DRUM),
+                at: sgt.transform_point(turret.drum),
             });
             if let Ok(rig) = rigs.get(hand_e) {
                 haptics.write(crate::rig::haptics::Haptic {
@@ -224,6 +239,47 @@ fn turn_turrets(
                     seconds: 0.012,
                 });
             }
+        }
+    }
+}
+
+/// Flat mode: `]` and `[` click the drum of the scope on the gun in your
+/// right hand up and down.
+fn flat_drum(
+    keys: Res<ButtonInput<KeyCode>>,
+    players: Query<&Children, (With<crate::rig::LocalPlayer>, Without<crate::bot::Bot>)>,
+    hands: Query<(&crate::rig::RigHand, &Hand)>,
+    mut scopes: Query<(Entity, &MountedOn, &GlobalTransform, &mut Turret)>,
+    mut clicked: MessageWriter<TurretClicked>,
+) {
+    let step: i64 = if keys.just_pressed(KeyCode::BracketRight) {
+        1
+    } else if keys.just_pressed(KeyCode::BracketLeft) {
+        -1
+    } else {
+        return;
+    };
+    let Some(gun) = players.iter().next().and_then(|c| {
+        c.iter()
+            .filter_map(|h| hands.get(h).ok())
+            .find(|(rh, _)| rh.side == crate::rig::Side::Right)
+            .and_then(|(_, h)| h.holding)
+    }) else {
+        return;
+    };
+    for (scope, m, sgt, mut turret) in &mut scopes {
+        if m.0 != gun {
+            continue;
+        }
+        let setting =
+            (turret.setting as i64 + step).clamp(turret.min as i64, turret.max as i64) as u32;
+        if setting != turret.setting {
+            turret.setting = setting;
+            clicked.write(TurretClicked {
+                scope,
+                setting,
+                at: sgt.transform_point(turret.drum),
+            });
         }
     }
 }
@@ -291,6 +347,43 @@ pub fn aim_lenses(
     for (parent, mut t) in &mut cams {
         if let Ok(z) = zeros.get(parent.parent()) {
             t.rotation = z.look;
+        }
+    }
+}
+
+/// A drum's rest pose, before it was turned.
+#[derive(Component)]
+pub struct DrumRest(Quat);
+
+/// Client side: each scope's `drum` node turns with its setting, a full
+/// turn over its positions (clockwise from above as the range goes up).
+pub fn turn_drums(
+    mut commands: Commands,
+    scopes: Query<(Entity, &Turret)>,
+    children: Query<&Children>,
+    mut nodes: Query<(&Name, &mut Transform, Option<&DrumRest>)>,
+) {
+    for (e, turret) in &scopes {
+        let positions = (turret.max - turret.min + 1) as f32;
+        let turn = -std::f32::consts::TAU * (turret.setting - turret.min) as f32 / positions;
+        for d in children.iter_descendants(e) {
+            let Ok((name, mut t, rest)) = nodes.get_mut(d) else {
+                continue;
+            };
+            if name.as_str() != "drum" {
+                continue;
+            }
+            let rest = match rest {
+                Some(r) => r.0,
+                None => {
+                    commands.entity(d).insert(DrumRest(t.rotation));
+                    t.rotation
+                }
+            };
+            let want = rest * Quat::from_rotation_y(turn);
+            if t.rotation.angle_between(want) > 1e-4 {
+                t.rotation = want;
+            }
         }
     }
 }

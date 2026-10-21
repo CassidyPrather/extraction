@@ -94,7 +94,7 @@ fn flat(v: Vec3) -> f32 {
 
 /// The classic distraction: a piece of scrap thrown down the street
 /// clatters 14 m from a walker at its post, and the walker walks over to
-/// where it landed (not to you) and searches round it.
+/// about where it landed (not to you) and searches round it.
 #[test]
 fn a_thrown_bolt_draws_a_walker() {
     let (mut app, player, zone) = app(None);
@@ -123,19 +123,21 @@ fn a_thrown_bolt_draws_a_walker() {
         .get_mut::<avian3d::prelude::LinearVelocity>(bolt)
         .unwrap()
         .0 = Vec3::new(0.0, -8.0, 0.0);
+    // It heard roughly where: it comes to look within its guess's spread.
+    let near = 3.5 + (14.0 * super::senses::HEARD_SPREAD).max(super::senses::HEARD_SPREAD_MIN);
     let mut closest = f32::MAX;
     let mut secs = 0.0;
     for i in 0..90 * 25 {
         app.update();
         let at = app.world().get::<Transform>(walker).unwrap().translation;
         closest = closest.min(flat(at - spot));
-        if closest < 3.5 {
+        if closest < near {
             secs = i as f32 / 90.0;
             break;
         }
     }
     assert!(
-        closest < 3.5,
+        closest < near,
         "walked to where it landed (closest {closest:.1} m)"
     );
     assert!(secs < 15.0, "in good time ({secs:.1} s)");
@@ -425,7 +427,7 @@ fn crawler_at(
         patrol: route.clone(),
         spawn: at,
         crawlers: 1,
-        heavy: 0,
+        wardens: 0,
         dormant: false,
     };
     let mut queue = CommandQueue::default();
@@ -1184,6 +1186,16 @@ fn minds_shift_once_per_change() {
     assert!(sa.contains(&Mind::Noticed), "{sa:?}");
     assert!(sa.contains(&Mind::Engaging), "{sa:?}");
     assert!(sa.contains(&Mind::Calling), "{sa:?}");
+    let first = |m: Mind| sa.iter().position(|s| *s == m).unwrap();
+    assert!(
+        first(Mind::Noticed) < first(Mind::Engaging),
+        "noticed first: {sa:?}"
+    );
+    assert_eq!(
+        sa.iter().filter(|s| **s == Mind::Noticed).count(),
+        1,
+        "once: {sa:?}"
+    );
     for r in [a, b] {
         let s = of(r);
         for w in s.windows(2) {
@@ -1406,7 +1418,7 @@ fn a_new_site_grid_reroutes_its_crawlers() {
             patrol: vec![a, b],
             spawn: a,
             crawlers: 1,
-            heavy: 0,
+            wardens: 0,
             dormant: false,
         });
         sites.sites.len() - 1

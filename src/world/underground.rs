@@ -1659,7 +1659,7 @@ pub fn register_residents(
                 patrol,
                 spawn,
                 crawlers: round.crawlers,
-                heavy: round.heavy,
+                wardens: round.heavy,
                 dormant: round.dormant,
             });
         }
@@ -2074,7 +2074,7 @@ const ADAPT_STOPS: f32 = 2.5;
 
 /// The surface's light as the sky set it, before going dark.
 #[derive(Default)]
-struct Daylight {
+pub(crate) struct Daylight {
     written: Option<(f32, f32)>,
     base: (f32, f32),
     fog: Option<Color>,
@@ -2083,7 +2083,7 @@ struct Daylight {
 /// How far below ground the eye is, 0 (on the surface) to 1 (a few
 /// metres down a stair or further): ambient light, the sun and the fog's
 /// colour go with it, so the rooms are as dark as their lamps leave them.
-fn go_dark(
+pub(crate) fn go_dark(
     zone: Res<Zone>,
     eyes: Query<(&GlobalTransform, &Camera), With<Camera3d>>,
     mut ambient: ResMut<GlobalAmbientLight>,
