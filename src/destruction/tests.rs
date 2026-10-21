@@ -1631,3 +1631,50 @@ fn list_parts() {
         );
     }
 }
+
+#[test]
+fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
+    // What a breakable is drawn with (`wood::Drawn`): a model that's on
+    // disk, or a box in a material whose texture is (a plain dark metal
+    // is plain on purpose). Never a box in a material that never loads,
+    // which draws pale and flat.
+    let root = crate::asset_root_path();
+    let model = |m: &str| root.join(crate::render::world_props::path(m)).exists();
+    let textured = |mat: crate::render::materials::Mat| {
+        let (dir, ..) = mat.info();
+        dir.is_none_or(|d| {
+            root.join("textures/materials")
+                .join(d)
+                .join("albedo.ktx2")
+                .exists()
+        })
+    };
+    let mut bad = Vec::new();
+    for m in super::wood::CRATE_MODELS
+        .into_iter()
+        .chain([super::boards::MODEL])
+    {
+        if !model(m) {
+            bad.push(format!("model {m} isn't on disk"));
+        }
+    }
+    let ids = crate::world::buildings::PREFABS
+        .into_iter()
+        .chain(crate::world::underground::ids());
+    for id in ids {
+        let Some(geo) = crate::world::buildings::prefab(id) else {
+            continue;
+        };
+        for b in &geo.breakables {
+            match b.model {
+                Some(m) if !model(m) => bad.push(format!("{id}: {:?}'s {m} isn't on disk", b.kind)),
+                None if !textured(b.mat) => bad.push(format!(
+                    "{id}: {:?} is a box of {:?}, untextured",
+                    b.kind, b.mat
+                )),
+                _ => {}
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
