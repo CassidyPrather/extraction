@@ -13,6 +13,7 @@ noise floor).
     scripts/anomaly_legibility.py            # shoots, then measures
     scripts/anomaly_legibility.py --measure  # measures the shots already taken
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
+    scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
 
 Writes docs/shots/anomalies/legibility/<kind>_<weather>.png (the "with"
 shot), a contact sheet docs/shots/anomalies/legibility.png and
@@ -68,6 +69,8 @@ DEFAULT_FLOOR = 0.03
 def shot(name: str, cam: str, weather: str, hide: bool, n: int) -> str:
     os.makedirs(RAW, exist_ok=True)
     out = os.path.join(RAW, f"{name}_{weather}_{'off' if hide else 'on'}{n}.png")
+    if os.path.exists(out) and "--fresh" not in sys.argv:
+        return out
     data = os.path.join(RAW, f"data_{name}_{weather}_{int(hide)}{n}")
     env = dict(os.environ, WGPU_BACKEND="vulkan")
     if hide:

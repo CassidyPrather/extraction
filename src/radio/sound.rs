@@ -63,6 +63,9 @@ pub enum Render {
     OrganTune(usize),
     /// A 78, by its item id, as the horn plays it.
     Record(&'static str),
+    /// One harmonium note, held twelve seconds (let go sooner, it's
+    /// faded out): every third key, like the piano's.
+    ReedKey(u8),
     /// One piano note, struck firmly and held (the dampers are the
     /// player's volume): every third key, the rest shifted to it.
     PianoKey(u8),
@@ -77,7 +80,7 @@ impl Render {
         match self {
             // A note is levelled over its first second (its strike), so
             // every key is as loud struck as another.
-            Render::PianoKey(_) => {
+            Render::PianoKey(_) | Render::ReedKey(_) => {
                 let head = ((rate as usize).min(x.len())).max(1);
                 let r = extraction_core::music::synth::rms(&x[..head]);
                 if r > 1e-6 {
@@ -106,6 +109,20 @@ impl Render {
             Render::Record(id) => tapes::record(id)
                 .map(|r| tapes::render_record(r, sr))
                 .unwrap_or_default(),
+            Render::ReedKey(k) => {
+                use extraction_core::music::{mml::Note, synth};
+                let part = synth::Part {
+                    instrument: synth::Instrument::Harmonium,
+                    notes: vec![Note {
+                        start: 0.0,
+                        len: 12.0,
+                        key: *k as i32,
+                        vel: 0.8,
+                    }],
+                    gain: 1.0,
+                };
+                synth::render(&[part], sr, *k as u64)
+            }
             Render::PianoKey(k) => {
                 use extraction_core::music::{mml::Note, synth};
                 let part = synth::Part {
@@ -545,21 +562,27 @@ fn sound_pianos(
     mut commands: Commands,
     mut renders: ResMut<Renders>,
     mut notes: MessageReader<super::piano::PianoNote>,
-    pianos: Query<&GlobalTransform, With<super::piano::Piano>>,
+    pianos: Query<(&GlobalTransform, &super::piano::Piano)>,
     ears: Query<&GlobalTransform, With<SpatialListener3D>>,
     mut voices: Query<(Entity, &mut PianoVoice, &SampleEffects)>,
     mut volumes: Query<&mut VolumeNode>,
     time: Res<Time>,
 ) {
     use super::piano::{HIGH, LOW};
-    let near = ears.iter().any(|e| {
-        pianos
+    for (gt, p) in &pianos {
+        if !ears
             .iter()
-            .any(|p| p.translation().distance(e.translation()) < 8.0)
-    });
-    if near {
+            .any(|e| gt.translation().distance(e.translation()) < 8.0)
+        {
+            continue;
+        }
         for k in (LOW + 1..=HIGH).step_by(3) {
-            renders.want(Render::PianoKey(k));
+            if (p.keyboard.low..=p.keyboard.high + 1).contains(&k) || k + 1 == p.keyboard.low {
+                renders.want(match p.keyboard.voice {
+                    super::piano::Voice::Piano => Render::PianoKey(k),
+                    super::piano::Voice::Reed => Render::ReedKey(k),
+                });
+            }
         }
     }
     for n in notes.read() {
@@ -573,7 +596,15 @@ fn sound_pianos(
             continue;
         }
         let (base, speed) = piano_source(n.key);
-        let Some(sample) = renders.want(Render::PianoKey(base)) else {
+        let render = match n.voice {
+            super::piano::Voice::Piano => Render::PianoKey(base),
+            super::piano::Voice::Reed => Render::ReedKey(base),
+        };
+        let cue = match n.voice {
+            super::piano::Voice::Piano => "piano.note",
+            super::piano::Voice::Reed => "organ",
+        };
+        let Some(sample) = renders.want(render) else {
             continue;
         };
         let level = 20.0 * n.velocity.max(0.05).log10();
@@ -584,7 +615,7 @@ fn sound_pianos(
                 damping: None,
                 level,
             },
-            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db("piano.note"))),
+            SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue))),
             PlaybackSettings::default().with_speed(speed),
             Transform::from_translation(n.at),
             sample_effects![
@@ -592,8 +623,8 @@ fn sound_pianos(
                     volume: Volume::Decibels(level),
                     ..default()
                 },
-                mix::spatial("piano.note"),
-                crate::audio::reverb_send("piano.note")
+                mix::spatial(cue),
+                crate::audio::reverb_send(cue)
             ],
         ));
     }

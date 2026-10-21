@@ -230,7 +230,9 @@ fn part_gone(
             continue;
         };
         for _ in 0..*n {
-            let off = Vec3::new((i as f32 * 1.7).sin() * 0.2, 0.1 + 0.05 * i as f32, 0.0);
+            // Out past its face (-Z), clear of what it was fixed to.
+            let out = half_z(collider) + 0.2;
+            let off = Vec3::new((i as f32 * 1.7).sin() * 0.2, 0.1 + 0.05 * i as f32, -out);
             crate::items::spawn_item(
                 &mut commands,
                 &catalog,
@@ -243,6 +245,13 @@ fn part_gone(
             i += 1;
         }
     }
+}
+
+fn half_z(collider: &Collider) -> f32 {
+    collider
+        .shape_scaled()
+        .as_cuboid()
+        .map_or(0.05, |c| c.half_extents.z)
 }
 
 /// The Surge: every shutter, panel and wreck whole again.

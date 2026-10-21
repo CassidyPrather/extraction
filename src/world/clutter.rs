@@ -9,6 +9,9 @@
 //! are on the floor, a burnt one's are charred. A few houses Story names
 //! have their own (see `special`).
 //!
+//! Outside, a house has its yard (`yard`, `art/props/yards.py`): a
+//! clothes line, the garden's beds, a bench, the woodpile, by valley.
+//!
 //! The buildings that aren't houses (cabins, the shop, sheds, barns, the
 //! pump station, huts, booths, halls) hold their workers' things instead
 //! (`workplace`, `art/props/workplaces.py`).
@@ -955,6 +958,405 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
     }
 }
 
+// --- Yards ------------------------------------------------------------------------------------
+
+/// A yard thing (`art/props/yards.py`): its model, half its footprint
+/// along its own x and z, and whether it stands against a wall, its back
+/// (+Z) to it, or out in the yard.
+#[derive(Clone, Copy, Debug)]
+struct YardThing {
+    model: &'static str,
+    hx: f32,
+    hz: f32,
+    wall: bool,
+}
+
+const fn thing(model: &'static str, hx: f32, hz: f32, wall: bool) -> YardThing {
+    YardThing {
+        model,
+        hx,
+        hz,
+        wall,
+    }
+}
+
+const CLOTHES_LINE: YardThing = thing("clothes_line", 2.1, 0.35, false);
+const CLOTHES_LINE_BARE: YardThing = thing("clothes_line_bare", 2.1, 0.35, false);
+const BED_CABBAGE: YardThing = thing("garden_bed_cabbage", 1.22, 0.52, false);
+const BED_ROOTS: YardThing = thing("garden_bed_roots", 1.22, 0.52, false);
+const BENCH: YardThing = thing("bench_yard", 0.78, 0.2, true);
+const BENCH_CHARRED: YardThing = thing("bench_charred", 0.78, 0.2, true);
+const RAIN_BARREL: YardThing = thing("rain_barrel", 0.33, 0.37, true);
+const WOODPILE: YardThing = thing("woodpile_lean", 1.13, 0.47, true);
+const WASHTUB: YardThing = thing("washtub_stand", 0.4, 0.36, true);
+const CHOPPING_BLOCK: YardThing = thing("chopping_block", 0.6, 0.36, false);
+const BEEHIVE: YardThing = thing("beehive", 0.27, 0.33, false);
+const HEN_COOP: YardThing = thing("hen_coop", 0.8, 0.74, false);
+const HANDCART: YardThing = thing("handcart", 0.53, 1.04, false);
+const HAND_PUMP: YardThing = thing("hand_pump", 0.42, 0.72, false);
+const DOG_KENNEL: YardThing = thing("dog_kennel", 0.53, 0.57, false);
+const TUB_IRON: YardThing = thing("tub_iron", 0.75, 0.36, true);
+const COAL_BUNKER: YardThing = thing("coal_bunker", 0.64, 0.72, true);
+
+/// Every yard model, for the tests.
+#[cfg(test)]
+const YARD_THINGS: [YardThing; 17] = [
+    CLOTHES_LINE,
+    CLOTHES_LINE_BARE,
+    BED_CABBAGE,
+    BED_ROOTS,
+    BENCH,
+    BENCH_CHARRED,
+    RAIN_BARREL,
+    WOODPILE,
+    WASHTUB,
+    CHOPPING_BLOCK,
+    BEEHIVE,
+    HEN_COOP,
+    HANDCART,
+    HAND_PUMP,
+    DOG_KENNEL,
+    TUB_IRON,
+    COAL_BUNKER,
+];
+
+/// Marrow's gardens: kept, the beds in rows, hives and hens, a cart left
+/// half loaded.
+const MARROW_YARD: [YardThing; 10] = [
+    BED_CABBAGE,
+    BED_ROOTS,
+    CLOTHES_LINE,
+    BENCH,
+    RAIN_BARREL,
+    WOODPILE,
+    BEEHIVE,
+    HEN_COOP,
+    HANDCART,
+    CHOPPING_BLOCK,
+];
+/// Kettle's miners' rows: coal, wood, the wash, a pump, a potato bed.
+const KETTLE_YARD: [YardThing; 10] = [
+    COAL_BUNKER,
+    WOODPILE,
+    CLOTHES_LINE,
+    WASHTUB,
+    CHOPPING_BLOCK,
+    BENCH,
+    RAIN_BARREL,
+    BED_ROOTS,
+    HAND_PUMP,
+    HANDCART,
+];
+/// Cinder's: what the fire left, nothing alive.
+const CINDER_YARD: [YardThing; 3] = [BENCH_CHARRED, TUB_IRON, CLOTHES_LINE_BARE];
+/// New Sallow's and the keepers' cottages.
+const SALLOW_YARD: [YardThing; 8] = [
+    BED_CABBAGE,
+    BED_ROOTS,
+    CLOTHES_LINE,
+    BENCH,
+    RAIN_BARREL,
+    WOODPILE,
+    HAND_PUMP,
+    WASHTUB,
+];
+
+/// Gap kept between yard things, and between a wall thing and its wall.
+const YARD_GAP: f32 = 0.35;
+/// How far out from the walls a yard reaches.
+pub const YARD_REACH: f32 = 4.0;
+
+/// A house's four sides, building-local: the front (-Z, the door's), the
+/// back, and the two ends.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Side {
+    Front,
+    Back,
+    Left,
+    Right,
+}
+
+/// The things in a house's yard, building-local: `prefab` placed at `xf`
+/// (its tag `tag`) on `map`, two to five from its valley's kit (fewer for
+/// a ruin), along its back and ends, a bench maybe either side of the
+/// door. `ground` is the ground's height at a map point (xz), `None`
+/// under water. Each keeps within [`YARD_REACH`] of the walls and clear
+/// of the door's way, the other placements, the roads and paths, the
+/// water, the markers and Story's scenes. None for a drowned house, nor
+/// for the buildings that were never homes.
+pub fn yard(
+    map: &MapDef,
+    prefab: &str,
+    tag: &str,
+    xf: &Transform,
+    ground: &dyn Fn(Vec2) -> Option<f32>,
+) -> Vec<(&'static str, Transform)> {
+    if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
+        return Vec::new();
+    }
+    let base = extraction_core::map::prefab_base(prefab);
+    let Some((w, d)) = plan(base) else {
+        return Vec::new();
+    };
+    if prefab.ends_with("_drowned") || matches!(tag, "post_office" | "mine_office") {
+        return Vec::new();
+    }
+    let ruin = prefab != base;
+    let sallow = map.name.to_lowercase().contains("sallow");
+    let at = Vec2::new(xf.translation.x, xf.translation.z);
+    let (kit, count): (&[YardThing], std::ops::RangeInclusive<usize>) = match valley(map) {
+        // Old Sallow's ruins lay sixty years under the reservoir.
+        None if sallow && !ruin => (&SALLOW_YARD, 2..=4),
+        None => return Vec::new(),
+        Some(Valley::Cinder) => (&CINDER_YARD, if ruin { 1..=2 } else { 1..=3 }),
+        Some(_) if ruin => (&CINDER_YARD[1..2], 1..=1),
+        Some(Valley::Marrow) => (&MARROW_YARD, 3..=5),
+        Some(Valley::Kettle) => (&KETTLE_YARD, 3..=5),
+    };
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x7a2d);
+    let mut want: Vec<YardThing> = kit.to_vec();
+    rng.shuffle(&mut want);
+    want.truncate(rng.usize(count));
+    // Hana's dog's kennel, first.
+    if valley(map) == Some(Valley::Marrow)
+        && special(Valley::Marrow, base, tag, at) == Some(Story::Hana)
+    {
+        want.insert(0, DOG_KENNEL);
+    }
+    // A damaged house's +X wall is breached, its rubble spilled outside.
+    let sides: &[Side] = if prefab.ends_with("_damaged") {
+        &[Side::Back, Side::Left]
+    } else {
+        &[Side::Back, Side::Left, Side::Right]
+    };
+    let site = YardSite::new(map, prefab, xf, w, d);
+    let mut placed: Vec<(Vec2, Vec2)> = Vec::new();
+    let mut out = Vec::new();
+    for t in want {
+        // A bench may stand either side of the door, under a window.
+        let bench = t.wall && t.hz < 0.25;
+        for _ in 0..16 {
+            let side = if bench && rng.f32() < 0.4 {
+                Side::Front
+            } else {
+                sides[rng.usize(..sides.len())]
+            };
+            let Some((c, half, yaw)) = site.spot(t, side, &mut rng) else {
+                continue;
+            };
+            if placed.iter().any(|(o, oh)| {
+                (c - *o)
+                    .abs()
+                    .cmplt(half + *oh + Vec2::splat(YARD_GAP))
+                    .all()
+            }) {
+                continue;
+            }
+            if !site.clear(c, half) {
+                continue;
+            }
+            let Some(y) = site.level(c, half, ground) else {
+                continue;
+            };
+            placed.push((c, half));
+            out.push((
+                t.model,
+                Transform::from_xyz(c.x, y, c.y).with_rotation(Quat::from_rotation_y(yaw)),
+            ));
+            break;
+        }
+    }
+    out
+}
+
+/// A house's ground: its walls, its door's way, what's round it on the map.
+struct YardSite<'a> {
+    map: &'a MapDef,
+    xf: &'a Transform,
+    /// The walls' outer faces (the plinth's), half across and half deep.
+    half: Vec2,
+    /// The door's way out: half its width with a metre either side, and
+    /// how far out it's kept clear.
+    door: (f32, f32),
+    /// Trees keep this far from the house's middle (`map::prefab_clearance`).
+    trees: f32,
+    /// Windows along each side (their middles, along the side's own axis).
+    windows: [Vec<f32>; 4],
+    scenes: Vec<Vec2>,
+}
+
+impl<'a> YardSite<'a> {
+    fn new(map: &'a MapDef, prefab: &str, xf: &'a Transform, w: f32, d: f32) -> Self {
+        let door = extraction_core::map::prefab_entrances(prefab)
+            .first()
+            .map_or((1.5, 3.6), |e| (e.width * 0.5 + 1.0, e.clear));
+        let id = map.name.to_lowercase().replace(' ', "_");
+        YardSite {
+            map,
+            xf,
+            half: Vec2::new(w * 0.5 + 0.1, d * 0.5 + 0.1),
+            door,
+            trees: extraction_core::map::prefab_clearance(prefab),
+            // As `buildings::house` cuts them (see `slots`).
+            windows: [
+                vec![-w * 0.3, w * 0.3],
+                vec![-w * 0.25, w * 0.25],
+                vec![0.0],
+                vec![-d * 0.2, d * 0.25],
+            ],
+            scenes: super::scenes::of(&id)
+                .map(|(_, s)| Vec2::from(s.at))
+                .collect(),
+        }
+    }
+
+    /// Where `t` might go on `side`: its middle (xz), its half extents
+    /// (building axes) and its yaw, its front turned away from the wall.
+    fn spot(&self, t: YardThing, side: Side, rng: &mut fastrand::Rng) -> Option<(Vec2, Vec2, f32)> {
+        use std::f32::consts::{FRAC_PI_2, PI};
+        let (along, wall_at) = match side {
+            Side::Front | Side::Back => (self.half.x, self.half.y),
+            Side::Left | Side::Right => (self.half.y, self.half.x),
+        };
+        let out = if t.wall {
+            t.hz + 0.06
+        } else {
+            1.3 + rng.f32() * 1.2 + t.hz
+        };
+        if out + t.hz > YARD_REACH {
+            return None;
+        }
+        // Along the side: wall things within it (a barrel in its corner),
+        // the others a little past its ends at most.
+        let reach = if t.wall {
+            along - t.hx - 0.1
+        } else {
+            along + 0.5 - t.hx
+        };
+        if reach < 0.0 {
+            return None;
+        }
+        let s = if t.model == RAIN_BARREL.model {
+            reach * if rng.bool() { 1.0 } else { -1.0 }
+        } else {
+            (rng.f32() * 2.0 - 1.0) * reach
+        };
+        let k = match side {
+            Side::Front => 0,
+            Side::Back => 1,
+            Side::Left => 2,
+            Side::Right => 3,
+        };
+        // Nothing tall over a window's sill.
+        if t.model == WOODPILE.model && self.windows[k].iter().any(|&m| (s - m).abs() < t.hx + 0.6)
+        {
+            return None;
+        }
+        if side == Side::Front && s.abs() - t.hx < self.door.0 {
+            return None;
+        }
+        let d = wall_at + out;
+        let (c, yaw) = match side {
+            Side::Front => (Vec2::new(s, -d), 0.0),
+            Side::Back => (Vec2::new(s, d), PI),
+            Side::Left => (Vec2::new(-d, s), FRAC_PI_2),
+            Side::Right => (Vec2::new(d, s), -FRAC_PI_2),
+        };
+        let half = match side {
+            Side::Front | Side::Back => Vec2::new(t.hx, t.hz),
+            Side::Left | Side::Right => Vec2::new(t.hz, t.hx),
+        };
+        Some((c, half, yaw))
+    }
+
+    fn to_map(&self, p: Vec2) -> Vec2 {
+        let q = self.xf.transform_point(Vec3::new(p.x, 0.0, p.y));
+        Vec2::new(q.x, q.z)
+    }
+
+    /// Whether a thing at `c` (building-local), `half` its half extents,
+    /// keeps clear of the house, the door's way, the trees' line and
+    /// everything else on the map.
+    fn clear(&self, c: Vec2, half: Vec2) -> bool {
+        let lo = c - half;
+        let hi = c + half;
+        // Off the walls, and the door's way.
+        if lo.x < self.half.x && hi.x > -self.half.x && lo.y < self.half.y && hi.y > -self.half.y {
+            return false;
+        }
+        let (dw, dc) = self.door;
+        if lo.x < dw && hi.x > -dw && lo.y < -self.half.y + 0.1 && hi.y > -self.half.y - dc {
+            return false;
+        }
+        // Inside the ring the trees keep clear.
+        let corners = [lo, hi, Vec2::new(lo.x, hi.y), Vec2::new(hi.x, lo.y)];
+        if corners.iter().any(|p| p.length() > self.trees - 0.6) {
+            return false;
+        }
+        let at = self.to_map(c);
+        let r = half.length();
+        let me = Vec2::new(self.xf.translation.x, self.xf.translation.z);
+        // Nobody else's footprint.
+        for o in &self.map.placements {
+            let oat = Vec2::from(o.at);
+            if oat.distance(me) < 0.5 {
+                continue;
+            }
+            let [ow, _, od] = extraction_core::map::prefab_footprint(&o.prefab);
+            let local = Quat::from_rotation_y(o.rot.to_radians())
+                * Vec3::new(at.x - oat.x, 0.0, at.y - oat.y);
+            let out = (Vec2::new(local.x, local.z).abs() - Vec2::new(ow, od) * 0.5).max(Vec2::ZERO);
+            if out.length() < r + 0.5 {
+                return false;
+            }
+        }
+        // Off the roads and paths, out of the water.
+        let p = [at.x, at.y];
+        for road in &self.map.roads {
+            let (dist, ..) = extraction_core::geom::polyline_closest(&road.points, p);
+            if dist < (road.width * 0.5 + 1.0).max(2.0) + r {
+                return false;
+            }
+        }
+        for water in &self.map.water {
+            let (dist, ..) = extraction_core::geom::polyline_closest(&water.points, p);
+            if dist < water.width * 0.5 + 1.0 + r {
+                return false;
+            }
+        }
+        // Clear of the markers (a note, a sign, loot on the ground, an
+        // anomaly's reach) and Story's scenes.
+        for m in &self.map.markers {
+            let keep = match &m.kind {
+                MarkerKind::Anomaly { radius, .. } => radius + 1.5,
+                _ => 1.2,
+            };
+            if Vec2::from(m.at).distance(at) < keep + r {
+                return false;
+            }
+        }
+        !self.scenes.iter().any(|s| s.distance(at) < 3.0 + r)
+    }
+
+    /// The thing's height (building-local) to stand on the ground at its
+    /// lowest corner, or `None` if the spot is under water or too steep.
+    fn level(&self, c: Vec2, half: Vec2, ground: &dyn Fn(Vec2) -> Option<f32>) -> Option<f32> {
+        let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
+        for k in [
+            Vec2::ZERO,
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1.0, -1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(-1.0, 1.0),
+        ] {
+            let h = ground(self.to_map(c + half * k))?;
+            lo = lo.min(h);
+            hi = hi.max(h);
+        }
+        (hi - lo < 0.35).then_some(lo - self.xf.translation.y - 0.02)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1416,5 +1818,119 @@ mod tests {
                     || t.translation.y < table.y - 0.3),
             "something on Hana's table"
         );
+    }
+
+    /// Every yard model is built.
+    #[test]
+    fn every_yard_model_exists() {
+        let root = crate::asset_root_path();
+        for t in YARD_THINGS {
+            let path = root.join(crate::render::world_props::path(t.model));
+            assert!(path.exists(), "no model {}", path.display());
+        }
+    }
+
+    /// Every valley's houses, on their real ground: each yard thing stands
+    /// outside the walls and within reach of them, out of the door's way
+    /// and off every other placement; the drowned houses and the offices
+    /// have none; Cinder's are nothing alive; Hana's house alone has the
+    /// kennel; and most houses have a yard.
+    #[test]
+    fn yards_keep_to_their_ground() {
+        use extraction_core::map::{VALLEYS, prefab_entrances, prefab_footprint};
+        let things: std::collections::HashMap<_, _> =
+            YARD_THINGS.iter().map(|t| (t.model, *t)).collect();
+        for (name, _) in VALLEYS {
+            let map = crate::world::load_map_def(name);
+            let hm = extraction_core::terrain::Heightmap::build(&map);
+            let ground = |p: Vec2| {
+                let p = [p.x, p.y];
+                hm.water_level(p).is_none().then(|| hm.height(p))
+            };
+            let (mut houses, mut yards) = (0, 0);
+            for p in &map.placements {
+                let base = extraction_core::map::prefab_base(&p.prefab);
+                if plan(base).is_none() {
+                    continue;
+                }
+                let y = hm.footing(&p.prefab, p.at, p.rot);
+                let xf = Transform::from_xyz(p.at[0], y, p.at[1])
+                    .with_rotation(Quat::from_rotation_y(-p.rot.to_radians()));
+                let yard = yard(&map, &p.prefab, &p.tag, &xf, &ground);
+                let here = format!("{name} {} at {:?}", p.prefab, p.at);
+                // (Old Sallow's ruins lay under the reservoir.)
+                if p.prefab.ends_with("_drowned")
+                    || (name == "sallow_reservoir" && p.prefab != base)
+                    || matches!(p.tag.as_str(), "post_office" | "mine_office")
+                {
+                    assert!(yard.is_empty(), "{here}: {yard:?}");
+                    continue;
+                }
+                houses += 1;
+                yards += usize::from(!yard.is_empty());
+                let [w, _, d] = prefab_footprint(&p.prefab);
+                let (hw, hd) = (w * 0.5, d * 0.5);
+                let door = prefab_entrances(&p.prefab)[0];
+                let hana = name == "marrow_creek" && Vec2::from(p.at) == Vec2::new(-18.0, 95.0);
+                assert_eq!(
+                    yard.iter().any(|(m, _)| *m == "dog_kennel"),
+                    hana,
+                    "{here}: {yard:?}"
+                );
+                for (m, t) in &yard {
+                    let thing = things[m];
+                    if name == "cinder_works" {
+                        assert!(
+                            ["bench_charred", "tub_iron", "clothes_line_bare"].contains(m),
+                            "{here}: {m}"
+                        );
+                    }
+                    // Its footprint, building-local.
+                    let c = t.translation.xz();
+                    let turned = (t.rotation * Vec3::X).x.abs() < 0.5;
+                    let half = if turned {
+                        Vec2::new(thing.hz, thing.hx)
+                    } else {
+                        Vec2::new(thing.hx, thing.hz)
+                    };
+                    let (lo, hi) = (c - half, c + half);
+                    assert!(
+                        lo.x >= hw || hi.x <= -hw || lo.y >= hd || hi.y <= -hd,
+                        "{here}: {m} at {c} in the house"
+                    );
+                    let off = (c.abs() - Vec2::new(hw, hd)).max(Vec2::ZERO).length();
+                    assert!(off <= YARD_REACH, "{here}: {m} at {c}, {off} m out");
+                    let dw = door.width * 0.5 + 1.0;
+                    assert!(
+                        !(lo.x < dw && hi.x > -dw && hi.y > door.at[1] - door.clear && lo.y < hd),
+                        "{here}: {m} at {c} in the door's way"
+                    );
+                    // Off every other placement.
+                    let at = xf.transform_point(Vec3::new(c.x, 0.0, c.y)).xz();
+                    for o in &map.placements {
+                        if std::ptr::eq(o, p) {
+                            continue;
+                        }
+                        let [ow, _, od] = prefab_footprint(&o.prefab);
+                        let l = Quat::from_rotation_y(o.rot.to_radians())
+                            * Vec3::new(at.x - o.at[0], 0.0, at.y - o.at[1]);
+                        let out = (l.xz().abs() - Vec2::new(ow, od) * 0.5).max(Vec2::ZERO);
+                        assert!(
+                            out.length() > half.length(),
+                            "{here}: {m} on the {} at {:?}",
+                            o.prefab,
+                            o.at
+                        );
+                    }
+                    // On the ground, not hanging over it.
+                    let g = ground(at).expect("in the water") - y;
+                    assert!(t.translation.y <= g + 0.01, "{here}: {m} floats");
+                }
+            }
+            assert!(
+                yards * 4 >= houses * 3,
+                "{name}: {yards} yards for {houses} houses"
+            );
+        }
     }
 }

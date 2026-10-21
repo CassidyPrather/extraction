@@ -406,6 +406,7 @@ fn shoot_for_screenshot(
     spatial: avian3d::prelude::SpatialQuery,
     mut breaches: MessageWriter<super::hooks::Breach>,
     parts: Query<(), With<super::strip::Strippable>>,
+    names: Query<NameOrEntity>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -447,18 +448,25 @@ fn shoot_for_screenshot(
             cam.z,
         );
         let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
-        if let Some(hit) = spatial.cast_ray(
+        let mut hits = spatial.ray_hits(
             eye,
             Dir3::new(rot * Vec3::NEG_Z).unwrap_or(Dir3::NEG_Z),
             30.0,
+            8,
             true,
             &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
-        ) {
-            if parts.contains(hit.entity) {
-                commands.entity(hit.entity).despawn();
-            } else {
-                warn!("EXTRACTION_STRIP: the view meets no wreck part");
-            }
+        );
+        hits.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+        for h in &hits {
+            let name = names
+                .get(h.entity)
+                .map(|n| n.to_string())
+                .unwrap_or_default();
+            info!("EXTRACTION_STRIP: {name} at {:.2} m", h.distance);
+        }
+        match hits.iter().find(|h| parts.contains(h.entity)) {
+            Some(h) => commands.entity(h.entity).despawn(),
+            None => warn!("EXTRACTION_STRIP: the view meets no wreck part"),
         }
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
