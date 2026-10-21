@@ -318,6 +318,7 @@ impl Plugin for AudioPlugin {
             .insert_resource(AudioRng(Rng::new(0xA0D10)))
             .init_resource::<Listening>()
             .init_resource::<Hush>()
+            .add_plugins(crate::audio_underground::UndergroundSoundsPlugin)
             .init_resource::<HushNow>()
             .init_resource::<Binaural>()
             .add_observer(place)
