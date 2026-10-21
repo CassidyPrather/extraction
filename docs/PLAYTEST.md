@@ -120,6 +120,24 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Heavy things.** A car door, a bus panel, a wheel, a heavy's claw:
+  take it by both ends and lift it. It's heavy: it swings on when you
+  stop and comes round late when you turn, and you walk slower and can't
+  run. With one hand you can only drag it, its far end scraping along
+  the ground (the machines hear that). Let go of it swinging and it's a
+  shove, not a throw. A robot's wreck: take it by a leg and drag it,
+  slowly. Your pack: reach over a shoulder, take it, and bring it round
+  in front of you: it hangs open from your hand and you can reach in
+  with the other; take it back over the shoulder and let go, and it's
+  on. Say if anything feels floaty or gets stuck.
+- **Your body.** Look down: a jacket, the chest rig and belt on it,
+  trousers and boots. Turn your head and your feet stay put; turn your
+  whole body, or step across the room, and they step after you. Crouch
+  and your knees come forward; bend over and the chest rig and pack lean
+  with you while the holster stays on your hip. Reach right out and your
+  shoulder comes forward. Seated, you sit, the belt on your hips. The
+  **BODY** card on the comfort board hides it. Say if your arms ever look
+  stretched or bent wrong, or if a limb goes through you.
 - **Climbing.** Grip a ladder and draw your hand down to climb, hand over
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
@@ -184,11 +202,19 @@ What changed, and worth a comment each:
   next to the frame times, where the GPU's time went (`gpu: ... ms a
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
-  and how it feels. If there's time, play a minute each with
-  `EXTRACTION_PERF=msaa=2` and `EXTRACTION_PERF=msaa=1` set and note the
-  `gpu:` lines and how the edges look: 4x MSAA is the dearest thing the
-  software renderer can measure, and only the headset can say what it
-  costs there (`docs/PERFORMANCE.md`).
+  and how it feels.
+- **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
+  the dearest per-eye cost the software renderer can measure; only the
+  headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
+  raid as it comes (the **SMOOTHING** card on the truck wall says 4x), then
+  press the card to 2x (or start with `--msaa 2`) and play the same valley
+  again. For each, note:
+  - the `gpu:` and `frames:` lines in the log;
+  - how the edges look: fence wires, grass, the trees' leaves, the gun's
+    sights and front post.
+
+  Whether 2x reads the same at the Beyond 2's sharpness decides the
+  default.
 
 ## Marks
 
@@ -290,6 +316,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | VIGNETTE | off to 90% | darkening the edges while the stick moves you |
 | SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
 | SHARPNESS | auto, 50–100% | render size per eye (next launch) |
+| SMOOTHING | 4x / 2x / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades |
 | GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
 | HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
 | MUSIC | rises with danger / off | the score |
@@ -298,6 +325,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | HANDS | two / one | one: a magazine in your hand touched to a box of rounds set down (or in a pouch) fills; bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands; the yard's boards say so |
 | CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
 | WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
+| BODY | shown / hidden | your body drawn under you when you look down (torso, legs, boots); hidden, only the arms and hands |
 
 For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
 it on: is anything out of reach, or does anything need the hand you've
@@ -363,6 +391,14 @@ said you don't use?
   notices. Bring the AK's iron sights to your cheek: do they line up
   without fiddling? Does the front post going soft read as your eye
   focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
+- Gun handling.
+  - Cup the PM or the Nagant under the grip with your other palm: does it
+    steady the shot without pulling your aim?
+  - Hold an AK out at arm's length, then tucked in: does the weight tell?
+  - Take your rifle off your sling and let go of it in front of you:
+    does the sling catch it?
+  - Walk through a doorway with it raised: do the knocks feel and sound
+    right, and never too often?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -531,6 +567,7 @@ pump?
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
+| `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

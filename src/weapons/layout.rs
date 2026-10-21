@@ -155,6 +155,19 @@ impl GunLayout {
     }
 }
 
+/// Where the other hand's palm cups a handgun's grip from below, in the
+/// grip's frame: under the butt of the grip, wrapping the gun hand.
+pub const CUP: Vec3 = Vec3::new(0.0, -0.065, 0.02);
+
+/// A handgun's cup (gun space): a gun with no place for a second hand on
+/// it is steadied by one under its grip.
+pub fn cup(layout: &GunLayout) -> Option<Vec3> {
+    layout
+        .support
+        .is_none()
+        .then(|| layout.grip.transform_point(CUP))
+}
+
 pub fn layout(id: &str) -> Option<GunLayout> {
     match id {
         "pm_pistol" => Some(pm()),

@@ -115,7 +115,7 @@ the building is placed:
 | Fence panel | `fence_garden`, four between its posts | 100 | 150 | splinters |
 | Bus door | the depot's wrecked bus | crowbar only | 200 | drops scrap |
 | Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
-| Car door | a car wreck's doors (Kit's `wreck_*`, coming) | crowbar only | 180 | drops a `car_door` |
+| Car door | a car wreck's doors (Kit's `wreck_lada`, `wreck_uaz`, `wreck_lorry`) | crowbar only | 180 | drops a `car_door` |
 | Car bonnet, boot | its bonnet, boot lid, tailgate | crowbar only | 140 | drops a `car_bonnet` |
 | Car wheel | its wheels | crowbar only | 160 | drops a `car_wheel` |
 
@@ -124,7 +124,10 @@ don't tear a door off. Wood breaks to rounds and blows as a board does.
 A part with no model is drawn as a box of its size in its material. A
 model can name one node of a file, `wreck_lada#door_fl`: a car's parts
 are nodes of the car's model, in the car's space, and each is drawn on
-its own part where the car put it (`Part::model_at`).
+its own part where the car put it (`Part::model_at`). A car's body
+collides as a few boxes (`strip::car_body`: chassis, hull inside the
+doors, cab, a lorry's bed), none over a part, so what reaches for a door
+meets the door.
 Anything else can place a part with `strip::spawn_part(commands, parts,
 broken, Part { .. })` (kept in `strip::Parts`). Gone, a part stays gone
 (`Broken`) until the Surge puts it back, from the buildings and `Parts`.
@@ -280,7 +283,8 @@ wall by a dozen rifle rounds), `shutters.png` (the foreman's cabin, its
 shutters open either side of the window), `shutter_off.png` (one shot
 off, its splinters at the wall's foot) and `bus.png` (the depot's bus,
 its skirt panels to prise off) and `bus_stripped.png` (one prised off,
-the rusted core behind). `EXTRACTION_STRIP=1` takes off the part in view
+the rusted core behind), `lada.png` (a Lada wreck on Marrow, whole) and
+`lada_stripped.png` (its front door off, lying beside it). `EXTRACTION_STRIP=1` takes off the part in view
 twenty frames before the capture.
 
 ## Next

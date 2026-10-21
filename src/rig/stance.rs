@@ -14,8 +14,9 @@
 //!   them, a foot steps (one at a time) to where it would stand.
 //! - The knees bend by two-bone IK from the hips to the planted ankles:
 //!   crouch and they come forward.
-//! - Seated (`Comfort::seated`): the lap and the knees where a seated
-//!   body's are, below the eyes as they really are (not as lifted).
+//! - Seated (`Comfort::seated`): the hips where they'd stand (the view is
+//!   lifted to a standing eye, the slots stay at standing heights), the
+//!   thighs out ahead of them, the shins down.
 //! - Reaching out further than the arm, the shoulder comes forward (up to
 //!   [`PROTRACT`]); the arm's length is learned from the longest reaches
 //!   (within limits), so a long-armed player's sleeves don't pull apart.
@@ -38,19 +39,21 @@ const NECK_BEHIND_EYES: f32 = 0.06;
 const SHOULDER: Vec3 = Vec3::new(0.17, -0.06, 0.03);
 /// Half the hips' width.
 pub const HIP: f32 = 0.1;
-/// Thigh and shin at a standing eye of [`STAND_EYE`]; scaled with the
-/// player's height.
-pub const THIGH: f32 = 0.42;
-pub const SHIN: f32 = 0.42;
+/// Thigh and shin, scaled to the player's standing hips (`Stance::legs`).
+pub const THIGH: f32 = 0.4;
+pub const SHIN: f32 = 0.4;
 /// The ankle joint over the sole.
 pub const ANKLE: f32 = 0.08;
-const STAND_EYE: f32 = 1.65;
 /// The feet stand this far apart (from the body's middle line).
 const STANCE: f32 = 0.12;
 /// A foot further than this from where it would stand steps there.
 pub const STEP: f32 = 0.3;
 /// A foot turned this far (radians) from the way the body faces steps.
 pub const TWIST: f32 = 1.0;
+/// A foot turned this far from the body for [`SETTLE`] seconds squares up
+/// (the body has turned and stayed turned).
+pub const SQUARE: f32 = 0.4;
+pub const SETTLE: f32 = 1.2;
 /// How long a step takes, and how high the foot lifts.
 const STEP_TIME: f32 = 0.28;
 const STEP_LIFT: f32 = 0.07;
@@ -64,9 +67,7 @@ pub const PROTRACT: f32 = 0.1;
 pub const ARM: f32 = 0.29 + 0.25 + 0.1;
 /// What the arm's length may be scaled to, learned from the reach.
 pub const ARM_SCALE: (f32, f32) = (0.92, 1.15);
-/// Seated: the lap this far under the real eyes and the knees this far
-/// ahead of it.
-const SEATED_LAP: f32 = 0.62;
+/// Seated: the knees this far ahead of the hips.
 const SEATED_KNEE: f32 = 0.42;
 /// The pelvis never goes lower than this over the feet (a deep squat).
 const LOWEST: f32 = 0.3;
@@ -83,6 +84,8 @@ pub struct Foot {
     pub to: Vec3,
     pub to_yaw: f32,
     pub t: f32,
+    /// How long it's been turned more than [`SQUARE`] from the body.
+    pub uneasy: f32,
 }
 
 impl Foot {
@@ -210,6 +213,7 @@ pub fn step_feet(
                 to: r,
                 to_yaw: yaw,
                 t: 1.0,
+                uneasy: 0.0,
             };
             continue;
         }
@@ -228,6 +232,13 @@ pub fn step_feet(
             f.at.y = ground;
         }
     }
+    for f in feet.iter_mut() {
+        if f.planted() && wrap(f.yaw - yaw).abs() > SQUARE {
+            f.uneasy += dt;
+        } else {
+            f.uneasy = 0.0;
+        }
+    }
     if feet.iter().any(|f| !f.planted()) {
         return;
     }
@@ -237,7 +248,12 @@ pub fn step_feet(
         let f = &feet[side.index()];
         let r = rest(pelvis, side, ground);
         let off = Vec2::new(f.at.x - r.x, f.at.z - r.z).length() / STEP;
-        let turned = wrap(f.yaw - yaw).abs() / TWIST;
+        let twist = wrap(f.yaw - yaw).abs();
+        let mut turned = twist / TWIST;
+        // Turned a while: square up.
+        if f.uneasy > SETTLE {
+            turned = turned.max(1.0 + twist);
+        }
         let need = off.max(turned);
         if need > 1.0 && worst.is_none_or(|(_, w)| need > w) {
             worst = Some((side, need));
@@ -272,7 +288,10 @@ fn stand(
         let facing = anchor.rotation;
         let fwd = facing * Vec3::NEG_Z;
         let up = Vec3::Y;
-        st.legs = (torso.standing / STAND_EYE).clamp(0.8, 1.25);
+        // Legs as long as the standing hips are high, a little more, so a
+        // standing body's knees are soft but not bent.
+        let hips_up = torso.standing - crate::interact::body::CHEST_BELOW_EYES - PELVIS_BELOW_CHEST;
+        st.legs = ((hips_up - ANKLE) / (THIGH + SHIN) * 1.03).clamp(0.8, 1.25);
         let (thigh, shin) = (THIGH * st.legs, SHIN * st.legs);
 
         // The neck: under and a little behind the eyes, whatever they look at.
@@ -280,11 +299,10 @@ fn stand(
         let flat = Vec3::new(look.x, 0.0, look.z).normalize_or(fwd);
         let neck = head.translation - up * NECK_BELOW_EYES - flat * NECK_BEHIND_EYES;
 
-        let pelvis_at = if seated {
-            // The lap where a seated body's is, under the eyes (the seated
-            // view lifts the eyes and the world alike, so this is lifted too).
-            Vec3::new(neck.x, head.translation.y - SEATED_LAP, neck.z) - fwd * 0.02
-        } else {
+        // Seated too, the hips hang from the anchor: the slots stay at the
+        // heights they're built for (`rig::seated` lifts the view to a
+        // standing eye), and the belt is drawn on the hips.
+        let pelvis_at = {
             let p = anchor.translation - up * PELVIS_BELOW_CHEST;
             Vec3::new(p.x, p.y.max(ground + LOWEST), p.z)
         };
@@ -294,6 +312,7 @@ fn stand(
         let chest = Transform::from_translation(anchor.translation).with_rotation(lean * facing);
         let chest_side = chest.rotation * Vec3::X;
 
+        let jumped_now = !st.ready || st.last_root.distance(root.translation) > JUMP;
         // Shoulders, then forward toward a hand that's out of reach.
         let mut shoulders = [Vec3::ZERO; 2];
         for side in [Side::Left, Side::Right] {
@@ -308,7 +327,12 @@ fn stand(
             let grip = hand.felt.unwrap_or(hand.world).translation;
             let s = &mut shoulders[rh.side.index()];
             let d = s.distance(grip);
-            longest = longest.max(d - PROTRACT);
+            // Learnt from where the hand really is, and only from what an
+            // arm could reach (not a hand left behind by a teleport).
+            let tracked = s.distance(hand.world.translation) - PROTRACT;
+            if tracked < ARM * ARM_SCALE.1 {
+                longest = longest.max(tracked);
+            }
             let over = d - ARM * st.arm;
             if over > 0.0 {
                 *s += (grip - *s).normalize_or_zero() * over.min(PROTRACT);
@@ -316,7 +340,7 @@ fn stand(
         }
         // Learn the arm from the longest reaches (a long arm reaches further
         // than the model's could, shoulder forward and all).
-        if st.ready && longest > ARM * st.arm {
+        if st.ready && !jumped_now && longest > ARM * st.arm {
             st.arm = (longest / ARM).clamp(ARM_SCALE.0, ARM_SCALE.1);
         }
 
@@ -351,6 +375,7 @@ fn stand(
                     to: sole,
                     to_yaw: yaw_of(fwd),
                     t: 1.0,
+                    uneasy: 0.0,
                 };
             }
         } else {
@@ -419,6 +444,24 @@ mod tests {
         }
         for f in &feet {
             assert!(f.planted() && wrap(f.yaw - 1.3).abs() < 0.05, "{f:?}");
+        }
+        // A smaller turn: nothing at once, but held, the feet square up.
+        pelvis.rotation = Quat::from_rotation_y(1.3 + 0.6);
+        for _ in 0..30 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        assert!(
+            feet.iter().all(|f| wrap(f.yaw - 1.3).abs() < 0.05),
+            "not at once"
+        );
+        for _ in 0..240 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        for f in &feet {
+            assert!(
+                f.planted() && wrap(f.yaw - 1.9).abs() < 0.05,
+                "squared: {f:?}"
+            );
         }
     }
 }

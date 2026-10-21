@@ -170,6 +170,30 @@ water. So the views follow the layout when it moves.
 The gauge writes a contact sheet, `legibility.png`, and its numbers in
 `legibility.json`. The first run is kept as `legibility_before.*`.
 
+The floor is what you see, not a share of the box: at least 2 square
+degrees changed, about a head at 10 m (1 for a mirror). That's at the
+shots' 12 px/deg (75° is the vertical field of view). The first cut held
+each kind to 3% of the box, which is 36 deg², and marked a plainly seen
+burner LOW. The views keep their line of sight off trunks, rocks and
+anything the map places (`sight_blockers`). A boulder once hid the
+mirror.
+
+Where it stands: every kind clears its floor in all three conditions.
+
+| Kind | Fog | Downpour | Night |
+|---|---|---|---|
+| Lift | 95 | 86 | 73 |
+| Burner | 44 | 50 | 60 |
+| Snare | 30 | 26 | 27 |
+| Well | 45 | 41 | 23 |
+| Mirror | 9 | 11 | 10 |
+| Hush | 157 | 158 | 45 |
+
+All figures are deg². The first run, re-scored the same way, had the
+lift at 0 and the snare at 1.2 in fog, and the mirror at 0 at night. The
+lift's column of air is now a shade darker, and that is what carries it
+through pea-souper fog, where its leaves don't.
+
 What it taught us:
 
 - **Fog takes the Zone's things as if half as far off.** Anomaly

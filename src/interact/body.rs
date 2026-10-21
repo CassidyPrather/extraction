@@ -36,10 +36,15 @@ pub struct Torso {
 }
 
 /// How far below the standing eyes the torso anchor rides.
-const CHEST_BELOW_EYES: f32 = 0.38;
+pub const CHEST_BELOW_EYES: f32 = 0.38;
 /// How far the head can drop (bending, reaching down) before the body is
 /// taken to be crouching and the anchor follows.
 const BEND: f32 = 0.45;
+/// Bending over, the hips stay where they are while the head goes forward
+/// and down: the anchor (and the belt on it) may trail the neck by this
+/// much per metre the head has dropped, up to [`HINGE_MOST`].
+const HINGE: f32 = 1.3;
+const HINGE_MOST: f32 = 0.45;
 
 /// Index of a body socket in the default slot layout (1-9 keys in flat mode).
 #[derive(Component, Clone, Copy, Debug)]
@@ -102,9 +107,19 @@ impl Plugin for BodyPlugin {
                     sync_backpack_visibility,
                     slung_reach,
                     handed_slots,
+                    lean_with_chest
+                        .after(handed_slots)
+                        .after(toggle_backpacks)
+                        .after(backpack_released),
                 ),
             )
-            .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems));
+            .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems))
+            .add_systems(
+                FixedUpdate,
+                hang_held_pack
+                    .in_set(super::InteractSystems::Follow)
+                    .after(super::follow_hands),
+            );
     }
 }
 
@@ -297,6 +312,69 @@ fn handed_slots(
     }
 }
 
+/// Is a slot on the chest (leaning with it as you bend over) rather than on
+/// the belt (staying where it is, so a hand reaching down finds it)?
+pub fn on_chest(slot: SlotKind) -> bool {
+    !matches!(slot, SlotKind::Holster | SlotKind::Pocket | SlotKind::Head)
+}
+
+/// The chest's lean in the torso anchor's own frame, about the pelvis:
+/// where a point on the chest (`at`, torso-local, standing) goes.
+pub fn leaned(lean: Quat, at: Vec3) -> Vec3 {
+    let pelvis = Vec3::NEG_Y * crate::rig::stance::PELVIS_BELOW_CHEST;
+    pelvis + lean * (at - pelvis)
+}
+
+/// The chest's slots and the worn pack lean with the chest (the stance's
+/// spine, `rig::stance`) as you bend over; the belt's stay. Without a
+/// stance (a bot, flat mode before it's placed) nothing leans.
+#[allow(clippy::type_complexity)]
+fn lean_with_chest(
+    players: Query<(&crate::rig::stance::Stance, &Children), With<crate::rig::LocalPlayer>>,
+    torsos: Query<(&GlobalTransform, &Children), With<Torso>>,
+    mut slots: Query<(&BodySlot, &Socket, &mut Transform), Without<Backpack>>,
+    mut bags: Query<(&Backpack, &mut Transform), (Without<BodySlot>, Without<Held>)>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+) {
+    let left = comfort.is_some_and(|c| c.left_handed);
+    for (st, children) in &players {
+        if !st.ready {
+            continue;
+        }
+        let Some((torso_gt, kit)) = children.iter().find_map(|c| torsos.get(c).ok()) else {
+            continue;
+        };
+        let facing = torso_gt.compute_transform().rotation;
+        let lean = facing.inverse() * st.chest.rotation;
+        for k in kit.iter() {
+            if let Ok((slot, socket, mut t)) = slots.get_mut(k) {
+                let SocketKind::Body(kind) = socket.kind else {
+                    continue;
+                };
+                if !on_chest(kind) {
+                    continue;
+                }
+                let (mut pos, ..) = slot_layout(kind, slot.0);
+                if left && matches!(kind, SlotKind::Mount) {
+                    pos.x = -pos.x;
+                }
+                let want = Transform::from_translation(leaned(lean, pos)).with_rotation(lean);
+                if *t != want {
+                    *t = want;
+                }
+            } else if let Ok((bag, mut t)) = bags.get_mut(k) {
+                if bag.open || !bag.carried {
+                    continue;
+                }
+                let want = Transform::from_translation(leaned(lean, BACK)).with_rotation(lean);
+                if *t != want {
+                    *t = want;
+                }
+            }
+        }
+    }
+}
+
 /// Where each slot sits on the torso (origin mid-chest), how its occupant
 /// is seated, and its snap radius.
 fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
@@ -385,7 +463,13 @@ fn follow_head(
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
             let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
-            let want = Vec3::new(neck.x, y, neck.z);
+            // Upright, under the neck; bending over, the hips stay put (up
+            // to a point) and the chest leans out over them (`rig::stance`).
+            let bent = ((torso.standing - head.translation.y) * HINGE).clamp(0.0, HINGE_MOST);
+            let under = Vec2::new(neck.x, neck.z);
+            let was = Vec2::new(t.translation.x, t.translation.z);
+            let at = under + (was - under).clamp_length_max(bent);
+            let want = Vec3::new(at.x, y, at.y);
             let ease = (12.0 * dt).min(1.0);
             t.translation = if t.translation.distance(want) > 0.5 {
                 want
@@ -393,6 +477,61 @@ fn follow_head(
                 t.translation.lerp(want, ease)
             };
             t.rotation = Quat::from_rotation_y(torso.yaw);
+        }
+    }
+}
+
+/// How far under the hand a held pack hangs (its middle), metres.
+pub const HANG: f32 = 0.3;
+
+/// Your pack swung off a shoulder and held: it hangs from the hand by its
+/// top strap, upright, its back to you, and while it's in front of you it's
+/// open, what's in it showing, for the other hand to reach in and take;
+/// taken back over the shoulder it closes (and let go there, it's on).
+#[allow(clippy::type_complexity)]
+fn hang_held_pack(
+    mut packs: Query<(
+        &mut Backpack,
+        &Held,
+        &Position,
+        &Rotation,
+        &mut LinearVelocity,
+        &mut AngularVelocity,
+    )>,
+    hands: Query<&super::Hand>,
+    players: Query<&Children, With<Player>>,
+    torsos: Query<&GlobalTransform, With<Torso>>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs().max(1e-4);
+    for (mut bag, held, pos, rot, mut lin, mut ang) in &mut packs {
+        if !bag.carried {
+            continue;
+        }
+        let (Ok(hand), Ok(children)) = (hands.get(held.hand), players.get(held.player)) else {
+            continue;
+        };
+        let Some(torso) = children.iter().find_map(|c| torsos.get(c).ok()) else {
+            continue;
+        };
+        let torso = torso.compute_transform();
+        let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
+            .with_rotation(torso.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+        lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
+        let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
+        if angle > std::f32::consts::PI {
+            angle -= std::f32::consts::TAU;
+        }
+        let w = axis * angle / dt;
+        ang.0 = if w.is_finite() {
+            w.clamp_length_max(20.0)
+        } else {
+            Vec3::ZERO
+        };
+        let in_front = torso.rotation.inverse() * (pos.0 - torso.translation);
+        let open = in_front.z < -0.05;
+        if bag.open != open {
+            bag.open = open;
         }
     }
 }

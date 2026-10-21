@@ -11,6 +11,7 @@ pub mod comfort;
 pub mod cpu;
 pub mod fog;
 pub mod grade;
+pub mod gun_rest;
 pub mod hand_push;
 pub mod kit;
 pub mod kitchen;
@@ -33,6 +34,7 @@ pub mod tells;
 pub mod terrain_material;
 pub mod tools;
 pub mod upgrades;
+pub mod vr_budget;
 pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;
@@ -72,6 +74,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
+        .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)

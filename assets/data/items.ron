@@ -19,7 +19,7 @@
             firearm: Some((
                 action: SemiAuto, cartridge: "9x18", magazine_family: Some("pm"),
                 modes: [Safe, Semi], last_round_hold_open: true, double_action: true,
-                muzzle_velocity: 315.0, damage: 34.0, spread_moa: 10.0, recoil: 1.0,
+                muzzle_velocity: 315.0, damage: 34.0, spread_moa: 10.0, recoil: 1.0, kick: (climb: 0.85),
                 wear_per_shot: 0.0006,
             )),
             tags: ["metal"],
@@ -32,7 +32,7 @@
             firearm: Some((
                 action: SemiAuto, cartridge: "5.45x39", magazine_family: Some("ak545"),
                 modes: [Safe, Auto, Semi], rpm: 650.0,
-                muzzle_velocity: 900.0, damage: 48.0, spread_moa: 4.0, recoil: 2.2,
+                muzzle_velocity: 900.0, damage: 48.0, spread_moa: 4.0, recoil: 2.2, kick: (climb: 0.7, walk: -0.25),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal", "wood"],
@@ -45,7 +45,7 @@
             firearm: Some((
                 action: BoltAction, cartridge: "7.62x54R", internal_capacity: 5,
                 modes: [Semi],
-                muzzle_velocity: 865.0, damage: 110.0, spread_moa: 1.5, recoil: 4.5,
+                muzzle_velocity: 865.0, damage: 110.0, spread_moa: 1.5, recoil: 4.5, kick: (climb: 1.15, push: 1.1),
                 wear_per_shot: 0.0003,
             )),
             tags: ["metal", "wood"],
@@ -58,7 +58,7 @@
             firearm: Some((
                 action: SemiAuto, cartridge: "7.62x39", internal_capacity: 10,
                 modes: [Safe, Semi], last_round_hold_open: true, floating_pin: true,
-                muzzle_velocity: 735.0, damage: 70.0, spread_moa: 3.0, recoil: 2.8,
+                muzzle_velocity: 735.0, damage: 70.0, spread_moa: 3.0, recoil: 2.8, kick: (climb: 1.15, push: 0.9),
                 wear_per_shot: 0.00035,
             )),
             tags: ["metal", "wood"],
@@ -71,7 +71,7 @@
             firearm: Some((
                 action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
                 modes: [Semi], double_action: true, gate_offset: 5,
-                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1,
+                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.9, walk: -0.3),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal", "wood"],
@@ -84,7 +84,7 @@
             firearm: Some((
                 action: SemiAuto, open_bolt: true, cartridge: "7.62x25", magazine_family: Some("ppsh_drum"),
                 modes: [Safe, Auto, Semi], rpm: 900.0,
-                muzzle_velocity: 490.0, damage: 32.0, spread_moa: 8.0, recoil: 1.6,
+                muzzle_velocity: 490.0, damage: 32.0, spread_moa: 8.0, recoil: 1.6, kick: (climb: 1.25, walk: 0.35),
                 wear_per_shot: 0.0006,
             )),
             tags: ["metal", "wood"],
@@ -97,7 +97,7 @@
             firearm: Some((
                 action: BreakAction, cartridge: "12ga", barrels: 2,
                 modes: [Semi],
-                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 150.0, recoil: 5.0,
+                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 150.0, recoil: 5.0, kick: (climb: 1.2, shove: 0.02),
                 wear_per_shot: 0.0005,
             )),
             tags: ["metal", "wood"],
@@ -110,7 +110,7 @@
             firearm: Some((
                 action: Pump, cartridge: "12ga", internal_capacity: 4,
                 modes: [Safe, Semi],
-                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 140.0, recoil: 5.0,
+                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 140.0, recoil: 5.0, kick: (climb: 0.9, push: 1.25, shove: 0.028),
                 wear_per_shot: 0.0005,
             )),
             tags: ["metal", "wood"],
@@ -123,7 +123,7 @@
             firearm: Some((
                 action: SemiAuto, cartridge: "7.62x54R", magazine_family: Some("svd"),
                 modes: [Safe, Semi], last_round_hold_open: true,
-                muzzle_velocity: 830.0, damage: 105.0, spread_moa: 1.8, recoil: 4.0,
+                muzzle_velocity: 830.0, damage: 105.0, spread_moa: 1.8, recoil: 4.0, kick: (climb: 0.6, push: 2.4),
                 wear_per_shot: 0.00035,
             )),
             tags: ["metal", "wood"],
@@ -149,7 +149,7 @@
             firearm: Some((
                 action: SemiAuto, cartridge: "5.45x39", magazine_family: Some("ak545"),
                 modes: [Safe, Auto, Semi], rpm: 600.0,
-                muzzle_velocity: 960.0, damage: 50.0, spread_moa: 3.0, recoil: 2.2,
+                muzzle_velocity: 960.0, damage: 50.0, spread_moa: 3.0, recoil: 2.2, kick: (climb: 0.9, walk: -0.15),
                 wear_per_shot: 0.0003,
             )),
             tags: ["metal", "wood"],
@@ -162,7 +162,7 @@
             firearm: Some((
                 action: BreakAction, cartridge: "26mm",
                 modes: [Semi],
-                muzzle_velocity: 75.0, damage: 20.0, spread_moa: 90.0, recoil: 1.6,
+                muzzle_velocity: 75.0, damage: 20.0, spread_moa: 90.0, recoil: 1.6, kick: (climb: 0.8, push: 1.6, shove: 0.035),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal"],
@@ -176,7 +176,7 @@
             firearm: Some((
                 action: Crossbow, cartridge: "bolt",
                 modes: [Safe, Semi], report: 0.04,
-                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5,
+                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5, kick: (climb: -2.0, push: -0.6, shove: 0.02),
                 wear_per_shot: 0.0015, fouling_per_shot: 0.0,
             )),
             tags: ["metal", "wood"],
@@ -946,6 +946,12 @@
             id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
             description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
             category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
+            description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
+            category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,
             tags: ["electronics", "metal"],
         ),
 

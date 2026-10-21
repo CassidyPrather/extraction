@@ -186,6 +186,7 @@ impl Plugin for BudgetPlugin {
                 late_reach,
                 range_items,
                 small_shadows.after(bevy::camera::visibility::VisibilitySystems::CalculateBounds),
+                small_ranges,
                 shadow_reach,
             )
                 .chain()
@@ -195,6 +196,10 @@ impl Plugin for BudgetPlugin {
         app.insert_resource(bevy::light::DirectionalLightShadowMap {
             size: knobs.shadow_map.unwrap_or(SHADOW_MAP),
         });
+        // The player's SMOOTHING setting, unless a knob sets MSAA.
+        if knobs.msaa.is_none() {
+            app.add_systems(PostUpdate, apply_msaa_setting);
+        }
         if knobs != Knobs::default() {
             info!("perf knobs: {knobs:?}");
             app.insert_resource(knobs)
@@ -369,6 +374,71 @@ fn small_shadows(
     }
 }
 
+/// Below this size (the largest side, world metres) a mesh that isn't
+/// part of an item (items have [`item_range`]) or under a [`LodReach`]
+/// fades out where it would be a pixel or two: [`small_range`]. Display
+/// guns (every round in a drum its own mesh), a piano's keys and hammers,
+/// a desk's fittings were drawn from anywhere: Marrow Creek's aerial view
+/// drew 96 piano parts and some 250 gun parts from 60 m up.
+pub const SMALL_DRAWN: f32 = 1.0;
+
+/// How far a small thing (`size` its largest side, metres) is drawn: 200
+/// times its size, 20 to 200 m (a 10 cm fitting at 20 m, about three
+/// pixels a side on the headset; a 60 cm crate at 120 m).
+pub fn small_range(size: f32) -> f32 {
+    (size * 200.0).clamp(20.0, 200.0)
+}
+
+/// Gives each newly bounded small mesh its range ([`small_range`]).
+/// `EXTRACTION_SMALL_RANGES=0` leaves them all drawn at any distance.
+#[allow(clippy::type_complexity)]
+fn small_ranges(
+    mut commands: Commands,
+    added: Query<
+        (Entity, &bevy::camera::primitives::Aabb, &GlobalTransform),
+        (
+            Added<bevy::camera::primitives::Aabb>,
+            With<Mesh3d>,
+            With<MeshMaterial3d<StandardMaterial>>,
+            Without<bevy::camera::visibility::VisibilityRange>,
+            Without<super::warmup::ShelfMark>,
+        ),
+    >,
+    parents: Query<&ChildOf>,
+    kept: Query<(), Or<(With<crate::items::Item>, With<LodReach>)>>,
+) {
+    if std::env::var("EXTRACTION_SMALL_RANGES").is_ok_and(|v| v == "0") {
+        return;
+    }
+    'next: for (e, aabb, gt) in &added {
+        let size = (Vec3::from(aabb.half_extents) * gt.compute_transform().scale.abs())
+            .max_element()
+            * 2.0;
+        if size >= SMALL_DRAWN {
+            continue;
+        }
+        // An item's (or a reach's) own range comes from `range_items`.
+        let mut at = e;
+        for _ in 0..12 {
+            if kept.contains(at) {
+                continue 'next;
+            }
+            match parents.get(at) {
+                Ok(p) => at = p.parent(),
+                Err(_) => break,
+            }
+        }
+        let far = small_range(size);
+        commands
+            .entity(e)
+            .try_insert(bevy::camera::visibility::VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: (far * 0.8)..far,
+                use_aabb: true,
+            });
+    }
+}
+
 fn shadow_reach(
     mut commands: Commands,
     cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
@@ -427,6 +497,36 @@ impl Knobs {
         std::env::var("EXTRACTION_PERF")
             .map(|t| Self::parse(&t))
             .unwrap_or_default()
+    }
+}
+
+/// The comfort board's SMOOTHING (`Comfort::msaa`, `--msaa`) on every
+/// view of the world: the headset's eyes, the flat camera, the mirror.
+/// Not offscreen views (a scope's picture, an impostor capture), which
+/// set their own.
+#[allow(clippy::type_complexity)]
+fn apply_msaa_setting(
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut cams: Query<
+        (&mut Msaa, Option<&bevy::camera::RenderTarget>),
+        (With<Camera3d>, Without<crate::render::OffscreenCamera>),
+    >,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    let want = comfort.msaa_setting();
+    let all = comfort.is_changed();
+    for (mut m, target) in &mut cams {
+        if !all && !m.is_added() {
+            continue;
+        }
+        if matches!(target, Some(bevy::camera::RenderTarget::Image(_))) {
+            continue;
+        }
+        if *m != want {
+            *m = want;
+        }
     }
 }
 
@@ -1180,6 +1280,13 @@ pub(crate) mod tests {
             for (what, c, t) in most.iter().take(5) {
                 println!("    many {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
+            // `BUDGET_LIST=1`: every kind drawn, most first (to find what
+            // a merge added, when it's spread over the long tail).
+            if std::env::var("BUDGET_LIST").is_ok_and(|v| v != "0") {
+                for (what, c, t) in &most {
+                    println!("    all {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+                }
+            }
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
@@ -1793,6 +1900,7 @@ pub(crate) mod tests {
             "kettle_pass",
             "cinder_works",
             "sallow_reservoir",
+            "rime_fell",
         ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
@@ -1820,6 +1928,11 @@ pub(crate) mod tests {
     #[test]
     fn sallow_reservoir_holds_the_budget() {
         holds("sallow_reservoir");
+    }
+
+    #[test]
+    fn rime_fell_holds_the_budget() {
+        holds("rime_fell");
     }
 
     #[test]

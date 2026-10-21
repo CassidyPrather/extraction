@@ -522,3 +522,103 @@ capture's rig isn't one.
 view (the truck at base, clear day, lavapipe) with the rule; without it
 the frame is identical to the pixel (the buttons, the vise, the tins are
 within reach and still cast), as is the Marrow gate view.
+
+## Small things' range
+
+Items fade where they'd be a few pixels (`item_range`). Other small
+things had no range. Marrow Creek's aerial view went from 998 to 1208
+draws in one merge, with the top five kinds unchanged. `BUDGET_LIST=1`
+lists every kind a view draws, which is how the tail showed up: 96 piano
+parts (keys, hammers), 39 of the player's body and kit parts, 35 depot
+fittings, 18 terminals, 18 notes, 15 supply crates, 7 keys. None were
+items. (The guns in that view are items, on the gate's truck within
+their 60 m range, and rightly drawn.)
+
+`render::budget::small_ranges` gives any StandardMaterial mesh under 1 m
+(largest side, world) that isn't part of an item or under a `LodReach` a
+range of 200 times its size, 20 to 200 m: a 10 cm fitting goes at 20 m,
+about three pixels a side on the headset. The aerial view now draws 945.
+The gate, village and aerial shots with and without it
+(`EXTRACTION_SMALL_RANGES=0`) differ only in the grass's sway.
+
+## Guns at rest
+
+A gun is one entity per glTF primitive. Its `static` body is already
+one primitive per material, joined in Blender. Then come each moving
+part (bolt, selector, trigger, hammer), a seated magazine's own, and
+three for every round in a drum or clip. An AK-74 with its magazine is
+about 19 draws, a PPSh with its drum 55, a Nagant 49. The parts move only
+in hand.
+
+`render::gun_rest`: a gun that isn't held or steadied, isn't under the
+Player, and whose meshes have stayed the same for 30 frames is drawn as
+its shown leaves merged in the pose it was left in. They're grouped by
+material and by how each part casts the sun's shadow (merged together, a
+drum's rounds would cast at any distance; `small_shadows` keeps them to
+the eye's few metres). Merged guns are children of the gun, so they move
+and fade with it, and guns left alike share them. A hand taking the
+gun, or anything under it put on, taken off or gone, brings its parts
+back exactly. The muzzle crown (fouling, nicks) and a scope's vignette
+stay live. `EXTRACTION_GUN_REST=0` leaves every gun as its parts.
+
+Marrow Creek's start has 15 guns lying near the gate: 165 leaf meshes
+drawn as 125. Gate shadow draws went Marrow 391 to 361, Rime Fell 483 to
+445, Sallow 513 to 468, with shadow triangles unchanged. The aerial view
+went 954 to 919. The gate views' own draws don't move: those guns are
+behind the cameras. `docs/shots/performance/guns_at_rest.png` shows
+those guns with it off (top) and on (bottom); only the grass sway
+differs. Tests: `gun_rest::tests::guns_lying_about_rest` and
+`a_resting_gun_wakes`.
+
+## The headset's two eyes: what each costs
+
+In the XR path each eye is its own Bevy camera (`bevy_mod_openxr`
+spawns `XrCamera(0)` and `XrCamera(1)`, one swapchain layer each, no
+multiview). Everything a view does happens twice:
+- frustum culling (`check_visibility`);
+- light clustering;
+- the main passes;
+- tonemapping and upscaling;
+- the sun's cascades, both building them from the eye's frustum and the
+  caster culling and shadow pass per cascade.
+
+Bevy's `prepare_lights` gives directional cascades a new shadow view per
+camera, by design ("cascades are unique to each view"). Spot and point
+shadows are shared across cameras. `--mirror` adds a third full camera,
+and it's off by default.
+
+Measured on lavapipe (Marrow Creek's village, 1024² an eye, 20-frame
+holds, `scripts/bench.sh`'s second eye):
+
+| | frame ms | GPU ms (passes) | render-world CPU ms |
+| - | - | - | - |
+| one eye | 1153 | 3536 | 18.9 |
+| two eyes | 2217 | 6704 | 21.9 |
+| two eyes, `shadows=0` | 1957 | 6042 | 19.3 |
+| two eyes, `msaa=1` | 1167 | 3470 | 21.4 |
+| two eyes, `cascades=1` | 2186 | 6665 | 20.8 |
+
+- **The second eye is a whole eye's pixels.** The GPU time goes ×1.9 and
+  render-world CPU +16%. That's what stereo costs; it isn't waste.
+- **The sun's shadows** (both eyes' passes and the sampling in the
+  opaque pass) are about 12% of the frame. Sharing the cascades between
+  the eyes would save only the second eye's shadow passes, a part of
+  that. It means vendoring and patching `bevy_pbr::prepare_lights`, the
+  only place a directional light's shadow views are made per camera.
+  Not worth a fork for single-digit percent. One cascade instead of two
+  saves 1-2%.
+- **4× MSAA at the eye's full size** is the biggest knob: off, the frame
+  halves on lavapipe. Each eye carries a 4-sample HDR target
+  (`camera_look`), and the swapchain is single-sampled.
+  - On a headset GPU the share is smaller than in software rendering,
+    but it's the one per-eye cost here that isn't the picture itself.
+  - With a Beyond 2's pixel density, `msaa=2` (or off) may read the
+    same.
+  - `EXTRACTION_PERF="msaa=2"` is how to try it on the playtester's
+    laptop; the session log's `gpu:` lines show the result.
+- **The eyes stay matched.** `render::vr_budget` holds every view
+  through both eyes to two eyes' budget and to shaded fragments at the
+  game's auto eye size (1800², `BUDGET_EYE_PX` to change it). It also
+  fails if the eyes see more than 10% apart, or if a third view draws
+  the world. The fragments are overdraw × eye pixels. Marrow's worst is
+  the spruce view: 45.8M a frame against 64.8M.

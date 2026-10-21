@@ -49,6 +49,10 @@ pub struct Bites {
     shock: f32,
     glint: f32,
     dice: Rng,
+    /// Seconds since the aegis last shocked you, and whether you've been
+    /// told it's killing you this wet spell.
+    since_shock: f32,
+    told_dying: bool,
 }
 
 impl Bites {
@@ -58,9 +62,17 @@ impl Bites {
             shock: aegis_shock_in(dice.f32()),
             glint: shard_glint_in(dice.f32()),
             dice,
+            since_shock: f32::INFINITY,
+            told_dying: false,
         }
     }
 }
+
+/// Said at a wet aegis's first shock (after a minute without one), and
+/// once if its shocks have you low: it never kills you without a word.
+pub const AEGIS_WET: &str =
+    "The aegis knot bites: wet, it holds a charge. Get dry, or seal it in lead.";
+pub const AEGIS_DYING: &str = "The aegis is killing you. Drop it, or get out of the wet.";
 
 /// What each player carries live, by catalogue id.
 fn live<'a>(
@@ -123,6 +135,8 @@ pub fn bites(
     time: Res<Time>,
     mut noises: MessageWriter<Noise>,
     mut out: MessageWriter<ArtifactBite>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut raid: ResMut<crate::raid::Raid>,
 ) {
     let dt = time.delta_secs();
     let wet = wetness.map_or(0.0, |w| w.level);
@@ -138,6 +152,7 @@ pub fn bites(
         if hearth.contains(&p) {
             body.stamina = (body.stamina - HEARTH_TIRE * dt).max(0.0);
         }
+        b.since_shock += dt;
         if aegis.contains(&p) && aegis_wet(wet, body.wading) {
             b.shock -= dt;
             if b.shock <= 0.0 {
@@ -146,6 +161,20 @@ pub fn bites(
                     health.hp -= AEGIS_SHOCK;
                     health.since_hit = 0.0;
                 }
+                let me = locals.contains(p);
+                if b.since_shock > 60.0 {
+                    b.told_dying = false;
+                    if me {
+                        raid.say(AEGIS_WET);
+                    }
+                }
+                if health.hp < 30.0 && !b.told_dying {
+                    b.told_dying = true;
+                    if me {
+                        raid.say(AEGIS_DYING);
+                    }
+                }
+                b.since_shock = 0.0;
                 noises.write(Noise {
                     at,
                     radius: 25.0,
@@ -282,9 +311,21 @@ mod tests {
         assert_eq!(shocks(&mut app, p, 20), 0, "dry, it keeps its charge");
         soak(&mut app, 1.0);
         let hp = app.world().get::<Health>(p).unwrap().hp;
-        let n = shocks(&mut app, p, 32);
+        // A second at a time, looking for the word (the raid's log lines
+        // fade after a few seconds).
+        let (mut n, mut said) = (0, false);
+        for _ in 0..32 {
+            n += shocks(&mut app, p, 1);
+            said |= app
+                .world()
+                .resource::<crate::raid::Raid>()
+                .log
+                .iter()
+                .any(|(t, _)| t == AEGIS_WET);
+        }
         assert!(n >= 2, "soaked, it bites every few seconds ({n} in 32 s)");
         assert!(app.world().get::<Health>(p).unwrap().hp < hp);
+        assert!(said, "and its first bite says why");
 
         // Sealed in a lead case, it's quiet even soaked.
         let (mut app, p) = self::app();

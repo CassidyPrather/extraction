@@ -1659,6 +1659,11 @@ pub fn clear_wrecks(world: &mut World) {
 /// see `fell_heavy`).
 pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heavy_claw"];
 
+/// A machine that dresses itself (its own look system), not from the
+/// shared robot models (`visuals`).
+#[derive(Component, Debug)]
+pub struct OwnLook;
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

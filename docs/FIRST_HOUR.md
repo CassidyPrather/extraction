@@ -205,3 +205,125 @@ None was hurt, stuck or confused on the raid, bar the lost one's wrong turn. Non
 | lost | all 23 steps, with walks that stalled coming back from the wrong posts | set off the wrong way, into the camp's edge, and stayed stuck |
 | hoarder | all 23 steps; a step failed with its hands full of what it had picked up | home, with two stalled walks |
 | one-handed | all 23 steps | home, with five stalled walks (the truck bed, the spot) |
+
+# The first fight
+
+```
+extraction --headless --scenario first_fight          # every machine
+extraction --headless --scenario first_fight_walker   # one
+```
+
+The scenario puts one machine on each newcomer's first route to the Old
+farm, a little short of halfway, and watches its tells and the first hit.
+A newcomer met no machine at all on that route in the first-hour runs, so
+the machine is placed by hand; a natural one would come on the second or
+third job. Each run starts from a fresh career that has done the yard.
+
+| Machine | Placed | Tells watched |
+| - | - | - |
+| walker | on Watch, 25 m off the route | Noticed (eye brightens), WalkerAim (clank, servo; 0.7 s to the shot) |
+| drone | on Watch, 30 m off, 22 m up | Noticed, DroneLock (the chirp; 0.9 s to the burst) |
+| hush | across the route, 7 m | InHush (the sound goes dull; tone at 4 s, harm from 8 s) |
+| sentry | 22 m off, sweeping 140° across the route | SentryEvent::Chirp (lens flare, and from Audio's round a chirp sound; 1 s to the shot) |
+| night | a walker as above, at `--hour night` | as the walker |
+
+(A real night visit comes to a safehouse you sleep in, which a first raid
+doesn't have, so "night" is the walker met in the dark.)
+
+At its first tell each newcomer does what it would:
+- **reckless:** draws and fights;
+- **lost:** runs, anywhere;
+- **hoarder:** carries on;
+- **cautious** and **one-handed:** get low, out of its line, and keep
+  still.
+
+A hit is **warned** when one of the machine's tells came in the 15 s
+before it.
+
+## First runs: the walker and the sentry
+
+| Machine | Newcomer | Tell to first hit | Outcome |
+| - | - | - | - |
+| walker | cautious | 0.8 s | down |
+| walker | reckless | 3.0 s | down |
+| walker | lost | 4.1 s | down |
+| walker | hoarder | 4.1 s | down |
+| walker | one-handed | 20.8 s | down |
+| sentry | cautious | 28 s (it hid from the first chirp) | down later |
+| sentry | reckless | 1.3 s | down |
+| sentry | lost | 7.1 s, from Noticed | down |
+| sentry | hoarder | 4.4 s | down |
+| sentry | one-handed | 1.3 s | down |
+
+Every newcomer died to its first machine.
+
+**The walker can fire 0.7 s after it first sees you.** These come in the
+same frame:
+- `Noticed`, its eye brightening;
+- `WalkerAim`, its gun settling;
+- the driver's Heard line.
+
+The shot follows 0.7 s later, which is under a newcomer's reaction time.
+The cautious newcomer moved on the tell and was hit 0.8 s later, in the
+open with nowhere to break line of sight. With Robot minds: a beat between
+first noticing someone and the first aim.
+
+**Death loops at the truck.** A newcomer who goes down wakes in the back
+of the truck at base. The machines the fight drew in kept shooting there:
+a drone answering the walker's call was at the base and hit them within a
+second of waking, five times over. With Robot minds: waking up should
+drop every machine's hold on you, or the parked truck at base should be
+out of bounds.
+
+**The sentry's chirp made no sound.** Its only tell was a red flare on
+the lens, easily missed by someone new looking elsewhere. Audio has given
+it a chirp that carries about 60 m. With Audio, too: the Hush's rising
+tone came at 8 s, the moment its harm starts. It now comes at 4 s.
+
+(In these first runs the bot kept walking its old route after going down,
+into the fight again. It stops now.)
+
+## First runs: the drone, the hush and the night
+
+| Machine | Newcomer | Tell to first hit | Outcome |
+| - | - | - | - |
+| drone | cautious | 4.2 s, from Noticed | down 28 s later |
+| drone | reckless | 5.1 s | down 15 s later |
+| drone | lost | 5.2 s | down 13 s later |
+| drone | hoarder | 5.1 s | down 16 s later |
+| drone | one-handed | 5.3 s | down 16 s later |
+| hush | all five | not hurt by it: each walked through inside its 8 s grace | |
+| night | cautious | never noticed: a walker in the dark at 25 m didn't see a crouched newcomer | |
+
+**The drone is told in time, but there's nowhere to go.** Every newcomer
+had four or five seconds between the drone noticing them and its first
+burst. Lev's "Get behind something" came with the lock. The Old farm road
+is open field, though: nothing to get behind within a sprint, and the
+drone fights from 20 m out and up high. The tell is fine; the place is
+the problem. A first drone should meet you where there's cover, or a
+newcomer should be told before setting out that the open is where drones
+find you. (Robot minds' 1.5 s look before the lock adds to the warning,
+not to the cover.)
+
+**The hush didn't hurt anyone.** Placed across the road, each newcomer
+walked through it inside its 8 s grace without knowing it was there. The
+tone now rises at 4 s (Audio), and Lev's new line says "Out of there,
+now", so someone who stops inside is told.
+
+**At night, the walker never saw the cautious newcomer.** The machines'
+sight falls to 0.4 at night, and a crouched newcomer 25 m off wasn't
+seen. That's the design (night is for sneaking); the reckless, who runs
+upright, is the one to watch in the rerun.
+
+(These runs' later deaths, long after each hush, and most of the night
+runs' stalls, were the bot's. It called the truck on whichever radio it
+found first, often one lying elsewhere in the valley, and walked off after
+it. It uses its own now.)
+
+Fixed since these runs, to be measured in the rerun:
+- **Robot minds:** a walker or drone spends 1.5 s looking at you before
+  its aim or lock begins, so the first round is no sooner than 2.2 s
+  (walker) or 2.4 s (drone). Going down makes every machine let you go.
+- **Audio:** the sentry chirps, and the hush's tone rises at 4 s.
+- **Here:** Lev warns of a walker's aim, a sentry's chirp and a hush, and
+  a line about danger now is said 1.5 s after the last, not 5 s.

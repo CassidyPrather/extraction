@@ -96,6 +96,29 @@ pub struct ZoneSave {
     /// Heavies' wrecks, where they fell: landmarks until the Surge.
     #[serde(default)]
     pub wrecks: Vec<WreckSave>,
+    /// Out in the Zone when the game was saved (quit, a crash, a flat
+    /// headset battery): the raid resumes where you stood. `None` at base.
+    #[serde(default)]
+    pub raid: Option<RaidSave>,
+}
+
+/// A raid in progress: where you stood and how it stood.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RaidSave {
+    /// Your feet, world.
+    pub at: [f32; 3],
+    pub yaw: f32,
+    pub phase: RaidPhaseSave,
+}
+
+/// The raid's phase, as far as it resumes: the truck on its way or
+/// waiting carries on its timer; down is down.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum RaidPhaseSave {
+    Out,
+    TruckCalled { rv: usize, eta: f32 },
+    TruckWaiting { rv: usize, left: f32 },
+    Down,
 }
 
 /// A heavy's wreck: where it lies, how it leans, what's still on it.
@@ -302,6 +325,26 @@ impl ZoneSave {
     /// Mends a valley's state read from a file: drops what lies nowhere
     /// (NaN or a world away), mends the rest. Says what it did.
     pub fn sanitize(&mut self, fixed: &mut Vec<String>) {
+        if let Some(r) = &mut self.raid {
+            let timer = match &mut r.phase {
+                RaidPhaseSave::TruckCalled { eta: t, .. }
+                | RaidPhaseSave::TruckWaiting { left: t, .. } => Some(t),
+                _ => None,
+            };
+            if let Some(t) = timer {
+                if !t.is_finite() || *t < 0.0 || *t > 1.0e4 {
+                    fixed.push(format!("{}: the truck's timer {t} reset", self.map));
+                    *t = finite_or(*t, 0.0).clamp(0.0, 1.0e4);
+                }
+            }
+            if !r.at.iter().all(|v| v.is_finite() && v.abs() < 1.0e5) || !r.yaw.is_finite() {
+                fixed.push(format!(
+                    "{}: the raid's place {:?} unreadable: back at base",
+                    self.map, r.at
+                ));
+                self.raid = None;
+            }
+        }
         if !self.clock.is_finite() || self.clock < 0.0 || self.clock > 1.0e7 {
             fixed.push(format!("{}: Zone clock {} reset", self.map, self.clock));
             self.clock = finite_or(self.clock, 0.0).clamp(0.0, 1.0e7);

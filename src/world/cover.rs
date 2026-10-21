@@ -38,7 +38,8 @@ pub struct CoverPlugin;
 impl Plugin for CoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SwayMaterial>::default())
-            .add_systems(Update, (stream_cover, blow));
+            .init_resource::<RobotPushers>()
+            .add_systems(Update, (stream_cover, blow, push_by_robots));
     }
 }
 
@@ -64,6 +65,48 @@ pub struct Sway {
     /// above it sink into it as it deepens.
     #[uniform(100)]
     pub snow: Vec4,
+    /// Robots among the plants (`RobotPushers`): xyz where, w how far
+    /// round them plants part (0: none).
+    #[uniform(100)]
+    pub robot_a: Vec4,
+    #[uniform(100)]
+    pub robot_b: Vec4,
+    #[uniform(100)]
+    pub robot_c: Vec4,
+    #[uniform(100)]
+    pub robot_d: Vec4,
+}
+
+/// Up to four robots pushing through ground cover and low branches:
+/// xyz where (an orb, a foot), w how far round them plants part (0:
+/// none). The robots write it (the nearest to the eye, within a couple of
+/// dozen metres, and only when one has moved a few centimetres: each
+/// write re-extracts the plants); the sway shaders part round them as
+/// round the player's hands.
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct RobotPushers {
+    pub spots: [Vec4; 4],
+}
+
+/// The robots' pushes, to the ground cover and the trees, when they
+/// change.
+fn push_by_robots(
+    pushers: Res<RobotPushers>,
+    mut cover: ResMut<Assets<SwayMaterial>>,
+    mut trees: ResMut<Assets<super::trees::TreeSwayMaterial>>,
+) {
+    if !pushers.is_changed() {
+        return;
+    }
+    let [a, b, c, d] = pushers.spots;
+    for (_, m) in cover.iter_mut() {
+        (m.extension.robot_a, m.extension.robot_b) = (a, b);
+        (m.extension.robot_c, m.extension.robot_d) = (c, d);
+    }
+    for (_, m) in trees.iter_mut() {
+        (m.extension.robot_a, m.extension.robot_b) = (a, b);
+        (m.extension.robot_c, m.extension.robot_d) = (c, d);
+    }
 }
 
 impl bevy::pbr::MaterialExtension for Sway {

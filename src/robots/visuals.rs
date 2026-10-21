@@ -27,6 +27,9 @@ impl Plugin for RobotVisualsPlugin {
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
             super::sentry_look::SentryLookPlugin,
+            super::spotter_look::SpotterLookPlugin,
+            super::minelayer_look::MinelayerLookPlugin,
+            super::mender_look::MenderLookPlugin,
         ))
         .add_systems(
             Update,
@@ -46,6 +49,8 @@ impl Plugin for RobotVisualsPlugin {
                 alert_eyes,
                 shell_by_light,
                 super::weathering::weather_meshes,
+                part_plants,
+                drone_lamps,
             ),
         );
     }
@@ -198,13 +203,20 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
+    heavies: Query<
+        (),
+        Or<(
+            With<super::heavy::Heavy>,
+            With<super::sentry::Sentry>,
+            With<super::heavy::OwnLook>,
+        )>,
+    >,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy and the sentry dress themselves: `heavy_look`,
-        // `sentry_look`.)
+        // (The heavy, the sentry and the others marked `OwnLook` dress
+        // themselves: `heavy_look`, `sentry_look`, ...)
         if heavies.contains(part.robot) {
             continue;
         }
@@ -962,7 +974,7 @@ const HALO_NEAR: f32 = 12.0;
 
 fn show_halos(
     mut halos: Query<(&Halo, &GlobalTransform, &mut Visibility)>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     parts: Query<&RobotPart>,
     robots: Query<&Robot>,
 ) {
@@ -1495,13 +1507,13 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
     .with_inserted_indices(bevy::mesh::Indices::U32(idx))
 }
 
-/// A hurt core's eye gutters: below 40% it drops out now and then, more
-/// often the worse it is, like a failing supply (1 when it's whole).
-fn gutter(core: f32, now: f32, k: u32) -> f32 {
-    if core >= 0.4 {
+/// An eye guttering this badly (0 steady, 1 all but out: a hurt sensor, a
+/// failing core, `damage`): it drops out now and then, more the worse it
+/// is, like a failing supply.
+fn guttering(bad: f32, now: f32, k: u32) -> f32 {
+    if bad <= 0.0 {
         return 1.0;
     }
-    let bad = 1.0 - core / 0.4;
     // Two slow beats against each other, so the drop-outs don't tick.
     let n = (now * 5.3 + k as f32).sin() * (now * 2.1 + k as f32 * 0.7).sin();
     if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
@@ -1519,7 +1531,7 @@ fn alert_eyes(
     eyes: Query<(Entity, &Eye, &MeshMaterial3d<StandardMaterial>)>,
     mut halos: Query<(&Eye, &mut crate::world::halos::Halo)>,
     gaits: Query<&super::anim::Gait>,
-    cameras: Query<&GlobalTransform, With<Camera3d>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     places: Query<&GlobalTransform, With<Robot>>,
     parts: Query<&RobotPart>,
     robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
@@ -1611,16 +1623,24 @@ fn alert_eyes(
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
-    // After dark the eye opens up to a hard point (emissive about 40 at
-    // rest, past 100 once it has you), so a walker reads at 60-80 m on a
-    // clear night, and its glow stays round it even calm.
+    // After dark the eye's core dims to what it reads as by day: the
+    // night's open exposure would clip it to white otherwise and its red
+    // would be lost; the halo carries it at range.
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
-    let gain = 1.0 + 9.0 * night;
-    // How much core each robot has left: a hurt one's eye gutters.
+    let gain = 1.0 - 0.75 * night;
+    // How badly each robot's eye gutters (`damage`: a hurt sensor, a
+    // failing core): 0 steady, 1 all but out.
     let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
     for p in &parts {
-        if p.role == PartRole::Core {
-            cores.insert(p.robot, p.hp / p.max_hp.max(1.0));
+        let h = p.hp / p.max_hp.max(1.0);
+        let bad = match p.role {
+            PartRole::Core => (1.0 - h / 0.4).clamp(0.0, 1.0),
+            PartRole::Sensor if h > 0.0 => (1.0 - h / 0.7).clamp(0.0, 1.0),
+            _ => continue,
+        };
+        if super::damage::tell(p.role, h).motion == super::damage::Motion::Gutter {
+            let b = cores.entry(p.robot).or_insert(0.0);
+            *b = b.max(bad);
         }
     }
     for (robot, aware, own, _) in &robots {
@@ -1635,8 +1655,8 @@ fn alert_eyes(
             }
         } else {
             1.0
-        } * gutter(
-            cores.get(&robot).copied().unwrap_or(1.0),
+        } * guttering(
+            cores.get(&robot).copied().unwrap_or(0.0),
             now,
             robot.index_u32(),
         );
@@ -1720,6 +1740,7 @@ fn shell_by_light(
     server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut done: Local<Option<f32>>,
+    mut day_rough: Local<Option<f32>>,
     zone: Option<Res<crate::world::Zone>>,
 ) {
     let (Some(c), Some(m)) = (conditions, mats) else {
@@ -1745,18 +1766,27 @@ fn shell_by_light(
     let k = 0.22 * c.light.sqrt() * dusk * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
+        // A clear moon glints off the shell: right, but it mustn't out-read
+        // the eyes, so after dark the glint spreads into a soft sheen.
+        let day = *day_rough.get_or_insert(mat.perceptual_roughness);
+        mat.perceptual_roughness = day.max(0.55) + (day - day.max(0.55)) * dusk;
     }
-    // The seams too: by day a cool line, after dark a faint one. At full
+    // The seams too: by day a cool line, after dark all but out. At full
     // strength in the night's open exposure they clip to white and read
     // before the eye's red does.
     if let Some(mut mat) = materials.get_mut(&m.glow) {
-        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.1 + 0.9 * dusk);
+        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.02 + 0.98 * dusk * dusk);
     }
 }
 
 #[cfg(test)]
 mod gutter_tests {
-    use super::gutter;
+    use super::guttering;
+
+    /// A core's eye: steady until 40%, then worse the lower.
+    fn gutter(core: f32, now: f32, k: u32) -> f32 {
+        guttering(if core >= 0.4 { 0.0 } else { 1.0 - core / 0.4 }, now, k)
+    }
 
     /// A whole core's eye never gutters; a hurt one drops out now and
     /// then, more the worse it's hurt.
@@ -1772,5 +1802,154 @@ mod gutter_tests {
         let (hurt, dying) = (out(0.3), out(0.05));
         assert!(hurt > 0 && dying > hurt, "{hurt} then {dying} of 900");
         assert!(dying < 600, "it still mostly shines ({dying} of 900 out)");
+    }
+}
+
+/// How far a walker parts plants, metres (times its size), round a spot
+/// low under its orb: the sway shaders part by 3D distance, and the
+/// ground cover is down round its feet, not up at the orb.
+const PARTS: f32 = 0.9;
+const PARTS_LOW: f32 = 0.85;
+/// Robots farther from the eye than this part nothing (nobody sees it).
+const PARTS_WITHIN: f32 = 20.0;
+
+/// Walkers and hounds push through ground cover and low branches: the
+/// four nearest the eye go to the sway shaders (`world::cover`). Each
+/// write re-extracts every plant, so a spot only changes once its robot
+/// has moved 5 cm, and an empty slot keeps nothing.
+fn part_plants(
+    pushers: Option<ResMut<crate::world::cover::RobotPushers>>,
+    walkers: Query<(&GlobalTransform, &super::anim::Gait, &Robot), With<super::walker::Walker>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let (Some(mut pushers), Some(eye)) = (pushers, cameras.iter().next()) else {
+        return;
+    };
+    let spots = pushing(
+        eye.translation(),
+        walkers
+            .iter()
+            .filter(|(_, _, r)| !r.wrecked)
+            .map(|(gt, g, _)| {
+                (gt.translation() - Vec3::Y * PARTS_LOW * g.size).extend(PARTS * g.size)
+            }),
+        pushers.spots,
+    );
+    pushers.set_if_neq(crate::world::cover::RobotPushers { spots });
+}
+
+/// The four pushes nearest `eye` (within `PARTS_WITHIN`), each left as
+/// it `was` while its robot has moved under 5 cm.
+fn pushing(eye: Vec3, robots: impl Iterator<Item = Vec4>, was: [Vec4; 4]) -> [Vec4; 4] {
+    let mut near: Vec<(f32, Vec4)> = robots
+        .map(|p| (p.truncate().distance_squared(eye), p))
+        .filter(|(d2, _)| *d2 < PARTS_WITHIN * PARTS_WITHIN)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut spots = [Vec4::ZERO; 4];
+    for (i, (_, p)) in near.into_iter().take(4).enumerate() {
+        spots[i] = if was[i].w > 0.0 && was[i].truncate().distance(p.truncate()) < 0.05 {
+            was[i]
+        } else {
+            p
+        };
+    }
+    spots
+}
+
+#[cfg(test)]
+mod pusher_tests {
+    use super::*;
+
+    /// The nearest four robots part the plants, none past 20 m; a robot
+    /// that's barely moved keeps its last spot (no rewrite).
+    #[test]
+    fn the_nearest_robots_part_the_plants() {
+        let eye = Vec3::ZERO;
+        let robots: Vec<Vec4> = [3.0, 25.0, 8.0, 1.0, 15.0, 12.0]
+            .iter()
+            .map(|x| Vec4::new(*x, 1.1, 0.0, 0.6))
+            .collect();
+        let spots = pushing(eye, robots.iter().copied(), [Vec4::ZERO; 4]);
+        let xs: Vec<f32> = spots.iter().map(|s| s.x).collect();
+        assert_eq!(xs, vec![1.0, 3.0, 8.0, 12.0]);
+        // Nudged 2 cm: the same spots, so nothing is written.
+        let nudged = robots.iter().map(|r| *r + Vec4::new(0.02, 0.0, 0.0, 0.0));
+        assert_eq!(pushing(eye, nudged, spots), spots);
+        // Walked off 30 cm: that one moves.
+        let walked = robots.iter().map(|r| *r + Vec4::new(0.3, 0.0, 0.0, 0.0));
+        assert_ne!(pushing(eye, walked, spots)[0], spots[0]);
+        // None near: nothing parts.
+        let far = [Vec4::new(40.0, 1.0, 0.0, 0.6)];
+        assert_eq!(pushing(eye, far.into_iter(), spots), [Vec4::ZERO; 4]);
+    }
+}
+
+/// A drone's searchlight after dark: a spotlight down and ahead, which
+/// `world::beams` gives a cone of lit air (dust on a dry night, a shaft
+/// through rain or fog).
+#[derive(Component)]
+struct DroneLamp;
+
+/// Darker than this, a drone hunts with its lamp lit.
+const LAMP_BELOW: f32 = 0.3;
+/// Farther from the eye than this it's left off (a light each: they cost).
+const LAMP_WITHIN: f32 = 60.0;
+
+/// Whether a drone's lamp is lit, at this light and this far from the eye.
+fn lamp_lit(light: f32, distance: f32, wrecked: bool) -> bool {
+    !wrecked && light < LAMP_BELOW && distance < LAMP_WITHIN
+}
+
+fn drone_lamps(
+    mut commands: Commands,
+    drones: Query<(Entity, &GlobalTransform, &Robot, Option<&Children>), With<super::drone::Drone>>,
+    lamps: Query<(), With<DroneLamp>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
+) {
+    let light = conditions.map_or(1.0, |c| c.light);
+    let eye = cameras.iter().next().map(|g| g.translation());
+    for (e, gt, robot, children) in &drones {
+        let d = eye.map_or(f32::MAX, |c| c.distance(gt.translation()));
+        let lit = lamp_lit(light, d, robot.wrecked);
+        let lamp = children.and_then(|c| c.iter().find(|c| lamps.contains(*c)));
+        match (lit, lamp) {
+            (true, None) => {
+                commands.spawn((
+                    DroneLamp,
+                    SpotLight {
+                        color: Color::srgb(0.85, 0.92, 1.0),
+                        intensity: 400_000.0,
+                        range: 40.0,
+                        inner_angle: 0.1,
+                        outer_angle: 0.3,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
+                    // Under the belly, down and ahead (-Z is its front).
+                    Transform::from_xyz(0.0, -0.12, -0.1)
+                        .looking_to(Vec3::new(0.0, -1.0, -0.7), Vec3::NEG_Z),
+                    ChildOf(e),
+                ));
+            }
+            (false, Some(l)) => commands.entity(l).despawn(),
+            _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod lamp_tests {
+    use super::lamp_lit;
+
+    /// A drone lights its lamp after dark, near enough to be seen, and
+    /// never once it's wrecked.
+    #[test]
+    fn drones_light_their_lamps_after_dark() {
+        assert!(lamp_lit(0.02, 20.0, false));
+        assert!(!lamp_lit(0.8, 20.0, false), "not by day");
+        assert!(!lamp_lit(0.02, 90.0, false), "not out of sight");
+        assert!(!lamp_lit(0.02, 20.0, true), "not wrecked");
     }
 }

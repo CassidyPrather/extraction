@@ -520,11 +520,12 @@ pub(super) fn direct_raid(
         if h.hp < state.hp - 5.0 {
             // Warned: the driver said something lately, or a machine
             // showed its tell (`first_fight`).
-            let warned = now - state.said_at < 30.0
-                || fight
-                    .as_ref()
-                    .and_then(|f| f.last_tell())
-                    .is_some_and(|t| now - t < 15.0);
+            // In a fight, warned is the machine's own tell; else something
+            // said lately.
+            let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
+                Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
+                None => now - state.said_at < 30.0,
+            };
             let kind = if warned {
                 Kind::Hurt
             } else {
@@ -561,6 +562,10 @@ pub(super) fn direct_raid(
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
         state.leg = Leg::Done;
+        // That's this first hour over: nothing left of the walk.
+        bot.tasks.clear();
+        bot.tasks.push_back(Task::Wait(IDLE));
+        bot.restart();
     }
 
     let idle_only =
@@ -801,8 +806,13 @@ pub(super) fn direct_raid(
             } else if world.radio_in_hand() {
                 tasks.extend([Task::Use(Side::Left), Task::Wait(1.0)]);
             } else {
-                let radio = world.items.iter().find(|(_, it, _, held, _, _)| {
-                    held.is_none() && world.catalog.get(it.kind()).id == "radio"
+                // Its own: on its body, not one lying about the valley.
+                let radio = world.items.iter().find(|(_, it, _, held, sock, _)| {
+                    held.is_none()
+                        && world.catalog.get(it.kind()).id == "radio"
+                        && sock.is_some_and(|s| {
+                            world.owners.get(s.socket).is_ok_and(|o| o.0 == player)
+                        })
                 });
                 match radio {
                     Some((e, ..)) => tasks.extend([
@@ -875,7 +885,6 @@ pub(super) fn direct_raid(
             return;
         }
     }
-    let _ = player;
     if !tasks.is_empty() {
         let idle = bot.tasks.pop_back();
         bot.tasks.extend(tasks);

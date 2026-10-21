@@ -54,6 +54,12 @@ pub enum First {
     KitRecovered,
     /// The first note read (its copy goes on the truck's board).
     NotePinned,
+    /// A walker's gun settling on you: the shot is a breath away.
+    Aimed,
+    /// A sentry's chirp: it has you in its sweep.
+    Sentry,
+    /// In a hush: the quiet that presses.
+    Hush,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -96,6 +102,9 @@ pub const ALL: &[First] = &[
     First::ConvoyTook,
     First::KitRecovered,
     First::NotePinned,
+    First::Aimed,
+    First::Sentry,
+    First::Hush,
 ];
 
 impl First {
@@ -119,6 +128,9 @@ impl First {
                 | First::Bleeding
                 | First::Blinked
                 | First::Well
+                | First::Aimed
+                | First::Sentry
+                | First::Hush
         )
     }
 
@@ -135,7 +147,9 @@ impl First {
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
-            First::DroneLock => &["Truck: \"Get behind something. That chirp is it taking aim.\""],
+            First::DroneLock => {
+                &["Truck: \"Run across it, to cover. That chirp is it taking aim.\""]
+            }
             First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
                 &["Truck: \"Torch on, go slow. Dark down there, and not empty.\""]
@@ -166,6 +180,9 @@ impl First {
                 &["Truck: \"Reading their notes? I keep copies. Board in the back.\""]
             }
             First::KitRecovered => &["Truck: \"That's how you get it back. Take it home.\""],
+            First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
+            First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
+            First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
         }
     }
 }
@@ -204,6 +221,9 @@ struct Queue {
 
 /// Seconds between two of these lines.
 const SPACING: f32 = 5.0;
+/// ...unless the second is danger now: then this, at least (time to read
+/// the first one's opening words).
+const URGENT_SPACING: f32 = 1.5;
 /// How close to an anomaly the air "goes wrong" (beyond its edge).
 const ANOMALY_NEAR: f32 = 4.0;
 /// Below this condition a gun jams noticeably more (`firearm::malfunction_chance`).
@@ -225,6 +245,7 @@ impl Plugin for FirstsPlugin {
                         jams,
                         robots_heard,
                         drone_locks,
+                        machines_on_you,
                         lamed,
                         pack_full,
                         places,
@@ -260,7 +281,18 @@ fn meet(
         return false;
     }
     info!("first time: {f:?}");
-    queue.lines.extend(f.lines().iter().map(|l| fill(l)));
+    if f.urgent() {
+        // Danger now: said at once, ahead of anything waiting (a walker's
+        // aim came the same moment as "heard", and five seconds behind it
+        // was after the shot).
+        for l in f.lines().iter().rev() {
+            queue.lines.push_front(fill(l));
+        }
+        let since = SPACING - queue.quiet;
+        queue.quiet = queue.quiet.min((URGENT_SPACING - since).max(0.0));
+    } else {
+        queue.lines.extend(f.lines().iter().map(|l| fill(l)));
+    }
     out.write(FirstMet(f));
     true
 }
@@ -333,6 +365,35 @@ fn robots_heard(
         if m.met(First::Heard) && ev.at.distance(at.translation()) < 80.0 {
             m.meet(First::LostYou);
         }
+    }
+}
+
+/// A walker's gun settling on you, a sentry's chirp near you, and the
+/// first hush you're in.
+fn machines_on_you(
+    mut aims: MessageReader<crate::robots::walker::WalkerAim>,
+    mut sentries: MessageReader<crate::robots::sentry::SentryEvent>,
+    minds: Query<&Awareness>,
+    locals: Query<(Entity, &GlobalTransform, Has<crate::anomaly::hush::InHush>), With<LocalPlayer>>,
+    mut m: Meet,
+) {
+    let Some((me, at, hushed)) = locals.iter().next() else {
+        return;
+    };
+    for ev in aims.read() {
+        if minds.get(ev.walker).is_ok_and(|a| a.target == Some(me)) {
+            m.meet(First::Aimed);
+        }
+    }
+    for ev in sentries.read() {
+        if ev.what == crate::robots::sentry::SentryAct::Chirp
+            && ev.at.distance(at.translation()) < 70.0
+        {
+            m.meet(First::Sentry);
+        }
+    }
+    if hushed {
+        m.meet(First::Hush);
     }
 }
 
@@ -697,14 +758,34 @@ mod tests {
         }
         let firsts = app.world().resource::<Firsts>();
         assert!(firsts.met(First::Death) && firsts.met(First::Surge));
-        // And spaced: never two in the same few seconds.
+        // And spaced: never two in the same second and a half (five
+        // seconds, unless the second is danger now).
         let gaps = app
             .world()
             .resource::<Spoken>()
             .1
             .windows(2)
-            .all(|w| w[1] - w[0] >= SPACING - 0.05);
+            .all(|w| w[1] - w[0] >= URGENT_SPACING - 0.05);
         assert!(gaps, "lines too close together");
+    }
+
+    /// Danger now goes ahead of anything waiting: a walker's aim isn't
+    /// said after the line about being heard.
+    #[test]
+    fn danger_now_is_said_first() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.world_mut().write_message(MeetFirst(First::Worn));
+        app.world_mut().write_message(MeetFirst(First::PackFull));
+        app.update();
+        app.world_mut().write_message(MeetFirst(First::Aimed));
+        for _ in 0..(90 * 3) {
+            app.update();
+        }
+        let spoken = app.world().resource::<Spoken>().0.clone();
+        let aimed = fill(First::Aimed.lines()[0], 0, 0);
+        let at = spoken.iter().position(|s| *s == aimed);
+        assert!(at.is_some_and(|i| i <= 1), "aimed said late: {spoken:?}");
     }
 
     /// The first wound that bleeds is named once, not on every hit after.

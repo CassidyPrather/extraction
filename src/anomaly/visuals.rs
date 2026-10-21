@@ -674,7 +674,9 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.0, 0.0, 0.0),
                         wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::ZERO,
+                        // Its column of lifted air is a shade darker, which
+                        // shows through fog where its leaves don't.
+                        drain: Vec4::new(0.0, 0.22, 0.0, 0.0),
                         glow: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),

@@ -13,6 +13,7 @@
 pub mod armour;
 pub mod armoury;
 pub mod ballistics;
+pub mod carry;
 pub mod crossbow;
 pub mod faults;
 pub mod feel;
@@ -25,6 +26,8 @@ pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+#[cfg(test)]
+pub mod signature;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
@@ -208,7 +211,10 @@ impl Plugin for WeaponsPlugin {
             })
             .add_systems(
                 PreUpdate,
-                update_aim_hints.before(crate::rig::RigDriverSystems),
+                (
+                    update_aim_hints.before(crate::rig::RigDriverSystems),
+                    fit_gun_colliders,
+                ),
             )
             .add_plugins((
                 armour::ArmourPlugin,
@@ -223,6 +229,7 @@ impl Plugin for WeaponsPlugin {
                 armoury::ArmouryPlugin,
                 flares::FlaresPlugin,
                 crossbow::CrossbowPlugin,
+                carry::CarryPlugin,
             ))
             .add_systems(
                 FixedUpdate,
@@ -277,6 +284,15 @@ fn setup_gun_items(
             0.14,
         ));
     }
+    // A handgun: the other palm cupped under the grip steadies it (it
+    // doesn't aim it: `interact::follow_hands`).
+    if let Some(c) = layout::cup(&layout) {
+        points.push(GrabPoint::new(
+            Transform::from_translation(c),
+            GripRole::Support,
+            0.08,
+        ));
+    }
     // (A pump's forend is the support grip: no handle of its own.)
     if let Some(h) = layout
         .handle
@@ -289,20 +305,9 @@ fn setup_gun_items(
             0.07,
         ));
     }
-    // Collider: the bounds of the blockout, as one box.
-    let (lo, hi) = layout.bounds();
-    let centre = (lo + hi) * 0.5;
-    let size = (hi - lo).max(Vec3::splat(0.01));
+    // (Its collider is fitted once it's a gun: `fit_gun_colliders`.)
     let mut e = commands.entity(add.entity);
-    e.insert((
-        CustomVisual,
-        Grabbable { points },
-        Collider::compound(vec![(
-            centre,
-            Quat::IDENTITY,
-            Collider::cuboid(size.x, size.y, size.z),
-        )]),
-    ));
+    e.insert((CustomVisual, Grabbable { points }));
     let gun = add.entity;
     let magwell = layout.magwell.map(|seat| {
         let family = fdef.magazine_family.clone().unwrap_or_default();
@@ -843,6 +848,28 @@ pub fn loose_round(
             .map(|(k, _)| k)
     };
     find(load).or_else(|| find(extraction_core::ammo::Load::Standard))
+}
+
+/// A gun's collider: the bounds of its blockout, as one box where the gun
+/// is (not the catalog's box about its origin, which `spawn_item` gives
+/// every item and which left an AK's last 20 cm of barrel going into walls
+/// and a phantom 20 cm behind its butt). Fitted after the spawn's own
+/// physics have gone in, so it isn't overwritten.
+pub fn gun_collider(layout: &GunLayout) -> Collider {
+    let (lo, hi) = layout.bounds();
+    let centre = (lo + hi) * 0.5;
+    let size = (hi - lo).max(Vec3::splat(0.01));
+    Collider::compound(vec![(
+        centre,
+        Quat::IDENTITY,
+        Collider::cuboid(size.x, size.y, size.z),
+    )])
+}
+
+fn fit_gun_colliders(mut commands: Commands, guns: Query<(Entity, &Gun), Added<Gun>>) {
+    for (e, gun) in &guns {
+        commands.entity(e).try_insert(gun_collider(&gun.layout));
+    }
 }
 
 /// Where a shot leaves from: the muzzle, unless something solid lies

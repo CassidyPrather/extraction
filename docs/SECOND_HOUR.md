@@ -9,7 +9,7 @@ spaced five seconds apart, because the wrist only shows the newest one.
 Each line fits the radio (3 lines of 26 characters) and uses no game words.
 The wrist pages a long line (3 lines of 18 a page, 2 under a caption's
 speaker), so where there's danger now, what to do comes first: it's on
-the first page, and the reason follows ("Get behind something. That chirp
+the first page, and the reason follows ("Run across it, to cover. That chirp
 is it taking aim.").
 
 | Moment | When | He says |
@@ -17,7 +17,7 @@ is it taking aim.").
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
 | Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
-| Drone lock | the chirp before it fires | get behind something |
+| Drone lock | the chirp before it fires | run across it, to cover (sprinting across its line scatters its rounds; standing still in the open doesn't) |
 | Anomaly | within 4 m of one's edge | throw something in first |
 | Underground | below ground in a site | torch on, go slow |
 | Surge | the sky turns (5 min warning) | come home |
@@ -32,6 +32,13 @@ is it taking aim.").
 | First death | waking in the truck | what came back (the crate, counted) and what didn't (what you carried, counted, where you fell); beat their convoy there |
 | Convoy took it / kit recovered | the first time each way | gone through the Gate / that's how you get it back |
 | Note pinned | first note read (Story's board) | he keeps copies, board in the back |
+| Aimed | a walker's gun settling on you | break its line, now; it's aiming at you |
+| Sentry | a sentry's chirp near you | down, out of its sweep |
+| Hush | in a hush | out of there, now; that dead quiet hurts |
+
+A line about danger now goes ahead of anything waiting. It's said 1.5 s
+after the line before it, not 5 s: a walker's aim came in the same moment
+as "heard", and five seconds later was after the shot.
 
 Other systems can add their own moment with `MeetFirst(First::...)`.
 

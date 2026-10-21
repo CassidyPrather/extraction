@@ -92,9 +92,10 @@ fn flat(v: Vec3) -> f32 {
     Vec2::new(v.x, v.z).length()
 }
 
-/// The classic distraction: a piece of scrap thrown down the street
-/// clatters 14 m from a walker at its post, and the walker walks over to
-/// about where it landed (not to you) and searches round it.
+/// The classic distraction: a piece of scrap lobbed down hard 7 m from a
+/// walker at its post (on grass, which muffles a landing to half: dropped
+/// softly, or from 14 m, it wouldn't be heard), and the walker walks over
+/// to about where it landed (not to you) and searches round it.
 #[test]
 fn a_thrown_bolt_draws_a_walker() {
     let (mut app, player, zone) = app(None);
@@ -103,7 +104,7 @@ fn a_thrown_bolt_draws_a_walker() {
     put(&mut app, player, zone.on_ground(100.0, 330.0));
     let walker = walker_at(&mut app, &zone, post);
     let catalog = app.world().resource::<crate::items::Catalog>().clone();
-    let spot = zone.on_ground(post.x + 14.0, post.z + 3.0);
+    let spot = zone.on_ground(post.x + 7.0, post.z + 3.0);
     let mut queue = CommandQueue::default();
     let bolt = {
         let mut c = Commands::new(&mut queue, app.world());
@@ -112,7 +113,7 @@ fn a_thrown_bolt_draws_a_walker() {
             &catalog,
             crate::items::SpawnItem {
                 kind: catalog.kind("scrap_metal").unwrap(),
-                transform: Transform::from_translation(spot + Vec3::Y * 2.0),
+                transform: Transform::from_translation(spot + Vec3::Y * 6.0),
                 condition: 1.0,
             },
         )
@@ -124,7 +125,8 @@ fn a_thrown_bolt_draws_a_walker() {
         .unwrap()
         .0 = Vec3::new(0.0, -8.0, 0.0);
     // It heard roughly where: it comes to look within its guess's spread.
-    let near = 3.5 + (14.0 * super::senses::HEARD_SPREAD).max(super::senses::HEARD_SPREAD_MIN);
+    let near = 3.5
+        + (flat(spot - post) * super::senses::HEARD_SPREAD).max(super::senses::HEARD_SPREAD_MIN);
     let mut closest = f32::MAX;
     let mut secs = 0.0;
     for i in 0..90 * 25 {
@@ -2218,4 +2220,281 @@ fn a_repath_storm_is_spread_over_ticks() {
         walkers.len(),
         "all of them repathed ({ticks} updates)"
     );
+}
+
+/// An armed walker at `post`, at its post.
+fn armed_walker_at(app: &mut App, zone: &Zone, post: Vec3) -> Entity {
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            zone,
+            post,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..90 {
+        app.update();
+    }
+    w
+}
+
+/// A walker that's just picked a fight looks before it shoots: its first
+/// round comes no sooner than SIGHT_BEAT + AIM_TIME after it starts.
+#[test]
+fn a_walker_looks_before_it_shoots() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    // Timed on the robots' own (fixed) clock.
+    app.init_resource::<Fired>().add_systems(
+        FixedPostUpdate,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    // Out of its sight while it's set up (it would pick the fight early).
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let me = zone.on_ground(100.0, 200.0);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    put(&mut app, player, me);
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let start = app.world().resource::<Time<Fixed>>().elapsed_secs();
+    for _ in 0..90 * 6 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let first = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .find(|(e, _)| *e == w)
+        .map(|(_, t)| *t - start)
+        .expect("it fired in the end");
+    assert!(
+        first >= super::walker::SIGHT_BEAT + super::walker::AIM_TIME - 0.05,
+        "it looked first: first round {first:.2} s in"
+    );
+}
+
+/// Go down and they let you go: a walker fighting you forgets you and
+/// gives up, so it isn't waiting when you come to.
+#[test]
+fn going_down_lets_you_go() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    app.update();
+    // Down, as health does it: the flag, and the message.
+    app.world_mut()
+        .get_mut::<crate::health::Health>(player)
+        .unwrap()
+        .down = true;
+    app.world_mut()
+        .write_message(crate::health::Downed { player, at: me });
+    app.update();
+    app.update();
+    let a = app.world().get::<Awareness>(w).unwrap();
+    assert_eq!(a.target, None, "it forgot you");
+    assert!(
+        !matches!(
+            app.world().get::<Brain>(w).unwrap(),
+            Brain::Engage | Brain::Investigate { .. } | Brain::Search { .. }
+        ),
+        "and gave up: {:?}",
+        app.world().get::<Brain>(w).unwrap()
+    );
+}
+
+/// Sprinting across a drone's line spoils its aim: over the same fight,
+/// a running player takes well under half the hits a still one does.
+#[test]
+fn running_across_a_drone_spoils_its_aim() {
+    #[derive(Resource, Default)]
+    struct Hits(usize);
+    let hits = |running: bool| {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Hits>().add_systems(
+            Last,
+            |mut h: MessageReader<crate::health::Hurt>, mut n: ResMut<Hits>| {
+                n.0 += h.read().count();
+            },
+        );
+        put(&mut app, player, zone.on_ground(100.0, 400.0));
+        let me = zone.on_ground(100.0, 200.0);
+        let over = zone.on_ground(100.0, 220.0) + Vec3::Y * 18.0;
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                over,
+                Job {
+                    kind: JobKind::Response,
+                    site: me,
+                    duration: 999.0,
+                    exit: over,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..30 {
+            app.update();
+        }
+        put(&mut app, player, me);
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(d).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(me);
+            a.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(d).unwrap() = Brain::Engage;
+        for _ in 0..90 * 15 {
+            put(&mut app, player, me);
+            // Running hard across (east), as far as its aim can tell.
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = if running { Vec3::X * 5.0 } else { Vec3::ZERO };
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = 100.0;
+                h.down = false;
+            }
+            app.update();
+        }
+        app.world().resource::<Hits>().0
+    };
+    let still = hits(false);
+    let running = hits(true);
+    assert!(still >= 4, "it hits a still target ({still})");
+    assert!(
+        (running as f32) < still as f32 * 0.5,
+        "running spoils its aim: {running} hits against {still}"
+    );
+}
+
+/// A drone picks out movement more than shape: crouched and still, 40 m
+/// off in the open, you're not made out; crouched and moving, you are.
+#[test]
+fn keeping_still_beats_a_drone_overhead() {
+    let seen = |moving: bool| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 400.0));
+        let me = zone.on_ground(100.0, 200.0);
+        let over = zone.on_ground(100.0, 238.0) + Vec3::Y * 15.0;
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                over,
+                Job {
+                    kind: JobKind::Survey,
+                    site: over,
+                    duration: 999.0,
+                    exit: over,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..30 {
+            app.update();
+        }
+        let mut best = 0.0f32;
+        for i in 0..90 * 4 {
+            let walk = if moving {
+                Vec3::X * (i as f32 / 90.0)
+            } else {
+                Vec3::ZERO
+            };
+            put(&mut app, player, me + walk);
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = if moving { Vec3::X * 1.0 } else { Vec3::ZERO };
+            app.world_mut()
+                .get_mut::<RigInput>(player)
+                .unwrap()
+                .head
+                .translation
+                .y = 0.85;
+            app.update();
+            best = best.max(app.world().get::<Awareness>(d).unwrap().exposure);
+        }
+        best
+    };
+    let still = seen(false);
+    let moving = seen(true);
+    assert!(
+        still < super::senses::SEEN,
+        "still, it can't make you out ({still:.3})"
+    );
+    assert!(
+        moving > still * 1.5,
+        "moving shows ({moving:.3} vs {still:.3})"
+    );
+}
+
+/// Survey drones aren't sent to loiter over a rendezvous.
+#[test]
+fn survey_drones_keep_off_the_rendezvous() {
+    use super::director::{Director, SURVEY_CLEAR};
+    use extraction_core::map::MarkerKind;
+    let (mut app, _, zone) = app(None);
+    app.update();
+    {
+        let mut d = app.world_mut().resource_mut::<Director>();
+        d.enabled = true;
+        d.next_logistics = 1e9;
+        d.max_active = 999;
+    }
+    for _ in 0..60 {
+        app.world_mut().resource_mut::<Director>().next_job = 0.0;
+        app.update();
+    }
+    let rvs: Vec<Vec2> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .collect();
+    let surveys: Vec<Vec3> = app
+        .world_mut()
+        .query::<&Job>()
+        .iter(app.world())
+        .filter(|j| j.kind == JobKind::Survey)
+        .map(|j| j.site)
+        .collect();
+    assert!(!surveys.is_empty(), "some went");
+    for s in surveys {
+        for r in &rvs {
+            assert!(
+                r.distance(Vec2::new(s.x, s.z)) > SURVEY_CLEAR,
+                "a survey at {s} by the rendezvous at {r}"
+            );
+        }
+    }
 }

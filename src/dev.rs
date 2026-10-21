@@ -19,11 +19,14 @@ impl Plugin for DevPlugin {
                     gallery,
                     first_person_hands,
                     wear_kit,
+                    sights_to_the_eye,
                 ),
             )
             .add_systems(
                 PreUpdate,
-                pose_body_for_gallery.after(crate::rig::RigDriverSystems),
+                (pose_body_for_gallery, carry_for_gallery)
+                    .chain()
+                    .after(crate::rig::RigDriverSystems),
             );
     }
 }
@@ -60,6 +63,45 @@ fn screenshot_when_ready(
             exit.write(AppExit::Success);
         },
     );
+}
+
+/// `--gallery sights:<gun>`: the gun's sight line on the camera's, its
+/// rear sight just ahead of the eye, and the eye down behind the sights
+/// (so the front post goes soft, as `weapons::optics` draws it).
+fn sights_to_the_eye(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut guns: Query<(
+        &crate::weapons::Gun,
+        &mut Transform,
+        &mut crate::weapons::feel::Handling,
+    )>,
+) {
+    let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
+    else {
+        return;
+    };
+    if !spec.starts_with("sights:") {
+        return;
+    }
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y == 0.0 {
+        ground + 1.7
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
+    let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    for (gun, mut tf, mut handling) in &mut guns {
+        // The eye 4 cm behind the rear sight, on the line to the front post.
+        let rear = gun.layout.sight.translation;
+        let front = crate::weapons::feel::front_post(gun);
+        let line = Quat::from_rotation_arc(Vec3::NEG_Z, (front - rear).normalize());
+        let rot = look * line.inverse();
+        let at_eye = rear - (front - rear).normalize() * 0.04;
+        *tf = Transform::from_translation(eye - rot * at_eye).with_rotation(rot);
+        handling.at_eye = 1.0;
+    }
 }
 
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
@@ -166,14 +208,18 @@ fn gallery(
                         .with_rotation(facing),
                 );
             }
-            "scopeview" => {
+            s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
                 // the camera, looking where the camera looks.
+                // `scopeview:pso_scope,SIDE,RELIEF`: the eye SIDE mm right
+                // of the axis and RELIEF mm behind the eyepiece (70).
+                let id = s.strip_prefix("scopeview:").unwrap_or("pu_scope");
                 let look =
                     Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
                 let eye_piece = Vec3::new(0.0, 0.0, 0.2);
-                let at = eye + look * (Vec3::NEG_Z * 0.07 - eye_piece);
-                if let Some(e) = spawn_static(&mut commands, "pu_scope", at) {
+                let relief = dist.map_or(0.07, |d| d / 1000.0);
+                let at = eye + look * (Vec3::NEG_Z * relief - eye_piece - Vec3::X * turn / 1000.0);
+                if let Some(e) = spawn_static(&mut commands, id, at) {
                     commands
                         .entity(e)
                         .insert(Transform::from_translation(at).with_rotation(look));
@@ -247,6 +293,11 @@ fn gallery(
                         ),
                     );
                 }
+            }
+            // `sights:ak74`: the gun at the cheek, its rear sight just in
+            // front of the camera (`sights_to_the_eye` places it).
+            s if s.starts_with("sights:") => {
+                spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
             }
             // `first_person_hands` and `wear_kit` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") => {}
@@ -684,13 +735,178 @@ fn wear_kit(
     }
 }
 
+/// `--gallery carry` (or `drag`, `pack`; with `side` to see it from
+/// beside you): your hands on things (`interact::carry`). `carry`: a car
+/// door taken by its two ends off the ground and held up across you;
+/// `drag`: taken by its near end in the right hand and drawn back, the
+/// far end on the ground; `pack`: your pack off the left shoulder, hanging
+/// open in front of you, a dressing in it and the right hand reaching in.
+#[allow(clippy::too_many_arguments)]
+fn carry_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
+        With<crate::rig::LocalPlayer>,
+    >,
+    torsos: Query<&Children, With<crate::interact::body::Torso>>,
+    bags: Query<Entity, With<crate::interact::body::Backpack>>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let (carry, drag, pack) = (
+        spec.contains("carry"),
+        spec.contains("drag"),
+        spec.contains("pack"),
+    );
+    if !carry && !drag && !pack {
+        return;
+    }
+    let Some((player, root, mut input, children)) = players.iter_mut().next() else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    let local = |v: Vec3| Transform::from_translation(v);
+    let mut hand = |input: &mut crate::rig::RigInput, side: Side, at: Vec3| {
+        let h = input.hand_mut(side);
+        h.pose = local(at);
+        h.tracked = true;
+    };
+    if f == 10 && (carry || drag) {
+        let id = catalog.kind("car_door").expect("a car door");
+        // Flat on the ground ahead; across you to carry, pointing away to
+        // drag.
+        let turn = if carry {
+            Quat::IDENTITY
+        } else {
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+        };
+        let at = root.mul_transform(
+            Transform::from_xyz(0.0, 0.08, -0.6)
+                .with_rotation(turn * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        );
+        let mut c = commands.reborrow();
+        state.1 = Some(crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: id,
+                transform: at,
+                condition: 0.6,
+            },
+        ));
+    }
+    if f == 10 && pack {
+        let id = catalog.kind("field_dressing").expect("a dressing");
+        let mut c = commands.reborrow();
+        state.1 = Some(crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: id,
+                transform: *root,
+                condition: 1.0,
+            },
+        ));
+    }
+    let Some(thing) = state.1 else {
+        return;
+    };
+    if carry {
+        // Down to its ends, take hold, and up.
+        let (l, r) = if f < 60 {
+            (Vec3::new(-0.44, 0.12, -0.6), Vec3::new(0.44, 0.12, -0.6))
+        } else {
+            (Vec3::new(-0.42, 0.95, -0.42), Vec3::new(0.42, 0.95, -0.42))
+        };
+        hand(&mut input, Side::Left, l);
+        hand(&mut input, Side::Right, r);
+        if f == 40 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Right,
+                item: thing,
+                point: None,
+            });
+        }
+        if f == 45 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Left,
+                item: thing,
+                point: None,
+            });
+        }
+    } else if drag {
+        let near = Vec3::new(0.0, 0.12, -0.16);
+        let back = Vec3::new(0.25, 0.8, 0.15);
+        let t = ((f as f32 - 50.0) / 80.0).clamp(0.0, 1.0);
+        hand(&mut input, Side::Right, near.lerp(back, t));
+        if f == 40 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Right,
+                item: thing,
+                point: None,
+            });
+        }
+    } else if pack {
+        let Some(bag) = children
+            .iter()
+            .filter_map(|c| torsos.get(c).ok())
+            .flat_map(|k| k.iter())
+            .find(|e| bags.contains(*e))
+        else {
+            return;
+        };
+        if f == 20 {
+            // A dressing in the pack.
+            commands.queue(move |world: &mut World| {
+                if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(bag) {
+                    b.contents.push(thing);
+                }
+                world.entity_mut(thing).insert((
+                    crate::interact::body::InBackpack { bag },
+                    ChildOf(bag),
+                    Transform::from_xyz(0.05, 0.12, 0.0),
+                    avian3d::prelude::RigidBodyDisabled,
+                    avian3d::prelude::ColliderDisabled,
+                    Visibility::Hidden,
+                ));
+            });
+        }
+        let shoulder = Vec3::new(-0.15, 1.6, 0.12);
+        let front = Vec3::new(-0.05, 1.2, -0.42);
+        let t = ((f as f32 - 40.0) / 30.0).clamp(0.0, 1.0);
+        hand(&mut input, Side::Left, shoulder.lerp(front, t));
+        hand(&mut input, Side::Right, Vec3::new(0.15, 1.0, -0.38));
+        if f == 30 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Left,
+                item: bag,
+                point: None,
+            });
+        }
+    }
+}
+
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment
 /// standing, the head drops 0.35 m and comes 0.25 m forward, looking down,
 /// as you bend to your belt (the torso keeps its standing height until the
 /// head has dropped further). `behind` puts the camera behind and above
 /// the player instead, to see the pack on their back; `above` high behind,
-/// looking down at the feet, to see the body's shadow. The free camera
-/// otherwise stays where `--camera` put it.
+/// looking down at the feet, to see the body's shadow. `down`: the head
+/// tips forward and looks down at the body, as a head does (the camera is
+/// the eye); `side` puts the camera 2 m to the right, to see the whole
+/// body (`render::body`); `crouch` squats. The free camera otherwise stays where
+/// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
     mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
@@ -711,7 +927,9 @@ fn pose_body_for_gallery(
         spec.contains("behind"),
         spec.contains("above"),
     );
-    if !stoop && !behind && !above {
+    let (down, side) = (spec.contains("down"), spec.contains("side"));
+    let crouch = spec.contains("crouch");
+    if !stoop && !behind && !above && !down && !side && !crouch {
         return;
     }
     *frames += 1;
@@ -725,11 +943,36 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.1);
     }
+    if crouch && *frames > 20 {
+        // Squatting, eyes 0.85 m up, looking down past the knees.
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        input.head.translation =
+            Vec3::new(input.head.translation.x, 0.85, input.head.translation.z) + flat * 0.12;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-0.9);
+    }
+    if down && *frames > 20 {
+        // A head looking down pivots on the neck: the eyes come forward.
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // (The flat rig writes the head afresh each frame, as for `stoop`.)
+        input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+    }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
         return;
     };
-    if above {
+    if side {
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let right = flat.cross(Vec3::Y);
+        let mid = root.translation + Vec3::Y * 0.9;
+        *cam = Transform::from_translation(mid + right * 2.2 + flat * 0.6 + Vec3::Y * 0.2)
+            .looking_at(mid, Vec3::Y);
+    } else if above {
         // High behind, looking down at the feet: the body's shadow.
         let fwd = head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);

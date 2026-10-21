@@ -7,8 +7,10 @@
 pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
+pub mod audio_kit;
 pub mod audio_mix;
 pub mod audio_score;
+pub mod audio_underground;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
@@ -491,13 +493,16 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     // Headless runs (sims, tests) never touch the player's save unless
     // given one explicitly.
     opts.headless = true;
+    // A sim replays from its seed only on one thread (see `single_threaded`).
+    let sim = opts.sim_run.is_some();
     let mut app = App::new();
     if log {
         app.add_plugins(bevy::log::LogPlugin::default());
     }
     let threads = std::env::var("EXTRACTION_THREADS")
         .ok()
-        .and_then(|n| n.parse().ok());
+        .and_then(|n| n.parse().ok())
+        .or(sim.then_some(1));
     let pools = match threads {
         Some(n) => bevy::app::TaskPoolPlugin {
             task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
@@ -521,7 +526,22 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     .insert_resource(Time::<Fixed>::from_hz(90.0))
     .add_plugins(PhysicsPlugins::default())
     .add_plugins(GamePlugin);
+    if sim {
+        single_threaded(&mut app);
+    }
     app
+}
+
+/// Every schedule runs its systems one at a time, in one fixed order. On
+/// many threads, systems that touch the same things run in either order
+/// and two runs of one seed part within seconds; a sim (`--sim-run`, and
+/// so every `--sim N` raid) runs this way, on one task-pool thread, so it
+/// replays from its seed. Each sim is one process a core anyway.
+pub fn single_threaded(app: &mut App) {
+    let mut schedules = app.world_mut().resource_mut::<Schedules>();
+    for (_, schedule) in schedules.iter_mut() {
+        schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+    }
 }
 
 /// The asset root as a path, for checking whether an optional file exists.
