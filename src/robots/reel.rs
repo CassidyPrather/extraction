@@ -13,7 +13,8 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `limp` (a leg shot off, then across), `hurt` (a leg at a fifth),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
-//! hound running across), `rubble` (a walker over a heap of broken
+//! hound running across), `knockdown` (a heavy round into a walker's
+//! side: down, and up again), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
@@ -212,7 +213,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" => {
+            "wreck" | "shot" | "knockdown" => {
                 let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
@@ -340,7 +341,7 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" => vec![],
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
@@ -413,6 +414,31 @@ fn reel(
                 spread: 0.0,
                 recoil: 0.0,
                 seed: frame as u64,
+            });
+        }
+    }
+    // One heavy round into its side: it goes down, lies a moment, gets up.
+    // (Its core is made to take it: this is about the knock.)
+    if what == "knockdown" && frame == 12 {
+        let core = parts
+            .iter_mut()
+            .find(|(_, p, _)| p.robot == subject && p.role == PartRole::Core);
+        if let Some((_, mut p, gt)) = core {
+            p.hp = 1.0e6;
+            p.max_hp = 1.0e6;
+            let target = gt.translation();
+            let origin = target - right * 3.0;
+            shots.write(crate::weapons::ballistics::Shot {
+                gun: Entity::PLACEHOLDER,
+                shooter: None,
+                origin,
+                direction: (target - origin).normalize_or(Vec3::X),
+                speed: 700.0,
+                damage: 90.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 1,
             });
         }
     }
