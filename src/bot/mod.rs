@@ -228,6 +228,8 @@ pub struct Bot {
     well_off: Option<Vec3>,
     /// Seated: the crouch button held for something low.
     reach_low: bool,
+    /// The gun it last had in hand: the one to draw back.
+    last_gun: Option<Entity>,
 }
 
 impl Bot {
@@ -253,6 +255,7 @@ impl Bot {
             deferred: 0,
             well_off: None,
             reach_low: false,
+            last_gun: None,
         }
     }
 
@@ -648,6 +651,9 @@ fn run_tasks(
                     .and_then(|(_, h)| h.holding)
             });
             let gun_held = held.is_some_and(|e| guns.get(e).is_ok());
+            if gun_held {
+                bot.last_gun = held;
+            }
             let held_id = held
                 .and_then(|e| items.get(e).ok())
                 .map(|i| catalog.get(i.kind()).id.clone());
@@ -845,14 +851,26 @@ fn run_tasks(
                     continue;
                 }
                 if !bot.pending || bot.retry > 1.0 {
-                    // A gun in one of this player's body slots.
-                    let slung = ext.socketed.iter().find(|(e, s, _)| {
-                        guns.get(*e).is_ok()
-                            && ext
-                                .sockets
-                                .get(s.socket)
-                                .is_ok_and(|(_, o, _)| o.0 == player)
-                    });
+                    // A gun in one of this player's body slots (not on a
+                    // bench or rack of its own): the one it last had out,
+                    // else any.
+                    let on_body: Vec<Entity> = ext
+                        .socketed
+                        .iter()
+                        .filter(|(e, s, _)| {
+                            guns.get(*e).is_ok()
+                                && ext.sockets.get(s.socket).is_ok_and(|(so, o, _)| {
+                                    o.0 == player
+                                        && matches!(so.kind, crate::interact::SocketKind::Body(_))
+                                })
+                        })
+                        .map(|(e, ..)| e)
+                        .collect();
+                    let slung = on_body
+                        .iter()
+                        .find(|e| Some(**e) == bot.last_gun)
+                        .or(on_body.first())
+                        .map(|e| (*e,));
                     let Some((gun_e, ..)) = slung else {
                         bot.failed += 1;
                         bot.note("FAIL no gun on the body to draw".into());
