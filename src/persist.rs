@@ -291,12 +291,9 @@ fn load_save(
         commands.insert_resource(crate::destruction::Broken(
             save.zone.broken.iter().copied().collect(),
         ));
-        commands.insert_resource(crate::destruction::breach::Breaches(
-            save.zone
-                .breaches
-                .iter()
-                .map(|c| Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32) / 100.0)
-                .collect(),
+        commands.insert_resource(crate::destruction::breach::Breaches::from_save(
+            &save.zone.holes,
+            &save.zone.breaches,
         ));
     }
     raid.raids = save.stats.raids;
@@ -750,7 +747,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.zone.broken = keys;
     }
     if let Some(b) = world.get_resource::<crate::destruction::breach::Breaches>() {
-        save.zone.breaches = b.0.iter().map(|p| crate::destruction::key(*p)).collect();
+        save.zone.holes = b.to_save();
     }
     save.memorial = world.resource::<Memorial>().0.clone();
     save.logbook = world
