@@ -216,6 +216,15 @@ funicular is always cheaper, by design), the barracks, the compressor
 house. The open upper slopes kill: drones and walkers see you a long way
 off up there.
 
+## Underground: the adit
+
+Underground's site `adit_rime` (`assets/underground/adit_rime.ron`):
+the mine in the knoll, in at a kiosk beside the adit house at
+(160, -55), out on the mill's back apron at (121, -2), the rooms at
+floor 97.25 under x 115-175, z -91 to 0. A roof over you, so the one
+warm place on the fell. Keep both kiosk pads clear; moving the adit
+house or the mill's apron means re-seating it (tell Underground).
+
 ## Frame budget
 
 Performance measured it on main (f4916fa): nothing to trim. Draws peak at
