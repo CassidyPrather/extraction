@@ -5933,6 +5933,17 @@ pub fn dress_buildings(
             super::overgrowth::seed(Vec2::new(xf.translation.x, xf.translation.z), &b.prefab);
         let bnorth = xf.rotation.inverse() * Vec3::NEG_Z;
         if decay {
+            // The timber houses' boards in their faded paint, each its own
+            // (not a ruin's: soot, or the water, took it).
+            if matches!(b.prefab.as_str(), "house_plank" | "farmhouse") {
+                let boards = props.lib.get(Mat::Planks, &props.server, &mut materials);
+                let paint = super::decay::paint(bseed);
+                for (mat, m) in &mut outer {
+                    if *mat == boards {
+                        super::decay::tint(m, paint);
+                    }
+                }
+            }
             for (_, m) in &mut outer {
                 super::decay::moss(m, bnorth, bseed);
             }
