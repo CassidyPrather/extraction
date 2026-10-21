@@ -452,7 +452,7 @@ fn spawn_reverb_bus(commands: &mut Commands) {
 /// How much of a cue goes to the reverb: all of it, but for recordings
 /// with their own space baked in (the far-off shot's echo, the siren's
 /// valley) and the beds.
-fn reverb_send(cue: &str) -> SendNode {
+pub(crate) fn reverb_send(cue: &str) -> SendNode {
     let share = match mix::role(cue) {
         Some(mix::Role::Bed) => 0.0,
         _ if matches!(cue, "gun.distant" | "surge.siren" | "surge.crack") => 0.3,
@@ -2064,6 +2064,8 @@ fn door_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_some_and(|b| b != door.open) {
@@ -3495,6 +3497,8 @@ fn gadget_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::climbing::Grapnel;
+    // (Only what still exists: every grapnel the Surge ever rolled stayed.)
+    grapnel_was.retain(|e, _| grapnels.contains(*e));
     let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
     for (e, g, gt) in &grapnels {
         let now = match g {
@@ -3645,6 +3649,7 @@ fn drone_and_zip_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::camera_drone::Flight;
+    flight_was.retain(|e, _| drones.contains(*e));
     let mut out: Vec<(&str, &str, Vec3)> = Vec::new();
     for (e, d, gt) in &drones {
         let before = flight_was.insert(e, d.flight);

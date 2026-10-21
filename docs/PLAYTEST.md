@@ -350,7 +350,8 @@ said you don't use?
   does the black edge and the sliding picture tell you to centre? At
   dusk, glass toward the sun and see whether a robot down the line
   notices. Bring the AK's iron sights to your cheek: do they line up
-  without fiddling?
+  without fiddling? Does the front post going soft read as your eye
+  focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

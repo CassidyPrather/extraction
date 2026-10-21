@@ -31,6 +31,7 @@ pub mod map_sentry;
 pub mod map_sight;
 pub mod map_surge;
 pub mod melee;
+pub mod music;
 pub mod nav;
 pub mod noise;
 pub mod progression;

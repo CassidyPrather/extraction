@@ -250,6 +250,9 @@ the gauge house and out: 262 s.
   door held until the gauge room's breaker is thrown). The fourth way
   through the dam, under cover. Then: its six test loops onto VALLEYS,
   the lint, fit and sims again.
+- World models' breakable bus panels (dc8b032): `dam::buses` drops
+  `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
+  draws it whole).
 - Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),

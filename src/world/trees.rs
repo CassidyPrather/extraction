@@ -563,28 +563,17 @@ fn fog_cull(
     }
 }
 
-type EyeCamera = (With<Camera3d>, Without<crate::render::OffscreenCamera>);
-
-/// The cameras the forest's detail is for: the player's eyes (or the flat
-/// camera), not those drawing into an image (an impostor capture's rig,
-/// 4 km down, while it waits on its picture).
-fn eyes<'a>(
-    cams: &'a Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), EyeCamera>,
-) -> impl Iterator<Item = &'a GlobalTransform> {
-    cams.iter()
-        .filter(|(_, t)| !matches!(t, Some(bevy::camera::RenderTarget::Image(_))))
-        .map(|(g, _)| g)
-}
-
 /// A tree's cards (and core) show within the impostors' cut and hide
 /// beyond it, by the same horizontal distance from the same camera the
 /// impostor shader measures, every frame: the tree swaps all at once.
 fn cut_near_detail(
-    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), EyeCamera>,
+    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     trees: Query<(&GlobalTransform, &NearDetail)>,
     mut vis: Query<&mut Visibility>,
 ) {
-    let eyes: Vec<Vec2> = eyes(&cams).map(|g| g.translation().xz()).collect();
+    let eyes: Vec<Vec2> = crate::render::eyes(&cams)
+        .map(|g| g.translation().xz())
+        .collect();
     if eyes.is_empty() {
         return;
     }
@@ -724,7 +713,7 @@ fn stream_near_detail(
     mut commands: Commands,
     grid: Option<Res<ForestGrid>>,
     assets: Option<Res<ForestAssets>>,
-    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), EyeCamera>,
+    cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     detailed: Query<(Entity, &NearDetail, &GlobalTransform)>,
     time: Res<Time>,
     mut timer: Local<f32>,
@@ -737,7 +726,9 @@ fn stream_near_detail(
         return;
     }
     *timer = 0.25;
-    let eyes: Vec<Vec3> = eyes(&cams).map(|g| g.translation()).collect();
+    let eyes: Vec<Vec3> = crate::render::eyes(&cams)
+        .map(|g| g.translation())
+        .collect();
     if eyes.is_empty() {
         return;
     }

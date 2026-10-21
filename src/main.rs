@@ -3,6 +3,10 @@
 use bevy::prelude::*;
 
 fn main() -> AppExit {
+    // `extraction soak ...`: a long headless run held to the leak gauge.
+    if std::env::args().nth(1).as_deref() == Some("soak") {
+        return extraction::soak::drive::cli(std::env::args().skip(2));
+    }
     let mut opts = extraction::LaunchOptions::from_args();
     // `--scenario all` runs each scenario in its own fresh process, so each
     // starts from an untouched world.

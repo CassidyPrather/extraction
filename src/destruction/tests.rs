@@ -1255,6 +1255,8 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
                 yields: vec![("scrap_metal".into(), 3)],
                 pry: 200.0,
                 model: None,
+                scale: Vec3::ONE,
+                hp: None,
             },
         );
     }
@@ -1262,10 +1264,11 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
     run(&mut app, 2);
     let door = app
         .world_mut()
-        .query_filtered::<Entity, With<Strippable>>()
+        .query_filtered::<(Entity, &GlobalTransform), With<Strippable>>()
         .iter(app.world())
-        .next()
-        .unwrap();
+        .find(|(_, g)| g.translation().distance(at) < 0.01)
+        .unwrap()
+        .0;
     // Rounds hole it; they don't tear it off.
     for _ in 0..5 {
         shoot(&mut app, at + Vec3::Z * 3.0, at, 715.0, 7.9, 40.0);
@@ -1467,4 +1470,139 @@ fn a_grenade_in_the_open_holes_nothing() {
             .0
             .is_empty()
     );
+}
+
+#[test]
+fn a_crate_gone_clears_its_space() {
+    #[derive(Resource, Default)]
+    struct Seen(Vec<super::Cleared>);
+    let mut app = app(None);
+    app.init_resource::<Seen>().add_systems(
+        FixedUpdate,
+        |mut c: MessageReader<super::Cleared>, mut s: ResMut<Seen>| s.0.extend(c.read().copied()),
+    );
+    let (c, t) = app
+        .world_mut()
+        .query_filtered::<(Entity, &Transform), With<SupplyCrate>>()
+        .iter(app.world())
+        .map(|(e, t)| (e, *t))
+        .next()
+        .unwrap();
+    for _ in 0..6 {
+        app.world_mut().write_message(Hit {
+            entity: c,
+            point: t.translation,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y,
+            damage: 40.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 2);
+    }
+    let seen = &app.world().resource::<Seen>().0;
+    assert!(
+        seen.iter().any(|c| {
+            let p = t.translation;
+            p.cmpge(c.min).all() && p.cmple(c.max).all()
+        }),
+        "its space is clear: {seen:?}"
+    );
+}
+
+#[test]
+fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{BUS_PRY, SHUTTER_HP, Splinters, Strippable};
+    let mut app = app(None);
+    run(&mut app, 3);
+    let parts = |app: &mut App| -> Vec<(Entity, Vec3, f32, bool, Vec<(String, u32)>)> {
+        app.world_mut()
+            .query::<(
+                Entity,
+                &GlobalTransform,
+                &Timber,
+                Has<Splinters>,
+                &Strippable,
+            )>()
+            .iter(app.world())
+            .map(|(e, g, t, s, p)| (e, g.translation(), t.max, s, p.yields.clone()))
+            .collect()
+    };
+    let all = parts(&mut app);
+    let shutters: Vec<_> = all.iter().filter(|p| p.2 == SHUTTER_HP && p.3).collect();
+    assert!(
+        shutters.len() >= 8,
+        "Marrow's houses have shutters ({})",
+        shutters.len()
+    );
+    let fence = all.iter().filter(|p| p.2 == super::strip::FENCE_HP).count();
+    let bus: Vec<_> = all.iter().filter(|p| !p.3).collect();
+    assert_eq!(bus.len(), 5, "the depot's bus: a door and four panels");
+    println!("{} shutters, {fence} fence panels", shutters.len());
+
+    // A shutter beaten: it splinters, and stays gone.
+    let (s, at, ..) = shutters[0].clone();
+    let debris = live_debris(&mut app);
+    for _ in 0..4 {
+        if app.world().get_entity(s).is_err() {
+            break;
+        }
+        app.world_mut().write_message(Hit {
+            entity: s,
+            point: at,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y * 6.0,
+            damage: 60.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    run(&mut app, 2);
+    assert!(app.world().get_entity(s).is_err(), "the shutter broke");
+    assert!(live_debris(&mut app) > debris, "in splinters");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+
+    // The bus's door to a crowbar: scrap.
+    let (door, door_at, ..) = bus
+        .iter()
+        .find(|p| p.4.iter().any(|(id, _)| id == "scrap_metal"))
+        .cloned()
+        .cloned()
+        .expect("the bus door yields scrap");
+    let scrap = |app: &mut App| {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("scrap_metal").unwrap();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = scrap(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: BUS_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(scrap(&mut app), before + 1, "for its scrap");
+
+    // The Surge: both back, and nothing doubled.
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    let after = parts(&mut app);
+    assert_eq!(after.len(), all.len(), "every part back, once");
+    for p in [at, door_at] {
+        assert!(after.iter().any(|q| q.1.distance(p) < 0.01), "back at {p}");
+    }
 }

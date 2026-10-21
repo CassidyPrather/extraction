@@ -197,7 +197,10 @@ noise that carries with how hard and how heavy (metal rings, cloth
 thuds): drop a pan beside a drone and it knows; throw a tin can down the
 street and a walker goes to look where it landed, not where you are
 (`items/impacts.rs`). Only gunfire and what the dirigible and pylons see
-get a response team sent; a clatter just gets looked at.
+get a response team sent; a clatter just gets looked at. Keep shooting
+and they send more: each reported shot heats things up a point (at most
+one per 8 s, cooling a point every two and a half minutes), and from
+2.5 a response brings two walkers as well, who pin and flank.
 
 **Robots sense like animals, not cameras** (`robots/senses.rs`, every
 tunable named and documented there). Sight is an *exposure*: range, fog
@@ -258,8 +261,9 @@ ground hard by walls and cover within its uncertainty (a drone comes down to a d
 round at each. Nothing, and it **gives up**: back to its job, cut short,
 or home if finding you was the job. Lose a robot mid-fight and it does
 the same from where it last saw you. A robot that notices you calls the
-others within 45 m to come and look (they don't open fire until they see
-you themselves), and a radio you carry hears the chatter. Each step is a
+others within 45 m to come and look (a drone, up high, spots for them:
+its call carries 120 m), and they don't open fire until they see you
+themselves; a radio you carry hears the chatter. Each step is a
 message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
 for sound and the wrist.
 
@@ -605,7 +609,11 @@ let go, as with magazines. Use on a gun switches everything on it.
   - *Iron sights* line up at the cheek: bring a gun without a scope up
     with your eye just behind the rear sight, and it settles (at most
     about 3 degrees, about the front post) so your eye, the rear sight
-    and the post are in line.
+    and the post are in line. Your eye is on the target, so the front
+    post goes soft as it comes up: a dark, soft-edged disc about 12 mm
+    across that fades in round the post. It's an approximation of focus,
+    not a depth-of-field pass. Comfort setting `post_blur`, or
+    `--no-post-blur`, turns it off.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one

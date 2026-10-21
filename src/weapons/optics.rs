@@ -19,7 +19,9 @@
 //! - **Iron sights** line up at the cheek: a gun with no scope brought up
 //!   so its rear sight is just in front of your eye settles so the eye,
 //!   the rear sight and the front post are in line (`feel`'s
-//!   `sight_fix`).
+//!   `sight_fix`). Your eye focuses on the target, so the front post goes
+//!   soft as the gun comes up ([`post_blur`]; the comfort setting
+//!   `post_blur` turns it off).
 
 use bevy::prelude::*;
 
@@ -186,7 +188,7 @@ fn eye_boxes(
             .max_by(|a, b| a.picture.total_cmp(&b.picture))
             .unwrap_or_default();
         if have != Some(&best) {
-            commands.entity(e).insert(best);
+            commands.entity(e).try_insert(best);
         }
     }
 }
@@ -211,7 +213,7 @@ fn glints(
             toward,
         };
         if have.map(|h| h.strength) != Some(g.strength) {
-            commands.entity(e).insert(g);
+            commands.entity(e).try_insert(g);
         }
         // Whose: the gun it's on, or the optic itself, in a hand.
         let holder = held.get(mounted.map_or(e, |m| m.0)).ok().map(|h| h.player);
@@ -280,8 +282,9 @@ pub fn add_vignettes(
             unlit: true,
             ..default()
         });
-        commands.entity(e).with_child((
+        commands.spawn((
             Name::new("Vignette"),
+            ChildOf(e),
             Vignette {
                 material: material.clone(),
             },
@@ -318,6 +321,140 @@ pub fn vignette_lenses(
         }
         if let Some(mut m) = materials.get_mut(&v.material) {
             m.uv_transform = want;
+        }
+    }
+}
+
+/// How dark a front post's soft edge is at its middle with the eye down
+/// behind the sights, and how far it spreads (metres).
+pub const POST_BLUR: f32 = 0.7;
+pub const POST_SPREAD: f32 = 0.006;
+
+/// How soft the front post looks with the eye `at_eye` (0..1) down behind
+/// the sights: none with the comfort setting off.
+pub fn post_blur(at_eye: f32, on: bool) -> f32 {
+    if on {
+        at_eye.clamp(0.0, 1.0) * POST_BLUR
+    } else {
+        0.0
+    }
+}
+
+/// A front post's soft edge (client side): a dark disc round the post,
+/// turned to the eye, clear but for a soft middle that darkens as the eye
+/// comes down behind the sights.
+#[derive(Component)]
+pub struct PostBlur {
+    material: Handle<StandardMaterial>,
+}
+
+/// The soft edge's texture: dark in the middle, fading out.
+fn blur_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 64u32;
+    let c = n as f32 / 2.0;
+    let mut data = vec![0u8; (n * n * 4) as usize];
+    for y in 0..n {
+        for x in 0..n {
+            let d = Vec2::new(x as f32 + 0.5 - c, y as f32 + 0.5 - c).length() / c;
+            let a = (-(d / 0.45).powi(2)).exp() * (1.0 - smoothstep(0.85, 1.0, d));
+            let i = ((y * n + x) * 4) as usize;
+            data[i..i + 3].fill(255);
+            data[i + 3] = (a * 255.0) as u8;
+        }
+    }
+    images.add(Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        bevy::asset::RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+pub fn add_post_blurs(
+    mut commands: Commands,
+    guns: Query<(Entity, &super::Gun), Added<super::Gun>>,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut tex: Local<Option<Handle<Image>>>,
+    mut disc: Local<Option<Handle<Mesh>>>,
+) {
+    for (e, gun) in &guns {
+        let tex = tex.get_or_insert_with(|| blur_texture(&mut images)).clone();
+        let disc = disc
+            .get_or_insert_with(|| meshes.add(Circle::new(POST_SPREAD)))
+            .clone();
+        let material = materials.add(StandardMaterial {
+            base_color: Color::srgba(0.06, 0.06, 0.065, 0.0),
+            base_color_texture: Some(tex),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            ..default()
+        });
+        commands.spawn((
+            Name::new("Front post blur"),
+            ChildOf(e),
+            PostBlur {
+                material: material.clone(),
+            },
+            Mesh3d(disc),
+            MeshMaterial3d(material),
+            Transform::from_translation(super::feel::front_post(gun)),
+            Visibility::Hidden,
+            bevy::light::NotShadowCaster,
+        ));
+    }
+}
+
+/// The soft edge darkens with the eye behind the sights, and turns to it.
+pub fn blur_posts(
+    mut posts: Query<(&PostBlur, &ChildOf, &mut Transform, &mut Visibility)>,
+    guns: Query<(&super::feel::Handling, &GlobalTransform)>,
+    cams: Query<
+        &GlobalTransform,
+        (
+            With<Camera3d>,
+            Without<crate::render::OffscreenCamera>,
+            Without<PostBlur>,
+        ),
+    >,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let on = comfort.as_deref().is_none_or(|c| c.post_blur);
+    let eye = cams.iter().next().map(|g| g.translation());
+    for (p, parent, mut tf, mut vis) in &mut posts {
+        let Ok((handling, gt)) = guns.get(parent.parent()) else {
+            continue;
+        };
+        let a = post_blur(handling.at_eye, on);
+        let show = a > 0.01 && eye.is_some();
+        let want = if show {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
+        let Some(eye) = eye.filter(|_| show) else {
+            continue;
+        };
+        // Facing the eye, in the gun's space.
+        let to_eye = gt.rotation().inverse() * (eye - gt.transform_point(tf.translation));
+        tf.rotation = Quat::from_rotation_arc(Vec3::Z, to_eye.normalize_or(Vec3::Z));
+        if let Some(m) = materials.get(&p.material) {
+            if (m.base_color.alpha() - a).abs() < 0.005 {
+                continue;
+            }
+        }
+        if let Some(mut m) = materials.get_mut(&p.material) {
+            m.base_color.set_alpha(a);
         }
     }
 }

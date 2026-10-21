@@ -554,6 +554,79 @@ take what she needs.
 (another hand) She went in the end, in the spring, on her own feet.
 The shop's anyone's now. - A.P.""", "Shop note"),
     ],
+    # The fifth valley (claude/polish-fifth-valley): skipped until its
+    # map is in.
+    "rime_fell": [
+        ("guard_booth", (0.0, 285.0), "Note", """SOUTH GATE, RIME FELL - DUTY LOG
+
+15 Oct. Coldharbour down on the funicular, last car 1600. Lorries from
+the valley station.
+
+16 Oct. The two at the observatory won't come down. Weather service
+says they're essential. Let them.
+
+2 Nov. Lights on the col all night. The observatory phoned it through
+an hour before we saw them.""", "Rime gate log"),
+        ("house_plank", (40.0, 252.0), "Note", """FUNICULAR - VALLEY STATION
+
+15 Oct. Last car down 1600, full. Sent the other up empty to hold the
+rope, both left on the brake. - F. Lukas, attendant
+
+(another hand) March. One car stopped at the loop. The rope's off the
+top drum, cut and wound away. Walk the stair. Don't ride it.""", "Funicular book"),
+        ("mast_hut", (-50.0, 145.0), "Note", """GRIT BOOK - roadmen
+
+12 Oct. Galleries one to three cleared. Plough on the hairpin.
+
+14 Oct. Forty sacks down for the buses.
+
+15 Oct. Last of it. We're off on the lorry. Plough's in the store,
+key on the nail.
+
+In a thaw, keep out from under the chutes. They run.""", "Grit book"),
+        ("house_brick", (20.0, 0.0), "Terminal", [
+            "RIME FELL MINE\nCONCENTRATE (SACKS)\n\n 9 OCT     212\n12 OCT     198\n14 OCT      64\n15 OCT       0\n\nAT TOP STATION  474",
+            "INVENTORY  3 NOV\n\nCONCENTRATE  474\nRAIL (M)    1380\nROPE (M)    2200\n\nSTATUS  PENDING REVIEW",
+        ], "Mine office terminal"),
+        ("shop", (-15.0, 5.0), "Note", """CANTEEN - COLDHARBOUR
+
+Soup Tuesdays and Thursdays. Bread up by the car.
+
+(pencil) 15 Oct. Pans washed, stove out. Back in three days.
+
+(another hand) The observatory two came down for flour in November
+and went back up. I told them stay down. They wouldn't.""", "Canteen note"),
+        ("cabin_log", (-60.0, 48.0), "Note", """Jana -
+
+We're staying with the station, Hedvika and me. The district needs its
+weather, and someone has to say what comes over the col.
+
+The car's still running. I'll be down Sundays. Keep the boys warm in
+town and don't let them fight.
+
+- Ota""", "Ota's letter"),
+        ("ranger_tower", (60.0, -170.0), "Note", """AVALANCHE WATCH
+
+Chute one loaded. Chute two loaded. Galleries open.
+
+(another hand, February) Chute two ran in the night. Gallery three
+held. Nobody left to clear the road.
+
+The machines walked over the slide in the morning as if it wasn't
+there. - H.S.""", "Watch log"),
+        ("mast_hut", (20.0, -245.0), "Note", """COL HUT BOOK
+
+30 Oct. Over to the cirque for the observatory: the tarn is lit up
+green at night. Something on the far side, building. - O.B.
+
+2 Nov. They came over the col in a line, one after another, and
+never looked at the hut. - H.S.
+
+(last) Phoned it down. Nobody answered at the gate.""", "Col hut book"),
+        ("pump_station", (240.0, -60.0), "Terminal", [
+            "COMPRESSOR HOUSE\nAIR TO ADIT\n\nCOMP 1    OFF  15 OCT\nCOMP 2    OFF  15 OCT\n\nADIT DOOR\nOPENED    4 NOV\nCARD      NONE",
+        ], "Compressor terminal"),
+    ],
 }
 
 

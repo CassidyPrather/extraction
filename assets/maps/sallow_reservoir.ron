@@ -441,6 +441,11 @@
         // The Custodian's gantry over the rows.
         (prefab: "sorting_gantry", at: (100.0, -82.0), rot: 0.0),
         (prefab: "stock_bins", at: (30.0, -130.0), rot: 90.0),
+        // More rows toward the haul ramp and the Gate: cover in clumps on
+        // the open east bed (the fifth sims lost four to drones out there).
+        (prefab: "stock_buses", at: (132.0, -40.0), rot: 20.0),
+        (prefab: "stock_bins", at: (80.0, -12.0), rot: 0.0),
+        (prefab: "stock_buses", at: (168.0, -150.0), rot: 330.0),
         (prefab: "stock_bins", at: (30.0, -140.0), rot: 90.0),
 
         // The causeway's toll hut.
