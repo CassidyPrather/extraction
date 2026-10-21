@@ -12,6 +12,7 @@ pub mod audio_score;
 pub mod bot;
 pub mod camp;
 pub mod capstone;
+pub mod capture;
 pub mod dev;
 pub mod foley;
 pub mod gadgets;
@@ -30,6 +31,7 @@ pub mod qa;
 pub mod raid;
 pub mod render;
 pub mod rig;
+pub mod robot_voice;
 pub mod robots;
 pub mod sim;
 pub mod tour;
@@ -84,6 +86,7 @@ impl Plugin for GamePlugin {
                 onboarding::OnboardingPlugin,
                 progression::ProgressionPlugin,
                 foley::FoleyPlugin,
+                robot_voice::VoicePlugin,
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin));
@@ -112,6 +115,7 @@ impl Plugin for ClientPlugin {
             gadgets::visuals::GadgetVisualsPlugin,
             models::ModelsPlugin,
         ))
+        .add_plugins(capture::CapturePlugin)
         .add_plugins(onboarding::visuals::OnboardingVisualsPlugin)
         .init_resource::<render::materials::MaterialLibrary>()
         .add_systems(

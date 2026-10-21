@@ -10,6 +10,8 @@ pub mod fog;
 pub mod grade;
 pub mod kit;
 pub mod kitchen;
+pub mod legibility;
+pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
 pub mod materials;
@@ -61,12 +63,19 @@ impl Plugin for RenderPlugin {
         .add_plugins(crate::raid::epilogue::EpilogueVisualsPlugin)
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
+        .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
-        .add_systems(PostUpdate, grade::dim_indoors)
+        // After the underground's darkening, which takes whatever ambient it
+        // finds for the sky's: run before it, the room's dimming was taken
+        // for daylight and the light ran down to nothing indoors.
+        .add_systems(
+            PostUpdate,
+            grade::dim_indoors.after(crate::world::underground::go_dark),
+        )
         .add_systems(Update, attach_flat_camera)
         .add_systems(
             Update,

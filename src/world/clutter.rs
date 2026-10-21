@@ -132,7 +132,7 @@ fn wall(model: &'static str, at: Vec3) -> (&'static str, Transform) {
 
 /// What a house holds, building-local: `prefab` placed at `xf` (its tag
 /// `tag`) on `map`; `epilogue` once Lev has been home
-/// (`progression::Epilogue`), which hangs the collar on Hana's lead.
+/// (`raid::epilogue::Epilogue`), which hangs the collar on Hana's lead.
 pub fn dress(
     map: &MapDef,
     prefab: &str,

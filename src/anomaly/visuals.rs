@@ -64,6 +64,8 @@ impl Plugin for AnomalyVisualsPlugin {
                 blink_flashes,
                 dress_items,
                 detector_lamps,
+                stone_lamps,
+                bear_screens,
                 xray_parts,
                 glass_eye,
             ),
@@ -149,6 +151,9 @@ pub struct HazeParams {
     pub wave: Vec4,
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
+    /// x: how much colour it drains from what's seen through it (a Hush's
+    /// dead air), y: how much it dims it.
+    pub drain: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -224,6 +229,7 @@ struct AnomalyAssets {
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
+    hushed: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
 }
@@ -317,6 +323,7 @@ fn init_assets(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
+    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
@@ -332,6 +339,7 @@ fn init_assets(
         flattened,
         glassy,
         crushed,
+        hushed,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
             emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
@@ -540,6 +548,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.0, 0.0, 0.0),
                         wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -559,6 +568,7 @@ fn dress_anomalies(
                         shape: Vec4::new(1.0, 2.4, 0.0, 0.0),
                         wave: Vec4::new(0.5, 1.6, 1.4, 0.0),
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -575,6 +585,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 0.8, 0.0, 0.0),
                         wave: Vec4::new(0.08, 2.5, 3.0, 0.0),
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -597,6 +608,7 @@ fn dress_anomalies(
                         shape: Vec4::new(2.0, 0.0, 0.0, 0.0),
                         wave: Vec4::new(0.04, 1.5, 0.5, 1.0),
                         tint: Vec4::ZERO,
+                        drain: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -613,8 +625,30 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, MIRROR_HEIGHT, 0.0, 0.0),
                         wave: Vec4::new(0.3, 0.9, 0.6, 1.0),
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
+                        drain: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
+                    0.0,
+                )),
+            ),
+            // Dead air: pale dust hanging still, a ground drained of colour,
+            // and no light of its own.
+            AnomalyKind::Hush => (
+                Some(&a.hushed),
+                vec![soft(7.0, 220, 0.06, Vec3::new(0.85, 0.85, 0.82), 0.9)],
+                (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
+                // Seen through, the world inside goes grey and a little
+                // dim: a bubble with the colour gone out of it.
+                Some((
+                    1.02,
+                    0.2,
+                    HazeParams {
+                        shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
+                        wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
+                        tint: Vec4::ZERO,
+                        drain: Vec4::new(0.95, 0.4, 0.0, 0.0),
+                    },
+                    Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
                 )),
             ),
@@ -769,6 +803,7 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
         AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
         AnomalyKind::Lift => 0.3 + 0.7 * charge,
         AnomalyKind::Mirror => 0.5 + 0.1 * (t * 0.7).sin(),
+        AnomalyKind::Hush => 0.5,
     };
     v.clamp(0.0, 1.0)
 }
@@ -1067,7 +1102,16 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 4] = ["bolt", "detector", "art_lodestone", "art_shard"];
+const OWN_LOOKS: [&str; 8] = [
+    "bolt",
+    "detector",
+    "art_lodestone",
+    "art_shard",
+    "art_stormglass",
+    "detector_sweep",
+    "detector_bear",
+    "art_hushstone",
+];
 
 /// Claims the look of an anomaly item as it's spawned, before the item
 /// placeholder system gives it a box.
@@ -1162,6 +1206,8 @@ fn dress_items(
         };
         let mut parts: Vec<(Handle<Mesh>, Handle<StandardMaterial>, Transform)> = Vec::new();
         let mut lamp = None;
+        let mut stone_lamp = None;
+        let mut screen = false;
         match id {
             "bolt" => {
                 let steel = mat(Color::srgb(0.36, 0.3, 0.25), 0.7, 0.65, LinearRgba::BLACK);
@@ -1182,8 +1228,14 @@ fn dress_items(
                     Transform::from_xyz(0.0, 0.0, 0.018).with_rotation(along),
                 ));
             }
-            "detector" => {
-                let olive = mat(Color::srgb(0.36, 0.4, 0.24), 0.15, 0.6, LinearRgba::BLACK);
+            "detector" | "detector_sweep" | "detector_bear" => {
+                // The Authority's Bear is grey; the survey sets olive.
+                let body = if id == "detector_bear" {
+                    Color::srgb(0.32, 0.33, 0.34)
+                } else {
+                    Color::srgb(0.36, 0.4, 0.24)
+                };
+                let olive = mat(body, 0.15, 0.6, LinearRgba::BLACK);
                 let face = mat(Color::srgb(0.85, 0.82, 0.7), 0.0, 0.4, LinearRgba::BLACK);
                 let black = mat(Color::srgb(0.04, 0.04, 0.04), 0.3, 0.5, LinearRgba::BLACK);
                 let glass = mat(
@@ -1199,11 +1251,14 @@ fn dress_items(
                 ));
                 // A dial and a grille on top, a carrying handle along the
                 // side.
-                parts.push((
-                    meshes.add(Cylinder::new(0.016, 0.003).mesh().resolution(20)),
-                    face,
-                    Transform::from_xyz(0.012, 0.021, 0.05),
-                ));
+                // (The Bear's screen takes the dial's place.)
+                if id != "detector_bear" {
+                    parts.push((
+                        meshes.add(Cylinder::new(0.016, 0.003).mesh().resolution(20)),
+                        face,
+                        Transform::from_xyz(0.012, 0.021, 0.05),
+                    ));
+                }
                 parts.push((
                     meshes.add(Cuboid::new(0.03, 0.004, 0.03)),
                     black.clone(),
@@ -1222,7 +1277,7 @@ fn dress_items(
                 ));
                 parts.push((
                     meshes.add(Sphere::new(0.006).mesh().ico(1).unwrap()),
-                    black,
+                    black.clone(),
                     Transform::from_xyz(0.018, 0.0, -0.078),
                 ));
                 parts.push((
@@ -1231,6 +1286,41 @@ fn dress_items(
                     Transform::from_xyz(-0.02, 0.021, -0.01),
                 ));
                 lamp = Some(glass);
+                if id == "detector_sweep" {
+                    // A long whip antenna, and a green lamp for stones.
+                    parts.push((
+                        meshes.add(Cylinder::new(0.0025, 0.16).mesh().resolution(6)),
+                        black.clone(),
+                        Transform::from_xyz(0.018, 0.0, -0.16)
+                            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+                    ));
+                    let green = mat(
+                        Color::srgb(0.02, 0.12, 0.03),
+                        0.0,
+                        0.2,
+                        LinearRgba::rgb(0.0, 0.1, 0.02),
+                    );
+                    parts.push((
+                        meshes.add(Sphere::new(0.005).mesh().ico(1).unwrap()),
+                        green.clone(),
+                        Transform::from_xyz(-0.03, 0.021, -0.01),
+                    ));
+                    stone_lamp = Some(green);
+                }
+                if id == "detector_bear" {
+                    // A round screen on top, facing up and back at you.
+                    parts.push((
+                        meshes.add(Cylinder::new(0.03, 0.004).mesh().resolution(32)),
+                        mat(
+                            Color::srgb(0.01, 0.03, 0.015),
+                            0.0,
+                            0.15,
+                            LinearRgba::rgb(0.0, 0.02, 0.005),
+                        ),
+                        Transform::from_xyz(0.0, 0.022, 0.035),
+                    ));
+                    screen = true;
+                }
             }
             "art_lodestone" => {
                 let iron = mat(
@@ -1271,17 +1361,154 @@ fn dress_items(
                 });
                 parts.push((meshes.add(shard_mesh()), glass, Transform::IDENTITY));
             }
+            "art_hushstone" => {
+                // A flat grey pebble, matte as felt.
+                let felt = mat(Color::srgb(0.42, 0.42, 0.4), 0.0, 0.98, LinearRgba::BLACK);
+                parts.push((
+                    meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
+                    felt,
+                    Transform::from_scale(Vec3::new(0.025, 0.012, 0.02)),
+                ));
+            }
+            "art_stormglass" => {
+                // A clouded bead: milky glass with a cold light in it.
+                let glass = materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.82, 0.86, 0.92, 0.85),
+                    perceptual_roughness: 0.25,
+                    emissive: LinearRgba::rgb(0.05, 0.08, 0.14),
+                    alpha_mode: AlphaMode::Blend,
+                    ..default()
+                });
+                parts.push((
+                    meshes.add(Sphere::new(0.02).mesh().ico(3).unwrap()),
+                    glass,
+                    Transform::IDENTITY,
+                ));
+            }
             _ => continue,
         }
         commands.entity(e).insert(Visibility::default());
         if let Some(material) = lamp {
             commands.entity(e).insert(Lamp { material, lit: 0.0 });
         }
+        if let Some(material) = stone_lamp {
+            commands.entity(e).insert(StoneLamp { material, lit: 0.0 });
+        }
+        if screen {
+            // A pool of blips on the screen, placed by `bear_screens`.
+            let dot = meshes.add(Cylinder::new(0.0022, 0.001).mesh().resolution(8));
+            let stone = materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: LinearRgba::rgb(2.0, 8.0, 2.5),
+                unlit: true,
+                ..default()
+            });
+            let ring = materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: LinearRgba::rgb(0.3, 1.6, 0.5),
+                unlit: true,
+                ..default()
+            });
+            let mut blips = Vec::new();
+            commands.entity(e).with_children(|c| {
+                for i in 0..BEAR_BLIPS {
+                    let m = if i < BEAR_BLIPS / 2 { &stone } else { &ring };
+                    blips.push(
+                        c.spawn((
+                            Mesh3d(dot.clone()),
+                            MeshMaterial3d(m.clone()),
+                            Transform::from_xyz(0.0, 0.025, 0.035),
+                            Visibility::Hidden,
+                        ))
+                        .id(),
+                    );
+                }
+            });
+            commands.entity(e).insert(BearBlips(blips));
+        }
         commands.entity(e).with_children(|c| {
             for (mesh, material, tf) in parts {
                 c.spawn((Mesh3d(mesh), MeshMaterial3d(material), tf));
             }
         });
+    }
+}
+
+/// A sweep's green lamp, lit by each stone ping.
+#[derive(Component)]
+struct StoneLamp {
+    material: Handle<StandardMaterial>,
+    lit: f32,
+}
+
+/// Blips on a Bear's screen: the first half stones, the rest anomalies.
+#[derive(Component)]
+struct BearBlips(Vec<Entity>);
+
+const BEAR_BLIPS: usize = 24;
+/// The screen's radius and centre, item space.
+const SCREEN_R: f32 = 0.027;
+const SCREEN_AT: Vec3 = Vec3::new(0.0, 0.0245, 0.035);
+
+/// Places a held Bear's blips: stones as bright dots, anomalies as dim
+/// ones sized by their reach. Up the screen is the way you face (-Z).
+fn bear_screens(
+    screens: Query<(&super::detector::BearScreen, &BearBlips)>,
+    mut blips: Query<(&mut Transform, &mut Visibility)>,
+) {
+    for (screen, pool) in &screens {
+        let half = pool.0.len() / 2;
+        let place = |i: usize,
+                     at: Option<([f32; 2], f32)>,
+                     blips: &mut Query<(&mut Transform, &mut Visibility)>| {
+            if let Ok((mut tf, mut vis)) = blips.get_mut(pool.0[i]) {
+                match at {
+                    Some((p, size)) => {
+                        tf.translation =
+                            SCREEN_AT + Vec3::new(p[0] * SCREEN_R, 0.0, -p[1] * SCREEN_R);
+                        tf.scale = Vec3::splat(size);
+                        vis.set_if_neq(Visibility::Inherited);
+                    }
+                    None => {
+                        vis.set_if_neq(Visibility::Hidden);
+                    }
+                }
+            }
+        };
+        for i in 0..half {
+            place(i, screen.stones.get(i).map(|p| (*p, 1.0)), &mut blips);
+        }
+        for i in 0..pool.0.len() - half {
+            let a = screen
+                .anomalies
+                .get(i)
+                .map(|(p, r)| (*p, (1.0 + r * 8.0).min(4.0)));
+            place(half + i, a, &mut blips);
+        }
+    }
+}
+
+/// A sweep's green lamp flashes with each stone ping.
+fn stone_lamps(
+    mut pings: MessageReader<super::detector::StonePing>,
+    mut lamps: Query<&mut StoneLamp>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+) {
+    for p in pings.read() {
+        if let Ok(mut l) = lamps.get_mut(p.detector) {
+            l.lit = 1.0;
+        }
+    }
+    let dt = time.delta_secs();
+    for mut l in &mut lamps {
+        if l.lit <= 0.0 {
+            continue;
+        }
+        l.lit = (l.lit - dt * 8.0).max(0.0);
+        if let Some(mut m) = materials.get_mut(&l.material) {
+            m.emissive = LinearRgba::rgb(0.0, 0.1 + 20.0 * l.lit, 0.02 + 4.0 * l.lit);
+        }
     }
 }
 

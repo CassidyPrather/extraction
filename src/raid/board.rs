@@ -324,6 +324,7 @@ fn pin_cards(
         commands.spawn((
             Name::new("Pinned note"),
             Pin { id: id.clone() },
+            crate::render::legibility::TextSource::PinnedNote,
             ScreenText {
                 text: crate::render::screen::wrap_to_fit(name, CARD, ScreenStyle::Card),
                 size: CARD,
@@ -347,6 +348,7 @@ fn pin_cards(
             commands.spawn((
                 Name::new("Board column"),
                 ColumnHead(col),
+                crate::render::legibility::TextSource::BoardColumn,
                 ScreenText {
                     text: name,
                     size: Vec2::new(column_width(columns()[col].1) - 0.03, HEADER - 0.015),
@@ -415,6 +417,7 @@ fn press_cards(
         commands.spawn((
             Name::new("Note taken down"),
             TakenDown { id: pin.id.clone() },
+            crate::render::legibility::TextSource::Note,
             note,
             Pressable::Note,
             Grabbable {
@@ -562,7 +565,7 @@ fn string_visuals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{MIN_EM_DEG, em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel};
 
     /// Every card that could be pinned reads from the bed, and every
     /// valley's notes fit their column without overlapping.
@@ -577,8 +580,9 @@ mod tests {
                 size: CARD,
                 style: ScreenStyle::Card,
             };
-            let deg = (em_metres(&card) / read_from(&card)).atan().to_degrees();
-            assert!(deg >= MIN_EM_DEG, "{id}: {deg:.2} deg");
+            if let Err(e) = check_panel(&card, TextSource::PinnedNote) {
+                panic!("{id}: {e}");
+            }
         }
         let ids: Vec<String> = all.iter().map(|(i, _)| i.clone()).collect();
         // Every valley's notes fit its column, and the columns the board.

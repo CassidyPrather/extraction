@@ -4,11 +4,13 @@
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
 pub mod ao;
+pub mod beams;
 pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
 pub mod decay;
+pub mod halos;
 pub mod impostors;
 pub mod notes;
 pub mod overgrowth;
@@ -236,6 +238,8 @@ impl Plugin for WorldVisualsPlugin {
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
             shafts::ShaftsPlugin,
+            beams::BeamsPlugin,
+            halos::HalosPlugin,
         ));
     }
 }

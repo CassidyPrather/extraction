@@ -412,9 +412,10 @@ fn first_person_hands(
         // The left wrist's display, as the game mounts it.
         if side == Side::Left {
             commands.spawn((
+                crate::render::legibility::TextSource::Dev,
                 crate::raid::bench::ScreenText {
-                    text: "SURGE 12m  14.2kg\nHP 100".into(),
-                    size: Vec2::new(0.075, 0.045),
+                    text: "SURGE 12M  14.2KG\nHP 100".into(),
+                    size: crate::render::comfort::WRIST_SIZE,
                     style: crate::raid::bench::ScreenStyle::Lcd,
                 },
                 crate::render::props::wrist_mount(crate::rig::Side::Left),

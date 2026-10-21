@@ -1,0 +1,7 @@
+# Cinder Works at night: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+# n02 looks up the sun's path, where the moon rides.
+n01_gate        -110,0,255,10,-2
+n02_moon        -110,0,255,345,28
+n03_ash_row     -55,0,190,0,-3
+n04_works       0,0,40,53,4
+n05_dead_wood   -150,0,-150,0,-2

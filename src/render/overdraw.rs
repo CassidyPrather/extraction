@@ -139,6 +139,9 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         let Some(m) = w.get::<Mesh3d>(e) else {
             continue;
         };
+        if w.get::<crate::render::warmup::ShelfMark>(e).is_some() {
+            continue;
+        }
         // Streaks are counted below, as their shader places them.
         if w.get::<MeshMaterial3d<crate::world::rain::RainMaterial>>(e)
             .is_some()
