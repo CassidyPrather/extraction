@@ -13,6 +13,7 @@
 pub mod census;
 #[cfg(test)]
 mod chaos;
+pub mod drive;
 #[cfg(test)]
 mod physics;
 #[cfg(test)]

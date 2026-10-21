@@ -22,6 +22,8 @@ impl Plugin for PryCuePlugin {
 
 /// How near a seam must be to the bar's hand to show (m).
 pub const SHOW_WITHIN: f32 = 3.0;
+/// The ring's size at a seam (m), before its pulse.
+pub const SEAM_RING: f32 = 0.1;
 
 #[derive(Component)]
 struct PryCue;
@@ -87,7 +89,7 @@ fn pry_cues(
         if let Ok((mut t, mut v)) = cues.get_mut(cue) {
             t.translation = at;
             t.rotation = Quat::from_rotation_arc(Vec3::Y, (hand - at).normalize_or(Vec3::Y));
-            t.scale = Vec3::splat(p.radius.clamp(0.04, 0.12) * pulse);
+            t.scale = Vec3::splat(SEAM_RING * pulse);
             *v = Visibility::Visible;
         }
     }
@@ -132,7 +134,8 @@ mod tests {
             Pryable {
                 needs: 50.0,
                 seam: Vec3::new(0.0, 0.5, 0.0),
-                radius: 0.1,
+                along: Vec3::X,
+                held: 0.0,
             }
             .clone_with(at)
         };
