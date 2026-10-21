@@ -4,11 +4,14 @@
 //! headless. [`WorldVisualsPlugin`] attaches everything you can see.
 
 pub mod ao;
+pub mod beams;
 pub mod bridges;
 pub mod buildings;
 pub mod clutter;
 pub mod cover;
+pub mod dam;
 pub mod decay;
+pub mod halos;
 pub mod impostors;
 pub mod notes;
 pub mod overgrowth;
@@ -130,6 +133,9 @@ pub enum Layer {
     Hand,
     /// Inside the backpack: items here collide with nothing.
     Stowed,
+    /// Shards and splinters (`destruction::debris`): they fall on the
+    /// world and nothing else, and no query looks for them.
+    Debris,
 }
 
 pub struct WorldPlugin;
@@ -236,6 +242,8 @@ impl Plugin for WorldVisualsPlugin {
             cover::CoverPlugin,
             underground::UndergroundVisualsPlugin,
             shafts::ShaftsPlugin,
+            beams::BeamsPlugin,
+            halos::HalosPlugin,
         ));
     }
 }

@@ -4,6 +4,16 @@
 //! until its pipeline is ready. On a headset that's a muzzle flash that
 //! never shows (it lives 35 ms) or an anomaly that blooms a beat late.
 //!
+//! So for the first seconds of a session ([`WARM_FOR`] frames, while the
+//! player is still in the truck) every kind of thing the world holds is
+//! drawn once on a shelf in front of the eye, too small to cover a pixel:
+//! one entry for each material key, mesh layout, and the flags that
+//! change a pipeline (a visibility range's dither, casting a shadow),
+//! plus every effect material nothing wears yet (a muzzle flash, a
+//! spark). Each pipeline is queued then, not when the effect first shows.
+//! `EXTRACTION_WARMUP=0` leaves the shelf out (to measure without it);
+//! `EXTRACTION_WARMUP=<frames>` keeps it stocked that long.
+//!
 //! - `EXTRACTION_PIPELINES=1` logs every pipeline as it's queued and as
 //!   it's ready (frames and ms after it was queued).
 //! - `EXTRACTION_FIRSTS=<frame>` sets off the raid's effects one by one
@@ -14,11 +24,41 @@
 //! See docs/PERFORMANCE.md, "Hitches".
 
 use bevy::prelude::*;
+use bevy::render::render_resource::AsBindGroup;
 
 pub struct WarmupPlugin;
 
 impl Plugin for WarmupPlugin {
     fn build(&self, app: &mut App) {
+        if std::env::var("EXTRACTION_WARMUP").map_or(true, |v| v != "0") {
+            use crate::anomaly::visuals::{HazeMaterial, ParticleMaterial, XrayMaterial};
+            use crate::world::{cover, impostors, rain, shafts, sky, trees};
+            app.init_resource::<Shelf>().add_systems(
+                Last,
+                (
+                    record_layouts,
+                    shelve_start,
+                    (
+                        shelve::<StandardMaterial>,
+                        shelve::<super::terrain_material::TerrainMaterial>,
+                        shelve::<super::water_material::WaterMaterial>,
+                        shelve::<trees::TreeSwayMaterial>,
+                        shelve::<trees::FarCrownMaterial>,
+                        shelve::<impostors::ImpostorMaterial>,
+                        shelve::<cover::SwayMaterial>,
+                        shelve::<rain::RainMaterial>,
+                        shelve::<shafts::ShaftMaterial>,
+                        shelve::<sky::SkyMaterial>,
+                        shelve::<HazeMaterial>,
+                        shelve::<ParticleMaterial>,
+                        shelve::<XrayMaterial>,
+                    ),
+                    shelve_unworn,
+                    shelve_end,
+                )
+                    .chain(),
+            );
+        }
         if std::env::var_os("EXTRACTION_PIPELINES").is_some() {
             if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
                 use bevy::render::{Render, RenderSystems};
@@ -299,4 +339,375 @@ pub(crate) fn bloom(world: &mut World, kind: extraction_core::anomaly::AnomalyKi
         at,
         what: AnomalyAct::Bloom,
     });
+}
+
+/// Frames from the first camera that the shelf is kept stocked.
+pub const WARM_FOR: u32 = 900;
+/// Frames between restocking (what's streamed in since gets its turn).
+const RESTOCK: u32 = 45;
+/// Frames a shelf entry stays: enough to be specialised and queued.
+const KEEP: u32 = 8;
+
+/// The warm-up's state: what has been shelved (by pipeline-relevant
+/// signature), what's on the shelf now, and the camera it hangs from.
+#[derive(Resource)]
+struct Shelf {
+    /// Frames to keep stocked (`WARM_FOR`, or `EXTRACTION_WARMUP=<n>`).
+    warm_for: u32,
+    frame: u32,
+    camera: Option<Entity>,
+    stocking: bool,
+    /// Shelved this restock.
+    seen: std::collections::HashSet<u64>,
+    /// Shelved at all (each a pipeline's worth, more or less).
+    kinds: std::collections::HashSet<u64>,
+    on: Vec<(Entity, u32)>,
+    layouts: std::collections::HashMap<AssetId<Mesh>, u64>,
+    cube: Option<Handle<Mesh>>,
+    shelved: usize,
+    /// What was shelved, by material type.
+    by_type: std::collections::BTreeMap<String, usize>,
+    /// One anomaly of each kind, far under the world, for the first
+    /// restock: a valley's cycle may hold none of a kind the Surge can
+    /// open, and its looks are only built for an anomaly.
+    decoys: Vec<Entity>,
+}
+
+impl Default for Shelf {
+    fn default() -> Self {
+        Self {
+            warm_for: std::env::var("EXTRACTION_WARMUP")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(WARM_FOR),
+            frame: 0,
+            camera: None,
+            stocking: false,
+            seen: default(),
+            kinds: default(),
+            on: Vec::new(),
+            layouts: default(),
+            cube: None,
+            shelved: 0,
+            by_type: default(),
+            decoys: Vec::new(),
+        }
+    }
+}
+
+/// Where the decoys are: under the world, out of every reach.
+const DECOYS_AT: Vec3 = Vec3::new(0.0, -5000.0, 0.0);
+
+impl Shelf {
+    /// Puts one thing on the shelf: tiny, in front of the eye, with the
+    /// flags its pipeline depends on.
+    fn put(
+        &mut self,
+        commands: &mut Commands,
+        mesh: Handle<Mesh>,
+        ranged: bool,
+        caster: bool,
+    ) -> Option<Entity> {
+        let cam = self.camera?;
+        let mut e = commands.spawn((
+            Name::new("Warm-up shelf"),
+            Mesh3d(mesh),
+            Transform::from_xyz(0.0, 0.0, -0.3).with_scale(Vec3::splat(1e-6)),
+            // Bounds of its own: some meshes can't be bounded from their
+            // data (particles placed in the shader, or the data's gone to
+            // the render world), and an unbounded mesh isn't drawn.
+            bevy::camera::primitives::Aabb::from_min_max(Vec3::splat(-1.0), Vec3::splat(1.0)),
+            bevy::camera::visibility::NoAutoAabb,
+            ChildOf(cam),
+        ));
+        if ranged {
+            e.insert(bevy::camera::visibility::VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: 1e5..1e5 + 1.0,
+                use_aabb: false,
+            });
+        }
+        if !caster {
+            e.insert(bevy::light::NotShadowCaster);
+        }
+        let e = e.id();
+        self.on.push((e, self.frame + KEEP));
+        self.shelved += 1;
+        Some(e)
+    }
+}
+
+fn hash_of(v: impl std::hash::Hash) -> u64 {
+    use std::hash::Hasher;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    v.hash(&mut h);
+    h.finish()
+}
+
+/// What a mesh's pipeline depends on: its attributes and topology (none
+/// once its data has gone to the render world).
+fn layout_of(mesh: &Mesh) -> Option<u64> {
+    let attrs: Vec<String> = mesh
+        .try_attributes()
+        .ok()?
+        .map(|(a, _)| format!("{:?}", a.id))
+        .collect();
+    let indexed = mesh.try_indices_option().ok()?.is_some();
+    Some(hash_of((
+        attrs,
+        format!("{:?}", mesh.primitive_topology()),
+        indexed,
+    )))
+}
+
+/// Each mesh's layout as it arrives, before the render world takes its
+/// data.
+fn record_layouts(
+    mut shelf: ResMut<Shelf>,
+    mut events: MessageReader<AssetEvent<Mesh>>,
+    meshes: Res<Assets<Mesh>>,
+) {
+    if shelf.frame > shelf.warm_for {
+        events.clear();
+        return;
+    }
+    for ev in events.read() {
+        if let AssetEvent::Added { id } | AssetEvent::Modified { id } = ev {
+            if let Some(l) = meshes.get(*id).and_then(layout_of) {
+                shelf.layouts.insert(*id, l);
+            }
+        }
+    }
+}
+
+fn shelve_start(
+    mut shelf: ResMut<Shelf>,
+    mut commands: Commands,
+    eyes: Query<Entity, With<bevy_mod_xr::camera::XrCamera>>,
+    free: Query<Entity, With<super::FreeCamera>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    // The headset's eye once there is one (it comes with the session),
+    // else the flat camera.
+    if let Some(eye) = eyes.iter().next() {
+        if shelf.camera != Some(eye) {
+            for (e, _) in shelf.on.drain(..) {
+                commands.entity(e).try_despawn();
+            }
+            *shelf = Shelf {
+                camera: Some(eye),
+                ..default()
+            };
+        }
+    } else if shelf.camera.is_none() {
+        shelf.camera = free.iter().next();
+    }
+    shelf.stocking = false;
+    if shelf.camera.is_none() || shelf.frame > shelf.warm_for + KEEP {
+        return;
+    }
+    shelf.frame += 1;
+    let now = shelf.frame;
+    shelf.on.retain(|(e, until)| {
+        if *until > now {
+            return true;
+        }
+        commands.entity(*e).try_despawn();
+        false
+    });
+    if shelf.cube.is_none() {
+        shelf.cube = Some(meshes.add(Cuboid::new(1.0, 1.0, 1.0)));
+    }
+    // The decoys come in now, are dressed next frame, are shelved at the
+    // second restock and go.
+    if now == 1 {
+        commands.queue(|world: &mut World| {
+            let decoys: Vec<Entity> = extraction_core::anomaly::AnomalyKind::ALL
+                .into_iter()
+                .map(|kind| {
+                    let (lo, hi) = kind.radius_range();
+                    crate::anomaly::spawn_anomaly(world, kind, DECOYS_AT, (lo + hi) * 0.5, None)
+                })
+                .collect();
+            world.resource_mut::<Shelf>().decoys = decoys;
+        });
+    }
+    if now == RESTOCK + 2 {
+        for e in std::mem::take(&mut shelf.decoys) {
+            commands.entity(e).try_despawn();
+        }
+    }
+    shelf.stocking = now <= shelf.warm_for && now % RESTOCK == 1;
+    // Every restock shelves everything again: a material isn't drawn
+    // (nor its pipeline built) until its textures are in, which can be
+    // after the restock that first saw it.
+    if shelf.stocking {
+        shelf.seen.clear();
+    }
+}
+
+/// One entry for every distinct (material key, mesh layout, range,
+/// shadow) among the things in the world wearing an `M`.
+#[allow(clippy::type_complexity)]
+fn shelve<M: Material>(
+    mut shelf: ResMut<Shelf>,
+    mut commands: Commands,
+    worn: Query<
+        (
+            &Mesh3d,
+            &MeshMaterial3d<M>,
+            Has<bevy::camera::visibility::VisibilityRange>,
+            Has<bevy::light::NotShadowCaster>,
+        ),
+        (
+            Without<bevy::mesh::skinning::SkinnedMesh>,
+            Without<ShelfMark>,
+        ),
+    >,
+    materials: Res<Assets<M>>,
+) where
+    M::Data: std::hash::Hash,
+{
+    if !shelf.stocking {
+        return;
+    }
+    let ty = std::any::type_name::<M>();
+    for (mesh, mat, ranged, no_shadow) in &worn {
+        let Some(m) = materials.get(&mat.0) else {
+            continue;
+        };
+        // A mesh whose layout wasn't seen counts as its own.
+        let layout = shelf
+            .layouts
+            .get(&mesh.0.id())
+            .copied()
+            .unwrap_or_else(|| hash_of(mesh.0.id()));
+        let key = hash_of((
+            ty,
+            m.bind_group_data(),
+            format!("{:?}", m.alpha_mode()),
+            m.depth_bias().to_bits(),
+            layout,
+            ranged,
+            no_shadow,
+        ));
+        if !shelf.seen.insert(key) {
+            continue;
+        }
+        if shelf.kinds.insert(key) {
+            let short = ty.rsplit("::").next().unwrap_or(ty).to_string();
+            *shelf.by_type.entry(short).or_default() += 1;
+        }
+        if let Some(e) = shelf.put(&mut commands, mesh.0.clone(), ranged, !no_shadow) {
+            commands
+                .entity(e)
+                .insert((MeshMaterial3d(mat.0.clone()), ShelfMark));
+        }
+    }
+}
+
+/// Marks a shelf entry, so restocking doesn't count it.
+#[derive(Component)]
+pub struct ShelfMark;
+
+/// The effects' materials nothing wears yet (spawned only when a shot
+/// lands or a gun fires): on a box, which has their meshes' layout.
+fn shelve_unworn(
+    mut shelf: ResMut<Shelf>,
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !shelf.stocking {
+        return;
+    }
+    let Some(cube) = shelf.cube.clone() else {
+        return;
+    };
+    let layout = layout_of(&Mesh::from(Cuboid::new(1.0, 1.0, 1.0))).unwrap_or_default();
+    let ty = std::any::type_name::<StandardMaterial>();
+    let ids: Vec<AssetId<StandardMaterial>> = materials.ids().collect();
+    for id in ids {
+        let Some(m) = materials.get(id) else {
+            continue;
+        };
+        let key = hash_of((
+            ty,
+            m.bind_group_data(),
+            format!("{:?}", m.alpha_mode()),
+            m.depth_bias().to_bits(),
+            layout,
+            false,
+            true,
+        ));
+        if !shelf.seen.insert(key) {
+            continue;
+        }
+        let Some(handle) = materials.get_strong_handle(id) else {
+            continue;
+        };
+        if shelf.kinds.insert(key) {
+            *shelf.by_type.entry("unworn".into()).or_default() += 1;
+        }
+        if let Some(e) = shelf.put(&mut commands, cube.clone(), false, false) {
+            commands
+                .entity(e)
+                .insert((MeshMaterial3d(handle), ShelfMark));
+        }
+    }
+}
+
+fn shelve_end(shelf: Res<Shelf>, mut logged: Local<bool>) {
+    if shelf.frame > shelf.warm_for && !*logged {
+        *logged = true;
+        info!(
+            "warm-up: {} kinds of thing shelved ({} entries) over {} frames: {:?}",
+            shelf.kinds.len(),
+            shelf.shelved,
+            shelf.warm_for,
+            shelf.by_type
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shelf stocks itself in the first seconds, its decoy anomalies
+    /// go after the second restock, and nothing of it is left after.
+    #[test]
+    fn the_shelf_stocks_and_clears() {
+        let _one_at_a_time = super::super::budget::tests::heavy();
+        let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
+        let decoys = |app: &mut App| {
+            let w = app.world_mut();
+            w.query_filtered::<&Transform, With<crate::anomaly::Anomaly>>()
+                .iter(w)
+                .filter(|t| t.translation.y < DECOYS_AT.y + 1.0)
+                .count()
+        };
+        let shelved = |app: &mut App| {
+            let w = app.world_mut();
+            w.query_filtered::<(), With<ShelfMark>>().iter(w).count()
+        };
+        let mut most = 0;
+        let mut saw_decoys = 0;
+        for _ in 0..(WARM_FOR + KEEP + 20) {
+            app.update();
+            most = most.max(shelved(&mut app));
+            saw_decoys = saw_decoys.max(decoys(&mut app));
+        }
+        let kinds = extraction_core::anomaly::AnomalyKind::ALL.len();
+        assert_eq!(saw_decoys, kinds, "a decoy of each kind");
+        assert_eq!(decoys(&mut app), 0, "the decoys gone");
+        assert!(most > 20, "the shelf stocked ({most} at most)");
+        assert_eq!(shelved(&mut app), 0, "the shelf cleared");
+        let shelf = app.world().resource::<Shelf>();
+        println!(
+            "{} kinds shelved ({} entries): {:?}",
+            shelf.kinds.len(),
+            shelf.shelved,
+            shelf.by_type
+        );
+    }
 }

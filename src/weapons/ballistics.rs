@@ -111,6 +111,9 @@ pub struct Hit {
     pub mass_g: f32,
     /// What the round was loaded with (armour weighs an AP core).
     pub load: Load,
+    /// A blow, not a round: a point, an edge or something blunt (wood and
+    /// robots weigh them differently). `None` for rounds and blasts.
+    pub blow: Option<extraction_core::melee::Blow>,
 }
 
 /// A muzzle flash's light, fading out.
@@ -191,7 +194,7 @@ impl Plugin for BallisticsPlugin {
     }
 }
 
-fn fire_shots(
+pub(crate) fn fire_shots(
     mut commands: Commands,
     mut shots: MessageReader<Shot>,
     mounted: Query<(&crate::gadgets::MountedOn, &crate::items::Item)>,
@@ -372,6 +375,7 @@ pub(crate) fn fly_projectiles(
                 shooter: p.shooter,
                 mass_g: p.mass_g,
                 load: p.load,
+                blow: None,
             });
             match outcome {
                 Outcome::Through { speed: out } => {
@@ -482,7 +486,7 @@ impl Struck<'_, '_> {
             .is_ok_and(|p| matches!(p.role, crate::robots::PartRole::Armour(_)))
     }
 
-    fn stuff(
+    pub(crate) fn stuff(
         &self,
         e: Entity,
         point: Vec3,

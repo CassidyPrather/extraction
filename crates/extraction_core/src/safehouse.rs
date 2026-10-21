@@ -129,6 +129,7 @@ mod tests {
             local: [0.0; 3],
             gun: None,
             inserted: Vec::new(),
+            loads: Default::default(),
         });
         // A quiet raid: nothing comes.
         assert!(s.found(FOUND_AT - 1).is_none());

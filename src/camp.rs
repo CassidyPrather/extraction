@@ -160,12 +160,18 @@ fn spawn_camp(
     let z = 0.016;
     commands.spawn((
         card(CampCard::Title, Vec2::new(1.1, 0.16)),
+        crate::render::legibility::TextSource::CampTitle,
         Transform::from_xyz(0.0, 0.335, z),
         ChildOf(board),
     ));
     let mut career = card(CampCard::Career, Vec2::new(0.52, 0.56));
     career.0.style = ScreenStyle::Paper;
-    commands.spawn((career, Transform::from_xyz(-0.28, -0.08, z), ChildOf(board)));
+    commands.spawn((
+        career,
+        crate::render::legibility::TextSource::CampSheet,
+        Transform::from_xyz(-0.28, -0.08, z),
+        ChildOf(board),
+    ));
     let column = [
         (Some(CampCard::Training), None),
         (Some(CampCard::NewCareer), None),
@@ -177,7 +183,12 @@ fn spawn_camp(
     for (i, (camp_card, comfort)) in column.into_iter().enumerate() {
         let at = Transform::from_xyz(0.38, 0.195 - i as f32 * 0.112, z);
         if let Some(c) = camp_card {
-            commands.spawn((card(c, Vec2::new(0.3, 0.1)), at, ChildOf(board)));
+            commands.spawn((
+                card(c, Vec2::new(0.3, 0.1)),
+                crate::render::legibility::TextSource::Card,
+                at,
+                ChildOf(board),
+            ));
         } else if let Some(c) = comfort {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -188,6 +199,7 @@ fn spawn_camp(
                 },
                 Collider::cuboid(0.3, 0.1, 0.03),
                 CollisionLayers::new(Layer::Item, LayerMask::NONE),
+                crate::render::legibility::TextSource::Card,
                 ScreenText {
                     text: String::new(),
                     size: Vec2::new(0.3, 0.1),

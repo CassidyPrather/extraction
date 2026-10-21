@@ -533,6 +533,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
     if let Some(note) = &scene.note {
         commands.spawn((
             Name::new("Note"),
+            crate::render::legibility::TextSource::Note,
             super::notes::note_panel(&note.text),
             note_pose(t, note),
             Visibility::default(),
@@ -562,6 +563,7 @@ fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled
                 scene: scene.name.clone(),
                 recalled: term.recalled.clone(),
             },
+            crate::render::legibility::TextSource::Terminal,
             super::notes::terminal_panel(text),
             crate::raid::truck::Pressable::Terminal,
             crate::interact::Grabbable {
