@@ -34,8 +34,10 @@ const SPOTS: [[f32; 2]; 6] = [
 ];
 
 /// Open ground for the `i`th scenario's anomaly near its spot: off the
-/// roads, clear of buildings, not steep.
+/// roads, clear of buildings and trees (the bot stands east of it), not
+/// steep.
 fn spot(zone: &Zone, i: usize, kind: AnomalyKind, radius: f32) -> Vec3 {
+    let trees = extraction_core::forest::scatter_trees(&zone.map, &zone.hm);
     let m = zone
         .marker(&MarkerKind::Insertion)
         .map(|m| m.at)
@@ -50,6 +52,9 @@ fn spot(zone: &Zone, i: usize, kind: AnomalyKind, radius: f32) -> Vec3 {
         .find(|p| {
             bloom_ok(&zone.map, &zone.hm, p.to_array(), kind, radius + 3.0)
                 && zone.hm.slope_deg(p.to_array()) < 10.0
+                && trees
+                    .iter()
+                    .all(|t| Vec2::new(t.pos[0], t.pos[2]).distance(*p) > radius + 7.0)
         })
         .unwrap_or(base);
     zone.on_ground(p.x, p.y)
