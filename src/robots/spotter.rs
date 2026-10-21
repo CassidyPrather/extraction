@@ -774,7 +774,7 @@ pub(crate) mod tests {
         let acts = vr.app.world().resource::<Acts>().0.clone();
         assert!(acts.contains(&SpotterAct::Holed), "{acts:?}");
         assert!(acts.contains(&SpotterAct::Down), "{acts:?}");
-        let t = vr.app.world().get::<Transform>(e).expect("the wreck stays");
+        let t = *vr.app.world().get::<Transform>(e).expect("the wreck stays");
         let over = t.translation.y - zone.ground(t.translation.x, t.translation.z);
         assert!(over < 1.5, "on the ground: {over}");
         let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
