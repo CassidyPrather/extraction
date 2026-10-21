@@ -40,7 +40,7 @@ pub enum Kind {
 impl Kind {
     pub fn for_map(map: &str) -> Option<Self> {
         match map {
-            "marrow_creek" | "kettle_pass" => Some(Kind::Deer),
+            "marrow_creek" | "kettle_pass" | "sallow_reservoir" => Some(Kind::Deer),
             "cinder_works" => Some(Kind::Dog),
             _ => None,
         }
