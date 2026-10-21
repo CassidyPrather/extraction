@@ -860,6 +860,12 @@ fn run_tasks(
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
                 let d = pos.distance(to);
+                // A step aside that can't be made isn't worth a fail.
+                if within == SIDESTEP && bot.elapsed > 4.0 {
+                    bot.walk = None;
+                    bot.next();
+                    continue;
+                }
                 if d <= within {
                     bot.walk = None;
                     if within != SIDESTEP {
@@ -875,7 +881,9 @@ fn run_tasks(
                 } else {
                     bot.progress.1 += dt;
                 }
-                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
+                // (Not when lining up close: indoors, a step aside put it
+                // in a corner.)
+                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP && d > 2.0 {
                     let ahead = (to - pos).normalize_or(Vec2::X);
                     let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
                     let step = pos + ahead.perp() * side * 3.0 - ahead * 0.5;

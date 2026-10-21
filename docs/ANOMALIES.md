@@ -136,11 +136,51 @@ snare (5%), 12 stones (60%).
   bent through a noise-wobbled normal; Bevy's own blurred fetch turned
   depth-rejected taps into black specks at the cards' edges. The copy
   behind it happens only while a haze is in view (within 55 m).
-- Particles and snare arcs thicken with distance (glowing ones most, up
-  to 2.5×), so a spark or an ember keeps a pixel or two at 20 m in rain
-  instead of flickering out; glowing particles use a soft round dot.
+- Particles thicken with distance (glowing ones most, up to 2.5×), so
+  a spark or an ember keeps a pixel or two at 20 m in rain instead of
+  flickering out. Glowing particles use a soft round dot. A snare's arcs
+  are never thinner than about 0.15° from the eye.
 - One unshadowed light each. A kind's flicker (`visuals::flicker`)
   drives its light, its particles' brightness and its haze's glow
   together.
 
 Shots: `docs/shots/anomalies/` (`before_*` are the old looks).
+
+### Readable from 20 m: the gauge
+
+`scripts/anomaly_legibility.py` takes the shots. For each kind, one
+anomaly on Marrow is viewed from 20 m, in pea-souper fog, in a downpour
+and on a moonless night. Each view is shot three times:
+
+- once with the anomaly's looks;
+- twice without them (`EXTRACTION_HIDE_ANOMALIES`: the anomaly still
+  works, it just isn't dressed).
+
+The score is the share of the box around the anomaly that changes
+between "with" and "without", minus what changes between the two
+"without" shots (rain and swaying grass: the noise floor). Each kind must
+change at least 3% of the box. A mirror only has to manage 1%, as it is
+meant to be almost nothing.
+
+The cameras come from `anomaly::view_of` through the `anomaly-views`
+tool. Of sixteen bearings, it takes the gentlest ground whose line to the
+anomaly is clear of rises, trunks and other anomalies, and off roads and
+water. So the views follow the layout when it moves.
+
+The gauge writes a contact sheet, `legibility.png`, and its numbers in
+`legibility.json`. The first run is kept as `legibility_before.*`.
+
+What it taught us:
+
+- **Fog takes the Zone's things as if half as far off.** Anomaly
+  particles are fogged at `FOG_REACH` = 0.5 of their distance. At full
+  fog a lift's leaves were gone at 20 m.
+- **Luminance, not hue, carries in grey weather.** The Hush dims what
+  you see through it, and so does the well's lens at its heart. Both are
+  applied after fog, so fog can't wash them out. Colour drain did almost
+  nothing in grey weather, and colour-blind eyes miss it anyway.
+- **In the dark there's nothing to dim or brighten.** A Hush's rim
+  glows faintly of itself.
+- **Motion reads from the corner of the eye.** The mirror carries a
+  glint that crosses it every 4 s, each mirror on its own beat. The
+  Hush's rim breathes in brightness only.

@@ -166,8 +166,13 @@ pub struct HazeParams {
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
     /// x: how much colour it drains from what's seen through it (a Hush's
-    /// dead air), y: how much it dims it.
+    /// dead air), y: how much it dims it, z: its rim's brightening, w: the
+    /// rim's breathing (rad/s).
     pub drain: Vec4,
+    /// Light of its own, for the dark: x: the rim's, y: a glint sweeping
+    /// the disc, z: seconds between glints, w: this one's beat (set from
+    /// where it stands).
+    pub glow: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -622,6 +627,7 @@ fn dress_anomalies(
         use_aabb: false,
     };
     for (e, anomaly, at) in &added {
+        let anchor = *at;
         let r = anomaly.radius;
         let kind = anomaly.kind;
         let reach = kind.reach(r);
@@ -669,6 +675,7 @@ fn dress_anomalies(
                         wave: Vec4::new(0.06, 1.0, 0.8, 1.0),
                         tint: Vec4::ZERO,
                         drain: Vec4::ZERO,
+                        glow: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -689,6 +696,7 @@ fn dress_anomalies(
                         wave: Vec4::new(0.5, 1.6, 1.4, 0.0),
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
                         drain: Vec4::ZERO,
+                        glow: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -706,6 +714,7 @@ fn dress_anomalies(
                         wave: Vec4::new(0.08, 2.5, 3.0, 0.0),
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
                         drain: Vec4::ZERO,
+                        glow: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -728,7 +737,10 @@ fn dress_anomalies(
                         shape: Vec4::new(2.0, 0.0, 0.0, 0.0),
                         wave: Vec4::new(0.04, 1.5, 0.5, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::ZERO,
+                        // A dark lens: the world seen through its heart
+                        // dims, which a grey fog can't hide.
+                        drain: Vec4::new(0.3, 0.4, 0.0, 0.0),
+                        glow: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -746,6 +758,9 @@ fn dress_anomalies(
                         wave: Vec4::new(0.3, 0.9, 0.6, 1.0),
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
                         drain: Vec4::ZERO,
+                        // A glint crossing it every few seconds: motion,
+                        // seen from the side of the eye, in any weather.
+                        glow: Vec4::new(0.0, 0.9, 4.0, 0.0),
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
                     0.0,
@@ -768,6 +783,9 @@ fn dress_anomalies(
                         wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
                         tint: Vec4::ZERO,
                         drain: Vec4::new(0.6, 0.5, 1.2, 1.1),
+                        // In the dark there's nothing to brighten: its rim
+                        // glows faintly of itself.
+                        glow: Vec4::new(0.12, 0.0, 0.0, 0.0),
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
@@ -840,7 +858,10 @@ fn dress_anomalies(
                         Visibility::Hidden
                     },
                 ));
-                if let Some((ior, thickness, params, scale, charged)) = haze {
+                if let Some((ior, thickness, mut params, scale, charged)) = haze {
+                    // Each its own beat, from where it stands.
+                    let spot = anchor.translation;
+                    params.glow.w = (spot.x * 0.37 + spot.z * 0.21).rem_euclid(1.0);
                     let mesh = if params.shape.x > 1.5 {
                         a.lens.clone()
                     } else {
@@ -1157,14 +1178,15 @@ fn snare_arcs(
         *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
         let mut rng = extraction_core::noise::Rng::new(*seed);
         let hot = anomaly.charge.max(look.flash).max(look.reveal);
-        let reach = anomaly.radius * (0.3 + 0.7 * look.flash) * (0.4 + 0.6 * hot);
+        let reach = anomaly.radius * (0.5 + 0.5 * look.flash) * (0.4 + 0.6 * hot);
         let mut paths = Vec::new();
-        // Thicker far off: an arc a few millimetres across is gone in a
-        // pixel by 20 m.
-        let far = eye.map_or(1.0, |e| {
-            (e.distance(gt.translation()) / 6.0).clamp(1.0, 4.0)
+        // Never thinner than about 0.15 degrees from the eye (a few eye
+        // pixels: Legibility's floor), so the crawling arcs of a charged
+        // snare still read at 20 m; a few millimetres up close.
+        let thin = eye.map_or(0.006, |e| {
+            (e.distance(gt.translation()) * 0.0026).max(0.006)
         });
-        let width = 0.006 * (1.0 + 2.5 * look.flash) * far;
+        let width = thin * (1.0 + 2.5 * look.flash);
         for _ in 0..ARCS {
             if !rng.chance(0.25 + 0.75 * hot) {
                 continue;
@@ -1185,8 +1207,8 @@ fn snare_arcs(
             paths.push((main, width));
         }
         for (to, _) in a.reaching.clone() {
-            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), 0.012 * far));
-            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.16), 0.007 * far));
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), thin * 2.0));
+            paths.push((jag(&mut rng, Vec3::ZERO, to, 0.16), thin * 1.2));
         }
         if let Some(mut m) = meshes.get_mut(&mesh.0) {
             *m = arc_mesh(&paths);

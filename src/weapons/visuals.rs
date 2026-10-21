@@ -108,7 +108,7 @@ fn material(mat: Mat) -> StandardMaterial {
     }
 }
 
-fn moves_for(name: &str) -> Option<Moves> {
+pub(crate) fn moves_for(name: &str) -> Option<Moves> {
     // `turnbolt` before `bolt`: neither is a prefix of the other, but keep
     // the more specific names first anyway.
     [

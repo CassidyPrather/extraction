@@ -60,6 +60,10 @@ pub struct Sway {
     pub hand_a: Vec4,
     #[uniform(100)]
     pub hand_b: Vec4,
+    /// Snow lying (`world::snow`): x how much, y the line (m). Plants
+    /// above it sink into it as it deepens.
+    #[uniform(100)]
+    pub snow: Vec4,
 }
 
 impl bevy::pbr::MaterialExtension for Sway {
@@ -75,7 +79,9 @@ fn blow(
     mut materials: ResMut<Assets<SwayMaterial>>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    snow: Option<Res<crate::world::snow::Snow>>,
     mut last: Local<Option<(f32, Vec3)>>,
+    mut last_snow: Local<Option<Vec4>>,
 ) {
     let Some(assets) = assets else {
         return;
@@ -89,7 +95,21 @@ fn blow(
     // re-specialised: ~500 meshes of cover), so only when the wind changes
     // or the feet have moved a few centimetres. (The gusts themselves run
     // on the shader's clock.)
-    if last.is_some_and(|(s, f)| s == strength && f.distance_squared(feet) < 0.05 * 0.05) {
+    let lying = snow.as_ref().map_or(Vec4::ZERO, |s| {
+        Vec4::new(
+            s.cover,
+            s.line.unwrap_or(crate::render::fog::NO_SNOW),
+            0.0,
+            0.0,
+        )
+    });
+    let snow_moved = !last_snow.is_some_and(|l| (l.x - lying.x).abs() < 0.02 && l.y == lying.y);
+    if snow_moved {
+        *last_snow = Some(lying);
+    }
+    if !snow_moved
+        && last.is_some_and(|(s, f)| s == strength && f.distance_squared(feet) < 0.05 * 0.05)
+    {
         return;
     }
     *last = Some((strength, feet));
@@ -97,6 +117,7 @@ fn blow(
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.wind = Vec4::new(0.8, 0.6, strength, 0.8);
             m.extension.pusher = feet.extend(0.6);
+            m.extension.snow = lying;
         }
     }
 }

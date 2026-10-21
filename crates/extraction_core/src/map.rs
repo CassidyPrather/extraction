@@ -734,11 +734,20 @@ pub fn prefab_clearance(id: &str) -> f32 {
 }
 
 /// Whether a prefab wants the ground levelled under it (buildings do;
-/// bridges, gates over roads and the anomaly don't).
+/// bridges, gates over roads and the anomaly don't, nor a garden fence:
+/// its posts follow the ground, and a pad levelled for a run that meets a
+/// house's back wall reached under the house and lifted its door off its
+/// steps; `map_lint` holds its ground to [`FENCE_RISE`](crate::map_lint::FENCE_RISE)).
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
-        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar" | "target"
+        "footbridge"
+            | "anomaly_core"
+            | "quarantine_gate"
+            | "radio_mast"
+            | "boxcar"
+            | "target"
+            | "fence_garden"
     )
 }
 

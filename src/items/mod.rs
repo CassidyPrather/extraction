@@ -3,6 +3,7 @@
 
 pub mod impacts;
 pub mod loot;
+pub mod lost;
 pub mod usage;
 
 use avian3d::prelude::*;
@@ -49,6 +50,7 @@ impl Plugin for ItemsPlugin {
             loot::LootPlugin,
             usage::UsagePlugin,
             impacts::ImpactPlugin,
+            lost::LostItemsPlugin,
         ));
     }
 }
@@ -94,6 +96,11 @@ pub fn physical_bundle(def: &ItemDef) -> impl Bundle {
         LinearDamping(0.05),
         AngularDamping(0.1),
         SweptCcd::default(),
+        // Nothing the game does moves an item faster (a hand lets go at
+        // 25 m/s at most); a thin thing (a cleaning rod) struck end-on
+        // spun up to hundreds of rad/s and blew up to 2 km/s without these.
+        MaxLinearSpeed(60.0),
+        MaxAngularSpeed(60.0),
     )
 }
 
