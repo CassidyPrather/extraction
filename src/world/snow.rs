@@ -450,8 +450,13 @@ fn demo_trail(
     for i in 0..36 {
         dir = Vec2::from_angle(0.025).rotate(dir);
         at += dir * 0.8;
+        let ground = zone.on_ground(at.x, at.y);
+        // Only where snow lies, as a walker's would be.
+        if snow.lies(ground.y) < 0.25 {
+            continue;
+        }
         tracks.add(Print {
-            at: zone.on_ground(at.x, at.y),
+            at: ground,
             yaw: f32::atan2(-dir.x, -dir.y),
             left: i % 2 == 0,
             by: Entity::PLACEHOLDER,

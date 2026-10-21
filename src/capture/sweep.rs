@@ -664,6 +664,9 @@ fn sweep(
                 commands.entity(root).despawn();
             }
             st.i += 1;
+            if st.i % 10 == 0 && st.light == 0 {
+                write_report(st, &out);
+            }
             if st.i % 25 == 0 {
                 info!(
                     "sweep: {} {}/{} ({:.0} s)",
@@ -747,7 +750,10 @@ fn record(
     }
 }
 
-fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExit>) {
+/// `sweep.json`: what each subject measured. Written as the sweep goes
+/// (every ten subjects) as well as at the end, so a run that dies hours in
+/// still leaves its findings.
+fn write_report(st: &Sweep, out: &std::path::Path) {
     let json = serde_json::json!({
         "grid": [GRID.0, GRID.1],
         "angles": angles(),
@@ -758,6 +764,10 @@ fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExi
         out.join("sweep.json"),
         serde_json::to_string_pretty(&json).unwrap_or_default(),
     );
+}
+
+fn finish(st: &mut Sweep, out: &std::path::Path, exit: &mut MessageWriter<AppExit>) {
+    write_report(st, out);
     info!(
         "sweep: done, {} subjects in {:.0} s",
         st.records.len(),

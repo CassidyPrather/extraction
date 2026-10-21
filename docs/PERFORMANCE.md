@@ -163,17 +163,19 @@ Worst fallback view: 549k triangles. The gauges print which path they
 measured (`foliage fetched` / `FALLBACK`), and so does the session log
 (`forest: foliage ...`).
 
-The gauges at every lookbook view of the four valleys (GPU-less client,
-one eye), in clear weather (the furthest you see, so the most drawn;
-`BUDGET_WEATHER=drizzle` for the reference look), worst view against
-the budget:
+The gauges at every lookbook view of the five valleys (GPU-less client,
+one eye, fetched foliage), in clear weather (the furthest you see, so
+the most drawn; `BUDGET_WEATHER=drizzle` for the reference look), worst
+view against the budget, on main with everything merged (wildlife, ivy,
+decals, the fourth valley, the underground sites):
 
 | | Worst | Budget | Headroom |
 | - | - | - | - |
-| Draws | 1081 (Marrow Creek spruce) | 1200 | 10% |
-| Triangles | 570k (Marrow Creek spruce) | 900k | 37% |
-| Shadow draws | 706 (Training Yard aerial) | 900 | 22% |
-| Shadow triangles | 247k (Cinder Works gate) | 700k | 65% |
+| Draws | 998 (Marrow Creek aerial) | 1200 | 17% |
+| Triangles | 515k (Marrow Creek spruce) | 900k | 43% |
+| Shadow draws | 509 (Training Yard aerial) | 900 | 43% |
+| Shadow triangles | 422k > (small casters) under 330k | 700k | 50%+ |
+| Overdraw, mean | 7.3 (Marrow Creek spruce) | 10 | 27% |
 
 At the start the worst views were 3316 draws and 970 shadow draws.
 
@@ -185,8 +187,8 @@ ms, which says nothing about the laptop).
 
 Left on the list: interiors seen from
 outside within 25 m (furniture behind walls; measured small, no class
-in any view's top five); the truck's 47-94 shadow
-casters; GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
+in any view's top five); the hands' 80 draws in every view (each finger
+a mesh; Hands are merging them); GPU occlusion culling (Bevy 0.19 has it, but it needs a depth
 prepass, a second geometry pass per eye: not worth it at these counts).
 
 ## Stereo: what the second eye costs, and multiview

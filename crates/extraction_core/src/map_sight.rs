@@ -1,8 +1,9 @@
 //! The sightline audit: can you find your way by what you see?
 //!
 //! From every 10 m of walkable ground inside the fence, the nearest
-//! landmark (a placement at least `map_lint::LANDMARK_HEIGHT` tall) whose
-//! top shows over the land; and from each insertion, rendezvous and
+//! landmark (a structure at least `map_lint::LANDMARK_HEIGHT` tall, as
+//! `map_landmarks` sees it: the top of any of its tall parts) whose top
+//! shows over the land; and from each insertion, rendezvous and
 //! hilltop, which landmarks show in fog and in ordinary weather. Ground
 //! with nothing in sight within fog range is where a player gets lost.
 //!
@@ -11,7 +12,7 @@
 
 use crate::geom::{P2, dist};
 use crate::map::{MapDef, MarkerKind, prefab_footprint};
-use crate::map_lint::{CLEAR_SIGHT, FOG_SIGHT, LANDMARK_HEIGHT, inside_fence, sees};
+use crate::map_lint::{CLEAR_SIGHT, FOG_SIGHT, inside_fence, sees};
 use crate::terrain::Heightmap;
 use std::fmt::Write as _;
 
@@ -108,16 +109,6 @@ impl Audit {
     }
 }
 
-fn landmarks(map: &MapDef) -> Vec<(String, P2, f32)> {
-    map.placements
-        .iter()
-        .filter_map(|p| {
-            let h = prefab_footprint(&p.prefab)[1];
-            (h >= LANDMARK_HEIGHT).then(|| (p.prefab.clone(), p.at, h))
-        })
-        .collect()
-}
-
 fn standable(map: &MapDef, hm: &Heightmap, p: P2) -> bool {
     inside_fence(map, p) && hm.water_level(p).is_none() && hm.slope_deg(p) < 32.0
 }
@@ -164,20 +155,12 @@ pub fn hilltops(map: &MapDef, hm: &Heightmap) -> Vec<P2> {
 
 /// The audit of a map as built from `hm`.
 pub fn audit(map: &MapDef, hm: &Heightmap) -> Audit {
-    let marks = landmarks(map);
+    let marks = crate::map_landmarks::landmarks(map, hm);
     let half = map.half() - map.fence_inset;
     let n = (2.0 * half / STEP).floor() as usize + 1;
     let origin = -half;
     let mut nearest = vec![f32::NAN; n * n];
-    let seen_from = |p: P2, range: f32| -> Vec<(String, f32)> {
-        let mut v: Vec<(String, f32)> = marks
-            .iter()
-            .filter(|(_, at, h)| dist(p, *at) <= range && sees(hm, p, *at, *h))
-            .map(|(name, at, _)| (name.clone(), dist(p, *at)))
-            .collect();
-        v.sort_by(|a, b| a.1.total_cmp(&b.1));
-        v
-    };
+    let seen_from = |p: P2, range: f32| crate::map_landmarks::seen_from(&marks, hm, p, range);
     for j in 0..n {
         for i in 0..n {
             let p = [origin + i as f32 * STEP, origin + j as f32 * STEP];

@@ -246,6 +246,12 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
             .iter()
             .any(|(c, cr)| geom::dist(*c, [r.pos[0], r.pos[2]]) < cr + r.radius)
     });
+    // And no solid rock in front of a door (`map_doors`).
+    let doors = crate::map_doors::doors(map);
+    out.retain(|r| {
+        r.radius < SOLID_RADIUS
+            || crate::map_doors::clear_of_doors(&doors, [r.pos[0], r.pos[2]], r.radius * 0.9)
+    });
     out
 }
 

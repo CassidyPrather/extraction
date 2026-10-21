@@ -60,7 +60,7 @@ pub enum Mat {
 
 impl Mat {
     /// (texture dir, metres per tile, fallback colour, roughness).
-    fn info(self) -> (Option<&'static str>, f32, Color, f32) {
+    pub(crate) fn info(self) -> (Option<&'static str>, f32, Color, f32) {
         match self {
             Mat::Planks => (
                 Some("weathered_planks"),
