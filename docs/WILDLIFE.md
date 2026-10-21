@@ -254,7 +254,9 @@ wind thin it. When the insects stop, something is close.
 `docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
 Creek), `flock_up.png` (the same house a few seconds after they went up),
 `deer_grazing.png`, `dogs.png` (Cinder Works), `heron.png` (Sallow
-Reservoir's shallows).
+Reservoir's shallows), `ducks.png` (a raft on Sallow Reservoir's upper
+arm from its west bank, 12 m off, `EXTRACTION_WILDLIFE=calm`; two
+dabbling) and `ducks_close.png` (the same frame cropped, 5x).
 
 ## Pacing
 
