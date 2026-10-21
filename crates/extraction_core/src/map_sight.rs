@@ -332,14 +332,13 @@ pub const SITE_STEP: f32 = 20.0;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
     /// Prints each valley's audit; holds only that the audit runs and
     /// finds its viewpoints (the thresholds come when every valley has its
     /// hero landmark).
     #[test]
     fn sightline_audit() {
-        for text in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for text in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(text).unwrap();
             let hm = Heightmap::build(&map);
             let a = audit(&map, &hm);

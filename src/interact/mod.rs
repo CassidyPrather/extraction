@@ -16,10 +16,16 @@
 
 pub mod body;
 pub mod far;
+pub mod first_aid;
 pub mod flat;
+pub mod gestures;
 pub mod hand_climb;
+#[cfg(test)]
+mod physics_audit;
 pub mod physics_hands;
 pub mod poke;
+pub mod read;
+pub mod tools;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -308,6 +314,10 @@ impl Plugin for InteractPlugin {
                 body::BodyPlugin,
                 physics_hands::PhysicsHandsPlugin,
                 hand_climb::HandClimbPlugin,
+                tools::ToolsPlugin,
+                first_aid::FirstAidPlugin,
+                gestures::GesturesPlugin,
+                read::ReadPlugin,
             ));
     }
 }
@@ -775,6 +785,8 @@ fn apply_hand_actions(
     mut backpacks: Query<(Entity, &GlobalTransform, &mut body::Backpack)>,
     catalog: Res<Catalog>,
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
+    // Things to take up and read (`read`): theirs to handle.
+    reading: (Query<(), With<read::Readable>>, Res<crate::rig::RigDriver>),
     fixed: Query<(), With<crate::raid::truck::Stash>>,
     ropes: Query<&crate::gadgets::climbing::Rope>,
     ladders: Query<(), With<hand_climb::Ladder>>,
@@ -816,6 +828,9 @@ fn apply_hand_actions(
                 });
                 events.write(InteractEvent::Grabbed { item, side });
             }
+            HandAction::Grab { item, .. }
+                if reading.0.contains(item)
+                    && read::reads(*reading.1, pressables.contains(item)) => {}
             HandAction::Grab {
                 player,
                 side,

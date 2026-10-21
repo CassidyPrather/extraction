@@ -80,6 +80,7 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
                 avian3d::prelude::LayerMask::NONE,
             ),
             crate::render::legibility::TextSource::Logbook,
+            crate::interact::read::Readable,
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.36, 0.3),

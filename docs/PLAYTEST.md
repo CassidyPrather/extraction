@@ -117,13 +117,39 @@ What changed, and worth a comment each:
   push down. If climbing makes you queasy, the **CLIMBING** card on the
   comfort board takes you straight to the top instead. Mark it if you
   ever rise when you only meant to lean on a table.
+- **Crowbar.** Hold it by the end and steady it along the shaft with your
+  other hand. Put the claw to a robot's armour plate, or the latch edge
+  of a door a wedge has jammed, then pull the handle round. Two hands at
+  the end of the bar shift it; hands near the claw won't. Your hands feel
+  the strain build, then a knock as it gives.
+- **Bolt cutters.** A handle in each hand. Spread them, put the jaws on a
+  padlock's shackle or on chain-link, and squeeze your hands together. A
+  cut panel leaves a gap you can walk through.
+- **First aid and food.** Wind a dressing round your other forearm (one
+  and a half turns). Put the injector's tip to your thigh and pull the
+  trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
+  The A/X button no longer does these in the headset, except medicine
+  with the one-handed comfort setting.
+- **Gestures.** A hand over your mouth quietens your breathing when
+  you're winded (robots nearby can hear it). An open palm raised over
+  your head is a gesture robots can read, though nothing reacts to it
+  yet. Mark it if either triggers when you didn't mean it.
 - **The training yard** is stations to do, not signs to read (below,
   "The yard and the camp").
 - **Loading in VR.** A magazine is loaded by touching a box of rounds to
   it, one in each hand (before, only flat mode could load one).
-- **Text.** Signposts are bigger, and every panel is checked to read
-  from where you'd stand (a signpost from 3 m, a card from 1 m). Mark
-  anything you still can't read, with how far away you were.
+- **Text.** Every piece of text is now held to a floor set for the
+  Beyond 2 at the auto render scale (`docs/LEGIBILITY.md`), measured
+  from where you'd read it, and checked by rendering it at the
+  headset's pixels a degree. The wrist and the radio show a few words a
+  line in capitals and page a long message every 3 seconds (watch it
+  turn over); notes are on bigger paper; the field map's names are
+  bigger and upright. Indoors stays lit after you've been underground
+  (rooms had been going black). **Squeeze on a note** (or the logbook,
+  or the driver's request card) and it comes up into your hand, facing
+  you: bring it to your face to read; open your hand and it goes back.
+  The logbook's pages now turn with its button. Mark anything you still can't read,
+  with how far away you were and the SHARPNESS setting.
 - **Magazines** seat when their top meets the well, and the bell cord
   is easier to catch.
 - **Things look like things.** About 70 items that were plain boxes

@@ -38,6 +38,8 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
     let clear: Vec<(P2, f32)> = map
         .placements
         .iter()
+        // (A site's kiosks are cleared after: see the end.)
+        .filter(|p| !crate::underground::is_site(&p.prefab))
         .map(|p| (p.at, prefab_clearance(&p.prefab)))
         .chain(map.markers.iter().map(|m| (m.at, 8.0)))
         .collect();
@@ -106,6 +108,13 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
             iz += 1;
         }
     }
+    // Off every site kiosk, the exits' too, after the scatter (as rocks).
+    let kiosks = crate::underground::kiosk_clearings(map);
+    out.retain(|t| {
+        !kiosks
+            .iter()
+            .any(|(c, r)| geom::dist(*c, [t.pos[0], t.pos[2]]) < *r)
+    });
     out
 }
 

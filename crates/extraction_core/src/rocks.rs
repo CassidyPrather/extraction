@@ -67,6 +67,8 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
     let clear: Vec<(P2, f32)> = map
         .placements
         .iter()
+        // (A site's kiosks are cleared after: see the end.)
+        .filter(|p| !crate::underground::is_site(&p.prefab))
         .map(|p| (p.at, prefab_clearance(&p.prefab) + 2.0))
         // Round a rendezvous, the whole way in to the truck's tailgate.
         .chain(map.markers.iter().map(|m| {
@@ -236,13 +238,20 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
         z += cell;
         iz += 1;
     }
+    // Off every site kiosk, the exits' too, after the scatter: skipping
+    // them in it would draw the rest of the map's rocks differently.
+    let kiosks = crate::underground::kiosk_clearings(map);
+    out.retain(|r| {
+        !kiosks
+            .iter()
+            .any(|(c, cr)| geom::dist(*c, [r.pos[0], r.pos[2]]) < cr + r.radius)
+    });
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
     #[test]
     fn a_new_marker_moves_no_rock_far_from_it() {
@@ -266,7 +275,7 @@ mod tests {
 
     #[test]
     fn rocks_break_up_the_ground_and_keep_off_roads() {
-        for src in [MARROW_CREEK, KETTLE_PASS, CINDER_WORKS] {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let rocks = scatter_rocks(&map, &hm);

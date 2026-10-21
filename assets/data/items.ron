@@ -438,6 +438,18 @@
             tags: ["metal", "electronics"],
         ),
         (
+            id: "work_boots", dims: Some((0.3, 0.16, 0.32)), name: "Work boots",
+            description: "A pair of black leather work boots, resoled more than once, laces knotted together. Good ones.",
+            category: Curio, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["leather"],
+        ),
+        (
+            id: "canary", dims: Some((0.16, 0.24, 0.16)), name: "Canary cage",
+            description: "A little brass cage with a bird-shaped flame-safety lamp in it, from the deep workings' landing. Carried, its glow goes amber, then red, as firedamp gathers near; too long in the gas and it goes out for good.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.5,
+            tags: ["metal"],
+        ),
+        (
             id: "detector_sweep", dims: Some((0.07, 0.04, 0.2)), name: "Sweep detector",
             description: "A survey detector with a long whip antenna. Held, it hears only what it points at, and a second, higher voice sings out for a loose stone in its beam. Worn, it's a plain clicker.",
             category: Gadget, size: Small, mass: 0.45, bulk: 0.35,
@@ -597,6 +609,18 @@
             id: "multitool", dims: Some((0.068, 0.016, 0.1)), name: "Multitool",
             category: Tool, size: Small, mass: 0.25, bulk: 0.1,
             tags: ["metal"],
+        ),
+        (
+            id: "crowbar", dims: Some((0.03, 0.05, 0.76)), name: "Crowbar",
+            description: "Put the claw to a seam and lean on the end with both hands. Plates, jammed doors.",
+            category: Tool, size: Medium, mass: 1.6, bulk: 1.2,
+            tags: ["steel"],
+        ),
+        (
+            id: "bolt_cutters", dims: Some((0.16, 0.04, 0.62)), name: "Bolt cutters",
+            description: "A handle in each hand, jaws on the shackle or the wire, squeeze. Padlocks, chain-link.",
+            category: Tool, size: Medium, mass: 2.1, bulk: 1.4,
+            tags: ["steel"],
         ),
         (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
