@@ -257,9 +257,6 @@ the gauge house and out: 262 s.
 - Story's `scenes::nav_obstacles` (claude/polish-story): scene pieces in
   the nav grid, so "Bay four"'s 0.63 m slot between its buses (scenes.ron,
   (70, -74)) is solid to it. Then the sims again.
-- World models' breakable bus panels (dc8b032): `dam::buses` drops
-  `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
-  draws it whole).
 - Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),
