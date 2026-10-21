@@ -1655,7 +1655,10 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
     // is plain on purpose). Never a box in a material that never loads,
     // which draws pale and flat.
     let root = crate::asset_root_path();
-    let model = |m: &str| root.join(crate::render::world_props::path(m)).exists();
+    let model = |m: &str| {
+        let (m, _) = super::wood::model_node(m);
+        root.join(crate::render::world_props::path(m)).exists()
+    };
     let textured = |mat: crate::render::materials::Mat| {
         let (dir, ..) = mat.info();
         dir.is_none_or(|d| {
