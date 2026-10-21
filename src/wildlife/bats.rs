@@ -758,9 +758,23 @@ mod tests {
         }
     }
 
-    /// Every valley has bats to hunt somewhere; four minutes of someone
-    /// walking about with a torch on them and shooting now and then, and a
-    /// machine coming by, never puts a bat inside or under anything built
+    /// How many of a valley's cells would have bats over water, if they had
+    /// bats.
+    fn wet_cells(zone: &Zone) -> usize {
+        let half = (zone.map.size * 0.5 / CELL).ceil() as i32;
+        let mut n = 0;
+        for i in -half..half {
+            for j in -half..half {
+                let mut rng = Rng::new(0xBA75 ^ (i as u64) << 20 ^ j as u64);
+                n += haunt_in(zone, &mut rng, (i, j)).is_some_and(|h| h.0 == Haunt::Water) as usize;
+            }
+        }
+        n
+    }
+
+    /// Every valley has bats to hunt somewhere, over its water where it has
+    /// much; four minutes of someone walking about with a torch on them and
+    /// shooting now and then, and a machine coming by, never puts a bat inside or under anything built
     /// or below 2 m over the ground or the water; they scatter from the
     /// shots and leave for the machine, and come back.
     #[test]
@@ -770,7 +784,16 @@ mod tests {
             let lamps = lamps(&zone);
             let every = all(&zone, &obstacles, 3);
             assert!(every.len() >= 4, "{map}: {} groups", every.len());
-            for haunt in [Haunt::Water, Haunt::Building] {
+            // Over the water wherever there's much of it: not over Rime
+            // Fell's one small tarn, two cells, which no group may draw.
+            let wet = wet_cells(&zone);
+            let haunts: &[Haunt] = if wet >= 8 {
+                &[Haunt::Water, Haunt::Building]
+            } else {
+                assert_eq!(map, "rime_fell", "{map}: {wet} cells over water");
+                &[Haunt::Building]
+            };
+            for &haunt in haunts {
                 assert!(
                     every.iter().any(|c| c.haunt == haunt),
                     "{map}: no bats hunting {haunt:?}"
