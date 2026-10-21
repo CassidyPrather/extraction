@@ -10,7 +10,7 @@
 //! Zone only while you stand in a real one.
 
 use bevy::prelude::*;
-use extraction_core::anomaly::{AnomalyKind, HUSHSTONE_RADIUS, hush_press, hushed};
+use extraction_core::anomaly::{AnomalyKind, HUSH_GRACE, HUSHSTONE_RADIUS, hush_press, hushed};
 
 use super::Anomaly;
 use super::artifacts::{CarriedBy, Shielded};
@@ -72,11 +72,19 @@ pub fn gather(
     }
 }
 
-/// The silence presses on whoever stays in a Hush past its grace.
+/// Said a few seconds before the silence starts to hurt, and as it does:
+/// you can't hear it coming, so you're told.
+pub const HUSH_WARN: &str = "Your ears ring in the silence. Get out of it.";
+pub const HUSH_HURTS: &str = "The silence is pressing on you.";
+
+/// The silence presses on whoever stays in a Hush past its grace; you're
+/// warned first.
 pub fn press(
     mut commands: Commands,
     hushes: Res<Hushes>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health, Option<&mut InHush>), With<Player>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    mut raid: ResMut<crate::raid::Raid>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -88,7 +96,16 @@ pub fn press(
                 commands.entity(e).insert(InHush(0.0));
             }
             (true, Some(mut t)) => {
+                let before = t.0;
                 t.0 += dt;
+                if locals.contains(e) {
+                    if before < HUSH_GRACE - 3.0 && t.0 >= HUSH_GRACE - 3.0 {
+                        raid.say(HUSH_WARN);
+                    }
+                    if before < HUSH_GRACE && t.0 >= HUSH_GRACE {
+                        raid.say(HUSH_HURTS);
+                    }
+                }
                 let hurt = hush_press(t.0);
                 if hurt > 0.0 && !h.down {
                     h.hp -= hurt * dt;
@@ -213,6 +230,14 @@ mod tests {
             (hp - grace).abs() < 0.5,
             "a few seconds is safe ({hp} -> {grace})"
         );
+        let said = |app: &App, line: &str| {
+            app.world()
+                .resource::<crate::raid::Raid>()
+                .log
+                .iter()
+                .any(|(t, _)| t == line)
+        };
+        assert!(said(&app, HUSH_WARN), "warned before it hurts");
         for _ in 0..90 * 6 {
             app.update();
         }
@@ -221,6 +246,7 @@ mod tests {
             grace - pressed > 6.0,
             "then it presses ({grace} -> {pressed})"
         );
+        assert!(said(&app, HUSH_HURTS), "and told when it does");
     }
 
     #[test]
