@@ -40,8 +40,8 @@ const SHOULDER: Vec3 = Vec3::new(0.17, -0.06, 0.03);
 pub const HIP: f32 = 0.1;
 /// Thigh and shin at a standing eye of [`STAND_EYE`]; scaled with the
 /// player's height.
-pub const THIGH: f32 = 0.42;
-pub const SHIN: f32 = 0.42;
+pub const THIGH: f32 = 0.4;
+pub const SHIN: f32 = 0.4;
 /// The ankle joint over the sole.
 pub const ANKLE: f32 = 0.08;
 const STAND_EYE: f32 = 1.65;
