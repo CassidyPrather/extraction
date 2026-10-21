@@ -848,10 +848,16 @@ mod tests {
     fn a_newer_career_is_known_by_its_version() {
         let mut c = rich_career();
         c.version = SAVE_VERSION + 3;
-        let text = c.to_ron().unwrap().replace("stash:", "stash_v9: Shiny(1), stash:");
+        let text = c
+            .to_ron()
+            .unwrap()
+            .replace("stash:", "stash_v9: Shiny(1), stash:");
         assert!(Career::from_ron(&text).is_err());
         assert_eq!(career_version(&text), Some(SAVE_VERSION + 3));
-        assert_eq!(career_version(&rich_career().to_ron().unwrap()), Some(SAVE_VERSION));
+        assert_eq!(
+            career_version(&rich_career().to_ron().unwrap()),
+            Some(SAVE_VERSION)
+        );
         assert_eq!(career_version("garbage"), None);
     }
 
