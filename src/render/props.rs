@@ -621,12 +621,35 @@ fn far_cue(
     mut commands: Commands,
     hands: Query<(Entity, &Hand)>,
     items: Query<(&GlobalTransform, Option<&avian3d::prelude::ColliderAabb>)>,
-    mut cues: Query<(&mut Transform, &mut Visibility), With<FarCue>>,
+    mut cues: Query<
+        (
+            &mut Transform,
+            &mut Visibility,
+            &mut MeshMaterial3d<StandardMaterial>,
+        ),
+        With<FarCue>,
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Entity>>,
+    // The ring for a far target, and a dimmer one for what's in reach: up
+    // close the glove's tint already says "this one", and a full ring
+    // round everything in a cluttered crate would be busy.
+    mut looks: Local<Option<(Handle<StandardMaterial>, Handle<StandardMaterial>)>>,
     time: Res<Time>,
 ) {
+    let (far_look, near_look) = looks
+        .get_or_insert_with(|| {
+            let ring = |k: f32| StandardMaterial {
+                base_color: Color::srgba(0.3, 0.9, 0.4, 0.5 * k),
+                emissive: LinearRgba::rgb(0.3 * k, 0.9 * k, 0.4 * k),
+                unlit: true,
+                alpha_mode: AlphaMode::Add,
+                ..default()
+            };
+            (materials.add(ring(1.0)), materials.add(ring(0.6)))
+        })
+        .clone();
     for (hand_e, hand) in &hands {
         // What a pointed hand would pull in, else what the hand would take
         // where it is: the near hover lit only the glove, faintly, and the
@@ -640,13 +663,7 @@ fn far_cue(
                         Name::new("Far grab cue"),
                         FarCue,
                         Mesh3d(meshes.add(Torus::new(0.94, 1.0))),
-                        MeshMaterial3d(materials.add(StandardMaterial {
-                            base_color: Color::srgba(0.3, 0.9, 0.4, 0.5),
-                            emissive: LinearRgba::rgb(0.3, 0.9, 0.4),
-                            unlit: true,
-                            alpha_mode: AlphaMode::Add,
-                            ..default()
-                        })),
+                        MeshMaterial3d(far_look.clone()),
                         bevy::light::NotShadowCaster,
                         Transform::default(),
                         Visibility::Hidden,
@@ -657,9 +674,17 @@ fn far_cue(
             }
             None => continue,
         };
-        let Ok((mut t, mut vis)) = cues.get_mut(cue) else {
+        let Ok((mut t, mut vis, mut look)) = cues.get_mut(cue) else {
             continue;
         };
+        let want = if hand.far.is_some() {
+            &far_look
+        } else {
+            &near_look
+        };
+        if look.0 != *want {
+            look.0 = want.clone();
+        }
         let Some((gt, aabb)) = target else {
             *vis = Visibility::Hidden;
             continue;

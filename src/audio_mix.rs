@@ -305,6 +305,15 @@ pub const MIX: &[Cue] = &[
     cue!("thunder.crack", "explosions/grenade_sharp", -1.0, 120.0, 120.0, Event, 120.0),
     cue!("thunder.roll", "ambience/thunder_distant", -10.5, 110.0, 120.0, Event, 120.0),
     cue!("thunder.surge", "ambience/thunder_distant", -11.0, 80.0, 0.0, Event),
+    // Music and broadcasts, synthesised (`radio`): a cassette player's
+    // little speaker, a radio's, a gramophone's horn, a piano in a room.
+    cue!("tape.music", "music/tape", -12.0, 72.0, 0.6, Detail, 2.0),
+    cue!("tape.motor", "music/motor", -22.0, 50.0, 0.5, Detail),
+    cue!("radio.station", "music/station", -12.0, 70.0, 0.6, Detail, 2.0),
+    cue!("radio.hiss", "music/static", -20.0, 62.0, 0.6, Detail, 2.0),
+    cue!("gramophone", "music/gramophone", -10.0, 75.0, 1.5, Detail, 3.0),
+    cue!("piano.note", "music/piano", -8.0, 85.0, 1.0, Detail, 4.0),
+    cue!("organ", "music/organ", -8.0, 90.0, 6.0, Detail, 10.0),
 ];
 
 /// Narrow dynamics (the comfort board's sound card), dB per role: the
@@ -441,7 +450,9 @@ mod tests {
         );
         for c in MIX {
             assert!(
-                index.get(c.set).is_some() || voices.iter().any(|v| v == c.set),
+                index.get(c.set).is_some()
+                    || voices.iter().any(|v| v == c.set)
+                    || crate::radio::sound::is_synth_set(c.set),
                 "{}: no set {}",
                 c.name,
                 c.set
@@ -460,6 +471,11 @@ mod tests {
             "ak74",
             "mosin",
             "toz_double",
+            "mp133",
+            "svd",
+            "toz8",
+            "flare_pistol",
+            "crossbow",
             "factory_hall",
             "chimney",
             "rail_shed",

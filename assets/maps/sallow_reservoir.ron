@@ -196,6 +196,9 @@
         Plateau(polygon: [(226.0, -92.0), (262.0, -92.0), (262.0, -50.0), (240.0, -50.0), (240.0, -36.0), (226.0, -36.0)], height: Some(45.7), blend: 8.0),
         // Sallow Head, where the truck turns.
         Plateau(polygon: [(-222.0, -275.0), (-180.0, -275.0), (-180.0, -241.0), (-222.0, -241.0)], height: Some(49.4), blend: 14.0),
+        // The gallery's toe: held level over the stair down to it, so the
+        // landing keeps its rock (underground::COVER) where the land dips.
+        Plateau(polygon: [(-14.0, 159.6), (2.0, 159.6), (2.0, 178.0), (-14.0, 178.0)], height: Some(30.1), blend: 2.0),
     ],
 
     roads: [
@@ -397,7 +400,7 @@
         (prefab: "house_brick", at: (-58.0, 206.0), rot: 180.0, tag: "keeper"),
         (prefab: "house_plank", at: (-88.0, 206.0), rot: 180.0),
         (prefab: "pump_station", at: (100.0, 210.0), rot: 270.0, tag: "filter_house"),
-        (prefab: "shed", at: (112.0, 225.0), rot: 0.0),
+        (prefab: "shed", at: (115.0, 226.0), rot: 0.0),
         (prefab: "shed", at: (6.0, 246.0), rot: 90.0),
         // The roadman's hut on the way round.
         (prefab: "shed", at: (-182.0, 244.0), rot: 0.0),
@@ -429,6 +432,11 @@
         // The Custodian's gantry over the rows.
         (prefab: "sorting_gantry", at: (100.0, -82.0), rot: 0.0),
         (prefab: "stock_bins", at: (30.0, -130.0), rot: 90.0),
+        // More rows toward the haul ramp and the Gate: cover in clumps on
+        // the open east bed (the fifth sims lost four to drones out there).
+        (prefab: "stock_buses", at: (132.0, -40.0), rot: 20.0),
+        (prefab: "stock_bins", at: (80.0, -12.0), rot: 0.0),
+        (prefab: "stock_buses", at: (168.0, -150.0), rot: 330.0),
         (prefab: "stock_bins", at: (30.0, -140.0), rot: 90.0),
 
         // The causeway's toll hut.

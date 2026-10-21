@@ -49,6 +49,31 @@ pub struct Broke {
     pub size: f32,
 }
 
+/// Something solid that stood here is gone (a crate burst, a board or a
+/// panel off, a hole to the floor): the space it took, world-aligned. For
+/// anything that keeps a map of what's in the way (robots' nav grids, a
+/// cover index) to clear.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Cleared {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+/// Whatever breakable goes, but quietly (the save, the Surge): its space
+/// is clear.
+fn cleared(
+    remove: On<Remove, wood::Timber>,
+    things: Query<(&avian3d::prelude::ColliderAabb, Has<wood::Quiet>)>,
+    mut out: MessageWriter<Cleared>,
+) {
+    if let Ok((aabb, false)) = things.get(remove.entity) {
+        out.write(Cleared {
+            min: aabb.min,
+            max: aabb.max,
+        });
+    }
+}
+
 /// How far a robot hears a break, metres: glass carries further than
 /// any wood but a door going down.
 pub fn noise_radius(stuff: Stuff, size: f32) -> f32 {
@@ -81,6 +106,8 @@ impl Plugin for DestructionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Broken>()
             .add_message::<Broke>()
+            .add_message::<Cleared>()
+            .add_observer(cleared)
             .configure_sets(
                 FixedUpdate,
                 DestructionSystems.after(crate::weapons::ballistics::BallisticsSystems),

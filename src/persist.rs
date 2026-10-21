@@ -185,31 +185,132 @@ pub fn burn_career(opts: &LaunchOptions) {
 /// The valley a saved career is headed for, if there is one.
 pub fn career_destination(opts: &LaunchOptions) -> Option<String> {
     let path = career_path(opts)?;
-    read_career(&path).map(|c| c.map).filter(|m| !m.is_empty())
+    read_career(&path)
+        .career
+        .map(|c| c.map)
+        .filter(|m| !m.is_empty())
+}
+
+/// What reading the career found. Reading changes nothing on disk:
+/// [`load_save`] puts a damaged file aside, once.
+#[derive(Default)]
+pub(crate) struct CareerRead {
+    pub career: Option<Career>,
+    /// The career file is damaged (moved aside when the session loads).
+    pub damaged: bool,
+    /// Written by a newer build: leave it alone, save nothing.
+    pub newer: Option<u32>,
+    /// What to tell the player, if anything.
+    pub notice: Option<String>,
+}
+
+/// The last good save, kept beside the career: each write moves the one
+/// before it here.
+pub(crate) fn backup_path(path: &std::path::Path) -> PathBuf {
+    path.with_extension("ron.bak")
+}
+
+/// A career file read and mended, or why not.
+fn read_one(path: &std::path::Path) -> Result<Career, (Option<u32>, String)> {
+    let text = std::fs::read_to_string(path).map_err(|e| (None, e.to_string()))?;
+    if let Some(v) = extraction_core::save::career_version(&text).filter(|v| *v > SAVE_VERSION) {
+        return Err((
+            Some(v),
+            format!("save version {v} is newer than this build"),
+        ));
+    }
+    let mut career = Career::from_ron(&text).map_err(|e| (None, e))?;
+    let fixed = career.sanitize();
+    for f in &fixed {
+        warn!("{}: {f}", path.display());
+    }
+    Ok(career)
 }
 
 /// Reads a career, or brings in the saves of an older build (one file per
-/// map, next to where the career goes) as one.
-fn read_career(path: &std::path::Path) -> Option<Career> {
-    if let Ok(text) = std::fs::read_to_string(path) {
-        return match Career::from_ron(&text) {
-            Ok(c) => Some(c),
-            Err(e) => {
-                // Keep the broken file for inspection rather than overwrite it.
-                let bad = path.with_extension("ron.bad");
-                let _ = std::fs::rename(path, &bad);
-                error!("{}: {e}; moved to {}", path.display(), bad.display());
-                None
+/// map, next to where the career goes) as one. A damaged career falls back
+/// to the last good save beside it; a newer build's is left alone.
+pub(crate) fn read_career(path: &std::path::Path) -> CareerRead {
+    if path.exists() {
+        return match read_one(path) {
+            Ok(c) => CareerRead {
+                career: Some(c),
+                ..default()
+            },
+            Err((Some(v), e)) => {
+                error!("{}: {e}; leaving it untouched", path.display());
+                CareerRead {
+                    newer: Some(v),
+                    notice: Some(
+                        "This career was saved by a newer version of the game. \
+                         It's left as it is, and nothing is saved this session."
+                            .into(),
+                    ),
+                    ..default()
+                }
+            }
+            Err((None, e)) => {
+                error!("{}: {e}", path.display());
+                let bak = backup_path(path);
+                match read_one(&bak) {
+                    Ok(c) => {
+                        warn!("going back to the last good save, {}", bak.display());
+                        CareerRead {
+                            career: Some(c),
+                            damaged: true,
+                            notice: Some(
+                                "Your save was damaged. You're back where the save \
+                                 before it left you."
+                                    .into(),
+                            ),
+                            ..default()
+                        }
+                    }
+                    Err(_) => CareerRead {
+                        damaged: true,
+                        notice: Some(format!(
+                            "Your save was damaged and couldn't be read. A new career \
+                             starts; the old file is kept as {}.",
+                            bad_path(path)
+                                .file_name()
+                                .map(|n| n.to_string_lossy().into_owned())
+                                .unwrap_or_default()
+                        )),
+                        ..default()
+                    },
+                }
             }
         };
     }
+    CareerRead {
+        career: read_older_saves(path),
+        ..default()
+    }
+}
+
+/// Where a damaged career is put aside: `career.ron.bad`, or the first
+/// free `career.ron.bad<N>` (a second damaged file never buries the first).
+fn bad_path(path: &std::path::Path) -> PathBuf {
+    let first = path.with_extension("ron.bad");
+    if !first.exists() {
+        return first;
+    }
+    (2..1000)
+        .map(|n| path.with_extension(format!("ron.bad{n}")))
+        .find(|p| !p.exists())
+        .unwrap_or(first)
+}
+
+/// An older build's saves, one file per map, as one career.
+fn read_older_saves(path: &std::path::Path) -> Option<Career> {
     let dir = path.parent()?;
     let mut old: Vec<(std::time::SystemTime, SaveGame)> = std::fs::read_dir(dir)
         .ok()?
         .flatten()
         .filter(|e| e.path().extension().is_some_and(|x| x == "ron"))
         .filter_map(|e| {
-            let save = SaveGame::from_ron(&std::fs::read_to_string(e.path()).ok()?).ok()?;
+            let mut save = SaveGame::from_ron(&std::fs::read_to_string(e.path()).ok()?).ok()?;
+            save.sanitize();
             let when = e.metadata().ok()?.modified().ok()?;
             Some((when, save))
         })
@@ -238,6 +339,9 @@ fn read_career(path: &std::path::Path) -> Option<Career> {
 /// on every save.
 #[derive(Resource, Debug, Default)]
 pub struct CareerState(pub Career);
+
+/// Seconds a notice about the save stays on the radio and wrist.
+const NOTICE_SECS: f32 = 60.0;
 
 fn choose_slot(mut commands: Commands, opts: Res<LaunchOptions>) {
     let slot = career_path(&opts);
@@ -279,7 +383,24 @@ fn load_save(
         info!("new game: ignoring any existing save");
         None
     } else {
-        read_career(path)
+        let read = read_career(path);
+        if read.damaged {
+            // Kept for inspection; the next save writes a sound one.
+            let bad = bad_path(path);
+            match std::fs::rename(path, &bad) {
+                Ok(()) => warn!("damaged career moved to {}", bad.display()),
+                Err(e) => error!("couldn't move the damaged career aside: {e}"),
+            }
+        }
+        if read.newer.is_some() {
+            // Never overwrite what a newer build wrote.
+            commands.insert_resource(SaveSlot(None));
+        }
+        if let Some(n) = &read.notice {
+            // Long enough to be read on the wrist after the load.
+            raid.log.push((n.clone(), NOTICE_SECS));
+        }
+        read.career
     };
     let mut career = career.unwrap_or_else(|| {
         info!("no career at {}; starting fresh", path.display());
@@ -405,10 +526,14 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
     };
     queue.apply(world);
     world.flush();
+    // A magazine holds no more than it holds, whatever the file says.
+    let capacity = world.get::<Mag>(e).map(|m| m.capacity);
     if let Some(mut it) = world.get_mut::<Item>(e) {
         it.condition = saved.condition;
-        it.rounds = saved.rounds;
+        it.rounds = capacity.map_or(saved.rounds, |c| saved.rounds.min(c));
         it.loads = saved.loads.clone();
+        let rounds = it.rounds;
+        it.loads.fit(rounds);
         if saved.charge_wh >= 0.0 {
             it.charge_wh = saved.charge_wh;
         }
@@ -421,8 +546,10 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         if g.hammers.len() == f.hammers_cocked.len() {
             f.hammers_cocked = g.hammers.clone();
         }
-        f.internal_rounds = g.internal_rounds;
+        f.internal_rounds = g.internal_rounds.min(f.def.internal_capacity);
         f.internal_loads = g.internal_loads.clone();
+        let n = f.internal_rounds;
+        f.internal_loads.fit(n);
         if g.chamber_loads.len() == f.chambers.len() {
             f.chamber_loads = g.chamber_loads.clone();
         }
@@ -431,7 +558,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         f.fouling = g.fouling;
     }
     for inner in &saved.inserted {
-        let Some(m) = restore_item(world, inner, Transform::IDENTITY) else {
+        let Some(m) = restore_item(world, inner, at) else {
             continue;
         };
         if world.get::<Mag>(m).is_some() {
@@ -439,8 +566,43 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         } else {
             seat_in_mount(world, e, m);
         }
+        if world.get::<InSocket>(m).is_none() {
+            // It no longer fits (the gun's well or mount changed since):
+            // it goes where its owner goes, not to the world's origin.
+            warn!("save: {} no longer fits its {}", inner.id, saved.id);
+            if let Some(mut o) = world.get_mut::<Unseated>(e) {
+                o.0.push(m);
+            } else {
+                world.entity_mut(e).insert(Unseated(vec![m]));
+            }
+        }
     }
     Some(e)
+}
+
+/// Seated in an item's save but no longer fitting it: placed with the
+/// item by whoever restores it ([`place_unseated`]).
+#[derive(Component)]
+pub(crate) struct Unseated(pub Vec<Entity>);
+
+/// Whatever didn't fit back into `item` goes into `bag` with it, or, with
+/// no bag, lies beside it.
+pub(crate) fn place_unseated(world: &mut World, item: Entity, bag: Option<(Entity, Vec3)>) {
+    let Some(Unseated(rest)) = world.entity_mut(item).take::<Unseated>() else {
+        return;
+    };
+    for (i, m) in rest.into_iter().enumerate() {
+        place_unseated(world, m, bag);
+        match bag {
+            Some((b, local)) => put_in_bag(world, m, b, local),
+            None => {
+                let at = world.get::<Transform>(item).copied().unwrap_or_default();
+                if let Some(mut t) = world.get_mut::<Transform>(m) {
+                    t.translation = at.translation + Vec3::new(0.1 * (i + 1) as f32, 0.05, 0.0);
+                }
+            }
+        }
+    }
 }
 
 /// Puts a magazine entity into a gun's well and the mechanism.
@@ -557,6 +719,24 @@ fn v3(a: [f32; 3]) -> Vec3 {
     Vec3::from_array(a)
 }
 
+/// Puts a restored item into `bag` (at `local`), or, with no bag to take
+/// it, lays it on the ground at `fallback`, never leaving it at the
+/// world's origin. What no longer fits inside it goes along.
+fn settle(world: &mut World, e: Entity, bag: Option<Entity>, local: Vec3, fallback: Vec3) {
+    match bag {
+        Some(b) => {
+            put_in_bag(world, e, b, local);
+            place_unseated(world, e, Some((b, local)));
+        }
+        None => {
+            if let Some(mut t) = world.get_mut::<Transform>(e) {
+                t.translation = fallback;
+            }
+            place_unseated(world, e, None);
+        }
+    }
+}
+
 fn apply_restore(world: &mut World) {
     let Some(Restore { save, zone }) = world.remove_resource::<Restore>() else {
         return;
@@ -569,59 +749,69 @@ fn apply_restore(world: &mut World) {
         .query_filtered::<Entity, With<LocalPlayer>>()
         .iter(world)
         .next();
+    // Where a thing with nowhere to go is laid down: at your feet.
+    let feet = player
+        .and_then(|p| world.get::<Transform>(p))
+        .map(|t| t.translation + Vec3::new(0.3, 0.3, 0.3))
+        .unwrap_or(Vec3::Y);
     let mut placed = 0;
     // The stash, and anything that was in your hands.
     for saved in save.stash.iter().chain(&save.loadout.hands) {
         let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
             continue;
         };
-        match stash {
-            Some(s) => put_in_bag(world, e, s, v3(saved.local)),
-            None => {}
-        }
+        settle(world, e, stash, v3(saved.local), feet);
         placed += 1;
     }
     // What you were wearing.
-    if let Some(p) = player {
-        let slots: Vec<(Entity, usize)> = world
+    let slots: Vec<(Entity, usize)> = match player {
+        Some(p) => world
             .query::<(Entity, &BodySlot, &SocketOwner)>()
             .iter(world)
             .filter(|(_, _, o)| o.0 == p)
             .map(|(e, s, _)| (e, s.0))
-            .collect();
-        let pack = world
+            .collect(),
+        None => Vec::new(),
+    };
+    let pack = player.and_then(|p| {
+        world
             .query::<(Entity, &Backpack)>()
             .iter(world)
             .find(|(_, b)| b.owner == p && b.carried)
-            .map(|(e, _)| e);
-        for (index, saved) in &save.loadout.slots {
-            let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
-                continue;
-            };
-            match slots.iter().find(|(_, i)| i == index) {
-                Some((slot_e, _)) => put_in_slot(world, e, *slot_e),
-                None => {
-                    if let Some(s) = stash {
-                        put_in_bag(world, e, s, Vec3::ZERO);
-                    }
-                }
+            .map(|(e, _)| e)
+    });
+    for (index, saved) in &save.loadout.slots {
+        let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
+            continue;
+        };
+        let free = slots.iter().find(|(s, i)| {
+            i == index
+                && world
+                    .get::<Socket>(*s)
+                    .is_some_and(|s| s.occupant.is_none())
+        });
+        match free {
+            Some((slot_e, _)) => {
+                put_in_slot(world, e, *slot_e);
+                place_unseated(world, e, stash.map(|s| (s, Vec3::ZERO)));
             }
-            placed += 1;
+            // The slot's gone or taken: the stash has room.
+            None => settle(world, e, stash, Vec3::ZERO, feet),
         }
-        for saved in &save.loadout.backpack {
-            let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
-                continue;
-            };
-            if let Some(b) = pack.or(stash) {
-                put_in_bag(world, e, b, v3(saved.local));
-            }
-            placed += 1;
-        }
+        placed += 1;
+    }
+    for saved in &save.loadout.backpack {
+        let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
+            continue;
+        };
+        settle(world, e, pack.or(stash), v3(saved.local), feet);
+        placed += 1;
     }
     if zone {
         for p in &save.zone.items {
             let t = Transform::from_translation(v3(p.at)).with_rotation(Quat::from_array(p.rot));
-            if restore_item(world, &p.item, t).is_some() {
+            if let Some(e) = restore_item(world, &p.item, t) {
+                place_unseated(world, e, None);
                 placed += 1;
             }
         }
@@ -632,7 +822,7 @@ fn apply_restore(world: &mut World) {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
                 if let Some(e) = restore_item(world, saved, Transform::IDENTITY) {
-                    put_in_bag(world, e, bag, v3(saved.local));
+                    settle(world, e, Some(bag), v3(saved.local), v3(r.at));
                     placed += 1;
                 }
             }
@@ -949,9 +1139,18 @@ pub(crate) fn write_career(path: &std::path::Path, career: &Career) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    // Write beside and rename, so a crash mid-write never eats the save.
+    // Write beside and rename, so a crash mid-write never eats the save;
+    // the save before it is kept as the last good one, should this one
+    // come back damaged (a full disk, a bad sector, a hand edit).
     let tmp = path.with_extension("ron.tmp");
-    if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, path)) {
+    if let Err(e) = std::fs::write(&tmp, text) {
+        error!("save to {}: {e}", tmp.display());
+        return;
+    }
+    if path.exists() {
+        let _ = std::fs::copy(path, backup_path(path));
+    }
+    if let Err(e) = std::fs::rename(&tmp, path) {
         error!("save to {}: {e}", path.display());
     }
 }
@@ -1051,6 +1250,7 @@ pub fn reset_zone(world: &mut World) {
         world.despawn(bag);
     }
     crate::robots::heavy::clear_wrecks(world);
+    crate::robots::wreck::clear_wrecks(world);
     let cycle = {
         let mut raid = world.resource_mut::<Raid>();
         raid.cycle += 1;
@@ -1061,6 +1261,7 @@ pub fn reset_zone(world: &mut World) {
     crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
+    crate::progression::safehouse::relay_leftovers(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
     world.write_message(SaveNow);
 }

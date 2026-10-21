@@ -212,7 +212,7 @@ fn spawn_camp(
         }
     }
     // You start at the table, facing the board (the truck beyond it).
-    if opts.scenario.is_none() && opts.camera.is_none() {
+    if opts.plays_for_real() && opts.camera.is_none() {
         state.stand = Some(pose * Transform::from_xyz(0.0, 0.0, 1.15));
         state.hold = 20;
     }

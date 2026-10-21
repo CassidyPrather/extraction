@@ -116,6 +116,54 @@ impl Plugin for SafehousePlugin {
     }
 }
 
+fn lay_leftovers(
+    commands: &mut Commands,
+    catalog: &Catalog,
+    map: &str,
+    cabin_at: &GlobalTransform,
+) {
+    for (id, local) in LEFTOVERS
+        .iter()
+        .filter(|(m, ..)| *m == map)
+        .map(|(_, id, at)| (id, at))
+    {
+        if let Some(kind) = catalog.kind(id) {
+            spawn_item(
+                commands,
+                catalog,
+                SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(cabin_at.transform_point(*local)),
+                    condition: 1.0,
+                },
+            );
+        }
+    }
+}
+
+/// The Surge has re-rolled the Zone (and swept the last people's
+/// leftovers with everything loose): they're back, for the new cycle.
+/// Without this they came back only when the game was next opened.
+pub(crate) fn relay_leftovers(world: &mut World) {
+    let cycle = world.resource::<Raid>().cycle;
+    let map = world.resource::<LaunchOptions>().map.clone();
+    let Some(cabin) = world.get_resource::<Safehouse>().and_then(|h| h.cabin) else {
+        return;
+    };
+    let Some(at) = world.get::<GlobalTransform>(cabin).copied() else {
+        return;
+    };
+    if world.resource::<Safehouse>().state.laid == Some(cycle) {
+        return;
+    }
+    world.resource_mut::<Safehouse>().state.laid = Some(cycle);
+    let catalog = world.resource::<Catalog>().clone();
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    let mut commands = Commands::new(&mut queue, world);
+    lay_leftovers(&mut commands, &catalog, &map, &at);
+    queue.apply(world);
+}
+
 /// The cabin and its door, once the buildings are up; and its stove and bed
 /// as things to press.
 fn find_cabin(
@@ -144,23 +192,7 @@ fn find_cabin(
     // restored Zone, which already has them, doesn't get them again).
     if house.state.laid != Some(raid.cycle) {
         house.state.laid = Some(raid.cycle);
-        for (id, local) in LEFTOVERS
-            .iter()
-            .filter(|(m, ..)| *m == opts.map)
-            .map(|(_, id, at)| (id, at))
-        {
-            if let Some(kind) = catalog.kind(id) {
-                spawn_item(
-                    &mut commands,
-                    &catalog,
-                    SpawnItem {
-                        kind,
-                        transform: Transform::from_translation(cabin_at.transform_point(*local)),
-                        condition: 1.0,
-                    },
-                );
-            }
-        }
+        lay_leftovers(&mut commands, &catalog, &opts.map, cabin_at);
     }
     house.door = doors
         .iter()
@@ -452,7 +484,9 @@ fn furnish(world: &mut World) {
     }
     for saved in &stash {
         if let Some(e) = crate::persist::restore_item(world, saved, Transform::IDENTITY) {
-            crate::persist::put_in_bag(world, e, bag, Vec3::from_array(saved.local));
+            let local = Vec3::from_array(saved.local);
+            crate::persist::put_in_bag(world, e, bag, local);
+            crate::persist::place_unseated(world, e, Some((bag, local)));
         }
     }
 }

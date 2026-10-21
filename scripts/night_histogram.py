@@ -94,7 +94,12 @@ def failures(seen):
             dark = seen.get(Path(valley, case.replace("stormflash", "storm"), view))
             if dark:
                 d_s, d_sky, d_ground = dark
-                if ground["p50"] < d_ground["p50"] + FLASH_LIFT:
+                # Under trees the canopy shades the ground from it (the
+                # flash casts shadows): the frame as a whole lifts.
+                if any(f in view for f in FOREST):
+                    if s["mean"] < d_s["mean"] + FLASH_LIFT:
+                        bad.append(f"{rel}: the flash lit the wood to {s['mean']:.0f} from {d_s['mean']:.0f}")
+                elif ground["p50"] < d_ground["p50"] + FLASH_LIFT:
                     bad.append(f"{rel}: the flash lit the ground to {ground['p50']} from {d_ground['p50']}")
                 if sky["p50"] <= d_sky["p50"]:
                     bad.append(f"{rel}: the flash left the sky at {sky['p50']}")

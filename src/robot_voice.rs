@@ -831,6 +831,13 @@ fn mutter(
     mut out: MessageWriter<Turned>,
 ) {
     let now = time.elapsed_secs();
+    // Forget robots that are gone (driven off, swept away by the Surge):
+    // every robot that ever spoke stayed in here for the session.
+    let v = &mut *voices;
+    v.last.retain(|(e, _), _| robots.contains(*e));
+    v.dead.retain(|e| robots.contains(*e));
+    v.mutter_at.retain(|e, _| robots.contains(*e));
+    v.busy.retain(|e, _| robots.contains(*e));
     for (e, robot, brain, gt) in &robots {
         let idle = matches!(brain, Brain::Transit { .. } | Brain::Working { .. });
         let at = gt.translation();

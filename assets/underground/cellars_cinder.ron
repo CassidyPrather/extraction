@@ -80,7 +80,8 @@
         (kind: "Burner", room: "burner_gallery", at: (1.6, 1.4), radius: 1.0),
         (kind: "Burner", room: "ash_pit", at: (0.0, 0.0), radius: 2.0),
     ],
-    patrol: ["stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
+    // By the vents and on the cool side: waiting where you come to vent.
+    patrol: ["stair_foot", "vent_room", "stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
     crawlers: 1,
     portals: [
         (),

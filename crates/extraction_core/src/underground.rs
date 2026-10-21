@@ -2109,14 +2109,10 @@ mod tests {
     use crate::terrain::Heightmap;
 
     fn maps() -> Vec<MapDef> {
-        [
-            crate::map::MARROW_CREEK,
-            crate::map::KETTLE_PASS,
-            crate::map::CINDER_WORKS,
-        ]
-        .iter()
-        .map(|t| MapDef::from_ron(t).unwrap())
-        .collect()
+        crate::map::VALLEYS
+            .iter()
+            .map(|(_, t)| MapDef::from_ron(t).unwrap())
+            .collect()
     }
 
     /// Every layout parses and is fit to build: rooms reached from the

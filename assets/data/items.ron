@@ -102,6 +102,85 @@
             )),
             tags: ["metal", "wood"],
         ),
+        (
+            id: "mp133", dims: Some((0.045, 0.2, 1.13)),
+            name: "MP-133 pump shotgun",
+            description: "A Baikal pump: four shells in the tube under the barrel, thumbed in through the port underneath. Pump it back hard and forward again. A cocked hammer locks it shut: the button by the trigger guard lets it open.",
+            category: Firearm, size: Bulky, mass: 3.4, bulk: 6.5,
+            firearm: Some((
+                action: Pump, cartridge: "12ga", internal_capacity: 4,
+                modes: [Safe, Semi],
+                muzzle_velocity: 400.0, damage: 14.0, projectiles: 9, spread_moa: 140.0, recoil: 5.0,
+                wear_per_shot: 0.0005,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "svd", dims: Some((0.08, 0.216, 1.227)),
+            name: "SVD rifle",
+            description: "The Dragunov: ten rounds of 7.62x54R as fast as you can aim them. The rail on its left takes the PSO-1; the cheek rest puts your eye behind it.",
+            category: Firearm, size: Bulky, mass: 4.3, bulk: 7.5,
+            firearm: Some((
+                action: SemiAuto, cartridge: "7.62x54R", magazine_family: Some("svd"),
+                modes: [Safe, Semi], last_round_hold_open: true,
+                muzzle_velocity: 830.0, damage: 105.0, spread_moa: 1.8, recoil: 4.0,
+                wear_per_shot: 0.00035,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "toz8", dims: Some((0.075, 0.17, 1.145)),
+            name: "TOZ-8M .22 rifle",
+            description: "A club rifle: one .22 at a time, thumbed into the open chamber. Its crack doesn't carry far. Good for an eye or a rook; useless against plate. Rimfire misfires: lift the bolt and drop it to strike again.",
+            category: Firearm, size: Bulky, mass: 2.9, bulk: 5.0,
+            firearm: Some((
+                action: BoltAction, cartridge: "22lr", internal_capacity: 0,
+                modes: [Semi], rimfire: true, report: 0.4,
+                muzzle_velocity: 330.0, damage: 16.0, spread_moa: 2.0, recoil: 0.25,
+                wear_per_shot: 0.0002, fouling_per_shot: 0.006,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "rpk74", dims: Some((0.106, 0.23, 1.15)),
+            name: "RPK-74",
+            description: "An AK with a long, heavy barrel and a folding bipod. Swing the legs down and set them on a wall, a sill or the ground, and it lies still. Takes AK magazines and its own forty-fives.",
+            category: Firearm, size: Bulky, mass: 5.0, bulk: 8.0,
+            firearm: Some((
+                action: SemiAuto, cartridge: "5.45x39", magazine_family: Some("ak545"),
+                modes: [Safe, Auto, Semi], rpm: 600.0,
+                muzzle_velocity: 960.0, damage: 50.0, spread_moa: 3.0, recoil: 2.2,
+                wear_per_shot: 0.0003,
+            )),
+            tags: ["metal", "wood"],
+        ),
+        (
+            id: "flare_pistol", dims: Some((0.04, 0.19, 0.235)),
+            name: "SPSh signal pistol",
+            description: "A 26 mm flare gun. Break it, a cartridge in, thumb the hammer. A white star lights the ground under it as it sinks; red and green are signals. Whatever's out there looks at a flare, and goes to where it falls.",
+            category: Firearm, size: Medium, mass: 1.0, bulk: 0.9,
+            firearm: Some((
+                action: BreakAction, cartridge: "26mm",
+                modes: [Semi],
+                muzzle_velocity: 75.0, damage: 20.0, spread_moa: 90.0, recoil: 1.6,
+                wear_per_shot: 0.0004,
+            )),
+            tags: ["metal"],
+        ),
+
+        (
+            id: "crossbow", dims: Some((0.62, 0.21, 0.885)),
+            name: "Home-made crossbow",
+            description: "A cut-down leaf spring on a plank, a gate latch for a nut. Draw the string back to the latch by hand, lay a bolt in the groove, loose it. Silent; the bolts come back if you go and get them. Never loose it empty.",
+            category: Firearm, size: Bulky, mass: 3.3, bulk: 9.0,
+            firearm: Some((
+                action: Crossbow, cartridge: "bolt",
+                modes: [Safe, Semi], report: 0.04,
+                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5,
+                wear_per_shot: 0.0015, fouling_per_shot: 0.0,
+            )),
+            tags: ["metal", "wood"],
+        ),
 
         // ---------------------------------------------------------------
         // Grenades and blades
@@ -182,6 +261,20 @@
             tags: ["metal"],
         ),
 
+        (
+            id: "svd_mag", dims: Some((0.03, 0.124, 0.1)), name: "SVD magazine",
+            description: "Ten rounds of 7.62x54R in a ribbed steel box.",
+            category: Magazine, size: Small, mass: 0.21, bulk: 0.25,
+            magazine: Some((fits: "svd", cartridge: "7.62x54R", capacity: 10)),
+            tags: ["metal"],
+        ),
+        (
+            id: "rpk_mag", dims: Some((0.026, 0.27, 0.13)), name: "RPK-74 magazine",
+            description: "Forty-five rounds of 5.45x39, a long curve of plum polymer. Fits any AK-74.",
+            category: Magazine, size: Small, mass: 0.33, bulk: 0.5,
+            magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 45)),
+            tags: ["polymer"],
+        ),
         // ---------------------------------------------------------------
         // Ammunition (boxes; rounds come out one at a time)
         // ---------------------------------------------------------------
@@ -321,6 +414,42 @@
             category: Ammo, size: Small, mass: 0.42, bulk: 0.35, cartridge: Some("12ga"), rounds: 10, load: Slug,
             tags: ["brass", "powder", "polymer"],
         ),
+        (
+            id: "ammo_22lr", dims: Some((0.0758, 0.0314, 0.055)), name: ".22 rounds (box)",
+            description: "Fifty .22 Long Rifle in a card box. Rimfire: the bench can't re-pack them.",
+            category: Ammo, size: Small, mass: 0.18, bulk: 0.08, cartridge: Some("22lr"), rounds: 50,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "flare_white", dims: Some((0.0296, 0.0296, 0.078)), name: "Signal cartridge (white)",
+            description: "A 26 mm illumination star: it lights the ground under it for eight seconds as it sinks. Smooth wad.",
+            category: Ammo, size: Tiny, mass: 0.11, bulk: 0.05, cartridge: Some("26mm"), rounds: 1,
+            tags: ["paper", "powder"],
+        ),
+        (
+            id: "flare_red", dims: Some((0.0296, 0.0296, 0.078)), name: "Signal cartridge (red)",
+            description: "A 26 mm red star: a signal. One bump on the wad.",
+            category: Ammo, size: Tiny, mass: 0.11, bulk: 0.05, cartridge: Some("26mm"), rounds: 1, load: SignalRed,
+            tags: ["paper", "powder"],
+        ),
+        (
+            id: "flare_green", dims: Some((0.0296, 0.0296, 0.078)), name: "Signal cartridge (green)",
+            description: "A 26 mm green star: a signal. Two bumps on the wad.",
+            category: Ammo, size: Tiny, mass: 0.11, bulk: 0.05, cartridge: Some("26mm"), rounds: 1, load: SignalGreen,
+            tags: ["paper", "powder"],
+        ),
+        (
+            id: "bolt_bundle", dims: Some((0.045, 0.04, 0.38)), name: "Crossbow bolts (bundle)",
+            description: "Five steel-rod bolts wired together, fletched with cut plastic bottle.",
+            category: Ammo, size: Small, mass: 0.15, bulk: 0.4, cartridge: Some("bolt"), rounds: 5,
+            tags: ["metal", "polymer"],
+        ),
+        (
+            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.38)), name: "Crossbow bolt",
+            description: "A filed steel rod with plastic fletches. Shot, it lies where it came down: go and get it.",
+            category: Ammo, size: Small, mass: 0.028, bulk: 0.08, cartridge: Some("bolt"), rounds: 1,
+            tags: ["metal", "polymer"],
+        ),
         // Loose rounds: what racking a loaded gun throws on the ground, and
         // what you thumb into magazines one at a time.
         (id: "round_9x18", dims: Some((0.0095, 0.0095, 0.025)), name: "9x18 round", category: Ammo, size: Tiny, mass: 0.01, bulk: 0.003, cartridge: Some("9x18"), rounds: 1, tags: ["brass", "powder"]),
@@ -343,6 +472,7 @@
         (id: "round_762x25_repack", dims: Some((0.0098, 0.0098, 0.0345)), name: "7.62x25 re-packed round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.004, cartridge: Some("7.62x25"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
         (id: "round_762r_repack", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R re-packed round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Repacked, tags: ["brass", "powder"]),
         (id: "shell_12ga_repack", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge re-packed shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, load: Repacked, tags: ["brass", "powder", "polymer"]),
+        (id: "round_22lr", dims: Some((0.0069, 0.0069, 0.0251)), name: ".22 round", category: Ammo, size: Tiny, mass: 0.0034, bulk: 0.001, cartridge: Some("22lr"), rounds: 1, tags: ["brass", "powder"]),
         (
             id: "robot_ammo_belt", name: "Robot ammunition belt",
             description: "Caseless slugs on a linked polymer belt. No human gun takes them; the bench can pull the powder and the metal.",
@@ -425,6 +555,66 @@
             description: "Calls the truck. Picks up the robots' chatter, if you know where to listen.",
             category: Gadget, size: Small, mass: 0.45, bulk: 0.4,
             tags: ["electronics"],
+        ),
+        (
+            id: "cassette_player", dims: Some((0.15, 0.09, 0.04)), name: "Cassette player",
+            description: "A portable tape recorder with chunky keys on top. Stop twice opens the door. Runs on a power cell.",
+            category: Gadget, size: Small, mass: 0.55, bulk: 0.45,
+            tags: ["electronics", "plastic"],
+        ),
+        (
+            id: "tape_practice", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: for Anna",
+            description: "A cassette, the label in a mother's hand: \"for Anna - practice\".",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_hymns", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: HARVEST HYMNS",
+            description: "A cassette in a chapel's careful capitals: HARVEST HYMNS.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_lodge", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Lodge dance",
+            description: "A cassette, the label smudged by a thumb: \"Lodge dance\". Taped off the wireless.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_duty", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: DUTY MIX 2",
+            description: "A cassette in block capitals: DUTY MIX 2. Dance tunes off the far station.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_birthday", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Our piano",
+            description: "A cassette, the label in a neat round hand: \"Our piano. Ruben's birthday.\"",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_bells", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Old Sallow bells",
+            description: "A cassette, the label in an old man's pencil: \"Old Sallow bells - from Dad's wire\".",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "record_augustin", dims: Some((0.254, 0.004, 0.254)), name: "Record: O du lieber Augustin",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a waltz.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
+        ),
+        (
+            id: "record_entertainer", dims: Some((0.254, 0.004, 0.254)), name: "Record: The Entertainer",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a rag.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
+        ),
+        (
+            id: "record_susanna", dims: Some((0.254, 0.004, 0.254)), name: "Record: Oh! Susanna",
+            description: "A ten-inch 78 in a paper sleeve gone soft: a dance orchestra.",
+            category: Curio, size: Small, mass: 0.2, bulk: 0.15, mount: Some(Record),
+            tags: ["record"],
         ),
         (
             id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
@@ -838,6 +1028,11 @@
             id: "camera", dims: Some((0.14, 0.09, 0.07)), name: "Zorki camera",
             description: "A rangefinder camera, film loaded. Hold it up, line the subject in the middle, press.",
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
+        ),
+        (
+            id: "scour_key", dims: Some((0.05, 0.05, 0.62)), name: "Scour valve key",
+            description: "A long box spanner with a T-bar, for the reservoir's scour valves. A cut chain hangs off the handle.",
+            category: Tool, size: Medium, mass: 2.6, bulk: 1.2, tags: ["metal"],
         ),
         (
             id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",

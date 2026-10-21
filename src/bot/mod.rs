@@ -119,6 +119,9 @@ pub enum Task {
     /// magazine out, the well brought down onto one in a pouch, the second
     /// button to rack.
     OneHandReload,
+    /// One-handed: bring what the gun hand holds to this (set down, or in
+    /// a pouch), for them to combine (rounds into a magazine).
+    OneHandCombine(Entity),
     /// Stage a scenario's world by name, where the bot stands: the module
     /// under test answers [`scenarios::Setup`] (a heavy and a well).
     Setup(&'static str),
@@ -188,6 +191,9 @@ pub const SEATED_EYE: f32 = 1.2;
 pub const SEATED_HAND_LOW: f32 = 0.35;
 /// How far past a hand's middle a grab still takes something.
 const GRAB_SLACK: f32 = 0.15;
+/// A step to the side round something in the way: how near it needs to
+/// get (and how a step is told from a walk).
+const SIDESTEP: f32 = 1.01;
 /// How quickly a bot's body swings onto its aim point, per second.
 const AIM_RATE: f32 = 14.0;
 
@@ -257,6 +263,12 @@ pub struct Bot {
     deferred: u32,
     /// The gun's well from the gun hand's grip, world, for a reload.
     well_off: Option<Vec3>,
+    /// The task it's on (as written), to know a new one from it.
+    on: Option<String>,
+    /// Walking: the nearest it's got, and how long since it got nearer.
+    progress: (f32, f32),
+    /// Steps to the side on the current walk (kept across them).
+    sidesteps: u32,
     /// Seated: the crouch button held for something low.
     reach_low: bool,
     /// The gun it last had in hand: the one to draw back.
@@ -286,6 +298,9 @@ impl Bot {
             gun_to: None,
             deferred: 0,
             well_off: None,
+            on: None,
+            progress: (f32::INFINITY, 0.0),
+            sidesteps: 0,
             reach_low: false,
             last_gun: None,
         }
@@ -344,6 +359,7 @@ impl Bot {
         self.gun_to = None;
         self.well_off = None;
         self.reach_low = false;
+        self.progress = (f32::INFINITY, 0.0);
     }
 
     /// Seated (`Comfort::seated`), something lower than a seated hand
@@ -682,6 +698,16 @@ fn run_tasks(
         let Some(task) = bot.tasks.front().cloned() else {
             continue;
         };
+        // A new task in front (a director put it there, ahead of or in
+        // place of the one running) starts its own clock: a button press
+        // timed from another's never comes.
+        let key = format!("{task:?}");
+        if bot.on.as_deref() != Some(key.as_str()) {
+            if bot.on.is_some() {
+                bot.restart();
+            }
+            bot.on = Some(key);
+        }
         let task = task.mirrored(mirror);
         // Seated: the lift, for what's in reach.
         let lift = comfort
@@ -819,9 +845,33 @@ fn run_tasks(
             Task::WalkTo { to, within } => {
                 bot.walk = Some(to);
                 bot.look = Vec3::new(to.x, root.translation.y + 1.6, to.y);
-                if pos.distance(to) <= within {
+                let d = pos.distance(to);
+                if d <= within {
                     bot.walk = None;
+                    if within != SIDESTEP {
+                        bot.sidesteps = 0;
+                    }
                     bot.next();
+                    continue;
+                }
+                // Up against something: a step to the side, as a person
+                // would (one way, then the other), and on.
+                if d < bot.progress.0 - 0.3 {
+                    bot.progress = (d, 0.0);
+                } else {
+                    bot.progress.1 += dt;
+                }
+                if bot.progress.1 > 2.5 && bot.sidesteps < 3 && within != SIDESTEP {
+                    let ahead = (to - pos).normalize_or(Vec2::X);
+                    let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
+                    let step = pos + ahead.perp() * side * 3.0 - ahead * 0.5;
+                    bot.sidesteps += 1;
+                    bot.tasks.push_front(Task::WalkTo {
+                        to: step,
+                        within: SIDESTEP,
+                    });
+                    bot.restart();
+                    continue;
                 }
             }
             Task::PickUp { id, side } => {
@@ -969,6 +1019,38 @@ fn run_tasks(
                 bot.buttons = [false; 3];
                 bot.buttons[i] = bot.elapsed < 0.15;
                 if bot.elapsed > 0.2 && !mac.busy() {
+                    bot.next();
+                }
+            }
+            Task::OneHandCombine(with) => {
+                bot.aim = false;
+                let Ok((at, _)) = ext.placed.get(with) else {
+                    bot.failed += 1;
+                    bot.note("FAIL nothing there to combine with".into());
+                    bot.next();
+                    continue;
+                };
+                let Some((hand_at, item_at)) = hand(gun_side).and_then(|h| {
+                    h.holding
+                        .and_then(|e| ext.placed.get(e).ok())
+                        .map(|(g, _)| (h.world.translation, g.translation()))
+                }) else {
+                    bot.failed += 1;
+                    bot.note("FAIL nothing in hand to combine".into());
+                    bot.next();
+                    continue;
+                };
+                // What's held, not the hand, down onto it from above:
+                // steered by where it is now (held where it was taken, it
+                // turns with the hand), looking at it to keep still.
+                bot.look = at.translation();
+                let above = (0.15 - bot.elapsed * 0.1).max(0.03);
+                let goal = at.translation() + Vec3::Y * above;
+                // A quarter of the way each tick: it lags the hand, and a
+                // whole step overshoots.
+                let from = bot.gun_to.unwrap_or(hand_at);
+                bot.gun_to = Some(from + (goal - item_at) * 0.25);
+                if bot.elapsed > 2.5 {
                     bot.next();
                 }
             }

@@ -407,7 +407,42 @@ impl Plugin for AudioPlugin {
             .add_systems(
                 PostUpdate,
                 occlude.after(bevy::transform::TransformSystems::Propagate),
-            );
+            )
+            .add_systems(Last, retire_voices);
+    }
+}
+
+/// At most this many one-shot sounds at once; past it the oldest go.
+pub const VOICE_CAP: usize = 256;
+/// No one-shot in the bank runs longer than a minute (the sirens), even
+/// slowed: one still "playing" after this never will.
+pub const ONE_SHOT_MAX: f32 = 90.0;
+
+/// Retires one-shot voices that outlive any sound, and the oldest past
+/// [`VOICE_CAP`]. A one-shot despawns itself when it finishes playing, but
+/// with no output device (none plugged in, or the headset's audio gone
+/// mid-session) nothing ever finishes: every footstep, shot and creak
+/// stayed as an entity, a few dozen a second (soak finding, `docs/SOAK.md`).
+pub(crate) fn retire_voices(
+    mut commands: Commands,
+    voices: Query<(Entity, &SamplePlayer)>,
+    time: Res<Time<Real>>,
+    mut born: Local<HashMap<Entity, f32>>,
+) {
+    let now = time.elapsed_secs();
+    born.retain(|e, _| voices.contains(*e));
+    let mut once: Vec<(f32, Entity)> = voices
+        .iter()
+        .filter(|(_, p)| matches!(p.repeat_mode, RepeatMode::PlayOnce))
+        .map(|(e, _)| (*born.entry(e).or_insert(now), e))
+        .collect();
+    once.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let over = once.len().saturating_sub(VOICE_CAP);
+    for (i, (t, e)) in once.into_iter().enumerate() {
+        if i < over || now - t > ONE_SHOT_MAX {
+            born.remove(&e);
+            commands.entity(e).try_despawn();
+        }
     }
 }
 
@@ -599,7 +634,7 @@ fn spawn_reverb_bus(commands: &mut Commands) {
 /// How much of a cue goes to the reverb: all of it, but for recordings
 /// with their own space baked in (the far-off shot's echo, the siren's
 /// valley) and the beds.
-fn reverb_send(cue: &str) -> SendNode {
+pub(crate) fn reverb_send(cue: &str) -> SendNode {
     let share = match mix::role(cue) {
         Some(mix::Role::Bed) => 0.0,
         _ if matches!(cue, "gun.distant" | "surge.siren" | "surge.crack") => 0.3,
@@ -987,6 +1022,9 @@ fn shot_set(item: &str) -> &'static str {
         "ak74" => "guns/rifle_shot",
         "mosin" => "guns/bolt_rifle_shot",
         "toz_double" => "guns/shotgun_shot",
+        "mp133" => "guns/shotgun_shot",
+        "svd" => "guns/bolt_rifle_shot",
+        "toz8" | "flare_pistol" | "crossbow" => "guns/pistol_shot",
         _ => "guns/rifle_shot",
     }
 }
@@ -1107,6 +1145,7 @@ fn gun_sounds(
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     guns: Query<&crate::weapons::Gun>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     let ear = listener
         .iter()
@@ -1122,7 +1161,9 @@ fn gun_sounds(
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
-                let quiet = suppressed.contains(ev.gun);
+                // (A .22's crack is as small as a suppressed rifle's.)
+                let quiet =
+                    suppressed.contains(ev.gun) || reports.get(ev.gun).is_ok_and(|r| r.0 < 0.6);
                 if quiet && !far {
                     // A suppressor: a cough, the crack's highs and boom gone.
                     if let Some(sample) = bank.pick(shot_set(&ev.item), &mut rng.0) {
@@ -1156,7 +1197,7 @@ fn gun_sounds(
             (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
             (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
             (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
-            (FireEvent::RoundLoaded, Some(BreakAction)) => {
+            (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
                 ("guns/shell_insert", "gun.shell_insert", 0.0)
             }
             (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip", 0.0),
@@ -2270,6 +2311,8 @@ fn door_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_some_and(|b| b != door.open) {
@@ -2856,6 +2899,8 @@ fn tool_sounds(
     mut next: Local<HashMap<Entity, f32>>,
 ) {
     let now = time.elapsed_secs();
+    // Forget a target once its creak is due again (and so anything gone).
+    next.retain(|_, t| now < *t);
     let at = |e: Entity| places.get(e).ok().map(|g| g.translation());
     for p in pried.read() {
         if next.get(&p.target).is_some_and(|t| now < *t) {
@@ -4076,6 +4121,8 @@ fn gadget_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::climbing::Grapnel;
+    // (Only what still exists: every grapnel the Surge ever rolled stayed.)
+    grapnel_was.retain(|e, _| grapnels.contains(*e));
     let mut out: Vec<(&str, &str, Vec3, f64)> = Vec::new();
     for (e, g, gt) in &grapnels {
         let now = match g {
@@ -4226,6 +4273,7 @@ fn drone_and_zip_sounds(
     mut rng: ResMut<AudioRng>,
 ) {
     use crate::gadgets::camera_drone::Flight;
+    flight_was.retain(|e, _| drones.contains(*e));
     let mut out: Vec<(&str, &str, Vec3)> = Vec::new();
     for (e, d, gt) in &drones {
         let before = flight_was.insert(e, d.flight);
