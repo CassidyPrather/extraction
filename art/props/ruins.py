@@ -13,8 +13,15 @@ each prop in prefab space with its origin on the floor under its centre:
 - `table_burnt`    a table burnt through on one side, its top down on the
                    floor at that end, 1.2 x 0.7
 - `ash_heap`       ash and charcoal in a low drift, 1.2 across
+- `rubble_logs`    a log cabin's fallen corner: wall logs down in a heap
+                   either way, a sheet of its roof iron on them, 1.9 x 0.75
+                   x 1.9 (`cabin_ruin`)
+- `rubble_concrete` a shop's roof slab broken on its floor: slabs and lumps
+                   of concrete, the rebar bent out of them, 1.8 x 0.45 x 1.5
+                   (`shop_ruin`)
 
-Materials: Timber, Planks, Shingles, Brick, Plaster, Char, Iron, Rusty.
+Materials: Timber, Planks, Shingles, Brick, Plaster, Concrete, Corrugated,
+Char, Iron, Rusty.
 """
 
 import math
@@ -183,6 +190,64 @@ def ash_heap():
     return [p]
 
 
+def rubble_logs():
+    p = Part("static")
+    w = Wear(21)
+    mound(p, (0.85, 0.8), 0.18, "Plaster")
+    # Layers of logs, the lower ones longer, each across the one under it
+    # (the two walls fell either way), a little askew.
+    for k, n in enumerate((4, 3, 3, 2)):
+        r = 0.12 + w.j(0.015)
+        y = r + k * 0.19
+        along_x = k % 2 == 0
+        for i in range(n):
+            off = (i - (n - 1) / 2) * 0.32 + w.j(0.05)
+            ln = (1.9 - k * 0.3) * w.rng.uniform(0.75, 1.0)
+            skew = w.j(0.4)
+            # One end down off the heap, the other up on it.
+            drop = w.j(0.1) if k else 0.0
+            mid = w.j(0.15)
+            if along_x:
+                a = (mid - ln / 2, y - drop, off - ln / 2 * math.sin(skew))
+                b = (mid + ln / 2, y + drop, off + ln / 2 * math.sin(skew))
+            else:
+                a = (off - ln / 2 * math.sin(skew), y - drop, mid - ln / 2)
+                b = (off + ln / 2 * math.sin(skew), y + drop, mid + ln / 2)
+            rod(p, a, b, r, "Timber", segs=10)
+            # The end grain, weathered dark, a few millimetres proud.
+            d = [b[j] - a[j] for j in range(3)]
+            n_ = math.sqrt(sum(c * c for c in d))
+            d = [c / n_ * 0.006 for c in d]
+            rod(p, tuple(a[j] - d[j] for j in range(3)), a, r * 0.85, "Char", segs=10)
+            rod(p, b, tuple(b[j] + d[j] for j in range(3)), r * 0.85, "Char", segs=10)
+    # A sheet of the roof's iron slid down onto them, and a few boards.
+    p.box((1.1, 0.012, 0.7), (0.0, 0.0, 0.0), "Corrugated",
+          xf=T(0.2, 0.72, 0.15) @ RY(0.5) @ RX(0.22) @ RZ(-0.1))
+    heap(p, (0.7, 0.65), 22, 6, (1.0, 0.03, 0.14), "Planks", 0.5, 1.0, 0.55)
+    return [p]
+
+
+def rubble_concrete():
+    p = Part("static")
+    w = Wear(23)
+    mound(p, (0.8, 0.62), 0.24, "Concrete")
+    heap(p, (0.8, 0.62), 24, 14, (0.42, 0.13, 0.34), "Concrete", 0.6, 1.2, 0.3)
+    heap(p, (0.6, 0.5), 25, 12, (0.16, 0.08, 0.12), ["Concrete", "Plaster"], 0.6, 1.1, 0.3)
+    # The rebar torn out of the slab, bent up out of the heap.
+    for k in range(7):
+        a = k / 7 * 2 * math.pi + w.j(0.3)
+        r = w.rng.uniform(0.2, 0.6)
+        x, z = r * 0.8 * math.cos(a), r * 0.62 * math.sin(a)
+        y = (1 - r * r) * 0.3 + 0.05
+        lean = w.rng.uniform(0.6, 1.4)
+        ln = w.rng.uniform(0.12, 0.3)
+        knee = (x + math.cos(a) * 0.12, y + 0.06, z + math.sin(a) * 0.12)
+        rod(p, (x, y, z), knee, 0.007, "Rusty", segs=5)
+        rod(p, knee, (knee[0] + math.cos(a) * ln * lean, knee[1] + ln, knee[2] + math.sin(a) * ln
+                      * lean), 0.007, "Rusty", segs=5)
+    return [p]
+
+
 prop("rubble_planks", rubble_planks)
 prop("rubble_brick", rubble_brick)
 prop("beam_fallen", beam_fallen)
@@ -190,3 +255,5 @@ prop("beam_charred", beam_charred)
 prop("bed_burnt", bed_burnt)
 prop("table_burnt", table_burnt)
 prop("ash_heap", ash_heap)
+prop("rubble_logs", rubble_logs)
+prop("rubble_concrete", rubble_concrete)
