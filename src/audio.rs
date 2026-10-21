@@ -401,7 +401,13 @@ impl Plugin for AudioPlugin {
                     room_acoustics,
                     binaural_switch,
                     score_drive,
-                    (animal_sounds, breath_sounds, water_sounds, sentry_sounds),
+                    (
+                        animal_sounds,
+                        breath_sounds,
+                        water_sounds,
+                        sentry_sounds,
+                        bat_sounds,
+                    ),
                 ),
             )
             // After everything that plays, so a sound is placed the frame
@@ -2641,6 +2647,7 @@ fn flock_sounds(
     mut commands: Commands,
     mut flushed: MessageReader<crate::wildlife::Flushed>,
     flocks: Query<&crate::wildlife::flock::Flock>,
+    rafts: Query<(), With<crate::wildlife::ducks::Raft>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
 ) {
@@ -2655,6 +2662,35 @@ fn flock_sounds(
             _ => ("ambience/crow", "flock.call"),
         };
         let restless = f.cause == FlushCause::Restless;
+        // A raft of mallards going up off the water: quacks, and the run-up
+        // splashing across the surface, with the wings.
+        if rafts.contains(f.flock) {
+            for _ in 0..(2 + rng.0.below(2)) {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "wildlife/duck",
+                    Some(f.at + Vec3::Y * 0.5),
+                    "flock.duck",
+                    0.0,
+                    0.1,
+                );
+            }
+            for _ in 0..3 {
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "footsteps/water",
+                    Some(f.at),
+                    "flock.splash",
+                    0.0,
+                    1.5,
+                    0.15,
+                );
+            }
+        }
         let up = Some(f.at + Vec3::Y * 2.0);
         let wings = (f.birds as f32 / 5.0).clamp(1.0, 4.0) as usize;
         for _ in 0..wings {
@@ -3174,6 +3210,48 @@ fn animal_sounds(
                 0.05,
             );
         }
+    }
+}
+
+/// Bats at dusk and night (`wildlife::bats`): the little of their calls a
+/// person hears, a quiet high flicker from the nearest hunting bat within
+/// [`BATS_NEAR`], now and then. A stand-in (`synth_foley`).
+pub const BATS_NEAR: f32 = 15.0;
+
+fn bat_sounds(
+    mut commands: Commands,
+    colonies: Query<&crate::wildlife::bats::Colony>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<f32>,
+) {
+    let now = time.elapsed_secs();
+    if now < *next {
+        return;
+    }
+    *next = now + rng.0.range(0.4, 1.2);
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let nearest = colonies
+        .iter()
+        .filter(|c| matches!(c.state, crate::wildlife::bats::ColonyState::Hunting))
+        .flat_map(|c| c.bats.iter().map(|b| b.pos))
+        .min_by(|a, b| a.distance(ear).total_cmp(&b.distance(ear)))
+        .filter(|p| p.distance(ear) < BATS_NEAR);
+    if let Some(at) = nearest {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "wildlife/bats",
+            Some(at),
+            "animal.bats",
+            0.0,
+            0.1,
+        );
     }
 }
 
