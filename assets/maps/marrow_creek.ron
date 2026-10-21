@@ -278,6 +278,31 @@
         (prefab: "boxcar", at: (110.5, -246.9), rot: 100.5),
         (prefab: "ranger_tower", at: (-240.0, -138.0), rot: 0.0),
         (prefab: "robot_gate", at: (-250.0, -255.0), rot: 45.0),
+
+        // Gardens (Destruction's breakable fence_garden, four plank panels
+        // a run): behind or beside the houses, never on the door side, each
+        // an L with the house wall that's open on its fourth side. Each run
+        // touches its house or the next run, so there's no squeeze.
+        // Behind the north house, open to the south.
+        (prefab: "fence_garden", at: (-25.85, 91.10), rot: 180.0),
+        (prefab: "fence_garden", at: (-30.20, 95.25), rot: 90.0),
+        // Behind the house over the road, open to the south.
+        (prefab: "fence_garden", at: (29.85, 81.10), rot: 0.0),
+        (prefab: "fence_garden", at: (34.20, 85.25), rot: 270.0),
+        // Beside the south house, open to the west and the road.
+        (prefab: "fence_garden", at: (28.40, 63.35), rot: 270.0),
+        (prefab: "fence_garden", at: (24.25, 67.70), rot: 0.0),
+        // Beside the house up the lane, open to the south.
+        (prefab: "fence_garden", at: (-53.35, 71.60), rot: 0.0),
+        (prefab: "fence_garden", at: (-57.70, 75.75), rot: 90.0),
+        // Behind the foreman's cabin, open to the east.
+        (prefab: "fence_garden", at: (-188.40, 197.35), rot: 90.0),
+        (prefab: "fence_garden", at: (-184.25, 201.70), rot: 0.0),
+        // The farm's paddock behind the house, open to the south and the shed.
+        (prefab: "fence_garden", at: (198.35, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (206.85, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (211.20, 144.25), rot: 270.0),
+        (prefab: "fence_garden", at: (211.20, 152.75), rot: 270.0),
             ],
 
     markers: [

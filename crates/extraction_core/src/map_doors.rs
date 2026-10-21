@@ -210,8 +210,11 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
             if dist(o.at, d.face) > geom::len(half) + d.reach() + d.half_width() {
                 continue;
             }
+            // Finer than the thing is thin, or a 0.2 m garden fence could
+            // stand across the strip between two rows of samples.
+            let step = 0.25f32.min(half[0].min(half[1]) * 1.5);
             let hit = d
-                .samples(0.0, d.half_width(), 0.25)
+                .samples(0.0, d.half_width(), step)
                 .into_iter()
                 .find(|q| inside_rect(o.at, half, o.rot, *q));
             if let Some(q) = hit {
