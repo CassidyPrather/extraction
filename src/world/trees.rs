@@ -489,6 +489,7 @@ fn spawn_forests(
     );
     commands.insert_resource(grid);
     commands.insert_resource(ForestAssets(assets));
+    commands.insert_resource(ForestBuilt);
 }
 
 /// Chunk size for merged forest meshes, metres.
@@ -696,6 +697,24 @@ struct ForestGrid {
 #[derive(Resource)]
 struct ForestAssets(TreeAssets);
 
+/// The forest's meshes are built (`spawn_forests` has run).
+#[derive(Resource)]
+pub struct ForestBuilt;
+
+/// Whether the forest is done arriving: built, and every impostor's
+/// picture taken (each a capture rig until its readback comes in).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ForestSettled<'w, 's> {
+    built: Option<Res<'w, ForestBuilt>>,
+    captures: Query<'w, 's, (), With<super::impostors::Capture>>,
+}
+
+impl ForestSettled<'_, '_> {
+    pub fn settled(&self) -> bool {
+        self.built.is_some() && self.captures.is_empty()
+    }
+}
+
 /// On a tree whose near detail is spawned: the detail entities.
 #[derive(Component)]
 struct NearDetail(Vec<Entity>);
@@ -803,9 +822,52 @@ pub struct TreeSway {
     pub pusher: Vec4,
 }
 
+/// Each vertex of a foliage card: the card's own centre (tree space), so
+/// the sway shader can shrink a card near the eye as a whole.
+pub const ATTRIBUTE_CARD_CENTRE: bevy::mesh::MeshVertexAttribute =
+    bevy::mesh::MeshVertexAttribute::new(
+        "CardCentre",
+        0x5EED_CA2D,
+        bevy::render::render_resource::VertexFormat::Float32x3,
+    );
+
+/// A card shrinks toward its centre from this far from the eye...
+pub const CARD_SHRINK_FROM: f32 = 2.0;
+/// ...and is gone by this near: in a headset a card at arm's length is a
+/// flat blurred sheet across the view, and under a spruce clump the cards
+/// within 2 m were a quarter of the view's overdraw. The trunks and the
+/// dark core stay; so do the cards' shadows.
+pub const CARD_GONE_AT: f32 = 1.2;
+
+/// How much of a card is left `d` metres from the eye (the shader's
+/// `smoothstep`, for the overdraw gauge).
+pub fn card_scale(d: f32) -> f32 {
+    let t = ((d - CARD_GONE_AT) / (CARD_SHRINK_FROM - CARD_GONE_AT)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
 impl bevy::pbr::MaterialExtension for TreeSway {
     fn vertex_shader() -> bevy::shader::ShaderRef {
         "shaders/tree_sway.wgsl".into()
+    }
+
+    fn specialize(
+        _pipeline: &bevy::pbr::MaterialExtensionPipeline,
+        descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
+        layout: &bevy::mesh::MeshVertexBufferLayoutRef,
+        _key: bevy::pbr::MaterialExtensionKey<Self>,
+    ) -> Result<(), bevy::render::render_resource::SpecializedMeshPipelineError> {
+        // The card's centre at location 8, where the mesh has it.
+        if let Ok(centre) = layout
+            .0
+            .get_layout(&[ATTRIBUTE_CARD_CENTRE.at_shader_location(8)])
+        {
+            if let Some(buffer) = descriptor.vertex.buffers.first_mut() {
+                buffer.attributes.extend(centre.attributes);
+                descriptor.vertex.shader_defs.push("CARD_CENTRE".into());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -897,6 +959,8 @@ struct MeshBuilder {
     nrm: Vec<[f32; 3]>,
     col: Vec<[f32; 4]>,
     uv: Vec<[f32; 2]>,
+    /// Per vertex, the card it's on's centre (cards only).
+    card_centre: Vec<[f32; 3]>,
     idx: Vec<u32>,
 }
 
@@ -966,10 +1030,12 @@ impl MeshBuilder {
                 a.0 * b.1 - b.0 * a.1
             })
             .sum();
+        let mid = (base + along * 0.5).to_array();
         let ids: Vec<u32> = pts
             .iter()
             .map(|&(s, f, uv)| {
                 let p = base - side + side * 2.0 * s + along * f;
+                self.card_centre.push(mid);
                 self.vertex_uv(p, n(p), c, uv)
             })
             .collect();
@@ -1108,6 +1174,11 @@ impl MeshBuilder {
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
         .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
         .with_inserted_indices(Indices::U32(self.idx));
+        // (`EXTRACTION_CARD_SHRINK=0`: whole cards however near, to compare.)
+        let shrink = std::env::var("EXTRACTION_CARD_SHRINK").map_or(true, |v| v != "0");
+        if shrink && !self.card_centre.is_empty() && self.card_centre.len() == m.count_vertices() {
+            m.insert_attribute(ATTRIBUTE_CARD_CENTRE, self.card_centre);
+        }
         if colours {
             m.insert_attribute(Mesh::ATTRIBUTE_COLOR, self.col);
         } else {
@@ -1523,6 +1594,57 @@ mod atlas_tests {
                 r[0] > 0.17 && r[3] < 0.77,
                 "sprig {r:?} reaches the strip or stems"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod card_shrink_tests {
+    use super::*;
+
+    /// Every card vertex knows its card's centre (each card's corners
+    /// share one, so the shader shrinks a card whole), and nothing but the
+    /// cards carries it.
+    #[test]
+    fn cards_carry_their_centres() {
+        for species in [TreeSpecies::Spruce, TreeSpecies::Pine, TreeSpecies::Birch] {
+            let m = build_tree(species, 1017, true, false, false);
+            let cards = m.cards.expect("textured trees have cards");
+            let Some(bevy::mesh::VertexAttributeValues::Float32x3(centres)) =
+                cards.attribute(ATTRIBUTE_CARD_CENTRE)
+            else {
+                panic!("{species:?}: no card centres");
+            };
+            assert_eq!(centres.len(), cards.count_vertices());
+            let pos = cards
+                .attribute(Mesh::ATTRIBUTE_POSITION)
+                .unwrap()
+                .as_float3()
+                .unwrap();
+            // A centre is near its own corners.
+            let far = pos
+                .iter()
+                .zip(centres)
+                .map(|(p, c)| Vec3::from(*p).distance(Vec3::from(*c)))
+                .fold(0.0f32, f32::max);
+            println!("{species:?}: corners at most {far:.2} m from their card's centre");
+            assert!(far < 4.0, "{species:?}: a corner {far:.1} m from its centre");
+            assert!(m.trunk.attribute(ATTRIBUTE_CARD_CENTRE).is_none());
+        }
+    }
+
+    /// Whole from 2 m, gone by 1.2 m, smoothly between.
+    #[test]
+    fn a_card_shrinks_near_the_eye() {
+        assert_eq!(card_scale(0.5), 0.0);
+        assert_eq!(card_scale(CARD_GONE_AT), 0.0);
+        assert_eq!(card_scale(CARD_SHRINK_FROM), 1.0);
+        assert_eq!(card_scale(10.0), 1.0);
+        let mut last = 0.0;
+        for i in 0..=40 {
+            let s = card_scale(1.2 + 0.02 * i as f32);
+            assert!(s >= last && s - last < 0.06, "no jump at {i}: {last} > {s}");
+            last = s;
         }
     }
 }
