@@ -50,6 +50,15 @@ pub struct MapDef {
     /// Ash drifting down when it isn't raining, 0..1.
     #[serde(default)]
     pub ash: f32,
+    /// Where snow can lie (m): above it, falling weather comes as snow
+    /// and lies on what faces up. None: the valley's too low
+    /// (`world::snow`).
+    #[serde(default)]
+    pub snow_line: Option<f32>,
+    /// Snow that lies above the line whatever the weather, 0..1: a high,
+    /// cold valley's snowfields. Falling snow adds to it.
+    #[serde(default)]
+    pub snow: f32,
     /// What the valley sounds like.
     #[serde(default)]
     pub sounds: SoundsDef,

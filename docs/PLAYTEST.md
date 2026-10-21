@@ -442,6 +442,23 @@ Also come in from a lit room or the truck bed into the dark. Does it
 take a few seconds before you see again, and does the brightness ever
 pump?
 
+### 4f. Storms and snow (10 minutes)
+
+1. `cargo run --release -- --map marrow_creek --weather storm`. Stand in
+   the open meadow for a minute.
+   - Does a near strike startle you? Is it ever uncomfortable in the
+     headset (too bright, too often)?
+   - Can you see the rain crossing the valley in sheets?
+   - Try `--hour night` too: the valley should jump out of the black
+     for a moment, then you're blind again.
+2. `cargo run --release -- --map kettle_pass --snow 1.0`. Walk up from
+   the gate to the pass.
+   - Does the snow start at the right height? Is the white too bright,
+     or does the ground lose its shape?
+   - Turn round: can you see your own tracks? Does your breath show,
+     and is it ever in the way?
+   - `--snow 0.3`: a first dusting, in patches.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -494,7 +511,8 @@ pump?
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
-| `--weather NAME` | `drizzle`, `fog`, `downpour`, `clearing` |
+| `--weather NAME` | `drizzle`, `fog`, `downpour`, `storm` (a downpour with lightning), `clearing` |
+| `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |
 | `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
 | `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
