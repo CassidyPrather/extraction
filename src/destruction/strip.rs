@@ -116,16 +116,11 @@ struct CarNode(&'static str, [f32; 3], [f32; 3]);
 /// Kit's car wrecks (`art/vehicles/wrecks.py`): each a model whose
 /// separable parts are its top-level nodes, in the car's space (floor
 /// under the wheelbase's middle, front to -Z, +X its right side). The
-/// boxes are the nodes' own bounds, read from the models; `body` first.
+/// boxes are the nodes' own bounds, read from the models.
 const CARS: &[(&str, &[CarNode])] = &[
     (
         "wreck_lada",
         &[
-            CarNode(
-                "wreck_lada#body",
-                [-0.042, 0.798, -0.007],
-                [1.796, 1.185, 4.313],
-            ),
             CarNode(
                 "wreck_lada#bonnet",
                 [0.0, 0.843, -1.493],
@@ -177,11 +172,6 @@ const CARS: &[(&str, &[CarNode])] = &[
     (
         "wreck_uaz",
         &[
-            CarNode(
-                "wreck_uaz#body",
-                [-0.018, 1.099, -0.076],
-                [1.899, 1.718, 3.952],
-            ),
             CarNode("wreck_uaz#bonnet", [0.0, 1.1, -1.41], [1.35, 0.06, 1.06]),
             CarNode(
                 "wreck_uaz#door_fl",
@@ -226,11 +216,6 @@ const CARS: &[(&str, &[CarNode])] = &[
         "wreck_lorry",
         &[
             CarNode(
-                "wreck_lorry#body",
-                [-0.033, 1.215, 0.402],
-                [2.583, 1.91, 6.435],
-            ),
-            CarNode(
                 "wreck_lorry#bonnet",
                 [0.0, 1.235, -1.955],
                 [1.124, 0.47, 1.4],
@@ -266,13 +251,56 @@ const CARS: &[(&str, &[CarNode])] = &[
     ),
 ];
 
-/// A car wreck's body box in the car's space (centre, size): for the
-/// prefab's collider. Its parts stand proud of it a little; they're
-/// their own colliders.
-pub fn car_body(model: &str) -> Option<(Vec3, Vec3)> {
-    let (_, nodes) = CARS.iter().find(|(m, _)| *m == model)?;
-    let n = nodes.iter().find(|n| n.0.ends_with("#body"))?;
-    Some((Vec3::from(n.1), Vec3::from(n.2)))
+/// A car wreck's body as boxes (min, max corners, car space), read off
+/// its model: a chassis between the wheels; a hull above them inside the
+/// doors' inner faces, up to the bonnet's and boot's undersides; the cab
+/// between the bonnet's hinge and the boot (or to the cab's back); and a
+/// lorry's bed. Nothing of it stands over a part, so a round or a hand
+/// meets the door, not the body round it, and there's no wall in the air
+/// over a bonnet.
+const BODIES: &[(&str, &[([f32; 3], [f32; 3])])] = &[
+    (
+        "wreck_lada",
+        &[
+            ([-0.595, 0.205, -2.15], [0.595, 0.56, 2.15]),
+            ([-0.72, 0.56, -2.15], [0.72, 0.825, 2.15]),
+            ([-0.72, 0.825, -0.985], [0.72, 1.39, 1.27]),
+        ],
+    ),
+    (
+        "wreck_uaz",
+        &[
+            ([-0.6, 0.24, -2.05], [0.6, 0.76, 1.74]),
+            ([-0.79, 0.76, -2.05], [0.79, 1.07, 1.74]),
+            ([-0.79, 1.07, -0.88], [0.79, 1.61, 1.74]),
+        ],
+    ),
+    (
+        "wreck_lorry",
+        &[
+            ([-0.595, 0.26, -2.81], [0.595, 0.88, 3.49]),
+            ([-0.92, 0.88, -2.81], [0.92, 1.0, 3.49]),
+            ([-0.92, 1.0, -1.255], [0.92, 2.17, 0.685]),
+            ([-1.15, 0.88, 0.685], [1.15, 1.12, 3.49]),
+        ],
+    ),
+];
+
+/// A car wreck's body boxes in the car's space (centre, size): for the
+/// prefab's collider.
+pub fn car_body(model: &str) -> Vec<(Vec3, Vec3)> {
+    BODIES
+        .iter()
+        .find(|(m, _)| *m == model)
+        .map_or(Vec::new(), |(_, boxes)| {
+            boxes
+                .iter()
+                .map(|(lo, hi)| {
+                    let (lo, hi) = (Vec3::from(*lo), Vec3::from(*hi));
+                    ((lo + hi) * 0.5, hi - lo)
+                })
+                .collect()
+        })
 }
 
 /// A car wreck's parts as a building's breakables, the car standing at
@@ -285,7 +313,6 @@ pub fn car_parts(model: &'static str, at: Transform) -> Vec<Breakable> {
     };
     nodes
         .iter()
-        .filter(|n| !n.0.ends_with("#body"))
         .map(|n| {
             let (local, size) = car_node_pose(n);
             let node = super::wood::model_node(n.0).1.unwrap_or_default();

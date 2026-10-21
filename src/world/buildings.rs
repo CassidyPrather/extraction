@@ -4547,21 +4547,25 @@ fn radio_mast(b: &mut Builder) {
 /// A dead bus standing on its wheels (one gone, that corner on a block):
 /// body, a band of dark windows, roof, bumpers, wheel arches, a door.
 /// A car left where it stopped (`art/vehicles/wrecks.py`, Kit's): its
-/// shell drawn and collided as one box, every door, bonnet, boot and
+/// shell drawn, and collided as a few boxes that follow it, every door, bonnet, boot and
 /// wheel its own breakable (`destruction::strip::car_parts`), in the
 /// model's own space (the ground under the wheelbase's middle, its front
 /// to -Z).
 fn car_wreck(b: &mut Builder, model: &'static str) {
-    let Some((centre, size)) = crate::destruction::strip::car_body(model) else {
+    let body = crate::destruction::strip::car_body(model);
+    if body.is_empty() {
         return;
-    };
+    }
     let from = b.geo.pieces.len();
-    b.piece(
-        Shape::Box(size),
-        Transform::from_translation(centre),
-        Mat::RustyMetal,
-        true,
-    );
+    // (Boxes that follow the body, clear of its parts: Destruction's.)
+    for (centre, size) in body {
+        b.piece(
+            Shape::Box(size),
+            Transform::from_translation(centre),
+            Mat::RustyMetal,
+            true,
+        );
+    }
     let to = b.geo.pieces.len();
     let body: &'static str = match model {
         "wreck_lada" => "wreck_lada#body",
