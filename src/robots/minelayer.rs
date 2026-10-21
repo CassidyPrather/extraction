@@ -133,7 +133,13 @@ impl Plugin for MinelayerPlugin {
             .add_observer(lead_cut)
             .add_systems(
                 FixedUpdate,
-                (minelayer_mind, mines, hopper_cook_off, minelayer_wreck)
+                (
+                    minelayer_mind,
+                    shot_mines,
+                    mines,
+                    hopper_cook_off,
+                    minelayer_wreck,
+                )
                     .chain()
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
@@ -385,10 +391,11 @@ fn minelayer_mind(
                         .map(|k| path[k + 1] - path[k])
                         .unwrap_or(Vec2::new(site.x - here.x, site.z - here.z));
                     // Never in a doorway, on a road or close by a building.
-                    let spots = rules::site_field(&zone.map, &zone.hm, [site.x, site.z], along.into())
-                        .into_iter()
-                        .map(Vec2::from)
-                        .collect();
+                    let spots =
+                        rules::site_field(&zone.map, &zone.hm, [site.x, site.z], along.into())
+                            .into_iter()
+                            .map(Vec2::from)
+                            .collect();
                     Doing::Lay {
                         spots,
                         next: 0,
@@ -519,18 +526,34 @@ fn lead_cut(gone: On<Remove, MineLead>, leads: Query<&MineLead>, mut cut: ResMut
     }
 }
 
+/// A round into a mine (read apart from [`mines`], which writes the
+/// blast's own hits).
+#[derive(Component, Debug)]
+pub struct MineShot;
+
+fn shot_mines(
+    mut commands: Commands,
+    mut hits: MessageReader<Hit>,
+    mines: Query<(), With<LaidMine>>,
+) {
+    for h in hits.read() {
+        if mines.contains(h.entity) {
+            commands.entity(h.entity).try_insert(MineShot);
+        }
+    }
+}
+
 /// Mines: weight on them, a hand on them, a round in them.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn mines(
     mut commands: Commands,
-    mut laid: Query<(Entity, &mut LaidMine, &GlobalTransform)>,
+    mut laid: Query<(Entity, &mut LaidMine, &GlobalTransform, Has<MineShot>)>,
     players: Query<(&GlobalTransform, &crate::player::Body), With<crate::player::Player>>,
     robots: Query<(&Robot, &GlobalTransform, Has<super::heavy::Heavy>)>,
     hands: Query<(&crate::interact::Hand, &GlobalTransform)>,
     parts: Query<(Entity, &GlobalTransform), With<super::RobotPart>>,
     bodies: Query<(Entity, &GlobalTransform), With<crate::player::BodyCollider>>,
     mut cut: ResMut<CutLeads>,
-    mut shot: MessageReader<Hit>,
     catalog: Res<crate::items::Catalog>,
     spatial: SpatialQuery,
     mut hits: MessageWriter<Hit>,
@@ -540,10 +563,9 @@ fn mines(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    let shot: Vec<Entity> = shot.read().map(|h| h.entity).collect();
     let cut: Vec<Entity> = std::mem::take(&mut cut.0);
     let mut blasts: Vec<Vec3> = Vec::new();
-    for (e, mut m, gt) in &mut laid {
+    for (e, mut m, gt, shot) in &mut laid {
         let at = gt.translation();
         let on_plate = |p: Vec3| {
             Vec2::new(p.x - at.x, p.z - at.z).length() < rules::PLATE && (p.y - at.y).abs() < 0.6
@@ -586,7 +608,7 @@ fn mines(
                 }
             }
         }
-        let act = if shot.contains(&e) {
+        let act = if shot {
             MineAct::Blast
         } else {
             m.mine.step(weight, dt)
