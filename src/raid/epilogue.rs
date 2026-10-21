@@ -25,7 +25,8 @@ impl Plugin for EpiloguePlugin {
             .add_systems(
                 Update,
                 (begin, plan_depot, walk, release, at_the_bay, home).chain(),
-            );
+            )
+            .add_systems(Update, crates_stay_open);
     }
 }
 
@@ -92,7 +93,7 @@ pub struct LevWalker {
 
 /// How close he keeps behind you, and how fast he walks.
 const BEHIND: f32 = 2.2;
-const PACE: f32 = 1.35;
+pub(crate) const PACE: f32 = 1.35;
 /// Near enough to the terminal, you and he, for the release.
 const AT_TERMINAL: f32 = 3.0;
 const LEV_NEAR: f32 = 7.0;
@@ -333,6 +334,7 @@ fn release(
     )>,
     mut beats: MessageWriter<EpilogueBeat>,
     mut told_shut: Local<bool>,
+    mut kept: Query<&mut crate::world::underground::KeptCrate>,
 ) {
     if epi.stage != Stage::Following {
         *told_shut = false;
@@ -353,6 +355,9 @@ fn release(
     }
     if !epi.crates_open {
         epi.crates_open = true;
+        for mut c in &mut kept {
+            c.open = true;
+        }
         term.pages = RELEASE_PAGES.iter().map(|p| p.to_string()).collect();
         term.page = 0;
         text.text = term.screen();
@@ -374,6 +379,22 @@ fn release(
     } else if !*told_shut {
         *told_shut = true;
         raid.say(STACKS_SHUT);
+    }
+}
+
+/// Once released, always: on later raids the Depot's crates stand open.
+fn crates_stay_open(
+    epi: Res<Epilogue>,
+    mut kept: Query<
+        &mut crate::world::underground::KeptCrate,
+        Added<crate::world::underground::KeptCrate>,
+    >,
+) {
+    if !epi.done {
+        return;
+    }
+    for mut c in &mut kept {
+        c.open = true;
     }
 }
 
@@ -445,13 +466,21 @@ fn home(
     epi.said = 0;
 }
 
-/// Client: Lev's body (`lev_body`, his arm `lev_hand`), boxes until the
-/// models are in, and a slow walker's sway.
+/// Client: Lev jointed and walking (`lev_walk`), or whole (`lev_body`, his
+/// arm `lev_hand`) without the rig; boxes until the models are in.
 pub struct EpilogueVisualsPlugin;
 
 impl Plugin for EpilogueVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, dress_lev);
+        app.add_systems(
+            Update,
+            (
+                dress_lev,
+                super::lev_walk::rig_lev,
+                super::lev_walk::walk_lev,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -479,10 +508,15 @@ fn dress_lev(
             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
                 * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
         );
-        commands.entity(e).insert(SwapIn(vec![
-            ("lev_body", Transform::IDENTITY),
-            ("lev_hand", hand),
-        ]));
+        // Jointed and walking when Kit models' rig is there; else whole.
+        if super::lev_walk::on_disk() {
+            commands.entity(e).insert(super::lev_walk::PendingRig);
+        } else {
+            commands.entity(e).insert(SwapIn(vec![
+                ("lev_body", Transform::IDENTITY),
+                ("lev_hand", hand),
+            ]));
+        }
         for (size, at, m) in [
             (Vec3::new(0.46, 0.95, 0.3), Vec3::new(0.0, 0.95, 0.0), &coat),
             (Vec3::new(0.36, 0.5, 0.22), Vec3::new(0.0, 0.25, 0.0), &coat),
@@ -612,6 +646,16 @@ mod tests {
         }
         let epi = app.world().resource::<Epilogue>().clone();
         assert!(epi.crates_open, "the release went through");
+        let kept: Vec<(String, bool)> = app
+            .world_mut()
+            .query::<&crate::world::underground::KeptCrate>()
+            .iter(app.world())
+            .map(|c| (c.tag.clone(), c.open))
+            .collect();
+        assert!(
+            kept.iter().any(|(t, _)| t == "MAREK, H.") && kept.iter().all(|(_, o)| *o),
+            "every kept crate opens: {kept:?}"
+        );
         assert_eq!(epi.stage, Stage::ToTheBay);
         let text = app
             .world_mut()

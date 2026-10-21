@@ -17,6 +17,7 @@ target/audio_audit/score_<intensity>.wav. This checks it:
   each band (a fragment ringing, not the average).
 """
 import math
+import re
 
 import numpy as np
 
@@ -25,7 +26,7 @@ import audio_mix as am
 
 UNDER_BED = 3.0         # LU the score's loudest moment stays under the wind
 RANGE_KEPT = 0.9        # share of a robot sound's audible range kept with the score
-ROBOTS = ("robot.", "drone.", "walker.")
+ROBOTS = ("robot.", "drone.", "walker.", "voice.")
 
 
 def worst_bands(x, block=3.0):
@@ -93,15 +94,20 @@ def run(sets, out):
                      f"{clears:+11.1f}  " + "; ".join(f))
     if full is None:
         return flags, lines
-    lines.append(f"  Robots heard to (m), without / with the score at full (keeps {RANGE_KEPT:.0%}):")
+    duck = float(re.search(r"SCORE_DUCK_DB: f32 = ([\d.]+)",
+                           (aa.ROOT / "src" / "audio_mix.rs").read_text()).group(1))
+    lines.append(f"  Robots heard to (m), without / with the score at full (keeps {RANGE_KEPT:.0%}; "
+                 f"voices with it ducked {duck:g} dB):")
     for c in mix:
         if not c["name"].startswith(ROBOTS) or c["dist"] <= 0:
             continue
         r = []
         f = []
+        # The score steps aside under a robot's voice (SCORE_DUCK_DB).
+        under = full - (duck if c["name"].startswith("voice.") else 0.0)
         for bed_name, bed in (("wind", wind_bands), ("surge", surge_bands)):
             alone = heard_to(c["name"], sets, mix, bed)
-            scored = heard_to(c["name"], sets, mix, power_sum(bed, full))
+            scored = heard_to(c["name"], sets, mix, power_sum(bed, under))
             r.append(f"{alone:4d} / {scored:4d}")
             if alone and scored < RANGE_KEPT * alone:
                 f.append(f"over the {bed_name}, {scored} m of {alone}")

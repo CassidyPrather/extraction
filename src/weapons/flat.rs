@@ -519,9 +519,12 @@ pub fn apply_combines(
 /// How close (m) a box of rounds and a magazine held in your two hands
 /// have to come for the rounds to go in.
 pub const TOUCH: f32 = 0.12;
+/// How close a cleaning kit, oil or parts must come to a gun's receiver.
+pub const TOUCH_GUN: f32 = 0.2;
 
 /// VR: bring a box of rounds to a magazine, one in each hand, and the rounds
-/// go in (what flat mode's C does). Without it a headset could never load a
+/// go in (what flat mode's C does); bring a cleaning kit, oil or spare
+/// parts to a gun's receiver and it's tended. Without it a headset could never load a
 /// magazine: the yard's sign said to, and nothing listened.
 fn touch_to_combine(
     driver: Res<crate::rig::RigDriver>,
@@ -554,10 +557,20 @@ fn touch_to_combine(
             ammo.category == Category::Ammo
                 && matches!((&ammo.cartridge, &mag.magazine), (Some(c), Some(m)) if *c == m.cartridge)
         };
-        if !(loads(da, db) || loads(db, da)) {
+        // A cleaning kit, oil or spare parts brought to a gun's receiver.
+        let tends = |tool: &extraction_core::items::ItemDef,
+                     gun: &extraction_core::items::ItemDef| {
+            gun.firearm.is_some()
+                && matches!(tool.id.as_str(), "cleaning_kit" | "gun_oil" | "spare_parts")
+        };
+        let reach = if loads(da, db) || loads(db, da) {
+            TOUCH
+        } else if tends(da, db) || tends(db, da) {
+            TOUCH_GUN
+        } else {
             continue;
-        }
-        if ga.translation().distance(gb.translation()) < TOUCH {
+        };
+        if ga.translation().distance(gb.translation()) < reach {
             now.insert((a, b));
             if !touching.contains(&(a, b)) {
                 combine.write(Combine { a, b });

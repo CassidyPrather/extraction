@@ -1,0 +1,26 @@
+# kettle_pass press-kit stills: name x,y,z,yaw,pitch (as --camera; y 0 = eye height).
+k01_gate        120,0,255,345,-1     # from the insertion, up the valley
+k02_row         0,0,175,0,-3         # Miners' Row
+k03_road        40,0,0,0,4           # up toward the pass
+k04_beck        -110,0,60,240,-6     # Kettle Beck
+k05_quarry      150,0,10,28,-6       # into the quarry
+k06_mine        -170,0,0,311,-3      # the mine yard
+k07_pines       180,0,-120,90,0      # east slope pines
+k08_pass        10,0,-245,180,-6     # from the pass, back down the valley
+k09_lodge       210,0,-190,34,-2     # the hunting lodge
+k10_summit      -120,0,-235,90,-6    # summit vista, east
+k11_aerial      120,45,300,350,-6    # over the gate, up toward the pass
+
+# Hero views of the landmarks: low from the south-east, high from the south-west.
+h_headframe_low   -49,0,51,315,8
+h_headframe_high  -106,~14,62,45,-12
+h_ropeway_station_low   -145,0,11,315,8
+h_ropeway_station_high  -202,~14,22,45,-12
+h_chapel_low   15,0,173,315,8
+h_chapel_high  -42,~14,184,45,-12
+h_ranger_tower_low   -25,0,-210,315,8
+h_ranger_tower_high  -82,~14,-199,45,-12
+h_radio_mast_low   85,0,-199,315,8
+h_radio_mast_high  28,~14,-188,45,-12
+h_sawmill_low   233,0,263,315,8
+h_sawmill_high  176,~14,274,45,-12

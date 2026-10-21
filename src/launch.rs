@@ -84,6 +84,9 @@ pub struct LaunchOptions {
     /// Dev: the tour's views from a file instead of the placements (see
     /// `tour::scripted_views`; the visual lookbook, `scripts/lookbook.sh`).
     pub tour_views: Option<PathBuf>,
+    /// Dev: screenshot every text panel from where it's read, at the
+    /// headset's pixels a degree, into this folder (`render::legibility`).
+    pub legibility: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -91,6 +94,9 @@ pub struct LaunchOptions {
     pub weather: Option<String>,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
+    /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
+    /// `gibbous`, `full`, `waning`, or a number; `weather::moon_phase`).
+    pub moon: Option<f32>,
     /// The low sun's height at dawn and dusk, degrees (a playtest knob:
     /// lower is warmer light but longer shadows).
     pub sun_elevation: f32,
@@ -108,6 +114,8 @@ pub struct LaunchOptions {
     pub sim_out: Option<PathBuf>,
     /// Sim raids run at once.
     pub jobs: usize,
+    /// Capture tooling: cinematics and sweeps (see `capture`).
+    pub capture: crate::capture::CaptureOptions,
 }
 
 impl Default for LaunchOptions {
@@ -127,6 +135,7 @@ impl Default for LaunchOptions {
             tour: None,
             tour_only: None,
             tour_views: None,
+            legibility: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -140,6 +149,7 @@ impl Default for LaunchOptions {
             gallery: None,
             weather: None,
             hour: None,
+            moon: None,
             sun_elevation: 20.0,
             map_explicit: false,
             sim: None,
@@ -148,6 +158,7 @@ impl Default for LaunchOptions {
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
+            capture: Default::default(),
         }
     }
 }
@@ -159,9 +170,11 @@ impl LaunchOptions {
     pub fn tooling(&self) -> bool {
         self.screenshot.is_some()
             || self.tour.is_some()
+            || self.legibility.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
+            || self.capture.active()
     }
 
     pub fn from_args() -> Self {
@@ -194,6 +207,17 @@ impl LaunchOptions {
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--weather" => o.weather = Some(val()),
                 "--hour" => o.hour = Some(val()),
+                "--moon" => {
+                    o.moon = match val().as_str() {
+                        "new" => Some(0.0),
+                        "crescent" => Some(0.125),
+                        "quarter" => Some(0.25),
+                        "gibbous" => Some(0.375),
+                        "full" => Some(0.5),
+                        "waning" => Some(0.625),
+                        other => other.parse::<f32>().ok().map(|p| p.rem_euclid(1.0)),
+                    }
+                }
                 "--sun-elevation" => {
                     o.sun_elevation = val().parse().unwrap_or(20.0f32).clamp(5.0, 60.0)
                 }
@@ -236,6 +260,13 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--legibility" => {
+                    o.legibility = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--tour-only" => o.tour_only = Some(val()),
                 "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
@@ -259,8 +290,18 @@ impl LaunchOptions {
                         o.window_size = (v[0], v[1]);
                     }
                 }
+                flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // A capture drives free cameras: over a quiet valley, or after a
+        // sim bot, rendered (a sim run is otherwise headless).
+        if o.capture.active() {
+            o.flat = true;
+            o.headless = false;
+            o.robots &= !o.capture.still();
+            o.camera
+                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {
@@ -302,6 +343,7 @@ mod tests {
             "--screenshot out.png",
             "--sim-run 3",
             "--bot",
+            "--cinematic x.cine",
         ] {
             assert!(parse(a).tooling(), "{a}");
         }

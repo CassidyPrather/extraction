@@ -12,8 +12,8 @@ jacket_hook, tally_board.
 Anywhere: dishes, jars, books, rug, broom.
 Ruins and Cinder's soot: dishes_broken, books_charred, frame_charred,
 ash_film (a sill's grey film, a unit metre long).
-For Story: dog_bowl, lead_hook (Hana's), pigeonholes (the post office),
-ledger_open (the mine office).
+For Story: dog_bowl, lead_hook and dog_collar (Hana's), pigeonholes (the
+post office), ledger_open (the mine office).
 
 Materials: Canvas, Leather, Wool, Ticking, Enamel, Brass, Paper, Cream,
 Glass, Iron, Rusty, Timber, Planks, Char, Red, Olive, Black, Rope, Steel,
@@ -376,20 +376,28 @@ def dog_bowl():
 
 
 def lead_hook():
-    """A coat hook by the door with a dog's lead hanging on it, its collar
-    at the end (the wall's face at z 0, the hook at y 0)."""
+    """A coat hook by the door with a dog's lead hanging on it, the clip
+    at its end (the wall's face at z 0, the hook at y 0)."""
     p = Part("static")
     p.box((0.1, 0.14, 0.02), (0, 0, -0.01), "Timber", bevel=0.004, segs=1)
     rod(p, (0, 0.02, -0.02), (0, 0.06, -0.09), 0.008, "Iron", segs=6)
-    # The lead: a loop over the hook, falling to the collar.
+    # The lead: a loop over the hook, falling to the clip.
     pts = [(0.0, 0.05, -0.08), (0.02, -0.1, -0.06), (0.01, -0.3, -0.05), (-0.01, -0.5, -0.05)]
     for a, b in zip(pts, pts[1:]):
         p.box((0.018, math.dist(a, b), 0.004), (0, 0, 0), "Leather",
               xf=T(*[(u + v) / 2 for u, v in zip(a, b)])
               @ RZ(math.atan2(b[0] - a[0], a[1] - b[1])))
+    p.box((0.012, 0.03, 0.008), (-0.01, -0.515, -0.05), "Brass", bevel=0.002, segs=1)
+    return [p]
+
+
+def dog_collar():
+    """The dog's collar on the lead's clip, placed with `lead_hook` (the
+    same origin): hung there once Lev has been home."""
+    p = Part("static")
     p.lathe([(0.055, -0.009), (0.065, -0.009), (0.065, 0.009), (0.055, 0.009)], "Leather",
-            segs=14, closed=True, xf=T(-0.01, -0.56, -0.05) @ RX(0.2))
-    p.cyl(0.012, -0.004, 0.004, "Brass", segs=8, xf=T(-0.01, -0.62, -0.06))
+            segs=14, closed=True, xf=T(-0.01, -0.585, -0.05) @ RX(0.2))
+    p.cyl(0.012, -0.004, 0.004, "Brass", segs=8, xf=T(-0.01, -0.645, -0.06))
     return [p]
 
 
@@ -442,5 +450,6 @@ for name, build in (("suitcase_open", suitcase_open), ("suitcase_shut", suitcase
                     ("broom", broom), ("dishes_broken", dishes_broken),
                     ("books_charred", books_charred), ("frame_charred", frame_charred),
                     ("ash_film", ash_film), ("dog_bowl", dog_bowl), ("lead_hook", lead_hook),
+                    ("dog_collar", dog_collar),
                     ("pigeonholes", pigeonholes), ("ledger_open", ledger_open)):
     prop(name, build)

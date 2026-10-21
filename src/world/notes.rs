@@ -42,8 +42,10 @@ impl Terminal {
     }
 }
 
-/// Paper size, metres: a sheet you can read leaning over a table.
-pub const NOTE: Vec2 = Vec2::new(0.24, 0.32);
+/// Paper size, metres: a sheet you can read leaning over a table (a
+/// little over A4: its letters clear the must-read floor from there,
+/// `docs/LEGIBILITY.md`).
+pub const NOTE: Vec2 = Vec2::new(0.26, 0.36);
 
 pub fn note_panel(text: &str) -> ScreenText {
     ScreenText {
@@ -161,6 +163,7 @@ fn spawn_notes(
                 let y = rest_height(&zone, m.at[0], m.at[1], 2.2 + m.y);
                 commands.spawn((
                     Name::new("Note"),
+                    crate::render::legibility::TextSource::Note,
                     note_panel(text),
                     // Lying face up, its top edge away from whoever reads
                     // it from the marker's facing.
@@ -205,6 +208,7 @@ fn spawn_notes(
                     crate::render::world_props::Blockout,
                 ));
                 commands.spawn((
+                    crate::render::legibility::TextSource::Sign,
                     sign_panel(text),
                     Transform::from_xyz(0.0, 1.45, 0.05),
                     Visibility::default(),
@@ -255,6 +259,7 @@ fn spawn_notes(
                 commands.spawn((
                     Name::new("Terminal screen"),
                     term,
+                    crate::render::legibility::TextSource::Terminal,
                     terminal_panel(text),
                     Pressable::Terminal,
                     Grabbable {

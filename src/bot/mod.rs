@@ -108,6 +108,9 @@ pub enum Task {
         target: Entity,
         shots: u32,
     },
+    /// Stage a scenario's world by name, where the bot stands: the module
+    /// under test answers [`scenarios::Setup`] (a heavy and a well).
+    Setup(&'static str),
 }
 
 impl Task {
@@ -175,6 +178,10 @@ pub enum Expect {
     Wrecked(usize),
     /// The bot is still standing.
     Alive,
+    /// The player would have heard at least this many robots' words (of
+    /// this mind, if given): `robot_voice::Heard`, in the listening
+    /// scenario.
+    Heard(Option<crate::robot_voice::Utterance>, usize),
 }
 
 #[derive(Component, Debug)]
@@ -377,6 +384,8 @@ struct TaskExtras<'w, 's> {
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     uses: MessageWriter<'w, crate::items::usage::UseItem>,
+    heard: Option<Res<'w, crate::robot_voice::Heard>>,
+    setups: MessageWriter<'w, scenarios::Setup>,
 }
 
 /// Advances each bot's current task.
@@ -460,6 +469,14 @@ fn run_tasks(
             }
             Task::Log(msg) => {
                 bot.note(msg);
+                bot.next();
+            }
+            Task::Setup(name) => {
+                ext.setups.write(scenarios::Setup {
+                    name,
+                    at: root.translation,
+                    facing: root.forward().as_vec3(),
+                });
                 bot.next();
             }
             Task::LookAt(p) => {
@@ -945,6 +962,13 @@ fn run_tasks(
                     Expect::Wrecked(n) => {
                         let w = robots.iter().filter(|(_, r, _)| r.wrecked).count();
                         (w >= *n, format!("at least {n} robots wrecked (got {w})"))
+                    }
+                    Expect::Heard(said, n) => {
+                        let got = ext.heard.as_ref().map_or(0, |h| h.count(*said));
+                        (
+                            got >= *n,
+                            format!("heard at least {n} {said:?} words (got {got})"),
+                        )
                     }
                     Expect::Alive => {
                         let h = healths

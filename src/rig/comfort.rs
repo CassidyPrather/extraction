@@ -7,8 +7,8 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--left-handed`,
-//! `--seated`, `--one-handed`, `--no-captions`,
+//! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
+//! `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -55,6 +55,9 @@ pub struct Comfort {
     /// What's said (the driver, the radio, the machines) shown on the
     /// wrist with who's speaking and from where.
     pub captions: bool,
+    /// A faint tick on the wrist when a machine nearby turns certain of
+    /// you (`rig::haptics`).
+    pub machine_tick: bool,
 }
 
 impl Default for Comfort {
@@ -74,6 +77,7 @@ impl Default for Comfort {
             seated: false,
             one_handed: false,
             captions: true,
+            machine_tick: true,
         }
     }
 }
@@ -209,6 +213,14 @@ impl Comfort {
         }
     }
 
+    pub fn machine_tick_label(&self) -> String {
+        if self.machine_tick {
+            "WARNING TICK\non the wrist".into()
+        } else {
+            "WARNING TICK\nOFF".into()
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
@@ -285,6 +297,7 @@ impl Comfort {
                 "--seated" => c.seated = true,
                 "--one-handed" => c.one_handed = true,
                 "--no-captions" => c.captions = false,
+                "--no-machine-tick" => c.machine_tick = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };

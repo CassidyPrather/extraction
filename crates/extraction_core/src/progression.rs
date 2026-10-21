@@ -359,6 +359,10 @@ pub enum Job {
         at: Option<[f32; 2]>,
         #[serde(default)]
         place: Option<String>,
+        /// An expedition: so far in it takes a night out (`safehouse`).
+        /// Counts only if the raid that brought it home had one.
+        #[serde(default)]
+        overnight: bool,
     },
     /// Bring home what's on the table in the house by the well
     /// ([`LETTER_ITEM`]): the last job of the last tier.
@@ -437,6 +441,9 @@ pub struct Progress {
     /// Fittings laid up for want of their upkeep (upgrade ids).
     #[serde(default)]
     pub laid_up: Vec<String>,
+    /// A night's been slept in a safehouse: expeditions are on the card.
+    #[serde(default)]
+    pub slept_out: bool,
     /// After the epilogue the valleys are quiet: deep jobs ease off
     /// ([`STANDING_QUIET`]). Kept in step with the game's epilogue.
     #[serde(default)]
@@ -654,6 +661,15 @@ pub fn underground_site(map: &MapDef, region: &str) -> Option<(String, [f32; 2],
     underground_sites(map).into_iter().find(|s| s.0 == region)
 }
 
+/// The middle of a polygon's corners (near enough for "how far in").
+fn mean(points: &[[f32; 2]]) -> [f32; 2] {
+    let n = points.len().max(1) as f32;
+    let s = points
+        .iter()
+        .fold([0.0, 0.0], |a, p| [a[0] + p[0], a[1] + p[1]]);
+    [s[0] / n, s[1] / n]
+}
+
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
@@ -745,6 +761,44 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                 }
             }
             JobKind::Recover => {
+                // Past the ladder, once you've slept out: half the recovers
+                // are expeditions, to the deepest place the valley has (the
+                // farthest from the insertion of its worst regions and
+                // underground sites).
+                if tier.jobs == 0 && progress.slept_out && rng.chance(0.5) {
+                    let ins = v
+                        .map
+                        .markers_of(&MarkerKind::Insertion)
+                        .next()
+                        .map_or([0.0, 0.0], |m| m.at);
+                    let mut deep: Vec<(String, [f32; 2])> = underground_sites(v.map)
+                        .into_iter()
+                        .map(|s| (s.0, s.1))
+                        .chain(
+                            v.map
+                                .regions
+                                .iter()
+                                .filter(|r| r.danger >= 2)
+                                .filter_map(|r| {
+                                    regions(v.map, (r.danger, r.danger))
+                                        .contains(&r.name)
+                                        .then(|| (r.name.clone(), mean(&r.polygon)))
+                                }),
+                        )
+                        .collect();
+                    deep.sort_by(|a, b| {
+                        crate::geom::dist(b.1, ins).total_cmp(&crate::geom::dist(a.1, ins))
+                    });
+                    if let Some((region, _)) = deep.into_iter().next() {
+                        return Job::Recover {
+                            map: v.id.to_owned(),
+                            region,
+                            at: None,
+                            place: None,
+                            overnight: true,
+                        };
+                    }
+                }
                 // Half the time, down into an underground site of the
                 // tier's danger, when the valley has one.
                 let (lo, hi) = tier.danger;
@@ -760,6 +814,7 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                         region: below[rng.below(below.len())].clone(),
                         at: None,
                         place: None,
+                        overnight: false,
                     };
                 }
                 let r = above;
@@ -769,6 +824,7 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
                         region: r[rng.below(r.len())].clone(),
                         at: None,
                         place: None,
+                        overnight: false,
                     };
                 }
             }
@@ -1065,6 +1121,38 @@ mod tests {
     }
 
     #[test]
+    fn once_you_have_slept_out_deep_jobs_include_expeditions() {
+        let v = valleys();
+        let valleys = as_valleys(&v);
+        let base = Progress {
+            tier: TIERS.len() as u32,
+            done: 30,
+            ..Default::default()
+        };
+        let expedition = |p: &Progress| {
+            (0..80).any(|i| {
+                let p = Progress {
+                    done: p.done + i,
+                    ..p.clone()
+                };
+                matches!(
+                    roll_job(&p, 7, "kettle_pass", &valleys),
+                    Job::Recover {
+                        overnight: true,
+                        ..
+                    }
+                )
+            })
+        };
+        assert!(!expedition(&base), "not before a night out");
+        let slept = Progress {
+            slept_out: true,
+            ..base
+        };
+        assert!(expedition(&slept));
+    }
+
+    #[test]
     fn jobs_round_trip_through_ron() {
         let p = Progress {
             job: Some(Job::Recover {
@@ -1072,6 +1160,7 @@ mod tests {
                 region: "The quarry".into(),
                 at: Some([1.0, 2.0]),
                 place: None,
+                overnight: false,
             }),
             upgrades: vec!["stash_rack".into()],
             ..Default::default()
