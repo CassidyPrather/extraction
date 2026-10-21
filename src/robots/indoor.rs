@@ -12,6 +12,9 @@
 //!
 //! Sites register themselves in [`IndoorSites`]; the director's
 //! [`spawn_residents`] puts each site's crawlers on their routes once.
+//! When what's passable changes (water rises, gas fills a gallery, a
+//! furnace vents) the site sends a new grid ([`SiteGrid`]) and its
+//! residents path on that from then on.
 
 use std::sync::Arc;
 
@@ -171,10 +174,18 @@ pub struct IndoorSite {
     pub crawlers: u32,
     /// Full-size armed walkers on the same round, slower (a room with the
     /// headroom: they don't fit a 1.5 m corridor).
-    pub heavy: u32,
+    pub wardens: u32,
     /// Its residents start asleep in their bays, and wake on a loud
     /// enough noise ([`WAKE_RADIUS`]).
     pub dormant: bool,
+}
+
+/// A site's grid has changed (new costs, cells blocked or opened): `site`
+/// is its index in [`IndoorSites`]. Its residents path on `grid` from now.
+#[derive(Message, Clone, Debug)]
+pub struct SiteGrid {
+    pub site: usize,
+    pub grid: Arc<NavGrid>,
 }
 
 /// A robot that lives in a site: where its bay is (it goes back there to
@@ -204,9 +215,10 @@ pub struct Waking {
     pub at: Vec3,
 }
 
-/// A heavy resident: a full-size walker on a site's round.
+/// A warden: a full-size walker on a site's round (not the Heavy
+/// machine, `heavy_mind`).
 #[derive(Component, Debug, Clone, Copy)]
-pub struct Heavy;
+pub struct Warden;
 
 /// A noise must carry at least this far to wake a sleeping resident (m):
 /// a breaker's clank, a shot, a grenade; not a footstep.
@@ -214,7 +226,7 @@ pub const WAKE_RADIUS: f32 = 25.0;
 /// Waking takes this long (s).
 pub const WAKE_TIME: f32 = 2.0;
 /// A heavy walks its round at this share of its pace.
-pub const HEAVY_PACE: f32 = 0.5;
+pub const WARDEN_PACE: f32 = 0.5;
 
 #[derive(Resource, Default, Debug)]
 pub struct IndoorSites {
@@ -229,6 +241,8 @@ pub struct Crawler {
     pub cooldown: f32,
     /// Seconds into charging a zap (0: not charging).
     pub charge: f32,
+    /// Wrecked, and its parts no longer stop the player.
+    pub cleared: bool,
 }
 
 /// The spark gun's emitter part.
@@ -277,9 +291,11 @@ impl Plugin for IndoorPlugin {
             .add_message::<CrawlerCharge>()
             .add_message::<CrawlerZap>()
             .add_message::<Waking>()
+            .add_message::<SiteGrid>()
             .add_systems(
                 FixedUpdate,
                 (
+                    regrid_sites,
                     spawn_residents,
                     crawler_guns,
                     clear_wrecks,
@@ -375,13 +391,13 @@ fn spawn_residents(
                 commands.entity(e).insert(Dormant);
             }
         }
-        for k in 0..site.heavy as usize {
+        for k in 0..site.wardens as usize {
             let mut route = site.patrol.clone();
             let len = route.len();
-            route.rotate_left((k * n / site.heavy.max(1) as usize).min(len));
+            route.rotate_left((k * n / site.wardens.max(1) as usize).min(len));
             let at = route.first().copied().unwrap_or(site.spawn);
-            info!("director: a heavy on its round at {at:.0}");
-            let e = spawn_heavy(&mut commands, &zone, site, at, route);
+            info!("director: a warden on its round at {at:.0}");
+            let e = spawn_warden(&mut commands, &zone, site, at, route);
             if site.dormant {
                 commands.entity(e).insert(Dormant);
             }
@@ -389,8 +405,32 @@ fn spawn_residents(
     }
 }
 
+/// A site's new grid: the site keeps it for residents yet to come out, and
+/// those already out (the ones carrying its old grid) take it and plan
+/// their way again.
+fn regrid_sites(
+    mut grids: MessageReader<SiteGrid>,
+    mut sites: ResMut<IndoorSites>,
+    mut residents: Query<(&mut LocalNav, &mut super::walker::Walker), With<Resident>>,
+) {
+    for g in grids.read() {
+        let Some(site) = sites.sites.get_mut(g.site) else {
+            warn!("a new grid for site {}, which isn't there", g.site);
+            continue;
+        };
+        let old = std::mem::replace(&mut site.nav.grid, g.grid.clone());
+        for (mut nav, mut w) in &mut residents {
+            if Arc::ptr_eq(&nav.grid, &old) {
+                nav.grid = g.grid.clone();
+                w.path.clear();
+                w.goal = None;
+            }
+        }
+    }
+}
+
 /// A full-size armed walker living on a site's round.
-pub fn spawn_heavy(
+pub fn spawn_warden(
     commands: &mut Commands,
     zone: &Zone,
     site: &IndoorSite,
@@ -407,7 +447,7 @@ pub fn spawn_heavy(
         super::walker::spawn_walker_sized(commands, zone, at, job, true, 130.0, 1.0, Some(at.y));
     commands.entity(e).insert((
         Name::new("Warden"),
-        Heavy,
+        Warden,
         super::Breed("Warden"),
         Resident { bay: at },
         site.nav.clone(),
@@ -507,20 +547,22 @@ fn recall_residents(
 /// salvage.
 fn clear_wrecks(
     mut commands: Commands,
-    crawlers: Query<(&Robot, &Children), (With<Crawler>, Changed<Robot>)>,
+    mut crawlers: Query<(&Robot, &mut Crawler, &Children), Changed<Robot>>,
     layers: Query<&CollisionLayers>,
 ) {
-    for (robot, children) in &crawlers {
-        if !robot.wrecked {
+    for (robot, mut crawler, children) in &mut crawlers {
+        if !robot.wrecked || crawler.cleared {
             continue;
         }
+        crawler.cleared = true;
         for c in children.iter() {
             if let Ok(l) = layers.get(c) {
                 let mut filters = l.filters;
                 filters.remove(crate::world::Layer::Player);
+                // A part may be torn off and gone by the time this lands.
                 commands
                     .entity(c)
-                    .insert(CollisionLayers::new(l.memberships, filters));
+                    .try_insert(CollisionLayers::new(l.memberships, filters));
             }
         }
     }

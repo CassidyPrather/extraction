@@ -257,6 +257,7 @@ fn load_save(
     mut firsts: ResMut<crate::onboarding::firsts::Firsts>,
     mut notes: ResMut<crate::raid::board::NotesRead>,
     mut epilogue: ResMut<crate::raid::epilogue::Epilogue>,
+    mut safehouse: ResMut<crate::progression::safehouse::Safehouse>,
 ) {
     let Some(path) = &slot.0 else {
         // The yard keeps nothing, but the sign says your kit is in the
@@ -286,6 +287,18 @@ fn load_save(
     let save = career.game(&opts.map);
     commands.insert_resource(CareerState(career));
     let zone = save.zone.map == opts.map && save.zone.rolled;
+    if zone {
+        commands.insert_resource(crate::destruction::Broken(
+            save.zone.broken.iter().copied().collect(),
+        ));
+        commands.insert_resource(crate::destruction::breach::Breaches(
+            save.zone
+                .breaches
+                .iter()
+                .map(|c| Vec3::new(c[0] as f32, c[1] as f32, c[2] as f32) / 100.0)
+                .collect(),
+        ));
+    }
     raid.raids = save.stats.raids;
     raid.extractions = save.stats.extractions;
     raid.deaths = save.stats.deaths;
@@ -301,6 +314,9 @@ fn load_save(
         cache: save.requests.cache.clone(),
         cache_at: save.requests.cache_at.clone(),
     };
+    if zone {
+        safehouse.state = save.zone.safehouse.clone().unwrap_or_default();
+    }
     progression.0 = save
         .progress
         .clone()
@@ -340,6 +356,7 @@ fn fresh_save(map: &str) -> SaveGame {
         local: at,
         gun: None,
         inserted: Vec::new(),
+        loads: Default::default(),
     };
     let mut pistol = item("pm_pistol", 0, [0.2, 0.05, -0.4]);
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
@@ -368,7 +385,7 @@ fn fresh_save(map: &str) -> SaveGame {
 
 /// Spawns one saved item (and what's seated in it) with physics on, at
 /// `at`. Returns `None` for ids the catalog no longer knows.
-fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
+pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<Entity> {
     let catalog = world.resource::<Catalog>().clone();
     let Some(kind) = catalog.kind(&saved.id) else {
         warn!("save: unknown item {:?}, skipped", saved.id);
@@ -392,6 +409,7 @@ fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<E
     if let Some(mut it) = world.get_mut::<Item>(e) {
         it.condition = saved.condition;
         it.rounds = saved.rounds;
+        it.loads = saved.loads.clone();
         if saved.charge_wh >= 0.0 {
             it.charge_wh = saved.charge_wh;
         }
@@ -405,6 +423,10 @@ fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) -> Option<E
             f.hammers_cocked = g.hammers.clone();
         }
         f.internal_rounds = g.internal_rounds;
+        f.internal_loads = g.internal_loads.clone();
+        if g.chamber_loads.len() == f.chambers.len() {
+            f.chamber_loads = g.chamber_loads.clone();
+        }
         f.mode = g.mode.min(f.def.modes.len().saturating_sub(1));
         f.condition = g.condition;
         f.fouling = g.fouling;
@@ -488,7 +510,7 @@ pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
     }
 }
 
-fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
+pub(crate) fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
     let stash = world.get::<Stash>(bag_e).is_some();
     let Some(mut bag) = world.get_mut::<Backpack>(bag_e) else {
         return;
@@ -649,7 +671,7 @@ pub fn spawn_remains(world: &mut World, at: Vec3) -> Entity {
 }
 
 /// One item, as saved, with whatever is seated in it.
-fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
+pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
     let catalog = world.resource::<Catalog>();
     let item = world.get::<Item>(e)?;
     let def = catalog.get(item.kind());
@@ -661,6 +683,7 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
         local: local.to_array(),
         gun: None,
         inserted: Vec::new(),
+        loads: item.loads.clone(),
     };
     if let Some(gun) = world.get::<Gun>(e) {
         let f = &gun.firearm;
@@ -671,6 +694,8 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
             mode: f.mode,
             condition: f.condition,
             fouling: f.fouling,
+            internal_loads: f.internal_loads.clone(),
+            chamber_loads: f.chamber_loads.clone(),
         });
         saved.condition = f.condition;
         if let Some(m) = gun
@@ -682,6 +707,7 @@ fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<SavedItem> {
                 // The mechanism's count is the live one while seated.
                 if let Some(mag) = &f.magazine {
                     inner.rounds = mag.rounds;
+                    inner.loads = mag.loads.clone();
                 }
                 saved.inserted.push(inner);
             }
@@ -718,6 +744,14 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         save.zone.cycle = raid.cycle;
     }
     save.zone.rolled = true;
+    if let Some(b) = world.get_resource::<crate::destruction::Broken>() {
+        let mut keys: Vec<[i32; 3]> = b.0.iter().copied().collect();
+        keys.sort();
+        save.zone.broken = keys;
+    }
+    if let Some(b) = world.get_resource::<crate::destruction::breach::Breaches>() {
+        save.zone.breaches = b.0.iter().map(|p| crate::destruction::key(*p)).collect();
+    }
     save.memorial = world.resource::<Memorial>().0.clone();
     save.logbook = world
         .get_resource::<crate::raid::logbook::Logbook>()
@@ -793,6 +827,13 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             continue;
         }
         if let Some(b) = bag {
+            // The safehouse's crate is saved with its valley (below).
+            if world
+                .get::<crate::progression::safehouse::SafehouseCrate>(b)
+                .is_some()
+            {
+                continue;
+            }
             // A cargo pod's contents go with the dirigible, saved or not.
             if world.get::<crate::robots::dirigible::CargoPod>(b).is_some() {
                 continue;
@@ -859,10 +900,40 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 local: [0.0; 3],
                 gun: None,
                 inserted: Vec::new(),
+                loads: Default::default(),
             },
         });
     }
     save.zone.remains = remains.into_values().collect();
+    // The valley's safehouse, and what's in its crate.
+    if let Some(house) = world
+        .get_resource::<crate::progression::safehouse::Safehouse>()
+        .cloned()
+    {
+        let mut state = house.state.clone();
+        if let Some(bag) = house.crate_bag {
+            let contents = world
+                .get::<Backpack>(bag)
+                .map(|b| b.contents.clone())
+                .unwrap_or_default();
+            let saved: Vec<SavedItem> = contents
+                .iter()
+                .filter_map(|e| {
+                    let local = world
+                        .get::<Transform>(*e)
+                        .map_or(Vec3::ZERO, |t| t.translation);
+                    snapshot_item(world, *e, local)
+                })
+                .collect();
+            // A crate not yet furnished keeps what was saved in it.
+            if !saved.is_empty() || state.stash.is_empty() {
+                state.stash = saved;
+            }
+        }
+        if state != extraction_core::safehouse::SafehouseSave::default() {
+            save.zone.safehouse = Some(state);
+        }
+    }
     save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
     save.loadout = loadout;
     save
@@ -988,6 +1059,7 @@ pub fn reset_zone(world: &mut World) {
         raid.say("The Surge has passed. The Zone is different now.");
         raid.cycle
     };
+    crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
     info!("Surge reset: cycle {cycle}, {gone} items swept away");
@@ -1086,6 +1158,46 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// A pistol whose magazine has AP and then a tracer on top of ball,
+    /// and a round in the chamber that's AP: saved and loaded, the rounds
+    /// keep their loads and their order.
+    #[test]
+    fn a_mixed_magazine_survives_a_save() {
+        use extraction_core::ammo::Load;
+        let path = temp_save("mixed_mag.ron");
+        let mut a = app_with_save(&path);
+        let pistol = {
+            let w = a.world_mut();
+            let mut q = w.query::<(Entity, &Gun)>();
+            q.iter(w)
+                .find(|(_, g)| g.firearm.magazine.is_some())
+                .map(|(e, _)| e)
+                .expect("the starter pistol with its magazine")
+        };
+        let want = vec![Load::Ap, Load::Tracer];
+        {
+            let mut g = a.world_mut().get_mut::<Gun>(pistol).unwrap();
+            let m = g.firearm.magazine.as_mut().unwrap();
+            m.loads.0 = want.clone();
+            g.firearm.chamber_loads[0] = Load::Ap;
+        }
+        a.update();
+        let save = snapshot(a.world_mut());
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+
+        let mut b = app_with_save(&path);
+        let w = b.world_mut();
+        let mut q = w.query::<&Gun>();
+        let g = q
+            .iter(w)
+            .find(|g| g.firearm.magazine.is_some())
+            .expect("the pistol came back");
+        assert_eq!(g.firearm.magazine.as_ref().unwrap().loads.0, want);
+        assert_eq!(g.firearm.chamber_load(0), Load::Ap);
+    }
+
     #[test]
     fn an_older_per_map_save_becomes_the_career() {
         let path = temp_save("career.ron");
@@ -1148,6 +1260,7 @@ mod tests {
             ) {
                 a.world_mut()
                     .write_message(crate::weapons::ballistics::Hit {
+                        blow: None,
                         entity: *e,
                         point: Vec3::ZERO,
                         normal: Vec3::Y,

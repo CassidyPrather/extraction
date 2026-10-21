@@ -44,10 +44,13 @@ RANGE_TARGETS = {
     "anomaly.well": (15, 10), "anomaly.mirror": (15, 10), "anomaly.reveal": (15, 8),
     "detector.click": (3, 2), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2), "chatter.voice": (3, 2),
-    "robot.voice": (30, 15), "power.generator": (40, 20),
+    "power.generator": (40, 20),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
-    "truck.arrive": (60, 15), "robot.notice": (30, 15), "robot.investigate": (30, 15),
-    "robot.lost": (25, 10), "robot.callout": (40, 20), "walker.aim": (60, 30),
+    "truck.arrive": (60, 15), "walker.aim": (60, 30),
+    "voice.idle": (20, 8), "voice.noticed": (30, 15), "voice.investigating": (30, 15),
+    "voice.searching": (25, 10), "voice.engaging": (40, 20), "voice.lost": (25, 10),
+    "voice.calling": (200, 80), "voice.answering": (200, 80), "voice.hurt": (30, 15),
+    "voice.dying": (40, 20),
     "walker.aim_lock": (40, 20), "harpoon.windup": (30, 15), "dirigible.engine": (200, 80), "truck.idle": (150, 50), "hit.body": (2, 1),
 }
 STEP_OVER_BED = (2.0, 10.0)  # footsteps: audible over the wind, not on top

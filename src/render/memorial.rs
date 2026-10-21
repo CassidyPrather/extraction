@@ -63,6 +63,7 @@ fn hang_board(
         // The driver's note, pinned on the left canvas wall by the stash.
         commands.spawn((
             Name::new("Driver's note"),
+            crate::render::legibility::TextSource::DriversNote,
             crate::raid::bench::ScreenText {
                 text: DRIVERS_NOTE.into(),
                 size: Vec2::new(0.36, 0.5),
@@ -78,6 +79,7 @@ fn hang_board(
         commands.spawn((
             Name::new("Memorial note"),
             MemorialNote,
+            crate::render::legibility::TextSource::MemorialNote,
             crate::raid::bench::ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.24, 0.34),

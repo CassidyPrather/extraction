@@ -1328,6 +1328,22 @@
       "author": "rubberduck",
       "license": "CC0-1.0",
       "sha256": "c0c9ecc11e2dc0d190f0cced755569858234b8528286bc83becb6314c663407f"
+    },
+    "fs_571079": {
+      "url": "https://cdn.freesound.org/previews/571/571079_97550-hq.ogg",
+      "page": "https://freesound.org/s/571079/",
+      "title": "180808 Crickets night insects busy chorus NOTL.mp3",
+      "author": "TRP",
+      "license": "CC0-1.0",
+      "sha256": "442e983f710fe005d1c229c73833ab155e5d42b0705d1b19b5a3a4b4c1412224"
+    },
+    "fs_848978": {
+      "url": "https://cdn.freesound.org/previews/848/848978_12606846-hq.ogg",
+      "page": "https://freesound.org/s/848978/",
+      "title": "Wind rustling leaves through tree Cardiff",
+      "author": "gsparrysound",
+      "license": "CC0-1.0",
+      "sha256": "cf7e3ba300ea541ab4510f8ac89895e16d678f76438f16d49ff3da8f5dabfe52"
     }
   },
   "sets": [
@@ -3870,6 +3886,45 @@
           }
         }
       ]
+    },
+    {
+      "category": "ambience",
+      "name": "insects_night",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_571079",
+          "start": 30,
+          "length": 45
+        },
+        {
+          "source": "fs_571079",
+          "start": 175,
+          "length": 45
+        }
+      ]
+    },
+    {
+      "category": "ambience",
+      "name": "rustle_leaves",
+      "type": "loop",
+      "channels": 2,
+      "xfade": 3.0,
+      "inputs": [
+        {
+          "source": "fs_848978",
+          "start": 35,
+          "length": 35
+        },
+        {
+          "source": "fs_848978",
+          "start": 90,
+          "length": 45
+        }
+      ],
+      "highpass": 250
     }
   ]
 }

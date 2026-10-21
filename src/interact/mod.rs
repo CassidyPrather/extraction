@@ -16,10 +16,15 @@
 
 pub mod body;
 pub mod far;
+pub mod first_aid;
 pub mod flat;
+pub mod gestures;
 pub mod hand_climb;
+#[cfg(test)]
+mod physics_audit;
 pub mod physics_hands;
 pub mod poke;
+pub mod tools;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -308,6 +313,9 @@ impl Plugin for InteractPlugin {
                 body::BodyPlugin,
                 physics_hands::PhysicsHandsPlugin,
                 hand_climb::HandClimbPlugin,
+                tools::ToolsPlugin,
+                first_aid::FirstAidPlugin,
+                gestures::GesturesPlugin,
             ));
     }
 }

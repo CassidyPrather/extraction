@@ -14,13 +14,42 @@ struct SkyParams {
     horizon: vec4<f32>,
     zenith: vec4<f32>,
     sun_dir: vec4<f32>,
-    // x: deck heaviness (1 the reference overcast), y: scud amount.
+    // x: deck heaviness (1 the reference overcast), y: scud amount,
+    // z: the moon's lit face (0 not up; + waxing, - waning; sun_dir is
+    // then toward it), w: how much night sky (stars).
     cloud: vec4<f32>,
     // A low sun's glow on its side of the horizon: rgb, strength in w.
     glow: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> sky: SkyParams;
+
+fn hash3(p: vec3<f32>) -> vec3<f32> {
+    var q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
+    q = q + dot(q, q.yxz + 33.33);
+    return fract((q.xxy + q.yzz) * q.zyx);
+}
+
+// Stars: one chance per cell of a grid on the sky. `density` (0..1) is the
+// chance a cell holds one. Each is a soft point a little over a pixel wide
+// in a headset (a hard one would shimmer), brighter ones rarer.
+fn stars(dir: vec3<f32>, cells: f32, density: f32, time: f32, twinkle: f32) -> f32 {
+    let p = dir * cells;
+    let c = floor(p);
+    let h = hash3(c);
+    if (h.x > density) {
+        return 0.0;
+    }
+    let centre = c + 0.25 + 0.5 * hash3(c + 17.0);
+    let d = length(p - centre);
+    let size = 0.11 + 0.06 * h.y;
+    let core = 1.0 - smoothstep(0.0, size, d);
+    // Rare bright ones; most are faint.
+    let mag = 0.12 + 0.88 * pow(h.z, 6.0);
+    // Low down, seen through more air, they flicker.
+    let flick = 1.0 - twinkle * 0.7 * (0.5 + 0.5 * sin(time * (7.0 + 9.0 * h.y) + h.z * 40.0));
+    return core * mag * flick;
+}
 
 fn hash2(p: vec2<f32>) -> f32 {
     let q = fract(p * vec2<f32>(0.1031, 0.1030));
@@ -101,13 +130,86 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // A low sun lights the horizon on its side, and the cloud's
     // underside there, warm; the seams take the most of it.
-    if (sky.glow.w > 0.0) {
+    if (sky.glow.w > 0.0 && sky.cloud.w <= 0.0) {
         let sun_h = normalize(sky.sun_dir.xz + vec2<f32>(1e-4, 0.0));
         let dir_h = normalize(dir.xz + vec2<f32>(1e-4, 0.0));
         let side = pow(max(dot(dir_h, sun_h), 0.0), 2.0);
         let low = 1.0 - smoothstep(0.0, 0.45, up);
         let g = side * low * sky.glow.w * (0.55 + 0.45 * (1.0 - belly));
         col = mix(col, col * sky.glow.rgb * 1.9, clamp(g, 0.0, 1.0));
+    }
+
+    // Night: the stars and the Milky Way where the deck breaks, and the
+    // moon, its phase, and the cloud's edges round it lit silver.
+    let night = sky.cloud.w;
+    if (night > 0.0) {
+        // How much open sky there is here: the gaps, not the bellies; none
+        // at all under a full overcast.
+        let open = (1.0 - belly) * (1.0 - scud * 0.8 * sky.cloud.y)
+            * (1.0 - smoothstep(0.55, 1.05, heavy)) * detail;
+        // The Milky Way: a band tilted across the sky, lumpy and dusty.
+        let pole = normalize(vec3<f32>(0.42, 0.55, -0.72));
+        let band_d = dot(dir, pole);
+        let band = exp(-band_d * band_d * 22.0);
+        let lumps = fbm2(dir.xz * 3.0 / max(abs(dir.y) + 0.35, 0.35) + vec2<f32>(dir.y * 4.0, 0.0), 1.0);
+        let dust = smoothstep(0.35, 0.75, lumps);
+        let milk = band * (0.35 + 0.65 * dust) * (1.0 - 0.6 * smoothstep(0.45, 0.6, fbm2(dir.xz * 9.0 + 4.0, 1.0)));
+        let low = 1.0 - smoothstep(0.02, 0.35, up);
+        let star = stars(dir, 140.0, 0.16 + 0.3 * band, time, low)
+            + stars(dir, 70.0, 0.05, time, low) * 1.6;
+        // The moon washes the faint ones out.
+        let moon_lit = abs(sky.cloud.z);
+        // How much of the moon's light gets through to the cloud and air
+        // (none under murk: an overcast night is black).
+        let moon_air = sky.glow.w;
+        // Unlit by a moon, the cloud is only what the valley's sky lights.
+        col = col * mix(0.65, 1.0, moon_air) ;
+        // The gaps are space: darker than the cloud's undersides, which
+        // catch what light the valley and the moon give them.
+        col = mix(col, zenith * 0.5, open * detail * night * (1.0 - 0.45 * moon_lit));
+        let wash = 1.0 - 0.6 * moon_lit;
+        let fade = smoothstep(0.0, 0.12, up) * open * night * wash;
+        col = col + vec3<f32>(0.75, 0.82, 1.0) * star * 0.7 * fade;
+        col = col + vec3<f32>(0.55, 0.6, 0.75) * milk * 0.03 * fade;
+
+        if (moon_lit > 0.0) {
+            let m = normalize(sky.sun_dir.xyz);
+            let cos_r = dot(dir, m);
+            // Its disc: half a degree is a dot in a headset; drawn twice
+            // that, the face can be read.
+            let radius = 0.021;
+            let r = sqrt(max(2.0 * (1.0 - cos_r), 0.0)) / radius;
+            // Its face, a frame on the disc: x across toward the west
+            // (where the sun went), y up.
+            let east = normalize(cross(vec3<f32>(0.0, 1.0, 0.0), m) + vec3<f32>(1e-4, 0.0, 0.0));
+            let north = cross(m, east);
+            let fx = dot(dir - m * cos_r, east) / radius;
+            let fy = dot(dir - m * cos_r, north) / radius;
+            let fz = sqrt(max(1.0 - fx * fx - fy * fy, 0.0));
+            // The sun lights it from its own side: waxing from the west
+            // (-x), waning from the east; the face at the phase angle.
+            let a = acos(clamp(1.0 - 2.0 * moon_lit, -1.0, 1.0));
+            let side = select(1.0, -1.0, sky.cloud.z > 0.0);
+            let sunlit = smoothstep(-0.04, 0.04, fx * side * sin(a) + fz * cos(a));
+            let maria = 0.78 + 0.22 * smoothstep(0.4, 0.65, fbm2(vec2<f32>(fx, fy) * 2.2 + 3.0, 1.0));
+            let disc = 1.0 - smoothstep(0.9, 1.05, r);
+            // Earthshine on the dark side, just there.
+            let face = (sunlit * maria + 0.02) * disc;
+            // Through the cloud: clear in a gap, a blurred smear behind a
+            // belly, gone under a thick deck.
+            let thick = smoothstep(0.75, 1.3, heavy);
+            let through = mix(1.0, 0.15, belly) * (1.0 - thick)
+                * clamp(moon_air / max(moon_lit, 0.05), 0.0, 1.0);
+            col = mix(col, vec3<f32>(0.92, 0.95, 1.0) * 3.0, face * through);
+            // The halo in the air round it, and the cloud's edges near it
+            // lit: the thin cloud between belly and seam catches it most.
+            let edge = belly * (1.0 - belly) * 4.0;
+            let near = pow(max(cos_r, 0.0), 60.0);
+            let wide = pow(max(cos_r, 0.0), 6.0);
+            let light = moon_air;
+            col = col + vec3<f32>(0.6, 0.68, 0.85) * light * (0.05 * near + 0.012 * wide);
+            col = col + vec3<f32>(0.7, 0.78, 0.95) * light * edge * (0.18 * near + 0.05 * wide) * detail;
+        }
     }
 
     // Toward and below the horizon the sky is fog.

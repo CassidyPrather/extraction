@@ -458,7 +458,8 @@ pub fn count_triangles(
 /// Everything [`ViewLoad`] is measured from.
 #[derive(SystemParam)]
 pub struct LoadCounter<'w, 's> {
-    meshes: Query<'w, 's, (&'static Mesh3d, Has<NotShadowCaster>)>,
+    meshes:
+        Query<'w, 's, (&'static Mesh3d, Has<NotShadowCaster>), Without<super::warmup::ShelfMark>>,
     names: Query<'w, 's, &'static Name>,
     parents: Query<'w, 's, &'static ChildOf>,
     tris: Option<Res<'w, Triangles>>,

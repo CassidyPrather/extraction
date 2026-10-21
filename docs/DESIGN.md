@@ -210,12 +210,17 @@ carry by calibre (a pistol 150 m, the AK 220, a Mosin 250), footsteps by
 what's underfoot (gravel and boards loud, grass soft), how fast and how
 low you go, doors when you open them, and things that land; a wall or a
 hill between cuts a sound's reach by more than half. A heard sound tells
-a robot where the *sound* was.
+a robot roughly where the *sound* was: a guess a fifth of the distance
+out, never on the spot, so it comes to look nearby, not at you. A glimpse
+of you moving is a guess the same way; a glimpse of you keeping still
+places you nowhere new. Crouched still in grass, a robot makes you out
+only within 4 m: shoot once from the grass at 40 m and keep still, and
+the one that comes to look finds you about half the time.
 
 **Light and dark.** Robot eyes follow the same light the player sees
 (`Conditions::light_at`, Visual design's time of day): exposure scales by
 its square root, so dusk leaves about 0.6 of the day's, a room by day
-0.55, a night 0.2. A torch lights you up wherever the sky doesn't, and its
+0.55, a full-moon night 0.28 and a black one 0.14. A torch lights you up wherever the sky doesn't, and its
 beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
 carries a shot a third as far. Robots hear round open doorways and
 through walls by the same rule the player's ears do (`acoustics`).
@@ -474,7 +479,28 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   port): the bolt won't close or clear until the magazine is out, so
   drop it, rack, reload. The bench's repair and a cleaning kit make
   them rare again. Flat mode's rack key tap-racks, or strips, racks and
-  reloads on a double feed.
+  reloads on a double feed. Each one feels different in the gun hand: a
+  stovepipe jolts, a failure to feed is a dead click, a double feed
+  grinds (`weapons/faults.rs`).
+- **Faults by type**:
+  - *Squib*: the bench's re-packed rounds now and then have too little
+    powder. You get a pop and no kick, the action doesn't move, and the
+    bullet stays in the bore. Rack the case out and push a cleaning rod
+    10 cm down the bore from the muzzle to knock the bullet out. Fire on
+    it instead and the barrel bulges: a violent jolt, the gun keeps 30%
+    of its condition, and the hand is hurt.
+  - *Sticky bolt*: a filthy Mosin's bolt can stick shut after a shot.
+    Lifting the handle only grinds until you slap it up hard with a
+    palm.
+  - *Slam-fire*: a worn, dirty SKS's floating pin can fire the round the
+    bolt slams home on, trigger untouched and even on safe, sometimes
+    round after round. Cleaning and repair are the cure.
+- **Wear you can see** (`weapons/wear.rs`): the bore at the muzzle goes
+  from bright steel to soot as the gun fouls, and the crown picks up
+  nicks as it wears. The spread opens with both. In the headset, bring a
+  cleaning kit, oil or spare parts to the receiver in your other hand.
+  Each stroke of the cleaning rod down the bore and back scrubs some
+  fouling too.
 
 ### What a round does, grenades, blades
 
@@ -497,6 +523,12 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   one (A). Harm from the point's speed along the blade or across the
   edge, nothing below about 1.5 m/s; eyes take double, joints half again,
   a robot's core and plate a fraction.
+- **Butt strokes**: any long gun's butt is a blunt weapon. Driven or
+  swung butt-first, its harm comes from the speed into what it hits
+  (nothing below 2.5 m/s) and the gun's weight. Joints and optics feel it
+  most. Parts made to be beaten or cut (a heavy's bolts) carry their own
+  multiplier (`WeakPoint`). Every blow's `Hit` says what kind it was
+  (point, edge or blunt), so a door gives to a butt before a knife.
 - **Armour** (`weapons/armour.rs`): a plate carrier goes on when you let
   it go at your chest, a helmet at your head, and a steel plate in either
   of the vest's pockets (the pocket decides front or back). A round that
@@ -539,7 +571,7 @@ let go, as with magazines. Use on a gun switches everything on it.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one
-  click per 100 m. The zero comes from the game's own ballistics (the
+  click per 100 m (in flat mode, `]` and `[`). The zero comes from the game's own ballistics (the
   gun's muzzle velocity, the scope's height over the bore), so at the set
   range the round goes where the reticle is. Nearer it strikes high,
   farther low: under a 300 m zero, a robot at 400 m needs holdover (the

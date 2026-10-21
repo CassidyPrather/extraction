@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ammo::{Load, Loads};
 use crate::firearm::Round;
 use crate::progression::Progress;
 
@@ -78,6 +79,16 @@ pub struct ZoneSave {
     /// left, things you dropped).
     pub items: Vec<PlacedItem>,
     pub remains: Vec<RemainsSave>,
+    /// What's been broken (panes, doors, crates) and stays broken until
+    /// the Surge: each by where it stood, centimetres.
+    #[serde(default)]
+    pub broken: Vec<[i32; 3]>,
+    /// Holes torn in walls, by their centres, centimetres.
+    #[serde(default)]
+    pub breaches: Vec<[i32; 3]>,
+    /// The valley's safehouse (`safehouse`), once you've started on it.
+    #[serde(default)]
+    pub safehouse: Option<crate::safehouse::SafehouseSave>,
     /// Heavies' wrecks, where they fell: landmarks until the Surge.
     #[serde(default)]
     pub wrecks: Vec<WreckSave>,
@@ -144,6 +155,9 @@ pub struct SavedItem {
     /// A magazine in the well (or later, attachments).
     #[serde(default)]
     pub inserted: Vec<SavedItem>,
+    /// What its rounds are loaded with, top last (empty: all standard).
+    #[serde(default)]
+    pub loads: Loads,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -154,6 +168,11 @@ pub struct SavedGun {
     pub mode: usize,
     pub condition: f32,
     pub fouling: f32,
+    /// The internal magazine's loads, and each chamber's.
+    #[serde(default)]
+    pub internal_loads: Loads,
+    #[serde(default)]
+    pub chamber_loads: Vec<Load>,
 }
 
 /// A whole career in one file: what you own and carry, your record and
@@ -305,6 +324,7 @@ mod tests {
             local: [0.0; 3],
             gun: None,
             inserted: Vec::new(),
+            loads: Loads::default(),
         }
     }
 
@@ -320,6 +340,8 @@ mod tests {
             mode: 1,
             condition: 0.7,
             fouling: 0.2,
+            internal_loads: Loads::default(),
+            chamber_loads: vec![Load::Ap],
         });
         let mut mag = item("ak_mag");
         mag.rounds = 29;
@@ -336,6 +358,36 @@ mod tests {
         assert_eq!(back.item_count(), 4);
         assert_eq!(back.loadout.slots[0].1, s.loadout.slots[0].1);
         assert_eq!(back.zone.clock, 123.5);
+    }
+
+    /// A magazine of ball with AP on top and a tracer over that keeps its
+    /// order through a save; a save from before loads were kept still
+    /// reads (all ball).
+    #[test]
+    fn a_mixed_magazine_keeps_its_order() {
+        let mut s = SaveGame::new("marrow_creek");
+        let mut mag = item("ak_mag");
+        mag.rounds = 30;
+        mag.loads.fill(27, Load::Ap, 2);
+        mag.loads.push(29, Load::Tracer);
+        s.stash.push(mag.clone());
+        let back = SaveGame::from_ron(&s.to_ron().unwrap()).unwrap();
+        assert_eq!(
+            back.stash[0].loads.0,
+            vec![Load::Ap, Load::Ap, Load::Tracer]
+        );
+        // An older save: no `loads` anywhere.
+        s.stash[0].loads = Loads::default();
+        let old: String = s
+            .to_ron()
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("loads:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!old.contains("loads"));
+        let back = SaveGame::from_ron(&old).unwrap();
+        assert!(back.stash[0].loads.0.is_empty());
     }
 
     #[test]

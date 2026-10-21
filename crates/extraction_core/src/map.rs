@@ -421,6 +421,18 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // A blast furnace with its stoves, chimney, dust catcher, skip
         // bridge and cast house.
         "blast_furnace" => [45.6, 38.5, 59.2],
+        // Sallow's dam (docs/FOURTH_VALLEY.md): its two faces either side
+        // of the crest (the crest itself is terrain, walked on), the
+        // draw-off tower on the bed, and the Custodian's stock in rows.
+        "dam_face" => [265.0, 23.0, 4.0],
+        "dam_face_end" => [25.0, 23.0, 4.0],
+        "dam_back" => [245.0, 21.5, 3.0],
+        "dam_back_end" => [35.0, 21.5, 3.0],
+        "draw_off_tower" => [9.0, 34.0, 9.0],
+        "stock_buses" => [13.0, 3.3, 12.0],
+        "stock_bicycles" => [2.4, 1.2, 24.0],
+        "stock_bins" => [1.6, 1.3, 20.0],
+        "sorting_gantry" => [20.0, 14.0, 6.0],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
@@ -694,6 +706,8 @@ pub const MARROW_CREEK: &str = include_str!("../../../assets/maps/marrow_creek.r
 pub const KETTLE_PASS: &str = include_str!("../../../assets/maps/kettle_pass.ron");
 /// The third.
 pub const CINDER_WORKS: &str = include_str!("../../../assets/maps/cinder_works.ron");
+/// The fourth (docs/FOURTH_VALLEY.md).
+pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_reservoir.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
 
 #[cfg(test)]
@@ -753,6 +767,63 @@ mod tests {
         }) {
             assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
             assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
+        }
+    }
+
+    /// Sallow Reservoir (docs/FOURTH_VALLEY.md): a dam, then a hole. The
+    /// crest stands well over the valley below and the drained bed behind
+    /// it; the bed is dry but for the old river; the upper arm, behind the
+    /// causeway, is still full, its lower street wadeable.
+    #[test]
+    fn sallow_reservoir_parses_and_builds() {
+        let map = MapDef::from_ron(SALLOW_RESERVOIR).expect("map parses");
+        assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
+        let hm = Heightmap::build(&map);
+        let crest = hm.height([0.0, 140.0]);
+        let below = hm.height([25.0, 230.0]);
+        let bed = hm.height([40.0, 60.0]);
+        assert!(crest - below > 18.0, "crest {crest:.1}, below {below:.1}");
+        assert!(crest - bed > 12.0, "crest {crest:.1}, bed {bed:.1}");
+        for p in [
+            [40.0, 60.0],
+            [-70.0, 10.0],
+            [80.0, -100.0],
+            [-150.0, -100.0],
+        ] {
+            assert!(hm.water_level(p).is_none(), "the bed is wet at {p:?}");
+        }
+        let arm = hm
+            .water_level([-180.0, -170.0])
+            .expect("the upper arm holds water");
+        assert!(arm - hm.height([-180.0, -170.0]) > 2.0, "the arm is deep");
+        let street = [-210.0, -204.0];
+        let wade = hm.water_level(street).expect("the lower street is flooded") - hm.height(street);
+        assert!(
+            (0.3..0.9).contains(&wade),
+            "the lower street is {wade:.2} m deep"
+        );
+        assert!(
+            hm.height([-160.0, -128.0]) > arm,
+            "the causeway holds the arm"
+        );
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
+        for m in map.markers.iter().filter(|m| {
+            matches!(
+                m.kind,
+                MarkerKind::Insertion | MarkerKind::Rendezvous | MarkerKind::Offering
+            )
+        }) {
+            assert!(hm.slope_deg(m.at) < 25.0, "{} is on a cliff", m.name);
+            assert!(hm.water_level(m.at).is_none(), "{} is under water", m.name);
+            if m.kind == MarkerKind::Rendezvous {
+                assert!(
+                    crate::geom::dist(ins.at, m.at) > 350.0,
+                    "{} is near",
+                    m.name
+                );
+                // The truck stops on the far side of the dam.
+                assert!(m.at[1] < 100.0, "{} is below the dam", m.name);
+            }
         }
     }
 
