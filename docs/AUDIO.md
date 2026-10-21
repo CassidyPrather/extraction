@@ -722,6 +722,48 @@ heavy's footfall); each break you hear about as far as robots do
   New Sallow's flooded street laps at its edge (`water_sounds`; both
   stand-ins until recordings can be fetched).
 
+## Underground's sites
+
+The signature sites under the map (`world::underground`, `::workings`,
+`::furnace`) are heard by `src/audio_underground.rs`
+(`UndergroundSoundsPlugin`, client only), which reads their state and
+messages. Every cue is an `ug.*` line in the mix, and the code plays the
+set that line names. Loops (a basin draining, the cart, the crane, the
+heat) are spawned when what makes them starts. They ease in and out, and
+are dropped once they're silent. Per-entity timers forget whatever is
+gone.
+
+| What | Sound |
+| --- | --- |
+| A valve wheel turned (`DrainControl` opening) | `ug.valve`: the door's creak at 0.75, the rusted stem shrieking round |
+| A hand pump's stroke (pressing a pump `DrainControl`) | `ug.pump`, the iron handle knocking, and `ug.pump_water`, a gout from the spout |
+| A basin's level falling (`Levels`) | `ug.gurgle`: the creek slowed to 0.6 and through 900 Hz, water going down a pipe, from the basin's water; held 1.2 s after the level last fell, so pump strokes run together |
+| A basin drained (`BasinDrained`) | `ug.drained`: a long glug (a splash at half speed) as the pipe sucks air |
+| Breathing firedamp (`InGas`) | `ug.cough` (a stand-in: a fit of one to three coughs) or `ug.wheeze` (the breath sped up), every 1.6-3.2 s at the head |
+| The canary (`Canary`) | `ug.canary` (a stand-in: a run of thin falling "tsip" notes at about 4 kHz). With no gas near, a calm run every 4-9 s, 10 dB down. With gas near, runs come quicker, louder and higher as `alarm` rises, to four a second in the gas. Dead (`life` 0), it is silent. Heard within 30 m |
+| A pocket going up (`GasFlash`, `GasIgnited`) | `ug.whump`: the heavy grenade at 0.7 through 300 Hz, a muffled blast heard through rock, not a bang; and `ug.timbers`, the groan slowed, as the shock goes through the shoring |
+| The mine cart (`MineCart`) | `ug.cart`: the truck's idle through 600 Hz, at 0.5-0.8 speed and up to full level with the cart's speed; `ug.cart_clack` at each rail joint (every 2.5 m); `ug.cart_stop`, a clank, when it stops hard at the rail's end |
+| A roof coming down (`RoofFell`) | `ug.roof`, the rockfall, and `ug.roof_crash`, concrete landing slowed; 1.2-2 s later, `ug.dust`, the rockfall sped up and quiet: grit still trickling |
+| Standing in the heat (`InHeat`) | `ug.sizzle`: the burner's roar at 1.8, louder the hotter, about the body; your own breath (`ug.heat_breath`) every 2.2 s once the heat is past a quarter |
+| A damper opened (`Vented`) | `ug.damper`, a metal clang slowed to 0.55, in the flue over its lever, and `ug.flue`, a long whoosh: hot air going up |
+| A zone cooling (its `Heat` share falling) | `ug.heat_tick`: a casing's tink slowed, at random points in the room, quick at first and slowing as it cools; it stops when the room has cooled. Heard within 35 m |
+| The crane running (`Crane::dir` not 0) | `ug.crane`, the hum at 1.6 (the trolley's motor whining); `ug.chain` clinking at the hook every 0.25-0.5 s; `ug.crane_clank` as its brake lets go, and again at the end of its run |
+| A vent's or the crane's lever (`VentLever`, `CraneLever`) | `ug.lever`, a heavy thunk under the press's click |
+
+Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
+rough voice at about 160 Hz through the throat's formants, sharp onset,
+each cough weaker than the last) and `wildlife/canary`.
+
+**Audited** (`scripts/audio_audit.py`; `ug.gurgle`, `ug.whump` and
+`ug.cart` are judged through their low-passes, `CUE_LOWPASS`). Every
+detail and action is within 2.6 LU of the mix line; the worst is the
+cart's rumble at +2.6 LU, then the heat's breath at -1.2 LU. Up close,
+the loudest is the roof's crash, 2.7 LU under your rifle (5.7 with
+narrow dynamics). The canary comes within 2.3 LU of the rifle with
+narrow dynamics. The whump is heard at -28.8 LUFS from 10 m, 5.9 LU
+under the rifle. The canary is heard 201 m away over the wind and 16 m
+over a downpour (target 15 / 8). No `ug.*` cue is flagged.
+
 ## Storms
 
 A thunderstorm (`Conditions::storm`, half of all downpours) is heard
