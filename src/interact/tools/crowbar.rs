@@ -15,7 +15,8 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use super::{CLICK, KNOCK, TICK, pulse};
-use crate::destruction::hooks::{PRY_HOLD, Pried, Pryable};
+use crate::destruction::hooks::PRY_HOLD;
+pub use crate::destruction::hooks::{Pried, Pryable};
 use crate::interact::{GrabPoint, Grabbable, GripRole, Hand, Held, InteractSystems, Supported};
 use crate::items::{Catalog, Item};
 use crate::rig::haptics::Haptic;

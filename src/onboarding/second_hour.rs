@@ -88,6 +88,12 @@ pub struct Run {
     walker: Option<Entity>,
     /// When it last put a dressing on.
     dressed: f32,
+    /// Things it's gone for in the pack step.
+    tried: Vec<Entity>,
+    /// Salvage set down for the pack step.
+    salvage: bool,
+    /// A magazine given for the shot that's heard.
+    topped_up: bool,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -129,13 +135,51 @@ pub(super) fn direct(
         bot.tasks.push_back(Task::Wait(IDLE));
     }
     let raid_no = raid.raids;
-
+    // Lamed, it limps round to look: keep the kiosk between, from where
+    // it is now.
+    let hiding = run
+        .pending
+        .iter()
+        .any(|(r, _)| run.rows[*r].first == First::Lamed);
+    let idle_only =
+        bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
+    if hiding && idle_only && now.fract() < time.delta_secs() {
+        let looking = run
+            .walker
+            .and_then(|w| world.robots.get(w).ok())
+            .is_some_and(|(_, _, b)| {
+                matches!(
+                    b,
+                    crate::robots::Brain::Engage | crate::robots::Brain::Investigate { .. }
+                )
+            });
+        if let (true, Some(from)) = (looking, run.walker.and_then(|w| world.robot_at(w))) {
+            if let Some(t) = world.hide(here, from.xz()).filter(
+                |t| matches!(t.last(), Some(Task::WalkTo { to, .. }) if to.distance(here) > 2.0),
+            ) {
+                cut_in(&mut bot, t);
+            }
+        }
+    }
     // The radio: each first time met gets the bot's answer, now.
     for FirstMet(f) in met.read() {
         let (response, tasks): (&'static str, Vec<Task>) = match f {
             First::Jam(_) => ("rack it", vec![Task::Gun(MacroKind::Rack)]),
             First::Worn => ("carry on; mend it at the bench later", vec![]),
-            First::Anomaly if world.nearest_is_burner(here) => ("go round it", vec![]),
+            // Not on into it: back out the way it came, a few steps.
+            First::Anomaly if world.nearest_is_burner(here) => {
+                bot.tasks.retain(|t| !matches!(t, Task::WalkTo { .. }));
+                let from = world
+                    .nearest_anomaly(here)
+                    .map_or(here + Vec2::Y, |(_, at)| at.xz());
+                (
+                    "go round it",
+                    vec![Task::WalkTo {
+                        to: here + (here - from).normalize_or(Vec2::Y) * 3.0,
+                        within: 0.8,
+                    }],
+                )
+            }
             First::Anomaly => match world.throwable(here) {
                 Some((item, at)) => (
                     "throw something in first",
@@ -169,6 +213,11 @@ pub(super) fn direct(
                 ),
                 None => ("(no radio)", vec![]),
             },
+            // Indoors, walls between: keep still where you are.
+            First::Heard if world.entrances.building_at(root.translation).is_some() => (
+                "keep still behind the walls",
+                vec![Task::Wait(20.0), Task::Wait(20.0)],
+            ),
             // Off from where it heard you, low and away from it, then still.
             First::Heard => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 40.0);
@@ -190,6 +239,11 @@ pub(super) fn direct(
                 Some(s) => {
                     let mut t = Vec::new();
                     if !world.door_open(s.door) {
+                        // Back out of the door's sweep, then open it.
+                        t.push(Task::WalkTo {
+                            to: s.outside.xz(),
+                            within: 0.4,
+                        });
                         t.push(Task::OpenDoor(s.door));
                     }
                     for to in [s.inside, s.corner] {
@@ -216,7 +270,20 @@ pub(super) fn direct(
             },
             First::LostYou => ("stay low a while", vec![]),
             // The torch on, and down at a walk (the bot doesn't run).
-            First::Underground => ("torch on, go slow", vec![Task::Use(Side::Left)]),
+            First::Underground => {
+                // One hand: a door on the way down may have put it away.
+                let mut t: Vec<Task> = run
+                    .torch
+                    .filter(|_| world.one_handed())
+                    .map(|(item, _)| Task::Grab {
+                        item,
+                        side: Side::Left,
+                    })
+                    .into_iter()
+                    .collect();
+                t.push(Task::Use(Side::Left));
+                ("torch on, go slow", t)
+            }
             // Away from it: it can't follow. Out of its sight, behind the
             // kiosk (in the open, it shot the bot walking off).
             First::Lamed => {
@@ -224,28 +291,8 @@ pub(super) fn direct(
                     .walker
                     .and_then(|w| world.robot_at(w))
                     .map_or(here + Vec2::Y, |w| w.xz());
-                match world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
-                    Some(k) => {
-                        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 5.0;
-                        let side = k.centre
-                            + (here - k.centre)
-                                .reject_from(k.centre - from)
-                                .normalize_or(Vec2::Y)
-                                * 4.0;
-                        (
-                            "walk away from it, out of its sight",
-                            vec![
-                                Task::WalkTo {
-                                    to: side,
-                                    within: 1.0,
-                                },
-                                Task::WalkTo {
-                                    to: behind,
-                                    within: 1.0,
-                                },
-                            ],
-                        )
-                    }
+                match world.hide(here, from) {
+                    Some(t) => ("walk away from it, out of its sight", t),
                     None => (
                         "walk away from it",
                         vec![Task::WalkTo {
@@ -301,7 +348,10 @@ pub(super) fn direct(
     // Get low for the machine that heard you, and in cover.
     // (And low while it sets up being heard: stood up in the open by day,
     // it's seen, not heard.)
+    // Low when heard, or hiding; and one-handed, low to shoot at a leg (a
+    // crouch steadies a gun with no second hand on it).
     let low = run.step == Some(Step::Heard)
+        || (run.step == Some(Step::Lamed) && world.one_handed())
         || run
             .pending
             .iter()
@@ -320,7 +370,14 @@ pub(super) fn direct(
             First::Worn => true,
             First::Anomaly if r.response == "go round it" => !world.inside_anomaly(here),
             First::Anomaly => world.anomaly_answered().unwrap_or(false),
-            First::PackFull => world.hand_empty(Side::Left).unwrap_or(false),
+            // The hand that held what wouldn't go in (one-handed: the one).
+            First::PackFull => world
+                .hand_empty(if world.one_handed() {
+                    Side::Right
+                } else {
+                    Side::Left
+                })
+                .unwrap_or(false),
             First::Surge => matches!(
                 raid.phase,
                 Phase::TruckCalled { .. } | Phase::TruckWaiting { .. }
@@ -352,6 +409,36 @@ pub(super) fn direct(
         if (ok && early) || now > deadline || !world.alive(player) {
             run.rows[row].right = Some(ok);
             match run.rows[row].first {
+                First::PackFull if run.salvage => {
+                    // The worst of it is the fuel set down for the step: left
+                    // too, or the walk home is a crawl.
+                    commands.queue(move |w: &mut World| {
+                        let catalog = w.resource::<Catalog>().clone();
+                        let fuel: Vec<Entity> = w
+                            .query::<(Entity, &Item)>()
+                            .iter(w)
+                            .filter(|(_, it)| catalog.get(it.kind()).id == "fuel_can")
+                            .map(|(e, _)| e)
+                            .collect();
+                        let mut bags = w.query::<&mut Backpack>();
+                        let mut dumped = Vec::new();
+                        for mut b in bags.iter_mut(w) {
+                            if b.owner == player && b.carried {
+                                b.contents.retain(|e| {
+                                    let f = fuel.contains(e);
+                                    if f {
+                                        dumped.push(*e);
+                                    }
+                                    !f
+                                });
+                            }
+                        }
+                        for e in dumped {
+                            w.entity_mut(e).despawn();
+                        }
+                    });
+                    bot.log.push("  (left the fuel cans too)".into());
+                }
                 First::Surge => {
                     // Answered: the clock goes back, so the walk home isn't
                     // a race the run would lose to the Surge.
@@ -455,14 +542,29 @@ pub(super) fn direct(
         Step::Pack => {
             if !firsts.met(First::PackFull) && run.tries < 12 {
                 // Everything loose nearby goes in the pack, till it won't.
-                if let Some(item) = world.bulky_near(here) {
+                // (Each tried once: one out of reach is left.)
+                if let Some(item) = world.bulky_near(here, &run.tried) {
+                    run.tried.push(item);
                     tasks.push(Grab {
                         item,
                         side: Side::Left,
                     });
                     tasks.push(Stow(Side::Left));
+                    run.tries += 1;
+                } else if !run.salvage {
+                    // Nothing big lying about in reach: salvage at its feet,
+                    // more than a pack holds.
+                    run.salvage = true;
+                    let away = world
+                        .nearest_anomaly(here)
+                        .map_or(Vec2::Y, |(_, at)| (here - at.xz()).normalize_or(Vec2::Y));
+                    let spot = here + away * 4.0;
+                    let at = Vec3::new(spot.x, world.zone.ground(spot.x, spot.y), spot.y);
+                    let _ = world.drop_items(&mut commands, at, &["fuel_can"; 4]);
+                    tasks.push(Wait(0.5));
+                } else {
+                    run.tries = 12;
                 }
-                run.tries += 1;
             } else {
                 advance(&mut run, Step::Surge);
             }
@@ -511,9 +613,7 @@ pub(super) fn direct(
                 advance(&mut run, next);
             } else {
                 // Armed again, if what it had went down with it.
-                let armed = world
-                    .holding(Side::Right)
-                    .is_some_and(|e| world.guns.get(e).is_ok());
+                let armed = world.armed(player);
                 if !armed {
                     if let Some(gun) = world.any_gun(here) {
                         tasks.push(Grab {
@@ -527,7 +627,18 @@ pub(super) fn direct(
             }
         }
         Step::Heard => {
-            if !firsts.met(First::Heard) && run.tries < 2 {
+            if !firsts.met(First::Heard) && !run.topped_up && world.rounds(player).unwrap_or(0) < 3
+            {
+                // Rounds to fire the shot with: a magazine from the crate.
+                run.topped_up = true;
+                let mag = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
+                tasks.extend([Wait(0.5), Stow(Side::Left)]);
+                tasks.extend(mag.first().map(|&item| GrabFromHere {
+                    item,
+                    side: Side::Left,
+                }));
+                tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload)]);
+            } else if !firsts.met(First::Heard) && run.tries < 2 {
                 // A walker about its own business off to one side, and a
                 // shot it can't miss hearing.
                 let o = here;
@@ -558,21 +669,15 @@ pub(super) fn direct(
             }
         }
         Step::Drone => {
-            let armed = world
-                .holding(Side::Right)
-                .is_some_and(|e| world.guns.get(e).is_ok());
+            let armed = world.armed(player);
             if !armed && run.tries < 2 {
-                // A rifle and a magazine, if what it had is gone.
-                let _ = world.drop_kit(&mut commands, root.translation);
+                // A rifle and a magazine, if what it had is gone (these
+                // ones: the nearest of an id might be an empty one).
+                let kit = world.drop_kit(&mut commands, root.translation);
                 tasks.push(Wait(0.5));
-                tasks.push(PickUp {
-                    id: "ak74".into(),
-                    side: Side::Right,
-                });
-                tasks.push(PickUp {
-                    id: "ak_mag".into(),
-                    side: Side::Left,
-                });
+                for (&item, side) in kit.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
                 tasks.push(Stow(Side::Left));
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
@@ -583,14 +688,9 @@ pub(super) fn direct(
                 let fresh = world.drop_kit(&mut commands, root.translation);
                 tasks.push(Release(Side::Right));
                 tasks.push(Wait(0.5));
-                tasks.extend(fresh.first().map(|&item| Grab {
-                    item,
-                    side: Side::Right,
-                }));
-                tasks.push(PickUp {
-                    id: "ak_mag".into(),
-                    side: Side::Left,
-                });
+                for (&item, side) in fresh.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
                 tasks.push(Stow(Side::Left));
                 tasks.push(Gun(MacroKind::Reload));
                 tasks.push(Gun(MacroKind::Mode));
@@ -635,7 +735,10 @@ pub(super) fn direct(
                 // A torch from the crate, its cell in.
                 run.torch = world.drop_torch(&mut commands, root.translation);
                 tasks.push(Wait(0.5));
-            } else if world.holding(Side::Left) != run.torch.map(|t| t.0) {
+            } else if !Side::BOTH
+                .iter()
+                .any(|s| world.holding(*s) == run.torch.map(|t| t.0))
+            {
                 let (torch, cell) = run.torch.unwrap();
                 if !run.seated {
                     run.seated = true;
@@ -657,6 +760,11 @@ pub(super) fn direct(
                     from = *to;
                 }
                 if let Some(d) = w.door.filter(|d| !world.door_open(*d)) {
+                    // Clear of the door's sweep, then open it.
+                    tasks.push(WalkTo {
+                        to: w.outside,
+                        within: 0.4,
+                    });
                     tasks.push(OpenDoor(d));
                 }
                 for to in [w.inside, w.top, w.down] {
@@ -713,23 +821,18 @@ pub(super) fn direct(
                 if world.held_condition(player) < 0.5 {
                     let fresh = world.drop_items(&mut commands, root.translation, &["ak74"]);
                     tasks.extend([Release(Side::Right), Wait(0.5)]);
-                    tasks.extend(fresh.first().map(|&item| Grab {
+                    tasks.extend(fresh.first().map(|&item| GrabFromHere {
                         item,
                         side: Side::Right,
                     }));
                 }
-                let _ = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
-                tasks.extend([
-                    Wait(0.5),
-                    Stow(Side::Left),
-                    PickUp {
-                        id: "ak_mag".into(),
-                        side: Side::Left,
-                    },
-                    Stow(Side::Left),
-                    Gun(MacroKind::Reload),
-                    Wait(1.0),
-                ]);
+                let mag = world.drop_items(&mut commands, root.translation, &["ak_mag"]);
+                tasks.extend([Wait(0.5), Stow(Side::Left)]);
+                tasks.extend(mag.first().map(|&item| GrabFromHere {
+                    item,
+                    side: Side::Left,
+                }));
+                tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
             } else if let Some(leg) = leg {
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
@@ -796,13 +899,15 @@ pub(super) fn direct(
         let idle = bot.tasks.pop_back();
         bot.tasks.extend(tasks);
         bot.tasks.extend(idle);
+        // In place of the idle wait that was running.
+        bot.restart();
     }
 }
 
 /// Tasks ahead of whatever the bot was doing. A shot it was taking is
 /// done with (resumed later, it would only be noise), and the trigger
 /// and the aim are let go: held through a walk, a rifle keeps firing.
-fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
+pub(super) fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
     if matches!(bot.tasks.front(), Some(Task::Fire { .. })) {
         bot.tasks.pop_front();
     }
@@ -811,7 +916,7 @@ fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
     for t in tasks.into_iter().rev() {
         bot.tasks.push_front(t);
     }
-    bot.elapsed = 0.0;
+    bot.restart();
 }
 
 /// The table, in the bot's log; a moment counts as passed when it was met
@@ -868,9 +973,9 @@ fn report(bot: &mut Bot, rows: &[Row]) {
 
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct World2<'w, 's> {
-    zone: Res<'w, Zone>,
-    catalog: Res<'w, Catalog>,
-    items: Query<
+    pub(super) zone: Res<'w, Zone>,
+    pub(super) catalog: Res<'w, Catalog>,
+    pub(super) items: Query<
         'w,
         's,
         (
@@ -882,11 +987,12 @@ pub(super) struct World2<'w, 's> {
             Option<&'static crate::interact::body::InBackpack>,
         ),
     >,
-    guns: Query<'w, 's, (&'static crate::weapons::Gun, &'static Held)>,
-    hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
-    anomalies: Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
-    anomaly_events: MessageReader<'w, 's, crate::anomaly::AnomalyEvent>,
-    robots: Query<
+    pub(super) guns: Query<'w, 's, (&'static crate::weapons::Gun, &'static Held)>,
+    pub(super) hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
+    pub(super) anomalies:
+        Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
+    pub(super) anomaly_events: MessageReader<'w, 's, crate::anomaly::AnomalyEvent>,
+    pub(super) robots: Query<
         'w,
         's,
         (
@@ -895,23 +1001,26 @@ pub(super) struct World2<'w, 's> {
             &'static crate::robots::Brain,
         ),
     >,
-    health: Query<'w, 's, &'static crate::health::Health>,
-    bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
-    pressables: Query<'w, 's, (Entity, &'static Pressable)>,
-    remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
-    trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
-    entrances: Res<'w, crate::robots::doors::Entrances>,
-    comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
-    doors: Query<'w, 's, &'static crate::world::buildings::Door>,
-    door_at: Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
-    robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
-    parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
-    lit: Query<'w, 's, (), With<crate::gadgets::Powered>>,
+    pub(super) health: Query<'w, 's, &'static crate::health::Health>,
+    pub(super) bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
+    pub(super) pressables: Query<'w, 's, (Entity, &'static Pressable)>,
+    pub(super) remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
+    pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
+    pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
+    pub(super) comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
+    pub(super) owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
+    pub(super) gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
+    pub(super) doors: Query<'w, 's, &'static crate::world::buildings::Door>,
+    pub(super) door_at:
+        Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
+    pub(super) robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
+    pub(super) parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
+    pub(super) lit: Query<'w, 's, (), With<crate::gadgets::Powered>>,
 }
 
 /// Down a site's stair: outside its kiosk, in at the door, the top step
 /// and the foot (world xz), and the kiosk's door.
-struct StairWay {
+pub(super) struct StairWay {
     /// The kiosk's middle.
     centre: Vec2,
     /// Round the kiosk to its door, from behind or beside it.
@@ -948,7 +1057,7 @@ fn seat_cell(commands: &mut Commands, torch: Entity, cell: Entity) {
 
 /// A house to get into: outside its nearest door, just in, and a spot
 /// beside the door out of its line (`corner`).
-struct Shelter {
+pub(super) struct Shelter {
     door: Entity,
     out: Vec3,
     round: Vec<Vec3>,
@@ -959,7 +1068,7 @@ struct Shelter {
 }
 
 impl World2<'_, '_> {
-    fn id(&self, e: Entity) -> Option<&str> {
+    pub(super) fn id(&self, e: Entity) -> Option<&str> {
         self.items
             .get(e)
             .ok()
@@ -968,7 +1077,7 @@ impl World2<'_, '_> {
 
     /// What's in a hand, as a right-handed bot names it (a left-handed one
     /// plays mirrored).
-    fn holding(&self, side: Side) -> Option<Entity> {
+    pub(super) fn holding(&self, side: Side) -> Option<Entity> {
         let side = side.mirrored(self.comfort.as_ref().is_some_and(|c| c.left_handed));
         self.hands
             .iter()
@@ -976,30 +1085,30 @@ impl World2<'_, '_> {
             .and_then(|(_, h)| h.holding)
     }
 
-    fn hand_empty(&self, side: Side) -> Option<bool> {
+    pub(super) fn hand_empty(&self, side: Side) -> Option<bool> {
         Some(self.holding(side).is_none())
     }
 
     /// The gun in the right hand (not one on the sling).
-    fn held_gun(&self, player: Entity) -> Option<(&crate::weapons::Gun, &Held)> {
+    pub(super) fn held_gun(&self, player: Entity) -> Option<(&crate::weapons::Gun, &Held)> {
         self.holding(Side::Right)
             .and_then(|e| self.guns.get(e).ok())
             .filter(|(_, h)| h.player == player)
     }
 
-    fn held_condition(&self, player: Entity) -> f32 {
+    pub(super) fn held_condition(&self, player: Entity) -> f32 {
         self.held_gun(player)
             .map_or(1.0, |(g, _)| g.firearm.condition)
     }
 
-    fn gun_clear(&self, player: Entity) -> Option<bool> {
+    pub(super) fn gun_clear(&self, player: Entity) -> Option<bool> {
         self.held_gun(player)
             .map(|(g, _)| g.firearm.malfunction.is_none())
     }
 
     /// Something loose within a few metres to throw, and where to throw it:
     /// at the nearest anomaly that answers a thrown thing (not a burner).
-    fn throwable(&self, near: Vec2) -> Option<(Entity, Vec3)> {
+    pub(super) fn throwable(&self, near: Vec2) -> Option<(Entity, Vec3)> {
         let target = self.anomaly_to_probe(near)?;
         let item = self
             .items
@@ -1009,8 +1118,11 @@ impl World2<'_, '_> {
                     && sock.is_none()
                     && bag.is_none()
                     && gt.translation().xz().distance(near) < 6.0
-                    && self.catalog.get(it.kind()).category
-                        != extraction_core::items::Category::Artifact
+                    && !matches!(
+                        self.catalog.get(it.kind()).category,
+                        extraction_core::items::Category::Artifact
+                            | extraction_core::items::Category::Firearm
+                    )
             })
             .map(|(e, ..)| e)
             .next()
@@ -1024,7 +1136,7 @@ impl World2<'_, '_> {
         Some((item, target + Vec3::Y * 0.5))
     }
 
-    fn nearest_anomaly(&self, near: Vec2) -> Option<(&crate::anomaly::Anomaly, Vec3)> {
+    pub(super) fn nearest_anomaly(&self, near: Vec2) -> Option<(&crate::anomaly::Anomaly, Vec3)> {
         self.anomalies
             .iter()
             .map(|(a, gt)| (a, gt.translation()))
@@ -1034,18 +1146,18 @@ impl World2<'_, '_> {
             })
     }
 
-    fn nearest_is_burner(&self, near: Vec2) -> bool {
+    pub(super) fn nearest_is_burner(&self, near: Vec2) -> bool {
         self.nearest_anomaly(near)
             .is_some_and(|(a, _)| a.kind == extraction_core::anomaly::AnomalyKind::Burner)
     }
 
-    fn inside_anomaly(&self, near: Vec2) -> bool {
+    pub(super) fn inside_anomaly(&self, near: Vec2) -> bool {
         self.anomalies
             .iter()
             .any(|(a, gt)| gt.translation().xz().distance(near) < a.radius)
     }
 
-    fn anomaly_to_probe(&self, near: Vec2) -> Option<Vec3> {
+    pub(super) fn anomaly_to_probe(&self, near: Vec2) -> Option<Vec3> {
         self.anomalies
             .iter()
             .filter(|(a, _)| a.kind != extraction_core::anomaly::AnomalyKind::Burner)
@@ -1053,22 +1165,32 @@ impl World2<'_, '_> {
             .min_by(|a, b| a.xz().distance(near).total_cmp(&b.xz().distance(near)))
     }
 
-    fn anomaly_answered(&self) -> Option<bool> {
+    pub(super) fn anomaly_answered(&self) -> Option<bool> {
         // (Read by the director each frame: any lift popping or snare
         // discharging since the throw.)
         Some(!self.anomaly_events.is_empty())
     }
 
-    fn bulky_near(&self, near: Vec2) -> Option<Entity> {
+    pub(super) fn bulky_near(&self, near: Vec2, tried: &[Entity]) -> Option<Entity> {
         self.items
             .iter()
-            .filter(|(_, it, gt, held, sock, bag)| {
-                held.is_none()
+            .filter(|(e, it, gt, held, sock, bag)| {
+                !tried.contains(e)
+                    && held.is_none()
                     && sock.is_none()
                     && bag.is_none()
                     && gt.translation().xz().distance(near) < 40.0
-                    && self.catalog.get(it.kind()).category
-                        != extraction_core::items::Category::Artifact
+                    && !matches!(
+                        self.catalog.get(it.kind()).category,
+                        extraction_core::items::Category::Artifact
+                            | extraction_core::items::Category::Firearm
+                    )
+                    // Out in the open (not on a shelf indoors)...
+                    && self.entrances.building_at(gt.translation()).is_none()
+                    // ...and not from the edge of one: it was gone round.
+                    && !self.anomalies.iter().any(|(a, agt)| {
+                        agt.translation().xz().distance(gt.translation().xz()) < a.radius + 2.0
+                    })
             })
             .max_by(|a, b| {
                 let bulk = |e: &crate::items::Item| self.catalog.get(e.kind()).bulk;
@@ -1078,12 +1200,17 @@ impl World2<'_, '_> {
     }
 
     /// A rifle and a full magazine at the bot's feet.
-    fn drop_kit(&self, commands: &mut Commands, at: Vec3) -> Vec<Entity> {
+    pub(super) fn drop_kit(&self, commands: &mut Commands, at: Vec3) -> Vec<Entity> {
         self.drop_items(commands, at, &["ak74", "ak_mag"])
     }
 
     /// Things from the crate set down by the bot (magazines full).
-    fn drop_items(&self, commands: &mut Commands, at: Vec3, ids: &[&str]) -> Vec<Entity> {
+    pub(super) fn drop_items(
+        &self,
+        commands: &mut Commands,
+        at: Vec3,
+        ids: &[&str],
+    ) -> Vec<Entity> {
         let mut out = Vec::new();
         for (k, id) in ids.iter().copied().enumerate() {
             let Some(kind) = self.catalog.kind(id) else {
@@ -1113,7 +1240,7 @@ impl World2<'_, '_> {
     }
 
     /// The nearest radio lying loose.
-    fn radio(&self, near: Vec2) -> Option<Entity> {
+    pub(super) fn radio(&self, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
             .filter(|(e, _, _, held, sock, bag)| {
@@ -1126,7 +1253,7 @@ impl World2<'_, '_> {
             .map(|(e, ..)| e)
     }
 
-    fn drop_radio(&self, commands: &mut Commands, at: Vec3) {
+    pub(super) fn drop_radio(&self, commands: &mut Commands, at: Vec3) {
         let Some(kind) = self.catalog.kind("radio") else {
             return;
         };
@@ -1141,37 +1268,37 @@ impl World2<'_, '_> {
         );
     }
 
-    fn no_one_engaging(&self) -> bool {
+    pub(super) fn no_one_engaging(&self) -> bool {
         !self
             .robots
             .iter()
             .any(|(_, r, b)| !r.wrecked && matches!(b, crate::robots::Brain::Engage))
     }
 
-    fn drones_down(&self) -> bool {
+    pub(super) fn drones_down(&self) -> bool {
         !self
             .robots
             .iter()
             .any(|(_, r, _)| !r.wrecked && r.kind == crate::robots::RobotKind::Drone)
     }
 
-    fn remains_at(&self, player: Entity) -> Option<Vec3> {
+    pub(super) fn remains_at(&self, player: Entity) -> Option<Vec3> {
         self.remains
             .iter()
             .find(|(_, r)| r.owner == player)
             .map(|(gt, _)| gt.translation())
     }
 
-    fn robot_entities(&self) -> Vec<Entity> {
+    pub(super) fn robot_entities(&self) -> Vec<Entity> {
         self.robots.iter().map(|(e, ..)| e).collect()
     }
 
     /// A dressing from its kit (set down, as from the crate), in the left
     /// hand, used.
-    fn dress(&self, commands: &mut Commands, at: Vec3) -> Vec<Task> {
+    pub(super) fn dress(&self, commands: &mut Commands, at: Vec3) -> Vec<Task> {
         let dressing = self.drop_items(commands, at, &["field_dressing"]);
         let mut t = vec![Task::Stow(Side::Left), Task::Wait(0.5)];
-        t.extend(dressing.first().map(|&item| Task::Grab {
+        t.extend(dressing.first().map(|&item| Task::GrabFromHere {
             item,
             side: Side::Left,
         }));
@@ -1179,15 +1306,19 @@ impl World2<'_, '_> {
         t
     }
 
-    fn bleeding(&self, player: Entity) -> f32 {
+    pub(super) fn one_handed(&self) -> bool {
+        self.comfort.as_ref().is_some_and(|c| c.one_handed)
+    }
+
+    pub(super) fn bleeding(&self, player: Entity) -> f32 {
         self.health.get(player).map_or(0.0, |h| h.bleeding)
     }
 
-    fn alive(&self, player: Entity) -> bool {
+    pub(super) fn alive(&self, player: Entity) -> bool {
         self.health.get(player).is_ok_and(|h| !h.down)
     }
 
-    fn fall(&self, commands: &mut Commands, player: Entity) {
+    pub(super) fn fall(&self, commands: &mut Commands, player: Entity) {
         commands.entity(player).queue(|mut e: EntityWorldMut| {
             if let Some(mut h) = e.get_mut::<crate::health::Health>() {
                 h.hp = 0.0;
@@ -1195,14 +1326,14 @@ impl World2<'_, '_> {
         });
     }
 
-    fn remains_item(&self, player: Entity) -> Option<Entity> {
+    pub(super) fn remains_item(&self, player: Entity) -> Option<Entity> {
         self.bags
             .iter()
             .find(|(_, r)| r.is_some_and(|r| r.owner == player))
             .and_then(|(b, _)| b.contents.first().copied())
     }
 
-    fn came_from_remains(&self, item: Entity) -> bool {
+    pub(super) fn came_from_remains(&self, item: Entity) -> bool {
         // It's in hand now; the remains bag no longer has it.
         !self
             .bags
@@ -1210,7 +1341,7 @@ impl World2<'_, '_> {
             .any(|(b, r)| r.is_some() && b.contents.contains(&item))
     }
 
-    fn insertion(&self) -> Vec2 {
+    pub(super) fn insertion(&self) -> Vec2 {
         self.zone
             .marker(&MarkerKind::Insertion)
             .map(|m| Vec2::from(m.at))
@@ -1218,7 +1349,7 @@ impl World2<'_, '_> {
     }
 
     /// Straight legs a bot can do inside its per-task time.
-    fn legs(&self, from: Vec2, to: Vec2) -> Vec<Task> {
+    pub(super) fn legs(&self, from: Vec2, to: Vec2) -> Vec<Task> {
         let d = from.distance(to);
         let n = (d / 14.0).ceil().max(1.0) as usize;
         (1..=n)
@@ -1231,7 +1362,7 @@ impl World2<'_, '_> {
 
     /// Home: radio called (by the Surge step); wait for the truck, walk to
     /// it, ring.
-    fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
+    pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
@@ -1279,7 +1410,7 @@ impl World2<'_, '_> {
 
     /// A gun lying loose, or in the crate.
     /// A gun lying loose nearby (not one out in its remains).
-    fn any_gun(&self, near: Vec2) -> Option<Entity> {
+    pub(super) fn any_gun(&self, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
             .filter(|(e, _, gt, held, sock, bag)| {
@@ -1293,11 +1424,11 @@ impl World2<'_, '_> {
             .next()
     }
 
-    fn door_open(&self, door: Entity) -> bool {
+    pub(super) fn door_open(&self, door: Entity) -> bool {
         crate::robots::doors::is_open(self.doors.get(door).ok())
     }
 
-    fn shelter(&self, near: Vec2) -> Option<Shelter> {
+    pub(super) fn shelter(&self, near: Vec2) -> Option<Shelter> {
         let e = self
             .entrances
             .doors
@@ -1373,7 +1504,7 @@ impl World2<'_, '_> {
         })
     }
 
-    fn nearest_robot(&self, near: Vec2) -> Option<Vec2> {
+    pub(super) fn nearest_robot(&self, near: Vec2) -> Option<Vec2> {
         self.robots
             .iter()
             .filter(|(_, r, _)| !r.wrecked)
@@ -1382,7 +1513,31 @@ impl World2<'_, '_> {
             .min_by(|a, b| a.distance(near).total_cmp(&b.distance(near)))
     }
 
-    fn robot_at(&self, robot: Entity) -> Option<Vec3> {
+    /// Round the kiosk near `here` to its far side from `from`: out of
+    /// sight of what's there.
+    pub(super) fn hide(&self, here: Vec2, from: Vec2) -> Option<Vec<Task>> {
+        let k = self
+            .stair(here)
+            .filter(|k| k.centre.distance(here) < 15.0)?;
+        let behind = k.centre + (k.centre - from).normalize_or(Vec2::X) * 5.0;
+        let side = k.centre
+            + (here - k.centre)
+                .reject_from(k.centre - from)
+                .normalize_or(Vec2::Y)
+                * 4.0;
+        Some(vec![
+            Task::WalkTo {
+                to: side,
+                within: 1.0,
+            },
+            Task::WalkTo {
+                to: behind,
+                within: 1.0,
+            },
+        ])
+    }
+
+    pub(super) fn robot_at(&self, robot: Entity) -> Option<Vec3> {
         self.robot_at.get(robot).ok().map(|g| g.translation())
     }
 
@@ -1390,7 +1545,7 @@ impl World2<'_, '_> {
     /// The nearest leg to `from` (the far ones are behind the body), up
     /// the shin toward the knee: its middle is low enough that a shot
     /// skims the ground.
-    fn leg_of(&self, robot: Entity, from: Vec3) -> Option<Vec3> {
+    pub(super) fn leg_of(&self, robot: Entity, from: Vec3) -> Option<Vec3> {
         self.parts
             .iter()
             .filter(|(p, _)| {
@@ -1400,15 +1555,30 @@ impl World2<'_, '_> {
             .min_by(|a, b| a.distance(from).total_cmp(&b.distance(from)))
     }
 
-    fn mode(&self, player: Entity) -> Option<extraction_core::firearm::FireMode> {
+    /// A gun in hand, or on the body (slung, holstered: a one-handed
+    /// player's is there whenever the hand's doing something else).
+    pub(super) fn armed(&self, player: Entity) -> bool {
+        self.holding(Side::Right)
+            .is_some_and(|e| self.guns.get(e).is_ok())
+            || self.items.iter().any(|(e, _, _, _, sock, _)| {
+                sock.is_some_and(|s| self.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                    && self.gun_ids.get(e).is_ok()
+            })
+    }
+
+    pub(super) fn rounds(&self, player: Entity) -> Option<u32> {
+        self.held_gun(player).map(|(g, _)| g.firearm.live_rounds())
+    }
+
+    pub(super) fn mode(&self, player: Entity) -> Option<extraction_core::firearm::FireMode> {
         self.held_gun(player).map(|(g, _)| g.firearm.fire_mode())
     }
 
-    fn lit(&self, item: Entity) -> bool {
+    pub(super) fn lit(&self, item: Entity) -> bool {
         self.lit.get(item).is_ok()
     }
 
-    fn drop_torch(&self, commands: &mut Commands, at: Vec3) -> Option<(Entity, Entity)> {
+    pub(super) fn drop_torch(&self, commands: &mut Commands, at: Vec3) -> Option<(Entity, Entity)> {
         let mut spawn = |id: &str, dx: f32| {
             let kind = self.catalog.kind(id)?;
             Some(crate::items::spawn_item(
@@ -1425,7 +1595,7 @@ impl World2<'_, '_> {
     }
 
     /// The nearest kiosk of the nearest underground site, within 250 m.
-    fn stair(&self, near: Vec2) -> Option<StairWay> {
+    pub(super) fn stair(&self, near: Vec2) -> Option<StairWay> {
         use extraction_core::underground as ug;
         let site = ug::placed(&self.zone.map)
             .into_iter()
@@ -1471,14 +1641,17 @@ impl World2<'_, '_> {
         })
     }
 
-    fn distance_to(&self, item: Entity, near: Vec2) -> f32 {
+    pub(super) fn distance_to(&self, item: Entity, near: Vec2) -> f32 {
         self.items.get(item).map_or(f32::MAX, |(_, _, gt, ..)| {
             gt.translation().xz().distance(near)
         })
     }
 
-    fn radio_in_hand(&self) -> bool {
-        self.holding(Side::Left)
-            .is_some_and(|e| self.id(e) == Some("radio"))
+    /// In either hand (one-handed, it's in the only one).
+    pub(super) fn radio_in_hand(&self) -> bool {
+        Side::BOTH.iter().any(|s| {
+            self.holding(*s)
+                .is_some_and(|e| self.id(e) == Some("radio"))
+        })
     }
 }

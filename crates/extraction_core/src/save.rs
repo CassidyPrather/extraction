@@ -83,9 +83,13 @@ pub struct ZoneSave {
     /// the Surge: each by where it stood, centimetres.
     #[serde(default)]
     pub broken: Vec<[i32; 3]>,
-    /// Holes torn in walls, by their centres, centimetres.
+    /// Doorways torn in walls, by their centres, centimetres (saves from
+    /// before holes had sizes; read, no longer written).
     #[serde(default)]
     pub breaches: Vec<[i32; 3]>,
+    /// Holes in walls, centimetres: [x, y, z, across, up, to the floor].
+    #[serde(default)]
+    pub holes: Vec<[i32; 6]>,
     /// The valley's safehouse (`safehouse`), once you've started on it.
     #[serde(default)]
     pub safehouse: Option<crate::safehouse::SafehouseSave>,

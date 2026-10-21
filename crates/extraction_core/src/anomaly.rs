@@ -519,51 +519,167 @@ pub fn surge_bloom_spot(
     None
 }
 
-/// Somewhere a run-time bloom (the director's, the Surge's) may open: the
-/// same ground as the Surge's own layout, `placeable` (dry, not steep,
-/// clear of every building by its footprint) and `clear_of_roads` for
-/// how far the kind reaches.
-pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
-    placeable(map, hm, p) && clear_of_roads(hm, p, kind.danger_radius(radius))
+/// Whether an anomaly reaching `reach` at `p` keeps off the walls (every
+/// building's footprint, every underground kiosk's, the exits' too) by
+/// `map_surge::WALL_CLEAR` and out of the strip in front of every door
+/// (`map_surge::anomaly_room`). `placeable`'s round clearance measures
+/// from a building's middle, so along a long hall's side wall it let a
+/// snare open 2 m from the wall; and it never knew the exit kiosks.
+pub fn clear_of_buildings(map: &MapDef, p: [f32; 2], reach: f32) -> bool {
+    crate::map_surge::anomaly_room(map, p).0 >= reach
 }
 
-/// The anomalies of a Surge cycle.
+/// Somewhere a run-time bloom (the director's, the Surge's) may open: the
+/// same ground as the Surge's own layout, `placeable` (dry, not steep,
+/// clear of every building by its footprint), `clear_of_roads` and
+/// `clear_of_buildings` for how far the kind reaches.
+pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
+    let reach = kind.danger_radius(radius);
+    placeable(map, hm, p) && clear_of_roads(hm, p, reach) && clear_of_buildings(map, p, reach)
+}
+
+/// Cycles between the Surge's great scatters. In between, what it scattered
+/// creeps downhill a little each cycle, along the terrain's lows.
+pub const SURGE_EPOCH: u32 = 6;
+/// How far a Surge-born anomaly creeps in a cycle, metres, at most.
+pub const MIGRATE_STEP: f32 = 7.0;
+/// Below this gradient (rise over run) the ground is a low: what reaches it
+/// stays, stirring in place.
+const MIGRATE_FLAT: f32 = 0.03;
+
+/// The anomalies of a Surge cycle. Each [`SURGE_EPOCH`]-th cycle scatters
+/// them afresh; the cycles after it walk that scatter downhill
+/// ([`migrate`]), and every cycle grows its own artifacts.
 pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<AnomalySpec> {
+    let start = cycle - cycle % SURGE_EPOCH;
+    let (mut out, chances, standing) = scatter(map, hm, seed, start);
+    if cycle == start {
+        return out;
+    }
+    for c in start + 1..=cycle {
+        migrate(map, hm, seed, c, &mut out, standing);
+    }
+    // This cycle's stones: the standing ones on their own stream (as at a
+    // scatter), the Surge's on the cycle's.
+    let mut srng = Rng::new(seed ^ 0x57A4D ^ (cycle as u64).wrapping_mul(0xD1B5_4A32_D192_ED03));
+    let mut rng = Rng::new(seed ^ 0xA77F ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    for (i, a) in out.iter_mut().enumerate() {
+        a.artifact = if i < standing {
+            srng.chance(FIELD_ARTIFACT_CHANCE)
+                .then(|| a.kind.artifact())
+        } else {
+            rng.chance(chances[i]).then(|| {
+                if rng.chance(GLASS_EYE_CHANCE) {
+                    "art_glasseye"
+                } else {
+                    a.kind.artifact()
+                }
+            })
+        };
+    }
+    out
+}
+
+/// One cycle's creep: each Surge-born anomaly (those after the first
+/// `standing`) steps down the slope it sits on, wobbling, and stops short
+/// of anything it may not reach: a road, water, a building, another
+/// anomaly. On the flat of a low it only stirs.
+pub fn migrate(
+    map: &MapDef,
+    hm: &Heightmap,
+    seed: u64,
+    cycle: u32,
+    out: &mut [AnomalySpec],
+    standing: usize,
+) {
+    let mut rng = Rng::new(seed ^ 0x316A ^ (cycle as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
+    for i in standing..out.len() {
+        let a = out[i].clone();
+        let h = |dx: f32, dz: f32| hm.height([a.at[0] + dx, a.at[1] + dz]);
+        let g = [
+            (h(3.0, 0.0) - h(-3.0, 0.0)) / 6.0,
+            (h(0.0, 3.0) - h(0.0, -3.0)) / 6.0,
+        ];
+        let steep = (g[0] * g[0] + g[1] * g[1]).sqrt();
+        let wobble = rng.range(-0.45, 0.45);
+        let (dir, far) = if steep > MIGRATE_FLAT {
+            (
+                g[1].atan2(g[0]) + std::f32::consts::PI + wobble,
+                MIGRATE_STEP,
+            )
+        } else {
+            (rng.range(0.0, std::f32::consts::TAU), MIGRATE_STEP * 0.25)
+        };
+        for f in [1.0, 0.6, 0.3] {
+            let p = [a.at[0] + dir.cos() * far * f, a.at[1] + dir.sin() * far * f];
+            let clear = out.iter().enumerate().all(|(j, b)| {
+                j == i || geom::dist(b.at, p) > b.kind.danger_radius(b.radius) + a.radius + 2.5
+            });
+            // Creeping, it keeps off walls and doorways as it was laid.
+            if clear
+                && placeable(map, hm, p)
+                && clear_of_roads(hm, p, a.radius)
+                && clear_of_buildings(map, p, a.kind.danger_radius(a.radius))
+            {
+                out[i].at = p;
+                break;
+            }
+        }
+    }
+}
+
+/// A great scatter: the standing anomalies (the first returned count),
+/// then the Surge's, each with its chance of a stone.
+fn scatter(
+    map: &MapDef,
+    hm: &Heightmap,
+    seed: u64,
+    cycle: u32,
+) -> (Vec<AnomalySpec>, Vec<f32>, usize) {
     let mut rng = Rng::new(seed ^ 0xA70A ^ (cycle as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
     let mut out: Vec<AnomalySpec> = Vec::new();
+    let mut chances: Vec<f32> = Vec::new();
     let fits = |out: &[AnomalySpec], p: [f32; 2], r: f32| {
         out.iter()
             .all(|a| geom::dist(a.at, p) > a.kind.danger_radius(a.radius) + r + 2.5)
     };
-    let place =
-        |rng: &mut Rng, out: &mut Vec<AnomalySpec>, centre: [f32; 2], spread: f32, chance: f32| {
-            for _ in 0..30 {
-                let a = rng.range(0.0, std::f32::consts::TAU);
-                let d = spread * rng.f32().sqrt();
-                let p = [centre[0] + a.cos() * d, centre[1] + a.sin() * d];
-                let kind = AnomalyKind::SURGE[rng.below(3)];
-                let (lo, hi) = kind.radius_range();
-                let radius = rng.range(lo, hi);
-                if !placeable(map, hm, p) || !clear_of_roads(hm, p, radius) || !fits(out, p, radius)
-                {
-                    continue;
-                }
-                let artifact = rng.chance(chance).then(|| {
-                    if rng.chance(GLASS_EYE_CHANCE) {
-                        "art_glasseye"
-                    } else {
-                        kind.artifact()
-                    }
-                });
-                out.push(AnomalySpec {
-                    kind,
-                    at: p,
-                    radius,
-                    artifact,
-                });
-                return;
+    let place = |rng: &mut Rng,
+                 out: &mut Vec<AnomalySpec>,
+                 chances: &mut Vec<f32>,
+                 centre: [f32; 2],
+                 spread: f32,
+                 chance: f32| {
+        for _ in 0..30 {
+            let a = rng.range(0.0, std::f32::consts::TAU);
+            let d = spread * rng.f32().sqrt();
+            let p = [centre[0] + a.cos() * d, centre[1] + a.sin() * d];
+            let kind = AnomalyKind::SURGE[rng.below(3)];
+            let (lo, hi) = kind.radius_range();
+            let radius = rng.range(lo, hi);
+            if !placeable(map, hm, p)
+                || !clear_of_roads(hm, p, radius)
+                || !fits(out, p, radius)
+                || !clear_of_buildings(map, p, kind.danger_radius(radius))
+            {
+                continue;
             }
-        };
+            let artifact = rng.chance(chance).then(|| {
+                if rng.chance(GLASS_EYE_CHANCE) {
+                    "art_glasseye"
+                } else {
+                    kind.artifact()
+                }
+            });
+            out.push(AnomalySpec {
+                kind,
+                at: p,
+                radius,
+                artifact,
+            });
+            chances.push(chance);
+            return;
+        }
+    };
     // The standing anomalies first, where the map puts them, so the Surge's
     // keep clear of them. Their own stream: adding one to a map leaves the
     // Surge's draws as they were.
@@ -582,19 +698,35 @@ pub fn layout(map: &MapDef, hm: &Heightmap, seed: u64, cycle: u32) -> Vec<Anomal
             radius: *radius,
             artifact,
         });
+        chances.push(0.0);
     }
+    let standing = out.len();
     for m in map.markers_of(&MarkerKind::ArtifactField) {
         let n = 5 + rng.below(4);
         for _ in 0..n {
-            place(&mut rng, &mut out, m.at, 28.0, FIELD_ARTIFACT_CHANCE);
+            place(
+                &mut rng,
+                &mut out,
+                &mut chances,
+                m.at,
+                28.0,
+                FIELD_ARTIFACT_CHANCE,
+            );
         }
     }
     let half = map.size * 0.5 - map.fence_inset - 10.0;
     for _ in 0..(4 + rng.below(3)) {
         let c = [rng.range(-half, half), rng.range(-half, half)];
-        place(&mut rng, &mut out, c, 0.0, LOOSE_ARTIFACT_CHANCE);
+        place(
+            &mut rng,
+            &mut out,
+            &mut chances,
+            c,
+            0.0,
+            LOOSE_ARTIFACT_CHANCE,
+        );
     }
-    out
+    (out, chances, standing)
 }
 
 #[cfg(test)]
@@ -624,9 +756,63 @@ mod tests {
     }
 
     #[test]
+    fn between_great_scatters_the_surge_s_anomalies_creep_downhill() {
+        let (map, hm) = marrow();
+        let standing = map
+            .markers
+            .iter()
+            .filter(|m| matches!(m.kind, MarkerKind::Anomaly { .. }))
+            .count();
+        let first = layout(&map, &hm, 3, 0);
+        let mut prev = first.clone();
+        for cycle in 1..SURGE_EPOCH {
+            let now = layout(&map, &hm, 3, cycle);
+            assert_eq!(now.len(), prev.len(), "cycle {cycle}: the same anomalies");
+            for (i, (a, b)) in prev.iter().zip(&now).enumerate() {
+                assert_eq!((a.kind, a.radius), (b.kind, b.radius));
+                let d = geom::dist(a.at, b.at);
+                if i < standing {
+                    assert_eq!(a.at, b.at, "standing anomalies stay put");
+                } else {
+                    assert!(d <= MIGRATE_STEP + 0.01, "{a:?} jumped {d} m");
+                }
+            }
+            prev = now;
+        }
+        let surge = standing..first.len();
+        let moved = surge
+            .clone()
+            .filter(|&i| geom::dist(first[i].at, prev[i].at) > 2.0)
+            .count();
+        let fell: f32 = surge
+            .clone()
+            .map(|i| hm.height(first[i].at) - hm.height(prev[i].at))
+            .sum::<f32>()
+            / surge.len() as f32;
+        assert!(
+            moved * 2 > surge.len(),
+            "most of the Surge's have moved ({moved} of {})",
+            surge.len()
+        );
+        assert!(
+            fell > 1.0,
+            "and they've gone downhill ({fell:.1} m on average)"
+        );
+        let fresh = layout(&map, &hm, 3, SURGE_EPOCH);
+        let kept = surge
+            .filter(|&i| {
+                fresh
+                    .get(i)
+                    .is_some_and(|f| geom::dist(f.at, prev[i].at) < 3.0)
+            })
+            .count();
+        assert!(kept < 3, "a great scatter starts over ({kept} stayed)");
+    }
+
+    #[test]
     fn anomalies_keep_off_roads_water_and_each_other() {
         let (map, hm) = marrow();
-        for cycle in 0..5 {
+        for cycle in 0..SURGE_EPOCH * 2 + 1 {
             let all = layout(&map, &hm, 7, cycle);
             for (i, a) in all.iter().enumerate() {
                 assert!(placeable(&map, &hm, a.at), "{a:?}");
@@ -818,6 +1004,13 @@ mod tests {
                 assert!(
                     clear_of_roads(&hm, p, kind.danger_radius(r)),
                     "{}: {p:?} by a road",
+                    map.name
+                );
+                // Nor against a wall, a kiosk or in front of a door.
+                let (room, what) = crate::map_surge::anomaly_room(&map, p);
+                assert!(
+                    room >= kind.danger_radius(r),
+                    "{}: a {kind:?} bloom at {p:?} reaches {what}",
                     map.name
                 );
             }

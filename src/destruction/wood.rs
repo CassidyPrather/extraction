@@ -536,11 +536,12 @@ fn burst(
 }
 
 /// How a breakable thing of its own is drawn (`visuals::dress_crates`):
-/// `model` posed `at` in its own space, a box of `size` until it loads,
-/// gone past `range` metres.
+/// `model` posed `at` in its own space, a box of `size` in `mat` until it
+/// loads (or for good, with no model), gone past `range` metres.
 #[derive(Component, Clone, Debug)]
 pub struct Drawn {
-    pub model: &'static str,
+    pub model: Option<&'static str>,
+    pub mat: Mat,
     pub at: Transform,
     pub size: Vec3,
     pub range: std::ops::Range<f32>,
@@ -654,7 +655,8 @@ pub fn spawn_building_crates(
             // Furniture's range (`buildings::dress_buildings`): gone past
             // 25-35 m, where the room's dark anyway.
             Drawn {
-                model,
+                model: Some(model),
+                mat: Mat::Planks,
                 at: model_at,
                 size: Vec3::splat(size),
                 range: 25.0..35.0,
