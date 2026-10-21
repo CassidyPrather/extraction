@@ -3914,8 +3914,12 @@ mod body {
         let st = stance(&vr);
         assert!(st.ready);
         let planted = st.feet.map(|f| f.at);
+        let _ = feet;
         for f in planted {
-            assert!((f.y - feet.y).abs() < 0.01, "a foot on the ground: {f}");
+            assert!(
+                (f.y - vr.feet().y).abs() < 0.01,
+                "a foot on the ground: {f}"
+            );
         }
         assert!(planted[0].x < planted[1].x, "left foot on the left");
         for (yaw, pitch) in [
@@ -3970,7 +3974,8 @@ mod body {
         for f in &st.feet {
             let d = Vec2::new(f.at.x - under.x, f.at.z - under.z).length();
             assert!(d < 0.3, "a foot {d} m from under the body");
-            assert!((f.at.y - feet.y).abs() < 0.01);
+            assert!((f.at.y - vr.feet().y).abs() < 0.01);
+            let _ = feet;
         }
     }
 
@@ -4098,6 +4103,13 @@ mod body {
         vr.step(60);
         let st = stance(&vr);
         let shoulder = st.shoulder(Side::Right);
+        let h = vr.hand_state(Side::Right);
+        eprintln!(
+            "rest {rest} now {shoulder} grip {grip} world {} felt {:?} arm {}",
+            h.world.translation,
+            h.felt.map(|f| f.translation),
+            st.arm
+        );
         assert!(
             shoulder.distance(rest) <= PROTRACT + 1e-3,
             "the shoulder came {} forward",

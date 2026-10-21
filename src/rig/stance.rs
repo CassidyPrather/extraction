@@ -51,6 +51,10 @@ const STANCE: f32 = 0.12;
 pub const STEP: f32 = 0.3;
 /// A foot turned this far (radians) from the way the body faces steps.
 pub const TWIST: f32 = 1.0;
+/// A foot turned this far from the body for [`SETTLE`] seconds squares up
+/// (the body has turned and stayed turned).
+pub const SQUARE: f32 = 0.4;
+pub const SETTLE: f32 = 1.2;
 /// How long a step takes, and how high the foot lifts.
 const STEP_TIME: f32 = 0.28;
 const STEP_LIFT: f32 = 0.07;
@@ -83,6 +87,8 @@ pub struct Foot {
     pub to: Vec3,
     pub to_yaw: f32,
     pub t: f32,
+    /// How long it's been turned more than [`SQUARE`] from the body.
+    pub uneasy: f32,
 }
 
 impl Foot {
@@ -210,6 +216,7 @@ pub fn step_feet(
                 to: r,
                 to_yaw: yaw,
                 t: 1.0,
+                uneasy: 0.0,
             };
             continue;
         }
@@ -228,6 +235,13 @@ pub fn step_feet(
             f.at.y = ground;
         }
     }
+    for f in feet.iter_mut() {
+        if f.planted() && wrap(f.yaw - yaw).abs() > SQUARE {
+            f.uneasy += dt;
+        } else {
+            f.uneasy = 0.0;
+        }
+    }
     if feet.iter().any(|f| !f.planted()) {
         return;
     }
@@ -237,7 +251,12 @@ pub fn step_feet(
         let f = &feet[side.index()];
         let r = rest(pelvis, side, ground);
         let off = Vec2::new(f.at.x - r.x, f.at.z - r.z).length() / STEP;
-        let turned = wrap(f.yaw - yaw).abs() / TWIST;
+        let twist = wrap(f.yaw - yaw).abs();
+        let mut turned = twist / TWIST;
+        // Turned a while: square up.
+        if f.uneasy > SETTLE {
+            turned = turned.max(1.0 + twist);
+        }
         let need = off.max(turned);
         if need > 1.0 && worst.is_none_or(|(_, w)| need > w) {
             worst = Some((side, need));
@@ -351,6 +370,7 @@ fn stand(
                     to: sole,
                     to_yaw: yaw_of(fwd),
                     t: 1.0,
+                    uneasy: 0.0,
                 };
             }
         } else {
@@ -419,6 +439,24 @@ mod tests {
         }
         for f in &feet {
             assert!(f.planted() && wrap(f.yaw - 1.3).abs() < 0.05, "{f:?}");
+        }
+        // A smaller turn: nothing at once, but held, the feet square up.
+        pelvis.rotation = Quat::from_rotation_y(1.3 + 0.6);
+        for _ in 0..30 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        assert!(
+            feet.iter().all(|f| wrap(f.yaw - 1.3).abs() < 0.05),
+            "not at once"
+        );
+        for _ in 0..240 {
+            step_feet(&mut feet, &pelvis, 0.0, Vec3::ZERO, 0.016, false);
+        }
+        for f in &feet {
+            assert!(
+                f.planted() && wrap(f.yaw - 1.9).abs() < 0.05,
+                "squared: {f:?}"
+            );
         }
     }
 }
