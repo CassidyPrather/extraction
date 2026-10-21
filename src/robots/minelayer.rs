@@ -384,12 +384,14 @@ fn minelayer_mind(
                     Doing::Travel { path, next }
                 } else if let Some(site) = m.sites.first().copied() {
                     m.sites.remove(0);
-                    // Across the way it came.
-                    let along = path
-                        .len()
-                        .checked_sub(2)
-                        .map(|k| path[k + 1] - path[k])
-                        .unwrap_or(Vec2::new(site.x - here.x, site.z - here.z));
+                    // Across the way in from the gate (as the map's lint
+                    // reckons it: `map_mines`).
+                    let along = Vec2::new(site.x - m.exit.x, site.z - m.exit.z);
+                    let along = if along.length() > 1.0 {
+                        along
+                    } else {
+                        Vec2::new(site.x - here.x, site.z - here.z)
+                    };
                     // Never in a doorway, on a road or close by a building.
                     let spots =
                         rules::site_field(&zone.map, &zone.hm, [site.x, site.z], along.into())
@@ -784,10 +786,9 @@ fn minelayer_wreck(
     }
 }
 
-/// Seconds into a raid the minelayer sets out (once a raid), and how many
-/// fields it lays.
+/// Seconds into a raid the minelayer sets out (once a raid). (How many
+/// fields it lays: `rules::FIELDS`.)
 pub const SET_OUT: f32 = 300.0;
-pub const FIELDS: usize = 2;
 
 /// Once a raid, robots on, a minelayer sets out from the gate to lay its
 /// fields at points of interest along the way in.
@@ -825,14 +826,25 @@ fn send_minelayer(
         .iter()
         .filter(|m| m.kind == extraction_core::map::MarkerKind::Poi)
         .map(|m| zone.on_ground(m.at[0], m.at[1]))
-        .filter(|p| nav.0.walkable([p.x, p.z]))
         .collect();
     pois.sort_by(|a, b| {
         let da = Vec2::new(a.x, a.z).distance(insertion);
         let db = Vec2::new(b.x, b.z).distance(insertion);
         da.total_cmp(&db)
     });
-    let sites: Vec<Vec3> = pois.into_iter().skip(1).take(FIELDS).collect();
+    // Each laid out in front of its POI where there's room
+    // (`rules::site_spot`: the map's lint checks the same).
+    let sites: Vec<Vec3> = pois
+        .into_iter()
+        .skip(1)
+        .filter_map(|p| {
+            let along = [p.x - gate.x, p.z - gate.z];
+            rules::site_spot(&zone.map, &zone.hm, [p.x, p.z], along)
+        })
+        .filter(|s| nav.0.walkable(*s))
+        .map(|s| zone.on_ground(s[0], s[1]))
+        .take(rules::FIELDS)
+        .collect();
     if sites.is_empty() {
         return;
     }

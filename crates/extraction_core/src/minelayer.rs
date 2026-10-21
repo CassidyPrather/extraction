@@ -98,6 +98,61 @@ pub fn site_field(
         .collect()
 }
 
+/// Fields a minelayer lays in a raid, and how far from a point of
+/// interest it'll look for room to lay one.
+pub const FIELDS: usize = 2;
+pub const SITE_REACH: f32 = 20.0;
+
+/// Where a minelayer lays its field for a point of interest at `poi`,
+/// coming from `along` (the way in from the gate): the POI itself if
+/// there's room, else stepping back out the way it came, else round
+/// about within [`SITE_REACH`]: the first spot where the whole field
+/// ([`field`], [`PER_FIELD`] mines) can lie ([`spot_ok`]); failing that,
+/// the spot that keeps the most (two at least). None: no room near it.
+/// (Points of interest are mostly at buildings; mines aren't laid in
+/// their doorways.)
+pub fn site_spot(
+    map: &crate::map::MapDef,
+    hm: &crate::terrain::Heightmap,
+    poi: [f32; 2],
+    along: [f32; 2],
+) -> Option<[f32; 2]> {
+    let doors = crate::map_doors::doors(map);
+    let len = (along[0] * along[0] + along[1] * along[1]).sqrt().max(1e-4);
+    let (ax, az) = (along[0] / len, along[1] / len);
+    let keeps = |site: [f32; 2]| {
+        field(site, along, PER_FIELD)
+            .into_iter()
+            .filter(|p| spot_ok(map, hm, &doors, *p))
+            .count()
+    };
+    let mut tries: Vec<[f32; 2]> = (0..=(SITE_REACH / 2.0) as usize)
+        .map(|k| {
+            let d = k as f32 * 2.0;
+            [poi[0] - ax * d, poi[1] - az * d]
+        })
+        .collect();
+    let mut r = 4.0;
+    while r <= SITE_REACH {
+        for k in 0..12 {
+            let a = k as f32 * std::f32::consts::TAU / 12.0;
+            tries.push([poi[0] + a.cos() * r, poi[1] + a.sin() * r]);
+        }
+        r += 4.0;
+    }
+    let mut best: Option<([f32; 2], usize)> = None;
+    for t in tries {
+        let n = keeps(t);
+        if n >= PER_FIELD as usize {
+            return Some(t);
+        }
+        if n >= 2 && best.is_none_or(|(_, b)| n > b) {
+            best = Some((t, n));
+        }
+    }
+    best.map(|(t, _)| t)
+}
+
 /// Whether its light is on, `t` seconds after it was laid (each mine's
 /// `phase` puts them out of step).
 pub fn lit(t: f32, phase: f32) -> bool {
@@ -215,6 +270,41 @@ mod tests {
         assert!((span - SPACING * (PER_FIELD - 1) as f32).abs() < 1e-3);
         for w in f.windows(2) {
             assert!((w[0][1] - w[1][1]).abs() > 1.0, "staggered");
+        }
+    }
+
+    /// Every valley has room in front of its points of interest for its
+    /// fields, whole: none needs its POIs moving.
+    #[test]
+    fn every_valley_has_room_for_its_fields() {
+        use crate::map::{MapDef, MarkerKind, VALLEYS};
+        for (name, src) in VALLEYS {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = crate::terrain::Heightmap::build(&map);
+            let gate = map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::RobotGate)
+                .map(|m| m.at)
+                .unwrap_or([0.0, -280.0]);
+            let doors = crate::map_doors::doors(&map);
+            let whole = map
+                .markers
+                .iter()
+                .filter(|m| m.kind == MarkerKind::Poi)
+                .filter_map(|m| {
+                    let along = [m.at[0] - gate[0], m.at[1] - gate[1]];
+                    let s = site_spot(&map, &hm, m.at, along)?;
+                    let n = field(s, along, PER_FIELD)
+                        .into_iter()
+                        .filter(|p| spot_ok(&map, &hm, &doors, *p))
+                        .count();
+                    let d = ((s[0] - m.at[0]).powi(2) + (s[1] - m.at[1]).powi(2)).sqrt();
+                    assert!(d <= SITE_REACH + 0.01, "{name}: {d} m off its POI");
+                    (n == PER_FIELD as usize).then_some(s)
+                })
+                .count();
+            assert!(whole >= FIELDS, "{name}: room for {whole} whole fields");
         }
     }
 
