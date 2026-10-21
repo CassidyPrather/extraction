@@ -284,8 +284,16 @@ there, the fog and the dark say otherwise. So:
   (`scripts/field_map.py`; `map_lint::tests::field_map_draws_the_landmarks`
   keeps its landmark height and names in step with the game's).
 - **The sky** as a compass: toward the sun the sky is 1.65–1.7x as bright
-  as away from it in every valley by day; by night, toward the moon, only
-  1.09–1.14x (passed to Visual design).
+  as away from it in every valley by day. By night, with Visual design's
+  moon lobe: a clear full moon 2.05–2.19x; a quarter moon stands low
+  enough to be in the shot, and its disc is the compass even where the
+  haze across the sky outshines the starry side (Sallow, 0.97x;
+  `wayfind.py` counts a near-white disc of 30 px as a compass); in
+  drizzle 1.11–1.15x, and at Sallow 0.61x, the cloud toward the moon
+  darker than the flat haze away (passed to Visual design;
+  [quarter](shots/legibility/sky_sallow_quarter.jpg),
+  [drizzle](shots/legibility/sky_sallow_drizzle.jpg)). Under cloud, no
+  compass is the intent.
 
 All five valleys, with the lamps (vantages with a landmark to steer by):
 
