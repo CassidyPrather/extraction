@@ -136,7 +136,7 @@ pub const FIXTURES: &[Fixture] = &[
 
 /// Where a harmonium's keys sit against the piano's (`piano::Keyboard`;
 /// `art/props/music.py` builds it so).
-pub const HARMONIUM_SHIFT: f32 = 0.0;
+pub const HARMONIUM_SHIFT: f32 = 0.023;
 
 pub(super) fn stand_fixtures(
     mut commands: Commands,
@@ -270,6 +270,23 @@ mod tests {
 #[cfg(test)]
 mod fixture_tests {
     use super::*;
+
+    /// The harmonium's keys where its model has them (key_36 at -0.4025,
+    /// key_60 at -0.0805, key_96 at 0.4025).
+    #[test]
+    fn the_harmoniums_keys_match_its_model() {
+        let kb = crate::radio::piano::Keyboard {
+            low: 36,
+            high: 96,
+            shift: HARMONIUM_SHIFT,
+            voice: crate::radio::piano::Voice::Reed,
+        };
+        for (k, x) in [(36, -0.4025), (60, -0.0805), (96, 0.4025)] {
+            assert!((kb.x(k) - x).abs() < 1e-4, "key_{k} at {}", kb.x(k));
+        }
+        assert_eq!(kb.under(Vec3::new(kb.x(21 + 15), 0.75, -0.19)), Some(36));
+        assert_eq!(kb.under(Vec3::new(-0.5, 0.75, -0.19)), None, "past its compass");
+    }
 
     /// Every standing instrument is on its map's ground or a floor above
     /// it (not buried, not floating far up), and away from the others.
