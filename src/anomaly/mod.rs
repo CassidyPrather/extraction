@@ -28,7 +28,9 @@ pub mod wells;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::anomaly::{AnomalyKind, LIFT_STONE_FLUNG, LIFT_STONE_RIDE, layout};
+use extraction_core::anomaly::{
+    AnomalyKind, LIFT_STONE_FLUNG, LIFT_STONE_RIDE, SURGE_EPOCH, layout,
+};
 use extraction_core::noise::Rng;
 
 use crate::health::Health;
@@ -171,7 +173,12 @@ impl Plugin for AnomalyPlugin {
                 commands.entity(add.entity).insert(Attention::default());
             })
             .add_plugins((artifacts::ArtifactPlugin, offering::OfferingPlugin))
-            .add_systems(Startup, spawn_cycle_anomalies)
+            // After the save is loaded (it runs before the loot), so a
+            // career's anomalies are its cycle's, where its stones lie.
+            .add_systems(
+                Startup,
+                spawn_cycle_anomalies.after(crate::items::loot::LootSpawnSystems),
+            )
             .add_systems(
                 FixedUpdate,
                 (
@@ -214,26 +221,49 @@ impl Plugin for AnomalyPlugin {
     }
 }
 
+/// Where a Surge-born anomaly crept from since the last cycle: a smear
+/// dragged across the ground behind it (at the anomaly's spot; `from` the
+/// ground where it sat).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DragScar {
+    pub from: Vec3,
+    pub radius: f32,
+}
+
 /// Lays out this cycle's anomalies (startup, and after a Surge reset).
 pub fn spawn_cycle_anomalies(world: &mut World) {
     let opts = world.resource::<LaunchOptions>().clone();
     let cycle = world.resource::<Raid>().cycle;
     let zone = world.resource::<Zone>().clone();
     let old: Vec<Entity> = world
-        .query_filtered::<Entity, With<Anomaly>>()
+        .query_filtered::<Entity, Or<(With<Anomaly>, With<DragScar>)>>()
         .iter(world)
         .collect();
     for e in old {
         world.despawn(e);
     }
-    for spec in layout(&zone.map, &zone.hm, opts.seed, cycle) {
-        spawn_anomaly(
-            world,
-            spec.kind,
-            zone.on_ground(spec.at[0], spec.at[1]),
-            spec.radius,
-            None,
-        );
+    let now = layout(&zone.map, &zone.hm, opts.seed, cycle);
+    // Within a great scatter's run the anomalies are the same ones, in the
+    // same order, a cycle's creep on.
+    let before = (cycle % SURGE_EPOCH != 0)
+        .then(|| layout(&zone.map, &zone.hm, opts.seed, cycle - 1))
+        .unwrap_or_default();
+    for (i, spec) in now.iter().enumerate() {
+        let at = zone.on_ground(spec.at[0], spec.at[1]);
+        spawn_anomaly(world, spec.kind, at, spec.radius, None);
+        if let Some(b) = before.get(i)
+            && extraction_core::geom::dist(b.at, spec.at) > 2.0
+        {
+            world.spawn((
+                Name::new("Drag scar"),
+                DragScar {
+                    from: zone.on_ground(b.at[0], b.at[1]),
+                    radius: spec.radius,
+                },
+                Transform::from_translation(at),
+                Visibility::default(),
+            ));
+        }
     }
     crate::world::underground::spawn_anomalies(world);
 }
@@ -801,6 +831,105 @@ mod tests {
             .find(|(_, a, _)| a.kind == kind && a.bloom.is_none())
             .map(|(e, a, g)| (e, g.translation(), a.radius))
             .expect("this cycle has one")
+    }
+
+    #[test]
+    fn a_cycle_on_the_anomalies_have_crept_and_left_drag_scars() {
+        let mut app = app(false);
+        let scars = |app: &mut App| {
+            app.world_mut()
+                .query::<(&DragScar, &Transform)>()
+                .iter(app.world())
+                .map(|(s, t)| (s.from, t.translation))
+                .collect::<Vec<_>>()
+        };
+        assert!(scars(&mut app).is_empty(), "cycle 0 is a fresh scatter");
+        app.world_mut().resource_mut::<Raid>().cycle = 1;
+        spawn_cycle_anomalies(app.world_mut());
+        app.update();
+        let (map, hm, seed) = {
+            let z = app.world().resource::<Zone>();
+            (
+                z.map.clone(),
+                z.hm.clone(),
+                app.world().resource::<LaunchOptions>().seed,
+            )
+        };
+        let before = layout(&map, &hm, seed, 0);
+        let now = layout(&map, &hm, seed, 1);
+        let s = scars(&mut app);
+        assert!(s.len() >= 5, "most have moved, and show it ({})", s.len());
+        for (from, to) in &s {
+            assert!(
+                before
+                    .iter()
+                    .any(|b| (b.at[0] - from.x).abs() < 0.01 && (b.at[1] - from.z).abs() < 0.01),
+                "a scar starts where one sat last cycle"
+            );
+            assert!(
+                now.iter()
+                    .any(|n| (n.at[0] - to.x).abs() < 0.01 && (n.at[1] - to.z).abs() < 0.01),
+                "and ends where it sits now"
+            );
+        }
+        app.world_mut().resource_mut::<Raid>().cycle = SURGE_EPOCH;
+        spawn_cycle_anomalies(app.world_mut());
+        assert!(scars(&mut app).is_empty(), "a great scatter leaves none");
+    }
+
+    #[test]
+    fn a_saved_career_s_anomalies_are_its_cycle_s() {
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join("anomaly_cycle");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("career.ron");
+        let mut career = extraction_core::save::Career {
+            version: extraction_core::save::SAVE_VERSION,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        career.zones.push(extraction_core::save::ZoneSave {
+            map: "marrow_creek".into(),
+            cycle: 2,
+            ..Default::default()
+        });
+        std::fs::write(&path, ron::to_string(&career).unwrap()).unwrap();
+        let mut app = crate::headless_app(
+            LaunchOptions {
+                save: Some(path),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        assert_eq!(app.world().resource::<Raid>().cycle, 2);
+        let (map, hm, seed) = {
+            let z = app.world().resource::<Zone>();
+            (
+                z.map.clone(),
+                z.hm.clone(),
+                app.world().resource::<LaunchOptions>().seed,
+            )
+        };
+        let want = layout(&map, &hm, seed, 2);
+        let mut have: Vec<[f32; 2]> = app
+            .world_mut()
+            .query_filtered::<&Transform, (With<Anomaly>, Without<ChildOf>)>()
+            .iter(app.world())
+            .map(|t| [t.translation.x, t.translation.z])
+            .collect();
+        have.retain(|h| {
+            want.iter()
+                .any(|w| (w.at[0] - h[0]).abs() < 0.01 && (w.at[1] - h[1]).abs() < 0.01)
+        });
+        assert_eq!(
+            have.len(),
+            want.len(),
+            "every anomaly where cycle 2 lays it"
+        );
     }
 
     fn drop_item(app: &mut App, id: &str, at: Vec3) -> Entity {

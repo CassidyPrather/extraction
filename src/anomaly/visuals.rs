@@ -60,6 +60,7 @@ impl Plugin for AnomalyVisualsPlugin {
             Update,
             (
                 dress_anomalies,
+                dress_scars,
                 (react_to_events, pulse, snare_arcs).chain(),
                 blink_flashes,
                 dress_items,
@@ -230,6 +231,7 @@ struct AnomalyAssets {
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
     hushed: Handle<StandardMaterial>,
+    dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
 }
@@ -324,6 +326,8 @@ fn init_assets(
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
     let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
+    // Torn turf, the dark earth under it showing.
+    let dragged = ground(Color::srgba(0.11, 0.08, 0.05, 0.8), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
@@ -340,6 +344,7 @@ fn init_assets(
         glassy,
         crushed,
         hushed,
+        dragged,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
             emissive: LinearRgba::rgb(10.0, 22.0, 60.0),
@@ -428,6 +433,69 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
 }
 
 // --- Dressing --------------------------------------------------------------
+
+/// A drag scar: a smear draped over the ground from where the anomaly sat
+/// last cycle to where it sits now, as wide as it is, soft at the edges.
+fn dress_scars(
+    mut commands: Commands,
+    added: Query<(Entity, &super::DragScar, &Transform), Added<super::DragScar>>,
+    a: Res<AnomalyAssets>,
+    zone: Res<crate::world::Zone>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    for (e, scar, at) in &added {
+        let mesh = draped_strip(&zone, at.translation, scar.from, scar.radius * 0.8);
+        commands.entity(e).insert((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(a.dragged.clone()),
+            NotShadowCaster,
+            VisibilityRange {
+                start_margin: 0.0..0.0,
+                end_margin: 75.0..90.0,
+                use_aabb: false,
+            },
+        ));
+    }
+}
+
+/// A strip draped over the terrain from `from` to `to` (the entity's
+/// position), `half` wide either side, reaching `half` past both ends.
+fn draped_strip(zone: &crate::world::Zone, to: Vec3, from: Vec3, half: f32) -> Mesh {
+    let (along, across) = (16, 4);
+    let back = Vec2::new(from.x - to.x, from.z - to.z);
+    let len = back.length().max(0.01);
+    let dir = back / len;
+    let side = Vec2::new(-dir.y, dir.x);
+    let mut pos = Vec::new();
+    let mut uv = Vec::new();
+    let mut nrm = Vec::new();
+    let mut idx = Vec::new();
+    for j in 0..=along {
+        for i in 0..=across {
+            let (u, v) = (i as f32 / across as f32, j as f32 / along as f32);
+            let p = dir * (v * (len + half * 2.0) - half) + side * (u * 2.0 - 1.0) * half;
+            let y = zone.ground(to.x + p.x, to.z + p.y) - to.y + 0.05;
+            pos.push([p.x, y, p.y]);
+            uv.push([u, v]);
+            nrm.push([0.0, 1.0, 0.0]);
+        }
+    }
+    for j in 0..along {
+        for i in 0..across {
+            let k = (j * (across + 1) + i) as u32;
+            let r = (across + 1) as u32;
+            idx.extend_from_slice(&[k, k + r, k + 1, k + 1, k + r, k + r + 1]);
+        }
+    }
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
+}
 
 /// How an anomaly looks this frame: what its light, particles and haze
 /// all follow.

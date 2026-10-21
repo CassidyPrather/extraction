@@ -16,9 +16,27 @@ looks like. Code: `src/anomaly/`, rules in
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
 
-Wells and mirrors don't move between cycles: the maps place them
+Wells, mirrors and hushes don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
 can still bloom any kind in your way.
+
+### Migration
+
+The Surge's own anomalies (lifts, burners, snares) aren't scattered afresh
+every cycle. Every 6th cycle (`SURGE_EPOCH`) the Surge scatters them anew.
+On each cycle in between, each one creeps up to 7 m (`MIGRATE_STEP`) down
+the slope it sits on, with a little wobble. It stops short of a road,
+water, a building or another anomaly, and once on the flat of a low it
+only stirs. So a field you learned last cycle is still there, a little
+further down. Over a run they gather in the valley's hollows and along
+its stream banks. On Marrow with seed 3, 16 of 17 moved over five
+cycles, and they ended 3.6 m lower on average.
+
+Each one that moved leaves a **drag scar**: torn turf smeared across the
+ground from where it sat to where it sits now. So the trail points to it.
+Shots, cycle 0 then cycle 1 (the Hollow's lift):
+`migration_cycle0.png`, `migration_cycle1.png`. Every cycle still grows
+its own stones. Rules: `anomaly::layout` and `migrate`.
 
 ### Wells and bullets
 
