@@ -218,7 +218,7 @@ for it in the open beside the Custodian's ground.
 
 ## What the sims said, and what changed
 
-Six batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
+Eight batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 
 | Batch | Out | Died | What it showed | Change |
 | - | -: | -: | - | - |
@@ -228,6 +228,8 @@ Six batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 | seed 21 | 6 | 2 | The shed looted (30 items); all three ways out used (Inflow bridge 4, Sallow Head 3, gauge house 1); both deaths in the danger-3 east under the Gate | |
 | seed 31 | 4 | 4 | Old Sallow's drowned houses in; all four deaths to drones crossing the open east bed | Three more stock rows in the east for cover |
 | seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four: Story put scene pieces in the nav grid |
+| seed 41 again | 4 | 4 | With the stair wall in the nav grid: nobody stuck at its foot (26 stuck events before, none now), falls 104 hp → 34. Bay four still traps (42 stuck events) until Story's fix is in | |
+| seed 41, main cbf9c3d | 2 | 6 | Both nav traps gone (one stuck event in all eight). Four deaths in the silt fans under the Gate sentry's arc. The control is the same seed on Marrow Creek: 0/8, five to drones, so round 8 made every valley harder in the sims and Sallow isn't the outlier | Flagged to the coordinator |
 
 Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
 visited yet: the valve house and filter house, the draw-off tower (no
@@ -256,9 +258,6 @@ the gauge house and out: 262 s.
 - Story's `scenes::nav_obstacles` (claude/polish-story): scene pieces in
   the nav grid, so "Bay four"'s 0.63 m slot between its buses (scenes.ron,
   (70, -74)) is solid to it. Then the sims again.
-- World models' breakable bus panels (dc8b032): `dam::buses` drops
-  `wrecked_bus`'s breakables (kept stock isn't prised apart; the model
-  draws it whole).
 - Progression's gate (now the contract "The overflow": a relay at Marrow's depot and two electronics, past the ladder), Visual design's fog and grade
   (0ff156b), Audio's slapback off the dam face, Wildlife's perches
   (they need `dam::PREFABS` or `buildings::prefab(id).is_some()`),

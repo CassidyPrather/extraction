@@ -8,7 +8,7 @@
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
 //! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
-//! `--no-post-blur`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
+//! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto).
 
 use bevy::prelude::*;
@@ -61,6 +61,9 @@ pub struct Comfort {
     /// Iron sights: the front post goes soft as the eye comes down behind
     /// them, focused on the target (`weapons::optics`).
     pub post_blur: bool,
+    /// Your body drawn under you, looking down (`render::body`); off, only
+    /// the arms and hands.
+    pub body: bool,
 }
 
 impl Default for Comfort {
@@ -82,6 +85,7 @@ impl Default for Comfort {
             captions: true,
             machine_tick: true,
             post_blur: true,
+            body: true,
         }
     }
 }
@@ -220,6 +224,14 @@ impl Comfort {
         }
     }
 
+    pub fn body_label(&self) -> String {
+        if self.body {
+            "BODY\nshown".into()
+        } else {
+            "BODY\nhidden".into()
+        }
+    }
+
     pub fn machine_tick_label(&self) -> String {
         if self.machine_tick {
             "WARNING TICK\non the wrist".into()
@@ -306,6 +318,7 @@ impl Comfort {
                 "--no-captions" => c.captions = false,
                 "--no-machine-tick" => c.machine_tick = false,
                 "--no-post-blur" => c.post_blur = false,
+                "--no-body" => c.body = false,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };

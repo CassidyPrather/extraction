@@ -14,6 +14,7 @@ pub mod haptics;
 pub mod runtime;
 pub mod seated;
 pub mod shapes;
+pub mod stance;
 #[cfg(feature = "xr")]
 pub mod xr;
 
@@ -150,6 +151,7 @@ impl Plugin for RigPlugin {
                 haptics::HapticsPlugin,
                 seated::SeatedPlugin,
                 shapes::ShapesPlugin,
+                stance::StancePlugin,
             ))
             .insert_resource(RigDriver::Flat)
             .insert_resource(comfort::Comfort::load(&args))

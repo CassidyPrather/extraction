@@ -272,23 +272,6 @@ fn owned(world: &mut World) -> HashMap<String, usize> {
     out
 }
 
-/// Saved past the Surge's coming: the game opens at base, where the Surge
-/// has been and gone, so the Zone is re-rolled (by design). What you own
-/// comes through whole.
-fn round_trip_past_the_surge(a: &mut App, path: &Path) -> App {
-    let before = owned(a.world_mut());
-    save(a, path);
-    let mut b = app(path);
-    check_world(b.world_mut(), "past the Surge, loaded");
-    assert_eq!(
-        b.world().resource::<Raid>().cycle,
-        1,
-        "the Zone was re-rolled"
-    );
-    assert_eq!(owned(b.world_mut()), before, "what you own came through");
-    b
-}
-
 /// Saves, loads into a fresh game, and checks it holds the same.
 fn round_trip(a: &mut App, path: &Path, when: &str) -> App {
     let before = census(a.world_mut());
@@ -323,14 +306,28 @@ fn stash_items(world: &mut World) -> Vec<Entity> {
         .collect()
 }
 
+/// The stash's `id`, or (a raid resumed puts what was in your hands at
+/// your feet) one lying within a few metres of the player.
 fn find(world: &mut World, id: &str) -> Option<Entity> {
     let catalog = world.resource::<Catalog>().clone();
-    let all = stash_items(world);
-    all.into_iter().find(|e| {
+    let is = |world: &World, e: Entity| {
         world
-            .get::<Item>(*e)
+            .get::<Item>(e)
             .is_some_and(|i| catalog.get(i.kind()).id == id)
-    })
+    };
+    let all = stash_items(world);
+    if let Some(e) = all.into_iter().find(|e| is(world, *e)) {
+        return Some(e);
+    }
+    let me = player(world);
+    let feet = world.get::<GlobalTransform>(me)?.translation();
+    let near: Vec<Entity> = world
+        .query_filtered::<(Entity, &GlobalTransform), (With<Item>, Without<ChildOf>)>()
+        .iter(world)
+        .filter(|(_, g)| g.translation().distance(feet) < 3.0)
+        .map(|(e, _)| e)
+        .collect();
+    near.into_iter().find(|e| is(world, *e))
 }
 
 /// Runs `n` frames, taking the world apart after each.
@@ -366,8 +363,8 @@ fn every_item_is_saved_once_through_a_raids_awkward_moments() {
     frames(&mut a, 4, "pistol and spare in hand");
     let mut a = round_trip(&mut a, &path, "holding a pistol and a magazine");
     let me = player(a.world_mut());
-    // The loaded game puts what was in your hands in the stash: take them
-    // up again for the reload.
+    // The loaded game resumes the raid and puts what was in your hands at
+    // your feet: take them up again for the reload.
     let pistol = find(a.world_mut(), "pm_pistol").expect("the pistol came back");
     let well_mag = a
         .world()
@@ -434,7 +431,13 @@ fn every_item_is_saved_once_through_a_raids_awkward_moments() {
     a.world_mut().resource_mut::<Raid>().phase = Phase::Out;
     a.world_mut().resource_mut::<Raid>().clock = crate::raid::SURGE_AFTER + 10.0;
     frames(&mut a, 5, "the Surge raging");
-    let mut a = round_trip_past_the_surge(&mut a, &path);
+    // Quit in the Surge, and you're back out in it: no sleeping it off.
+    let mut a = round_trip(&mut a, &path, "the Surge raging");
+    {
+        let raid = a.world().resource::<Raid>();
+        assert_eq!(raid.phase, Phase::Out, "still out in it");
+        assert!(raid.clock > crate::raid::SURGE_AFTER, "and still raging");
+    }
     // Going down, every frame of it.
     let me = player(a.world_mut());
     a.world_mut().resource_mut::<Raid>().phase = Phase::Out;
@@ -604,6 +607,11 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
     let z = &mut c.zones[0];
     let n = z.items.len();
     assert!(n > 10, "a rolled Zone");
+    // (Each with whatever's inside it: a tape player carries its cell.)
+    fn nested(i: &SavedItem) -> i64 {
+        1 + i.inserted.iter().map(nested).sum::<i64>()
+    }
+    let nowhere = nested(&z.items[0].item) + nested(&z.items[1].item);
     z.items[0].at = [f32::NAN, 0.0, 0.0];
     z.items[1].at = [1.0e9, 0.0, 0.0];
     z.items[2].rot = [0.0; 4];
@@ -620,7 +628,16 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
         *want.entry(id.into()).or_default() += 1;
     }
     let lost: i64 = want.values().sum::<usize>() as i64 - after.0.values().sum::<usize>() as i64;
-    assert_eq!(lost, 2, "only the two lying nowhere are gone");
+    let mut gone: Vec<String> = want
+        .iter()
+        .filter(|(k, v)| after.0.get(*k).copied().unwrap_or(0) != **v)
+        .map(|(k, v)| format!("{k}: {v} -> {:?}", after.0.get(k)))
+        .collect();
+    gone.sort();
+    assert_eq!(
+        lost, nowhere,
+        "only the two lying nowhere (and what's in them) are gone: {gone:?}"
+    );
     assert_eq!(after.0.get("ak74"), want.get("ak74"));
     assert_eq!(
         after.0.get("pm_mag"),

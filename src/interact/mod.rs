@@ -303,7 +303,7 @@ impl Plugin for InteractPlugin {
                     )
                         .chain()
                         .in_set(InteractSystems::Grab),
-                    (leash_check, follow_hands)
+                    (drop_orphaned_holds, leash_check, follow_hands)
                         .chain()
                         .in_set(InteractSystems::Follow),
                 ),
@@ -444,6 +444,13 @@ fn seat_from_body(
         });
     }
 }
+
+/// The fastest anything leaves a hand, m/s: a hard overarm throw. A
+/// controller's tracking jumping (or the playspace moving) while it holds
+/// something would otherwise let go of it at hundreds of m/s.
+pub const MAX_THROW: f32 = 25.0;
+/// And the fastest it spins, rad/s.
+pub const MAX_THROW_SPIN: f32 = 40.0;
 
 /// How near a pouched magazine's top the gun's well has to come, one-handed.
 pub const BODY_SEAT: f32 = 0.06;
@@ -789,7 +796,11 @@ fn apply_hand_actions(
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
     // Things to take up and read (`read`): theirs to handle.
     reading: (Query<(), With<read::Readable>>, Res<crate::rig::RigDriver>),
-    fixed: Query<(), With<crate::raid::truck::Stash>>,
+    // The stash crate stays put; a stone just dropped too hot isn't taken.
+    fixed: (
+        Query<(), With<crate::raid::truck::Stash>>,
+        Query<(), With<crate::anomaly::harvest::Scalded>>,
+    ),
     ropes: Query<&crate::gadgets::climbing::Rope>,
     ladders: Query<(), With<hand_climb::Ladder>>,
     time: Res<Time>,
@@ -842,7 +853,7 @@ fn apply_hand_actions(
                 let _ = (side, point);
                 events.write(InteractEvent::Pressed { item, player });
             }
-            HandAction::Grab { item, .. } if fixed.contains(item) => {}
+            HandAction::Grab { item, .. } if fixed.0.contains(item) || fixed.1.contains(item) => {}
             HandAction::Grab {
                 player,
                 side,
@@ -914,7 +925,8 @@ fn apply_hand_actions(
                         let offset = Transform::from_matrix(offset.into());
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
-                        physics_on(&mut commands, item, world, hand.velocity, Vec3::ZERO, false);
+                        let v = hand.velocity.clamp_length_max(MAX_THROW);
+                        physics_on(&mut commands, item, world, v, Vec3::ZERO, false);
                         commands.entity(item).insert(Held {
                             player,
                             hand: hand_e,
@@ -948,8 +960,9 @@ fn apply_hand_actions(
                 let Some(item) = hand.holding.take() else {
                     continue;
                 };
-                let velocity = hand.velocity + hand_world.forward() * throw;
-                let angular = hand.angular_velocity;
+                let velocity =
+                    (hand.velocity + hand_world.forward() * throw).clamp_length_max(MAX_THROW);
+                let angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
                 commands.entity(item).remove::<(Held, Supported)>();
                 // Any other hand supporting it lets go too.
                 for (_, _, mut h) in &mut hands {
@@ -1336,6 +1349,21 @@ fn leash_check(
                 .is_some()
         {
             blocked.0.insert(e);
+        }
+    }
+}
+
+/// Something marked held by a hand that's let go of it, or taken hold of
+/// something else since, drops. (A hoarder's hand took one thing after
+/// another; the stone it had held stayed stuck to it, hot, and nothing
+/// could make it let go.)
+fn drop_orphaned_holds(mut commands: Commands, held: Query<(Entity, &Held)>, hands: Query<&Hand>) {
+    for (e, h) in &held {
+        if hands.get(h.hand).is_ok_and(|hand| hand.holding != Some(e)) {
+            commands
+                .entity(e)
+                .remove::<(Held, Supported)>()
+                .insert(GravityScale(1.0));
         }
     }
 }

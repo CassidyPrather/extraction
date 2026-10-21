@@ -1030,6 +1030,18 @@ pub(crate) mod tests {
 
     /// A client under this weather, with this much snow lying (`--snow`).
     fn client_with(map: &str, weather: &str, snow: Option<f32>, threads: Option<usize>) -> App {
+        client_flash(map, weather, snow, false, threads)
+    }
+
+    /// `client_with`, with a storm's strike held lit (every frame a flash
+    /// frame: the sun's cascades on, the bolt drawn).
+    fn client_flash(
+        map: &str,
+        weather: &str,
+        snow: Option<f32>,
+        flash: bool,
+        threads: Option<usize>,
+    ) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -1072,6 +1084,7 @@ pub(crate) mod tests {
             data_dir: Some(dir),
             weather: Some(weather.into()),
             snow,
+            storm_flash: flash,
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -1212,7 +1225,9 @@ pub(crate) mod tests {
         let loads = match weather {
             Some((w, snow)) => {
                 println!("{map}: in {w}, snow {snow:?}");
-                loads_with(client_with(map, w, snow, None), map)
+                // A storm is measured on its flash frames, its dearest.
+                let flash = w == "storm";
+                loads_with(client_flash(map, w, snow, flash, None), map)
             }
             None => loads(map),
         };
@@ -1851,6 +1866,7 @@ pub(crate) mod tests {
             "kettle_pass",
             "cinder_works",
             "sallow_reservoir",
+            "rime_fell",
         ] {
             let stats = busy_moment(map);
             println!("{map}, a busy moment (ms a frame, mean / 1%):");
@@ -1881,12 +1897,17 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn rime_fell_holds_the_budget() {
+        holds("rime_fell");
+    }
+
+    #[test]
     fn training_yard_holds_the_budget() {
         holds("training_yard");
     }
 
-    /// A thunderstorm: the rain sheets crossing the valley (the flashes
-    /// are a few frames, not a steady load).
+    /// A thunderstorm, measured on a flash frame (its dearest: the sun's
+    /// cascades on for it, the bolt, the rain sheets).
     #[test]
     fn marrow_creek_holds_the_budget_in_a_storm() {
         holds_with("marrow_creek", Some(("storm", None)));

@@ -266,7 +266,11 @@ fn snow_with_weather(
         }
         snow.step(falling, dt);
     }
-    tracks.weather(snow.falling, dt);
+    // (A screenshot's demo trail stays as laid: a software-rendered shot
+    // takes minutes of clock, and the prints filled in before the frame.)
+    if std::env::var("EXTRACTION_DEMO_TRACKS").is_err() {
+        tracks.weather(snow.falling, dt);
+    }
 }
 
 /// Footsteps leave prints where snow lies.
@@ -274,8 +278,11 @@ fn tread(
     snow: Res<Snow>,
     mut steps: MessageReader<crate::player::Footstep>,
     mut tracks: ResMut<Tracks>,
+    alive: Query<()>,
     mut last: Local<Vec<(Entity, Vec3, bool)>>,
 ) {
+    // Walkers that are gone are forgotten.
+    last.retain(|l| alive.contains(l.0));
     for s in steps.read() {
         let prev = last.iter_mut().find(|l| l.0 == s.entity);
         let (dir, left) = match prev {

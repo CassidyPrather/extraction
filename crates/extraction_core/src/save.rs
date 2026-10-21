@@ -96,6 +96,29 @@ pub struct ZoneSave {
     /// Heavies' wrecks, where they fell: landmarks until the Surge.
     #[serde(default)]
     pub wrecks: Vec<WreckSave>,
+    /// Out in the Zone when the game was saved (quit, a crash, a flat
+    /// headset battery): the raid resumes where you stood. `None` at base.
+    #[serde(default)]
+    pub raid: Option<RaidSave>,
+}
+
+/// A raid in progress: where you stood and how it stood.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RaidSave {
+    /// Your feet, world.
+    pub at: [f32; 3],
+    pub yaw: f32,
+    pub phase: RaidPhaseSave,
+}
+
+/// The raid's phase, as far as it resumes: the truck on its way or
+/// waiting carries on its timer; down is down.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum RaidPhaseSave {
+    Out,
+    TruckCalled { rv: usize, eta: f32 },
+    TruckWaiting { rv: usize, left: f32 },
+    Down,
 }
 
 /// A heavy's wreck: where it lies, how it leans, what's still on it.
@@ -137,10 +160,36 @@ pub struct LoadoutSave {
 pub struct Memorial {
     /// Convoys that got away with someone's kit.
     pub convoys: u32,
-    /// Names of everything they took, oldest first.
+    /// Names of what they took, oldest first: the latest [`LOST_KEPT`]
+    /// (the board shows the newest few, the Depot's bins sixteen).
     pub lost: Vec<String>,
     /// Bodies recovered before the convoy got them out.
     pub recovered: u32,
+    /// Everything they ever took, counted (older saves: `lost`'s length).
+    #[serde(default)]
+    pub lost_total: u32,
+}
+
+/// How many of the convoys' takings a career keeps by name. A long career
+/// dying often kept every name for good: the save only grew (`docs/SOAK.md`).
+pub const LOST_KEPT: usize = 250;
+
+impl Memorial {
+    /// The convoy got away with these.
+    pub fn lose(&mut self, names: impl IntoIterator<Item = String>) {
+        let total = self.total_lost();
+        let before = self.lost.len();
+        self.lost.extend(names);
+        let gained = (self.lost.len() - before) as u32;
+        self.lost_total = total.saturating_add(gained);
+        let over = self.lost.len().saturating_sub(LOST_KEPT);
+        self.lost.drain(..over);
+    }
+
+    /// Everything the convoys ever took.
+    pub fn total_lost(&self) -> u32 {
+        self.lost_total.max(self.lost.len() as u32)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -276,6 +325,26 @@ impl ZoneSave {
     /// Mends a valley's state read from a file: drops what lies nowhere
     /// (NaN or a world away), mends the rest. Says what it did.
     pub fn sanitize(&mut self, fixed: &mut Vec<String>) {
+        if let Some(r) = &mut self.raid {
+            let timer = match &mut r.phase {
+                RaidPhaseSave::TruckCalled { eta: t, .. }
+                | RaidPhaseSave::TruckWaiting { left: t, .. } => Some(t),
+                _ => None,
+            };
+            if let Some(t) = timer {
+                if !t.is_finite() || *t < 0.0 || *t > 1.0e4 {
+                    fixed.push(format!("{}: the truck's timer {t} reset", self.map));
+                    *t = finite_or(*t, 0.0).clamp(0.0, 1.0e4);
+                }
+            }
+            if !r.at.iter().all(|v| v.is_finite() && v.abs() < 1.0e5) || !r.yaw.is_finite() {
+                fixed.push(format!(
+                    "{}: the raid's place {:?} unreadable: back at base",
+                    self.map, r.at
+                ));
+                self.raid = None;
+            }
+        }
         if !self.clock.is_finite() || self.clock < 0.0 || self.clock > 1.0e7 {
             fixed.push(format!("{}: Zone clock {} reset", self.map, self.clock));
             self.clock = finite_or(self.clock, 0.0).clamp(0.0, 1.0e7);
@@ -921,5 +990,23 @@ mod tests {
             c.progress,
             "every valley"
         );
+    }
+
+    /// A career that dies often keeps a count of all the convoys took, and
+    /// the names of only the latest: the save stops growing.
+    #[test]
+    fn the_memorial_keeps_a_count_not_every_name() {
+        // An older save: names only.
+        let mut m = Memorial {
+            lost: vec!["ak74".into(); 10],
+            ..Default::default()
+        };
+        assert_eq!(m.total_lost(), 10);
+        for i in 0..1000 {
+            m.lose([format!("thing {i}"), "ak_mag".into()]);
+        }
+        assert_eq!(m.total_lost(), 2010);
+        assert_eq!(m.lost.len(), LOST_KEPT);
+        assert_eq!(m.lost.last().unwrap(), "ak_mag", "newest kept");
     }
 }

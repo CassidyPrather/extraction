@@ -31,14 +31,18 @@ SPOTS = {
     "mast_hut": [(0.8, 1.4)],
     "guard_booth": [(0.3, 0.6)],
     "ranger_tower": [(0.3, 0.6)],
+    # The survey tower's deck table (-0.9, deck, 1.1).
+    "survey_tower": [(-0.9 + 0.3, 1.1)],
     "factory_hall": [(-12.6 + 0.4, 7.0)],
     "chapel": [(0.3, 14.0 * 0.5 - 1.6)],
     # Sallow's (src/world/dam.rs): the tagging desk under the gantry, and
     # the table in the draw-off tower's valve room at the bridge floor.
     "sorting_gantry": [(-6.0, 0.0)],
     "draw_off_tower": [(-1.0, 1.9)],
+    # Rime Fell's (src/world/fell.rs): the radio desk on the east wall.
+    "observatory": [(4.35, 0.5)],
 }
-REACH = {"ranger_tower": 8.5, "draw_off_tower": 20.0}
+REACH = {"ranger_tower": 8.5, "survey_tower": 8.5, "draw_off_tower": 20.0}
 
 
 def world(at, rot, local):
@@ -192,7 +196,7 @@ material is reset.
 
 Schedule source: OBSERVED.""",
         ], "Mast terminal"),
-        ("ranger_tower", (101.0, -2.0), "Note", """SURVEY POST - HOLLOW
+        ("survey_tower", "survey_post", "Note", """SURVEY POST - HOLLOW
 
 21 Nov. Ground up 41 cm since spring. The glow is brighter the nights
 before a discharge; I can predict them now. Nobody at the Authority
@@ -487,7 +491,7 @@ someone has to mind the dam.
 
 2 Nov. Something built on the north-east shore overnight. Not ours. Not
 the water board's.""", "Sallow gate log"),
-        ("house_brick", (-58.0, 206.0), "Note", """Whoever has the cottage now -
+        ("house_brick", "keeper", "Note", """Whoever has the cottage now -
 
 I was seven when the water board moved us up the hill. We watched the
 water come over the bridge a hand a day.
@@ -500,15 +504,15 @@ Don't stand in the churchyard after rain. Things come up there that
 weren't buried.
 
 - A. Pech, keeper""", "Keeper's note"),
-        ("pump_station", (12.0, 172.0), "Terminal", [
+        ("pump_station", "valve_house", "Terminal", [
             "SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED",
             "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n15 DEC   16.2\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING",
         ], "Valve log"),
-        ("pump_station", (100.0, 210.0), "Terminal", [
+        ("pump_station", "filter_house", "Terminal", [
             "SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0",
             "CINDER WORKS\n\nDEMAND FROM    3 NOV\nFOR   FURNACE COOLING\nCEASED        26 FEB\n\nNO OTHER DEMAND.",
         ], "Supply terminal"),
-        ("pump_station", (245.0, -70.0), "Note", """CATCHWATER GAUGE - read Sundays
+        ("pump_station", "gauge_house", "Note", """CATCHWATER GAUGE - read Sundays
 
 Sun. 0.42. Sun. 0.40. Sun. 0.41.
 
@@ -557,7 +561,12 @@ The shop's anyone's now. - A.P.""", "Shop note"),
     # The fifth valley (claude/polish-fifth-valley): skipped until its
     # map is in.
     "rime_fell": [
-        ("guard_booth", (0.0, 285.0), "Note", """SOUTH GATE, RIME FELL - DUTY LOG
+        ("observatory", "observatory", "Terminal", [
+            "RIME FELL OBSERVATORY\nOUTGOING LOG\n\n15 OCT  SW 4  SNOW  SENT\n 2 NOV  LIGHTS ON THE COL\n 2 NOV  GATE: NO REPLY\n 3 NOV  CITY: NO REPLY",
+            "DEC  -14  SENT\nJAN  -19  SENT\nFEB  CHUTE 2 RAN  SENT\nMAR  ROPE GONE  SENT\n\nRECEIVED  NOTHING",
+            "OCT, THIRD YEAR\n\nH.B. DOWN THE STAIR\nFOR FLOUR. NOT BACK.\nSENDING ALONE.\n\n- O.B.",
+        ], "Observatory log"),
+        ("guard_booth", "gate_booth", "Note", """SOUTH GATE, RIME FELL - DUTY LOG
 
 15 Oct. Coldharbour down on the funicular, last car 1600. Lorries from
 the valley station.
@@ -567,14 +576,14 @@ says they're essential. Let them.
 
 2 Nov. Lights on the col all night. The observatory phoned it through
 an hour before we saw them.""", "Rime gate log"),
-        ("house_plank", (40.0, 252.0), "Note", """FUNICULAR - VALLEY STATION
+        ("house_plank", "station_house", "Note", """FUNICULAR - VALLEY STATION
 
 15 Oct. Last car down 1600, full. Sent the other up empty to hold the
 rope, both left on the brake. - F. Lukas, attendant
 
 (another hand) March. One car stopped at the loop. The rope's off the
 top drum, cut and wound away. Walk the stair. Don't ride it.""", "Funicular book"),
-        ("mast_hut", (-50.0, 145.0), "Note", """GRIT BOOK - roadmen
+        ("mast_hut", "hairpin_hut", "Note", """GRIT BOOK - roadmen
 
 12 Oct. Galleries one to three cleared. Plough on the hairpin.
 
@@ -584,11 +593,11 @@ top drum, cut and wound away. Walk the stair. Don't ride it.""", "Funicular book
 key on the nail.
 
 In a thaw, keep out from under the chutes. They run.""", "Grit book"),
-        ("house_brick", (20.0, 0.0), "Terminal", [
+        ("house_brick", "mine_office", "Terminal", [
             "RIME FELL MINE\nCONCENTRATE (SACKS)\n\n 9 OCT     212\n12 OCT     198\n14 OCT      64\n15 OCT       0\n\nAT TOP STATION  474",
             "INVENTORY  3 NOV\n\nCONCENTRATE  474\nRAIL (M)    1380\nROPE (M)    2200\n\nSTATUS  PENDING REVIEW",
         ], "Mine office terminal"),
-        ("shop", (-15.0, 5.0), "Note", """CANTEEN - COLDHARBOUR
+        ("shop", "canteen", "Note", """CANTEEN - COLDHARBOUR
 
 Soup Tuesdays and Thursdays. Bread up by the car.
 
@@ -596,7 +605,7 @@ Soup Tuesdays and Thursdays. Bread up by the car.
 
 (another hand) The observatory two came down for flour in November
 and went back up. I told them stay down. They wouldn't.""", "Canteen note"),
-        ("cabin_log", (-60.0, 48.0), "Note", """Jana -
+        ("cabin_log", "keepers_cabin", "Note", """Jana -
 
 We're staying with the station, Hedvika and me. The district needs its
 weather, and someone has to say what comes over the col.
@@ -605,7 +614,7 @@ The car's still running. I'll be down Sundays. Keep the boys warm in
 town and don't let them fight.
 
 - Ota""", "Ota's letter"),
-        ("ranger_tower", (60.0, -170.0), "Note", """AVALANCHE WATCH
+        ("ranger_tower", "avalanche_watch", "Note", """AVALANCHE WATCH
 
 Chute one loaded. Chute two loaded. Galleries open.
 
@@ -614,7 +623,7 @@ held. Nobody left to clear the road.
 
 The machines walked over the slide in the morning as if it wasn't
 there. - H.S.""", "Watch log"),
-        ("mast_hut", (20.0, -245.0), "Note", """COL HUT BOOK
+        ("mast_hut", "col_hut", "Note", """COL HUT BOOK
 
 30 Oct. Over to the cirque for the observatory: the tarn is lit up
 green at night. Something on the far side, building. - O.B.
@@ -623,7 +632,7 @@ green at night. Something on the far side, building. - O.B.
 never looked at the hut. - H.S.
 
 (last) Phoned it down. Nobody answered at the gate.""", "Col hut book"),
-        ("pump_station", (240.0, -60.0), "Terminal", [
+        ("pump_station", "compressor_house", "Terminal", [
             "COMPRESSOR HOUSE\nAIR TO ADIT\n\nCOMP 1    OFF  15 OCT\nCOMP 2    OFF  15 OCT\n\nADIT DOOR\nOPENED    4 NOV\nCARD      NONE",
         ], "Compressor terminal"),
     ],
@@ -633,9 +642,15 @@ never looked at the hut. - H.S.
 def block(map_name, placements):
     lines = ["        // notes:begin (generated by scripts/place_notes.py)"]
     for prefab, at, kind, body, name in NOTES[map_name]:
-        rot = next((r for (p, a, r) in placements if p == prefab and abs(a[0] - at[0]) < 0.01 and abs(a[1] - at[1]) < 0.01), None)
-        if rot is None:
-            sys.exit(f"{map_name}: no {prefab} at {at}")
+        # Anchored by a placement's tag (it survives the building moving),
+        # or by where it stands.
+        if isinstance(at, str):
+            found = next(((a, r) for (p, a, r, t) in placements if p == prefab and t == at), None)
+        else:
+            found = next(((a, r) for (p, a, r, t) in placements if p == prefab and abs(a[0] - at[0]) < 0.01 and abs(a[1] - at[1]) < 0.01), None)
+        if found is None:
+            raise LookupError(f"{map_name}: no {prefab} at {at}")
+        at, rot = found
         spot = SPOTS[prefab][0]
         x, z = world(at, rot, spot)
         y = REACH.get(prefab, 0.0)
@@ -657,17 +672,34 @@ def block(map_name, placements):
 
 
 def main():
+    """Lays the notes into the maps; `--check` only checks every note's
+    building is there (`world::story` runs it), and a valley's name lays
+    just that one."""
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    check = "--check" in sys.argv[1:]
+    problems = []
     for map_name in NOTES:
+        if args and map_name not in args:
+            continue
         path = ROOT / "assets" / "maps" / f"{map_name}.ron"
         if not path.exists():
             print(f"{map_name}: no map yet, skipped")
             continue
         text = path.read_text()
         placements = [
-            (m.group(1), (float(m.group(2)), float(m.group(3))), float(m.group(4)))
-            for m in re.finditer(r'\(prefab: "(\w+)", at: \(([-\d.]+), ([-\d.]+)\), rot: ([-\d.]+)', text)
+            (m.group(1), (float(m.group(2)), float(m.group(3))), float(m.group(4)), m.group(5))
+            for m in re.finditer(
+                r'\(prefab: "(\w+)", at: \(([-\d.]+), ([-\d.]+)\), rot: ([-\d.]+)(?:[^)\n]*?tag: "(\w+)")?',
+                text,
+            )
         ]
-        new = block(map_name, placements)
+        try:
+            new = block(map_name, placements)
+        except LookupError as e:
+            problems.append(str(e))
+            continue
+        if check:
+            continue
         if "// notes:begin" in text:
             text = re.sub(r"        // notes:begin.*?// notes:end", lambda _: new, text, flags=re.S)
         else:
@@ -676,6 +708,8 @@ def main():
             text = text[:j] + "\n" + new + text[j:]
         path.write_text(text)
         print(f"{map_name}: {len(NOTES[map_name])} notes and terminals")
+    if problems:
+        sys.exit("\n".join(problems))
 
 
 if __name__ == "__main__":

@@ -34,6 +34,8 @@ enum Valley {
     Marrow,
     Kettle,
     Cinder,
+    /// Rime Fell's Coldharbour: snowed in four months a year.
+    Rime,
 }
 
 fn valley(map: &MapDef) -> Option<Valley> {
@@ -44,6 +46,8 @@ fn valley(map: &MapDef) -> Option<Valley> {
         Some(Valley::Kettle)
     } else if n.contains("cinder") {
         Some(Valley::Cinder)
+    } else if n.contains("rime") {
+        Some(Valley::Rime)
     } else {
         None
     }
@@ -212,6 +216,7 @@ pub fn dress(
             match valley {
                 Valley::Marrow => out.push(on("suitcase_shut", s.door_floor[0], 0.2)),
                 Valley::Kettle => out.push(on("boots", s.door_floor[0], 0.3)),
+                Valley::Rime => out.push(on("felt_boots", s.door_floor[0], 0.3)),
                 // The front's sills (a damaged house's +X wall is breached).
                 Valley::Cinder => {
                     for &(c, len, yaw) in &s.sills[..2] {
@@ -246,6 +251,39 @@ pub fn dress(
                         s.shelf[1] - Vec3::X * 0.05,
                         std::f32::consts::FRAC_PI_2,
                     ));
+                }
+                // Snowed in: the boots and the shovel by the door, the skis
+                // on the wall, the stores laid in, the wood by the stove and
+                // the wet things drying over it.
+                Valley::Rime => {
+                    let (x, z) = (w * 0.5, d * 0.5);
+                    let f = s.door_floor[0].y;
+                    out.push(on("felt_boots", s.door_floor[0], 0.0));
+                    out.push(facing(
+                        "snow_shovel",
+                        Vec3::new(1.45, f, -z + 0.09),
+                        Vec3::Z,
+                    ));
+                    out.push(facing("skis_wall", Vec3::new(-1.45, f, -z + 0.09), Vec3::Z));
+                    out.push(on(
+                        "winter_stores",
+                        Vec3::new(-x + 1.1, f, 1.0 + (z - 3.5)),
+                        std::f32::consts::FRAC_PI_2,
+                    ));
+                    out.push(on("firewood_basket", Vec3::new(-0.6, f, z - 0.5), 0.0));
+                    // Over the stove's pipe (`Builder::stove`, -x * 0.35).
+                    out.push(on(
+                        "stove_pipe_rack",
+                        Vec3::new(-x * 0.35, f + 1.7, z - 0.09),
+                        0.0,
+                    ));
+                    out.push(facing(
+                        "drying_line",
+                        Vec3::new(-x + 0.09, f + 1.75, -z * 0.55),
+                        Vec3::X,
+                    ));
+                    out.push(on("ice_axe", s.table[1], 0.4));
+                    out.push(on("hurricane_lamp", s.kitchen[1], 0.5));
                 }
                 Valley::Cinder => {
                     out.push(on("books_charred", s.shelf[1], std::f32::consts::FRAC_PI_2));
@@ -577,14 +615,15 @@ const FIREPROOF: [&str; 10] = [
 /// is thrown about: the workers left in order.
 fn workplace(map: &MapDef, prefab: &str, at: Vec2) -> Vec<(&'static str, Transform)> {
     let n = map.name.to_lowercase();
-    if !["marrow", "kettle", "cinder", "sallow"]
+    if !["marrow", "kettle", "cinder", "sallow", "rime"]
         .iter()
         .any(|v| n.contains(v))
     {
         return Vec::new();
     }
     let cinder = n.contains("cinder");
-    let mut all = kit(prefab, n.contains("kettle"));
+    // Rime Fell's were miners too: their carbide lamps.
+    let mut all = kit(prefab, n.contains("kettle") || n.contains("rime"));
     if cinder {
         all.retain(|(m, _)| FIREPROOF.contains(m));
     }
@@ -997,10 +1036,12 @@ const HAND_PUMP: YardThing = thing("hand_pump", 0.42, 0.72, false);
 const DOG_KENNEL: YardThing = thing("dog_kennel", 0.53, 0.57, false);
 const TUB_IRON: YardThing = thing("tub_iron", 0.75, 0.36, true);
 const COAL_BUNKER: YardThing = thing("coal_bunker", 0.64, 0.72, true);
+const SNOW_SHOVEL: YardThing = thing("snow_shovel_out", 0.24, 0.21, true);
+const SLEDGE: YardThing = thing("sledge", 0.24, 0.63, false);
 
 /// Every yard model, for the tests.
 #[cfg(test)]
-const YARD_THINGS: [YardThing; 17] = [
+const YARD_THINGS: [YardThing; 19] = [
     CLOTHES_LINE,
     CLOTHES_LINE_BARE,
     BED_CABBAGE,
@@ -1018,6 +1059,8 @@ const YARD_THINGS: [YardThing; 17] = [
     DOG_KENNEL,
     TUB_IRON,
     COAL_BUNKER,
+    SNOW_SHOVEL,
+    SLEDGE,
 ];
 
 /// Marrow's gardens: kept, the beds in rows, hives and hens, a cart left
@@ -1046,6 +1089,16 @@ const KETTLE_YARD: [YardThing; 10] = [
     BED_ROOTS,
     HAND_PUMP,
     HANDCART,
+];
+/// Coldharbour's, on its bench above the trees: coal and wood for the
+/// winter, the shovel, a sledge; nothing grows and the water freezes.
+const RIME_YARD: [YardThing; 6] = [
+    COAL_BUNKER,
+    WOODPILE,
+    SNOW_SHOVEL,
+    SLEDGE,
+    CHOPPING_BLOCK,
+    BENCH,
 ];
 /// Cinder's: what the fire left, nothing alive.
 const CINDER_YARD: [YardThing; 3] = [BENCH_CHARRED, TUB_IRON, CLOTHES_LINE_BARE];
@@ -1112,6 +1165,7 @@ pub fn yard(
         Some(_) if ruin => (&CINDER_YARD[1..2], 1..=1),
         Some(Valley::Marrow) => (&MARROW_YARD, 3..=5),
         Some(Valley::Kettle) => (&KETTLE_YARD, 3..=5),
+        Some(Valley::Rime) => (&RIME_YARD, 2..=4),
     };
     let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x7a2d);
     let mut want: Vec<YardThing> = kit.to_vec();

@@ -142,6 +142,8 @@ fn glaze_buildings(
     mut waiting: Local<Vec<Entity>>,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
+    // A building gone (the zone left), or its glass: forget them.
+    drawn.retain(|(b, _), e| commands.get_entity(*b).is_ok() && commands.get_entity(*e).is_ok());
     let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
     dirty.append(&mut waiting);
     if dirty.is_empty() {
@@ -561,6 +563,9 @@ fn dress_crates(
             commands.entity(e).insert(CrateDressed);
             continue;
         };
+        // `file#node`: one node of a model (a car's door), in the model's
+        // space.
+        let (model, node) = super::wood::model_node(model);
         match props.resolve_all([model].into_iter()) {
             Resolved::Loading => boxed(&mut props),
             // Missing: the box stays.
@@ -568,12 +573,32 @@ fn dress_crates(
                 commands.entity(e).insert(CrateDressed);
             }
             Resolved::Ready => {
+                let prims = match node {
+                    None => props.primitives(model),
+                    Some(node) => {
+                        let found = props
+                            .parts(model)
+                            .unwrap_or_default()
+                            .into_iter()
+                            .find(|p| p.name == node);
+                        let Some(part) = found else {
+                            // No such node: the box stays, and says so.
+                            warn!("{model} has no node {node}");
+                            commands.entity(e).insert(CrateDressed);
+                            continue;
+                        };
+                        part.prims
+                            .into_iter()
+                            .map(|(m, t, mat)| (m, part.at * t, mat))
+                            .collect()
+                    }
+                };
                 for k in children.into_iter().flatten() {
                     if boxes.contains(*k) {
                         commands.entity(*k).despawn();
                     }
                 }
-                for (mesh, t, mat) in props.primitives(model) {
+                for (mesh, t, mat) in prims {
                     let material = props.material(&mat, &mut materials);
                     commands.spawn((
                         Mesh3d(mesh),

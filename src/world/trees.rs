@@ -817,6 +817,15 @@ pub struct TreeSway {
     pub hand_a: Vec4,
     #[uniform(100)]
     pub hand_b: Vec4,
+    /// Robots pushing through low branches (`cover::RobotPushers`).
+    #[uniform(100)]
+    pub robot_a: Vec4,
+    #[uniform(100)]
+    pub robot_b: Vec4,
+    #[uniform(100)]
+    pub robot_c: Vec4,
+    #[uniform(100)]
+    pub robot_d: Vec4,
 }
 
 /// Each vertex of a foliage card: the card's own centre (tree space), so
