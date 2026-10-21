@@ -660,10 +660,34 @@ heavy's footfall); each break you hear about as far as robots do
 - **Wind** over the open bed is the mountain wind (`wind_mountain`,
   Fourth valley's sounds block); **the river** below the dam is the
   creek, which follows any valley's water.
+- **Silt underfoot**: on the drained bed (`world::terrain::Drowned`,
+  the same definition the ground's look uses: under the old water line,
+  behind the dam) footsteps are `footsteps/mud`.
+- **The scours**: the valves the Custodian opened still run, roaring out
+  of the valve house at the dam's toe into the river (`OUTFLOWS`,
+  `water.scour`, -26.5 LUFS at 20 m): the creek's recording slowed to
+  0.75 and louder, until an outflow can be recorded. The spillway is
+  dry (the reservoir is drained below its sill).
 - **Still to come**, waiting on recordings (Freesound is out of reach
-  from this environment's network for now): the scour valves' drip and
-  gurgle, lapping water in New Sallow, the spillway, and silt underfoot
-  on the bed (the bed reads as mud only where the ground is wet).
+  from this environment's network for now): the scours' drip and gurgle
+  inside the draw-off tower and at its foot, and lapping water in New
+  Sallow.
+
+## Storms
+
+A thunderstorm (`Conditions::storm`, half of all downpours) is heard
+by its lightning (`world::weather::Lightning`, `storm_sounds`): each
+strike's thunder arrives `distance / 343` s after the flash
+(`storm::thunder_delay`), from the strike's direction. Near (under
+600 m): a sharp crack echoing the flash's strokes, then the long roll;
+far: the low rumble only, through 1.5 kHz at 600 m darkening to 300 Hz
+at 2.6 km. 6 dB quieter each doubling past 250 m, and up to 6 dB
+quieter for a faint strike. The nearest, brightest strike is kept under
+your rifle (the roll 2.1 LU, the crack 3.7 LU). In a storm the random
+far thunder keeps quiet: every roll is a flash's.
+
+In any downpour a wall of rain sweeps over every 10-20 s (the rain
+sheets crossing the valley): the rain bed up 4 dB and back over 4 s.
 
 ## The night
 
