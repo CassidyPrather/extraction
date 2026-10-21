@@ -125,6 +125,9 @@ lies burning.
   look. A flare is a lure.
 - A star that strikes a robot burns it (20) and dazzles it
   (`robots::Stunned`, 3 s).
+- Its fault is the cartridge's: paper-cased, a damp one misfires (6% on
+  top of the gun's own) and stays in the barrel. Break it, take it out,
+  put in another.
 - The cartridges are told apart by touch in the dark: the white wad is
   smooth, the red has one bump, the green two.
 - The bench (with the vice) packs two white stars from powder, brass and
