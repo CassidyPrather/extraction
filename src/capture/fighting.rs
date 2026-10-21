@@ -405,23 +405,7 @@ mod tests {
     /// (reported to Models: world): (prefab or `*`, text in one side's
     /// name, text in the other's). Take a line out when it's fixed; a new
     /// fight fails the test.
-    const KNOWN: &[(&str, &str, &str)] = &[
-        // Window casings flush with the timber trim round the opening.
-        ("*", "(Timber)", "window_casing"),
-        ("pump_station", "(Plaster)", "window_sash"),
-        ("bus_depot", "workbench", "table"),
-        ("chapel", "(Concrete)", "steeple"),
-        ("mill_race", "mill_race", "crate_slat"),
-        ("house_plank_damaged", "(WoodFloor)", "rubble_planks"),
-        ("shed", "(Timber)", "(Concrete)"),
-        // Roof ends: shingles or tin against the gable's planks.
-        ("*", "(Shingles)", "(Planks)"),
-        ("*", "(Corrugated)", "(Planks)"),
-        ("farmhouse_burnt", "(RustyMetal)", "(Charred)"),
-        // The foundation's face flush with the bottom log, above ground
-        // (`qa` judges burial by a face's centre, which is underground).
-        ("cabin_log", "(Concrete)", "(Timber)"),
-    ];
+    const KNOWN: &[(&str, &str, &str)] = &[];
 
     fn known(id: &str, f: &Fight) -> bool {
         KNOWN.iter().any(|(p, a, b)| {
