@@ -977,4 +977,31 @@
             rot: 0.0,
         )),
     ),
+    (
+        map: "sallow_reservoir",
+        name: "Inspector's book",
+        // The dam's inspection gallery (site gallery_sallow), the gauge
+        // room's bench: the plumb-line book, and one reading after.
+        at: (-52.4, 140.35),
+        rot: 0.0,
+        floor: Some(26.04),
+        note: Some((
+            name: "Plumb book",
+            text: "DAM INSPECTION - PLUMB LINE AT THE CROWN (MM)\nMar 2.1. Apr 2.0. May 2.2. Jun 2.1. Jul 2.0. Aug 2.1. Sep 2.0.\n(pencil, shaky) December, the second winter. 9.5. The scours are open and she's moving. Nobody to tell. - A.P.",
+            at: (0.0, 0.95, 0.0),
+            rot: 90.0,
+        )),
+    ),
+    (
+        map: "sallow_reservoir",
+        name: "Plumb chamber lamp",
+        // Its own fitting's dead: the keeper's lamp on the table, by the
+        // plumb machine he read.
+        at: (7.9, 137.4),
+        rot: 0.0,
+        floor: Some(26.04),
+        pieces: [
+            Lantern(at: (0.0, 0.82, 0.0)),
+        ],
+    ),
 ]
