@@ -262,7 +262,7 @@
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
         (prefab: "anomaly_core", at: (150.0, -40.0), rot: 0.0),
-        (prefab: "ranger_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
+        (prefab: "survey_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
 
         // North: bus depot, radio mast, rail yard, ranger tower, robot Gate.
         (prefab: "bus_depot", at: (25.0, -225.0), rot: 0.0),
