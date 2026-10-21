@@ -2096,6 +2096,14 @@ mod tests {
         );
     }
 
+    /// Every wreck is a light prop (`VIEW_LIGHT` names them again).
+    #[test]
+    fn every_wreck_is_a_light_prop() {
+        for w in WRECKS {
+            assert!(VIEW_LIGHT.contains(w), "{w} missing from VIEW_LIGHT");
+        }
+    }
+
     /// The Training Yard belongs to onboarding: its findings are printed
     /// for them, and only the rules that would break the tutorial hold.
     #[test]
