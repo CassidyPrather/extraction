@@ -1,6 +1,8 @@
 //! Weathering by valley: robots that work Cinder Works come in sooted,
 //! their dark metal heat-blued; Marrow Creek's are streaked with rust and
-//! furred with moss on their tops; Kettle Pass's carry a little dust. It's
+//! furred with moss on their tops; Kettle Pass's carry a little dust;
+//! Rime Fell's are iced, cold blue down their sides and under, with snow
+//! lying white on their tops and rime on their dark metal. It's
 //! painted once into the robot meshes' vertex colours (which the shell and
 //! metal materials multiply), so it costs no draws and no materials: every
 //! robot of a kind shares its meshes, and a raid is in one valley.
@@ -17,6 +19,8 @@ pub enum Valley {
     Marrow,
     /// A little dust (Kettle Pass).
     Kettle,
+    /// Ice and snow (Rime Fell).
+    Rime,
     /// Clean (the training yard, anywhere else).
     None,
 }
@@ -29,6 +33,7 @@ impl Valley {
             Valley::Cinder => 0.45,
             Valley::Marrow => 0.75,
             Valley::Kettle => 0.9,
+            Valley::Rime => 0.85,
             Valley::None => 1.0,
         }
     }
@@ -41,6 +46,8 @@ impl Valley {
             Valley::Marrow
         } else if n.contains("kettle") {
             Valley::Kettle
+        } else if n.contains("rime") {
+            Valley::Rime
         } else {
             Valley::None
         }
@@ -120,6 +127,23 @@ pub fn grime(valley: Valley, p: Vec3, n: Vec3, shell: bool) -> [f32; 4] {
             mix(white, dust, 0.3 + 0.6 * top * blotch)
         }
         (Valley::Kettle, false) => mix(white, Vec3::new(0.9, 0.88, 0.84), 0.3),
+        (Valley::Rime, true) => {
+            // Cold blue where the snow doesn't lie (sides, under, the
+            // creases), white where it does (on top, in patches).
+            let ice = Vec3::new(0.74, 0.82, 0.94);
+            let snow = (top * 1.6 - 0.35 + 0.5 * blotch).clamp(0.0, 1.0);
+            mix(
+                mix(white, ice, 0.35 + 0.5 * side + 0.4 * under + 0.3 * streak),
+                white,
+                snow,
+            )
+        }
+        // Rime on the dark metal: its top faces furred pale (the metal's
+        // dark, so this lifts it rather than tints it).
+        (Valley::Rime, false) => {
+            let rime = (top * 1.4 - 0.4 + 0.6 * blotch).clamp(0.0, 1.0);
+            mix(Vec3::new(0.9, 0.95, 1.05), Vec3::new(2.6, 2.8, 3.0), rime)
+        }
     };
     [c.x, c.y, c.z, 1.0]
 }
@@ -189,7 +213,14 @@ mod tests {
         for v in [Valley::Cinder, Valley::Marrow, Valley::Kettle, Valley::None] {
             for shell in [true, false] {
                 for c in sample(v, shell) {
-                    assert!(c.iter().all(|x| (0.0..=1.0).contains(x) && x.is_finite()));
+                    // (Rime lifts dark metal past 1: it multiplies a near-
+                    // black base.)
+                    let top = if v == Valley::Rime && !shell {
+                        3.0
+                    } else {
+                        1.0
+                    };
+                    assert!(c.iter().all(|x| (0.0..=top).contains(x) && x.is_finite()));
                 }
             }
         }
@@ -203,5 +234,16 @@ mod tests {
         assert_eq!(Valley::of_map("Cinder Works"), Valley::Cinder);
         assert_eq!(Valley::of_map("Marrow Creek"), Valley::Marrow);
         assert_eq!(Valley::of_map("Training Yard"), Valley::None);
+        // Rime Fell: blue-iced sides, white tops, pale-furred dark metal.
+        assert_eq!(Valley::of_map("Rime Fell"), Valley::Rime);
+        let side = grime(Valley::Rime, Vec3::new(0.4, 0.0, 0.0), Vec3::X, true);
+        assert!(side[2] > side[0] + 0.1, "iced blue: {side:?}");
+        let top = grime(Valley::Rime, Vec3::new(0.0, 0.4, 0.0), Vec3::Y, true);
+        assert!(
+            top.iter().take(3).all(|c| *c > 0.95),
+            "snow on top: {top:?}"
+        );
+        let metal = mean(&sample(Valley::Rime, false));
+        assert!(metal.x > 1.0, "rimed metal is lifted: {metal}");
     }
 }
