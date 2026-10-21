@@ -128,8 +128,12 @@ fn turn_knobs(
     }
 }
 
+/// A prop whose model is still loading.
+#[derive(Component)]
+struct PendingProp(Handle<bevy::gltf::Gltf>);
+
 /// Props drawn from their model (`models/props/<name>.glb`): the
-/// gramophone and the piano. Their nodes are what moves.
+/// gramophone and the piano. Their nodes, named, are what moves.
 fn dress_props(
     mut commands: Commands,
     server: Res<AssetServer>,
@@ -141,10 +145,61 @@ fn dress_props(
         .map(|e| (e, "gramophone"))
         .chain(pianos.iter().map(|e| (e, "upright_piano")))
     {
-        let scene = server.load(
-            bevy::gltf::GltfAssetLabel::Scene(0).from_asset(format!("models/props/{name}.glb")),
-        );
-        commands.spawn((SceneRoot(scene), Transform::IDENTITY, ChildOf(e)));
+        commands
+            .entity(e)
+            .insert(PendingProp(server.load(format!("models/props/{name}.glb"))));
+    }
+}
+
+fn spawn_nodes(
+    commands: &mut Commands,
+    parent: Entity,
+    nodes: Vec<crate::models::ModelNode>,
+    mat: &mut impl FnMut(Option<&str>) -> Handle<StandardMaterial>,
+) {
+    for mut node in nodes {
+        let children = std::mem::take(&mut node.children);
+        let n = commands
+            .spawn((
+                Name::new(node.name.clone()),
+                node.transform,
+                Visibility::default(),
+                ChildOf(parent),
+            ))
+            .id();
+        crate::models::spawn_primitives_ranged(commands, n, &node, None, &mut *mat);
+        spawn_nodes(commands, n, children, mat);
+    }
+}
+
+fn finish_props(
+    mut commands: Commands,
+    pending: Query<(Entity, &PendingProp)>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    nodes: Res<Assets<bevy::gltf::GltfNode>>,
+    gltf_meshes: Res<Assets<bevy::gltf::GltfMesh>>,
+    mut model_mats: ResMut<crate::models::ModelMaterials>,
+    mut lib: ResMut<crate::render::materials::MaterialLibrary>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::models::{ModelState, Models, model_nodes};
+    for (e, p) in &pending {
+        let gltf = match Models::state(&p.0, &server, &gltfs) {
+            ModelState::Loading => continue,
+            ModelState::Failed => {
+                warn!("a music prop's model failed to load");
+                commands.entity(e).remove::<PendingProp>();
+                continue;
+            }
+            ModelState::Ready(g) => g,
+        };
+        commands.entity(e).remove::<PendingProp>();
+        let model = model_nodes(gltf, &nodes, &gltf_meshes);
+        let mut mat = |name: Option<&str>| {
+            model_mats.get(name.unwrap_or("Wood"), &mut lib, &server, &mut materials)
+        };
+        spawn_nodes(&mut commands, e, model, &mut mat);
     }
 }
 
@@ -245,6 +300,7 @@ impl Plugin for MusicVisualsPlugin {
                 animate_decks,
                 turn_knobs,
                 dress_props,
+                finish_props,
                 animate_gramophones,
                 animate_pianos,
             ),
