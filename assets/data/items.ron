@@ -176,7 +176,7 @@
             firearm: Some((
                 action: Crossbow, cartridge: "bolt",
                 modes: [Safe, Semi], report: 0.04,
-                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5,
+                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5, kick: (climb: -2.0, push: -0.6, shove: 0.02),
                 wear_per_shot: 0.0015, fouling_per_shot: 0.0,
             )),
             tags: ["metal", "wood"],

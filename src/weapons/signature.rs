@@ -70,17 +70,23 @@ impl Signature {
             .fold(0.0, f32::max)
     }
 
-    /// What a hand and an eye tell apart: the peak rise (mrad) and when it
+    /// What a hand and an eye tell apart: the furthest rise (mrad) and when it
     /// comes (per 10 ms), the peak push back (per half mm), the climb and
     /// walk left at the end (mrad; per half mrad of walk), and the shots
     /// (each worth 5).
     pub fn features(&self) -> [f32; 6] {
+        // The rise's furthest, up or down (a crossbow's limbs dip it).
         let (t, rise) = self
             .rise
             .iter()
             .copied()
             .enumerate()
-            .fold((0, f32::MIN), |b, (i, r)| if r > b.1 { (i, r) } else { b });
+            .fold(
+                (0, 0.0f32),
+                |b, (i, r)| {
+                    if r.abs() > b.1.abs() { (i, r) } else { b }
+                },
+            );
         [
             rise,
             t as f32 * 100.0 / 90.0,
@@ -121,12 +127,8 @@ impl Signature {
 
     /// One line: peak rise, when, peak push, yaw at the end, rise at the end.
     pub fn line(&self) -> String {
-        let (t, rise) = self
-            .rise
-            .iter()
-            .copied()
-            .enumerate()
-            .fold((0, f32::MIN), |b, (i, r)| if r > b.1 { (i, r) } else { b });
+        let f = self.features();
+        let (t, rise) = (f[1] * 0.9, f[0]);
         let back = self.back.iter().copied().fold(f32::MIN, f32::max);
         format!(
             "{:<13} {}h{} lever {:>5.1} mm {:>4.1} kg shots {:>2}  rise {:>6.1} mrad at {:>3.0} ms  back {:>5.1} mm  up {:>5.1} mm  yaw end {:>6.1}  rise end {:>6.1}",
@@ -137,7 +139,7 @@ impl Signature {
             self.mass,
             self.shots,
             rise,
-            t as f32 * 1000.0 / 90.0,
+            t * 1000.0 / 90.0,
             back,
             self.up.iter().copied().fold(f32::MIN, f32::max),
             self.yaw.last().copied().unwrap_or(0.0),
@@ -181,6 +183,13 @@ fn ready(r: &mut Range) {
     while f.fire_mode() != best {
         f.cycle_mode();
     }
+    // A crossbow's string (or anything else ready only drawn back) on its
+    // latch.
+    if !f.is_ready() {
+        f.locked_back = true;
+        f.bolt_travel = 1.0;
+    }
+    assert!(f.is_ready(), "ready to fire: {f:?}");
     f.condition = 1.0;
     f.fouling = 0.0;
 }

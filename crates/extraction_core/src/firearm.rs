@@ -123,9 +123,10 @@ pub struct FirearmDef {
 #[serde(default)]
 pub struct Kick {
     /// The muzzle's climb, against what its shape gives (a brake or a
-    /// compensator under 1).
+    /// compensator under 1; under 0 it dips, as a crossbow's limbs throw
+    /// it).
     pub climb: f32,
-    /// The push back along the bore, likewise.
+    /// The push back along the bore, likewise (under 0, forward).
     pub push: f32,
     /// Which way the muzzle walks, as a share of the shot's yaw: 1 always
     /// left, -1 always right, 0 either way.
