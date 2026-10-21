@@ -1609,8 +1609,16 @@ fn alert_eyes(
         } else {
             0.0
         };
-        let level = 0.45 + 0.9 * a + 1.4 * x;
-        let want = LinearRgba::rgb(9.0, 1.2 + 2.5 * x, 0.6 + 0.8 * x) * level * stutter * gain;
+        // Its colour and, for eyes that can't tell red from orange (or a
+        // look from far off), its rhythm (`render::tells`); brighter after
+        // dark.
+        let [r, g, b] = crate::render::tells::eye_colour(a, x);
+        let pulse = crate::render::tells::eye_pulse(
+            a,
+            aware.can_see_target,
+            now + robot.index_u32() as f32 * 0.37,
+        );
+        let want = LinearRgba::rgb(r, g, b) * stutter * pulse * gain;
         if let Some(mut mat) = materials.get_mut(&own.0) {
             if mat.emissive != want {
                 mat.emissive = want;

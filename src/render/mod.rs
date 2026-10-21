@@ -25,6 +25,7 @@ pub mod props;
 pub mod screen;
 pub mod spikes;
 pub mod stats;
+pub mod tells;
 pub mod terrain_material;
 pub mod tools;
 pub mod upgrades;

@@ -266,14 +266,31 @@ If any of this fails, stop and send the log: everything else depends on it.
   YARD, NEW CAREER (press twice), the comfort cards, PACK UP to quit).
   To play, walk out through the gate. Is this a good first minute?
 
-### 2. Comfort (5 minutes)
+### 2. Settings (5 minutes)
 
-Press the cards on the camp board (or the truck bed's left wall): turning (snap 30°/45°,
-smooth 90–180°/s), vignette (off to 90%, darkening the edges while
-the stick moves you) and sound (full range, or narrow: the forest and
-your hands up, gunfire down, for open speakers in a room that isn't
-quiet). Note which you end up with, and anything that made
-you queasy — climbing, the zipline, being knocked about, swimming.
+Every setting is a card on the truck bed's left wall (some also on the
+camp board): press one to step it on. The choice is kept in
+`settings.ron`. Note which you end up with, and anything that made you
+queasy (climbing, the zipline, being knocked about, swimming).
+
+| Card | Steps through | What it's for |
+| - | - | - |
+| TURNING | snap 30° / 45°, smooth 90–180°/s | how the right stick turns you |
+| VIGNETTE | off to 90% | darkening the edges while the stick moves you |
+| SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
+| SHARPNESS | auto, 50–100% | render size per eye (next launch) |
+| GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
+| HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
+| MUSIC | rises with danger / off | the score |
+| GUN HAND | right / left | left: the holster and chest mount on the left, the watch on the right wrist, moving on the right stick and turning on the left, the gun hand's stick click the fire selector |
+| PLAYING | standing / seated | seated: the view and hands lifted to a standing eye (measured from how you sit, over a few seconds); the crouch button (right stick down, or the left with GUN HAND left) brings you down to the floor |
+| HANDS | two / one | one: bring the gun's empty well down onto a magazine in a pouch and it seats; the second face button (B/Y) racks; a gun rested on something holds as steady as two hands |
+| CAPTIONS | on the wrist / off | who's speaking (Lev on the radio, Lev from the cab, machines on the radio) and from where, on a clock bearing with 12 ahead ("LEV, RADIO", "LEV AT 4", "MACHINES AT 11"), above what's said |
+| WARNING TICK | on the wrist / off | a faint tick in the off hand when a machine nearby turns certain of you |
+
+For each of GUN HAND, PLAYING and HANDS, play the yard and a raid with
+it on: is anything out of reach, or does anything need the hand you've
+said you don't use?
 
 ### 3. The truck and the guns, at base (15 minutes)
 
@@ -484,5 +501,6 @@ pump?
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
-| `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics` | Comfort, without the cards |
+| `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
+| `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |
