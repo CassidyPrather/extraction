@@ -242,6 +242,8 @@ pub(super) struct Newcomer {
     failed_seen: usize,
     reported: bool,
     wrong_way_done: bool,
+    /// When the reckless one last picked a fight.
+    fought_at: f32,
 }
 
 impl Newcomer {
@@ -455,6 +457,19 @@ pub(super) fn direct_raid(
     let idle_only =
         bot.tasks.len() == 1 && matches!(bot.tasks.front(), Some(Task::Wait(s)) if *s == IDLE);
     if !idle_only || bot.elapsed < 0.5 {
+        return;
+    }
+    // Reckless: a machine in reach is a fight (once a minute at most).
+    if p.reckless
+        && now - state.fought_at > 60.0
+        && matches!(state.leg, Leg::Place | Leg::Rendezvous | Leg::Call)
+        && world
+            .nearest_robot(here)
+            .is_some_and(|r| r.distance(here) < 40.0)
+    {
+        state.fought_at = now;
+        state.note(now, Kind::Learned, "a machine in range: took it on");
+        super::second_hour::cut_in(&mut bot, vec![Task::DrawGun, Task::Engage { shots: 12 }]);
         return;
     }
     let truck = view.trucks.iter().next().map(|t| t.compute_transform());
