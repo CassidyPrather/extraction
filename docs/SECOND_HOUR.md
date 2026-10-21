@@ -88,7 +88,14 @@ makes the player play:
 - **Left-handed:** mirrored. The holster and mount are on the other hip,
   the watch is on the right wrist, and the sticks are swapped.
 
-RESULTS_TABLE
+Last runs, all on the same tree (commit a84d213):
+
+| Mode | Flag | Moments met | Answered right | Bot task failures |
+| - | - | - | - | - |
+| Standing, two hands, right | (none) | 14 | 14 | 0 |
+| Left-handed | `--left-handed` | 14 | 14 | 0 |
+| One-handed | `--one-handed` | 14 | 14 | 0 |
+| Seated | `--seated` | 14 | 14 | 0 |
 
 Where a mode failed, the game was usually wrong for that mode, and the fix
 went into the game for that kind of player:
