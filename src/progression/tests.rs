@@ -466,7 +466,8 @@ fn the_second_and_third_tiers_hand_over_guns() {
         app.world_mut().write_message(JobDone);
         app.update();
     }
-    for _ in 0..2000 {
+    // (Contracts' kit and pay come through the hatch too.)
+    for _ in 0..6000 {
         app.update();
         if !app.world().resource::<crate::raid::lev::Handovers>().busy() {
             break;
