@@ -359,10 +359,8 @@ mod tests {
     #[test]
     fn a_seed_plays_the_same_raid_twice() {
         let run = |n: u32| {
-            let dir = std::env::temp_dir().join(format!(
-                "extraction-replay-{}-{n}",
-                std::process::id()
-            ));
+            let dir =
+                std::env::temp_dir().join(format!("extraction-replay-{}-{n}", std::process::id()));
             let opts = LaunchOptions {
                 sim_run: Some("replay".into()),
                 sim_out: Some(dir.clone()),
@@ -383,7 +381,12 @@ mod tests {
         };
         let (a, b) = (run(0), run(1));
         assert!(a.lines().count() > 40, "the raid got going:\n{a}");
-        if let Some((i, (x, y))) = a.lines().zip(b.lines()).enumerate().find(|(_, (x, y))| x != y) {
+        if let Some((i, (x, y))) = a
+            .lines()
+            .zip(b.lines())
+            .enumerate()
+            .find(|(_, (x, y))| x != y)
+        {
             panic!("the two runs part at event {i}:\n{x}\n{y}");
         }
         assert_eq!(a.lines().count(), b.lines().count());
