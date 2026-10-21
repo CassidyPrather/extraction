@@ -445,6 +445,17 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "stock_bicycles" => [2.4, 1.2, 24.0],
         "stock_bins" => [1.6, 1.3, 20.0],
         "sorting_gantry" => [20.0, 14.0, 6.0],
+        // Rime Fell's (src/world/fell.rs): the ore mill stepped down the
+        // slope in four bays (its floors 4 m apart, climbing toward +z,
+        // the headhouse on the top one), the observatory on its summit
+        // (its radio mast to 20 m), the funicular's two stations (the
+        // platform along each one's -x face is inside; the track runs
+        // past outside it) and its car on the grade.
+        "ore_mill" => [20.0, 22.0, 40.0],
+        "observatory" => [12.0, 20.0, 10.0],
+        "funicular_lower" => [10.0, 8.0, 16.0],
+        "funicular_upper" => [12.0, 12.0, 14.0],
+        "funicular_car" => [3.2, 4.0, 8.0],
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
@@ -670,6 +681,81 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 0.95,
             clear: 3.53,
         }],
+        // The mill's front door, the door onto each bay's terrace on the
+        // +x side (their floors at 0, 4, 8 and 12 m), the back door on
+        // the top bay.
+        "ore_mill" => &[
+            Entrance {
+                at: [-3.0, -20.0],
+                out: [0.0, -1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, -15.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, -5.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, 5.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [10.0, 15.0],
+                out: [1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [4.0, 20.0],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+        ],
+        "observatory" => &[Entrance {
+            at: [0.0, -5.0],
+            out: [0.0, -1.0],
+            width: 0.95,
+            clear: 1.0,
+        }],
+        "funicular_lower" => &[
+            Entrance {
+                at: [1.6, 7.9],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.2,
+            },
+            Entrance {
+                at: [-1.8, 6.8],
+                out: [-1.0, 0.0],
+                width: 0.95,
+                clear: 1.2,
+            },
+        ],
+        "funicular_upper" => &[
+            Entrance {
+                at: [-3.2, 5.7],
+                out: [-1.0, 0.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+            Entrance {
+                at: [2.0, 7.0],
+                out: [0.0, 1.0],
+                width: 0.95,
+                clear: 1.0,
+            },
+        ],
         _ => &[],
     }
 }
@@ -706,7 +792,16 @@ pub fn prefab_clearance(id: &str) -> f32 {
 pub fn prefab_wants_pad(id: &str) -> bool {
     !matches!(
         id,
-        "footbridge" | "anomaly_core" | "quarantine_gate" | "radio_mast" | "boxcar" | "target"
+        "footbridge"
+            | "anomaly_core"
+            | "quarantine_gate"
+            | "radio_mast"
+            | "boxcar"
+            | "target"
+            // Stepped down its slope: the map terraces the ground for it.
+            | "ore_mill"
+            // On the line's grade.
+            | "funicular_car"
     )
 }
 

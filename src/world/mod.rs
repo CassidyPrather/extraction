@@ -33,6 +33,7 @@ pub mod underground;
 pub mod water;
 pub mod weather;
 pub mod workings;
+pub mod fell;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;

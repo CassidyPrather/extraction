@@ -232,6 +232,10 @@ pub const ENTERABLE: &[&str] = &[
     "ranger_tower",
     "factory_hall",
     "guard_booth",
+    "ore_mill",
+    "observatory",
+    "funicular_lower",
+    "funicular_upper",
 ];
 
 // ---- Orientation -----------------------------------------------------------

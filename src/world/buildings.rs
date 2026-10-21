@@ -1431,6 +1431,9 @@ pub fn prefab(id: &str) -> Option<Geo> {
     if let Some(g) = super::dam::geo(id) {
         return Some(g);
     }
+    if let Some(g) = super::fell::geo(id) {
+        return Some(g);
+    }
     let mut b = Builder {
         drop: extraction_core::map::prefab_lift(id),
         ..Default::default()

@@ -646,6 +646,10 @@ impl Heightmap {
         if let Some((a, b)) = self.bogies(prefab, at, rot_deg) {
             return (a + b) * 0.5;
         }
+        // The funicular's car is built on the grade through its middle.
+        if prefab == "funicular_car" {
+            return self.height(at);
+        }
         let [w, _, d] = crate::map::prefab_footprint(prefab);
         let (s, c) = rot_deg.to_radians().sin_cos();
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);

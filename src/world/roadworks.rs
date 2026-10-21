@@ -169,6 +169,14 @@ const COL_EVERY: f32 = 6.0;
 const BEAM: f32 = 0.45;
 /// A portal's length along the road (m).
 const PORTAL: f32 = 0.8;
+/// The drift banked against the apron: its fall per metre outward, how
+/// far out it may reach looking for the ground (m), and its profile's
+/// columns.
+const BANK: f32 = 0.55;
+const BANK_REACH: f32 = 25.0;
+const BANK_COLS: usize = 12;
+/// How far past each portal the drift runs on, sinking (m).
+const BANK_TAPER: f32 = 7.0;
 
 /// One gallery's place on its road.
 #[derive(Clone, Debug)]
@@ -396,6 +404,38 @@ fn build_gallery(plan: GalleryPlan, line: &Line, hm: &Heightmap) -> Gallery {
             col(lip, sec.under(lip), lip, sec.top(lip)),
             col(back, sec.under(back), back, sec.top(back)),
         ]
+    }));
+    // The slope meets the roof: a drift banked from the apron down to the
+    // ground behind it (or, on a steep bank, the ground meets it first).
+    // It buries the wall's back, and you can climb it onto the roof. Past
+    // the portals it runs on a few metres, sinking into the slope.
+    let drift_at = line.stations(a - BANK_TAPER, b + BANK_TAPER, BAY);
+    sweeps.push(Sweep::new(Look::Snow, true, &drift_at, up, |st| {
+        let out = st.left * up;
+        let ground = |u: f32| {
+            let p = st.at + out * u;
+            hm.height([p.x, p.z]) - st.at.y
+        };
+        let full = geom::smoothstep(a - BANK_TAPER, a + 1.0, st.s)
+            * (1.0 - geom::smoothstep(b - 1.0, b + BANK_TAPER, st.s));
+        let start = back + 0.04;
+        let crest = sec.top(back) + 0.05;
+        let surface = |u: f32| crest - BANK * (u - start);
+        let mut run = 0.25;
+        while run < BANK_REACH && surface(start + run) > ground(start + run) {
+            run += 0.25;
+        }
+        let rise = |u: f32, top: f32| {
+            let g = ground(u);
+            let top = (g + (top - g) * full).max(g + 0.02);
+            col(u, (g - 0.4).min(top - 0.1), u, top)
+        };
+        let mut cols = vec![rise(back - 0.15, crest - 0.01)];
+        for j in 0..BANK_COLS {
+            let u = start + run * j as f32 / (BANK_COLS - 1) as f32;
+            cols.push(rise(u, surface(u)));
+        }
+        cols
     }));
     // The upturn at the lip, its outer face a few cm proud of the slab's
     // edge.

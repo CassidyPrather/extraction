@@ -27,6 +27,9 @@ const BAND: (f32, f32) = (0.42, 1.75);
 const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
 pub const MAX_REACH_UP: f32 = 2.1;
+/// The most one cell's floor may stand over its neighbour's and still be
+/// walked between (a stair's riser is 0.2).
+const STEP_UP: f32 = 0.45;
 
 #[derive(Clone, Debug)]
 pub struct DoorInfo {
@@ -206,9 +209,51 @@ pub fn plan_buildings(
             cost: vec![1; n * n],
             lanes: Vec::new(),
         };
+        // A building stepped down a slope (the ore mill): each cell's own
+        // floor, stairs and all, and each piece in the way or not at the
+        // floor under it.
+        let levels: Option<Vec<f32>> =
+            crate::world::fell::stepped_floor(&b.prefab, Vec2::ZERO).map(|_| {
+                (0..n * n)
+                    .map(|k| {
+                        let c = Vec2::from(grid.centre(k % n, k / n));
+                        crate::world::fell::stepped_floor(&b.prefab, c).unwrap_or(floor)
+                    })
+                    .collect()
+            });
         for piece in geo.pieces.iter().filter(|p| p.collide) {
-            if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
+            let c = piece.at.translation;
+            let under = levels
+                .as_ref()
+                .and_then(|l| grid.cell_of([c.x, c.z]).map(|(i, j)| l[j * n + i]))
+                .unwrap_or(floor);
+            if let Some(ob) = obstacle(piece.shape, piece.at, under) {
                 grid.block(ob, CLEARANCE);
+            }
+        }
+        // Where one floor meets another more than a step up or down (a
+        // retaining wall, a stair's open side), neither edge is a way
+        // across.
+        if let Some(l) = &levels {
+            let mut cliff = Vec::new();
+            for j in 0..n {
+                for i in 0..n {
+                    let y = l[j * n + i];
+                    let steep = [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)].iter().any(|(di, dj)| {
+                        let (a, c) = (i as i64 + di, j as i64 + dj);
+                        a >= 0
+                            && c >= 0
+                            && (a as usize) < n
+                            && (c as usize) < n
+                            && (l[c as usize * n + a as usize] - y).abs() > STEP_UP
+                    });
+                    if steep {
+                        cliff.push(j * n + i);
+                    }
+                }
+            }
+            for k in cliff {
+                grid.cost[k] = BLOCKED;
             }
         }
         // Open door leaves stand out from the wall (doors swing about 100
@@ -316,7 +361,7 @@ pub fn plan_buildings(
             doors: infos,
             entries,
             half,
-            levels: None,
+            levels,
         });
     }
     out
@@ -650,6 +695,76 @@ mod tests {
                  d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
             )
             .unwrap()
+    }
+
+    /// The ore mill's plan stands each bay at its own floor, and from the
+    /// front door there's a way up the stairs to every bay and to every
+    /// loot spot within reach of a floor (the top bay's included).
+    #[test]
+    fn the_mill_plan_climbs_every_bay() {
+        use crate::world::fell::MILL_FLOORS;
+        let mut world = World::new();
+        let geo = prefab("ore_mill").unwrap();
+        let root = world
+            .spawn((
+                Building {
+                    prefab: "ore_mill".into(),
+                },
+                Transform::IDENTITY,
+            ))
+            .id();
+        for d in &geo.doors {
+            world.spawn((DoorLeaf(*d), ChildOf(root)));
+        }
+        let plans = world
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let plan = &plans[0];
+        assert!(plan.levels.is_some(), "the mill's plan has its floors");
+        let front = plan
+            .doors
+            .iter()
+            .find_map(|d| d.outside.filter(|o| o.y < -20.0))
+            .expect("a way in at the front door");
+        for (k, (goal, f)) in [
+            (Vec2::new(1.0, -17.0), MILL_FLOORS[0]),
+            (Vec2::new(7.0, -3.0), MILL_FLOORS[1]),
+            (Vec2::new(5.0, 4.0), MILL_FLOORS[2]),
+            (Vec2::new(6.0, 15.0), MILL_FLOORS[3]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert!(
+                (plan.floor_at(goal) - f).abs() < 1e-3,
+                "bay {k}'s floor is {:.2} at {goal}",
+                plan.floor_at(goal)
+            );
+            let path = plan
+                .path(front, goal)
+                .unwrap_or_else(|| panic!("no way from the front door to bay {k}"));
+            let end = *path.last().unwrap();
+            assert!(end.distance(goal) < 0.5, "bay {k}: the path ends at {end}");
+        }
+        let mut tried = 0;
+        for s in &geo.loot {
+            if !plan.reachable_height(s.at) {
+                continue;
+            }
+            tried += 1;
+            let goal = s.at.xz();
+            let cell = super::super::raider::reach_cell(plan, front, goal);
+            assert!(
+                cell.is_some_and(|c| super::super::raider::reaches(plan, c, goal)),
+                "the {} spot at {:.2} is out of reach",
+                s.table,
+                s.at
+            );
+        }
+        assert!(tried >= 6, "only {tried} loot spots within reach of a floor");
     }
 
     /// A bot routed by a building plan gets through the front door and

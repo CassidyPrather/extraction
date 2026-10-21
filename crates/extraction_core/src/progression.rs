@@ -754,6 +754,10 @@ pub fn is_building(prefab: &str) -> bool {
             | "factory_hall"
             | "sawmill"
             | "signal_box"
+            | "ore_mill"
+            | "observatory"
+            | "funicular_lower"
+            | "funicular_upper"
     )
 }
 
