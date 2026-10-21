@@ -30,6 +30,8 @@ struct Haze {
     shape: vec4<f32>,
     wave: vec4<f32>,
     tint: vec4<f32>,
+    // x: colour drained from what's seen through it, y: how much dimmed.
+    drain: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> haze: Haze;
@@ -146,6 +148,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let full = vec2<f32>(textureDimensions(view_transmission_texture));
     let st = clamp((sub * view.viewport.zw + view.viewport.xy) / full, vec2<f32>(0.0), vec2<f32>(1.0));
     var behind = textureSampleLevel(view_transmission_texture, view_transmission_sampler, st, 0.0).rgb;
+    // A Hush: the colour goes out of the world seen through it.
+    let grey = dot(behind, vec3<f32>(0.2126, 0.7152, 0.0722));
+    // A firm round edge, so the bubble itself shows.
+    let disc = 1.0 - smoothstep(0.82, 0.95, length(q));
+    behind = mix(behind, vec3<f32>(grey), haze.drain.x * disc)
+        * (1.0 - haze.drain.y * disc);
     // The heart's glow: a soft spot, never the card's outline.
     let glow = haze.tint.a * pow(max(0.0, 1.0 - length(q)), 3.0) * select(1.0, 0.0, mode == 2);
     behind += haze.tint.rgb * glow * (0.85 + 0.15 * sin(t * 7.0)) * view.exposure;

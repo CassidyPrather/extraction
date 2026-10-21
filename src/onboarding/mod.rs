@@ -142,9 +142,9 @@ impl Goal {
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
-            (Goal::Wrist, false) => "Raise your left hand and\nlook at the back of it.",
+            (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "Hold it. Press A or X.",
+            (Goal::Dressing, false) => "In one hand, wind it\nround the other forearm.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
@@ -502,6 +502,7 @@ fn facing(rot: f32) -> Quat {
 fn card(c: OnboardCard, text: &str, size: Vec2) -> impl Bundle {
     (
         Name::new("Training card"),
+        crate::render::legibility::TextSource::Card,
         ScreenText {
             text: text.into(),
             size,
@@ -607,6 +608,11 @@ fn setup(
         commands.spawn((
             Name::new("Station board"),
             StationSign(i),
+            if i == 0 {
+                crate::render::legibility::TextSource::TruckBoard
+            } else {
+                crate::render::legibility::TextSource::StationBoard
+            },
             paper(String::new(), size),
             board_at,
             Visibility::default(),
@@ -643,6 +649,7 @@ fn setup(
     commands.spawn((
         Name::new("Training list"),
         Checklist,
+        crate::render::legibility::TextSource::TrainingList,
         paper(String::new(), CHECKLIST),
         Transform::from_xyz(0.0, 1.45, 0.04),
         Visibility::default(),
@@ -655,7 +662,12 @@ fn setup(
     ));
     let mut skip = crate::camp::skip_card();
     skip.0.size = Vec2::new(0.3, 0.14);
-    commands.spawn((skip, Transform::from_xyz(0.2, 0.62, 0.03), ChildOf(post)));
+    commands.spawn((
+        skip,
+        crate::render::legibility::TextSource::Card,
+        Transform::from_xyz(0.2, 0.62, 0.03),
+        ChildOf(post),
+    ));
 
     let spawn = |commands: &mut Commands, id: &str, at: Transform| -> Option<Entity> {
         let kind = catalog.kind(id)?;
@@ -1191,7 +1203,8 @@ fn watch_moves(
     }
 }
 
-/// Where the wrist's screen rides on the left hand (`render::comfort`).
+/// Where the wrist's screen rides on the left hand (`render::comfort`);
+/// on the right, mirrored.
 pub const WRIST_PANEL: Vec3 = Vec3::new(-0.03, 0.015, 0.07);
 
 /// Looking at your wrist (the head's gaze on the left hand's screen, close,
@@ -1205,10 +1218,16 @@ fn watch_wrist(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     time: Res<Time>,
     mut held: Local<f32>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
     if ob.is_done(Goal::Wrist) {
         return;
     }
+    // The watch is on the hand that isn't the gun hand.
+    let watch = comfort
+        .as_ref()
+        .map_or(Side::Left, |c| c.gun_side().other());
+    let panel_at = WRIST_PANEL * Vec3::new(-watch.sign(), 1.0, 1.0);
     let mut looking = keys.is_some_and(|k| k.pressed(KeyCode::KeyH));
     for (head, owner) in &heads {
         if !locals.contains(owner.parent()) {
@@ -1216,9 +1235,9 @@ fn watch_wrist(
         }
         let hand = hands
             .iter()
-            .find(|(_, rh, p)| rh.side == Side::Left && p.parent() == owner.parent());
+            .find(|(_, rh, p)| rh.side == watch && p.parent() == owner.parent());
         let Some((hand, ..)) = hand else { continue };
-        let panel = hand.transform_point(WRIST_PANEL);
+        let panel = hand.transform_point(panel_at);
         let to = panel - head.translation();
         let forward = head.rotation() * Vec3::NEG_Z;
         if to.length() < 0.65 && forward.angle_between(to) < 20f32.to_radians() {
@@ -1560,29 +1579,13 @@ pub mod bot;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::screen::{em_metres, read_from};
+    use crate::render::legibility::{TextSource, check_panel, panel_deg};
 
-    /// The yard's own boards hold to more than the game's floor
-    /// (`MIN_EM_DEG`): the first playtest's first complaint was signs it
-    /// couldn't read, and these are what someone new reads first.
-    const BOARD_MIN_DEG: f32 = 0.8;
-
-    fn deg(screen: &ScreenText) -> f32 {
-        (em_metres(screen) / read_from(screen)).atan().to_degrees()
-    }
-
-    fn readable(screen: &ScreenText) -> Result<(), String> {
-        let em = em_metres(screen);
-        let at = read_from(screen);
-        let deg = (em / at).atan().to_degrees();
-        if deg < BOARD_MIN_DEG {
-            return Err(format!(
-                "{:.1} cm letters, {deg:.2} deg at {at} m: {:?}",
-                em * 100.0,
-                screen.text
-            ));
-        }
-        Ok(())
+    // The first playtest's first complaint was signs it couldn't read, and
+    // these are what someone new reads first: they hold to the must-read
+    // floor (`render::legibility`).
+    fn readable(screen: &ScreenText, source: TextSource) -> Result<(), String> {
+        check_panel(screen, source).map(|_| ())
     }
 
     /// Every board's words, at every stage, in both modes, read from where
@@ -1603,13 +1606,21 @@ mod tests {
                     for i in 0..STATIONS.len() {
                         let size = if i == 0 { TRUCK_SIGN } else { SIGN };
                         let s = paper(sign_text(&ob, i, flat), size);
-                        smallest = smallest.min(deg(&s));
-                        if let Err(e) = readable(&s) {
+                        let source = if i == 0 {
+                            TextSource::TruckBoard
+                        } else {
+                            TextSource::StationBoard
+                        };
+                        smallest = smallest.min(panel_deg(&s, source));
+                        if let Err(e) = readable(&s, source) {
                             bad.push(e);
                         }
                     }
                 }
-                if let Err(e) = readable(&paper(checklist_text(&ob), CHECKLIST)) {
+                if let Err(e) = readable(
+                    &paper(checklist_text(&ob), CHECKLIST),
+                    TextSource::TrainingList,
+                ) {
                     bad.push(e);
                 }
             }
@@ -1624,13 +1635,13 @@ mod tests {
                 size,
                 style: ScreenStyle::Card,
             };
-            if let Err(e) = readable(&s) {
+            if let Err(e) = readable(&s, TextSource::Card) {
                 bad.push(e);
             }
         }
         bad.dedup();
         assert!(bad.is_empty(), "too small:\n{}", bad.join("\n"));
-        eprintln!("smallest letters: {smallest:.2} deg (minimum {BOARD_MIN_DEG})");
+        eprintln!("smallest letters: {smallest:.2} deg");
     }
 
     /// Everything the driver says fits the wrist whole.

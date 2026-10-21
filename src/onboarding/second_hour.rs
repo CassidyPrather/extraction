@@ -169,18 +169,21 @@ pub(super) fn direct(
                 ),
                 None => ("(no radio)", vec![]),
             },
-            // Off from where it heard you, low, then still.
-            First::Heard => (
-                "move off low, then keep still",
-                vec![
-                    Task::WalkTo {
-                        to: here + Vec2::new(-18.0, 6.0),
-                        within: 1.5,
-                    },
-                    Task::Wait(20.0),
-                    Task::Wait(20.0),
-                ],
-            ),
+            // Off from where it heard you, low and away from it, then still.
+            First::Heard => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 40.0);
+                (
+                    "move off low, then keep still",
+                    vec![
+                        Task::WalkTo {
+                            to: here + (here - from).normalize_or(Vec2::X) * 20.0,
+                            within: 1.5,
+                        },
+                        Task::Wait(20.0),
+                        Task::Wait(20.0),
+                    ],
+                )
+            }
             // In through the door it waited by, and into a corner out of
             // the doorway's line.
             First::DroneLock => match world.shelter(here) {
@@ -273,11 +276,7 @@ pub(super) fn direct(
         });
         bot.log.push(format!("  radio: {f:?} -> {response}"));
         if !tasks.is_empty() {
-            // Ahead of whatever it was doing.
-            for t in tasks.into_iter().rev() {
-                bot.tasks.push_front(t);
-            }
-            bot.elapsed = 0.0;
+            cut_in(&mut bot, tasks);
             let wait = match f {
                 First::DroneLock => 60.0,
                 First::Underground | First::Lamed => 25.0,
@@ -296,20 +295,17 @@ pub(super) fn direct(
     {
         run.dressed = now;
         bot.log.push("  (bleeding again: dressing on it)".into());
-        for t in world
-            .dress(&mut commands, root.translation)
-            .into_iter()
-            .rev()
-        {
-            bot.tasks.push_front(t);
-        }
-        bot.elapsed = 0.0;
+        let dress = world.dress(&mut commands, root.translation);
+        cut_in(&mut bot, dress);
     }
     // Get low for the machine that heard you, and in cover.
-    let low = run
-        .pending
-        .iter()
-        .any(|(row, _)| matches!(run.rows[*row].first, First::Heard | First::DroneLock));
+    // (And low while it sets up being heard: stood up in the open by day,
+    // it's seen, not heard.)
+    let low = run.step == Some(Step::Heard)
+        || run
+            .pending
+            .iter()
+            .any(|(row, _)| matches!(run.rows[*row].first, First::Heard | First::DroneLock));
     if input.crouch != low {
         input.crouch = low;
     }
@@ -535,7 +531,9 @@ pub(super) fn direct(
                 // A walker about its own business off to one side, and a
                 // shot it can't miss hearing.
                 let o = here;
-                let at = Vec3::new(o.x + 30.0, 0.0, o.y - 30.0);
+                // Far enough off to hear the shot and not see who fired it
+                // (at 40 m, by day, it saw the bot even crouched).
+                let at = Vec3::new(o.x + 60.0, 0.0, o.y - 60.0);
                 let site = world.zone.on_ground(o.x + 60.0, o.y - 50.0);
                 crate::robots::walker::spawn_walker(
                     &mut commands,
@@ -801,6 +799,21 @@ pub(super) fn direct(
     }
 }
 
+/// Tasks ahead of whatever the bot was doing. A shot it was taking is
+/// done with (resumed later, it would only be noise), and the trigger
+/// and the aim are let go: held through a walk, a rifle keeps firing.
+fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
+    if matches!(bot.tasks.front(), Some(Task::Fire { .. })) {
+        bot.tasks.pop_front();
+    }
+    bot.trigger = false;
+    bot.aim = false;
+    for t in tasks.into_iter().rev() {
+        bot.tasks.push_front(t);
+    }
+    bot.elapsed = 0.0;
+}
+
 /// The table, in the bot's log; a moment counts as passed when it was met
 /// and the driver's advice worked.
 fn report(bot: &mut Bot, rows: &[Row]) {
@@ -888,6 +901,7 @@ pub(super) struct World2<'w, 's> {
     remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
+    comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     doors: Query<'w, 's, &'static crate::world::buildings::Door>,
     door_at: Query<'w, 's, (Entity, &'static GlobalTransform), With<crate::world::buildings::Door>>,
     robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
@@ -952,7 +966,10 @@ impl World2<'_, '_> {
             .map(|(_, it, ..)| self.catalog.get(it.kind()).id.as_str())
     }
 
+    /// What's in a hand, as a right-handed bot names it (a left-handed one
+    /// plays mirrored).
     fn holding(&self, side: Side) -> Option<Entity> {
+        let side = side.mirrored(self.comfort.as_ref().is_some_and(|c| c.left_handed));
         self.hands
             .iter()
             .find(|(rh, _)| rh.side == side)
@@ -1354,6 +1371,15 @@ impl World2<'_, '_> {
             inside: ground(e.mid - e.out * 1.2),
             corner: ground(corner),
         })
+    }
+
+    fn nearest_robot(&self, near: Vec2) -> Option<Vec2> {
+        self.robots
+            .iter()
+            .filter(|(_, r, _)| !r.wrecked)
+            .filter_map(|(e, ..)| self.robot_at(e))
+            .map(|p| p.xz())
+            .min_by(|a, b| a.distance(near).total_cmp(&b.distance(near)))
     }
 
     fn robot_at(&self, robot: Entity) -> Option<Vec3> {

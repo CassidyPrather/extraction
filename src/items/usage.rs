@@ -1,6 +1,8 @@
 //! Using things: the radio, bandages and injectors, food, lights.
 //!
-//! VR: press the primary button (A/X) while holding a non-gun item. Flat: U
+//! VR: press the primary button (A/X) while holding a non-gun item; food
+//! and medicine are used with the hands instead (`interact::first_aid`),
+//! medicine by the button too with the one-handed comfort setting. Flat: U
 //! uses what's in the right hand.
 
 use bevy::prelude::*;
@@ -46,7 +48,21 @@ fn vr_use_button(
     mut last: Local<std::collections::HashMap<(Entity, usize), bool>>,
     mut uses: MessageWriter<UseItem>,
     driver: Res<crate::rig::RigDriver>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
+    use extraction_core::items::Category;
+    let one_handed = comfort.is_some_and(|c| c.one_handed);
+    let by_hand = |e: Entity| {
+        items
+            .get(e)
+            .is_ok_and(|i| match catalog.get(i.kind()).category {
+                Category::Food => true,
+                Category::Medical => !one_handed,
+                _ => false,
+            })
+    };
     if *driver != crate::rig::RigDriver::Xr {
         return;
     }
@@ -60,7 +76,7 @@ fn vr_use_button(
                 .insert((player, rh.side.index()), pressed)
                 .unwrap_or(false);
             if pressed && !was {
-                if let Some(item) = h.holding.filter(|i| !guns.contains(*i)) {
+                if let Some(item) = h.holding.filter(|i| !guns.contains(*i) && !by_hand(*i)) {
                     uses.write(UseItem { player, item });
                 }
             }
@@ -115,10 +131,14 @@ fn use_items(
             }
             _ if def.category == extraction_core::items::Category::Food => {
                 // No hunger meter. Eating is for the ritual of it.
-                raid.say(format!(
-                    "You eat the {}. It tastes of tin and smoke.",
-                    def.name.to_lowercase()
-                ));
+                if def.tags.iter().any(|t| t == "food:Water") {
+                    raid.say("You drink. It tastes of the bottle.");
+                } else {
+                    raid.say(format!(
+                        "You eat the {}. It tastes of tin and smoke.",
+                        def.name.to_lowercase()
+                    ));
+                }
                 consume = true;
             }
             _ => {}

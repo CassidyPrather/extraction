@@ -1,0 +1,7 @@
+# Training Yard at night: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m).
+# n02 looks up the sun's path, where the moon rides.
+n01_gate        0,0,75,0,-3
+n02_moon        0,0,75,345,28
+n03_track       0,0,20,0,-3
+n04_west        -60,0,0,270,0
+n05_belt        -85,0,40,0,0

@@ -65,6 +65,7 @@ fn spawn_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             },
             Collider::cuboid(0.3, 0.26, 0.03),
             CollisionLayers::new(Layer::Item, LayerMask::NONE),
+            crate::render::legibility::TextSource::Request,
             ScreenText {
                 text: String::new(),
                 size: Vec2::new(0.3, 0.26),
@@ -95,6 +96,7 @@ fn press_card(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut done: MessageWriter<crate::progression::JobDone>,
+    logbook: Res<crate::raid::logbook::Logbook>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -148,10 +150,16 @@ fn press_card(
                 }
                 have
             }
-            Job::Recover { .. } => {
+            Job::Recover { overnight, .. } => {
                 let have = in_stash(RECOVER_ITEM, 1, &stash);
                 if have.is_empty() {
                     raid.say(lines::NO_RECORDER);
+                    continue;
+                }
+                // An expedition counts when the raid it came home on had a
+                // night out in it.
+                if *overnight && !logbook.last.as_ref().is_some_and(|e| e.nights > 0) {
+                    raid.say(lines::EXPEDITION_NO_NIGHT);
                     continue;
                 }
                 have
@@ -385,7 +393,7 @@ fn card_text(
     progression: Res<Progression>,
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
-    epilogue: Res<crate::progression::Epilogue>,
+    epilogue: Res<crate::raid::epilogue::Epilogue>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
@@ -403,7 +411,7 @@ fn card_text(
         "DRIVER WANTS\n".to_owned()
     };
     match &p.job {
-        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.0),
+        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done),
         None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {

@@ -181,6 +181,8 @@ it. Thirty seconds now versus archaeology later.
 | `assets/audio/ambience/raven_*.ogg` | Freesound "Raven_Caw.wav" — <https://freesound.org/s/274439/> | KiddoFish86 | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/raven_*.ogg` | Freesound "Raven call.wav" — <https://freesound.org/s/328846/> | deleted_user_958643 | CC0 1.0 | 2026-10 |
 | `assets/audio/ambience/jackdaw_*.ogg` | Freesound "Group of jackdaw" — <https://freesound.org/s/612814/> | GeniusKevin | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/insects_night_*.ogg` | Freesound "180808 Crickets night insects busy chorus NOTL.mp3" — <https://freesound.org/s/571079/> | TRP | CC0 1.0 | 2026-10 |
+| `assets/audio/ambience/rustle_leaves_*.ogg` | Freesound "Wind rustling leaves through tree Cardiff" — <https://freesound.org/s/848978/> | gsparrysound | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo noises" — <https://freesound.org/s/188821/> | peridactyloptrix | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Small servo (arduino)" — <https://freesound.org/s/520514/> | gpag1 | CC0 1.0 | 2026-10 |
 | `assets/audio/machines/servo_*.ogg` | Freesound "Servo motor" — <https://freesound.org/s/322021/> | Burningmonkey | CC0 1.0 | 2026-10 |
