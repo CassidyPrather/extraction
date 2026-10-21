@@ -252,8 +252,16 @@ pub const LANDMARK_HEIGHT: f32 = 12.0;
 /// How far you can make one out in thick fog (the pea-souper's
 /// visibility), metres.
 pub const FOG_SIGHT: f32 = 150.0;
-/// How far in ordinary weather (drizzle).
-pub const CLEAR_SIGHT: f32 = 320.0;
+/// How far in ordinary weather (drizzle). Legibility's wayfinding
+/// renders (`scripts/wayfind.sh`, docs/LEGIBILITY.md "Wayfinding") put
+/// every landmark in front of the headset from the insertion and each
+/// rendezvous: past about 200 m in drizzle a structure keeps 3-7% of its
+/// contrast, which is nothing to steer by.
+pub const CLEAR_SIGHT: f32 = 200.0;
+/// Two landmarks of a kind closer than this are twins you can't tell
+/// apart, metres. Wider than [`CLEAR_SIGHT`]: one that's barely there
+/// past it still reads as "the mast" and sends you the wrong way.
+pub const UNIQUE_SIGHT: f32 = 320.0;
 /// Share of each main route from which a landmark is in sight in ordinary
 /// weather, and the longest blind stretch.
 pub const LANDMARK_SHARE: f32 = 0.7;
@@ -1122,7 +1130,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for (i, a) in marks.iter().enumerate() {
         for b in marks.iter().skip(i + 1) {
             let apart = a.apart(b);
-            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < CLEAR_SIGHT {
+            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,

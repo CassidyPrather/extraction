@@ -51,20 +51,26 @@ are printed for the onboarding work, which owns it.
 ## Landmarks and orientation
 
 In a headset you navigate by what you see, and the weather takes that
-away: drizzle leaves you 320 m (`CLEAR_SIGHT`), a pea-souper 150 m
-(`FOG_SIGHT`). The compass and the field map help, but the land should do
+away: drizzle leaves you 200 m (`CLEAR_SIGHT`), a pea-souper 150 m
+(`FOG_SIGHT`). Drizzle was 320 m until Legibility's wayfinding renders
+(docs/LEGIBILITY.md, "Wayfinding") stood at the insertion and every
+rendezvous and looked: past about 200 m a structure keeps 3-7% of its
+contrast, which is not there to steer by. The compass and the field map help, but the land should do
 most of the work.
 
 - From most of every main route a landmark is in sight over the land in
   ordinary weather: at least 70% of the way (`LANDMARK_SHARE`), never
   more than 200 m blind (`BLIND_GAP`).
 - Each landmark is one of a kind within sight: two of a kind closer than
-  `CLEAR_SIGHT` and you can't tell which is which. Masts, chimneys,
+  320 m (`UNIQUE_SIGHT`) and you can't tell which is which. That stays
+  wider than drizzle sight: a twin that's barely there past 200 m still
+  reads as "the mast" and sends you the wrong way. Masts, chimneys,
   towers: one of each in any view. A ropeway's pylons are a line to
   follow, not twins (`SERIES`). The lint also measures, per route, how
-  much of it has two of a kind in one view however far apart they are
-  (only Marrow Creek has any: its two ranger towers, 366 m apart, both in
-  sight from 21-41% of each route).
+  much of it has two of a kind in one view (within `CLEAR_SIGHT`)
+  however far apart they are: none now. Marrow Creek's two ranger
+  towers, 366 m apart, were both in sight from 20-41% of each route at
+  320 m; at 200 m never at once.
 - Every region you go to has something of its own: a structure at least
   6 m tall standing in it (any corner of its footprint or any top inside
   the region: a dam whose middle is over the line still counts), or a
@@ -98,12 +104,18 @@ landmark's share and where along the route it shows):
 
 | Valley | Landmarks | Routes: in sight (in fog), longest blind |
 | - | - | - |
-| Marrow Creek | mill race, radio mast, water tower, two ranger towers (the survey post, the RV's), the Gate | 100% (58-70%), 0 m |
+| Marrow Creek | mill race, radio mast, water tower, two ranger towers (the survey post, the RV's), the Gate | 91-93% (58-72%), 48 m |
 | Kettle Pass | headframe, ropeway station and its pylons, chapel, radio mast, ranger tower, chimney, the Gate | 100% (95-100%), 0 m |
-| Cinder Works | blast furnace, chimney, ranger tower, the Gate | 100% (80-89%), 0 m |
-| Sallow Reservoir | the dam, draw-off tower, church tower (steeple), water tower, radio mast, ranger tower, sorting gantry, the Gate | 93-100% (90-100%), 48 m |
+| Cinder Works | blast furnace, chimney, ranger tower, the Gate | 100% (80-89%), 2 m |
+| Sallow Reservoir | the dam, draw-off tower, church tower (steeple), water tower, radio mast, ranger tower, sorting gantry, the Gate | 93-100% (90-100%), 50 m |
 
-Every valley reads in drizzle. Fog is where they differ: Marrow Creek's
+Every valley reads in drizzle at 200 m, without a landmark added or
+moved: only Marrow Creek lost anything when drizzle came down from
+320 m (its routes from 100% to 91-93%, its longest blind stretch from
+0 to 48 m, all three just south of the creek before the mill race and
+the survey post's tower come into view). Kettle Pass and Cinder Works
+are tall and close enough together that nothing changed; Sallow's Sallow
+Head route went from 48 to 50 m blind. Fog is where they differ: Marrow Creek's
 routes are blind in fog for a third of the way (south of the creek
 nothing tall stands within 150 m: the insertion sees nothing in fog, the
 mill race is 235 m off), and `map_sight`'s hero-site search says where a
