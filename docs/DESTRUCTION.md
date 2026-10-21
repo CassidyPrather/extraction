@@ -13,6 +13,7 @@ Code: `src/destruction/`, with the geometry in
 | Plank door | rounds (at half their harm: they hole the boards, they don't split them), blows by kind (`wood::blow_share`: blunt in full, an edge half, a point a quarter) and blasts; a crowbar at its latch edge; a walker battering a wedged door | 260 (a Mosin's round is 90, a knife's thrust 40) | six boards' splinters; the doorway stands open |
 | Supply crate (in the open, under loot) | rounds, blows, blasts, a crowbar in its lid | 110 (four pistol rounds) | slats, and a roll of its loot table spilled out on top of what was on its lid |
 | Crate in a building (`Builder::crate_box`) | the same | 110, scaled by size | the same (its loot spot's table) |
+| Board over a window (`boards`) | rounds (two rifle rounds), blows, blasts, a crowbar at its end (90 N·m) | 60 | splinters; the (already broken) window behind |
 
 Steel doors don't break, and rounds stop in them (their leaf is plate to a
 round). Glass costs a round nothing to go through, so glass has no
@@ -79,6 +80,17 @@ grids don't know about holes yet.
 
 `EXTRACTION_BREACH=1` on a `--screenshot` run tears one where the view
 meets a wall, twenty frames before the capture (`breach.png`).
+
+## Boarded windows
+
+World models picks which sashes are boarded (`world::decay::boarded_sashes`,
+read by `boards::boarded_sashes`; a stub here until their branch is on
+main) and draws the board (`window_board`). Each of a boarded window's
+three boards is its own breakable entity (`boards::WindowBoard`): a
+plank to a round, `Timber` 60, a `Pryable` seam at its end, drawn by its
+model at the building's range, splintering when it goes, saved broken and
+nailed back up by the Surge. A boarded sash is always a weathered one, so
+there's no glass behind to draw.
 
 ## Broken by the years
 
