@@ -245,6 +245,19 @@ What it found and what changed:
   and trees): 3.2 cm and climbing-rope orange.
 - Doors, the folding shield and mine tubs are on the world layer and
   get no ring; their shapes carry them (handles, a tub on rails).
+- **Pry seams** showed nothing: with a crowbar in hand, every seam within
+  3 m shows a small green ring where the claw goes (`render::pry_cue`).
+
+In the render: `--afford DIR` (`scripts/afford.sh MAP [OUT] [--hour
+night]`) shoots up to three of each kind 1.5 m off, with and without
+it, from whichever side (front, back, either flank) a sight line
+reaches within 10 cm of its middle, else the side that sees farthest
+in. The training yard, by day in drizzle: 21 of 23 stand out. The two
+that don't are the gauge's: the bench's selector knob faces the truck
+bed's rail, with no room for a camera 1.5 m off where the hand reaches
+it; and the middle of three bolts 5 cm apart, whose neighbours fill in
+where it was. Things with no mesh of their own (a wreck part drawn in
+its building's surfaces) aren't shot.
 
 ## Wayfinding
 
