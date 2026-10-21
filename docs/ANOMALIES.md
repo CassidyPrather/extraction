@@ -170,6 +170,34 @@ water. So the views follow the layout when it moves.
 The gauge writes a contact sheet, `legibility.png`, and its numbers in
 `legibility.json`. The first run is kept as `legibility_before.*`.
 
+Where it stands: 13 of 18 views are under their floor, down from 14.
+The Hush now clears all three conditions: 11% of its box in fog and
+rain, and 3.7% at night where it was 1.3%.
+
+The fixes moved the other kinds, but not past 3%:
+
+| Kind | Fog before → after | Notes |
+|---|---|---|
+| Well | 0.2% → 1.2% | its dark lens now shows in fog |
+| Burner | 0.5% → 1.8% | |
+| Snare | 0.1% → 3.4% | passes in fog |
+| Mirror | — | 1.6% in rain, passes its 1% floor there |
+
+The lift, burner and snare views are of different anomalies than the
+first run's, because the layout moved with main.
+
+Two things the gauge itself still gets wrong:
+
+- `view_of` doesn't know rocks or floating crates. The mirror's view is
+  behind a boulder, and crates hang in the lift's and snare's.
+- The 3% floor favours big things. The burner's embers and glow read
+  plainly in the shot at 1.8%. A floor in square degrees, a patch a
+  couple of degrees across, would measure what the eye picks out
+  better.
+
+Next: those two fixes, then the lift in fog. It is still 0.0%; its
+leaves are lost in pea-souper fog even fogged at half distance.
+
 What it taught us:
 
 - **Fog takes the Zone's things as if half as far off.** Anomaly
