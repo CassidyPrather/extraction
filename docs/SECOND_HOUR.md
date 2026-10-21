@@ -6,7 +6,11 @@ meet something the yard doesn't cover, Lev says one short line on the
 radio with what to do. He says each line once per career, and the career
 saves which ones he's said (`firsts` in `career.ron`). The lines are
 spaced five seconds apart, because the wrist only shows the newest one.
-Each line fits the wrist (3 lines of 26 characters) and uses no game words.
+Each line fits the radio (3 lines of 26 characters) and uses no game words.
+The wrist pages a long line (3 lines of 18 a page, 2 under a caption's
+speaker), so where there's danger now, what to do comes first: it's on
+the first page, and the reason follows ("Get behind something. That chirp
+is it taking aim.").
 
 | Moment | When | He says |
 | - | - | - |
@@ -153,13 +157,13 @@ went into the game for that kind of player:
   lands before you're in cover, and the wound bleeds until dressed. The
   only sign was "BLEED" on the wrist's status line, and the bot (like a
   player who missed it) bled out later, waiting for the truck. Now Lev
-  says it once ("You're bleeding. Dressing on it now, before you drop."),
+  says it once ("Dressing on, now: you're bleeding. Before you drop."),
   the moment the yard's first-aid station was for.
 - **A lamed walker can't chase you, but it can still shoot.** Walking off
   in the open, as the old line ("it can't chase you now") suggested, got
   the bot shot. Walking off out of its sight (behind the bunker's kiosk)
   worked; it limped a few metres to look, and no further. Lev now says
-  so: "You've lamed it. It can't follow. Get out of its sight."
+  so: "Get out of its sight. You've lamed it; it can't follow."
 - **A torch and a slow walk down the bunker stair was fine** for 25 s at
   the foot. (The test `underground_a_crawler_sees_you_by_your_torch` says what happens
   further in.)

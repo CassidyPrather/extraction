@@ -335,7 +335,7 @@ const RADIO_COLUMNS: usize = 15;
 const RADIO_LINES: usize = 4;
 
 /// Lines of the driver's words a page on the wrist.
-const WRIST_LINES: usize = 3;
+pub(crate) const WRIST_LINES: usize = 3;
 
 /// Seconds a page of a long message stays up.
 const PAGE_SECS: f32 = 3.0;
@@ -411,7 +411,7 @@ pub fn radio_text(heard: &[String], page: usize) -> String {
 }
 
 /// Characters per line on the wrist: narrow keeps the type big.
-const WRIST_COLUMNS: usize = 18;
+pub(crate) const WRIST_COLUMNS: usize = 18;
 
 #[cfg(test)]
 mod tests {
