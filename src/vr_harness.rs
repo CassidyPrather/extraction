@@ -4093,6 +4093,34 @@ mod body {
         }
     }
 
+    /// Bending over (the head down and forward, looking down): the chest's
+    /// pouches lean forward with the chest, out from under the eyes, and
+    /// the belt's holster stays where a hand reaching down will find it.
+    #[test]
+    fn bending_over_the_pouches_lean_and_the_holster_stays() {
+        let (mut vr, _) = standing();
+        let pouch = slot(&mut vr, SlotKind::Pouch);
+        let holster = slot(&mut vr, SlotKind::Holster);
+        look(&mut vr, Vec3::new(0.0, 1.3, -0.25), 0.0, -1.1);
+        vr.step(60);
+        let bent_pouch = slot(&mut vr, SlotKind::Pouch);
+        let bent_holster = slot(&mut vr, SlotKind::Holster);
+        assert!(
+            holster.distance(bent_holster) < 0.03,
+            "the holster moved {}",
+            holster.distance(bent_holster)
+        );
+        assert!(
+            pouch.z - bent_pouch.z > 0.08,
+            "the pouch {pouch} to {bent_pouch}: not forward with the chest"
+        );
+        let eye = vr.feet() + Vec3::new(0.0, 1.3, -0.25);
+        assert!(
+            eye.y - bent_pouch.y > 0.2,
+            "the pouch {bent_pouch} at the eye {eye}"
+        );
+    }
+
     /// Straight out at arm's length and a little beyond: the shoulder
     /// comes forward (no further than a shoulder goes) and the drawn arm
     /// reaches the hand from it, not from somewhere off the body.
