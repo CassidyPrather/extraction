@@ -24,11 +24,13 @@ pub enum Step {
         map: &'static str,
         place: &'static str,
     },
-    /// Bring home `item`, left by the point of interest `place` in `map`.
+    /// Bring home `item`, left by the point of interest `place` in `map`
+    /// (or at `near`, when it's somewhere the place's name only points to).
     Bring {
         map: &'static str,
         place: &'static str,
         item: &'static str,
+        near: Option<[f32; 2]>,
     },
     /// Leave `item` (the contract's kit) by the point of interest `place`
     /// in `map`, then get home.
@@ -70,8 +72,9 @@ pub enum Unlock {
 /// When the driver offers it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Offered {
-    /// At the head of this ladder tier (an index into [`TIERS`]).
-    Tier(u32),
+    /// In this ladder tier (an index into [`TIERS`]), as its job `at` (0
+    /// is the tier's first).
+    Tier { tier: u32, at: u32 },
     /// Past the ladder, with this much trust.
     Deep { trust: u32 },
 }
@@ -82,8 +85,9 @@ pub struct Contract {
     pub name: &'static str,
     /// Who it's for, in the driver's words.
     pub giver: &'static str,
-    /// What he says it's about, on the card with the first step.
-    pub why: &'static str,
+    /// What he says about each step, on the card with it ("" for nothing
+    /// more than the step's own ask).
+    pub says: &'static [&'static str],
     pub offered: Offered,
     /// Raids needed in every one of the first valleys before it's offered.
     pub raided_all: bool,
@@ -105,11 +109,33 @@ pub const PHOTO_CONE: f32 = 0.2;
 
 pub const CONTRACTS: &[Contract] = &[
     Contract {
+        id: "post_counter",
+        name: "The post counter",
+        giver: "the Holm boy",
+        says: &["The Holm boy's grown. Wants his grandad's watch. The post office."],
+        offered: Offered::Tier { tier: 0, at: 1 },
+        raided_all: false,
+        steps: &[Step::Bring {
+            map: "marrow_creek",
+            place: "Village",
+            item: "holm_watch",
+            // The post office's counter, in the village.
+            near: Some([-20.0, 65.0]),
+        }],
+        kit: &[],
+        pay: &[("field_dressing", 1), ("matches", 2)],
+        trust: 1,
+        unlocks: &[],
+    },
+    Contract {
         id: "mast_relay",
         name: "The mast relay",
         giver: "Lev",
-        why: "I want to hear them talk. Put this up the radio mast for me.",
-        offered: Offered::Tier(1),
+        says: &[
+            "I want to hear them talk. Put this up the radio mast for me.",
+            "",
+        ],
+        offered: Offered::Tier { tier: 1, at: 0 },
         raided_all: false,
         steps: &[
             Step::Plant {
@@ -131,14 +157,18 @@ pub const CONTRACTS: &[Contract] = &[
         id: "hajek_tin",
         name: "Hajek's tin",
         giver: "Vera Hajkova",
-        why: "His sister wants what he kept. Mirek, at the charcoal hut. He stayed.",
-        offered: Offered::Tier(2),
+        says: &[
+            "His sister wants what he kept. Mirek, at the charcoal hut. He stayed.",
+            "If he walked down, he'd have passed the weir. Look in there.",
+        ],
+        offered: Offered::Tier { tier: 2, at: 0 },
         raided_all: false,
         steps: &[
             Step::Bring {
                 map: "kettle_pass",
                 place: "Charcoal hut",
                 item: "hajek_tin",
+                near: None,
             },
             Step::Scout {
                 map: "kettle_pass",
@@ -154,8 +184,11 @@ pub const CONTRACTS: &[Contract] = &[
         id: "walker_portrait",
         name: "A walker's portrait",
         giver: "the town paper",
-        why: "A man from the paper wants one, side on. Take the camera.",
-        offered: Offered::Tier(3),
+        says: &[
+            "A man from the town paper. Nobody believes it out there. He wants one, side on. Take the camera.",
+            "",
+        ],
+        offered: Offered::Tier { tier: 3, at: 0 },
         raided_all: false,
         steps: &[
             Step::Photograph {
@@ -175,7 +208,10 @@ pub const CONTRACTS: &[Contract] = &[
         id: "the_overflow",
         name: "The overflow",
         giver: "Lev",
-        why: "The depot's intake goes somewhere past the gate. Put a relay on it.",
+        says: &[
+            "The depot's intake goes somewhere past the gate. Put a relay on it.",
+            "",
+        ],
         offered: Offered::Deep { trust: 3 },
         raided_all: true,
         steps: &[
@@ -198,7 +234,7 @@ pub const CONTRACTS: &[Contract] = &[
         id: "the_heavy",
         name: "The heavy",
         giver: "the town paper",
-        why: "Now they want the big one. Get close. Get home.",
+        says: &["Now he wants the big one. Get close. Get home.", ""],
         offered: Offered::Deep { trust: 5 },
         raided_all: false,
         steps: &[
@@ -248,13 +284,13 @@ pub fn next_contract(p: &Progress) -> Option<&'static Contract> {
             return false;
         }
         match c.offered {
-            Offered::Tier(t) => {
+            Offered::Tier { tier: t, at } => {
                 let Some(tier) = TIERS.get(t as usize) else {
                     return false;
                 };
                 // The last tier's last job is the letter's.
                 let last = (t as usize == TIERS.len() - 1) as u32;
-                p.tier == t && p.done_in_tier == 0 && c.steps.len() as u32 + last <= tier.jobs
+                p.tier == t && p.done_in_tier == at && at + c.steps.len() as u32 + last <= tier.jobs
             }
             Offered::Deep { trust } => p.past_ladder() && p.trust >= trust,
         }
@@ -287,11 +323,19 @@ pub fn step_job(step: &Step, valleys: &[Valley]) -> Option<Job> {
             at: at(map, place)?,
             seen: false,
         },
-        Step::Bring { map, place, item } => Job::Bring {
+        Step::Bring {
+            map,
+            place,
+            item,
+            near,
+        } => Job::Bring {
             map: map.to_owned(),
             place: place.to_owned(),
             item: item.to_owned(),
-            at: at(map, place)?,
+            at: match near {
+                Some(n) => n,
+                None => at(map, place)?,
+            },
         },
         Step::Plant { map, place, item } => Job::Plant {
             map: map.to_owned(),
@@ -360,10 +404,11 @@ mod tests {
             for s in c.steps {
                 assert!(step_job(s, &vs).is_some(), "{}: no place for {s:?}", c.id);
             }
-            if let Offered::Tier(t) = c.offered {
+            assert_eq!(c.says.len(), c.steps.len(), "{}: a line a step", c.id);
+            if let Offered::Tier { tier: t, at } = c.offered {
                 let last = (t as usize == TIERS.len() - 1) as u32;
                 assert!(
-                    c.steps.len() as u32 + last <= TIERS[t as usize].jobs,
+                    at + c.steps.len() as u32 + last <= TIERS[t as usize].jobs,
                     "{}: too long for its tier",
                     c.id
                 );
@@ -398,6 +443,7 @@ mod tests {
         assert_eq!(
             ids,
             [
+                "post_counter",
                 "mast_relay",
                 "hajek_tin",
                 "walker_portrait",
@@ -450,8 +496,13 @@ mod tests {
     #[test]
     fn the_arc_offers_each_contract_once_in_its_place() {
         let mut p = Progress::default();
+        assert!(next_contract(&p).is_none(), "not the very first job");
+        p.done = 1;
+        p.done_in_tier = 1;
+        assert_eq!(next_contract(&p).map(|c| c.id), Some("post_counter"));
+        p.contracts_done.push("post_counter".into());
         p.done = 3;
-        assert!(next_contract(&p).is_none(), "nothing in the first tier");
+        p.done_in_tier = 0;
         p.tier = 1;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("mast_relay"));
         p.done_in_tier = 1;

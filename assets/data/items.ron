@@ -828,6 +828,11 @@
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
         ),
         (
+            id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",
+            description: "A plain steel watch on a worn strap. J. HOLM, 25 YEARS engraved on the back.",
+            category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"],
+        ),
+        (
             id: "hajek_tin", dims: Some((0.09, 0.025, 0.06)), name: "Hajek's tin",
             description: "A tobacco tin, scratched M.H. on the lid. Inside: a photograph, a ring on a string, a stub of pencil.",
             category: Curio, size: Tiny, mass: 0.12, bulk: 0.03, tags: ["metal"],

@@ -464,8 +464,8 @@ fn card_text(
         .and_then(|a| extraction_core::contracts::contract(&a.id).map(|c| (a, c)));
     let mut text = if let Some((a, c)) = contract {
         let mut head = lines::contract_head(c.name, c.giver, a.step, c.steps.len());
-        if a.step == 0 {
-            head += &format!("\"{}\"\n", c.why);
+        if let Some(says) = c.says.get(a.step as usize).filter(|s| !s.is_empty()) {
+            head += &format!("\"{says}\"\n");
         }
         head
     } else if (p.tier as usize) < TIERS.len() {
