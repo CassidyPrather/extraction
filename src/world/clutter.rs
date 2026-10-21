@@ -247,6 +247,17 @@ pub fn dress(
             }
         }
     }
+    // Who lived here (`Resident`), in a whole house Story hasn't written
+    // about: a few of their things where the valley's leave room.
+    if let (None, None) = (ruin, story) {
+        if let Some(r) = resident(xf, prefab) {
+            if r == Resident::OldCouple {
+                // Two cups on the table, not the family's dishes.
+                out.retain(|(n, _)| *n != "dishes");
+            }
+            out.extend(r.things(&s, w, d));
+        }
+    }
     // Story's houses.
     match story {
         Some(Story::Hana) => {
@@ -294,6 +305,129 @@ fn sill_ash(c: Vec3, len: f32, yaw: f32) -> (&'static str, Transform) {
             .with_rotation(Quat::from_rotation_y(yaw))
             .with_scale(Vec3::new(len, 1.0, 1.0)),
     )
+}
+
+/// Who lived in a house, from its seed: each leaves three or so telling
+/// things (`art/props/residents.py`). A house in four has nobody to tell
+/// of (or nothing that does).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Resident {
+    /// The village's teacher: a globe and exercise books on the sills, a
+    /// slate on the partition.
+    Teacher,
+    /// A family with small children: a cot in the corner, a rocking
+    /// horse, small boots by the door.
+    Family,
+    /// A hunter: traps on the peg by the door, a pelt on its frame.
+    Hunter,
+    /// An old couple: two cups on the table, spectacles on a book on the
+    /// sill, a walking stick by the door.
+    OldCouple,
+    /// A seamstress: the treadle machine under the window, a dress on its
+    /// dummy in the corner, pinned cloth on the sill.
+    Seamstress,
+    /// A radio ham: the set on the sill, its lead out of the window, the
+    /// log beside it.
+    RadioHam,
+    /// A railwayman: the timetable on the partition, his cap and lamp on
+    /// the pegs by the door.
+    Railwayman,
+}
+
+const RESIDENTS: [Resident; 7] = [
+    Resident::Teacher,
+    Resident::Family,
+    Resident::Hunter,
+    Resident::OldCouple,
+    Resident::Seamstress,
+    Resident::RadioHam,
+    Resident::Railwayman,
+];
+
+/// The resident of the house `prefab` placed at `xf`, if it has one.
+pub fn resident(xf: &Transform, prefab: &str) -> Option<Resident> {
+    let at = Vec2::new(xf.translation.x, xf.translation.z);
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x2e51);
+    if rng.f32() < 0.25 {
+        return None;
+    }
+    Some(RESIDENTS[rng.usize(..RESIDENTS.len())])
+}
+
+impl Resident {
+    /// Their things, building-local, in the slots of a `w` x `d` house.
+    fn things(self, s: &Slots, w: f32, d: f32) -> Vec<(&'static str, Transform)> {
+        let f = 0.5;
+        let (x, z) = (w * 0.5, d * 0.5);
+        // On a front sill, a little in from the sash, facing the room.
+        let sill = |k: usize, model: &'static str, along: f32| {
+            let (c, _, _) = s.sills[k];
+            (
+                model,
+                Transform::from_translation(c + Vec3::new(along, 0.0, 0.1)),
+            )
+        };
+        // The partition's face, a picture's height up.
+        let partition = |model: &'static str, along: f32| {
+            on(model, s.partition + Vec3::new(along, 0.35, 0.0), 0.0)
+        };
+        // The front -X corner of the front room, its floor clear.
+        let corner = Vec3::new(-x + 0.75, f, -z + 0.5);
+        match self {
+            Resident::Teacher => vec![
+                sill(0, "globe", -0.15),
+                sill(1, "exercise_books", 0.1),
+                partition("slate_board", -0.5),
+            ],
+            Resident::Family => vec![
+                on("cot", corner, 0.0),
+                on(
+                    "rocking_horse",
+                    s.room_floor + Vec3::new(-0.45, 0.0, 0.85),
+                    0.6,
+                ),
+                on(
+                    "small_boots",
+                    s.door_floor[1] + Vec3::new(0.3, 0.0, 0.05),
+                    0.2,
+                ),
+            ],
+            Resident::Hunter => vec![
+                wall("traps_hook", s.door_wall[1]),
+                partition("hide_frame", 0.6),
+            ],
+            Resident::OldCouple => vec![
+                on("two_cups", s.table[0], 0.1),
+                sill(0, "reading_glasses", 0.2),
+                wall("walking_stick", s.door_wall[1]),
+            ],
+            Resident::Seamstress => vec![
+                // Under the front's +X window, facing in.
+                on(
+                    "sewing_machine",
+                    Vec3::new(s.sills[1].0.x, f, -z + 0.09 + 0.3),
+                    std::f32::consts::PI,
+                ),
+                on("dress_form", corner, 0.4),
+                sill(0, "cloth_pinned", 0.0),
+            ],
+            Resident::RadioHam => vec![
+                {
+                    let (c, _, _) = s.sills[1];
+                    on(
+                        "radio_set",
+                        c + Vec3::new(0.0, 0.0, 0.12),
+                        std::f32::consts::PI,
+                    )
+                },
+                sill(0, "logbook", 0.0),
+            ],
+            Resident::Railwayman => vec![
+                partition("timetable", 0.55),
+                wall("cap_hook", s.door_wall[1]),
+            ],
+        }
+    }
 }
 
 /// The houses Story writes about, found by where they stand.
@@ -344,6 +478,46 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Every resident's things are built and stand inside the house,
+    /// clear of its loot (as far from a spot as the dishes are, or more).
+    #[test]
+    fn every_resident_has_their_things() {
+        let root = crate::asset_root_path();
+        for base in ["house_plank", "farmhouse", "house_brick"] {
+            let (w, d) = plan(base).unwrap();
+            let s = slots(w, d);
+            let geo = crate::world::buildings::prefab(base).unwrap();
+            for r in RESIDENTS {
+                let things = r.things(&s, w, d);
+                assert!(things.len() >= 2, "{r:?}");
+                for (model, t) in things {
+                    let path = root.join(crate::render::world_props::path(model));
+                    assert!(path.exists(), "{r:?}: no model {}", path.display());
+                    let p = t.translation;
+                    assert!(
+                        p.x.abs() < w * 0.5 && p.z.abs() < d * 0.5,
+                        "{r:?} {model} at {p}"
+                    );
+                    for l in &geo.loot {
+                        assert!(l.at.distance(p) > 0.35, "{r:?} {model} on {} loot", l.table);
+                    }
+                }
+            }
+        }
+        // Most houses have someone.
+        let map = crate::world::load_map_def("kettle_pass");
+        let houses: Vec<_> = map
+            .placements
+            .iter()
+            .filter(|p| plan(&p.prefab).is_some())
+            .collect();
+        let lived = houses
+            .iter()
+            .filter(|p| resident(&Transform::from_xyz(p.at[0], 0.0, p.at[1]), &p.prefab).is_some())
+            .count();
+        assert!(lived * 2 > houses.len(), "{lived} of {}", houses.len());
     }
 
     /// Story's houses get their things, and Hana's table stays bare.
