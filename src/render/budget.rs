@@ -1165,6 +1165,13 @@ pub(crate) mod tests {
             for (what, c, t) in most.iter().take(5) {
                 println!("    many {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
+            // `BUDGET_LIST=1`: every kind drawn, most first (to find what
+            // a merge added, when it's spread over the long tail).
+            if std::env::var("BUDGET_LIST").is_ok_and(|v| v != "0") {
+                for (what, c, t) in &most {
+                    println!("    all {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
+                }
+            }
             for (what, c, t) in load.shadow_by.iter().take(4) {
                 println!("    shadow {what}: {c} meshes, {:.0}k", *t as f64 / 1000.0);
             }
