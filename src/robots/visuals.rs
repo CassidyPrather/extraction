@@ -1711,11 +1711,12 @@ fn alert_eyes(
         let alive = part.alive();
         let want = match (alive, moods.get(&part.robot), robots.get(part.robot)) {
             (true, Some(&(color, on)), Ok((_, _, _, r))) if !r.wrecked && on > 0.0 => {
-                // Wide enough to read as a point at 60-80 m after dark.
+                // Wide enough to read as a point at 60-80 m on a clear
+                // night, when there's no haze to spread it.
                 let radius = if r.kind == RobotKind::Drone {
-                    0.4
+                    0.6
                 } else {
-                    0.8 * gaits.get(part.robot).map_or(1.0, |g| g.size)
+                    1.2 * gaits.get(part.robot).map_or(1.0, |g| g.size)
                 };
                 crate::world::halos::Halo { color, radius }
             }
@@ -1771,11 +1772,11 @@ fn shell_by_light(
         let day = *day_rough.get_or_insert(mat.perceptual_roughness);
         mat.perceptual_roughness = day.max(0.55) + (day - day.max(0.55)) * dusk;
     }
-    // The seams too: by day a cool line, after dark all but out. At full
-    // strength in the night's open exposure they clip to white and read
-    // before the eye's red does.
+    // The seams too: by day a cool line, after dark out. Any glow left in
+    // the night's open exposure reads as a cyan point beside the eye's red
+    // and muddles which robot is looking at you.
     if let Some(mut mat) = materials.get_mut(&m.glow) {
-        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.02 + 0.98 * dusk * dusk);
+        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (dusk * dusk);
     }
 }
 
