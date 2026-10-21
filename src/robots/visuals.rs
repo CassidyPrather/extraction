@@ -1611,11 +1611,10 @@ fn alert_eyes(
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
-    // After dark the eye opens up to a hard point (emissive about 40 at
-    // rest, past 100 once it has you), so a walker reads at 60-80 m on a
-    // clear night, and its glow stays round it even calm.
+    // After dark the eye opens up a little (the halo carries it at range:
+    // pushed much harder the core clips to white and the red is lost).
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
-    let gain = 1.0 + 9.0 * night;
+    let gain = 1.0 + 2.0 * night;
     // How much core each robot has left: a hurt one's eye gutters.
     let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
     for p in &parts {
@@ -1746,11 +1745,11 @@ fn shell_by_light(
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
     }
-    // The seams too: by day a cool line, after dark a faint one. At full
+    // The seams too: by day a cool line, after dark all but out. At full
     // strength in the night's open exposure they clip to white and read
     // before the eye's red does.
     if let Some(mut mat) = materials.get_mut(&m.glow) {
-        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.1 + 0.9 * dusk);
+        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.02 + 0.98 * dusk * dusk);
     }
 }
 
