@@ -195,7 +195,7 @@
         map: "cinder_works",
         name: "Engine shed tea break",
         // Two cups and the crib table in the north sidings' engine shed.
-        at: (48.0, -260.0),
+        at: (47.5, -258.0),
         rot: 195.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),

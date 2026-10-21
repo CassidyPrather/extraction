@@ -40,7 +40,11 @@ MARKER_STYLE = {
     "Offering": ((255, 150, 220), "☉"),
     "WorkSite": ((255, 140, 60), "⚒"),
     "TruckStop": ((80, 220, 120), "▭"),
+    "Sentry": ((255, 60, 60), "▼"),
 }
+# A sentry's reach and eye (extraction_core::sentry SIGHT, FOV).
+SENTRY_SIGHT = 55.0
+SENTRY_FOV = 50.0
 DANGER = [(120, 200, 120), (230, 210, 90), (240, 140, 60), (230, 60, 60)]
 
 
@@ -245,6 +249,19 @@ def render(dump, px_size=1400, heat=None, title=None, dim=0.0):
         else:
             d.rectangle([x - 4, y - 4, x + 4, y + 4], fill=(30, 30, 30), outline=(230, 230, 230))
         d.text((x + 6, y - 6), p["prefab"], fill=(220, 220, 220), font=f_small)
+    # Sentries: the ground they can ever look at, and the cable to the box.
+    for m in meta["markers"]:
+        if m["kind"] != "Sentry":
+            continue
+        half = m["arc"] / 2 + SENTRY_FOV / 2
+        wedge = [px(m["at"])]
+        for k in range(25):
+            b = np.radians(m["rot"] - half + 2 * half * k / 24)
+            wedge.append(px((m["at"][0] + np.sin(b) * SENTRY_SIGHT, m["at"][1] - np.cos(b) * SENTRY_SIGHT)))
+        d.polygon(wedge, outline=(255, 60, 60))
+        d.line([px(m["at"]), px(m["power"])], fill=(255, 220, 60), width=2)
+        bx, by = px(m["power"])
+        d.rectangle([bx - 3, by - 3, bx + 3, by + 3], fill=(255, 220, 60))
     # Markers.
     for m in meta["markers"]:
         col, glyph = MARKER_STYLE.get(m["kind"], ((255, 255, 255), "?"))
