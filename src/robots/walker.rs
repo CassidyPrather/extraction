@@ -32,6 +32,10 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Seeing you for the first time in a fight, it stops and looks this long
+/// (its eye and the Heard line have their moment) before it settles its
+/// turret on you: no first shot inside a newcomer's reaction time.
+pub const SIGHT_BEAT: f32 = 1.5;
 /// Fire through a wall: a walker that lost sight of you under a roof
 /// moments ago (at least [`BLIND_AFTER`], at most [`BLIND_WITHIN`]
 /// seconds), and knows within [`BLIND_SURE`] m where you are, within
@@ -1070,14 +1074,21 @@ fn walker_guns(
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
-    (entrances, path, mut blind): (
+    (entrances, path, mut blind, mut fighting_since): (
         Res<super::doors::Entrances>,
         crate::destruction::through::RoundPath,
         Local<std::collections::HashMap<Entity, Blind>>,
+        Local<std::collections::HashMap<Entity, f32>>,
     ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     blind.retain(|e, _| walkers.contains(*e));
+    fighting_since.retain(|e, _| {
+        walkers
+            .get(*e)
+            .is_ok_and(|(_, _, b, ..)| matches!(b, Brain::Engage))
+    });
     for (e, mut w, brain, aware, robot, children) in &mut walkers {
         w.gun_cooldown -= dt;
         if robot.wrecked || !matches!(brain, Brain::Engage) {
@@ -1181,6 +1192,11 @@ fn walker_guns(
         }
         let muzzle = gt.translation() + Vec3::Y * 0.05;
         if muzzle.distance(target) > 70.0 {
+            continue;
+        }
+        // A first look at you before anything else.
+        let since = *fighting_since.entry(e).or_insert(now);
+        if now - since < SIGHT_BEAT {
             continue;
         }
         // Tell first: the turret settles, then it fires.
