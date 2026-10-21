@@ -540,3 +540,32 @@ range of 200 times its size, 20 to 200 m: a 10 cm fitting goes at 20 m,
 about three pixels a side on the headset. The aerial view now draws 945.
 The gate, village and aerial shots with and without it
 (`EXTRACTION_SMALL_RANGES=0`) differ only in the grass's sway.
+
+## Guns at rest
+
+A gun is one entity per glTF primitive. Its `static` body is already
+one primitive per material, joined in Blender. Then come each moving
+part (bolt, selector, trigger, hammer), a seated magazine's own, and
+three for every round in a drum or clip. An AK-74 with its magazine is
+about 19 draws, a PPSh with its drum 55, a Nagant 49. The parts move only
+in hand.
+
+`render::gun_rest`: a gun that isn't held or steadied, isn't under the
+Player, and whose meshes have stayed the same for 30 frames is drawn as
+its shown leaves merged in the pose it was left in. They're grouped by
+material and by how each part casts the sun's shadow (merged together, a
+drum's rounds would cast at any distance; `small_shadows` keeps them to
+the eye's few metres). Merged guns are children of the gun, so they move
+and fade with it, and guns left alike share them. A hand taking the
+gun, or anything under it put on, taken off or gone, brings its parts
+back exactly. The muzzle crown (fouling, nicks) and a scope's vignette
+stay live. `EXTRACTION_GUN_REST=0` leaves every gun as its parts.
+
+Marrow Creek's start has 15 guns lying near the gate: 165 leaf meshes
+drawn as 125. Gate shadow draws went Marrow 391 to 361, Rime Fell 483 to
+445, Sallow 513 to 468, with shadow triangles unchanged. The aerial view
+went 954 to 919. The gate views' own draws don't move: those guns are
+behind the cameras. `docs/shots/performance/guns_at_rest.png` shows
+those guns with it off (top) and on (bottom); only the grass sway
+differs. Tests: `gun_rest::tests::guns_lying_about_rest` and
+`a_resting_gun_wakes`.
