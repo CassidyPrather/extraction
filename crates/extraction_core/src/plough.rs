@@ -91,7 +91,11 @@ pub fn along(points: &[[f32; 2]], s: f32) -> ([f32; 2], [f32; 2]) {
 /// Which side the bank goes (+1: the right of the way it's going, -1:
 /// the left): the downhill side, from the ground's height on each.
 pub fn bank_side(left_height: f32, right_height: f32) -> f32 {
-    if right_height <= left_height { 1.0 } else { -1.0 }
+    if right_height <= left_height {
+        1.0
+    } else {
+        -1.0
+    }
 }
 
 /// Whether a lane cleared `age` seconds ago is still clean with snow
@@ -220,7 +224,10 @@ mod tests {
 
     #[test]
     fn the_horn_comes_well_before_the_auger() {
-        assert!(HORN_LEAD > 6.0, "seconds to get out of its lane: {HORN_LEAD}");
+        assert!(
+            HORN_LEAD > 6.0,
+            "seconds to get out of its lane: {HORN_LEAD}"
+        );
         assert!(in_lane_ahead(15.0, 0.5));
         assert!(!in_lane_ahead(15.0, 3.0), "off the road's middle: no horn");
         assert!(in_mouth(MOUTH + 0.2, 1.0));
@@ -233,7 +240,10 @@ mod tests {
         assert!(lane_fresh(60.0, 0.0));
         assert!(lane_fresh(LANE_LIFE - 1.0, 0.0));
         assert!(!lane_fresh(LANE_LIFE + 1.0, 0.0));
-        assert!(!lane_fresh(LANE_LIFE_FALLING + 1.0, 1.0), "faster in a blizzard");
+        assert!(
+            !lane_fresh(LANE_LIFE_FALLING + 1.0, 1.0),
+            "faster in a blizzard"
+        );
         assert_eq!(bank_side(10.0, 9.0), 1.0, "the right is lower");
         assert_eq!(bank_side(9.0, 10.0), -1.0);
     }

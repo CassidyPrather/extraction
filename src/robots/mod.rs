@@ -33,6 +33,8 @@ pub mod mender_look;
 mod mind_tests;
 pub mod minelayer;
 pub mod minelayer_look;
+pub mod plough;
+pub mod plough_look;
 pub mod pylon;
 pub mod reel;
 pub mod search;
@@ -279,6 +281,7 @@ impl Plugin for RobotsPlugin {
                     spotter::SpotterPlugin,
                     minelayer::MinelayerPlugin,
                     mender::MenderPlugin,
+                    plough::PloughPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
