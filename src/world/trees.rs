@@ -1628,7 +1628,10 @@ mod card_shrink_tests {
                 .map(|(p, c)| Vec3::from(*p).distance(Vec3::from(*c)))
                 .fold(0.0f32, f32::max);
             println!("{species:?}: corners at most {far:.2} m from their card's centre");
-            assert!(far < 4.0, "{species:?}: a corner {far:.1} m from its centre");
+            assert!(
+                far < 4.0,
+                "{species:?}: a corner {far:.1} m from its centre"
+            );
             assert!(m.trunk.attribute(ATTRIBUTE_CARD_CENTRE).is_none());
         }
     }

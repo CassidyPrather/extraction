@@ -111,29 +111,43 @@ fn spawn_terrain_meshes(
     let hm = &zone.hm;
     let cells = hm.n - 1;
     let step = (CHUNK as f32 / hm.cell).round() as usize;
+    let mut spans = Vec::new();
     let mut j0 = 0;
     while j0 < cells {
         let mut i0 = 0;
         while i0 < cells {
             let i1 = (i0 + step).min(cells);
             let j1 = (j0 + step).min(cells);
-            for (lod, (spacing, _)) in LODS.iter().enumerate() {
-                let mesh = chunk_mesh(&zone, &canopy, i0, j0, i1, j1, *spacing);
-                commands.spawn((
-                    Name::new("Terrain chunk"),
-                    TerrainChunk { lod },
-                    crate::render::centred(&mut meshes, mesh),
-                    MeshMaterial3d(material.clone()),
-                    lod_range(lod, FOG_CULL_DEFAULT),
-                    // Under this sky the land's own shadows are faint, and
-                    // the cascades are drawn per eye: it takes shadows
-                    // (trees, buildings) but casts none.
-                    bevy::light::NotShadowCaster,
-                ));
-            }
+            spans.push((i0, j0, i1, j1));
             i0 = i1;
         }
         j0 += step;
+    }
+    // The chunks' meshes on every core (each is its own); spawned after.
+    let built: Vec<Vec<Mesh>> = bevy::tasks::ComputeTaskPool::get().scope(|scope| {
+        for &(i0, j0, i1, j1) in &spans {
+            let (zone, canopy) = (&zone, &canopy);
+            scope.spawn(async move {
+                LODS.iter()
+                    .map(|(spacing, _)| chunk_mesh(zone, canopy, i0, j0, i1, j1, *spacing))
+                    .collect()
+            });
+        }
+    });
+    for lods in built {
+        for (lod, mesh) in lods.into_iter().enumerate() {
+            commands.spawn((
+                Name::new("Terrain chunk"),
+                TerrainChunk { lod },
+                crate::render::centred(&mut meshes, mesh),
+                MeshMaterial3d(material.clone()),
+                lod_range(lod, FOG_CULL_DEFAULT),
+                // Under this sky the land's own shadows are faint, and
+                // the cascades are drawn per eye: it takes shadows
+                // (trees, buildings) but casts none.
+                bevy::light::NotShadowCaster,
+            ));
+        }
     }
 }
 
