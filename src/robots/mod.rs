@@ -403,6 +403,8 @@ fn wreck_loot(
     let Some(loot) = loot else {
         return;
     };
+    // (Salvaged or gone: no timer to keep.)
+    timers.retain(|e, _| robots.contains(*e));
     for (e, robot, gt, mut rng, crawler, hound) in &mut robots {
         if !robot.wrecked {
             continue;
