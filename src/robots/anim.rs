@@ -720,7 +720,9 @@ pub(crate) fn walk(
     mut steps: MessageWriter<WalkerStep>,
 ) {
     let dt = time.delta_secs();
-    let filter = SpatialQueryFilter::from_mask([Layer::World]);
+    // Feet land on what's lying about too: rubble and shards
+    // (`destruction`), wreckage, crates and loose things.
+    let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
     for (mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in &mut walkers {
         let pos = t.translation - g.sway;
         // Steering along the path.
@@ -1045,6 +1047,81 @@ mod tests {
             assert!(hip.distance(foot) <= (UPPER + LOWER) * size + 0.01);
             assert!((hip.distance(knee) - UPPER * size).abs() < 1e-3);
         }
+    }
+
+    /// Feet meet what's lying about: walking over a block of rubble
+    /// (Destruction's debris layer), every foot that comes down on it
+    /// stands on its top, neither floating nor sunk.
+    #[test]
+    fn feet_stand_on_rubble() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let block = Vec3::new(at.x + 2.6, 0.0, at.z);
+        let base = zone.ground(block.x, block.z);
+        let half = Vec3::new(0.7, 0.15, 0.9);
+        let top = base + 2.0 * half.y;
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+            CollisionLayers::new(Layer::Debris, [Layer::World]),
+            Transform::from_xyz(block.x, base + half.y, block.z),
+        ));
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..20 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+            vec![Vec3::new(at.x + 6.0, 0.0, at.z)];
+        let mut on_top = 0;
+        for _ in 0..(90 * 8) {
+            app.update();
+            let w = app.world().get::<Walker>(walker).unwrap();
+            for f in &w.feet {
+                let inside = (f.planted.x - block.x).abs() < half.x - 0.08
+                    && (f.planted.z - block.z).abs() < half.z - 0.08;
+                if f.alive && f.t >= 1.0 && inside {
+                    assert!(
+                        (f.planted.y - top).abs() < 0.06,
+                        "a foot on the block at {:.2} m from its top",
+                        f.planted.y - top
+                    );
+                    on_top += 1;
+                }
+            }
+        }
+        assert!(
+            on_top > 30,
+            "it walked over the block ({on_top} foot-ticks on it)"
+        );
     }
 
     /// Underground, below the terrain, footing is the floor the ray finds,
