@@ -70,11 +70,14 @@ impl Part {
             BreakKind::CarBonnet | BreakKind::CarBoot => (None, CAR_LID_PRY),
             BreakKind::CarWheel => (None, CAR_WHEEL_PRY),
         };
-        let model_at = if b.kind.in_car_space() {
-            let back = b.at.rotation.inverse();
-            Transform::from_translation(-(back * b.at.translation)).with_rotation(back)
-        } else {
-            Transform::from_scale(b.at.scale)
+        // A car's part is modelled in the car's space: back from its box
+        // there. (Not a part we know: drawn as its box would be.)
+        let model_at = match b.model.filter(|_| b.kind.in_car_space()) {
+            Some(drawn) => car_model_at(drawn).unwrap_or_else(|| {
+                warn!("{drawn}: not a car part we know");
+                Transform::IDENTITY
+            }),
+            None => Transform::from_scale(b.at.scale),
         };
         Part {
             at: (*bxf * b.at.with_scale(Vec3::ONE)).with_scale(Vec3::ONE),
@@ -104,6 +107,124 @@ impl Plugin for StripPlugin {
                 fit_breakables.in_set(super::DestructionSystems),
             );
     }
+}
+
+/// One separable part of a car wreck's model: `model#node`, and its box in
+/// the car's space (from the model's own bounds: centre, size, metres).
+struct CarNode(&'static str, [f32; 3], [f32; 3]);
+
+/// Kit's car wrecks (`art/vehicles/wrecks.py`): each a model whose
+/// separable parts are its top-level nodes, in the car's space (floor
+/// under the wheelbase's middle, front to -Z, +X its right side).
+const CARS: &[(&str, &[CarNode])] = &[(
+    "wreck_lada",
+    &[
+        CarNode(
+            "wreck_lada#bonnet",
+            [0.0, 0.843, -1.493],
+            [1.52, 0.035, 1.015],
+        ),
+        CarNode("wreck_lada#boot", [0.0, 0.852, 1.63], [1.52, 0.035, 0.72]),
+        CarNode(
+            "wreck_lada#door_fl",
+            [-0.766, 0.83, -0.467],
+            [0.092, 0.99, 0.995],
+        ),
+        CarNode(
+            "wreck_lada#door_fr",
+            [0.766, 0.83, -0.467],
+            [0.092, 0.99, 0.995],
+        ),
+        CarNode(
+            "wreck_lada#door_rl",
+            [-0.766, 0.83, 0.527],
+            [0.092, 0.99, 0.855],
+        ),
+        CarNode(
+            "wreck_lada#door_rr",
+            [0.766, 0.83, 0.527],
+            [0.092, 0.99, 0.855],
+        ),
+        CarNode(
+            "wreck_lada#wheel_fl",
+            [-0.68, 0.27, -1.21],
+            [0.17, 0.58, 0.58],
+        ),
+        CarNode(
+            "wreck_lada#wheel_fr",
+            [0.68, 0.27, -1.21],
+            [0.17, 0.58, 0.58],
+        ),
+        CarNode(
+            "wreck_lada#wheel_rl",
+            [-0.68, 0.27, 1.21],
+            [0.17, 0.58, 0.58],
+        ),
+        CarNode(
+            "wreck_lada#wheel_rr",
+            [0.68, 0.27, 1.21],
+            [0.17, 0.58, 0.58],
+        ),
+    ],
+)];
+
+/// A car wreck's parts as a building's breakables, the car standing at
+/// `at` in the building's space: a door or a wheel faces out of its side,
+/// a bonnet or a boot lid up. For the prefab that places the car (it
+/// draws only the model's `body` node, and collides only the body).
+pub fn car_parts(model: &'static str, at: Transform) -> Vec<Breakable> {
+    let Some((_, nodes)) = CARS.iter().find(|(m, _)| *m == model) else {
+        return Vec::new();
+    };
+    nodes
+        .iter()
+        .map(|n| {
+            let (local, size) = car_node_pose(n);
+            let node = super::wood::model_node(n.0).1.unwrap_or_default();
+            let (kind, mat, yields) = match node.split('_').next().unwrap_or_default() {
+                "door" => (BreakKind::CarDoor, Mat::PaintedMetal, "car_door"),
+                "wheel" => (BreakKind::CarWheel, Mat::RustyMetal, "car_wheel"),
+                "bonnet" => (BreakKind::CarBonnet, Mat::PaintedMetal, "scrap_metal"),
+                _ => (BreakKind::CarBoot, Mat::PaintedMetal, "scrap_metal"),
+            };
+            Breakable {
+                kind,
+                at: at * local,
+                size,
+                model: Some(n.0),
+                mat,
+                yields: Some(yields),
+            }
+        })
+        .collect()
+}
+
+/// A car part's box in the car's space, and its size: its outer face to
+/// local -Z, its long side along local x. A lid lying flat faces up; a
+/// door or a wheel faces out of its side.
+fn car_node_pose(CarNode(_, c, s): &CarNode) -> (Transform, Vec3) {
+    use std::f32::consts::FRAC_PI_2;
+    let (c, s) = (Vec3::from(*c), Vec3::from(*s));
+    let (rot, size) = if s.y < s.x.min(s.z) {
+        (Quat::from_rotation_x(FRAC_PI_2), Vec3::new(s.x, s.z, s.y))
+    } else {
+        let out = if c.x < 0.0 { FRAC_PI_2 } else { -FRAC_PI_2 };
+        (Quat::from_rotation_y(out), Vec3::new(s.z, s.y, s.x))
+    };
+    (Transform::from_translation(c).with_rotation(rot), size)
+}
+
+/// Where a car part's model goes on the part: back from its box to the
+/// car's space its node is modelled in. `None` for a part not in
+/// [`CARS`].
+fn car_model_at(drawn: &str) -> Option<Transform> {
+    let n = CARS
+        .iter()
+        .flat_map(|(_, nodes)| nodes.iter())
+        .find(|n| n.0 == drawn)?;
+    let (local, _) = car_node_pose(n);
+    let back = local.rotation.inverse();
+    Some(Transform::from_translation(-(back * local.translation)).with_rotation(back))
 }
 
 /// Put up a new building's shutters, fence panels and wreck parts (but
