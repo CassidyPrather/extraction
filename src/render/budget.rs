@@ -142,6 +142,9 @@ impl Plugin for BudgetPlugin {
             .add_systems(FixedFirst, start_tick)
             .add_systems(FixedLast, end_tick)
             .add_systems(Update, log_cpu);
+        if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
+            app.add_systems(Last, log_counts);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -1836,4 +1839,45 @@ pub(crate) mod tests {
     fn kettle_pass_holds_the_budget_in_snow() {
         holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
+}
+
+/// `EXTRACTION_COUNTS=1`: every ten seconds, what the world holds (all
+/// entities, lights, meshes, the names that grew most since last time).
+/// For something that piles up while you stand still.
+fn log_counts(
+    time: Res<Time<Real>>,
+    mut last: Local<(f32, std::collections::HashMap<String, usize>)>,
+    all: Query<Option<&Name>>,
+    points: Query<(), With<PointLight>>,
+    spots: Query<(), With<SpotLight>>,
+    meshes: Query<&ViewVisibility, With<Mesh3d>>,
+) {
+    let now = time.elapsed_secs();
+    if now - last.0 < 10.0 {
+        return;
+    }
+    last.0 = now;
+    let mut names: std::collections::HashMap<String, usize> = default();
+    let mut n = 0;
+    for name in &all {
+        n += 1;
+        *names
+            .entry(name.map_or("(unnamed)".into(), |n| n.as_str().to_owned()))
+            .or_default() += 1;
+    }
+    let shown = meshes.iter().filter(|v| v.get()).count();
+    let mut grew: Vec<(String, i64)> = names
+        .iter()
+        .map(|(k, v)| (k.clone(), *v as i64 - *last.1.get(k).unwrap_or(&0) as i64))
+        .filter(|(_, d)| *d != 0)
+        .collect();
+    grew.sort_by_key(|(_, d)| -d.abs());
+    grew.truncate(8);
+    info!(
+        "counts: {n} entities, {} point lights, {} spot lights, {} meshes ({shown} visible); grew {grew:?}",
+        points.iter().count(),
+        spots.iter().count(),
+        meshes.iter().count(),
+    );
+    last.1 = names;
 }
