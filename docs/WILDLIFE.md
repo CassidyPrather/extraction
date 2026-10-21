@@ -177,6 +177,13 @@ the carcass (despawns it) takes the body with it. `bodies::Killed` says
 so, and the sim logs `animal_killed`. The shot itself still flushes every
 flock and herd in earshot.
 
+A deer's or a dog's carcass is a body to drag (`interact::carry`'s
+`Draggable`: by its mass, never lifted, scraping): a box the animal's size
+lying on its side (deer 50 kg, dog 25 kg), on the items' layer, turning
+only about the vertical. Let go, it settles and goes static. The herd
+draws the dead animal on the ground under it, facing its way
+(`bodies::drag_along`). A bird's carcass stays where it fell.
+
 ## Fish
 
 Trout in the creeks (`wildlife::fish`): the water near you is cut into
@@ -319,7 +326,9 @@ wind thin it. When the insects stop, something is close.
   the fright, and raise the alarm at most once a minute; determinism.
 - `wildlife::app_tests::animals_can_be_shot_and_their_carcasses_collected`:
   a ray down the ballistics' own filter finds a deer's body; a hit kills
-  it and leaves a carcass; collected, the body and its collider go; a
+  it and leaves a carcass, a 50 kg body to drag that comes to rest on the
+  ground, the deer drawn where it's moved to; collected, the body and its
+  collider go; a
   bird shot off its perch lies on what's under it.
 - `perches::scene_perches_are_on_top_of_things`, `flock::empty_tests`
   (a map with nothing built has no flocks), `doc_tests` (this file stays
