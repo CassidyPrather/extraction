@@ -93,9 +93,85 @@ impl Plugin for HooksPlugin {
             .add_message::<Cut>()
             .add_systems(
                 FixedUpdate,
-                (smash, pry, cut).in_set(super::DestructionSystems),
+                (seat_crowbar, crowbar_gives, smash, pry, cut)
+                    .chain()
+                    .in_set(super::DestructionSystems),
             );
     }
+}
+
+/// How near the crowbar's claw must come to a seam to seat in it, m.
+pub const SEAT_RADIUS: f32 = 0.12;
+
+/// The crowbar (`interact::tools::crowbar`) seats on every seam here too:
+/// a board's end, a crate's lid, a shutter's hinge, a bus panel's edge.
+/// Not a door's: the crowbar has its own seat at a door's latch edge, to
+/// burst a jammed door open (breaking one down is for blows).
+#[allow(clippy::type_complexity)]
+fn seat_crowbar(
+    mut commands: Commands,
+    seams: Query<(Entity, &Pryable, Option<&ChildOf>), Added<Pryable>>,
+    doors: Query<(), With<crate::world::buildings::DoorLeaf>>,
+) {
+    for (e, p, parent) in &seams {
+        if parent.is_some_and(|c| doors.contains(c.parent())) || doors.contains(e) {
+            continue;
+        }
+        commands
+            .entity(e)
+            .insert(crate::interact::tools::crowbar::Pryable {
+                needs: p.needs,
+                seam: p.seam,
+                radius: SEAT_RADIUS,
+            });
+    }
+}
+
+/// The crowbar's strain held long enough on one of ours: it comes off.
+fn crowbar_gives(
+    mut commands: Commands,
+    mut free: MessageReader<crate::interact::tools::crowbar::PriedFree>,
+    mut seams: Query<(&Pryable, &mut Timber, &GlobalTransform)>,
+    mut broken: ResMut<Broken>,
+    mut out: MessageWriter<Broke>,
+) {
+    for f in free.read() {
+        if let Ok((seam, mut t, gt)) = seams.get_mut(f.target) {
+            come_off(
+                &mut commands,
+                f.target,
+                seam,
+                &mut t,
+                gt,
+                &mut broken,
+                &mut out,
+            );
+        }
+    }
+}
+
+/// Levered off: away from its seam, gently, and gone till the Surge.
+fn come_off(
+    commands: &mut Commands,
+    e: Entity,
+    seam: &Pryable,
+    t: &mut Timber,
+    gt: &GlobalTransform,
+    broken: &mut Broken,
+    out: &mut MessageWriter<Broke>,
+) {
+    if t.hp <= 0.0 {
+        return;
+    }
+    t.hp = 0.0;
+    t.push = gt.rotation() * Vec3::Z * 1.2;
+    broken.0.insert(t.key);
+    out.write(Broke {
+        at: gt.transform_point(seam.seam),
+        stuff: super::Stuff::Wood,
+        size: 0.3,
+    });
+    commands.entity(e).despawn();
 }
 
 /// Seams on what can be pried: a plank door's latch edge, a crate's lid.
@@ -191,19 +267,10 @@ fn pry(
             continue;
         }
         seam.held += dt;
-        if seam.held < PRY_HOLD || t.hp <= 0.0 {
+        if seam.held < PRY_HOLD {
             continue;
         }
-        t.hp = 0.0;
-        // Levered away from the seam: gently.
-        t.push = gt.rotation() * Vec3::Z * 1.2;
-        broken.0.insert(t.key);
-        out.write(Broke {
-            at: gt.transform_point(seam.seam),
-            stuff: super::Stuff::Wood,
-            size: 0.3,
-        });
-        commands.entity(e).despawn();
+        come_off(&mut commands, e, &seam, &mut t, gt, &mut broken, &mut out);
     }
 }
 

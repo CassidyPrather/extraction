@@ -1606,3 +1606,42 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
         assert!(after.iter().any(|q| q.1.distance(p) < 0.01), "back at {p}");
     }
 }
+
+#[test]
+fn the_crowbar_seats_on_our_seams_and_what_gives_comes_off() {
+    use super::strip::{SHUTTER_HP, Strippable};
+    use crate::interact::tools::crowbar::{PriedFree, Pryable as BarSeat};
+    let mut app = app(None);
+    run(&mut app, 3);
+    // Every seam of ours has a seat for the bar, but a door's (the
+    // bar's own latch seat bursts a jammed door).
+    let unseated = app
+        .world_mut()
+        .query_filtered::<Entity, (With<super::hooks::Pryable>, Without<BarSeat>)>()
+        .iter(app.world())
+        .count();
+    let doors = app
+        .world_mut()
+        .query_filtered::<Entity, (With<super::hooks::Pryable>, With<ChildOf>)>()
+        .iter(app.world())
+        .count();
+    assert_eq!(
+        unseated, doors,
+        "only doors' seams are left to the bar's own"
+    );
+    let (shutter, at) = app
+        .world_mut()
+        .query_filtered::<(Entity, &GlobalTransform, &Timber), (With<Strippable>, With<BarSeat>)>()
+        .iter(app.world())
+        .find(|(.., t)| t.max == SHUTTER_HP)
+        .map(|(e, g, _)| (e, g.translation()))
+        .expect("a shutter the bar seats on");
+    let bar = app.world_mut().spawn_empty().id();
+    app.world_mut().write_message(PriedFree {
+        target: shutter,
+        by: bar,
+    });
+    run(&mut app, 2);
+    assert!(app.world().get_entity(shutter).is_err(), "it came off");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+}
