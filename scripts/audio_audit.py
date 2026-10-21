@@ -248,7 +248,14 @@ def main():
         with open(out / "mix.txt", "a") as f:
             f.write("\n\n" + text + "\n")
     flagged += room_flags
-    flagged += len(audio_music.run(sets, out))
+    # The music pass returns the lines it flags.
+    music_flags = audio_music.run(sets, out)
+    if music_flags:
+        text = "Music (src/radio):\n" + "\n".join("    " + f for f in music_flags)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n" + text + "\n")
+    flagged += len(music_flags)
     import audio_binaural  # noqa: E402  (where the headset puts sounds)
     ear_flags, ear_lines = audio_binaural.run(out)
     if ear_lines:

@@ -83,6 +83,16 @@ pub const STAND_INS: &[StandIn] = &[
         variants: 4,
         render: lap,
     },
+    StandIn {
+        set: "body/cough",
+        variants: 4,
+        render: cough,
+    },
+    StandIn {
+        set: "wildlife/canary",
+        variants: 5,
+        render: canary,
+    },
 ];
 
 pub fn is_stand_in(set: &str) -> bool {
@@ -430,6 +440,62 @@ fn lap(rng: &mut Rng, sr: f32) -> Vec<f32> {
             (a.run(s) + 0.35 * b.run(s) * (1.0 - x)) * env
         })
         .collect()
+}
+
+/// A cough in bad air: one to three hard barks of breath, each a rush of
+/// noise through the throat's formants with a rough voiced edge, falling
+/// off as the lungs empty, 0.3-1.1 s.
+fn cough(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let fits = 1 + (rng.f32() * 2.99) as usize;
+    let mut out = Vec::new();
+    for k in 0..fits {
+        let p = 160.0 * jitter(rng, 0.2);
+        let secs = 0.22 * jitter(rng, 0.2);
+        let open = 450.0 * jitter(rng, 0.15);
+        let mut bark = call(
+            rng,
+            sr,
+            secs,
+            |x| p * (1.0 - 0.3 * x),
+            |x| (x / 0.04).min(1.0) * (1.0 - x).max(0.0).powf(1.6),
+            &[(open, 2.0, 1.0), (1400.0, 2.5, 0.7), (2700.0, 3.0, 0.35)],
+            8,
+            2.5,
+        );
+        // Each one weaker: less breath left.
+        let g = 1.0 - 0.25 * k as f32;
+        bark.iter_mut().for_each(|v| *v *= g);
+        out.extend(bark);
+        out.extend(std::iter::repeat_n(
+            0.0,
+            (0.09 * jitter(rng, 0.3) * sr) as usize,
+        ));
+    }
+    out
+}
+
+/// A canary's alarm: a run of thin, quick "tsip" notes falling from
+/// 3.5-4.5 kHz, three to seven of them, each 40 ms.
+fn canary(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let notes = 3 + (rng.f32() * 4.99) as usize;
+    let f0 = 4000.0 * jitter(rng, 0.12);
+    let mut out = Vec::new();
+    for _ in 0..notes {
+        let len = (0.04 * jitter(rng, 0.2) * sr) as usize;
+        let f = f0 * jitter(rng, 0.05);
+        let mut ph = 0.0f32;
+        for i in 0..len {
+            let x = i as f32 / len as f32;
+            ph = (ph + f * (1.0 - 0.3 * x) / sr).fract();
+            let env = (x / 0.15).min(1.0) * (1.0 - x).powf(1.2);
+            out.push(((TAU * ph).sin() + 0.2 * (2.0 * TAU * ph).sin()) * env);
+        }
+        out.extend(std::iter::repeat_n(
+            0.0,
+            (0.03 * jitter(rng, 0.3) * sr) as usize,
+        ));
+    }
+    out
 }
 
 #[cfg(test)]

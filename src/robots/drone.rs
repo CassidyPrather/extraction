@@ -434,12 +434,24 @@ fn drone_guns(
     mut locks: MessageWriter<DroneLock>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
+    mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
+    fighting_since.retain(|e, _| {
+        drones
+            .get(*e)
+            .is_ok_and(|(_, _, b, ..)| matches!(b, Brain::Engage))
+    });
     for (e, mut d, brain, aware, robot, children, t) in &mut drones {
         d.gun_cooldown -= dt;
         if robot.wrecked || !matches!(brain, Brain::Engage) {
             d.lock = 0.0;
+            continue;
+        }
+        // A first look at you before it locks on (`walker::SIGHT_BEAT`).
+        let since = *fighting_since.entry(e).or_insert(now);
+        if now - since < super::walker::SIGHT_BEAT {
             continue;
         }
         if !aware.can_see_target {

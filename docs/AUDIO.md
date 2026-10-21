@@ -233,6 +233,7 @@ is what it did before.
 | A jam: failure to eject or feed, a double feed (`Malfunctioned`) | `gun.malfunction`, a dull wrong clack | each its own pulse in the gun hand (`weapons::faults`: 0.55/30 ms, 0.12/15 ms, 0.85/120 ms); the old generic 0.5 pulse in both hands is gone | a generic pulse as well |
 | Its fragments (and any slow round) landing | the impact by surface, softer the slower: full from 300 m/s, −12 dB at 75 m/s | — | every round at full |
 | A step into a puddle (rain-wet ground, `world::puddles::puddle_at` > 0.5) | `step` from `footsteps/water` | — | the ground's set |
+| A sentry (`robots::sentry::SentryEvent`) | its warning (`Chirp`, a second before it fires): `sentry.chirp`, the lock tone quicker and higher, levelled to carry; its shots (`robot.shot`); a servo as a decoy draws it (`sentry.turn`); its power going, a whine winding down and a clank; its head shot through, glass and a groan | — | silent: the warning was only the lens's red flare |
 | A step in snow lying (`world::snow::Snow::lies` over 0.25: Kettle Pass's high ground) | `step` from `footsteps/gravel` for its crunch, until a recording of snow can be fetched | — | the ground's set |
 | The sweep detector pointing at a loose stone (`anomaly::detector::StonePing`) | `detector.ping`: synthesised (`robot_voice::render_ping`), a soft sine at 1.76 kHz with its octave, sweeter than the click, played faster and higher the nearer the stone | — | silent |
 | A wet aegis biting its carrier (`anomaly::costs::ArtifactBite`, shock) | `bite.shock`, a synthesised electric crackle at the chest (`render_crackle`) | a kick in both hands (0.7/60 ms) | silent |
@@ -240,12 +241,16 @@ is what it did before.
 | A hot stone held (`anomaly::harvest::Burned`) | `burn.sizzle`, a hiss at the hand for as long as it burns, gone when you let go | a tick in that hand every half second | silent |
 | Levering with the crowbar (`interact::tools::crowbar::Pried`) | `tool.pry`, a strained creak every 0.6 s, higher and louder the harder you pull; when it gives, it's a break (`destruction::Broke`, below) | Hands' strain pulses and knock (`interact::tools`) | silent |
 | The bolt cutters biting through (`cutters::Cut`) | `tool.cut`, the snip, and `tool.cut_ping` | Hands' knock | silent |
-| Standing in a Hush (`anomaly::hush`) | everything 18 dB down and every placed sound (your own steps and shots too) muffled to 350 Hz, over a second; after 8 s a low pressure tone rises (`hush.tone`). A hushstone's 1.2 m: 4 dB and 3 kHz, all the time. Checked dull, not deaf: your footstep still clears the wind by +6.1 dB, a call at 2 m by +23 dB | — | nothing |
+| Standing in a Hush (`anomaly::hush`) | everything 18 dB down and every placed sound (your own steps and shots too) muffled to 350 Hz, over a second; after 4 s a low pressure tone rises (`hush.tone`), a warning well before it starts to hurt (8 s). A hushstone's 1.2 m: 4 dB and 3 kHz, all the time. Checked dull, not deaf: your footstep still clears the wind by +6.1 dB, a call at 2 m by +23 dB | — | nothing |
 | A squib: a reloaded round with too little powder (`FireEvent::Squib`) | `gun.squib`: the rifle's shot low-passed at 450 Hz and slowed, a weak dull pop 10 LU under a real shot up close, nothing cycling | 0.2/30 ms in the gun hand (`weapons::faults`) | the generic malfunction clack |
 | A bulge: a round fired into a squib's bullet (`Bulged`) | `gun.bulged` (the shot through 1.4 kHz: muffled, wrong) and `gun.bulged_ring`, the barrel ringing | 1.0/350 ms (`weapons::faults`), and it hurts you | — |
 | Rodding a stuck bullet out (`Rodded`) | `gun.rod_scrape` down the bore and `gun.rod_tink` as it drops | 0.3/40 ms | — |
 | A Mosin's bolt seized after the shot (`BoltStuck`), slapped free (`BoltFreed`) | `gun.bolt_stuck`, a dull clack through 1.8 kHz; `gun.bolt_freed`, a sharp metal smack, then the bolt opening | 0.6/80 ms, a grinding 0.3 tick while you lift against it; 0.4/20 ms | — |
 | A worn SKS slam-firing (`SlamFire`) | the bolt's close (a tick before), the shot on top of it, and `gun.slam_snap`, the floating pin | the shot's kick | — |
+| Racking the MP-133's pump back, and running it home (`Cocked`, `BoltClosed` on a pump action) | `gun.pump_back`, the fore-end's slide and the bolt unlocking; `gun.pump_fwd`, the slap forward as it locks up (`audio::gun_sounds`) | back: 0.25/20 ms; home: the bolt-home shape, fainter in the pumping hand | silent: a pump's rack matched no arm |
+| A signal flare leaving the muzzle (`weapons::flares::Flare` appearing) | `flare.pop`, a soft dull pop (a pistol's report low-passed to 1.2 kHz); then `flare.burn`, a fizzing hiss on the star as it flies and lies burning, silent until it lights and fading with its glow over its last second (`audio_kit`) | the shot's kick | the shot only; the star burned silently |
+| The RPK's bipod swung down or up (`weapons::armoury::Bipod`) | `bipod.swing`, a short metal creak as the legs start to move; `bipod.lock`, a clank as they lock down or fold home; at most one every 0.15 s per gun | — | silent |
+| A bare hand striking something at 1.5 m/s or more (`interact::touch::HandStruck`) | a palm slap by what it met: `hand.slap_wood`, `hand.slap_metal`, `hand.slap_stone` (concrete), `hand.slap_glass` (a small knock, the break sped up), `hand.slap_skin` (a robot's soft parts, a dull thud), `hand.slap_wire` (a chain-link rattle); 12 dB down and dull at 1.5 m/s, the cue's level and full brightness at 6 m/s (`audio_kit::slap_db`) | that material's shape, by speed (`rig::shapes`) | felt, not heard |
 | A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
@@ -721,6 +726,48 @@ heavy's footfall); each break you hear about as far as robots do
 - **Drips and lapping**: the scours drip at the draw-off tower's foot;
   New Sallow's flooded street laps at its edge (`water_sounds`; both
   stand-ins until recordings can be fetched).
+
+## Underground's sites
+
+The signature sites under the map (`world::underground`, `::workings`,
+`::furnace`) are heard by `src/audio_underground.rs`
+(`UndergroundSoundsPlugin`, client only), which reads their state and
+messages. Every cue is an `ug.*` line in the mix, and the code plays the
+set that line names. Loops (a basin draining, the cart, the crane, the
+heat) are spawned when what makes them starts. They ease in and out, and
+are dropped once they're silent. Per-entity timers forget whatever is
+gone.
+
+| What | Sound |
+| --- | --- |
+| A valve wheel turned (`DrainControl` opening) | `ug.valve`: the door's creak at 0.75, the rusted stem shrieking round |
+| A hand pump's stroke (pressing a pump `DrainControl`) | `ug.pump`, the iron handle knocking, and `ug.pump_water`, a gout from the spout |
+| A basin's level falling (`Levels`) | `ug.gurgle`: the creek slowed to 0.6 and through 900 Hz, water going down a pipe, from the basin's water; held 1.2 s after the level last fell, so pump strokes run together |
+| A basin drained (`BasinDrained`) | `ug.drained`: a long glug (a splash at half speed) as the pipe sucks air |
+| Breathing firedamp (`InGas`) | `ug.cough` (a stand-in: a fit of one to three coughs) or `ug.wheeze` (the breath sped up), every 1.6-3.2 s at the head |
+| The canary (`Canary`) | `ug.canary` (a stand-in: a run of thin falling "tsip" notes at about 4 kHz). With no gas near, a calm run every 4-9 s, 10 dB down. With gas near, runs come quicker, louder and higher as `alarm` rises, to four a second in the gas. Dead (`life` 0), it is silent. Heard within 30 m |
+| A pocket going up (`GasFlash`, `GasIgnited`) | `ug.whump`: the heavy grenade at 0.7 through 300 Hz, a muffled blast heard through rock, not a bang; and `ug.timbers`, the groan slowed, as the shock goes through the shoring |
+| The mine cart (`MineCart`) | `ug.cart`: the truck's idle through 600 Hz, at 0.5-0.8 speed and up to full level with the cart's speed; `ug.cart_clack` at each rail joint (every 2.5 m); `ug.cart_stop`, a clank, when it stops hard at the rail's end |
+| A roof coming down (`RoofFell`) | `ug.roof`, the rockfall, and `ug.roof_crash`, concrete landing slowed; 1.2-2 s later, `ug.dust`, the rockfall sped up and quiet: grit still trickling |
+| Standing in the heat (`InHeat`) | `ug.sizzle`: the burner's roar at 1.8, louder the hotter, about the body; your own breath (`ug.heat_breath`) every 2.2 s once the heat is past a quarter |
+| A damper opened (`Vented`) | `ug.damper`, a metal clang slowed to 0.55, in the flue over its lever, and `ug.flue`, a long whoosh: hot air going up |
+| A zone cooling (its `Heat` share falling) | `ug.heat_tick`: a casing's tink slowed, at random points in the room, quick at first and slowing as it cools; it stops when the room has cooled. Heard within 35 m |
+| The crane running (`Crane::dir` not 0) | `ug.crane`, the hum at 1.6 (the trolley's motor whining); `ug.chain` clinking at the hook every 0.25-0.5 s; `ug.crane_clank` as its brake lets go, and again at the end of its run |
+| A vent's or the crane's lever (`VentLever`, `CraneLever`) | `ug.lever`, a heavy thunk under the press's click |
+
+Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
+rough voice at about 160 Hz through the throat's formants, sharp onset,
+each cough weaker than the last) and `wildlife/canary`.
+
+**Audited** (`scripts/audio_audit.py`; `ug.gurgle`, `ug.whump` and
+`ug.cart` are judged through their low-passes, `CUE_LOWPASS`). Every
+detail and action is within 2.6 LU of the mix line; the worst is the
+cart's rumble at +2.6 LU, then the heat's breath at -1.2 LU. Up close,
+the loudest is the roof's crash, 2.7 LU under your rifle (5.7 with
+narrow dynamics). The canary comes within 2.3 LU of the rifle with
+narrow dynamics. The whump is heard at -28.8 LUFS from 10 m, 5.9 LU
+under the rifle. The canary is heard 201 m away over the wind and 16 m
+over a downpour (target 15 / 8). No `ug.*` cue is flagged.
 
 ## Storms
 

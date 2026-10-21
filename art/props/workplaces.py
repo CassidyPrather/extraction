@@ -228,7 +228,7 @@ def snowshoes():
         t = 0.024
         ring(p, 1.0, t / rx, (0, 0, 0), "Timber", segs=20,
              xf=T(x, cy, z) @ S(rx, ry, 0.022 * rx / t))
-        tip = (x * 0.25, -0.04, z)
+        tip = (0.0, -0.009, z)
         for sx in (-1, 1):
             rod(p, (x + sx * rx * 0.6, cy + ry * 0.78, z), tip, 0.011, "Timber", segs=5)
         # The gut webbing filling it, a rawhide lacing over it.

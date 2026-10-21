@@ -1758,24 +1758,56 @@ fn a_garden_fence_panel_breaks_between_its_posts_and_comes_back() {
     assert_eq!(panels(&mut app).len(), 4, "the Surge puts it back");
 }
 
+/// A car wreck's separable parts as its model has them: its top-level
+/// nodes, but its `body` and its empties (`pt_*`, for loot), read from
+/// the glb's JSON chunk.
+fn separable_nodes(model: &str) -> Vec<String> {
+    let file = crate::asset_root_path().join(crate::render::world_props::path(model));
+    let bytes = std::fs::read(&file).unwrap_or_else(|e| panic!("{model}: {e}"));
+    let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+    let nodes = json["nodes"].as_array().unwrap();
+    let scene = json["scene"].as_u64().unwrap_or(0) as usize;
+    let mut out: Vec<String> = json["scenes"][scene]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|i| nodes[i.as_u64()? as usize]["name"].as_str())
+        .filter(|n| *n != "body" && !n.starts_with("body_") && !n.starts_with("pt_"))
+        .map(str::to_string)
+        .collect();
+    out.sort();
+    out
+}
+
 #[test]
 fn the_wrecks_come_apart_where_kit_modelled_them() {
     use crate::world::buildings::BreakKind;
     let car = Transform::from_xyz(3.0, 0.0, -2.0).with_rotation(Quat::from_rotation_y(0.4));
     let building = Transform::from_xyz(100.0, 20.0, 50.0).with_rotation(Quat::from_rotation_y(2.1));
     let back = car.compute_affine().inverse();
-    for (model, n, doors) in [
-        ("wreck_lada", 10, 4),
-        ("wreck_uaz", 10, 4),
-        ("wreck_lorry", 8, 2),
-    ] {
+    for model in ["wreck_lada", "wreck_uaz", "wreck_lorry"] {
         let parts = super::strip::car_parts(model, car);
-        assert_eq!(parts.len(), n, "{model}'s parts");
+        // Every separable part Kit modelled, and nothing else: read off
+        // the model, so a part added or renamed there shows here.
+        let mut ours: Vec<String> = parts
+            .iter()
+            .map(|b| {
+                super::wood::model_node(b.model.unwrap())
+                    .1
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        ours.sort();
+        assert_eq!(
+            ours,
+            separable_nodes(model),
+            "{model}'s parts are its model's"
+        );
         let count = |k: BreakKind| parts.iter().filter(|p| p.kind == k).count();
-        assert_eq!(count(BreakKind::CarDoor), doors, "{model}'s doors");
         assert_eq!(count(BreakKind::CarWheel), 4, "{model}'s wheels");
         assert_eq!(count(BreakKind::CarBonnet), 1, "{model}'s bonnet");
-        assert_eq!(count(BreakKind::CarBoot), 1, "{model}'s boot or tailgate");
         let (body, _) = super::strip::car_body(model).expect("a body box");
         for b in &parts {
             let name = b.model.unwrap();
@@ -1786,8 +1818,7 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
                 out.dot(mid - body) > 0.0,
                 "{name} at {mid} faces out ({out})"
             );
-            // Its box, turned, is the box read off the model: thinnest
-            // along the way it faces.
+            // Thinnest the way it faces.
             assert!(
                 b.size.z <= b.size.x.min(b.size.y) + 1e-4,
                 "{name}'s box {} is thinnest out",
@@ -1809,19 +1840,6 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
                 _ => "car_bonnet",
             };
             assert_eq!(b.yields, Some(want), "{name} yields");
-        }
-        // Every node it names is in Kit's model (once the model's here).
-        let file = crate::asset_root_path().join(crate::render::world_props::path(model));
-        if let Ok(bytes) = std::fs::read(&file) {
-            let text = String::from_utf8_lossy(&bytes);
-            for b in &parts {
-                let (_, node) = super::wood::model_node(b.model.unwrap());
-                let node = node.unwrap();
-                assert!(
-                    text.contains(&format!("\"name\":\"{node}\"")),
-                    "{model} has a node {node}"
-                );
-            }
         }
     }
 }
@@ -1851,7 +1869,7 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     };
     let on = parts(&mut app);
     assert_eq!(on.len(), 10, "the Lada's ten parts");
-    let (door, _door_at, _) = on
+    let (door, door_at, _) = on
         .iter()
         .find(|(_, p, y)| y.iter().any(|(i, _)| i == "car_door") && p.x < at.x)
         .cloned()
@@ -1877,6 +1895,10 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     }
     assert!(app.world().get_entity(door).is_err(), "prised off");
     assert_eq!(doors(&mut app), before + 1, "a car door to carry");
+    assert!(
+        app.world().resource::<Broken>().0.contains(&key(door_at)),
+        "and it stays off till the Surge"
+    );
     super::surge(app.world_mut());
     run(&mut app, 2);
     assert_eq!(parts(&mut app).len(), 10, "the Surge hangs it back");

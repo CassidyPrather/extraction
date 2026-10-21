@@ -19,6 +19,7 @@ impl Plugin for DevPlugin {
                     gallery,
                     first_person_hands,
                     wear_kit,
+                    sights_to_the_eye,
                 ),
             )
             .add_systems(
@@ -60,6 +61,45 @@ fn screenshot_when_ready(
             exit.write(AppExit::Success);
         },
     );
+}
+
+/// `--gallery sights:<gun>`: the gun's sight line on the camera's, its
+/// rear sight just ahead of the eye, and the eye down behind the sights
+/// (so the front post goes soft, as `weapons::optics` draws it).
+fn sights_to_the_eye(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut guns: Query<(
+        &crate::weapons::Gun,
+        &mut Transform,
+        &mut crate::weapons::feel::Handling,
+    )>,
+) {
+    let (Some(spec), Some((cam, yaw, pitch)), Some(zone)) = (&opts.gallery, opts.camera, zone)
+    else {
+        return;
+    };
+    if !spec.starts_with("sights:") {
+        return;
+    }
+    let ground = zone.ground(cam.x, cam.z);
+    let eye_y = if cam.y == 0.0 {
+        ground + 1.7
+    } else {
+        cam.y.max(ground + 0.3)
+    };
+    let eye = Vec3::new(cam.x, eye_y, cam.z);
+    let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    for (gun, mut tf, mut handling) in &mut guns {
+        // The eye 4 cm behind the rear sight, on the line to the front post.
+        let rear = gun.layout.sight.translation;
+        let front = crate::weapons::feel::front_post(gun);
+        let line = Quat::from_rotation_arc(Vec3::NEG_Z, (front - rear).normalize());
+        let rot = look * line.inverse();
+        let at_eye = rear - (front - rear).normalize() * 0.04;
+        *tf = Transform::from_translation(eye - rot * at_eye).with_rotation(rot);
+        handling.at_eye = 1.0;
+    }
 }
 
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
@@ -166,14 +206,18 @@ fn gallery(
                         .with_rotation(facing),
                 );
             }
-            "scopeview" => {
+            s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
                 // the camera, looking where the camera looks.
+                // `scopeview:pso_scope,SIDE,RELIEF`: the eye SIDE mm right
+                // of the axis and RELIEF mm behind the eyepiece (70).
+                let id = s.strip_prefix("scopeview:").unwrap_or("pu_scope");
                 let look =
                     Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
                 let eye_piece = Vec3::new(0.0, 0.0, 0.2);
-                let at = eye + look * (Vec3::NEG_Z * 0.07 - eye_piece);
-                if let Some(e) = spawn_static(&mut commands, "pu_scope", at) {
+                let relief = dist.map_or(0.07, |d| d / 1000.0);
+                let at = eye + look * (Vec3::NEG_Z * relief - eye_piece - Vec3::X * turn / 1000.0);
+                if let Some(e) = spawn_static(&mut commands, id, at) {
                     commands
                         .entity(e)
                         .insert(Transform::from_translation(at).with_rotation(look));
@@ -247,6 +291,11 @@ fn gallery(
                         ),
                     );
                 }
+            }
+            // `sights:ak74`: the gun at the cheek, its rear sight just in
+            // front of the camera (`sights_to_the_eye` places it).
+            s if s.starts_with("sights:") => {
+                spawn_static(&mut commands, &s["sights:".len()..], eye + fwd * 0.5);
             }
             // `first_person_hands` and `wear_kit` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") => {}
@@ -689,8 +738,11 @@ fn wear_kit(
 /// as you bend to your belt (the torso keeps its standing height until the
 /// head has dropped further). `behind` puts the camera behind and above
 /// the player instead, to see the pack on their back; `above` high behind,
-/// looking down at the feet, to see the body's shadow. The free camera
-/// otherwise stays where `--camera` put it.
+/// looking down at the feet, to see the body's shadow. `down`: the head
+/// tips forward and looks down at the body, as a head does (the camera is
+/// the eye); `side` puts the camera 2 m to the right, to see the whole
+/// body (`render::body`). The free camera otherwise stays where
+/// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
     mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
@@ -711,7 +763,8 @@ fn pose_body_for_gallery(
         spec.contains("behind"),
         spec.contains("above"),
     );
-    if !stoop && !behind && !above {
+    let (down, side) = (spec.contains("down"), spec.contains("side"));
+    if !stoop && !behind && !above && !down && !side {
         return;
     }
     *frames += 1;
@@ -725,11 +778,27 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.1);
     }
+    if down && *frames > 20 {
+        // A head looking down pivots on the neck: the eyes come forward.
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // (The flat rig writes the head afresh each frame, as for `stoop`.)
+        input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+    }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
         return;
     };
-    if above {
+    if side {
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let right = flat.cross(Vec3::Y);
+        let mid = root.translation + Vec3::Y * 0.9;
+        *cam = Transform::from_translation(mid + right * 2.2 + flat * 0.6 + Vec3::Y * 0.2)
+            .looking_at(mid, Vec3::Y);
+    } else if above {
         // High behind, looking down at the feet: the body's shadow.
         let fwd = head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
