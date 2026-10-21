@@ -13,6 +13,11 @@
 //!   half pace.
 //! - **Let go of it moving and it's shoved, not thrown**: what an arm puts
 //!   into it is [`SHOVE`] joules at most (`interact::apply_hand_actions`).
+//! - **A wreck is dragged by a limb** ([`Draggable`]): a broken robot's hull
+//!   (`robots::wreck::Broken`), taken by a leg or an arm (its parts are
+//!   found by the grip, `interact::find_grab`), in one hand or both, never
+//!   lifted; slowly, as its mass allows ([`drag_speed`]). Let go, it
+//!   settles again.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -46,6 +51,17 @@ pub const DRAG_HEARD: f32 = 14.0;
 #[derive(Component, Debug)]
 pub struct Bulky;
 
+/// Too heavy to carry, however many hands: only dragged (a robot's wreck).
+/// Also [`Bulky`], so a second hand takes hold of it too.
+#[derive(Component, Debug)]
+pub struct Draggable;
+
+/// How fast a thing of this mass can be dragged at most, m/s: [`DRAG_SPEED`]
+/// up to 30 kg, slower the heavier (a walker's hull, about half that).
+pub fn drag_speed(mass: f32) -> f32 {
+    DRAG_SPEED * (30.0 / mass.max(1.0)).min(1.0).sqrt()
+}
+
 /// Something bulky dragged along the ground, every tick it slides (a
 /// scrape for Audio: one loop per item, stopping when these stop).
 #[derive(Message, Clone, Copy, Debug)]
@@ -72,6 +88,9 @@ impl Plugin for CarryPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Dragged>()
             .add_observer(mark_bulky)
+            .add_observer(wreck_draggable)
+            .add_observer(settle_let_go)
+            .add_observer(unsettle_taken)
             .add_systems(
                 FixedUpdate,
                 (drag, swing, haul)
@@ -128,6 +147,39 @@ fn mark_bulky(
     ));
 }
 
+/// A robot come apart: its hull is dragged by a limb.
+fn wreck_draggable(add: On<Add, crate::robots::wreck::Broken>, mut commands: Commands) {
+    commands.entity(add.entity).try_insert((
+        Bulky,
+        Draggable,
+        Grabbable {
+            points: vec![GrabPoint::free()],
+        },
+    ));
+}
+
+/// A wreck taken hold of stops settling: it'd be made static in the hand.
+fn unsettle_taken(add: On<Add, Held>, wrecks: Query<(), With<Draggable>>, mut commands: Commands) {
+    if wrecks.contains(add.entity) {
+        commands
+            .entity(add.entity)
+            .try_remove::<crate::robots::wreck::Settling>();
+    }
+}
+
+/// A wreck let go settles again (and goes static, costing nothing).
+fn settle_let_go(
+    remove: On<Remove, Held>,
+    wrecks: Query<(), With<Draggable>>,
+    mut commands: Commands,
+) {
+    if wrecks.contains(remove.entity) {
+        commands
+            .entity(remove.entity)
+            .try_insert(crate::robots::wreck::Settling::default());
+    }
+}
+
 /// What a carried thing is to the hand and the ear.
 fn stuff_of(def: &extraction_core::items::ItemDef) -> Stuff {
     let has = |t: &str| def.tags.iter().any(|x| x == t);
@@ -155,14 +207,16 @@ fn drag(
         (
             Entity,
             &Held,
-            &Item,
+            Option<&Item>,
             &Position,
             &Rotation,
             &mut LinearVelocity,
             &mut AngularVelocity,
             Option<&mut GravityScale>,
             Option<&Mass>,
-            Has<Supported>,
+            Option<&Supported>,
+            Has<Draggable>,
+            Option<&Grabbable>,
         ),
         With<Bulky>,
     >,
@@ -177,7 +231,10 @@ fn drag(
     let dt = time.delta_secs().max(1e-4);
     *heard -= dt;
     let mut loudest: Option<crate::robots::Noise> = None;
-    for (e, held, item, pos, rot, mut lin, mut ang, gravity, mass, two) in &mut things {
+    for (e, held, item, pos, rot, mut lin, mut ang, gravity, mass, support, wreck, grab) in
+        &mut things
+    {
+        let two = support.is_some() && !wreck;
         let want_gravity = if two { 0.0 } else { 1.0 };
         match gravity {
             Some(mut g) if g.0 != want_gravity => g.0 = want_gravity,
@@ -189,33 +246,46 @@ fn drag(
         if two {
             continue;
         }
-        let Ok(hand) = hands.get(held.hand) else {
-            continue;
-        };
-        let def = catalog.get(item.kind());
-        let m = mass.map_or(def.mass, |m| m.0).max(0.5);
-        let size = Vec3::from_array(def.size_m());
-        // Where the hand took it, on the thing.
-        let grip = held
-            .offset
-            .compute_affine()
-            .inverse()
-            .transform_point3(Vec3::ZERO);
-        let r = rot.0 * grip;
-        let at = pos.0 + r;
-        let point_v = lin.0 + ang.0.cross(r);
-        let want = ((hand.world.translation - at) * 10.0).clamp_length_max(DRAG_SPEED);
-        // An arm's impulse at the held point, toward the speed wanted
-        // there: it moves the thing and turns it about its middle.
-        let j = ((want - point_v) * m).clamp_length_max(PULL * dt);
-        // One arm raises the end it holds, never the whole thing: up, it
-        // pulls with at most part of the thing's weight.
-        let j = j.with_y(j.y.min(LIFT_ONE * m * 9.81 * dt));
-        lin.0 += j / m;
+        let def = item.map(|i| catalog.get(i.kind()));
+        let m = mass.map_or(def.map_or(80.0, |d| d.mass), |m| m.0).max(0.5);
+        let size = def.map_or(Vec3::splat(0.8), |d| Vec3::from_array(d.size_m()));
         let inertia =
             m / 12.0 * (Vec3::splat(size.length_squared()) - size * size).max(Vec3::splat(0.01));
-        let local = rot.0.inverse() * r.cross(j);
-        ang.0 += rot.0 * (local / inertia);
+        // Each hand on it pulls at the point it holds: the first where it
+        // took hold, the second (on a wreck) at its grab point.
+        let mut pulls = vec![];
+        if let Ok(hand) = hands.get(held.hand) {
+            let grip = held
+                .offset
+                .compute_affine()
+                .inverse()
+                .transform_point3(Vec3::ZERO);
+            pulls.push((hand.world.translation, grip));
+        }
+        if let (Some(s), true) = (support, wreck)
+            && let Ok(hand) = hands.get(s.hand)
+        {
+            let grip = grab
+                .and_then(|g| g.points.get(s.point))
+                .map_or(Vec3::ZERO, |p| p.local.translation);
+            pulls.push((hand.world.translation, grip));
+        }
+        let top = drag_speed(m);
+        for (hand_at, grip) in pulls {
+            let r = rot.0 * grip;
+            let at = pos.0 + r;
+            let point_v = lin.0 + ang.0.cross(r);
+            let want = ((hand_at - at) * 10.0).clamp_length_max(top);
+            // An arm's impulse at the held point, toward the speed wanted
+            // there: it moves the thing and turns it about its middle.
+            let j = ((want - point_v) * m).clamp_length_max(PULL * dt);
+            // One arm raises the end it holds, never the whole thing: up,
+            // it pulls with at most part of the thing's weight.
+            let j = j.with_y(j.y.min(LIFT_ONE * m * 9.81 * dt));
+            lin.0 += j / m;
+            let local = rot.0.inverse() * r.cross(j);
+            ang.0 += rot.0 * (local / inertia);
+        }
         // Sliding on the ground: a scrape.
         let speed = Vec2::new(lin.0.x, lin.0.z).length();
         if speed > 0.1 {
@@ -228,10 +298,10 @@ fn drag(
                     item: e,
                     at: ground,
                     speed,
-                    stuff: stuff_of(def),
-                    rolling: def.id.contains("wheel"),
+                    stuff: def.map_or(Stuff::Metal, stuff_of),
+                    rolling: def.is_some_and(|d| d.id.contains("wheel")),
                 });
-                let radius = DRAG_HEARD * (speed / DRAG_SPEED).clamp(0.3, 1.0);
+                let radius = DRAG_HEARD * (speed / top).clamp(0.3, 1.0);
                 if loudest.as_ref().is_none_or(|n| n.radius < radius) {
                     loudest = Some(crate::robots::Noise {
                         at: ground,
@@ -297,19 +367,20 @@ pub fn haul_of(mass: f32, two_hands: bool) -> f32 {
     if two_hands {
         (mass * CARRY_SLOW).min(0.6)
     } else {
-        DRAG_SLOW
+        // Dragging: half pace, slower still for more than you could carry.
+        (DRAG_SLOW + (mass - 40.0).max(0.0) * 0.004).min(0.75)
     }
 }
 
 fn haul(
-    things: Query<(&Held, Has<Supported>, Option<&Mass>), With<Bulky>>,
+    things: Query<(&Held, Has<Supported>, Option<&Mass>, Has<Draggable>), With<Bulky>>,
     mut bodies: Query<(Entity, &mut Body)>,
 ) {
     for (player, mut body) in &mut bodies {
         let slow = things
             .iter()
             .filter(|(h, ..)| h.player == player)
-            .map(|(_, two, m)| haul_of(m.map_or(1.0, |m| m.0), two))
+            .map(|(_, two, m, wreck)| haul_of(m.map_or(1.0, |m| m.0), two && !wreck))
             .fold(0.0, f32::max);
         if body.hauling != slow {
             body.hauling = slow;
@@ -348,5 +419,15 @@ mod tests {
         assert!((haul_of(16.0, true) - 0.35).abs() < 0.02);
         assert!((haul_of(6.0, true) - 0.13).abs() < 0.02);
         assert_eq!(haul_of(6.0, false), DRAG_SLOW);
+        assert!(haul_of(70.0, false) > DRAG_SLOW, "a wreck, slower");
+    }
+
+    /// A walker's hull drags at most at about two thirds of a light thing's
+    /// pace.
+    #[test]
+    fn the_heavier_the_slower_it_drags() {
+        assert_eq!(drag_speed(16.0), DRAG_SPEED);
+        let hull = drag_speed(70.0);
+        assert!(hull < DRAG_SPEED * 0.7 && hull > DRAG_SPEED * 0.5, "{hull}");
     }
 }
