@@ -427,6 +427,30 @@
             tags: ["electronics"],
         ),
         (
+            id: "cassette_player", dims: Some((0.15, 0.09, 0.04)), name: "Cassette player",
+            description: "A portable tape recorder with chunky keys on top. Stop twice opens the door. Runs on a power cell.",
+            category: Gadget, size: Small, mass: 0.55, bulk: 0.45,
+            tags: ["electronics", "plastic"],
+        ),
+        (
+            id: "tape_practice", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: for Anna",
+            description: "A cassette, the label in a mother's hand: \"for Anna - practice\".",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_hymns", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Harvest hymns",
+            description: "A cassette in a chapel's careful capitals: HARVEST HYMNS.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
+            id: "tape_lodge", dims: Some((0.1004, 0.0638, 0.012)), name: "Cassette: Lodge dance",
+            description: "A cassette, the label smudged by a thumb: \"Lodge dance\". Taped off the wireless.",
+            category: Curio, size: Tiny, mass: 0.045, bulk: 0.02, mount: Some(Cassette),
+            tags: ["plastic", "tape"],
+        ),
+        (
             id: "binoculars", dims: Some((0.17, 0.06, 0.13)), name: "Binoculars",
             category: Gadget, size: Medium, mass: 0.6, bulk: 0.7,
             tags: ["glass", "metal"],
