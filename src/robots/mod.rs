@@ -27,8 +27,12 @@ pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
+pub mod mender;
+pub mod mender_look;
 #[cfg(test)]
 mod mind_tests;
+pub mod minelayer;
+pub mod minelayer_look;
 pub mod pylon;
 pub mod reel;
 pub mod search;
@@ -38,6 +42,8 @@ pub mod sentry_look;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;
+pub mod spotter;
+pub mod spotter_look;
 pub mod visuals;
 pub mod walker;
 pub mod weathering;
@@ -269,6 +275,9 @@ impl Plugin for RobotsPlugin {
                     heavy::HeavyPlugin,
                     heavy_mind::HeavyMindPlugin,
                     sentry::SentryPlugin,
+                    spotter::SpotterPlugin,
+                    minelayer::MinelayerPlugin,
+                    mender::MenderPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,

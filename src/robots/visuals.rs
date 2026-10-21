@@ -27,6 +27,9 @@ impl Plugin for RobotVisualsPlugin {
             super::sorter_look::SorterLookPlugin,
             super::heavy_look::HeavyLookPlugin,
             super::sentry_look::SentryLookPlugin,
+            super::spotter_look::SpotterLookPlugin,
+            super::minelayer_look::MinelayerLookPlugin,
+            super::mender_look::MenderLookPlugin,
         ))
         .add_systems(
             Update,
@@ -198,13 +201,20 @@ fn request_models(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart), Added<RobotPart>>,
     robots: Query<&Robot>,
-    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::sentry::Sentry>)>>,
+    heavies: Query<
+        (),
+        Or<(
+            With<super::heavy::Heavy>,
+            With<super::sentry::Sentry>,
+            With<super::heavy::OwnLook>,
+        )>,
+    >,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
 ) {
     for (e, part) in &parts {
-        // (The heavy and the sentry dress themselves: `heavy_look`,
-        // `sentry_look`.)
+        // (The heavy, the sentry and the others marked `OwnLook` dress
+        // themselves: `heavy_look`, `sentry_look`, ...)
         if heavies.contains(part.robot) {
             continue;
         }

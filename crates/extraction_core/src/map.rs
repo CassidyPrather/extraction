@@ -334,6 +334,9 @@ pub enum MarkerKind {
         #[serde(default)]
         power: Option<P2>,
     },
+    /// A spotter's winch (`robots::spotter`): a balloon on a tether over
+    /// it, watching the ground round about and calling in the others.
+    Spotter,
 }
 
 fn sentry_arc() -> f32 {
