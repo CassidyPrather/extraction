@@ -327,7 +327,7 @@ fn walker_brain(
             Option<&super::indoor::LocalNav>,
             Option<&mut super::indoor::Patrol>,
             Has<super::indoor::Crawler>,
-            Option<&super::anim::Gait>,
+            Option<&mut super::anim::Gait>,
             Option<&mut super::hound_mind::HoundMind>,
             Option<&super::flee::Fleeing>,
             (Has<super::indoor::Dormant>, Has<super::indoor::Warden>),
@@ -348,7 +348,7 @@ fn walker_brain(
     spatial: SpatialQuery,
     (mut shots, mut crouches, mut bites, mut seed): (
         MessageWriter<Shot>,
-        MessageWriter<super::hound_mind::HoundCrouch>,
+        MessageWriter<super::hound::HoundCrouch>,
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
     ),
@@ -366,11 +366,14 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden)),
+        (local, mut patrol, crawler, mut gait, mut hound, fleeing, (dormant, warden)),
     ) in &mut walkers
     {
         // (The heavy thinks for itself: `heavy_mind`.)
-        if gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy) {
+        if gait
+            .as_ref()
+            .is_some_and(|g| g.shape == super::anim::Shape::Heavy)
+        {
             continue;
         }
         let is_hound = hound.is_some();
@@ -406,7 +409,7 @@ fn walker_brain(
             }
             continue;
         }
-        let lame = gait.is_some_and(|g| g.limp > LAME);
+        let lame = gait.as_ref().is_some_and(|g| g.limp > LAME);
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
         if !single_minded {
@@ -571,6 +574,15 @@ fn walker_brain(
                             if h.crouch <= 0.0 {
                                 h.lunge = super::hound_mind::LUNGE_TIME;
                                 h.bit = false;
+                                if let Some(g) = gait.as_deref_mut() {
+                                    super::hound::lunge(
+                                        &mut w,
+                                        g,
+                                        pos,
+                                        tp,
+                                        super::hound_mind::LUNGE_SPEED,
+                                    );
+                                }
                             }
                             None
                         } else if h.lunge > 0.0 {
@@ -596,7 +608,7 @@ fn walker_brain(
                             Some(tp)
                         } else if d < super::hound_mind::LUNGE_RANGE && h.cooldown <= 0.0 {
                             h.crouch = super::hound_mind::CROUCH_TIME;
-                            crouches.write(super::hound_mind::HoundCrouch { hound: e, at: pos });
+                            crouches.write(super::hound::HoundCrouch { hound: e, at: tp });
                             None
                         } else if h.cooldown > 0.0 && d < super::hound_mind::LUNGE_RANGE {
                             // Backs off between bites.

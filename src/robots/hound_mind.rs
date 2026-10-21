@@ -4,7 +4,7 @@
 //! A sound sends it running there, and for the last stretch it drops low
 //! and stalks; there it noses round (the walkers' search). It sees you
 //! close up, and then it comes round to your side, crouches (the tell:
-//! [`HoundCrouch`], [`CROUCH_TIME`]), and lunges to bite. So the way to
+//! [`super::hound::HoundCrouch`], [`CROUCH_TIME`]), and lunges to bite. So the way to
 //! beat a hound is the opposite of the way to beat a drone: don't run, keep
 //! still and quiet, and it has nothing to go on. The director sends a pair
 //! in answer to gunfire now and then, instead of a drone ([`HOUND_SHARE`]).
@@ -40,9 +40,11 @@ pub const FLANK_FROM: f32 = 8.0;
 pub const FLANK_OFFSET: f32 = 6.0;
 /// Within this it crouches to lunge (m)...
 pub const LUNGE_RANGE: f32 = 4.5;
-/// ...crouching this long first (the tell, s)...
-pub const CROUCH_TIME: f32 = 0.6;
-/// ...then lunging this long, flat out...
+/// ...crouching this long first (the tell, s: the body's coil)...
+pub const CROUCH_TIME: f32 = super::hound::COIL_TIME;
+/// ...then springing at this speed (m/s), past its run...
+pub const LUNGE_SPEED: f32 = 7.0;
+/// ...for this long...
 pub const LUNGE_TIME: f32 = 0.5;
 /// ...and biting whatever it reaches within this (m)...
 pub const BITE_RANGE: f32 = 1.8;
@@ -65,14 +67,6 @@ pub struct HoundMind {
     pub bit: bool,
 }
 
-/// A hound crouched to lunge at someone (its tell: a body pose and a
-/// growl), `CROUCH_TIME` before it springs.
-#[derive(Message, Clone, Copy, Debug)]
-pub struct HoundCrouch {
-    pub hound: Entity,
-    pub at: Vec3,
-}
-
 /// A hound bit (for its sound and the body's snap).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct HoundBite {
@@ -84,8 +78,7 @@ pub struct HoundMindPlugin;
 
 impl Plugin for HoundMindPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<HoundCrouch>()
-            .add_message::<HoundBite>()
+        app.add_message::<HoundBite>()
             .add_systems(FixedUpdate, wake_hounds);
     }
 }

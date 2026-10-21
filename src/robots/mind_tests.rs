@@ -738,7 +738,7 @@ struct HoundLog {
 }
 
 fn hound_log(
-    mut c: MessageReader<super::hound_mind::HoundCrouch>,
+    mut c: MessageReader<super::hound::HoundCrouch>,
     mut b: MessageReader<super::hound_mind::HoundBite>,
     time: Res<Time>,
     mut log: ResMut<HoundLog>,
