@@ -32,6 +32,36 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Fire through a wall: a walker that lost sight of you under a roof
+/// moments ago (at least [`BLIND_AFTER`], at most [`BLIND_WITHIN`]
+/// seconds), and knows within [`BLIND_SURE`] m where you are, within
+/// [`BLIND_RANGE`] m, settles its turret [`BLIND_TELL`] s (the same tell
+/// as a shot) and fires [`BLIND_ROUNDS`] through it, if a round would get
+/// through (`destruction::through`): once each time it loses you.
+pub const BLIND_AFTER: f32 = 0.3;
+pub const BLIND_WITHIN: f32 = 4.0;
+pub const BLIND_SURE: f32 = 3.0;
+pub const BLIND_RANGE: f32 = 12.0;
+pub const BLIND_TELL: f32 = 0.4;
+pub const BLIND_ROUNDS: u8 = 3;
+/// Seconds between them, and their spread (wider than aimed fire).
+const BLIND_EVERY: f32 = 0.25;
+const BLIND_SPREAD: f32 = 0.06;
+/// A walker round, for the check: 8 g at the turret's 450 m/s.
+const ROUND_G: f32 = 8.0;
+const ROUND_SPEED: f32 = 450.0;
+
+/// Where a walker is in a burst through a wall.
+#[derive(Debug, Default, Clone, Copy)]
+struct Blind {
+    /// Settling (the tell), then firing.
+    tell: f32,
+    left: u8,
+    /// Done (or not worth it) for this loss of sight.
+    spent: bool,
+    /// Where it fires.
+    at: Vec3,
+}
 /// Lamer than this (`anim::Gait::limp`), a walker fights from where it
 /// stands and doesn't chase.
 pub const LAME: f32 = 0.5;
@@ -121,6 +151,7 @@ impl Plugin for WalkerPlugin {
                 (
                     walker_parts_destroyed,
                     walker_brain,
+                    super::hound_mind::spring_hounds,
                     super::anim::walk,
                     super::anim::aim_turrets,
                     walker_guns,
@@ -346,15 +377,53 @@ fn walker_brain(
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
     spatial: SpatialQuery,
-    (mut shots, mut crouches, mut bites, mut seed): (
+    (mut shots, mut crouches, mut bites, mut seed, minds, flanking, (parts, retreating)): (
         MessageWriter<Shot>,
-        MessageWriter<super::hound_mind::HoundCrouch>,
+        MessageWriter<super::hound::HoundCrouch>,
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
+        Query<&super::senses::MindSeed>,
+        Query<(), With<Flanker>>,
+        (Query<&RobotPart>, Query<(), With<Retreating>>),
     ),
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 1.1;
+    // How much core each robot has left (0..1).
+    let cores: std::collections::HashMap<Entity, f32> = parts
+        .iter()
+        .filter(|p| p.role == PartRole::Core)
+        .map(|p| (p.robot, (p.hp / p.max_hp.max(1.0)).max(0.0)))
+        .collect();
+    // Walkers fighting someone, for pairing up: (who, where, whom, seed).
+    let fighting: Vec<(Entity, Vec3, Entity, u64)> = walkers
+        .iter()
+        .filter_map(
+            |(
+                e,
+                _,
+                brain,
+                _,
+                aware,
+                t,
+                robot,
+                _,
+                _,
+                grappler,
+                (_, _, crawler, gait, hound, ..),
+            )| {
+                let plain = !grappler && !crawler && hound.is_none();
+                let heavy = gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy);
+                (plain && !heavy && !robot.wrecked && matches!(brain, Brain::Engage))
+                    .then_some(())
+                    .and(aware.target)
+                    .map(|p| {
+                        let seed = minds.get(e).map_or(e.to_bits(), |m| m.0);
+                        (e, t.translation, p, seed)
+                    })
+            },
+        )
+        .collect();
     for (
         e,
         mut w,
@@ -376,6 +445,9 @@ fn walker_brain(
         let is_hound = hound.is_some();
         if let Some(h) = hound.as_deref_mut() {
             h.cooldown -= dt;
+        }
+        if !matches!(*brain, Brain::Engage) && flanking.contains(e) {
+            commands.entity(e).remove::<Flanker>();
         }
         // A site's own grid, or the Zone's.
         let navr = local.map_or(NavRef::Zone(&nav.0), NavRef::Local);
@@ -571,6 +643,7 @@ fn walker_brain(
                             if h.crouch <= 0.0 {
                                 h.lunge = super::hound_mind::LUNGE_TIME;
                                 h.bit = false;
+                                h.spring = Some(tp);
                             }
                             None
                         } else if h.lunge > 0.0 {
@@ -580,9 +653,7 @@ fn walker_brain(
                             if d < super::hound_mind::BITE_RANGE && !h.bit {
                                 h.bit = true;
                                 h.cooldown = super::hound_mind::BITE_COOLDOWN;
-                                *seed = seed
-                                    .wrapping_mul(6364136223846793005)
-                                    .wrapping_add(1442695040888963407);
+                                *seed = super::senses::shot_seed(&minds, e, &time);
                                 let head = pos + Vec3::Y * 0.2;
                                 super::hound_mind::bite(
                                     e,
@@ -596,7 +667,7 @@ fn walker_brain(
                             Some(tp)
                         } else if d < super::hound_mind::LUNGE_RANGE && h.cooldown <= 0.0 {
                             h.crouch = super::hound_mind::CROUCH_TIME;
-                            crouches.write(super::hound_mind::HoundCrouch { hound: e, at: pos });
+                            crouches.write(super::hound::HoundCrouch { hound: e, at: tp });
                             None
                         } else if h.cooldown > 0.0 && d < super::hound_mind::LUNGE_RANGE {
                             // Backs off between bites.
@@ -622,11 +693,40 @@ fn walker_brain(
                         (d > super::indoor::CRAWLER_HOLD).then_some(tp)
                     }
                     (Some(tp), _) => {
+                        // Badly hurt, it breaks off: back to cover away from
+                        // you (and says so), still shooting.
+                        let hurt = cores.get(&e).is_some_and(|c| *c < RETREAT_AT);
+                        if hurt && !retreating.contains(e) {
+                            commands.entity(e).insert(Retreating);
+                            w.rethink = 0.0;
+                        }
+                        // Two on one: the first pins you, the other works
+                        // round to your side.
+                        let flank = aware
+                            .target
+                            .filter(|_| !hurt)
+                            .and_then(|p| flank_role(e, pos, p, tp, &fighting));
+                        if flank.is_some() != flanking.contains(e) {
+                            if flank.is_some() {
+                                commands.entity(e).insert(Flanker);
+                                w.rethink = 0.0;
+                            } else {
+                                commands.entity(e).remove::<Flanker>();
+                            }
+                        }
                         // Fight from cover: move between pieces of it, in range.
                         w.rethink -= dt;
                         if w.rethink <= 0.0 {
                             w.rethink = COVER_RETHINK;
-                            w.cover = pick_cover(pos, tp, navr, &spatial);
+                            w.cover = match (hurt, flank) {
+                                (true, _) => {
+                                    let away = (pos - tp).with_y(0.0).normalize_or(Vec3::X);
+                                    let back = pos + away * RETREAT_DIST;
+                                    pick_cover(back, tp, navr, &spatial).or(Some(back))
+                                }
+                                (false, Some(f)) => pick_cover(f, tp, navr, &spatial).or(Some(f)),
+                                (false, None) => pick_cover(pos, tp, navr, &spatial),
+                            };
                         }
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
                         match w.cover {
@@ -760,6 +860,56 @@ fn walker_brain(
 /// Somewhere to fight `target` from: walkable ground hard by an obstacle
 /// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
 /// line to it, not far from `pos`. Where it stands, if that will do.
+/// A walker with less than this share of its core left breaks off...
+pub const RETREAT_AT: f32 = 0.35;
+/// ...to cover about this much further from you (m).
+pub const RETREAT_DIST: f32 = 14.0;
+
+/// A walker that's broken off, hurt (it keeps shooting from further back).
+#[derive(Component, Debug)]
+pub struct Retreating;
+
+/// Two walkers on one target within this of each other pair up (m)...
+pub const PAIR_RADIUS: f32 = 40.0;
+/// ...and the flanker works round to this far off the pinner's line
+/// (radians, either side by turns)...
+pub const FLANK_ANGLE: f32 = 1.3;
+/// ...at the pinner's range, held to this band (m).
+pub const FLANK_RANGE: (f32, f32) = (14.0, 24.0);
+
+/// A walker working round to its target's side (while another pins it).
+#[derive(Component, Debug)]
+pub struct Flanker;
+
+/// Where `me` (at `pos`, fighting `target` at `tp`) should go to flank, if
+/// it's not the pinner: among those on the same target within
+/// [`PAIR_RADIUS`], the lowest seed pins; the rest flank, alternating
+/// sides, [`FLANK_ANGLE`] round from the pinner's line.
+fn flank_role(
+    me: Entity,
+    pos: Vec3,
+    target: Entity,
+    tp: Vec3,
+    fighting: &[(Entity, Vec3, Entity, u64)],
+) -> Option<Vec3> {
+    let my_seed = fighting.iter().find(|f| f.0 == me)?.3;
+    let mut mates: Vec<&(Entity, Vec3, Entity, u64)> = fighting
+        .iter()
+        .filter(|f| f.2 == target && (f.0 == me || f.1.distance(pos) < PAIR_RADIUS))
+        .collect();
+    mates.sort_by_key(|f| (f.3, f.0));
+    let pinner = mates.first()?;
+    if pinner.0 == me {
+        return None;
+    }
+    let rank = mates.iter().position(|f| f.0 == me && f.3 == my_seed)?;
+    let side = if rank % 2 == 1 { 1.0 } else { -1.0 };
+    let from = Vec2::new(pinner.1.x - tp.x, pinner.1.z - tp.z);
+    let d = from.length().clamp(FLANK_RANGE.0, FLANK_RANGE.1);
+    let dir = Vec2::from_angle(FLANK_ANGLE * side).rotate(from.normalize_or(Vec2::X));
+    Some(Vec3::new(tp.x + dir.x * d, pos.y, tp.z + dir.y * d))
+}
+
 fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> Option<Vec3> {
     let blocked = |p: Vec3| !nav.walkable(p);
     let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
@@ -802,26 +952,110 @@ fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> O
     best.map(|(p, _)| p)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walker_guns(
     mut walkers: Query<(Entity, &mut Walker, &Brain, &Awareness, &Robot, &Children)>,
     turrets: Query<(&GlobalTransform, &RobotPart), With<WalkerTurret>>,
+    parts: Query<&RobotPart>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut shots: MessageWriter<Shot>,
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
+    minds: Query<&super::senses::MindSeed>,
+    (entrances, path, mut blind): (
+        Res<super::doors::Entrances>,
+        crate::destruction::through::RoundPath,
+        Local<std::collections::HashMap<Entity, Blind>>,
+    ),
 ) {
     let dt = time.delta_secs();
+    blind.retain(|e, _| walkers.contains(*e));
     for (e, mut w, brain, aware, robot, children) in &mut walkers {
         w.gun_cooldown -= dt;
         if robot.wrecked || !matches!(brain, Brain::Engage) {
             w.aim = 0.0;
+            blind.remove(&e);
             continue;
+        }
+        if aware.can_see_target {
+            // A new loss of sight may earn a new burst.
+            blind.remove(&e);
         }
         if !aware.can_see_target {
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
                 w.aim = 0.0;
+            }
+            // Through the wall, if it's thin and you're close behind it.
+            let Some((gt, part)) = children.iter().find_map(|c| turrets.get(c).ok()) else {
+                continue;
+            };
+            if !part.alive() || aware.unseen < BLIND_AFTER {
+                continue;
+            }
+            let muzzle = gt.translation() + Vec3::Y * 0.05;
+            let b = blind.entry(e).or_default();
+            if b.spent {
+                continue;
+            }
+            if b.left == 0 {
+                // Worth it? Close, sure, under a roof, and a round gets there.
+                let Some(lk) = aware.last_known else {
+                    b.spent = true;
+                    continue;
+                };
+                let at = lk + Vec3::Y * 1.0;
+                let near = muzzle.distance(at) < BLIND_RANGE;
+                let sure = aware.uncertainty < BLIND_SURE;
+                let soon = aware.unseen < BLIND_WITHIN;
+                let roofed = entrances.building_at(lk).is_some();
+                // Aimed a little short: the check can't tell you from a wall.
+                let short = at - (at - muzzle).normalize_or_zero() * 0.6;
+                let own = |x: Entity| x == e || parts.get(x).is_ok_and(|p| p.robot == e);
+                if !(near && sure && soon && roofed) {
+                    if !soon {
+                        b.spent = true;
+                    }
+                    continue;
+                }
+                if !path.would_reach(muzzle, short, ROUND_G, ROUND_SPEED, &own) {
+                    b.spent = true;
+                    continue;
+                }
+                *b = Blind {
+                    tell: 0.0,
+                    left: BLIND_ROUNDS,
+                    spent: false,
+                    at,
+                };
+                aims.write(WalkerAim {
+                    walker: e,
+                    at: muzzle,
+                });
+            }
+            b.tell += dt;
+            if b.tell < BLIND_TELL || w.gun_cooldown > 0.0 {
+                continue;
+            }
+            *seed = super::senses::shot_seed(&minds, e, &time);
+            let dir = (b.at - muzzle).normalize_or(Vec3::NEG_Z);
+            shots.write(Shot {
+                gun: e,
+                shooter: Some(e),
+                origin: muzzle + dir * 0.3,
+                direction: dir,
+                speed: ROUND_SPEED,
+                damage: 14.0,
+                projectiles: 1,
+                spread: BLIND_SPREAD,
+                recoil: 0.0,
+                seed: *seed,
+            });
+            w.gun_cooldown = BLIND_EVERY;
+            b.left -= 1;
+            if b.left == 0 {
+                b.spent = true;
             }
             continue;
         }
@@ -856,9 +1090,7 @@ fn walker_guns(
         if w.gun_cooldown > 0.0 {
             continue;
         }
-        *seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        *seed = super::senses::shot_seed(&minds, e, &time);
         shots.write(Shot {
             gun: e,
             shooter: Some(e),

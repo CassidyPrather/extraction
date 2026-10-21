@@ -72,7 +72,7 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 11.5 | Was 10; Kettle's quarry view now stands under a spruce clump (10.27), see "Gauge margins" |
+| Overdraw, mean layers a pixel | 10 | Worst view 7.3 (Marrow's spruce); 11.5 for a while, see "Gauge margins" |
 | Overdraw, 95th percentile | 35 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
@@ -338,10 +338,20 @@ Kettle Pass and Cinder Works hold the same ceilings (`SPIKE_MAP`): their
 events are all 1.2-2.6x the median, loading's worst after the second
 frame 79 and 102 ms.
 
-Still there: the first frame (Startup: building the Zone, terrain and
-rock meshes, 6.7 s on one thread) runs before the app submits a frame, so
-the headset shows its own loading indicator; and frame 2 (215 ms: first
-text layout, the screens). Neither is a hitch mid-raid.
+The first frame (Startup: building the Zone, terrain and rock meshes,
+6.7 s on one thread) runs before the OpenXR session is even created
+(`bevy_mod_xr` runs `XrFirst` ahead of everything but the startup
+schedules, and the session was only asked for in that frame's
+PreUpdate), so the runtime shows its own loader. What did reach the
+headset was the rest of the load: frames of 60-100 ms for about a second
+while buildings dressed and the forest's impostors were taken. So the
+session now starts only when the load has settled
+(`rig::xr::handle_session`, `bevy_mod_xr`'s own handling switched off):
+no building still waiting on its props, the forest built, every impostor
+captured; or after 20 s whatever the load's doing, so a stuck stream
+can't leave the player in the runtime's loader. `rig::xr::tests` hold
+both. (`scripts/xr_check.sh` needs more `FRAMES` for it: the screenshot
+now comes after the load, not during it.)
 
 ### First use: pipelines
 
@@ -416,7 +426,18 @@ something real (main at 43940f8, fetched foliage):
   cards within about 1.5 m of the eye in their vertex shader, as the
   impostors' near cut does (in VR those are flat sheets in your face);
   it needs each card's centre in a vertex attribute, and the tree shader
-  is Visual design's.
+  is Visual design's. Done, with their OK: each card vertex carries its
+  card's centre (`trees::ATTRIBUTE_CARD_CENTRE`, at location 8 through
+  `TreeSway`'s specialize), and `tree_sway.wgsl` shrinks the card to it
+  smoothly, whole from 2 m and gone by 1.2 m (`trees::card_scale`); the
+  trunks, the dark core and the cards' shadows stay, and the overdraw
+  gauge models it. Kettle's quarry on main: 10.27 > 8.64 (tree cards 6.07
+  > 4.43). `EXTRACTION_CARD_SHRINK=0` leaves cards whole, to compare.
+  `docs/shots/performance/card_shrink_k05.png` (lavapipe, left before,
+  right after) also shows what the view had become: its camera stands
+  inside that spruce's dark core, which is drawn from inside; the view
+  wants moving a few metres, and the core seen from within is a look for
+  World models and Visual design.
 - **Where each valley stands** (worst share of any limit in any view):
   Marrow 1.00 (aerial, 1195 of 1200 draws), Kettle 0.89 (quarry overdraw,
   of 11.5), Training Yard 0.90 (aerial shadow draws), Cinder 0.86 (gate
@@ -435,3 +456,19 @@ something real (main at 43940f8, fetched foliage):
   1211, expect about 1064).
 - The hitch gauge's wall-clock test is out of the default suite
   (`scripts/hitches.sh`), its finds held by counts (see "Hitches").
+
+## Load time
+
+The startup frame (before the headset's session starts) was 4.7-6.2 s on
+this 4-core container, and longer on one thread. `render::spikes::tests::
+startup_frames` (ignored, wall-clock) times it per valley on all cores.
+
+- The terrain's shaping pass (noise, relief, the distance from every cell
+  to every ridge and channel spline) was most of `Heightmap::build`, on
+  one thread. Each cell's rise depends only on where it is, so rows go to
+  every core (bit-identical heights, hashed): `Heightmap::build` 3.1-4.5 s
+  > 1.5-2.5 s.
+- The terrain chunks' meshes and the rock chunks' meshes (with their
+  tangents) are built on the compute pool, each chunk on its own, and
+  spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
+  (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).

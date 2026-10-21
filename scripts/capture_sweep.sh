@@ -12,6 +12,8 @@ FILTER="${1:-all}"
 OUT="${2:-target/sweep}"
 shift $(( $# > 2 ? 2 : $# ))
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
+. scripts/capture_common.sh
+capture_check_bin "$BIN"
 SIZE=1280x640
 mkdir -p "$OUT"
 DATA="$(mktemp -d)"

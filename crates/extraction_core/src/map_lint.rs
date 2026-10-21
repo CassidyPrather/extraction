@@ -1702,6 +1702,44 @@ mod tests {
         assert_clean(&run("rime_fell", RIME_FELL));
     }
 
+    /// The paper map (`scripts/field_map.py`) draws every landmark as a
+    /// tower with its lamp, named: it must take the same height to call
+    /// something a landmark, draw it big enough to pick out (3.5 mm on the
+    /// sheet), and have a name for every landmark the maps place.
+    #[test]
+    fn field_map_draws_the_landmarks() {
+        let src = include_str!("../../../scripts/field_map.py");
+        let num = |name: &str| -> f32 {
+            src.lines()
+                .find_map(|l| l.strip_prefix(&format!("{name} = ")))
+                .and_then(|v| v.split('#').next()?.trim().parse().ok())
+                .unwrap_or_else(|| panic!("field_map.py has no plain `{name} = <number>` line"))
+        };
+        assert_eq!(num("LANDMARK_M"), LANDMARK_HEIGHT);
+        assert!(num("LANDMARK_MM") >= 3.5, "landmark glyph under 3.5 mm");
+        let mut unnamed = Vec::new();
+        for (name, text) in crate::map::VALLEYS
+            .iter()
+            .map(|(n, t)| (*n, *t))
+            .chain([("training_yard", TRAINING_YARD)])
+        {
+            let map = MapDef::from_ron(text).unwrap();
+            for p in &map.placements {
+                let base = crate::map::prefab_base(&p.prefab);
+                if prefab_footprint(&p.prefab)[1] >= LANDMARK_HEIGHT
+                    && !src.contains(&format!("    \"{base}\": \""))
+                {
+                    unnamed.push(format!("{name}: {base}"));
+                }
+            }
+        }
+        assert!(
+            unnamed.is_empty(),
+            "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
+            unnamed.join("\n")
+        );
+    }
+
     /// The Training Yard belongs to onboarding: its findings are printed
     /// for them, and only the rules that would break the tutorial hold.
     #[test]

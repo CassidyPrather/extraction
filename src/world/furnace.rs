@@ -45,7 +45,17 @@ pub struct FurnaceVisualsPlugin;
 
 impl Plugin for FurnaceVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (glow, crane_looks));
+        app.add_systems(
+            Update,
+            (
+                glow,
+                crane_looks,
+                crane_models.after(crane_looks),
+                lever_looks,
+                lever_models.after(lever_looks),
+                swing_levers,
+            ),
+        );
     }
 }
 
@@ -497,23 +507,254 @@ fn crane_looks(
             ..default()
         });
         commands.spawn((
+            crate::render::world_props::Blockout,
             Mesh3d(meshes.add(Cuboid::new(0.6, 0.5, 0.6))),
             MeshMaterial3d(iron.clone()),
             Transform::from_xyz(0.0, 0.2, 0.0),
             ChildOf(e),
         ));
         commands.spawn((
+            crate::render::world_props::Blockout,
             Mesh3d(meshes.add(Cylinder::new(0.035, 1.5))),
             MeshMaterial3d(iron.clone()),
             Transform::default(),
             ChildOf(c.chain),
         ));
         commands.spawn((
+            crate::render::world_props::Blockout,
             Mesh3d(meshes.add(Cuboid::new(0.3, 0.35, 0.2))),
             MeshMaterial3d(iron),
             Transform::from_xyz(0.0, -0.6, 0.0),
             ChildOf(c.chain),
         ));
+    }
+}
+
+/// Its models are in (a crane's bridge and hook, a lever's box).
+#[derive(Component)]
+struct Dressed;
+
+/// A lever's arm, drawn apart so it can swing: down (about its pivot's
+/// X) as its vent opens.
+#[derive(Component)]
+struct LeverArm {
+    rest: Quat,
+    angle: f32,
+}
+
+/// How far a vent's lever swings down, open (radians).
+const LEVER_DOWN: f32 = -1.75;
+
+/// Spawns a model's parts (or those named, or all but those) as children
+/// of `parent`, each placed at `at` and its own node's transform.
+fn spawn_parts(
+    commands: &mut Commands,
+    props: &mut crate::render::world_props::PropModels,
+    materials: &mut Assets<StandardMaterial>,
+    parent: Entity,
+    parts: &[crate::render::world_props::Part],
+    at: Transform,
+    keep: impl Fn(&str) -> bool,
+) {
+    for part in parts.iter().filter(|p| keep(&p.name)) {
+        for (mesh, t, mat) in &part.prims {
+            let material = props.material(mat, materials);
+            commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material),
+                at * part.at * *t,
+                ChildOf(parent),
+            ));
+        }
+    }
+}
+
+/// Client: the crane's models in place of its blockout once they're in:
+/// the bridge across the pit (from wall to wall, under the roof), the
+/// hook block at the chain's foot with the chain up to the bridge.
+fn crane_models(
+    mut commands: Commands,
+    cranes: Query<(Entity, &Crane, &Children), Without<Dressed>>,
+    chains: Query<&Children>,
+    blockouts: Query<(), With<crate::render::world_props::Blockout>>,
+    buildings: Query<(&Building, &Transform)>,
+    mut props: crate::render::world_props::PropModels,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, c, kids) in &cranes {
+        let Ok((b, xf)) = buildings.get(c.site) else {
+            continue;
+        };
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let Some(def) = &l.crane else {
+            continue;
+        };
+        let (Some(bridge), Some(hook)) = (
+            props.parts("cellar_crane_bridge"),
+            props.parts("cellar_crane_hook"),
+        ) else {
+            continue;
+        };
+        commands.entity(e).insert(Dressed);
+        for k in kids.iter().filter(|k| blockouts.contains(*k)) {
+            commands.entity(k).despawn();
+        }
+        for k in chains
+            .get(c.chain)
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|k| blockouts.contains(*k))
+        {
+            commands.entity(k).despawn();
+        }
+        // Across the run, centred over the pit.
+        let (from, to) = (Vec2::from(def.from), Vec2::from(def.to));
+        let run = (to - from).normalize_or(Vec2::Y);
+        let across = Vec2::new(run.y, -run.x);
+        let pit = l
+            .rooms
+            .iter()
+            .find(|r| r.pit)
+            .map_or(0.0, |r| (Vec2::from(r.at) - from).dot(across));
+        let turn = xf.rotation * Quat::from_rotation_y((-across.y).atan2(across.x));
+        // Its top just under the roof (the hook's top 0.6 under that).
+        let bridge_at = Transform::from_translation(
+            xf.rotation * Vec3::new(across.x * pit, 0.55, across.y * pit),
+        )
+        .with_rotation(turn);
+        spawn_parts(
+            &mut commands,
+            &mut props,
+            &mut materials,
+            e,
+            &bridge,
+            bridge_at,
+            |_| true,
+        );
+        // The block at the chain's foot; the chain up to the beam's
+        // underside, half a metre over the hook's top.
+        let foot = Transform::from_xyz(0.0, -def.drop * 0.5, 0.0).with_rotation(turn);
+        spawn_parts(
+            &mut commands,
+            &mut props,
+            &mut materials,
+            c.chain,
+            &hook,
+            foot,
+            |n| n != "chain",
+        );
+        let reach = (def.drop - 0.05).max(0.1);
+        spawn_parts(
+            &mut commands,
+            &mut props,
+            &mut materials,
+            c.chain,
+            &hook,
+            foot * Transform::from_scale(Vec3::new(1.0, reach, 1.0)),
+            |n| n == "chain",
+        );
+    }
+}
+
+/// Client: a box on the wall for each vent and crane lever until its
+/// model's in.
+fn lever_looks(
+    mut commands: Commands,
+    levers: Query<Entity, Or<(Added<VentLever>, Added<CraneLever>)>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for e in &levers {
+        commands.spawn((
+            crate::render::world_props::Blockout,
+            Mesh3d(meshes.add(Cuboid::new(0.5, 0.8, 0.25))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.12, 0.11, 0.1),
+                perceptual_roughness: 0.7,
+                metallic: 0.5,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, 0.0, 0.12 - 0.125),
+            ChildOf(e),
+        ));
+    }
+}
+
+/// Client: the cast-iron lever box (Kit's `cellar_vent`) on each vent's
+/// and crane's lever, its back on the wall, its arm apart to swing.
+fn lever_models(
+    mut commands: Commands,
+    levers: Query<(Entity, &Children), (Or<(With<VentLever>, With<CraneLever>)>, Without<Dressed>)>,
+    blockouts: Query<(), With<crate::render::world_props::Blockout>>,
+    mut props: crate::render::world_props::PropModels,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, kids) in &levers {
+        let Some(parts) = props.parts("cellar_vent") else {
+            continue;
+        };
+        commands.entity(e).insert(Dressed);
+        for k in kids.iter().filter(|k| blockouts.contains(*k)) {
+            commands.entity(k).despawn();
+        }
+        // (The pose stands 0.12 off the wall; the model's origin is on it.)
+        let wall = Transform::from_xyz(0.0, 0.0, 0.12);
+        spawn_parts(
+            &mut commands,
+            &mut props,
+            &mut materials,
+            e,
+            &parts,
+            wall,
+            |n| n != "lever",
+        );
+        if let Some(arm) = parts.iter().find(|p| p.name == "lever") {
+            let pivot = wall * arm.at;
+            let a = commands
+                .spawn((
+                    LeverArm {
+                        rest: pivot.rotation,
+                        angle: 0.0,
+                    },
+                    pivot,
+                    Visibility::default(),
+                    ChildOf(e),
+                ))
+                .id();
+            for (mesh, t, mat) in &arm.prims {
+                let material = props.material(mat, &mut materials);
+                commands.spawn((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(material),
+                    *t,
+                    ChildOf(a),
+                ));
+            }
+        }
+    }
+}
+
+/// Client: a vent's lever swings down as it's opened.
+fn swing_levers(
+    vents: Query<&VentLever>,
+    mut arms: Query<(&mut LeverArm, &mut Transform, &ChildOf)>,
+    time: Res<Time>,
+) {
+    for (mut arm, mut t, parent) in &mut arms {
+        let want = if vents.get(parent.parent()).is_ok_and(|v| v.open) {
+            LEVER_DOWN
+        } else {
+            0.0
+        };
+        if (arm.angle - want).abs() < 1e-3 {
+            continue;
+        }
+        let step = 4.0 * time.delta_secs();
+        arm.angle += (want - arm.angle).clamp(-step, step);
+        t.rotation = arm.rest * Quat::from_rotation_x(arm.angle);
     }
 }
 

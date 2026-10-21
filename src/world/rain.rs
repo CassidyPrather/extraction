@@ -23,7 +23,10 @@ impl Plugin for RainPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<RainMaterial>::default())
             .add_systems(Startup, spawn_rain)
-            .add_systems(Update, (rain_intensity, ash_fall, shelter_nearby));
+            .add_systems(
+                Update,
+                (rain_intensity, ash_fall, snow_fall, shelter_nearby),
+            );
     }
 }
 
@@ -208,32 +211,113 @@ fn ash_fall(
     }
 }
 
+/// Snow falling round the eye, where it's above the snow line: the ash's
+/// field again, white, slower and larger.
+#[derive(Component)]
+struct Flakes(Handle<RainMaterial>);
+
+fn snow_fall(
+    mut commands: Commands,
+    conditions: Res<Conditions>,
+    snow: Option<Res<super::snow::Snow>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<RainMaterial>>,
+    mut flakes: Query<(&Flakes, &mut Visibility)>,
+    mut done: Local<Option<f32>>,
+) {
+    let Some(snow) = snow else {
+        return;
+    };
+    let eye_y = cams.iter().next().map_or(0.0, |g| g.translation().y);
+    let here = snow.falling * snow.above(eye_y);
+    if done.is_some_and(|d| (d - here).abs() < 0.02) && !conditions.is_changed() {
+        return;
+    }
+    if done.is_none() && here <= 0.0 {
+        return;
+    }
+    *done = Some(here);
+    let params = |here: f32| RainParams {
+        params: Vec4::new(here, 1.1, 0.05, BOX),
+        // A blizzard drives it nearly flat.
+        wind: Vec4::new(
+            0.25 + 3.0 * conditions.wind() * here,
+            2.0,
+            0.1 + conditions.wind() * here,
+            0.045,
+        ),
+        light: Vec4::new(streak_light(&conditions), 1.0, 1.0, 1.0),
+    };
+    if flakes.is_empty() {
+        let m = materials.add(RainMaterial {
+            rain: params(here),
+            shelters: Shelters::default(),
+        });
+        commands.spawn((
+            Name::new("Snow"),
+            Flakes(m.clone()),
+            Mesh3d(meshes.add(streak_mesh())),
+            MeshMaterial3d(m),
+            Transform::IDENTITY,
+            NoFrustumCulling,
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
+        return;
+    }
+    for (f, mut vis) in &mut flakes {
+        vis.set_if_neq(if here > 0.01 {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        });
+        if let Some(mut m) = materials.get_mut(&f.0) {
+            m.rain = params(here);
+        }
+    }
+}
+
 /// The streaks' brightness at the hour: the light, less what the eyes
 /// make up (`render::grade::Adaptation`). At night there's next to no
 /// light for a flake to catch: ash or a drop shows only near a lamp or in
 /// a torch's beam, not as a field of white points like stars.
-fn streak_light(c: &Conditions) -> f32 {
+pub(crate) fn streak_light(c: &Conditions) -> f32 {
     let stops = crate::render::grade::Adaptation::target(c.light);
     let dark = (c.light / 0.1).clamp(0.25, 1.0);
     (c.light * 2f32.powf(stops) * dark).clamp(0.02, 1.0)
 }
 
+/// How much of the rain still falls as rain where the eye is: above the
+/// snow line while it snows it comes down as flakes instead
+/// (`world::snow`).
+fn rain_here(c: &Conditions, snow: Option<&super::snow::Snow>, eye_y: f32) -> f32 {
+    let flakes = snow.map_or(0.0, |s| s.falling * s.above(eye_y));
+    c.rain * (1.0 - flakes)
+}
+
 fn rain_intensity(
     conditions: Res<Conditions>,
+    snow: Option<Res<super::snow::Snow>>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     rain: Query<(&Rain, &mut Visibility)>,
     mut materials: ResMut<Assets<RainMaterial>>,
+    mut done: Local<Option<f32>>,
 ) {
-    if !conditions.is_changed() {
+    let eye_y = cams.iter().next().map_or(0.0, |g| g.translation().y);
+    let here = rain_here(&conditions, snow.as_deref(), eye_y);
+    if !conditions.is_changed() && done.is_some_and(|d| (d - here).abs() < 0.02) {
         return;
     }
+    *done = Some(here);
     for (r, mut vis) in rain {
-        *vis = if conditions.rain > 0.01 {
+        *vis = if here > 0.01 {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
         if let Some(mut m) = materials.get_mut(&r.0) {
-            m.rain.params.x = conditions.rain;
+            m.rain.params.x = here;
             m.rain.light.x = streak_light(&conditions);
             m.rain.wind = Vec4::new(1.2 + 2.0 * conditions.rain, 0.0, 0.6 + conditions.rain, 0.0);
         }

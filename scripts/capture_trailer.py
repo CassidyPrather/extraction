@@ -3,11 +3,11 @@
 
     scripts/capture_trailer.py OUT_DIR [--max-clip 9] [--no-video]
 
-OUT_DIR holds chase/ and drone/ frames, trailer.json (the clips: frames,
-raid time, why) and trailer.jsonl (the raid's own telemetry). Each clip is
-cut to one camera or the other by what it shows (a fight goes back and
-forth between them), trimmed to --max-clip seconds, captioned with what's
-happening and when, and set between a title card and an end card. Writes
+OUT_DIR holds chase/ and drone/ frames (each frame from whichever camera
+the director cut to as it filmed), trailer.json (the clips: frames, raid
+time, why) and trailer.jsonl (the raid's own telemetry). Each clip is
+trimmed to --max-clip seconds, captioned with what's happening and when,
+and set between a title card and an end card. Writes
 OUT_DIR/trailer.mp4 when ffmpeg is there, and always OUT_DIR/edit/ (the
 edited frames) and OUT_DIR/trailer_sheet.jpg.
 """
@@ -41,20 +41,6 @@ def font(size):
     return ImageFont.load_default()
 
 
-def cameras_for(reason, n, fps):
-    """Which camera films each frame of a clip of n frames."""
-    if reason == "fight":
-        # Back and forth every 2.5 s, starting close.
-        beat = int(2.5 * fps)
-        return ["chase" if (i // beat) % 2 == 0 else "drone" for i in range(n)]
-    if reason in ("robot", "down"):
-        half = n // 2
-        return ["drone"] * half + ["chase"] * (n - half)
-    if reason in ("walk", "truck", "extract"):
-        return ["drone"] * n
-    return ["chase"] * n
-
-
 def card(size, title, sub):
     img = Image.new("RGB", size, (8, 9, 10))
     d = ImageDraw.Draw(img)
@@ -81,14 +67,13 @@ def main(argv):
     frames = []
     for c in t["clips"]:
         n = min(c["last"] - c["first"], int(max_clip * fps))
-        cams = cameras_for(c["reason"], n, fps)
-        for i, cam in enumerate(cams):
-            src = os.path.join(out, cam, f"f{c['first'] + i:05d}.png")
-            if not os.path.exists(src):
-                # The other camera's, if this one's frame is missing.
-                src = os.path.join(out, "drone" if cam == "chase" else "chase", f"f{c['first'] + i:05d}.png")
-            if os.path.exists(src):
-                frames.append((src, c, c["start"] + i / fps))
+        for i in range(n):
+            # Whichever camera filmed it (the director cuts as it films).
+            for cam in ("chase", "drone"):
+                src = os.path.join(out, cam, f"f{c['first'] + i:05d}.png")
+                if os.path.exists(src):
+                    frames.append((src, c, c["start"] + i / fps))
+                    break
     if not frames:
         print("no frames")
         return

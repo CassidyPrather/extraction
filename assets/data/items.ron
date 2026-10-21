@@ -638,6 +638,18 @@
         (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
         (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
+        (
+            id: "bus_panel", dims: Some((0.9, 0.6, 0.03)), name: "Bus panel",
+            description: "A side panel prised off a bus. Cream paint, a red stripe, rust.",
+            category: Material, size: Bulky, mass: 6.0, bulk: 10.0,
+            tags: ["metal"],
+        ),
+        (
+            id: "car_door", dims: Some((1.0, 0.95, 0.12)), name: "Car door",
+            description: "A saloon's front door, the glass long gone. Good cover, for a while.",
+            category: Material, size: Bulky, mass: 16.0, bulk: 20.0,
+            tags: ["metal"],
+        ),
 
         // ---------------------------------------------------------------
         // Robot parts
@@ -814,6 +826,28 @@
             id: "hana_letter", dims: Some((0.11, 0.004, 0.16)), name: "Letter from the village",
             description: "An envelope, sealed, in a careful hand: For Lev, when he comes back for me.",
             category: Curio, size: Tiny, mass: 0.01, bulk: 0.01, tags: ["paper"],
+        ),
+        // The driver's contracts (`contracts`): what he hands you for
+        // them, and what one sends you for.
+        (
+            id: "relay_box", dims: Some((0.16, 0.1, 0.12)), name: "Relay box",
+            description: "A steel box with an aerial lead and one green lamp. Lev's soldering. Leave it where he said; it listens.",
+            category: Gadget, size: Small, mass: 1.1, bulk: 0.6, tags: ["electronics", "metal"],
+        ),
+        (
+            id: "camera", dims: Some((0.14, 0.09, 0.07)), name: "Zorki camera",
+            description: "A rangefinder camera, film loaded. Hold it up, line the subject in the middle, press.",
+            category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
+        ),
+        (
+            id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",
+            description: "A plain steel watch on a worn strap. J. HOLM, 25 YEARS engraved on the back.",
+            category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"],
+        ),
+        (
+            id: "hajek_tin", dims: Some((0.09, 0.025, 0.06)), name: "Hajek's tin",
+            description: "A tobacco tin, scratched M.H. on the lid. Inside: a photograph, a ring on a string, a stub of pencil.",
+            category: Curio, size: Tiny, mass: 0.12, bulk: 0.03, tags: ["metal"],
         ),
         // What the driver's Recover jobs send you for (`progression`).
         (

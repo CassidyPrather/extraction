@@ -239,49 +239,62 @@ fn spawn_rock_meshes(
         end_margin: (to - 10.0)..(to + 10.0),
         use_aabb: true,
     };
-    for (_, list) in chunks {
-        let (small, big): (Vec<&RockSpot>, Vec<&RockSpot>) =
-            list.iter().partition(|r| r.radius < SOLID_RADIUS);
-        // Boulders: three LODs. Field stones: two, and only near (they're
-        // grain in the ground, not landmarks). Shadows only from what's
-        // near enough to show one.
-        for (rocks, detail, range, shadow) in [
-            (&big, 2, range(0.0, NEAR_LOD), true),
-            (&big, 1, range(NEAR_LOD, FAR_LOD), true),
-            (&big, 0, range(FAR_LOD, CULL), false),
-            (&small, 1, range(0.0, STONES_NEAR), false),
-            (&small, 0, range(STONES_NEAR, STONES), false),
-        ] {
-            if rocks.is_empty() {
-                continue;
+    // The meshes on every core (each chunk's its own); spawned after.
+    let built: Vec<Vec<(Mesh, VisibilityRange, bool)>> =
+        bevy::tasks::ComputeTaskPool::get().scope(|scope| {
+            for (_, list) in &chunks {
+                let zone = &zone;
+                let range = &range;
+                scope.spawn(async move {
+                    let (small, big): (Vec<&RockSpot>, Vec<&RockSpot>) =
+                        list.iter().partition(|r| r.radius < SOLID_RADIUS);
+                    let mut out = Vec::new();
+                    // Boulders: three LODs. Field stones: two, and only
+                    // near (they're grain in the ground, not landmarks).
+                    // Shadows only from what's near enough to show one.
+                    for (rocks, detail, range, shadow) in [
+                        (&big, 2, range(0.0, NEAR_LOD), true),
+                        (&big, 1, range(NEAR_LOD, FAR_LOD), true),
+                        (&big, 0, range(FAR_LOD, CULL), false),
+                        (&small, 1, range(0.0, STONES_NEAR), false),
+                        (&small, 0, range(STONES_NEAR, STONES), false),
+                    ] {
+                        if rocks.is_empty() {
+                            continue;
+                        }
+                        let (mut pos, mut nrm, mut uv, mut col) =
+                            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                        for r in rocks {
+                            let (p, n, u, c) = rock_mesh(r, detail, zone.map.ash > 0.0);
+                            pos.extend(p);
+                            nrm.extend(n);
+                            uv.extend(u);
+                            col.extend(c);
+                        }
+                        let mut mesh = Mesh::new(
+                            PrimitiveTopology::TriangleList,
+                            RenderAssetUsages::RENDER_WORLD,
+                        )
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+                        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
+                        let _ = mesh.generate_tangents();
+                        out.push((mesh, range, shadow));
+                    }
+                    out
+                });
             }
-            let (mut pos, mut nrm, mut uv, mut col) =
-                (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-            for r in rocks {
-                let (p, n, u, c) = rock_mesh(r, detail, zone.map.ash > 0.0);
-                pos.extend(p);
-                nrm.extend(n);
-                uv.extend(u);
-                col.extend(c);
-            }
-            let mut mesh = Mesh::new(
-                PrimitiveTopology::TriangleList,
-                RenderAssetUsages::RENDER_WORLD,
-            )
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
-            let _ = mesh.generate_tangents();
-            let mut e = commands.spawn((
-                Name::new("Rock chunk"),
-                crate::render::centred(&mut meshes, mesh),
-                MeshMaterial3d(mat.clone()),
-                range,
-            ));
-            if !shadow {
-                e.insert(bevy::light::NotShadowCaster);
-            }
+        });
+    for (mesh, range, shadow) in built.into_iter().flatten() {
+        let mut e = commands.spawn((
+            Name::new("Rock chunk"),
+            crate::render::centred(&mut meshes, mesh),
+            MeshMaterial3d(mat.clone()),
+            range,
+        ));
+        if !shadow {
+            e.insert(bevy::light::NotShadowCaster);
         }
     }
 }

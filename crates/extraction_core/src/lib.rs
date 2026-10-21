@@ -8,6 +8,7 @@
 pub mod ammo;
 pub mod anomaly;
 pub mod cold;
+pub mod contracts;
 pub mod cooking;
 pub mod cover;
 pub mod fabrication;

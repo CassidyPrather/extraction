@@ -25,6 +25,7 @@ pub mod debris;
 pub mod glass;
 pub mod hooks;
 pub mod scenario;
+pub mod strip;
 // Robot minds' walkers call it (after the merge); tests do already.
 #[allow(dead_code)]
 pub mod through;
@@ -92,6 +93,7 @@ impl Plugin for DestructionPlugin {
                 hooks::HooksPlugin,
                 breach::BreachPlugin,
                 boards::BoardsPlugin,
+                strip::StripPlugin,
             ));
     }
 }
@@ -115,6 +117,7 @@ pub fn surge(world: &mut World) {
     wood::mend_all(world);
     breach::mend_all(world);
     boards::mend_all(world);
+    strip::mend_all(world);
 }
 
 #[cfg(test)]

@@ -53,12 +53,10 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
-    // 10 until a forest reshuffle stood Kettle Pass's quarry view 1.3 m
-    // from a spruce, with three more within 9 m: 10.27, deterministic,
-    // and a fair worst case (standing under a spruce clump). Card quads
-    // within 2 m of the eye are 2.4 of its layers; collapsing those is
-    // the cut that would earn 10 back (docs/PERFORMANCE.md).
-    overdraw_mean: 11.5,
+    // (11.5 for a while, when Kettle Pass's quarry view stood inside a
+    // spruce clump at 10.27; moved clear, and near cards shrinking away,
+    // it's 4.4, and the worst view anywhere is 7.3.)
+    overdraw_mean: 10.0,
     overdraw_p95: 35,
 };
 
@@ -907,6 +905,11 @@ pub(crate) mod tests {
     /// `client_in` on a fixed number of task-pool threads (one: every
     /// system's time is its own work, and the frame's is the total).
     pub(crate) fn client_threads(map: &str, weather: &str, threads: Option<usize>) -> App {
+        client_with(map, weather, None, threads)
+    }
+
+    /// A client under this weather, with this much snow lying (`--snow`).
+    fn client_with(map: &str, weather: &str, snow: Option<f32>, threads: Option<usize>) -> App {
         use bevy::render::RenderPlugin;
         use bevy::render::settings::WgpuSettings;
         let dir = std::env::temp_dir().join(format!("extraction-budget-{map}"));
@@ -948,6 +951,7 @@ pub(crate) mod tests {
             robots: false,
             data_dir: Some(dir),
             weather: Some(weather.into()),
+            snow,
             camera: Some((Vec3::new(0.0, 0.0, 0.0), 0.0, 0.0)),
             ..default()
         })
@@ -1012,7 +1016,13 @@ pub(crate) mod tests {
 
     /// Every lookbook view of `map`, seen through the headset's eye.
     fn loads(map: &str) -> Vec<(String, ViewLoad, super::super::overdraw::Overdraw)> {
-        let mut app = client(map);
+        loads_with(client(map), map)
+    }
+
+    fn loads_with(
+        mut app: App,
+        map: &str,
+    ) -> Vec<(String, ViewLoad, super::super::overdraw::Overdraw)> {
         settle(&mut app);
         let zone = app.world().resource::<crate::world::Zone>().clone();
         let file = crate::asset_root_path()
@@ -1063,6 +1073,11 @@ pub(crate) mod tests {
     }
 
     fn holds(map: &str) {
+        holds_with(map, None);
+    }
+
+    /// `holds`, under a given weather (and snow), instead of the clearing.
+    fn holds_with(map: &str, weather: Option<(&str, Option<f32>)>) {
         let _one_at_a_time = heavy();
         // Two different scenes: the forest with its fetched textures (cards
         // and impostors, what ships) or without (a lighter fallback). Each
@@ -1074,7 +1089,13 @@ pub(crate) mod tests {
              not run), not the shipped scene"
         };
         println!("{map}: measuring {path}");
-        let loads = loads(map);
+        let loads = match weather {
+            Some((w, snow)) => {
+                println!("{map}: in {w}, snow {snow:?}");
+                loads_with(client_with(map, w, snow, None), map)
+            }
+            None => loads(map),
+        };
         let mut over = Vec::new();
         for (view, load, od) in &loads {
             println!("{map} {view}: {}", load.summary());
@@ -1741,5 +1762,18 @@ pub(crate) mod tests {
     #[test]
     fn training_yard_holds_the_budget() {
         holds("training_yard");
+    }
+
+    /// A thunderstorm: the rain sheets crossing the valley (the flashes
+    /// are a few frames, not a steady load).
+    #[test]
+    fn marrow_creek_holds_the_budget_in_a_storm() {
+        holds_with("marrow_creek", Some(("storm", None)));
+    }
+
+    /// The first snow, lying: flakes falling, the snow on every surface.
+    #[test]
+    fn kettle_pass_holds_the_budget_in_snow() {
+        holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
 }

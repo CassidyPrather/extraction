@@ -44,6 +44,14 @@ pub fn path(name: &str) -> String {
     format!("models/props/{name}.glb")
 }
 
+/// A model's top-level node: its name, its transform in prop space, and
+/// its primitives (mesh, in the node's space, material name).
+pub struct Part {
+    pub name: String,
+    pub at: Transform,
+    pub prims: Vec<(Handle<Mesh>, Transform, String)>,
+}
+
 /// A blockout part to remove once its entity's [`SwapIn`] models are in.
 #[derive(Component)]
 pub struct Blockout;
@@ -138,6 +146,46 @@ impl PropModels<'_> {
             walk(&n, Transform::IDENTITY, &mut out);
         }
         out
+    }
+
+    /// The model's top-level nodes, each with its own transform and its
+    /// primitives in its space, if it has loaded: for a model with a part
+    /// that moves (a lever, a chain), drawn apart from the rest.
+    pub fn parts(&mut self, name: &str) -> Option<Vec<Part>> {
+        let h = self.models.request(&path(name), &self.server)?;
+        let ModelState::Ready(g) = Models::state(&h, &self.server, &self.gltfs) else {
+            return None;
+        };
+        fn walk(
+            n: &crate::models::ModelNode,
+            t: Transform,
+            out: &mut Vec<(Handle<Mesh>, Transform, String)>,
+        ) {
+            for p in &n.primitives {
+                out.push((
+                    p.mesh.clone(),
+                    t,
+                    p.material.clone().unwrap_or_else(|| "Timber".into()),
+                ));
+            }
+            for c in &n.children {
+                walk(c, t * c.transform, out);
+            }
+        }
+        Some(
+            model_nodes(g, &self.nodes, &self.gltf_meshes)
+                .iter()
+                .map(|n| {
+                    let mut prims = Vec::new();
+                    walk(n, Transform::IDENTITY, &mut prims);
+                    Part {
+                        name: n.name.clone(),
+                        at: n.transform,
+                        prims,
+                    }
+                })
+                .collect(),
+        )
     }
 
     pub fn material(

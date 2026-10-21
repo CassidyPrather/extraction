@@ -76,7 +76,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
         b.bx(
             Vec3::new(len, y1 - y0, t),
             Vec3::new(0.0, (y0 + y1) * 0.5, -2.0 + t * 0.5),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
         // Its coping: a string course a hand proud of the face.
         b.deco(
@@ -104,7 +104,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
     b.bx(
         Vec3::new(len, ph, pt),
         Vec3::new(0.0, FACE_H + ph * 0.5, pz),
-        Mat::Concrete,
+        Mat::DressedStone,
     );
     b.deco(
         Vec3::new(len + 0.1, 0.12, pt + 0.2),
@@ -128,7 +128,7 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
             b.bx(
                 Vec3::new(w, h, w),
                 Vec3::new(x, FACE_H + h * 0.5, pz - 0.9),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
             b.piece(
                 Shape::Prism(Vec3::new(w + 0.4, 1.6, w + 0.4)),
@@ -150,7 +150,7 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
     b.bx(
         Vec3::new(len, BACK_H, 3.0),
         Vec3::new(0.0, BACK_H * 0.5, 0.0),
-        Mat::Concrete,
+        Mat::DressedStone,
     );
     // Where the water stood: the stained skin, a tide line along its top.
     b.deco(
@@ -173,7 +173,7 @@ fn back(b: &mut Builder, len: f32, gap: Option<f32>) {
         b.bx(
             Vec3::new(c - a, ph, pt),
             Vec3::new((a + c) * 0.5, BACK_H + ph * 0.5, pz),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
         b.deco(
             Vec3::new(c - a + 0.1, 0.12, pt + 0.2),
@@ -206,7 +206,7 @@ fn tower(b: &mut Builder) {
             b.bx(
                 Vec3::new(side, 2.4, t),
                 Vec3::new(x, y0 + 1.2, z),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
         }
     };
@@ -218,21 +218,21 @@ fn tower(b: &mut Builder) {
             b.bx(
                 Vec3::new(w, doorway, t),
                 Vec3::new(0.0, doorway * 0.5, z),
-                Mat::Concrete,
+                Mat::DressedStone,
             );
         }
         let top = doorway + 2.4;
         b.bx(
             Vec3::new(w, h - top, t),
             Vec3::new(0.0, (top + h) * 0.5, z),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
     }
     for x in [-hw + t * 0.5, hw - t * 0.5] {
         b.bx(
             Vec3::new(t, h, w - 2.0 * t),
             Vec3::new(x, h * 0.5, 0.0),
-            Mat::Concrete,
+            Mat::DressedStone,
         );
     }
     // Slits of light up the walls (dark glass, visual only), and a band

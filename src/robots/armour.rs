@@ -141,17 +141,18 @@ fn shed_plates(
         &Robot,
         Option<&LinearVelocity>,
         Option<&super::walker::Walker>,
+        Option<&super::RobotSeed>,
     )>,
     heavies: Query<(), With<super::heavy::Heavy>>,
 ) {
     for ev in events.read() {
-        let PartRole::Armour(_) = ev.role else {
+        let PartRole::Armour(plate) = ev.role else {
             continue;
         };
         let Ok(gt) = parts.get(ev.part) else {
             continue;
         };
-        let Ok((robot, lin, walker)) = robots.get(ev.robot) else {
+        let Ok((robot, lin, walker, robot_seed)) = robots.get(ev.robot) else {
             continue;
         };
         if heavies.contains(ev.robot) {
@@ -163,7 +164,8 @@ fn shed_plates(
             .map(|v| v.0)
             .or(walker.map(|w| w.velocity))
             .unwrap_or_default();
-        let seed = ev.part.index_u32() as f32;
+        // Each plate of each robot falls its own way.
+        let seed = (robot_seed.map_or(0, |s| s.low() % 1000) + plate as u32 * 7) as f32;
         let (collider, mass, inertia) = if robot.kind == RobotKind::Dirigible {
             (
                 Collider::cuboid(0.86, 0.06, 3.3),

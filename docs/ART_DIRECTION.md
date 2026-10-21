@@ -114,6 +114,39 @@ Night is half the game, and it must be both beautiful and playable.
   - overcast must be no brighter than clear;
   - no view may be a hole.
 
+## Storms and snow
+
+- **A storm is a downpour with thunder in it.** Half of all downpours
+  are storms. Under the anvil it is darker, the wind is at its hardest,
+  and the hollows fill in a minute or two.
+- **Lightning lights the whole valley for a few frames.** Two to four
+  strokes flicker over about a third of a second. The light comes from
+  where it struck, so shadows swing across the ground for the flash
+  (the sun's cascades run only for those frames). The cloud lights from
+  inside, the bellies most, and so do the fog and the horizon. Strikes
+  come every 6 to 24 seconds, mostly far off. The thunder follows by
+  the distance: about three seconds a kilometre (Audio).
+- **Rain you can see crossing the valley.** In a downpour, veils of
+  heavier rain drift across 40 to 200 m out with the wind: ragged, in
+  columns, thinning upward. They gust in a storm.
+- **First snow, at altitude.** In Kettle Pass, on one cold cycle in
+  three after the first couple, snow starts 20 to 40 minutes into the
+  raid. Above about 30 m (the pass, the lodge, the tops) it comes down
+  as flakes and lies over about nine minutes; the valley floor stays
+  wet. It lies on what faces up and is open to the sky: roofs and
+  ground, not walls or under eaves. It comes thin and in patches first,
+  the grass through it. Trees take it on their tops only, so the green
+  shows under the load.
+- **Snow keeps your tracks.** Every step through it leaves a print for
+  up to twelve minutes, three in falling snow: a tell on you, and one
+  the machines can read (`world::snow::Tracks`). Your breath shows in
+  the cold.
+- Gauges: `scripts/night_matrix.sh` also shoots storms dark and in a
+  held flash, by night and by day. A flash must light the near ground
+  well above the dark storm's, brighten the sky, and blow out no more
+  than a sixth of the frame. The budget test has a storm and a snow
+  case.
+
 ## Per valley
 
 | Valley | Mood | Air | Grade |

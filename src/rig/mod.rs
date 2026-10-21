@@ -12,6 +12,7 @@ pub mod fingers;
 pub mod flat;
 pub mod haptics;
 pub mod runtime;
+pub mod seated;
 #[cfg(feature = "xr")]
 pub mod xr;
 
@@ -95,6 +96,9 @@ pub struct RigInput {
     pub crouch: bool,
     /// Playtest mark: flag this moment (flat F9; VR both sticks clicked).
     pub mark: bool,
+    /// How far the head and hands have been lifted for seated play
+    /// (`seated`): drivers write raw poses and set it to 0.
+    pub lifted: f32,
 }
 
 impl RigInput {
@@ -141,7 +145,7 @@ impl Plugin for RigPlugin {
     fn build(&self, app: &mut App) {
         let args: Vec<String> = std::env::args().collect();
         app.register_type::<RigInput>()
-            .add_plugins(haptics::HapticsPlugin)
+            .add_plugins((haptics::HapticsPlugin, seated::SeatedPlugin))
             .insert_resource(RigDriver::Flat)
             .insert_resource(comfort::Comfort::load(&args))
             .add_systems(
