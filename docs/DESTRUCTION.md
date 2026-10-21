@@ -64,19 +64,31 @@ own entities (`wood::BuildingCrate`), drawn by their `crate_slat` /
 
 ## Holes in walls
 
+Three things hole a plank, log, timber, plaster or sheet wall (never
+concrete or brick):
+
+- a heavy's arm (`Breach`): a doorway, 1.1 m wide, floor to 2 m;
+- sustained fire: rounds and blows wear patches of a wall half a metre
+  square (`breach::Wear`); a patch that's taken its fill
+  (`breach::wall_wear`: plaster 300, planks 360, sheet 500, logs 900;
+  a burst of nine or ten rifle rounds into planks) gives way to a hole
+  the size of a head, to see and shoot through (`worn.png`). Rounds that
+  go through wear what's behind too;
+- a grenade within 1.3 m of a wall blows a hole a metre across, or one to
+  crawl through (0.9 × 1.2) if it went off at the wall's foot.
+
 A building is one compound collider and a few merged meshes, so a hole
-is cut in its prefab: the wall box the breach lands in becomes the boxes
-round the hole (over it, and either side, added at the end so props'
-piece ranges hold; `breach::split`). The collider and surfaces are
-rebuilt at once (`buildings::body`); the client drops the building's
-merged meshes and builds them again (`buildings::redress`;
-`dress_buildings` cuts the holes too). Holes are kept by their centres in
-the world (`breach::Breaches`), saved as `ZoneSave::breaches`, cut again
-when a restored building appears, and mended by the Surge. Each hole is
-also a way in for the robots: a `breach::BreachHole` marker in their
-doorway index (`robots::doors::Entrances`), always open, facing out, so
-a robot hunting someone inside can come to it as to a door. Their nav
-grids don't know about holes yet.
+is cut in its prefab: the wall box it's in becomes the boxes round it
+(over, under, either side; added at the end so props' piece ranges hold;
+`breach::split`). The collider and surfaces are rebuilt at once
+(`buildings::body`); the client drops the building's merged meshes and
+builds them again (`buildings::redress`; `dress_buildings` cuts the holes
+too). Holes are kept by their middles and sizes (`breach::Breaches`),
+saved as `ZoneSave::holes`, cut again when a restored building appears,
+and mended by the Surge. A hole down to the floor is a way in for the
+robots: a `breach::BreachHole` marker in their doorway index
+(`robots::doors::Entrances`), always open, facing out (and the building
+gets a shell if it had no door). Their nav grids don't know about holes.
 
 `EXTRACTION_BREACH=1` on a `--screenshot` run tears one where the view
 meets a wall, twenty frames before the capture (`breach.png`).
@@ -244,7 +256,8 @@ splinters in the doorway), `litter.png` (glass glittering on the ground
 under a window broken from inside), `breach.png` (a hole torn in a plank
 house's back wall, its boards on the ground), `boarded.png` (a boarded
 window over the years' broken sash) and `board_off.png` (its middle board
-shot off, splinters falling).
+shot off, splinters falling), `worn.png` (a hole worn through a plank
+wall by a dozen rifle rounds).
 
 ## Next
 
