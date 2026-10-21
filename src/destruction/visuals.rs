@@ -405,6 +405,7 @@ fn shoot_for_screenshot(
     player: Query<Entity, With<crate::rig::LocalPlayer>>,
     spatial: avian3d::prelude::SpatialQuery,
     mut breaches: MessageWriter<super::hooks::Breach>,
+    parts: Query<(), With<super::strip::Strippable>>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -434,6 +435,30 @@ fn shoot_for_screenshot(
                 at: eye + dir * (hit.distance + 0.05),
                 out: -dir,
             });
+        }
+    }
+    // `EXTRACTION_STRIP=1`: twenty frames before the capture, the part
+    // the view meets (a shutter, a bus panel) comes off, as to a crowbar.
+    if std::env::var("EXTRACTION_STRIP").is_ok() && *frame + 20 == opts.frames {
+        let ground = zone.ground(cam.x, cam.z);
+        let eye = Vec3::new(
+            cam.x,
+            if cam.y == 0.0 { ground + 1.7 } else { cam.y },
+            cam.z,
+        );
+        let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+        if let Some(hit) = spatial.cast_ray(
+            eye,
+            Dir3::new(rot * Vec3::NEG_Z).unwrap_or(Dir3::NEG_Z),
+            30.0,
+            true,
+            &avian3d::prelude::SpatialQueryFilter::from_mask(crate::world::Layer::World),
+        ) {
+            if parts.contains(hit.entity) {
+                commands.entity(hit.entity).despawn();
+            } else {
+                warn!("EXTRACTION_STRIP: the view meets no wreck part");
+            }
         }
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
@@ -471,16 +496,39 @@ fn shoot_for_screenshot(
 /// A breakable thing drawn on its own (`wood::Drawn`: a building's crate,
 /// a board over a window): its box until its model is in. Each mesh
 /// carries its range (a range doesn't pass to children).
+#[allow(clippy::type_complexity)]
 fn dress_crates(
     mut commands: Commands,
-    things: Query<(Entity, &super::wood::Drawn, Option<&Children>), Without<CrateDressed>>,
+    things: Query<
+        (Entity, &super::wood::Drawn, &Transform, Option<&Children>),
+        Without<CrateDressed>,
+    >,
+    baking: Query<
+        (&crate::world::buildings::Building, &Transform),
+        With<crate::world::buildings::PropsPending>,
+    >,
     boxes: Query<(), With<CrateBox>>,
     mut props: crate::render::world_props::PropModels,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     use crate::render::world_props::Resolved;
-    for (e, c, children) in &things {
+    // Nothing of a building's (its shutters, boards, crates) shows before
+    // the building does: it'd hang in the air while the walls bake.
+    let baking: Vec<(Transform, Vec3)> = baking
+        .iter()
+        .map(|(b, t)| {
+            let f = extraction_core::map::prefab_footprint(&b.prefab);
+            (*t, Vec3::from(f) * 0.5 + Vec3::splat(1.0))
+        })
+        .collect();
+    for (e, c, at, children) in &things {
+        if baking.iter().any(|(t, half)| {
+            let local = t.rotation.inverse() * (at.translation - t.translation);
+            local.x.abs() < half.x && local.z.abs() < half.z && local.y.abs() < half.y * 2.0
+        }) {
+            continue;
+        }
         let range = || bevy::camera::visibility::VisibilityRange {
             start_margin: 0.0..0.0,
             end_margin: c.range.clone(),

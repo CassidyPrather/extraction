@@ -62,6 +62,135 @@ struct RoofRain {
     heavy: bool,
 }
 
+/// Water that runs where a map says it does, beyond its rivers: Sallow's
+/// scour valves, still open, roaring out of the valve house at the dam's
+/// toe into the river (loud at the toe and the face stair's foot, fading
+/// up the valley). (map, xz, height above ground.) The creek's recording,
+/// slowed and louder, until an outflow can be recorded.
+pub const OUTFLOWS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [12.0, 176.0], 1.0)];
+
+#[derive(Component)]
+struct OutflowLoop;
+
+fn outflows(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    existing: Query<(), With<OutflowLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut done: Local<bool>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    if *done || !existing.is_empty() {
+        return;
+    }
+    *done = true;
+    for &(map, [x, z], up) in OUTFLOWS {
+        if zone.map.name != map {
+            continue;
+        }
+        if let Some(sample) = bank.pick("ambience/creek", &mut rng.0) {
+            commands.spawn((
+                OutflowLoop,
+                SamplePlayer::new(sample)
+                    .looping()
+                    .with_volume(Volume::Decibels(mix::db("water.scour"))),
+                PlaybackSettings::default().with_speed(0.75),
+                Transform::from_xyz(x, zone.ground(x, z) + up, z),
+                Placed::new("water.scour"),
+            ));
+        }
+    }
+}
+
+/// A downpour's swell: (dB, seconds).
+pub const RAIN_SWELL: (f32, f32) = (4.0, 4.0);
+
+/// Thunder after each flash (`world::weather::Lightning`), as far behind
+/// it as sound takes (`storm::thunder_delay`, 343 m/s), from the strike's
+/// direction:
+///
+/// - near (under [`THUNDER_NEAR`]): a sharp crack, echoing the flash's
+///   strokes, then the long tearing roll;
+/// - far: the low rumble only, darker the further (a 1.5 kHz roll at
+///   600 m to 300 Hz at 2.6 km).
+///
+/// Louder the nearer and the brighter the strike. (In a storm the far
+/// thunder of `ambient_oneshots` keeps quiet: every roll is a flash's.)
+pub const THUNDER_NEAR: f32 = 600.0;
+
+fn storm_sounds(
+    mut commands: Commands,
+    mut flashes: MessageReader<crate::world::weather::Lightning>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, Vec3, f32, f32)>>,
+) {
+    let now = time.elapsed_secs();
+    for f in flashes.read() {
+        let delay = crate::world::storm::thunder_delay(f.distance);
+        pending.push((now + delay, f.at, f.distance, f.strength));
+    }
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, at, d, strength) in due {
+        // From the strike's direction, a fixed way off and up: its level is
+        // set here, by distance, not by the falloff.
+        let dir = (at - ear).with_y(0.0).normalize_or(Vec3::X);
+        let from = ear + dir * 120.0 + Vec3::Y * 60.0;
+        let db = thunder_db(d, strength);
+        if d < THUNDER_NEAR {
+            let fc = 8000.0 - 5000.0 * ((d - 250.0) / 350.0).clamp(0.0, 1.0);
+            play_filtered_db(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "explosions/grenade_sharp",
+                from,
+                "thunder.crack",
+                db,
+                0.7,
+                fc,
+            );
+        }
+        let fc = thunder_cutoff(d);
+        play_filtered_db(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ambience/thunder_distant",
+            from,
+            "thunder.roll",
+            db,
+            0.85,
+            fc,
+        );
+    }
+}
+
+/// Thunder's level against its cue, dB: 0 at 250 m from a full strike,
+/// 6 dB down each doubling of distance, and down to -6 dB for a faint one.
+pub fn thunder_db(distance: f32, strength: f32) -> f32 {
+    -6.0 * (distance.max(250.0) / 250.0).log2() - 6.0 * (1.0 - strength.clamp(0.0, 1.0))
+}
+
+/// The roll's low-pass by distance, Hz: 1.5 kHz at 600 m to 300 Hz at
+/// 2.6 km and beyond, and open up close.
+pub fn thunder_cutoff(distance: f32) -> f32 {
+    if distance < THUNDER_NEAR {
+        return 4000.0;
+    }
+    let t = ((distance - THUNDER_NEAR) / 2000.0).clamp(0.0, 1.0);
+    (1500f32.ln() + (300f32.ln() - 1500f32.ln()) * t).exp()
+}
+
 /// The rain bed follows the weather, and where you are: duller and quieter
 /// under a roof (a tin roof drumming over you if there's a recording for
 /// it), gone underground. Eased, so a doorway is a crossfade.
@@ -78,11 +207,25 @@ fn rain_volume(
     mut lowpass: Query<&mut FastLowpassNode>,
     mut now: Local<Option<(f32, f32)>>,
     mut drums: Local<HashMap<&'static str, f32>>,
+    mut swell: Local<(f32, f32)>,
 ) {
+    // In a downpour, a wall of rain sweeps over every 10-20 s (the rain
+    // sheets crossing the valley): up 4 dB and back over 4 s.
+    let t = time.elapsed_secs();
+    if t >= swell.0 {
+        swell.1 = t;
+        swell.0 = t + rng.0.range(10.0, 20.0);
+    }
+    let into = t - swell.1;
+    let gust = if conditions.rain > 0.7 && into < RAIN_SWELL.1 {
+        RAIN_SWELL.0 * (std::f32::consts::PI * into / RAIN_SWELL.1).sin()
+    } else {
+        0.0
+    };
     let rain_db = if conditions.rain < 0.01 {
         None
     } else {
-        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt())
+        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt() + gust)
     };
     let (want_db, want_cut, drum) = crate::acoustics::rain_under(&listening.space);
     let k = (time.delta_secs() * 2.0).min(1.0);
@@ -237,6 +380,8 @@ impl Plugin for AudioPlugin {
                         tool_sounds,
                         hush_world,
                         slapbacks,
+                        storm_sounds,
+                        outflows,
                     ),
                 ),
             )
@@ -742,8 +887,8 @@ fn grenade_sounds(
 }
 
 /// The footstep set for whatever is under `at`: the truck's bed, a built
-/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), or the
-/// ground.
+/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), a
+/// drained reservoir's silt, or the ground.
 fn ground_set(
     zone: &Zone,
     trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
@@ -763,6 +908,12 @@ fn ground_set(
         footstep_set(m)
     } else if wet > 0.0 && crate::world::puddles::puddle_at(&zone.hm, p, wet) > PUDDLE_SPLASH {
         "footsteps/water"
+    } else if crate::world::terrain::drowned_line(&zone.map.name)
+        .is_some_and(|d| d.at(p, at.y).0 > 0.5)
+    {
+        // A drained reservoir's bed (`world::terrain::Drowned`): silt,
+        // as it looks.
+        "footsteps/mud"
     } else {
         surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
     }
@@ -819,7 +970,7 @@ fn shot_set(item: &str) -> &'static str {
         "toz_double" => "guns/shotgun_shot",
         "mp133" => "guns/shotgun_shot",
         "svd" => "guns/bolt_rifle_shot",
-        "toz8" | "flare_pistol" => "guns/pistol_shot",
+        "toz8" | "flare_pistol" | "crossbow" => "guns/pistol_shot",
         _ => "guns/rifle_shot",
     }
 }
@@ -868,6 +1019,37 @@ fn fault_sounds(
         }
     }
     true
+}
+
+/// [`play_filtered`] with a level offset (dB) against its cue.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered_db(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    db: f32,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + db)),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
 }
 
 /// A placed one-shot through its own low-pass (`hz`), for sounds that
@@ -1519,6 +1701,7 @@ fn ambient_oneshots(
     let night = conditions
         .as_deref()
         .is_some_and(|c| c.hour == crate::world::weather::Hour::Night);
+    let storm = conditions.as_deref().is_some_and(|c| c.storm);
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
@@ -1614,7 +1797,10 @@ fn ambient_oneshots(
     }
     // Far thunder; at night, the Surge's, deeper and more often, a long
     // way off across the Zone.
-    if next.1 <= 0.0 {
+    if next.1 <= 0.0 && storm {
+        // In a storm, all thunder follows a flash (`storm_sounds`).
+        next.1 = rng.0.range(60.0, 180.0);
+    } else if next.1 <= 0.0 {
         if night {
             next.1 = rng.0.range(35.0, 90.0);
             play_at_speed(
@@ -4299,6 +4485,20 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Thunder is quieter and darker the further the strike: 6 dB a
+    /// doubling past 250 m, the roll from 1.5 kHz at 600 m to 300 Hz at
+    /// 2.6 km.
+    #[test]
+    fn far_thunder_is_low_and_quiet() {
+        assert_eq!(thunder_db(250.0, 1.0), 0.0);
+        assert!((thunder_db(1000.0, 1.0) + 12.0).abs() < 1e-4);
+        assert!(thunder_db(1000.0, 0.2) < thunder_db(1000.0, 1.0));
+        assert!((thunder_cutoff(600.0) - 1500.0).abs() < 1.0);
+        assert!((thunder_cutoff(2600.0) - 300.0).abs() < 1.0);
+        assert!(thunder_cutoff(1200.0) < thunder_cutoff(800.0));
+        assert!(thunder_cutoff(300.0) > thunder_cutoff(600.0));
+    }
 
     /// The night's sounds come with the dark.
     #[test]

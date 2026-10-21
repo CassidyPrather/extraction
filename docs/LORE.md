@@ -447,6 +447,10 @@ never on the ground, and each is walkable from where the raid sets down
 | Kettle, the lodge meadow | **Fiala's walker** | A machine that came to old Fiala's fence every evening and never took a thing of his, lying where it stopped, jam jars of flowers on its back. He took its eye out so it would stop looking. |
 | Cinder, by the blast furnace | **The charging queue** | The last charge, pallet by pallet (cases, a bedstead, books, dishes, a tool chest), held when the fire got into the north wood on 26 February, and never fed. |
 | Sallow, the stock ground | **Bay four** | Marrow depot's buses in their row on the dry bed, and the bay between three and five still held for number four, the bus Lev drove out. |
+| Marrow, the village street | **Jan Holm's handcart** | Where the collector took Jan Holm on 3 November with the shelter's lamp oil on his cart. Hana sent the oil down and left the cart where it stopped, so Mrs Holm could see it from the shelter steps. |
+| Kettle, by the mine | **The lamp board** | The lamp checks back on their hooks the day the pit shut, all but the Nováks' three: old Novák went down for his tools and took Marie and the boy (their refuge is in the deep workings). |
+| Cinder, below the fire lookout | **The bucket line** | Water butts and a charred beam at the wood's edge where the works hands and Ash Row held the fire on 26 February, noon till dark, until the wind went round. |
+| Sallow, Old Sallow | **The keeper's chair** | Alois Pech's chair below the church tower, where he sat each evening of the drain to watch the church come out ("ten to four, as I said"). |
 
 ## Tone rules
 

@@ -9,6 +9,10 @@
 //! are on the floor, a burnt one's are charred. A few houses Story names
 //! have their own (see `special`).
 //!
+//! The buildings that aren't houses (cabins, the shop, sheds, barns, the
+//! pump station, huts, booths, halls) hold their workers' things instead
+//! (`workplace`, `art/props/workplaces.py`).
+//!
 //! Each thing goes in a slot on `buildings::house`'s plan: the table top,
 //! the shelves' boards that carry no loot, the bed, the floor by the door,
 //! the wall beside it, the sills. Slots within [`NOTE_CLEAR`] of a note or
@@ -154,7 +158,13 @@ pub fn dress(
     let at = Vec2::new(xf.translation.x, xf.translation.z);
     let named = named(map, base, prefab, at);
     let Some((valley, (w, d))) = valley(map).zip(plan(base)) else {
-        return clear_of_notes(map, xf, named.map_or_else(Vec::new, |n| n.things));
+        // Not a house (or not a valley's): Story's things, or else the
+        // workers' (`workplace`).
+        let things = match named {
+            Some(n) => n.things,
+            None => workplace(map, prefab, at),
+        };
+        return clear_of_notes(map, xf, things);
     };
     let ruin = if prefab.ends_with("_burnt") {
         Some(Ruin::Burnt)
@@ -524,6 +534,259 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
         ),
         _ => None,
     }
+}
+
+/// The buildings that aren't houses which get their workers' things
+/// (`workplace`).
+pub const WORKPLACES: [&str; 11] = [
+    "cabin_log",
+    "shop",
+    "shed",
+    "barn",
+    "pump_station",
+    "mast_hut",
+    "guard_booth",
+    "signal_box",
+    "bus_depot",
+    "rail_shed",
+    "factory_hall",
+];
+
+/// What Cinder's fire left of a workplace's things: iron and tin.
+const FIREPROOF: [&str; 10] = [
+    "shop_scales",
+    "hurricane_lamp",
+    "wall_clock",
+    "gauge_board",
+    "oil_cans",
+    "toolbox",
+    "pitchfork",
+    "milk_churn",
+    "tyre_stack",
+    "watering_can",
+];
+
+/// What the people who worked in a building that isn't a house left
+/// (`art/props/workplaces.py`), building-local: three to six of its set
+/// (`kit`), from its seed, so no two barns are alike. Kettle's lamps are
+/// carbide, and its miners left their dinner pails; in Cinder only the
+/// iron and tin came through the fire, two or three things of it. Nothing
+/// is thrown about: the workers left in order.
+fn workplace(map: &MapDef, prefab: &str, at: Vec2) -> Vec<(&'static str, Transform)> {
+    let n = map.name.to_lowercase();
+    if !["marrow", "kettle", "cinder", "sallow"]
+        .iter()
+        .any(|v| n.contains(v))
+    {
+        return Vec::new();
+    }
+    let cinder = n.contains("cinder");
+    let mut all = kit(prefab, n.contains("kettle"));
+    if cinder {
+        all.retain(|(m, _)| FIREPROOF.contains(m));
+    }
+    let mut rng = fastrand::Rng::with_seed(super::overgrowth::seed(at, prefab) ^ 0x3c0b);
+    rng.shuffle(&mut all);
+    let keep = if cinder {
+        2 + rng.usize(..2)
+    } else {
+        3 + rng.usize(..4)
+    };
+    all.truncate(keep);
+    all
+}
+
+/// A floor thing with its back (its +Z, `back` deep from its origin) to
+/// the wall whose face is at `at`, facing into the room along `into`.
+fn against(model: &'static str, at: Vec3, into: Vec3, back: f32) -> (&'static str, Transform) {
+    facing(model, at + into * (back + 0.02), into)
+}
+
+/// Every thing a workplace could hold, building-local, by its recipe
+/// (`buildings`): against the walls and in the corners, a metre and more
+/// from every doorway, on the furniture's tops clear of the loot. Each
+/// stands clear of the others, as any few of them are chosen.
+fn kit(prefab: &str, kettle: bool) -> Vec<(&'static str, Transform)> {
+    let (px, nx, pz, nz) = (Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z);
+    let lamp = if kettle {
+        "carbide_lamp"
+    } else {
+        "hurricane_lamp"
+    };
+    // How far the models reach behind their origins (their +Z).
+    let (cans, tools) = (0.16, 0.112);
+    let mut v = match prefab {
+        // `buildings::cabin`: 7 x 6, the floor 0.4 up (its boards' top
+        // 0.43), the walls' insides 3.36 and 2.86 out; the door at x -1.5
+        // in the front, the stove in the back +X corner.
+        "cabin_log" => {
+            let (f, x, z) = (0.43, 3.36, 2.86);
+            let table = |along: f32| {
+                Vec3::new(0.0, 0.4 + 0.785, 0.5) + Quat::from_rotation_y(0.3) * Vec3::X * along
+            };
+            let mut v = vec![
+                facing("woodpile", Vec3::new(1.6, f, z - 0.23), nz),
+                on(lamp, table(0.42), 0.3),
+                against("washstand", Vec3::new(-x, f, -0.9), px, 0.2),
+                facing("snowshoes", Vec3::new(-x, 0.4 + 1.9, -2.15), px),
+                on("rug", Vec3::new(-0.3, f, -1.6), 0.1),
+                facing("broom", Vec3::new(0.25, f, -z), pz),
+                on("jars", Vec3::new(-1.0, 0.4 + 0.315, 2.7), 0.0),
+            ];
+            if kettle {
+                v.push(on("lunch_pail", table(-0.42), 0.3));
+            }
+            v
+        }
+        // `buildings::shop`: 9 x 7, the floor 0.3 up, the walls' insides
+        // 4.375 and 3.375 out; the counter across the front room, the
+        // shelves on the partition (z 1.6, its door at x 1.0), the back
+        // room behind.
+        "shop" => {
+            let (f, x) = (0.33, 4.375);
+            let mut v = vec![
+                on("shop_scales", Vec3::new(0.0, 0.3 + 0.9, -0.4), 0.0),
+                // Behind the counter, under the -X window.
+                on("flour_sacks", Vec3::new(-3.5, f, 0.42), 0.0),
+                facing("price_board", Vec3::new(x, 0.3 + 1.7, -1.2), nx),
+                facing("broom", Vec3::new(x, f, -2.6), nx),
+                on("jars", Vec3::new(3.8, 0.3 + 0.315, 1.2), 0.0),
+                on("milk_churn", Vec3::new(1.9, f, 3.1), 0.0),
+            ];
+            if kettle {
+                v.push(on("lunch_pail", Vec3::new(-2.1, 0.3 + 0.9, -0.4), 0.4));
+            }
+            v
+        }
+        // `buildings::shed`: 4 x 3, the floor 0.15 up, the walls' insides
+        // 1.95 and 1.45 out; the door at x -1.0.
+        "shed" => {
+            let f = 0.18;
+            vec![
+                facing("garden_tools", Vec3::new(-0.35, 0.15 + 1.6, 1.45), nz),
+                against("watering_can", Vec3::new(-1.95, f, -0.2), px, 0.084),
+                against("toolbox", Vec3::new(1.95, f, 0.85), nx, tools),
+                on("wheelbarrow", Vec3::new(1.55, f, -0.3), 0.0),
+                facing("broom", Vec3::new(0.6, f, -1.45), pz),
+            ]
+        }
+        // `buildings::barn`: 12 x 16, the walls' insides 5.925 and 7.925
+        // out; doorways front and back, a door at z -4 in the +X wall,
+        // the hay in the back -X corner, the workbench along +X.
+        "barn" => {
+            let (f, x) = (0.065, 5.925);
+            vec![
+                on("milk_churn", Vec3::new(-5.65, f, 0.6), 0.0),
+                facing("pitchfork", Vec3::new(-x, f, -1.0), px),
+                facing("harness_peg", Vec3::new(-x, 0.05 + 1.9, -3.0), px),
+                against("flour_sacks", Vec3::new(-x, f, 6.6), px, 0.19),
+                on(lamp, Vec3::new(5.0, 0.05 + 0.94, -0.2), 0.0),
+                on("wheelbarrow", Vec3::new(-3.0, f, -6.6), 0.0),
+                against("toolbox", Vec3::new(x, f, 2.2), nx, tools),
+                against("oil_cans", Vec3::new(x, f, -1.2), nx, cans),
+            ]
+        }
+        // `buildings::pump_station`: 14 x 10, the floor 0.3 up, the walls'
+        // insides 6.85 and 4.85 out; the office behind the wall at x 3.5
+        // (its door at z -1.5), the pumps down the middle.
+        "pump_station" => {
+            let (f, x, z) = (0.33, 6.85, 4.85);
+            let mut v = vec![
+                facing("wall_clock", Vec3::new(3.44, 0.3 + 2.4, -3.2), nx),
+                facing("gauge_board", Vec3::new(0.0, 0.3 + 1.5, z), nz),
+                facing("wall_telephone", Vec3::new(x, 0.3 + 1.5, -2.4), nx),
+                on("ledger_open", Vec3::new(4.95, 0.3 + 0.785, -3.0), 0.2),
+                against("oil_cans", Vec3::new(-3.9, f, -z), pz, cans),
+                against("toolbox", Vec3::new(-x, f, 2.2), px, tools),
+                on(lamp, Vec3::new(-6.2, 0.3 + 0.94, -3.5), 0.0),
+                facing("jacket_hook", Vec3::new(3.56, 0.3 + 1.7, -4.0), px),
+            ];
+            if kettle {
+                v.push(on("lunch_pail", Vec3::new(-4.8, 0.3 + 0.94, -3.5), 0.0));
+            }
+            v
+        }
+        // `buildings::mast_hut`: 5 x 4, the floor 0.2 up, the walls'
+        // insides 2.375 and 1.875 out; the door at x -1.3.
+        "mast_hut" => {
+            let (f, x, z) = (0.23, 2.375, 1.875);
+            vec![
+                facing("wall_clock", Vec3::new(x, 0.2 + 2.0, -0.2), nx),
+                facing("wall_telephone", Vec3::new(x, 0.2 + 1.45, -1.0), nx),
+                on("ledger_open", Vec3::new(0.45, 0.2 + 0.9, 1.4), 0.1),
+                against("toolbox", Vec3::new(1.2, f, -z), pz, tools),
+                against("oil_cans", Vec3::new(-x, f, 0.3), px, cans),
+                on(lamp, Vec3::new(2.0, 0.2 + 0.9, 1.4), 0.0),
+            ]
+        }
+        // `buildings::guard_booth`: 2.2 square, the floor 0.6 up, the
+        // walls' insides 1.06 out; the counter across the back.
+        "guard_booth" => {
+            let x = 1.06;
+            vec![
+                on("ledger_open", Vec3::new(-0.5, 0.6 + 0.9, 0.6), 0.0),
+                facing("wall_telephone", Vec3::new(x, 0.6 + 1.5, 0.78), nx),
+                facing("wall_clock", Vec3::new(-x, 0.6 + 1.85, 0.78), px),
+                on(lamp, Vec3::new(0.55, 0.6 + 0.9, 0.6), 0.0),
+            ]
+        }
+        // `buildings::signal_box`: 6 x 3.6, the floor 0.3 up, the walls'
+        // insides 2.85 and 1.65 out; the door at x -1.5, the lever frame
+        // along the back, the desk in the back -X corner.
+        "signal_box" => {
+            let (f, x, z) = (0.33, 2.85, 1.65);
+            vec![
+                facing("wall_clock", Vec3::new(x, 0.3 + 2.1, 0.3), nx),
+                facing("wall_telephone", Vec3::new(x, 0.3 + 1.45, -0.6), nx),
+                on(
+                    "ledger_open",
+                    Vec3::new(-2.3, 0.3 + 0.785, 1.0),
+                    std::f32::consts::FRAC_PI_2,
+                ),
+                on(lamp, Vec3::new(-1.45, 0.3 + 0.785, 1.1), 0.0),
+                against("oil_cans", Vec3::new(2.35, f, z), nz, cans),
+                facing("jacket_hook", Vec3::new(-x, 0.3 + 1.7, 1.2), px),
+            ]
+        }
+        "bus_depot" => hall(30.0, 18.0, kettle),
+        "rail_shed" => hall(20.0, 12.0, kettle),
+        "factory_hall" => hall(36.0, 20.0, kettle),
+        _ => Vec::new(),
+    };
+    // The depot's office: its telephone, the day's ledger on its table.
+    if prefab == "bus_depot" {
+        v.push(facing(
+            "wall_telephone",
+            Vec3::new(13.7, 0.1 + 1.5, 4.06),
+            pz,
+        ));
+        v.push(on(
+            "ledger_open",
+            Vec3::new(11.98, 0.1 + 0.785, 6.5),
+            std::f32::consts::FRAC_PI_2,
+        ));
+    }
+    v
+}
+
+/// A `buildings::hall`'s things, `w` x `d`: the floor 0.1 up, the walls'
+/// insides 0.125 in; round the -X bay's workbench (at -0.35 w, 0.35 d)
+/// and the back wall behind it, and a gauge board on the +X wall.
+fn hall(w: f32, d: f32, kettle: bool) -> Vec<(&'static str, Transform)> {
+    let (f, x, z) = (0.1, w * 0.5 - 0.125, d * 0.5 - 0.125);
+    let (bx, bz) = (-w * 0.35, d * 0.35);
+    let mut v = vec![
+        on("tyre_stack", Vec3::new(-x + 1.05, f, z - 0.75), 0.4),
+        against("oil_cans", Vec3::new(bx - 0.6, f, z), Vec3::NEG_Z, 0.16),
+        on("toolbox", Vec3::new(bx - 0.6, f + 0.94, bz), 0.0),
+        facing("jacket_hook", Vec3::new(bx + 1.6, f + 1.7, z), Vec3::NEG_Z),
+        facing("wall_clock", Vec3::new(bx, f + 3.2, z), Vec3::NEG_Z),
+        facing("gauge_board", Vec3::new(x, f + 1.5, -2.4), Vec3::NEG_X),
+    ];
+    if kettle {
+        v.push(on("lunch_pail", Vec3::new(bx + 0.6, f + 0.94, bz), 0.0));
+    }
+    v
 }
 
 /// Ash on a sill: the unit-metre film stretched along it.
@@ -914,6 +1177,216 @@ mod tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// A model's box at `t` (building-local), from its glb's bounds.
+    fn placed_bounds(
+        cache: &mut std::collections::HashMap<&'static str, Option<(Vec3, Vec3)>>,
+        model: &'static str,
+        t: &Transform,
+    ) -> Option<(Vec3, Vec3)> {
+        let root = crate::asset_root_path();
+        let (lo, hi) = (*cache.entry(model).or_insert_with(|| {
+            let path = root.join(crate::render::world_props::path(model));
+            crate::capture::glb::read(&path)
+                .ok()
+                .and_then(|g| g.bounds_of(|_| true))
+        }))?;
+        Some(corners(lo, hi, |c| t.transform_point(c)))
+    }
+
+    /// The box round the eight corners of `lo`..`hi` taken through `f`.
+    fn corners(lo: Vec3, hi: Vec3, f: impl Fn(Vec3) -> Vec3) -> (Vec3, Vec3) {
+        let (mut a, mut z) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for k in 0..8 {
+            let c = Vec3::new(
+                if k & 1 == 0 { lo.x } else { hi.x },
+                if k & 2 == 0 { lo.y } else { hi.y },
+                if k & 4 == 0 { lo.z } else { hi.z },
+            );
+            let q = f(c);
+            a = a.min(q);
+            z = z.max(q);
+        }
+        (a, z)
+    }
+
+    fn overlap(a: (Vec3, Vec3), b: (Vec3, Vec3)) -> bool {
+        a.0.cmplt(b.1).all() && b.0.cmplt(a.1).all()
+    }
+
+    /// The walls' insides of each workplace, half width and half depth
+    /// (from its recipe: its size less half its walls' thickness).
+    fn inside(prefab: &str) -> Vec2 {
+        let (w, d, t) = match prefab {
+            "cabin_log" => (7.0, 6.0, 0.28),
+            "shop" => (9.0, 7.0, 0.25),
+            "shed" => (4.0, 3.0, 0.1),
+            "barn" => (12.0, 16.0, 0.15),
+            "pump_station" => (14.0, 10.0, 0.3),
+            "mast_hut" => (5.0, 4.0, 0.25),
+            "guard_booth" => (2.2, 2.2, 0.08),
+            "signal_box" => (6.0, 3.6, 0.3),
+            "bus_depot" => (30.0, 18.0, 0.25),
+            "rail_shed" => (20.0, 12.0, 0.25),
+            "factory_hall" => (36.0, 20.0, 0.25),
+            _ => panic!("{prefab}: no recipe"),
+        };
+        Vec2::new(w - t, d - t) * 0.5
+    }
+
+    /// Every thing a workplace could hold is built and stands inside its
+    /// walls (give or take 3 cm, inside the wall, unseen), off its loot,
+    /// a metre and more from every door and doorway, clear of its
+    /// furniture and of the others it could be chosen with.
+    #[test]
+    fn workplaces_hold_their_things_in_place() {
+        use crate::world::buildings::Shape;
+        let root = crate::asset_root_path();
+        let mut cache = std::collections::HashMap::new();
+        let mut bad = Vec::new();
+        for prefab in WORKPLACES {
+            let geo = crate::world::buildings::prefab(prefab).unwrap();
+            let inner = inside(prefab);
+            // The furniture, the walls and what else stands in the room:
+            // every piece but the floors' thin slabs.
+            let solid: Vec<_> = geo
+                .pieces
+                .iter()
+                .filter_map(|p| {
+                    let half = match p.shape {
+                        Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                        Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                    };
+                    let b = corners(-half, half, |c| p.at.transform_point(c));
+                    (b.1.y - b.0.y > 0.06).then_some(b)
+                })
+                .collect();
+            for kettle in [false, true] {
+                let things = kit(prefab, kettle);
+                assert!(things.len() >= 4, "{prefab}: {things:?}");
+                let mut boxes: Vec<(&str, (Vec3, Vec3))> = Vec::new();
+                for (model, t) in &things {
+                    let path = root.join(crate::render::world_props::path(model));
+                    assert!(path.exists(), "{prefab}: no model {}", path.display());
+                    let p = t.translation;
+                    let Some((a, z)) = placed_bounds(&mut cache, model, t) else {
+                        bad.push(format!("{prefab} {model}: no bounds"));
+                        continue;
+                    };
+                    let s = 0.03;
+                    if a.x < -inner.x - s
+                        || z.x > inner.x + s
+                        || a.z < -inner.y - s
+                        || z.z > inner.y + s
+                    {
+                        bad.push(format!("{prefab} {model} from {a} to {z}: through a wall"));
+                    }
+                    for l in &geo.loot {
+                        if l.at.distance(p) <= 0.35 {
+                            bad.push(format!("{prefab} {model} at {p}: on {} loot", l.table));
+                        }
+                    }
+                    // Doors, inside and out: a metre from the doorway's
+                    // width either side.
+                    for dr in &geo.doors {
+                        let along = Quat::from_rotation_y(dr.yaw) * Vec3::X;
+                        let k = (p - dr.hinge).dot(along).clamp(0.0, dr.width);
+                        let near = (dr.hinge + along * k).xz().distance(p.xz());
+                        if near < 1.0 {
+                            bad.push(format!("{prefab} {model} at {p}: {near:.2} from a door"));
+                        }
+                    }
+                    // Doorways (a barn's, a hall's have no doors), on
+                    // their inside.
+                    for e in &geo.entrances {
+                        let (at, out) = (Vec2::from(e.at), Vec2::from(e.out));
+                        let r = p.xz() - at;
+                        let inward = -r.dot(out);
+                        let side = r.dot(out.perp());
+                        let off = side - side.clamp(-e.width * 0.5, e.width * 0.5);
+                        let near = Vec2::new(off, inward).length();
+                        if inward > -0.5 && near < 1.0 {
+                            bad.push(format!("{prefab} {model} at {p}: {near:.2} from a doorway"));
+                        }
+                    }
+                    // Into the furniture or the walls (by more than 3 cm:
+                    // a thing's back is against a wall, its foot on a top).
+                    let shrunk = (a + Vec3::splat(s), z - Vec3::splat(s));
+                    for b in &solid {
+                        if overlap(shrunk, *b) {
+                            bad.push(format!(
+                                "{prefab} {model} from {a} to {z}: into a piece {} to {}",
+                                b.0, b.1
+                            ));
+                        }
+                    }
+                    for (other, o) in &boxes {
+                        if overlap(shrunk, *o) {
+                            bad.push(format!("{prefab} {model} into {other}"));
+                        }
+                    }
+                    boxes.push((model, (a, z)));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Every workplace in the valleys gets three to six of its things (two
+    /// or three in Cinder, all iron and tin); one Story names keeps only
+    /// Story's; and not every barn is alike.
+    #[test]
+    fn workplaces_are_dressed_by_valley() {
+        for (name, _) in extraction_core::map::VALLEYS {
+            let mut map = crate::world::load_map_def(name);
+            map.markers.clear();
+            let cinder = name.contains("cinder");
+            for p in map
+                .placements
+                .iter()
+                .filter(|p| WORKPLACES.contains(&p.prefab.as_str()))
+            {
+                if named(&map, &p.prefab, &p.prefab, Vec2::from(p.at)).is_some() {
+                    continue;
+                }
+                let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
+                let things = dress(&map, &p.prefab, &p.tag, &xf, false);
+                let n = things.len();
+                let want = if cinder { 2..=3 } else { 3..=6 };
+                assert!(want.contains(&n), "{name} {} at {:?}: {n}", p.prefab, p.at);
+                if cinder {
+                    for (m, _) in &things {
+                        assert!(FIREPROOF.contains(m), "{} in Cinder: {m}", p.prefab);
+                    }
+                }
+            }
+        }
+        // Story's shop and the foreman's cabin: their things, none of the
+        // set's.
+        let mut map = crate::world::load_map_def("marrow_creek");
+        map.markers.clear();
+        for (prefab, x, z) in [("shop", -16.0, 35.0), ("cabin_log", -185.0, 190.0)] {
+            let xf = Transform::from_xyz(x, 0.0, z);
+            let things = dress(&map, prefab, "", &xf, false);
+            let set = kit(prefab, false);
+            assert!(!things.is_empty());
+            for (m, _) in &things {
+                assert!(!set.iter().any(|(s, _)| s == m), "{prefab}: {m}");
+            }
+        }
+        let map = crate::world::load_map_def("kettle_pass");
+        let sets: std::collections::HashSet<Vec<&str>> = (0..6)
+            .map(|k| {
+                let mut v: Vec<_> = workplace(&map, "barn", Vec2::new(k as f32 * 37.0, 11.0))
+                    .into_iter()
+                    .map(|(m, _)| m)
+                    .collect();
+                v.sort();
+                v
+            })
+            .collect();
+        assert!(sets.len() > 2, "{sets:?}");
     }
 
     /// Story's houses get their things, and Hana's table stays bare.

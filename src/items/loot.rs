@@ -351,6 +351,8 @@ fn spawn_dev_cache(
         ("flare_pistol", 0),
         ("flare_white", 1),
         ("flare_red", 1),
+        ("crossbow", 0),
+        ("bolt_bundle", 5),
     ];
     for (i, (id, rounds)) in list.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {

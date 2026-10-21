@@ -205,10 +205,12 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 
 | Contract | For | Offered | Steps | Pays | Opens |
 | - | - | - | - | - | - |
+| The post counter | the Holm boy | the second odd job | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
 | The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
 | Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |
 | A walker's portrait | the town paper | head of Far jobs | photograph a walker; look at the chimney (Cinder) | a PU scope, 2 boxes 7.62R, trust 2 | re-pack 7.62R AP |
 | The overflow | Lev | past the ladder, trust 3, all three valleys raided | plant a relay at the Depot (Marrow); 2 electronics | a fuel can, a radio, trust 2 | Sallow Reservoir |
+| The scour key | Lev | past the ladder, trust 4, after the overflow | bring the scour valve key from the Valve house; plant a relay at the Draw-off tower (Sallow) | an EMP trap, 2 boxes 5.45 AP, trust 2 | |
 | The heavy | the town paper | past the ladder, trust 5 | photograph a heavy; plant a relay at the Fire lookout (Cinder) | 2 EMP grenades, a steel plate, trust 3 | |
 
 **The ladder keeps its length.** A contract starts only at the head of its
@@ -219,11 +221,27 @@ driver's patience is for errands). Its kit comes through the cab's hatch
 as it starts; its pay as the last step's handed in, with what it opens
 said on the wrist.
 
-**Trust** is earned only by contracts (7 by the overflow, 10 with the
-heavy); past the ladder it's what the driver's bigger asks wait on. **The
+**Trust** is earned only by contracts (8 by the overflow, 13 with the
+scour key and the heavy); past the ladder it's what the driver's bigger asks wait on. **The
 fourth valley** is opened by the overflow, which the driver offers once
 the career has raided all three valleys: Sallow Reservoir is the place
 that contract's relay listens to.
+
+**Bots.** Every contract has a scenario bot that does it from the card to
+the pay with its own hands (`progression::contracts::scenario`,
+`--scenario contract_<id> --map <its valley>`; a test holds every contract
+to having one): kit off the hatch ledge, out of the truck, the step (into
+the building and through its doors for a Bring, the relay set down by the
+place, the camera held up at a walker or a heavy it spawns), home, the
+thing into the stash crate, the card pressed. Its shortcuts: the career is
+set to the contract's offer, long walks are skipped to 25 m short, a raid
+ends by phase, and a fetch's things are laid out ahead of it (a
+scenario's stash starts empty). `SIM_CONTRACT=<id>[:step]` puts a sim
+raider on a step for pacing (Bring and Plant; photographs are the
+scenarios'): the step's place pulls it hardest, the thing to bring is
+worth more than anything, and at a Plant's place it draws the relay and
+sets it down. Marrow's post counter, first runs: 1 raider in 4 met it
+(the others died on the way home).
 
 ## Safehouses: staying out overnight
 

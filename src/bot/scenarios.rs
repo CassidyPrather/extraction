@@ -43,6 +43,7 @@ pub const NAMES: &[&str] = &[
     "smallbore_drill",
     "lmg_drill",
     "flare_drill",
+    "crossbow_drill",
     "pack_mule",
     "drone_duel",
     "walker_hunt",
@@ -79,6 +80,7 @@ pub const OPT_IN: &[&str] = &[
     CONTRACTS[3].0,
     CONTRACTS[4].0,
     CONTRACTS[5].0,
+    CONTRACTS[6].0,
 ];
 
 /// Targets sit north of the insertion point at these distances.
@@ -364,6 +366,28 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Gun(MacroKind::Reload),
             Expect(super::Expect::GunRounds(1, 1)),
             Fire { at: t1, shots: 1 },
+            Expect(super::Expect::GunRounds(0, 0)),
+            Stow(Side::Right),
+        ],
+        "crossbow_drill" => vec![
+            Log(s(
+                "crossbow drill: draw to the latch, a bolt in the groove, loose; again",
+            )),
+            PickUp {
+                id: s("crossbow"),
+                side: Side::Right,
+            },
+            PickUp {
+                id: s("bolt_bundle"),
+                side: Side::Left,
+            },
+            Stow(Side::Left),
+            Gun(MacroKind::Reload),
+            Expect(super::Expect::GunRounds(1, 1)),
+            Gun(MacroKind::Mode),
+            Fire { at: t0, shots: 1 },
+            Gun(MacroKind::Reload),
+            Fire { at: t0, shots: 1 },
             Expect(super::Expect::GunRounds(0, 0)),
             Stow(Side::Right),
         ],

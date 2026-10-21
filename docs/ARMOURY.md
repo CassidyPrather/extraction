@@ -21,9 +21,7 @@ militia store, a signal box, a collapsed police post.
 | SPSh-44 signal pistol | `flare_pistol` | **Light and a lure**: a 26 mm break-open flare gun. A white star lights the ground under it for eight seconds as it sinks; a red or green one is a signal. Robots look at a burning flare and go to where it falls; a flare to the face dazzles. It lights you too. | signal boxes, rail and works sites: Cinder Works, the reservoir |
 | RPK-74 | `rpk74` | **Resting on cover**: a long, heavy-barrelled AK with a folding bipod. Swing the legs down and set them on a wall top, a sill or the ground, and the gun lies still and soaks up its recoil. Takes AK magazines, and its own 45. | rare; Cinder Works and the militia posts |
 
-A sixth, a home-made crossbow (silent, bolts you pull back out of what
-you shot), is the next candidate: it fits "nothing is bought" best of
-all, and its retrievable projectile needs more new code than the rest.
+| Home-made crossbow | `crossbow` | **Silent, and its ammunition comes back**: a leaf-spring prod on a plank, drawn by hand to a gate-latch nut. A bolt flies slow and drops, lies where it lands, and can be picked up and shot again; the bench files new ones from scrap, and with the vice builds the bow itself. The most "nothing is bought" gun there is. | rare; Marrow Creek's poachers |
 
 ## What a gun needs
 
@@ -135,6 +133,23 @@ rest probe for `feel`'s bracing that counts the bare ground too: set the
 feet on a wall top, a sill or the earth and the gun lies still, with
 bracing's recoil and sway.
 
+### Home-made crossbow (`crossbow`)
+
+`ActionKind::Crossbow`. Take the string with the other hand's trigger
+and draw it back 26 cm: past the latch it catches when you let go
+(`locked_back`); short of it, it slaps home and wears the bow a little.
+A bolt (a loose `crossbow_bolt`, or one at a time from a `bolt_bundle`)
+laid in the groove at the load port; the trigger looses it. A dry loose
+(the trigger with no bolt on) costs the bow 4% of its condition.
+
+A loosed bolt (`crossbow::Quarrel`) is no bullet: it flies at 70 m/s,
+drops, and strikes for 60. Where it stops it comes down as a
+`crossbow_bolt` item to pick up; on stone, steel or a robot's plate it
+breaks three times in ten. `report: 0.04`: robots hear it at about 5 m.
+The model's `string_rest` shows at rest and `string_drawn` (the V,
+stretched about the prod's tips) as it's drawn; `static_rail_bolt` shows
+while a bolt is on.
+
 ## Where they turn up
 
 `assets/data/loot.ron`: all five are in `weapons_rare` (the pump about as
@@ -147,7 +162,7 @@ the common table plus a few things of its own:
 
 | Valley | More of |
 | - | - |
-| Marrow Creek (hunting country) | the TOZ-8 and .22, the pump |
+| Marrow Creek (hunting country) | the TOZ-8 and .22, the pump, the crossbow |
 | Kettle Pass (long sightlines) | the SVD and its magazine |
 | Cinder Works (guard posts, signal boxes) | the RPK and its magazine, the flare gun and white and red stars |
 | Sallow Reservoir (the dam's keepers) | the flare gun and white and green stars, the pump |
@@ -159,6 +174,17 @@ the common table plus a few things of its own:
 - Headset (`weapons::armoury::vr_tests`, `weapons::flares::vr_tests`):
   each gun loaded, cycled, fired and cleared by hand through `RigInput`.
 - Bots (`--scenario`): `pump_drill`, `marksman_drill`, `smallbore_drill`,
-  `lmg_drill`, `flare_drill`.
+  `lmg_drill`, `flare_drill`, `crossbow_drill`.
 - The range (`weapons::range`) fires the four new bullet guns at every
   material.
+
+## Shots
+
+`docs/shots/armoury/`: each gun in the gallery (`--gallery <id>+open`
+works the action and swings a bipod down; give it 60 frames so the
+model has loaded):
+
+```bash
+EXTRACTION_BIN=target/fast/extraction scripts/shot.sh docs/shots/armoury/rpk74_open.png \
+    40,19.2,262,0,0 60 --gallery rpk74+open,0,0.95 --data-dir /tmp/x --no-robots
+```
