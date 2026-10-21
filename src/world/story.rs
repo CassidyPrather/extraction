@@ -573,6 +573,11 @@ pub const THREAD: &[Lead] = &[
     // Rime Fell: the mine on the bench, the funicular, the observatory.
     Lead {
         map: R,
+        note: "Observatory log",
+        mentions: &[(R, "The col"), (R, "Ota's letter")],
+    },
+    Lead {
+        map: R,
         note: "Rime gate log",
         mentions: &[
             (R, "Coldharbour"),

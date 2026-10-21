@@ -37,6 +37,8 @@ SPOTS = {
     # the table in the draw-off tower's valve room at the bridge floor.
     "sorting_gantry": [(-6.0, 0.0)],
     "draw_off_tower": [(-1.0, 1.9)],
+    # Rime Fell's (src/world/fell.rs): the radio desk on the east wall.
+    "observatory": [(4.35, 0.5)],
 }
 REACH = {"ranger_tower": 8.5, "draw_off_tower": 20.0}
 
@@ -557,6 +559,11 @@ The shop's anyone's now. - A.P.""", "Shop note"),
     # The fifth valley (claude/polish-fifth-valley): skipped until its
     # map is in.
     "rime_fell": [
+        ("observatory", (-208.0, -210.0), "Terminal", [
+            "RIME FELL OBSERVATORY\nOUTGOING LOG\n\n15 OCT  SW 4  SNOW  SENT\n 2 NOV  LIGHTS ON THE COL\n 2 NOV  GATE: NO REPLY\n 3 NOV  CITY: NO REPLY",
+            "DEC  -14  SENT\nJAN  -19  SENT\nFEB  CHUTE 2 RAN  SENT\nMAR  ROPE GONE  SENT\n\nRECEIVED  NOTHING",
+            "OCT, THIRD YEAR\n\nH.B. DOWN THE STAIR\nFOR FLOUR. NOT BACK.\nSENDING ALONE.\n\n- O.B.",
+        ], "Observatory log"),
         ("guard_booth", (0.0, 285.0), "Note", """SOUTH GATE, RIME FELL - DUTY LOG
 
 15 Oct. Coldharbour down on the funicular, last car 1600. Lorries from
