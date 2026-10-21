@@ -56,6 +56,8 @@ pub enum Mat {
     Silt,
     /// Timber sixty years under water: black-brown, slimed.
     Sodden,
+    /// Old snow lying on a roof or a sill (`decay::snow_load`).
+    Snow,
 }
 
 impl Mat {
@@ -161,6 +163,7 @@ impl Mat {
                 0.85,
             ),
             Mat::Silt => (Some("concrete_wet"), 4.0, Color::srgb(0.33, 0.3, 0.25), 0.9),
+            Mat::Snow => (None, 1.0, Color::srgb(0.8, 0.83, 0.87), 0.85),
             Mat::Sodden => (
                 Some("weathered_planks"),
                 2.0,

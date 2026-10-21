@@ -109,6 +109,23 @@ pub enum BreakKind {
     BusDoor,
     /// A wrecked bus's side skirt panel.
     BusPanel,
+    /// A car wreck's door, bonnet, boot lid or wheel (`destruction::strip`).
+    /// Their models are authored in the car's own space, so each slots
+    /// into the body where it came from.
+    CarDoor,
+    CarBonnet,
+    CarBoot,
+    CarWheel,
+}
+
+impl BreakKind {
+    /// A car's part: its model is in the car's space, not its own.
+    pub fn in_car_space(self) -> bool {
+        matches!(
+            self,
+            BreakKind::CarDoor | BreakKind::CarBonnet | BreakKind::CarBoot | BreakKind::CarWheel
+        )
+    }
 }
 
 /// A breakable thing on a building (`Geo::breakables`).
@@ -5662,8 +5679,19 @@ pub fn dress_buildings(
         let holes = breaches
             .as_ref()
             .map_or(0, |h| crate::destruction::breach::apply(&mut geo, xf, &h.0));
-        let bake_key = if holes == 0 {
+        // Old snow on its roof and sills, where it lies all winter
+        // (`decay::snow_load`).
+        let snowed = zone.as_ref().is_some_and(|z| {
+            z.map.snow > 0.0 && super::snow::snow_line(&z.map).is_some_and(|l| xf.translation.y > l)
+        });
+        if snowed {
+            let load = super::decay::snow_load(&geo, &occluders(&geo));
+            geo.pieces.extend(load);
+        }
+        let bake_key = if holes == 0 && !snowed {
             b.prefab.clone()
+        } else if holes == 0 {
+            format!("{} snowed", b.prefab)
         } else {
             format!(
                 "{} at {:.1},{:.1} with {holes} holes",
@@ -6028,8 +6056,13 @@ pub fn dress_buildings(
         // Years of ivy (`overgrowth`): stems near, leaves to the middle
         // distance, a few big cards past that. None where the water's only
         // just gone down.
+        // Nor above the snow line, where nothing grows.
         let drowned = b.prefab.ends_with("_drowned");
-        if let (Some(ivy), false, false, true) = (&ivy, site, drowned, super::overgrowth::enabled())
+        let warm = zone
+            .as_ref()
+            .is_none_or(|z| super::overgrowth::warm(&z.map, xf.translation.y));
+        if let (Some(ivy), false, false, true) =
+            (&ivy, site, drowned || !warm, super::overgrowth::enabled())
         {
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;

@@ -796,7 +796,11 @@ fn apply_hand_actions(
     pressables: Query<(), With<crate::raid::truck::Pressable>>,
     // Things to take up and read (`read`): theirs to handle.
     reading: (Query<(), With<read::Readable>>, Res<crate::rig::RigDriver>),
-    fixed: Query<(), With<crate::raid::truck::Stash>>,
+    // The stash crate stays put; a stone just dropped too hot isn't taken.
+    fixed: (
+        Query<(), With<crate::raid::truck::Stash>>,
+        Query<(), With<crate::anomaly::harvest::Scalded>>,
+    ),
     ropes: Query<&crate::gadgets::climbing::Rope>,
     ladders: Query<(), With<hand_climb::Ladder>>,
     time: Res<Time>,
@@ -849,7 +853,7 @@ fn apply_hand_actions(
                 let _ = (side, point);
                 events.write(InteractEvent::Pressed { item, player });
             }
-            HandAction::Grab { item, .. } if fixed.contains(item) => {}
+            HandAction::Grab { item, .. } if fixed.0.contains(item) || fixed.1.contains(item) => {}
             HandAction::Grab {
                 player,
                 side,

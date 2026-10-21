@@ -455,7 +455,13 @@ fn stair(b: &mut Builder) {
 fn buses(b: &mut Builder) {
     for (i, x) in [-4.95f32, -1.65, 1.65, 4.95].into_iter().enumerate() {
         let from = b.geo.pieces.len();
+        let breakables = b.geo.breakables.len();
         super::buildings::wrecked_bus(b, Vec3::new(x, 0.0, 0.0));
+        // Kept stock isn't prised apart: the wreck's panels and door stay
+        // solid, under the model that draws the bus whole.
+        for k in b.geo.breakables.split_off(breakables) {
+            b.piece(Shape::Box(k.size), k.at, k.mat, true);
+        }
         // Drawn by `kept_bus` (art/props/dam.py); its boxes stay the
         // colliders.
         b.dress_structure(from, vec![("kept_bus", Transform::from_xyz(x, 0.0, 0.0))]);
@@ -728,6 +734,20 @@ mod tests {
                     "the wall's foot shows at ({x}, {dz})"
                 );
             }
+        }
+    }
+
+    /// The Custodian's stock is kept whole: nothing on it prises off (the
+    /// models draw it entire, so a gap would show nowhere).
+    #[test]
+    fn kept_stock_has_nothing_to_prise_off() {
+        for id in PREFABS {
+            let g = geo(id).unwrap();
+            assert!(
+                g.breakables.is_empty(),
+                "{id}: {} breakables",
+                g.breakables.len()
+            );
         }
     }
 
