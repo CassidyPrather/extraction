@@ -1642,3 +1642,70 @@ mod card_shrink_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod far_tree_tests {
+    use super::*;
+
+    /// Every tree stands on the ground under it, in every valley, and its
+    /// far picture's quad stands on the tree: bottom edge at the foliage's
+    /// foot above the base, centred on the trunk. (A band of pale far trees
+    /// over Sallow's rim in rain looked like floating cards; it was the sky
+    /// behind them, unfogged near the horizon, not where they stood. This
+    /// keeps "where they stand" a known.)
+    #[test]
+    fn far_trees_stand_on_the_ground() {
+        let imp = super::super::impostors::Impostor {
+            min: Vec3::new(-3.0, 1.5, -3.0),
+            max: Vec3::new(3.0, 14.0, 3.0),
+            image: Handle::default(),
+        };
+        for name in extraction_core::map::VALLEYS.map(|v| v.0) {
+            let zone = Zone::load(name);
+            let trees = scatter_trees(&zone);
+            assert!(
+                !trees.is_empty() || name == "training_yard",
+                "{name}: no trees"
+            );
+            let mut worst = 0.0f32;
+            for t in &trees {
+                let ground = zone.hm.height([t.pos.x, t.pos.z]);
+                let sink = ground - t.pos.y;
+                worst = worst.max(sink.abs());
+                assert!(
+                    (0.0..0.5).contains(&sink),
+                    "{name}: a tree at {:.0?} is {sink:.2} m into the ground",
+                    t.pos
+                );
+                let tf = Transform::from_translation(t.pos)
+                    .with_rotation(Quat::from_rotation_y(t.yaw))
+                    .with_scale(Vec3::splat(t.scale));
+                let mut b = super::super::impostors::Builder::default();
+                super::super::impostors::quads(&imp, &tf, &mut b);
+                let mesh = b.build();
+                let pos = mesh
+                    .attribute(Mesh::ATTRIBUTE_POSITION)
+                    .unwrap()
+                    .as_float3()
+                    .unwrap();
+                let foot = t.pos.y + imp.min.y * t.scale;
+                let low = pos.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
+                assert!(
+                    (low - foot).abs() < 1e-3,
+                    "{name}: a far picture's foot at {low:.2}, its tree's foliage at {foot:.2}"
+                );
+                for p in pos {
+                    let off = Vec2::new(p[0] - t.pos.x, p[2] - t.pos.z).length();
+                    assert!(
+                        off <= imp.max.x * t.scale + 1e-3,
+                        "{name}: a quad off its trunk"
+                    );
+                }
+            }
+            println!(
+                "{name}: {} trees, all within {worst:.2} m of the ground",
+                trees.len()
+            );
+        }
+    }
+}
