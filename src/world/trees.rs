@@ -489,6 +489,7 @@ fn spawn_forests(
     );
     commands.insert_resource(grid);
     commands.insert_resource(ForestAssets(assets));
+    commands.insert_resource(ForestBuilt);
 }
 
 /// Chunk size for merged forest meshes, metres.
@@ -695,6 +696,24 @@ struct ForestGrid {
 
 #[derive(Resource)]
 struct ForestAssets(TreeAssets);
+
+/// The forest's meshes are built (`spawn_forests` has run).
+#[derive(Resource)]
+pub struct ForestBuilt;
+
+/// Whether the forest is done arriving: built, and every impostor's
+/// picture taken (each a capture rig until its readback comes in).
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ForestSettled<'w, 's> {
+    built: Option<Res<'w, ForestBuilt>>,
+    captures: Query<'w, 's, (), With<super::impostors::Capture>>,
+}
+
+impl ForestSettled<'_, '_> {
+    pub fn settled(&self) -> bool {
+        self.built.is_some() && self.captures.is_empty()
+    }
+}
 
 /// On a tree whose near detail is spawned: the detail entities.
 #[derive(Component)]

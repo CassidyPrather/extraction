@@ -4116,7 +4116,7 @@ pub fn swing_doors(
 /// A building waiting for its props' models before it builds its meshes
 /// (frames waited: it gives up on a model that never arrives).
 #[derive(Component)]
-pub struct PropsPending(u32);
+pub struct PropsPending(pub(crate) u32);
 
 /// Client: lights for buildings, and door leaves (their boxes until the
 /// door model is in). The meshes come once the props' models have loaded
