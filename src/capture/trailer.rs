@@ -50,6 +50,11 @@ const TAIL: f32 = 3.0;
 /// Seconds the cameras render before anything is kept: the valley streams
 /// its detail in round them (unfilmed frames draw nothing).
 const WARMUP: f32 = 6.0;
+/// The share of the budget walking may take.
+const WALK_SHARE: f32 = 0.35;
+/// The drone films only while less than this share of its sight line to
+/// the bot is in tree crowns.
+const DRONE_BLOCKED: f32 = 0.2;
 /// Shortest clip worth keeping, seconds.
 const MIN_CLIP: f32 = 2.5;
 
@@ -86,6 +91,8 @@ struct Director {
     done: bool,
     /// Seconds to the drone's next look round for a clearer sight.
     look_round: f32,
+    /// The share of the drone's sight line to the bot in tree crowns.
+    drone_blocked: f32,
     /// Seconds to the next position line in the log (`RUST_LOG=...=debug`).
     log_in: f32,
 }
@@ -248,8 +255,9 @@ fn direct(
         Phase::Down { .. } => d.want("down", t + 6.0),
         _ => {}
     }
-    // A stretch of the walk now and then.
-    if t - d.last_walk > 75.0 {
+    // A stretch of the walk now and then, while the budget lasts for
+    // better things.
+    if t - d.last_walk > 75.0 && d.used < d.budget * WALK_SHARE {
         d.last_walk = t;
         d.want("walk", t + 6.0);
     }
@@ -261,11 +269,18 @@ fn direct(
     // Only the camera the cut will use renders: the one for now, and the
     // one for a moment ahead, so a camera has drawn a frame or two before
     // its first saved one.
+    // The drone only when it can see the bot: in a closed wood it films
+    // needles.
+    let drone_ok = d.drone_blocked < DRONE_BLOCKED;
+    let pick = |reason: &str, s: f32| match camera_for(reason, s) {
+        View::Drone if !drone_ok => View::Chase,
+        v => v,
+    };
     let (now, soon) = d.open.as_ref().map_or((None, None), |c| {
         let lead = 2.5 * time.delta_secs();
         (
-            Some(camera_for(&c.reason, t - c.start)),
-            Some(camera_for(&c.reason, t - c.start + lead)),
+            Some(pick(&c.reason, t - c.start)),
+            Some(pick(&c.reason, t - c.start + lead)),
         )
     });
     let on = |v: View| now == Some(v) || soon == Some(v);
@@ -539,6 +554,7 @@ fn aim(
     if d.look_round <= 0.0 {
         d.look_round = 0.5;
         let here = blocked(trees, spot(d.drone_angle), eye);
+        d.drone_blocked = here;
         let best = (1..8)
             .map(|k| d.drone_angle + k as f32 * std::f32::consts::FRAC_PI_4)
             .map(|a| (a, blocked(trees, spot(a), eye)))
@@ -546,6 +562,7 @@ fn aim(
         if let Some((a, b)) = best {
             if b + 0.15 < here {
                 d.drone_angle = a;
+                d.drone_blocked = b;
             }
         }
     }
