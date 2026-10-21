@@ -605,7 +605,7 @@ fn sweep(
             commands.entity(st.lamp.unwrap()).insert(PointLight {
                 color: Color::srgb(1.0, 0.88, 0.7),
                 intensity: if night {
-                    60_000.0 * (radius * 2.0).max(1.0).powi(2)
+                    20_000.0 * (radius * 2.0).max(1.0).powi(2)
                 } else {
                     0.0
                 },
