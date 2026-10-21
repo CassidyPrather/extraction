@@ -20,6 +20,8 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 8e63945 | 22:00 | next | rechecks: 5 of 8 pass | |
+| eb0bcd4 | 20:00 | 11/11 clean: Marrow and Sallow seeds 1-4, Kettle, Cinder, Rime Fell seed 1; 7 extracted; stuck_block fired 3 times, no timeouts | 798 passed, 8 failed | |
 | bdb219a | 17:30 | | 781 passed, 10 failed (7 fixed by eb0bcd4) | |
 | 7505d1e | 16:50 | | stopped at 615/790: 6 FAILED | |
 | 5d2ad52 | 15:00 | 7/7 clean, five valleys (Rime Fell seeds 1-3 all extracted); Sallow seed 1 timed out stuck | stopped at 132 (main moved): `a_stormglass_is_a_roof_in_the_surge` FAILED | |
@@ -33,19 +35,19 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of eb0bcd4; det. = fails every time, alone too.
+As of 8e63945; det. = fails every time, alone too.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `wildlife::bats::tests::bats_never_go_inside_anything_or_underground` ("rime_fell: no bats hunting Water") | det. | VALLEYS-wide gauges assume every valley has what the first four have | Wildlife (Fifth valley cc) | routed 19:50 |
-| `wildlife::ducks::tests::flushed_ducks_fly_off_and_land_on_water_again` ("rime_fell: came down 24 m from the fright") | det. | same | Wildlife (Fifth valley cc) | routed 19:50 |
-| `soak::physics::items_spawned_inside_things_are_not_launched`: now a walker_leg_actuator 0.2 m into a wall ends 5.1 m under the ground | det. | tunnelling | Soak | routed 19:50 |
-| Sim: Marrow Creek, 0 extractions in 11 raids across every sha so far (drones, the sentry, a crawler, a burner); Cinder 8/11, Kettle 6/11, Sallow 5/11, Rime Fell 3/3 | | balance | Map design / Heavy | re-measuring on eb0bcd4 |
+| `robots::dirigible::tests::a_logistics_run_lands_a_full_pod` ("the pod came down") | det. | since 6599c83d (speed cap; per-robot loot seeds)? | Robot bodies | routed 22:00 |
+| `items::impacts::tests::a_thrown_can_draws_a_walker_to_look` ("the walker went to look") | det. | hearing change | Robot minds | routed 22:00 |
+| `soak::physics::heaps_settle` (heap at (-150, 25.8, 150) throws at 8.4 m/s; 7 still moving after 8 s) | det. (3/3 alone) | two new speed caps? catalog-order inputs? | Soak | routed 22:00 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| Rime Fell bats and ducks (no water birds above the snow line; the tarn is too small for a raft), Soak's launch test (an item down a site is fine), drone chirp, thrown bolt | 8e63945 | Wildlife, Soak, Robot minds |
 | underground ×5 on Rime Fell (no site), sentry `a_heavy_walks_into_its_fire` (the assert reads backwards: it fails when the sentry never fires), save fuzz's misfit magazine | eb0bcd4 | Underground, Heavy, Soak |
 | sims not reproducible from their seed | f1c4fd4 (single-threaded sims) | Verifier |
 | stormglass, destruction shutters, `no_prefab_fights_or_floats`, `heaps_settle` (failed on 7505d1e) | bdb219a | Anomalies, Destruction, World models, Soak |

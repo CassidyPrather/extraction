@@ -12,6 +12,7 @@
 //! Nothing here changes the game's rules: the raider drives the same
 //! `RigInput` and `HandAction`s as a player, through [`crate::bot`].
 
+pub mod harvest;
 pub mod indoor;
 pub mod playtest;
 pub mod raider;

@@ -190,6 +190,26 @@ impl Tracks {
         self.version = self.version.wrapping_add(1);
     }
 
+    /// Drops every print (players' and others') inside a rectangle on the
+    /// ground: `half_width` either side of the line from `at` along
+    /// `along` (any length; only its direction across the ground counts)
+    /// for `len` metres. Snow thrown off by a plough takes its prints with
+    /// it.
+    pub fn wipe(&mut self, at: Vec3, half_width: f32, along: Vec3, len: f32) {
+        let dir = Vec2::new(along.x, along.z).normalize_or(Vec2::NEG_Y);
+        let inside = |p: &Print| {
+            let d = Vec2::new(p.at.x - at.x, p.at.z - at.z);
+            let t = d.dot(dir);
+            (0.0..=len).contains(&t) && d.perp_dot(dir).abs() <= half_width
+        };
+        let before = self.prints.len() + self.others.len();
+        self.prints.retain(|p| !inside(p));
+        self.others.retain(|p| !inside(p));
+        if self.prints.len() + self.others.len() != before {
+            self.version = self.version.wrapping_add(1);
+        }
+    }
+
     pub fn clear(&mut self) {
         self.prints.clear();
         self.others.clear();
@@ -237,14 +257,54 @@ impl Tracks {
     }
 }
 
+/// Lanes packed through the snow (a plough's, `robots::plough`): each
+/// from `a` to `b` across the ground, `half_width` either side, and how
+/// fresh it is (1 new, 0 gone). The terrain draws them packed (flatter,
+/// darker, greyer) for as long as they're fresh. The newest
+/// `render::terrain_material::LANES` are drawn; whoever packs them keeps
+/// the list (and only writes it when it changes).
+#[derive(Resource, Clone, Debug, Default, PartialEq)]
+pub struct Packed {
+    pub lanes: Vec<PackedLane>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PackedLane {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub half_width: f32,
+    pub fresh: f32,
+}
+
+impl Packed {
+    /// The lanes as the terrain's uniform wants them: the newest (last)
+    /// `LANES`.
+    pub fn params(&self) -> crate::render::terrain_material::LaneParams {
+        use crate::render::terrain_material::LANES;
+        let mut p = crate::render::terrain_material::LaneParams::default();
+        let skip = self.lanes.len().saturating_sub(LANES);
+        for (i, l) in self.lanes.iter().skip(skip).enumerate() {
+            p.ends[i] = Vec4::new(l.a.x, l.a.y, l.b.x, l.b.y);
+            p.extra[i] = Vec4::new(l.fresh.clamp(0.0, 1.0), l.half_width, 0.0, 0.0);
+        }
+        p
+    }
+}
+
+/// Where the snow is stepped and prints are laid: a system that drops
+/// prints (a ploughed lane takes none) runs `.after(Treading)`.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Treading;
+
 pub struct SnowPlugin;
 
 impl Plugin for SnowPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<crate::player::Footstep>()
             .init_resource::<Snow>()
+            .init_resource::<Packed>()
             .init_resource::<Tracks>()
-            .add_systems(Update, (snow_with_weather, tread).chain());
+            .add_systems(Update, (snow_with_weather, tread).chain().in_set(Treading));
     }
 }
 
@@ -511,6 +571,7 @@ fn demo_trail(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     zone: Res<super::Zone>,
     mut tracks: ResMut<Tracks>,
+    mut packed: ResMut<Packed>,
     mut laid: Local<Option<Vec3>>,
 ) {
     if snow.cover <= 0.0 || std::env::var("EXTRACTION_DEMO_TRACKS").is_err() {
@@ -525,6 +586,19 @@ fn demo_trail(
     }
     *laid = Some(eye.translation());
     tracks.clear();
+    // And a ploughed lane beside it, 3 m to the right, 30 m out.
+    {
+        let f = eye.forward().as_vec3();
+        let d = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
+        let right = Vec2::new(-d.y, d.x);
+        let a = eye.translation().xz() + right * 3.5 + d * 2.0;
+        packed.lanes = vec![PackedLane {
+            a,
+            b: a + d * 30.0,
+            half_width: 1.5,
+            fresh: 1.0,
+        }];
+    }
     let f = eye.forward().as_vec3();
     let mut dir = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
     let mut at = eye.translation().xz() + dir * 1.5;
@@ -860,6 +934,28 @@ mod tests {
         }
         assert_eq!(r.len(), MAX_PRINTS);
         assert_eq!(r.others().count(), MAX_OTHER_PRINTS);
+        // A plough's lane takes the prints it runs over, and no others.
+        let mut w = Tracks::default();
+        for (i, x) in [0.0, 1.0, 3.0].into_iter().enumerate() {
+            w.add(Print {
+                at: Vec3::new(x, 40.0, -5.0),
+                yaw: 0.0,
+                left: i % 2 == 0,
+                by: a,
+                fill: 0.0,
+            });
+        }
+        w.add_other(Print {
+            at: Vec3::new(0.5, 40.0, -9.0),
+            yaw: 0.0,
+            left: false,
+            by: walker,
+            fill: 0.0,
+        });
+        // A lane 3 m wide up the z axis from z 0 to -12, centred on x 0.
+        w.wipe(Vec3::new(0.0, 40.0, 0.0), 1.5, Vec3::NEG_Z, 12.0);
+        assert_eq!(w.prints().map(|p| p.at.x).collect::<Vec<_>>(), vec![3.0]);
+        assert_eq!(w.others().count(), 0);
         assert!(r.prints().all(|p| p.by == a), "the players' own");
         assert_eq!(r.prints().next().unwrap().at.x, 10.0);
     }

@@ -48,6 +48,8 @@ pub const GRID: (u32, u32) = (4, 2);
 pub const FOV: f32 = 40.0;
 /// The cameras' near plane.
 pub const NEAR: f32 = 0.03;
+/// A turntable camera's height over its subject, degrees.
+const TURN_ELEVATION: f32 = 18.0;
 /// How much further than the weather's the sweep's cameras see.
 const CLEAR_AIR: f32 = 8.0;
 /// How far under the subjects the studio floor's top is, metres.
@@ -177,8 +179,15 @@ struct Sweep {
     extra: Vec<Entity>,
     frames: u32,
     stable: (usize, u32),
-    /// Pictures to take of this subject under this light, by file suffix.
-    shots: Vec<&'static str>,
+    /// Pictures to take of this subject under this light, by file suffix
+    /// (`/tNNN` for a turntable's frames).
+    shots: Vec<String>,
+    /// Frames of a turntable (`--sweep-turn`), 0 for the grid.
+    turn: u32,
+    /// What the cameras look at and from how far: the subject's middle.
+    aim: (Vec3, f32),
+    /// The turntable frame the camera was last moved to.
+    turned: Option<u32>,
     records: Vec<Record>,
     /// The subject is hidden for its `_empty` picture.
     hidden: bool,
@@ -191,8 +200,10 @@ struct Sweep {
 }
 
 /// Meshes of the scene round the camera, not of any subject (the sky, the
-/// renderer's warm-up, the sun's shafts).
-const SCENE_MESHES: [&str; 3] = ["Sky dome", "Warm-up shelf", "Light shafts"];
+/// renderer's warm-up, the sun's shafts, and at night the moths round the
+/// lamp, which wildlife spawns afresh whenever they're cleared: the night
+/// sweep once cleared them for ever and never moved on).
+const SCENE_MESHES: [&str; 4] = ["Sky dome", "Warm-up shelf", "Light shafts", "Moth"];
 
 /// Frames the studio settles for when it opens and at each new light
 /// (the sky and fog ease into a new weather).
@@ -347,14 +358,18 @@ fn sweep(
                 physical_size: UVec2::new(cw, ch),
                 ..default()
             };
-            cam.viewport = Some(cell(0));
+            st.turn = opts.capture.sweep_turn.unwrap_or(0);
+            if st.turn == 0 {
+                cam.viewport = Some(cell(0));
+            }
             // The haze is the valley's, not the subject's: a big subject
             // framed from 200 m off was lost in it.
             commands
                 .entity(cam_e)
                 .insert((super::Lens(FOV.to_radians()), super::ClearAir(CLEAR_AIR)));
             let weather = crate::world::sky::Weather::default();
-            for i in 1..8 {
+            let extras = if st.turn == 0 { 1..8 } else { 1..1 };
+            for i in extras {
                 st.extra.push(
                     commands
                         .spawn((
@@ -683,6 +698,7 @@ fn sweep(
                     ..default()
                 });
             };
+            st.aim = (centre, dist);
             place(0, &mut cam_tf, &mut proj);
             for (i, e) in st.extra.iter().enumerate() {
                 if let Ok((mut tf, _, mut p)) = extra_cams.get_mut(*e) {
@@ -700,8 +716,11 @@ fn sweep(
             let night = st.lights[st.light] == Light::Night;
             commands.entity(st.lamp.unwrap()).insert(PointLight {
                 color: Color::srgb(1.0, 0.88, 0.7),
+                // As bright on every subject: the lamp stands about 2r off,
+                // so its power goes with that squared, for a cartridge as
+                // for a factory (a floor of 1 m once blew small items out).
                 intensity: if night {
-                    20_000.0 * (radius * 2.0).max(1.0).powi(2)
+                    20_000.0 * (radius * 2.0).powi(2)
                 } else {
                     0.0
                 },
@@ -710,12 +729,15 @@ fn sweep(
                 shadow_maps_enabled: true,
                 ..default()
             });
-            st.shots = if st.lights[st.light] == Light::Day {
+            st.shots = if st.turn > 0 {
+                (0..st.turn).map(|k| format!("/t{k:03}")).collect()
+            } else if st.lights[st.light] == Light::Day {
                 // Then without the subject, for telling it from the studio.
-                vec!["", "_empty"]
+                vec!["".into(), "_empty".into()]
             } else {
-                vec![""]
+                vec!["".into()]
             };
+            st.turned = None;
             // A few frames for the move to settle (shadows, the lamp).
             st.frames = 0;
             st.stage = Stage::Shoot;
@@ -725,10 +747,28 @@ fn sweep(
             if st.frames < 3 {
                 return;
             }
-            let Some(suffix) = st.shots.first().copied() else {
+            let Some(suffix) = st.shots.first().cloned() else {
                 st.stage = Stage::Next;
                 return;
             };
+            // A turntable's frame: the camera steps round the subject,
+            // a little above it, and gets a frame to draw from there.
+            if let Some(k) = suffix
+                .strip_prefix("/t")
+                .and_then(|k| k.parse::<u32>().ok())
+            {
+                if st.turned != Some(k) {
+                    let az = (angles()[0].0 + k as f32 * 360.0 / st.turn as f32).to_radians();
+                    let el = TURN_ELEVATION.to_radians();
+                    let dir = Vec3::new(az.sin() * el.cos(), el.sin(), -az.cos() * el.cos());
+                    let (centre, dist) = st.aim;
+                    *cam_tf = Transform::from_translation(centre + dir * dist)
+                        .looking_at(centre, Vec3::Y);
+                    st.turned = Some(k);
+                    st.frames = 1;
+                    return;
+                }
+            }
             if suffix == "_empty" {
                 if let Some(root) = st.root {
                     if !st.hidden {
@@ -743,6 +783,9 @@ fn sweep(
             let file = out
                 .join(light.dir())
                 .join(format!("{}{suffix}.png", st.subjects[st.i].file()));
+            if let Some(dir) = file.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
             let mut save = save_to_disk(file);
             st.shots.remove(0);
             st.stage = Stage::Waiting;

@@ -13,6 +13,7 @@
 pub mod anim;
 pub mod armour;
 pub mod collector;
+pub mod damage;
 pub mod director;
 pub mod dirigible;
 pub mod doors;

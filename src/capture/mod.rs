@@ -108,6 +108,9 @@ pub struct CaptureOptions {
     pub sweep: Option<String>,
     /// `--sweep-lights day,dusk,night`: which lights to shoot under.
     pub sweep_lights: Option<String>,
+    /// `--sweep-turn N`: a turntable instead of the grid, N frames round
+    /// each subject from one full-window camera.
+    pub sweep_turn: Option<u32>,
     /// `--trailer SECONDS`: film the `--sim-run` raid, up to SECONDS of
     /// footage.
     pub trailer: Option<String>,
@@ -125,6 +128,7 @@ impl CaptureOptions {
                 | "--fps"
                 | "--sweep"
                 | "--sweep-lights"
+                | "--sweep-turn"
                 | "--trailer"
         )
     }
@@ -138,6 +142,7 @@ impl CaptureOptions {
             "--fps" => self.fps = val.parse().ok().filter(|n| *n > 0),
             "--sweep" => self.sweep = Some(val),
             "--sweep-lights" => self.sweep_lights = Some(val),
+            "--sweep-turn" => self.sweep_turn = val.parse().ok().filter(|n| *n > 0),
             "--trailer" => self.trailer = Some(val),
             _ => {}
         }

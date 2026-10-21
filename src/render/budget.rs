@@ -196,6 +196,10 @@ impl Plugin for BudgetPlugin {
         app.insert_resource(bevy::light::DirectionalLightShadowMap {
             size: knobs.shadow_map.unwrap_or(SHADOW_MAP),
         });
+        // The player's SMOOTHING setting, unless a knob sets MSAA.
+        if knobs.msaa.is_none() {
+            app.add_systems(PostUpdate, apply_msaa_setting);
+        }
         if knobs != Knobs::default() {
             info!("perf knobs: {knobs:?}");
             app.insert_resource(knobs)
@@ -493,6 +497,56 @@ impl Knobs {
         std::env::var("EXTRACTION_PERF")
             .map(|t| Self::parse(&t))
             .unwrap_or_default()
+    }
+}
+
+/// The comfort board's SMOOTHING (`Comfort::msaa`, `--msaa`) on every
+/// view of the world: the headset's eyes, the flat camera, the mirror.
+/// Not offscreen views (a scope's picture, an impostor capture), which
+/// set their own. With it off, FXAA instead: one cheap pass that takes
+/// the edge off wires and rails (Visual design's call; no SMAA, no TAA,
+/// whose ghosting in a headset is a comfort problem). Foliage's alpha to
+/// coverage follows the samples by itself (`trees::foliage_alpha`).
+#[allow(clippy::type_complexity)]
+fn apply_msaa_setting(
+    mut commands: Commands,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut cams: Query<
+        (
+            Entity,
+            &mut Msaa,
+            Option<&bevy::camera::RenderTarget>,
+            Has<bevy::anti_alias::fxaa::Fxaa>,
+        ),
+        (With<Camera3d>, Without<crate::render::OffscreenCamera>),
+    >,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    let want = comfort.msaa_setting();
+    let all = comfort.is_changed();
+    for (e, mut m, target, fxaa) in &mut cams {
+        if !all && !m.is_added() {
+            continue;
+        }
+        if matches!(target, Some(bevy::camera::RenderTarget::Image(_))) {
+            continue;
+        }
+        if *m != want {
+            *m = want;
+        }
+        match (want == Msaa::Off, fxaa) {
+            (true, false) => {
+                commands
+                    .entity(e)
+                    .insert(bevy::anti_alias::fxaa::Fxaa::default());
+            }
+            (false, true) => {
+                commands.entity(e).remove::<bevy::anti_alias::fxaa::Fxaa>();
+            }
+            _ => {}
+        }
     }
 }
 

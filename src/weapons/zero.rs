@@ -320,7 +320,10 @@ fn zero_scopes(
         // The line of sight is the bore turned down by the angle: in the
         // scope's frame, however the scope sits.
         let look = sgt.rotation().inverse() * ggt.rotation() * Quat::from_rotation_x(-angle);
-        if !same || zero.look.angle_between(look) > 1e-5 {
+        // (Not `angle_between`: its acos can't see under about 3e-4 rad in
+        // f32, and a look that stale is a 10 cm miss at 300 m.)
+        let moved = (zero.look.inverse() * look).xyz().length() * 2.0;
+        if !same || moved > 1e-6 {
             *zero = Zero {
                 range_m: turret.range_m(),
                 angle,

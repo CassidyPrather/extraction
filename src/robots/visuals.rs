@@ -40,6 +40,7 @@ impl Plugin for RobotVisualsPlugin {
                 spin_propellers,
                 pose_leg_visuals,
                 dim_dead_eyes,
+                last_flicker,
                 blink_beacons,
                 show_halos,
                 dress_pylon_masts,
@@ -924,6 +925,106 @@ fn dim_dead_eyes(
     }
 }
 
+/// An eye dying: it flares and stutters at its socket for [`LAST_FLICKER`]
+/// seconds, then it's out for good (`dim_dead_eyes`; `fx` throws the
+/// socket's sparks). A still frame at 30 m catches it going.
+#[derive(Component)]
+struct LastFlicker {
+    left: f32,
+    radius: f32,
+    /// The flare itself, which reads by day when the halo doesn't.
+    core: Handle<StandardMaterial>,
+}
+
+/// How long a dying eye flickers (s).
+pub const LAST_FLICKER: f32 = 0.7;
+
+/// Whether a dying eye is lit `left` seconds before it's out: three
+/// stutters, the last the brightest, then dark.
+pub fn flicker_lit(left: f32) -> f32 {
+    let t = LAST_FLICKER - left;
+    match t {
+        t if t < 0.08 => 1.0,
+        t if t < 0.2 => 0.0,
+        t if t < 0.28 => 0.6,
+        t if t < 0.45 => 0.0,
+        t if t < 0.6 => 1.4,
+        _ => 0.0,
+    }
+}
+
+fn last_flicker(
+    mut commands: Commands,
+    mut deaths: MessageReader<super::PartDestroyed>,
+    robots: Query<(&Robot, &GlobalTransform, Option<&super::anim::Gait>)>,
+    mut flickers: Query<(Entity, &mut LastFlicker, &mut crate::world::halos::Halo)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut flare: Local<Option<Handle<Mesh>>>,
+    time: Res<Time>,
+) {
+    for d in deaths.read() {
+        if d.role != PartRole::Sensor {
+            continue;
+        }
+        let Ok((robot, gt, gait)) = robots.get(d.robot) else {
+            continue;
+        };
+        let radius = if robot.kind == RobotKind::Drone {
+            0.6
+        } else {
+            1.2 * gait.map_or(1.0, |g| g.size)
+        };
+        // Riding with the body, at the socket.
+        let local = gt.affine().inverse().transform_point3(d.at);
+        let core = materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            perceptual_roughness: 1.0,
+            reflectance: 0.0,
+            alpha_mode: AlphaMode::Add,
+            fog_enabled: false,
+            ..default()
+        });
+        let mesh = flare
+            .get_or_insert_with(|| meshes.add(Sphere::new(0.12).mesh().ico(2).unwrap()))
+            .clone();
+        commands.spawn((
+            LastFlicker {
+                left: LAST_FLICKER,
+                radius,
+                core: core.clone(),
+            },
+            Mesh3d(mesh),
+            MeshMaterial3d(core),
+            NotShadowCaster,
+            crate::world::halos::Halo {
+                color: LinearRgba::BLACK,
+                radius: 0.0,
+            },
+            Transform::from_translation(local),
+            Visibility::default(),
+            ChildOf(d.robot),
+        ));
+    }
+    let dt = time.delta_secs();
+    for (e, mut f, mut halo) in &mut flickers {
+        f.left -= dt;
+        if f.left <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        let k = flicker_lit(f.left);
+        if let Some(mut m) = materials.get_mut(&f.core) {
+            m.emissive = LinearRgba::rgb(12.0, 2.4, 0.7) * k;
+        }
+        let want = crate::world::halos::Halo {
+            color: LinearRgba::rgb(1.0, 0.25, 0.08) * 3.0 * k,
+            radius: if k > 0.0 { f.radius } else { 0.0 },
+        };
+        halo.set_if_neq(want);
+    }
+}
+
 /// A beacon at full flash, and how much of it glows between flashes.
 const BEACON_ON: LinearRgba = LinearRgba::rgb(40.0, 24.0, 8.0);
 const BEACON_REST: f32 = 0.06;
@@ -1508,13 +1609,13 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
     .with_inserted_indices(bevy::mesh::Indices::U32(idx))
 }
 
-/// A hurt core's eye gutters: below 40% it drops out now and then, more
-/// often the worse it is, like a failing supply (1 when it's whole).
-fn gutter(core: f32, now: f32, k: u32) -> f32 {
-    if core >= 0.4 {
+/// An eye guttering this badly (0 steady, 1 all but out: a hurt sensor, a
+/// failing core, `damage`): it drops out now and then, more the worse it
+/// is, like a failing supply.
+fn guttering(bad: f32, now: f32, k: u32) -> f32 {
+    if bad <= 0.0 {
         return 1.0;
     }
-    let bad = 1.0 - core / 0.4;
     // Two slow beats against each other, so the drop-outs don't tick.
     let n = (now * 5.3 + k as f32).sin() * (now * 2.1 + k as f32 * 0.7).sin();
     if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
@@ -1629,11 +1730,19 @@ fn alert_eyes(
     // would be lost; the halo carries it at range.
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
     let gain = 1.0 - 0.75 * night;
-    // How much core each robot has left: a hurt one's eye gutters.
+    // How badly each robot's eye gutters (`damage`: a hurt sensor, a
+    // failing core): 0 steady, 1 all but out.
     let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
     for p in &parts {
-        if p.role == PartRole::Core {
-            cores.insert(p.robot, p.hp / p.max_hp.max(1.0));
+        let h = p.hp / p.max_hp.max(1.0);
+        let bad = match p.role {
+            PartRole::Core => (1.0 - h / 0.4).clamp(0.0, 1.0),
+            PartRole::Sensor if h > 0.0 => (1.0 - h / 0.7).clamp(0.0, 1.0),
+            _ => continue,
+        };
+        if super::damage::tell(p.role, h).motion == super::damage::Motion::Gutter {
+            let b = cores.entry(p.robot).or_insert(0.0);
+            *b = b.max(bad);
         }
     }
     for (robot, aware, own, _) in &robots {
@@ -1648,8 +1757,8 @@ fn alert_eyes(
             }
         } else {
             1.0
-        } * gutter(
-            cores.get(&robot).copied().unwrap_or(1.0),
+        } * guttering(
+            cores.get(&robot).copied().unwrap_or(0.0),
             now,
             robot.index_u32(),
         );
@@ -1704,11 +1813,12 @@ fn alert_eyes(
         let alive = part.alive();
         let want = match (alive, moods.get(&part.robot), robots.get(part.robot)) {
             (true, Some(&(color, on)), Ok((_, _, _, r))) if !r.wrecked && on > 0.0 => {
-                // Wide enough to read as a point at 60-80 m after dark.
+                // Wide enough to read as a point at 60-80 m on a clear
+                // night, when there's no haze to spread it.
                 let radius = if r.kind == RobotKind::Drone {
-                    0.4
+                    0.6
                 } else {
-                    0.8 * gaits.get(part.robot).map_or(1.0, |g| g.size)
+                    1.2 * gaits.get(part.robot).map_or(1.0, |g| g.size)
                 };
                 crate::world::halos::Halo { color, radius }
             }
@@ -1764,17 +1874,22 @@ fn shell_by_light(
         let day = *day_rough.get_or_insert(mat.perceptual_roughness);
         mat.perceptual_roughness = day.max(0.55) + (day - day.max(0.55)) * dusk;
     }
-    // The seams too: by day a cool line, after dark all but out. At full
-    // strength in the night's open exposure they clip to white and read
-    // before the eye's red does.
+    // The seams too: by day a cool line, after dark out. Any glow left in
+    // the night's open exposure reads as a cyan point beside the eye's red
+    // and muddles which robot is looking at you.
     if let Some(mut mat) = materials.get_mut(&m.glow) {
-        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (0.02 + 0.98 * dusk * dusk);
+        mat.emissive = LinearRgba::rgb(1.2, 7.0, 9.0) * (dusk * dusk);
     }
 }
 
 #[cfg(test)]
 mod gutter_tests {
-    use super::gutter;
+    use super::guttering;
+
+    /// A core's eye: steady until 40%, then worse the lower.
+    fn gutter(core: f32, now: f32, k: u32) -> f32 {
+        guttering(if core >= 0.4 { 0.0 } else { 1.0 - core / 0.4 }, now, k)
+    }
 
     /// A whole core's eye never gutters; a hurt one drops out now and
     /// then, more the worse it's hurt.

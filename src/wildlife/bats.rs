@@ -261,16 +261,19 @@ fn spot(
     None
 }
 
-/// Where in a cell bats hunt, if anywhere: its deepest water, or the
-/// nearest stretch of a wood's edge, or a building.
+/// Where in a cell bats hunt, if anywhere: its deepest water (below the
+/// snow line: nothing hatches off a frozen tarn), or the nearest stretch of
+/// a wood's edge, or a building.
 fn haunt_in(zone: &Zone, rng: &mut Rng, cell: (i32, i32)) -> Option<(Haunt, Vec3, f32, f32)> {
     let base = Vec2::new(cell.0 as f32, cell.1 as f32) * CELL;
     let mid = base + Vec2::splat(CELL * 0.5);
+    let line = crate::world::snow::snow_line(&zone.map);
     let water = (0..16)
         .map(|_| base + Vec2::new(rng.f32(), rng.f32()) * CELL)
         .filter_map(|p| {
-            let d = zone.hm.water_level([p.x, p.y])? - zone.ground(p.x, p.y);
-            (d > 0.2).then_some((d, p))
+            let top = zone.hm.water_level([p.x, p.y])?;
+            let d = top - zone.ground(p.x, p.y);
+            (d > 0.2 && line.is_none_or(|l| top < l)).then_some((d, p))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0));
     if let Some((_, p)) = water {
@@ -758,9 +761,23 @@ mod tests {
         }
     }
 
-    /// Every valley has bats to hunt somewhere; four minutes of someone
-    /// walking about with a torch on them and shooting now and then, and a
-    /// machine coming by, never puts a bat inside or under anything built
+    /// How many of a valley's cells would have bats over water, if they had
+    /// bats.
+    fn wet_cells(zone: &Zone) -> usize {
+        let half = (zone.map.size * 0.5 / CELL).ceil() as i32;
+        let mut n = 0;
+        for i in -half..half {
+            for j in -half..half {
+                let mut rng = Rng::new(0xBA75 ^ (i as u64) << 20 ^ j as u64);
+                n += haunt_in(zone, &mut rng, (i, j)).is_some_and(|h| h.0 == Haunt::Water) as usize;
+            }
+        }
+        n
+    }
+
+    /// Every valley has bats to hunt somewhere, over its water where it has
+    /// much; four minutes of someone walking about with a torch on them and
+    /// shooting now and then, and a machine coming by, never puts a bat inside or under anything built
     /// or below 2 m over the ground or the water; they scatter from the
     /// shots and leave for the machine, and come back.
     #[test]
@@ -770,7 +787,16 @@ mod tests {
             let lamps = lamps(&zone);
             let every = all(&zone, &obstacles, 3);
             assert!(every.len() >= 4, "{map}: {} groups", every.len());
-            for haunt in [Haunt::Water, Haunt::Building] {
+            // Over the water wherever there's much of it below the snow
+            // line: not over Rime Fell's one small tarn, high and frozen.
+            let wet = wet_cells(&zone);
+            let haunts: &[Haunt] = if wet >= 8 {
+                &[Haunt::Water, Haunt::Building]
+            } else {
+                assert_eq!((map, wet), ("rime_fell", 0), "cells over water");
+                &[Haunt::Building]
+            };
+            for &haunt in haunts {
                 assert!(
                     every.iter().any(|c| c.haunt == haunt),
                     "{map}: no bats hunting {haunt:?}"

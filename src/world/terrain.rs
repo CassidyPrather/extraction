@@ -26,7 +26,7 @@ impl Plugin for TerrainVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_terrain_meshes)
             .add_systems(PostUpdate, fog_cull)
-            .add_systems(Update, wet_with_weather);
+            .add_systems(Update, (wet_with_weather, pack_lanes));
     }
 }
 
@@ -72,6 +72,26 @@ fn fog_cull(
 /// The ground is as wet as the weather has made it (`weather::Wetness`):
 /// soaking over minutes in rain, drying slowly after. (A uniform: no
 /// recompile; written when it has moved a little.)
+/// Packed lanes through the snow, to the terrain when they change.
+fn pack_lanes(
+    packed: Option<Res<super::snow::Packed>>,
+    chunks: Query<&MeshMaterial3d<TerrainMaterial>, With<TerrainChunk>>,
+    mut materials: ResMut<Assets<TerrainMaterial>>,
+) {
+    let Some(packed) = packed else {
+        return;
+    };
+    if !packed.is_changed() {
+        return;
+    }
+    let Some(handle) = chunks.iter().next() else {
+        return;
+    };
+    if let Some(mut m) = materials.get_mut(&handle.0) {
+        m.extension.lanes = packed.params();
+    }
+}
+
 fn wet_with_weather(
     wet: Res<super::weather::Wetness>,
     snow: Option<Res<super::snow::Snow>>,
