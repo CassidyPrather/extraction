@@ -134,19 +134,22 @@ impl Plugin for SentryPlugin {
     }
 }
 
+/// How far behind its mast a marker's junction box stands when the map
+/// doesn't say.
+pub const POWER_BEHIND: f32 = 12.0;
+
 /// Where a `MarkerKind::Sentry` puts its machine: its arc's centre (the
-/// marker's `rot`, a bearing as [`rules::bearing`] measures it) and its
+/// marker's `rot` is the way it faces, as a sign's board does) and its
 /// junction box.
 pub fn from_marker(m: &extraction_core::map::Marker) -> Option<(Vec2, f32, f32, Vec2)> {
     let extraction_core::map::MarkerKind::Sentry { arc, power } = &m.kind else {
         return None;
     };
-    Some((
-        Vec2::from(m.at),
-        rules::wrap_deg(m.rot),
-        *arc,
-        Vec2::from(*power),
-    ))
+    let at = Vec2::from(m.at);
+    let r = m.rot.to_radians();
+    let facing = Vec2::new(r.sin(), r.cos());
+    let power = power.map(Vec2::from).unwrap_or(at - facing * POWER_BEHIND);
+    Some((at, rules::wrap_deg(180.0 - m.rot), *arc, power))
 }
 
 /// The map's sentries, stood up once the Zone is in (with robots on).
@@ -749,20 +752,25 @@ pub(crate) mod tests {
         (app, e)
     }
 
-    /// A map's marker: its `rot` is its arc's centre, as a bearing.
+    /// A map's marker: its arc faces along `rot` (the way a sign's board
+    /// does), and its box stands behind it unless the map says where.
     #[test]
     fn a_marker_faces_its_rot() {
-        let m: extraction_core::map::Marker = ron::from_str(
-            "(kind: Sentry(arc: 140.0, power: (4.0, 34.0)), at: (10.0, 20.0), rot: 90.0)",
-        )
-        .unwrap();
+        let m: extraction_core::map::Marker =
+            ron::from_str("(kind: Sentry(), at: (10.0, 20.0), rot: 90.0)").unwrap();
         let (at, centre, arc, power) = from_marker(&m).unwrap();
-        assert_eq!(
-            (at, arc, power),
-            (Vec2::new(10.0, 20.0), 140.0, Vec2::new(4.0, 34.0))
-        );
+        assert_eq!(at, Vec2::new(10.0, 20.0));
+        assert_eq!(arc, 220.0);
         // Faces +X: the bearing toward +X.
         assert!((centre - rules::bearing([10.0, 20.0], [11.0, 20.0])).abs() < 1e-3);
+        assert!((power - Vec2::new(10.0 - POWER_BEHIND, 20.0)).length() < 1e-3);
+        let m: extraction_core::map::Marker = ron::from_str(
+            "(kind: Sentry(arc: 160.0, power: Some((4.0, 5.0))), at: (0.0, 0.0), rot: 0.0)",
+        )
+        .unwrap();
+        let (_, centre, arc, power) = from_marker(&m).unwrap();
+        assert_eq!((arc, power), (160.0, Vec2::new(4.0, 5.0)));
+        assert!((rules::wrap_deg(centre - rules::bearing([0.0, 0.0], [0.0, 1.0]))).abs() < 1e-3);
     }
 
     /// Unwatched, it sweeps its arc in its rhythm, its head on the mast,
