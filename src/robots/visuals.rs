@@ -1611,10 +1611,11 @@ fn alert_eyes(
     let light = conditions.map_or(1.0, |c| c.light);
     // The glow tells more the darker it is.
     let dark = (1.2 - light).clamp(0.3, 1.0);
-    // After dark the eye opens up a little (the halo carries it at range:
-    // pushed much harder the core clips to white and the red is lost).
+    // After dark the eye's core dims to what it reads as by day: the
+    // night's open exposure would clip it to white otherwise and its red
+    // would be lost; the halo carries it at range.
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
-    let gain = 1.0 + 2.0 * night;
+    let gain = 1.0 - 0.75 * night;
     // How much core each robot has left: a hurt one's eye gutters.
     let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
     for p in &parts {
@@ -1719,6 +1720,7 @@ fn shell_by_light(
     server: Res<AssetServer>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut done: Local<Option<f32>>,
+    mut day_rough: Local<Option<f32>>,
     zone: Option<Res<crate::world::Zone>>,
 ) {
     let (Some(c), Some(m)) = (conditions, mats) else {
@@ -1744,6 +1746,10 @@ fn shell_by_light(
     let k = 0.22 * c.light.sqrt() * dusk * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
+        // A clear moon glints off the shell: right, but it mustn't out-read
+        // the eyes, so after dark the glint spreads into a soft sheen.
+        let day = *day_rough.get_or_insert(mat.perceptual_roughness);
+        mat.perceptual_roughness = day.max(0.55) + (day - day.max(0.55)) * dusk;
     }
     // The seams too: by day a cool line, after dark all but out. At full
     // strength in the night's open exposure they clip to white and read
