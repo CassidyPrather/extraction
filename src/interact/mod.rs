@@ -26,6 +26,7 @@ pub mod physics_hands;
 pub mod poke;
 pub mod read;
 pub mod tools;
+pub mod touch;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -317,6 +318,7 @@ impl Plugin for InteractPlugin {
                 tools::ToolsPlugin,
                 first_aid::FirstAidPlugin,
                 gestures::GesturesPlugin,
+                touch::TouchPlugin,
                 read::ReadPlugin,
             ));
     }

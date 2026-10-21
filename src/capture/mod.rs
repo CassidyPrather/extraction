@@ -32,7 +32,11 @@ impl Plugin for CapturePlugin {
             trailer::TrailerPlugin,
         ))
         .add_systems(PostUpdate, keep_alive)
-        .add_systems(Update, clear_air.after(crate::world::sky::WeatherLook));
+        .add_systems(Update, clear_air.after(crate::world::sky::WeatherLook))
+        .add_systems(
+            PostUpdate,
+            hold_lens.before(bevy::camera::CameraUpdateSystems),
+        );
     }
 }
 
@@ -66,6 +70,23 @@ fn clear_air(
 ) {
     for (k, mut fog) in &mut cams {
         fog.falloff = bevy::pbr::FogFalloff::from_visibility_squared(weather.visibility * k.0);
+    }
+}
+
+/// A capture camera's field of view, vertical, radians, held every frame:
+/// in flat mode the optic zoom (`gadgets::visuals`) eases every camera's
+/// view back toward the game's 75° unless a scope is at the eye, which
+/// quietly undid the sweep's framing and the cinematics' lenses.
+#[derive(Component, Clone, Copy)]
+pub struct Lens(pub f32);
+
+fn hold_lens(mut cams: Query<(&Lens, &mut Projection)>) {
+    for (lens, mut proj) in &mut cams {
+        if let Projection::Perspective(p) = &mut *proj {
+            if p.fov != lens.0 {
+                p.fov = lens.0;
+            }
+        }
     }
 }
 

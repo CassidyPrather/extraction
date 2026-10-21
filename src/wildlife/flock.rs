@@ -267,6 +267,12 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
     };
     let mut rng = Rng::new(seed ^ 0xB12D_5EED ^ name_hash(map));
     let mut taken: Vec<usize> = Vec::new();
+    // Nowhere to perch (a map with nothing built): no flocks.
+    let count = if perches.sites.iter().any(|s| !s.wading) {
+        count
+    } else {
+        0
+    };
     for _ in 0..count {
         // Far from the flocks already placed: the best of a few tries.
         let pick = (0..8)
@@ -326,7 +332,7 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
     taken.len() + herons
 }
 
-fn name_hash(s: &str) -> u64 {
+pub(crate) fn name_hash(s: &str) -> u64 {
     s.bytes().fold(0xCBF2_9CE4_8422_2325, |h, b| {
         (h ^ b as u64).wrapping_mul(0x100_0000_01B3)
     })
@@ -1124,6 +1130,24 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(), run());
+    }
+}
+
+#[cfg(test)]
+mod empty_tests {
+    use super::*;
+    use bevy::ecs::world::CommandQueue;
+
+    /// A map with nothing built (a scratch map) has no flocks, rather than
+    /// a crash.
+    #[test]
+    fn no_perches_no_flocks() {
+        let world = World::new();
+        let mut queue = CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        for map in ["marrow_creek", "sallow_reservoir", "nowhere"] {
+            assert_eq!(spawn_flocks(&mut commands, map, &Perches::default(), 1), 0);
+        }
     }
 }
 

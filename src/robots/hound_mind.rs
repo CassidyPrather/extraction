@@ -141,16 +141,22 @@ pub fn bite(e: Entity, from: Vec3, target: Vec3, seed: u64, shots: &mut MessageW
 /// of your facing it's already on, a little behind you; straight at you
 /// once it's close.
 pub fn flank_point(me: Vec3, target: Vec3, facing: Vec3) -> Vec3 {
+    flank_point_side(me, target, facing, None)
+}
+
+/// [`flank_point`] to a given side of you (`Some(1.0)` your right,
+/// `Some(-1.0)` your left), for a pack splitting up.
+pub fn flank_point_side(me: Vec3, target: Vec3, facing: Vec3, side: Option<f32>) -> Vec3 {
     let d = Vec2::new(target.x - me.x, target.z - me.z).length();
     if d < FLANK_FROM {
         return target;
     }
     let f = Vec3::new(facing.x, 0.0, facing.z).normalize_or(Vec3::NEG_Z);
     let right = Vec3::new(-f.z, 0.0, f.x);
-    let side = if (me - target).dot(right) >= 0.0 {
-        right
-    } else {
-        -right
+    let side = match side {
+        Some(k) => right * k.signum(),
+        None if (me - target).dot(right) >= 0.0 => right,
+        None => -right,
     };
     target + side * FLANK_OFFSET - f * 2.0
 }
@@ -167,6 +173,10 @@ mod tests {
         let p = flank_point(me, target, Vec3::NEG_Z);
         assert!(p.x.abs() > FLANK_OFFSET * 0.9, "out to a side: {p}");
         assert!(p.z > -0.5, "not in front of you: {p}");
+        // A pack splits: one each side.
+        let r = flank_point_side(me, target, Vec3::NEG_Z, Some(1.0));
+        let l = flank_point_side(me, target, Vec3::NEG_Z, Some(-1.0));
+        assert!(r.x * l.x < 0.0, "opposite sides: {r} {l}");
         // Close, it comes straight in.
         assert_eq!(
             flank_point(Vec3::new(0.0, 0.0, -5.0), target, Vec3::NEG_Z),

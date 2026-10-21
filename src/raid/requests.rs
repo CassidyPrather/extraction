@@ -412,6 +412,7 @@ fn building_name(prefab: &str) -> String {
         "ranger_tower" => "ranger tower".into(),
         "funicular_lower" => "funicular's valley station".into(),
         "funicular_upper" => "funicular's top station".into(),
+        "survey_tower" => "survey tower".into(),
         other => other.replace('_', " "),
     }
 }
@@ -448,12 +449,40 @@ fn find_cache(
     }
 }
 
+/// Which way a job's spot in this valley is from where the truck drops
+/// you, and that it's ringed on the map: the place's name alone means
+/// nothing to someone new (its sheet is in the kit).
+fn way_from_the_drop(
+    job: &extraction_core::progression::Job,
+    map: &str,
+    zone: &crate::world::Zone,
+) -> String {
+    let seen = matches!(
+        job,
+        extraction_core::progression::Job::Scout { seen: true, .. }
+    );
+    let Some((_, at)) = job.mark().filter(|(m, _)| *m == map && !seen) else {
+        return String::new();
+    };
+    let Some(drop) = zone
+        .marker(&extraction_core::map::MarkerKind::Insertion)
+        .map(|m| m.at)
+    else {
+        return String::new();
+    };
+    format!(
+        "\nFrom the drop: {}. Ringed on your map.",
+        crate::raid::lines::way(drop, at)
+    )
+}
+
 fn card_text(
     requests: Res<Requests>,
     progression: Res<Progression>,
     catalog: Res<Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
     epilogue: Res<crate::raid::epilogue::Epilogue>,
+    zone: Res<crate::world::Zone>,
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
@@ -481,7 +510,10 @@ fn card_text(
         "DRIVER WANTS\n".to_owned()
     };
     match &p.job {
-        Some(job) => text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done),
+        Some(job) => {
+            text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
+            text += &way_from_the_drop(job, &opts.map, &zone);
+        }
         None => text += lines::NOTHING_YET,
     }
     if let Some(u) = p.next_fitting().first() {

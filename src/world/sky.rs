@@ -113,7 +113,10 @@ impl Weather {
             } else {
                 Color::srgba(0.75, 0.72, 0.65, 0.25)
             },
-            directional_light_exponent: 12.0,
+            // The moon stands high (a full one where the noon sun would):
+            // a tight lobe left the horizon toward it barely lighter than
+            // away (1.1x); a wide one makes the fog that side a compass.
+            directional_light_exponent: if self.moon > 0.0 { 4.0 } else { 12.0 },
             falloff: FogFalloff::from_visibility_squared(self.visibility),
         }
     }

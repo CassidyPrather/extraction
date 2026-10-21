@@ -38,10 +38,8 @@ use crate::world::{Layer, Zone};
 
 /// The head's height over the ground at its foot (m).
 pub const MAST: f32 = 4.6;
-/// The cable's segments: each a stretch of this length a cutters' jaws
-/// find within [`CABLE_REACH`] of its middle.
+/// The cable's segments: each a stretch of this length, each cut on its own.
 pub const CABLE_STEP: f32 = 0.6;
-pub const CABLE_REACH: f32 = 0.35;
 /// What its parts take.
 pub const HEAD_HP: f32 = 260.0;
 pub const EYE_HP: f32 = 60.0;
@@ -76,6 +74,8 @@ pub struct Sentry {
     pub report: f32,
     /// Its foot (the ground at the mast).
     pub foot: Vec3,
+    /// Rounds fired: with its foot, each round's scatter seed.
+    pub fired: u64,
 }
 
 /// One of a sentry's pieces that isn't on its head: the mast, the box, a
@@ -121,6 +121,8 @@ pub struct SentryPlugin;
 impl Plugin for SentryPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SentryEvent>()
+            .init_resource::<Severed>()
+            .add_observer(cable_gone)
             .add_systems(
                 FixedUpdate,
                 (sentry_power, sentry_mind, sentry_report)
@@ -128,7 +130,47 @@ impl Plugin for SentryPlugin {
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
             )
-            .add_systems(FixedUpdate, stage_scenario);
+            .add_systems(FixedUpdate, (place_sentries, stage_scenario));
+    }
+}
+
+/// How far behind its mast a marker's junction box stands when the map
+/// doesn't say.
+pub const POWER_BEHIND: f32 = 12.0;
+
+/// Where a `MarkerKind::Sentry` puts its machine: its arc's centre (the
+/// marker's `rot` is the way it faces, as a sign's board does) and its
+/// junction box.
+pub fn from_marker(m: &extraction_core::map::Marker) -> Option<(Vec2, f32, f32, Vec2)> {
+    let extraction_core::map::MarkerKind::Sentry { arc, power } = &m.kind else {
+        return None;
+    };
+    let at = Vec2::from(m.at);
+    let r = m.rot.to_radians();
+    let facing = Vec2::new(r.sin(), r.cos());
+    let power = power.map(Vec2::from).unwrap_or(at - facing * POWER_BEHIND);
+    Some((at, rules::wrap_deg(180.0 - m.rot), *arc, power))
+}
+
+/// The map's sentries, stood up once the Zone is in (with robots on).
+fn place_sentries(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    opts: Option<Res<crate::LaunchOptions>>,
+    mut done: Local<bool>,
+) {
+    let Some(zone) = zone else { return };
+    if *done {
+        return;
+    }
+    *done = true;
+    if !opts.is_some_and(|o| o.robots) {
+        return;
+    }
+    for m in &zone.map.markers {
+        if let Some((at, centre, arc, power)) = from_marker(m) {
+            spawn_sentry(&mut commands, &zone, at, centre, arc, power);
+        }
     }
 }
 
@@ -180,6 +222,7 @@ pub fn spawn_sentry(
                 powered: true,
                 report: 0.0,
                 foot,
+                fired: 0,
             },
             Senses {
                 sight: rules::SIGHT,
@@ -314,6 +357,7 @@ fn sentry_power(
     mut commands: Commands,
     mut cuts: MessageReader<crate::destruction::hooks::Cut>,
     mut destroyed: MessageReader<super::PartDestroyed>,
+    mut severed: ResMut<Severed>,
     pieces: Query<(&SentryPiece, &OfSentry)>,
     mut sentries: Query<(Entity, &mut Sentry, &Robot, &Transform)>,
     raid: Option<Res<crate::raid::Raid>>,
@@ -326,15 +370,15 @@ fn sentry_power(
             commands.entity(e).despawn();
         }
     }
-    let mut lost: Vec<Entity> = Vec::new();
+    let mut lost: Vec<Entity> = std::mem::take(&mut severed.0);
     for c in cuts.read() {
         if let Ok((SentryPiece::Cable, of)) = pieces.get(c.target) {
             lost.push(of.0);
-            // Cut through: it's two loose ends now, not a cable.
+            // Cut through: a gap in it, two loose ends.
             commands
                 .entity(c.target)
                 .remove::<(crate::destruction::hooks::Cuttable, Collider)>()
-                .insert(CableCut);
+                .insert((CableCut, Visibility::Hidden));
         }
     }
     for d in destroyed.read() {
@@ -371,6 +415,23 @@ fn sentry_power(
 #[derive(Component, Debug)]
 pub struct CableCut;
 
+/// Sentries whose cable has lost a stretch since [`sentry_power`] last
+/// looked.
+#[derive(Resource, Default)]
+struct Severed(Vec<Entity>);
+
+/// A stretch of cable taken away (Destruction despawns what the cutters
+/// cut, maybe before [`sentry_power`] reads the cut): its sentry is dark.
+fn cable_gone(
+    gone: On<Remove, SentryPiece>,
+    pieces: Query<(&SentryPiece, &OfSentry)>,
+    mut severed: ResMut<Severed>,
+) {
+    if let Ok((SentryPiece::Cable, of)) = pieces.get(gone.entity) {
+        severed.0.push(of.0);
+    }
+}
+
 /// Sweep, look, track, warn, fire.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn sentry_mind(
@@ -390,8 +451,8 @@ fn sentry_mind(
     catalog: Res<crate::items::Catalog>,
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
+    minds: Query<&super::senses::MindSeed>,
     time: Res<Time>,
-    mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
     let heard: Vec<(Vec3, f32, Option<Entity>)> =
@@ -511,9 +572,10 @@ fn sentry_mind(
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
                 let aim = p + Vec3::Y * 1.1;
-                *seed = seed
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
+                // Seeded by the machine and how many it has fired, so it
+                // scatters the same whatever else is in the world.
+                s.fired += 1;
+                let seed = super::senses::mix(minds.get(e).map_or(0, |m| m.0), s.fired);
                 shots.write(Shot {
                     gun: e,
                     shooter: Some(e),
@@ -524,7 +586,7 @@ fn sentry_mind(
                     projectiles: 1,
                     spread: SPREAD,
                     recoil: 0.0,
-                    seed: *seed,
+                    seed,
                 });
                 out.write(SentryEvent {
                     sentry: e,
@@ -690,6 +752,27 @@ pub(crate) mod tests {
         (app, e)
     }
 
+    /// A map's marker: its arc faces along `rot` (the way a sign's board
+    /// does), and its box stands behind it unless the map says where.
+    #[test]
+    fn a_marker_faces_its_rot() {
+        let m: extraction_core::map::Marker =
+            ron::from_str("(kind: Sentry(), at: (10.0, 20.0), rot: 90.0)").unwrap();
+        let (at, centre, arc, power) = from_marker(&m).unwrap();
+        assert_eq!(at, Vec2::new(10.0, 20.0));
+        assert_eq!(arc, 220.0);
+        // Faces +X: the bearing toward +X.
+        assert!((centre - rules::bearing([10.0, 20.0], [11.0, 20.0])).abs() < 1e-3);
+        assert!((power - Vec2::new(10.0 - POWER_BEHIND, 20.0)).length() < 1e-3);
+        let m: extraction_core::map::Marker = ron::from_str(
+            "(kind: Sentry(arc: 160.0, power: Some((4.0, 5.0))), at: (0.0, 0.0), rot: 0.0)",
+        )
+        .unwrap();
+        let (_, centre, arc, power) = from_marker(&m).unwrap();
+        assert_eq!((arc, power), (160.0, Vec2::new(4.0, 5.0)));
+        assert!((rules::wrap_deg(centre - rules::bearing([0.0, 0.0], [0.0, 1.0]))).abs() < 1e-3);
+    }
+
     /// Unwatched, it sweeps its arc in its rhythm, its head on the mast,
     /// never turning into its blind sector.
     #[test]
@@ -742,14 +825,7 @@ pub(crate) mod tests {
         vr.stand(me, 0.0);
         if cut {
             vr.step(5);
-            let cable = vr
-                .app
-                .world_mut()
-                .query::<(Entity, &SentryPiece, &OfSentry)>()
-                .iter(vr.app.world())
-                .find(|(_, p, o)| matches!(p, SentryPiece::Cable) && o.0 == e)
-                .map(|(c, ..)| c)
-                .unwrap();
+            let cable = cable_core(&mut vr.app, e);
             vr.app
                 .world_mut()
                 .write_message(crate::destruction::hooks::Cut {
@@ -766,6 +842,16 @@ pub(crate) mod tests {
         }
         let hurt = vr.app.world().resource::<Hurts>().0;
         (chirp.is_some(), fire.is_some(), hurt)
+    }
+
+    /// One of `sentry`'s stretches of cable (each is what the cutters cut).
+    pub(crate) fn cable_core(app: &mut App, sentry: Entity) -> Entity {
+        app.world_mut()
+            .query::<(Entity, &SentryPiece, &OfSentry)>()
+            .iter(app.world())
+            .find(|(_, p, o)| matches!(p, SentryPiece::Cable) && o.0 == sentry)
+            .map(|(e, ..)| e)
+            .expect("a cable")
     }
 
     #[derive(Resource, Default)]
@@ -793,6 +879,49 @@ pub(crate) mod tests {
         assert!(hurt > 0.0, "and hit");
     }
 
+    /// Its scatter is seeded by the machine (where it stands, how many it
+    /// has fired), not by entity ids: with fifty unrelated things spawned
+    /// first, it throws the same rounds.
+    #[test]
+    fn its_scatter_is_its_own() {
+        #[derive(Resource, Default)]
+        struct Seeds(Vec<u64>);
+        fn seeds(mut shots: MessageReader<Shot>, mut out: ResMut<Seeds>) {
+            out.0.extend(shots.read().map(|s| s.seed));
+        }
+        let run = |pad: usize| {
+            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            vr.app.init_resource::<Seeds>().add_systems(Update, seeds);
+            for k in 0..pad {
+                vr.app.world_mut().spawn(Name::new(format!("pad {k}")));
+            }
+            let zone = vr.app.world().resource::<Zone>().clone();
+            {
+                let mut c = vr.app.world_mut().commands();
+                spawn_sentry(
+                    &mut c,
+                    &zone,
+                    Vec2::new(40.0, 230.0),
+                    0.0,
+                    160.0,
+                    Vec2::new(48.0, 236.0),
+                );
+                vr.app.world_mut().flush();
+            }
+            vr.stand(zone.on_ground(40.0, 216.0), 0.0);
+            vr.step(90 * 12);
+            std::mem::take(&mut vr.app.world_mut().resource_mut::<Seeds>().0)
+        };
+        let a = run(0);
+        assert!(a.len() >= 3, "it fired: {a:?}");
+        let b = run(50);
+        assert_eq!(a, b);
+        let mut u = a.clone();
+        u.sort();
+        u.dedup();
+        assert_eq!(u.len(), a.len(), "no two rounds alike");
+    }
+
     #[test]
     fn behind_it_you_are_never_seen() {
         let (chirp, fire, hurt) = stand_and_watch(true, false);
@@ -803,6 +932,89 @@ pub(crate) mod tests {
     fn cut_its_cable_and_its_dark() {
         let (chirp, fire, hurt) = stand_and_watch(false, true);
         assert!(!chirp && !fire && hurt == 0.0, "{chirp} {fire} {hurt}");
+    }
+
+    /// The real thing: bolt cutters in both hands, the jaws onto a
+    /// stretch of its cable, squeezed. It goes dark.
+    #[test]
+    fn real_cutters_kill_it() {
+        use crate::interact::GripRole;
+        use crate::interact::tools::cutters::{JAWS, LEFT};
+        use crate::rig::Side;
+        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_sentry(
+                &mut c,
+                &zone,
+                Vec2::new(40.0, 230.0),
+                0.0,
+                160.0,
+                Vec2::new(40.0, 242.0),
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(3);
+        // A stretch halfway along, the player beside it.
+        let stretches: Vec<(Entity, Vec3)> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &SentryPiece, &OfSentry, &Transform)>()
+            .iter(vr.app.world())
+            .filter(|(_, p, o, _)| matches!(p, SentryPiece::Cable) && o.0 == e)
+            .map(|(c, _, _, t)| (c, t.translation))
+            .collect();
+        let (stretch, wire) = stretches[stretches.len() / 2];
+        vr.stand(zone.on_ground(wire.x, wire.z + 0.7), 0.0);
+        let tool = vr.spawn(
+            "bolt_cutters",
+            Transform::from_translation(wire + Vec3::new(0.0, 0.5, 0.0)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let l = vr.point(tool, |r| *r == GripRole::Primary);
+        let r = vr.point(tool, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, l, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        vr.hand(Side::Right, r, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        // Handles spread, the jaws onto the cable (held low, pointing
+        // ahead, as at a fence).
+        let reach = (LEFT.z - JAWS.z) + 0.04;
+        let at = |s: f32| {
+            let back = wire + Vec3::Z * reach;
+            (back - Vec3::X * s * 0.5, back + Vec3::X * s * 0.5)
+        };
+        let spread = 0.3;
+        let (l1, r1) = at(spread);
+        for i in 1..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, l.lerp(l1, k));
+            vr.move_hand(Side::Right, r.lerp(r1, k));
+            vr.step(1);
+        }
+        vr.step(8);
+        for i in 1..=12 {
+            let (l2, r2) = at(spread - (spread - 0.1) * i as f32 / 12.0);
+            vr.move_hand(Side::Left, l2);
+            vr.move_hand(Side::Right, r2);
+            vr.step(1);
+        }
+        vr.step(10);
+        let w = vr.app.world();
+        assert!(
+            w.get_entity(stretch).is_err() || w.get::<CableCut>(stretch).is_some(),
+            "the stretch is cut"
+        );
+        assert!(!w.get::<Sentry>(e).unwrap().powered, "and it's dark");
     }
 
     /// A noise where it could look swings it there, and it holds there a

@@ -20,7 +20,7 @@
 
 use super::doors::Entrances;
 use super::indoor::NavRef;
-use super::{Awareness, Brain, Job, JobKind, NOTICED, Noticed, Robot};
+use super::{Awareness, Brain, Job, JobKind, NOTICED, Noticed, Robot, RobotKind};
 use bevy::prelude::*;
 
 /// Suspicion past which a robot goes to look.
@@ -42,6 +42,8 @@ pub const SEARCH_TIME: f32 = 40.0;
 pub const RETARGET: f32 = 4.0;
 /// A robot that notices you calls others within this (m)...
 pub const CALL_RADIUS: f32 = 45.0;
+/// A drone's call carries this far (m): it's the walkers' spotter.
+pub const DRONE_CALL_RADIUS: f32 = 120.0;
 /// ...up to this suspicion: they come to look; they don't open fire
 /// until they see you themselves.
 pub const CALL_SUSPICION: f32 = 0.45;
@@ -68,11 +70,13 @@ pub struct Searching {
     pub at: Vec3,
 }
 
-/// A robot gave up looking.
+/// A robot gave up looking (`at`: where it is; `searched`: the spot it
+/// was looking round).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct LostYou {
     pub robot: Entity,
     pub at: Vec3,
+    pub searched: Vec3,
 }
 
 /// A robot that noticed someone called the robots near it.
@@ -379,12 +383,15 @@ fn call_out(
     mut log: ResMut<MindLog>,
 ) {
     let now = time.elapsed_secs();
+    // A cooldown run out is the same as none (and the robot may be long
+    // gone): keep only the live ones.
+    last.retain(|_, t| now - *t < CALL_COOLDOWN);
     let mut director = director;
     for n in noticed.read() {
         if last.get(&n.robot).is_some_and(|t| now - t < CALL_COOLDOWN) {
             continue;
         }
-        let Ok((_, _, gt, aware, job)) = robots.get(n.robot) else {
+        let Ok((_, caller, gt, aware, job)) = robots.get(n.robot) else {
             continue;
         };
         // The convoy's collector keeps itself to itself.
@@ -395,13 +402,19 @@ fn call_out(
             continue;
         };
         let me = gt.translation();
+        // A drone up high is a spotter: it calls further.
+        let reach = if caller.kind == RobotKind::Drone {
+            DRONE_CALL_RADIUS
+        } else {
+            CALL_RADIUS
+        };
         last.insert(n.robot, now);
         let mut heard = 0;
         for (e, robot, ogt, mut other, ojob) in &mut robots {
             if e == n.robot
                 || robot.wrecked
                 || ojob.kind == JobKind::Collect
-                || ogt.translation().distance(me) > CALL_RADIUS
+                || ogt.translation().distance(me) > reach
                 || other.suspicion >= NOTICED
             {
                 continue;
@@ -486,6 +499,7 @@ fn wrist_lines(
     }
     let now = time.elapsed_secs();
     let (per_robot, last, n) = &mut *said;
+    per_robot.retain(|_, t| now - *t < LINE_PER_ROBOT);
     for (is_lost, robot, at, about) in events {
         if about != Some(me)
             || at.distance(gt.translation()) > LINE_NEAR
@@ -515,9 +529,10 @@ fn announce(
     mut minds: MessageWriter<MindShift>,
     mut log: ResMut<MindLog>,
     time: Res<Time>,
-    (flankers, retreats): (
+    (flankers, retreats, mut looked): (
         Query<(Entity, &GlobalTransform), Added<super::walker::Flanker>>,
         Query<(Entity, &GlobalTransform), Added<super::walker::Retreating>>,
+        Local<std::collections::HashMap<Entity, Vec3>>,
     ),
 ) {
     let now = time.elapsed_secs();
@@ -558,6 +573,9 @@ fn announce(
         };
         let before = was.insert(e, code);
         let at = gt.translation();
+        if let Brain::Investigate { at: spot, .. } | Brain::Search { at: spot, .. } = brain {
+            looked.insert(e, *spot);
+        }
         match (before, brain) {
             (Some(b), Brain::Investigate { at: toward, .. }) if b != 2 => {
                 investigating.write(Investigating {
@@ -570,7 +588,11 @@ fn announce(
                 searching.write(Searching { robot: e, at });
             }
             (Some(2 | 3), Brain::Transit { .. } | Brain::Leave { .. }) => {
-                lost.write(LostYou { robot: e, at });
+                lost.write(LostYou {
+                    robot: e,
+                    at,
+                    searched: looked.get(&e).copied().unwrap_or(at),
+                });
             }
             _ => {}
         }
@@ -605,6 +627,7 @@ fn announce(
         }
     }
     was.retain(|e, _| seen.contains(e));
+    looked.retain(|e, _| seen.contains(e));
     log.last.retain(|e, _| seen.contains(e));
     log.hurt.retain(|e, _| seen.contains(e));
 }

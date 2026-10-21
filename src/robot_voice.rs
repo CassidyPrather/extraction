@@ -110,10 +110,12 @@ pub enum Utterance {
     Answering,
     Hurt,
     Dying,
+    Flanking,
+    Retreating,
 }
 
 impl Utterance {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 12] = [
         Self::Idle,
         Self::Noticed,
         Self::Investigating,
@@ -124,6 +126,8 @@ impl Utterance {
         Self::Answering,
         Self::Hurt,
         Self::Dying,
+        Self::Flanking,
+        Self::Retreating,
     ];
 
     pub fn name(self) -> &'static str {
@@ -138,6 +142,8 @@ impl Utterance {
             Self::Answering => "answering",
             Self::Hurt => "hurt",
             Self::Dying => "dying",
+            Self::Flanking => "flanking",
+            Self::Retreating => "retreating",
         }
     }
 
@@ -154,6 +160,8 @@ impl Utterance {
             Self::Answering => "voice.answering",
             Self::Hurt => "voice.hurt",
             Self::Dying => "voice.dying",
+            Self::Flanking => "voice.flanking",
+            Self::Retreating => "voice.retreating",
         }
     }
 }
@@ -247,6 +255,24 @@ pub fn phrase(u: Utterance) -> Vec<Note> {
             Note {
                 noise: 0.7,
                 ..n(0.14, 0.08, 0.0, -4.0, 0.95)
+            },
+        ],
+        Utterance::Flanking => vec![
+            n(0.0, 0.07, -2.0, 0.0, 0.8),
+            n(0.09, 0.07, 3.0, 5.0, 0.85),
+            n(0.24, 0.07, -2.0, 0.0, 0.8),
+            n(0.33, 0.09, 3.0, 6.0, 0.85),
+        ],
+        Utterance::Retreating => vec![
+            Note {
+                noise: 0.3,
+                curve: 0.8,
+                ..n(0.0, 0.3, 4.0, 1.0, 0.9)
+            },
+            Note {
+                noise: 0.4,
+                curve: 0.8,
+                ..n(0.36, 0.4, 0.0, -6.0, 0.8)
             },
         ],
         Utterance::Dying => vec![Note {
@@ -746,8 +772,8 @@ fn from_minds(
             Mind::Lost => Utterance::Lost,
             Mind::Calling => Utterance::Calling,
             // (Robot minds: its own line is Audio's to give.)
-            Mind::Flanking => Utterance::Engaging,
-            Mind::Retreating => Utterance::Hurt,
+            Mind::Flanking => Utterance::Flanking,
+            Mind::Retreating => Utterance::Retreating,
             Mind::Answering { caller } => {
                 let from = places.get(caller).map_or(m.at, |g| g.translation());
                 answers
@@ -805,6 +831,13 @@ fn mutter(
     mut out: MessageWriter<Turned>,
 ) {
     let now = time.elapsed_secs();
+    // Forget robots that are gone (driven off, swept away by the Surge):
+    // every robot that ever spoke stayed in here for the session.
+    let v = &mut *voices;
+    v.last.retain(|(e, _), _| robots.contains(*e));
+    v.dead.retain(|e| robots.contains(*e));
+    v.mutter_at.retain(|e, _| robots.contains(*e));
+    v.busy.retain(|e, _| robots.contains(*e));
     for (e, robot, brain, gt) in &robots {
         let idle = matches!(brain, Brain::Transit { .. } | Brain::Working { .. });
         let at = gt.translation();
@@ -844,6 +877,8 @@ pub fn heard_to(u: Utterance) -> f32 {
         Utterance::Calling | Utterance::Answering => 248.0,
         Utterance::Hurt => 38.0,
         Utterance::Dying => 71.0,
+        Utterance::Flanking => 71.0,
+        Utterance::Retreating => 93.0,
     }
 }
 

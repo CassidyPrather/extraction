@@ -634,6 +634,9 @@ pub struct Scene<'w, 's> {
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
+    /// The bots' sockets by entity (`Task::Draw` counts them in entity
+    /// order).
+    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -2271,7 +2274,12 @@ fn raid_step(
                     );
                     r.act = Act::Search(s);
                     if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
-                        log.event("plant", json!({"site": r.sites[s].name}));
+                        let how = t.iter().find_map(|t| match t {
+                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
+                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
+                            _ => None,
+                        });
+                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
                         return t;
                     }
                     continue;
@@ -2401,6 +2409,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             // they're fit to.
             // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
             _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
+            // (`SIM_CONTRACT`'s step is the point of the run, too.)
+            _ if s.job && r.hp >= 50.0 && std::env::var_os("SIM_CONTRACT").is_some() => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
@@ -2507,21 +2517,49 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
         return None;
     }
     let relay = *scene.carried(me, item).first()?;
-    Some(vec![
+    let mut t = vec![
         Task::Log(format!("planting the {item}")),
         Task::WalkTo {
             to: Vec2::from_array(*at),
             within: 1.5,
         },
-        Task::ToggleBackpack,
-        Task::Grab {
-            item: relay,
-            side: Side::Left,
-        },
-        Task::ToggleBackpack,
-        Task::Release(Side::Left),
-        Task::Wait(1.0),
-    ])
+    ];
+    // The hand free first (it may be holding the last thing picked up),
+    // then out of the body slot it was stowed in (drawn), or the pack.
+    t.push(Task::Stow(Side::Left));
+    let socket = scene
+        .items
+        .get(relay)
+        .ok()
+        .and_then(|(.., so, _)| so.map(|s| s.socket));
+    let mut mine: Vec<Entity> = scene
+        .owned_sockets
+        .iter()
+        .filter(|(_, o)| o.0 == me)
+        .map(|(e, _)| e)
+        .collect();
+    mine.sort();
+    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
+        Some(slot) => t.extend([
+            Task::Draw {
+                slot,
+                side: Side::Left,
+            },
+            Task::Wait(0.5),
+        ]),
+        None => t.extend([
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
+                item: relay,
+                side: Side::Left,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.5),
+        ]),
+    }
+    t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
+    Some(t)
 }
 
 /// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend
@@ -2808,7 +2846,22 @@ fn take_item(
             if !plan.in_grid(pos) {
                 return None;
             }
-            let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
+            let goal = plan.to_local(at).xz();
+            // A contract's thing to bring, somewhere the route can't stand
+            // (behind a counter): as near as there's floor, and reach.
+            let wanted = matches!(
+                scene.progression.as_ref().and_then(|p| p.0.job.as_ref()),
+                Some(CardJob::Bring { item: id, .. })
+                    if scene.items.get(item).is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == *id)
+            );
+            let route = match indoor(plan, pos, goal, 0.3) {
+                Some(route) => route,
+                None if wanted => {
+                    let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
+                    indoor(plan, pos, near, 0.3)?
+                }
+                None => return None,
+            };
             // Behind a door on an underground site's power: throw the
             // switches first, stage by stage up to the one that holds it
             // (it's loud: the crawlers come), unless careful.

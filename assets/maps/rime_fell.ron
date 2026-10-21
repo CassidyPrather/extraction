@@ -85,6 +85,13 @@
         Plateau(polygon: [(200.0, -255.0), (232.0, -255.0), (232.0, -225.0), (200.0, -225.0)], height: Some(131.0), blend: 30.0),
         // The valley station's yard.
         Plateau(polygon: [(64.0, 200.0), (84.0, 200.0), (84.0, 228.0), (64.0, 228.0)], blend: 8.0),
+        // Level ground at their doors (the lint's door rule): the roadmen's top hut, the top station, the chapel, the adit house, the snow survey hut, the observatory.
+        Plateau(polygon: [(-207.0, 85.0), (-193.0, 85.0), (-193.0, 99.0), (-207.0, 99.0)], blend: 8.0),
+        Plateau(polygon: [(59.0, -12.0), (83.0, -12.0), (83.0, 12.0), (59.0, 12.0)], blend: 8.0),
+        Plateau(polygon: [(-120.0, 10.0), (-88.0, 10.0), (-88.0, 42.0), (-120.0, 42.0)], blend: 8.0),
+        Plateau(polygon: [(117.0, -62.0), (153.0, -62.0), (153.0, -26.0), (117.0, -26.0)], blend: 10.0),
+        Plateau(polygon: [(-32.0, -102.0), (-18.0, -102.0), (-18.0, -88.0), (-32.0, -88.0)], blend: 8.0),
+        Plateau(polygon: [(-219.0, -221.0), (-197.0, -221.0), (-197.0, -199.0), (-219.0, -199.0)], blend: 8.0),
         // The south gate's apron, at the road's height.
         Plateau(polygon: [(-34.0, 260.0), (14.0, 260.0), (14.0, 300.0), (-34.0, 300.0)], height: Some(51.5), blend: 16.0),
         // Where the truck turns: the saddle, the col, the tip road's end.
@@ -222,6 +229,8 @@
         (prefab: "shed", at: (-70.0, 270.0), rot: 10.0, tag: "bus_shelter"),
         (prefab: "log_pile", at: (-115.0, 262.0), rot: 80.0),
 
+        // The mine's radio mast on the east slope, over the lorry road.
+        (prefab: "radio_mast", at: (236.0, 128.0), rot: 0.0),
         // The lorry road's weighbridge, half way up the east slope.
         (prefab: "shed", at: (172.0, 160.0), rot: 225.0, tag: "weighbridge"),
 
@@ -241,11 +250,11 @@
         (prefab: "house_plank", at: (-80.0, 15.0), rot: 165.0),
         (prefab: "cabin_log", at: (-60.0, 48.0), rot: 345.0),
         (prefab: "cabin_log", at: (-20.0, 42.0), rot: 345.0),
-        (prefab: "chapel", at: (-100.0, 40.0), rot: 75.0),
+        (prefab: "chapel", at: (-104.0, 26.0), rot: 90.0),
 
         // The ore mill, stepped down the spur; the adit house over it.
         (prefab: "ore_mill", at: (140.0, 20.0), rot: 180.0, y: 90.0, absolute: true, tag: "ore_mill"),
-        (prefab: "rail_shed", at: (135.0, -42.0), rot: 90.0, tag: "adit_house"),
+        (prefab: "rail_shed", at: (135.0, -44.0), rot: 270.0, tag: "adit_house"),
 
         // The tip road's end: the compressor house.
         (prefab: "pump_station", at: (238.0, -60.0), rot: 180.0, tag: "compressor_house"),
@@ -281,7 +290,7 @@
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (160.0, -160.0), name: "Tarn mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-212.0, 150.0), name: "Gallery hush"),
-        (kind: Offering, at: (-96.0, 30.0), name: "The miners' shrine"),
+        (kind: Offering, at: (-80.0, 34.0), name: "The miners' shrine"),
         (kind: Offering, at: (30.0, -230.0), name: "The cairn on the col"),
         (kind: WorkSite, at: (60.0, -110.0), name: "Upper slopes site"),
         (kind: WorkSite, at: (110.0, -200.0), name: "Tarn site"),
