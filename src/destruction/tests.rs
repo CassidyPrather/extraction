@@ -1232,3 +1232,69 @@ fn list_boards() {
         println!("board at {:.2} out {:.2}", g.translation(), out);
     }
 }
+
+#[test]
+fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
+    use super::hooks::{PRY_HOLD, Pried};
+    use super::strip::{Part, Parts, Strippable, spawn_part};
+    let mut app = app(None);
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0) + Vec3::Y * 1.0;
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut parts = Parts::default();
+        let mut c = Commands::new(&mut queue, app.world());
+        spawn_part(
+            &mut c,
+            &mut parts,
+            &Broken::default(),
+            Part {
+                at: Transform::from_translation(at),
+                size: Vec3::new(0.95, 1.85, 0.04),
+                mat: crate::render::materials::Mat::DarkMetal,
+                yields: vec![("scrap_metal".into(), 3)],
+                pry: 200.0,
+                model: None,
+            },
+        );
+    }
+    queue.apply(app.world_mut());
+    run(&mut app, 2);
+    let door = app
+        .world_mut()
+        .query_filtered::<Entity, With<Strippable>>()
+        .iter(app.world())
+        .next()
+        .unwrap();
+    // Rounds hole it; they don't tear it off.
+    for _ in 0..5 {
+        shoot(&mut app, at + Vec3::Z * 3.0, at, 715.0, 7.9, 40.0);
+        run(&mut app, 2);
+    }
+    assert!(
+        app.world().get_entity(door).is_ok(),
+        "rounds don't strip a wreck"
+    );
+    let scrap = |app: &mut App| {
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("scrap_metal").unwrap();
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = scrap(&mut app);
+    let bar = app.world_mut().spawn_empty().id();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: door,
+            torque: 240.0,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(door).is_err(), "prised off");
+    assert_eq!(scrap(&mut app), before + 3, "for its scrap");
+    assert!(app.world().resource::<Broken>().0.contains(&key(at)));
+}

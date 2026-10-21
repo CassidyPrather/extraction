@@ -91,6 +91,17 @@ model at the building's range, splintering when it goes, saved broken and
 nailed back up by the Surge. A boarded sash is always a weathered one, so
 there's no glass behind to draw.
 
+## Wrecks you can strip
+
+`strip::spawn_part(commands, parts, broken, Part { at, size, mat, yields,
+pry, model })` puts a part on a wreck: a bus's folding door, a panel, a
+seat. A metal part comes off only to a crowbar (`Pryable`, `pry` N·m:
+rounds hole sheet, they don't tear a door off); a wooden one breaks too.
+Off, it drops what it yields (item ids and counts: scrap now, a panel you
+can carry once Kit has one) and stays off until the Surge puts the wreck
+back together (`strip::Parts` keeps every part placed). Whoever places
+wrecks (World models) calls it; nothing in the valleys does yet.
+
 ## Broken by the years
 
 World models' decay swaps some sashes to `window_sash_broken` (all of a
