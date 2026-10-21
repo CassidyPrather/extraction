@@ -15,6 +15,7 @@
 //! hand.
 
 pub mod body;
+pub mod carry;
 pub mod far;
 pub mod first_aid;
 pub mod flat;
@@ -319,6 +320,7 @@ impl Plugin for InteractPlugin {
                 first_aid::FirstAidPlugin,
                 gestures::GesturesPlugin,
                 touch::TouchPlugin,
+                carry::CarryPlugin,
                 read::ReadPlugin,
             ));
     }
@@ -789,6 +791,7 @@ fn apply_hand_actions(
         Option<&Held>,
         Option<&InSocket>,
         Option<&Item>,
+        Has<carry::Bulky>,
     )>,
     mut sockets: Query<(Entity, &GlobalTransform, &mut Socket, Option<&SocketOwner>)>,
     mut backpacks: Query<(Entity, &GlobalTransform, &mut body::Backpack)>,
@@ -864,7 +867,7 @@ fn apply_hand_actions(
                     warn!("grab: player {player} has no {side:?} hand");
                     continue;
                 };
-                let Ok((gt, grabbable, held, in_socket, _)) = items.get(item) else {
+                let Ok((gt, grabbable, held, in_socket, _, bulky)) = items.get(item) else {
                     warn!("grab: {item} is not grabbable");
                     continue;
                 };
@@ -876,6 +879,23 @@ fn apply_hand_actions(
                     continue;
                 };
                 match gp.role {
+                    // A second hand on something bulky takes its other end:
+                    // carried in both hands (`carry`).
+                    _ if bulky && held.is_some_and(|h| h.player == player && h.hand != hand_e) => {
+                        let other = held.map_or(0, |h| h.point);
+                        let point = if point == other {
+                            (other + 1) % grabbable.points.len().max(1)
+                        } else {
+                            point
+                        };
+                        hand.supporting = Some(item);
+                        commands.entity(item).insert(Supported {
+                            hand: hand_e,
+                            side,
+                            point,
+                        });
+                        events.write(InteractEvent::Grabbed { item, side });
+                    }
                     GripRole::Support | GripRole::Handle(_)
                         if held.is_some_and(|h| h.player == player) =>
                     {
@@ -960,9 +980,18 @@ fn apply_hand_actions(
                 let Some(item) = hand.holding.take() else {
                     continue;
                 };
-                let velocity =
+                let mut velocity =
                     (hand.velocity + hand_world.forward() * throw).clamp_length_max(MAX_THROW);
-                let angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
+                let mut angular = hand.angular_velocity.clamp_length_max(MAX_THROW_SPIN);
+                // Something bulky is shoved, not thrown: an arm puts so much
+                // into it, and it hardly turns (`carry`).
+                if let Ok((.., Some(it), true)) = items.get(item) {
+                    let m = catalog.get(it.kind()).mass.max(0.5);
+                    velocity = hand
+                        .velocity
+                        .clamp_length_max((2.0 * carry::SHOVE / m).sqrt());
+                    angular *= 0.2;
+                }
                 commands.entity(item).remove::<(Held, Supported)>();
                 // Any other hand supporting it lets go too.
                 for (_, _, mut h) in &mut hands {
@@ -970,7 +999,7 @@ fn apply_hand_actions(
                         h.supporting = None;
                     }
                 }
-                let Ok((gt, _, _, _, it)) = items.get(item) else {
+                let Ok((gt, _, _, _, it, _)) = items.get(item) else {
                     continue;
                 };
                 if it.is_none() {
@@ -1079,7 +1108,7 @@ fn apply_hand_actions(
                 let Some(item) = hand.holding else {
                     continue;
                 };
-                let Ok((_, _, _, _, Some(it))) = items.get(item) else {
+                let Ok((_, _, _, _, Some(it), _)) = items.get(item) else {
                     continue;
                 };
                 let def = catalog.get(it.kind());
@@ -1177,7 +1206,12 @@ fn items_kinds(
 ) -> Vec<extraction_core::items::ItemKind> {
     contents
         .iter()
-        .filter_map(|e| items.get(*e).ok().and_then(|(.., it)| it.map(|i| i.kind())))
+        .filter_map(|e| {
+            items
+                .get(*e)
+                .ok()
+                .and_then(|(.., it, _)| it.map(|i| i.kind()))
+        })
         .collect()
 }
 
@@ -1215,6 +1249,9 @@ pub fn accepts_item(
         // Worn things go on only where they're worn.
         SocketKind::Body(SlotKind::Vest) => mount == Some(extraction_core::items::Mount::Vest),
         SocketKind::Body(SlotKind::Head) => mount == Some(extraction_core::items::Mount::Helmet),
+        // A sling's for a long gun: a car door or a heavy's claw is carried
+        // in the hands (`carry`).
+        SocketKind::Body(SlotKind::Sling) => is_gun && SlotKind::Sling.accepts(size),
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
         SocketKind::Mount(m) => mount == Some(*m),
@@ -1368,7 +1405,7 @@ fn drop_orphaned_holds(mut commands: Commands, held: Query<(Entity, &Held)>, han
     }
 }
 
-fn follow_hands(
+pub(crate) fn follow_hands(
     hands: Query<&Hand>,
     mut held: Query<(
         Entity,
@@ -1381,13 +1418,20 @@ fn follow_hands(
         &mut AngularVelocity,
         Option<&Mass>,
         Option<&mut HoldFeel>,
+        Has<carry::Bulky>,
     )>,
     roots: Query<&GlobalTransform, With<Player>>,
     blocked: Res<LeashBlocked>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs().max(1e-4);
-    for (e, h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel) in &mut held {
+    for (e, h, support, grabbable, mut pos, mut rot, mut lin, mut ang, mass, feel, bulky) in
+        &mut held
+    {
+        // One hand on something bulky drags it (`carry`).
+        if bulky && support.is_none() {
+            continue;
+        }
         let Ok(hand) = hands.get(h.hand) else {
             continue;
         };
