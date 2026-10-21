@@ -231,6 +231,7 @@ struct AnomalyAssets {
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
     hushed: Handle<StandardMaterial>,
+    hush_ring: Handle<StandardMaterial>,
     dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
     void: Handle<StandardMaterial>,
@@ -249,6 +250,33 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let a = v.atan2(u);
             let edge = 0.82 + 0.08 * (a * 5.0).sin() + 0.05 * (a * 11.0 + 1.3).sin();
             let alpha = (1.0 - ((r - edge * 0.55) / (edge * 0.45)).clamp(0.0, 1.0)).powf(1.6);
+            data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// A ring, soft both sides, round the outer tenth: the edge of a Hush
+/// drawn on the ground.
+fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 128u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r = (u * u + v * v).sqrt();
+            let alpha = (1.0 - ((r - 0.91) / 0.05).abs()).clamp(0.0, 1.0).powf(0.7);
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
     }
@@ -332,6 +360,16 @@ fn init_assets(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
     );
+    // Its edge, pale and firm: a line on dark wet ground you can step up to.
+    let ring = ring_texture(&mut images);
+    let hush_ring = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),
+        base_color_texture: Some(ring),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.95,
+        depth_bias: 60.0,
+        ..default()
+    });
     let a = AnomalyAssets {
         card: meshes.add(Rectangle::new(1.0, 1.0)),
         lens: meshes.add(Sphere::new(1.0).mesh().uv(32, 18)),
@@ -344,6 +382,7 @@ fn init_assets(
         glassy,
         crushed,
         hushed,
+        hush_ring,
         dragged,
         spark: materials.add(StandardMaterial {
             base_color: Color::srgb(0.6, 0.8, 1.0),
@@ -703,10 +742,11 @@ fn dress_anomalies(
             // and no light of its own.
             AnomalyKind::Hush => (
                 Some(&a.hushed),
-                vec![soft(7.0, 220, 0.06, Vec3::new(0.85, 0.85, 0.82), 0.9)],
+                vec![soft(7.0, 60, 0.1, Vec3::new(0.85, 0.85, 0.82), 0.9)],
                 (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
-                // Seen through, the world inside goes grey and a little
-                // dim: a bubble with the colour gone out of it.
+                // Seen through, the world inside goes dim (and greyer),
+                // inside a slow-pulsing bright rim: luminance and motion,
+                // which carry in fog and to colour-blind eyes.
                 Some((
                     1.02,
                     0.2,
@@ -714,7 +754,7 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
                         wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::new(0.95, 0.4, 0.0, 0.0),
+                        drain: Vec4::new(0.6, 0.5, 1.2, 1.1),
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
@@ -730,6 +770,16 @@ fn dress_anomalies(
                     c.spawn((
                         Mesh3d(disc),
                         MeshMaterial3d(mark.clone()),
+                        Transform::IDENTITY,
+                        NotShadowCaster,
+                        near(90.0),
+                    ));
+                }
+                if kind == AnomalyKind::Hush {
+                    let disc = meshes.add(draped_disc(&zone, at.translation, r * 1.1));
+                    c.spawn((
+                        Mesh3d(disc),
+                        MeshMaterial3d(a.hush_ring.clone()),
                         Transform::IDENTITY,
                         NotShadowCaster,
                         near(90.0),
