@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn a_new_marker_moves_no_rock_far_from_it() {
-        let mut map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         let hm = Heightmap::build(&map);
         let before = scatter_rocks(&map, &hm);
         let at = [
