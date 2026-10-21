@@ -70,11 +70,13 @@ pub struct Searching {
     pub at: Vec3,
 }
 
-/// A robot gave up looking.
+/// A robot gave up looking (`at`: where it is; `searched`: the spot it
+/// was looking round).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct LostYou {
     pub robot: Entity,
     pub at: Vec3,
+    pub searched: Vec3,
 }
 
 /// A robot that noticed someone called the robots near it.
@@ -527,9 +529,10 @@ fn announce(
     mut minds: MessageWriter<MindShift>,
     mut log: ResMut<MindLog>,
     time: Res<Time>,
-    (flankers, retreats): (
+    (flankers, retreats, mut looked): (
         Query<(Entity, &GlobalTransform), Added<super::walker::Flanker>>,
         Query<(Entity, &GlobalTransform), Added<super::walker::Retreating>>,
+        Local<std::collections::HashMap<Entity, Vec3>>,
     ),
 ) {
     let now = time.elapsed_secs();
@@ -570,6 +573,9 @@ fn announce(
         };
         let before = was.insert(e, code);
         let at = gt.translation();
+        if let Brain::Investigate { at: spot, .. } | Brain::Search { at: spot, .. } = brain {
+            looked.insert(e, *spot);
+        }
         match (before, brain) {
             (Some(b), Brain::Investigate { at: toward, .. }) if b != 2 => {
                 investigating.write(Investigating {
@@ -582,7 +588,11 @@ fn announce(
                 searching.write(Searching { robot: e, at });
             }
             (Some(2 | 3), Brain::Transit { .. } | Brain::Leave { .. }) => {
-                lost.write(LostYou { robot: e, at });
+                lost.write(LostYou {
+                    robot: e,
+                    at,
+                    searched: looked.get(&e).copied().unwrap_or(at),
+                });
             }
             _ => {}
         }
@@ -617,6 +627,7 @@ fn announce(
         }
     }
     was.retain(|e, _| seen.contains(e));
+    looked.retain(|e, _| seen.contains(e));
     log.last.retain(|e, _| seen.contains(e));
     log.hurt.retain(|e, _| seen.contains(e));
 }

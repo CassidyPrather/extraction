@@ -1998,3 +1998,40 @@ fn a_pair_of_hounds_splits_up() {
     }
     assert!(widest > 60.0, "they split round you: {widest:.0}°");
 }
+
+/// A lure that keeps going (a tape playing on a table) draws a walker
+/// once: it looks, searches, finds nothing, gives up, and then the same
+/// sound there doesn't draw it again for a while.
+#[test]
+fn a_lure_that_keeps_going_wears_out() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let spot = zone.on_ground(post.x + 14.0, post.z + 3.0);
+    // Once it has given up (2 s calm), it never goes back to the tune.
+    let (mut looked, mut calm, mut drawn_again) = (false, 0.0f32, None);
+    for i in 0..90 * 150 {
+        if i % (90 * 3) == 0 {
+            app.world_mut().write_message(super::Noise {
+                at: spot,
+                radius: 25.0,
+                source: None,
+            });
+        }
+        app.update();
+        let brain = app.world().get::<Brain>(w).unwrap();
+        let looking = matches!(brain, Brain::Investigate { .. } | Brain::Search { .. });
+        looked |= looking;
+        if looking {
+            if looked && calm > 2.0 && drawn_again.is_none() {
+                drawn_again = Some(i as f32 / 90.0);
+            }
+            calm = 0.0;
+        } else if looked {
+            calm += 1.0 / 90.0;
+        }
+    }
+    assert!(looked && calm > 2.0, "it looked and gave up");
+    assert_eq!(drawn_again, None, "and the same tune didn't draw it again");
+}

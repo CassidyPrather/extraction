@@ -164,7 +164,18 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
             log.flushed.clear();
         }
         if flush {
-            let spot = centre + side * 2.0;
+            // The first open ground out from the middle of the roof (toward
+            // the walker's side, where the ground's open): right beside the
+            // building, whichever way it's turned.
+            let nav = app
+                .world()
+                .resource::<crate::robots::walker::Nav>()
+                .0
+                .clone();
+            let spot = (4..16)
+                .map(|k| centre - side * (k as f32 * 0.5))
+                .find(|p| nav.walkable([p.x, p.z]))
+                .expect("open ground beside the building");
             put(&mut app, player, zone.on_ground(spot.x, spot.z));
         }
         for _ in 0..90 * 6 {
