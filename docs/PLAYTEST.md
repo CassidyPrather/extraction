@@ -206,12 +206,21 @@ What changed, and worth a comment each:
 - **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
   the dearest per-eye cost the software renderer can measure; only the
   headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
-  raid as it comes (the **SMOOTHING** card on the truck wall says 4x), then
+  raid as it comes (the **SMOOTHING** card on the truck wall says 4x+leaves), then
   press the card to 2x (or start with `--msaa 2`) and play the same valley
   again. For each, note:
   - the `gpu:` and `frames:` lines in the log;
   - how the edges look: fence wires, grass, the trees' leaves, the gun's
-    sights and front post.
+    sights and front post. The first to shimmer are a spruce's edge
+    against the sky and a fence line 20-40 m off, while turning your head
+    slowly.
+  - a third raid at **4x hard leaves** (the card's second step, or
+    `--a2c 0`; restart after pressing it, since the leaves change next
+    launch): the trees' leaves cut hard instead of smoothed. Stand in the
+    spruce wood, or look across it, in both, and note the `gpu:` line's
+    `main_opaque_pass_3d`. If soft leaves cost more than 0.5 ms an eye
+    there (about 1 ms a frame for both eyes), hard leaves become the
+    default.
 
   Whether 2x reads the same at the Beyond 2's sharpness decides the
   default.
@@ -316,7 +325,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | VIGNETTE | off to 90% | darkening the edges while the stick moves you |
 | SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
 | SHARPNESS | auto, 50–100% | render size per eye (next launch) |
-| SMOOTHING | 4x / 2x / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades |
+| SMOOTHING | 4x+leaves / 4x hard leaves / 2x+leaves / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades; hard leaves cuts the trees' leaves sharp instead of smoothing them (next launch); off adds a light edge filter (FXAA) |
 | GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
 | HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
 | MUSIC | rises with danger / off | the score |
@@ -568,6 +577,7 @@ pump?
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
 | `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
+| `--a2c 0` | Hard leaves: the trees' leaves cut sharp, not smoothed (`--a2c 1`, the default, smooths them) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |
