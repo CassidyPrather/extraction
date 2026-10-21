@@ -332,7 +332,7 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
     taken.len() + herons
 }
 
-fn name_hash(s: &str) -> u64 {
+pub(crate) fn name_hash(s: &str) -> u64 {
     s.bytes().fold(0xCBF2_9CE4_8422_2325, |h, b| {
         (h ^ b as u64).wrapping_mul(0x100_0000_01B3)
     })

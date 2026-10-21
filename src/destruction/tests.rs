@@ -1585,6 +1585,7 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
             .count()
     };
     let before = scrap(&mut app);
+    let out = app.world().get::<GlobalTransform>(door).unwrap().rotation() * Vec3::NEG_Z;
     let bar = app.world_mut().spawn_empty().id();
     for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
         app.world_mut().write_message(Pried {
@@ -1596,6 +1597,21 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
     }
     assert!(app.world().get_entity(door).is_err(), "prised off");
     assert_eq!(scrap(&mut app), before + 1, "for its scrap");
+    // Dropped outside it, not into what it was fixed to.
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let id = catalog.kind("scrap_metal").unwrap();
+    let dropped = app
+        .world_mut()
+        .query::<(&crate::items::Item, &GlobalTransform)>()
+        .iter(app.world())
+        .filter(|(i, _)| i.kind() == id)
+        .map(|(_, g)| g.translation())
+        .min_by(|a, b| a.distance(door_at).total_cmp(&b.distance(door_at)))
+        .unwrap();
+    assert!(
+        (dropped - door_at).dot(out) > 0.1,
+        "the scrap lands outside the bus ({dropped} from {door_at})"
+    );
 
     // The Surge: both back, and nothing doubled.
     super::surge(app.world_mut());
@@ -1630,4 +1646,51 @@ fn list_parts() {
             out
         );
     }
+}
+
+#[test]
+fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
+    // What a breakable is drawn with (`wood::Drawn`): a model that's on
+    // disk, or a box in a material whose texture is (a plain dark metal
+    // is plain on purpose). Never a box in a material that never loads,
+    // which draws pale and flat.
+    let root = crate::asset_root_path();
+    let model = |m: &str| root.join(crate::render::world_props::path(m)).exists();
+    let textured = |mat: crate::render::materials::Mat| {
+        let (dir, ..) = mat.info();
+        dir.is_none_or(|d| {
+            root.join("textures/materials")
+                .join(d)
+                .join("albedo.ktx2")
+                .exists()
+        })
+    };
+    let mut bad = Vec::new();
+    for m in super::wood::CRATE_MODELS
+        .into_iter()
+        .chain([super::boards::MODEL])
+    {
+        if !model(m) {
+            bad.push(format!("model {m} isn't on disk"));
+        }
+    }
+    let ids = crate::world::buildings::PREFABS
+        .into_iter()
+        .chain(crate::world::underground::ids());
+    for id in ids {
+        let Some(geo) = crate::world::buildings::prefab(id) else {
+            continue;
+        };
+        for b in &geo.breakables {
+            match b.model {
+                Some(m) if !model(m) => bad.push(format!("{id}: {:?}'s {m} isn't on disk", b.kind)),
+                None if !textured(b.mat) => bad.push(format!(
+                    "{id}: {:?} is a box of {:?}, untextured",
+                    b.kind, b.mat
+                )),
+                _ => {}
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

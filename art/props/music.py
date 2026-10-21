@@ -1,4 +1,5 @@
-"""Music in the houses: a wind-up horn gramophone and an upright piano.
+"""Music in the houses: a wind-up horn gramophone, an upright piano and a
+chapel harmonium.
 Writes assets/models/props/<name>.glb for each; prop space as in _kit.py
 (metres, +Y up, -Z the front, origin on the floor under the piece's
 centre). Their moving parts are separate nodes:
@@ -16,6 +17,12 @@ centre). Their moving parts are separate nodes:
   back of its top face, the pivot: a negative turn about local X presses
   its front down; `pedal_l`, `pedal_r` (origin on their pivot inside the
   plinth, a negative turn about X presses them); `music_desk`.
+- harmonium: a reed organ, 1.2 x 1.3 x 0.6 m. `case`; `key_36` .. `key_96`,
+  the piano's keys exactly (sizes, heights, pivots), the piano's layout
+  moved left by `harmonium_offset()` (0.023 m) so the five octaves sit
+  centred on the case; `stops` (the row of knobs over the keys);
+  `pedal_l`, `pedal_r` (the bellows treadles, origin on their hinge pin
+  at the back, a negative turn about X presses them); `music_desk`.
 """
 
 import importlib.util
@@ -273,6 +280,38 @@ def outline(pts):
     return keep
 
 
+def keyboard(lo, hi, dx=0.0):
+    """Keys `key_<lo>` .. `key_<hi>` (MIDI numbers), the piano's layout
+    moved `dx` along X: ivory whites cut round the blacks, ebony blacks
+    raised. Each key's origin is at the back of its top face, the pivot."""
+    wx, bx = key_layout()
+    wx = {n: x + dx for n, x in wx.items() if lo <= n <= hi}
+    bx = {n: x + dx for n, x in bx.items() if lo <= n <= hi}
+    g = 0.0005
+    parts = []
+    for n in range(lo, hi + 1):
+        if n in wx:
+            x = wx[n]
+            xl, xr = x - PITCH / 2 + g, x + PITCH / 2 - g
+            bl = bx[n - 1] + BLACK_W / 2 + 0.001 if (n - 1) in bx else xl
+            br = bx[n + 1] - BLACK_W / 2 - 0.001 if (n + 1) in bx else xr
+            zh = Z_FRONT + HEAD
+            k = Part(f"key_{n}", origin=(x, KEY_TOP, Z_BACK))
+            k.prism(outline([(xl, Z_FRONT), (xr, Z_FRONT), (xr, zh), (br, zh), (br, Z_BACK),
+                             (bl, Z_BACK), (bl, zh), (xl, zh)]), KEY_BOT, KEY_TOP, "Cream",
+                    axis="y")
+        else:
+            x = bx[n]
+            yt = KEY_TOP + BLACK_UP
+            k = Part(f"key_{n}", origin=(x, yt, Z_BACK))
+            k.prism([(x - BLACK_W / 2, KEY_BOT + 0.004), (x + BLACK_W / 2, KEY_BOT + 0.004),
+                     (x + BLACK_W / 2 - 0.0012, yt - 0.003), (x + 0.0042, yt),
+                     (x - 0.0042, yt), (x - BLACK_W / 2 + 0.0012, yt - 0.003)],
+                    Z_BACK - BLACK_LEN, Z_BACK, "Rotor", axis="z")
+        parts.append(k)
+    return parts
+
+
 def upright_piano():
     W, H, D = PIANO_W, PIANO_H, PIANO_D
     zb, zf = D / 2, -D / 2
@@ -343,29 +382,7 @@ def upright_piano():
                 xf=T(0.0, HINGE[1], HINGE[2]) @ ALONG_X)
     parts.append(lid)
 
-    # Keys: ivory whites cut round the blacks, ebony blacks raised.
-    wx, bx = key_layout()
-    g = 0.0005
-    for n in range(21, 109):
-        if n in wx:
-            x = wx[n]
-            xl, xr = x - PITCH / 2 + g, x + PITCH / 2 - g
-            bl = bx[n - 1] + BLACK_W / 2 + 0.001 if (n - 1) in bx else xl
-            br = bx[n + 1] - BLACK_W / 2 - 0.001 if (n + 1) in bx else xr
-            zh = Z_FRONT + HEAD
-            k = Part(f"key_{n}", origin=(x, KEY_TOP, Z_BACK))
-            k.prism(outline([(xl, Z_FRONT), (xr, Z_FRONT), (xr, zh), (br, zh), (br, Z_BACK),
-                             (bl, Z_BACK), (bl, zh), (xl, zh)]), KEY_BOT, KEY_TOP, "Cream",
-                    axis="y")
-        else:
-            x = bx[n]
-            yt = KEY_TOP + BLACK_UP
-            k = Part(f"key_{n}", origin=(x, yt, Z_BACK))
-            k.prism([(x - BLACK_W / 2, KEY_BOT + 0.004), (x + BLACK_W / 2, KEY_BOT + 0.004),
-                     (x + BLACK_W / 2 - 0.0012, yt - 0.003), (x + 0.0042, yt),
-                     (x - 0.0042, yt), (x - BLACK_W / 2 + 0.0012, yt - 0.003)],
-                    Z_BACK - BLACK_LEN, Z_BACK, "Rotor", axis="z")
-        parts.append(k)
+    parts += keyboard(21, 108)
 
     # Pedals: brass levers out of the plinth, pivoting inside it.
     for name, sx in (("pedal_l", -1), ("pedal_r", 1)):
@@ -387,5 +404,153 @@ def upright_piano():
     return parts
 
 
+# --- Harmonium ----------------------------------------------------------------------------
+
+HARM_W, HARM_H, HARM_D = 1.2, 1.3, 0.6
+HARM_LO, HARM_HI = 36, 96
+
+
+def harmonium_offset():
+    """How far the piano's key layout is moved left so the harmonium's
+    five octaves are centred on its case: x = x_piano - offset."""
+    wx, _ = key_layout()
+    return ((wx[HARM_LO] - PITCH / 2) + (wx[HARM_HI] + PITCH / 2)) / 2
+
+
+def harmonium():
+    W, H, D = HARM_W, HARM_H, HARM_D
+    zb = D / 2
+    so, si = W / 2 - 0.015, W / 2 - 0.045      # the sides' outer and inner faces
+    kx = (HARM_HI - HARM_LO) // 12 * 7 * PITCH / 2 + PITCH / 2   # half the keyboard
+    top = 1.1                                  # under the top lid
+    case = Part("case")
+    # Sides: the lower case, the arms either side of the keys, the upper
+    # case set back above them.
+    side = fillet([(-0.2, 0.0), (zb, 0.0), (zb, top), (-0.075, top), (-0.075, 0.8),
+                   (-0.255, 0.8), (-0.255, 0.64), (-0.23, 0.57), (-0.2, 0.53)], 0.01, 2)
+    for sx in (-1, 1):
+        a, b = sorted((sx * si, sx * so))
+        case.prism(side, a, b, "Wood", axis="x", bevel=0.004, segs=1)
+        # A raised moulding frame on the side's outer face (6 mm proud).
+        for cz, cy, sz, sy in ((0.05, 0.1, 0.32, 0.02), (0.05, 0.5, 0.32, 0.02),
+                               (-0.1, 0.3, 0.02, 0.38), (0.2, 0.3, 0.02, 0.38)):
+            case.box((0.006, sy, sz), (sx * (so + 0.003), cy, cz), "Wood", bevel=0.002, segs=1)
+    # Back; the floor of the treadle well, its back (the bellows' front),
+    # the shelf over it and the knee board; a shaped apron under that.
+    case.box((2 * si, top, 0.02), (0.0, top / 2, zb - 0.015), "Wood")
+    case.box((2 * si, 0.02, 0.2), (0.0, 0.01, -0.1), "Wood")
+    case.box((2 * si, 0.29, 0.02), (0.0, 0.165, 0.01), "Wood")
+    case.box((2 * si, 0.02, 0.17), (0.0, 0.3, -0.085), "Wood")
+    case.box((2 * si, 0.35, 0.02), (0.0, 0.465, -0.18), "Wood")
+    arch = [(-0.5 + t / 12, 0.21 + 0.04 * math.sin(math.pi * t / 12)) for t in range(1, 12)]
+    case.prism([(-si, 0.29), (-si, 0.19), (-0.5, 0.21)] + arch +
+               [(0.5, 0.21), (si, 0.19), (si, 0.29)], -0.2, -0.18, "Wood", axis="z")
+    for x0, x1 in ((-0.52, -0.02), (0.02, 0.52)):
+        for cx, cy, w, h in (((x0 + x1) / 2, 0.34, x1 - x0 + 0.02, 0.02),
+                             ((x0 + x1) / 2, 0.59, x1 - x0 + 0.02, 0.02),
+                             (x0, 0.465, 0.02, 0.23), (x1, 0.465, 0.02, 0.23)):
+            case.box((w, h, 0.006), (cx, cy, -0.193), "Wood", bevel=0.002, segs=1)
+    # Iron brackets on the well's floor for the treadles' hinge pins.
+    for px in (-0.14, 0.14):
+        for sx in (-1, 1):
+            case.box((0.012, 0.03, 0.03), (px + sx * 0.116, 0.035, -0.02), "Iron", bevel=0.002,
+                     segs=1)
+    # Keybed, key slip, the cheeks at the keys' ends, the name rail over
+    # the keys' backs, the stop board above it.
+    case.box((2 * kx + 0.004, KEY_BOT - 0.64, -0.03 - Z_FRONT),
+             (0.0, (0.64 + KEY_BOT) / 2, (Z_FRONT - 0.03) / 2), "Wood")
+    case.box((2 * kx + 0.004, 0.049, 0.017), (0.0, 0.6795, Z_FRONT - 0.0085), "Wood",
+             bevel=0.002, segs=1)
+    for sx in (-1, 1):
+        a, b = sorted((sx * (kx + 0.002), sx * si))
+        case.prism(fillet(rect(Z_FRONT - 0.02, -0.03, 0.64, 0.77), 0.012, 3), a, b, "Wood",
+                   axis="x", bevel=0.004, segs=1)
+    case.box((2 * kx + 0.004, 0.025, 0.06), (0.0, 0.7475, -0.06), "Wood", bevel=0.002, segs=1)
+    items_kit.text(case, "ФИСГАРМОНИЯ", 0.011, "Brass", T(0.0, 0.7475, -0.09) @ RY(math.pi),
+                   depth=0.0008)
+    case.box((2 * si, 0.08, 0.04), (0.0, 0.8, -0.05), "Wood", bevel=0.002, segs=1)
+    # The upper case's front behind the desk, a raised panel each side of
+    # the desk with a brass candle sconce on it.
+    case.box((2 * si, top - 0.64, 0.02), (0.0, (0.64 + top) / 2, -0.02), "Wood")
+    for sx in (-1, 1):
+        x0, x1 = sorted((sx * 0.37, sx * 0.53))
+        for cx, cy, w, h in (((x0 + x1) / 2, 0.87, x1 - x0 + 0.02, 0.02),
+                             ((x0 + x1) / 2, 1.07, x1 - x0 + 0.02, 0.02),
+                             (x0, 0.97, 0.02, 0.18), (x1, 0.97, 0.02, 0.18)):
+            case.box((w, h, 0.006), (cx, cy, -0.033), "Wood", bevel=0.002, segs=1)
+        c = sx * 0.45
+        case.cyl(0.03, -0.034, -0.03, "Brass", segs=20, xf=T(c, 0.95, 0.0))
+        rod(case, (c, 0.95, -0.032), (c, 0.95, -0.1), 0.005, "Brass", segs=8)
+        case.lathe([(0.0, 0.0), (0.03, 0.0), (0.032, 0.004), (0.012, 0.008), (0.012, 0.03),
+                    (0.016, 0.034), (0.0, 0.034)], "Brass", segs=20,
+                   xf=T(c, 0.944, -0.1) @ UP)
+    # The top lid, then the crest: a pointed board with a raised trefoil,
+    # turned finials at its ends and on its point.
+    case.prism(fillet(rect(-0.1, zb, top, top + 0.025), 0.008, 2), -W / 2, W / 2, "Wood",
+               axis="x", bevel=0.005, segs=2)
+    yt = top + 0.025
+    crest = [(-0.5, yt), (0.5, yt), (0.5, yt + 0.04)]
+    for i in range(1, 12):
+        t = i / 12
+        y = yt + 0.04 + 0.07 * t ** 1.4 + 0.01 * math.sin(3 * math.pi * t)
+        crest.append((0.5 * (1 - t), y))
+    crest.append((0.0, yt + 0.11))
+    crest += [(-x, y) for x, y in crest[3:-1][::-1]]
+    crest.append((-0.5, yt + 0.04))
+    case.prism(crest, 0.2, 0.22, "Wood", axis="z")
+    for a in (90, 210, 330):
+        cx = 0.018 * math.cos(math.radians(a))
+        cy = yt + 0.065 + 0.018 * math.sin(math.radians(a))
+        items_kit.ring(case, 0.016, 0.004, "Wood", xf=T(cx, cy, 0.2), segs=24, sides=6)
+    for sx in (-1, 1):
+        items_kit.ring(case, 0.012, 0.004, "Wood", xf=T(sx * 0.3, yt + 0.03, 0.2), segs=20,
+                       sides=6)
+    fin = [(0.0, 0.0), (0.03, 0.0), (0.03, 0.012), (0.018, 0.02), (0.024, 0.045),
+           (0.012, 0.07), (0.016, 0.08), (0.006, 0.1), (0.0, 0.11)]
+    for sx in (-1, 1):
+        case.lathe(fin, "Wood", segs=16, xf=T(sx * 0.53, yt, 0.21) @ UP)
+    case.lathe([(0.0, 0.0), (0.012, 0.0), (0.014, 0.01), (0.008, 0.02), (0.011, 0.035),
+                (0.005, 0.06), (0.0, H - yt - 0.1)], "Wood", segs=14,
+               xf=T(0.0, yt + 0.1, 0.21) @ UP)
+    parts = [case]
+
+    parts += keyboard(HARM_LO, HARM_HI, -harmonium_offset())
+
+    # Stops: a row of turned knobs with ivory faces out of the stop board.
+    sp = (0.0, 0.8, -0.07)
+    stops = Part("stops", origin=sp)
+    for x in (-0.45, -0.36, -0.27, -0.18, -0.09, 0.09, 0.18, 0.27, 0.36, 0.45):
+        xf = T(x, sp[1], sp[2]) @ RY(math.pi)
+        stops.lathe([(0.0, -0.003), (0.006, -0.003), (0.006, 0.012), (0.01, 0.015),
+                     (0.011, 0.022), (0.0095, 0.027), (0.0, 0.027)], "Wood", segs=16, xf=xf)
+        stops.cyl(0.0075, 0.026, 0.031, "Cream", segs=16, xf=xf)
+    parts.append(stops)
+
+    # Treadles: carpeted boards hinged at the back of the well, their
+    # fronts tilted up; a negative turn about X presses them.
+    tilt = math.radians(18)
+    for name, x in (("pedal_l", -0.14), ("pedal_r", 0.14)):
+        hg = (x, 0.035, -0.02)
+        pd = Part(name, origin=hg)
+        up = RX(tilt, about=hg)
+        pd.cyl(0.006, x - 0.11, x + 0.11, "Iron", segs=10, xf=T(0.0, hg[1], hg[2]) @ ALONG_X)
+        pd.box((0.2, 0.014, 0.27), (x, hg[1], hg[2] - 0.135), "Wood", bevel=0.002, segs=1,
+               xf=up)
+        pd.box((0.17, 0.005, 0.23), (x, hg[1] + 0.0095, hg[2] - 0.14), "Red", xf=up)
+        pd.box((0.2, 0.026, 0.01), (x, hg[1] + 0.006, hg[2] - 0.275), "Brass", bevel=0.002,
+               segs=1, xf=up)
+        parts.append(pd)
+
+    # Music desk: a ledge on the stop board, a board leaning back on it.
+    desk = Part("music_desk")
+    desk.box((0.62, 0.014, 0.075), (0.0, 0.847, -0.0675), "Wood", bevel=0.003, segs=1)
+    desk.prism([(-0.099, 0.854), (-0.087, 0.854), (-0.04, 1.03), (-0.052, 1.03)], -0.3, 0.3,
+               "Wood", axis="x")
+    desk.box((0.62, 0.03, 0.012), (0.0, 0.866, -0.099), "Wood", bevel=0.003, segs=1)
+    parts.append(desk)
+    return parts
+
+
 prop("gramophone", gramophone)
 prop("upright_piano", upright_piano)
+prop("harmonium", harmonium)

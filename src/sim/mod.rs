@@ -352,6 +352,82 @@ mod tests {
             }
         }
     }
+
+    /// Damage the telemetry can't place isn't called a fall: a wet aegis in
+    /// the pack shocking its carrier is named as such, and nothing that
+    /// happens on level ground reads "fall" (it once did, and a raider
+    /// killed by its own artifact went down in the report as a bad landing).
+    #[test]
+    fn telemetry_names_an_aegis_shock_and_never_guesses_a_fall() {
+        use crate::interact::body::{Backpack, InBackpack};
+        use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
+        let dir = std::env::temp_dir().join(format!("extraction-aegis-{}", std::process::id()));
+        let opts = LaunchOptions {
+            sim_run: Some("aegis".into()),
+            sim_out: Some(dir.clone()),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let pack = app
+            .world_mut()
+            .query::<(Entity, &Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .unwrap();
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let knot = crate::items::spawn_item(
+            &mut Commands::new(&mut queue, app.world()),
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("art_aegis").unwrap(),
+                transform: Transform::default(),
+                condition: 1.0,
+            },
+        );
+        queue.apply(app.world_mut());
+        app.world_mut()
+            .get_mut::<Backpack>(pack)
+            .unwrap()
+            .contents
+            .push(knot);
+        app.world_mut().entity_mut(knot).insert((
+            InBackpack { bag: pack },
+            ChildOf(pack),
+            RigidBodyDisabled,
+            ColliderDisabled,
+        ));
+        for _ in 0..90 * 40 {
+            if let Some(mut w) = app
+                .world_mut()
+                .get_resource_mut::<crate::world::weather::Wetness>()
+            {
+                w.level = 1.0;
+            }
+            app.update();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let damage = &app.world().resource::<telemetry::SimLog>().stats.damage;
+        assert!(
+            damage.get("aegis").is_some_and(|d| *d > 0.0),
+            "the shocks are the aegis's: {damage:?}"
+        );
+        assert!(
+            !damage.contains_key("fall") && !damage.contains_key("other"),
+            "nothing else hurt the bot: {damage:?}"
+        );
+    }
 }
 
 /// `SIM_ARMOUR=late`: a bot on a job of the third tier or later (the late
