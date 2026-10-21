@@ -736,6 +736,7 @@ fn concentrate_shed(b: &mut Builder) {
     // The thickener: a concrete tank, its bridge across with the drive
     // in the middle, the rake's shaft down into the slurry.
     let (tx, tz, tr) = (-2.5, -13.8, 2.2);
+    let from = b.geo.pieces.len();
     b.piece(
         Shape::Cylinder(tr, 1.5),
         Transform::from_xyz(tx, f + 0.75, tz),
@@ -764,6 +765,10 @@ fn concentrate_shed(b: &mut Builder) {
         Vec3::new(0.7, 0.55, 0.7),
         Vec3::new(tx, f + 2.375, tz),
         Mat::DarkMetal,
+    );
+    b.dress(
+        from,
+        vec![("mill_thickener", Transform::from_xyz(tx, f, tz))],
     );
     // Sacks of concentrate, two tiers on each pallet.
     for (x, z) in [(-8.9, -19.0), (-7.5, -19.0), (-8.9, -17.9)] {
@@ -798,6 +803,7 @@ fn flotation_floor(b: &mut Builder) {
     let f = MILL_FLOORS[1];
     let (x0, x1, z0, z1) = (-7.4, 3.4, -6.6, -5.0);
     let (cx, cz) = ((x0 + x1) * 0.5, (z0 + z1) * 0.5);
+    let from = b.geo.pieces.len();
     b.bx(
         Vec3::new(x1 - x0, 1.3, z1 - z0),
         Vec3::new(cx, f + 0.65, cz),
@@ -872,7 +878,12 @@ fn flotation_floor(b: &mut Builder) {
             Mat::DarkMetal,
         );
     }
+    b.dress(
+        from,
+        vec![("mill_flotation", Transform::from_xyz(cx, f, cz))],
+    );
     // The conditioner, its agitator's drive on top.
+    let from = b.geo.pieces.len();
     b.piece(
         Shape::Cylinder(1.0, 2.0),
         Transform::from_xyz(-6.5, f + 1.0, -8.6),
@@ -884,11 +895,20 @@ fn flotation_floor(b: &mut Builder) {
         Vec3::new(-6.5, f + 2.2, -8.6),
         Mat::DarkMetal,
     );
+    b.dress(
+        from,
+        vec![("mill_conditioner", Transform::from_xyz(-6.5, f, -8.6))],
+    );
     // The pump at the bank's tail.
+    let from = b.geo.pieces.len();
     b.bx(
         Vec3::new(0.8, 0.7, 0.6),
         Vec3::new(4.2, f + 0.35, -5.8),
         Mat::PaintedMetal,
+    );
+    b.dress(
+        from,
+        vec![("mill_pump", Transform::from_xyz(4.2, f, -5.8))],
     );
     for (x, z) in [(5.5, -9.3), (6.2, -9.35), (5.85, -8.75)] {
         b.barrel(Vec3::new(x, f, z));
@@ -911,6 +931,7 @@ fn ball_mill_floor(b: &mut Builder) {
     let f = MILL_FLOORS[2];
     let (mx, my, mz, r, len) = (-1.5, f + 1.9, 4.2, 1.4, 5.0);
     let across = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+    let from = b.geo.pieces.len();
     b.piece(
         Shape::Cylinder(r, len),
         Transform::from_xyz(mx, my, mz).with_rotation(across),
@@ -948,20 +969,6 @@ fn ball_mill_floor(b: &mut Builder) {
         Mat::RustyMetal,
         true,
     );
-    b.furnish(
-        "gearbox",
-        Vec3::new(1.0, 0.75, 0.85),
-        Vec3::new(gx, f, mz + 2.2),
-        0.0,
-        None,
-    );
-    b.furnish(
-        "drive_motor",
-        Vec3::new(1.7, 1.1, 0.8),
-        Vec3::new(gx - 1.75, f, mz + 2.2),
-        std::f32::consts::PI,
-        None,
-    );
     b.piece(
         Shape::Cylinder(0.25, 0.3),
         Transform::from_xyz(gx, f + 0.95, mz + 1.6)
@@ -975,6 +982,24 @@ fn ball_mill_floor(b: &mut Builder) {
         Vec3::new(0.6, c1 - c0, 0.6),
         Vec3::new(mx - len * 0.5 - 0.3, (c0 + c1) * 0.5, mz),
         Mat::RustyMetal,
+    );
+    b.dress(
+        from,
+        vec![("mill_ball_mill", Transform::from_xyz(mx, f, mz))],
+    );
+    b.furnish(
+        "gearbox",
+        Vec3::new(1.0, 0.75, 0.85),
+        Vec3::new(gx, f, mz + 2.2),
+        0.0,
+        None,
+    );
+    b.furnish(
+        "drive_motor",
+        Vec3::new(1.7, 1.1, 0.8),
+        Vec3::new(gx - 1.75, f, mz + 2.2),
+        std::f32::consts::PI,
+        None,
     );
     b.workbench(Vec3::new(6.0, f, 0.6), 0.0, Some("workshop"));
     b.furnish(
@@ -1005,6 +1030,7 @@ fn crusher_floor(b: &mut Builder) {
     let (bx0, bx1, bz0, bz1) = (-9.3, -4.3, 12.5, 18.5);
     let (bcx, bcz) = ((bx0 + bx1) * 0.5, (bz0 + bz1) * 0.5);
     let (bin_lo, bin_hi) = (f + 3.2, f + 5.6);
+    let from = b.geo.pieces.len();
     b.bx(
         Vec3::new(bx1 - bx0, bin_hi - bin_lo, bz1 - bz0),
         Vec3::new(bcx, (bin_lo + bin_hi) * 0.5, bcz),
@@ -1051,7 +1077,12 @@ fn crusher_floor(b: &mut Builder) {
             );
         }
     }
+    b.dress(
+        from,
+        vec![("mill_ore_bin", Transform::from_xyz(bcx, f, bcz))],
+    );
     // The jaw crusher, its two flywheels.
+    let from = b.geo.pieces.len();
     b.bx(
         Vec3::new(1.4, 1.2, 1.8),
         Vec3::new(bcx, f + 0.6, bcz),
@@ -1072,6 +1103,10 @@ fn crusher_floor(b: &mut Builder) {
             .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
         false,
+    );
+    b.dress(
+        from,
+        vec![("mill_jaw_crusher", Transform::from_xyz(bcx, f, bcz))],
     );
     // The ladder up the bin's east face to the grizzly, and what the
     // last shift left up there.
@@ -1300,6 +1335,7 @@ fn observatory(b: &mut Builder) {
         None,
     );
     b.chair(Vec3::new(ix - 1.35, f, 0.5), -std::f32::consts::FRAC_PI_2);
+    let from = b.geo.pieces.len();
     b.bx(
         Vec3::new(0.35, 0.45, 0.9),
         Vec3::new(ix - 0.3, f + 0.785 + 0.225, 0.6),
@@ -1310,7 +1346,16 @@ fn observatory(b: &mut Builder) {
         Vec3::new(ix - 0.48, f + 1.1, 0.6),
         Mat::Glass,
     );
+    b.dress(
+        from,
+        vec![(
+            "obs_radio",
+            Transform::from_xyz(ix - 0.3, f + 0.785, 0.6)
+                .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
+        )],
+    );
     b.shelf(Vec3::new(3.9, f, iz1 - 0.2), 0.0, Some("tools"));
+    let from = b.geo.pieces.len();
     b.piece(
         Shape::Cylinder(0.16, 0.05),
         Transform::from_xyz(0.2, f + 1.7, iz1 - 0.025)
@@ -1318,10 +1363,15 @@ fn observatory(b: &mut Builder) {
         Mat::PaintedMetal,
         false,
     );
+    b.dress(
+        from,
+        vec![("obs_barometer", Transform::from_xyz(0.2, f + 1.7, iz1))],
+    );
     b.bed(
         Vec3::new(-ix + 1.0, f, iz1 - 1.0),
         std::f32::consts::FRAC_PI_2,
     );
+    let from = b.geo.pieces.len();
     for (x, z) in [(-ix + 0.05, iz1 - 0.55), (-ix + 1.95, iz1 - 0.55)] {
         for dz in [0.0, -0.9] {
             b.bx(
@@ -1341,6 +1391,10 @@ fn observatory(b: &mut Builder) {
         Vec3::new(-ix + 1.0, f + 1.45, iz1 - 1.0),
         Mat::Canvas,
     );
+    b.dress(
+        from,
+        vec![("obs_bunk", Transform::from_xyz(-ix + 1.0, f, iz1 - 1.0))],
+    );
     b.stove(Vec3::new(-ix + 0.5, f, -1.6), std::f32::consts::FRAC_PI_2);
     b.crate_box(Vec3::new(-ix + 0.6, f, -0.3), 0.6, Some("medical"));
     // Upstairs: the store, the observer's chest.
@@ -1357,6 +1411,7 @@ fn observatory(b: &mut Builder) {
     // On the roof: the dome over the east end, white, on its drum.
     let (dx, dz, dr) = (2.6, 0.9, 2.0);
     let drum = OBS_ROOF + 1.2;
+    let from = b.geo.pieces.len();
     b.piece(
         Shape::Cylinder(dr, 1.2),
         Transform::from_xyz(dx, OBS_ROOF + 0.6, dz),
@@ -1388,9 +1443,14 @@ fn observatory(b: &mut Builder) {
         Vec3::new(dx, drum + dr + 0.02, dz),
         Mat::DarkMetal,
     );
+    b.dress_structure(
+        from,
+        vec![("obs_dome", Transform::from_xyz(dx, OBS_ROOF, dz))],
+    );
     // The instrument cage: the louvred screen on its legs, a wire cage
     // round it.
     let (sx, sz) = (-0.2, -1.9);
+    let from = b.geo.pieces.len();
     for (lx, lz) in [(-0.4, -0.25), (0.4, -0.25), (-0.4, 0.25), (0.4, 0.25)] {
         b.bx(
             Vec3::new(0.05, 1.1, 0.05),
@@ -1439,6 +1499,10 @@ fn observatory(b: &mut Builder) {
             );
         }
     }
+    b.dress_structure(
+        from,
+        vec![("obs_screen", Transform::from_xyz(sx, OBS_ROOF, sz))],
+    );
     // The anemometer's mast: a pipe, the cups on their arms at the top, a
     // vane under them.
     let (ax, az, ah) = (1.6, 3.6, 12.0);
@@ -1448,6 +1512,7 @@ fn observatory(b: &mut Builder) {
         Mat::PaintedMetal,
         true,
     );
+    let from = b.geo.pieces.len();
     for k in 0..3 {
         let a = k as f32 * std::f32::consts::TAU / 3.0;
         let d = Vec3::new(a.cos(), 0.0, a.sin());
@@ -1476,6 +1541,10 @@ fn observatory(b: &mut Builder) {
         Vec3::new(0.02, 0.22, 0.3),
         Vec3::new(ax - 0.62, ah - 0.5, az),
         Mat::DarkMetal,
+    );
+    b.dress_structure(
+        from,
+        vec![("obs_anemometer", Transform::from_xyz(ax, ah, az))],
     );
     // The radio mast: a square lattice from the roof's south-west corner
     // to 20 m, its dipole at the top, guyed to the parapet.
@@ -1931,6 +2000,7 @@ fn upper_station(b: &mut Builder) {
     // to the gearbox and the motor.
     let (wx, wy, wz, wr) = (gx, 5.0, gz, 2.4);
     let across = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+    let from = b.geo.pieces.len();
     let n = 20;
     for k in 0..n {
         let a = k as f32 / n as f32 * std::f32::consts::TAU;
@@ -1980,6 +2050,10 @@ fn upper_station(b: &mut Builder) {
         Vec3::new(0.3, wy + 0.3 - (f + 0.8), 0.6),
         Vec3::new(cx, (wy + 0.3 + f + 0.8) * 0.5, wz),
         Mat::PaintedMetal,
+    );
+    b.dress(
+        from,
+        vec![("fun_bull_wheel", Transform::from_xyz(wx, f, wz))],
     );
     b.furnish(
         "gearbox",
@@ -2032,6 +2106,7 @@ fn upper_station(b: &mut Builder) {
     );
     // The spare rope on its reel, the oil drums, the fitters' chest.
     let (rx, rz) = (3.6, 4.6);
+    let from = b.geo.pieces.len();
     for dx in [-0.5, 0.5] {
         b.piece(
             Shape::Cylinder(0.9, 0.08),
@@ -2045,6 +2120,10 @@ fn upper_station(b: &mut Builder) {
         Transform::from_xyz(rx, f + 0.9, rz).with_rotation(across),
         Mat::DarkMetal,
         true,
+    );
+    b.dress(
+        from,
+        vec![("fun_rope_reel", Transform::from_xyz(rx, f, rz))],
     );
     for (x, z) in [(5.25, 6.25), (4.65, 6.3), (5.25, 5.65)] {
         b.barrel(Vec3::new(x, f, z));
@@ -2110,6 +2189,8 @@ fn car(b: &mut Builder) {
             false,
         );
     }
+    // (Drawn by `fun_car_frame`, in the grade's own frame.)
+    let from = b.geo.pieces.len();
     for x in [-0.8, 0.8] {
         b.piece(
             Shape::Box(Vec3::new(0.12, 0.3, CAR_LEN - 0.1)),
@@ -2155,6 +2236,13 @@ fn car(b: &mut Builder) {
         on_grade(0.0, 0.55, -CAR_LEN * 0.5 - 0.05),
         Mat::DarkMetal,
         false,
+    );
+    b.dress_structure(
+        from,
+        vec![(
+            "fun_car_frame",
+            Transform::from_rotation(Quat::from_rotation_x(GRADE.atan())),
+        )],
     );
     // The skirt under the body each side, from the deck to above the
     // floors, broken at the doors.
