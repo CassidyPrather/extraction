@@ -120,6 +120,16 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Heavy things.** A car door, a bus panel, a wheel, a heavy's claw:
+  take it by both ends and lift it. It's heavy: it swings on when you
+  stop and comes round late when you turn, and you walk slower and can't
+  run. With one hand you can only drag it, its far end scraping along
+  the ground (the machines hear that). Let go of it swinging and it's a
+  shove, not a throw. A robot's wreck: take it by a leg and drag it,
+  slowly. Your pack: reach over a shoulder, take it, and bring it round
+  in front of you: it hangs open from your hand and you can reach in
+  with the other; take it back over the shoulder and let go, and it's
+  on. Say if anything feels floaty or gets stuck.
 - **Your body.** Look down: a jacket, the chest rig and belt on it,
   trousers and boots. Turn your head and your feet stay put; turn your
   whole body, or step across the room, and they step after you. Crouch
