@@ -628,15 +628,21 @@ pub struct Scene<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+    vent_levers: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::furnace::VentLever,
+            &'static GlobalTransform,
+        ),
+    >,
     attention: Query<'w, 's, &'static crate::anomaly::Attention>,
     breeds: Query<'w, 's, &'static crate::robots::Breed>,
     spatial: SpatialQuery<'w, 's>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     opts: Res<'w, LaunchOptions>,
     house: Option<Res<'w, crate::progression::safehouse::Safehouse>>,
-    /// The bots' sockets by entity (`Task::Draw` counts them in entity
-    /// order).
-    owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
 }
 
 impl Scene<'_, '_> {
@@ -783,11 +789,23 @@ pub fn think(
     scene: Scene,
     mut log: ResMut<SimLog>,
     mut locks: MessageReader<crate::robots::drone::DroneLock>,
+    mut vented: MessageReader<crate::world::furnace::Vented>,
 ) {
     let dt = scene.time.delta_secs();
     let locks: Vec<Entity> = locks.read().map(|l| l.drone).collect();
+    let vented: Vec<(Entity, usize)> = vented.read().map(|v| (v.site, v.vent)).collect();
     for (me, mut bot, mut r, tf, health, body, children, mut input) in &mut bots {
         let r = &mut *r;
+        // A flue vented: its heat's cells are a way again.
+        for (site, vent) in &vented {
+            for plan in r.plans.iter_mut().filter(|p| p.entity == *site) {
+                let zones = extraction_core::underground::layout(&plan.name)
+                    .and_then(|l| l.vents.get(*vent))
+                    .map(|v| v.zones.clone())
+                    .unwrap_or_default();
+                plan.vent(&zones);
+            }
+        }
         if r.stage == Stage::Done || health.down {
             continue;
         }
@@ -2273,13 +2291,10 @@ fn raid_step(
                         json!({"site": site.name, "items": all, "artifacts": artifacts}),
                     );
                     r.act = Act::Search(s);
-                    if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
-                        let how = t.iter().find_map(|t| match t {
-                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
-                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
-                            _ => None,
-                        });
-                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
+                    if let Some((relay, t)) = plant_tasks(me, scene, &r.sites[s]) {
+                        // Set down for good: not loot to pick up again.
+                        r.skip.insert(relay);
+                        log.event("plant", json!({"site": r.sites[s].name}));
                         return t;
                     }
                     continue;
@@ -2503,7 +2518,7 @@ fn add_job_site(r: &mut Raider, scene: &Scene) {
 
 /// A Plant job's place, reached: the relay out of the pack and set down
 /// on the ground by it.
-fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
+fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<(Entity, Vec<Task>)> {
     let Some(CardJob::Plant {
         item,
         at,
@@ -2519,47 +2534,32 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
     let relay = *scene.carried(me, item).first()?;
     let mut t = vec![
         Task::Log(format!("planting the {item}")),
+        // Well inside the plant's radius, if there's footing that close.
         Task::WalkTo {
             to: Vec2::from_array(*at),
-            within: 1.5,
+            within: 2.5,
         },
     ];
     // The hand free first (it may be holding the last thing picked up),
-    // then out of the body slot it was stowed in (drawn), or the pack.
+    // then the relay into it from wherever it's carried (a grab takes it
+    // out of its body slot or the open pack).
+    let packed = scene.items.get(relay).is_ok_and(|(.., bag)| bag.is_some());
     t.push(Task::Stow(Side::Left));
-    let socket = scene
-        .items
-        .get(relay)
-        .ok()
-        .and_then(|(.., so, _)| so.map(|s| s.socket));
-    let mut mine: Vec<Entity> = scene
-        .owned_sockets
-        .iter()
-        .filter(|(_, o)| o.0 == me)
-        .map(|(e, _)| e)
-        .collect();
-    mine.sort();
-    match socket.and_then(|s| mine.iter().position(|m| *m == s)) {
-        Some(slot) => t.extend([
-            Task::Draw {
-                slot,
-                side: Side::Left,
-            },
-            Task::Wait(0.5),
-        ]),
-        None => t.extend([
-            Task::ToggleBackpack,
-            Task::Wait(0.6),
-            Task::GrabFromHere {
-                item: relay,
-                side: Side::Left,
-            },
-            Task::ToggleBackpack,
-            Task::Wait(0.5),
-        ]),
+    if packed {
+        t.extend([Task::ToggleBackpack, Task::Wait(0.6)]);
+    }
+    t.extend([
+        Task::GrabFromHere {
+            item: relay,
+            side: Side::Left,
+        },
+        Task::Wait(0.5),
+    ]);
+    if packed {
+        t.extend([Task::ToggleBackpack, Task::Wait(0.5)]);
     }
     t.extend([Task::Release(Side::Left), Task::Wait(1.0)]);
-    Some(t)
+    Some((relay, t))
 }
 
 /// `SIM_OVERNIGHT=1`: the valley's safehouse as a job of its own, to spend
@@ -2653,6 +2653,42 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
         }
         _ => site.at,
     }
+}
+
+/// How long to give a vented flue to cool before going through (s): it's
+/// past scorching in five, and gentle by twenty.
+const VENT_WAIT: f32 = 20.0;
+
+/// To a local point a site's heat shuts off: the way by one of its vent
+/// levers (closed still), pulled, a wait while it cools, then on through.
+fn vent_first(scene: &Scene, plan: &BuildingPlan, pos: Vec3, goal: Vec2) -> Option<Vec<Task>> {
+    if plan.hot.is_empty() {
+        return None;
+    }
+    let l = extraction_core::underground::layout(&plan.name)?;
+    for (lever, v, gt) in scene
+        .vent_levers
+        .iter()
+        .filter(|(_, v, _)| v.site == plan.entity && !v.open)
+    {
+        let Some(def) = l.vents.get(v.vent) else {
+            continue;
+        };
+        let mut cool = plan.clone();
+        cool.vent(&def.zones);
+        let at = gt.translation();
+        let Some(mut tasks) = indoor(plan, pos, plan.to_local(at).xz(), 0.5) else {
+            continue;
+        };
+        let Some(on) = indoor(&cool, at, goal, 0.3) else {
+            continue;
+        };
+        tasks.push(Task::Press(lever));
+        tasks.push(Task::Wait(VENT_WAIT));
+        tasks.extend(on);
+        return Some(tasks);
+    }
+    None
 }
 
 /// Indoors: `metres` along the building's plan from `pos` toward `to`
@@ -2860,6 +2896,9 @@ fn take_item(
                     let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
                     indoor(plan, pos, near, 0.3)?
                 }
+                // Behind heat nothing crosses: vent it first (it clangs),
+                // unless careful.
+                None if r.traits.name != "cautious" => vent_first(scene, plan, pos, goal)?,
                 None => return None,
             };
             // Behind a door on an underground site's power: throw the

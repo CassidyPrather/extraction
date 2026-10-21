@@ -109,6 +109,23 @@ pub enum BreakKind {
     BusDoor,
     /// A wrecked bus's side skirt panel.
     BusPanel,
+    /// A car wreck's door, bonnet, boot lid or wheel (`destruction::strip`).
+    /// Their models are authored in the car's own space, so each slots
+    /// into the body where it came from.
+    CarDoor,
+    CarBonnet,
+    CarBoot,
+    CarWheel,
+}
+
+impl BreakKind {
+    /// A car's part: its model is in the car's space, not its own.
+    pub fn in_car_space(self) -> bool {
+        matches!(
+            self,
+            BreakKind::CarDoor | BreakKind::CarBonnet | BreakKind::CarBoot | BreakKind::CarWheel
+        )
+    }
 }
 
 /// A breakable thing on a building (`Geo::breakables`).
@@ -5254,7 +5271,7 @@ pub fn spawn_buildings(mut commands: Commands, zone: Res<Zone>) {
         }
         for s in &geo.loot {
             loot.0.push(LootSpot {
-                at: clear_of_notes(&zone.map, t.transform_point(s.at)),
+                at: loot_spot_at(&zone, &t, s.at),
                 table: s.table,
             });
         }
@@ -5281,6 +5298,19 @@ const LOOT_CLEAR: f32 = 0.55;
 
 /// A loot spot moved along the table, away from a note or terminal that
 /// lies on it (notes sit 0.3 m off a table's middle, where its loot is).
+/// Where a prefab's loot spot (`local`, in the prefab) lies in the world:
+/// clear of notes, and never under the ground. A prefab set on its lowest
+/// corner over a hill (the slag heaps' anomaly) had its loot spawned inside
+/// the hill, falling through it (`docs/SOAK.md`). Underground sites' spots
+/// are under the ground on purpose.
+pub fn loot_spot_at(zone: &Zone, t: &Transform, local: Vec3) -> Vec3 {
+    let mut at = clear_of_notes(&zone.map, t.transform_point(local));
+    if crate::world::underground::floor_under(zone, at).is_none() {
+        at.y = at.y.max(zone.ground(at.x, at.z) + 0.05);
+    }
+    at
+}
+
 fn clear_of_notes(map: &extraction_core::map::MapDef, at: Vec3) -> Vec3 {
     use extraction_core::map::MarkerKind;
     let Some(m) = map.markers.iter().find(|m| {

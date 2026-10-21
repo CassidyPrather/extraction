@@ -62,9 +62,24 @@ pub struct BuildingPlan {
     /// floor under each cell, building-local y (NaN where there's none).
     /// A point belongs to the plan only near its cell's floor.
     pub levels: Option<Vec<f32>>,
+    /// An underground site's cells shut only by heat nothing crosses:
+    /// (cell, heat zone, its cost once that zone's vented).
+    pub hot: Vec<(usize, u16, u8)>,
 }
 
 impl BuildingPlan {
+    /// Heat zones vented: their cells walked again.
+    pub fn vent(&mut self, zones: &[usize]) {
+        let grid = &mut self.grid;
+        self.hot.retain(|&(k, z, cost)| {
+            let open = zones.contains(&(z as usize));
+            if open {
+                grid.cost[k] = cost;
+            }
+            !open
+        });
+    }
+
     pub fn to_local(&self, p: Vec3) -> Vec3 {
         self.xf.compute_affine().inverse().transform_point3(p)
     }
@@ -318,6 +333,7 @@ pub fn plan_buildings(
             entries,
             half,
             levels: None,
+            hot: Vec::new(),
         });
     }
     out
@@ -396,17 +412,10 @@ fn plan_site(
                         && !levels[c as usize * n + a as usize].is_nan()
                 })
             });
-            // A pit's floor, or heat nothing crosses: not a way at all.
+            // A pit's floor: not a way at all. (Heat nothing crosses is
+            // shut after, once the colliders are in: see `hot`.)
             let p = grid.centre(i, j);
-            let barred = r.cell_of(p).is_some_and(|(a, c)| {
-                let k = c * r.nx + a;
-                r.pit[k]
-                    || r.heat[k].is_some_and(|z| {
-                        extraction_core::underground::layout(&b.prefab).is_some_and(|l| {
-                            l.heat[z as usize].level >= extraction_core::underground::SCORCHING
-                        })
-                    })
-            });
+            let barred = r.cell_of(p).is_some_and(|(a, c)| r.pit[c * r.nx + a]);
             if barred {
                 grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
             } else if clear {
@@ -453,6 +462,26 @@ fn plan_site(
             },
             CLEARANCE,
         );
+    }
+    // Heat nothing crosses: shut, each cell's cost kept for when its zone
+    // is vented (`BuildingPlan::vent`).
+    let mut hot = Vec::new();
+    if let Some(l) = extraction_core::underground::layout(&b.prefab) {
+        for j in 0..n {
+            for i in 0..n {
+                let k = j * n + i;
+                let Some(z) = r.heat_at(grid.centre(i, j)) else {
+                    continue;
+                };
+                if l.heat[z as usize].level < extraction_core::underground::SCORCHING {
+                    continue;
+                }
+                if grid.cost[k] != extraction_core::nav::BLOCKED {
+                    hot.push((k, z, grid.cost[k]));
+                    grid.cost[k] = extraction_core::nav::BLOCKED;
+                }
+            }
+        }
     }
     let is_ground = |p: Vec2| {
         grid.cell_of(p.to_array())
@@ -510,6 +539,7 @@ fn plan_site(
         outside: ground,
         inner,
         levels: Some(levels),
+        hot,
     }
 }
 

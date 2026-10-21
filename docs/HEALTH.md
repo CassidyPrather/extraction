@@ -20,22 +20,31 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| cbf9c3d | 10:40 | not yet | 20 reported tests by name: 7 fail (above) | full suite next |
+| eb7b932 | 08:35 | 8/8 clean, every hit named | stopped at 339/681: round_trip, warmup, lev FAILED | marrow_creek seed 2's looter dies in the same Walker-Drone-Hound gauntlet at x -60..-110, z -257 on every sha, going for depot_marrow 570 m off (Map design) |
 | 073c684 | 06:45 | 8/8 clean (seeds 1, 2) | stopped at 228/611 (main moved): 4 FAILED | the Sallow seed-1 bot was killed by its own wet aegis (15 × 5 HP), and telemetry called it "fall"; fixed on this branch |
 | d0118ba | 05:30 | 8/8 clean (seeds 1, 2) | not run (main moved) | 7 of 8 raids died; the cinder_works looter dies to a Crawler at tunnel_cinder at ~3 min on both seeds |
 
 ## Open failures
 
-| test / run | since | det. / flaky | class | owner | status |
-| - | - | - | - | - | - |
-| `persist::tests::a_heavys_wreck_keeps_until_the_surge` | 073c684 | ? | Surge despawn (`insert` on a despawned entity) | Weapon feel / Heavy | fixed on eb7b932 by 36e66c5 and optics.rs:189 (coordinator); to check |
-| `persist::tests::surge_rerolls_the_zone_at_base` | 073c684 | ? | same | Weapon feel / Heavy | same |
-| `render::legibility::tests::no_loot_lands_on_a_note` | 073c684 | ? | ? | Legibility / Story | to check on eb7b932 |
-| `render::legibility::tests::nothing_lies_on_a_scenes_note` | 073c684 | ? | ? | Legibility / Story | to check on eb7b932 |
+As of cbf9c3d; every one below fails each time run alone (deterministic).
+
+| test / run | since | class | owner | status |
+| - | - | - | - | - |
+| `persist::tests::save_and_restore_round_trip` (354 items back, 348 saved) | 3eeb94e6 Merge polish: radio | load-time spawns duplicated by the save: `radio::places::PLACES` lays its tapes and players every load and the save keeps them too (+2 players, +2 cells, +2 tapes) | Radio and music | routed 10:40 |
+| `render::legibility::tests::nothing_lies_on_a_scenes_note` (handcart, bucket line, keeper's chair) | before 073c684 | scene data | Story / Legibility | routed by coordinator |
+| `sim::indoor::tests::every_loot_spot_is_in_reach`, `..._reached_from_its_own_side` (6 spots in Sallow's drowned prefabs) | fourth-valley merges | prefab data | World models / Fourth valley | routed by coordinator |
+| `wildlife::app_tests::animals_can_be_shot_and_their_carcasses_collected` ("the ray hit something else") | after 073c684 | ray blocked by new geometry? | Wildlife | Wildlife fixing |
+| `wildlife::flock::tests::birds_never_go_inside_walls_or_ground_and_settle_again` (cinder_works flock 3 never settles) | after 073c684 | ? | Wildlife | routed 10:40 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| `render::warmup::tests::every_material_is_shelved` (storm's Sheet/BoltMaterial, from 337a20a6) | this branch | Verifier (two shelve lines) |
+| `persist::tests::a_heavys_wreck_keeps_until_the_surge`, `surge_rerolls_the_zone_at_base` | eb7b932 | Weapon feel, Heavy |
+| `raid::lev::tests::home_with_a_stone_he_says_so`, `no_loot_lands_on_a_note`, capture fighting, contacts churn, destruction boards, `a_thrown_bolt_*`: pass on cbf9c3d | | |
+| sim telemetry called an aegis shock "fall" | 47e8772 | Verifier |
 
 ## Machine notes
 

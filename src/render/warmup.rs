@@ -54,6 +54,10 @@ impl Plugin for WarmupPlugin {
                         shelve::<XrayMaterial>,
                         shelve::<crate::world::halos::HaloMaterial>,
                         shelve::<crate::world::beams::BeamMaterial>,
+                        (
+                            shelve::<crate::world::storm::SheetMaterial>,
+                            shelve::<crate::world::storm::BoltMaterial>,
+                        ),
                     ),
                     shelve_unworn,
                     shelve_end,
