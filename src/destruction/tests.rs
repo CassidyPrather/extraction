@@ -1539,7 +1539,11 @@ fn shutters_splinter_and_the_bus_strips_and_the_surge_puts_them_back() {
         shutters.len()
     );
     let fence = all.iter().filter(|p| p.2 == super::strip::FENCE_HP).count();
-    let bus: Vec<_> = all.iter().filter(|p| !p.3).collect();
+    // The bus's (the car wrecks' parts yield car_*).
+    let bus: Vec<_> = all
+        .iter()
+        .filter(|p| !p.3 && p.4.iter().all(|(id, _)| !id.starts_with("car_")))
+        .collect();
     assert_eq!(bus.len(), 5, "the depot's bus: a door and four panels");
     println!("{} shutters, {fence} fence panels", shutters.len());
 
@@ -1808,7 +1812,9 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
         let count = |k: BreakKind| parts.iter().filter(|p| p.kind == k).count();
         assert_eq!(count(BreakKind::CarWheel), 4, "{model}'s wheels");
         assert_eq!(count(BreakKind::CarBonnet), 1, "{model}'s bonnet");
-        let (body, _) = super::strip::car_body(model).expect("a body box");
+        let boxes = super::strip::car_body(model);
+        assert!(!boxes.is_empty(), "{model} has a body");
+        let body = Vec3::new(0.0, 0.6, 0.0);
         for b in &parts {
             let name = b.model.unwrap();
             // Out of the car: its -Z face points away from the body's middle.
@@ -1818,6 +1824,18 @@ fn the_wrecks_come_apart_where_kit_modelled_them() {
                 out.dot(mid - body) > 0.0,
                 "{name} at {mid} faces out ({out})"
             );
+            // No body box stands over it: what reaches for the part
+            // meets the part.
+            let half = b.size * 0.5;
+            for (c, sz) in &boxes {
+                let (lo, hi) = (*c - *sz * 0.5, *c + *sz * 0.5);
+                let inside = |p: Vec3| p.cmpgt(lo + 0.01).all() && p.cmplt(hi - 0.01).all();
+                let face = mid + out * half.z;
+                assert!(
+                    !inside(face),
+                    "{name}'s outer face is inside the body box {c} {sz}"
+                );
+            }
             // Thinnest the way it faces.
             assert!(
                 b.size.z <= b.size.x.min(b.size.y) + 1e-4,
