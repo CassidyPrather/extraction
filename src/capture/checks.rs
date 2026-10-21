@@ -361,7 +361,7 @@ mod tests {
         "props/hide_frame:",
         "props/sewing_machine:",
         "props/snowshoes:",
-        // The ankle gap, with Models: kit.
+        // Fixed on Models: kit's branch (e2e241b); out once merged.
         "props/lev:",
         // Not loose in game: the name board hangs on the brick shell the
         // building code draws round the prop.
