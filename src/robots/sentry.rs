@@ -76,6 +76,8 @@ pub struct Sentry {
     pub report: f32,
     /// Its foot (the ground at the mast).
     pub foot: Vec3,
+    /// Rounds fired: with its foot, each round's scatter seed.
+    pub fired: u64,
 }
 
 /// One of a sentry's pieces that isn't on its head: the mast, the box, a
@@ -128,7 +130,47 @@ impl Plugin for SentryPlugin {
                     .after(super::perceive)
                     .before(PhysicsSystems::First),
             )
-            .add_systems(FixedUpdate, stage_scenario);
+            .add_systems(FixedUpdate, (place_sentries, stage_scenario));
+    }
+}
+
+/// How far behind its mast a marker's junction box stands when the map
+/// doesn't say.
+pub const POWER_BEHIND: f32 = 12.0;
+
+/// Where a `MarkerKind::Sentry` puts its machine: its arc's centre (the
+/// marker's `rot` is the way it faces, as a sign's board does) and its
+/// junction box.
+pub fn from_marker(m: &extraction_core::map::Marker) -> Option<(Vec2, f32, f32, Vec2)> {
+    let extraction_core::map::MarkerKind::Sentry { arc, power } = &m.kind else {
+        return None;
+    };
+    let at = Vec2::from(m.at);
+    let r = m.rot.to_radians();
+    let facing = Vec2::new(r.sin(), r.cos());
+    let power = power.map(Vec2::from).unwrap_or(at - facing * POWER_BEHIND);
+    Some((at, rules::wrap_deg(180.0 - m.rot), *arc, power))
+}
+
+/// The map's sentries, stood up once the Zone is in (with robots on).
+fn place_sentries(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    opts: Option<Res<crate::LaunchOptions>>,
+    mut done: Local<bool>,
+) {
+    let Some(zone) = zone else { return };
+    if *done {
+        return;
+    }
+    *done = true;
+    if !opts.is_some_and(|o| o.robots) {
+        return;
+    }
+    for m in &zone.map.markers {
+        if let Some((at, centre, arc, power)) = from_marker(m) {
+            spawn_sentry(&mut commands, &zone, at, centre, arc, power);
+        }
     }
 }
 
@@ -180,6 +222,7 @@ pub fn spawn_sentry(
                 powered: true,
                 report: 0.0,
                 foot,
+                fired: 0,
             },
             Senses {
                 sight: rules::SIGHT,
@@ -264,21 +307,32 @@ pub fn spawn_sentry(
         ),
     ));
     for (mid, len, rot) in cable_run(zone, foot, box_at) {
-        commands.spawn((
-            Name::new("Sentry cable"),
-            SentryPiece::Cable,
-            OfSentry(robot),
-            crate::interact::tools::cutters::Cuttable {
-                at: Vec3::ZERO,
-                radius: CABLE_REACH,
-            },
-            Transform::from_translation(mid).with_rotation(rot),
-            CableLength(len),
-            Visibility::default(),
-        ));
+        commands
+            .spawn((
+                Name::new("Sentry cable"),
+                SentryPiece::Cable,
+                OfSentry(robot),
+                Transform::from_translation(mid).with_rotation(rot),
+                CableLength(len),
+                Visibility::default(),
+            ))
+            .with_child((
+                // What the cutters' jaws find (a sensor: you walk over it);
+                // a cut takes this, and the stretch it was on goes dark.
+                Name::new("Sentry cable (cuttable)"),
+                CableCore,
+                crate::destruction::hooks::Cuttable { needs: 0.0 },
+                Collider::capsule(CABLE_REACH * 0.1, len),
+                Sensor,
+                Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            ));
     }
     robot
 }
+
+/// The cuttable core of a stretch of cable (its child).
+#[derive(Component, Debug)]
+pub struct CableCore;
 
 /// A stretch of cable's length (for its look).
 #[derive(Component, Debug, Clone, Copy)]
@@ -310,7 +364,8 @@ pub fn cable_run(zone: &Zone, from: Vec3, to: Vec3) -> Vec<(Vec3, f32, Quat)> {
 #[allow(clippy::too_many_arguments)]
 fn sentry_power(
     mut commands: Commands,
-    mut cuts: MessageReader<crate::interact::tools::cutters::Cut>,
+    mut cuts: MessageReader<crate::destruction::hooks::Cut>,
+    cores: Query<&ChildOf, With<CableCore>>,
     mut destroyed: MessageReader<super::PartDestroyed>,
     pieces: Query<(&SentryPiece, &OfSentry)>,
     mut sentries: Query<(Entity, &mut Sentry, &Robot, &Transform)>,
@@ -326,13 +381,15 @@ fn sentry_power(
     }
     let mut lost: Vec<Entity> = Vec::new();
     for c in cuts.read() {
-        if let Ok((SentryPiece::Cable, of)) = pieces.get(c.target) {
+        let Ok(stretch) = cores.get(c.target).map(|p| p.parent()) else {
+            continue;
+        };
+        if let Ok((SentryPiece::Cable, of)) = pieces.get(stretch) {
             lost.push(of.0);
-            // Cut through: it's two loose ends now, not a cable.
+            // Cut through: a gap in it, two loose ends.
             commands
-                .entity(c.target)
-                .remove::<crate::interact::tools::cutters::Cuttable>()
-                .insert(CableCut);
+                .entity(stretch)
+                .insert((CableCut, Visibility::Hidden));
         }
     }
     for d in destroyed.read() {
@@ -389,7 +446,6 @@ fn sentry_mind(
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
     time: Res<Time>,
-    mut seed: Local<u64>,
 ) {
     let dt = time.delta_secs();
     let heard: Vec<(Vec3, f32, Option<Entity>)> =
@@ -509,9 +565,10 @@ fn sentry_mind(
                 };
                 let muzzle = ggt.transform_point(Vec3::new(0.0, 0.0, -0.32));
                 let aim = p + Vec3::Y * 1.1;
-                *seed = seed
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
+                // Seeded by where it stands and how many it has fired, so
+                // it scatters the same whatever else is in the world.
+                s.fired += 1;
+                let seed = super::heavy::spot_seed(s.foot) ^ s.fired;
                 shots.write(Shot {
                     gun: e,
                     shooter: Some(e),
@@ -522,7 +579,7 @@ fn sentry_mind(
                     projectiles: 1,
                     spread: SPREAD,
                     recoil: 0.0,
-                    seed: *seed,
+                    seed,
                 });
                 out.write(SentryEvent {
                     sentry: e,
@@ -688,6 +745,27 @@ pub(crate) mod tests {
         (app, e)
     }
 
+    /// A map's marker: its arc faces along `rot` (the way a sign's board
+    /// does), and its box stands behind it unless the map says where.
+    #[test]
+    fn a_marker_faces_its_rot() {
+        let m: extraction_core::map::Marker =
+            ron::from_str("(kind: Sentry(), at: (10.0, 20.0), rot: 90.0)").unwrap();
+        let (at, centre, arc, power) = from_marker(&m).unwrap();
+        assert_eq!(at, Vec2::new(10.0, 20.0));
+        assert_eq!(arc, 220.0);
+        // Faces +X: the bearing toward +X.
+        assert!((centre - rules::bearing([10.0, 20.0], [11.0, 20.0])).abs() < 1e-3);
+        assert!((power - Vec2::new(10.0 - POWER_BEHIND, 20.0)).length() < 1e-3);
+        let m: extraction_core::map::Marker = ron::from_str(
+            "(kind: Sentry(arc: 160.0, power: Some((4.0, 5.0))), at: (0.0, 0.0), rot: 0.0)",
+        )
+        .unwrap();
+        let (_, centre, arc, power) = from_marker(&m).unwrap();
+        assert_eq!((arc, power), (160.0, Vec2::new(4.0, 5.0)));
+        assert!((rules::wrap_deg(centre - rules::bearing([0.0, 0.0], [0.0, 1.0]))).abs() < 1e-3);
+    }
+
     /// Unwatched, it sweeps its arc in its rhythm, its head on the mast,
     /// never turning into its blind sector.
     #[test]
@@ -740,17 +818,10 @@ pub(crate) mod tests {
         vr.stand(me, 0.0);
         if cut {
             vr.step(5);
-            let cable = vr
-                .app
-                .world_mut()
-                .query::<(Entity, &SentryPiece, &OfSentry)>()
-                .iter(vr.app.world())
-                .find(|(_, p, o)| matches!(p, SentryPiece::Cable) && o.0 == e)
-                .map(|(c, ..)| c)
-                .unwrap();
+            let cable = cable_core(&mut vr.app, e);
             vr.app
                 .world_mut()
-                .write_message(crate::interact::tools::cutters::Cut {
+                .write_message(crate::destruction::hooks::Cut {
                     target: cable,
                     by: vr.player,
                 });
@@ -764,6 +835,16 @@ pub(crate) mod tests {
         }
         let hurt = vr.app.world().resource::<Hurts>().0;
         (chirp.is_some(), fire.is_some(), hurt)
+    }
+
+    /// The cuttable core of one of `sentry`'s stretches of cable.
+    pub(crate) fn cable_core(app: &mut App, sentry: Entity) -> Entity {
+        app.world_mut()
+            .query::<(&SentryPiece, &OfSentry, &Children)>()
+            .iter(app.world())
+            .find(|(p, o, _)| matches!(p, SentryPiece::Cable) && o.0 == sentry)
+            .and_then(|(_, _, c)| c.iter().next())
+            .expect("a cable")
     }
 
     #[derive(Resource, Default)]
@@ -789,6 +870,49 @@ pub(crate) mod tests {
         let (chirp, fire, hurt) = stand_and_watch(false, false);
         assert!(chirp && fire, "chirp {chirp} fire {fire}");
         assert!(hurt > 0.0, "and hit");
+    }
+
+    /// Its scatter is seeded by the machine (where it stands, how many it
+    /// has fired), not by entity ids: with fifty unrelated things spawned
+    /// first, it throws the same rounds.
+    #[test]
+    fn its_scatter_is_its_own() {
+        #[derive(Resource, Default)]
+        struct Seeds(Vec<u64>);
+        fn seeds(mut shots: MessageReader<Shot>, mut out: ResMut<Seeds>) {
+            out.0.extend(shots.read().map(|s| s.seed));
+        }
+        let run = |pad: usize| {
+            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            vr.app.init_resource::<Seeds>().add_systems(Update, seeds);
+            for k in 0..pad {
+                vr.app.world_mut().spawn(Name::new(format!("pad {k}")));
+            }
+            let zone = vr.app.world().resource::<Zone>().clone();
+            {
+                let mut c = vr.app.world_mut().commands();
+                spawn_sentry(
+                    &mut c,
+                    &zone,
+                    Vec2::new(40.0, 230.0),
+                    0.0,
+                    160.0,
+                    Vec2::new(48.0, 236.0),
+                );
+                vr.app.world_mut().flush();
+            }
+            vr.stand(zone.on_ground(40.0, 216.0), 0.0);
+            vr.step(90 * 12);
+            std::mem::take(&mut vr.app.world_mut().resource_mut::<Seeds>().0)
+        };
+        let a = run(0);
+        assert!(a.len() >= 3, "it fired: {a:?}");
+        let b = run(50);
+        assert_eq!(a, b);
+        let mut u = a.clone();
+        u.sort();
+        u.dedup();
+        assert_eq!(u.len(), a.len(), "no two rounds alike");
     }
 
     #[test]
