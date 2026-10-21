@@ -352,16 +352,20 @@ mod tests {
         );
     }
 
-    /// Loose parts waiting on their owners (Models: world), by the start
-    /// of their line. Take one out when it's fixed.
+    /// Loose parts waiting on their owners, by the start of their line.
+    /// Take one out when it's fixed.
     const LOOSE_KNOWN: &[&str] = &[
+        // Fixed on Models: world's branch (03d21d8); out once merged.
         "props/brake_drum:",
         "props/fence_panel:",
         "props/hide_frame:",
-        "props/lev:",
         "props/sewing_machine:",
-        "props/signal_box:",
         "props/snowshoes:",
+        // The ankle gap, with Models: kit.
+        "props/lev:",
+        // Not loose in game: the name board hangs on the brick shell the
+        // building code draws round the prop.
+        "props/signal_box:",
     ];
 
     /// Prints every furniture group's fit (`-- --nocapture`), and holds
