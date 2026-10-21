@@ -937,7 +937,14 @@ fn run_tasks(
                 if bot.fired == 0 {
                     // The empty one out.
                     if in_well.is_some() {
-                        bot.buttons[0] = bot.elapsed < 0.15;
+                        // Pressed again each half second: a press the gun
+                        // missed (it was put away mid-press) isn't the end.
+                        bot.buttons[0] = bot.elapsed % 0.5 < 0.15;
+                        if bot.elapsed > 3.0 {
+                            bot.failed += 1;
+                            bot.note("FAIL the button didn't drop the magazine".into());
+                            bot.next();
+                        }
                         continue;
                     }
                     bot.buttons = [false; 3];

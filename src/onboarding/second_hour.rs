@@ -285,7 +285,20 @@ pub(super) fn direct(
             },
             First::LostYou => ("stay low a while", vec![]),
             // The torch on, and down at a walk (the bot doesn't run).
-            First::Underground => ("torch on, go slow", vec![Task::Use(Side::Left)]),
+            First::Underground => {
+                // One hand: a door on the way down may have put it away.
+                let mut t: Vec<Task> = run
+                    .torch
+                    .filter(|_| world.one_handed())
+                    .map(|(item, _)| Task::Grab {
+                        item,
+                        side: Side::Left,
+                    })
+                    .into_iter()
+                    .collect();
+                t.push(Task::Use(Side::Left));
+                ("torch on, go slow", t)
+            }
             // Away from it: it can't follow. Out of its sight, behind the
             // kiosk (in the open, it shot the bot walking off).
             First::Lamed => {
