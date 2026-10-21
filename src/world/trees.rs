@@ -932,18 +932,20 @@ struct TreeAssets {
     handles: std::collections::HashMap<(TreeSpecies, usize), VariantAssets>,
 }
 
-/// Foliage's alpha: a test by default; `EXTRACTION_A2C=1` turns it into
-/// alpha to coverage, which lets the 4x MSAA smooth the cards' cut edges
-/// (an alpha-tested edge crawls in a headset as the head moves). It's off
-/// until it's been timed on the headset machine: in the software
-/// renderer it cost the opaque pass 40-70% wherever foliage filled the
-/// view. Compare the session log's `gpu:` lines with and without it.
+/// Foliage's alpha: alpha to coverage, which lets MSAA smooth the cards'
+/// cut edges (an alpha-tested edge crawls in a headset as the head
+/// moves). It follows each view's samples by itself: with SMOOTHING off
+/// (`Comfort::msaa`), Bevy draws it as a plain test at the material's
+/// cut-off (0.5). `EXTRACTION_A2C=0` makes it a test at `cutoff` at any
+/// setting, to time against: in the software renderer coverage cost the
+/// opaque pass 40-70% wherever foliage filled the view; compare the
+/// session log's `gpu:` lines with and without it.
 pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
-    static A2C: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *A2C.get_or_init(|| std::env::var("EXTRACTION_A2C").is_ok_and(|v| v == "1")) {
-        AlphaMode::AlphaToCoverage
-    } else {
+    static MASK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *MASK.get_or_init(|| std::env::var("EXTRACTION_A2C").is_ok_and(|v| v == "0")) {
         AlphaMode::Mask(cutoff)
+    } else {
+        AlphaMode::AlphaToCoverage
     }
 }
 
