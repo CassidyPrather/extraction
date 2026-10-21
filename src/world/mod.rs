@@ -257,7 +257,7 @@ impl Plugin for WorldVisualsPlugin {
             storm::StormPlugin,
             snow::SnowVisualsPlugin,
         ))
-        .add_plugins((roadworks::RoadworksVisualsPlugin, cold::ColdVisualsPlugin));
+        .add_plugins(roadworks::RoadworksVisualsPlugin);
     }
 }
 

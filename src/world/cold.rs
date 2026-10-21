@@ -3,8 +3,8 @@
 //! Every player carries a [`Chill`]. Out in the open up high it rises, under
 //! a roof it falls, and a chilled body shivers: its stamina is capped (so
 //! sprints are short and, through the guns' tired sway, the aim shakes) and
-//! now and then the hands shiver. In the client your breath shows in the
-//! cold air. A valley without `cold` leaves everyone warm.
+//! now and then the hands shiver. (Your breath in the cold air is the
+//! snow's: `world::snow`.) A valley without `cold` leaves everyone warm.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -84,6 +84,7 @@ fn floor(zone: &Zone) -> f32 {
 fn chill(
     zone: Res<Zone>,
     conditions: Option<Res<Conditions>>,
+    snow: Option<Res<super::snow::Snow>>,
     time: Res<Time>,
     spatial: SpatialQuery,
     mut bodies: Query<(Entity, &GlobalTransform, &mut Chill), With<Player>>,
@@ -106,6 +107,11 @@ fn chill(
                     .cast_ray_predicate(head, Dir3::Y, ROOF_REACH, true, &filter, &|h| h != e)
                     .is_some();
         }
+        // Snow falling on you is the worst of it.
+        let weather = match &snow {
+            Some(s) if s.falling > 0.2 && s.above(head.y) > 0.5 => Weather::Snow,
+            _ => weather,
+        };
         let air = Air {
             cold: valley,
             height: head.y - HEAD - low,
@@ -150,123 +156,6 @@ fn shiver(
                     });
                 }
             }
-        }
-    }
-}
-
-// --- The client: breath in the cold air ------------------------------------
-
-/// Breath shows when the air bites at least this much.
-const BREATH_FROM: f32 = 0.05;
-/// A breath's life, seconds.
-const BREATH_LIFE: f32 = 1.6;
-
-pub struct ColdVisualsPlugin;
-
-impl Plugin for ColdVisualsPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, (breathe, drift_breath).chain());
-    }
-}
-
-#[derive(Component)]
-struct Breath {
-    age: f32,
-    drift: Vec3,
-}
-
-#[derive(Default)]
-struct BreathAssets {
-    mesh: Handle<Mesh>,
-    clock: f32,
-}
-
-fn breathe(
-    mut commands: Commands,
-    time: Res<Time>,
-    zone: Res<Zone>,
-    player: Query<(&Chill, &Body), With<LocalPlayer>>,
-    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut assets: Local<Option<BreathAssets>>,
-) {
-    if zone.map.cold <= 0.0 {
-        return;
-    }
-    let Ok((chill, body)) = player.single() else {
-        return;
-    };
-    let Some(cam) = cams.iter().next() else {
-        return;
-    };
-    // Cold air shows a breath even indoors (unheated); out of it, only
-    // where the air bites.
-    let air = chill
-        .bite
-        .max(0.06 * zone.map.cold * f32::from(chill.sheltered));
-    if air < BREATH_FROM {
-        return;
-    }
-    let a = assets.get_or_insert_with(|| BreathAssets {
-        mesh: meshes.add(Sphere::new(0.06).mesh().ico(2).unwrap()),
-        clock: 0.0,
-    });
-    // Out of breath you breathe faster.
-    let pace = 3.6 - 1.6 * (1.0 - body.stamina).clamp(0.0, 1.0);
-    a.clock += time.delta_secs();
-    if a.clock < pace {
-        return;
-    }
-    a.clock = 0.0;
-    let fwd = cam.forward().as_vec3();
-    let at = cam.translation() + fwd * 0.28 - Vec3::Y * 0.16;
-    let alpha = (0.05 + 0.12 * air.min(1.0)).min(0.16);
-    commands.spawn((
-        Name::new("Breath"),
-        Breath {
-            age: 0.0,
-            drift: fwd * 0.35 + Vec3::Y * 0.12,
-        },
-        Mesh3d(a.mesh.clone()),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.92, 0.94, 0.97, alpha),
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        })),
-        Transform::from_translation(at).with_scale(Vec3::splat(0.6)),
-        bevy::light::NotShadowCaster,
-        bevy::light::NotShadowReceiver,
-    ));
-}
-
-fn drift_breath(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut puffs: Query<(
-        Entity,
-        &mut Breath,
-        &mut Transform,
-        &MeshMaterial3d<StandardMaterial>,
-    )>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let dt = time.delta_secs();
-    for (e, mut b, mut t, mat) in &mut puffs {
-        b.age += dt;
-        if b.age >= BREATH_LIFE {
-            materials.remove(&mat.0);
-            commands.entity(e).despawn();
-            continue;
-        }
-        let k = b.age / BREATH_LIFE;
-        t.translation += b.drift * dt * (1.0 - k);
-        t.scale = Vec3::splat(0.6 + 2.4 * k);
-        if let Some(mut m) = materials.get_mut(&mat.0) {
-            let a = m.base_color.alpha();
-            m.base_color
-                .set_alpha(a * (1.0 - dt / (BREATH_LIFE - b.age + dt)));
         }
     }
 }
