@@ -42,8 +42,31 @@ use crate::robots::{JobKind, Noise};
 use crate::weapons::ballistics::Hit;
 use crate::world::{Layer, Zone};
 
+/// An anomaly's own dice (a snare's kicks), seeded from where it stands,
+/// so how many others there are, and what they roll, never changes its.
 #[derive(Component, Debug, Clone)]
-#[require(detector::Touched)]
+pub struct Dice(pub Rng);
+
+impl Default for Dice {
+    fn default() -> Self {
+        Self(Rng::new(0x5A4E))
+    }
+}
+
+/// Seeds an anomaly's dice from its spot.
+fn seed_dice(add: On<Add, Anomaly>, mut q: Query<(&Transform, &mut Dice)>) {
+    if let Ok((t, mut d)) = q.get_mut(add.entity) {
+        let p = t.translation;
+        d.0 = Rng::new(
+            0x5A4E
+                ^ u64::from(p.x.to_bits()).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                ^ u64::from(p.z.to_bits()).wrapping_mul(0xC2B2_AE3D_27D4_EB4F),
+        );
+    }
+}
+
+#[derive(Component, Debug, Clone)]
+#[require(detector::Touched, Dice)]
 pub struct Anomaly {
     pub kind: AnomalyKind,
     pub radius: f32,
@@ -169,6 +192,7 @@ impl Plugin for AnomalyPlugin {
             .init_resource::<surge::Agitation>()
             .init_resource::<hush::Hushes>()
             .add_observer(surge::remember_size)
+            .add_observer(seed_dice)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Attention::default());
             })
@@ -524,7 +548,10 @@ fn burners(
 /// Snares: discharge into everything in reach when anything touches them.
 #[allow(clippy::too_many_arguments)]
 fn snares(
-    mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
+    mut anomalies: Query<
+        (Entity, &mut Anomaly, &GlobalTransform, &mut Dice),
+        Without<surge::Forming>,
+    >,
     agitation: Res<surge::Agitation>,
     mut players: Query<(Entity, &GlobalTransform, &mut Health), With<Player>>,
     items: Query<(&GlobalTransform, &Item, Option<&crate::interact::Held>)>,
@@ -539,11 +566,10 @@ fn snares(
     mut hits: MessageWriter<Hit>,
     mut events: MessageWriter<AnomalyEvent>,
     mut noises: MessageWriter<Noise>,
-    mut rng: Local<Option<Rng>>,
 ) {
     let dt = time.delta_secs();
-    let rng = rng.get_or_insert_with(|| Rng::new(0x5A4E));
-    for (e, mut a, gt) in &mut anomalies {
+    for (e, mut a, gt, mut dice) in &mut anomalies {
+        let rng = &mut dice.0;
         if a.kind != AnomalyKind::Snare {
             continue;
         }
@@ -969,6 +995,34 @@ mod tests {
             }
         }
         assert!(fired, "the snare discharged into the item");
+    }
+
+    #[test]
+    fn another_snare_elsewhere_never_changes_how_this_one_kicks() {
+        // The same snare striking the same item, alone and with a second
+        // snare 40 m off striking its own on the same tick.
+        let kick = |other: bool| {
+            let mut app = app(false);
+            let (_, at, _) = find(&mut app, AnomalyKind::Snare);
+            if other {
+                let zone = app.world().resource::<Zone>().clone();
+                let far = zone.on_ground(at.x + 40.0, at.z);
+                spawn_anomaly(app.world_mut(), AnomalyKind::Snare, far, 1.5, None);
+                app.update();
+                drop_item(&mut app, "spare_parts", far + Vec3::Y * 1.5);
+            }
+            let item = drop_item(&mut app, "spare_parts", at + Vec3::Y * 1.5);
+            for _ in 0..60 {
+                app.update();
+            }
+            app.world().get::<Transform>(item).unwrap().translation
+        };
+        let alone = kick(false);
+        let with = kick(true);
+        assert!(
+            alone.distance(with) < 1e-4,
+            "kicked the same: {alone:?} vs {with:?}"
+        );
     }
 
     #[test]
