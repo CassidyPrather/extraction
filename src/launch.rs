@@ -90,6 +90,9 @@ pub struct LaunchOptions {
     /// Dev: from the truck's stop and every rendezvous, shoot each landmark
     /// in range with and without it, into this folder (`render::wayfind_shots`).
     pub wayfind: Option<PathBuf>,
+    /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
+    /// without it, into this folder (`render::wayfind_shots`).
+    pub afford: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -140,6 +143,7 @@ impl Default for LaunchOptions {
             tour_views: None,
             legibility: None,
             wayfind: None,
+            afford: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -176,6 +180,7 @@ impl LaunchOptions {
             || self.tour.is_some()
             || self.legibility.is_some()
             || self.wayfind.is_some()
+            || self.afford.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -267,6 +272,13 @@ impl LaunchOptions {
                 }
                 "--legibility" => {
                     o.legibility = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--afford" => {
+                    o.afford = Some(val().into());
                     o.robots = false;
                     o.flat = true;
                     o.camera
