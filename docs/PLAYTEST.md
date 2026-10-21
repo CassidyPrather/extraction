@@ -391,6 +391,14 @@ said you don't use?
   notices. Bring the AK's iron sights to your cheek: do they line up
   without fiddling? Does the front post going soft read as your eye
   focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
+- Gun handling.
+  - Cup the PM or the Nagant under the grip with your other palm: does it
+    steady the shot without pulling your aim?
+  - Hold an AK out at arm's length, then tucked in: does the weight tell?
+  - Take your rifle off your sling and let go of it in front of you:
+    does the sling catch it?
+  - Walk through a doorway with it raised: do the knocks feel and sound
+    right, and never too often?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
