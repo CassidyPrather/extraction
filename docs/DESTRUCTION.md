@@ -135,8 +135,10 @@ on the floor (or the ground) on the side the glass fell (`Break::fell`;
 a restored pane's fell in), a few millimetres proud: what tells a window
 was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass
 and the window glass boxes to the panes (`glass::window_glass`,
-`glass::drawn_by_panes`). Flying pieces are their own small slabs (on a
-child entity, so shrinking one never touches its body).
+`glass::drawn_by_panes`). Flying pieces share eight unit shard shapes,
+each stretched to its piece's size, and one material a kind (glass, or
+the wood's), so a cap's worth of pieces batches into a few draws; the
+mesh is on a child entity, so shrinking it never touches the body.
 
 ## What stays broken
 
