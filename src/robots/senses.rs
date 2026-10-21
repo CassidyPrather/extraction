@@ -360,7 +360,7 @@ pub(crate) fn perceive(
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes): (
+    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints): (
         Res<Lighting>,
         Query<&crate::world::buildings::Door>,
         Res<crate::gadgets::Cloaks>,
@@ -368,6 +368,7 @@ pub(crate) fn perceive(
         Res<Zone>,
         Res<super::doors::Entrances>,
         Option<Res<crate::anomaly::hush::Hushes>>,
+        Option<Res<crate::weapons::optics::Glints>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
@@ -568,6 +569,11 @@ pub(crate) fn perceive(
                     if beam.angle_between(back) < TORCH_CONE && dist < TORCH_REACH {
                         e = e.max(TORCH_GLARE * (1.0 - dist / TORCH_REACH).max(0.25));
                     }
+                }
+                // A scope pointed this way into a low sun flashes in its
+                // eyes (`weapons::optics`).
+                if let Some(g) = &glints {
+                    e = e.max(g.seen_by(t.e, eye));
                 }
                 if e < GLIMPSE {
                     continue;
