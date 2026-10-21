@@ -165,18 +165,18 @@
         // Along under the summit to the observatory's saddle.
         (
             name: "Saddle track", kind: Dirt, width: 3.5, smoothing: 40.0,
-            points: [(5.0, -200.0), (-30.0, -235.0), (-70.0, -258.0), (-115.0, -264.0)],
+            points: [(5.0, -200.0), (-30.0, -235.0), (-70.0, -258.0), (-126.0, -264.0)],
         ),
         // The observatory path, up from the saddle.
         (
             name: "Observatory path", kind: Path, width: 1.8, shoulder: 1.5, smoothing: 50.0,
-            points: [(-115.0, -264.0), (-150.0, -262.0), (-185.0, -250.0), (-204.0, -226.0)],
+            points: [(-126.0, -264.0), (-150.0, -262.0), (-185.0, -250.0), (-204.0, -226.0)],
         ),
         // The old miners' path: straight up the west side from the
         // switchbacks' top over the upper slopes to the saddle.
         (
             name: "Miners' path", kind: Path, width: 1.8, shoulder: 1.5, smoothing: 45.0,
-            points: [(-150.0, 68.0), (-150.0, 0.0), (-130.0, -80.0), (-110.0, -150.0), (-104.0, -170.0), (-105.0, -215.0), (-115.0, -264.0)],
+            points: [(-150.0, 68.0), (-150.0, 0.0), (-130.0, -80.0), (-110.0, -150.0), (-104.0, -170.0), (-102.0, -215.0), (-96.0, -257.0)],
         ),
         // The machines' track from the cirque down to the tarn and the
         // upper slopes.
