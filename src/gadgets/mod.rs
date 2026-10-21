@@ -139,9 +139,15 @@ fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
         "mosin" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.112, -0.1))),
         // Over the receiver cover, clear of the rear sight.
         "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1, -0.08))),
+        // The RPK's is the AK's; the SVD's scope sits over the bore off
+        // the rail on its left; the TOZ-8's receiver has a dovetail.
+        "rpk74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
+        "svd" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.1))),
+        "toz8" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.085, -0.11))),
         _ => {}
     }
-    if id != "toz_double" {
+    // Shotguns and the flare gun have no threaded muzzle.
+    if !matches!(id, "toz_double" | "mp133" | "flare_pistol") {
         v.push((Mount::Muzzle, Transform::from_translation(muzzle)));
     }
     v

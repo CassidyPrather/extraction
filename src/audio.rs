@@ -809,6 +809,9 @@ fn shot_set(item: &str) -> &'static str {
         "ak74" => "guns/rifle_shot",
         "mosin" => "guns/bolt_rifle_shot",
         "toz_double" => "guns/shotgun_shot",
+        "mp133" => "guns/shotgun_shot",
+        "svd" => "guns/bolt_rifle_shot",
+        "toz8" | "flare_pistol" => "guns/pistol_shot",
         _ => "guns/rifle_shot",
     }
 }
@@ -821,6 +824,7 @@ fn gun_sounds(
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     guns: Query<&crate::weapons::Gun>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     let ear = listener
         .iter()
@@ -833,7 +837,9 @@ fn gun_sounds(
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
-                let quiet = suppressed.contains(ev.gun);
+                // (A .22's crack is as small as a suppressed rifle's.)
+                let quiet =
+                    suppressed.contains(ev.gun) || reports.get(ev.gun).is_ok_and(|r| r.0 < 0.6);
                 if quiet && !far {
                     // A suppressor: a cough, the crack's highs and boom gone.
                     if let Some(sample) = bank.pick(shot_set(&ev.item), &mut rng.0) {
@@ -867,7 +873,7 @@ fn gun_sounds(
             (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
             (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
             (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
-            (FireEvent::RoundLoaded, Some(BreakAction)) => {
+            (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
                 ("guns/shell_insert", "gun.shell_insert", 0.0)
             }
             (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip", 0.0),

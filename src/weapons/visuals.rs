@@ -48,6 +48,7 @@ impl Plugin for GunVisualsPlugin {
                 super::grenades::explosion_fx,
                 super::zero::aim_lenses,
                 super::zero::turn_drums,
+                super::flares::flare_visuals,
             ),
         )
         .add_plugins((
@@ -116,6 +117,7 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("gate", Moves::Gate),
         ("ejector", Moves::Rod),
         ("bayonet", Moves::Bayonet),
+        ("bipod", Moves::Bipod),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -267,11 +269,12 @@ fn animate_parts(
         Option<&super::melee::Bayonet>,
         Option<&super::sling::SlingSwing>,
         &Item,
+        Option<&super::armoury::Bipod>,
     )>,
     mut parts: Query<(&GunPart, &mut Transform)>,
     catalog: Res<Catalog>,
 ) {
-    for (gun, children, handling, bayonet, swing, item) in &guns {
+    for (gun, children, handling, bayonet, swing, item, bipod) in &guns {
         // A slung gun's parts swing on its strap, about the rear swivel.
         let swung = swing
             .filter(|s| s.angle != Vec2::ZERO)
@@ -320,6 +323,14 @@ fn animate_parts(
                     if folding && bayonet.is_some_and(|b| b.fixed) {
                         r.rotation = Quat::from_rotation_x(std::f32::consts::PI) * r.rotation;
                     }
+                    r
+                }
+                Moves::Bipod => {
+                    // About its pivot (the model's origin), down and forward.
+                    let mut r = part.rest;
+                    let swing = bipod.map_or(0.0, |b| b.swing);
+                    r.rotation =
+                        Quat::from_rotation_x(super::armoury::BIPOD_DEPLOY * swing) * r.rotation;
                     r
                 }
                 Moves::Rod => {
