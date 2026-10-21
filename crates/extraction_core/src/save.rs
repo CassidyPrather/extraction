@@ -358,6 +358,17 @@ fn sanitize_shared(
     }
 }
 
+/// The version a career file says it was written by, read without
+/// reading the rest (which a newer build may have laid out differently).
+pub fn career_version(text: &str) -> Option<u32> {
+    #[derive(Deserialize)]
+    #[serde(rename = "Career")]
+    struct Peek {
+        version: u32,
+    }
+    ron::from_str::<Peek>(text).ok().map(|p| p.version)
+}
+
 impl Career {
     /// A career built around one game's save (a new career, or an old
     /// one-file-per-map save being brought in).
@@ -825,6 +836,19 @@ mod tests {
         assert_eq!(back.stash[0].charge_wh, -1.0, "the kind's default charge");
         assert_eq!(back.stats.raids, MAX_COUNT);
         assert!(floats(&back).iter().all(|v| v.is_finite()));
+    }
+
+    /// A newer build's career is known for one even when this build can't
+    /// read the rest of it (a field or a kind of thing it's never heard of).
+    #[test]
+    fn a_newer_career_is_known_by_its_version() {
+        let mut c = rich_career();
+        c.version = SAVE_VERSION + 3;
+        let text = c.to_ron().unwrap().replace("stash:", "stash_v9: Shiny(1), stash:");
+        assert!(Career::from_ron(&text).is_err());
+        assert_eq!(career_version(&text), Some(SAVE_VERSION + 3));
+        assert_eq!(career_version(&rich_career().to_ron().unwrap()), Some(SAVE_VERSION));
+        assert_eq!(career_version("garbage"), None);
     }
 
     #[test]
