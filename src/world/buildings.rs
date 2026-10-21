@@ -4547,32 +4547,41 @@ fn radio_mast(b: &mut Builder) {
 /// A dead bus standing on its wheels (one gone, that corner on a block):
 /// body, a band of dark windows, roof, bumpers, wheel arches, a door.
 /// A car left where it stopped (`art/vehicles/wrecks.py`, Kit's): its
-/// shell drawn and collided as one box, every door, bonnet, boot and
+/// shell drawn, and collided as a few boxes that follow it, every door, bonnet, boot and
 /// wheel its own breakable (`destruction::strip::car_parts`), in the
 /// model's own space (the ground under the wheelbase's middle, its front
 /// to -Z).
 fn car_wreck(b: &mut Builder, model: &'static str) {
-    let Some((centre, size)) = crate::destruction::strip::car_body(model) else {
+    let body = crate::destruction::strip::car_body(model);
+    if body.is_empty() {
         return;
-    };
+    }
     let from = b.geo.pieces.len();
-    b.piece(
-        Shape::Box(size),
-        Transform::from_translation(centre),
-        Mat::RustyMetal,
-        true,
-    );
-    // What the shell stands on with its wheels gone: the floor pan's
-    // middle down to the ground, inside the track and between the axles
-    // (so it never touches a wheel), hidden under the body.
-    let pan = centre.y - size.y * 0.5;
-    if pan > 0.0 {
+    // (Boxes that follow the body, clear of its parts: Destruction's.)
+    for &(centre, size) in &body {
         b.piece(
-            Shape::Box(Vec3::new(size.x * 0.4, pan, size.z * 0.44)),
-            Transform::from_xyz(centre.x, pan * 0.5, centre.z),
+            Shape::Box(size),
+            Transform::from_translation(centre),
             Mat::RustyMetal,
             true,
         );
+    }
+    // What the shell stands on with its wheels gone: the lowest box's
+    // middle down to the ground, inside the track and between the axles
+    // (so it never touches a wheel), hidden under the body.
+    if let Some(&(centre, size)) = body
+        .iter()
+        .min_by(|a, c| (a.0.y - a.1.y * 0.5).total_cmp(&(c.0.y - c.1.y * 0.5)))
+    {
+        let pan = centre.y - size.y * 0.5;
+        if pan > 0.0 {
+            b.piece(
+                Shape::Box(Vec3::new(size.x * 0.6, pan, size.z * 0.44)),
+                Transform::from_xyz(centre.x, pan * 0.5, centre.z),
+                Mat::RustyMetal,
+                true,
+            );
+        }
     }
     let to = b.geo.pieces.len();
     let body: &'static str = match model {
@@ -5290,9 +5299,13 @@ pub struct BuildingLoot(pub Vec<LootSpot>);
 pub fn placement_transform(zone: &Zone, p: &extraction_core::map::Placement) -> Transform {
     // Where the terrain was settled for it (the lowest corner of a rough
     // footprint, lifted as far as its foundation allows).
-    // Rolling stock pitches to follow the grade under its bogies.
+    // Rolling stock pitches to follow the grade under its bogies; a wreck
+    // pitches and rolls to the ground under its four wheels.
     let pitch = zone.hm.pitch(&p.prefab, p.at, p.rot);
-    let rot = Quat::from_rotation_y(-p.rot.to_radians()) * Quat::from_rotation_x(-pitch);
+    let roll = zone.hm.roll(&p.prefab, p.at, p.rot);
+    let rot = Quat::from_rotation_y(-p.rot.to_radians())
+        * Quat::from_rotation_x(-pitch)
+        * Quat::from_rotation_z(roll);
     let y = zone.hm.footing(&p.prefab, p.at, p.rot);
     let y = if p.absolute { p.y } else { y + p.y };
     Transform::from_xyz(p.at[0], y, p.at[1]).with_rotation(rot)
@@ -6125,7 +6138,8 @@ pub fn dress_buildings(
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;
             let gseed = super::overgrowth::seed(at, &b.prefab);
-            let mut growth = super::overgrowth::grow(&geo, &occluders, gseed, north);
+            let mut growth =
+                super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
             // Saplings through a ruin's floor, bushes at the walls' feet.
             let ruin = extraction_core::map::prefab_base(&b.prefab) != b.prefab;
             let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);
