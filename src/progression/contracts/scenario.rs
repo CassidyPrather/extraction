@@ -15,6 +15,7 @@
 //!   `contract_the_overflow`: `--map marrow_creek`
 //! - `contract_hajek_tin`: `--map kettle_pass`
 //! - `contract_walker_portrait`, `contract_the_heavy`: `--map cinder_works`
+//! - `contract_scour_key`: `--map sallow_reservoir`
 //!
 //! Shortcuts:
 //! - The career is set at the start so the contract is the one the driver
@@ -58,6 +59,7 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_hajek_tin", "hajek_tin"),
     ("contract_walker_portrait", "walker_portrait"),
     ("contract_the_overflow", "the_overflow"),
+    ("contract_scour_key", "scour_key"),
     ("contract_the_heavy", "the_heavy"),
 ];
 
@@ -632,29 +634,70 @@ pub fn direct(
                         return;
                     };
                     bot.log.push(format!("{item} lies at {:.0?}", p));
-                    // Indoors: up to its door, open it, and in.
-                    let door = scene.entrances.building_at(p).and_then(|b| {
-                        scene
-                            .entrances
-                            .doors
+                    // Indoors: up to its door, open it, and in (and through
+                    // an inner door, if the room it's in has one nearer).
+                    let building = scene.entrances.building_at(p);
+                    let shell = building
+                        .and_then(|b| scene.entrances.shells.iter().find(|s| s.building == b));
+                    let doors: Vec<_> = scene
+                        .entrances
+                        .doors
+                        .iter()
+                        .filter(|d| Some(d.building) == building)
+                        .collect();
+                    // In the shell's walls, or a wall within it.
+                    let outer = |d: &&crate::robots::doors::Entrance| {
+                        shell.is_some_and(|s| {
+                            let l = s.xf.compute_affine().inverse().transform_point3(d.mid);
+                            l.x.abs() > s.half.x - 0.6 || l.z.abs() > s.half.y - 0.6
+                        })
+                    };
+                    let nearest = |want_outer: bool| {
+                        doors
                             .iter()
-                            .filter(|d| d.building == b)
+                            .filter(|d| outer(d) == want_outer)
                             .min_by(|a, b| a.mid.distance(p).total_cmp(&b.mid.distance(p)))
+                            .copied()
+                    };
+                    let front_door = nearest(true);
+                    let inner = nearest(false).filter(|i| {
+                        front_door.is_some_and(|f| i.mid.distance(p) < f.mid.distance(p))
                     });
-                    match door {
+                    match front_door {
                         Some(d) => {
                             let out = d.out.xz().normalize_or(Vec2::Y);
                             let front = d.mid.xz() + out * 1.3;
                             let short = d.mid.xz() + out * SHORT;
+                            let inside = d.mid.xz() - out * 1.5;
                             t.push(Task::Teleport(Vec3::new(short.x, 0.0, short.y)));
                             t.extend(legs(short, front, 0.4));
                             t.extend([
                                 Task::OpenDoor(d.door),
                                 Task::WalkTo {
-                                    to: d.mid.xz() - out * 1.5,
+                                    to: inside,
                                     within: 0.5,
                                 },
                             ]);
+                            if let Some(i) = inner {
+                                // From this side of it to the other.
+                                let n = i.out.xz().normalize_or(Vec2::Y);
+                                let k = if (inside - i.mid.xz()).dot(n) > 0.0 {
+                                    1.0
+                                } else {
+                                    -1.0
+                                };
+                                t.extend([
+                                    Task::WalkTo {
+                                        to: i.mid.xz() + n * k * 1.3,
+                                        within: 0.4,
+                                    },
+                                    Task::OpenDoor(i.door),
+                                    Task::WalkTo {
+                                        to: i.mid.xz() - n * k * 1.3,
+                                        within: 0.5,
+                                    },
+                                ]);
+                            }
                         }
                         None => t.extend(approach(p.xz(), 1.0)),
                     }

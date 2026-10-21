@@ -80,6 +80,7 @@ pub const OPT_IN: &[&str] = &[
     CONTRACTS[3].0,
     CONTRACTS[4].0,
     CONTRACTS[5].0,
+    CONTRACTS[6].0,
 ];
 
 /// Targets sit north of the insertion point at these distances.
