@@ -4,10 +4,11 @@
 //! (`Rule::Mines`, see `docs/MAP_DESIGN.md`, "Mines").
 //!
 //! The game sends it out from the robots' Gate once a raid to the points
-//! of interest nearest the insertion: `Poi` markers on walkable ground,
-//! nearest first, the very nearest skipped, the next [`FIELDS`]. At each
-//! it lays [`minelayer::site_field`] across the way it came (the last
-//! step of its walk there), from a hopper of [`minelayer::HOPPER`].
+//! of interest nearest the insertion: `Poi` markers nearest first, the
+//! very nearest skipped, each laid out in front of where there's room
+//! ([`minelayer::site_spot`], the straight way in from the Gate), the
+//! first [`minelayer::FIELDS`] whose site is walkable. At each it lays
+//! [`minelayer::site_field`], from a hopper of [`minelayer::HOPPER`].
 //!
 //! A field is a find, not a trap: no mine on a main route
 //! ([`ON_ROUTE`] of the walk a player would take, between its samples),
@@ -21,9 +22,6 @@ use crate::minelayer;
 use crate::nav::NavGrid;
 use crate::terrain::Heightmap;
 
-/// Fields a minelayer lays a raid (the game's `robots::minelayer::FIELDS`;
-/// keep the two the same).
-pub const FIELDS: usize = 2;
 /// A mine this near a main route's line is on it: its plate and a boot.
 pub const ON_ROUTE: f32 = minelayer::PLATE + 0.5;
 
@@ -54,30 +52,28 @@ pub fn fields(map: &MapDef, hm: &Heightmap, walk: &NavGrid) -> Vec<MineField> {
         .map_or([0.0, 0.0], |m| m.at);
     let mut pois: Vec<(&str, P2)> = map
         .markers_of(&MarkerKind::Poi)
-        .filter(|m| walk.walkable(m.at))
         .map(|m| (m.name.as_str(), m.at))
         .collect();
     pois.sort_by(|a, b| dist(a.1, ins).total_cmp(&dist(b.1, ins)));
-    let mut here = gate;
+    let sites: Vec<(&str, P2, P2)> = pois
+        .into_iter()
+        .skip(1)
+        .filter_map(|(name, p)| {
+            let along = [p[0] - gate[0], p[1] - gate[1]];
+            minelayer::site_spot(map, hm, p, along).map(|s| (name, s, along))
+        })
+        .filter(|(_, s, _)| walk.walkable(*s))
+        .take(minelayer::FIELDS)
+        .collect();
     let mut hopper = minelayer::HOPPER as usize;
     let mut out = Vec::new();
-    for (name, site) in pois.into_iter().skip(1).take(FIELDS) {
+    for (name, site, along) in sites {
         if hopper == 0 {
             break;
         }
-        let path = walk.path(here, site).unwrap_or_else(|| vec![site]);
-        let along = match path.len() {
-            0 | 1 => [site[0] - here[0], site[1] - here[1]],
-            n => [
-                path[n - 1][0] - path[n - 2][0],
-                path[n - 1][1] - path[n - 2][1],
-            ],
-        };
         let mines = minelayer::site_field(map, hm, site, along);
         let laid = mines.len().min(hopper);
         hopper -= laid;
-        // It drives on from over the last one it laid.
-        here = mines[..laid].last().copied().unwrap_or(site);
         out.push(MineField {
             name: name.to_string(),
             site,
@@ -182,8 +178,10 @@ mod tests {
         let hm = Heightmap::build(&map);
         let walk = crate::map_nav::zone_grid(&map, &hm, crate::map_nav::MAX_SLOPE);
         let fs = fields(&map, &hm, &walk);
-        // Only two of its points of interest stand on open ground: one field.
-        assert_eq!(fs.len(), 1, "{fs:?}");
+        // Laid in front of its points of interest where there's room: both
+        // fields, and the first whole.
+        assert_eq!(fs.len(), minelayer::FIELDS, "{fs:?}");
+        assert_eq!(fs[0].mines.len(), minelayer::PER_FIELD as usize, "{fs:?}");
         // A route straight through the first field's middle mine.
         let m = fs[0].mines[fs[0].mines.len() / 2];
         let route = vec![[m[0] - 20.0, m[1] + 0.7], [m[0] + 20.0, m[1] + 0.7]];
