@@ -476,6 +476,36 @@ can mend nothing. *Salvage:* as a drone, and a kit of spare parts.
 Scenario `mender_weld` (shoot it off a hurt pylon);
 `mender_control` lets it weld the pylon whole.
 
+### The plough: Rime Fell's snow machine
+
+A machine that only makes sense in snow (`robots/plough.rs`, its rules
+`extraction_core::plough`): a tracked rotary snow-blower that keeps
+Rime Fell's Pass road open for the Custodian's convoys. It runs the road
+up from its shed and back, on a beat (about 10 minutes), only while snow
+lies; it never leaves the road and carries no gun.
+
+- **The tell.** Its amber beacon, its auger's roar, and a plume of snow
+  arcing out of its chute that you see across the valley. Anyone in its
+  lane ahead gets its horn about 8 s before it arrives: it doesn't stop.
+- **The lane.** Behind it the road is packed and clean (`Lanes`): it
+  takes no prints while it's fresh (25 min dry, 6 in a blizzard), so it's
+  the one way through the snow the print-reading machines can't follow,
+  and it's in full view, and the plough comes back.
+- **The bank.** What lies in its way, loot and all, goes out of its chute
+  into a bank on the downhill side, buried. A hand held in the bank
+  (1.2 s) digs it out.
+- **The weakness.** Anything of 1.5 kg or more (a crowbar, a rifle, a
+  fuel can) in its auger jams it for 30 s: the engine hatch springs and
+  its power cell rides up out of its well, to be shot. Its body shrugs
+  off rounds. An EMP stalls it.
+- **The salvage.** Its fuel, its auger's scrap, a servo.
+
+Checks: the rules' tests (its beat, the horn's lead, the lane, the
+bank side); the body's (the horn then the auger, a tin buried and dug
+out by a hand, a crowbar's jam); `plough_jam` (a tin buried, a crowbar
+laid in its lane jams it, the bot shoots the cell); `--gallery
+plough[:after]` and `docs/shots/plough/` (before and after it passes).
+
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover

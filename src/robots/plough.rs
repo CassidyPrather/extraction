@@ -304,6 +304,8 @@ fn plough_drive(
                 p.banked = s;
                 let side = bank_dir(&zone, ground, dir);
                 let b = ground + side * rules::BANK_OUT;
+                // (Not at a junction or a hut's door, nor in a gallery.)
+                let bank_here = rules::bank_ok(&zone.map, [b.x, b.z]);
                 // The packed lane it leaves (a strip over the snow).
                 commands.spawn((
                     Name::new("Plough lane"),
@@ -316,17 +318,19 @@ fn plough_drive(
                     ),
                     Visibility::default(),
                 ));
-                commands.spawn((
-                    Name::new("Plough bank"),
-                    BankPiece,
-                    OfPlough(e),
-                    Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(
-                        Quat::from_rotation_y(
-                            -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
+                if bank_here {
+                    commands.spawn((
+                        Name::new("Plough bank"),
+                        BankPiece,
+                        OfPlough(e),
+                        Transform::from_translation(zone.on_ground(b.x, b.z)).with_rotation(
+                            Quat::from_rotation_y(
+                                -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
+                            ),
                         ),
-                    ),
-                    Visibility::default(),
-                ));
+                        Visibility::default(),
+                    ));
+                }
             }
         }
     }
@@ -593,7 +597,7 @@ fn plough_wreck(
 
 /// The map's plough, in its shed, once the Zone is in (robots on): one
 /// on the valley's road named [`ROAD`], in a valley where snow lies.
-pub const ROAD: &str = "Pass road";
+pub const ROAD: &str = rules::ROAD;
 
 fn place_ploughs(
     mut commands: Commands,
@@ -609,8 +613,8 @@ fn place_ploughs(
     if !opts.is_some_and(|o| o.robots) || zone.map.snow <= 0.0 {
         return;
     }
-    if let Some(r) = zone.map.roads.iter().find(|r| r.name == ROAD) {
-        spawn_plough(&mut commands, &zone, r.points.clone());
+    if let Some(beat) = rules::beat(&zone.map) {
+        spawn_plough(&mut commands, &zone, beat);
     }
 }
 
@@ -716,3 +720,130 @@ fn stage_scenario(
 /// steps back to.
 pub const LAY_PLACEHOLDER: Vec2 = Vec2::new(-6e6, -6e6);
 pub const BACK_PLACEHOLDER: Vec2 = Vec2::new(-7e6, -7e6);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Resource, Default)]
+    struct Acts(Vec<PloughAct>, f32);
+
+    fn collect(
+        mut ev: MessageReader<PloughEvent>,
+        mut acts: ResMut<Acts>,
+        mut hurt: MessageReader<crate::health::Hurt>,
+    ) {
+        acts.0.extend(ev.read().map(|e| e.what));
+        acts.1 += hurt.read().map(|h| h.amount).sum::<f32>();
+    }
+
+    /// A plough on a straight road from `a` toward `b` (x/z), running
+    /// whatever the snow.
+    fn world(a: Vec2, b: Vec2) -> (crate::vr_harness::Vr, Zone, Entity) {
+        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        vr.app.init_resource::<Acts>().add_systems(Update, collect);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let e = {
+            let mut c = vr.app.world_mut().commands();
+            let e = spawn_plough(&mut c, &zone, vec![a.to_array(), b.to_array()]);
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.app.world_mut().get_mut::<Plough>(e).unwrap().needs_snow = false;
+        (vr, zone, e)
+    }
+
+    fn drop_item(vr: &mut crate::vr_harness::Vr, zone: &Zone, id: &str, at: Vec2) -> Entity {
+        vr.spawn(
+            id,
+            Transform::from_translation(zone.on_ground(at.x, at.y) + Vec3::Y * 0.1),
+        )
+    }
+
+    /// Standing in its lane: the horn sounds well before it gets there.
+    /// Step aside and it passes; stay, and the auger has you.
+    #[test]
+    fn it_horns_then_its_auger_has_you() {
+        let (mut vr, zone, _) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(40.0, 238.0), 0.0);
+        let mut first_horn = None;
+        for k in 0..(90 * 14) {
+            vr.step(1);
+            let acts = &vr.app.world().resource::<Acts>().0;
+            if first_horn.is_none() && acts.contains(&PloughAct::Horn) {
+                first_horn = Some(k);
+            }
+            if acts.contains(&PloughAct::Caught) {
+                let horn = first_horn.expect("a horn first");
+                let lead = (k - horn) as f32 / 90.0;
+                assert!(lead > 4.0, "{lead:.1} s from the horn to the auger");
+                vr.step(90);
+                assert!(vr.app.world().resource::<Acts>().1 > 0.0, "and it hurt");
+                return;
+            }
+        }
+        panic!("it never reached you");
+    }
+
+    /// A tin in its way goes in the bank, out of sight; a hand held in the
+    /// bank digs it out.
+    #[test]
+    fn what_it_ploughs_goes_in_the_bank_and_digs_out() {
+        use crate::rig::Side;
+        let (mut vr, zone, _) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(60.0, 250.0), 0.0);
+        let tin = drop_item(&mut vr, &zone, "canned_stew", Vec2::new(40.0, 248.0));
+        vr.step(90 * 8);
+        let buried = *vr.app.world().get::<Transform>(tin).unwrap();
+        assert!(vr.app.world().get::<Buried>(tin).is_some(), "buried");
+        assert_eq!(
+            vr.app.world().get::<Visibility>(tin),
+            Some(&Visibility::Hidden)
+        );
+        let off = Vec2::new(buried.translation.x - 40.0, 0.0).length();
+        assert!(off > 3.0, "beside the road, in the bank: {off:.1} m out");
+        // Dig.
+        let at = buried.translation + Vec3::Y * 0.3;
+        vr.stand(zone.on_ground(at.x + 0.5, at.z), 0.0);
+        vr.hand(Side::Left, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step((90.0 * (rules::DIG + 0.5)) as usize);
+        assert!(vr.app.world().get::<Buried>(tin).is_none(), "dug out");
+        assert!(
+            vr.app
+                .world()
+                .resource::<Acts>()
+                .0
+                .contains(&PloughAct::Dug)
+        );
+    }
+
+    /// A crowbar in its way jams it: it stops, the cell comes up to be
+    /// shot; after the jam clears it goes on.
+    #[test]
+    fn a_crowbar_jams_it() {
+        let (mut vr, zone, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(60.0, 250.0), 0.0);
+        drop_item(&mut vr, &zone, "crowbar", Vec2::new(40.0, 250.0));
+        vr.step(90 * 6);
+        let p = vr.app.world().get::<Plough>(e).unwrap();
+        assert!(p.jammed > 0.0, "jammed");
+        let at = vr.app.world().get::<Transform>(e).unwrap().translation;
+        vr.step(90 * 3);
+        let still = vr.app.world().get::<Transform>(e).unwrap().translation;
+        assert!(at.distance(still) < 0.05, "it stopped");
+        let cell = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &Transform), With<PloughCell>>()
+            .iter(vr.app.world())
+            .next()
+            .map(|(c, t)| (c, t.translation))
+            .unwrap();
+        assert!(cell.1.y > CELL.y + 0.3, "the cell's up");
+        assert!(vr.app.world().get::<ColliderDisabled>(cell.0).is_none());
+        vr.step((90.0 * rules::JAM_TIME) as usize);
+        let on = vr.app.world().get::<Transform>(e).unwrap().translation;
+        assert!(on.distance(still) > 1.0, "the jam cleared and it went on");
+        assert!(vr.app.world().get::<ColliderDisabled>(cell.0).is_some());
+    }
+}
