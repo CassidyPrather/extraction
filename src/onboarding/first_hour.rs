@@ -433,7 +433,7 @@ pub(super) fn direct_raid(
     while state.failed_seen < bot.log.len() {
         let line = bot.log[state.failed_seen].clone();
         state.failed_seen += 1;
-        if line.contains("FAIL") {
+        if line.trim_start().starts_with("FAIL") && !state.reported {
             state.note(now, Kind::Stuck, line.trim().to_string());
         }
     }
