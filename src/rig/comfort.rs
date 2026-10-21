@@ -120,7 +120,10 @@ impl Comfort {
     /// a laptop GPU (the playtest's Bigscreen Beyond 2 asked for 2980 and
     /// ran at 20-30 fps).
     pub const AUTO_EYE_PX: f32 = 1800.0;
-    pub const RENDER_SCALES: [f32; 6] = [0.0, 0.5, 0.6, 0.7, 0.85, 1.0];
+    /// The SHARPNESS card's steps (0 is auto). None below 60%: at 50% a
+    /// Beyond 2's text loses a quarter of its pixels and drops under the
+    /// legibility floor (`docs/LEGIBILITY.md`).
+    pub const RENDER_SCALES: [f32; 5] = [0.0, 0.6, 0.7, 0.85, 1.0];
 
     /// The share of the runtime's `recommended` width to render.
     pub fn render_scale_for(&self, recommended: u32) -> f32 {
@@ -316,6 +319,6 @@ mod tests {
         assert!((c.render_scale_for(2980) - 0.604).abs() < 0.01);
         assert_eq!(c.render_scale_for(1600), 1.0);
         c.next_render_scale();
-        assert_eq!(c.render_scale_for(2980), 0.5);
+        assert_eq!(c.render_scale_for(2980), 0.6);
     }
 }

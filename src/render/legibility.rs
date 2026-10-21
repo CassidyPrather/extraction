@@ -466,6 +466,24 @@ mod tests {
         assert!(INCIDENTAL_DEG * ppd >= 4.8);
     }
 
+    /// The floors are set for the auto render scale; the SHARPNESS card's
+    /// lowest step mustn't render a Beyond 2 (2980 px an eye asked for)
+    /// much below it.
+    #[test]
+    fn no_sharpness_step_goes_under_the_floors_density() {
+        use crate::rig::comfort::Comfort;
+        let lowest = Comfort::RENDER_SCALES
+            .iter()
+            .copied()
+            .filter(|s| *s > 0.0)
+            .fold(1.0f32, f32::min);
+        assert!(
+            lowest * 2980.0 >= AUTO_EYE_PX * 0.97,
+            "lowest step {lowest}: {} px an eye",
+            lowest * 2980.0
+        );
+    }
+
     #[test]
     fn lower_case_is_measured_by_its_x_height() {
         assert_eq!(letter_height("ABC 12", 1.0), CAP_HEIGHT);
