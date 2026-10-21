@@ -33,15 +33,17 @@ OUT = os.path.join(ROOT, "docs", "shots", "anomalies", "legibility")
 RAW = os.path.join(ROOT, "target", "legibility")
 BIN = os.path.join(ROOT, "target", "fast", "extraction")
 
-# Camera 20 m off each anomaly, eye height, looking straight at it:
-# x,y,z,yaw,pitch (yaw 0 looks down -z, 90 down +x, 270 down -x).
+# Camera 20 m off each anomaly, eye height, aimed at a metre over its
+# centre: x,y,z,yaw,pitch (yaw 0 looks down -z, 90 down +x). Each from the
+# side with a clear line: no rise, trunk or other anomaly between, not on a
+# road, gentle ground (picked from the heightmap and the tree scatter).
 TARGETS = [
-    ("lift", "146.3,0,-2.5,0,-4"),       # Lift at (146.3, -22.5), from the south
-    ("burner", "66.1,0,264.4,270,-4"),   # Burner at (46.1, 264.4), from the east
-    ("snare", "224.4,0,-72.0,90,-4"),    # Snare at (244.4, -72.0), from the west
-    ("well", "158.0,0,13.0,0,-3"),       # Well at (158, -7), from the south
-    ("mirror", "-124.0,0,-199.0,270,-4"),  # Mirror at (-144, -199), from the east
-    ("hush", "136.0,0,13.0,0,-3"),       # Hush at (136, -7), from the south
+    ("lift", "132.2,0,-36.6,135,-2"),     # Lift at (146.3, -22.5)
+    ("burner", "64.6,0,256.7,248,-3"),    # Burner at (46.1, 264.4)
+    ("snare", "225.9,0,-64.3,68,8"),      # Snare at (244.4, -72.0)
+    ("well", "143.9,0,7.1,45,-1"),        # Well at (158, -7)
+    ("mirror", "-144.0,0,-179.0,0,-6"),   # Mirror at (-144, -199)
+    ("hush", "136.0,0,13.0,0,-7"),        # Hush at (136, -7)
 ]
 # Label: launch flags. Night is drizzle under a new moon, the darkest.
 CONDITIONS = {
