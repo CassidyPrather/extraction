@@ -702,8 +702,11 @@ fn sweep(
             let night = st.lights[st.light] == Light::Night;
             commands.entity(st.lamp.unwrap()).insert(PointLight {
                 color: Color::srgb(1.0, 0.88, 0.7),
+                // As bright on every subject: the lamp stands about 2r off,
+                // so its power goes with that squared, for a cartridge as
+                // for a factory (a floor of 1 m once blew small items out).
                 intensity: if night {
-                    20_000.0 * (radius * 2.0).max(1.0).powi(2)
+                    20_000.0 * (radius * 2.0).powi(2)
                 } else {
                     0.0
                 },
