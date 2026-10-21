@@ -23,6 +23,8 @@ software renderer is.
 | `crawl.png` | `reel:crawl`: two legs shot off, a walker no longer falls apart; belly down, it drags itself on the two it has left, the dead ones trailing | sheet |
 | `damaged.png` | `reel:damaged` by day and dusk: plates on their last bolt hang from a corner and swing as it walks, the core at a fifth smokes and sparks, and its eye gutters (dusk row) | sheet |
 | `rime_frost.png` | Rime Fell's weathering: shells iced cold blue down their sides and under, snow white on their tops, rime on the dark metal's tops (vertex colours, no new draws) | still |
+| `rime_snow_walk.png` | Rime Fell's col in falling snow: an iced walker crossing lying snow (on the steep, icy ground beyond, its feet creep and it stumbles: `feet_slip_on_ice_slopes`) | sheet |
+| `drone_lamps.png` | `reel:drone` at night in a downpour (top) and fog (bottom): after dark a drone hunts with its searchlight lit, down and ahead, a shaft through the rain and fog (`world::beams`) and a pool on the ground | sheet |
 | `weathering.png` | The same walker in the training yard (clean), Marrow Creek (rust streaks, moss on top) and Cinder Works (sooted, heat-blued metal) | still |
 | `walker_limp.png` | A walker with a leg shot off: limping across on three, one foot up at a time, the dead leg dangling, the body sagging toward the gap | 0.2 s |
 | `drone_wreck.png` | A drone killed in the air: a rotor flies off, it corkscrews down on its fading lift trailing smoke, hits in a burst of sparks, sheds its panel and gun pod, and smoulders | 0.17 s |
