@@ -85,6 +85,171 @@ pub fn moss(mesh: &mut Mesh, north: Vec3, seed: u64) {
     }
 }
 
+/// How far an old house's roof has sagged at the middle of its ridge, m
+/// (0 for most: about a third sag), from its seed.
+pub fn sagging(seed: u64) -> f32 {
+    let mut rng = fastrand::Rng::with_seed(seed ^ 0x5a99);
+    if rng.f32() < 0.32 {
+        0.07 + 0.15 * rng.f32()
+    } else {
+        0.0
+    }
+}
+
+/// Where a roof is, from its merged meshes: their bounds (building-local).
+pub fn roof_bounds<'a>(meshes: impl IntoIterator<Item = &'a Mesh>) -> Option<(Vec3, Vec3)> {
+    let mut b: Option<(Vec3, Vec3)> = None;
+    for m in meshes {
+        let Some(VertexAttributeValues::Float32x3(pos)) = m.attribute(Mesh::ATTRIBUTE_POSITION)
+        else {
+            continue;
+        };
+        for p in pos {
+            let p = Vec3::from(*p);
+            b = Some(b.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))));
+        }
+    }
+    b
+}
+
+/// Bow what's over a pitched roof's eaves (`roof`: its bounds; its ridge
+/// along z, building-local): down by `amount` at the middle of the
+/// ridge, nothing at the gables' ends (the end walls hold it) or along
+/// the eaves (the side walls do). The roof, its ridge board and the
+/// gables' tops alike, so nothing stands off it. Drawn only: the roof's
+/// colliders stay where they were.
+pub fn sag(mesh: &mut Mesh, roof: (Vec3, Vec3), amount: f32) {
+    if amount <= 0.0 {
+        return;
+    }
+    let (lo, hi) = roof;
+    let over = lo.y + 0.02;
+    // A box's face is two triangles: cut what's over the eaves finer to
+    // bend it.
+    subdivide(mesh, 0.6, over);
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return;
+    };
+    let (c, half) = ((lo + hi) * 0.5, ((hi - lo) * 0.5).max(Vec3::splat(0.01)));
+    for p in pos.iter_mut().filter(|p| p[1] > over) {
+        let tz = ((p[2] - lo.z) / (2.0 * half.z)).clamp(0.0, 1.0);
+        let xn = ((p[0] - c.x) / half.x).abs().min(1.0);
+        p[1] -= amount * (std::f32::consts::PI * tz).sin() * (1.0 - xn);
+    }
+}
+
+/// Split a triangle list's edges over `above` (both their ends) until
+/// none is longer than `max`, every attribute interpolated. An edge splits
+/// the same in both its triangles (by its length and height alone), so the
+/// cut mesh has no cracks to open.
+fn subdivide(mesh: &mut Mesh, max: f32, above: f32) {
+    let Some(VertexAttributeValues::Float32x3(pos)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        return;
+    };
+    let n = pos.len();
+    let mut idx: Vec<u32> = match mesh.indices() {
+        Some(Indices::U32(i)) => i.clone(),
+        Some(Indices::U16(i)) => i.iter().map(|&k| k as u32).collect(),
+        None => (0..n as u32).collect(),
+    };
+    // Every float attribute, flattened: (id, components, data).
+    let mut attrs: Vec<(bevy::mesh::MeshVertexAttribute, usize, Vec<f32>)> = Vec::new();
+    for (a, v) in mesh.attributes() {
+        let (k, data): (usize, Vec<f32>) = match v {
+            VertexAttributeValues::Float32x2(d) => (2, d.iter().flatten().copied().collect()),
+            VertexAttributeValues::Float32x3(d) => (3, d.iter().flatten().copied().collect()),
+            VertexAttributeValues::Float32x4(d) => (4, d.iter().flatten().copied().collect()),
+            _ => return,
+        };
+        attrs.push((a.clone(), k, data));
+    }
+    let p = |attrs: &[(bevy::mesh::MeshVertexAttribute, usize, Vec<f32>)], i: u32| {
+        let d = &attrs
+            .iter()
+            .find(|(a, _, _)| a.id == Mesh::ATTRIBUTE_POSITION.id)
+            .unwrap()
+            .2;
+        Vec3::from_slice(&d[i as usize * 3..i as usize * 3 + 3])
+    };
+    for _ in 0..8 {
+        let mut mid: std::collections::HashMap<(u32, u32), u32> = Default::default();
+        let mut next = Vec::with_capacity(idx.len() * 2);
+        let mut split = false;
+        for t in idx.chunks_exact(3) {
+            let v = [t[0], t[1], t[2]];
+            let mut m = [None; 3];
+            for e in 0..3 {
+                let (a, b) = (v[e], v[(e + 1) % 3]);
+                let (pa, pb) = (p(&attrs, a), p(&attrs, b));
+                if pa.distance(pb) <= max || pa.y <= above || pb.y <= above {
+                    continue;
+                }
+                split = true;
+                let key = (a.min(b), a.max(b));
+                let k = *mid.entry(key).or_insert_with(|| {
+                    let at = attrs[0].2.len() / attrs[0].1;
+                    for (_, c, d) in attrs.iter_mut() {
+                        for j in 0..*c {
+                            let x = (d[a as usize * *c + j] + d[b as usize * *c + j]) * 0.5;
+                            d.push(x);
+                        }
+                    }
+                    at as u32
+                });
+                m[e] = Some(k);
+            }
+            // Edge e runs v[e] -> v[e+1], its middle m[e].
+            match m {
+                [None, None, None] => next.extend_from_slice(&v),
+                [Some(a), Some(b), Some(c)] => {
+                    next.extend_from_slice(&[v[0], a, c, a, v[1], b, c, b, v[2], a, b, c])
+                }
+                _ => {
+                    // One or two long edges: fan from the first one's
+                    // middle round the cut outline (from a corner, the fan
+                    // would run along an uncut edge).
+                    let mut ring = Vec::with_capacity(5);
+                    for e in 0..3 {
+                        ring.push(v[e]);
+                        if let Some(k) = m[e] {
+                            ring.push(k);
+                        }
+                    }
+                    let first = m.iter().flatten().next().copied().unwrap();
+                    let start = ring.iter().position(|&x| x == first).unwrap();
+                    ring.rotate_left(start);
+                    for w in 1..ring.len() - 1 {
+                        next.extend_from_slice(&[ring[0], ring[w], ring[w + 1]]);
+                    }
+                }
+            }
+        }
+        idx = next;
+        if !split {
+            break;
+        }
+    }
+    for (a, c, d) in attrs {
+        let v = match c {
+            2 => {
+                VertexAttributeValues::Float32x2(d.chunks_exact(2).map(|x| [x[0], x[1]]).collect())
+            }
+            3 => VertexAttributeValues::Float32x3(
+                d.chunks_exact(3).map(|x| [x[0], x[1], x[2]]).collect(),
+            ),
+            _ => VertexAttributeValues::Float32x4(
+                d.chunks_exact(4)
+                    .map(|x| [x[0], x[1], x[2], x[3]])
+                    .collect(),
+            ),
+        };
+        mesh.insert_attribute(a, v);
+    }
+    mesh.insert_indices(Indices::U32(idx));
+}
+
 fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -625,6 +790,71 @@ mod tests {
             !stains(&geo, &occ, 7, false)
                 .iter()
                 .any(|d| d.kind == Stain::Tide)
+        );
+    }
+
+    /// A bowed roof: two pitched slabs, cut fine (their area kept), the
+    /// middle of the ridge down by the bow, the gables' ends and the eaves
+    /// where they were.
+    #[test]
+    fn a_roof_sags_in_the_middle() {
+        let slab = |side: f32| {
+            let pitch = 0.5f32;
+            let run = 3.0;
+            crate::render::materials::metric_box(Vec3::new(run / pitch.cos(), 0.1, 8.0))
+                .transformed_by(
+                    Transform::from_xyz(side * run * 0.5, 4.0 + run * 0.5 * pitch.tan(), 0.0)
+                        .with_rotation(Quat::from_rotation_z(-side * pitch)),
+                )
+        };
+        let mut m = slab(1.0);
+        m.merge(&slab(-1.0)).unwrap();
+        let positions = |m: &Mesh| match m.attribute(Mesh::ATTRIBUTE_POSITION) {
+            Some(VertexAttributeValues::Float32x3(p)) => p.clone(),
+            _ => panic!(),
+        };
+        let area = |m: &Mesh| {
+            let p = positions(m);
+            let Some(Indices::U32(i)) = m.indices() else {
+                panic!()
+            };
+            i.chunks_exact(3)
+                .map(|t| {
+                    let [a, b, c] = [t[0], t[1], t[2]].map(|k| Vec3::from(p[k as usize]));
+                    (b - a).cross(c - a).length() * 0.5
+                })
+                .sum::<f32>()
+        };
+        let roof = roof_bounds([&m]).unwrap();
+        let mut flat = m.clone();
+        flat.insert_indices(Indices::U32(match m.indices() {
+            Some(Indices::U16(i)) => i.iter().map(|&k| k as u32).collect(),
+            Some(Indices::U32(i)) => i.clone(),
+            None => panic!(),
+        }));
+        let whole = area(&flat);
+        subdivide(&mut flat, 0.6, roof.0.y + 0.02);
+        // Cut, not torn: the same surface.
+        assert!((area(&flat) - whole).abs() / whole < 1e-4);
+        sag(&mut m, roof, 0.2);
+        let (p, q) = (positions(&m), positions(&flat));
+        assert_eq!(p.len(), q.len());
+        assert!(p.len() > 200, "{} vertices", p.len());
+        let drop: Vec<f32> = p.iter().zip(&q).map(|(a, b)| b[1] - a[1]).collect();
+        assert!(drop.iter().all(|d| (-1e-4..=0.2 + 1e-4).contains(d)));
+        // Most at the ridge's middle, none at the ends or the eaves.
+        let most = p
+            .iter()
+            .zip(&drop)
+            .filter(|(v, _)| v[0].abs() < 0.3 && v[2].abs() < 0.3)
+            .map(|(_, d)| *d)
+            .fold(0.0, f32::max);
+        assert!(most > 0.15, "the ridge's middle down {most}");
+        assert!(
+            p.iter()
+                .zip(&drop)
+                .filter(|(v, _)| v[2].abs() > 3.99)
+                .all(|(_, d)| d.abs() < 1e-4)
         );
     }
 

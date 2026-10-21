@@ -5063,7 +5063,7 @@ pub fn dress_buildings(
                 }
             }
         };
-        let [mut outer, near, far, windows, hero, hero_mid, under] = merged;
+        let [mut outer, near, mut far, windows, hero, hero_mid, under] = merged;
         // Moss and lichen in the shell's colours, stains on its walls
         // (`decay`).
         let decay = !site && super::overgrowth::enabled();
@@ -5073,6 +5073,27 @@ pub fn dress_buildings(
         if decay {
             for (_, m) in &mut outer {
                 super::decay::moss(m, bnorth, bseed);
+            }
+            // A third of the old houses' roofs bowed (their ridges along
+            // z), near and far alike.
+            if matches!(
+                b.prefab.as_str(),
+                "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shed"
+            ) {
+                let bow = super::decay::sagging(bseed);
+                let roofs = [Mat::Shingles, Mat::Corrugated]
+                    .map(|m| props.lib.get(m, &props.server, &mut materials));
+                let roof = super::decay::roof_bounds(
+                    outer
+                        .iter()
+                        .filter(|(mat, _)| roofs.contains(mat))
+                        .map(|(_, m)| m),
+                );
+                if let (Some(roof), true) = (roof, bow > 0.0) {
+                    for (_, m) in outer.iter_mut().chain(far.iter_mut()) {
+                        super::decay::sag(m, roof, bow);
+                    }
+                }
             }
             if let Some(sm) = &stain_mats {
                 let decals =
