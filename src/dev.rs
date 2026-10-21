@@ -689,8 +689,11 @@ fn wear_kit(
 /// as you bend to your belt (the torso keeps its standing height until the
 /// head has dropped further). `behind` puts the camera behind and above
 /// the player instead, to see the pack on their back; `above` high behind,
-/// looking down at the feet, to see the body's shadow. The free camera
-/// otherwise stays where `--camera` put it.
+/// looking down at the feet, to see the body's shadow. `down`: the head
+/// tips forward and looks down at the body, as a head does (the camera is
+/// the eye); `side` puts the camera 2 m to the right, to see the whole
+/// body (`render::body`). The free camera otherwise stays where
+/// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
     mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
@@ -711,7 +714,8 @@ fn pose_body_for_gallery(
         spec.contains("behind"),
         spec.contains("above"),
     );
-    if !stoop && !behind && !above {
+    let (down, side) = (spec.contains("down"), spec.contains("side"));
+    if !stoop && !behind && !above && !down && !side {
         return;
     }
     *frames += 1;
@@ -725,11 +729,27 @@ fn pose_body_for_gallery(
         input.head.rotation =
             Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.1);
     }
+    if down && *frames > 20 {
+        // A head looking down pivots on the neck: the eyes come forward.
+        let fwd = input.head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        // (The flat rig writes the head afresh each frame, as for `stoop`.)
+        input.head.translation += flat * 0.08 - Vec3::Y * 0.04;
+        input.head.rotation =
+            Transform::IDENTITY.looking_to(flat, Vec3::Y).rotation * Quat::from_rotation_x(-1.05);
+    }
     let head = root.mul_transform(input.head);
     let Ok(mut cam) = cams.single_mut() else {
         return;
     };
-    if above {
+    if side {
+        let fwd = head.rotation * Vec3::NEG_Z;
+        let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
+        let right = flat.cross(Vec3::Y);
+        let mid = root.translation + Vec3::Y * 0.9;
+        *cam = Transform::from_translation(mid + right * 2.2 + flat * 0.6 + Vec3::Y * 0.2)
+            .looking_at(mid, Vec3::Y);
+    } else if above {
         // High behind, looking down at the feet: the body's shadow.
         let fwd = head.rotation * Vec3::NEG_Z;
         let flat = Vec3::new(fwd.x, 0.0, fwd.z).normalize_or(Vec3::NEG_Z);
