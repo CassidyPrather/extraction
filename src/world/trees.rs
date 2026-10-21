@@ -801,6 +801,12 @@ pub struct TreeSway {
     /// Unused by trees (the ground cover's push from the player's legs).
     #[uniform(100)]
     pub pusher: Vec4,
+    /// The player's hands up in the branches: xyz where, w how far round
+    /// them the foliage parts (0: not pushing; `render::hand_push`).
+    #[uniform(100)]
+    pub hand_a: Vec4,
+    #[uniform(100)]
+    pub hand_b: Vec4,
 }
 
 impl bevy::pbr::MaterialExtension for TreeSway {
