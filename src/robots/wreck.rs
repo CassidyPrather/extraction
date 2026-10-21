@@ -64,6 +64,11 @@ pub struct Broken;
 pub struct Settling {
     still: f32,
     age: f32,
+    /// Velocities smoothed over a few frames: a body at rest on uneven
+    /// ground jitters, a frame one way and the next the other, and that
+    /// isn't moving.
+    v: Vec3,
+    w: Vec3,
 }
 
 #[derive(Resource, Default)]
@@ -694,7 +699,10 @@ fn settle(
     let dt = time.delta_secs();
     for (e, mut s, v, w) in &mut moving {
         s.age += dt;
-        let still = v.0.length() < STILL_SPEED && w.0.length() < STILL_SPEED * 3.0;
+        let k = (dt * 8.0).min(1.0);
+        s.v = s.v.lerp(v.0, k);
+        s.w = s.w.lerp(w.0, k);
+        let still = s.v.length() < STILL_SPEED && s.w.length() < STILL_SPEED * 3.0;
         s.still = if still { s.still + dt } else { 0.0 };
         if (s.age > 2.0 && s.still > STILL_FOR) || s.age > SETTLE_BY {
             commands

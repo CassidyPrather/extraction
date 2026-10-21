@@ -392,7 +392,18 @@ fn seed_robot(add: On<Add, Robot>, robots: Query<(&Robot, &Transform)>, mut comm
 
 fn wreck_loot(
     mut commands: Commands,
-    mut robots: Query<(Entity, &Robot, &GlobalTransform, &mut LootRng), Without<Salvaged>>,
+    mut robots: Query<
+        (
+            Entity,
+            &Robot,
+            &GlobalTransform,
+            &mut LootRng,
+            Has<indoor::Crawler>,
+            Has<hound::Hound>,
+        ),
+        (Without<Salvaged>, Without<heavy::Heavy>),
+    >,
+    parts: Query<&RobotPart>,
     loot: Option<Res<crate::items::loot::Loot>>,
     catalog: Res<crate::items::Catalog>,
     mut timers: Local<std::collections::HashMap<Entity, f32>>,
@@ -401,7 +412,7 @@ fn wreck_loot(
     let Some(loot) = loot else {
         return;
     };
-    for (e, robot, gt, mut rng) in &mut robots {
+    for (e, robot, gt, mut rng, crawler, hound) in &mut robots {
         if !robot.wrecked {
             continue;
         }
@@ -413,12 +424,22 @@ fn wreck_loot(
         commands.entity(e).insert(Salvaged);
         timers.remove(&e);
         let base = gt.translation() + Vec3::Y * 0.4;
-        for (i, drop) in loot
-            .0
-            .roll(wreck_table(robot.kind), &catalog, &mut rng.0)
-            .into_iter()
-            .enumerate()
-        {
+        let mut drops = loot.0.roll(wreck_table(robot.kind), &catalog, &mut rng.0);
+        // And whatever came through whole is there to unbolt.
+        let whole: Vec<PartRole> = parts
+            .iter()
+            .filter(|p| p.robot == e && p.alive())
+            .map(|p| p.role)
+            .collect();
+        for id in part_salvage(robot.kind, crawler, hound, &whole, &mut rng.0) {
+            if let Some(kind) = catalog.kind(id) {
+                drops.push(extraction_core::loot::Drop {
+                    kind,
+                    condition: rng.0.range(0.35, 0.9),
+                });
+            }
+        }
+        for (i, drop) in drops.into_iter().enumerate() {
             let a = i as f32 * 2.1;
             crate::items::spawn_item(
                 &mut commands,
@@ -432,6 +453,57 @@ fn wreck_loot(
                 },
             );
         }
+    }
+}
+
+/// Parts a wreck gives up besides its table: one chance per part that
+/// came through whole (a knee that still bends, a rotor still on its arm),
+/// at most two of a kind. A crawler's capacitor bank is in its body, so
+/// it's there unless the core went up with it; a hound's legs are too
+/// small to be worth the bother.
+pub fn part_salvage(
+    kind: RobotKind,
+    crawler: bool,
+    hound: bool,
+    whole: &[PartRole],
+    rng: &mut extraction_core::noise::Rng,
+) -> Vec<&'static str> {
+    let count = |f: fn(&PartRole) -> bool| whole.iter().filter(|r| f(r)).count();
+    let tries = |n: usize, p: f32, id: &'static str, rng: &mut extraction_core::noise::Rng| {
+        (0..n)
+            .filter(|_| rng.chance(p))
+            .take(2)
+            .map(|_| id)
+            .collect::<Vec<_>>()
+    };
+    match kind {
+        RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
+        RobotKind::Walker if hound => Vec::new(),
+        RobotKind::Walker => tries(
+            count(|r| matches!(r, PartRole::Leg(_))),
+            0.3,
+            "walker_leg_actuator",
+            rng,
+        ),
+        RobotKind::Drone => tries(
+            count(|r| matches!(r, PartRole::Rotor(_))),
+            0.35,
+            "drone_rotor_motor",
+            rng,
+        ),
+        RobotKind::Dirigible => tries(
+            count(|r| matches!(r, PartRole::GasCell(_))),
+            0.4,
+            "dirigible_gas_valve",
+            rng,
+        ),
+        RobotKind::Pylon => tries(
+            count(|r| *r == PartRole::Sensor),
+            0.6,
+            "pylon_relay_coil",
+            rng,
+        ),
+        RobotKind::Sorter => tries(1, 0.7, "sorter_servo_pack", rng),
     }
 }
 
@@ -530,6 +602,50 @@ mod tests {
             .collect();
         kinds.sort();
         kinds
+    }
+
+    /// Whole parts give up their own salvage: never more than two of a
+    /// kind, nothing from parts that are gone, nothing from a hound, and
+    /// every id is a real item.
+    #[test]
+    fn whole_parts_come_off_as_salvage() {
+        let mut rng = extraction_core::noise::Rng::new(9);
+        let legs: Vec<PartRole> = (0..4).map(PartRole::Leg).collect();
+        let mut seen = 0;
+        for _ in 0..200 {
+            let got = part_salvage(RobotKind::Walker, false, false, &legs, &mut rng);
+            assert!(got.len() <= 2);
+            assert!(got.iter().all(|id| *id == "walker_leg_actuator"));
+            seen += got.len();
+        }
+        // About 0.3 a leg, four legs, capped at two: roughly 1.1 a wreck.
+        assert!((150..300).contains(&seen), "{seen} actuators in 200 wrecks");
+        assert!(part_salvage(RobotKind::Walker, false, false, &[], &mut rng).is_empty());
+        assert!(part_salvage(RobotKind::Walker, false, true, &legs, &mut rng).is_empty());
+        let catalog = crate::items::Catalog::load();
+        let all = [
+            (RobotKind::Walker, false, legs.clone()),
+            (RobotKind::Walker, true, vec![]),
+            (
+                RobotKind::Drone,
+                false,
+                (0..3).map(PartRole::Rotor).collect(),
+            ),
+            (
+                RobotKind::Dirigible,
+                false,
+                (0..3).map(PartRole::GasCell).collect(),
+            ),
+            (RobotKind::Pylon, false, vec![PartRole::Sensor]),
+            (RobotKind::Sorter, false, vec![]),
+        ];
+        for (kind, crawler, whole) in all {
+            for _ in 0..50 {
+                for id in part_salvage(kind, crawler, false, &whole, &mut rng) {
+                    assert!(catalog.kind(id).is_some(), "{id} isn't an item");
+                }
+            }
+        }
     }
 
     /// A wreck's salvage is its own: other robots wrecked first, somewhere
