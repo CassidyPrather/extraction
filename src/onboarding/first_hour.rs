@@ -595,7 +595,11 @@ pub(super) fn direct_raid(
             // Lost: off the wrong way first, until the map puts it right.
             if p.lost && !state.wrong_way_done {
                 state.wrong_way_done = true;
-                let wrong = from - (at - from).normalize_or_zero() * 70.0;
+                // Off at right angles (the wrong road), into the valley
+                // rather than back into the fence.
+                let side = (at - from).normalize_or_zero().perp();
+                let side = if side.dot(-from) >= 0.0 { side } else { -side };
+                let wrong = from + side * 70.0;
                 state.note(now, Kind::Confused, "set off the wrong way");
                 tasks.extend(world.legs(from, wrong));
                 from = wrong;
