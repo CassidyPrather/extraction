@@ -110,6 +110,41 @@ pub struct FirearmDef {
     /// again.
     #[serde(default)]
     pub rimfire: bool,
+    /// How its kick feels beside another gun's of the same momentum: the
+    /// game's handling reads it (`weapons::feel`).
+    #[serde(default)]
+    pub kick: Kick,
+}
+
+/// A gun's own kick, over what its momentum and shape say: the game works
+/// out the climb from the bore's height over where the gun bears, and these
+/// scale it.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Kick {
+    /// The muzzle's climb, against what its shape gives (a brake or a
+    /// compensator under 1; under 0 it dips, as a crossbow's limbs throw
+    /// it).
+    pub climb: f32,
+    /// The push back along the bore, likewise (under 0, forward).
+    pub push: f32,
+    /// Which way the muzzle walks, as a share of the shot's yaw: 1 always
+    /// left, -1 always right, 0 either way.
+    pub walk: f32,
+    /// How long the shot's shove lasts, seconds: 0 a rifle's snap, a
+    /// shotgun's or a flare's a longer push.
+    pub shove: f32,
+}
+
+impl Default for Kick {
+    fn default() -> Self {
+        Self {
+            climb: 1.0,
+            push: 1.0,
+            walk: 0.0,
+            shove: 0.0,
+        }
+    }
 }
 
 const fn one() -> u32 {
@@ -210,6 +245,11 @@ pub enum Event {
     },
     /// A rod pushed down the bore knocked the squib's bullet out.
     Rodded,
+    /// A self-loader's carrier slamming home after the shot (the game
+    /// times it from the cycle and sends it).
+    CarrierHome,
+    /// An open bolt slamming home on the round it fires (likewise).
+    OpenBoltSlam,
     /// A dirty bolt stuck shut after the shot: slap the handle up.
     BoltStuck,
     BoltFreed,
@@ -240,6 +280,9 @@ const PUMP_RELEASE: f32 = 0.7;
 pub const DRY_LOOSE: f32 = 0.04;
 /// A crossbow's string let go short of the latch slaps home: a little wear.
 pub const STRING_SLAP: f32 = 0.005;
+/// A paper-cased 26 mm signal cartridge's extra chance of a misfire (the
+/// card soaks up the damp): break the gun, swap it.
+pub const PAPER_DUD: f32 = 0.06;
 /// A rimfire round's extra chance of a misfire.
 pub const RIMFIRE_DUD: f32 = 0.03;
 /// Where a double feed wedges the bolt: it won't come further forward.
@@ -573,7 +616,12 @@ impl Firearm {
                     } else {
                         0.0
                     }
-                    + if self.def.rimfire { RIMFIRE_DUD } else { 0.0 };
+                    + if self.def.rimfire { RIMFIRE_DUD } else { 0.0 }
+                    + if self.def.cartridge == "26mm" {
+                        PAPER_DUD
+                    } else {
+                        0.0
+                    };
                 if roll() < dud_chance {
                     events.push(Event::Dud);
                     return events;
@@ -1417,6 +1465,7 @@ mod tests {
             floating_pin: false,
             report: 1.0,
             rimfire: false,
+            kick: Kick::default(),
         }
     }
 
@@ -2272,5 +2321,30 @@ mod tests {
             before - bow.condition >= DRY_LOOSE * 0.99,
             "the dry loose cost it"
         );
+    }
+
+    /// A damp signal cartridge misfires and stays in; broken open, it
+    /// comes out by hand and another goes in.
+    #[test]
+    fn a_damp_flare_misfires_and_is_swapped() {
+        let def = FirearmDef {
+            cartridge: "26mm".into(),
+            barrels: 1,
+            ..double()
+        };
+        let mut gun = Firearm::new(def, 1.0);
+        gun.set_break_open(true);
+        assert!(gun.load_round());
+        gun.set_break_open(false);
+        // A roll inside the paper's extra chance.
+        let ev = gun.update(0.016, true, &mut rolls(&[0.05]));
+        gun.update(0.016, false, &mut lucky());
+        assert_eq!(ev, vec![Event::Dud]);
+        assert_eq!(gun.chambers[0], Some(Round::Live), "still in");
+        gun.set_break_open(true);
+        assert_eq!(gun.unload_chamber(0), Some(Round::Live), "out by hand");
+        assert!(gun.load_round());
+        gun.set_break_open(false);
+        assert!(fired(&shoot(&mut gun)));
     }
 }

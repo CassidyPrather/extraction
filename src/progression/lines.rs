@@ -386,6 +386,12 @@ mod tests {
             valley_opened("Sallow Reservoir"),
         ];
         lines.extend(Upgrade::ALL.iter().map(|u| fitted(*u)));
+        lines.extend(
+            extraction_core::contracts::CONTRACTS
+                .iter()
+                .filter(|c| !c.done.is_empty())
+                .map(|c| c.done.to_owned()),
+        );
         assert_eq!(
             scout_noticed("The quarry"),
             "The quarry: noted. Now get it home."

@@ -754,12 +754,19 @@ mod tests {
         let feet = on_ground(&vr, OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
         vr.step(10);
+        // The one on your back (the stash crate is a Backpack too): the
+        // nearest, not whichever the query meets first.
         let bag = vr
             .app
             .world_mut()
-            .query_filtered::<Entity, With<crate::interact::body::Backpack>>()
+            .query_filtered::<(Entity, &GlobalTransform), With<crate::interact::body::Backpack>>()
             .iter(vr.app.world())
-            .next()
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
             .expect("a backpack");
         // Over the right shoulder, a hand's width behind the head.
         let at = feet + Vec3::new(0.15, 1.6, 0.12);

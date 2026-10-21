@@ -164,10 +164,11 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
             }
             // Steeper ground is rockier; a slow noise makes rock fields.
             let steep = ((slope - 7.0) / 22.0).clamp(0.0, 1.0);
-            let fields = ((field(base, c, 90.0) - 0.45) * 3.0).clamp(0.0, 1.0);
+            // A scree valley (`MapDef::scree`) is a rock field all over.
+            let fields = ((field(base, c, 90.0) - 0.45) * 3.0 + map.scree).clamp(0.0, 1.0);
             // Now and then a lone erratic: a boulder the ice left, big
             // enough to steer by.
-            if rng.f32() < 0.012 {
+            if rng.f32() < 0.012 + 0.02 * map.scree {
                 let r = rng.range(1.8, 3.2);
                 if ok(c, r) {
                     let squash = rng.range(0.5, 0.75);

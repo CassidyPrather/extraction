@@ -432,14 +432,16 @@ pub fn finish(
                 let job = p.0.job.as_ref()?;
                 let home = outcome == "extracted";
                 use extraction_core::progression::Job;
-                let (kind, met) = match job {
-                    Job::Plant { planted, .. } => ("plant", *planted && home),
-                    Job::Bring { item, .. } => ("bring", home && s.loot.iter().any(|l| l == item)),
-                    Job::Scout { seen, .. } => ("scout", *seen && home),
-                    Job::Photograph { taken, .. } => ("photograph", *taken && home),
+                // `done`: the step's own part (set down, seen, taken, picked
+                // up); `met`: that, and home with it.
+                let (kind, done) = match job {
+                    Job::Plant { planted, .. } => ("plant", *planted),
+                    Job::Bring { item, .. } => ("bring", s.loot.iter().any(|l| l == item)),
+                    Job::Scout { seen, .. } => ("scout", *seen),
+                    Job::Photograph { taken, .. } => ("photograph", *taken),
                     _ => ("other", false),
                 };
-                Some(json!({"id": a.id, "step": a.step, "kind": kind, "met": met}))
+                Some(json!({"id": a.id, "step": a.step, "kind": kind, "done": done, "met": done && home}))
             }),
             // Nights slept in the safehouse (`SIM_OVERNIGHT`).
             "nights": house.as_ref().map_or(0, |h| h.nights_out),

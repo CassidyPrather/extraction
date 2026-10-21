@@ -83,6 +83,42 @@ impl Solid {
         }
     }
 
+    /// The nearest point just outside it (grown by `pad`) from `p` inside
+    /// it: out through whichever face is closest, or (`flat`) whichever of
+    /// its sides, not its top or bottom.
+    pub fn out(&self, p: Vec3, pad: f32, flat: bool) -> Vec3 {
+        const PAST: f32 = 0.01;
+        let mut l = self.to_local.transform_point3(p);
+        match self.kind {
+            SolidKind::Box(h) => {
+                let mut pen = h + Vec3::splat(pad) - l.abs();
+                if flat {
+                    pen.y = f32::MAX;
+                }
+                let axis = if pen.x <= pen.y && pen.x <= pen.z {
+                    0
+                } else if pen.y <= pen.z {
+                    1
+                } else {
+                    2
+                };
+                l[axis] = (h[axis] + pad + PAST).copysign(l[axis]);
+            }
+            SolidKind::Cylinder(r, h) => {
+                let across = Vec2::new(l.x, l.z);
+                let side = r + pad - across.length();
+                let end = h + pad - l.y.abs();
+                if end <= side && !flat {
+                    l.y = (h + pad + PAST).copysign(l.y);
+                } else {
+                    let d = across.try_normalize().unwrap_or(Vec2::X) * (r + pad + PAST);
+                    (l.x, l.z) = (d.x, d.y);
+                }
+            }
+        }
+        self.to_world.transform_point3(l)
+    }
+
     /// Where a ray first enters it: distance along `dir` (in units of
     /// `dir`'s length) and the world normal there.
     pub fn ray(&self, from: Vec3, dir: Vec3) -> Option<(f32, Vec3)> {
@@ -264,6 +300,19 @@ impl Obstacles {
             }
         }
         top
+    }
+
+    /// `p` moved out of whatever it's inside (grown by `pad`), by the
+    /// shortest way out of each (`flat`: sideways); a few goes for pieces
+    /// that meet.
+    pub fn push_out(&self, mut p: Vec3, pad: f32, flat: bool) -> Vec3 {
+        for _ in 0..4 {
+            match self.near(p).find(|s| s.contains(p, pad)) {
+                Some(s) => p = s.out(p, pad, flat),
+                None => break,
+            }
+        }
+        p
     }
 
     /// Is `p` inside anything built (grown by `pad`)?
@@ -555,6 +604,41 @@ pub fn wading(zone: &Zone) -> Vec<PerchSite> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A dam's face with a coping overhanging it: from under the coping,
+    /// out sideways (not down, under it again); otherwise the nearest way.
+    #[test]
+    fn pushed_out_from_under_an_overhang() {
+        let mut o = Obstacles::default();
+        // The wall's face at z = 1, the coping out to z = 1.1 over it.
+        o.push(Solid::new(
+            Transform::from_xyz(0.0, 5.0, 0.0),
+            SolidKind::Box(Vec3::new(20.0, 5.0, 1.0)),
+        ));
+        o.push(Solid::new(
+            Transform::from_xyz(0.0, 10.1, 0.0),
+            SolidKind::Box(Vec3::new(20.0, 0.1, 1.1)),
+        ));
+        let under = Vec3::new(0.0, 9.99, 1.05);
+        assert!(o.inside(under, 0.02));
+        let side = o.push_out(under, 0.02, true);
+        assert!(
+            !o.inside(side, 0.02) && side.z > 1.12 && side.y == under.y,
+            "{side}"
+        );
+        let near = o.push_out(under, 0.02, false);
+        assert!(!o.inside(near, 0.02) && near.y < 9.98, "{near}");
+        // Just under the coping's top: up and out.
+        let top = o.push_out(Vec3::new(3.0, 10.19, 0.0), 0.0, false);
+        assert!(!o.inside(top, 0.0) && top.y > 10.2, "{top}");
+        // A stack: out through its side.
+        let c = Solid::new(
+            Transform::from_xyz(30.0, 10.0, 0.0),
+            SolidKind::Cylinder(1.0, 10.0),
+        );
+        let out = c.out(Vec3::new(30.5, 10.0, 0.0), 0.0, false);
+        assert!((out.x - 31.01).abs() < 1e-3 && out.y == 10.0, "{out}");
+    }
 
     #[test]
     fn rays_meet_boxes_and_cylinders_from_above() {

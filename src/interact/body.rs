@@ -96,6 +96,8 @@ impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<ToggleBackpack>()
             .add_observer(build_body)
+            .add_observer(forget_despawned_in_bag)
+            .add_observer(forget_despawned_in_socket)
             .add_systems(
                 Update,
                 (
@@ -180,6 +182,38 @@ fn slung_reach(
 pub struct CarriedMassSystems;
 
 /// When a player appears, give them a torso, a rig, and a backpack.
+/// Something despawned while in a pack (a grenade going off in it) leaves
+/// the pack's list too, wherever it was despawned from. The chaos monkey
+/// found packs listing items long gone (`docs/SOAK.md`).
+fn forget_despawned_in_bag(
+    gone: On<bevy::ecs::lifecycle::Despawn, InBackpack>,
+    stowed: Query<&InBackpack>,
+    mut bags: Query<&mut Backpack>,
+) {
+    let e = gone.entity;
+    if let Ok(i) = stowed.get(e)
+        && let Ok(mut bag) = bags.get_mut(i.bag)
+    {
+        bag.contents.retain(|c| *c != e);
+    }
+}
+
+/// And one despawned in a socket (a pouch, the holster, a gun's well)
+/// leaves it empty.
+fn forget_despawned_in_socket(
+    gone: On<bevy::ecs::lifecycle::Despawn, super::InSocket>,
+    seated: Query<&super::InSocket>,
+    mut sockets: Query<&mut Socket>,
+) {
+    let e = gone.entity;
+    if let Ok(i) = seated.get(e)
+        && let Ok(mut s) = sockets.get_mut(i.socket)
+        && s.occupant == Some(e)
+    {
+        s.occupant = None;
+    }
+}
+
 fn build_body(add: On<Add, Player>, mut commands: Commands) {
     let player = add.entity;
     let torso = commands

@@ -218,7 +218,8 @@ def signal_box():
     p = Part("static")
     W, D = SB
     hw, hd = W / 2, D / 2
-    # The station's name board on the brick front, over the door.
+    # The station's name board on the brick front (the building's shell,
+    # its face at -hd - 0.15), over the front window.
     p.box((1.6, 0.3, 0.04), (0.5, 2.62, -hd - 0.15 - 0.02), "Cream")
     # Panelled timber walls with a band of glass, a sill round it.
     y0 = SB_FLOOR
