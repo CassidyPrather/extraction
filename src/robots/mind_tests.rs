@@ -1735,3 +1735,59 @@ fn a_guess_does_not_hang_on_entity_ids() {
     let (a, b) = (guess(0), guess(50));
     assert!(a.distance(b) < 1e-3, "{a} vs {b}");
 }
+
+/// Two walkers on one player: one pins, the other works round to the
+/// side (and says so, once), so cover that faces one doesn't face both.
+#[test]
+fn two_walkers_pin_and_flank() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Shifts>().add_systems(
+        Last,
+        |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let a = walker_at(&mut app, &zone, zone.on_ground(98.0, 225.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(102.0, 225.0));
+    for w in [a, b] {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    }
+    let angle = |app: &App| {
+        let p = |w: Entity| {
+            let t = app.world().get::<Transform>(w).unwrap().translation;
+            Vec2::new(t.x - me.x, t.z - me.z)
+        };
+        p(a).angle_to(p(b)).abs().to_degrees()
+    };
+    let start = angle(&app);
+    let mut widest = start;
+    for _ in 0..90 * 12 {
+        put(&mut app, player, me);
+        app.update();
+        widest = widest.max(angle(&app));
+    }
+    assert!(
+        widest > 45.0,
+        "spread round you: {start:.0}° -> {widest:.0}°"
+    );
+    let flanks: Vec<Entity> = app
+        .world()
+        .resource::<Shifts>()
+        .0
+        .iter()
+        .filter(|s| s.state == Mind::Flanking)
+        .map(|s| s.robot)
+        .collect();
+    assert_eq!(
+        flanks.len(),
+        1,
+        "one of them flanks, and says so once: {flanks:?}"
+    );
+}
