@@ -338,6 +338,7 @@ fn marker_json(hm: &Heightmap, m: &Marker) -> Value {
         MarkerKind::Terminal { .. } => ("Terminal".to_string(), None),
         MarkerKind::ValleyKey { item } => ("ValleyKey".to_string(), Some(item.clone())),
         MarkerKind::Anomaly { kind, .. } => ("Anomaly".to_string(), Some(kind.clone())),
+        MarkerKind::Sentry { .. } => ("Sentry".to_string(), None),
         k => (format!("{k:?}"), None),
     };
     json!({

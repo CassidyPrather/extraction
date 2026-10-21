@@ -60,6 +60,17 @@ pub enum Rule {
     Crate,
     /// A point of interest no road or path leads to.
     Funnel,
+    /// A sentry that's a wall, not a puzzle: blind, guarding nothing, no
+    /// way round, over the way in or out, or met without warning
+    /// (`map_sentry`).
+    Sentry,
+    /// Caught out by the Surge: no roof in reach once it's called, or one
+    /// of its anomalies against a wall or a door (`map_surge`).
+    Surge,
+    /// A door with something in front of it: a building, a trunk, a rock,
+    /// a crate, water, or ground that doesn't meet its steps
+    /// (`map_doors`).
+    Door,
 }
 
 #[derive(Clone, Debug)]
@@ -242,8 +253,16 @@ pub const LANDMARK_HEIGHT: f32 = 12.0;
 /// How far you can make one out in thick fog (the pea-souper's
 /// visibility), metres.
 pub const FOG_SIGHT: f32 = 150.0;
-/// How far in ordinary weather (drizzle).
-pub const CLEAR_SIGHT: f32 = 320.0;
+/// How far in ordinary weather (drizzle). Legibility's wayfinding
+/// renders (`scripts/wayfind.sh`, docs/LEGIBILITY.md "Wayfinding") put
+/// every landmark in front of the headset from the insertion and each
+/// rendezvous: past about 200 m in drizzle a structure keeps 3-7% of its
+/// contrast, which is nothing to steer by.
+pub const CLEAR_SIGHT: f32 = 200.0;
+/// Two landmarks of a kind closer than this are twins you can't tell
+/// apart, metres. Wider than [`CLEAR_SIGHT`]: one that's barely there
+/// past it still reads as "the mast" and sends you the wrong way.
+pub const UNIQUE_SIGHT: f32 = 320.0;
 /// Share of each main route from which a landmark is in sight in ordinary
 /// weather, and the longest blind stretch.
 pub const LANDMARK_SHARE: f32 = 0.7;
@@ -254,6 +273,9 @@ pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
+/// From every rendezvous a landmark is in sight within this, metres, so
+/// "head for the mast" is a plan.
+pub const RV_LANDMARK: f32 = 200.0;
 
 // ---- Cover -----------------------------------------------------------------
 
@@ -325,8 +347,25 @@ pub const RV_LEVEL: f32 = 12.0;
 pub const VIEW_RANGE: f32 = 150.0;
 pub const VIEW_MAX: usize = 16;
 
+/// Where a kiosk's door is checked for footing: this far out from it.
+pub const KIOSK_STEP: f32 = 2.0;
+
 /// A road's first and last metres may run up to a building's door.
 const ROAD_END: usize = 8;
+
+// ---- Doors (`map_doors`) -----------------------------------------------------
+
+/// In front of every outside door, this far out from the wall's face (or
+/// the door's own steps and standing room, if further) and a shoulder
+/// either side of the opening, is kept clear, metres.
+pub const DOOR_REACH: f32 = 4.0;
+pub const DOOR_SHOULDER: f32 = 0.3;
+/// The ground there meets the door's steps within a step: the body's
+/// (`player.rs` `STEP_HEIGHT`); the walkers' smaller one is measured.
+pub const DOOR_STEP: f32 = 0.4;
+pub const WALKER_STEP: f32 = 0.28;
+/// A road ending this near a door runs on to it (no ledge check).
+pub const DOOR_ROAD_END: f32 = 5.0;
 
 /// Prefabs a road may run into or under.
 const ON_ROADS: &[&str] = &[
@@ -344,14 +383,14 @@ const ON_ROADS: &[&str] = &[
 /// An oriented rectangle in map space: centre, half extents, yaw (as the
 /// walkers' nav grid reads a placement's `rot`).
 #[derive(Clone, Copy, Debug)]
-struct Rect {
-    at: P2,
-    half: P2,
-    yaw: f32,
+pub(crate) struct Rect {
+    pub(crate) at: P2,
+    pub(crate) half: P2,
+    pub(crate) yaw: f32,
 }
 
 impl Rect {
-    fn of(prefab: &str, at: P2, rot: f32) -> Self {
+    pub(crate) fn of(prefab: &str, at: P2, rot: f32) -> Self {
         let f = prefab_footprint(prefab);
         Self {
             at,
@@ -360,21 +399,21 @@ impl Rect {
         }
     }
 
-    fn local(&self, p: P2) -> P2 {
+    pub(crate) fn local(&self, p: P2) -> P2 {
         let d = geom::sub(p, self.at);
         let (s, c) = self.yaw.sin_cos();
         [d[0] * c + d[1] * s, -d[0] * s + d[1] * c]
     }
 
     /// Signed distance from `p` to the rectangle (negative inside).
-    fn sdf(&self, p: P2) -> f32 {
+    pub(crate) fn sdf(&self, p: P2) -> f32 {
         let l = self.local(p);
         let q = [l[0].abs() - self.half[0], l[1].abs() - self.half[1]];
         let out = [q[0].max(0.0), q[1].max(0.0)];
         geom::len(out) + q[0].max(q[1]).min(0.0)
     }
 
-    fn corners(&self) -> [P2; 4] {
+    pub(crate) fn corners(&self) -> [P2; 4] {
         let (s, c) = self.yaw.sin_cos();
         let w = |lx: f32, lz: f32| [self.at[0] + lx * c - lz * s, self.at[1] + lx * s + lz * c];
         let [hx, hz] = self.half;
@@ -382,7 +421,7 @@ impl Rect {
     }
 
     /// Points round the outline every `step` metres.
-    fn outline(&self, step: f32) -> Vec<P2> {
+    pub(crate) fn outline(&self, step: f32) -> Vec<P2> {
         let c = self.corners();
         let mut out = Vec::new();
         for k in 0..4 {
@@ -395,9 +434,18 @@ impl Rect {
         out
     }
 
+    /// A point `local` (x, z) in this rectangle's own frame, in the map.
+    pub(crate) fn world(&self, local: P2) -> P2 {
+        let (s, c) = self.yaw.sin_cos();
+        [
+            self.at[0] + local[0] * c - local[1] * s,
+            self.at[1] + local[0] * s + local[1] * c,
+        ]
+    }
+
     /// Distance between two rectangles (negative: they overlap by about
     /// that much).
-    fn gap(&self, other: &Rect) -> f32 {
+    pub(crate) fn gap(&self, other: &Rect) -> f32 {
         let a = self
             .outline(0.25)
             .into_iter()
@@ -410,6 +458,86 @@ impl Rect {
             .fold(f32::INFINITY, f32::min);
         a.min(b)
     }
+}
+
+/// Something solid standing on the surface: a placement, or an
+/// underground site's kiosk. A site's placement *is* its entrance kiosk
+/// (its footprint is the kiosk and apron), so only the exits are added,
+/// and nothing is counted twice.
+#[derive(Clone, Debug)]
+pub(crate) struct Solid {
+    /// What to call it in a finding: the prefab, or "<site> exit".
+    pub(crate) name: String,
+    /// The prefab id, for the prefab lists (a site's id for its exits).
+    pub(crate) prefab: String,
+    /// What it stands on: its footprint (a kiosk's with its apron).
+    pub(crate) rect: Rect,
+    /// A kiosk's shell, walls and all (its apron is open ground).
+    pub(crate) shell: Option<Rect>,
+}
+
+impl Solid {
+    pub(crate) fn kiosk(&self) -> bool {
+        self.shell.is_some()
+    }
+
+    /// A way indoors with a roof over it: a walk-in building (`ENTERABLE`)
+    /// or a kiosk's stair down.
+    pub(crate) fn enterable(&self) -> bool {
+        self.kiosk() || ENTERABLE.contains(&crate::map::prefab_base(&self.prefab))
+    }
+
+    /// Where a kiosk's door is, on the outside face of its -Z end (portal
+    /// space: the stair runs down +Z), and the way out of it.
+    pub(crate) fn kiosk_door(&self) -> Option<(P2, P2)> {
+        let shell = self.shell?;
+        let at = shell.world([0.0, -shell.half[1]]);
+        let out = geom::sub(shell.world([0.0, -shell.half[1] - 1.0]), at);
+        Some((at, out))
+    }
+}
+
+/// Every solid thing on the surface, placements first (in order: index
+/// `i < map.placements.len()` is placement `i`), then the sites' exit
+/// kiosks.
+pub(crate) fn solids(map: &MapDef) -> Vec<Solid> {
+    let kiosk = |at: P2, rot: f32| {
+        let f = crate::underground::FOOTPRINT;
+        (
+            Rect {
+                at,
+                half: [f[0] * 0.5, f[2] * 0.5],
+                yaw: rot.to_radians(),
+            },
+            Rect {
+                at,
+                half: crate::underground::SHELL_HALF,
+                yaw: rot.to_radians(),
+            },
+        )
+    };
+    let mut out: Vec<Solid> = map
+        .placements
+        .iter()
+        .map(|p| Solid {
+            name: p.prefab.clone(),
+            prefab: p.prefab.clone(),
+            rect: Rect::of(&p.prefab, p.at, p.rot),
+            shell: crate::underground::is_site(&p.prefab).then(|| kiosk(p.at, p.rot).1),
+        })
+        .collect();
+    for site in crate::underground::placed(map) {
+        for (at, rot, _) in site.exits() {
+            let (rect, shell) = kiosk(at, rot);
+            out.push(Solid {
+                name: format!("{} exit", site.id),
+                prefab: site.id.clone(),
+                rect,
+                shell: Some(shell),
+            });
+        }
+    }
+    out
 }
 
 /// Points bucketed on a coarse grid, for "anything within r of here?".
@@ -626,16 +754,15 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     let walk = crate::map_nav::zone_grid(map, hm, crate::map_nav::MAX_SLOPE);
     let comfy = crate::map_nav::zone_grid(map, hm, COMFORT_SLOPE);
     let walk_seen = flood(&walk, ins);
+    let doors = crate::map_doors::doors(map);
     let comfy_seen = flood(&comfy, ins);
     // Main routes keep to ground no steeper than a route may climb, as a
     // player picking the easy way would.
     let gentle = crate::map_nav::zone_grid(map, hm, ROUTE_GRADE);
-    let rects: Vec<(usize, Rect)> = map
-        .placements
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (i, Rect::of(&p.prefab, p.at, p.rot)))
-        .collect();
+    // Everything solid on the surface, the sites' exit kiosks too: `rects`
+    // indexes into it.
+    let solids = solids(map);
+    let rects: Vec<(usize, Rect)> = solids.iter().map(|s| s.rect).enumerate().collect();
     let inside_building = |p: P2| {
         rects
             .iter()
@@ -666,9 +793,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         targets.push((name, at, reach));
     }
     for (i, rc) in &rects {
-        let p = &map.placements[*i];
-        if ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)) {
-            targets.push((p.prefab.clone(), rc.at, geom::len(rc.half) + 3.0));
+        // A building you can walk into, or a kiosk's door: somewhere to go.
+        if solids[*i].enterable() {
+            targets.push((solids[*i].name.clone(), rc.at, geom::len(rc.half) + 3.0));
         }
     }
     let mut unreached = 0;
@@ -779,7 +906,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             let dir = geom::sub(p, rl.points[inward]);
             let l = geom::len(dir).max(1e-3);
             let at = |d: f32| geom::add(p, geom::scale(dir, d / l));
-            let door = rects.iter().any(|(_, rc)| rc.sdf(p) < 5.0);
+            let door = crate::map_doors::near_door(&doors, p, DOOR_ROAD_END);
             // A road that ends on another road joins it.
             let joins = hm.road_lines.iter().any(|o| {
                 o.road != rl.road && polyline_closest(&o.points, p).0 < o.width * 0.5 + 2.0
@@ -890,18 +1017,13 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             )
         })
         .map(|m| m.at)
-        .chain(
-            map.placements
-                .iter()
-                .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
-                .map(|p| p.at),
-        )
+        .chain(solids.iter().filter(|s| s.enterable()).map(|s| s.rect.at))
         .collect();
-    let shelters: Vec<P2> = map
-        .placements
+    // A kiosk's stair down is a roof too.
+    let shelters: Vec<P2> = solids
         .iter()
-        .filter(|p| ENTERABLE.contains(&crate::map::prefab_base(&p.prefab)))
-        .map(|p| p.at)
+        .filter(|s| s.enterable())
+        .map(|s| s.rect.at)
         .collect();
     for route in &routes {
         let (gap, at) = longest_gap(&route.points, |p| {
@@ -936,19 +1058,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
 
     // -- Landmarks -------------------------------------------------------------
-    let marks: Vec<(String, P2, f32)> = map
-        .placements
-        .iter()
-        .filter_map(|p| {
-            let h = prefab_footprint(&p.prefab)[1];
-            (h >= LANDMARK_HEIGHT).then(|| (p.prefab.clone(), p.at, h))
-        })
-        .collect();
-    let in_sight = |p: P2, range: f32| {
-        marks
-            .iter()
-            .any(|(_, at, h)| dist(p, *at) <= range && sees(hm, p, *at, *h))
-    };
+    // Whole structures, seen at the tops of their tall parts
+    // (`map_landmarks`).
+    let marks = crate::map_landmarks::landmarks(map, hm);
+    let in_sight = |p: P2, range: f32| crate::map_landmarks::in_sight(&marks, hm, p, range);
     for route in &routes {
         let seen = route
             .points
@@ -969,6 +1082,29 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             seen * 100.0,
             fog * 100.0
         ));
+        let sight = crate::map_landmarks::along(&marks, hm, &route.points, CLEAR_SIGHT, FOG_SIGHT);
+        let each: Vec<String> = sight
+            .each
+            .iter()
+            .map(|(name, c, f, a, b)| {
+                format!(
+                    "{name} {:.0}% ({:.0}% in fog, {a:.0}-{b:.0} m)",
+                    c * 100.0,
+                    f * 100.0
+                )
+            })
+            .collect();
+        r.measures
+            .push(format!("route to {} sees: {}", route.to, each.join(", ")));
+        for (which, kind, share, _) in &sight.twins {
+            if !SERIES.contains(&kind.as_str()) {
+                r.measures.push(format!(
+                    "route to {}: two {kind}s in one view {:.0}% of the way ({which})",
+                    route.to,
+                    share * 100.0
+                ));
+            }
+        }
         if seen < LANDMARK_SHARE {
             find(
                 &mut r,
@@ -991,15 +1127,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
     }
     // Two of the same kind in sight at once and you can't tell which is
-    // which.
-    for (i, (ka, pa, _)) in marks.iter().enumerate() {
-        for (kb, pb, _) in marks.iter().skip(i + 1) {
-            if ka == kb && !SERIES.contains(&ka.as_str()) && dist(*pa, *pb) < CLEAR_SIGHT {
+    // which. A structure of several pieces is one landmark.
+    for (i, a) in marks.iter().enumerate() {
+        for b in marks.iter().skip(i + 1) {
+            let apart = a.apart(b);
+            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,
-                    format!("two {ka}s {:.0} m apart", dist(*pa, *pb)),
-                    *pa,
+                    format!("two {}s {apart:.0} m apart", a.kind),
+                    a.at(),
                 );
             }
         }
@@ -1007,13 +1144,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for reg in map.regions.iter().filter(|g| g.danger > 0) {
         let (lo, hi) = geom::bounds(&reg.polygon);
         let mid = geom::scale(geom::add(lo, hi), 0.5);
-        let own = map
-            .placements
+        let own = crate::map_landmarks::tallest_in(map, hm, &reg.polygon);
+        let near = marks
             .iter()
-            .filter(|p| geom::point_in_polygon(&reg.polygon, p.at))
-            .map(|p| prefab_footprint(&p.prefab)[1])
-            .fold(0.0, f32::max);
-        let near = marks.iter().any(|(_, at, _)| dist(*at, mid) <= FOG_SIGHT);
+            .any(|m| m.tops.iter().any(|(at, _)| dist(*at, mid) <= FOG_SIGHT));
         if own < REGION_MARK && !near {
             find(
                 &mut r,
@@ -1023,6 +1157,30 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     reg.name
                 ),
                 mid,
+            );
+        }
+    }
+    // The rendezvous is where a landmark is: one in sight within
+    // RV_LANDMARK, and (measured) one within fog range.
+    for m in map.markers_of(&MarkerKind::Rendezvous) {
+        let seen = crate::map_landmarks::seen_from(&marks, hm, m.at, CLEAR_SIGHT);
+        let fog = seen.iter().any(|s| s.1 <= FOG_SIGHT);
+        r.measures.push(format!(
+            "rendezvous {}: nearest landmark in sight {}{}",
+            m.name,
+            seen.first()
+                .map_or("none".into(), |(n, d)| format!("{n} {d:.0} m")),
+            if fog { "" } else { " (none in fog)" }
+        ));
+        if seen.first().is_none_or(|s| s.1 > RV_LANDMARK) {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!(
+                    "no landmark in sight within {RV_LANDMARK:.0} m of {}",
+                    m.name
+                ),
+                m.at,
             );
         }
     }
@@ -1208,7 +1366,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     "{}'s crate is {:.1} m from the {}",
                     m.name,
                     rc.sdf(m.at),
-                    map.placements[*i].prefab
+                    solids[*i].name
                 ),
                 m.at,
             );
@@ -1253,12 +1411,54 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
+    // own placement is padded as any building), so what can go wrong is
+    // under the exits' pads, and where their doors open: onto water or a
+    // slope you can't walk up to the door over.
+    for s in solids.iter().filter(|s| s.kiosk()) {
+        let is_exit = !crate::underground::is_site(&s.name);
+        let wet = is_exit
+            && s.rect
+                .outline(1.0)
+                .into_iter()
+                .chain([s.rect.at])
+                .any(|q| hm.water_level(q).is_some());
+        if wet {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!("{} stands in water", s.name),
+                s.rect.at,
+            );
+        }
+        let (door, out) = s.kiosk_door().unwrap();
+        let step = geom::add(door, geom::scale(out, KIOSK_STEP));
+        if hm.water_level(step).is_some() {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!("{}'s door opens onto water", s.name),
+                step,
+            );
+        } else if hm.slope_deg(step) > COMFORT_SLOPE {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "{}'s door opens onto a {:.0}° slope",
+                    s.name,
+                    hm.slope_deg(step)
+                ),
+                step,
+            );
+        }
+    }
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
-            let (pa, pb) = (&map.placements[*a], &map.placements[*b]);
+            let (pa, pb) = (&solids[*a], &solids[*b]);
             if !solid(&pa.prefab) || !solid(&pb.prefab) {
                 continue;
             }
@@ -1266,28 +1466,27 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 continue;
             }
             let gap = ra.gap(rb);
+            // Between walls: a kiosk's apron is ground you walk over.
+            let walls = pa.shell.unwrap_or(*ra).gap(&pb.shell.unwrap_or(*rb));
             if gap < -0.05 {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!("{} and {} overlap by {:.1} m", pa.prefab, pb.prefab, -gap),
-                    pa.at,
+                    format!("{} and {} overlap by {:.1} m", pa.name, pb.name, -gap),
+                    ra.at,
                 );
-            } else if gap >= SEALED && gap < SQUEEZE {
+            } else if (SEALED..SQUEEZE).contains(&walls) {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!(
-                        "{:.1} m squeeze between {} and {}",
-                        gap, pa.prefab, pb.prefab
-                    ),
-                    pa.at,
+                    format!("{:.1} m squeeze between {} and {}", walls, pa.name, pb.name),
+                    ra.at,
                 );
             }
         }
     }
     for (i, rc) in &rects {
-        let p = &map.placements[*i];
+        let p = &solids[*i];
         if ON_ROADS.contains(&p.prefab.as_str()) || !solid(&p.prefab) {
             continue;
         }
@@ -1302,7 +1501,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 find(
                     &mut r,
                     Rule::Overlap,
-                    format!("{} is on the {}", p.prefab, map.roads[rl.road].name),
+                    format!("{} is on the {}", p.name, map.roads[rl.road].name),
                     *q,
                 );
             }
@@ -1609,6 +1808,32 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
     }
 
+    // -- Sentries ----------------------------------------------------------------
+    {
+        let named: Vec<(String, Vec<P2>)> = routes
+            .iter()
+            .map(|rt| (rt.to.clone(), rt.points.clone()))
+            .collect();
+        let c = crate::map_sentry::check(map, hm, &walk, ins, &named, |p| inside_fence(map, p));
+        r.measures.extend(c.measures);
+        for (what, at) in c.findings {
+            find(&mut r, Rule::Sentry, what, at);
+        }
+    }
+
+    // -- Doors -----------------------------------------------------------------------
+    let dc = crate::map_doors::check(map, hm, &walk, &walk_seen);
+    r.measures.push(format!(
+        "doors: {}, {} findings, worst step to the ground {:.2} m, {} a walker can't step ({WALKER_STEP} m)",
+        dc.doors,
+        dc.findings.len(),
+        dc.worst_step,
+        dc.walker_blocked
+    ));
+    for (what, at) in dc.findings {
+        find(&mut r, Rule::Door, what, at);
+    }
+
     // -- Render load -----------------------------------------------------------------
     let views = route_pts
         .iter()
@@ -1617,10 +1842,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .chain(pois.iter().map(|p| p.1));
     let mut worst = (0, ins);
     for p in views {
-        let n = map
-            .placements
+        // A kiosk is a building to draw like any other.
+        let n = solids
             .iter()
-            .filter(|q| dist(q.at, p) <= VIEW_RANGE)
+            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE)
             .count();
         if n > worst.0 {
             worst = (n, p);
@@ -1639,6 +1864,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         );
     }
 
+    // -- The Surge: a roof in reach, and its anomalies off the walls -------------
+    crate::map_surge::check(map, hm, &comfy, &comfy_seen, &routes, &targets, &mut r);
+
     r.routes = routes;
     r.findings.sort_by_key(|f| f.rule);
     r
@@ -1647,7 +1875,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK, SALLOW_RESERVOIR, TRAINING_YARD};
+    use crate::map::{CINDER_WORKS, TRAINING_YARD};
 
     fn run(name: &str, text: &str) -> Report {
         let map = MapDef::from_ron(text).unwrap();
@@ -1661,33 +1889,27 @@ mod tests {
         r
     }
 
-    fn assert_clean(r: &Report) {
+    /// Every valley on [`crate::map::VALLEYS`] lints clean: a new valley is
+    /// held to the guide the moment it's listed. They lint side by side.
+    #[test]
+    fn every_valley_passes_the_map_lint() {
+        let reports: Vec<Report> = std::thread::scope(|s| {
+            let jobs: Vec<_> = crate::map::VALLEYS
+                .iter()
+                .map(|(name, text)| s.spawn(move || run(name, text)))
+                .collect();
+            jobs.into_iter().map(|j| j.join().unwrap()).collect()
+        });
+        let dirty: Vec<String> = reports
+            .iter()
+            .filter(|r| !r.findings.is_empty())
+            .map(Report::text)
+            .collect();
         assert!(
-            r.findings.is_empty(),
-            "{} breaks the map design rules:\n{}",
-            r.map,
-            r.text()
+            dirty.is_empty(),
+            "valleys break the map design rules:\n{}",
+            dirty.join("\n")
         );
-    }
-
-    #[test]
-    fn marrow_creek_passes_the_map_lint() {
-        assert_clean(&run("marrow_creek", MARROW_CREEK));
-    }
-
-    #[test]
-    fn kettle_pass_passes_the_map_lint() {
-        assert_clean(&run("kettle_pass", KETTLE_PASS));
-    }
-
-    #[test]
-    fn cinder_works_passes_the_map_lint() {
-        assert_clean(&run("cinder_works", CINDER_WORKS));
-    }
-
-    #[test]
-    fn sallow_reservoir_passes_the_map_lint() {
-        assert_clean(&run("sallow_reservoir", SALLOW_RESERVOIR));
     }
 
     /// The paper map (`scripts/field_map.py`) draws every landmark as a
@@ -1738,6 +1960,47 @@ mod tests {
         }
     }
 
+    /// Landmarks are whole structures of a kind: a chapel's tower and a
+    /// steeple in one view are two you can't tell apart, two masts side by
+    /// side are one; and a rendezvous with a landmark by it is found.
+    #[test]
+    fn landmarks_are_structures_and_rendezvous_have_one() {
+        let mut map = MapDef::from_ron(TRAINING_YARD).unwrap();
+        let lone = lint(&map, &Heightmap::build(&map));
+        assert!(
+            lone.findings
+                .iter()
+                .any(|f| f.rule == Rule::Landmark && f.what.contains("North post")),
+            "{}",
+            lone.text()
+        );
+        for (prefab, at) in [
+            ("chapel", [-60.0, 0.0]),
+            ("steeple", [60.0, 0.0]),
+            ("radio_mast", [-20.0, -60.0]),
+            ("radio_mast", [-30.0, -60.0]),
+        ] {
+            map.placements.push(crate::map::Placement {
+                prefab: prefab.into(),
+                at,
+                rot: 0.0,
+                y: 0.0,
+                absolute: false,
+                tag: String::new(),
+            });
+        }
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        let landmark = |s: &str| {
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Landmark && f.what.contains(s))
+        };
+        assert!(landmark("two steeples"), "{}", r.text());
+        assert!(!landmark("two radio_masts"), "{}", r.text());
+        assert!(!landmark("within 200 m of North post"), "{}", r.text());
+    }
+
     #[test]
     fn rects_measure_their_gap() {
         let a = Rect::of("shed", [0.0, 0.0], 0.0); // 4 x 3
@@ -1772,6 +2035,60 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Reach && f.what.contains("house_plank")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Marrow Creek's depot exit: a kiosk 115 m from its site's placement.
+    fn marrow_exit() -> (MapDef, P2) {
+        let map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let exit = crate::underground::placed(&map)
+            .iter()
+            .find(|s| s.id == "depot_marrow")
+            .unwrap()
+            .exits()[0]
+            .0;
+        (map, exit)
+    }
+
+    #[test]
+    fn a_building_on_an_exit_kiosk_is_found() {
+        let (mut map, exit) = marrow_exit();
+        map.placements.push(crate::map::Placement {
+            prefab: "shed".into(),
+            at: [exit[0] + 2.0, exit[1]],
+            rot: 0.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings.iter().any(|f| f.rule == Rule::Overlap
+                && f.what.contains("depot_marrow exit")
+                && f.what.contains("shed")),
+            "{}",
+            r.text()
+        );
+    }
+
+    #[test]
+    fn an_exit_kiosk_in_the_water_is_found() {
+        let (mut map, exit) = marrow_exit();
+        map.water.push(crate::map::WaterDef {
+            name: "test ditch".into(),
+            points: vec![[exit[0] - 20.0, exit[1]], [exit[0] + 20.0, exit[1]]],
+            width: 6.0,
+            depth: 0.7,
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Footing && f.what.contains("depot_marrow exit")),
             "{}",
             r.text()
         );
