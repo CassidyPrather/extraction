@@ -49,6 +49,11 @@ pub enum Moves {
     /// A folding bipod: turns about its pivot (the origin, local X) from
     /// folded to deployed.
     Bipod,
+    /// A crossbow's string at rest: shown until the draw starts.
+    StringRest,
+    /// A crossbow's string drawn into a V: its origin on the line through
+    /// the prod's tips, stretched along Z with the draw.
+    StringDrawn,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -96,6 +101,8 @@ pub enum HandleKind {
     /// A pump's forend: the supporting hand works it, back and forward
     /// along the bore (`grab` is the forend, where the support is).
     Pump,
+    /// A crossbow's string: drawn back to the latch by hand.
+    String,
 }
 
 #[derive(Clone, Debug)]
@@ -162,6 +169,7 @@ pub fn layout(id: &str) -> Option<GunLayout> {
         "toz8" => Some(toz8()),
         "rpk74" => Some(rpk74()),
         "flare_pistol" => Some(flare_pistol()),
+        "crossbow" => Some(crossbow()),
         _ => None,
     }
 }
@@ -872,6 +880,57 @@ fn flare_pistol() -> GunLayout {
     }
 }
 
+/// The home-made crossbow (art/guns/crossbow.py): a leaf-spring prod on a
+/// plank stock. The string is drawn back by hand to the latch; a bolt
+/// goes in the groove at `load_port`.
+fn crossbow() -> GunLayout {
+    use Mat::*;
+    use Moves::*;
+    let rail = 0.06;
+    GunLayout {
+        grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
+        support: Some(Vec3::new(0.0, 0.0, -0.28)),
+        muzzle: Vec3::new(0.0, rail, -0.46),
+        port: Vec3::new(0.0, 0.07, -0.2),
+        eject: Vec3::new(0.0, 1.0, 0.0),
+        sight: at(0.0, 0.085, -0.027),
+        magwell: None,
+        handle: Some(HandleLayout {
+            kind: HandleKind::String,
+            grab: Vec3::new(0.0, 0.065, -0.33),
+            travel: 0.26,
+        }),
+        load_port: Vec3::new(0.0, 0.07, -0.2),
+        hinge: Vec3::ZERO,
+        parts: vec![
+            // Plank stock and tiller, the rail along its top.
+            part(bx(0.035, 0.04, 0.5), at(0.0, 0.03, -0.2), Wood, Static),
+            part(
+                bx(0.035, 0.11, 0.3),
+                Transform::from_xyz(0.0, -0.03, 0.2).with_rotation(Quat::from_rotation_x(0.1)),
+                Wood,
+                Static,
+            ),
+            part(
+                bx(0.02, 0.01, 0.42),
+                at(0.0, rail - 0.005, -0.25),
+                Steel,
+                Static,
+            ),
+            // The leaf-spring prod across the front.
+            part(bx(0.6, 0.012, 0.04), at(0.0, 0.05, -0.4), Steel, Static),
+            part(bx(0.005, 0.022, 0.006), at(0.0, 0.0, -0.05), Black, Trigger),
+            // The string's middle.
+            part(
+                bx(0.06, 0.004, 0.004),
+                at(0.0, 0.065, -0.33),
+                Black,
+                WithBolt,
+            ),
+        ],
+    }
+}
+
 fn toz() -> GunLayout {
     use Mat::*;
     use Moves::*;
@@ -966,6 +1025,7 @@ mod tests {
             "toz8",
             "rpk74",
             "flare_pistol",
+            "crossbow",
         ] {
             let l = layout(id).unwrap();
             assert!(l.muzzle.z < l.grip.translation.z - 0.1, "{id}");

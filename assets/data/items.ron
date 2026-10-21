@@ -168,6 +168,20 @@
             tags: ["metal"],
         ),
 
+        (
+            id: "crossbow", dims: Some((0.62, 0.21, 0.885)),
+            name: "Home-made crossbow",
+            description: "A cut-down leaf spring on a plank, a gate latch for a nut. Draw the string back to the latch by hand, lay a bolt in the groove, loose it. Silent; the bolts come back if you go and get them. Never loose it empty.",
+            category: Firearm, size: Bulky, mass: 3.3, bulk: 9.0,
+            firearm: Some((
+                action: Crossbow, cartridge: "bolt",
+                modes: [Safe, Semi], report: 0.04,
+                muzzle_velocity: 70.0, damage: 60.0, spread_moa: 25.0, recoil: 0.5,
+                wear_per_shot: 0.0015, fouling_per_shot: 0.0,
+            )),
+            tags: ["metal", "wood"],
+        ),
+
         // ---------------------------------------------------------------
         // Grenades and blades
         (
@@ -423,6 +437,18 @@
             description: "A 26 mm green star: a signal. Two bumps on the wad.",
             category: Ammo, size: Tiny, mass: 0.11, bulk: 0.05, cartridge: Some("26mm"), rounds: 1, load: SignalGreen,
             tags: ["paper", "powder"],
+        ),
+        (
+            id: "bolt_bundle", dims: Some((0.045, 0.04, 0.38)), name: "Crossbow bolts (bundle)",
+            description: "Five steel-rod bolts wired together, fletched with cut plastic bottle.",
+            category: Ammo, size: Small, mass: 0.15, bulk: 0.4, cartridge: Some("bolt"), rounds: 5,
+            tags: ["metal", "polymer"],
+        ),
+        (
+            id: "crossbow_bolt", dims: Some((0.03, 0.03, 0.38)), name: "Crossbow bolt",
+            description: "A filed steel rod with plastic fletches. Shot, it lies where it came down: go and get it.",
+            category: Ammo, size: Small, mass: 0.028, bulk: 0.08, cartridge: Some("bolt"), rounds: 1,
+            tags: ["metal", "polymer"],
         ),
         // Loose rounds: what racking a loaded gun throws on the ground, and
         // what you thumb into magazines one at a time.
@@ -1002,6 +1028,11 @@
             id: "camera", dims: Some((0.14, 0.09, 0.07)), name: "Zorki camera",
             description: "A rangefinder camera, film loaded. Hold it up, line the subject in the middle, press.",
             category: Gadget, size: Small, mass: 0.6, bulk: 0.4, tags: ["metal"],
+        ),
+        (
+            id: "scour_key", dims: Some((0.05, 0.05, 0.62)), name: "Scour valve key",
+            description: "A long box spanner with a T-bar, for the reservoir's scour valves. A cut chain hangs off the handle.",
+            category: Tool, size: Medium, mass: 2.6, bulk: 1.2, tags: ["metal"],
         ),
         (
             id: "holm_watch", dims: Some((0.04, 0.012, 0.04)), name: "Post office watch",

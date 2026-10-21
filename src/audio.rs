@@ -62,6 +62,135 @@ struct RoofRain {
     heavy: bool,
 }
 
+/// Water that runs where a map says it does, beyond its rivers: Sallow's
+/// scour valves, still open, roaring out of the valve house at the dam's
+/// toe into the river (loud at the toe and the face stair's foot, fading
+/// up the valley). (map, xz, height above ground.) The creek's recording,
+/// slowed and louder, until an outflow can be recorded.
+pub const OUTFLOWS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [12.0, 176.0], 1.0)];
+
+#[derive(Component)]
+struct OutflowLoop;
+
+fn outflows(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    existing: Query<(), With<OutflowLoop>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut done: Local<bool>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    if *done || !existing.is_empty() {
+        return;
+    }
+    *done = true;
+    for &(map, [x, z], up) in OUTFLOWS {
+        if zone.map.name != map {
+            continue;
+        }
+        if let Some(sample) = bank.pick("ambience/creek", &mut rng.0) {
+            commands.spawn((
+                OutflowLoop,
+                SamplePlayer::new(sample)
+                    .looping()
+                    .with_volume(Volume::Decibels(mix::db("water.scour"))),
+                PlaybackSettings::default().with_speed(0.75),
+                Transform::from_xyz(x, zone.ground(x, z) + up, z),
+                Placed::new("water.scour"),
+            ));
+        }
+    }
+}
+
+/// A downpour's swell: (dB, seconds).
+pub const RAIN_SWELL: (f32, f32) = (4.0, 4.0);
+
+/// Thunder after each flash (`world::weather::Lightning`), as far behind
+/// it as sound takes (`storm::thunder_delay`, 343 m/s), from the strike's
+/// direction:
+///
+/// - near (under [`THUNDER_NEAR`]): a sharp crack, echoing the flash's
+///   strokes, then the long tearing roll;
+/// - far: the low rumble only, darker the further (a 1.5 kHz roll at
+///   600 m to 300 Hz at 2.6 km).
+///
+/// Louder the nearer and the brighter the strike. (In a storm the far
+/// thunder of `ambient_oneshots` keeps quiet: every roll is a flash's.)
+pub const THUNDER_NEAR: f32 = 600.0;
+
+fn storm_sounds(
+    mut commands: Commands,
+    mut flashes: MessageReader<crate::world::weather::Lightning>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut pending: Local<Vec<(f32, Vec3, f32, f32)>>,
+) {
+    let now = time.elapsed_secs();
+    for f in flashes.read() {
+        let delay = crate::world::storm::thunder_delay(f.distance);
+        pending.push((now + delay, f.at, f.distance, f.strength));
+    }
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let due: Vec<_> = pending.iter().filter(|p| p.0 <= now).copied().collect();
+    pending.retain(|p| p.0 > now);
+    for (_, at, d, strength) in due {
+        // From the strike's direction, a fixed way off and up: its level is
+        // set here, by distance, not by the falloff.
+        let dir = (at - ear).with_y(0.0).normalize_or(Vec3::X);
+        let from = ear + dir * 120.0 + Vec3::Y * 60.0;
+        let db = thunder_db(d, strength);
+        if d < THUNDER_NEAR {
+            let fc = 8000.0 - 5000.0 * ((d - 250.0) / 350.0).clamp(0.0, 1.0);
+            play_filtered_db(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "explosions/grenade_sharp",
+                from,
+                "thunder.crack",
+                db,
+                0.7,
+                fc,
+            );
+        }
+        let fc = thunder_cutoff(d);
+        play_filtered_db(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ambience/thunder_distant",
+            from,
+            "thunder.roll",
+            db,
+            0.85,
+            fc,
+        );
+    }
+}
+
+/// Thunder's level against its cue, dB: 0 at 250 m from a full strike,
+/// 6 dB down each doubling of distance, and down to -6 dB for a faint one.
+pub fn thunder_db(distance: f32, strength: f32) -> f32 {
+    -6.0 * (distance.max(250.0) / 250.0).log2() - 6.0 * (1.0 - strength.clamp(0.0, 1.0))
+}
+
+/// The roll's low-pass by distance, Hz: 1.5 kHz at 600 m to 300 Hz at
+/// 2.6 km and beyond, and open up close.
+pub fn thunder_cutoff(distance: f32) -> f32 {
+    if distance < THUNDER_NEAR {
+        return 4000.0;
+    }
+    let t = ((distance - THUNDER_NEAR) / 2000.0).clamp(0.0, 1.0);
+    (1500f32.ln() + (300f32.ln() - 1500f32.ln()) * t).exp()
+}
+
 /// The rain bed follows the weather, and where you are: duller and quieter
 /// under a roof (a tin roof drumming over you if there's a recording for
 /// it), gone underground. Eased, so a doorway is a crossfade.
@@ -78,11 +207,25 @@ fn rain_volume(
     mut lowpass: Query<&mut FastLowpassNode>,
     mut now: Local<Option<(f32, f32)>>,
     mut drums: Local<HashMap<&'static str, f32>>,
+    mut swell: Local<(f32, f32)>,
 ) {
+    // In a downpour, a wall of rain sweeps over every 10-20 s (the rain
+    // sheets crossing the valley): up 4 dB and back over 4 s.
+    let t = time.elapsed_secs();
+    if t >= swell.0 {
+        swell.1 = t;
+        swell.0 = t + rng.0.range(10.0, 20.0);
+    }
+    let into = t - swell.1;
+    let gust = if conditions.rain > 0.7 && into < RAIN_SWELL.1 {
+        RAIN_SWELL.0 * (std::f32::consts::PI * into / RAIN_SWELL.1).sin()
+    } else {
+        0.0
+    };
     let rain_db = if conditions.rain < 0.01 {
         None
     } else {
-        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt())
+        Some(mix::db("rain") - 18.0 + 18.0 * conditions.rain.sqrt() + gust)
     };
     let (want_db, want_cut, drum) = crate::acoustics::rain_under(&listening.space);
     let k = (time.delta_secs() * 2.0).min(1.0);
@@ -237,6 +380,8 @@ impl Plugin for AudioPlugin {
                         tool_sounds,
                         hush_world,
                         slapbacks,
+                        storm_sounds,
+                        outflows,
                     ),
                 ),
             )
@@ -254,6 +399,7 @@ impl Plugin for AudioPlugin {
                     room_acoustics,
                     binaural_switch,
                     score_drive,
+                    (animal_sounds, breath_sounds, water_sounds),
                 ),
             )
             // After everything that plays, so a sound is placed the frame
@@ -261,7 +407,42 @@ impl Plugin for AudioPlugin {
             .add_systems(
                 PostUpdate,
                 occlude.after(bevy::transform::TransformSystems::Propagate),
-            );
+            )
+            .add_systems(Last, retire_voices);
+    }
+}
+
+/// At most this many one-shot sounds at once; past it the oldest go.
+pub const VOICE_CAP: usize = 256;
+/// No one-shot in the bank runs longer than a minute (the sirens), even
+/// slowed: one still "playing" after this never will.
+pub const ONE_SHOT_MAX: f32 = 90.0;
+
+/// Retires one-shot voices that outlive any sound, and the oldest past
+/// [`VOICE_CAP`]. A one-shot despawns itself when it finishes playing, but
+/// with no output device (none plugged in, or the headset's audio gone
+/// mid-session) nothing ever finishes: every footstep, shot and creak
+/// stayed as an entity, a few dozen a second (soak finding, `docs/SOAK.md`).
+pub(crate) fn retire_voices(
+    mut commands: Commands,
+    voices: Query<(Entity, &SamplePlayer)>,
+    time: Res<Time<Real>>,
+    mut born: Local<HashMap<Entity, f32>>,
+) {
+    let now = time.elapsed_secs();
+    born.retain(|e, _| voices.contains(*e));
+    let mut once: Vec<(f32, Entity)> = voices
+        .iter()
+        .filter(|(_, p)| matches!(p.repeat_mode, RepeatMode::PlayOnce))
+        .map(|(e, _)| (*born.entry(e).or_insert(now), e))
+        .collect();
+    once.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let over = once.len().saturating_sub(VOICE_CAP);
+    for (i, (t, e)) in once.into_iter().enumerate() {
+        if i < over || now - t > ONE_SHOT_MAX {
+            born.remove(&e);
+            commands.entity(e).try_despawn();
+        }
     }
 }
 
@@ -536,10 +717,19 @@ fn footsteps(
     spatial: SpatialQuery,
     built: Query<(&GlobalTransform, &Surfaces)>,
     wetness: Option<Res<crate::world::weather::Wetness>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let wet = wetness.map_or(0.0, |w| w.level);
     for s in steps.read() {
-        let set = ground_set(&zone, &trucks, &spatial, &built, s.position, wet);
+        let set = ground_set(
+            &zone,
+            &trucks,
+            &spatial,
+            &built,
+            s.position,
+            wet,
+            snow.as_deref(),
+        );
         let offset = -6.0 + (s.speed / 4.0).min(1.0) * 6.0;
         play(
             &mut commands,
@@ -553,6 +743,9 @@ fn footsteps(
         );
     }
 }
+
+/// How deep snow must lie (`world::snow::Snow::lies`) to crunch underfoot.
+const SNOW_UNDERFOOT: f32 = 0.25;
 
 /// How much standing water (`world::puddles::puddle_at`) a step must land
 /// in to splash.
@@ -742,8 +935,8 @@ fn grenade_sounds(
 }
 
 /// The footstep set for whatever is under `at`: the truck's bed, a built
-/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), or the
-/// ground.
+/// floor, a puddle (on ground as wet as `wet`, `world::puddles`), a
+/// drained reservoir's silt, or the ground.
 fn ground_set(
     zone: &Zone,
     trucks: &Query<(&GlobalTransform, &crate::raid::truck::Truck)>,
@@ -751,6 +944,7 @@ fn ground_set(
     built: &Query<(&GlobalTransform, &Surfaces)>,
     at: Vec3,
     wet: f32,
+    snow: Option<&crate::world::snow::Snow>,
 ) -> &'static str {
     let p = [at.x, at.z];
     let in_truck = trucks
@@ -763,6 +957,16 @@ fn ground_set(
         footstep_set(m)
     } else if wet > 0.0 && crate::world::puddles::puddle_at(&zone.hm, p, wet) > PUDDLE_SPLASH {
         "footsteps/water"
+    } else if snow.is_some_and(|s| s.lies(at.y) > SNOW_UNDERFOOT) {
+        // Snow lying (`world::snow`): a crunch; gravel's until a recording
+        // of snow can be fetched.
+        "footsteps/gravel"
+    } else if crate::world::terrain::drowned_line(&zone.map.name)
+        .is_some_and(|d| d.at(p, at.y).0 > 0.5)
+    {
+        // A drained reservoir's bed (`world::terrain::Drowned`): silt,
+        // as it looks.
+        "footsteps/mud"
     } else {
         surface_set(zone.hm.surface(p, zone.forest_cover(p[0], p[1]) > 0.5))
     }
@@ -782,6 +986,7 @@ fn landing_sounds(
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     wetness: Option<Res<crate::world::weather::Wetness>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let wet = wetness.map_or(0.0, |w| w.level);
     for (e, body, gt) in &bodies {
@@ -793,7 +998,7 @@ fn landing_sounds(
             continue;
         }
         let at = gt.translation();
-        let set = ground_set(&zone, &trucks, &spatial, &built, at, wet);
+        let set = ground_set(&zone, &trucks, &spatial, &built, at, wet, snow.as_deref());
         let hard = ((-vy - 2.5) / 6.0).clamp(0.0, 1.0);
         for _ in 0..2 {
             play_at_speed(
@@ -818,8 +1023,10 @@ fn shot_set(item: &str) -> &'static str {
         "mosin" => "guns/bolt_rifle_shot",
         "toz_double" => "guns/shotgun_shot",
         "mp133" => "guns/shotgun_shot",
+        "sks" | "rpk74" => "guns/rifle_shot",
+        "nagant" | "ppsh" => "guns/pistol_shot",
         "svd" => "guns/bolt_rifle_shot",
-        "toz8" | "flare_pistol" => "guns/pistol_shot",
+        "toz8" | "flare_pistol" | "crossbow" => "guns/pistol_shot",
         _ => "guns/rifle_shot",
     }
 }
@@ -868,6 +1075,37 @@ fn fault_sounds(
         }
     }
     true
+}
+
+/// [`play_filtered`] with a level offset (dB) against its cue.
+#[allow(clippy::too_many_arguments)]
+fn play_filtered_db(
+    commands: &mut Commands,
+    bank: &SoundBank,
+    rng: &mut Rng,
+    set: &str,
+    at: Vec3,
+    cue: &str,
+    db: f32,
+    speed: f64,
+    hz: f32,
+) {
+    let Some(sample) = bank.pick(set, rng) else {
+        return;
+    };
+    commands.spawn((
+        SamplePlayer::new(sample).with_volume(Volume::Decibels(mix::db(cue) + db)),
+        PlaybackSettings::default().with_speed(speed),
+        Transform::from_translation(at),
+        sample_effects![
+            mix::spatial(cue),
+            FastLowpassNode::<2> {
+                cutoff_hz: hz,
+                ..default()
+            },
+            reverb_send(cue)
+        ],
+    ));
 }
 
 /// A placed one-shot through its own low-pass (`hz`), for sounds that
@@ -1519,6 +1757,7 @@ fn ambient_oneshots(
     let night = conditions
         .as_deref()
         .is_some_and(|c| c.hour == crate::world::weather::Hour::Night);
+    let storm = conditions.as_deref().is_some_and(|c| c.storm);
     let dt = time.delta_secs();
     next.0 -= dt;
     next.1 -= dt;
@@ -1614,7 +1853,10 @@ fn ambient_oneshots(
     }
     // Far thunder; at night, the Surge's, deeper and more often, a long
     // way off across the Zone.
-    if next.1 <= 0.0 {
+    if next.1 <= 0.0 && storm {
+        // In a storm, all thunder follows a flash (`storm_sounds`).
+        next.1 = rng.0.range(60.0, 180.0);
+    } else if next.1 <= 0.0 {
         if night {
             next.1 = rng.0.range(35.0, 90.0);
             play_at_speed(
@@ -2400,10 +2642,12 @@ fn flock_sounds(
     use crate::wildlife::FlushCause;
     use crate::wildlife::flock::Species;
     for f in flushed.read() {
-        let calls = match flocks.get(f.flock).map(|fl| fl.species) {
-            Ok(Species::Raven) => "ambience/raven",
-            Ok(Species::Jackdaw) => "ambience/jackdaw",
-            _ => "ambience/crow",
+        let (calls, cue) = match flocks.get(f.flock).map(|fl| fl.species) {
+            Ok(Species::Raven) => ("ambience/raven", "flock.call"),
+            Ok(Species::Jackdaw) => ("ambience/jackdaw", "flock.call"),
+            Ok(Species::Heron) => ("wildlife/heron", "flock.heron"),
+            Ok(Species::Chough) => ("wildlife/chough", "flock.chough"),
+            _ => ("ambience/crow", "flock.call"),
         };
         let restless = f.cause == FlushCause::Restless;
         let up = Some(f.at + Vec3::Y * 2.0);
@@ -2435,7 +2679,7 @@ fn flock_sounds(
                 &mut rng.0,
                 calls,
                 Some(f.at + Vec3::Y * 4.0),
-                "flock.call",
+                cue,
                 if restless { -6.0 } else { 0.0 },
                 0.1,
             );
@@ -2791,6 +3035,283 @@ fn hush_world(
                 } else {
                     Volume::Decibels(mix::db("hush.tone") + now.db + 20.0 * rise.log10())
                 };
+            }
+        }
+    }
+}
+
+/// The animals (`wildlife`), some of them stand-ins (`synth_foley`):
+///
+/// - a herd startled: a roe deer's hoarse bark, a chamois' whistle, a dog
+///   pack barking (two or three of them); bolting, hooves away through the
+///   leaves; a dog killed, its yelp;
+/// - rats in the walls: squeaks and claws;
+/// - an animal killed (`bodies::Killed`): the thump of it going down, and
+///   a heron's croak.
+fn animal_sounds(
+    mut commands: Commands,
+    mut startled: MessageReader<crate::wildlife::herd::Startled>,
+    mut scurried: MessageReader<crate::wildlife::rats::Scurried>,
+    mut killed: MessageReader<crate::wildlife::bodies::Killed>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::wildlife::bodies::CarcassKind;
+    use crate::wildlife::herd::{Kind, Startle};
+    for s in startled.read() {
+        let at = Some(s.at + Vec3::Y * 0.8);
+        match (s.kind, s.what) {
+            (Kind::Deer, Startle::Bark) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/deer_bark",
+                at,
+                "animal.deer",
+                0.0,
+                0.05,
+            ),
+            (Kind::Chamois, Startle::Bark) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/chamois",
+                at,
+                "animal.chamois",
+                0.0,
+                0.05,
+            ),
+            (Kind::Dog, Startle::Bark) => {
+                for i in 0..(2 + rng.0.below(2)) {
+                    let off = Vec3::new(i as f32 * 1.3, 0.0, (i as f32 - 1.0) * 1.1);
+                    play(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "wildlife/dog_bark",
+                        Some(s.at + off + Vec3::Y * 0.5),
+                        "animal.dog",
+                        0.0,
+                        0.08,
+                    );
+                }
+            }
+            (Kind::Dog, Startle::Killed) => play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/dog_yelp",
+                at,
+                "animal.yelp",
+                0.0,
+                0.05,
+            ),
+            (_, Startle::Bolt) => {
+                for _ in 0..3 {
+                    play_at_speed(
+                        &mut commands,
+                        &bank,
+                        &mut rng.0,
+                        "footsteps/leaves",
+                        at,
+                        "animal.hooves",
+                        0.0,
+                        1.7,
+                        0.1,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    for r in scurried.read() {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "wildlife/rats",
+            Some(r.at),
+            "animal.rats",
+            0.0,
+            0.08,
+        );
+    }
+    for k in killed.read() {
+        let speed = match k.kind {
+            CarcassKind::Bird => 1.5,
+            CarcassKind::Heron => 1.2,
+            CarcassKind::Dog => 1.0,
+            CarcassKind::Deer => 0.85,
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/body_hit",
+            Some(k.at),
+            "animal.thump",
+            0.0,
+            speed,
+            0.08,
+        );
+        if k.kind == CarcassKind::Heron {
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/heron",
+                Some(k.at),
+                "flock.heron",
+                -4.0,
+                0.05,
+            );
+        }
+    }
+}
+
+/// Winded, you breathe hard (`interact::gestures`' breaths, which robots
+/// hear to `gestures::BREATH` m, a third with a hand over your mouth):
+/// a breath every [`BREATH_EVERY`] s, louder the more winded, quieter and
+/// muffled through the hand. The ears hear it about as far as the robots
+/// (the audit checks). A stand-in breath (`synth_foley`) for now.
+pub const BREATH_EVERY: f32 = 1.0;
+
+fn breath_sounds(
+    mut commands: Commands,
+    players: Query<
+        (
+            &crate::player::Body,
+            &crate::interact::gestures::Gestures,
+            &GlobalTransform,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<f32>,
+) {
+    let Ok((body, g, gt)) = players.single() else {
+        return;
+    };
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = BREATH_EVERY;
+    let winded = (1.0 - body.stamina / 0.6).clamp(0.0, 1.0);
+    if winded <= 0.0 {
+        return;
+    }
+    let at = gt.translation() + Vec3::Y * 1.6;
+    let db = 20.0 * winded.max(0.05).log10();
+    if g.hush {
+        let hushed = 20.0 * crate::interact::gestures::HUSHED.log10();
+        play_filtered_db(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/breath",
+            at,
+            "body.breath",
+            db + hushed,
+            1.0,
+            1000.0,
+        );
+    } else {
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/breath",
+            Some(at),
+            "body.breath",
+            db,
+            0.05,
+        );
+    }
+}
+
+/// Water that isn't a river: any wide water (an arm, a lake, a flooded
+/// street; [`LAP_WIDTH`] m and more) laps at the shore nearest you when
+/// you're within [`LAP_NEAR`] of it; and where a map's water drips
+/// ([`DRIPS`]: Sallow's scours, leaking into the foot of the draw-off
+/// tower), drops fall when you're near. Stand-ins (`synth_foley`) for now.
+pub const LAP_WIDTH: f32 = 20.0;
+pub const LAP_NEAR: f32 = 40.0;
+pub const DRIPS: &[(&str, [f32; 2], f32)] = &[("Sallow Reservoir", [-20.0, 102.5], 0.5)];
+const DRIP_NEAR: f32 = 50.0;
+
+fn water_sounds(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<(f32, f32)>,
+    mut shores: Local<Option<Vec<(f32, Vec<[f32; 2]>)>>>,
+) {
+    let (Some(zone), Some(ear)) = (zone, listener.iter().next().map(|g| g.translation())) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let shores = shores.get_or_insert_with(|| {
+        zone.map
+            .water
+            .iter()
+            .filter(|w| w.width >= LAP_WIDTH)
+            .map(|w| (w.width, extraction_core::geom::catmull_rom(&w.points, 4.0)))
+            .collect()
+    });
+    let p = [ear.x, ear.z];
+    if now >= next.0 {
+        next.0 = now + rng.0.range(1.2, 2.8);
+        // The nearest point of the nearest wide water's edge.
+        let mut best: Option<(f32, [f32; 2])> = None;
+        for (width, line) in shores.iter() {
+            for q in line {
+                let d = extraction_core::geom::dist(*q, p) - width * 0.5;
+                if best.is_none_or(|b| d < b.0) {
+                    let to =
+                        Vec2::new(p[0] - q[0], p[1] - q[1]).normalize_or_zero() * (width * 0.5);
+                    best = Some((d, [q[0] + to.x, q[1] + to.y]));
+                }
+            }
+        }
+        if let Some((d, q)) = best.filter(|b| b.0 < LAP_NEAR) {
+            let _ = d;
+            let at = zone.on_ground(q[0], q[1]);
+            play(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ambience/lap",
+                Some(at),
+                "water.lap",
+                0.0,
+                0.1,
+            );
+        }
+    }
+    if now >= next.1 {
+        next.1 = now + rng.0.range(0.15, 0.9);
+        for &(map, [x, z], up) in DRIPS {
+            if zone.map.name != map {
+                continue;
+            }
+            let at = Vec3::new(x, zone.ground(x, z) + up, z);
+            if at.distance(ear) < DRIP_NEAR {
+                play(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "ambience/drip",
+                    Some(at),
+                    "water.drip",
+                    0.0,
+                    0.1,
+                );
             }
         }
     }
@@ -3890,6 +4411,20 @@ fn render_voices(
         renders.tasks.push((PING_SET.to_string(), ping));
         let crackle = pool.spawn(async move { vec![rv::render_crackle(sr)] });
         renders.tasks.push((CRACKLE_SET.to_string(), crackle));
+        // Stand-ins for recordings not yet fetched (`synth_foley`), unless
+        // the bank has the real thing.
+        for st in crate::synth_foley::STAND_INS {
+            if bank.has(st.set) {
+                continue;
+            }
+            let (set, variants) = (st.set, st.variants);
+            let task = pool.spawn(async move {
+                (0..variants)
+                    .filter_map(|v| crate::synth_foley::render(set, v, sr))
+                    .collect::<Vec<_>>()
+            });
+            renders.tasks.push((set.to_string(), task));
+        }
     }
     renders.tasks.retain_mut(|(set, task)| {
         let Some(buffers) = bevy::tasks::futures::check_ready(task) else {
@@ -4299,6 +4834,20 @@ fn pylon_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Thunder is quieter and darker the further the strike: 6 dB a
+    /// doubling past 250 m, the roll from 1.5 kHz at 600 m to 300 Hz at
+    /// 2.6 km.
+    #[test]
+    fn far_thunder_is_low_and_quiet() {
+        assert_eq!(thunder_db(250.0, 1.0), 0.0);
+        assert!((thunder_db(1000.0, 1.0) + 12.0).abs() < 1e-4);
+        assert!(thunder_db(1000.0, 0.2) < thunder_db(1000.0, 1.0));
+        assert!((thunder_cutoff(600.0) - 1500.0).abs() < 1.0);
+        assert!((thunder_cutoff(2600.0) - 300.0).abs() < 1.0);
+        assert!(thunder_cutoff(1200.0) < thunder_cutoff(800.0));
+        assert!(thunder_cutoff(300.0) > thunder_cutoff(600.0));
+    }
 
     /// The night's sounds come with the dark.
     #[test]

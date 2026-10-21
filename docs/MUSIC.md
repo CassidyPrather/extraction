@@ -32,3 +32,104 @@ We deliberately left out:
 
 - "Beer Barrel Polka" / "Škoda lásky" (Vejvoda, 1927; Vejvoda d. 1988): still in copyright.
 - Any modern arrangement, edition or recording.
+
+## The things that play it
+
+Everything below is `src/radio` (headless logic in `RadioPlugin`, sound in
+`radio::sound`, motion in `radio::visuals`); the rules are engine-free in
+`extraction_core::music`.
+
+**The cassette player** (`cassette_player`, a portable with four piano keys
+on top). Hold it in one hand and push the keys with the other forefinger
+(trigger off, hand empty); flat or bot, the use button is play/stop.
+
+- **Stop**, then **stop** again: the door springs open (the eject).
+- A tape goes in **open edge down**; the face toward you through the
+  window is the side that plays. Upside down it won't go: it drops out in
+  front (`DeckWhat::WrongWay`). The tape keeps how far it's wound, so
+  side B is side A backwards.
+- **Push the open door** shut (its inside face is a push button).
+- **Play** runs to the end of the side and stops; **rewind** and **fast
+  forward** wind twelve times as fast. The reels turn in the window.
+- A **power cell** in the back runs it: 3 W playing, 5 W winding (a full
+  cell is a little over three hours of music). Under a fifth of a charge
+  the motor sags: the music goes flat and wobbles; then it stops.
+- The players laid in Hana's house and the gate booth come with a cell
+  half run down. Elsewhere they're among the gadgets; tapes among curios.
+
+**The tapes** (`music::tapes::TAPES`, one item each, owners and labels
+held to `docs/LORE.md`): Hana's "for Anna - practice" (Anna at the upright,
+stumbling and starting again; Hana humming), the sexton's HARVEST HYMNS
+(harmonium), Fiala's "Lodge dance (off the wireless)", a soldier's DUTY MIX
+2 (it runs out mid-song), Vlasta's "Our piano. Ruben's birthday." (the
+piano that went into the furnace), Pech's "Old Sallow bells - from Dad's
+wire". Each lies by its owner's note on a table or shelf, never the floor
+(`radio::places`, tested).
+
+**The radio's knob** (the field radio's `dial` node). Hold the radio, take
+the knob with the other hand and turn your wrist: about 40 kHz a radian,
+clockwise up the band. Let go and take it again to keep turning. All the
+way down it clicks off (it starts off). What's on the dial is
+`music::stations`:
+
+| kHz | Station | Heard |
+| - | - | - |
+| 702 | The Authority's evacuation loop (attention tone, a machine voice, Story's eight lines) | everywhere, best in Marrow; it outlasts the recall: nobody turned it off |
+| 909 | A station over the hills: dance music, faint and fading | high ground; on the Kettle saddle and over the reservoir |
+| 1080 | Radio Marrow, off the air: static with the old station surfacing (a bar of a tune, the pips, a chime) | Marrow, under its mast |
+| 1215 | A woman reading figures | from the second rank on, from high ground |
+| 1413 | The Custodian's numbers, in Morse: new figures every raid day | everywhere; silent after the recall |
+| 1560 | The machines' traffic | where the chatter is |
+
+Between stations, static; underground, only static. The robots' chatter
+breaks in whatever it's tuned to, as before. A radio in a pouch or the
+pack plays nothing aloud.
+
+**The upright piano** (`radio::piano`, `art/props/music.py`): each pointing
+forefinger is a finger on the keys; a key sounds as it bottoms out, as
+loud as it went down fast, and is damped as you lift.
+
+**The gramophone** (`radio::gramophone`): a 78 on the platter, push the
+crank round (each push winds about twenty seconds), push the arm over.
+As the spring runs down the record slows and sags flat; wind it while it
+plays to keep it going. Three 78s turn up among curios.
+
+**Robots hear all of it.** While it plays, a tape writes a 26 m noise
+every 3 s (past the sleepers' wake radius), a gramophone 24 m, a piano
+key struck hard 30 m, a radio out loud 7-14 m. Set a tape playing on a
+table and walk away: it's a lure. It also tells them where you are if
+it's in your hand.
+
+**The score steps aside**: `radio::MusicNear` is true while any of these
+plays within 15 m of you, and the score is silent under it: one musical
+layer at a time.
+
+## Checking it
+
+- `cargo test -p extraction_core music`: the tracker, every instrument in
+  tune, decay, the media, the deck's rules, every tape's takes, stations,
+  Morse, and every tune parsing, aligned and in its instruments' range.
+- `cargo test --lib radio::`: the cassette player through the headset's
+  path (`radio::tests`: a cell, stop twice, a tape the right way and the
+  wrong way, the door pushed shut, play, robots hearing it), the piano's
+  keys against the model's nodes, every placement on a surface.
+- The audio audit: `radio::sound::tests::renders_for_the_audit` renders
+  each synthesised set to `target/audio_audit/music/`, and
+  `scripts/audio_music.py` measures them into the mix pass and checks that
+  a tape in your hand stays within 12 LU of a walker's step at 10 m and a
+  station sits at least 3 LU under the chatter.
+
+## Listening in the headset
+
+1. Load Hana's tape the wrong way, then the right way. Is it clear why it
+   wouldn't go? Does the door shutting feel like a door?
+2. Side A: does Anna's stumble sound like a child, not a glitch? Side B:
+   is the humming a person?
+3. Let a cell run low (`--data-dir` with a drained cell): is the sag
+   audible and sad rather than broken?
+4. Turn the radio's knob across the band: can you find each station with
+   a glove? Is the static between them unpleasant enough to keep turning?
+5. The evacuation loop: is the voice readable through the AM band?
+6. The piano: two fingers, a tune. Does a hard key sound harder?
+7. The gramophone running down: does it slow like a spring?
+8. Set a tape playing on a table in a house and hide: do walkers come?

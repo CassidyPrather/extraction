@@ -271,7 +271,9 @@ shot off, splinters falling), `worn.png` (a hole worn through a plank
 wall by a dozen rifle rounds), `shutters.png` (the foreman's cabin, its
 shutters open either side of the window), `shutter_off.png` (one shot
 off, its splinters at the wall's foot) and `bus.png` (the depot's bus,
-its skirt panels to prise off).
+its skirt panels to prise off) and `bus_stripped.png` (one prised off,
+the rusted core behind). `EXTRACTION_STRIP=1` takes off the part in view
+twenty frames before the capture.
 
 ## Next
 

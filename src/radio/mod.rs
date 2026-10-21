@@ -94,7 +94,14 @@ impl Plugin for RadioPlugin {
                 Update,
                 (dial::turn_dials, dial::receive, dial::radio_noise).chain(),
             )
-            .add_systems(Update, (places::lay_tapes, piano::play_pianos))
+            .add_systems(
+                Update,
+                (
+                    places::lay_tapes,
+                    places::stand_fixtures,
+                    piano::play_pianos,
+                ),
+            )
             .add_systems(
                 Update,
                 (gramophone::work_gramophones, gramophone::run_gramophones).chain(),
@@ -107,5 +114,7 @@ impl Plugin for RadioPlugin {
     }
 }
 
+#[cfg(test)]
+mod lure_tests;
 #[cfg(test)]
 mod tests;

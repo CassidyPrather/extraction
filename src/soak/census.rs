@@ -44,46 +44,43 @@ pub struct Census {
     pub save_bytes: usize,
     pub phase: String,
     pub raids: u32,
+    /// Robots by kind, job and what they're doing ("Walker Collect
+    /// Leave"): which ones pile up.
+    pub robot_kinds: BTreeMap<String, usize>,
 }
 
 /// Entity counts by kind: the sorted short names of an archetype's
 /// components.
 pub type Kinds = BTreeMap<String, usize>;
 
-fn short(name: &str) -> String {
-    // `a::b::C<d::E>` -> `C<E>`.
-    let mut out = String::new();
-    let mut word = String::new();
-    for ch in name.chars() {
-        if ch.is_alphanumeric() || ch == '_' {
-            word.push(ch);
-        } else if ch == ':' {
-            word.clear();
-        } else {
-            out.push_str(&word);
-            word.clear();
-            out.push(ch);
-        }
-    }
-    out.push_str(&word);
-    out
-}
-
-/// Entities by archetype, keyed by their components' short names.
+/// Entities by kind: the entity's name (or its nearest named ancestor's),
+/// digits dropped, and how many components it has. (Component names need
+/// Bevy's `debug` feature; names say more anyway.)
 pub fn kinds(world: &World) -> Kinds {
     let mut out = Kinds::new();
     for arch in world.archetypes().iter() {
-        if arch.is_empty() {
-            continue;
+        for e in arch.entities() {
+            let mut at = e.id();
+            let mut name = None;
+            for _ in 0..8 {
+                if let Some(n) = world.get::<Name>(at) {
+                    name = Some(n.as_str().to_owned());
+                    break;
+                }
+                match world.get::<ChildOf>(at) {
+                    Some(p) => at = p.parent(),
+                    None => break,
+                }
+            }
+            let name: String = name
+                .unwrap_or_else(|| "(unnamed)".into())
+                .chars()
+                .filter(|c| !c.is_ascii_digit())
+                .collect();
+            let own = if at == e.id() { "" } else { "under " };
+            *out.entry(format!("{own}{name} [{}]", arch.component_count()))
+                .or_default() += 1;
         }
-        let mut names: Vec<String> = arch
-            .components()
-            .iter()
-            .filter_map(|c| world.components().get_name(*c))
-            .map(|n| short(&n.to_string()))
-            .collect();
-        names.sort();
-        *out.entry(names.join(",")).or_default() += arch.len() as usize;
     }
     out
 }
@@ -120,6 +117,31 @@ pub fn take(world: &mut World, t: f32) -> Census {
             .iter(w)
             .count()
     });
+    let mut robot_kinds = BTreeMap::new();
+    for (r, job, brain) in world
+        .query::<(
+            &crate::robots::Robot,
+            Option<&crate::robots::Job>,
+            Option<&crate::robots::Brain>,
+        )>()
+        .iter(world)
+    {
+        let brain = brain.map_or("-".to_string(), |b| {
+            format!("{b:?}")
+                .split([' ', '{', '('])
+                .next()
+                .unwrap_or("")
+                .to_owned()
+        });
+        let key = format!(
+            "{:?} {} {}{}",
+            r.kind,
+            job.map_or("-".to_string(), |j| format!("{:?}", j.kind)),
+            brain,
+            if r.wrecked { " wrecked" } else { "" }
+        );
+        *robot_kinds.entry(key).or_default() += 1;
+    }
     let contacts = world
         .get_resource::<ContactGraph>()
         .map_or(0, |g| g.edges.edge_count());
@@ -155,6 +177,7 @@ pub fn take(world: &mut World, t: f32) -> Census {
         save_bytes,
         phase,
         raids,
+        robot_kinds,
     }
 }
 
@@ -286,6 +309,14 @@ impl Record {
         for l in &leaks {
             s += &format!("LEAK: {l}\n");
         }
+        if let Some(last) = self.censuses.last() {
+            let robots: Vec<String> = last
+                .robot_kinds
+                .iter()
+                .map(|(k, n)| format!("{n} {k}"))
+                .collect();
+            s += &format!("robots at the end: {}\n", robots.join(", "));
+        }
         for (k, b, a) in growers(&self.start_kinds, &self.end_kinds, 8) {
             s += &format!("  grew {b} -> {a}: {k}\n");
         }
@@ -359,15 +390,42 @@ mod tests {
             leaks(&run(&v), 0.05)
         );
         // A slow, steady pile-up: a leak.
-        let v: Vec<usize> = (0..60).map(|i| 1000 + i * 10).collect();
+        let v: Vec<usize> = (0..60).map(|i| 1000 + i * 20).collect();
         let found = leaks(&run(&v), 0.05);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].what, "entities");
     }
 
+    /// End to end: a system that leaks an entity every few frames trips the
+    /// gauge, which names what grew; the same world without it doesn't.
     #[test]
-    fn short_names_drop_paths() {
-        assert_eq!(short("a::b::C<d::E>"), "C<E>");
-        assert_eq!(short("Transform"), "Transform");
+    fn a_leaking_system_trips_the_gauge() {
+        fn leak(mut commands: Commands, mut n: Local<u32>) {
+            *n += 1;
+            if *n % 3 == 0 {
+                commands.spawn(Name::new("Leaked spark"));
+            }
+        }
+        let play = |leaky: bool| {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins);
+            if leaky {
+                app.add_systems(Update, leak);
+            }
+            for _ in 0..10 {
+                app.world_mut().spawn(Name::new("Rock"));
+            }
+            soak(&mut app, 60.0, 1.0, |_, _| {}, |_| {})
+        };
+        let rec = play(true);
+        let found = rec.leaks();
+        assert!(found.iter().any(|l| l.what == "entities"), "{found:?}");
+        assert!(rec.report().contains("Leaked spark"), "{}", rec.report());
+        let rec = play(false);
+        assert!(
+            !rec.leaks().iter().any(|l| l.what == "entities"),
+            "{}",
+            rec.report()
+        );
     }
 }

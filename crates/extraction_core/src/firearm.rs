@@ -33,6 +33,10 @@ pub enum ActionKind {
     /// chambers it. A cocked hammer locks the action shut until the shot
     /// (or the action release).
     Pump,
+    /// A crossbow: the string drawn back by hand catches on the latch;
+    /// a bolt laid in the groove; the trigger looses it. Nothing to
+    /// eject, nothing to cycle.
+    Crossbow,
 }
 
 /// Fire-selector positions.
@@ -269,6 +273,12 @@ const STOVEPIPE_AT: f32 = 0.2;
 /// (short of [`EJECT_AT`]: a short stroke releases a shell without
 /// throwing out the case, and the two jam).
 const PUMP_RELEASE: f32 = 0.7;
+/// What loosing a crossbow with no bolt on it (a dry loose: the prod's
+/// whole spring goes into its own limbs and the string) takes off its
+/// condition.
+pub const DRY_LOOSE: f32 = 0.04;
+/// A crossbow's string let go short of the latch slaps home: a little wear.
+pub const STRING_SLAP: f32 = 0.005;
 /// A rimfire round's extra chance of a misfire.
 pub const RIMFIRE_DUD: f32 = 0.03;
 /// Where a double feed wedges the bolt: it won't come further forward.
@@ -443,7 +453,7 @@ impl Firearm {
 
     /// Ready to fire: closed, or for an open bolt, back on the sear.
     pub fn is_ready(&self) -> bool {
-        if self.def.open_bolt {
+        if self.def.open_bolt || self.def.action == ActionKind::Crossbow {
             self.locked_back
         } else {
             self.is_closed()
@@ -544,6 +554,10 @@ impl Firearm {
         if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_ready() {
             return events;
         }
+        if self.def.action == ActionKind::Crossbow {
+            self.trigger_reset = false;
+            return self.loose(roll);
+        }
         if self.def.open_bolt {
             if self.malfunction.is_some() {
                 return events;
@@ -621,6 +635,24 @@ impl Firearm {
             _ => events.push(Event::DryFire),
         }
         events
+    }
+
+    /// A crossbow's trigger lets the string go: a bolt on the rail flies;
+    /// none, and the prod spends itself in a dry loose.
+    fn loose(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        self.locked_back = false;
+        self.bolt_travel = 0.0;
+        self.hammers_cocked[0] = false;
+        match self.chambers[0].take() {
+            Some(Round::Live) => {
+                let load = self.chamber_load(0);
+                self.discharge(0, load, roll).0
+            }
+            _ => {
+                self.condition = (self.condition - DRY_LOOSE).max(0.0);
+                vec![Event::DryFire]
+            }
+        }
     }
 
     /// An open bolt let go: it runs forward, strips a round, fires it as
@@ -758,7 +790,10 @@ impl Firearm {
     /// as it cocks. Not with a revolver's gate open.
     pub fn cock_hammer(&mut self) -> Vec<Event> {
         if self.def.open_bolt
-            || self.def.action == ActionKind::BoltAction
+            || matches!(
+                self.def.action,
+                ActionKind::BoltAction | ActionKind::Crossbow
+            )
             || self.hammers_cocked.first() != Some(&false)
             || (self.def.action == ActionKind::Revolver && self.gate_open)
         {
@@ -942,6 +977,13 @@ impl Firearm {
         if self.def.action == ActionKind::Pump {
             return self.pump_travel(travel.clamp(0.0, 1.0));
         }
+        if self.def.action == ActionKind::Crossbow {
+            // Drawn by hand; caught on the latch, it stays there.
+            if !self.locked_back {
+                self.bolt_travel = travel.clamp(0.0, 1.0);
+            }
+            return events;
+        }
         let mut to = travel.clamp(0.0, 1.0);
         let from = self.bolt_travel;
         if self.malfunction == Some(Malfunction::DoubleFeed) {
@@ -1098,6 +1140,26 @@ impl Firearm {
     /// (or onto the slide stop); turn-bolts stay where they were left.
     pub fn release_bolt(&mut self) -> Vec<Event> {
         match self.def.action {
+            ActionKind::Crossbow => {
+                if self.locked_back {
+                    return Vec::new();
+                }
+                let drawn = self.bolt_travel;
+                self.bolt_travel = 0.0;
+                if drawn >= EJECT_AT {
+                    // Over the latch: it catches.
+                    self.bolt_travel = 1.0;
+                    self.locked_back = true;
+                    self.hammers_cocked[0] = true;
+                    vec![Event::Cocked]
+                } else if drawn > 0.3 {
+                    // Let go short: the string slaps home.
+                    self.condition = (self.condition - STRING_SLAP).max(0.0);
+                    vec![Event::BoltClosed]
+                } else {
+                    Vec::new()
+                }
+            }
             ActionKind::SemiAuto if self.def.open_bolt => {
                 if self.locked_back {
                     return Vec::new();
@@ -1249,6 +1311,15 @@ impl Firearm {
     /// [`Self::load_round`] with a round of `load`.
     pub fn load_round_of(&mut self, load: Load) -> bool {
         match self.def.action {
+            ActionKind::Crossbow => {
+                // A bolt into the groove, the string on the latch.
+                if !self.locked_back || self.chambers[0].is_some() {
+                    return false;
+                }
+                self.chambers[0] = Some(Round::Live);
+                self.set_chamber_load(0, load);
+                true
+            }
             ActionKind::Revolver => {
                 let c = self.gate_chamber();
                 if self.gate_open && self.chambers[c].is_none() {
@@ -2194,5 +2265,52 @@ mod tests {
         gun.set_handle_lift(1.0);
         gun.set_handle_lift(0.0);
         assert!(fired(&shoot(&mut gun)), "struck again");
+    }
+
+    fn crossbow() -> FirearmDef {
+        FirearmDef {
+            action: ActionKind::Crossbow,
+            cartridge: "bolt".into(),
+            magazine_family: None,
+            modes: vec![FireMode::Safe, FireMode::Semi],
+            double_action: false,
+            last_round_hold_open: false,
+            ..pistol()
+        }
+    }
+
+    /// A crossbow: drawn short and let go, the string slaps home; drawn
+    /// to the latch it catches and stays; a bolt laid on, and the trigger
+    /// looses it, leaving nothing behind. Loosed with no bolt, the dry
+    /// loose costs the bow.
+    #[test]
+    fn a_crossbow_draws_latches_and_looses() {
+        let mut bow = Firearm::new(crossbow(), 1.0);
+        bow.cycle_mode();
+        assert!(!bow.load_round(), "not drawn");
+        bow.set_bolt_travel(0.6);
+        assert_eq!(bow.release_bolt(), vec![Event::BoltClosed]);
+        assert!(!bow.locked_back && bow.bolt_travel == 0.0, "slapped home");
+        bow.set_bolt_travel(1.0);
+        assert_eq!(bow.release_bolt(), vec![Event::Cocked]);
+        assert!(bow.locked_back);
+        bow.set_bolt_travel(0.2);
+        assert_eq!(bow.bolt_travel, 1.0, "on the latch it stays");
+        assert!(bow.load_round());
+        assert!(!bow.load_round(), "one bolt");
+        let ev = shoot(&mut bow);
+        assert!(fired(&ev));
+        assert!(!ev.iter().any(|e| matches!(e, Event::Ejected(_))));
+        assert_eq!(bow.chambers[0], None);
+        assert!(!bow.locked_back);
+        assert!(!fired(&shoot(&mut bow)), "not drawn: nothing");
+        let before = bow.condition;
+        bow.set_bolt_travel(1.0);
+        bow.release_bolt();
+        assert_eq!(shoot(&mut bow), vec![Event::DryFire]);
+        assert!(
+            before - bow.condition >= DRY_LOOSE * 0.99,
+            "the dry loose cost it"
+        );
     }
 }

@@ -36,19 +36,7 @@ const SWING_MAX: f32 = 0.45;
 /// (`pt_sling_front`, `pt_sling_rear`), else a guess under the handguard
 /// and the butt.
 pub fn swivels(id: &str, gun: &Gun) -> Option<(Vec3, Vec3)> {
-    let v = Vec3::new;
-    let known = match id {
-        "ak74" => Some((v(-0.0145, 0.039, -0.461), v(-0.022, -0.06, 0.269))),
-        "mosin" => Some((v(0.0, -0.009, -0.64), v(0.0, -0.045, 0.17))),
-        "sks" => Some((v(-0.0195, 0.0, -0.482), v(-0.021, -0.075, 0.152))),
-        "toz_double" => Some((v(0.0, 0.006, -0.62), v(0.0, -0.111, 0.25))),
-        "ppsh" => Some((v(-0.021, 0.006, -0.185), v(0.0, -0.063, 0.17))),
-        "mp133" => Some((v(0.0, -0.01, -0.636), v(0.0, -0.105, 0.25))),
-        "toz8" => Some((v(0.0, -0.0212, -0.43), v(0.0, -0.093, 0.2))),
-        "svd" => Some((v(-0.0162, 0.043, -0.543), v(-0.0237, -0.074, 0.222))),
-        "rpk74" => Some((v(-0.0172, 0.0435, -0.6), v(-0.0205, -0.048, 0.218))),
-        _ => None,
-    };
+    let known = known_swivels(id);
     if known.is_some() {
         return known;
     }
@@ -57,6 +45,24 @@ pub fn swivels(id: &str, gun: &Gun) -> Option<(Vec3, Vec3)> {
     let front = Vec3::new(0.0, support.y - 0.03, support.z);
     let rear = Vec3::new(0.0, lo.y + 0.02, hi.z - 0.06);
     Some((front, rear))
+}
+
+/// A gun's swivels as its model has them, if they've been taken from it.
+pub fn known_swivels(id: &str) -> Option<(Vec3, Vec3)> {
+    let v = Vec3::new;
+    match id {
+        "ak74" => Some((v(-0.0145, 0.039, -0.461), v(-0.022, -0.06, 0.269))),
+        "mosin" => Some((v(0.0, -0.009, -0.64), v(0.0, -0.045, 0.17))),
+        "sks" => Some((v(-0.0195, 0.0, -0.482), v(-0.021, -0.075, 0.152))),
+        "toz_double" => Some((v(0.0, 0.006, -0.62), v(0.0, -0.111, 0.25))),
+        "ppsh" => Some((v(-0.021, 0.006, -0.185), v(0.0, -0.063, 0.17))),
+        "mp133" => Some((v(0.0, -0.01, -0.636), v(0.0, -0.105, 0.25))),
+        "toz8" => Some((v(0.0, -0.0212, -0.43), v(0.0, -0.093, 0.2))),
+        "crossbow" => Some((v(0.0, -0.0125, -0.37), v(0.0, -0.1033, 0.25))),
+        "svd" => Some((v(-0.0162, 0.043, -0.543), v(-0.0237, -0.074, 0.222))),
+        "rpk74" => Some((v(-0.0172, 0.0435, -0.6), v(-0.0205, -0.048, 0.218))),
+        _ => None,
+    }
 }
 
 /// A long gun's strap: its drawn segments.

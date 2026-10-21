@@ -198,10 +198,10 @@ top face.
   looks (`qa`'s burial depth, taken at the overlap rather than at a face's
   centre). `qa`'s gauge covers boxes against boxes; this one adds models
   against boxes and models against each other. Underground sites are
-  printed but not held, because earth outside their boxes hides faces
-  this check can't tell are hidden. The fights found when this gauge was
-  written are listed in `KNOWN`, waiting on their owners. Take a line out
-  when its fight is fixed. A new fight fails the test.
+  held too. Earth lies outside their boxes, so a face there counts only
+  with somewhere to stand in front of it (`floor_under`). `KNOWN` lists
+  fights waiting on their owners. It's empty: Models: world and
+  Underground fixed the first round. A new fight fails the test.
 - **Every model against itself** (`fighting`): its nodes against each
   other, as `art/check.py` checks in Blender, here in `cargo test` too.
 

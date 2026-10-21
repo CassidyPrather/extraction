@@ -53,6 +53,7 @@ impl Plugin for GunVisualsPlugin {
                 super::optics::add_post_blurs,
                 super::optics::blur_posts,
                 super::flares::flare_visuals,
+                super::crossbow::quarrel_visuals,
             ),
         )
         .add_plugins((
@@ -107,7 +108,7 @@ fn material(mat: Mat) -> StandardMaterial {
     }
 }
 
-fn moves_for(name: &str) -> Option<Moves> {
+pub(crate) fn moves_for(name: &str) -> Option<Moves> {
     // `turnbolt` before `bolt`: neither is a prefix of the other, but keep
     // the more specific names first anyway.
     [
@@ -122,6 +123,8 @@ fn moves_for(name: &str) -> Option<Moves> {
         ("ejector", Moves::Rod),
         ("bayonet", Moves::Bayonet),
         ("bipod", Moves::Bipod),
+        ("string_rest", Moves::StringRest),
+        ("string_drawn", Moves::StringDrawn),
         ("static", Moves::Static),
     ]
     .into_iter()
@@ -329,6 +332,30 @@ fn animate_parts(
                     }
                     r
                 }
+                Moves::StringRest => {
+                    let mut r = part.rest;
+                    if f.bolt_travel > 0.02 {
+                        r.scale = Vec3::ZERO;
+                    }
+                    r
+                }
+                Moves::StringDrawn => {
+                    // Modelled drawn to the latch; stretched along Z about
+                    // the tips' line to wherever the string is.
+                    let mut r = part.rest;
+                    let rest = gun
+                        .layout
+                        .handle
+                        .as_ref()
+                        .map_or(0.0, |h| (h.grab.z - part.rest.translation.z).abs());
+                    let full = rest + travel;
+                    if f.bolt_travel <= 0.02 || full <= 0.0 {
+                        r.scale = Vec3::ZERO;
+                    } else {
+                        r.scale.z *= (rest + f.bolt_travel * travel) / full;
+                    }
+                    r
+                }
                 Moves::Bipod => {
                     // About its pivot (the model's origin), down and forward.
                     let mut r = part.rest;
@@ -435,6 +462,25 @@ fn seat_mag_visuals(
 /// chamber shows the live round or the spent case it holds, or nothing.
 fn show_chambers(guns: Query<(&Gun, &Children)>, mut nodes: Query<(&Name, &mut Visibility)>) {
     for (gun, children) in &guns {
+        if gun.firearm.def.action == extraction_core::firearm::ActionKind::Crossbow {
+            // The bolt on the rail, while there is one.
+            for c in children.iter() {
+                let Ok((name, mut vis)) = nodes.get_mut(c) else {
+                    continue;
+                };
+                if name.as_str() == "static_rail_bolt" {
+                    let v = if gun.firearm.chambers[0] == Some(Round::Live) {
+                        Visibility::Inherited
+                    } else {
+                        Visibility::Hidden
+                    };
+                    if *vis != v {
+                        *vis = v;
+                    }
+                }
+            }
+            continue;
+        }
         if gun.firearm.def.action != extraction_core::firearm::ActionKind::Revolver {
             continue;
         }
