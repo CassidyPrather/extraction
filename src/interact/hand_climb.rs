@@ -121,6 +121,12 @@ impl Ladder {
     }
 }
 
+/// Not to be climbed: the palms and grips find nothing on it. The
+/// quarantine perimeter's `world::structures::Fence` and anything of a
+/// robot's (a sentry's mast) count as this too.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct NoClimb;
+
 /// What a hand is holding the body by, at `at` (world).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HandHold {
@@ -162,6 +168,15 @@ pub struct ClimbedOver {
 #[allow(clippy::type_complexity)]
 fn plant_palms(
     mut commands: Commands,
+    barred: Query<
+        (),
+        Or<(
+            With<NoClimb>,
+            With<crate::world::structures::Fence>,
+            With<crate::robots::Robot>,
+        )>,
+    >,
+    parents: Query<&ChildOf>,
     players: Query<(&Transform, &Children), (With<Player>, With<LocalPlayer>)>,
     hands: Query<(Entity, &Hand, Option<&HandHold>), With<RigHand>>,
     driver: Res<RigDriver>,
@@ -215,6 +230,17 @@ fn plant_palms(
                 continue;
             };
             if hit.normal.y < 0.7 || hit.distance < 0.01 {
+                continue;
+            }
+            // Not the map's perimeter, nor a robot's kit.
+            let mut up = Some(hit.entity);
+            let mut no = false;
+            for _ in 0..4 {
+                let Some(e) = up else { break };
+                no |= barred.contains(e);
+                up = parents.get(e).ok().map(|p| p.parent());
+            }
+            if no {
                 continue;
             }
             let top = from.y - hit.distance;

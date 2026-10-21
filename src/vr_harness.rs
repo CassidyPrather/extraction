@@ -4559,7 +4559,7 @@ mod vault {
 
     /// Standing in the open facing -Z with a thin wall (or fence) `high`
     /// over the ground, its near face 0.35 m ahead, `thick` through.
-    fn facing_a_wall(high: f32, thick: f32) -> (Vr, Vec3) {
+    fn facing_a_wall(high: f32, thick: f32) -> (Vr, Vec3, Entity) {
         let mut vr = Vr::new("training_yard");
         let feet = vr
             .app
@@ -4567,16 +4567,20 @@ mod vault {
             .resource::<crate::world::Zone>()
             .on_ground(OPEN.x, OPEN.z);
         vr.stand(feet, 0.0);
-        vr.app.world_mut().spawn((
-            RigidBody::Static,
-            Collider::cuboid(2.0, high + 1.0, thick),
-            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
-            Transform::from_translation(
-                feet + Vec3::new(0.0, (high - 1.0) / 2.0, -0.35 - thick / 2.0),
-            ),
-        ));
+        let wall = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0, high + 1.0, thick),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(
+                    feet + Vec3::new(0.0, (high - 1.0) / 2.0, -0.35 - thick / 2.0),
+                ),
+            ))
+            .id();
         vr.step(10);
-        (vr, feet)
+        (vr, feet, wall)
     }
 
     /// Both hands up on the top's near edge, gripping; then drawn down
@@ -4614,7 +4618,7 @@ mod vault {
     /// hands, pull down, and you're up and over it, down the far side.
     #[test]
     fn grip_a_wall_top_above_your_head_and_pull_up_and_over() {
-        let (mut vr, feet) = facing_a_wall(2.0, 0.2);
+        let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
         let start = vr.feet();
         grip_and_pull(&mut vr, feet.y + 2.0, 1.4, 90);
         vr.step(30);
@@ -4627,7 +4631,7 @@ mod vault {
     /// it, landing on the far side.
     #[test]
     fn vault_a_fence() {
-        let (mut vr, feet) = facing_a_wall(1.1, 0.06);
+        let (mut vr, feet, _) = facing_a_wall(1.1, 0.06);
         let start = vr.feet();
         grip_and_pull(&mut vr, feet.y + 1.1, 0.5, 30);
         vr.step(30);
@@ -4635,16 +4639,32 @@ mod vault {
         assert!(now.z < start.z - 0.5, "over the fence: {start} to {now}");
     }
 
+    /// The quarantine perimeter isn't climbed: hands on its top find
+    /// nothing to hold, and you stay this side.
+    #[test]
+    fn the_perimeter_fence_is_not_climbed() {
+        let (mut vr, feet, wall) = facing_a_wall(1.1, 0.06);
+        vr.app
+            .world_mut()
+            .entity_mut(wall)
+            .insert(crate::world::structures::Fence);
+        let start = vr.feet();
+        grip_and_pull(&mut vr, feet.y + 1.1, 0.5, 30);
+        vr.step(30);
+        let now = vr.feet();
+        assert!(now.z > start.z - 0.2, "still this side: {start} to {now}");
+    }
+
     /// The same pull-up with 40-odd kg on you: you come up at a fraction of
     /// the pace.
     #[test]
     fn a_load_slows_the_pull_up() {
         let light = {
-            let (mut vr, feet) = facing_a_wall(2.0, 0.2);
+            let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
         };
         let heavy = {
-            let (mut vr, feet) = facing_a_wall(2.0, 0.2);
+            let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             // Two heavy cells and a fuel can in the pack.
             let bag = vr
                 .app
