@@ -584,7 +584,11 @@ let go, as with magazines. Use on a gun switches everything on it.
   - *Iron sights* line up at the cheek: bring a gun without a scope up
     with your eye just behind the rear sight, and it settles (at most
     about 3 degrees, about the front post) so your eye, the rear sight
-    and the post are in line.
+    and the post are in line. Your eye is on the target, so the front
+    post goes soft as it comes up: a dark, soft-edged disc about 12 mm
+    across that fades in round the post. It's an approximation of focus,
+    not a depth-of-field pass. Comfort setting `post_blur`, or
+    `--no-post-blur`, turns it off.
 - **Zeroing** (`weapons/zero.rs`): the PSO-1 (100 to 1000 m) and the PU
   (to 1300 m) have an elevation drum. Take it with the other hand's
   trigger and turn your wrist, clockwise from above for more range, one

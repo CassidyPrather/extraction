@@ -236,6 +236,9 @@ pub struct Handling {
     /// Iron sights brought to the eye: the turn about the front post that
     /// lines the rear sight up with it (item space), eased.
     pub sight_fix: Quat,
+    /// How far the eye is down behind the iron sights, 0..1, eased: the
+    /// front post goes soft as it rises (`optics`' post blur).
+    pub at_eye: f32,
 }
 
 impl Handling {
@@ -444,16 +447,17 @@ fn handle_guns(
         // be without it (so it settles rather than chasing itself).
         let front = front_post(gun);
         let about_front = |q: Quat| Transform::from_translation(front - q * front).with_rotation(q);
-        let want = match head {
+        let (want, lined) = match head {
             Some(eye) if !scoped.iter().any(|m| m.0 == gun_e) => {
                 let eye_now = gt.affine().inverse().transform_point3(eye);
                 let eye_bare = about_front(handling.sight_fix).transform_point(eye_now);
-                sight_fix(gun, eye_bare)
+                (sight_fix(gun, eye_bare), at_sights(gun, eye_bare))
             }
-            _ => Quat::IDENTITY,
+            _ => (Quat::IDENTITY, false),
         };
         let ease = 1.0 - (-dt / SIGHT_EASE).exp();
         handling.sight_fix = handling.sight_fix.slerp(want, ease);
+        handling.at_eye += (if lined { 1.0 } else { 0.0 } - handling.at_eye) * ease;
         feel.offset = kick * about_front(handling.sight_fix);
         feel.lag = hold.lag(mass);
     }
@@ -473,15 +477,20 @@ pub fn front_post(gun: &Gun) -> Vec3 {
     Vec3::new(s.x, s.y, gun.layout.muzzle.z + 0.03)
 }
 
+/// Whether an eye at `eye` (gun space) is just behind the rear sight.
+pub fn at_sights(gun: &Gun, eye: Vec3) -> bool {
+    let rel = eye - gun.layout.sight.translation;
+    (SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) && rel.truncate().length() <= SIGHT_OFF
+}
+
 /// The turn about the front post (gun space) that puts the rear sight on
 /// the line from an eye at `eye` (gun space, the gun as held without it) to
 /// the front post: none unless the eye is just behind the rear sight.
 pub fn sight_fix(gun: &Gun, eye: Vec3) -> Quat {
-    let rear = gun.layout.sight.translation;
-    let rel = eye - rear;
-    if !(SIGHT_DEPTH.0..SIGHT_DEPTH.1).contains(&rel.z) || rel.truncate().length() > SIGHT_OFF {
+    if !at_sights(gun, eye) {
         return Quat::IDENTITY;
     }
+    let rear = gun.layout.sight.translation;
     let front = front_post(gun);
     let q = Quat::from_rotation_arc(
         (rear - front).normalize(),
@@ -1302,6 +1311,41 @@ mod vr_tests {
         let (rear, front, _) = sights(&mut r);
         let miss = line_miss(rear, front);
         assert!(miss < 0.004, "eye, rear sight, front post: {miss} m off");
+    }
+
+    /// Iron sights brought to the eye, the front post goes soft (the eye
+    /// is on the target), unless the comfort setting is off; taken down,
+    /// it's sharp again.
+    #[test]
+    fn the_front_post_softens_at_the_cheek() {
+        use crate::weapons::optics::{POST_BLUR, post_blur};
+        let mut r = hold("ak74", true, true);
+        r.vr.step(30);
+        let at_eye = |r: &Range| r.vr.app.world().get::<Handling>(r.gun).unwrap().at_eye;
+        assert!(at_eye(&r) < 0.01, "the eye nowhere near: {}", at_eye(&r));
+        let (rear, _, rot) = sights(&mut r);
+        let root =
+            r.vr.app
+                .world()
+                .get::<Transform>(r.vr.player)
+                .unwrap()
+                .translation;
+        let away =
+            r.vr.app
+                .world()
+                .get::<crate::rig::RigInput>(r.vr.player)
+                .unwrap()
+                .head
+                .translation;
+        r.vr.head(rear + rot * Vec3::new(0.0, 0.01, 0.06) - root);
+        r.vr.step(60);
+        let a = at_eye(&r);
+        assert!(a > 0.95, "down behind the sights: {a}");
+        assert!((post_blur(a, true) - POST_BLUR).abs() < 0.05);
+        assert_eq!(post_blur(a, false), 0.0, "the comfort setting off");
+        r.vr.head(away);
+        r.vr.step(60);
+        assert!(at_eye(&r) < 0.05, "taken down: {}", at_eye(&r));
     }
 
     fn glide_side(r: &mut Range, side: Side, a: Vec3, b: Vec3, steps: usize) {
