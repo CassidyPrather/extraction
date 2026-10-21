@@ -20,6 +20,7 @@ pub mod impacts;
 pub mod layout;
 pub mod melee;
 pub mod muzzle;
+pub mod optics;
 pub mod range;
 pub mod sling;
 pub mod tracers;
@@ -211,6 +212,7 @@ impl Plugin for WeaponsPlugin {
                 ballistics::BallisticsPlugin,
                 zero::ZeroPlugin,
                 faults::FaultsPlugin,
+                optics::OpticsPlugin,
                 feel::FeelPlugin,
                 impacts::ImpactPlugin,
                 grenades::GrenadePlugin,

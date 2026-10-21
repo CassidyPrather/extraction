@@ -87,11 +87,18 @@ pub struct LaunchOptions {
     /// Dev: screenshot every text panel from where it's read, at the
     /// headset's pixels a degree, into this folder (`render::legibility`).
     pub legibility: Option<PathBuf>,
+    /// Dev: from the truck's stop and every rendezvous, shoot each landmark
+    /// in range with and without it, into this folder (`render::wayfind_shots`).
+    pub wayfind: Option<PathBuf>,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
-    /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `clearing`).
+    /// Dev: force the weather (`drizzle`, `fog`, `downpour`, `storm`,
+    /// `clearing`).
     pub weather: Option<String>,
+    /// Dev: snow falling now, this much lying already (0..1; only where
+    /// the valley has a snow line, `world::snow`).
+    pub snow: Option<f32>,
     /// Dev: force the hour (`dawn`, `day`, `dusk`, `night`).
     pub hour: Option<String>,
     /// Dev: force the moon's phase, 0..1 (`new`, `crescent`, `quarter`,
@@ -136,6 +143,7 @@ impl Default for LaunchOptions {
             tour_only: None,
             tour_views: None,
             legibility: None,
+            wayfind: None,
             camp: false,
             bot: false,
             scenario: None,
@@ -148,6 +156,7 @@ impl Default for LaunchOptions {
             surge_in: None,
             gallery: None,
             weather: None,
+            snow: None,
             hour: None,
             moon: None,
             sun_elevation: 20.0,
@@ -171,6 +180,7 @@ impl LaunchOptions {
         self.screenshot.is_some()
             || self.tour.is_some()
             || self.legibility.is_some()
+            || self.wayfind.is_some()
             || self.bot
             || self.scenario.is_some()
             || self.sim_run.is_some()
@@ -200,12 +210,13 @@ impl LaunchOptions {
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
-                | "--one-handed" | "--no-captions" => {}
+                | "--one-handed" | "--no-captions" | "--no-machine-tick" => {}
                 "--vignette" => {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
                 "--weather" => o.weather = Some(val()),
+                "--snow" => o.snow = val().parse::<f32>().ok().map(|s| s.clamp(0.0, 1.0)),
                 "--hour" => o.hour = Some(val()),
                 "--moon" => {
                     o.moon = match val().as_str() {
@@ -267,6 +278,13 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--wayfind" => {
+                    o.wayfind = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--tour-only" => o.tour_only = Some(val()),
                 "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
@@ -300,8 +318,12 @@ impl LaunchOptions {
             o.flat = true;
             o.headless = false;
             o.robots &= !o.capture.still();
-            o.camera
-                .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            // A camera override also places the player (as screenshots
+            // want); a trailer's bot starts in the truck, as in any sim.
+            if o.capture.still() {
+                o.camera
+                    .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+            }
         }
         // A screenshot with the mirror on is of the headset's view.
         if o.mirror {

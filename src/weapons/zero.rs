@@ -342,11 +342,19 @@ pub fn sight_line(scope_gt: &GlobalTransform, zero: &Zero) -> (Vec3, Vec3) {
 /// Client side: a zeroed scope's lens looks down along its line of sight.
 pub fn aim_lenses(
     mut cams: Query<(&ChildOf, &mut Transform), With<crate::render::OffscreenCamera>>,
-    zeros: Query<&Zero, Changed<Zero>>,
+    optics: Query<(Option<&Zero>, Option<&super::optics::EyeBox>)>,
 ) {
     for (parent, mut t) in &mut cams {
-        if let Ok(z) = zeros.get(parent.parent()) {
-            t.rotation = z.look;
+        let Ok((zero, eye)) = optics.get(parent.parent()) else {
+            continue;
+        };
+        // The zero, and off-axis the picture sliding against the reticle
+        // (the reticle sits on the lens; the view behind it turns).
+        let shift = eye.map_or(Vec2::ZERO, |e| e.shift);
+        let want = zero.map_or(Quat::IDENTITY, |z| z.look)
+            * Quat::from_euler(EulerRot::YXZ, -shift.x, shift.y, 0.0);
+        if t.rotation.angle_between(want) > 1e-5 {
+            t.rotation = want;
         }
     }
 }

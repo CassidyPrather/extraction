@@ -517,8 +517,12 @@ fn sort(
         for (te, mut tt, _) in &mut totes {
             let l = s.local(tt.translation);
             if l.y < -2.0 || l.y > s.height + 2.0 {
-                let k = te.index_u32() as usize % s.spots.len().max(1);
-                if let Some(sp) = s.spots.get(k).copied() {
+                // The spot nearest where it went.
+                let near = s.spots.iter().copied().min_by(|a, b| {
+                    a.distance_squared(l.xz())
+                        .total_cmp(&b.distance_squared(l.xz()))
+                });
+                if let Some(sp) = near {
                     tt.translation = s.world(Vec3::new(sp.x, TOTE.y * 0.5 + 0.05, sp.y));
                     commands.entity(te).insert(LinearVelocity::ZERO);
                 }

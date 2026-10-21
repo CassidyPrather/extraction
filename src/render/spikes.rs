@@ -341,6 +341,27 @@ mod tests {
     /// hitch. `scripts/hitches.sh` runs it on every valley (bench.sh calls
     /// it); the suite holds the hitches it found by counts instead
     /// (`guards`).
+    /// A valley's startup frame (the zone, terrain, rocks, buildings'
+    /// shells: all before the headset's session starts) on all the cores
+    /// there are, ms: `cargo test --profile fast --lib startup_frames --
+    /// --ignored --nocapture`.
+    #[test]
+    #[ignore = "wall-clock timing"]
+    fn startup_frames() {
+        let _one_at_a_time = heavy();
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+            let t = Instant::now();
+            let mut app = client_threads(map, "clearing", None);
+            let built = t.elapsed().as_secs_f64() * 1000.0;
+            let t = Instant::now();
+            app.update();
+            println!(
+                "{map}: app built {built:.0} ms, startup frame {:.0} ms",
+                t.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
     #[test]
     #[ignore = "wall-clock timing: scripts/hitches.sh"]
     fn hitches_hold_their_ceiling() {

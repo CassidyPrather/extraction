@@ -37,6 +37,20 @@ MUZZLE = -0.52
 WELL_Z = -0.152                # the magazine well's centre
 
 
+def screw(p, cutter, r, pos, xf, turn=0.6, mat="Blued", segs=12):
+    """A domed slotted screw head of radius r at `pos`, its axis +Y turned
+    by `xf`, its rim sunk 0.6 mm; `cutter` gets the slot, turned `turn`."""
+    h = r * 0.55
+    prof = [(0.0, -0.0006), (r, -0.0006)]
+    prof += [(r * math.cos(math.radians(d)), h * math.sin(math.radians(d)))
+             for d in (0, 30, 55, 75)]
+    prof.append((0.0, h))
+    p.lathe(prof, mat, segs=segs, xf=T(*pos) @ xf @ RX(-math.pi / 2))
+    if cutter is not None:
+        cutter.box((r * 2.4, h * 1.4, r * 0.32), (0.0, h, 0.0), mat,
+                   xf=T(*pos) @ xf @ RY(turn))
+
+
 def lerp_table(t, table):
     for (a, va), (b, vb) in zip(table, table[1:]):
         if a <= t <= b:
@@ -68,7 +82,7 @@ def stock_w(z, yc, h):
 
 
 stock = Part("stock")
-stock.stock(stock_prof, -0.2045, 0.3145, "Wood", stock_w, stations=90, segs=24,
+stock.stock(stock_prof, -0.2045, 0.3145, "Wood", stock_w, stations=110, segs=28,
             power=lambda z: 3.4 if z < 0.0 else 2.5)
 sc = Part("cut")
 # The magazine well through the stock, and the sling slot in the butt.
@@ -81,10 +95,20 @@ bp = fillet([(0.3145, 0.0055), (0.324, 0.0045), (0.324, -0.113), (0.3145, -0.113
             [0.0, 0.002, 0.002, 0.0], 2)
 furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
 furn.box((0.024, 0.05, 0.004), (0.0, -0.05, 0.3255), "Blued", bevel=0.0012)
+# The trap's hinge at its foot and its latch button at the top.
+furn.cyl(0.0022, -0.013, 0.013, "Blued", segs=12, chamfer=0.0005,
+         xf=T(0, -0.0755, 0.3265) @ RY(math.pi / 2))
+furn.lathe([(0.0, 0.0), (0.0034, 0.0), (0.0034, 0.0014), (0.0026, 0.0024), (0.0, 0.0026)],
+           "Steel", segs=14, xf=T(0, -0.028, 0.327))
+screws = Part("screws")
+slots = Part("cut")
+# The butt plate's two screws, into the heel and the toe.
+for y in (-0.008, -0.098):
+    screw(screws, slots, 0.0034, (0.0, y, 0.324), RX(math.pi / 2), turn=0.5 - y * 11)
 # The front sling swivel on the stock's left, ahead of the magazine well.
 swivel = [(-0.185 + 0.009 * math.cos(a), 0.015 + 0.009 * math.sin(a))
-          for a in [math.pi + math.pi * i / 8 for i in range(9)]]
-furn.sweep(swivel, section_rect(0.0025, 0.0025, 0.0007), "Blued", xf=T(-0.021, 0, 0))
+          for a in [math.pi + math.pi * i / 14 for i in range(15)]]
+furn.sweep(swivel, section_rect(0.0025, 0.0025, 0.0007, 3), "Blued", xf=T(-0.021, 0, 0))
 furn.box((0.004, 0.006, 0.022), (-0.0195, 0.017, -0.185), "Blued", bevel=0.001)
 
 # --- Receiver: the lower half, and the cover hinged at the front -------------------------
@@ -104,27 +128,63 @@ cover = fillet([(-0.0165, 0.052), (0.0165, 0.052), (0.0165, 0.064), (0.0, 0.0705
 recv.prism(cover, -0.135, RX1, "Blued", axis="z", bevel=0.0012, segs=1)
 cc = Part("cut")
 cc.box((0.018, 0.03, 0.05), (0.004, 0.06, -0.16), "Blued", bevel=0.002, segs=1)
+# Serial and year stamped on the cover's upper left, where the shooter
+# sees them, and the notch in the standing sight leaf. (The cover's
+# rounded edges lean its sides in by up to 1.2 mm toward the front; the
+# letters follow.)
+SLOPE = math.atan2(0.0065, 0.0165)
+for s_, z in (("ПГ 3047", -0.098), ("1943", -0.068)):
+    sink = 0.0012 * (RX1 - 0.0012 - z) / (RX1 - 0.0012 + 0.135) + 0.0006
+    at = T(-0.0088 + sink * math.sin(SLOPE), 0.0705 - 0.0088 * math.tan(SLOPE)
+           - sink * math.cos(SLOPE), z) @ RZ(SLOPE) @ RY(-math.pi / 2) @ RX(-math.pi / 2)
+    text(cc, s_, 0.0034, "Blued", at, depth=0.0012)
+cc.box((0.0024, 0.006, 0.006), (0.0, 0.0805, -0.03), "Blued")
 recv.cut(cc)
 # The cover's latch at the back; the hinge at the jacket.
-recv.box((0.012, 0.01, 0.008), (0.0, 0.058, RX1 + 0.003), "Blued", bevel=0.0018)
-recv.cyl(0.004, -0.019, 0.019, "Blued", segs=12, xf=T(0, 0.054, -0.205) @ RY(math.pi / 2))
+recv.box((0.012, 0.01, 0.008), (0.0, 0.058, RX1 + 0.003), "Blued", bevel=0.0018, segs=2)
+# Its push button, ribbed for the thumb.
+recv.lathe([(0.0, 0.0), (0.0034, 0.0), (0.0034, 0.0022), (0.0027, 0.003), (0.0, 0.0031)],
+           "Steel", segs=16, xf=T(0, 0.058, RX1 + 0.0068))
+for i in range(3):
+    recv.box((0.011, 0.0008, 0.0008), (0.0, 0.0632, RX1 + 0.0004 + i * 0.0022),
+             "Blued", bevel=0.0002, segs=1)
+recv.cyl(0.004, -0.019, 0.019, "Blued", segs=20, xf=T(0, 0.054, -0.205) @ RY(math.pi / 2))
+# The hinge pin's peened heads.
+for sx in (-1, 1):
+    recv.lathe([(0.0, 0.0), (0.0026, 0.0), (0.0024, 0.0008), (0.0014, 0.0014), (0.0, 0.0015)],
+               "Steel", segs=12, xf=T(sx * 0.0188, 0.054, -0.205) @ RY(sx * math.pi / 2))
+# Rivets along the foot of the receiver's sides.
+for sx in (-1, 1):
+    for z in (-0.19, -0.105, -0.012):
+        recv.lathe([(0.0, -0.0005), (0.0019, -0.0005), (0.0019, 0.0002), (0.0013, 0.0009),
+                    (0.0, 0.0011)], "Blued", segs=10,
+                   xf=T(sx * RHW, 0.036, z) @ RY(sx * math.pi / 2))
 # The L-shaped flip rear sight on the cover.
-recv.box((0.012, 0.012, 0.004), (0.0, 0.074, -0.03), "Blued", bevel=0.001)
-recv.box((0.012, 0.002, 0.016), (0.0, 0.069, -0.022), "Blued", bevel=0.0006)
+recv.box((0.012, 0.012, 0.004), (0.0, 0.074, -0.03), "Blued", bevel=0.001, segs=2)
+recv.box((0.012, 0.002, 0.016), (0.0, 0.069, -0.022), "Blued", bevel=0.0006, segs=2)
+# The leaves' pivot, and the ears pressed up either side to guard them.
+recv.cyl(0.0017, -0.0075, 0.0075, "Steel", segs=12, chamfer=0.0004,
+         xf=T(0, 0.0695, -0.0305) @ RY(math.pi / 2))
+for sx in (-1, 1):
+    recv.prism(fillet([(-0.036, 0.066), (-0.02, 0.066), (-0.022, 0.0775), (-0.034, 0.0775)],
+                      [0.0, 0.0, 0.0025, 0.0025], 3),
+               sx * 0.0095 - 0.001, sx * 0.0095 + 0.001, "Blued", axis="x", bevel=0.0004,
+               segs=1)
 # The magazine catch behind the well, and the well's housing under the
 # receiver.
 recv.box((0.014, 0.022, 0.006), (0.0, 0.014, WELL_Z + 0.035), "Blued", bevel=0.0015)
+
 recv.prism(fillet([(WELL_Z - 0.03, 0.03), (WELL_Z + 0.03, 0.03), (WELL_Z + 0.03, 0.012),
                    (WELL_Z - 0.03, 0.012)], 0.003, 2), -0.016, 0.016, "Blued", axis="x",
            bevel=0.0012, segs=1)
 # Trigger guard.
 guard = catmull([(-0.075, 0.012), (-0.078, -0.004), (-0.066, -0.018), (-0.045, -0.02),
-                 (-0.024, -0.016), (-0.012, -0.006), (-0.006, 0.0)], 4, closed=False)
-recv.sweep(guard, section_rect(0.009, 0.003, 0.001), "Blued")
+                 (-0.024, -0.016), (-0.012, -0.006), (-0.006, 0.0)], 6, closed=False)
+recv.sweep(guard, section_rect(0.009, 0.003, 0.001, 3), "Blued")
 
 # --- Barrel jacket: a perforated tube, slanted at the front ---------------------------
 jacket = Part("jacket")
-jacket.tube(0.0175, 0.0155, -0.545, -0.2, "Blued", segs=28, xf=T(0, BORE, 0), chamfer=0.0008)
+jacket.tube(0.0175, 0.0155, -0.545, -0.2, "Blued", segs=40, xf=T(0, BORE, 0), chamfer=0.0008)
 jc = Part("cut")
 # Rows of long cooling slots round the jacket (not along its bottom).
 for k in range(7):
@@ -141,7 +201,7 @@ jc.box((0.1, 0.1, 0.1), (0.0, BORE, -0.5725), "Blued",
 jacket.cut(jc)
 barrel = Part("barrel")
 barrel.lathe([(0.0039, MUZZLE + 0.016), (0.0075, MUZZLE + 0.016), (0.0082, -0.47),
-              (0.0095, -0.21), (0.0, -0.21)], "Blued", segs=18, xf=T(0, BORE, 0))
+              (0.0095, -0.21), (0.0, -0.21)], "Blued", segs=24, xf=T(0, BORE, 0))
 # The front sight in its ears on the jacket's top, near the front.
 barrel.prism(fillet([(-0.488, BORE + 0.015), (-0.47, BORE + 0.015), (-0.474, BORE + 0.028),
                      (-0.484, BORE + 0.028)], 0.0012, 2), -0.0014, 0.0014, "Blued", axis="x",
@@ -151,26 +211,46 @@ for sx in (-1, 1):
                          (-0.486, BORE + 0.029)], 0.0012, 2), sx * 0.008 - 0.0015,
                  sx * 0.008 + 0.0015, "Blued", axis="x", bevel=0.0004, segs=1)
 # The muzzle's front bearing ring inside the compensator.
-barrel.tube(0.0155, 0.0042, -0.505, -0.497, "Blued", segs=24, xf=T(0, BORE, 0))
+barrel.tube(0.0155, 0.0042, -0.505, -0.497, "Blued", segs=40, xf=T(0, BORE, 0))
 
 # --- Moving parts ------------------------------------------------------------------------
 bolt = Part("bolt", origin=(0.0, BORE, -0.1))
 bolt.prism(fillet([(-0.0125, 0.036), (0.0125, 0.036), (0.0125, 0.058), (-0.0125, 0.058)],
                   0.002, 2), -0.205, -0.08, "Steel", axis="z", bevel=0.0012, segs=1)
-bolt.box((0.022, 0.008, 0.012), (0.024, 0.046, -0.115), "Steel", bevel=0.0015)
+# The bolt's face, its firing pin and the extractor along the right, seen
+# through the ejection port.
+bolt.lathe([(0.0, -0.2065), (0.0012, -0.2065), (0.0016, -0.2052), (0.0016, -0.204)], "Steel",
+           segs=10, xf=T(0, BORE, 0))
+bolt.box((0.0025, 0.004, 0.035), (0.0118, 0.052, -0.19), "Steel", bevel=0.0006, segs=1)
+bolt.box((0.022, 0.008, 0.012), (0.024, 0.046, -0.115), "Steel", bevel=0.0015, segs=2)
+# The handle's knob, knurled, and the safety catch that slides in from it
+# into a notch in the receiver.
 bolt.lathe([(0.0, 0.0), (0.0055, 0.0), (0.0066, 0.004), (0.0066, 0.01), (0.0052, 0.013),
-            (0.0, 0.0135)], "Steel", segs=14, xf=T(0.034, 0.046, -0.115) @ RY(math.pi / 2))
+            (0.0, 0.0135)], "Steel", segs=22, xf=T(0.034, 0.046, -0.115) @ RY(math.pi / 2))
+for i in range(14):
+    a = 2 * math.pi * i / 14
+    c = (0.0415, 0.046 + 0.0066 * math.cos(a), -0.115 + 0.0066 * math.sin(a))
+    bolt.box((0.0056, 0.0007, 0.0007), c, "Steel", xf=RX(a + math.pi / 4, about=c))
+bolt.box((0.0075, 0.0028, 0.008), (0.0245, 0.0514, -0.115), "Steel", bevel=0.0007, segs=2)
+for i in range(3):
+    bolt.box((0.0065, 0.0008, 0.0009), (0.0245, 0.0528, -0.1175 + i * 0.0025), "Steel",
+             bevel=0.0002, segs=1)
 
 trig = Part("trigger", origin=(0.0, 0.01, -0.035))
-trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.002), (-0.038, -0.006), (-0.033, -0.01)], 3,
-                   closed=False), section_rect(0.0048, 0.0032, 0.0011), "Blued")
+trig.sweep(catmull([(-0.037, 0.012), (-0.04, 0.002), (-0.038, -0.006), (-0.033, -0.01)], 5,
+                   closed=False), section_rect(0.0048, 0.0032, 0.0011, 3), "Blued")
 
 SEL_PIVOT = (0.0, 0.01, -0.06)
 selector = Part("selector", origin=SEL_PIVOT)
 selector.prism(fillet([(-0.064, 0.012), (-0.056, 0.012), (-0.057, 0.0), (-0.063, 0.0)], 0.0012,
-                      2), -0.0035, 0.0035, "Blued", axis="x", bevel=0.0005, segs=1)
+                      3), -0.0035, 0.0035, "Blued", axis="x", bevel=0.0005, segs=2)
+# Ribs across its face for the trigger finger to push it.
+for i in range(3):
+    selector.box((0.0062, 0.0008, 0.0008), (0.0, 0.0018 + i * 0.0022, -0.0632 + i * 0.00017),
+                 "Blued", bevel=0.0002, segs=1)
 
-join("static", stock, furn, recv, jacket, barrel, worn={})
+screws.cut(slots)
+join("static", stock, furn, recv, jacket, barrel, screws, worn={})
 for p in (bolt, trig, selector):
     make(p, worn={})
 

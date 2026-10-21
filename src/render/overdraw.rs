@@ -160,6 +160,20 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
             .iter()
             .map(|p| model.transform_point3(Vec3::from(*p)))
             .collect();
+        // Cards near the eye shrink to their centres in theirs.
+        if w.get::<MeshMaterial3d<crate::world::trees::TreeSwayMaterial>>(e)
+            .is_some()
+        {
+            if let Some(VertexAttributeValues::Float32x3(centres)) =
+                mesh.attribute(crate::world::trees::ATTRIBUTE_CARD_CENTRE)
+            {
+                for (p, c) in world.iter_mut().zip(centres) {
+                    let c = model.transform_point3(Vec3::from(*c));
+                    let left = crate::world::trees::card_scale(c.distance(eye_pos));
+                    *p = c + (*p - c) * left;
+                }
+            }
+        }
         // Impostors turn to face the eye in their vertex shader.
         if w.get::<MeshMaterial3d<crate::world::impostors::ImpostorMaterial>>(e)
             .is_some()

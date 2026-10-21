@@ -6620,5 +6620,5 @@
 <circle cx='40.8' cy='511.8' r='4' fill='#d4a017'/>
 <circle cx='79.2' cy='552.6' r='4' fill='#d4a017'/>
 <text x='60.0' y='525.0' fill='#1d1c1a' text-anchor='middle'>sump x</text>
-<text x='8' y='822' fill='#e8e2d0'>Pumping station (pump_marrow): floor -6.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>
+<text x='8' y='822' fill='#e8e2d0'>The pump wells (pump_marrow): floor -6.0 m; grid 0.2 m; gold = loot, red = door (yellow: on the power), blue = stair, teal = water (dark: too deep to stand), olive = firedamp, orange/red = heat (red: scorching); lamp * on, ~ flickering, x dead, + on the power</text>
 </svg>

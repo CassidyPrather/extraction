@@ -111,7 +111,7 @@ enum Lit {
     Eye,
 }
 
-fn lod_range(lod: usize) -> Option<VisibilityRange> {
+pub(crate) fn lod_range(lod: usize) -> Option<VisibilityRange> {
     let fade = |d: f32| (d - 2.0)..(d + 2.0);
     match lod {
         0 => Some(VisibilityRange {
@@ -132,7 +132,7 @@ fn lod_range(lod: usize) -> Option<VisibilityRange> {
     }
 }
 
-fn lod_name(name: &str, lod: usize) -> String {
+pub(crate) fn lod_name(name: &str, lod: usize) -> String {
     if lod == 0 {
         name.into()
     } else {

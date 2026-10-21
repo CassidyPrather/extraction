@@ -44,14 +44,24 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
         .chain(map.markers.iter().map(|m| (m.at, 8.0)))
         .collect();
     for forest in &map.forests {
-        let mut rng = Rng::new(0x7EE5 ^ u64::from(forest.seed));
         let spacing = (100.0 / forest.density.max(0.01)).sqrt();
         let (lo, hi) = geom::bounds(&forest.polygon);
         let weights: Vec<f32> = forest.mix.iter().map(|(_, w)| *w).collect();
         let mut z = lo[1];
+        let mut iz = 0u64;
         while z < hi[1] {
             let mut x = lo[0];
+            let mut ix = 0u64;
             while x < hi[0] {
+                // Each cell its own stream: a marker, road or building that
+                // clears this cell's tree leaves every other tree as it was.
+                let mut rng = Rng::new(
+                    0x7EE5
+                        ^ u64::from(forest.seed)
+                        ^ ix.wrapping_mul(0x9E37_79B9_7F4A_7C15)
+                        ^ iz.wrapping_mul(0xC2B2_AE3D_27D4_EB4F),
+                );
+                ix += 1;
                 let p = [
                     x + rng.range(-0.45, 0.45) * spacing,
                     z + rng.range(-0.45, 0.45) * spacing,
@@ -95,6 +105,7 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
                 });
             }
             z += spacing;
+            iz += 1;
         }
     }
     // Off every site kiosk, the exits' too, after the scatter (as rocks).
@@ -115,6 +126,30 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
 mod tests {
     use super::*;
     use crate::map::{KETTLE_PASS, MARROW_CREEK};
+
+    #[test]
+    fn a_new_marker_clears_only_its_own_trees() {
+        let mut map = MapDef::from_ron(KETTLE_PASS).unwrap();
+        let hm = Heightmap::build(&map);
+        let before = scatter_trees(&map, &hm);
+        // On a tree, in the middle of the list.
+        let t = &before[before.len() / 2];
+        let at = [t.pos[0], t.pos[2]];
+        let mut m = map.markers[0].clone();
+        m.at = at;
+        map.markers.push(m);
+        let after = scatter_trees(&map, &hm);
+        let near = |t: &TreeSpot| geom::dist([t.pos[0], t.pos[2]], at) < 8.0;
+        let kept: Vec<_> = before.iter().filter(|t| !near(t)).collect();
+        assert!(before.len() > after.len(), "it cleared some");
+        assert_eq!(kept.len(), after.len());
+        for (a, b) in kept.iter().zip(&after) {
+            assert_eq!(
+                (a.pos, a.yaw, a.species, a.variant),
+                (b.pos, b.yaw, b.species, b.variant)
+            );
+        }
+    }
 
     #[test]
     fn forests_are_full_and_clear_of_roads_and_water() {

@@ -216,6 +216,10 @@ pub struct Portal {
     /// The floor its stair goes down to, site y; the layout's otherwise.
     #[serde(default)]
     pub floor: Option<f32>,
+    /// A front over its kiosk's door: a prop model (`models/props/`,
+    /// origin on the ground at its centre, its back to the wall).
+    #[serde(default)]
+    pub facade: Option<String>,
 }
 
 fn yes() -> bool {
@@ -629,7 +633,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 7] = [
+pub const SITES: [(&str, &str); 8] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -657,6 +661,10 @@ pub const SITES: [(&str, &str); 7] = [
     (
         "cellars_cinder",
         include_str!("../../../assets/underground/cellars_cinder.ron"),
+    ),
+    (
+        "gallery_sallow",
+        include_str!("../../../assets/underground/gallery_sallow.ron"),
     ),
 ];
 
@@ -1069,11 +1077,11 @@ impl Raster {
                                 .copied()
                         })
                         .min();
-                    if let Some(low) = low {
-                        if tread[&c] > low + 1 {
-                            tread.insert(c, low + 1);
-                            changed = true;
-                        }
+                    if let Some(low) = low
+                        && tread[&c] > low + 1
+                    {
+                        tread.insert(c, low + 1);
+                        changed = true;
                     }
                 }
                 if !changed {
@@ -2198,10 +2206,10 @@ mod tests {
                         (r.get(i, j), r.get(i + 1, j)),
                         (r.get(i, j), r.get(i, j + 1)),
                     ] {
-                        if let (Cell::Room(a), Cell::Room(b)) = (a, b) {
-                            if a != b {
-                                edges.insert((a.min(b) as usize, a.max(b) as usize));
-                            }
+                        if let (Cell::Room(a), Cell::Room(b)) = (a, b)
+                            && a != b
+                        {
+                            edges.insert((a.min(b) as usize, a.max(b) as usize));
                         }
                     }
                 }

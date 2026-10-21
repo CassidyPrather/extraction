@@ -14,6 +14,7 @@
 
 use bevy::prelude::*;
 
+pub mod bodies;
 pub mod fish;
 pub mod flock;
 pub mod herd;
@@ -144,7 +145,8 @@ pub struct WildlifePlugin;
 
 impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Flushed>()
+        app.add_plugins(bodies::BodiesPlugin)
+            .add_message::<Flushed>()
             .add_message::<herd::Startled>()
             .add_message::<rats::Scurried>()
             .init_resource::<Threats>()
@@ -153,6 +155,7 @@ impl Plugin for WildlifePlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    scene_perches,
                     gather_threats,
                     (flock::flocks, herd::herds, fish::shoals, rats::rats),
                 )
@@ -170,7 +173,11 @@ impl Plugin for WildlifePlugin {
 /// The valley's perches and its animals, once the map is in.
 fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate::LaunchOptions>) {
     let started = std::time::Instant::now();
-    let (obstacles, perches) = perches::survey(&zone);
+    let (obstacles, mut perches) = perches::survey(&zone);
+    // Somewhere for a heron to stand, where there's one.
+    if opts.map == "sallow_reservoir" {
+        perches.sites.extend(perches::wading(&zone));
+    }
     // `EXTRACTION_WILDLIFE=off`: no animals (to compare sims with and without).
     let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
     let flocks = if off {
@@ -186,6 +193,39 @@ fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate:
     );
     commands.insert_resource(obstacles);
     commands.insert_resource(perches);
+}
+
+/// Story's staged scenes (`world::scenes::Staged`: a row of kept buses, a
+/// yard of luggage) are somewhere to perch too, and to keep out of, once
+/// they're staged: they're added as they appear.
+fn scene_perches(
+    staged: Option<Res<crate::world::scenes::Staged>>,
+    zone: Res<crate::world::Zone>,
+    opts: Res<crate::LaunchOptions>,
+    perches: Option<ResMut<perches::Perches>>,
+    obstacles: Option<ResMut<perches::Obstacles>>,
+    mut done: Local<std::collections::HashSet<String>>,
+) {
+    let (Some(staged), Some(mut perches), Some(mut obstacles)) = (staged, perches, obstacles)
+    else {
+        return;
+    };
+    if staged.0.len() == done.len() {
+        return;
+    }
+    for (id, scene) in crate::world::scenes::of(&opts.map) {
+        if !staged.0.contains(&id) || !done.insert(id.clone()) {
+            continue;
+        }
+        let (solids, site) = perches::scene(&zone, &id, scene);
+        for s in solids {
+            obstacles.push(s);
+        }
+        if let Some(site) = site {
+            debug!("perches on the scene {}: {}", scene.name, site.spots.len());
+            perches.sites.push(site);
+        }
+    }
 }
 
 /// Animal visuals: the client's half.

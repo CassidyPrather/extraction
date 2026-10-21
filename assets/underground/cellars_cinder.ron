@@ -31,7 +31,7 @@
         // The coal store, behind the flue.
         (id: "coal_store", at: (10.0, 30.0), size: (4.0, 4.0), height: 2.6, props: [
             (kind: Shelf, at: (1.6, 0.6), rot: 270.0, loot: Some("workshop")),
-            (kind: Pallet, at: (-0.6, 1.2)),
+            (kind: SmallCrate, at: (-0.6, 1.2)),
         ]),
         // The near ledge over the ash pit: the crane's home.
         (id: "near_ledge", at: (0.0, 38.0), size: (8.0, 4.0), height: 4.0, props: [
