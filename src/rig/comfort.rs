@@ -415,7 +415,7 @@ mod tests {
         c.next_msaa();
         assert_eq!(c.msaa_setting(), Msaa::Sample4);
         assert!(c.soft_leaves);
-        assert!(c.msaa_label().contains("soft leaves"));
+        assert_eq!(c.msaa_label(), "SMOOTHING\n4x+leaves, relaunch");
         c.next_msaa();
         assert_eq!(c.msaa_setting(), Msaa::Sample2);
         assert!(!c.soft_leaves);
