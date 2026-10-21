@@ -438,10 +438,18 @@ mod tests {
                 rec.report()
             );
         };
-        grew("entities", a.entities, b.entities, 60);
-        grew("bodies", a.bodies, b.bodies, 10);
-        grew("items", a.items, b.items, 10);
-        grew("contact pairs", a.contacts, b.contacts, 80);
+        // Each Surge rolls different loot, so the item count wanders:
+        // hold it to a band, and what isn't loot to the reset before.
+        let more_items = b.items.saturating_sub(a.items);
+        grew("items", a.items, b.items, a.items / 5);
+        grew(
+            "bodies besides items",
+            a.bodies - a.items,
+            b.bodies - b.items,
+            5,
+        );
+        grew("entities", a.entities, b.entities, 60 + 8 * more_items);
+        grew("contact pairs", a.contacts, b.contacts, 80 + 4 * more_items);
         assert!(rec.leaks().is_empty(), "{}", rec.report());
     }
 }
