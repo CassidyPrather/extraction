@@ -1851,7 +1851,7 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     };
     let on = parts(&mut app);
     assert_eq!(on.len(), 10, "the Lada's ten parts");
-    let (door, door_at, _) = on
+    let (door, _door_at, _) = on
         .iter()
         .find(|(_, p, y)| y.iter().any(|(i, _)| i == "car_door") && p.x < at.x)
         .cloned()
