@@ -153,7 +153,7 @@ impl Kind {
             ),
             Kind::FixtureControl => (
                 &[
-                    Shape("a breaker, a valve wheel, a pump handle"),
+                    Shape("a breaker, a valve wheel, a pump handle, a lever box"),
                     Ring,
                     Haptic,
                 ],
@@ -219,7 +219,8 @@ pub struct Traits {
     pub item: bool,
     pub ladder: bool,
     pub rope: bool,
-    /// A breaker or a valve: a run-control with its own look.
+    /// A breaker, a valve, a furnace lever box: a run-control with its own
+    /// look.
     pub fixture: bool,
     pub cart: bool,
     pub button: bool,
@@ -278,11 +279,26 @@ pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, T
             Has<crate::interact::poke::PokeButton>,
             Has<crate::interact::body::Backpack>,
             Has<crate::destruction::hooks::Pryable>,
+            Has<crate::world::furnace::VentLever>,
+            Has<crate::world::furnace::CraneLever>,
         ),
     )>();
     q.iter(world)
         .map(|(e, p, parent, grabbable, f)| {
-            let (readable, item, ladder, rope, power, drain, cart, button, pack, pryable) = f;
+            let (
+                readable,
+                item,
+                ladder,
+                rope,
+                power,
+                drain,
+                cart,
+                button,
+                pack,
+                pryable,
+                vent,
+                crane,
+            ) = f;
             (
                 e,
                 Traits {
@@ -293,7 +309,7 @@ pub fn traits(world: &mut bevy::prelude::World) -> Vec<(bevy::prelude::Entity, T
                     item,
                     ladder,
                     rope,
-                    fixture: power || drain,
+                    fixture: power || drain || vent || crane,
                     cart,
                     button,
                     pack,
