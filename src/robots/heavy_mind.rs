@@ -133,6 +133,7 @@ fn heavy_brain(
     mut orders: MessageWriter<ArmOrder>,
     mut tears: MessageWriter<HeavyTear>,
     spatial: avian3d::prelude::SpatialQuery,
+    mut breaches: MessageWriter<crate::destruction::hooks::Breach>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
@@ -322,6 +323,9 @@ fn heavy_brain(
                                 at,
                                 out,
                             });
+                            // A doorway-sized hole where it pulls (wood,
+                            // plaster and tin tear; brick and concrete don't).
+                            breaches.write(crate::destruction::hooks::Breach { at, out });
                         }
                     }
                     None
@@ -440,7 +444,8 @@ fn call_heavy(
         feeling,
         gate_threat: gate_threat(gate, &spots, carried),
         out: calls.pending.is_some() || heavies.iter().any(|r| !r.wrecked),
-        enabled: director.enabled,
+        // (Not while a night visit is on its way: one at a time.)
+        enabled: director.enabled && director.visits.is_empty(),
     };
     // Where it's sent: the one the Zone is looking at hardest.
     let target = players
