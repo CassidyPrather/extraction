@@ -1507,13 +1507,13 @@ fn panel_mesh(w: f32, l: f32, r: f32) -> Mesh {
     .with_inserted_indices(bevy::mesh::Indices::U32(idx))
 }
 
-/// A hurt core's eye gutters: below 40% it drops out now and then, more
-/// often the worse it is, like a failing supply (1 when it's whole).
-fn gutter(core: f32, now: f32, k: u32) -> f32 {
-    if core >= 0.4 {
+/// An eye guttering this badly (0 steady, 1 all but out: a hurt sensor, a
+/// failing core, `damage`): it drops out now and then, more the worse it
+/// is, like a failing supply.
+fn guttering(bad: f32, now: f32, k: u32) -> f32 {
+    if bad <= 0.0 {
         return 1.0;
     }
-    let bad = 1.0 - core / 0.4;
     // Two slow beats against each other, so the drop-outs don't tick.
     let n = (now * 5.3 + k as f32).sin() * (now * 2.1 + k as f32 * 0.7).sin();
     if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
@@ -1628,11 +1628,19 @@ fn alert_eyes(
     // would be lost; the halo carries it at range.
     let night = (1.0 - light / 0.25).clamp(0.0, 1.0);
     let gain = 1.0 - 0.75 * night;
-    // How much core each robot has left: a hurt one's eye gutters.
+    // How badly each robot's eye gutters (`damage`: a hurt sensor, a
+    // failing core): 0 steady, 1 all but out.
     let mut cores: std::collections::HashMap<Entity, f32> = Default::default();
     for p in &parts {
-        if p.role == PartRole::Core {
-            cores.insert(p.robot, p.hp / p.max_hp.max(1.0));
+        let h = p.hp / p.max_hp.max(1.0);
+        let bad = match p.role {
+            PartRole::Core => (1.0 - h / 0.4).clamp(0.0, 1.0),
+            PartRole::Sensor if h > 0.0 => (1.0 - h / 0.7).clamp(0.0, 1.0),
+            _ => continue,
+        };
+        if super::damage::tell(p.role, h).motion == super::damage::Motion::Gutter {
+            let b = cores.entry(p.robot).or_insert(0.0);
+            *b = b.max(bad);
         }
     }
     for (robot, aware, own, _) in &robots {
@@ -1647,8 +1655,8 @@ fn alert_eyes(
             }
         } else {
             1.0
-        } * gutter(
-            cores.get(&robot).copied().unwrap_or(1.0),
+        } * guttering(
+            cores.get(&robot).copied().unwrap_or(0.0),
             now,
             robot.index_u32(),
         );
@@ -1773,7 +1781,12 @@ fn shell_by_light(
 
 #[cfg(test)]
 mod gutter_tests {
-    use super::gutter;
+    use super::guttering;
+
+    /// A core's eye: steady until 40%, then worse the lower.
+    fn gutter(core: f32, now: f32, k: u32) -> f32 {
+        guttering(if core >= 0.4 { 0.0 } else { 1.0 - core / 0.4 }, now, k)
+    }
 
     /// A whole core's eye never gutters; a hurt one drops out now and
     /// then, more the worse it's hurt.

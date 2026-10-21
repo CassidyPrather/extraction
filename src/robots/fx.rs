@@ -58,6 +58,8 @@ struct FxAssets {
     arc: Handle<StandardMaterial>,
     /// Water thrown up by a foot.
     water: Handle<StandardMaterial>,
+    /// A wound's coolant: pale green, a little lit so it reads at range.
+    coolant: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -94,6 +96,11 @@ fn assets(
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
             unlit: true,
+            ..default()
+        }),
+        coolant: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.55, 0.95, 0.6),
+            emissive: LinearRgba::rgb(0.6, 2.2, 0.8),
             ..default()
         }),
         water: materials.add(StandardMaterial {
@@ -191,9 +198,9 @@ fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: 
     ));
 }
 
-/// A part shot below a third keeps sparking now and then; a core shot
-/// below half smokes.
-#[allow(clippy::too_many_arguments)]
+/// A hurt part shows it (`damage::tell`): sparks, smoke and coolant off
+/// the wound at its band's rates, each on its own count so they don't
+/// tick together.
 fn sputter(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart, &GlobalTransform)>,
@@ -203,46 +210,78 @@ fn sputter(
     existing: Option<Res<FxAssets>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut timers: Local<std::collections::HashMap<Entity, f32>>,
+    mut counts: Local<std::collections::HashMap<Entity, Vec3>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
     mut dice: Local<Dice>,
 ) {
     let dt = time.delta_secs();
+    let eye = cameras.iter().next().map(|g| g.translation());
     let (mut n_sparks, mut n_puffs) = (sparks.iter().len(), puffs.iter().len());
     let mut a = None;
-    timers.retain(|e, _| parts.contains(*e));
+    counts.retain(|e, _| parts.contains(*e));
     for (e, part, gt) in &parts {
-        let health = part.hp / part.max_hp.max(1.0);
-        // Gas cells don't spark; a wreck smoulders instead.
-        if matches!(part.role, PartRole::GasCell(_))
-            || robots.get(part.robot).is_ok_and(|r| r.wrecked)
-        {
+        // A wreck smoulders instead (`smoulder`).
+        if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
         }
-        let core = part.role == PartRole::Core;
-        let sparky = health < 0.34;
-        let smoky = core && health < 0.5;
-        if !sparky && !smoky {
+        let tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        if tell.sparks <= 0.0 && tell.smoke <= 0.0 && tell.coolant <= 0.0 {
             continue;
         }
-        let t = timers.entry(e).or_insert_with(|| dice.f());
-        *t -= dt;
-        if *t > 0.0 {
+        // (Started anywhere in the count, so a hurt robot's parts don't
+        // all go at once.)
+        let c = counts
+            .entry(e)
+            .or_insert_with(|| Vec3::new(dice.f(), dice.f(), dice.f()));
+        *c += Vec3::new(tell.sparks, tell.smoke, tell.coolant) * dt * (0.6 + 0.8 * dice.f());
+        if c.max_element() < 1.0 {
             continue;
         }
         let a =
             a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
         let at = gt.translation();
-        if smoky && n_puffs < MAX_PUFFS {
-            puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.3, false, 0.35);
-            n_puffs += 1;
-            *t = 0.4 + dice.f() * 0.4;
+        if c.x >= 1.0 {
+            c.x -= 1.0;
+            if n_sparks < MAX_SPARKS {
+                burst(&mut commands, a, &mut dice, at, Vec3::Y, 3, 2.5);
+                n_sparks += 3;
+            }
         }
-        if sparky && n_sparks < MAX_SPARKS && dice.f() < 0.5 {
-            burst(&mut commands, a, &mut dice, at, Vec3::Y, 3, 2.5);
-            n_sparks += 3;
-            *t = 0.6 + dice.f() * 1.8;
+        if c.y >= 1.0 {
+            c.y -= 1.0;
+            if n_puffs < MAX_PUFFS {
+                // A gas cell's vent is pale; a burning part's is grey.
+                let size = 0.3 * at_range(eye, at).sqrt();
+                puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                n_puffs += 1;
+            }
         }
+        if c.z >= 1.0 {
+            c.z -= 1.0;
+            if n_sparks < MAX_SPARKS {
+                leak(&mut commands, a, &mut dice, at);
+                n_sparks += 2;
+            }
+        }
+    }
+}
+
+/// Coolant spattering from a wound: a couple of pale-green drops, out and
+/// down.
+fn leak(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3) {
+    for _ in 0..2 {
+        let out = Vec3::new(dice.f() - 0.5, 0.0, dice.f() - 0.5).normalize_or(Vec3::X);
+        commands.spawn((
+            Spark {
+                vel: out * (0.5 + dice.f() * 0.6) - Vec3::Y * 0.4,
+                life: 0.5 + dice.f() * 0.3,
+            },
+            Mesh3d(a.spark.clone()),
+            MeshMaterial3d(a.coolant.clone()),
+            Transform::from_translation(at).with_scale(Vec3::splat(0.0)),
+            NotShadowCaster,
+        ));
     }
 }
 
@@ -337,12 +376,20 @@ fn smoulder(
     }
 }
 
+/// How much bigger a wound's sparks, drops and smoke are drawn this far
+/// from the eye, so they still read at 20-40 m: 1 within 10 m, up to 4.
+fn at_range(eye: Option<Vec3>, at: Vec3) -> f32 {
+    eye.map_or(1.0, |e| (e.distance(at) / 10.0).clamp(1.0, 4.0))
+}
+
 fn fly_sparks(
     mut commands: Commands,
     mut sparks: Query<(Entity, &mut Spark, &mut Transform)>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
+    let eye = cameras.iter().next().map(|g| g.translation());
     for (e, mut s, mut t) in &mut sparks {
         s.life -= dt;
         if s.life <= 0.0 {
@@ -355,7 +402,8 @@ fn fly_sparks(
         let speed = s.vel.length();
         // A streak along its path.
         t.rotation = Quat::from_rotation_arc(Vec3::Y, s.vel / speed.max(1e-3));
-        t.scale = Vec3::new(1.0, (speed * 0.02).clamp(0.01, 0.12), 1.0);
+        let w = at_range(eye, t.translation);
+        t.scale = Vec3::new(w, (speed * 0.02).clamp(0.01, 0.12) * w.sqrt(), w);
     }
 }
 
