@@ -522,3 +522,21 @@ capture's rig isn't one.
 view (the truck at base, clear day, lavapipe) with the rule; without it
 the frame is identical to the pixel (the buttons, the vise, the tins are
 within reach and still cast), as is the Marrow gate view.
+
+## Small things' range
+
+Items fade where they'd be a few pixels (`item_range`). Other small
+things had no range. Marrow Creek's aerial view went from 998 to 1208
+draws in one merge, with the top five kinds unchanged. `BUDGET_LIST=1`
+lists every kind a view draws, which is how the tail showed up: 96 piano
+parts (keys, hammers), 39 of the player's body and kit parts, 35 depot
+fittings, 18 terminals, 18 notes, 15 supply crates, 7 keys. None were
+items. (The guns in that view are items, on the gate's truck within
+their 60 m range, and rightly drawn.)
+
+`render::budget::small_ranges` gives any StandardMaterial mesh under 1 m
+(largest side, world) that isn't part of an item or under a `LodReach` a
+range of 200 times its size, 20 to 200 m: a 10 cm fitting goes at 20 m,
+about three pixels a side on the headset. The aerial view now draws 945.
+The gate, village and aerial shots with and without it
+(`EXTRACTION_SMALL_RANGES=0`) differ only in the grass's sway.
