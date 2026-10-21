@@ -227,7 +227,12 @@ pub fn dress(
                     out.push(wall("jacket_hook", s.door_wall[0]));
                     out.push(on("lunch_pail", s.table[1], 0.0));
                     out.push(on("carbide_lamp", s.kitchen[1], 0.5));
-                    out.push(on("helmet_lamp", s.shelf[1], std::f32::consts::FRAC_PI_2));
+                    // In off the shelf's back (the wall behind it).
+                    out.push(on(
+                        "helmet_lamp",
+                        s.shelf[1] - Vec3::X * 0.05,
+                        std::f32::consts::FRAC_PI_2,
+                    ));
                 }
                 Valley::Cinder => {
                     out.push(on("books_charred", s.shelf[1], std::f32::consts::FRAC_PI_2));
@@ -465,7 +470,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
         ("cinder", "house_plank_damaged") if here(0.0, 150.0) => house(
             |_| {
                 vec![
-                    on("bedroll", Vec3::new(-4.0 + 0.85, 0.5, -3.5 + 1.1), PI * 0.5),
+                    on("bedroll", Vec3::new(-4.0 + 0.95, 0.5, -3.5 + 1.1), PI * 0.5),
                     on("tin_empty", Vec3::new(-4.0 + 1.55, 0.5, -3.5 + 0.45), 0.7),
                 ]
             },
@@ -855,6 +860,60 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Nothing for a room comes through its walls: every thing a house
+    /// is dressed with stays inside its outer walls' inner faces, give or
+    /// take 3 cm (inside the wall, unseen); a sill's things may stand on
+    /// the wall's middle, in the window. (A coat's sleeves once ran out
+    /// through the front wall beside the door.)
+    #[test]
+    fn nothing_comes_through_the_walls() {
+        let root = crate::asset_root_path();
+        let mut cache = std::collections::HashMap::new();
+        let mut bad = Vec::new();
+        for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
+            let map = crate::world::load_map_def(name);
+            for p in &map.placements {
+                let base = extraction_core::map::prefab_base(&p.prefab);
+                let Some((w, d)) = plan(base) else { continue };
+                let inner = Vec2::new(w * 0.5 - 0.09, d * 0.5 - 0.09);
+                let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
+                for (model, t) in dress(&map, &p.prefab, &p.tag, &xf, true) {
+                    let b = cache.entry(model).or_insert_with(|| {
+                        let path = root.join(crate::render::world_props::path(model));
+                        crate::capture::glb::read(&path)
+                            .ok()
+                            .and_then(|g| g.bounds_of(|_| true))
+                    });
+                    let Some((lo, hi)) = *b else { continue };
+                    let (mut a, mut z) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                    for k in 0..8 {
+                        let c = Vec3::new(
+                            if k & 1 == 0 { lo.x } else { hi.x },
+                            if k & 2 == 0 { lo.y } else { hi.y },
+                            if k & 4 == 0 { lo.z } else { hi.z },
+                        );
+                        let q = t.transform_point(c);
+                        a = a.min(q);
+                        z = z.max(q);
+                    }
+                    let sill = (t.translation.y - 1.425).abs() < 0.05;
+                    let slack = if sill { 0.2 } else { 0.03 };
+                    if a.x < -inner.x - slack
+                        || z.x > inner.x + slack
+                        || a.z < -inner.y - slack
+                        || z.z > inner.y + slack
+                    {
+                        bad.push(format!(
+                            "{name} {} at {:?}: {model} from {a} to {z}",
+                            p.prefab, p.at
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Story's houses get their things, and Hana's table stays bare.
