@@ -104,6 +104,10 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
             .iter()
             .any(|(c, r)| geom::dist(*c, [t.pos[0], t.pos[2]]) < *r)
     });
+    // And no trunk in front of a door (`map_doors`): the clearing round a
+    // building is round, its doors aren't always inside it.
+    let doors = crate::map_doors::doors(map);
+    out.retain(|t| crate::map_doors::clear_of_doors(&doors, [t.pos[0], t.pos[2]], 0.3 * t.scale));
     out
 }
 

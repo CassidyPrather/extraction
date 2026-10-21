@@ -60,6 +60,10 @@ pub enum Rule {
     Crate,
     /// A point of interest no road or path leads to.
     Funnel,
+    /// A door with something in front of it: a building, a trunk, a rock,
+    /// a crate, water, or ground that doesn't meet its steps
+    /// (`map_doors`).
+    Door,
 }
 
 #[derive(Clone, Debug)]
@@ -326,6 +330,20 @@ pub const VIEW_MAX: usize = 16;
 
 /// A road's first and last metres may run up to a building's door.
 const ROAD_END: usize = 8;
+
+// ---- Doors (`map_doors`) -----------------------------------------------------
+
+/// In front of every outside door, this far out from the wall's face (or
+/// the door's own steps and standing room, if further) and a shoulder
+/// either side of the opening, is kept clear, metres.
+pub const DOOR_REACH: f32 = 4.0;
+pub const DOOR_SHOULDER: f32 = 0.3;
+/// The ground there meets the door's steps within a step: the body's
+/// (`player.rs` `STEP_HEIGHT`); the walkers' smaller one is measured.
+pub const DOOR_STEP: f32 = 0.4;
+pub const WALKER_STEP: f32 = 0.28;
+/// A road ending this near a door runs on to it (no ledge check).
+pub const DOOR_ROAD_END: f32 = 5.0;
 
 /// Prefabs a road may run into or under.
 const ON_ROADS: &[&str] = &[
@@ -625,6 +643,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     let walk = crate::map_nav::zone_grid(map, hm, crate::map_nav::MAX_SLOPE);
     let comfy = crate::map_nav::zone_grid(map, hm, COMFORT_SLOPE);
     let walk_seen = flood(&walk, ins);
+    let doors = crate::map_doors::doors(map);
     let comfy_seen = flood(&comfy, ins);
     // Main routes keep to ground no steeper than a route may climb, as a
     // player picking the easy way would.
@@ -778,7 +797,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             let dir = geom::sub(p, rl.points[inward]);
             let l = geom::len(dir).max(1e-3);
             let at = |d: f32| geom::add(p, geom::scale(dir, d / l));
-            let door = rects.iter().any(|(_, rc)| rc.sdf(p) < 5.0);
+            let door = crate::map_doors::near_door(&doors, p, DOOR_ROAD_END);
             // A road that ends on another road joins it.
             let joins = hm.road_lines.iter().any(|o| {
                 o.road != rl.road && polyline_closest(&o.points, p).0 < o.width * 0.5 + 2.0
@@ -1606,6 +1625,19 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 at,
             );
         }
+    }
+
+    // -- Doors -----------------------------------------------------------------------
+    let dc = crate::map_doors::check(map, hm, &walk, &walk_seen);
+    r.measures.push(format!(
+        "doors: {}, {} findings, worst step to the ground {:.2} m, {} a walker can't step ({WALKER_STEP} m)",
+        dc.doors,
+        dc.findings.len(),
+        dc.worst_step,
+        dc.walker_blocked
+    ));
+    for (what, at) in dc.findings {
+        find(&mut r, Rule::Door, what, at);
     }
 
     // -- Render load -----------------------------------------------------------------

@@ -271,6 +271,22 @@ fine on a monitor makes people sick or tired in a headset.
   and kerbs are the prefabs' job (the building fit gauge in
   `extraction_core::fit` holds plinths to the ground); the map must not
   leave a building's door above a drop.
+- **Doors**: in front of every outside door (`map::prefab_entrances`),
+  a strip as wide as the opening and 0.3 m either side, from the wall
+  out past its steps and at least 4 m (`DOOR_SHOULDER`, `DOOR_REACH`), is
+  clear: no other building or site kiosk, trunk, solid rock, supply
+  crate, sign, offering or standing anomaly, and no water. Past the
+  steps the ground meets them within a step (the steps reach down to
+  the building's footing less its lift; `DOOR_STEP`, the body's 0.4 m)
+  and is no steeper than `COMFORT_SLOPE`, and the walkers' grid is open
+  there and reached from the insertion. The lint prints how many doors
+  a walker, which steps only 0.28 m (`WALKER_STEP`), couldn't step to.
+  A booth or hut at the fence turns its door away from the rim's rise.
+  A road ending within 5 m of a door's strip runs on to it
+  (`DOOR_ROAD_END`). Boxcars are a climb on purpose: their strip is
+  kept clear but their ground isn't held. The forest and rock scatter
+  keep off door strips (`map_doors::clear_of_doors`). Staged scenes
+  (`assets/data/scenes.ron`) are the game's and aren't checked.
 - **No forced jumps**: nothing that matters is only reached by jumping,
   climbing or swimming. Water deeper than 0.9 m is a wall on the nav
   grid, and the lint's reach is on that grid.
