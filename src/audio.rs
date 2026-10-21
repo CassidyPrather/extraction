@@ -320,6 +320,7 @@ impl Plugin for AudioPlugin {
             .init_resource::<Hush>()
             .add_plugins(crate::audio_underground::UndergroundSoundsPlugin)
             .init_resource::<HushNow>()
+            .add_plugins(crate::audio_kit::KitSoundsPlugin)
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -1206,6 +1207,9 @@ fn gun_sounds(
             (FireEvent::BoltClosed, Some(BreakAction)) => {
                 ("guns/shotgun_close", "gun.shotgun_close", 0.0)
             }
+            // A pump run home: the fore-end slapping forward and the bolt
+            // locking up behind it.
+            (FireEvent::BoltClosed, Some(Pump)) => ("guns/shotgun_close", "gun.pump_fwd", 0.0),
             (FireEvent::BoltClosed, Some(SemiAuto)) if ev.item == "ak74" => {
                 ("guns/charging_handle", "gun.charging", 0.0)
             }
@@ -1214,6 +1218,8 @@ fn gun_sounds(
             (FireEvent::Cocked, Some(BreakAction)) => {
                 ("guns/shotgun_open", "gun.shotgun_open", 0.0)
             }
+            // A pump racked back: the fore-end's slide and the bolt unlocking.
+            (FireEvent::Cocked, Some(Pump)) => ("guns/shotgun_open", "gun.pump_back", 0.0),
             // A spent case is heard where it lands (`casing_sounds`), a beat
             // after the shot; a live round worked out by hand, here.
             (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
