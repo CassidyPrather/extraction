@@ -72,7 +72,7 @@ each with its own shadow cascades, so the frame is twice this.
 | Shadow draws (sun, all cascades) | 900 | |
 | Shadow triangles | 700k | |
 | Shadowed point/spot lights | 2 | Each is another view (six for a point light) |
-| Overdraw, mean layers a pixel | 11.5 | Was 10; Kettle's quarry view now stands under a spruce clump (10.27), see "Gauge margins" |
+| Overdraw, mean layers a pixel | 10 | Worst view 7.3 (Marrow's spruce); 11.5 for a while, see "Gauge margins" |
 | Overdraw, 95th percentile | 35 | |
 | CPU main schedule | 6 ms | |
 | Physics within it | 2 ms | |
@@ -456,3 +456,19 @@ something real (main at 43940f8, fetched foliage):
   1211, expect about 1064).
 - The hitch gauge's wall-clock test is out of the default suite
   (`scripts/hitches.sh`), its finds held by counts (see "Hitches").
+
+## Load time
+
+The startup frame (before the headset's session starts) was 4.7-6.2 s on
+this 4-core container, and longer on one thread. `render::spikes::tests::
+startup_frames` (ignored, wall-clock) times it per valley on all cores.
+
+- The terrain's shaping pass (noise, relief, the distance from every cell
+  to every ridge and channel spline) was most of `Heightmap::build`, on
+  one thread. Each cell's rise depends only on where it is, so rows go to
+  every core (bit-identical heights, hashed): `Heightmap::build` 3.1-4.5 s
+  > 1.5-2.5 s.
+- The terrain chunks' meshes and the rock chunks' meshes (with their
+  tangents) are built on the compute pool, each chunk on its own, and
+  spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
+  (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).

@@ -53,12 +53,10 @@ pub const BUDGET: Budget = Budget {
     shadow_draws: 900,
     shadow_tris: 700_000,
     shadowed_lights: 2,
-    // 10 until a forest reshuffle stood Kettle Pass's quarry view 1.3 m
-    // from a spruce, with three more within 9 m: 10.27, deterministic,
-    // and a fair worst case (standing under a spruce clump). Card quads
-    // within 2 m of the eye are 2.4 of its layers; collapsing those is
-    // the cut that would earn 10 back (docs/PERFORMANCE.md).
-    overdraw_mean: 11.5,
+    // (11.5 for a while, when Kettle Pass's quarry view stood inside a
+    // spruce clump at 10.27; moved clear, and near cards shrinking away,
+    // it's 4.4, and the worst view anywhere is 7.3.)
+    overdraw_mean: 10.0,
     overdraw_p95: 35,
 };
 
