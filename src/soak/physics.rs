@@ -94,6 +94,9 @@ fn despawn(app: &mut App, es: &[Entity]) {
     }
 }
 
+/// How far past a surface a step may end and still count as touching it.
+const SHALLOW: f32 = 0.02;
+
 /// For each segment, the first static collider it passes through (and
 /// where), if any. A body's middle never touches a surface (resting on
 /// one, it stays this side), so a middle's path through one is tunnelling.
@@ -112,7 +115,10 @@ fn crossings(app: &mut App, segs: Vec<(Vec3, Vec3)>) -> Vec<Option<(Entity, Vec3
                         let dir = Dir3::new(d).ok()?;
                         q.ray_hits(a, dir, len, 4, true, &filter)
                             .into_iter()
-                            .filter(|h| h.distance > 1e-3)
+                            // Ending a couple of centimetres past a face is a
+                            // small thing sinking into a curved collider on
+                            // contact (the water tower's foot), not tunnelling.
+                            .filter(|h| h.distance > 1e-3 && len - h.distance > SHALLOW)
                             .find(|h| {
                                 of.get(h.entity)
                                     .ok()
