@@ -34,6 +34,7 @@ pub mod tells;
 pub mod terrain_material;
 pub mod tools;
 pub mod upgrades;
+pub mod vr_budget;
 pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;
