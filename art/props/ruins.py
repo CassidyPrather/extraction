@@ -213,7 +213,7 @@ def rubble_logs():
             else:
                 a = (off - ln / 2 * math.sin(skew), y - drop, mid - ln / 2)
                 b = (off + ln / 2 * math.sin(skew), y + drop, mid + ln / 2)
-            rod(p, a, b, r, "Timber", segs=10)
+            rod(p, a, b, r, "Boards", segs=10)
             # The end grain, weathered dark, a few millimetres proud.
             d = [b[j] - a[j] for j in range(3)]
             n_ = math.sqrt(sum(c * c for c in d))
