@@ -3945,6 +3945,9 @@ fn splash_sounds(
     }
 }
 
+/// Above this (kg) a landing adds a low thud of the ground taking the weight.
+const HEAVY_DROP: f32 = 8.0;
+
 /// Things you drop land with a sound that depends on what they're made of
 /// and what they land on, louder the harder they hit (`items::impacts`).
 /// On a floor, a crate or a rock you hear the thing; in grass, leaves or
@@ -3962,6 +3965,21 @@ fn drop_sounds(
     use crate::items::impacts::{Material, soft};
     for i in impacts.read() {
         let offset = (-18.0 + 4.0 * i.speed + 3.0 * i.mass.max(0.05).log2()).min(0.0);
+        if i.mass > HEAVY_DROP {
+            // A door or a wheel: the ground takes its weight, under whatever it is.
+            let weight = (3.0 * (i.mass / HEAVY_DROP).log2()).min(6.0);
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "impacts/dirt",
+                Some(i.at),
+                "drop.heavy",
+                weight - 6.0 + (2.0 * i.speed).min(6.0),
+                0.55,
+                0.1,
+            );
+        }
         let on_built = underfoot(&spatial, &built, i.at).is_some();
         if !on_built && soft(i.ground) {
             let ground = surface_set(i.ground.unwrap_or(Surface::Grass));
