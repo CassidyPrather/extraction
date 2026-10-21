@@ -3,13 +3,13 @@
 //!
 //! ```ron
 //! (smooth_turn: false, turn_speed: 120.0, snap_angle: 30.0, vignette: 0.6,
-//!  narrow_dynamics: false, render_scale: 0.0)
+//!  narrow_dynamics: false, render_scale: 0.0, msaa: 4)
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
 //! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
 //! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
-//! `--render-scale 0.3..1` (0 or absent: auto).
+//! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`.
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,11 @@ pub struct Comfort {
     /// Your body drawn under you, looking down (`render::body`); off, only
     /// the arms and hands.
     pub body: bool,
+    /// Samples a pixel on the edges of things (MSAA): 4, 2, or 0 (off).
+    /// Each eye carries a target this many times its size; fewer is
+    /// cheaper, with harder edges on wires and blades
+    /// (`docs/PERFORMANCE.md`, "The headset's two eyes").
+    pub msaa: u32,
 }
 
 impl Default for Comfort {
@@ -86,6 +91,7 @@ impl Default for Comfort {
             machine_tick: true,
             post_blur: true,
             body: true,
+            msaa: 4,
         }
     }
 }
@@ -157,6 +163,41 @@ impl Comfort {
             .position(|v| (v - self.render_scale).abs() < 0.01);
         self.render_scale =
             Self::RENDER_SCALES[now.map_or(0, |i| (i + 1) % Self::RENDER_SCALES.len())];
+    }
+
+    /// The SMOOTHING card's steps.
+    pub const MSAAS: [u32; 3] = [4, 2, 0];
+
+    pub fn next_msaa(&mut self) {
+        let now = Self::MSAAS.iter().position(|v| *v == self.msaa);
+        self.msaa = Self::MSAAS[now.map_or(0, |i| (i + 1) % Self::MSAAS.len())];
+    }
+
+    /// The camera setting for `msaa`.
+    pub fn msaa_setting(&self) -> Msaa {
+        match self.msaa {
+            0 | 1 => Msaa::Off,
+            2 => Msaa::Sample2,
+            8 => Msaa::Sample8,
+            _ => Msaa::Sample4,
+        }
+    }
+
+    pub fn msaa_label(&self) -> String {
+        match self.msaa_setting() {
+            Msaa::Off => "SMOOTHING
+off (fastest)"
+                .into(),
+            Msaa::Sample2 => "SMOOTHING
+2x"
+            .into(),
+            Msaa::Sample8 => "SMOOTHING
+8x"
+            .into(),
+            _ => "SMOOTHING
+4x"
+            .into(),
+        }
     }
 
     pub fn render_scale_label(&self) -> String {
@@ -324,6 +365,11 @@ impl Comfort {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
                     }
                 }
+                "--msaa" => {
+                    if let Some(v) = it.next().and_then(|v| v.parse::<u32>().ok()) {
+                        c.msaa = v;
+                    }
+                }
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.vignette = v.clamp(0.0, 1.0);
@@ -339,6 +385,32 @@ impl Comfort {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SMOOTHING steps 4x, 2x, off and round; `--msaa` sets it.
+    #[test]
+    fn smoothing_steps_and_takes_a_flag() {
+        let mut c = Comfort::default();
+        assert_eq!(c.msaa_setting(), Msaa::Sample4);
+        c.next_msaa();
+        assert_eq!(c.msaa_setting(), Msaa::Sample2);
+        assert_eq!(c.msaa_label(), "SMOOTHING\n2x");
+        c.next_msaa();
+        assert_eq!(c.msaa_setting(), Msaa::Off);
+        c.next_msaa();
+        assert_eq!(c.msaa_setting(), Msaa::Sample4);
+        // (A settings file from before the setting reads as 4x.)
+        let old: Comfort = ron::from_str("(smooth_turn: true)").unwrap();
+        assert_eq!(old.msaa, 4);
+        let args: Vec<String> = ["--msaa", "2"].iter().map(|s| s.to_string()).collect();
+        let mut it = args.iter();
+        let mut c = Comfort::default();
+        while let Some(a) = it.next() {
+            if a == "--msaa" {
+                c.msaa = it.next().unwrap().parse().unwrap();
+            }
+        }
+        assert_eq!(c.msaa_setting(), Msaa::Sample2);
+    }
 
     #[test]
     fn the_board_steps_through_the_presets_and_round() {
