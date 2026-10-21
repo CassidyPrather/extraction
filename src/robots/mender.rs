@@ -36,6 +36,10 @@ pub const ROTORS: [Vec3; 4] = [
 pub const EYE: Vec3 = Vec3::new(0.0, 0.0, -0.27);
 pub const ARM: Vec3 = Vec3::new(0.0, -0.12, -0.15);
 pub const TORCH: Vec3 = Vec3::new(0.0, -0.38, -0.45);
+/// The lowest it can hang over the ground (`flight` holds drones off it),
+/// and how far its arc reaches from there, m.
+pub const HOVER_MIN: f32 = 2.7;
+pub const ARC_REACH: f32 = 3.2;
 /// Seconds with nothing to mend before it goes home.
 pub const IDLE_HOME: f32 = 45.0;
 /// Counters a scenario reads: hit points welded back (whole ones).
@@ -296,14 +300,17 @@ fn mender_mind(
         // came from.
         let flat = Vec2::new(here.x - at.x, here.z - at.z);
         let side = flat.normalize_or(Vec2::X);
-        let beside = at + Vec3::new(side.x, 0.0, side.y) * rules::WELD_REACH + Vec3::Y * 0.5;
         let ground = zone.ground(here.x, here.z);
+        // (It can't hover lower than its flight lets it: `flight` keeps
+        // it off the ground. Its arc reaches down.)
+        let mut beside = at + Vec3::new(side.x, 0.0, side.y) * rules::WELD_REACH + Vec3::Y * 0.5;
+        beside.y = beside.y.max(zone.ground(beside.x, beside.z) + HOVER_MIN);
         d.goal = if flat.length() > 8.0 {
             Vec3::new(at.x, (ground + rules::CRUISE).max(at.y + 3.0), at.z)
         } else {
             beside
         };
-        if here.distance(beside) < 0.9 {
+        if here.distance(beside) < 1.2 && here.distance(at) < ARC_REACH {
             let before = p.hp;
             p.hp = rules::weld(p.hp, p.max_hp, dt);
             m.owed += p.hp - before;

@@ -1103,7 +1103,15 @@ mod tests {
             .iter(vr.app.world())
             .map(|g| g.translation())
             .collect();
-        assert_eq!(mines.len(), rules::PER_FIELD as usize, "{mines:?}");
+        // The field, less any spot it may not lay in (a road, a doorway).
+        let want = rules::site_field(
+            &zone.map,
+            &zone.hm,
+            [site.x, site.z],
+            [site.x - from.x, site.z - from.z],
+        );
+        assert!(want.len() >= 2, "a site with room: {want:?}");
+        assert_eq!(mines.len(), want.len(), "{mines:?} vs {want:?}");
         for p in &mines {
             assert!(
                 Vec2::new(p.x - site.x, p.z - site.z).length() < 5.0,
@@ -1111,7 +1119,7 @@ mod tests {
             );
         }
         let left = vr.app.world().get::<Minelayer>(e).map(|m| m.hopper);
-        assert!(left.is_none() || left == Some(rules::HOPPER - rules::PER_FIELD));
+        assert!(left.is_none() || left == Some(rules::HOPPER - want.len() as u32));
     }
 
     /// Hole its hopper and it goes up with its mines.
@@ -1126,9 +1134,10 @@ mod tests {
             .0
             .clone();
         let from = zone.on_ground(40.0, 230.0);
+        let far = zone.on_ground(40.0, 160.0);
         let e = {
             let mut c = vr.app.world_mut().commands();
-            let e = spawn_minelayer(&mut c, &zone, &nav, from, vec![from], from);
+            let e = spawn_minelayer(&mut c, &zone, &nav, from, vec![far], far);
             vr.app.world_mut().flush();
             e
         };
