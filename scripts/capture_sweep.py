@@ -9,8 +9,8 @@ subject hidden (`_empty`):
 
 - fallback colours: magenta in the subject (an engine's missing texture);
 - blank views: a view where the subject covers almost nothing;
-- size: a model's size against its folder's range, a prefab's against the
-  radius the map clears round it;
+- size: a model's size against its folder's range (a prefab's reach is
+  held by `capture::checks::prefabs_stay_inside_their_clearance`);
 - blockouts left standing (a model that never loaded) and pieces whose
   boxes touch nothing (floating), from sweep.json.
 
@@ -98,15 +98,6 @@ def analyse(out, rec, grid):
         a, b = SIZE.get(folder, (0.01, 60.0))
         if not a <= size.max() <= b:
             flags.append(("error", f"{size.max():.2f} m across, outside {a}-{b} m for {folder}"))
-    elif rec["kind"] == "prefab":
-        # How far it reaches from its footing against the circle the map
-        # clears round it: past that it pokes into trees, rocks and its
-        # neighbours. (Sites underground have nothing cleared.)
-        clear = rec.get("clearance")
-        if clear is not None:
-            reach = float(np.hypot(max(abs(lo[0]), abs(hi[0])), max(abs(lo[2]), abs(hi[2]))))
-            if reach > clear + 1.0:
-                flags.append(("warn", f"reaches {reach:.1f} m from its footing, the map clears {clear:.1f} m"))
     if rec.get("blockouts"):
         flags.append(("error", f"{rec['blockouts']} blockout boxes still standing"))
     # animals/ hold pose sheets (each pose its own node, laid out side by

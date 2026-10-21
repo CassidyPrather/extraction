@@ -12,6 +12,9 @@
 //!   sinks or swamps the room once the boxes are gone.
 //! - **No outside images**: a model's textures are inside the file, or a
 //!   missing one renders as flat grey.
+//! - **Inside its clearance**: a prefab as drawn reaches no further from
+//!   its footing than the radius the map clears round it, or it stands in
+//!   the trees and rocks the map put just outside.
 //! - **Held together**: every part of a model touches another part or the
 //!   ground; a nail over its loop or a board in mid-air shows from across
 //!   a room.
@@ -168,6 +171,24 @@ pub fn furniture_fits() -> Vec<Fit> {
     out
 }
 
+/// How far each surface prefab reaches from its footing as drawn (its
+/// boxes and models, `fighting::assemble`), against the radius the map
+/// clears round it: (id, reach, clearance), metres.
+pub fn reaches() -> Vec<(&'static str, f32, f32)> {
+    buildings::PREFABS
+        .into_iter()
+        .filter_map(|id| {
+            let (faces, _, _) = super::fighting::assemble(id)?;
+            let reach = faces
+                .iter()
+                .flat_map(|f| f.p)
+                .map(|p| p.x.hypot(p.z))
+                .fold(0.0, f32::max);
+            Some((id, reach, extraction_core::map::prefab_clearance(id)))
+        })
+        .collect()
+}
+
 /// Images a model expects next to it (embedded ones are fine).
 pub fn outside_images() -> Vec<String> {
     glb::all_models()
@@ -282,6 +303,29 @@ mod tests {
         assert!(
             bad.is_empty(),
             "models with outside images:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// Prints each prefab's reach (`-- --nocapture`) and holds it inside
+    /// its clearance. A ropeway's cables run on to the next pylon, over
+    /// whatever is in between.
+    #[test]
+    fn prefabs_stay_inside_their_clearance() {
+        let all = reaches();
+        assert!(all.len() > 30, "only {} prefabs", all.len());
+        let mut bad = Vec::new();
+        for (id, reach, clear) in all {
+            println!("{id:<22} reaches {reach:5.1} m, clears {clear:5.1} m");
+            if reach > clear && !id.starts_with("ropeway") {
+                bad.push(format!(
+                    "{id}: reaches {reach:.1} m, the map clears {clear:.1} m"
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "prefabs past their clearance:\n{}",
             bad.join("\n")
         );
     }
