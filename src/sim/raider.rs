@@ -2266,7 +2266,12 @@ fn raid_step(
                     );
                     r.act = Act::Search(s);
                     if let Some(t) = plant_tasks(me, scene, &r.sites[s]) {
-                        log.event("plant", json!({"site": r.sites[s].name}));
+                        let how = t.iter().find_map(|t| match t {
+                            Task::Draw { slot, .. } => Some(format!("slot {slot}")),
+                            Task::GrabFromHere { .. } => Some("pack".to_owned()),
+                            _ => None,
+                        });
+                        log.event("plant", json!({"site": r.sites[s].name, "from": how}));
                         return t;
                     }
                     continue;
@@ -2511,7 +2516,9 @@ fn plant_tasks(me: Entity, scene: &Scene, site: &Site) -> Option<Vec<Task>> {
             within: 1.5,
         },
     ];
-    // Out of the body slot it was stowed in (drawn), or the pack.
+    // The hand free first (it may be holding the last thing picked up),
+    // then out of the body slot it was stowed in (drawn), or the pack.
+    t.push(Task::Stow(Side::Left));
     let socket = scene.items.get(relay).ok().and_then(|(.., so, _)| so.map(|s| s.socket));
     let mut mine: Vec<Entity> = scene
         .owned_sockets
