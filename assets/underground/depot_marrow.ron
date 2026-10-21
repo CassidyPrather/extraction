@@ -113,7 +113,8 @@
         (room: Some("pump_gallery"), depth: 1.2),
     ],
     portals: [
-        (),
+        // The intake ramp's kiosk, under a Custodian front.
+        (facade: Some("depot_intake_facade")),
         // The service stair, from the pump room up to a hatch in the woods.
         (at: (-16.0, 115.0), rot: 180.0, y: 3.7, floor: Some(-19.0)),
     ],

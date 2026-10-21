@@ -216,6 +216,10 @@ pub struct Portal {
     /// The floor its stair goes down to, site y; the layout's otherwise.
     #[serde(default)]
     pub floor: Option<f32>,
+    /// A front over its kiosk's door: a prop model (`models/props/`,
+    /// origin on the ground at its centre, its back to the wall).
+    #[serde(default)]
+    pub facade: Option<String>,
 }
 
 fn yes() -> bool {
@@ -629,7 +633,7 @@ fn corridor_height() -> f32 {
 }
 
 /// Every site, by id: the layouts ship in the binary.
-pub const SITES: [(&str, &str); 7] = [
+pub const SITES: [(&str, &str); 8] = [
     (
         "bunker_marrow",
         include_str!("../../../assets/underground/bunker_marrow.ron"),
@@ -657,6 +661,10 @@ pub const SITES: [(&str, &str); 7] = [
     (
         "cellars_cinder",
         include_str!("../../../assets/underground/cellars_cinder.ron"),
+    ),
+    (
+        "gallery_sallow",
+        include_str!("../../../assets/underground/gallery_sallow.ron"),
     ),
 ];
 
@@ -1069,11 +1077,11 @@ impl Raster {
                                 .copied()
                         })
                         .min();
-                    if let Some(low) = low {
-                        if tread[&c] > low + 1 {
-                            tread.insert(c, low + 1);
-                            changed = true;
-                        }
+                    if let Some(low) = low
+                        && tread[&c] > low + 1
+                    {
+                        tread.insert(c, low + 1);
+                        changed = true;
                     }
                 }
                 if !changed {
@@ -2101,14 +2109,10 @@ mod tests {
     use crate::terrain::Heightmap;
 
     fn maps() -> Vec<MapDef> {
-        [
-            crate::map::MARROW_CREEK,
-            crate::map::KETTLE_PASS,
-            crate::map::CINDER_WORKS,
-        ]
-        .iter()
-        .map(|t| MapDef::from_ron(t).unwrap())
-        .collect()
+        crate::map::VALLEYS
+            .iter()
+            .map(|v| MapDef::from_ron(v.1).unwrap())
+            .collect()
     }
 
     /// Every layout parses and is fit to build: rooms reached from the
@@ -2202,10 +2206,10 @@ mod tests {
                         (r.get(i, j), r.get(i + 1, j)),
                         (r.get(i, j), r.get(i, j + 1)),
                     ] {
-                        if let (Cell::Room(a), Cell::Room(b)) = (a, b) {
-                            if a != b {
-                                edges.insert((a.min(b) as usize, a.max(b) as usize));
-                            }
+                        if let (Cell::Room(a), Cell::Room(b)) = (a, b)
+                            && a != b
+                        {
+                            edges.insert((a.min(b) as usize, a.max(b) as usize));
                         }
                     }
                 }
@@ -2349,11 +2353,11 @@ mod scout {
     fn scout() {
         let arg = std::env::var("SCOUT").unwrap();
         let v: Vec<&str> = arg.split(':').collect();
-        let text = match v[0] {
-            "marrow_creek" => crate::map::MARROW_CREEK,
-            "kettle_pass" => crate::map::KETTLE_PASS,
-            _ => crate::map::CINDER_WORKS,
-        };
+        let text = crate::map::VALLEYS
+            .iter()
+            .find(|m| m.0 == v[0])
+            .expect("SCOUT names a valley")
+            .1;
         let id = v[1];
         let (tx, tz, rad): (f32, f32, f32) = (
             v[2].parse().unwrap(),
@@ -2462,11 +2466,7 @@ mod where_ {
     #[test]
     #[ignore]
     fn where_sites() {
-        for text in [
-            crate::map::MARROW_CREEK,
-            crate::map::KETTLE_PASS,
-            crate::map::CINDER_WORKS,
-        ] {
+        for text in crate::map::VALLEYS.map(|v| v.1) {
             let map = MapDef::from_ron(text).unwrap();
             let hm = crate::terrain::Heightmap::build(&map);
             for s in placed(&map) {

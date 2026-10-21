@@ -16,6 +16,10 @@ software renderer is.
 | `shell_marks.png` | Rounds into a walker's front: its low armour plate takes them (sparks, marks) until it comes off, then the core behind scorches; the eye stutters when it's hit | 0.33 s |
 | `eyes_by_hour.png` | Day, dusk and night (`--hour`): three walkers calm, suspicious and seeing you (left to right) and a drone; eyes glow by mood, more so the darker it is, and shells dim their own glow with the light | still |
 | `eyes_night_glow.png` | Night: the eye glow is an HDR emissive now, and opens up after dark (core about 40 at rest), so calm, suspicious and seeing read as red, hot and near-white points. `reel:eyesfar` puts walkers at 30, 60 and 80 m for range checks | still |
+| `eyes_halo_by_hour.png` | Day, dusk, night with `world::halos::Halo` on each eye (calm, suspicious, seeing you): after dark the shell gives up its own glow and the eye's halo is the tell | still |
+| `eyes_halo_range.png` | `reel:eyesfar` at night, clear (top) and fog (bottom), zoomed: calm walkers at 30, 60 and 80 m and one that sees you | still |
+| `feet_on_rubble.png` | `reel:rubble`: a walker crosses a heap of broken blocks on Destruction's debris layer; each foot comes down on a block's top, not through it | sheet |
+| `knockdown.png` | `reel:knockdown`: one heavy round into a walker's side knocks it down, tipped the way it was hit, legs splayed; it lies 1.6 s, then plants its feet and rises on them | sheet |
 | `weathering.png` | The same walker in the training yard (clean), Marrow Creek (rust streaks, moss on top) and Cinder Works (sooted, heat-blued metal) | still |
 | `walker_limp.png` | A walker with a leg shot off: limping across on three, one foot up at a time, the dead leg dangling, the body sagging toward the gap | 0.2 s |
 | `drone_wreck.png` | A drone killed in the air: a rotor flies off, it corkscrews down on its fading lift trailing smoke, hits in a burst of sparks, sheds its panel and gun pod, and smoulders | 0.17 s |

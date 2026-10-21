@@ -81,10 +81,40 @@ jackdaw greyer). The wingbeat runs 3.2 to 6 beats a second by how hard it
 works; turning, it banks. Past 45 m the far stand-in, past 380 m nothing.
 No shadows.
 
+### Set pieces
+
+Story's staged scenes (`world::scenes`: a row of kept buses over Sallow's
+empty bay four, a yard of luggage at Marrow's depot) are perches too,
+added as they're staged (`perches::scene`), as low as 18 cm (crows on the
+cases), and their pieces are obstacles in flight. Flocks pick a scene six
+times as often as a building.
+
+### Rime Fell
+
+The high fell has alpine choughs (the rook, smaller and blacker, flocks of
+8 to 16) on its ore mill, observatory and funicular, and chamois (the
+deer's ways, a little quicker, a dark coat) on the highest open ground. A
+herd's home needs no forest edge in a valley without one.
+
+### The heron
+
+Sallow Reservoir has rooks on the dam's parapet, the draw-off tower and the
+gantry (perches come from any generated prefab), and a grey heron standing
+in its shallows (`perches::wading`: water 8 to 32 cm deep, gathered in
+24 m cells, the bed under its feet; `art/animals/heron.py`, in the rook's
+pose names). It goes up from 1.6 times as far as a rook, with slow deep
+wingbeats, and only ever comes down in the shallows. On a bare reservoir
+bed, a heron lifting off the water is the tell from the slipway.
+
+Flying birds keep 3 m over the top of anything built within 4 m of them
+(`flock::OVER`), landing too until they're nearly down: a flock came to a
+roof past Cinder Works' blast furnace and the stragglers were caught
+going in and out of its top.
+
 ## Deer and dogs
 
 One larger animal a valley (`wildlife::herd`): two to four roe deer in
-Marrow Creek and Kettle Pass, three or four stray dogs in Cinder Works.
+Marrow Creek, Kettle Pass and on Sallow Reservoir's bed, three or four stray dogs in Cinder Works.
 They live on the walkers' nav grid (`robots::walker::Nav`), so never in
 a building, a rock, a trunk or deep water; a herd's home is open ground
 at a forest's edge at least 150 m from the insertion point.
@@ -123,6 +153,20 @@ graze and up to look, turned toward what it's watching. Models in parts
 lower legs, a far stand-in past 90 m), 0.7k triangles an animal near,
 ten draws. Body and head cast shadows, legs don't.
 
+## Shot, and kept
+
+Every bird of a flock, deer and dog has a body (`wildlife::bodies`; not
+yet the ducks, bats or fish): a
+collider that follows it, in the robots' layer and colliding with
+nothing, so bullets, fragments and blasts find it and nobody bumps into
+it. A hit kills. A bird drops off its perch or out of the sky and lies on
+whatever's under it; a deer or dog falls where it stood. Every death, a
+shot or a hound's catch, leaves a `Carcass` entity: the Custodian keeps
+everything, "animals included" (`docs/LORE.md`), and a robot that takes
+the carcass (despawns it) takes the body with it. `bodies::Killed` says
+so, and the sim logs `animal_killed`. The shot itself still flushes every
+flock and herd in earshot.
+
 ## Fish
 
 Trout in the creeks (`wildlife::fish`): the water near you is cut into
@@ -134,11 +178,77 @@ current between the bed and the surface; someone on the bank within 6 m
 12 s. Fish there means nobody's been by. They never leave water 0.3 m
 deep. Drawn within 30 m (`art/animals/fish.py`, 118 triangles).
 
+## Ducks
+
+Mallards on open water (`wildlife::ducks`): a tell across water. The
+valley's water is sampled every 2 m for places a raft can sit: at least
+0.25 m deep (enough to float), with deep water at least 3 m all round
+and nothing built within 3 m (bridges, the dam). Every valley has some,
+and gets one or two rafts of three to nine, drakes and hens, at places
+fixed by the map and the seed, the roomiest water likelier (the second
+at least 120 m from the first): Sallow Reservoir's upper arm (round
+(-180, -170), surface 47.6) nearly always has one, Marrow Creek, Kettle
+Pass and Cinder Works their creeks' wider stretches. None of the four
+valleys goes without; the Training Yard has no water.
+
+They paddle slowly about their place (0.3 m/s), keeping together by a
+few boids rules on the surface, and now and then one up-ends to dabble,
+tail to the sky. Someone within 25 m and they swim off, slowly
+(0.8 m/s), along the water away from them, keeping their distance;
+within 12 m, or running (3.5 m/s) within 25 m, or a shot within 0.6 of
+its reach, and they go up: a run of a few metres splashing along the
+surface, then low and fast (15 m/s, 3 m over water, 12 m over land and
+over anything built) to other open water 70 to 420 m off and 60 m from
+whatever scared them, more often onward than back past it, and down
+with a skid. Crouched you get 30% nearer; after a fright they're 30%
+warier for two minutes. Machines scare them the same. A raft a player
+flushes sends the flocks' `Flushed` (its `flock` is the raft's entity,
+`birds` its ducks; look for `ducks::Raft` to tell), with `alarm` at
+most once a minute a raft, so the robots hear it the way they hear
+rooks. On the water a duck is always at the surface of water deep
+enough and outside anything built; in the air never under the ground or
+the water.
+
+Drawn like the birds (`wildlife::duck_look`, `art/animals/duck.py`):
+one merged, vertex-coloured mesh a pose, drakes (green head, white
+collar, chestnut breast, grey flanks) and hens (browns) from the same
+model, a splash in the run-up's and the skid's poses, far stand-ins
+past 40 m and the whole raft in `visuals::FarParts` past 60 m.
+
 ## Moths
 
 At dusk and at night (not in heavy rain), seven moths flit round each of
 the nearest six lit lamps within 35 m of you: any point light, house
 lamps, lanterns, the camp's (`wildlife::small_look`; visual only).
+
+## Bats
+
+At dusk and at night (not in heavy rain), small groups of bats, three to
+eight, hunt in loose, erratic loops over the water, along the outside of
+the woods' edges and round the buildings, 3 to 15 m up
+(`wildlife::bats`). By day they roost in the buildings, out of sight. As
+with the fish, the valley near you is cut into 40 m cells and about half
+the cells with water, a wood's edge or a building in them have a group,
+always the same for the seed; they're kept within 90 m of you. Each bat
+flies at 6 to 9 m/s and swerves every quarter to whole second, turning
+hard. None is ever inside or under anything built, or lower than 2 m
+over the ground or the water. What they tell you:
+
+- **Bats veer off a light**: they keep 9 m from a lamp (the houses'
+  lamps, any other lit near you) and out of a torch's beam (30 m long, a
+  cone 40 degrees across, with a margin): your torch on the creek clears
+  a lane through them, and a hole in their loops where you'd expect none
+  is a light, or was.
+- **A shot scatters them** (as far off as it flushes a flock): they're
+  off flat out for three seconds, then back to hunting.
+- **A machine within 40 m of where they hunt sends them off**: gone
+  after five seconds, and back only a minute after nothing's been near.
+  No bats over a stretch of water at dusk, when the next one along has
+  them, says something's been there.
+
+Drawn within 60 m (`art/animals/bat.py`: wings up and down, swapped ten
+times a second, 232 triangles; a 64-triangle stand-in past 25 m), a
+little over life size so they read against the dusk.
 
 ## The chorus
 
@@ -179,10 +289,79 @@ wind thin it. When the insects stop, something is close.
 - `wildlife::fish::tests`: every valley has shoals; walking to the bank,
   wading in and shooting, no fish leaves deep water or the space between
   bed and surface, and they dart.
+- `wildlife::bats::tests`: out only at dusk and at night (and in the
+  whole game: bats on Marrow Creek's creek at dusk and night, none by
+  day); four minutes per valley of someone walking round the groups with
+  a torch on them, shooting now and then, and a walker coming by: no bat
+  ever inside or under anything built or below 2 m, none faster than
+  9 m/s, and they scatter, leave and come back; with a torch pointed
+  across their beat they keep further from its beam than in the dark;
+  determinism.
+- `wildlife::ducks::tests`: every valley has open water and one or two
+  rafts on it (Sallow Reservoir's upper arm for nearly every seed); four
+  minutes paddling, alone and with someone pacing 18 m off, keep every
+  duck at the surface of water deep enough, together, and dabbling;
+  walking at them they swim off inside 25 m and go up at 12 m, running
+  at 25 m, crouched not at 10 m, a walker at 11 m and a shot 120 m off
+  too; flushed again and again they never go inside anything built or
+  under the ground or the water, land on open water at least 48 m from
+  the fright, and raise the alarm at most once a minute; determinism.
+- `wildlife::app_tests::animals_can_be_shot_and_their_carcasses_collected`:
+  a ray down the ballistics' own filter finds a deer's body; a hit kills
+  it and leaves a carcass; collected, the body and its collider go; a
+  bird shot off its perch lies on what's under it.
+- `perches::scene_perches_are_on_top_of_things`, `flock::empty_tests`
+  (a map with nothing built has no flocks), `doc_tests` (this file stays
+  whole: a bad edit once wrote one paragraph into it thirteen thousand
+  times).
+- The gauges (`render::budget`): everything far off is one mesh
+  (`visuals::FarParts`: flocks and rafts of ducks past 60 m, deer and dogs past 90 m), so
+  the animals cost a view one draw beyond the near ones.
 - The sim logs `flush` (`cause`, `birds`, `alarm`, `x`, `z`) and
   `bird_alarm` (a robot sent to look by an alarm: `robot`, `x`, `z`,
-  `dist`). `EXTRACTION_WILDLIFE=off` runs without animals, to compare.
+  `dist`). `EXTRACTION_WILDLIFE=off` runs without animals, to compare;
+  `=calm`, nothing scares them; `=restless`, flocks move on a second in
+  (both for screenshots).
+
+## Shots
+
+`docs/shots/wildlife/`: `rooks_on_roof.png` (a row along a ridge, Marrow
+Creek), `flock_up.png` (the same house a few seconds after they went up),
+`deer_grazing.png`, `dogs.png` (Cinder Works), `heron.png` (Sallow
+Reservoir's shallows), `bats.png` (dusk over Marrow Creek's creek,
+looking downstream from -130, 8),
+`ducks.png` (a raft on Sallow Reservoir's upper
+arm from its west bank, 12 m off, `EXTRACTION_WILDLIFE=calm`; two
+dabbling) and `ducks_close.png` (the same frame cropped, 5x).
 
 ## Pacing
 
-Pending: a batch of sims with and without.
+Bot raids with animals and without (`EXTRACTION_WILDLIFE=off`), the same
+seeds, four a valley:
+
+| Valley | Animals | Extracted | Flushes | Alarms | Robots sent | Engagements | Mean raid (s) |
+| - | - | - | - | - | - | - | - |
+| Marrow Creek | with | 2 of 4 | 55 | 8 | 0 | 28 | 779 |
+| | without | 3 of 4 | | | | 19 | 756 |
+| Kettle Pass | with | 3 of 4 | 43 | 5 | 0 | 19 | 497 |
+| | without | 2 of 4 | | | | 13 | 502 |
+| Cinder Works | with | 1 of 4 | 33 | 2 | 0 | 26 | 462 |
+| | without | 1 of 4 | | | | 13 | 449 |
+| Sallow Reservoir | with | 1 of 4 | 39 | 8 | 0 | 21 | 442 |
+| | without | 2 of 4 | | | | 31 | 525 |
+
+Extraction 7 of 16 with, 8 of 16 without; raid times the same. Bots set
+off a flock every minute or so and raise the alarm once or twice a raid,
+but no robot was ever sent by birds: a robot has to be within 60 m of the
+flock you put up, and a careful raider isn't. Engagements went up in
+three valleys and down in one, so Cinder Works (26 against 13) was run
+again at eight raids each way, logging the dogs' barks too:
+
+| Cinder Works, 8 raids | Extracted | Engagements | Flushes | Alarms (birds, barks) | Robots sent |
+| - | - | - | - | - | - |
+| with animals | 4 of 8 | 49 | 87 | 8, 2 | 0 |
+| without | 3 of 8 | 62 | | | |
+
+The difference was noise. The animals don't change how raids go for a
+careful bot; they change what a player can read, and what a careless one
+pays for.

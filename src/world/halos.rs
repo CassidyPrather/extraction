@@ -79,6 +79,11 @@ pub struct Halo {
     pub radius: f32,
 }
 
+/// How far off a `Halo` still shows (m), if not the lamps' 140 m: a
+/// landmark's lamp read from across the valley. Put it on with the Halo.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct HaloReach(pub f32);
+
 /// The sphere drawing a `Halo`, and its own material.
 #[derive(Component)]
 struct GlowOf(Handle<HaloMaterial>);
@@ -198,14 +203,15 @@ fn add_halos(
 
 fn add_glows(
     mut commands: Commands,
-    added: Query<(Entity, &Halo), Added<Halo>>,
+    added: Query<(Entity, &Halo, Option<&HaloReach>), Added<Halo>>,
     conditions: Res<Conditions>,
     weather: Res<super::sky::Weather>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<HaloMaterial>>,
     mut mesh: Local<Option<Handle<Mesh>>>,
 ) {
-    for (e, halo) in &added {
+    for (e, halo, reach) in &added {
+        let reach = reach.map_or(REACH, |r| r.0);
         let mesh = mesh
             .get_or_insert_with(|| meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap()))
             .clone();
@@ -231,7 +237,7 @@ fn add_glows(
                 },
                 VisibilityRange {
                     start_margin: 0.0..0.0,
-                    end_margin: REACH..REACH + 10.0,
+                    end_margin: reach..reach + 10.0,
                     use_aabb: false,
                 },
                 NotShadowCaster,

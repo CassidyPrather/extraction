@@ -141,8 +141,15 @@ fn a_thrown_bolt_draws_a_walker() {
         "walked to where it landed (closest {closest:.1} m)"
     );
     assert!(secs < 15.0, "in good time ({secs:.1} s)");
-    for _ in 0..90 * 2 {
+    // Once at its guess, it looks round.
+    for _ in 0..90 * 10 {
         app.update();
+        if matches!(
+            app.world().get::<Brain>(walker).unwrap(),
+            Brain::Search { .. }
+        ) {
+            break;
+        }
     }
     assert!(
         matches!(
@@ -738,7 +745,7 @@ struct HoundLog {
 }
 
 fn hound_log(
-    mut c: MessageReader<super::hound_mind::HoundCrouch>,
+    mut c: MessageReader<super::hound::HoundCrouch>,
     mut b: MessageReader<super::hound_mind::HoundBite>,
     time: Res<Time>,
     mut log: ResMut<HoundLog>,
@@ -1382,14 +1389,22 @@ fn a_night_visit_sends_two_walkers_to_the_door() {
     let inside = ent.mid - ent.out * 2.0;
     let visitors: Vec<_> = app
         .world_mut()
-        .query::<(&Robot, &Brain, &Job)>()
+        .query::<(&Robot, &Brain, &Job, &Transform)>()
         .iter(app.world())
-        .filter(|(r, _, j)| {
+        .filter(|(r, _, j, _)| {
             r.kind == super::RobotKind::Walker
                 && j.kind == JobKind::Response
                 && j.site.distance(inside) < 0.1
         })
-        .map(|(_, b, _)| b.clone())
+        .map(|(_, b, _, t)| {
+            // In from the woods, a couple of minutes off.
+            assert!(
+                flat(t.translation - inside) < super::director::VISIT_FROM + 8.0,
+                "close enough to come soon: {:.0} m",
+                flat(t.translation - inside)
+            );
+            b.clone()
+        })
         .collect();
     assert_eq!(visitors.len(), 2, "{visitors:?}");
     for b in visitors {
@@ -1450,4 +1465,573 @@ fn a_new_site_grid_reroutes_its_crawlers() {
     }
     assert!(reached_b, "got there");
     assert!(!crossed, "round the gas, not through it");
+}
+
+/// The Sorter: seeing you, it rings the hall once, winds up (the tell)
+/// and only then throws. Lose it and it watches where you were, gropes
+/// round there with its arm, then goes back to work.
+#[test]
+fn the_sorter_rings_winds_up_throws_then_gropes_and_calms() {
+    use super::sorter::{SorterOrder, SorterThrow, SorterWindup};
+    use super::sorter_mind::{ALARM, GROPE_TIME, SorterMind, WATCH_TIME};
+    #[derive(Resource, Default)]
+    struct Seen {
+        alarms: Vec<f32>,
+        windups: Vec<f32>,
+        throws: Vec<f32>,
+    }
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Seen>().add_systems(
+        Last,
+        |mut n: MessageReader<super::Noise>,
+         mut w: MessageReader<SorterWindup>,
+         mut t: MessageReader<SorterThrow>,
+         time: Res<Time>,
+         mut s: ResMut<Seen>| {
+            let now = time.elapsed_secs();
+            s.alarms
+                .extend(n.read().filter(|n| n.radius == ALARM).map(|_| now));
+            s.windups.extend(w.read().map(|_| now));
+            s.throws.extend(t.read().map(|_| now));
+        },
+    );
+    // An open-air hall on a meadow, as the body's own tests use.
+    let c = Vec2::new(40.0, 220.0);
+    let mut top = f32::MIN;
+    for i in -12..=12 {
+        for j in -8..=8 {
+            top = top.max(zone.ground(c.x + i as f32, c.y + j as f32));
+        }
+    }
+    let hall = Transform::from_xyz(c.x, top, c.y);
+    let sorter = {
+        let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+        let mut cmd = q.get_mut(app.world_mut()).unwrap();
+        cmd.spawn((
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(30.0, 0.2, 20.0),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                [
+                    crate::world::Layer::Item,
+                    crate::world::Layer::Robot,
+                    crate::world::Layer::Player,
+                ],
+            ),
+            Transform::from_xyz(c.x, top - 0.1, c.y),
+        ));
+        let e = super::sorter::spawn_sorter(
+            &mut cmd,
+            hall,
+            Vec2::new(12.0, 8.0),
+            6.0,
+            super::sorter::depot_spots(),
+            4,
+        );
+        q.apply(app.world_mut());
+        e
+    };
+    // Standing in the hall, 7 m off its middle.
+    put(&mut app, player, Vec3::new(c.x + 7.0, top, c.y + 2.0));
+    for _ in 0..90 * 12 {
+        app.update();
+    }
+    {
+        let s = app.world().resource::<Seen>();
+        assert_eq!(s.alarms.len(), 1, "rang the hall once: {:?}", s.alarms);
+        let thrown = *s.throws.first().expect("it threw");
+        let wound = s
+            .windups
+            .iter()
+            .copied()
+            .filter(|w| *w <= thrown)
+            .next_back()
+            .expect("wound up first");
+        assert!(
+            thrown - wound >= super::sorter::WINDUP * 0.9,
+            "the tell ({:.2} s) before the throw",
+            thrown - wound
+        );
+    }
+    // Gone, out of its sight: it lost you by the hall's far end.
+    put(&mut app, player, zone.on_ground(c.x + 200.0, c.y + 200.0));
+    for _ in 0..3 {
+        app.update();
+    }
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(sorter).unwrap();
+        a.target = None;
+        a.can_see_target = false;
+        a.last_known = Some(Vec3::new(c.x - 6.0, top, c.y - 3.0));
+        a.uncertainty = 2.0;
+    }
+    *app.world_mut().get_mut::<SorterMind>(sorter).unwrap() = SorterMind::Watch {
+        at: Vec3::new(c.x - 6.0, top, c.y - 3.0),
+        left: WATCH_TIME,
+    };
+    let mut watched = false;
+    let mut groped = false;
+    for _ in 0..90 * (WATCH_TIME + GROPE_TIME + 6.0) as usize {
+        app.update();
+        let mind = *app.world().get::<SorterMind>(sorter).unwrap();
+        let order = app.world().get::<SorterOrder>(sorter).copied();
+        watched |= matches!(mind, SorterMind::Watch { .. })
+            && matches!(order, Some(SorterOrder::Watch { .. }));
+        groped |= matches!(mind, SorterMind::Grope { .. })
+            && matches!(order, Some(SorterOrder::Reach { .. }));
+    }
+    assert!(watched, "it watched where you were");
+    assert!(groped, "and groped round there");
+    assert_eq!(
+        *app.world().get::<SorterMind>(sorter).unwrap(),
+        SorterMind::Calm
+    );
+    assert_eq!(
+        app.world().get::<SorterOrder>(sorter).copied(),
+        Some(SorterOrder::Idle),
+        "back to its work"
+    );
+}
+
+/// A player behind a plank house's door; an armed walker 6 m out that has
+/// just lost them, believing them `inside` (else out by the door). The
+/// times (s after it lost them) of its shots before it sees them again.
+fn blind_fire(inside: bool) -> Vec<f32> {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    app.update();
+    let ent = *app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .doors
+        .iter()
+        .find(|e| {
+            app.world()
+                .get::<crate::world::buildings::Building>(e.building)
+                .is_some_and(|b| b.prefab == "house_plank")
+        })
+        .expect("a house door");
+    let hide = ent.mid - ent.out * 2.0;
+    put(&mut app, player, hide.with_y(ent.mid.y - 1.15));
+    let post = ent.mid + ent.out * 6.0;
+    // Armed (the helper's walkers aren't).
+    let walker = {
+        let mut queue = CommandQueue::default();
+        let post = zone.on_ground(post.x, post.z);
+        let w = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                post,
+                Job {
+                    kind: JobKind::Watch,
+                    site: post,
+                    duration: 999.0,
+                    exit: post,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..90 {
+            app.update();
+        }
+        w
+    };
+    app.update();
+    let lost = app.world().resource::<Time>().elapsed_secs();
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(walker).unwrap();
+        // (Out in the open, nobody to follow: its eyes would put you back.)
+        a.target = inside.then_some(player);
+        a.last_known = Some(if inside {
+            hide.with_y(ent.mid.y - 1.15)
+        } else {
+            zone.on_ground(post.x + ent.out.z * 4.0, post.z - ent.out.x * 4.0)
+        });
+        a.uncertainty = 0.5;
+        a.suspicion = 1.0;
+        a.unseen = 0.0;
+        a.can_see_target = false;
+    }
+    *app.world_mut().get_mut::<Brain>(walker).unwrap() = Brain::Engage;
+    // (Until it sees you again: it opens the door, then it's aimed fire.)
+    let mut sighted = f32::INFINITY;
+    for _ in 0..90 * 6 {
+        app.update();
+        if app.world().get::<Awareness>(walker).unwrap().can_see_target {
+            sighted = sighted.min(app.world().resource::<Time>().elapsed_secs() - lost);
+        }
+    }
+    let fired: Vec<f32> = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .filter(|(e, _)| *e == walker)
+        .map(|(_, t)| *t - lost)
+        .filter(|t| *t < sighted)
+        .collect();
+    fired
+}
+
+/// Behind a plank door, close: the walker that lost you there settles its
+/// turret (the tell), then fires a short burst through it, once.
+#[test]
+fn a_walker_fires_through_a_plank_door_once() {
+    let fired = blind_fire(true);
+    assert!(!fired.is_empty(), "it fired through the door");
+    assert!(
+        fired.len() <= super::walker::BLIND_ROUNDS as usize,
+        "a short burst, once: {fired:?}"
+    );
+    assert!(
+        fired[0] >= super::walker::BLIND_AFTER + super::walker::BLIND_TELL - 0.05,
+        "after the tell: {fired:?}"
+    );
+}
+
+/// Lost out in the open (no roof to be under), it doesn't fire blind.
+#[test]
+fn a_walker_does_not_fire_blind_in_the_open() {
+    let fired = blind_fire(false);
+    assert!(fired.is_empty(), "no blind fire: {fired:?}");
+}
+
+/// A walker's guess at a sound hangs on the walker (where it was posted)
+/// and the sound, not on how many other things exist: 50 unrelated
+/// entities spawned first don't move it.
+#[test]
+fn a_guess_does_not_hang_on_entity_ids() {
+    let guess = |extra: usize| {
+        let (mut app, player, zone) = app(None);
+        for _ in 0..extra {
+            app.world_mut().spawn_empty();
+        }
+        put(&mut app, player, zone.on_ground(100.0, 400.0));
+        let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 200.0));
+        app.world_mut().write_message(super::Noise {
+            at: zone.on_ground(101.0, 240.0),
+            radius: super::senses::GUNSHOT,
+            source: Some(player),
+        });
+        app.update();
+        app.update();
+        app.world()
+            .get::<Awareness>(w)
+            .unwrap()
+            .last_known
+            .expect("heard it")
+    };
+    let (a, b) = (guess(0), guess(50));
+    assert!(a.distance(b) < 1e-3, "{a} vs {b}");
+}
+
+/// Two walkers on one player: one pins, the other works round to the
+/// side (and says so, once), so cover that faces one doesn't face both.
+#[test]
+fn two_walkers_pin_and_flank() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Shifts>().add_systems(
+        Last,
+        |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let a = walker_at(&mut app, &zone, zone.on_ground(98.0, 225.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(102.0, 225.0));
+    for w in [a, b] {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    }
+    let angle = |app: &App| {
+        let p = |w: Entity| {
+            let t = app.world().get::<Transform>(w).unwrap().translation;
+            Vec2::new(t.x - me.x, t.z - me.z)
+        };
+        p(a).angle_to(p(b)).abs().to_degrees()
+    };
+    let start = angle(&app);
+    let mut widest = start;
+    for _ in 0..90 * 12 {
+        put(&mut app, player, me);
+        app.update();
+        widest = widest.max(angle(&app));
+    }
+    assert!(
+        widest > 45.0,
+        "spread round you: {start:.0}° -> {widest:.0}°"
+    );
+    let flanks: Vec<Entity> = app
+        .world()
+        .resource::<Shifts>()
+        .0
+        .iter()
+        .filter(|s| s.state == Mind::Flanking)
+        .map(|s| s.robot)
+        .collect();
+    assert_eq!(
+        flanks.len(),
+        1,
+        "one of them flanks, and says so once: {flanks:?}"
+    );
+}
+
+/// A walker with its core shot most of the way through breaks off: it
+/// says so, once, and falls back further from you than a sound one.
+#[test]
+fn a_badly_hurt_walker_breaks_off() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let run = |hurt: bool| {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Shifts>().add_systems(
+            Last,
+            |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+        );
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 216.0));
+        if hurt {
+            let mut q = app.world_mut().query::<&mut super::RobotPart>();
+            for mut p in q.iter_mut(app.world_mut()) {
+                if p.robot == w && p.role == super::PartRole::Core {
+                    p.hp = p.max_hp * 0.3;
+                }
+            }
+        }
+        {
+            let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            aw.target = Some(player);
+            aw.last_known = Some(me);
+            aw.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+        for _ in 0..90 * 12 {
+            put(&mut app, player, me);
+            app.update();
+        }
+        let d = flat(app.world().get::<Transform>(w).unwrap().translation - me);
+        let said = app
+            .world()
+            .resource::<Shifts>()
+            .0
+            .iter()
+            .filter(|s| s.robot == w && s.state == Mind::Retreating)
+            .count();
+        (d, said)
+    };
+    let (sound, sound_said) = run(false);
+    let (hurt, hurt_said) = run(true);
+    assert_eq!(sound_said, 0);
+    assert_eq!(hurt_said, 1, "it says it's breaking off, once");
+    assert!(
+        hurt > sound + 6.0,
+        "it fell back: {hurt:.1} m, a sound one {sound:.1} m"
+    );
+}
+
+/// Keep shooting and they send more: one reported shot gets the usual
+/// response; three in half a minute, and two walkers come to look as well.
+#[test]
+fn keep_shooting_and_walkers_come_too() {
+    use super::director::{Director, ESCALATE, HEAT_GAP};
+    let walkers_sent = |shots: usize| {
+        let (mut app, player, zone) = app(None);
+        app.update();
+        {
+            let mut d = app.world_mut().resource_mut::<Director>();
+            d.enabled = true;
+            d.next_job = 1e9;
+            d.next_logistics = 1e9;
+            d.max_active = 99;
+        }
+        let at = zone.on_ground(100.0, 200.0);
+        for _ in 0..shots {
+            app.world_mut().write_message(super::Noise {
+                at,
+                radius: super::senses::GUNSHOT,
+                source: Some(player),
+            });
+            for _ in 0..(90.0 * (HEAT_GAP + 1.0)) as usize {
+                app.update();
+            }
+        }
+        // The response goes out (it was queued 35-70 s after the first).
+        for _ in 0..90 * 70 {
+            app.update();
+        }
+        app.world_mut()
+            .query::<(&Robot, &Job)>()
+            .iter(app.world())
+            .filter(|(r, j)| {
+                r.kind == super::RobotKind::Walker
+                    && j.kind == JobKind::Response
+                    && j.site.distance(at) < 0.5
+            })
+            .count()
+    };
+    assert!(ESCALATE > 1.0);
+    assert_eq!(walkers_sent(1), 0, "one shot: the usual response");
+    assert_eq!(walkers_sent(3), 2, "three: two walkers as well");
+}
+
+/// A drone that notices you is the walkers' spotter: its call reaches a
+/// walker 100 m off; a walker's own call doesn't carry that far.
+#[test]
+fn a_drone_spots_for_walkers_far_off() {
+    let heard = |drone_calls: bool| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 330.0));
+        let here = zone.on_ground(100.0, 200.0);
+        let listener = walker_at(&mut app, &zone, zone.on_ground(100.0, 100.0));
+        let caller = if drone_calls {
+            let mut queue = CommandQueue::default();
+            let d = {
+                let mut c = Commands::new(&mut queue, app.world());
+                super::drone::spawn_drone(
+                    &mut c,
+                    here + Vec3::Y * 15.0,
+                    Job {
+                        kind: JobKind::Survey,
+                        site: here,
+                        duration: 999.0,
+                        exit: here,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            app.update();
+            d
+        } else {
+            walker_at(&mut app, &zone, here)
+        };
+        let you = zone.on_ground(100.0, 215.0);
+        {
+            let mut a = app.world_mut().get_mut::<Awareness>(caller).unwrap();
+            a.target = Some(player);
+            a.last_known = Some(you);
+            a.uncertainty = 1.0;
+            a.suspicion = 1.0;
+        }
+        app.world_mut().write_message(super::Noticed {
+            robot: caller,
+            at: here,
+        });
+        app.update();
+        app.update();
+        let a = app.world().get::<Awareness>(listener).unwrap();
+        a.suspicion >= super::search::CALL_SUSPICION * 0.9
+            && a.last_known.is_some_and(|l| flat(l - you) < 10.0)
+    };
+    assert!(heard(true), "the drone's call reached it");
+    assert!(!heard(false), "a walker's call doesn't carry 100 m");
+}
+
+/// A pair of hounds on one player split up: one comes round each side.
+#[test]
+fn a_pair_of_hounds_splits_up() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    // Both start off the same side.
+    let a = hound_at(
+        &mut app,
+        &zone,
+        zone.on_ground(103.0, 225.0),
+        me,
+        JobKind::Response,
+    );
+    let b = hound_at(
+        &mut app,
+        &zone,
+        zone.on_ground(105.0, 225.0),
+        me,
+        JobKind::Response,
+    );
+    for h in [a, b] {
+        // (Plain eyes: this is about splitting up, not seeing you.)
+        app.world_mut()
+            .entity_mut(h)
+            .remove::<super::senses::MotionSight>();
+        app.world_mut().get_mut::<super::Senses>(h).unwrap().fov_deg = 360.0;
+        let mut aw = app.world_mut().get_mut::<Awareness>(h).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(h).unwrap() = Brain::Engage;
+    }
+    let bearing = |app: &App, h: Entity| {
+        let t = app.world().get::<Transform>(h).unwrap().translation;
+        Vec2::new(t.x - me.x, t.z - me.z)
+    };
+    // Walking a small circle (a still body barely shows to a hound).
+    let mut widest = 0.0f32;
+    for i in 0..90 * 6 {
+        let ang = i as f32 / 90.0 * 0.6;
+        put(
+            &mut app,
+            player,
+            me + Vec3::new(ang.cos(), 0.0, ang.sin()) * 1.5,
+        );
+        app.update();
+        let (pa, pb) = (bearing(&app, a), bearing(&app, b));
+        if pa.length() > 5.0 && pb.length() > 5.0 {
+            widest = widest.max(pa.angle_to(pb).abs().to_degrees());
+        }
+    }
+    assert!(widest > 60.0, "they split round you: {widest:.0}°");
+}
+
+/// A lure that keeps going (a tape playing on a table) draws a walker
+/// once: it looks, searches, finds nothing, gives up, and then the same
+/// sound there doesn't draw it again for a while.
+#[test]
+fn a_lure_that_keeps_going_wears_out() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let spot = zone.on_ground(post.x + 14.0, post.z + 3.0);
+    // Once it has given up (2 s calm), it never goes back to the tune.
+    let (mut looked, mut calm, mut drawn_again) = (false, 0.0f32, None);
+    for i in 0..90 * 150 {
+        if i % (90 * 3) == 0 {
+            app.world_mut().write_message(super::Noise {
+                at: spot,
+                radius: 25.0,
+                source: None,
+            });
+        }
+        app.update();
+        let brain = app.world().get::<Brain>(w).unwrap();
+        let looking = matches!(brain, Brain::Investigate { .. } | Brain::Search { .. });
+        looked |= looking;
+        if looking {
+            if looked && calm > 2.0 && drawn_again.is_none() {
+                drawn_again = Some(i as f32 / 90.0);
+            }
+            calm = 0.0;
+        } else if looked {
+            calm += 1.0 / 90.0;
+        }
+    }
+    assert!(looked && calm > 2.0, "it looked and gave up");
+    assert_eq!(drawn_again, None, "and the same tune didn't draw it again");
 }

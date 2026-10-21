@@ -7,6 +7,10 @@
 //!   careless sprint past one tells the machines ([`Flushed`], and a
 //!   [`crate::robots::Noise`] at the flock).
 //! - [`perches`]: where birds can sit, from the buildings' own pieces.
+//! - [`bats`]: at dusk and at night, over the water and round the
+//!   buildings; off a light, and gone when a machine's near.
+//! - [`ducks`]: mallards on open water, that swim off from you and go up
+//!   splashing when you're close (the same [`Flushed`] as a flock).
 //!
 //! Logic here runs headless (in [`WildlifePlugin`], part of `GamePlugin`)
 //! and is deterministic for a seed; what you see is in [`visuals`]
@@ -14,6 +18,11 @@
 
 use bevy::prelude::*;
 
+pub mod bat_look;
+pub mod bats;
+pub mod bodies;
+pub mod duck_look;
+pub mod ducks;
 pub mod fish;
 pub mod flock;
 pub mod herd;
@@ -144,7 +153,8 @@ pub struct WildlifePlugin;
 
 impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Flushed>()
+        app.add_plugins(bodies::BodiesPlugin)
+            .add_message::<Flushed>()
             .add_message::<herd::Startled>()
             .add_message::<rats::Scurried>()
             .init_resource::<Threats>()
@@ -153,8 +163,16 @@ impl Plugin for WildlifePlugin {
             .add_systems(
                 FixedUpdate,
                 (
+                    scene_perches,
                     gather_threats,
-                    (flock::flocks, herd::herds, fish::shoals, rats::rats),
+                    (
+                        flock::flocks,
+                        herd::herds,
+                        fish::shoals,
+                        rats::rats,
+                        bats::bats,
+                        ducks::rafts,
+                    ),
                 )
                     .chain()
                     .in_set(WildlifeSystems),
@@ -170,7 +188,11 @@ impl Plugin for WildlifePlugin {
 /// The valley's perches and its animals, once the map is in.
 fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate::LaunchOptions>) {
     let started = std::time::Instant::now();
-    let (obstacles, perches) = perches::survey(&zone);
+    let (obstacles, mut perches) = perches::survey(&zone);
+    // Somewhere for a heron to stand, where there's one.
+    if opts.map == "sallow_reservoir" {
+        perches.sites.extend(perches::wading(&zone));
+    }
     // `EXTRACTION_WILDLIFE=off`: no animals (to compare sims with and without).
     let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
     let flocks = if off {
@@ -188,6 +210,39 @@ fn setup(mut commands: Commands, zone: Res<crate::world::Zone>, opts: Res<crate:
     commands.insert_resource(perches);
 }
 
+/// Story's staged scenes (`world::scenes::Staged`: a row of kept buses, a
+/// yard of luggage) are somewhere to perch too, and to keep out of, once
+/// they're staged: they're added as they appear.
+fn scene_perches(
+    staged: Option<Res<crate::world::scenes::Staged>>,
+    zone: Res<crate::world::Zone>,
+    opts: Res<crate::LaunchOptions>,
+    perches: Option<ResMut<perches::Perches>>,
+    obstacles: Option<ResMut<perches::Obstacles>>,
+    mut done: Local<std::collections::HashSet<String>>,
+) {
+    let (Some(staged), Some(mut perches), Some(mut obstacles)) = (staged, perches, obstacles)
+    else {
+        return;
+    };
+    if staged.0.len() == done.len() {
+        return;
+    }
+    for (id, scene) in crate::world::scenes::of(&opts.map) {
+        if !staged.0.contains(&id) || !done.insert(id.clone()) {
+            continue;
+        }
+        let (solids, site) = perches::scene(&zone, &id, scene);
+        for s in solids {
+            obstacles.push(s);
+        }
+        if let Some(site) = site {
+            debug!("perches on the scene {}: {}", scene.name, site.spots.len());
+            perches.sites.push(site);
+        }
+    }
+}
+
 /// Animal visuals: the client's half.
 pub struct WildlifeVisualsPlugin;
 
@@ -197,6 +252,37 @@ impl Plugin for WildlifeVisualsPlugin {
             visuals::VisualsPlugin,
             herd_look::HerdLookPlugin,
             small_look::SmallLookPlugin,
+            bat_look::BatLookPlugin,
+            duck_look::DuckLookPlugin,
         ));
+    }
+}
+
+#[cfg(test)]
+mod doc_tests {
+    /// docs/WILDLIFE.md stays a document: a script's bad edit once wrote one
+    /// paragraph into it thirteen thousand times (10 MB, every heading
+    /// gone), and nothing noticed until a reader did.
+    #[test]
+    fn the_wildlife_doc_is_whole() {
+        let text = std::fs::read_to_string(crate::asset_root_path().join("../docs/WILDLIFE.md"))
+            .expect("docs/WILDLIFE.md");
+        assert!(text.len() < 100_000, "{} bytes", text.len());
+        for h in [
+            "## Rooks",
+            "## Deer and dogs",
+            "## Fish",
+            "## Bats",
+            "## The chorus",
+            "## Checks",
+            "## Pacing",
+        ] {
+            assert_eq!(
+                text.matches(h).count(),
+                1,
+                "{h} appears {} times",
+                text.matches(h).count()
+            );
+        }
     }
 }

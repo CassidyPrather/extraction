@@ -175,8 +175,8 @@ fn spawn_forests(
             base_color: Color::srgb(0.55, 0.6, 0.55),
             perceptual_roughness: 0.9,
             reflectance: 0.15,
-            double_sided: true,
-            cull_mode: None,
+            // One-sided: standing in a spruce (only the trunk stops you),
+            // its core seen from inside was most of the view, black.
             ..default()
         });
         let card = |name: &str, tint: Color, materials: &mut Assets<StandardMaterial>| {
@@ -811,6 +811,12 @@ pub struct TreeSway {
     /// Unused by trees (the ground cover's push from the player's legs).
     #[uniform(100)]
     pub pusher: Vec4,
+    /// The player's hands up in the branches: xyz where, w how far round
+    /// them the foliage parts (0: not pushing; `render::hand_push`).
+    #[uniform(100)]
+    pub hand_a: Vec4,
+    #[uniform(100)]
+    pub hand_b: Vec4,
 }
 
 /// Each vertex of a foliage card: the card's own centre (tree space), so

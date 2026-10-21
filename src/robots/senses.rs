@@ -146,6 +146,12 @@ pub const OCCLUDED: f32 = 0.45;
 /// Sound bends over a low rise: it counts as blocked only by what stands
 /// this high over its source (a wall, a hill; not a hump in a field) (m).
 pub const HEARD_OVER: f32 = 1.2;
+/// A robot that searched somewhere and found nothing pays no heed, this
+/// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
+/// gave up: a lure that keeps going wears out its welcome. (Sounds you
+/// make there still count.)
+pub const BORED_FOR: f32 = 120.0;
+pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
 pub const HEARD_FULL: f32 = 15.0;
@@ -299,6 +305,7 @@ pub(crate) fn gunshot_noise(
     mut noise: MessageWriter<Noise>,
     suppressed: Query<(), With<crate::gadgets::Suppressed>>,
     hounds: Query<(), With<super::hound::Hound>>,
+    reports: Query<&crate::weapons::armoury::Report>,
 ) {
     for s in shots.read() {
         if hounds.contains(s.gun) {
@@ -308,7 +315,7 @@ pub(crate) fn gunshot_noise(
             crate::gadgets::SUPPRESSED_REACH
         } else {
             1.0
-        };
+        } * reports.get(s.gun).map_or(1.0, |r| r.0);
         noise.write(Noise {
             at: s.origin,
             radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
@@ -324,6 +331,8 @@ pub(crate) fn door_noise(
     mut was_open: Local<std::collections::HashMap<Entity, bool>>,
     mut noise: MessageWriter<Noise>,
 ) {
+    // Broken doors come back as new entities after the Surge.
+    was_open.retain(|e, _| doors.contains(*e));
     for (e, door, gt) in &doors {
         let before = was_open.insert(e, door.open);
         if before.is_none_or(|b| b == door.open) {
@@ -357,10 +366,11 @@ pub(crate) fn perceive(
         Option<&super::indoor::LocalNav>,
         Option<&MotionSight>,
         Has<super::indoor::Dormant>,
+        Option<&MindSeed>,
     )>,
     players: Query<(Entity, &GlobalTransform, &Body), With<Player>>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes): (
+    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
         Query<&crate::world::buildings::Door>,
         Res<crate::gadgets::Cloaks>,
@@ -368,6 +378,8 @@ pub(crate) fn perceive(
         Res<Zone>,
         Res<super::doors::Entrances>,
         Option<Res<crate::anomaly::hush::Hushes>>,
+        Option<Res<crate::weapons::optics::Glints>>,
+        Option<Res<crate::weapons::flares::Starlight>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     sensors: Query<&RobotPart>,
@@ -377,9 +389,26 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
+    (mut gave_up, mut bored): (
+        MessageReader<super::search::LostYou>,
+        Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+    ),
 ) {
     let dt = time.delta_secs();
     let world = SpatialQueryFilter::from_mask([Layer::World]);
+    // Where each robot looked and found nothing lately: sounds nobody made
+    // there (a tape playing, a hum, a flare's crackle) it stops answering.
+    let now = time.elapsed_secs();
+    for g in gave_up.read() {
+        bored
+            .entry(g.robot)
+            .or_default()
+            .push((g.searched, now + BORED_FOR));
+    }
+    bored.retain(|e, spots| {
+        spots.retain(|(_, until)| *until > now);
+        !spots.is_empty() && robots.contains(*e)
+    });
     let mut sounds: Vec<Sound> = noises
         .read()
         .map(|n| Sound {
@@ -476,12 +505,14 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
-                // Your torch lights you when the sky doesn't.
+                // Your torch lights you when the sky doesn't; so does a
+                // white star overhead (`weapons::flares`).
                 light: if torch.is_some() {
                     conditions.light_at(indoors).max(TORCH)
                 } else {
                     conditions.light_at(indoors)
-                },
+                }
+                .max(starlight.as_ref().map_or(0.0, |s| s.at(head))),
                 dark,
                 torch,
             }
@@ -495,7 +526,10 @@ pub(crate) fn perceive(
         .map(|e| e.mid)
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
-    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant) in &mut robots {
+    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant, mind_seed) in
+        &mut robots
+    {
+        let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
         aware.news = false;
         // Asleep: only a loud noise reaches it (`indoor::wake_residents`).
         if robot.wrecked || dormant {
@@ -569,6 +603,11 @@ pub(crate) fn perceive(
                         e = e.max(TORCH_GLARE * (1.0 - dist / TORCH_REACH).max(0.25));
                     }
                 }
+                // A scope pointed this way into a low sun flashes in its
+                // eyes (`weapons::optics`).
+                if let Some(g) = &glints {
+                    e = e.max(g.seen_by(t.e, eye));
+                }
                 if e < GLIMPSE {
                     continue;
                 }
@@ -592,7 +631,7 @@ pub(crate) fn perceive(
                     let moved = t.speed > 0.3;
                     if !aware.can_see_target && (moved || aware.last_known.is_none()) {
                         let spread = (dist * GLIMPSE_SPREAD).max(GLIMPSE_SPREAD_MIN);
-                        aware.last_known = Some(heard_guess(t.feet, spread, robot_e));
+                        aware.last_known = Some(heard_guess(t.feet, spread, mind_seed));
                         aware.uncertainty = spread;
                     }
                     if aware.suspicion < GLIMPSE_CAP {
@@ -620,6 +659,13 @@ pub(crate) fn perceive(
         let ear = gt.translation();
         for s in &sounds {
             if s.source == Some(robot_e) {
+                continue;
+            }
+            let dull = s.source.is_none()
+                && bored.get(&robot_e).is_some_and(|spots| {
+                    spots.iter().any(|(at, _)| at.distance(s.at) < BORED_RADIUS)
+                });
+            if dull {
                 continue;
             }
             let d = s.at.distance(ear);
@@ -662,7 +708,7 @@ pub(crate) fn perceive(
             if !aware.can_see_target {
                 let spread =
                     (d * HEARD_SPREAD * if occluded { 1.5 } else { 1.0 }).max(HEARD_SPREAD_MIN);
-                aware.last_known = Some(heard_guess(s.at, spread, robot_e));
+                aware.last_known = Some(heard_guess(s.at, spread, mind_seed));
                 aware.uncertainty = spread;
                 aware.news = true;
                 if let Some(p) = s.source.filter(|s| players.contains(*s)) {
@@ -679,19 +725,51 @@ pub(crate) fn perceive(
     }
 }
 
-/// Where a robot guesses a sound at `at` came from, `spread` out: a point
-/// [`HEARD_MISS`]..1 of the spread off it, the same for the same robot and
-/// spot (so a second shot from there doesn't walk its guess about) but
-/// different between robots.
-pub fn heard_guess(at: Vec3, spread: f32, robot: Entity) -> Vec3 {
-    let mut h = robot.to_bits()
-        ^ (at.x.to_bits() as u64).rotate_left(21)
-        ^ (at.z.to_bits() as u64).rotate_left(42);
-    // splitmix64
+/// A robot's own seed for its guesses and its aim's scatter: from where
+/// it was spawned, so it doesn't change with how many other things exist
+/// (entity ids do). Set when it's spawned ([`seed_mind`]).
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MindSeed(pub u64);
+
+/// splitmix64 of `a` and `b`.
+pub fn mix(a: u64, b: u64) -> u64 {
+    let mut h = a ^ b.rotate_left(29);
     h = h.wrapping_add(0x9e37_79b9_7f4a_7c15);
     h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    h ^= h >> 31;
+    h ^ (h >> 31)
+}
+
+/// A seed for a shot `robot` fires now: its [`MindSeed`] and the (fixed)
+/// clock, so it doesn't hang on which robot a system happened to visit
+/// first.
+pub fn shot_seed(minds: &Query<&MindSeed>, robot: Entity, time: &Time) -> u64 {
+    let own = minds.get(robot).map_or(robot.to_bits(), |m| m.0);
+    mix(own, (time.elapsed_secs_f64() * 1000.0) as u64)
+}
+
+/// A new robot's [`MindSeed`], from the spot it's spawned at.
+pub fn seed_mind(add: On<Add, Robot>, at: Query<&Transform>, mut commands: Commands) {
+    let p = at
+        .get(add.entity)
+        .map(|t| t.translation)
+        .unwrap_or(Vec3::ZERO);
+    let seed = mix(
+        (p.x.to_bits() as u64) | ((p.z.to_bits() as u64) << 32),
+        p.y.to_bits() as u64,
+    );
+    commands.entity(add.entity).try_insert(MindSeed(seed));
+}
+
+/// Where a robot guesses a sound at `at` came from, `spread` out: a point
+/// [`HEARD_MISS`]..1 of the spread off it, the same for the same robot and
+/// spot (so a second shot from there doesn't walk its guess about) but
+/// different between robots (`seed`: its [`MindSeed`]).
+pub fn heard_guess(at: Vec3, spread: f32, seed: u64) -> Vec3 {
+    let h = mix(
+        seed,
+        (at.x.to_bits() as u64) | ((at.z.to_bits() as u64) << 32),
+    );
     let angle = (h & 0xffff) as f32 / 65536.0 * std::f32::consts::TAU;
     let r = spread * (HEARD_MISS + (1.0 - HEARD_MISS) * ((h >> 16) & 0xffff) as f32 / 65536.0);
     at + Vec3::new(angle.cos(), 0.0, angle.sin()) * r

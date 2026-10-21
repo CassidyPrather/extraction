@@ -221,6 +221,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Hide",
     "Pale",
     "Hoof",
+    "Drake",
 ];
 
 /// The game's materials for the model material names: the scanned PBR sets
@@ -315,6 +316,8 @@ impl ModelMaterials {
             "Hide" => flat(materials, Color::srgb(0.3, 0.24, 0.18), 0.0, 0.85),
             "Pale" => flat(materials, Color::srgb(0.78, 0.74, 0.66), 0.0, 0.85),
             "Hoof" => flat(materials, Color::srgb(0.04, 0.035, 0.03), 0.0, 0.5),
+            // A mallard drake's glossy green head.
+            "Drake" => flat(materials, Color::srgb(0.02, 0.2, 0.07), 0.0, 0.35),
             // The gloves: the canvas scan's weave, fine, under olive-drab
             // nylon, a tan synthetic leather palm and charcoal padding. Dark
             // as worn gloves are, but never black (ART_DIRECTION: values).
