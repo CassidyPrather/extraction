@@ -353,6 +353,45 @@ mod tests {
         }
     }
 
+    /// A sim replays from its seed: two raids on one seed write the same
+    /// telemetry, event for event. (On many threads they parted within
+    /// half a minute; see `crate::single_threaded`.)
+    #[test]
+    fn a_seed_plays_the_same_raid_twice() {
+        let run = |n: u32| {
+            let dir =
+                std::env::temp_dir().join(format!("extraction-replay-{}-{n}", std::process::id()));
+            let opts = LaunchOptions {
+                sim_run: Some("replay".into()),
+                sim_out: Some(dir.clone()),
+                map: "sallow_reservoir".into(),
+                seed: 1,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..90 * 60 {
+                app.update();
+            }
+            app.world_mut().resource_mut::<telemetry::SimLog>().flush();
+            let text = std::fs::read_to_string(dir.join("replay.jsonl")).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            text
+        };
+        let (a, b) = (run(0), run(1));
+        assert!(a.lines().count() > 40, "the raid got going:\n{a}");
+        if let Some((i, (x, y))) = a
+            .lines()
+            .zip(b.lines())
+            .enumerate()
+            .find(|(_, (x, y))| x != y)
+        {
+            panic!("the two runs part at event {i}:\n{x}\n{y}");
+        }
+        assert_eq!(a.lines().count(), b.lines().count());
+    }
+
     /// Damage the telemetry can't place isn't called a fall: a wet aegis in
     /// the pack shocking its carrier is named as such, and nothing that
     /// happens on level ground reads "fall" (it once did, and a raider
