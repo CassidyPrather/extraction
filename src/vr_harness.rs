@@ -3951,10 +3951,17 @@ mod body {
         let (mut vr, feet) = standing();
         look(&mut vr, Vec3::new(0.0, 1.65, 0.0), 2.2, 0.0);
         let mut stepping_both = false;
-        for _ in 0..240 {
+        for n in 0..240 {
             vr.step(1);
             let st = stance(&vr);
             stepping_both |= st.feet.iter().all(|f| !f.planted());
+            if n % 20 == 0 {
+                eprintln!(
+                    "{n}: body {} feet {:?}",
+                    st.pelvis.rotation.to_euler(EulerRot::YXZ).0,
+                    st.feet.map(|f| (f.yaw, f.t, f.uneasy))
+                );
+            }
         }
         assert!(!stepping_both, "one foot at a time");
         let st = stance(&vr);

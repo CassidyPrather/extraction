@@ -313,6 +313,7 @@ fn stand(
         let chest = Transform::from_translation(anchor.translation).with_rotation(lean * facing);
         let chest_side = chest.rotation * Vec3::X;
 
+        let jumped_now = !st.ready || st.last_root.distance(root.translation) > JUMP;
         // Shoulders, then forward toward a hand that's out of reach.
         let mut shoulders = [Vec3::ZERO; 2];
         for side in [Side::Left, Side::Right] {
@@ -327,7 +328,12 @@ fn stand(
             let grip = hand.felt.unwrap_or(hand.world).translation;
             let s = &mut shoulders[rh.side.index()];
             let d = s.distance(grip);
-            longest = longest.max(d - PROTRACT);
+            // Learnt from where the hand really is, and only from what an
+            // arm could reach (not a hand left behind by a teleport).
+            let tracked = s.distance(hand.world.translation) - PROTRACT;
+            if tracked < ARM * ARM_SCALE.1 {
+                longest = longest.max(tracked);
+            }
             let over = d - ARM * st.arm;
             if over > 0.0 {
                 *s += (grip - *s).normalize_or_zero() * over.min(PROTRACT);
@@ -335,7 +341,7 @@ fn stand(
         }
         // Learn the arm from the longest reaches (a long arm reaches further
         // than the model's could, shoulder forward and all).
-        if st.ready && longest > ARM * st.arm {
+        if st.ready && !jumped_now && longest > ARM * st.arm {
             st.arm = (longest / ARM).clamp(ARM_SCALE.0, ARM_SCALE.1);
         }
 
