@@ -35,6 +35,7 @@ pub mod search;
 pub mod senses;
 pub mod sorter;
 pub mod sorter_look;
+pub mod sorter_mind;
 pub mod visuals;
 pub mod walker;
 pub mod weathering;
@@ -240,7 +241,11 @@ impl Plugin for RobotsPlugin {
             .add_message::<Noticed>()
             .add_message::<Noise>()
             .init_resource::<senses::Lighting>()
-            .add_plugins((hound_mind::HoundMindPlugin, flee::FleePlugin))
+            .add_plugins((
+                hound_mind::HoundMindPlugin,
+                flee::FleePlugin,
+                sorter_mind::SorterMindPlugin,
+            ))
             .add_plugins((
                 drone::DronePlugin,
                 walker::WalkerPlugin,

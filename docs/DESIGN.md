@@ -232,6 +232,14 @@ your side, crouches (the tell) and lunges to bite. The way to beat one is
 the opposite of a drone: keep still and quiet. The director answers
 gunfire with a pair of hounds a third of the time.
 
+**The Sorter rings its hall** (`robots/sorter_mind.rs`). The Depot's
+gantry can't leave its rails. It turns its head to a sound; seeing you,
+it bangs the hall once (loud enough to wake what sleeps in the bays) and
+throws a tote while you're within 14 m, after a wind-up that's its tell:
+it throws where you stood then, so step aside. Lose it and it watches
+where you went, then gropes round there with its arm, then goes back to
+its sorting.
+
 **Robots remember and search** (`robots/search.rs`). Each keeps a
 last-known position and an uncertainty that grows at walking pace while
 you're out of sight (it knows which way you went for a second, then it's
