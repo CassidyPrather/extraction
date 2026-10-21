@@ -250,7 +250,7 @@ fn slat_bench(b: &mut Builder, x: f32, y: f32, back: f32, face: f32, len: f32) {
     for k in 0..2 {
         b.deco(
             Vec3::new(len, 0.1, 0.025),
-            Vec3::new(x, y + 0.65 + 0.2 * k as f32, back + face * 0.0425),
+            Vec3::new(x, y + 0.65 + 0.2 * k as f32, back + face * 0.1275),
             Mat::Timber,
         );
     }
@@ -262,8 +262,8 @@ fn slat_bench(b: &mut Builder, x: f32, y: f32, back: f32, face: f32, len: f32) {
             Mat::DarkMetal,
         );
         b.deco(
-            Vec3::new(0.04, 0.5, 0.03),
-            Vec3::new(fx, y + 0.75, back + face * 0.015),
+            Vec3::new(0.04, 0.58, 0.03),
+            Vec3::new(fx, y + 0.71, back + face * 0.1),
             Mat::DarkMetal,
         );
     }
@@ -380,11 +380,11 @@ fn mill_bay(b: &mut Builder, k: usize) {
     let z0 = bay_z0(k);
     let z1 = z0 + BAY;
     let roof = |z: f32| f + EAVE_FRONT + (EAVE_BACK - EAVE_FRONT) * (z - z0) / BAY;
-    // The footing under the floor, down past the bay in front's floor:
-    // its front face is that bay's back wall, holding the hill.
+    // The footing under the floor, down to the mill's foot: its front
+    // face is the bay in front's back wall, holding the hill.
     let front = if k == 0 { z0 } else { z0 - WALL * 0.5 };
     let back = if k == 3 { z1 } else { z1 - WALL * 0.5 };
-    let bottom = if k == 0 { -1.5 } else { MILL_FLOORS[k - 1] - 1.0 };
+    let bottom = -1.5;
     b.bx(
         Vec3::new(2.0 * MILL_HW, f - bottom, back - front),
         Vec3::new(0.0, (f + bottom) * 0.5, (front + back) * 0.5),
@@ -1510,7 +1510,7 @@ fn observatory(b: &mut Builder) {
     );
     b.deco(
         Vec3::new(2.6, 0.04, 0.04),
-        Vec3::new(mx, mh - 0.1, mz),
+        Vec3::new(mx, mh - 0.1, mz - mw * 0.5),
         Mat::DarkMetal,
     );
     let guy = Vec3::new(mx, 14.0, mz);
@@ -1713,7 +1713,7 @@ fn slat_bench_x(b: &mut Builder, wall: f32, y: f32, z: f32, len: f32) {
     for k in 0..2 {
         b.deco(
             Vec3::new(0.025, 0.1, len),
-            Vec3::new(wall - 0.0425, y + 0.65 + 0.2 * k as f32, z),
+            Vec3::new(wall - 0.1275, y + 0.65 + 0.2 * k as f32, z),
             Mat::Timber,
         );
     }
@@ -1725,8 +1725,8 @@ fn slat_bench_x(b: &mut Builder, wall: f32, y: f32, z: f32, len: f32) {
             Mat::DarkMetal,
         );
         b.deco(
-            Vec3::new(0.03, 0.5, 0.04),
-            Vec3::new(wall - 0.015, y + 0.75, fz),
+            Vec3::new(0.03, 0.58, 0.04),
+            Vec3::new(wall - 0.1, y + 0.71, fz),
             Mat::DarkMetal,
         );
     }
