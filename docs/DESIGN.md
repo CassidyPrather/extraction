@@ -236,7 +236,9 @@ gunfire with a pair of hounds a third of the time.
 cover in range. Two on one player pair up: the first pins you, the other
 says so (`Mind::Flanking`) and works round to your side, about 75° off
 the first's line, so cover that faces one doesn't face both. Three or
-more take sides by turns.
+more take sides by turns. A walker shot most of the way through its core
+(under a third left) breaks off: it says so (`Mind::Retreating`) and falls
+back about 14 m to cover away from you, still shooting. Press it.
 
 **The Sorter rings its hall** (`robots/sorter_mind.rs`). The Depot's
 gantry can't leave its rails. It turns its head to a sound; seeing you,

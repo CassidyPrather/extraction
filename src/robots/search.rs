@@ -104,6 +104,9 @@ pub enum Mind {
     /// It's working round to your side while another pins you
     /// (`walker::Flanker`).
     Flanking,
+    /// Badly hurt, it's breaking off to cover further back
+    /// (`walker::Retreating`).
+    Retreating,
     /// It heard `caller`'s call and is coming to look.
     Answering {
         caller: Entity,
@@ -512,11 +515,17 @@ fn announce(
     mut minds: MessageWriter<MindShift>,
     mut log: ResMut<MindLog>,
     time: Res<Time>,
-    flankers: Query<(Entity, &GlobalTransform), Added<super::walker::Flanker>>,
+    (flankers, retreats): (
+        Query<(Entity, &GlobalTransform), Added<super::walker::Flanker>>,
+        Query<(Entity, &GlobalTransform), Added<super::walker::Retreating>>,
+    ),
 ) {
     let now = time.elapsed_secs();
     for (e, gt) in &flankers {
         log.shift(&mut minds, e, Mind::Flanking, gt.translation(), now);
+    }
+    for (e, gt) in &retreats {
+        log.shift(&mut minds, e, Mind::Retreating, gt.translation(), now);
     }
     for n in noticed.read() {
         // Its suspicion can cross NOTICED after it's already gone to look

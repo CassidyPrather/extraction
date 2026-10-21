@@ -1791,3 +1791,58 @@ fn two_walkers_pin_and_flank() {
         "one of them flanks, and says so once: {flanks:?}"
     );
 }
+
+/// A walker with its core shot most of the way through breaks off: it
+/// says so, once, and falls back further from you than a sound one.
+#[test]
+fn a_badly_hurt_walker_breaks_off() {
+    use super::search::{Mind, MindShift};
+    #[derive(Resource, Default)]
+    struct Shifts(Vec<MindShift>);
+    let run = |hurt: bool| {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Shifts>().add_systems(
+            Last,
+            |mut m: MessageReader<MindShift>, mut s: ResMut<Shifts>| s.0.extend(m.read().copied()),
+        );
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 216.0));
+        if hurt {
+            let mut q = app.world_mut().query::<&mut super::RobotPart>();
+            for mut p in q.iter_mut(app.world_mut()) {
+                if p.robot == w && p.role == super::PartRole::Core {
+                    p.hp = p.max_hp * 0.3;
+                }
+            }
+        }
+        {
+            let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            aw.target = Some(player);
+            aw.last_known = Some(me);
+            aw.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+        for _ in 0..90 * 12 {
+            put(&mut app, player, me);
+            app.update();
+        }
+        let d = flat(app.world().get::<Transform>(w).unwrap().translation - me);
+        let said = app
+            .world()
+            .resource::<Shifts>()
+            .0
+            .iter()
+            .filter(|s| s.robot == w && s.state == Mind::Retreating)
+            .count();
+        (d, said)
+    };
+    let (sound, sound_said) = run(false);
+    let (hurt, hurt_said) = run(true);
+    assert_eq!(sound_said, 0);
+    assert_eq!(hurt_said, 1, "it says it's breaking off, once");
+    assert!(
+        hurt > sound + 6.0,
+        "it fell back: {hurt:.1} m, a sound one {sound:.1} m"
+    );
+}

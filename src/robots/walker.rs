@@ -377,17 +377,24 @@ fn walker_brain(
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
     spatial: SpatialQuery,
-    (mut shots, mut crouches, mut bites, mut seed, minds, flanking): (
+    (mut shots, mut crouches, mut bites, mut seed, minds, flanking, (parts, retreating)): (
         MessageWriter<Shot>,
         MessageWriter<super::hound::HoundCrouch>,
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
         Query<&super::senses::MindSeed>,
         Query<(), With<Flanker>>,
+        (Query<&RobotPart>, Query<(), With<Retreating>>),
     ),
 ) {
     let dt = time.delta_secs();
     let sweep = time.elapsed_secs() * 1.1;
+    // How much core each robot has left (0..1).
+    let cores: std::collections::HashMap<Entity, f32> = parts
+        .iter()
+        .filter(|p| p.role == PartRole::Core)
+        .map(|p| (p.robot, (p.hp / p.max_hp.max(1.0)).max(0.0)))
+        .collect();
     // Walkers fighting someone, for pairing up: (who, where, whom, seed).
     let fighting: Vec<(Entity, Vec3, Entity, u64)> = walkers
         .iter()
@@ -686,10 +693,18 @@ fn walker_brain(
                         (d > super::indoor::CRAWLER_HOLD).then_some(tp)
                     }
                     (Some(tp), _) => {
+                        // Badly hurt, it breaks off: back to cover away from
+                        // you (and says so), still shooting.
+                        let hurt = cores.get(&e).is_some_and(|c| *c < RETREAT_AT);
+                        if hurt && !retreating.contains(e) {
+                            commands.entity(e).insert(Retreating);
+                            w.rethink = 0.0;
+                        }
                         // Two on one: the first pins you, the other works
                         // round to your side.
                         let flank = aware
                             .target
+                            .filter(|_| !hurt)
                             .and_then(|p| flank_role(e, pos, p, tp, &fighting));
                         if flank.is_some() != flanking.contains(e) {
                             if flank.is_some() {
@@ -703,9 +718,14 @@ fn walker_brain(
                         w.rethink -= dt;
                         if w.rethink <= 0.0 {
                             w.rethink = COVER_RETHINK;
-                            w.cover = match flank {
-                                Some(f) => pick_cover(f, tp, navr, &spatial).or(Some(f)),
-                                None => pick_cover(pos, tp, navr, &spatial),
+                            w.cover = match (hurt, flank) {
+                                (true, _) => {
+                                    let away = (pos - tp).with_y(0.0).normalize_or(Vec3::X);
+                                    let back = pos + away * RETREAT_DIST;
+                                    pick_cover(back, tp, navr, &spatial).or(Some(back))
+                                }
+                                (false, Some(f)) => pick_cover(f, tp, navr, &spatial).or(Some(f)),
+                                (false, None) => pick_cover(pos, tp, navr, &spatial),
                             };
                         }
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
@@ -840,6 +860,15 @@ fn walker_brain(
 /// Somewhere to fight `target` from: walkable ground hard by an obstacle
 /// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
 /// line to it, not far from `pos`. Where it stands, if that will do.
+/// A walker with less than this share of its core left breaks off...
+pub const RETREAT_AT: f32 = 0.35;
+/// ...to cover about this much further from you (m).
+pub const RETREAT_DIST: f32 = 14.0;
+
+/// A walker that's broken off, hurt (it keeps shooting from further back).
+#[derive(Component, Debug)]
+pub struct Retreating;
+
 /// Two walkers on one target within this of each other pair up (m)...
 pub const PAIR_RADIUS: f32 = 40.0;
 /// ...and the flanker works round to this far off the pinner's line
