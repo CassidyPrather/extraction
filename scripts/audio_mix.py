@@ -110,7 +110,7 @@ def muffle_db(fc):
 # they take out of the asset's spectrum.
 CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0, "gun.squib": 450.0,
                "gun.bulged": 1400.0, "gun.bolt_stuck": 1800.0, "heavy.step": 220.0,
-               "heavy.slam": 600.0, "heavy.stall": 2500.0}
+               "heavy.slam": 600.0, "heavy.stall": 2500.0, "echo.slap": 2500.0}
 
 
 def own_filter(cue_name):

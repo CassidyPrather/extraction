@@ -640,6 +640,29 @@ going) and a robot's call 30 m off clearing its (worst +8.9 dB, the
 heavy's footfall); each break you hear about as far as robots do
 (0.6-1.6x).
 
+## Sallow Reservoir
+
+- **The dam slaps back** (`acoustics::slapback`, `slapbacks`): a shot,
+  a grenade, the heavy's footfall or blow, or a wall breached, with you
+  and the sound both in front of one of the dam's faces (the downstream
+  face, 22 m of masonry; the upstream wall, 21 m), comes back off it from
+  the sound's mirror image behind the face, after the extra path at
+  343 m/s, through 2.5 kHz. It is never occluded (it's behind the dam on
+  purpose). A shot fired 100 m out comes back 0.58 s later, 11 LU under
+  the shot and 5.5 dB over the wind; closer than ~10 m, the echo would
+  fuse with the shot, so there is none (`SLAP_AFTER`, 60 ms).
+- **The draw-off tower** (probed at its bridge from the crest): a hard
+  room, a 2.2 s tail at -12 dB wet: a tall concrete shaft. **The crest**
+  is open and dry, which is why the slapback matters. The dam's
+  inspection gallery has no reverb yet: it isn't built (Underground's).
+- **Wind** over the open bed is the mountain wind (`wind_mountain`,
+  Fourth valley's sounds block); **the river** below the dam is the
+  creek, which follows any valley's water.
+- **Still to come**, waiting on recordings (Freesound is out of reach
+  from this environment's network for now): the scour valves' drip and
+  gurgle, lapping water in New Sallow, the spillway, and silt underfoot
+  on the bed (the bed reads as mud only where the ground is wet).
+
 ## The night
 
 After dark (`world::weather::Hour::Night`; half at dusk) the valley

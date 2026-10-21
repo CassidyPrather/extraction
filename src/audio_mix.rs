@@ -168,6 +168,7 @@ pub const MIX: &[Cue] = &[
     cue!("tool.cut", "guns/safety", -6.0, 70.0, 0.8, Detail),
     cue!("tool.cut_ping", "impacts/ricochet", -9.0, 65.0, 0.8, Detail),
     cue!("hush.tone", "anomaly/well_drone", -30.0, 40.0, 0.0, Bed),
+    cue!("echo.slap", "guns/rifle_shot", 0.0, 120.0, 20.0, Event, 60.0),
     cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
     cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),
     cue!("grenade.spoon", "guns/casing", -8.0, 65.0, 1.0, Detail),
