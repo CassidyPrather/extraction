@@ -769,6 +769,8 @@ pub fn prefab_foundation(id: &str) -> f32 {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
+        // Rime Fell's: stone footings and the stations' platforms.
+        "observatory" | "funicular_lower" | "funicular_upper" => 0.6,
         _ => 0.0,
     }
 }

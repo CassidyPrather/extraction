@@ -12,6 +12,7 @@ pub mod cold;
 pub mod cover;
 pub mod dam;
 pub mod decay;
+pub mod fell;
 pub mod furnace;
 pub mod halos;
 pub mod impostors;
@@ -33,7 +34,6 @@ pub mod underground;
 pub mod water;
 pub mod weather;
 pub mod workings;
-pub mod fell;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;

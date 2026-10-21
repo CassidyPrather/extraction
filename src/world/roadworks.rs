@@ -173,10 +173,10 @@ const PORTAL: f32 = 0.8;
 /// far out it may reach looking for the ground (m), and its profile's
 /// columns.
 const BANK: f32 = 0.55;
-const BANK_REACH: f32 = 25.0;
+const BANK_REACH: f32 = 14.0;
 const BANK_COLS: usize = 12;
 /// How far past each portal the drift runs on, sinking (m).
-const BANK_TAPER: f32 = 7.0;
+const BANK_TAPER: f32 = 4.0;
 
 /// One gallery's place on its road.
 #[derive(Clone, Debug)]
@@ -420,7 +420,7 @@ fn build_gallery(plan: GalleryPlan, line: &Line, hm: &Heightmap) -> Gallery {
         // far its inner foot spills toward the road (no wall to lean on).
         let past = (a - st.s).max(st.s - b).max(0.0);
         let full = 1.0 - geom::smoothstep(0.0, BANK_TAPER, past);
-        let spill = 3.0 * geom::smoothstep(0.0, 1.5, past);
+        let spill = 2.0 * geom::smoothstep(0.0, 1.0, past);
         let start = back + 0.04;
         let crest = sec.top(back) + 0.05;
         let surface = |u: f32| crest - BANK * (u - start);
@@ -1081,7 +1081,8 @@ pub fn funicular(map: &MapDef, hm: &Heightmap) -> Option<Funicular> {
         t += ROLLER_EVERY;
     }
     for (track, single) in [(&outer as &dyn Fn(f32) -> f32, true), (&inner, false)] {
-        let rope_at = |t: f32| level(t, track(t)) + Vec3::Y * (SLEEPER_TOP + 2.0 * roller_r + rope_r);
+        let rope_at =
+            |t: f32| level(t, track(t)) + Vec3::Y * (SLEEPER_TOP + 2.0 * roller_r + rope_r);
         for &t in &rt {
             if !single && spread(t) < 0.01 {
                 continue;

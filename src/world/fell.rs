@@ -53,7 +53,16 @@ fn r2(v: f32) -> f32 {
 /// `Builder::shell`'s walls face, their corners taken clockwise seen from
 /// above: going from `a` to `c` along +X, outside is -Z.
 #[allow(clippy::too_many_arguments)]
-fn outer(b: &mut Builder, a: Vec2, c: Vec2, y0: f32, h: f32, thick: f32, mat: Mat, ops: &[Opening]) {
+fn outer(
+    b: &mut Builder,
+    a: Vec2,
+    c: Vec2,
+    y0: f32,
+    h: f32,
+    thick: f32,
+    mat: Mat,
+    ops: &[Opening],
+) {
     b.wall(a, c, y0, h, thick, mat, ops);
     let dir = (c - a).normalize();
     let out = Vec2::new(dir.y, -dir.x);
@@ -254,6 +263,11 @@ fn slat_bench(b: &mut Builder, x: f32, y: f32, back: f32, face: f32, len: f32) {
             Mat::Timber,
         );
     }
+    b.deco(
+        Vec3::new(0.04, 0.58, 0.03),
+        Vec3::new(x, y + 0.71, back + face * 0.1),
+        Mat::DarkMetal,
+    );
     for sx in [-1.0, 1.0] {
         let fx = x + sx * (len * 0.5 - 0.12);
         b.bx(
@@ -709,10 +723,7 @@ fn concentrate_shed(b: &mut Builder) {
     );
     b.table(Vec3::new(7.0, f, -19.0), 0.0, Some("driver_cache"));
     b.chair(Vec3::new(7.0, f, -18.25), 0.0);
-    b.locker(
-        Vec3::new(9.35, f, -17.2),
-        -std::f32::consts::FRAC_PI_2,
-    );
+    b.locker(Vec3::new(9.35, f, -17.2), -std::f32::consts::FRAC_PI_2);
     b.shelf(Vec3::new(5.2, f, -19.45), 0.0, None);
     b.stove(Vec3::new(8.9, f, -19.25), 0.0);
     b.furnish(
@@ -1096,7 +1107,7 @@ const OBS_UPPER: f32 = 3.4;
 const OBS_ROOF: f32 = 6.5;
 
 /// The weather and radio observatory: a squat two-storey block of rubble
-/// stone with walls 60 cm thick, a porch for an airlock, and a flat roof
+/// stone with walls 60 cm thick, a porch to keep the wind out (its outer door shut, an open doorway on in), and a flat roof
 /// behind a parapet carrying the dome, the instrument cage, the
 /// anemometer's mast and the radio mast. Inside: the instrument room
 /// with the radio desk, the barometers, a bunk and the stove; a ladder
@@ -1124,7 +1135,13 @@ fn observatory(b: &mut Builder) {
         top - f,
         t,
         Mat::Boulder,
-        &[window(2.0), door(hx), window(9.0), up(2.0), up(9.0)],
+        &[
+            window(2.0),
+            gap(hx, 1.0, 2.1),
+            window(9.0),
+            up(2.0),
+            up(9.0),
+        ],
     );
     b.wall(
         Vec2::new(hx, zb - t * 0.5),
@@ -1156,18 +1173,21 @@ fn observatory(b: &mut Builder) {
     // A band of dressed stone at the upper floor, the parapet's coping.
     let band = |b: &mut Builder, y: f32, h: f32, d: f32, m: Mat| {
         for z in [zf - d * 0.5, zb + d * 0.5] {
+            b.deco(Vec3::new(2.0 * hx + 2.0 * d, h, d), Vec3::new(0.0, y, z), m);
+        }
+        for x in [-hx - d * 0.5, hx + d * 0.5] {
             b.deco(
-                Vec3::new(2.0 * hx + 2.0 * d, h, d),
-                Vec3::new(0.0, y, z),
+                Vec3::new(d, h, zb - zf),
+                Vec3::new(x, y, (zf + zb) * 0.5),
                 m,
             );
         }
-        for x in [-hx - d * 0.5, hx + d * 0.5] {
-            b.deco(Vec3::new(d, h, zb - zf), Vec3::new(x, y, (zf + zb) * 0.5), m);
-        }
     };
     band(b, OBS_UPPER - 0.1, 0.25, 0.08, Mat::DressedStone);
-    for (z, len) in [(zf + t * 0.5, 2.0 * hx + 0.1), (zb - t * 0.5, 2.0 * hx + 0.1)] {
+    for (z, len) in [
+        (zf + t * 0.5, 2.0 * hx + 0.1),
+        (zb - t * 0.5, 2.0 * hx + 0.1),
+    ] {
         b.deco(
             Vec3::new(len, 0.08, t + 0.1),
             Vec3::new(0.0, top + 0.04, z),
@@ -1321,10 +1341,7 @@ fn observatory(b: &mut Builder) {
         Vec3::new(-ix + 1.0, f + 1.45, iz1 - 1.0),
         Mat::Canvas,
     );
-    b.stove(
-        Vec3::new(-ix + 0.5, f, -1.6),
-        std::f32::consts::FRAC_PI_2,
-    );
+    b.stove(Vec3::new(-ix + 0.5, f, -1.6), std::f32::consts::FRAC_PI_2);
     b.crate_box(Vec3::new(-ix + 0.6, f, -0.3), 0.6, Some("medical"));
     // Upstairs: the store, the observer's chest.
     b.table(Vec3::new(3.0, OBS_UPPER, -1.9), 0.0, None);
@@ -1352,7 +1369,7 @@ fn observatory(b: &mut Builder) {
         Mat::DarkMetal,
         false,
     );
-    let n = 9;
+    let n = 14;
     for i in 0..n {
         let a0 = i as f32 / n as f32 * std::f32::consts::FRAC_PI_2;
         let a1 = (i + 1) as f32 / n as f32 * std::f32::consts::FRAC_PI_2;
@@ -1466,7 +1483,11 @@ fn observatory(b: &mut Builder) {
     for (lx, lz) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
         b.bx(
             Vec3::new(0.05, mh - OBS_ROOF, 0.05),
-            Vec3::new(mx + lx * mw * 0.5, (OBS_ROOF + mh) * 0.5, mz + lz * mw * 0.5),
+            Vec3::new(
+                mx + lx * mw * 0.5,
+                (OBS_ROOF + mh) * 0.5,
+                mz + lz * mw * 0.5,
+            ),
             Mat::DarkMetal,
         );
     }
@@ -1504,17 +1525,26 @@ fn observatory(b: &mut Builder) {
     }
     b.piece(
         Shape::Cylinder(0.03, 0.8),
-        Transform::from_xyz(mx, mh + 0.4, mz),
+        Transform::from_xyz(mx, mh + 0.44, mz),
         Mat::DarkMetal,
         false,
     );
     b.deco(
         Vec3::new(2.6, 0.04, 0.04),
-        Vec3::new(mx, mh - 0.1, mz - mw * 0.5),
+        Vec3::new(mx, mh - 0.02, mz - mw * 0.5),
+        Mat::DarkMetal,
+    );
+    b.deco(
+        Vec3::new(mw + 0.1, 0.04, mw + 0.1),
+        Vec3::new(mx, mh + 0.02, mz),
         Mat::DarkMetal,
     );
     let guy = Vec3::new(mx, 14.0, mz);
-    for (gx, gz) in [(hx - 0.3, zf + 0.3), (-hx + 0.3, zb - 0.3), (hx - 0.3, zb - 0.3)] {
+    for (gx, gz) in [
+        (hx - 0.3, zf + 0.3),
+        (-hx + 0.3, zb - 0.3),
+        (hx - 0.3, zb - 0.3),
+    ] {
         rod(
             b,
             guy,
@@ -1655,7 +1685,15 @@ fn lower_station(b: &mut Builder) {
                 ],
             ],
         );
-        s.gable_roof(w + 0.36, d + 0.36, f + h, 35.0, 0.45, Mat::Shingles, Mat::Planks);
+        s.gable_roof(
+            w + 0.36,
+            d + 0.36,
+            f + h,
+            35.0,
+            0.45,
+            Mat::Shingles,
+            Mat::Planks,
+        );
         // The ticket office's partition, its window onto the hall and its
         // door; the counter behind the window, the clerk's desk and the
         // lost-property shelf.
@@ -1696,7 +1734,18 @@ fn lower_station(b: &mut Builder) {
     // The platform along the -X face, stepping up the grade toward -Z,
     // with a bench and the timetable on the wall.
     let (x0, x1) = (-5.0, cx - w * 0.5 - 0.1);
-    platform(b, x0, x1, -8.0, 8.0, f, 0.15, 2.0, f + h - 0.25, f + h - 0.65);
+    platform(
+        b,
+        x0,
+        x1,
+        -8.0,
+        8.0,
+        f,
+        0.15,
+        2.0,
+        f + h - 0.25,
+        f + h - 0.65,
+    );
     board(b, Vec3::new(x1, f + 1.7, 2.0), Vec3::NEG_X, 1.2, 0.9);
     slat_bench_x(b, x1, f + 0.3, 3.0, 1.6);
 }
@@ -1717,6 +1766,11 @@ fn slat_bench_x(b: &mut Builder, wall: f32, y: f32, z: f32, len: f32) {
             Mat::Timber,
         );
     }
+    b.deco(
+        Vec3::new(0.03, 0.58, 0.04),
+        Vec3::new(wall - 0.1, y + 0.71, z),
+        Mat::DarkMetal,
+    );
     for sz in [-1.0, 1.0] {
         let fz = z + sz * (len * 0.5 - 0.12);
         b.bx(
@@ -1814,8 +1868,16 @@ fn upper_station(b: &mut Builder) {
     );
     // The housing's inner walls over the motor room on their beams.
     for (a, c, beam) in [
-        (Vec2::new(hx - t * 0.5, iz0), Vec2::new(hx - t * 0.5, hz - t), true),
-        (Vec2::new(ix0, hz - t * 0.5), Vec2::new(hx, hz - t * 0.5), true),
+        (
+            Vec2::new(hx - t * 0.5, iz0),
+            Vec2::new(hx - t * 0.5, hz - t),
+            true,
+        ),
+        (
+            Vec2::new(ix0, hz - t * 0.5),
+            Vec2::new(hx, hz - t * 0.5),
+            true,
+        ),
     ] {
         b.wall(a, c, eave, top - eave, t, Mat::Concrete, &[]);
         if beam {
@@ -2204,7 +2266,11 @@ fn car(b: &mut Builder) {
         // The roof: over the partition behind it, out past the car's
         // ends.
         let ra = if i == 0 { za - 0.06 } else { za + t * 0.5 };
-        let rb = if i + 1 == CAR_ROOMS { zb + 0.06 } else { zb + t * 0.5 };
+        let rb = if i + 1 == CAR_ROOMS {
+            zb + 0.06
+        } else {
+            zb + t * 0.5
+        };
         b.bx(
             Vec3::new(2.0 * CAR_HW + 0.1, 0.08, rb - ra),
             Vec3::new(0.0, y + CAR_WALL + 0.04, (ra + rb) * 0.5),

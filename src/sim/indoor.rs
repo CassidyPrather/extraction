@@ -212,8 +212,8 @@ pub fn plan_buildings(
         // A building stepped down a slope (the ore mill): each cell's own
         // floor, stairs and all, and each piece in the way or not at the
         // floor under it.
-        let levels: Option<Vec<f32>> =
-            crate::world::fell::stepped_floor(&b.prefab, Vec2::ZERO).map(|_| {
+        let levels: Option<Vec<f32>> = crate::world::fell::stepped_floor(&b.prefab, Vec2::ZERO)
+            .map(|_| {
                 (0..n * n)
                     .map(|k| {
                         let c = Vec2::from(grid.centre(k % n, k / n));
@@ -239,14 +239,16 @@ pub fn plan_buildings(
             for j in 0..n {
                 for i in 0..n {
                     let y = l[j * n + i];
-                    let steep = [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)].iter().any(|(di, dj)| {
-                        let (a, c) = (i as i64 + di, j as i64 + dj);
-                        a >= 0
-                            && c >= 0
-                            && (a as usize) < n
-                            && (c as usize) < n
-                            && (l[c as usize * n + a as usize] - y).abs() > STEP_UP
-                    });
+                    let steep = [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)]
+                        .iter()
+                        .any(|(di, dj)| {
+                            let (a, c) = (i as i64 + di, j as i64 + dj);
+                            a >= 0
+                                && c >= 0
+                                && (a as usize) < n
+                                && (c as usize) < n
+                                && (l[c as usize * n + a as usize] - y).abs() > STEP_UP
+                        });
                     if steep {
                         cliff.push(j * n + i);
                     }
@@ -764,7 +766,10 @@ mod tests {
                 s.at
             );
         }
-        assert!(tried >= 6, "only {tried} loot spots within reach of a floor");
+        assert!(
+            tried >= 6,
+            "only {tried} loot spots within reach of a floor"
+        );
     }
 
     /// A bot routed by a building plan gets through the front door and
