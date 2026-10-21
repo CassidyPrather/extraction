@@ -290,6 +290,14 @@ impl Bot {
 
     fn next(&mut self) {
         self.tasks.pop_front();
+        self.restart();
+        self.deferred = 0;
+    }
+
+    /// A fresh start on whatever task is now first: for a director that
+    /// puts new tasks in front of (or in place of) the running one, whose
+    /// clock and half-done state aren't theirs.
+    pub fn restart(&mut self) {
         self.elapsed = 0.0;
         self.fired = 0;
         self.pending = false;
@@ -297,7 +305,6 @@ impl Bot {
         self.trigger = false;
         self.buttons = [false; 3];
         self.gun_to = None;
-        self.deferred = 0;
         self.well_off = None;
         self.reach_low = false;
     }
@@ -322,9 +329,7 @@ impl Bot {
         for t in tasks.into_iter().rev() {
             self.tasks.push_front(t);
         }
-        self.elapsed = 0.0;
-        self.pending = false;
-        self.retry = 0.0;
+        self.restart();
     }
 }
 

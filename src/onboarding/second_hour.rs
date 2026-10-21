@@ -938,6 +938,8 @@ pub(super) fn direct(
         let idle = bot.tasks.pop_back();
         bot.tasks.extend(tasks);
         bot.tasks.extend(idle);
+        // In place of the idle wait that was running.
+        bot.restart();
     }
 }
 
@@ -953,7 +955,7 @@ fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
     for t in tasks.into_iter().rev() {
         bot.tasks.push_front(t);
     }
-    bot.elapsed = 0.0;
+    bot.restart();
 }
 
 /// The table, in the bot's log; a moment counts as passed when it was met
