@@ -2393,6 +2393,8 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             // they're fit to.
             // (`SIM_OVERNIGHT`'s safehouse is the point of the run.)
             _ if s.job && r.hp >= 50.0 && s.name == "safehouse" => 40.0,
+            // (`SIM_CONTRACT`'s step is the point of the run, too.)
+            _ if s.job && r.hp >= 50.0 && std::env::var_os("SIM_CONTRACT").is_some() => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
             SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
@@ -2776,7 +2778,22 @@ fn take_item(
             if !plan.in_grid(pos) {
                 return None;
             }
-            let route = indoor(plan, pos, plan.to_local(at).xz(), 0.3)?;
+            let goal = plan.to_local(at).xz();
+            // A contract's thing to bring, somewhere the route can't stand
+            // (behind a counter): as near as there's floor, and reach.
+            let wanted = matches!(
+                scene.progression.as_ref().and_then(|p| p.0.job.as_ref()),
+                Some(CardJob::Bring { item: id, .. })
+                    if scene.items.get(item).is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == *id)
+            );
+            let route = match indoor(plan, pos, goal, 0.3) {
+                Some(route) => route,
+                None if wanted => {
+                    let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
+                    indoor(plan, pos, near, 0.3)?
+                }
+                None => return None,
+            };
             // Behind a door on an underground site's power: throw the
             // switches first, stage by stage up to the one that holds it
             // (it's loud: the crawlers come), unless careful.
