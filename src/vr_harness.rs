@@ -5023,7 +5023,9 @@ mod fight {
                 Mass(6.0),
                 NoAutoMass,
                 GravityScale(0.0),
-                LinearDamping(0.3),
+                // It holds station as a hovering drone does (and flees
+                // against it).
+                LinearDamping(6.0),
                 Transform::from_translation(at),
             ))
             .id();
@@ -5051,27 +5053,48 @@ mod fight {
         vr.step(4);
         // The hand reaches in to its frame (its near side), slowly, and
         // closes.
-        let on = at + Vec3::new(0.0, 0.0, 0.15);
         let from = at + Vec3::new(0.0, 0.0, 0.45);
         vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
         vr.step(10);
-        for i in 1..=20 {
-            vr.move_hand(Side::Right, from.lerp(on, i as f32 / 20.0));
+        // (It hovers, holding station, while the hand reaches it: static
+        // until it's taken, as a test stands in for its rotors.)
+        vr.app
+            .world_mut()
+            .entity_mut(drone)
+            .insert(RigidBody::Static);
+        let hand = at + Vec3::new(0.0, 0.0, 0.15);
+        for i in 1..=60 {
+            vr.move_hand(Side::Right, from.lerp(hand, i as f32 / 60.0));
             vr.step(1);
         }
         vr.grip(Side::Right, 1.0);
         vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(drone)
+            .insert(RigidBody::Dynamic);
+        vr.step(1);
         let took = at_of(&vr, drone);
+        let gripping = vr
+            .app
+            .world_mut()
+            .query::<(&crate::rig::RigHand, &crate::interact::fight::RobotGrip)>()
+            .iter(vr.app.world())
+            .any(|(h, g)| h.side == Side::Right && g.robot == drone);
+        assert!(gripping, "the hand has hold of it");
         vr.app.world_mut().entity_mut(drone).insert(Flees);
         vr.step(64);
+        // Held: what was taken (0.15 from its middle) still in the hand,
+        // however it's swung round it.
         let held = at_of(&vr, drone);
+        let in_hand = vr.hand_state(Side::Right).world.translation;
         assert!(
-            held.distance(took) < 0.2,
-            "held in the hand: {held} (taken at {took})"
+            held.distance(in_hand) < 0.2,
+            "held in the hand: {held} (hand {in_hand}, taken at {took})"
         );
         // Moved, it comes.
         for i in 1..=30 {
-            vr.move_hand(Side::Right, on + Vec3::NEG_X * 0.4 * i as f32 / 30.0);
+            vr.move_hand(Side::Right, hand + Vec3::NEG_X * 0.4 * i as f32 / 30.0);
             vr.step(1);
         }
         vr.step(10);
