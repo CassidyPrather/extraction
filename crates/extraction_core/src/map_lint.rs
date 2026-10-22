@@ -295,8 +295,19 @@ pub const RV_LANDMARK: f32 = 200.0;
 /// Cover counts within this distance of where you stand, metres: a dash
 /// of five seconds or so when a drone chirps its lock.
 pub const COVER_REACH: f32 = 25.0;
-/// Longest stretch of a main route with no cover within reach.
-pub const COVER_GAP: f32 = 60.0;
+/// Longest stretch of a main route with no cover within reach: a few
+/// seconds' run (the four valleys before Sallow keep theirs to 20 m).
+pub const COVER_GAP: f32 = 30.0;
+/// Open stretches this long or longer are listed by where they start.
+const COVER_NOTE: f32 = 20.0;
+/// Anywhere walkable in the valley, cover is within this, and no more than
+/// [`OPEN_SHARE`] of it is further than [`COVER_REACH`] from any: open ground
+/// is where drones kill. (Measured on a grid of `OPEN_STEP`, by the
+/// distances in `OPEN_LADDER`.)
+pub const OPEN_FAR: f32 = 70.0;
+pub const OPEN_SHARE: f32 = 0.03;
+const OPEN_STEP: f32 = 4.0;
+const OPEN_LADDER: [f32; 6] = [30.0, 35.0, 40.0, 50.0, 70.0, 100.0];
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -758,6 +769,32 @@ fn path_length(path: &[P2]) -> f32 {
 
 /// Longest run of consecutive route samples failing `ok`, in metres, and
 /// where it starts.
+/// Every stretch along `points` where `ok` fails for at least `min`
+/// metres: its length and where it starts.
+fn open_runs(points: &[P2], ok: impl Fn(P2) -> bool, min: f32) -> Vec<(f32, P2)> {
+    let mut out = Vec::new();
+    let (mut run, mut start) = (0.0, points[0]);
+    for (i, p) in points.iter().enumerate() {
+        if ok(*p) {
+            if run >= min {
+                out.push((run, start));
+            }
+            run = 0.0;
+        } else {
+            if run == 0.0 {
+                start = *p;
+            }
+            if i > 0 {
+                run += dist(points[i - 1], *p);
+            }
+        }
+    }
+    if run >= min {
+        out.push((run, start));
+    }
+    out
+}
+
 fn longest_gap(points: &[P2], ok: impl Fn(P2) -> bool) -> (f32, P2) {
     let (mut best, mut at, mut run, mut start) = (0.0, points[0], 0.0, points[0]);
     for (i, p) in points.iter().enumerate() {
@@ -1293,10 +1330,19 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         let (gap, at) = longest_gap(&route.points, covered);
         let share =
             route.points.iter().filter(|p| covered(**p)).count() as f32 / route.points.len() as f32;
+        let runs: Vec<String> = open_runs(&route.points, covered, COVER_NOTE)
+            .iter()
+            .map(|(l, p)| format!("{l:.0} m from ({:.0}, {:.0})", p[0], p[1]))
+            .collect();
         r.measures.push(format!(
-            "route to {}: cover within {COVER_REACH} m {:.0}% of the way, longest open {gap:.0} m",
+            "route to {}: cover within {COVER_REACH} m {:.0}% of the way, longest open {gap:.0} m{}",
             route.to,
-            share * 100.0
+            share * 100.0,
+            if runs.is_empty() {
+                String::new()
+            } else {
+                format!(" (open: {})", runs.join(", "))
+            }
         ));
         if gap > COVER_GAP {
             find(
@@ -1306,6 +1352,82 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 at,
             );
         }
+    }
+
+    // How far from cover the open ground runs, anywhere you can walk in the
+    // valley (not only along the main routes: raids cross the open to
+    // what they're after).
+    let cover_within = |p: P2, reach: f32| {
+        rects.iter().any(|(_, rc)| rc.sdf(p) <= reach)
+            || boulders.count_within(p, reach, 1) > 0
+            || tree_b.count_within(p, reach, STAND) >= STAND
+    };
+    let (mut cells, mut open, mut worst) = (0usize, 0usize, (0.0f32, [0.0, 0.0]));
+    let step = (OPEN_STEP / walk.cell).round().max(1.0) as usize;
+    for j in (0..walk.n).step_by(step) {
+        for i in (0..walk.n).step_by(step) {
+            let p = walk.centre(i, j);
+            if walk.cost[j * walk.n + i] == BLOCKED
+                || !map
+                    .regions
+                    .iter()
+                    .any(|reg| geom::point_in_polygon(&reg.polygon, p))
+            {
+                continue;
+            }
+            cells += 1;
+            if cover_within(p, COVER_REACH) {
+                continue;
+            }
+            open += 1;
+            let far = OPEN_LADDER
+                .iter()
+                .copied()
+                .find(|&reach| cover_within(p, reach))
+                .unwrap_or(f32::INFINITY);
+            if far > worst.0 {
+                worst = (far, p);
+            }
+        }
+    }
+    r.measures.push(format!(
+        "open ground: {:.0}% of the walkable valley over {COVER_REACH} m from cover; the farthest from it {} at ({:.0}, {:.0})",
+        open as f32 * 100.0 / cells.max(1) as f32,
+        if worst.0.is_finite() {
+            format!("within {:.0} m", worst.0)
+        } else {
+            format!("over {:.0} m", OPEN_LADDER[OPEN_LADDER.len() - 1])
+        },
+        worst.1[0],
+        worst.1[1],
+    ));
+    let share = open as f32 / cells.max(1) as f32;
+    if share > OPEN_SHARE {
+        find(
+            &mut r,
+            Rule::Cover,
+            format!(
+                "{:.0}% of the walkable valley is over {COVER_REACH} m from cover (at most {:.0}%)",
+                share * 100.0,
+                OPEN_SHARE * 100.0
+            ),
+            worst.1,
+        );
+    }
+    if worst.0 > OPEN_FAR {
+        find(
+            &mut r,
+            Rule::Cover,
+            format!(
+                "ground {} m from any cover: a drone's open killing ground",
+                if worst.0.is_finite() {
+                    format!("{:.0}", worst.0)
+                } else {
+                    "over 100".into()
+                }
+            ),
+            worst.1,
+        );
     }
 
     // -- Loot against risk ---------------------------------------------------------
