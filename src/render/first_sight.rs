@@ -57,6 +57,99 @@ fn preload_models(server: Res<AssetServer>, mut models: ResMut<crate::models::Mo
     info!("preload: {n} models asked for at start (render::first_sight)");
 }
 
+/// Where things come out: before the flat camera, or the headset's eye.
+fn bring_out_at(w: &mut World) -> Vec3 {
+    let mut q = w.query_filtered::<&GlobalTransform, With<Camera3d>>();
+    let eye = q
+        .iter(w)
+        .map(|g| (g.translation(), g.forward().as_vec3()))
+        .next()
+        .unwrap_or((Vec3::ZERO, Vec3::NEG_Z));
+    let mut f = eye.1;
+    f.y = 0.0;
+    eye.0 + f.normalize_or(Vec3::NEG_Z) * 8.0
+}
+
+/// `EXTRACTION_EVERYTHING=<frame>`: at that frame, bring everything out
+/// (`bring_everything_out`) in front of the camera, for
+/// `EXTRACTION_PIPELINES=1` to show what still builds at first sight.
+pub struct EverythingPlugin;
+
+impl Plugin for EverythingPlugin {
+    fn build(&self, app: &mut App) {
+        if let Some(at) = std::env::var("EXTRACTION_EVERYTHING")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            app.add_systems(Update, move |world: &mut World, mut frame: Local<u32>| {
+                *frame += 1;
+                if *frame == at {
+                    info!("everything: out at frame {at}");
+                    bring_everything_out_world(world);
+                }
+            });
+        }
+    }
+}
+
+/// Everything a raid can bring out, near the player: a robot of each
+/// kind that comes mid-raid, and one of every item (a wreck's loot, a
+/// crate's spill, a pod's cargo, a gun picked up).
+#[cfg(test)]
+pub(crate) fn bring_everything_out(app: &mut App) {
+    bring_everything_out_world(app.world_mut());
+}
+
+/// A robot of each kind that comes mid-raid, and one of every item (a
+/// wreck's loot, a crate's spill, a pod's cargo, a gun picked up), near
+/// the eye.
+pub(crate) fn bring_everything_out_world(world: &mut World) {
+    use crate::robots::{Job, JobKind};
+    let zone = world.resource::<crate::world::Zone>().clone();
+    let catalog_res = crate::items::Catalog(world.resource::<crate::items::Catalog>().0.clone());
+    let catalog = catalog_res.0.clone();
+    let at = bring_out_at(world);
+    let ground = |dx: f32, dz: f32| zone.on_ground(at.x + dx, at.z + dz);
+    let job = |site: Vec3| Job {
+        kind: JobKind::Watch,
+        site,
+        duration: 600.0,
+        exit: site + Vec3::X * 200.0,
+    };
+    let mut queue = bevy::ecs::world::CommandQueue::default();
+    {
+        let mut c = Commands::new(&mut queue, world);
+        let site = ground(12.0, 0.0);
+        crate::robots::drone::spawn_drone(&mut c, site + Vec3::Y * 6.0, job(site));
+        crate::robots::walker::spawn_walker(&mut c, &zone, ground(-12.0, 4.0), job(site));
+        crate::robots::hound::spawn_hound(&mut c, &zone, ground(10.0, 10.0), job(site));
+        crate::robots::heavy::spawn_heavy(
+            &mut c,
+            &zone,
+            &catalog_res,
+            ground(-25.0, -20.0),
+            job(site),
+        );
+        crate::robots::dirigible::spawn_dirigible(&mut c, site + Vec3::Y * 26.0, job(site));
+        crate::robots::grappler::spawn_grappler(&mut c, &zone, ground(15.0, -10.0), job(site));
+        crate::robots::spotter::spawn_spotter(&mut c, &zone, ground(-15.0, 15.0).xz());
+        crate::robots::mender::spawn_mender(&mut c, ground(5.0, -15.0) + Vec3::Y * 4.0, site);
+        for (i, (kind, _)) in catalog.iter().enumerate() {
+            let (x, z) = ((i % 16) as f32 * 0.8 - 6.0, (i / 16) as f32 * 0.8 + 3.0);
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(ground(x, z) + Vec3::Y * 0.3),
+                    condition: 1.0,
+                },
+            );
+        }
+    }
+    queue.apply(world);
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::prelude::*;
@@ -89,61 +182,6 @@ mod tests {
         loads.paths.extend(got.into_iter().flatten());
     }
 
-    /// Everything a raid can bring out, near the player: a robot of each
-    /// kind that comes mid-raid, and one of every item (a wreck's loot, a
-    /// crate's spill, a pod's cargo, a gun picked up).
-    fn bring_everything_out(app: &mut App) {
-        use crate::robots::{Job, JobKind};
-        let zone = app.world().resource::<crate::world::Zone>().clone();
-        let catalog_res =
-            crate::items::Catalog(app.world().resource::<crate::items::Catalog>().0.clone());
-        let catalog = catalog_res.0.clone();
-        let at = {
-            let w = app.world_mut();
-            let mut q = w.query_filtered::<&Transform, With<crate::render::FreeCamera>>();
-            q.single(w).unwrap().translation
-        };
-        let ground = |dx: f32, dz: f32| zone.on_ground(at.x + dx, at.z + dz);
-        let job = |site: Vec3| Job {
-            kind: JobKind::Watch,
-            site,
-            duration: 600.0,
-            exit: site + Vec3::X * 200.0,
-        };
-        let mut queue = bevy::ecs::world::CommandQueue::default();
-        {
-            let mut c = Commands::new(&mut queue, app.world());
-            let site = ground(12.0, 0.0);
-            crate::robots::drone::spawn_drone(&mut c, site + Vec3::Y * 6.0, job(site));
-            crate::robots::walker::spawn_walker(&mut c, &zone, ground(-12.0, 4.0), job(site));
-            crate::robots::hound::spawn_hound(&mut c, &zone, ground(10.0, 10.0), job(site));
-            crate::robots::heavy::spawn_heavy(
-                &mut c,
-                &zone,
-                &catalog_res,
-                ground(-25.0, -20.0),
-                job(site),
-            );
-            crate::robots::dirigible::spawn_dirigible(&mut c, site + Vec3::Y * 26.0, job(site));
-            crate::robots::grappler::spawn_grappler(&mut c, &zone, ground(15.0, -10.0), job(site));
-            crate::robots::spotter::spawn_spotter(&mut c, &zone, ground(-15.0, 15.0).xz());
-            crate::robots::mender::spawn_mender(&mut c, ground(5.0, -15.0) + Vec3::Y * 4.0, site);
-            for (i, (kind, _)) in catalog.iter().enumerate() {
-                let (x, z) = ((i % 16) as f32 * 0.8 - 6.0, (i / 16) as f32 * 0.8 + 3.0);
-                crate::items::spawn_item(
-                    &mut c,
-                    &catalog,
-                    crate::items::SpawnItem {
-                        kind,
-                        transform: Transform::from_translation(ground(x, z) + Vec3::Y * 0.3),
-                        condition: 1.0,
-                    },
-                );
-            }
-        }
-        queue.apply(app.world_mut());
-    }
-
     /// Everything a raid can bring out comes out, and none of it asks for
     /// a model that wasn't asked for at start (every disk load of one
     /// begins with `Models::request`): the fast form of the guard below.
@@ -165,7 +203,7 @@ mod tests {
             v
         };
         let before = asked(&app);
-        bring_everything_out(&mut app);
+        super::bring_everything_out(&mut app);
         for _ in 0..60 {
             app.update();
         }
@@ -209,7 +247,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         app.world_mut().resource_mut::<Loads>().recording = true;
-        bring_everything_out(&mut app);
+        super::bring_everything_out(&mut app);
         for _ in 0..600 {
             app.update();
         }

@@ -58,6 +58,7 @@ impl Plugin for WarmupPlugin {
                         shelve::<crate::world::storm::BoltMaterial>,
                     ),
                     shelve_unworn,
+                    shelve_models,
                     shelve_end,
                 )
                     .chain(),
@@ -719,6 +720,91 @@ fn shelve<M: Material>(
             commands
                 .entity(e)
                 .insert((MeshMaterial3d(mat.0.clone()), ShelfMark));
+        }
+    }
+}
+
+/// The models asked for at start (`first_sight::PreloadPlugin`) that
+/// nothing in the world wears yet: an item's, a gun's, a robot's first
+/// appearance mid-raid would build its pipelines on the frame it's first
+/// drawn. Each primitive goes on the shelf with the material it will
+/// wear (`ModelMaterials`, as items take theirs), ranged (items fade) and
+/// not.
+#[allow(clippy::too_many_arguments)]
+fn shelve_models(
+    mut shelf: ResMut<Shelf>,
+    mut commands: Commands,
+    models: Res<crate::models::Models>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    gnodes: Res<Assets<bevy::gltf::GltfNode>>,
+    gmeshes: Res<Assets<bevy::gltf::GltfMesh>>,
+    mut model_mats: ResMut<crate::models::ModelMaterials>,
+    mut lib: ResMut<super::materials::MaterialLibrary>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !shelf.stocking {
+        return;
+    }
+    fn walk<'a>(
+        nodes: &'a [crate::models::ModelNode],
+        out: &mut Vec<&'a crate::models::ModelPrimitive>,
+    ) {
+        for n in nodes {
+            out.extend(n.primitives.iter());
+            walk(&n.children, out);
+        }
+    }
+    let ty = std::any::type_name::<StandardMaterial>();
+    for handle in models.handles() {
+        let Some(gltf) = gltfs.get(handle) else {
+            continue;
+        };
+        let nodes = crate::models::model_nodes(gltf, &gnodes, &gmeshes);
+        let mut prims = Vec::new();
+        walk(&nodes, &mut prims);
+        for prim in prims {
+            let mat = model_mats.get(
+                prim.material.as_deref().unwrap_or("Blued"),
+                &mut lib,
+                &server,
+                &mut materials,
+            );
+            let Some(m) = materials.get(&mat) else {
+                continue;
+            };
+            let layout = shelf
+                .layouts
+                .get(&prim.mesh.id())
+                .copied()
+                .unwrap_or_else(|| hash_of(prim.mesh.id()));
+            for ranged in [true, false] {
+                let key = hash_of((
+                    ty,
+                    m.bind_group_data(),
+                    format!("{:?}", m.alpha_mode()),
+                    m.depth_bias().to_bits(),
+                    layout,
+                    ranged,
+                    false,
+                ));
+                if !shelf.seen.insert(key) {
+                    continue;
+                }
+                if shelf.kinds.insert(key) {
+                    *shelf.by_type.entry("model".into()).or_default() += 1;
+                }
+                let shown = shelf
+                    .twins
+                    .get(&layout)
+                    .cloned()
+                    .unwrap_or(prim.mesh.clone());
+                if let Some(e) = shelf.put(&mut commands, shown, ranged, true) {
+                    commands
+                        .entity(e)
+                        .insert((MeshMaterial3d(mat.clone()), ShelfMark));
+                }
+            }
         }
     }
 }
