@@ -41,6 +41,7 @@ pub mod network;
 pub mod plough;
 pub mod plough_look;
 pub mod pylon;
+pub mod recall;
 pub mod reel;
 pub mod search;
 pub mod senses;
@@ -269,6 +270,7 @@ impl Plugin for RobotsPlugin {
                 memory::MemoryPlugin,
                 network::NetworkPlugin,
                 devices::DevicesPlugin,
+                recall::RecallPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
