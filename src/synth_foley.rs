@@ -104,6 +104,16 @@ pub const STAND_INS: &[StandIn] = &[
         render: ice_crack,
     },
     StandIn {
+        set: "device/notice",
+        variants: 2,
+        render: notice,
+    },
+    StandIn {
+        set: "device/notice_hard",
+        variants: 2,
+        render: notice_hard,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -759,4 +769,44 @@ fn ice_crack(rng: &mut Rng, sr: f32) -> Vec<f32> {
             snap * 0.6 + ring.run(snap) * 3.0 + body.run(snap) * (-t * 25.0).exp()
         })
         .collect()
+}
+
+/// Bright, clipped notes (a square-ish tone, a click of onset, quick
+/// decay), one after another: (pitch Hz, length s, gap s).
+fn chirps(rng: &mut Rng, sr: f32, notes: &[(f32, f32, f32)]) -> Vec<f32> {
+    let mut out = Vec::new();
+    for &(f, len, gap) in notes {
+        let f = f * jitter(rng, 0.02);
+        let n = (len * sr) as usize;
+        let mut ph = 0.0f32;
+        for i in 0..n {
+            let t = i as f32 / sr;
+            ph = (ph + f / sr).fract();
+            let tone =
+                (TAU * ph).sin() + 0.3 * (3.0 * TAU * ph).sin() + 0.15 * (5.0 * TAU * ph).sin();
+            let env = (t / 0.004).min(1.0) * (1.0 - t / len).max(0.0).powf(0.6);
+            out.push(tone * env);
+        }
+        out.extend(std::iter::repeat_n(0.0, (gap * sr) as usize));
+    }
+    out
+}
+
+/// A machine noticing something you set down: two short notes stepping
+/// up, a question (`robots::devices::DeviceNoticed`, investigating).
+fn notice(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(rng, sr, &[(1_400.0, 0.07, 0.05), (2_100.0, 0.09, 0.0)])
+}
+
+/// The same, hunting it: three, quicker, harder and higher.
+fn notice_hard(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (1_700.0, 0.05, 0.03),
+            (2_300.0, 0.05, 0.03),
+            (3_100.0, 0.08, 0.0),
+        ],
+    )
 }

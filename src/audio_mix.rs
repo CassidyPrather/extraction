@@ -289,6 +289,8 @@ pub const MIX: &[Cue] = &[
     cue!("hound.crouch", "machines/servo", -8.0, 80.0, 10.0, Signal, 6.0),
     cue!("hound.bite", "impacts/metal", -4.0, 95.0, 2.0, Action),
     cue!("robot.wake", "machines/servo", -8.0, 80.0, 10.0, Signal, 6.0),
+    cue!("device.notice", "device/notice", -14.0, 80.0, 15.0, Signal, 8.0),
+    cue!("device.hunt", "device/notice_hard", -12.0, 85.0, 15.0, Signal, 8.0),
     cue!("wreck.thud", "impacts/metal", -2.0, 100.0, 20.0, Action, 10.0),
     cue!("cell.arc", "device/crackle", -9.0, 95.0, 1.0, Action),
     cue!("you.hurt", "physical/body_hit", -8.0, 85.0, 0.0, Detail),
