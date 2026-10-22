@@ -136,7 +136,10 @@ fn run_lockdown(
             continue;
         };
         let Some(left) = lk.left else {
-            if power.stages.iter().any(|s| s.on) {
+            // (Screenshots of it, `EXTRACTION_LOCKDOWN=1`: sounding from
+            // the start, and never sealing.)
+            let shot = std::env::var_os("EXTRACTION_LOCKDOWN").is_some();
+            if shot || power.stages.iter().any(|s| s.on) {
                 lk.left = Some(k.after);
                 lk.blast = 0.0;
                 raid.say(format!(
@@ -160,7 +163,11 @@ fn run_lockdown(
                 source: None,
             });
         }
-        let left = left - dt;
+        let left = if std::env::var_os("EXTRACTION_LOCKDOWN").is_some() {
+            k.after
+        } else {
+            left - dt
+        };
         if left > 0.0 {
             lk.left = Some(left);
             continue;

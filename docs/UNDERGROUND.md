@@ -351,6 +351,7 @@ already there), then the mine, then the cellars.
 | `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
 
 | `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | the gallery carries sound (below); a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | `world::echo`: `Echoed`; a room's `carries`; the layout's `basins` (a still one) | `the_gallery_carries_sound_its_length`, `a_walk_carries_and_a_creep_does_not`; scenario `gallery_echo` |
+| `bunker_marrow` | Marrow (-10, 70), escape stair 60 m north | its lockdown (above): the generator started, a klaxon, and the gas lock sealed | `world::lockdown`: `Lockdown`, `KlaxonLamp`, `Klaxon`, `Sealed`; the layout's `lockdown`; `underground::SEALED` | `the_shelter_seals_and_the_tunnel_stays_open`, `a_sealed_shelter_can_be_left`; scenario `shelter_lockdown` |
 | `adit_rime` | Rime Fell (160, -55) turned 180, exit (121, -2) on the mill's back apron | the winze's cage, down to the deep level (below); the one warm place on the fell (any roof stops the Cold's chill, `world::cold`); a flooded sump on the loop; the lamp room's breaker lights the drift and opens the magazine | `world::cage`: `Cage`, `CageBell`, `GateLamp`, `CageRung`, `CageArrived`, `CageCrushed`; the layout's `cage`, `floods` and `power` | `riding_the_cage_and_standing_under_it`, `nothing_walks_into_the_winze`; scenario `cage_ride` |
 
 ### One of its own: the adit's cage
@@ -401,6 +402,33 @@ length and a little over (48 m).
 
 Shot: the gallery's length, the crawler at its far end, as it carries
 (`docs/shots/underground/s_gallery.jpg`).
+
+### One of its own: the shelter's lockdown
+
+The civil-defence shelter's (`bunker_marrow`) programme is still set
+(`world::lockdown`, the layout's `lockdown`): start its generator and,
+after the lights, it seals itself.
+
+- *The tell.* A klaxon in the hall every 2.5 s (heard 50 m: a Noise,
+  `Klaxon` for the ear), an amber lamp turning on the hall's ceiling, and
+  a voice off a tape: "Attack warning. Shelter sealing in 20 seconds."
+- *The hurt.* Twenty seconds on, the gas lock's two doors swing to and
+  bolt for good (`PowerLocked` at stage `SEALED`; a hand on one is told
+  so). The way you came in is shut, and the klaxon has brought the two
+  crawlers. Out by the escape tunnel past the medical post, or chest
+  deep through the drain from the filter plant to the gas lock's stair.
+- *Always a way out.* The layout's check: sealed, every room still
+  reaches `out` (the escape tunnel), and a way out leaves from it
+  (`a_sealed_shelter_can_be_left`); in the game, a raider's route from
+  the hall to the tunnel goes through no sealed door
+  (`the_shelter_seals_and_the_tunnel_stays_open`); scenario
+  `shelter_lockdown` starts the generator, waits it out and walks out.
+- *Bots.* A raider routes round a sealed door, and leaves by a door
+  that opens (`PowerLocked` doors were already so).
+
+Shot: the hall with the klaxon sounding, its lamp turning
+(`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
+shelter sounding from the start, for shots).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
