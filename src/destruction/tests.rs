@@ -1663,14 +1663,22 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
         let (m, _) = super::wood::model_node(m);
         root.join(crate::render::world_props::path(m)).exists()
     };
+    // Textures are fetched (`scripts/fetch_assets.py`), not in git: a
+    // material is textured if the fetch manifest has its set, whether or
+    // not this checkout has fetched it.
+    let manifest = root
+        .parent()
+        .unwrap()
+        .join("scripts/assets_manifest.json");
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        eprintln!("no {} (a packaged build): skipped", manifest.display());
+        return;
+    };
+    let sets: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let sets = &sets["materials"]["sets"];
     let textured = |mat: crate::render::materials::Mat| {
         let (dir, ..) = mat.info();
-        dir.is_none_or(|d| {
-            root.join("textures/materials")
-                .join(d)
-                .join("albedo.ktx2")
-                .exists()
-        })
+        dir.is_none_or(|d| sets.get(d).is_some())
     };
     let mut bad = Vec::new();
     for m in super::wood::CRATE_MODELS
