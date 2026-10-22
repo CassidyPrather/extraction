@@ -205,21 +205,35 @@ burner LOW. The views keep their line of sight off trunks, rocks and
 anything the map places (`sight_blockers`). A boulder once hid the
 mirror.
 
-Where it stands: every kind clears its floor in all three conditions.
+Where it stands: every kind clears its floor in all three conditions in
+every valley, 90 views of 90 (`--map=NAME`; sheets
+`legibility.png` for Marrow Creek and `legibility_<map>.png` for the
+rest). The table gives each kind's weakest view across the valleys, in
+deg²:
 
-| Kind | Fog | Downpour | Night |
-|---|---|---|---|
-| Lift | 95 | 86 | 73 |
-| Burner | 44 | 50 | 60 |
-| Snare | 30 | 26 | 27 |
-| Well | 45 | 41 | 23 |
-| Mirror | 9 | 11 | 10 |
-| Hush | 157 | 158 | 45 |
+| Kind | Weakest | Where |
+|---|---|---|
+| Lift | 44 | Rime Fell, night |
+| Burner | 12 | Cinder Works, downpour (on ash) |
+| Snare | 7 | Sallow Reservoir, fog |
+| Well | 19 | Rime Fell, downpour |
+| Mirror | 7 | Rime Fell, fog (on snow) |
+| Hush | 36 | Cinder Works, night |
 
-All figures are deg². The first run, re-scored the same way, had the
-lift at 0 and the snare at 1.2 in fog, and the mirror at 0 at night. The
-lift's column of air is now a shade darker, and that is what carries it
-through pea-souper fog, where its leaves don't.
+What the valleys taught us, beyond Marrow:
+
+- **Snow takes added light.** The mirror's glint added light, and on
+  Rime Fell it changed almost nothing (0.4 deg² at night). Its rim now
+  always steps away from what's behind it, darker over light and lighter
+  over dark, and its glint does the same. Inverting the background
+  wouldn't work, because mid-grey fog inverts to itself.
+- **A view needs to clear walls by their faces, not their middles.**
+  On Kettle Pass the Hush's first view was a brick wall.
+
+The first runs, re-scored the same way, had the lift at 0 and the snare
+at 1.2 in fog on Marrow, and the mirror at 0 at night. A lift's column of
+air is now a shade darker, and that is what carries it through
+pea-souper fog, where its leaves don't.
 
 What it taught us:
 

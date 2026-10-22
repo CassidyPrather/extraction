@@ -94,6 +94,11 @@ pub const STAND_INS: &[StandIn] = &[
         render: canary,
     },
     StandIn {
+        set: "alarm/klaxon",
+        variants: 2,
+        render: klaxon,
+    },
+    StandIn {
         set: "drag/metal",
         variants: 3,
         render: drag_metal,
@@ -670,4 +675,34 @@ fn drag_body(rng: &mut Rng, sr: f32) -> Vec<f32> {
         let tug = (TAU * tugs * t).sin().max(0.0).powf(1.5);
         (cloth.run(s) * 0.8 + 0.6 * thud.run(s)) * (0.25 + 0.75 * tug)
     })
+}
+
+/// An electric klaxon's blast: a steel diaphragm hammered by a motor's
+/// cam, a raw buzz near 420 Hz (the cam's rate riding on it) through the
+/// horn's flare, rising a little as the motor comes up to speed, 1.1 s.
+fn klaxon(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 1.1;
+    let f0 = 420.0 * jitter(rng, 0.04);
+    let cam = 75.0 * jitter(rng, 0.1);
+    let mut horn = [
+        (Bp::new(800.0, 3.0, sr), 1.0),
+        (Bp::new(1600.0, 4.0, sr), 0.7),
+        (Bp::new(2500.0, 5.0, sr), 0.4),
+    ];
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let f = f0 * (0.85 + 0.15 * (t / 0.15).min(1.0));
+            ph = (ph + f / sr).fract();
+            // A clipped saw: the diaphragm slapping its stop.
+            let saw = (2.0 * ph - 1.0) * 3.0;
+            let buzz = saw.clamp(-1.0, 1.0) * (0.7 + 0.3 * (TAU * cam * t).sin());
+            let src = buzz + 0.05 * noise(rng);
+            let env = (t / 0.03).min(1.0) * ((secs - t) / 0.12).clamp(0.0, 1.0);
+            let shaped: f32 = horn.iter_mut().map(|(b, w)| b.run(src) * *w).sum();
+            (shaped + 0.15 * buzz) * env
+        })
+        .collect()
 }
