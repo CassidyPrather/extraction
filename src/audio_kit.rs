@@ -1,7 +1,8 @@
 //! Sound for the newer kit and the bare hands (`docs/AUDIO.md`, "What you
 //! hear and feel"): a signal flare's pop and hiss, the RPK's bipod
 //! swinging and locking, a palm slapped on whatever it meets, a held gun
-//! knocked into a wall, and something heavy dragged over the ground. (The
+//! knocked into a wall, something heavy dragged over the ground, and the
+//! lights for the dark: a chemlight snapped, a hand flare struck. (The
 //! pump-action's rack is a gun event, heard with the rest in
 //! `audio::gun_sounds`.)
 //!
@@ -20,6 +21,7 @@ use crate::weapons::ActionGrind;
 use crate::weapons::armoury::Bipod;
 use crate::weapons::carry::GunBumped;
 use crate::weapons::flares::Flare;
+use crate::world::glow::{Burning, GlowKind, Lit};
 
 pub struct KitSoundsPlugin;
 
@@ -31,6 +33,7 @@ impl Plugin for KitSoundsPlugin {
             .add_message::<GunBumped>()
             .add_message::<Dragged>()
             .add_message::<ActionGrind>()
+            .add_message::<Lit>()
             .add_systems(
                 Update,
                 (
@@ -41,6 +44,8 @@ impl Plugin for KitSoundsPlugin {
                     bump_sounds,
                     drag_sounds,
                     grind_sounds,
+                    lit_sounds,
+                    flare_burns,
                 ),
             );
     }
@@ -281,6 +286,76 @@ fn bump_sounds(
     }
 }
 
+/// A hand flare's spitting burn, on the flare.
+#[derive(Component)]
+struct HandFlareBurn;
+
+/// A light for the dark lit (`world::glow`): a chemlight's tube snapped
+/// inside (`glow.snap`, a plastic crack, quick); a hand flare's cap rasped
+/// across its end (`glow.strike`) and the flare taking, spitting as it
+/// burns (`glow.burn`, the burner's roar sped into a sputter) for as long
+/// as it does, wherever it's thrown.
+fn lit_sounds(
+    mut commands: Commands,
+    mut lit: MessageReader<Lit>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for l in lit.read() {
+        match l.kind {
+            GlowKind::Chem => play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/handle_plastic",
+                Some(l.at),
+                "glow.snap",
+                0.0,
+                1.5,
+                0.08,
+            ),
+            GlowKind::Flare => {
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "physical/zip",
+                    Some(l.at),
+                    "glow.strike",
+                    0.0,
+                    0.7,
+                    0.08,
+                );
+                let cue = "glow.burn";
+                if let Some(sample) = bank.pick("anomaly/burner_roar", &mut rng.0) {
+                    commands.entity(l.item).with_child((
+                        HandFlareBurn,
+                        SamplePlayer::new(sample)
+                            .looping()
+                            .with_volume(Volume::Decibels(mix::db(cue))),
+                        PlaybackSettings::default().with_speed(2.1 + rng.0.f32() as f64 * 0.2),
+                        Transform::default(),
+                        sample_effects![mix::spatial(cue), reverb_send(cue)],
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// A hand flare burnt out (no longer `Burning`): its sputter stops.
+fn flare_burns(
+    mut commands: Commands,
+    burns: Query<(Entity, &ChildOf), With<HandFlareBurn>>,
+    burning: Query<(), With<Burning>>,
+) {
+    for (e, parent) in &burns {
+        if !burning.contains(parent.parent()) {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
 /// The shortest gap between two grinds heard (s): Weapon feel ticks every
 /// 60 ms, about twice as often as a grind sounds.
 const GRIND_EVERY: f32 = 0.11;
@@ -459,6 +534,9 @@ mod tests {
             ("physical/handle_metal", "bipod.swing"),
             ("physical/drop_metal", "gun.bump"),
             ("physical/handle_metal", "gun.grind"),
+            ("physical/handle_plastic", "glow.snap"),
+            ("physical/zip", "glow.strike"),
+            ("anomaly/burner_roar", "glow.burn"),
         ];
         for s in [
             Stuff::Wood,
