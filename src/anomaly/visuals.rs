@@ -290,6 +290,42 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
+/// What an anomaly does to the ground under it, out to its edge: solid to
+/// nearly the edge and gone just past it, so where the mark stops is where
+/// the anomaly starts (a mark that fades out well inside is an invisible
+/// wall). Its edge wavers a little, never more than a few centimetres on a
+/// typical one, and it's a touch grainy. On a disc of 1.1 radii.
+fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 256u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            // In the anomaly's radii.
+            let r = (u * u + v * v).sqrt() * 1.1;
+            let a = v.atan2(u);
+            let edge = 1.0 + 0.012 * (a * 7.0).sin() + 0.008 * (a * 17.0 + 1.3).sin();
+            // Full to 0.93 of it, nothing past 1.02.
+            let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
+            let grain = 0.85 + 0.15 * ((x * 7919 + y * 104_729) % 613) as f32 / 613.0;
+            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * grain;
+            data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
 /// A ragged ring of dust round the outer tenth: the edge of a Hush on the
 /// ground.
 fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
@@ -366,10 +402,11 @@ fn init_assets(
         .load("textures/foliage/birch_leaves/albedo.ktx2");
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
+    let mark = mark_texture(&mut images);
     let mut ground = |c: Color, emissive: LinearRgba| {
         materials.add(StandardMaterial {
             base_color: c,
-            base_color_texture: Some(radial.clone()),
+            base_color_texture: Some(mark.clone()),
             emissive,
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 0.95,
@@ -392,12 +429,20 @@ fn init_assets(
         Color::srgba(0.82, 0.9, 1.0, 0.75),
         LinearRgba::rgb(0.0, 0.01, 0.03),
     );
-    // Torn turf, the dark earth under it showing.
-    let dragged = ground(Color::srgba(0.11, 0.08, 0.05, 0.8), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
     );
+    // Torn turf, the dark earth under it showing: a drag scar is a smear,
+    // soft at its edges, not an anomaly's own mark.
+    let dragged = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.11, 0.08, 0.05, 0.8),
+        base_color_texture: Some(radial.clone()),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.95,
+        depth_bias: 50.0,
+        ..default()
+    });
     // Its edge: pale dust settled in a ragged line on the ground, which you
     // can step up to.
     let ring = ring_texture(&mut images);
