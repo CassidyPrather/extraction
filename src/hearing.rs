@@ -138,6 +138,9 @@ pub struct Graph {
     walls: HashMap<(u16, u16), f32>,
     /// Loss from every room to every other, rooms x rooms.
     table: Vec<f32>,
+    /// How much each room smears where a sound seems to come from
+    /// ([`Hearing::smear`]).
+    smear: Vec<f32>,
     site: bool,
 }
 
@@ -320,6 +323,7 @@ impl Graph {
             doors: Vec::new(),
             walls: HashMap::new(),
             table: Vec::new(),
+            smear: Vec::new(),
             site,
         };
         // Each door joins the rooms either side of it.
@@ -365,6 +369,43 @@ impl Graph {
                 *w = w.min(loss);
             }
         }
+        // Each room's ring: how big it is, and how hard what bounds it
+        // (the walls round it, by what they're built of; a site's rock).
+        let mut area = vec![0usize; g.rooms];
+        let mut hard = vec![(0.0f32, 0usize); g.rooms];
+        for k in 0..n * n {
+            let r = g.room[k];
+            if r == NONE || r == OUTSIDE {
+                continue;
+            }
+            area[r as usize] += 1;
+            let (i, j) = (k % n, k / n);
+            for (di, dj) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1)] {
+                let (a, b) = (i as i64 + di, j as i64 + dj);
+                if a < 0 || b < 0 || a >= n as i64 || b >= n as i64 {
+                    continue;
+                }
+                let c = b as usize * n + a as usize;
+                let h = match wall[c] {
+                    _ if site && blocked[c] => Some(ROCK_HARD),
+                    Some(stuff) => Some(hardness(stuff)),
+                    None => None,
+                };
+                if let Some(h) = h {
+                    hard[r as usize].0 += h;
+                    hard[r as usize].1 += 1;
+                }
+            }
+        }
+        g.smear = (0..g.rooms)
+            .map(|r| {
+                if r == OUTSIDE as usize || hard[r].1 == 0 {
+                    return 1.0;
+                }
+                let m2 = area[r] as f32 * CELL * CELL;
+                1.0 + hard[r].0 / hard[r].1 as f32 * (m2 / SMEAR_AREA).min(1.0)
+            })
+            .collect();
         g.solve();
         Some(g)
     }
@@ -495,6 +536,20 @@ impl Graph {
     }
 }
 
+/// A room this big (m²) rings as much as its walls let it.
+const SMEAR_AREA: f32 = 100.0;
+/// How much a wall of each kind rings (adds to a room's smear at full
+/// size): the rock round a site's galleries most, timber least.
+const ROCK_HARD: f32 = 1.5;
+fn hardness(stuff: Stuff) -> f32 {
+    match stuff {
+        Stuff::Stone | Stuff::Metal => 1.0,
+        Stuff::Glass => 0.8,
+        Stuff::Wood => 0.6,
+        Stuff::Skin | Stuff::Wire => 0.2,
+    }
+}
+
 /// Every building's graph, and where to find them.
 #[derive(Resource, Default)]
 pub struct Hearing {
@@ -558,13 +613,58 @@ impl Hearing {
 
     /// How a sound made at `from` reaches an ear at `to`: the dB it loses
     /// on the way and the muffle that goes with it. The same answer for
-    /// the player's ears and a robot's.
-    pub fn path(&self, zone: Option<&Zone>, from: Vec3, to: Vec3) -> Occlusion {
-        occlusion(self.loss(zone, from, to))
+    /// the player's ears and a robot's. Out in the open on both ends,
+    /// `blocked` is asked (once) whether anything but a building stands
+    /// between (a compound wall, an outcrop, a wreck: `acoustics::blocked`,
+    /// two rays); `None` asks only the heightmap.
+    pub fn path(
+        &self,
+        zone: Option<&Zone>,
+        from: Vec3,
+        to: Vec3,
+        blocked: Option<&dyn Fn(Vec3, Vec3) -> bool>,
+    ) -> Occlusion {
+        occlusion(self.loss(zone, from, to, blocked))
+    }
+
+    /// How much where a sound at `at` seems to come from is smeared by
+    /// the room it rings in, for a robot's guess (`robots::senses`,
+    /// `HEARD_SPREAD`): 1 in the open or a small soft room, up to 2 in a
+    /// big hard hall, 2.5 in a rock gallery.
+    pub fn smear(&self, at: Vec3) -> f32 {
+        match self.place(at) {
+            Place::In(g, room, _) => self.graphs[g].smear[room as usize],
+            Place::Out => 1.0,
+        }
+    }
+
+    #[cfg(test)]
+    fn loss_open(&self, from: Vec3, to: Vec3) -> f32 {
+        self.loss(None, from, to, None)
+    }
+
+    /// [`Self::path`], and whether anything stands in the way beyond an
+    /// open doorway (a wall, a shut door, the rock, a hill): what the
+    /// robots' ears call "through a wall".
+    pub fn heard(
+        &self,
+        zone: Option<&Zone>,
+        from: Vec3,
+        to: Vec3,
+        blocked: Option<&dyn Fn(Vec3, Vec3) -> bool>,
+    ) -> (Occlusion, bool) {
+        let loss = self.loss(zone, from, to, blocked);
+        (occlusion(loss), loss > DOORWAY_LOSS + 0.01)
     }
 
     /// The dB a sound loses from `from` to `to`.
-    pub fn loss(&self, zone: Option<&Zone>, from: Vec3, to: Vec3) -> f32 {
+    pub fn loss(
+        &self,
+        zone: Option<&Zone>,
+        from: Vec3,
+        to: Vec3,
+        blocked: Option<&dyn Fn(Vec3, Vec3) -> bool>,
+    ) -> f32 {
         let (a, b) = (self.place(from), self.place(to));
         match (a, b) {
             (Place::In(g, r1, s1), Place::In(h, r2, s2)) if g == h => {
@@ -573,11 +673,11 @@ impl Hearing {
                 graph.loss(r1, r2) + floors
             }
             (Place::Out, Place::Out) => {
-                if zone.is_some_and(|z| over_a_hill(z, from, to)) {
-                    hill_loss()
-                } else {
-                    0.0
-                }
+                let cut = match blocked {
+                    Some(b) => b(from, to),
+                    None => zone.is_some_and(|z| over_a_hill(z, from, to)),
+                };
+                if cut { hill_loss() } else { 0.0 }
             }
             _ => self.out_of(a) + self.out_of(b),
         }
@@ -739,13 +839,13 @@ mod tests {
         let p3 = |p: Vec2, up: f32| Vec3::new(p.x, f + 1.3 + up, p.y);
         let h_open = Hearing::from_graphs(vec![open]);
         let h_shut = Hearing::from_graphs(vec![shut]);
-        let lo = h_open.loss(None, p3(pa, 0.0), p3(pb, 0.0));
-        let ls = h_shut.loss(None, p3(pa, 0.0), p3(pb, 0.0));
+        let lo = h_open.loss_open(p3(pa, 0.0), p3(pb, 0.0));
+        let ls = h_shut.loss_open(p3(pa, 0.0), p3(pb, 0.0));
         assert!(lo <= DOORWAY_LOSS + 1e-3, "open {lo}");
         assert!(ls > lo && ls <= door + 1e-3, "shut {ls} open {lo}");
         // Same room: nothing lost; a storey up, a floor's.
-        assert_eq!(h_open.loss(None, p3(pa, 0.0), p3(pa, 0.0)), 0.0);
-        let up = h_open.loss(None, p3(pa, 0.0), p3(pa, STOREY));
+        assert_eq!(h_open.loss_open(p3(pa, 0.0), p3(pa, 0.0)), 0.0);
+        let up = h_open.loss_open(p3(pa, 0.0), p3(pa, STOREY));
         assert!((up - wall_loss(Stuff::Wood)).abs() < 1e-3, "upstairs {up}");
         // A house's inside from its yard, door shut: its door or a wall.
         let house = graph("house_brick", false);
@@ -753,8 +853,11 @@ mod tests {
         let floor = house.floor;
         let h = Hearing::from_graphs(vec![house]);
         let yard = Vec3::new(0.0, floor + 1.3, 30.0);
-        let l = h.loss(None, Vec3::new(inside.x, floor + 1.3, inside.y), yard);
-        assert!(l > DOORWAY_LOSS && l <= wall_loss(Stuff::Stone) + 1e-3, "house {l}");
+        let l = h.loss_open(Vec3::new(inside.x, floor + 1.3, inside.y), yard);
+        assert!(
+            l > DOORWAY_LOSS && l <= wall_loss(Stuff::Stone) + 1e-3,
+            "house {l}"
+        );
         // A site below: its deepest room from the ground over it.
         let id = extraction_core::underground::SITES[0].0;
         let site = graph(id, true);
@@ -775,9 +878,34 @@ mod tests {
         let h = Hearing::from_graphs(vec![site]);
         let below = Vec3::new(c.x, y + 1.3, c.y);
         let above = Vec3::new(c.x, 1.3, c.y);
-        let l = h.loss(None, below, above);
-        assert!(l > 0.0 && l <= ROCK_LOSS + 1e-3, "{id} room at {y} from the surface: {l}");
-        eprintln!("set pairs: door open {lo:.1} / shut {ls:.1} dB, upstairs {up:.1}, \
-            house from its yard (shut) see above, {id} at {y:.0} m from the surface {l:.1} dB");
+        let l = h.loss_open(below, above);
+        assert!(
+            l > 0.0 && l <= ROCK_LOSS + 1e-3,
+            "{id} room at {y} from the surface: {l}"
+        );
+        eprintln!(
+            "set pairs: door open {lo:.1} / shut {ls:.1} dB, upstairs {up:.1}, \
+            house from its yard (shut) see above, {id} at {y:.0} m from the surface {l:.1} dB"
+        );
+    }
+
+    /// The open air doesn't smear; a room does, a rock gallery most.
+    #[test]
+    fn rooms_smear() {
+        let house = graph("house_plank", true);
+        let inside = somewhere_in(&house, 1).unwrap();
+        let f = house.floor;
+        let h = Hearing::from_graphs(vec![house]);
+        assert_eq!(h.smear(Vec3::new(40.0, 1.0, 40.0)), 1.0);
+        let room = h.smear(Vec3::new(inside.x, f + 1.3, inside.y));
+        assert!(room > 1.0 && room < 2.0, "a house room {room}");
+        let id = extraction_core::underground::SITES[0].0;
+        let site = graph(id, true);
+        let most = site.smear.iter().cloned().fold(1.0f32, f32::max);
+        assert!(
+            most > room,
+            "{id}'s biggest room {most} over a house's {room}"
+        );
+        assert!(most <= 1.0 + ROCK_HARD + 1e-3);
     }
 }

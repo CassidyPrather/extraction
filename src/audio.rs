@@ -5054,8 +5054,10 @@ fn occlude(
     hush: Res<HushNow>,
     hearing: Res<crate::hearing::Hearing>,
     zone: Option<Res<Zone>>,
+    spatial: SpatialQuery,
     time: Res<Time>,
 ) {
+    let blocked = |a: Vec3, b: Vec3| crate::acoustics::blocked(&spatial, a, b);
     let Some(head) = listener.iter().next() else {
         return;
     };
@@ -5076,7 +5078,7 @@ fn occlude(
         // The way the robots hear it too (`hearing`): round doors, through
         // walls by what they're built of, up through floors and rock.
         let o = || {
-            let mut o = hearing.path(zone.as_deref(), gt.translation(), ear);
+            let mut o = hearing.path(zone.as_deref(), gt.translation(), ear, Some(&blocked));
             o.cutoff = o.cutoff.min(hush.cutoff);
             o
         };
