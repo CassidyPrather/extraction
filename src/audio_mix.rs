@@ -278,6 +278,8 @@ pub const MIX: &[Cue] = &[
     cue!("ug.breath_thud", "machines/clank", -6.4, 45.0, 3.0, Detail, 1.5),
     cue!("ug.breath_creak", "machines/groan", -22.0, 40.0, 3.0, Detail, 1.5),
     cue!("ug.breath_metal", "guns/casing", -3.8, 38.0, 3.0, Detail, 1.5),
+    cue!("ug.breath_rattle", "machines/clank", -6.9, 40.0, 3.0, Detail, 1.5),
+    cue!("ug.breath_servo", "machines/servo", -12.7, 40.0, 3.0, Detail, 1.5),
     cue!("ug.breath_rope", "physical/door_creak", -11.5, 40.0, 3.0, Detail, 1.5),
     cue!("grenade.pin", "guns/safety", -8.0, 60.0, 0.5, Detail),
     cue!("grenade.scrape", "physical/handle_metal", -15.0, 50.0, 0.5, Detail),

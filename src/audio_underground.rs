@@ -1358,6 +1358,16 @@ const BREATHS: &[(&str, &[Breath])] = &[
             },
         ],
     ),
+    // The robots' depot: the sorting halls, occupied: a conveyor's
+    // distant rattle, a gantry's hum, now and then a servo.
+    (
+        "depot_marrow",
+        &[
+            bed("ug.breath_mains", 0.8, None),
+            spot("ug.breath_rattle", (0.15, 0.4), (0.9, 1.3)),
+            spot("ug.breath_servo", (3.0, 9.0), (0.7, 0.9)),
+        ],
+    ),
     // The winze: wind down the drift, the cage's rope creaking.
     (
         "adit_rime",
@@ -1556,6 +1566,7 @@ mod tests {
             "cellars_cinder",
             "gallery_sallow",
             "adit_rime",
+            "depot_marrow",
         ] {
             assert!(!breath(id).is_empty(), "{id} has no breath");
         }

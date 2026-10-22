@@ -925,7 +925,8 @@ moan, drips, the timbers creaking; the deep workings add the firedamp's
 faint hiss. The cinder tunnel: the mains' hum and a cable's buzz. The
 furnace cellars: a warm roar and metal ticking. The dam gallery: water
 seeping, every drop answered late and faint down its length. The winze:
-wind down the drift and the cage's rope creaking. Every layer is a
+wind down the drift and the cage's rope creaking. The robots' depot, occupied:
+a gantry's hum, a conveyor's distant rattle, now and then a servo. Every layer is a
 `ug.breath_*` line, its low-pass in `CUE_LOWPASS`.
 
 **Audited** (`scripts/audio_audit.py`; `ug.gurgle`, `ug.whump` and
