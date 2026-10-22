@@ -188,13 +188,19 @@ mod tests {
         let f = &mut g.firearm;
         let mut loads = Loads::default();
         loads.fill(0, load, n);
-        f.insert_magazine(Magazine {
-            family: family.into(),
-            capacity: n,
-            rounds: n,
-            loads,
-        })
-        .unwrap();
+        if f.def.magazine_family.is_some() {
+            f.insert_magazine(Magazine {
+                family: family.into(),
+                capacity: n,
+                rounds: n,
+                loads,
+            })
+            .unwrap();
+        } else {
+            // A fixed magazine: rounds straight in.
+            f.internal_rounds = n.min(f.def.internal_capacity);
+            f.internal_loads = loads;
+        }
         f.set_bolt_travel(1.0);
         f.release_bolt();
         while f.fire_mode() != FireMode::Semi {
@@ -324,5 +330,60 @@ mod tests {
         assert!(last > first * 1.3, "{last} vs {first}");
         assert!(worn < 0.4, "{worn}");
         assert!(fouled > 25.0 * per * 1.5, "{fouled}");
+    }
+
+    /// An SVD fired from the hand at nothing, a drone hanging 200 m down
+    /// the line and 8 m off it. Bare, it hears the report and looks back
+    /// toward the shooter; under the PBS the report doesn't reach it, only
+    /// the crack going by, and it looks for the shooter out by itself.
+    #[test]
+    fn the_crack_sends_a_robot_downrange_the_wrong_way() {
+        let heard_at = |can: bool| -> (Vec3, Vec3) {
+            let mut r = hold("svd", false, false);
+            if can {
+                fit(&mut r, "pbs_suppressor");
+            }
+            load_with(&mut r, "svd", 5, Load::Standard);
+            r.vr.step(3);
+            let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            let (muzzle, fwd) = (gt.translation(), gt.forward().as_vec3());
+            let side = fwd.cross(Vec3::Y).normalize();
+            let at = muzzle + fwd * 200.0 + side * 8.0;
+            let drone = {
+                let mut commands = r.vr.app.world_mut().commands();
+                let job = crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site: at,
+                    duration: 1.0e6,
+                    exit: at,
+                };
+                crate::robots::drone::spawn_drone(&mut commands, at, job)
+            };
+            r.vr.app.world_mut().flush();
+            r.vr.app
+                .world_mut()
+                .entity_mut(drone)
+                .insert((RigidBody::Static, Transform::from_translation(at)));
+            r.vr.step(5);
+            one_shot(&mut r);
+            let aware =
+                r.vr.app
+                    .world()
+                    .get::<crate::robots::Awareness>(drone)
+                    .unwrap();
+            (aware.last_known.expect("it heard something"), muzzle)
+        };
+        let (bare, muzzle) = heard_at(false);
+        println!(
+            "bare: it looks {:.0} m from the shooter",
+            bare.distance(muzzle)
+        );
+        assert!(bare.distance(muzzle) < 80.0, "the report gives you away");
+        let (quiet, muzzle) = heard_at(true);
+        println!(
+            "suppressed: it looks {:.0} m from the shooter",
+            quiet.distance(muzzle)
+        );
+        assert!(quiet.distance(muzzle) > 150.0, "the crack misleads it");
     }
 }
