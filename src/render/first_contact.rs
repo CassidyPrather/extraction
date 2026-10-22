@@ -131,9 +131,9 @@ impl Loading {
     }
 }
 
-/// A valley's client, loaded and settled (and how long it took), with
-/// what arrives each frame noted.
-fn loaded_app(map: &str) -> (App, Loading) {
+/// A valley's client, loaded (and how long it took), with what arrives
+/// each frame noted; settled too (for a walk) if `settled`.
+fn loaded_app(map: &str, settled: bool) -> (App, Loading) {
     profile();
     let t = Instant::now();
     let mut app = client_threads(map, "clearing", None);
@@ -188,6 +188,9 @@ fn loaded_app(map: &str) -> (App, Loading) {
         warm: warm.unwrap_or(f64::INFINITY),
         frames,
     };
+    if !settled {
+        return (app, loading);
+    }
     settle(&mut app);
     // What's settling keeps arriving a while: until a second's quiet.
     let mut quiet = 0;
@@ -278,7 +281,7 @@ pub(crate) struct Contact {
 /// A valley walked twice: (first-pass worst, steady worst, the first
 /// contacts, the stops).
 pub(crate) fn walk(map: &str) -> (f64, f64, Vec<Contact>, usize) {
-    walk_app(loaded_app(map).0)
+    walk_app(loaded_app(map, true).0)
 }
 
 /// `walk`, on a valley's loaded client.
@@ -423,7 +426,13 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
     let mut wrong = Vec::new();
     for map in maps() {
         let t = Instant::now();
-        let (mut app, l) = loaded_app(&map);
+        let walked = std::env::var("FIRST_WALK").is_ok_and(|v| v == "all")
+            || std::env::var("FIRST_MAP").is_ok()
+            || map == "marrow_creek";
+        // Settled either way: the VRAM count wants what streams in after
+        // the load (ground cover, the forest's pieces: a third of the
+        // meshes).
+        let (mut app, l) = loaded_app(&map, true);
         let budget = LOAD_BUDGET
             .iter()
             .find(|(m, _)| *m == map)
@@ -451,9 +460,6 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
                 super::vram::VRAM_BUDGET as f64 / super::vram::MB
             ));
         }
-        let walked = std::env::var("FIRST_WALK").is_ok_and(|v| v == "all")
-            || std::env::var("FIRST_MAP").is_ok()
-            || map == "marrow_creek";
         if !walked {
             println!("  ({map}: {:.0} s in all)", t.elapsed().as_secs_f64());
             continue;
