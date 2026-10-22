@@ -29,16 +29,20 @@ pub enum AnomalyKind {
     /// a shot or a step, and nothing inside hears anything. Stay too long
     /// and the silence presses on you.
     Hush,
+    /// Still cold that steals heat: in it you stiffen, slower and slower,
+    /// to a crawl, and at the last it bites. A live hearth keeps it off.
+    Frost,
 }
 
 impl AnomalyKind {
-    pub const ALL: [AnomalyKind; 6] = [
+    pub const ALL: [AnomalyKind; 7] = [
         AnomalyKind::Lift,
         AnomalyKind::Burner,
         AnomalyKind::Snare,
         AnomalyKind::Well,
         AnomalyKind::Mirror,
         AnomalyKind::Hush,
+        AnomalyKind::Frost,
     ];
 
     /// What the Surge scatters each cycle. Wells and mirrors don't move:
@@ -61,6 +65,7 @@ impl AnomalyKind {
             AnomalyKind::Well => "art_lodestone",
             AnomalyKind::Mirror => "art_shard",
             AnomalyKind::Hush => "art_hushstone",
+            AnomalyKind::Frost => "art_rimestone",
         }
     }
 
@@ -73,6 +78,7 @@ impl AnomalyKind {
             AnomalyKind::Well => (1.6, 2.4),
             AnomalyKind::Mirror => (1.2, 1.8),
             AnomalyKind::Hush => (2.5, 4.0),
+            AnomalyKind::Frost => (2.5, 3.5),
         }
     }
 
@@ -213,6 +219,62 @@ pub fn hushed(at: [f32; 3], hushes: &[([f32; 3], f32)]) -> bool {
 /// What `secs` seconds in a Hush cost, health a second.
 pub fn hush_press(secs: f32) -> f32 {
     if secs > HUSH_GRACE { HUSH_PRESS } else { 0.0 }
+}
+
+// --- Frosts ----------------------------------------------------------------
+
+/// Chill a second at a frost's heart (0..1: at 1 you're at its worst):
+/// about three seconds from warm to stiff.
+pub const FROST_CHILL: f32 = 0.35;
+/// And at its edge.
+pub const FROST_CHILL_EDGE: f32 = 0.12;
+/// Chill shed a second out of it.
+pub const FROST_THAW: f32 = 0.25;
+/// How much of your pace full chill takes: never all of it, so you can
+/// always crawl out.
+pub const FROST_SLOW: f32 = 0.85;
+/// Chill at which you're told your legs are going.
+pub const FROST_WARN: f32 = 0.4;
+/// Health a second it takes at full chill.
+pub const FROST_BITE: f32 = 6.0;
+/// A live hearth on you: chill builds at this share of the rate, and never
+/// past `FROST_HEARTH_CAP` (it never bites).
+pub const FROST_HEARTH: f32 = 0.25;
+pub const FROST_HEARTH_CAP: f32 = 0.3;
+/// A live rimestone on you keeps this much chill on you always (a little
+/// slower), and a burner's heat can't touch you.
+pub const RIMESTONE_CHILL: f32 = 0.15;
+
+/// Chill a second `d` from a frost's centre (radius `r`): its heart is
+/// coldest; nothing outside it.
+pub fn frost_rate(d: f32, r: f32) -> f32 {
+    if d >= r {
+        return 0.0;
+    }
+    FROST_CHILL_EDGE + (FROST_CHILL - FROST_CHILL_EDGE) * (1.0 - d / r)
+}
+
+/// One step of a body's chill: `inside_rate` from [`frost_rate`] (0 out of
+/// any frost), with or without a live hearth or rimestone on it.
+pub fn chill_step(chill: f32, inside_rate: f32, hearth: bool, rimestone: bool, dt: f32) -> f32 {
+    let floor = if rimestone { RIMESTONE_CHILL } else { 0.0 };
+    let next = if inside_rate > 0.0 {
+        let rate = if hearth {
+            inside_rate * FROST_HEARTH
+        } else {
+            inside_rate
+        };
+        let cap = if hearth { FROST_HEARTH_CAP } else { 1.0 };
+        (chill + rate * dt).min(cap.max(chill))
+    } else {
+        chill - FROST_THAW * dt
+    };
+    next.clamp(floor, 1.0)
+}
+
+/// Pace kept at `chill`.
+pub fn frost_pace(chill: f32) -> f32 {
+    1.0 - FROST_SLOW * chill.clamp(0.0, 1.0)
 }
 
 // --- Mirrors ---------------------------------------------------------------
@@ -831,7 +893,11 @@ mod tests {
         let (map, hm) = marrow();
         let all = layout(&map, &hm, 1, 0);
         let blockers = sight_blockers(&map, &hm);
+        // Every kind the valley has (a frost is Rime Fell's own).
         for kind in AnomalyKind::ALL {
+            if !all.iter().any(|a| a.kind == kind) {
+                continue;
+            }
             let view = all
                 .iter()
                 .filter(|a| a.kind == kind)
@@ -843,6 +909,36 @@ mod tests {
             let ahead = [v.at[0] + s * 20.0, v.at[1] - c * 20.0];
             assert!(geom::dist(ahead, a.at) < 0.05, "{kind:?}: looks away");
         }
+    }
+
+    #[test]
+    fn a_frost_stiffens_you_to_a_crawl_and_a_hearth_keeps_it_off() {
+        let dt = 1.0 / 90.0;
+        let soak = |hearth: bool, secs: f32| {
+            let mut c = 0.0;
+            for _ in 0..(secs / dt) as usize {
+                c = chill_step(c, frost_rate(0.0, 3.0), hearth, false, dt);
+            }
+            c
+        };
+        let three = soak(false, 3.0);
+        assert!(
+            three > 0.95,
+            "three seconds at its heart and you're stiff ({three})"
+        );
+        assert!(frost_pace(1.0) > 0.1, "but you can always crawl");
+        assert!(
+            soak(true, 60.0) <= FROST_HEARTH_CAP + 1e-4,
+            "a hearth: never past its cap"
+        );
+        assert!(frost_pace(FROST_HEARTH_CAP) > 0.7);
+        assert_eq!(frost_rate(3.1, 3.0), 0.0, "nothing outside it");
+        // Out of it you thaw, but a rimestone keeps a little cold on you.
+        let mut c = 1.0;
+        for _ in 0..(10.0 / dt) as usize {
+            c = chill_step(c, 0.0, false, true, dt);
+        }
+        assert!((c - RIMESTONE_CHILL).abs() < 1e-4);
     }
 
     #[test]
