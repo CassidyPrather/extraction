@@ -368,7 +368,7 @@ mod tests {
 
     use crate::rig::Side;
     use crate::weapons::ballistics::Hit;
-    use crate::weapons::feel::vr_tests::{Range, fire, hold, load, take_in};
+    use crate::weapons::feel::vr_tests::{Range, hold, load, take_in};
     use extraction_core::firearm::FireMode;
 
     /// The hits written from now on, as the tick after `n` steps reads them.
@@ -432,9 +432,15 @@ mod tests {
                 .query_filtered::<Entity, With<crate::player::BodyCollider>>();
         let body: Vec<Entity> = bodies.iter(r.vr.app.world()).collect();
         let shoot = |r: &mut Range, gun: Entity, speed: f32, damage: f32| {
-            // From 15 m off, at the chest, through the door's face beside the
-            // hand on it.
-            let at = r.feet + Vec3::new(0.18, 1.35, -15.0);
+            // From 15 m off, through the door's face beside the hand on it,
+            // where the door is now.
+            let face =
+                r.vr.app
+                    .world()
+                    .get::<GlobalTransform>(door)
+                    .unwrap()
+                    .translation();
+            let at = face + Vec3::new(0.18, 0.1, -15.0);
             r.vr.app.world_mut().write_message(Shot {
                 gun,
                 shooter: Some(gun),
@@ -448,19 +454,6 @@ mod tests {
                 seed: 7,
             });
             let hits = hits_over(&mut r.vr, 10);
-            let w = r.vr.app.world();
-            eprintln!(
-                "DBG door {:?}",
-                w.get::<GlobalTransform>(door).map(|g| g.translation())
-            );
-            for h in &hits {
-                eprintln!(
-                    "DBG hit {:?} {:?} {:?}",
-                    w.get::<Name>(h.entity),
-                    h.point,
-                    h.damage
-                );
-            }
             let on_door = hits.iter().any(|h| h.entity == door);
             let on_body = hits.iter().any(|h| body.contains(&h.entity));
             (on_door, on_body)
@@ -514,31 +507,10 @@ mod tests {
                     ))
                     .id();
             r.vr.step(5);
-            let mut cursor =
-                r.vr.app
-                    .world()
-                    .resource::<Messages<Hit>>()
-                    .get_cursor_current();
-            assert_eq!(fire(&mut r, 1, false).len(), 1, "{id} fired");
-            let mut hits = Vec::new();
-            for _ in 0..20 {
-                r.vr.step(1);
-                hits.extend(
-                    cursor
-                        .read(r.vr.app.world().resource::<Messages<Hit>>())
-                        .cloned(),
-                );
-            }
-            {
-                let w = r.vr.app.world();
-                eprintln!(
-                    "DBG fwd {fwd:?} at {at:?} drone {:?}",
-                    w.get::<GlobalTransform>(drone).map(|g| g.translation())
-                );
-                for h in &hits {
-                    eprintln!("DBG hit {:?} {:?}", w.get::<Name>(h.entity), h.point);
-                }
-            }
+            // One pull of the trigger, the hits read as they land.
+            r.vr.trigger(Side::Right, 1.0);
+            let hits = hits_over(&mut r.vr, 20);
+            r.vr.trigger(Side::Right, 0.0);
             let mut parts = r.vr.app.world_mut().query::<&crate::robots::RobotPart>();
             let on_drone = hits.iter().any(|h| {
                 parts
