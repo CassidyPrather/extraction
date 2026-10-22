@@ -359,6 +359,13 @@ pub fn kinds_in_sight(
     kinds.len()
 }
 
+/// Whether `p` is further than `edge` into a wood.
+pub fn deep_in_woods(map: &MapDef, p: P2, edge: f32) -> bool {
+    map.forests.iter().any(|f| {
+        geom::point_in_polygon(&f.polygon, p) && geom::polygon_edge_distance(&f.polygon, p) > edge
+    })
+}
+
 /// Where orientation is gauged: walkable ground (on `walk`, every `step`
 /// metres) inside the valley's regions, less what's deeper than `edge`
 /// into a wood (nothing's in sight there in any valley: you steer by its
@@ -382,10 +389,7 @@ pub fn gauge_cells(
             {
                 continue;
             }
-            if map.forests.iter().any(|f| {
-                geom::point_in_polygon(&f.polygon, p)
-                    && geom::polygon_edge_distance(&f.polygon, p) > edge
-            }) {
+            if deep_in_woods(map, p, edge) {
                 deep += 1;
                 continue;
             }
@@ -393,6 +397,28 @@ pub fn gauge_cells(
         }
     }
     (out, deep)
+}
+
+/// A rendezvous's beacon: a pole with a steady green lamp (the game's
+/// `world::rv_beacon`), so the way out can be found from the valley side
+/// before the truck's there. It stands this far off the side of where the
+/// truck parks (`raid::truck::rv_pose`: its bed toward the map's middle)...
+pub const BEACON_OFF: f32 = 7.0;
+/// ...its lamp this high.
+pub const BEACON_HEIGHT: f32 = 6.5;
+
+/// Where the beacon of the rendezvous at `rv` stands.
+pub fn beacon_at(rv: P2) -> P2 {
+    let l = (rv[0] * rv[0] + rv[1] * rv[1]).sqrt();
+    let inward = if l > 1e-3 {
+        [-rv[0] / l, -rv[1] / l]
+    } else {
+        [0.0, 1.0]
+    };
+    [
+        rv[0] - inward[1] * BEACON_OFF,
+        rv[1] + inward[0] * BEACON_OFF,
+    ]
 }
 
 /// Whether any landmark's top is in sight from `p` within `range`.

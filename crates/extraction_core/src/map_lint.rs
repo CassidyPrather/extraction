@@ -292,6 +292,14 @@ pub const REGION_MARK: f32 = 6.0;
 /// `POCKET` square).
 pub const TWO_MARKS_SHARE: f32 = 0.9;
 pub const TWO_MARKS_STEP: f32 = 8.0;
+/// A rendezvous's beacon is in sight from this share of the last
+/// [`BEACON_APPROACH`] of the main route in to it (measured too: the ground
+/// within [`BEACON_SIGHT`]).
+pub const BEACON_SHARE: f32 = 0.7;
+/// A landmark this near a rendezvous marks it as its beacon does.
+pub const RV_MARK: f32 = 60.0;
+pub const BEACON_APPROACH: f32 = 300.0;
+pub const BEACON_SIGHT: f32 = 250.0;
 /// Further into a wood than this from its edge is deep in it.
 pub const WOOD_EDGE: f32 = 25.0;
 const POCKET: f32 = 40.0;
@@ -1299,6 +1307,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // trees (in VR there's no glancing at a map).
     let canopy = crate::map_landmarks::Canopy::new(map, hm);
     let (spots, deep) = crate::map_landmarks::gauge_cells(map, &walk, TWO_MARKS_STEP, WOOD_EDGE);
+    let gauge = spots.clone();
     let cells = spots.len();
     let (mut two, mut two_fog) = (0usize, 0usize);
     let mut blind: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
@@ -1371,6 +1380,58 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 .map_or("none".into(), |(n, d)| format!("{n} {d:.0} m")),
             if fog { "" } else { " (none in fog)" }
         ));
+        // Its beacon from the valley side: the ground within reach of it
+        // that has it in sight over the land and the trees, and the last
+        // stretch of the way in to it.
+        let beacon = crate::map_landmarks::beacon_at(m.at);
+        let top = hm.height(beacon) + crate::map_landmarks::BEACON_HEIGHT;
+        // A landmark standing at the rendezvous marks it as well as its
+        // beacon does (the fire lookout's tower, with its lamp).
+        let own: Vec<&crate::map_landmarks::Landmark> = marks
+            .iter()
+            .filter(|l| l.tops.iter().any(|t| dist(t.0, m.at) <= RV_MARK))
+            .collect();
+        let lit = |p: P2| {
+            (sees(hm, p, beacon, crate::map_landmarks::BEACON_HEIGHT)
+                && !canopy.hides(hm, p, beacon, top))
+                || own
+                    .iter()
+                    .any(|l| l.seen_through(hm, &canopy, p, BEACON_APPROACH).is_some())
+        };
+        let near: Vec<P2> = gauge
+            .iter()
+            .copied()
+            .filter(|p| dist(*p, beacon) <= BEACON_SIGHT)
+            .collect();
+        let around = near.iter().filter(|p| lit(**p)).count() as f32 / near.len().max(1) as f32;
+        let approach: Vec<P2> = routes
+            .iter()
+            .filter(|rt| rt.to == m.name)
+            .flat_map(|rt| rt.points.iter().copied())
+            .filter(|p| dist(*p, m.at) <= BEACON_APPROACH && dist(*p, m.at) > TRUCK_APPROACH)
+            // (Deep in a wood nothing's in sight: as for the gauge.)
+            .filter(|p| !crate::map_landmarks::deep_in_woods(map, *p, WOOD_EDGE))
+            .collect();
+        let way_in =
+            approach.iter().filter(|p| lit(**p)).count() as f32 / approach.len().max(1) as f32;
+        r.measures.push(format!(
+            "rendezvous {}: its beacon (or its own landmark) in sight from {:.0}% of the way in (the last {BEACON_APPROACH:.0} m, out of the deep woods), {:.0}% of the ground within {BEACON_SIGHT:.0} m",
+            m.name,
+            way_in * 100.0,
+            around * 100.0
+        ));
+        if !approach.is_empty() && way_in < BEACON_SHARE {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!(
+                    "{}'s beacon is in sight from only {:.0}% of the last {BEACON_APPROACH:.0} m in",
+                    m.name,
+                    way_in * 100.0
+                ),
+                beacon,
+            );
+        }
         if seen.first().is_none_or(|s| s.1 > RV_LANDMARK) {
             find(
                 &mut r,

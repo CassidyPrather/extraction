@@ -404,7 +404,14 @@
         (
             name: "Arm birches", seed: 99, density: 0.9, undergrowth: 0.4,
             mix: [(Birch, 0.8), (Snag, 0.2)],
-            polygon: [(-282.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-282.0, -250.0)],
+            // Open round Sallow Head's turning place, so its beacon's in
+            // sight on the way in.
+            polygon: [(-282.0, -282.0), (-240.0, -282.0), (-240.0, -251.0), (-282.0, -250.0)],
+        ),
+        (
+            name: "Arm birches east", seed: 141, density: 0.9, undergrowth: 0.4,
+            mix: [(Birch, 0.8), (Snag, 0.2)],
+            polygon: [(-160.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-160.0, -255.0)],
         ),
         // The spruce round the Gate.
         (

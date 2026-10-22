@@ -45,7 +45,7 @@ const DAY_R: f32 = 1.4;
 
 /// A lamp's daytime glow.
 #[derive(Component)]
-struct DayGlow;
+pub(crate) struct DayGlow;
 
 /// The highest point of a prefab, in its own frame: the top middle of its
 /// highest piece.
@@ -137,7 +137,7 @@ fn light_landmarks(
 
 /// A disc of light fading from the middle to nothing at its edge (white;
 /// the material tints it).
-fn falloff() -> Image {
+pub(crate) fn falloff() -> Image {
     const N: u32 = 64;
     let mut data = Vec::with_capacity((N * N * 4) as usize);
     for y in 0..N {
