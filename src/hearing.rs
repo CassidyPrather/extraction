@@ -586,6 +586,9 @@ pub struct Hearing {
     valley: Valley,
 }
 
+/// The valley grid's cell (m).
+const VALLEY_CELL: f32 = 8.0;
+
 /// The ground's smear on a grid over the map.
 #[derive(Default)]
 struct Valley {
@@ -596,13 +599,13 @@ struct Valley {
 
 impl Valley {
     fn of(zone: &Zone) -> Self {
-        use crate::weapons::reverb::{CELL, valley_smear};
-        let n = (zone.map.size / CELL).ceil() as usize;
+        use crate::weapons::reverb::valley_smear;
+        let n = (zone.map.size / VALLEY_CELL).ceil() as usize;
         let origin = -zone.map.size * 0.5;
         let smear = (0..n * n)
             .map(|k| {
-                let x = origin + ((k % n) as f32 + 0.5) * CELL;
-                let z = origin + ((k / n) as f32 + 0.5) * CELL;
+                let x = origin + ((k % n) as f32 + 0.5) * VALLEY_CELL;
+                let z = origin + ((k / n) as f32 + 0.5) * VALLEY_CELL;
                 valley_smear(|x, z| zone.ground(x, z), x, z)
             })
             .collect();
@@ -610,7 +613,7 @@ impl Valley {
     }
 
     fn at(&self, p: Vec3) -> f32 {
-        let cell = crate::weapons::reverb::CELL;
+        let cell = VALLEY_CELL;
         let (i, j) = ((p.x - self.origin) / cell, (p.z - self.origin) / cell);
         if self.n == 0 || i < 0.0 || j < 0.0 || i as usize >= self.n || j as usize >= self.n {
             return 1.0;

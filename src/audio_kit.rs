@@ -36,6 +36,7 @@ impl Plugin for KitSoundsPlugin {
             .add_message::<Dragged>()
             .add_message::<ActionGrind>()
             .add_message::<Lit>()
+            .add_message::<crate::weapons::gunsmith::Worked>()
             .add_systems(
                 Update,
                 (
@@ -50,6 +51,7 @@ impl Plugin for KitSoundsPlugin {
                     flare_burns,
                     treatment_sounds,
                     frost_sounds,
+                    gunsmith_sounds,
                 ),
             );
     }
@@ -550,6 +552,62 @@ fn frost_sounds(
     }
 }
 
+/// A cut's strokes after which the blade is through a barrel's wall: the
+/// rasp's pitch rises over them as the cut deepens.
+const SAW_DEEP: f32 = 24.0;
+
+/// Gunsmithing at the vice (`weapons::gunsmith::Worked`): the jaws
+/// closing on a gun (a vice's clunk); each hacksaw stroke's rasp, rising
+/// as the cut deepens; the snap as it goes through (the offcut's landing
+/// is its own, as scrap); a stock screw's squeak each quarter turn; the
+/// stock lifting off and seating back (wood on steel); a bolt drawn out
+/// and slid home.
+fn gunsmith_sounds(
+    mut commands: Commands,
+    mut worked: MessageReader<crate::weapons::gunsmith::Worked>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut strokes: Local<HashMap<Entity, (f32, f32)>>,
+) {
+    use crate::weapons::gunsmith::Work;
+    let now = time.elapsed_secs();
+    // A cut left off a while is a cut started again.
+    strokes.retain(|_, (_, last)| now - *last < 10.0);
+    for w in worked.read() {
+        let (set, cue, speed) = match w.what {
+            Work::Clamped => ("machines/clank", "smith.clamp", 0.75),
+            Work::SawStroke => {
+                let (n, last) = strokes.entry(w.gun).or_insert((0.0, now));
+                *n += 1.0;
+                *last = now;
+                let deep = (*n / SAW_DEEP).min(1.0) as f64;
+                ("physical/handle_metal", "smith.saw", 1.25 + 0.3 * deep)
+            }
+            Work::Cut => {
+                strokes.remove(&w.gun);
+                ("impacts/metal", "smith.cut", 1.6)
+            }
+            Work::ScrewTurn => ("physical/door_creak", "smith.screw", 2.2),
+            Work::StockOff => ("physical/handle_wood", "smith.stock", 1.1),
+            Work::StockOn => ("physical/handle_wood", "smith.stock", 0.85),
+            Work::BoltOut => ("guns/bolt_open", "gun.bolt_open", 1.0),
+            Work::BoltIn => ("guns/bolt_close", "gun.bolt_close", 1.0),
+        };
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(w.at),
+            cue,
+            0.0,
+            speed,
+            0.06,
+        );
+    }
+}
+
 /// The shortest gap between two grinds heard (s): Weapon feel ticks every
 /// 60 ms, about twice as often as a grind sounds.
 const GRIND_EVERY: f32 = 0.11;
@@ -739,6 +797,11 @@ mod tests {
             ("footsteps/mud", "aid.wet"),
             ("body/breath", "frost.gasp"),
             ("physical/ice_crack", "frost.bite"),
+            ("machines/clank", "smith.clamp"),
+            ("physical/handle_metal", "smith.saw"),
+            ("impacts/metal", "smith.cut"),
+            ("physical/door_creak", "smith.screw"),
+            ("physical/handle_wood", "smith.stock"),
         ];
         for s in [
             Stuff::Wood,
