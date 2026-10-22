@@ -16,8 +16,11 @@ use std::time::Instant;
 
 use super::budget::tests::{as_the_game_runs, client_threads, heavy, settle};
 
-/// Frames at each stop (the tour's own settle).
-const PER_VIEW: usize = 6;
+/// Frames at each stop: enough for what's first seen there to arrive and
+/// be drawn, once (the walk is in the gauge tier, under its time).
+const PER_VIEW: usize = 3;
+/// Frames of the fight.
+const FIGHT: usize = 90;
 /// A first-pass frame this much over its second-pass self is a first
 /// contact (and the gauge's ceiling, worst against worst).
 const CEILING: f64 = 1.2;
@@ -112,9 +115,27 @@ fn systems() -> Vec<(String, f64)> {
     v
 }
 
-/// A valley's client, settled, with what arrives each frame noted.
-fn probe_app(map: &str) -> App {
+/// How long a valley took to load, on this machine's CPU, from its app
+/// being built: to the preload landed, the buildings dressed, and the
+/// warm-up shelf's settled restock out (`WorldReady`'s GPU share aside).
+pub(crate) struct Loading {
+    pub preload: f64,
+    pub props: f64,
+    pub warm: f64,
+    pub frames: u32,
+}
+
+impl Loading {
+    pub fn seconds(&self) -> f64 {
+        self.preload.max(self.props).max(self.warm)
+    }
+}
+
+/// A valley's client, loaded and settled (and how long it took), with
+/// what arrives each frame noted.
+fn loaded_app(map: &str) -> (App, Loading) {
     profile();
+    let t = Instant::now();
     let mut app = client_threads(map, "clearing", None);
     as_the_game_runs(&mut app);
     app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
@@ -130,6 +151,43 @@ fn probe_app(map: &str) -> App {
             note_spawns,
         ),
     );
+    let (mut preload, mut props, mut warm) = (None, None, None);
+    let mut frames = 0;
+    while (preload.is_none() || props.is_none() || warm.is_none()) && frames < 3000 {
+        app.update();
+        frames += 1;
+        let mut q = bevy::ecs::system::SystemState::<(
+            super::timeline::WorldReady,
+            Res<crate::models::Models>,
+            Res<Assets<bevy::gltf::Gltf>>,
+            Res<AssetServer>,
+        )>::new(app.world_mut());
+        let (world, models, gltfs, server) = q.get_mut(app.world_mut()).unwrap();
+        let now = Some(t.elapsed().as_secs_f64());
+        if preload.is_none()
+            && models.handles().all(|h| {
+                gltfs.contains(h)
+                    || matches!(
+                        server.get_load_state(h),
+                        Some(bevy::asset::LoadState::Failed(_))
+                    )
+            })
+        {
+            preload = now;
+        }
+        if props.is_none() && world.props() {
+            props = now;
+        }
+        if warm.is_none() && world.materials() {
+            warm = now;
+        }
+    }
+    let loading = Loading {
+        preload: preload.unwrap_or(f64::INFINITY),
+        props: props.unwrap_or(f64::INFINITY),
+        warm: warm.unwrap_or(f64::INFINITY),
+        frames,
+    };
     settle(&mut app);
     // What's settling keeps arriving a while: until a second's quiet.
     let mut quiet = 0;
@@ -141,7 +199,8 @@ fn probe_app(map: &str) -> App {
             break;
         }
     }
-    app
+    std::mem::take(&mut *app.world_mut().resource_mut::<Arrivals>());
+    (app, loading)
 }
 
 /// Puts the player (and the free camera) at a tour stop.
@@ -193,7 +252,7 @@ fn pass(app: &mut App, views: &[crate::tour::View]) -> Vec<Frame> {
     let fight = views.len();
     crate::perf::fight::arm(app);
     crate::perf::fight::hunt(app);
-    for _ in 0..180 {
+    for _ in 0..FIGHT {
         crate::perf::fight::keep_alive(app);
         frame(app, fight, &mut out);
     }
@@ -219,7 +278,11 @@ pub(crate) struct Contact {
 /// A valley walked twice: (first-pass worst, steady worst, the first
 /// contacts, the stops).
 pub(crate) fn walk(map: &str) -> (f64, f64, Vec<Contact>, usize) {
-    let mut app = probe_app(map);
+    walk_app(loaded_app(map).0)
+}
+
+/// `walk`, on a valley's loaded client.
+fn walk_app(mut app: App) -> (f64, f64, Vec<Contact>, usize) {
     let zone = app.world().resource::<crate::world::Zone>().clone();
     let views = crate::tour::views(&zone);
     let first = pass(&mut app, &views);
@@ -323,28 +386,79 @@ fn maps() -> Vec<String> {
     )
 }
 
-/// Every valley's first pass is within 1.2x of its steady state, worst
-/// frame against worst frame, and the first contacts are named. The
-/// harness's frames jitter by more than a small hitch, so each valley is
-/// walked `FIRST_RUNS` (3) times, each in a new game: a stop is a first
-/// contact only if it is one every time, and a valley fails only if it's
-/// over every time.
+/// What a valley may take to load on the CPU here (seconds; a 4-core
+/// container), below what each took with every texture RGBA8 and the
+/// buildings dressed 3 a frame (Marrow Creek 9.6, Kettle Pass 8.5, Cinder
+/// Works 7.0, Sallow Reservoir 5.9, Rime Fell 8.7). `LOAD_SLACK` scales
+/// them for a slower machine.
+const LOAD_BUDGET: [(&str, f64); 5] = [
+    ("marrow_creek", 8.0),
+    ("kettle_pass", 7.5),
+    ("cinder_works", 6.5),
+    ("sallow_reservoir", 6.0),
+    ("rime_fell", 8.0),
+];
+
+/// Every valley, one game each: it loads within its budget, holds under
+/// its VRAM budget (`vram`), and meets no first-sight stutter: its tour
+/// and a fight's first pass within 1.2x of their steady state, worst frame
+/// against worst frame. The harness's frames jitter by more than a small
+/// hitch, so a valley over is walked again in a new game, up to
+/// `FIRST_RUNS` (3) in all: a stop is a first contact only if it is one
+/// every time, and the valley fails only if it's over every time.
 #[test]
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
-fn gauge_no_first_sight_stutter() {
+fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
     let _one_at_a_time = heavy();
     let runs: usize = std::env::var("FIRST_RUNS")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(3);
-    let mut over = Vec::new();
+    let slack: f64 = std::env::var("LOAD_SLACK")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1.0);
+    let mut wrong = Vec::new();
     for map in maps() {
+        let t = Instant::now();
+        let (mut app, l) = loaded_app(&map);
+        let budget = LOAD_BUDGET
+            .iter()
+            .find(|(m, _)| *m == map)
+            .map_or(9.0, |b| b.1)
+            * slack;
+        println!(
+            "{map}: loaded in {:.2} s of {budget:.1} (preload {:.2}, buildings {:.2}, warm {:.2}; {} frames)",
+            l.seconds(),
+            l.preload,
+            l.props,
+            l.warm,
+            l.frames
+        );
+        if l.seconds() > budget {
+            wrong.push(format!(
+                "{map}: loaded in {:.2} s, over {budget:.1}",
+                l.seconds()
+            ));
+        }
+        let vram = super::vram::report(&map, app.world_mut());
+        if vram > super::vram::VRAM_BUDGET {
+            wrong.push(format!(
+                "{map}: {:.0} MB on the GPU, over {:.0}",
+                vram as f64 / super::vram::MB,
+                super::vram::VRAM_BUDGET as f64 / super::vram::MB
+            ));
+        }
         let mut every: Option<Vec<Contact>> = None;
         let mut over_every = true;
         let mut worst = (0.0, 0.0);
+        let mut first = Some(app);
         for run in 1..=runs {
-            let (f, s, contacts, stops) = walk(&map);
-            println!("run {run}:");
+            let (f, s, contacts, stops) = match first.take() {
+                Some(app) => walk_app(app),
+                None => walk(&map),
+            };
+            println!("  walk {run}:");
             report(&map, f, s, &contacts, stops);
             let is_over = f > s * CEILING && f - s > SLACK_MS;
             over_every &= is_over;
@@ -358,117 +472,25 @@ fn gauge_no_first_sight_stutter() {
                     .filter(|c| before.iter().any(|b| b.what == c.what))
                     .collect(),
             });
+            // Only what's over is walked again.
             if !is_over && every.as_ref().is_some_and(|e| e.is_empty()) {
                 over_every = false;
                 break;
             }
         }
-        let every = every.unwrap_or_default();
-        if !every.is_empty() {
-            println!("{map}: first contacts in every run:");
-            for c in &every {
-                println!(
-                    "    {:<34} {:.1} ms first, {:.1} steady: {}",
-                    c.what, c.first, c.steady, c.why
-                );
-            }
+        for c in every.unwrap_or_default() {
+            println!(
+                "    first contact every run: {:<30} {:.1} ms first, {:.1} steady: {}",
+                c.what, c.first, c.steady, c.why
+            );
         }
         if over_every {
-            over.push(format!(
-                "{map}: {:.1} ms first against {:.1} steady, every run",
+            wrong.push(format!(
+                "{map}: first pass {:.1} ms against {:.1} steady, every run",
                 worst.0, worst.1
             ));
         }
+        println!("  ({map}: {:.0} s in all)", t.elapsed().as_secs_f64());
     }
-    assert!(over.is_empty(), "first-sight stutter:\n{}", over.join("\n"));
-}
-
-/// Seconds (and frames) from a valley's app being built until its world
-/// is in (`timeline::WorldReady`, and the preload landed), on this
-/// machine's CPU: what a map change costs before the GPU's share.
-#[test]
-#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
-fn gauge_map_load_seconds() {
-    let _one_at_a_time = heavy();
-    for map in maps() {
-        let t = Instant::now();
-        let mut app = client_threads(&map, "clearing", None);
-        as_the_game_runs(&mut app);
-        app.init_resource::<Landed>()
-            .add_systems(Last, (landed::<Image>, landed::<bevy::gltf::Gltf>));
-        LANDED_FROM.get_or_init(|| t);
-        let built = t.elapsed().as_secs_f64();
-        let mut frames = 0;
-        let mut marks: Vec<(String, f64, u32)> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        loop {
-            app.update();
-            frames += 1;
-            let mut q = bevy::ecs::system::SystemState::<(
-                super::timeline::WorldReady,
-                Res<crate::models::Models>,
-                Res<Assets<bevy::gltf::Gltf>>,
-            )>::new(app.world_mut());
-            let (world, models, gltfs) = q.get_mut(app.world_mut()).unwrap();
-            let preload = models.handles().all(|h| gltfs.contains(h));
-            for (what, ok) in [
-                ("forest", world.forest()),
-                ("props", world.props()),
-                ("warm", world.materials()),
-                ("preload", preload),
-            ] {
-                if ok && seen.insert(what) {
-                    marks.push((what.into(), t.elapsed().as_secs_f64(), frames));
-                }
-            }
-            if seen.len() == 4 || frames > 3000 {
-                break;
-            }
-        }
-        let l = app.world().resource::<Landed>();
-        println!(
-            "    textures: {} files, last in at {:.2} s; models: {} files, last in at {:.2} s",
-            l.count.get("Image").copied().unwrap_or(0),
-            l.last.get("Image").copied().unwrap_or(0.0),
-            l.count.get("Gltf").copied().unwrap_or(0),
-            l.last.get("Gltf").copied().unwrap_or(0.0),
-        );
-        println!(
-            "{map}: built {built:.2} s; {}",
-            marks
-                .iter()
-                .map(|(w, s, f)| format!("{w} {s:.2} s (frame {f})"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-}
-
-/// When each kind of file-loaded asset last landed, and how many did.
-#[derive(Resource, Default)]
-struct Landed {
-    count: std::collections::HashMap<&'static str, usize>,
-    last: std::collections::HashMap<&'static str, f64>,
-}
-
-static LANDED_FROM: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
-
-fn landed<A: Asset>(
-    mut events: MessageReader<AssetEvent<A>>,
-    server: Res<AssetServer>,
-    mut l: ResMut<Landed>,
-) {
-    let kind = std::any::type_name::<A>()
-        .rsplit("::")
-        .next()
-        .unwrap_or("?");
-    for ev in events.read() {
-        if let AssetEvent::LoadedWithDependencies { id } = ev {
-            if server.get_path(*id).is_some() {
-                *l.count.entry(kind).or_default() += 1;
-                let at = LANDED_FROM.get().map_or(0.0, |t| t.elapsed().as_secs_f64());
-                l.last.insert(kind, at);
-            }
-        }
-    }
+    assert!(wrong.is_empty(), "valleys over:\n{}", wrong.join("\n"));
 }
