@@ -1046,12 +1046,11 @@ mod tests {
             1.0,
             0.0,
         );
-        let mut shots = r
-            .vr
-            .app
-            .world()
-            .resource::<Messages<Shot>>()
-            .get_cursor_current();
+        let mut shots =
+            r.vr.app
+                .world()
+                .resource::<Messages<Shot>>()
+                .get_cursor_current();
         let mut shot = None;
         let mut ticks = 0;
         for _ in 0..90 {

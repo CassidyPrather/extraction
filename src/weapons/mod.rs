@@ -206,6 +206,7 @@ pub struct WeaponsPlugin;
 impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<GunEvent>()
+            .add_message::<ActionGrind>()
             .add_observer(setup_gun_items)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(AimHint::default());
@@ -472,6 +473,7 @@ fn work_handles(
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    mut grinds: MessageWriter<ActionGrind>,
     // Per gun: the furthest its bolt came back this stroke (for a short
     // stroke), and when it last ground under a hand.
     mut strokes: Local<std::collections::HashMap<Entity, (f32, f32)>>,
@@ -522,6 +524,9 @@ fn work_handles(
         let events = gun.firearm.set_bolt_travel(to);
         grind(
             &mut haptics,
+            &mut grinds,
+            gun_e,
+            hand.world.translation,
             rig.get(hand_e).ok().map(|r| r.side),
             stiff,
             to != travel,
@@ -585,6 +590,9 @@ fn work_handles(
                 }
                 grind(
                     &mut haptics,
+                    &mut grinds,
+                    gun_e,
+                    hand.world.translation,
                     side,
                     stiff,
                     to != was,
@@ -615,7 +623,17 @@ fn work_handles(
                         taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
                     }
                     let stroke = strokes.entry(gun_e).or_default();
-                    grind(&mut haptics, side, stiff, to != was, now_s, stroke);
+                    grind(
+                        &mut haptics,
+                        &mut grinds,
+                        gun_e,
+                        hand.world.translation,
+                        side,
+                        stiff,
+                        to != was,
+                        now_s,
+                        stroke,
+                    );
                     ev.extend(gun.firearm.set_bolt_travel(to));
                     // Came back short and going home again: a short stroke.
                     let now = gun.firearm.bolt_travel;
@@ -649,10 +667,23 @@ fn work_handles(
     }
 }
 
+/// A stiff action ground under a hand (for Audio): about every 60 ms while
+/// it moves.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ActionGrind {
+    pub gun: Entity,
+    pub at: Vec3,
+    pub stiff: f32,
+}
+
 /// A stiff action grinds in the hand that works it: a tick as it moves,
-/// harder the stiffer.
+/// harder the stiffer, and heard.
+#[allow(clippy::too_many_arguments)]
 fn grind(
     haptics: &mut MessageWriter<crate::rig::haptics::Haptic>,
+    grinds: &mut MessageWriter<ActionGrind>,
+    gun: Entity,
+    at: Vec3,
     side: Option<crate::rig::Side>,
     stiff: f32,
     moved: bool,
@@ -671,6 +702,7 @@ fn grind(
         amplitude: 0.08 + 0.3 * stiff,
         seconds: 0.015,
     });
+    grinds.write(ActionGrind { gun, at, stiff });
 }
 
 /// How fast a palm must come up into a seated magazine's floorplate to
