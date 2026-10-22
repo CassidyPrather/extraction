@@ -208,14 +208,15 @@ fn holds(map: &str) {
 }
 
 #[test]
-fn marrow_creek_holds_the_stereo_budget() {
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_marrow_creek_holds_the_stereo_budget() {
     holds("marrow_creek");
 }
 
-/// Every valley, both eyes (slow: `cargo test --lib -- --ignored stereo`).
+/// Every valley, both eyes (the gauge tier).
 #[test]
-#[ignore]
-fn every_valley_holds_the_stereo_budget() {
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_every_valley_holds_the_stereo_budget() {
     for (map, _) in extraction_core::map::VALLEYS {
         holds(map);
     }

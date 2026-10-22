@@ -239,7 +239,7 @@ upstream Bevy for multiview, and take it when it lands rather than fork.
 `render::cpu` splits every frame by schedule (marker schedules between
 the main and fixed schedules, so no tracing build is needed;
 `EXTRACTION_CPU=1` logs the split every ten seconds). The gauge
-`budget::tests::a_busy_moment_holds_the_cpu_budget` stages a raid's busy
+`budget::tests::gauge_a_busy_moment_holds_the_cpu_budget` stages a raid's busy
 moment in Marrow Creek: the whole client without a GPU, the player beside
 an anomaly in a downpour, ten robots (six drones, four walkers) hunting
 and shooting, one fixed tick a frame, on one thread so each system's time
@@ -391,7 +391,7 @@ not hold every kind the Surge can open. Marrow Creek shelves 64 kinds of
 thing; every pipeline the raid's firsts need is then built in the first
 200 frames, and none at first use (the same run: a shot, impacts on every
 surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
-`warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
+`warmup::tests::gauge_the_shelf_stocks_and_clears` holds the shelf's mechanics
 (it stocks, the decoys go, nothing's left after).
 
 The shelf draws nothing. Each entry wears its layout's *point twin*: the
@@ -408,7 +408,7 @@ behind, and so it never finished. In Monado's simulated headset (training
 yard, standing still) the point lights went from 7 to 61, and the opaque
 pass from about 1 s to 9-15 s a frame on llvmpipe. Fixed, the lights go
 7, 13, 7 and opaque holds at 0.4-1.3 s.
-`warmup::tests::two_eyes_one_shelf` holds that, and
+`warmup::tests::gauge_two_eyes_one_shelf` holds that, and
 `EXTRACTION_COUNTS=1` logs the world's entity, light and mesh counts every
 ten seconds, and what grew, for anything else that piles up.
 
@@ -567,7 +567,7 @@ drawn as 125. Gate shadow draws went Marrow 391 to 361, Rime Fell 483 to
 went 954 to 919. The gate views' own draws don't move: those guns are
 behind the cameras. `docs/shots/performance/guns_at_rest.png` shows
 those guns with it off (top) and on (bottom); only the grass sway
-differs. Tests: `gun_rest::tests::guns_lying_about_rest` and
+differs. Tests: `gun_rest::tests::gauge_guns_lying_about_rest` and
 `a_resting_gun_wakes`.
 
 ## The headset's two eyes: what each costs
