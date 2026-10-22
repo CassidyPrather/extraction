@@ -24,7 +24,7 @@ impl Plugin for DevPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (pose_body_for_gallery, carry_for_gallery)
+                (pose_body_for_gallery, carry_for_gallery, climb_for_gallery)
                     .chain()
                     .after(crate::rig::RigDriverSystems),
             );
@@ -893,6 +893,86 @@ fn carry_for_gallery(
                 item: bag,
                 point: None,
             });
+        }
+    }
+}
+
+/// `--gallery climb` (with `side` to see it from beside you): a wall 2 m
+/// high ahead, both hands gripping its top's near edge
+/// (`interact::hand_climb`), drawn down: you pull yourself up it. A flat
+/// rig's hands don't grip the world themselves, so the holds are put on
+/// them here; the climbing is the game's.
+#[allow(clippy::type_complexity)]
+fn climb_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (&Transform, &mut crate::rig::RigInput, &Children),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut state: Local<(u32, f32)>,
+) {
+    use crate::interact::hand_climb::{HandHold, Hold};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
+        return;
+    }
+    let Some((root, mut input, children)) = players.iter_mut().next() else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        state.1 = root.translation.y;
+        commands.spawn((
+            Name::new("Gallery wall"),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(2.4, 2.0, 0.25),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+            root.mul_transform(Transform::from_xyz(0.0, 1.0, -0.48)),
+            Mesh3d(meshes.add(Cuboid::new(2.4, 2.0, 0.25))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.46, 0.44, 0.4),
+                perceptual_roughness: 0.95,
+                ..default()
+            })),
+        ));
+    }
+    if f < 10 {
+        return;
+    }
+    let top = state.1 + 2.0;
+    // Up on the edge, then drawn down a metre over a second and a half.
+    let pull = ((f as f32 - 40.0) / 96.0).clamp(0.0, 1.0);
+    let up = top + 0.03 - root.translation.y - pull * 1.0;
+    for side in [Side::Left, Side::Right] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_xyz(0.22 * side.sign(), up, -0.38)
+            .with_rotation(Quat::from_rotation_x(-0.4));
+        h.tracked = true;
+        h.grip = 1.0;
+    }
+    if f == 30 {
+        for c in children.iter() {
+            if let Ok((e, rh)) = hands.get(c) {
+                let at = root.transform_point(Vec3::new(
+                    0.22 * rh.side.sign(),
+                    top + 0.03 - root.translation.y,
+                    -0.38,
+                ));
+                commands.entity(e).insert(HandHold {
+                    on: Hold::Edge { top },
+                    at,
+                    since: time.elapsed_secs(),
+                });
+            }
         }
     }
 }
