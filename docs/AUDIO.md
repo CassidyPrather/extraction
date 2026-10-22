@@ -914,6 +914,20 @@ Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
 rough voice at about 160 Hz through the throat's formants, sharp onset,
 each cough weaker than the last) and `wildlife/canary`.
 
+**The stair breathing out.** Each kiosk door is a tell for what's below
+(`stair_breath`, by the site's prefab, `breath`): faint, from just
+inside the door, full within 5 m, gone by 9 (`breath_heard`), and gone
+again once your head is 2.5 m down the stair, where the site's own
+sounds take over. The shelter: a slow drip, the air handling's dead hum
+(`ug.breath_hum`), a far ventilator's blade ticking round. The drowned
+works: running water, a pump's distant thud. The workings: a draught's
+moan, drips, the timbers creaking; the deep workings add the firedamp's
+faint hiss. The cinder tunnel: the mains' hum and a cable's buzz. The
+furnace cellars: a warm roar and metal ticking. The dam gallery: water
+seeping, every drop answered late and faint down its length. The winze:
+wind down the drift and the cage's rope creaking. Every layer is a
+`ug.breath_*` line, its low-pass in `CUE_LOWPASS`.
+
 **Audited** (`scripts/audio_audit.py`; `ug.gurgle`, `ug.whump` and
 `ug.cart` are judged through their low-passes, `CUE_LOWPASS`). Every
 detail and action is within 2.6 LU of the mix line; the worst is the
