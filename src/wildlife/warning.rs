@@ -126,6 +126,8 @@ pub(crate) fn log_warnings(
             .fold(f32::MAX, f32::min)
     };
     let mut alive = Vec::new();
+    // Machines that come together (a pair of walkers) are one approach.
+    let mut logged: Vec<Vec3> = Vec::new();
     for (e, robot, breed, senses, gt) in &robots {
         if robot.wrecked || matches!(robot.kind, RobotKind::Pylon | RobotKind::Sorter) {
             continue;
@@ -167,7 +169,9 @@ pub(crate) fn log_warnings(
                 .path
                 .front()
                 .is_some_and(|(_, p)| p.xz().distance(at.xz()) >= CAME);
-            if fresh && came {
+            let together = logged.iter().any(|p| p.distance(at) < 3.0);
+            if fresh && came && !together {
+                logged.push(at);
                 let lead = tr
                     .cues
                     .iter()
