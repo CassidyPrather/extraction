@@ -327,7 +327,12 @@ fn reel(
                     let p = eye + flat * d + right * x;
                     let at = zone.on_ground(p.x, p.z);
                     let w = spawn_walker(&mut commands, &zone, at, job(at));
-                    commands.entity(w).insert(TellCase(k as u8));
+                    // (Blind to the camera: they keep to the reel's script.)
+                    commands
+                        .entity(w)
+                        .remove::<Senses>()
+                        .remove::<Brain>()
+                        .insert(TellCase(k as u8));
                     first.get_or_insert(w);
                 }
                 first.unwrap()

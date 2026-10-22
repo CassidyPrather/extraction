@@ -556,6 +556,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         f.mode = g.mode.min(f.def.modes.len().saturating_sub(1));
         f.condition = g.condition;
         f.fouling = g.fouling;
+        f.grime = g.grime;
     }
     for inner in &saved.inserted {
         let Some(m) = restore_item(world, inner, at) else {
@@ -958,6 +959,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
             mode: f.mode,
             condition: f.condition,
             fouling: f.fouling,
+            grime: f.grime,
             internal_loads: f.internal_loads.clone(),
             chamber_loads: f.chamber_loads.clone(),
         });

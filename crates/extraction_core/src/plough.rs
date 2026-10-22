@@ -98,11 +98,15 @@ pub fn bank_side(left_height: f32, right_height: f32) -> f32 {
     }
 }
 
+/// How long a lane stays clean (s) with snow falling this hard (0..1).
+pub fn lane_life(falling: f32) -> f32 {
+    1.0 / (1.0 / LANE_LIFE + falling / LANE_LIFE_FALLING)
+}
+
 /// Whether a lane cleared `age` seconds ago is still clean with snow
 /// falling this hard (0..1).
 pub fn lane_fresh(age: f32, falling: f32) -> bool {
-    let life = 1.0 / (1.0 / LANE_LIFE + falling / LANE_LIFE_FALLING);
-    age < life
+    age < lane_life(falling)
 }
 
 /// Whether a point at `ahead` metres in front of its middle and `side`

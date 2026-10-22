@@ -414,7 +414,7 @@ fn draw_herds(
 }
 
 /// The body's rotation for a heading (atan2(z, x)): -Z forward along it.
-fn facing(yaw: f32) -> Quat {
+pub fn facing(yaw: f32) -> Quat {
     Quat::from_rotation_y(-yaw - std::f32::consts::FRAC_PI_2)
 }
 

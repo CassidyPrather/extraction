@@ -32,6 +32,7 @@ pub mod sling;
 pub mod tracers;
 pub mod visuals;
 pub mod wear;
+pub mod weather;
 pub mod zero;
 
 use avian3d::prelude::*;
@@ -230,6 +231,7 @@ impl Plugin for WeaponsPlugin {
                 flares::FlaresPlugin,
                 crossbow::CrossbowPlugin,
                 carry::CarryPlugin,
+                weather::WeatherPlugin,
             ))
             .add_systems(
                 FixedUpdate,

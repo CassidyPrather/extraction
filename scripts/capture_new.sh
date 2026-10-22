@@ -32,7 +32,7 @@ reel() { # name map camera reel [hour]
     WGPU_BACKEND=vulkan timeout 1800 xvfb-run -a -s "-screen 0 1280x720x24" \
         "$BIN" --map "$map" --screenshot "$dir/f.png" --frames 99999 --camera "$cam" \
         --no-robots --data-dir "$data" --new-game --hour "$hour" --weather clearing \
-        --gallery "reel:$what" --size 1280x720 2>&1 | grep -E 'panicked' || true
+        --gallery "reel:$what" --hide-hands 1 --size 1280x720 2>&1 | grep -E 'panicked' || true
     rm -rf "$data"
     echo "reel $name: $(ls "$dir"/f_*.png 2>/dev/null | wc -l) frames"
 }
@@ -47,7 +47,11 @@ for PART in "${PARTS[@]}"; do
             for MAP in "${AFTER_MAPS[@]}"; do
                 ARGS=""
                 [ "$MAP" = marrow_creek ] && ARGS="--gallery minefields"
-                OUT="$OUT/after" MOODS="day night" SIZE=1600x900 \
+                # The pairs are by drizzle (as the fixes were found);
+                # Rime Fell shows best on a clear day.
+                MOODS="day night"
+                [ "$MAP" = rime_fell ] && MOODS="clear night"
+                OUT="$OUT/after" MOODS="$MOODS" SIZE=1600x900 \
                     STILLS_DIR=scripts/capture_paths/new GAME_ARGS="$ARGS" \
                     scripts/capture_presskit.sh "$MAP"
             done
