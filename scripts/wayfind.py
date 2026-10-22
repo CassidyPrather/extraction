@@ -17,7 +17,8 @@ landmark's lamp from 150 m and 300 m must be measurably brighter than
 what's round it: its brightest pixel (within LAMP_NEAR of where it lands)
 at least LAMP_LIFT times and LAMP_STEP over the brighter of the same
 spot without the lamp and the median round it. The exit status is the
-number of lamp views that fail.
+number of lamp views that fail; one with a brighter light in line (white
+round it) says nothing either way and isn't counted.
 
 Time is frozen while a view is shot, the difference is taken only inside
 the landmark's box in the picture, and only its largest blob counts.
@@ -121,6 +122,7 @@ LAMP_NEAR = 2
 LAMP_ROUND = 12
 LAMP_LIFT = 1.4
 LAMP_STEP = 0.02
+LAMP_BLOWN = 0.9
 
 
 def lamp_shines(d, v):
@@ -162,8 +164,11 @@ def main(argv):
                 continue
             peak, round_ = lamp_shines(d, v)
             ok = peak >= round_ * LAMP_LIFT and peak - round_ >= LAMP_STEP
-            dim += not ok
-            print(f"{'ok  ' if ok else 'DIM '} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
+            # A brighter light in line with it (white where the lamp is,
+            # with it and without): this bearing says nothing of the lamp.
+            lost = round_ >= LAMP_BLOWN
+            dim += not ok and not lost
+            print(f"{'ok  ' if ok else 'n/a ' if lost else 'DIM '} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
                   f"lamp {peak:.3f}, round it {round_:.3f} ({peak / max(round_, 1e-4):.1f}x)")
         print(f"{dim} lamp view(s) not brighter than what's round them")
         return dim
