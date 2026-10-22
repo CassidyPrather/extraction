@@ -377,9 +377,9 @@ adit's loot) is reached only by it.
   grid stop at its edge, top and foot (`nothing_walks_into_the_winze`),
   and the deep level is behind the works.
 
-Shots: the cage at the shaft station under its green lamp
-(`docs/shots/underground/r_cage.jpg`); up the open winze from its foot,
-the cage away overhead (`r_winze.jpg`).
+Shots: the cage at the shaft station, its lamp green
+(`docs/shots/underground/r_cage.jpg`); up the open winze from its foot to
+the cage's floor 12 m overhead (`r_winze.jpg`).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
