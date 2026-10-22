@@ -76,6 +76,9 @@ pub enum Rule {
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
+    /// Ground the walkers' grid reaches only over a bank a body can't walk
+    /// (`map_pockets`).
+    Pocket,
     /// A door with something in front of it: a building, a trunk, a rock,
     /// a crate, water, or ground that doesn't meet its steps
     /// (`map_doors`).
@@ -810,7 +813,7 @@ pub(crate) fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
 }
 
 /// Height you walk at: a bridge deck's where there is one, else the ground.
-fn walk_height(hm: &Heightmap, p: P2) -> f32 {
+pub(crate) fn walk_height(hm: &Heightmap, p: P2) -> f32 {
     for rl in hm.road_lines.iter().filter(|rl| !rl.bridges.is_empty()) {
         let (d, s, _) = polyline_closest(&rl.points, p);
         if d <= rl.width * 0.5 + 1.0 && rl.on_bridge(s) {
@@ -2060,6 +2063,37 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     ));
     for (what, at) in dc.findings {
         find(&mut r, Rule::Door, what, at);
+    }
+
+    // -- Pockets ----------------------------------------------------------------------
+    {
+        let p = crate::map_pockets::pockets(&walk, hm, ins, crate::map_nav::MAX_SLOPE, |p| {
+            inside_fence(map, p)
+        });
+        r.measures.push(format!(
+            "pockets: {} false steps on the walkers' grid; pockets {}",
+            p.false_steps,
+            p.pockets
+                .iter()
+                .take(6)
+                .map(|(a, at)| format!("{a:.0} m² at ({:.0}, {:.0})", at[0], at[1]))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        for (area, at) in p
+            .pockets
+            .iter()
+            .filter(|(a, _)| *a >= crate::map_pockets::POCKET_MIN)
+        {
+            find(
+                &mut r,
+                Rule::Pocket,
+                format!(
+                    "{area:.0} m² the walkers' grid reaches only over a bank too steep to walk"
+                ),
+                *at,
+            );
+        }
     }
 
     // -- Render load -----------------------------------------------------------------

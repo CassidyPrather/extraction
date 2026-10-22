@@ -485,6 +485,15 @@ fine on a monitor makes people sick or tired in a headset.
   kept clear but their ground isn't held. The forest and rock scatter
   keep off door strips (`map_doors::clear_of_doors`). Staged scenes
   (`assets/data/scenes.ron`) are the game's and aren't checked.
+- **No pockets**: the walkers' grid judges each 2 m cell by the slope at
+  its middle, so a bank between two middles is invisible to it. Every
+  step between walkable neighbours is walked every 25 cm (bridges at
+  their decks); one that climbs or drops more than a step (0.4 m,
+  `BODY_STEP`) over ground steeper than the body stands on (49.5°,
+  `BODY_SLOPE`, the game's `walk_over`) is a false step, and ground the
+  insertion reaches only over false steps is a pocket (`map_pockets`,
+  `POCKET_MIN` 16 m²). None in the five valleys; the measure prints each
+  valley's false steps.
 - **No forced jumps**: nothing that matters is only reached by jumping,
   climbing or swimming. Water deeper than 0.9 m is a wall on the nav
   grid, and the lint's reach is on that grid.

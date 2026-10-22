@@ -29,6 +29,7 @@ pub mod map_landmarks;
 pub mod map_lint;
 pub mod map_mines;
 pub mod map_nav;
+pub mod map_pockets;
 pub mod map_sentry;
 pub mod map_sight;
 pub mod map_spotter;
