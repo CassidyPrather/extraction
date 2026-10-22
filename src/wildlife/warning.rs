@@ -23,7 +23,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde_json::json;
 
-use super::insects::{self, HUSH_NEAR, HUSH_NEAR_DRONE};
+use super::insects;
 use super::{FlushCause, Flushed};
 use crate::robots::{Breed, Robot, RobotKind, Senses};
 use crate::sim::telemetry::{SimLog, round};
@@ -143,11 +143,11 @@ pub(crate) fn log_warnings(
         while tr.near.front().is_some_and(|(s, _, _)| t - s > LOOK_BACK) {
             tr.near.pop_front();
         }
-        let near = if robot.kind == RobotKind::Drone {
-            HUSH_NEAR_DRONE
-        } else {
-            HUSH_NEAR
-        };
+        let near = insects::hush_near(match robot.kind {
+            RobotKind::Drone => super::ThreatKind::Drone,
+            RobotKind::Dirigible => super::ThreatKind::Dirigible,
+            _ => super::ThreatKind::Walker,
+        });
         let hushing = singing >= SINGING && insects::hush(at.distance(foot), near) <= HUSH_CUE;
         if hushing && !tr.hushing {
             tr.cues.push((t, "hush"));
