@@ -300,7 +300,7 @@ pub struct Raider {
     /// give up.
     interrupted: bool,
     pack_full: bool,
-    rv: Option<usize>,
+    pub rv: Option<usize>,
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
@@ -475,7 +475,10 @@ pub fn attach_raider(
         }
     }
     let seed = opts.seed;
-    let objective = choose_objective(&zone.map, &sites, seed);
+    let (objective, career_rv) = match career_habit() {
+        Some(h) => h.choose(&zone.map, &sites),
+        None => (choose_objective(&zone.map, &sites, seed), None),
+    };
     log.event(
         "start",
         json!({"run": run, "map": opts.map, "seed": seed, "personality": traits.name,
@@ -519,7 +522,7 @@ pub fn attach_raider(
                 burned: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
-                rv: None,
+                rv: career_rv,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
                 stuck_spot: (Vec2::ZERO, 0),
@@ -2754,6 +2757,66 @@ fn add_safehouse_site(r: &mut Raider, scene: &Scene) {
         tries: 0,
         job: true,
     });
+}
+
+/// A career's raider, over raid after raid (`SIM_HABIT`, with
+/// `SIM_RAID` the raid's number in the career and `SIM_CAREER_SEED` the
+/// career's): a creature of habit goes the same way to the same region
+/// and out the same rendezvous every raid; a varier takes the regions and
+/// the rendezvous in turn. For measuring what the Zone's memory of you
+/// does (`robots::memory`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CareerHabit {
+    pub varies: bool,
+    pub raid: u32,
+    pub seed: u64,
+}
+
+/// The career habit knob, from the environment, if this is a career run.
+pub fn career_habit() -> Option<CareerHabit> {
+    let varies = match std::env::var("SIM_HABIT").ok()?.as_str() {
+        "habit" => false,
+        "varier" => true,
+        _ => return None,
+    };
+    let num = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<u64>().ok());
+    Some(CareerHabit {
+        varies,
+        raid: num("SIM_RAID").unwrap_or(0) as u32,
+        seed: num("SIM_CAREER_SEED").unwrap_or(1),
+    })
+}
+
+impl CareerHabit {
+    /// This raid's objective region and the rendezvous it means to leave by.
+    fn choose(&self, map: &MapDef, sites: &[Site]) -> (Option<Vec2>, Option<usize>) {
+        let rvs = map.markers_of(&MarkerKind::Rendezvous).count().max(1);
+        if !self.varies {
+            return (
+                choose_objective(map, sites, self.seed),
+                Some(self.seed as usize % rvs),
+            );
+        }
+        let regions: Vec<_> = map
+            .regions
+            .iter()
+            .filter(|g| g.danger > 0)
+            .filter(|g| {
+                sites
+                    .iter()
+                    .any(|s| extraction_core::geom::point_in_polygon(&g.polygon, s.at.to_array()))
+            })
+            .collect();
+        let objective = (!regions.is_empty()).then(|| {
+            let g = regions[(self.raid as usize + self.seed as usize) % regions.len()];
+            let n = g.polygon.len().max(1) as f32;
+            g.polygon.iter().map(|p| Vec2::from_array(*p)).sum::<Vec2>() / n
+        });
+        (
+            objective,
+            Some((self.raid as usize + self.seed as usize) % rvs),
+        )
+    }
 }
 
 /// How much better a site at the raid's objective looks, and how far
