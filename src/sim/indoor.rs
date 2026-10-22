@@ -19,6 +19,10 @@ pub const CELL: f32 = 0.25;
 const MARGIN: f32 = 3.0;
 /// The player capsule's radius plus a little.
 const CLEARANCE: f32 = 0.22;
+/// Down an underground site, the whole capsule's radius (`player`'s 0.28):
+/// a gap between props narrower than a body is no way, or a raider routed
+/// through it sticks there.
+pub const SITE_CLEARANCE: f32 = 0.28;
 /// Geometry in this band above the floor blocks walking (below it you step
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
@@ -504,7 +508,7 @@ fn plan_site(
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
         if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
-            grid.block(ob, CLEARANCE);
+            grid.block(ob, SITE_CLEARANCE);
         }
     }
     for (_, leaf) in mine {
@@ -519,7 +523,7 @@ fn plan_site(
                 half: [def.width * 0.5, 0.04],
                 yaw: along.y.atan2(along.x),
             },
-            CLEARANCE,
+            SITE_CLEARANCE,
         );
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
@@ -1223,6 +1227,74 @@ mod tests {
     /// can stand in (furniture's colliders in place, the capsule's
     /// clearance round them) is within a bot's reach of it (`bot::REACH`),
     /// from a door.
+    /// Down every underground site, for a whole body (`SITE_CLEARANCE`):
+    /// every cell it can stand in, bar those behind the works (past a pit,
+    /// heat or the cage), joins up with the ways out. No pocket a raider
+    /// could be routed into or caught in.
+    #[test]
+    fn every_site_cell_reaches_a_way_out() {
+        let mut pockets = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app)
+                .iter()
+                .filter(|p| extraction_core::underground::layout(&p.name).is_some())
+            {
+                let g = &plan.grid;
+                let n = g.n;
+                let mut seen = vec![false; n * n];
+                let mut stack: Vec<(usize, usize)> = plan
+                    .entries
+                    .iter()
+                    .filter_map(|e| g.nearest_walkable(e.to_array()))
+                    .filter_map(|c| g.cell_of(c))
+                    .collect();
+                for &(i, j) in &stack {
+                    seen[j * n + i] = true;
+                }
+                while let Some((i, j)) = stack.pop() {
+                    for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                        let (ni, nj) = (i as i64 + di, j as i64 + dj);
+                        if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                            continue;
+                        }
+                        let k = nj as usize * n + ni as usize;
+                        if !seen[k] && g.cost[k] != BLOCKED {
+                            seen[k] = true;
+                            stack.push((ni as usize, nj as usize));
+                        }
+                    }
+                }
+                let cut: Vec<[f32; 2]> = (0..n * n)
+                    .filter(|k| g.cost[*k] != BLOCKED && !seen[*k])
+                    .map(|k| g.centre(k % n, k / n))
+                    .filter(|c| {
+                        let at = plan.world2(Vec2::from_array(*c));
+                        let y = plan.floor_at(Vec2::from_array(*c));
+                        !behind_the_works(plan, Vec3::new(at.x, y + 0.5, at.y))
+                    })
+                    .collect();
+                if !cut.is_empty() {
+                    pockets.push(format!(
+                        "{map} {}: {} cells cut off, e.g. {:.1?}",
+                        plan.name,
+                        cut.len(),
+                        &cut[..cut.len().min(4)]
+                    ));
+                }
+            }
+        }
+        assert!(pockets.is_empty(), "pockets:\n{}", pockets.join("\n"));
+    }
+
     #[test]
     fn every_loot_spot_is_in_reach() {
         const REACH: f32 = crate::bot::REACH;
