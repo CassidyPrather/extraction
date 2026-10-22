@@ -36,6 +36,9 @@ impl Plugin for EchoPlugin {
 pub struct Echoed {
     pub at: Vec3,
     pub radius: f32,
+    /// The room's end farthest from it, on its floor: where the echo
+    /// comes back from.
+    pub from: Vec3,
     /// Whose step it was, if a step.
     pub player: Option<Entity>,
 }
@@ -44,8 +47,9 @@ pub struct Echoed {
 #[derive(Resource, Default)]
 struct Carrying(Vec<crate::robots::Noise>);
 
-/// How far a sound made at `p` carries, if it's made in a carrying room.
-pub fn carries(sites: &Query<(Entity, &Building, &Transform)>, p: Vec3) -> Option<f32> {
+/// How far a sound made at `p` carries, if it's made in a carrying room;
+/// and the room's end farthest from it (on its floor).
+pub fn carries(sites: &Query<(Entity, &Building, &Transform)>, p: Vec3) -> Option<(f32, Vec3)> {
     for (_, b, xf) in sites {
         let Some(l) = ug::layout(&b.prefab) else {
             continue;
@@ -62,7 +66,18 @@ pub fn carries(sites: &Query<(Entity, &Building, &Transform)>, p: Vec3) -> Optio
                 && q.y < l.floor_of(r) + r.height
         });
         if let Some(r) = found {
-            return r.carry();
+            let along = if r.size[0] >= r.size[1] {
+                Vec3::X * r.size[0]
+            } else {
+                Vec3::Z * r.size[1]
+            } * 0.5;
+            let mid = Vec3::new(r.at[0], l.floor_of(r), r.at[1]);
+            let far = if (q - mid).dot(along) > 0.0 {
+                mid - along
+            } else {
+                mid + along
+            };
+            return r.carry().map(|c| (c, xf.transform_point(far)));
         }
     }
     None
@@ -82,7 +97,7 @@ fn hear_the_gallery(
     mut told: Local<bool>,
 ) {
     for n in noises.read() {
-        let Some(radius) = carries(&sites, n.at) else {
+        let Some((radius, from)) = carries(&sites, n.at) else {
             continue;
         };
         // (What's carried already, or louder, isn't carried again.)
@@ -97,11 +112,12 @@ fn hear_the_gallery(
         echoed.write(Echoed {
             at: n.at,
             radius,
+            from,
             player: None,
         });
     }
     for s in steps.read() {
-        let Some(radius) = carries(&sites, s.position) else {
+        let Some((radius, from)) = carries(&sites, s.position) else {
             continue;
         };
         let tall = bodies
@@ -118,6 +134,7 @@ fn hear_the_gallery(
         echoed.write(Echoed {
             at: s.position,
             radius,
+            from,
             player: Some(s.entity),
         });
         if !*told {
