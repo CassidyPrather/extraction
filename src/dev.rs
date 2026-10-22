@@ -24,7 +24,13 @@ impl Plugin for DevPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (pose_body_for_gallery, carry_for_gallery, climb_for_gallery)
+                (
+                    pose_body_for_gallery,
+                    carry_for_gallery,
+                    climb_for_gallery,
+                    fight_for_gallery,
+                    treat_for_gallery,
+                )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
             );
@@ -981,6 +987,163 @@ fn climb_for_gallery(
             }
         }
     }
+}
+
+/// `--gallery fight` (with `side` to see it from beside you): a crawler
+/// a metre ahead (`robots::indoor`), a crowbar raised in the right hand
+/// to strike, the left palm laid on the machine (`interact::fight`).
+#[allow(clippy::too_many_arguments)]
+fn fight_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput),
+        With<crate::rig::LocalPlayer>,
+    >,
+    parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+        return;
+    }
+    let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        let at = root.transform_point(Vec3::new(0.0, 0.0, -1.0));
+        let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+        state.1 = Some(crate::robots::walker::spawn_walker_sized(
+            &mut commands,
+            &zone,
+            at,
+            crate::robots::Job {
+                kind: crate::robots::JobKind::Watch,
+                site: at,
+                duration: f32::INFINITY,
+                exit: at,
+            },
+            false,
+            crate::robots::indoor::CRAWLER_HP,
+            crate::robots::indoor::CRAWLER_SIZE,
+            None,
+        ));
+        let bar = catalog.kind("crowbar").expect("a crowbar");
+        state.2 = Some(crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: bar,
+                transform: root.mul_transform(Transform::from_xyz(0.3, 1.2, -0.35)),
+                condition: 0.7,
+            },
+        ));
+    }
+    let (Some(crawler), Some(bar)) = (state.1, state.2) else {
+        return;
+    };
+    // The right hand on the bar, raised; the left on the crawler's body.
+    let raised = Vec3::new(0.28, 1.5, -0.3);
+    let body = parts
+        .iter()
+        .filter(|(p, _)| p.robot == crawler)
+        .map(|(_, g)| g.translation())
+        .max_by(|a, b| a.y.total_cmp(&b.y));
+    let palm = body
+        .map(|b| root.compute_affine().inverse().transform_point3(b) + Vec3::new(-0.05, 0.05, 0.22))
+        .unwrap_or(Vec3::new(-0.2, 0.8, -0.7));
+    let right = if f < 30 {
+        Vec3::new(0.3, 1.2, -0.35)
+    } else {
+        raised
+    };
+    for (side, at, rot) in [
+        (Side::Right, right, Quat::from_rotation_x(0.9)),
+        (Side::Left, palm, Quat::from_rotation_x(-0.3)),
+    ] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(at).with_rotation(rot);
+        h.tracked = true;
+    }
+    if f == 20 {
+        actions.write(crate::interact::HandAction::Grab {
+            player,
+            side: Side::Right,
+            item: bar,
+            point: None,
+        });
+    }
+}
+
+/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
+/// a body hurt and treated (`interact::wounds`, drawn by
+/// `render::wounds`). An open wound on the right thigh and the left
+/// forearm, a dressing round the right upper arm, a splint strapped on the
+/// right shin, and the left glove, turned palm up, bloody from the wound.
+fn treat_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (
+            Entity,
+            &mut crate::rig::RigInput,
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    mut frames: Local<u32>,
+) {
+    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+        return;
+    }
+    let Some((player, mut input, mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    let Some(mut wounds) = wounds else {
+        return;
+    };
+    *frames += 1;
+    let wound = |limb, along, around, bleed, dressed| Wound {
+        limb,
+        along,
+        around,
+        bleed,
+        dressed,
+    };
+    wounds.0 = vec![
+        wound(Limb::Thigh(Side::Right), 0.45, 1.4, 1.0, false),
+        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
+        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
+        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
+    ];
+    // Bleeding as the wounds have it, and in no danger of going down.
+    health.bleeding = 1.6;
+    health.hp = health.max;
+    if *frames == 2 {
+        commands.entity(player).insert(Fracture {
+            leg: Side::Right,
+            splinted: true,
+        });
+        for (h, rh) in &hands {
+            if rh.side == Side::Left {
+                commands.entity(h).insert(Bloodied(1.0));
+            }
+        }
+    }
+    // The left hand low and turned palm up.
+    let left = input.hand_mut(Side::Left);
+    left.pose = Transform::from_xyz(-0.18, 1.05, -0.32)
+        .with_rotation(Quat::from_rotation_z(std::f32::consts::PI) * Quat::from_rotation_x(0.4));
+    left.tracked = true;
 }
 
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment

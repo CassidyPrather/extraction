@@ -82,6 +82,11 @@
         (link: Some(("stair_hall", "pump_room")), depth: 1.1),
         (room: Some("overflow"), depth: 0.7),
     ],
+    // The overflow chamber's lamps hang on their cables down into its
+    // water: once the vault's breaker is in, the water's live, till the
+    // isolator in the switch room cuts the chamber's circuit (and its
+    // light).
+    live: Some((room: "overflow", isolator: ("switch_room", (-2.75, -1.5), 90.0))),
     portals: [
         (),
         (at: (10.0, 53.0), rot: 180.0, y: 0.0),

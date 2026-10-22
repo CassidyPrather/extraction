@@ -62,6 +62,9 @@ pub const NAMES: &[&str] = &[
     crate::robots::mender::SCENARIO,
     crate::robots::plough::SCENARIO,
     crate::world::cage::SCENARIO,
+    crate::world::echo::SCENARIO,
+    crate::world::lockdown::SCENARIO,
+    crate::world::live::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -569,6 +572,79 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::live::SCENARIO => {
+            // The service tunnel: the vault's breaker in (the overflow's
+            // water live), the switch room's isolator pulled, and into the
+            // overflow chamber unhurt.
+            use crate::bot::Expect::{Counter, HealthAtLeast};
+            use crate::world::live as lv;
+            vec![
+                Log(s(
+                    "live water: the breaker, the isolator, then the overflow chamber",
+                )),
+                Setup(lv::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::TO_ISOLATOR,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::INTO_IT,
+                    within: 1.0,
+                },
+                Wait(2.0),
+                Expect(Counter("live_isolated", 1, 1)),
+                Expect(Counter("live_jolts", 0, 0)),
+                Expect(HealthAtLeast(99.0)),
+            ]
+        }
+        crate::world::lockdown::SCENARIO => {
+            // The shelter: the generator started, the klaxon, the gas lock
+            // sealed; out by the escape tunnel.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::lockdown as lk;
+            let wait = extraction_core::underground::layout("bunker_marrow")
+                .and_then(|l| l.lockdown.as_ref())
+                .map_or(20.0, |k| k.after)
+                + 2.0;
+            vec![
+                Log(s(
+                    "shelter lockdown: start the generator, then out the escape tunnel",
+                )),
+                Setup(lk::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(wait),
+                Expect(Counter("shelter_sealed", 1, 1)),
+                WalkTo {
+                    to: lk::OUT,
+                    within: 1.0,
+                },
+                Expect(Near(lk::OUT, 1.5)),
+                Expect(HealthAtLeast(50.0)),
+            ]
+        }
+        crate::world::echo::SCENARIO => {
+            // The dam's gallery: its length on foot, upright; every step
+            // comes back.
+            use crate::bot::Expect::{Counter, Near};
+            use crate::world::echo as ec;
+            vec![
+                Log(s("gallery echo: the inspection gallery's length on foot")),
+                Setup(ec::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: ec::FAR_END,
+                    within: 1.0,
+                },
+                Expect(Near(ec::FAR_END, 2.0)),
+                Expect(Counter("gallery_echoes", 10, 1000)),
             ]
         }
         crate::world::cage::SCENARIO => {

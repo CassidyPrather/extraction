@@ -41,10 +41,11 @@ is shortened for the sim: same tick rate, same truck timings, same robots.
 save with `--save`).
 
 A sim replays from its seed: the same map, seed and personality play the
-same raid, event for event. That holds only single-threaded, so a
-`--sim-run` process runs every schedule on one thread and gives its task
-pool one thread (`single_threaded` in `src/lib.rs`; `EXTRACTION_THREADS=N`
-overrides the pool). On many threads, systems that touch the same things
+same raid, event for event. That holds only single-threaded, so every
+headless app runs every schedule on one thread (`single_threaded` in
+`src/lib.rs`, which also makes them two to three times faster side by
+side), and a `--sim-run` process gives its task pool one thread too
+(`EXTRACTION_THREADS=N` overrides the pool). On many threads, systems that touch the same things
 run in either order, and two runs of one seed part within half a minute.
 `sim::tests::a_seed_plays_the_same_raid_twice` holds it.
 

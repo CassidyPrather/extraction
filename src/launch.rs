@@ -367,6 +367,16 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::onboarding::first_hour::RAID) {
             o.robots = true;
         }
+        // The live water's the service tunnel's, at Cinder Works.
+        if o.scenario.as_deref() == Some(crate::world::live::SCENARIO) && !o.map_explicit {
+            o.map = "cinder_works".into();
+            o.map_explicit = true;
+        }
+        // The carrying gallery is the dam's, on Sallow.
+        if o.scenario.as_deref() == Some(crate::world::echo::SCENARIO) && !o.map_explicit {
+            o.map = "sallow_reservoir".into();
+            o.map_explicit = true;
+        }
         // The cage is the adit's, on Rime Fell.
         if o.scenario.as_deref() == Some(crate::world::cage::SCENARIO) && !o.map_explicit {
             o.map = "rime_fell".into();

@@ -23,12 +23,14 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod grip;
 pub mod heavy;
 pub mod heavy_look;
 pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
+pub mod memory;
 pub mod mender;
 pub mod mender_look;
 #[cfg(test)]
@@ -39,6 +41,7 @@ pub mod plough;
 pub mod plough_look;
 pub mod pylon;
 pub mod reel;
+pub mod salvage;
 pub mod search;
 pub mod senses;
 pub mod sentry;
@@ -263,6 +266,7 @@ impl Plugin for RobotsPlugin {
                 tracks::TracksPlugin,
                 signs::SignsPlugin,
                 disturbed::DisturbedPlugin,
+                memory::MemoryPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -277,6 +281,8 @@ impl Plugin for RobotsPlugin {
                     anim::AnimPlugin,
                     flight::FlightPlugin,
                     wreck::WreckPlugin,
+                    salvage::SalvagePlugin,
+                    grip::GripPlugin,
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
@@ -306,10 +312,37 @@ impl Plugin for RobotsPlugin {
     }
 }
 
-/// Bullets damage the part they strike.
+/// A blunt blow (a crowbar, a rifle's butt) on an armour plate does this
+/// much more to it than its harm: it shakes the plate's bolts loose, so a
+/// plate beaten hangs (`armour::Hanging`) and comes off sooner than one
+/// shot. Elsewhere a blow is its harm.
+pub const BLUNT_LOOSENS: f32 = 1.8;
+
+/// What a hit of `damage` does to a part in this role. A weak point (a
+/// heavy's bolt: `weapons::melee::WeakPoint`) has its own multiplier,
+/// already in `damage`: no more on top.
+pub fn part_damage(
+    role: PartRole,
+    weak: bool,
+    damage: f32,
+    blow: Option<extraction_core::melee::Blow>,
+) -> f32 {
+    match (role, blow) {
+        (PartRole::Armour(_), Some(extraction_core::melee::Blow::Blunt)) if !weak => {
+            damage * BLUNT_LOOSENS
+        }
+        _ => damage,
+    }
+}
+
+/// Bullets (and blows) damage the part they strike.
 fn damage_parts(
     mut hits: MessageReader<Hit>,
-    mut parts: Query<(&mut RobotPart, &GlobalTransform)>,
+    mut parts: Query<(
+        &mut RobotPart,
+        &GlobalTransform,
+        Has<crate::weapons::melee::WeakPoint>,
+    )>,
     mut robots: Query<&mut Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
     mut noise: MessageWriter<Noise>,
@@ -319,7 +352,7 @@ fn damage_parts(
 ) {
     let now = time.elapsed_secs();
     for hit in hits.read() {
-        let Ok((mut part, gt)) = parts.get_mut(hit.entity) else {
+        let Ok((mut part, gt, weak)) = parts.get_mut(hit.entity) else {
             continue;
         };
         if !part.alive() {
@@ -331,7 +364,7 @@ fn damage_parts(
             radius: 40.0,
             source: hit.shooter,
         });
-        part.hp -= hit.damage;
+        part.hp -= part_damage(part.role, weak, hit.damage, hit.blow);
         if part.hp <= 0.0 {
             destroyed.write(PartDestroyed {
                 robot: part.robot,
@@ -499,12 +532,9 @@ pub fn part_salvage(
     match kind {
         RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
         RobotKind::Walker if hound => Vec::new(),
-        RobotKind::Walker => tries(
-            count(|r| matches!(r, PartRole::Leg(_))),
-            0.3,
-            "walker_leg_actuator",
-            rng,
-        ),
+        // A walker's servo packs are bolted on its wreck, taken off by hand
+        // (`salvage`), not dropped.
+        RobotKind::Walker => Vec::new(),
         RobotKind::Drone => tries(
             count(|r| matches!(r, PartRole::Rotor(_))),
             0.35,
@@ -523,7 +553,8 @@ pub fn part_salvage(
             "pylon_relay_coil",
             rng,
         ),
-        RobotKind::Sorter => tries(1, 0.7, "sorter_servo_pack", rng),
+        // Its servo pack is bolted on its wreck (`salvage`).
+        RobotKind::Sorter => Vec::new(),
     }
 }
 
@@ -570,7 +601,14 @@ pub fn part_bundle(
         collider,
         CollisionLayers::new(
             Layer::Robot,
-            [Layer::World, Layer::Item, Layer::Robot, Layer::Player],
+            // (Hand: a palm stops on a robot, or shoves it: `interact::fight`.)
+            [
+                Layer::World,
+                Layer::Item,
+                Layer::Robot,
+                Layer::Player,
+                Layer::Hand,
+            ],
         ),
         at,
         Visibility::default(),
@@ -625,22 +663,26 @@ mod tests {
     }
 
     /// Whole parts give up their own salvage: never more than two of a
-    /// kind, nothing from parts that are gone, nothing from a hound, and
-    /// every id is a real item.
+    /// kind, nothing from parts that are gone, nothing from a hound (and
+    /// nothing loose from a walker: its are on the wreck), and every id
+    /// is a real item.
     #[test]
     fn whole_parts_come_off_as_salvage() {
         let mut rng = extraction_core::noise::Rng::new(9);
         let legs: Vec<PartRole> = (0..4).map(PartRole::Leg).collect();
+        let rotors: Vec<PartRole> = (0..4).map(PartRole::Rotor).collect();
         let mut seen = 0;
         for _ in 0..200 {
-            let got = part_salvage(RobotKind::Walker, false, false, &legs, &mut rng);
+            let got = part_salvage(RobotKind::Drone, false, false, &rotors, &mut rng);
             assert!(got.len() <= 2);
-            assert!(got.iter().all(|id| *id == "walker_leg_actuator"));
+            assert!(got.iter().all(|id| *id == "drone_rotor_motor"));
             seen += got.len();
         }
-        // About 0.3 a leg, four legs, capped at two: roughly 1.1 a wreck.
-        assert!((150..300).contains(&seen), "{seen} actuators in 200 wrecks");
-        assert!(part_salvage(RobotKind::Walker, false, false, &[], &mut rng).is_empty());
+        // About 0.35 a rotor, four rotors, capped at two.
+        assert!((150..320).contains(&seen), "{seen} motors in 200 wrecks");
+        assert!(part_salvage(RobotKind::Drone, false, false, &[], &mut rng).is_empty());
+        // A walker's servo packs are bolted on (`salvage`), not dropped.
+        assert!(part_salvage(RobotKind::Walker, false, false, &legs, &mut rng).is_empty());
         assert!(part_salvage(RobotKind::Walker, false, true, &legs, &mut rng).is_empty());
         let catalog = crate::items::Catalog::load();
         let all = [
@@ -666,6 +708,21 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A blunt blow beats a plate loose faster than its harm; a blade or a
+    /// round does its harm, and a blow elsewhere is its harm.
+    #[test]
+    fn blunt_blows_shake_plates_loose() {
+        use extraction_core::melee::Blow;
+        let plate = PartRole::Armour(0);
+        assert!(part_damage(plate, false, 10.0, Some(Blow::Blunt)) > 10.0);
+        assert_eq!(part_damage(plate, false, 10.0, Some(Blow::Edge)), 10.0);
+        assert_eq!(part_damage(plate, false, 10.0, None), 10.0);
+        let core = PartRole::Core;
+        assert_eq!(part_damage(core, false, 10.0, Some(Blow::Blunt)), 10.0);
+        // A heavy's bolt is a weak point: its own multiplier, not this.
+        assert_eq!(part_damage(plate, true, 10.0, Some(Blow::Blunt)), 10.0);
     }
 
     /// A wreck's salvage is its own: other robots wrecked first, somewhere

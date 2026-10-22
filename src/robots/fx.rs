@@ -34,6 +34,7 @@ impl Plugin for RobotFxPlugin {
                 drag_sparks,
                 scuff_dust,
                 eye_out,
+                cell_arcs,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -729,6 +730,40 @@ fn eye_out(
         let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
         burst(&mut commands, &a, &mut dice, d.at, Vec3::Y, 10, 3.5);
         n += 10;
+    }
+}
+
+/// A live cell throwing a hand off (`salvage::Arced`): a crack of
+/// blue-white arc off it.
+fn cell_arcs(
+    mut commands: Commands,
+    mut arcs: MessageReader<super::salvage::Arced>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let mut n = sparks.iter().len();
+    for arc in arcs.read() {
+        if n >= MAX_SPARKS {
+            continue;
+        }
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        for _ in 0..12 {
+            let vel = (Vec3::Y + dice.signed()).normalize_or(Vec3::Y) * (1.5 + 2.5 * dice.f());
+            commands.spawn((
+                Spark {
+                    vel,
+                    life: 0.08 + dice.f() * 0.12,
+                },
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(a.arc.clone()),
+                Transform::from_translation(arc.at).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+        }
+        n += 12;
     }
 }
 

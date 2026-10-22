@@ -93,6 +93,26 @@ pub const STAND_INS: &[StandIn] = &[
         variants: 5,
         render: canary,
     },
+    StandIn {
+        set: "drag/metal",
+        variants: 3,
+        render: drag_metal,
+    },
+    StandIn {
+        set: "drag/wood",
+        variants: 3,
+        render: drag_wood,
+    },
+    StandIn {
+        set: "drag/roll",
+        variants: 3,
+        render: drag_roll,
+    },
+    StandIn {
+        set: "drag/body",
+        variants: 3,
+        render: drag_body,
+    },
 ];
 
 pub fn is_stand_in(set: &str) -> bool {
@@ -553,4 +573,101 @@ mod tests {
             }
         }
     }
+}
+
+/// How long a drag loop is, s, and how much of its tail is faded into
+/// its head so it loops without a seam.
+const LOOP_SECS: f32 = 2.0;
+const LOOP_FADE: f32 = 0.3;
+
+/// `LOOP_SECS` of `sample(rng, t)` that loops without a click: rendered
+/// long, its tail crossfaded (equal power) into its head.
+fn seamless(rng: &mut Rng, sr: f32, mut sample: impl FnMut(&mut Rng, f32) -> f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let fade = (LOOP_FADE * sr) as usize;
+    let long: Vec<f32> = (0..n + fade).map(|i| sample(rng, i as f32 / sr)).collect();
+    let mut out = long[..n].to_vec();
+    for i in 0..fade {
+        let a = (i as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+        out[i] = out[i] * a.sin() + long[n + i] * a.cos();
+    }
+    out
+}
+
+/// Stick and slip: a rough, uneven grit, `rate` catches a second, each a
+/// quick swell that lets go, in 0.3..1.
+fn grit(rate: f32, sr: f32) -> impl FnMut(&mut Rng) -> f32 {
+    let mut level = 0.6f32;
+    let mut next = 0usize;
+    let mut i = 0usize;
+    move |rng: &mut Rng| {
+        if i >= next {
+            level = 0.3 + 0.7 * rng.f32();
+            next = i + ((sr / rate) * jitter(rng, 0.6)) as usize;
+        }
+        i += 1;
+        let k = (next - i) as f32 / (sr / rate);
+        level * (0.5 + 0.5 * k.min(1.0))
+    }
+}
+
+/// A sheet of metal (a car door, a panel, a robot's hull) dragged over
+/// ground: a hiss through the sheet's own ringing modes, catching and
+/// slipping, with the grind of what's under it, 2 s, looped.
+fn drag_metal(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut modes: Vec<(Bp, f32)> = [1100.0, 2600.0, 4200.0, 6300.0]
+        .iter()
+        .zip([1.0, 0.45, 0.2, 0.08])
+        .map(|(&f, w)| (Bp::new(f * jitter(rng, 0.15), 18.0, sr), w))
+        .collect();
+    let mut grind = Bp::new(320.0 * jitter(rng, 0.2), 0.8, sr);
+    let mut catch = grit(35.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let s = noise(rng);
+        let ring: f32 = modes.iter_mut().map(|(m, w)| m.run(s) * *w).sum();
+        (2.5 * ring + 0.6 * grind.run(s)) * catch(rng)
+    })
+}
+
+/// Wood (a crate, a plank, a door) dragged: a dry, hollow chatter, 2 s,
+/// looped.
+fn drag_wood(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut body = Bp::new(650.0 * jitter(rng, 0.2), 1.6, sr);
+    let mut edge = Bp::new(2100.0 * jitter(rng, 0.2), 2.0, sr);
+    let mut catch = grit(22.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let s = noise(rng);
+        let c = catch(rng);
+        body.run(s) * c * c + 0.4 * edge.run(s) * c
+    })
+}
+
+/// A wheel rolled over ground: a low rumble with the tread's beat and
+/// the odd stone crackling under it, 2 s, looped.
+fn drag_roll(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut low = Bp::new(110.0 * jitter(rng, 0.15), 0.7, sr);
+    let mut mid = Bp::new(380.0, 1.0, sr);
+    let tread = 9.0 * jitter(rng, 0.2);
+    let mut crackle = Bp::new(3000.0, 1.5, sr);
+    seamless(rng, sr, |rng, t| {
+        let s = noise(rng);
+        // A whole number of beats per loop so the tread doesn't jump.
+        let beats = (tread * LOOP_SECS).round() / LOOP_SECS;
+        let beat = 0.7 + 0.3 * (TAU * beats * t).sin().abs();
+        let stone = if rng.f32() < 25.0 / sr { 1.0 } else { 0.0 };
+        (2.0 * low.run(s) + 0.5 * mid.run(s)) * beat + 3.0 * crackle.run(stone)
+    })
+}
+
+/// A body (a person's, a robot's soft parts) dragged: cloth and limbs
+/// scuffing the ground in uneven tugs, 2 s, looped.
+fn drag_body(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut cloth = Bp::new(1400.0 * jitter(rng, 0.2), 0.9, sr);
+    let mut thud = Bp::new(180.0, 0.8, sr);
+    let tugs = (1.5 * jitter(rng, 0.2) * LOOP_SECS).round() / LOOP_SECS;
+    seamless(rng, sr, |rng, t| {
+        let s = noise(rng);
+        let tug = (TAU * tugs * t).sin().max(0.0).powf(1.5);
+        (cloth.run(s) * 0.8 + 0.6 * thud.run(s)) * (0.25 + 0.75 * tug)
+    })
 }

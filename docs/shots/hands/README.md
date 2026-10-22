@@ -72,3 +72,7 @@ posed and their holds put on by the gallery; `interact::hand_climb`): a
 wall 2 m high, from behind. Reaching up to its top, gripping its edge
 (`Hold::Edge`), and pulled up until the head is over it; a moment later
 you're over and down the far side.
+`18_fight.jpg` (`--gallery fight`, `fight+side`; `interact::fight`): a
+crawler a metre ahead, the crowbar raised in the right hand to strike
+(swung fast, its claw end lands a blunt blow), and the left palm laid on
+the machine (where a shove or a grip would start).

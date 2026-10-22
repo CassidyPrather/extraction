@@ -27,7 +27,7 @@ impl Plugin for GunRestPlugin {
         }
         app.init_resource::<RestCache>().add_systems(
             PostUpdate,
-            (wake_handled, rest_idle)
+            (wake_handled, rest_idle, finish_building)
                 .chain()
                 .after(TransformSystems::Propagate)
                 .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
@@ -217,15 +217,166 @@ fn wake_handled(
     }
 }
 
+/// Whether a mesh can be merged (`world_props::for_merge` takes it):
+/// without building the merge, which generates tangents and cost a frame
+/// its 31 ms a gun when asked every time.
+fn mergeable(m: &Mesh) -> bool {
+    m.primitive_topology() == bevy::mesh::PrimitiveTopology::TriangleList
+        && m.attribute(Mesh::ATTRIBUTE_POSITION).is_some()
+        && m.attribute(Mesh::ATTRIBUTE_NORMAL).is_some()
+        && m.attribute(Mesh::ATTRIBUTE_UV_0).is_some()
+        && m.indices().is_some()
+}
+
+/// A gun whose merged meshes are being built off the main thread (a
+/// merge was a 31 ms frame on it): put to rest when they're done, if it
+/// is still lying as it was.
+#[derive(Component)]
+struct Building {
+    task: bevy::tasks::Task<Vec<(u64, Option<Mesh>)>>,
+    groups: Vec<(Shade, u64)>,
+    all: Vec<Entity>,
+    taken: Vec<(Entity, Visibility)>,
+    range: Option<VisibilityRange>,
+}
+
+fn group_key(parts: &[(AssetId<Mesh>, Mat4)]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for (id, m) in parts {
+        id.hash(&mut h);
+        for f in m.to_cols_array() {
+            ((f * 1e4).round() as i64).hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
+/// Puts a gun to rest with its merged meshes: stand-ins spawned, leaves
+/// hidden.
+fn put_to_rest(
+    commands: &mut Commands,
+    gun: Entity,
+    groups: &[(Shade, Handle<Mesh>)],
+    all: Vec<Entity>,
+    taken: Vec<(Entity, Visibility)>,
+    range: Option<VisibilityRange>,
+) {
+    let mut stand_ins = Vec::new();
+    for (shade, handle) in groups {
+        let mut ec = commands.spawn((
+            Name::new("Gun at rest"),
+            RestMesh,
+            Mesh3d(handle.clone()),
+            MeshMaterial3d(shade.mat.clone()),
+            Transform::IDENTITY,
+            ChildOf(gun),
+        ));
+        if let Some(r) = &range {
+            ec.insert(r.clone());
+        }
+        match shade.reach {
+            Some(bits) => {
+                ec.insert(super::budget::ShadowReach(f32::from_bits(bits)));
+            }
+            None if !shade.caster => {
+                ec.insert(bevy::light::NotShadowCaster);
+            }
+            None => {}
+        }
+        stand_ins.push(ec.id());
+    }
+    for (e, _) in &taken {
+        commands.entity(*e).insert(Visibility::Hidden);
+    }
+    commands.entity(gun).insert(AtRest {
+        all,
+        leaves: taken,
+        merged: stand_ins,
+    });
+}
+
+/// A gun's merged meshes done building: put to rest, if nobody took it
+/// and nothing under it changed meanwhile.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn finish_building(
+    mut commands: Commands,
+    mut building: Query<(Entity, &mut Building)>,
+    mut cache: ResMut<RestCache>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
+    hands: Query<
+        (),
+        Or<(
+            With<crate::interact::Held>,
+            With<crate::interact::Supported>,
+        )>,
+    >,
+    players: Query<(), With<crate::player::Player>>,
+    parents: Query<&ChildOf>,
+    children: Query<&Children>,
+    meshes: Query<
+        (
+            &Mesh3d,
+            &MeshMaterial3d<StandardMaterial>,
+            &InheritedVisibility,
+        ),
+        Without<bevy::mesh::skinning::SkinnedMesh>,
+    >,
+    merged: Query<(), With<RestMesh>>,
+    names: Query<&Name>,
+) {
+    use bevy::tasks::{block_on, futures_lite::future};
+    for (gun, mut b) in &mut building {
+        let Some(built) = block_on(future::poll_once(&mut b.task)) else {
+            continue;
+        };
+        commands.entity(gun).remove::<Building>();
+        for (key, mesh) in built {
+            if let Some(mesh) = mesh {
+                let h = mesh_assets.add(mesh);
+                cache.meshes.insert(key, h);
+            }
+        }
+        if handled(gun, &hands, &players, &parents)
+            || leaves_of(gun, &children, &meshes, &merged, &names) != b.all
+        {
+            continue;
+        }
+        let groups: Option<Vec<(Shade, Handle<Mesh>)>> = b
+            .groups
+            .iter()
+            .map(|(shade, key)| cache.meshes.get(key).map(|h| (shade.clone(), h.clone())))
+            .collect();
+        let Some(groups) = groups else {
+            continue;
+        };
+        put_to_rest(
+            &mut commands,
+            gun,
+            &groups,
+            std::mem::take(&mut b.all),
+            std::mem::take(&mut b.taken),
+            b.range.take(),
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn rest_idle(
     mut commands: Commands,
     mut settling: Local<std::collections::HashMap<Entity, (usize, u32)>>,
-    mut cache: ResMut<RestCache>,
-    mut mesh_assets: ResMut<Assets<Mesh>>,
+    // Guns not worth merging, by how many leaves they had then: asked
+    // again only when that changes.
+    mut declined: Local<std::collections::HashMap<Entity, usize>>,
+    cache: Res<RestCache>,
+    mesh_assets: Res<Assets<Mesh>>,
     guns: Query<
         (Entity, &GlobalTransform, &InheritedVisibility),
-        (With<crate::weapons::Gun>, Without<AtRest>),
+        (
+            With<crate::weapons::Gun>,
+            Without<AtRest>,
+            Without<Building>,
+        ),
     >,
     hands: Query<
         (),
@@ -256,6 +407,7 @@ fn rest_idle(
     )>,
 ) {
     settling.retain(|e, _| guns.contains(*e));
+    declined.retain(|e, _| guns.contains(*e));
     let mut done = 0;
     for (gun, gun_gt, shown) in &guns {
         if done >= PER_FRAME {
@@ -266,6 +418,9 @@ fn rest_idle(
             continue;
         }
         let leaves = leaves_of(gun, &children, &meshes, &merged, &names);
+        if declined.get(&gun) == Some(&leaves.len()) {
+            continue;
+        }
         let all = leaves.clone();
         let entry = settling.entry(gun).or_insert((usize::MAX, 0));
         if entry.0 != leaves.len() {
@@ -302,7 +457,7 @@ fn rest_idle(
             let Some(m) = mesh_assets.get(&mesh.0) else {
                 continue;
             };
-            if crate::render::world_props::for_merge(m).is_none() {
+            if !mergeable(m) {
                 continue;
             }
             if range.is_none() {
@@ -328,33 +483,46 @@ fn rest_idle(
         }
         // Not worth it for a gun that's a draw or two already.
         if taken.len() <= groups.len() {
+            declined.insert(gun, all.len());
             continue;
         }
-        let mut stand_ins = Vec::new();
-        for (shade, parts) in &groups {
-            let key = {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                for (id, m) in parts {
-                    id.hash(&mut h);
-                    for f in m.to_cols_array() {
-                        ((f * 1e4).round() as i64).hash(&mut h);
-                    }
-                }
-                h.finish()
-            };
-            let handle = match cache.meshes.get(&key) {
-                Some(h) => h.clone(),
-                None => {
+        let keyed: Vec<(Shade, u64, Vec<(AssetId<Mesh>, Mat4)>)> = groups
+            .into_iter()
+            .map(|(shade, parts)| {
+                let key = group_key(&parts);
+                (shade, key, parts)
+            })
+            .collect();
+        // Guns left alike share merged meshes: when every group's is made,
+        // rest now; else build the rest off the main thread.
+        let hits: Option<Vec<(Shade, Handle<Mesh>)>> = keyed
+            .iter()
+            .map(|(shade, key, _)| cache.meshes.get(key).map(|h| (shade.clone(), h.clone())))
+            .collect();
+        if let Some(hits) = hits {
+            put_to_rest(&mut commands, gun, &hits, all, taken, range);
+            continue;
+        }
+        let work: Vec<(u64, Vec<(Mesh, Mat4)>)> = keyed
+            .iter()
+            .filter(|(_, key, _)| !cache.meshes.contains_key(key))
+            .map(|(_, key, parts)| {
+                let srcs = parts
+                    .iter()
+                    .filter_map(|(id, m)| mesh_assets.get(*id).map(|src| (src.clone(), *m)))
+                    .collect();
+                (*key, srcs)
+            })
+            .collect();
+        let task = bevy::tasks::AsyncComputeTaskPool::get().spawn(async move {
+            work.into_iter()
+                .map(|(key, srcs)| {
                     let mut out: Option<Mesh> = None;
-                    for (id, m) in parts {
-                        let Some(src) = mesh_assets.get(*id) else {
+                    for (src, m) in srcs {
+                        let Some(part) = crate::render::world_props::for_merge(&src) else {
                             continue;
                         };
-                        let Some(part) = crate::render::world_props::for_merge(src) else {
-                            continue;
-                        };
-                        let part = part.transformed_by(Transform::from_matrix(*m));
+                        let part = part.transformed_by(Transform::from_matrix(m));
                         match &mut out {
                             Some(o) => {
                                 let _ = o.merge(&part);
@@ -362,43 +530,19 @@ fn rest_idle(
                             None => out = Some(part),
                         }
                     }
-                    let Some(out) = out else {
-                        continue;
-                    };
-                    let h = mesh_assets.add(out);
-                    cache.meshes.insert(key, h.clone());
-                    h
-                }
-            };
-            let mut ec = commands.spawn((
-                Name::new("Gun at rest"),
-                RestMesh,
-                Mesh3d(handle),
-                MeshMaterial3d(shade.mat.clone()),
-                Transform::IDENTITY,
-                ChildOf(gun),
-            ));
-            if let Some(r) = &range {
-                ec.insert(r.clone());
-            }
-            match shade.reach {
-                Some(bits) => {
-                    ec.insert(super::budget::ShadowReach(f32::from_bits(bits)));
-                }
-                None if !shade.caster => {
-                    ec.insert(bevy::light::NotShadowCaster);
-                }
-                None => {}
-            }
-            stand_ins.push(ec.id());
-        }
-        for (e, _) in &taken {
-            commands.entity(*e).insert(Visibility::Hidden);
-        }
-        commands.entity(gun).insert(AtRest {
+                    (key, out)
+                })
+                .collect()
+        });
+        commands.entity(gun).insert(Building {
+            task,
+            groups: keyed
+                .into_iter()
+                .map(|(shade, key, _)| (shade, key))
+                .collect(),
             all,
-            leaves: taken,
-            merged: stand_ins,
+            taken,
+            range,
         });
     }
 }
@@ -440,7 +584,8 @@ mod tests {
     /// Guns lying in a valley rest; the drawn meshes under a resting gun
     /// are its merged ones only.
     #[test]
-    fn guns_lying_about_rest() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_guns_lying_about_rest() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         for _ in 0..(SETTLE as usize * 3 + 60) {

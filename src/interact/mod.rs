@@ -17,6 +17,7 @@
 pub mod body;
 pub mod carry;
 pub mod far;
+pub mod fight;
 pub mod first_aid;
 pub mod flat;
 pub mod gestures;
@@ -28,6 +29,7 @@ pub mod poke;
 pub mod read;
 pub mod tools;
 pub mod touch;
+pub mod wounds;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -321,6 +323,8 @@ impl Plugin for InteractPlugin {
                 gestures::GesturesPlugin,
                 touch::TouchPlugin,
                 carry::CarryPlugin,
+                fight::FightPlugin,
+                wounds::WoundsPlugin,
                 read::ReadPlugin,
             ));
     }

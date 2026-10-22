@@ -163,7 +163,23 @@ pub struct Room {
     /// The power stage its `Lamp::Powered` lamp is on.
     #[serde(default)]
     pub stage: usize,
+    /// Long, bare and hard: it carries every sound made in it its whole
+    /// length (`world::echo`).
+    #[serde(default)]
+    pub carries: bool,
 }
+
+impl Room {
+    /// How far a sound made in it carries, if it carries: its length and a
+    /// little over (metres).
+    pub fn carry(&self) -> Option<f32> {
+        self.carries
+            .then(|| self.size[0].max(self.size[1]) + CARRY_OVER)
+    }
+}
+
+/// How far past a carrying room's length its sounds reach (metres).
+pub const CARRY_OVER: f32 = 4.0;
 
 fn room_height() -> f32 {
     2.6
@@ -292,6 +308,13 @@ pub struct Layout {
     /// A cage riding a shaft between levels.
     #[serde(default)]
     pub cage: Option<CageDef>,
+    /// The site seals itself once its power's on.
+    #[serde(default)]
+    pub lockdown: Option<LockdownDef>,
+    /// A flooded room whose water goes live with its lamps' power, and the
+    /// isolator that cuts it.
+    #[serde(default)]
+    pub live: Option<LiveDef>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -406,6 +429,85 @@ pub struct CageDef {
     pub shaft: String,
     pub top: String,
     pub bells: Vec<(String, P2, f32)>,
+}
+
+/// A shelter's lockdown: `after` seconds once its first power stage comes
+/// on (a klaxon in `room` the while), the doors opening into the `doors`
+/// rooms shut and bolt for good. From every room `out` (the room the way
+/// out that isn't the way in leaves from) must still be reached.
+#[derive(Clone, Debug, Deserialize)]
+pub struct LockdownDef {
+    pub after: f32,
+    pub room: String,
+    pub doors: Vec<String>,
+    pub out: String,
+}
+
+impl LockdownDef {
+    /// Whether it shuts this door (of the raster's).
+    pub fn holds(&self, l: &Layout, d: &DoorSpot) -> bool {
+        d.room
+            .is_some_and(|k| self.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+    }
+
+    /// Whether it shuts this corridor (a door at an end opening into one
+    /// of its rooms).
+    pub fn shuts(&self, k: &Link) -> bool {
+        let at = |end: &str| self.doors.iter().any(|id| id == end);
+        (matches!(k.doors, Doors::From | Doors::Both) && at(&k.from))
+            || (matches!(k.doors, Doors::To | Doors::Both) && at(&k.to))
+    }
+
+    /// The rooms that can't reach `out` once it's shut (by name).
+    pub fn cut_off<'a>(&self, l: &'a Layout) -> Vec<&'a str> {
+        let id = |r: &str| l.rooms.iter().position(|q| q.id == r);
+        let Some(out) = id(&self.out) else {
+            return l.rooms.iter().map(|r| r.id.as_str()).collect();
+        };
+        let mut seen = vec![false; l.rooms.len()];
+        seen[out] = true;
+        let mut stack = vec![out];
+        while let Some(k) = stack.pop() {
+            for link in l.links.iter().filter(|k| !self.shuts(k)) {
+                let (Some(a), Some(b)) = (id(&link.from), id(&link.to)) else {
+                    continue;
+                };
+                for (x, y) in [(a, b), (b, a)] {
+                    if x == k && !seen[y] {
+                        seen[y] = true;
+                        stack.push(y);
+                    }
+                }
+            }
+        }
+        l.rooms
+            .iter()
+            .zip(seen)
+            .filter(|(_, s)| !s)
+            .map(|(r, _)| r.id.as_str())
+            .collect()
+    }
+}
+
+/// Live water: `room` is flooded and lit on a power stage; once that
+/// stage is on, the lamps' feed is down in the water and it's live, till
+/// the isolator (on a room's wall, as vents are) cuts the room's circuit
+/// (and its lamps).
+#[derive(Clone, Debug, Deserialize)]
+pub struct LiveDef {
+    pub room: String,
+    pub isolator: (String, P2, f32),
+}
+
+impl LiveDef {
+    /// The power stage that makes it live: its room's lamps'.
+    pub fn stage(&self, l: &Layout) -> Option<usize> {
+        l.rooms
+            .iter()
+            .find(|r| r.id == self.room)
+            .filter(|r| r.lamp == Lamp::Powered)
+            .map(|r| r.stage)
+    }
 }
 
 /// The cage's floor, inside its shaft's walls, metres.
@@ -1676,6 +1778,62 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    if let Some(v) = &l.live {
+        let (room, at, rot) = &v.isolator;
+        on_wall(room, *at, *rot, "isolator", &mut bad);
+        if v.stage(l).is_none_or(|k| k >= l.power.len()) {
+            bad.push(format!(
+                "live water in `{}`: no powered lamps there",
+                v.room
+            ));
+        }
+        if !l
+            .floods
+            .iter()
+            .any(|f| f.room.as_deref() == Some(v.room.as_str()))
+        {
+            bad.push(format!("live water in `{}`: it isn't flooded", v.room));
+        }
+        if room == &v.room {
+            bad.push("the isolator's in the live water's room".into());
+        }
+    }
+    if let Some(k) = &l.lockdown {
+        for id in k.doors.iter().chain([&k.room, &k.out]) {
+            if !l.rooms.iter().any(|r| r.id == *id) {
+                bad.push(format!("the lockdown names no room `{id}`"));
+            }
+        }
+        if !r.doors.iter().any(|d| k.holds(l, d)) {
+            bad.push("a lockdown that shuts no door".into());
+        }
+        if l.power.is_empty() {
+            bad.push("a lockdown with no power to set it off".into());
+        }
+        let cut = k.cut_off(l);
+        if !cut.is_empty() {
+            bad.push(format!("sealed, these can't get out: {cut:?}"));
+        }
+        // The way out leaves from `out`: a portal other than the entrance
+        // nearest it.
+        let near = |p: P2| {
+            l.rooms
+                .iter()
+                .min_by(|a, b| {
+                    let d = |r: &Room| (r.at[0] - p[0]).hypot(r.at[1] - p[1]);
+                    d(a).total_cmp(&d(b))
+                })
+                .map(|r| r.id.as_str())
+        };
+        if !l
+            .portals
+            .iter()
+            .skip(1)
+            .any(|p| near(p.at) == Some(k.out.as_str()))
+        {
+            bad.push(format!("no way out leaves from `{}`", k.out));
+        }
+    }
     if let Some(c) = &l.cage {
         for (room, at, rot) in &c.bells {
             on_wall(room, *at, *rot, "cage bell", &mut bad);
@@ -2266,6 +2424,26 @@ mod tests {
                 assert!(l.open_rooms().iter().all(|o| *o), "{id}: every room open");
             }
         }
+    }
+
+    /// Sealed, the shelter can still be left: every room reaches the
+    /// escape tunnel; a lockdown that shut the tunnel's door too would be
+    /// caught.
+    #[test]
+    fn a_sealed_shelter_can_be_left() {
+        let l = layout("bunker_marrow").unwrap();
+        let k = l.lockdown.as_ref().expect("the shelter's lockdown");
+        assert!(k.cut_off(l).is_empty(), "{:?}", k.cut_off(l));
+        let r = raster("bunker_marrow").unwrap();
+        assert_eq!(
+            r.doors.iter().filter(|d| k.holds(l, d)).count(),
+            2,
+            "the gas lock's two doors"
+        );
+        let mut bad = l.clone();
+        bad.lockdown.as_mut().unwrap().doors.push("escape".into());
+        let errs = check(&bad);
+        assert!(errs.iter().any(|e| e.contains("can't get out")), "{errs:?}");
     }
 
     #[test]
