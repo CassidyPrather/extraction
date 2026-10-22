@@ -1,0 +1,3 @@
+# What's new: Marrow Creek. name x,y,z,yaw,pitch (y 0: eye height on the ground).
+n_minefield     16,0,82,330,-14     # the minelayer's field at the village (--gallery minefields)
+n_wreck_lada    27,0,145,303,-8     # a Lada wreck by the road north

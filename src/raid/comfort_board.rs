@@ -1,4 +1,4 @@
-//! The comfort board: twelve cards pinned on the bed's left wall, above the
+//! The comfort board: fifteen cards pinned on the bed's left wall, above the
 //! stash, for the settings a headset player can't reach otherwise. Press
 //! one to step through its presets; the choice is kept in `settings.ron`.
 
@@ -36,6 +36,8 @@ pub enum ComfortCard {
     Climb,
     /// Your body drawn under you, or not.
     Body,
+    /// MSAA: 4x, 2x or off.
+    Smoothing,
 }
 
 pub struct ComfortBoardPlugin;
@@ -71,6 +73,8 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::MachineTick, 1.80, -0.15),
             // Under it, whether you see your body.
             (ComfortCard::Body, 1.62, -0.15),
+            // And under that, how smooth the edges are (a frame-rate knob).
+            (ComfortCard::Smoothing, 1.44, -0.15),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -126,6 +130,7 @@ fn press_cards(
                 ComfortCard::MachineTick => comfort.machine_tick = !comfort.machine_tick,
                 ComfortCard::Body => comfort.body = !comfort.body,
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
+                ComfortCard::Smoothing => comfort.next_msaa(),
             }
             // Tests and sims don't touch the player's settings.
             if !opts.headless {
@@ -162,6 +167,7 @@ fn card_text(
             ComfortCard::MachineTick => comfort.machine_tick_label(),
             ComfortCard::Body => comfort.body_label(),
             ComfortCard::Climb => comfort.climb_label(),
+            ComfortCard::Smoothing => comfort.msaa_label(),
         };
         if text.text != t {
             text.text = t;

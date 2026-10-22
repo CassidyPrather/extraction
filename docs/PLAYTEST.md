@@ -120,6 +120,16 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Heavy things.** A car door, a bus panel, a wheel, a heavy's claw:
+  take it by both ends and lift it. It's heavy: it swings on when you
+  stop and comes round late when you turn, and you walk slower and can't
+  run. With one hand you can only drag it, its far end scraping along
+  the ground (the machines hear that). Let go of it swinging and it's a
+  shove, not a throw. A robot's wreck: take it by a leg and drag it,
+  slowly. Your pack: reach over a shoulder, take it, and bring it round
+  in front of you: it hangs open from your hand and you can reach in
+  with the other; take it back over the shoulder and let go, and it's
+  on. Say if anything feels floaty or gets stuck.
 - **Your body.** Look down: a jacket, the chest rig and belt on it,
   trousers and boots. Turn your head and your feet stay put; turn your
   whole body, or step across the room, and they step after you. Crouch
@@ -192,11 +202,28 @@ What changed, and worth a comment each:
   next to the frame times, where the GPU's time went (`gpu: ... ms a
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
-  and how it feels. If there's time, play a minute each with
-  `EXTRACTION_PERF=msaa=2` and `EXTRACTION_PERF=msaa=1` set and note the
-  `gpu:` lines and how the edges look: 4x MSAA is the dearest thing the
-  software renderer can measure, and only the headset can say what it
-  costs there (`docs/PERFORMANCE.md`).
+  and how it feels.
+- **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
+  the dearest per-eye cost the software renderer can measure; only the
+  headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
+  raid as it comes (the **SMOOTHING** card on the truck wall says 4x+leaves), then
+  press the card to 2x (or start with `--msaa 2`) and play the same valley
+  again. For each, note:
+  - the `gpu:` and `frames:` lines in the log;
+  - how the edges look: fence wires, grass, the trees' leaves, the gun's
+    sights and front post. The first to shimmer are a spruce's edge
+    against the sky and a fence line 20-40 m off, while turning your head
+    slowly.
+  - a third raid at **4x hard leaves** (the card's second step, or
+    `--a2c 0`; restart after pressing it, since the leaves change next
+    launch): the trees' leaves cut hard instead of smoothed. Stand in the
+    spruce wood, or look across it, in both, and note the `gpu:` line's
+    `main_opaque_pass_3d`. If soft leaves cost more than 0.5 ms an eye
+    there (about 1 ms a frame for both eyes), hard leaves become the
+    default.
+
+  Whether 2x reads the same at the Beyond 2's sharpness decides the
+  default.
 
 ## Marks
 
@@ -298,6 +325,7 @@ queasy (climbing, the zipline, being knocked about, swimming).
 | VIGNETTE | off to 90% | darkening the edges while the stick moves you |
 | SOUND | full range / narrow | narrow: the forest and your hands up, gunfire down, for open speakers in a room that isn't quiet |
 | SHARPNESS | auto, 50–100% | render size per eye (next launch) |
+| SMOOTHING | 4x+leaves / 4x hard leaves / 2x+leaves / off | smoothed edges (MSAA): fewer samples, faster, with harder edges on wires and blades; hard leaves cuts the trees' leaves sharp instead of smoothing them (next launch); off adds a light edge filter (FXAA) |
 | GRAB | squeeze / squeeze or fingers | fingers: tracked fingers closing round a thing take it |
 | HEARING | all around you / flat stereo | binaural placed sounds, or plain panning |
 | MUSIC | rises with danger / off | the score |
@@ -372,6 +400,14 @@ said you don't use?
   notices. Bring the AK's iron sights to your cheek: do they line up
   without fiddling? Does the front post going soft read as your eye
   focusing past it, or as a smudge? (`--no-post-blur` turns it off.)
+- Gun handling.
+  - Cup the PM or the Nagant under the grip with your other palm: does it
+    steady the shot without pulling your aim?
+  - Hold an AK out at arm's length, then tucked in: does the weight tell?
+  - Take your rifle off your sling and let go of it in front of you:
+    does the sling catch it?
+  - Walk through a doorway with it raised: do the knocks feel and sound
+    right, and never too often?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -540,6 +576,8 @@ pump?
 | `--no-robots` | An empty Zone, for looking around |
 | `--steamvr` | Use SteamVR's OpenXR runtime, whatever the active one is |
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
+| `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
+| `--a2c 0` | Hard leaves: the trees' leaves cut sharp, not smoothed (`--a2c 1`, the default, smooths them) |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

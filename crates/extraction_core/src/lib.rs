@@ -39,6 +39,7 @@ pub mod minelayer;
 pub mod music;
 pub mod nav;
 pub mod noise;
+pub mod plough;
 pub mod progression;
 pub mod rocks;
 pub mod safehouse;

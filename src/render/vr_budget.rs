@@ -220,3 +220,61 @@ fn every_valley_holds_the_stereo_budget() {
         holds(map);
     }
 }
+
+/// The comfort board's SMOOTHING reaches the views of the world (both
+/// eyes here) and leaves offscreen pictures alone.
+#[test]
+fn smoothing_reaches_the_eyes() {
+    let _one_at_a_time = super::budget::tests::heavy();
+    let mut app = super::budget::tests::client_threads("training_yard", "clearing", None);
+    for _ in 0..120 {
+        app.update();
+    }
+    let eyes = both_eyes(&mut app);
+    let image = app
+        .world_mut()
+        .resource_mut::<Assets<Image>>()
+        .add(Image::default());
+    let scope = app
+        .world_mut()
+        .spawn((
+            Camera3d::default(),
+            Camera {
+                is_active: false,
+                ..default()
+            },
+            bevy::camera::RenderTarget::Image(image.into()),
+            Msaa::Off,
+        ))
+        .id();
+    app.update();
+    let msaa = |app: &App, e: Entity| *app.world().get::<Msaa>(e).unwrap();
+    assert_eq!(msaa(&app, eyes.0), Msaa::Sample4);
+    assert_eq!(msaa(&app, eyes.1), Msaa::Sample4);
+    app.world_mut()
+        .resource_mut::<crate::rig::comfort::Comfort>()
+        .msaa = 2;
+    app.update();
+    assert_eq!(msaa(&app, eyes.0), Msaa::Sample2);
+    assert_eq!(msaa(&app, eyes.1), Msaa::Sample2);
+    assert_eq!(
+        msaa(&app, scope),
+        Msaa::Off,
+        "an offscreen picture keeps its own"
+    );
+    // Off: FXAA instead, on the eyes only; back on, it goes.
+    let fxaa = |app: &App, e: Entity| app.world().get::<bevy::anti_alias::fxaa::Fxaa>(e).is_some();
+    assert!(!fxaa(&app, eyes.0));
+    app.world_mut()
+        .resource_mut::<crate::rig::comfort::Comfort>()
+        .msaa = 0;
+    app.update();
+    assert_eq!(msaa(&app, eyes.0), Msaa::Off);
+    assert!(fxaa(&app, eyes.0) && fxaa(&app, eyes.1));
+    assert!(!fxaa(&app, scope));
+    app.world_mut()
+        .resource_mut::<crate::rig::comfort::Comfort>()
+        .msaa = 4;
+    app.update();
+    assert!(!fxaa(&app, eyes.0) && !fxaa(&app, eyes.1));
+}

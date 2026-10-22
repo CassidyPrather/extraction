@@ -120,7 +120,7 @@ fn settle_new_items(
 /// Whether a world point is down an underground site: over (or less than
 /// `below` under) a site's floor near there, and under its ceiling (a
 /// stair's open to the sky).
-fn down_a_site(zone: &Zone, p: Vec3, below: f32) -> bool {
+pub(crate) fn down_a_site(zone: &Zone, p: Vec3, below: f32) -> bool {
     for site in ug::placed(&zone.map) {
         let Some(r) = ug::raster(&site.id) else {
             continue;

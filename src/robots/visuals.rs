@@ -30,6 +30,7 @@ impl Plugin for RobotVisualsPlugin {
             super::spotter_look::SpotterLookPlugin,
             super::minelayer_look::MinelayerLookPlugin,
             super::mender_look::MenderLookPlugin,
+            super::plough_look::PloughLookPlugin,
         ))
         .add_systems(
             Update,

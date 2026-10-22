@@ -33,6 +33,13 @@ Things that have bitten captures, and what now guards against them:
   where the Surge doesn't show. Still captures keep the local player's
   health topped up (`capture::keep_alive`). A trailer's bot takes its
   chances.
+- **The world answering the studio.** At night, wildlife sends moths to
+  any bright lamp, the sweep's included, and spawns more as soon as they
+  go. The sweep cleared them as leftovers before each subject and never
+  got past the first. Moths count as the scene's (`sweep::SCENE_MESHES`)
+  and can show in a night shot near the lamp. Don't merge new shaders
+  into the tree under a running capture either: it loads them from
+  `assets/` as it goes.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.

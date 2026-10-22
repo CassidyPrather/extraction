@@ -60,3 +60,10 @@ thighs out ahead.
 `15_body_eye.jpg` (`--gallery body+down`, `+stoop`, `+crouch`): the same
 from the eye. Looking down, the chest rig, the jacket and the sleeves;
 the chest rig keeps the feet out of sight standing.
+`16_carrying.jpg` (`--gallery carry`, `carry+side`, `drag+side`, `pack`,
+flat mode with the hands posed by the gallery; `interact::carry`): a car
+door taken off the ground by its two ends and held up across you, from the
+eye and from beside; the same door taken by its near end in one hand and
+drawn back, the far end on the ground, scraping; and the pack swung off
+the left shoulder, hanging open in front of you for the right hand to
+reach into.
