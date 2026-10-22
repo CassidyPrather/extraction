@@ -2182,10 +2182,10 @@ fn anomaly_loops(
                     }
                     // Dead air: nothing to hear (Anomalies).
                     extraction_core::anomaly::AnomalyKind::Hush => continue,
-                    // A frost's thin crystal tinkle; the mirror's shimmer
-                    // stands in until it has its own (Anomalies).
+                    // A frost's thin crystal tinkle over the ice's creak
+                    // (a stand-in, `synth_foley`): a tell at a few metres.
                     extraction_core::anomaly::AnomalyKind::Frost => {
-                        ("anomaly/mirror_shimmer", "anomaly.mirror")
+                        ("anomaly/frost", "anomaly.frost")
                     }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {

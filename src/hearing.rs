@@ -556,6 +556,42 @@ pub struct Hearing {
     pub graphs: Vec<Graph>,
     tiles: HashMap<(i32, i32), Vec<u16>>,
     dirty: bool,
+    /// Out in the open, how much the ground round smears a sound
+    /// (`weapons::reverb::valley_smear`), on its grid.
+    valley: Valley,
+}
+
+/// The ground's smear on a grid over the map.
+#[derive(Default)]
+struct Valley {
+    n: usize,
+    origin: f32,
+    smear: Vec<f32>,
+}
+
+impl Valley {
+    fn of(zone: &Zone) -> Self {
+        use crate::weapons::reverb::{CELL, valley_smear};
+        let n = (zone.map.size / CELL).ceil() as usize;
+        let origin = -zone.map.size * 0.5;
+        let smear = (0..n * n)
+            .map(|k| {
+                let x = origin + ((k % n) as f32 + 0.5) * CELL;
+                let z = origin + ((k / n) as f32 + 0.5) * CELL;
+                valley_smear(|x, z| zone.ground(x, z), x, z)
+            })
+            .collect();
+        Self { n, origin, smear }
+    }
+
+    fn at(&self, p: Vec3) -> f32 {
+        let cell = crate::weapons::reverb::CELL;
+        let (i, j) = ((p.x - self.origin) / cell, (p.z - self.origin) / cell);
+        if self.n == 0 || i < 0.0 || j < 0.0 || i as usize >= self.n || j as usize >= self.n {
+            return 1.0;
+        }
+        self.smear[j as usize * self.n + i as usize]
+    }
 }
 
 /// Where a point is: in a building's room (graph, room, storey), or out.
@@ -586,6 +622,7 @@ impl Hearing {
             graphs,
             tiles,
             dirty: false,
+            valley: Valley::default(),
         }
     }
 
@@ -629,12 +666,13 @@ impl Hearing {
 
     /// How much where a sound at `at` seems to come from is smeared by
     /// the room it rings in, for a robot's guess (`robots::senses`,
-    /// `HEARD_SPREAD`): 1 in the open or a small soft room, up to 2 in a
-    /// big hard hall, 2.5 in a rock gallery.
+    /// `HEARD_SPREAD`): 1 in a small soft room, up to 2 in a big hard
+    /// hall, 2.5 in a rock gallery; outside, by how the ground rises round
+    /// it (1 on a plain, up to 2.2 in a narrow valley).
     pub fn smear(&self, at: Vec3) -> f32 {
         match self.place(at) {
             Place::In(g, room, _) => self.graphs[g].smear[room as usize],
-            Place::Out => 1.0,
+            Place::Out => self.valley.at(at),
         }
     }
 
@@ -701,11 +739,12 @@ pub fn over_a_hill(zone: &Zone, from: Vec3, to: Vec3) -> bool {
 #[allow(clippy::type_complexity)]
 fn build_graphs(
     mut hearing: ResMut<Hearing>,
+    zone: Option<Res<Zone>>,
     added: Query<(), Added<Building>>,
     buildings: Query<(Entity, &Building, &Transform)>,
     leaves: Query<(Entity, &DoorLeaf, &ChildOf, Option<&Door>)>,
 ) {
-    if !added.is_empty() {
+    if !added.is_empty() || zone.as_ref().is_some_and(|z| z.is_changed()) {
         hearing.dirty = true;
         return;
     }
@@ -724,6 +763,9 @@ fn build_graphs(
         })
         .collect();
     *hearing = Hearing::from_graphs(graphs);
+    if let Some(zone) = zone {
+        hearing.valley = Valley::of(&zone);
+    }
 }
 
 /// A door opened or shut, broken or gone: its building's table again.
