@@ -23,7 +23,11 @@ impl Plugin for EchoPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Carrying>()
             .add_message::<Echoed>()
-            .add_systems(Update, (hear_the_gallery, carry).chain());
+            .init_resource::<crate::bot::Counters>()
+            .add_systems(
+                Update,
+                (hear_the_gallery, carry, stage_scenario, count_echoes).chain(),
+            );
     }
 }
 
@@ -121,6 +125,68 @@ fn hear_the_gallery(
             raid.say(
                 "Your steps come back to you off the far end: the gallery carries every sound.",
             );
+        }
+    }
+}
+
+/// The scenario: in the gallery's east end, the bot walks its length,
+/// upright, and its steps carry (`gallery_echoes`).
+pub const SCENARIO: &str = "gallery_echo";
+/// Filled in by the setup: the gallery's far (west) end.
+pub const FAR_END: Vec2 = Vec2::new(-9002.0, 1.0);
+
+/// The scenario staged: the bot into the gallery's east end, its walk to
+/// the far end filled in.
+fn stage_scenario(
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    sites: Query<(&Building, &Transform), Without<crate::rig::LocalPlayer>>,
+    mut players: Query<(&mut Transform, &mut crate::bot::Bot), With<crate::rig::LocalPlayer>>,
+) {
+    for s in setups.read() {
+        if s.name != SCENARIO {
+            continue;
+        }
+        let Some((l, xf)) = sites.iter().find_map(|(b, xf)| {
+            ug::layout(&b.prefab)
+                .filter(|l| l.rooms.iter().any(|r| r.carries))
+                .map(|l| (l, *xf))
+        }) else {
+            error!("gallery scenario: no carrying room on this map");
+            continue;
+        };
+        let Some(g) = l.rooms.iter().find(|r| r.carries) else {
+            continue;
+        };
+        let along = if g.size[0] >= g.size[1] {
+            Vec2::X
+        } else {
+            Vec2::Y
+        } * (g.size[0].max(g.size[1]) * 0.5 - 1.5);
+        let end = |k: f32| {
+            let p = Vec2::from(g.at) + along * k;
+            xf.transform_point(Vec3::new(p.x, l.floor_of(g) + 0.05, p.y))
+        };
+        let (from, to) = (end(-1.0), end(1.0));
+        for (mut t, mut bot) in &mut players {
+            t.translation = from;
+            for task in bot.tasks.iter_mut() {
+                if let crate::bot::Task::WalkTo { to: w, .. }
+                | crate::bot::Task::Expect(crate::bot::Expect::Near(w, _)) = task
+                    && *w == FAR_END
+                {
+                    *w = Vec2::new(to.x, to.z);
+                }
+            }
+        }
+        info!("scenario: the gallery from {from:?} to {to:?}");
+    }
+}
+
+/// Counts the steps of yours the gallery carried.
+fn count_echoes(mut echoed: MessageReader<Echoed>, mut counters: ResMut<crate::bot::Counters>) {
+    for e in echoed.read() {
+        if e.player.is_some() {
+            counters.bump("gallery_echoes");
         }
     }
 }

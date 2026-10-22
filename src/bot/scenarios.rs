@@ -62,6 +62,7 @@ pub const NAMES: &[&str] = &[
     crate::robots::mender::SCENARIO,
     crate::robots::plough::SCENARIO,
     crate::world::cage::SCENARIO,
+    crate::world::echo::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -569,6 +570,23 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::echo::SCENARIO => {
+            // The dam's gallery: its length on foot, upright; every step
+            // comes back.
+            use crate::bot::Expect::{Counter, Near};
+            use crate::world::echo as ec;
+            vec![
+                Log(s("gallery echo: the inspection gallery's length on foot")),
+                Setup(ec::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: ec::FAR_END,
+                    within: 1.0,
+                },
+                Expect(Near(ec::FAR_END, 2.0)),
+                Expect(Counter("gallery_echoes", 10, 1000)),
             ]
         }
         crate::world::cage::SCENARIO => {
