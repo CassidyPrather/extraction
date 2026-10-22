@@ -244,7 +244,10 @@ fn run_director(
     >,
     pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
+    // What the valley remembers of your ways (`memory`): patrols lean on it.
+    mind: Option<Res<super::memory::ZoneMind>>,
 ) {
+    let mind = mind.as_deref();
     if !director.enabled {
         return;
     }
@@ -375,7 +378,7 @@ fn run_director(
         .map(|m| m.at)
         .collect();
     if director.rng.chance(0.6) && !pois.is_empty() {
-        let p = pois[director.rng.below(pois.len())];
+        let p = pois[super::memory::lean_pick(&mut director.rng, &pois, mind)];
         info!("director: survey drone to {p:?}");
         spawn_drone(
             &mut commands,
@@ -401,7 +404,7 @@ fn run_director(
         super::pylon::spawn_pylon(&mut commands, site, duration, exit);
         super::pylon::send_builders(&mut commands, &zone, site, duration, exit);
     } else if !sites.is_empty() {
-        let s = sites[director.rng.below(sites.len())];
+        let s = sites[super::memory::lean_pick(&mut director.rng, &sites, mind)];
         info!("director: walker to work site {s:?}");
         spawn_walker(
             &mut commands,

@@ -169,6 +169,18 @@ impl ZoneMemory {
             * MEMORY
     }
 
+    /// The most habitual of the cells round `(x, z)` (it and its eight
+    /// neighbours): how near your usual ways a place is.
+    pub fn corridor_near(&self, x: f32, z: f32) -> f32 {
+        let mut best = 0.0f32;
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                best = best.max(self.corridor(x + dx as f32 * CELL, z + dz as f32 * CELL));
+            }
+        }
+        best
+    }
+
     /// The rendezvous you favour, if you favour one: where, and how
     /// strongly (0..1, times [`MEMORY`]).
     pub fn favourite_rv(&self) -> Option<([f32; 2], f32)> {

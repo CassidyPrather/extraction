@@ -894,6 +894,10 @@ fn apply_restore(world: &mut World) {
         for w in &save.zone.wrecks {
             crate::robots::heavy::restore_wreck(world, w);
         }
+        world.insert_resource(crate::robots::memory::ZoneMind {
+            memory: save.zone.memory.clone().unwrap_or_default(),
+            ..default()
+        });
         for r in &save.zone.remains {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
@@ -1202,6 +1206,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         }
     }
     save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
+    save.zone.memory = world
+        .get_resource::<crate::robots::memory::ZoneMind>()
+        .map(|m| m.memory.clone())
+        .filter(|m| !m.is_blank());
     save.loadout = loadout;
     save
 }
