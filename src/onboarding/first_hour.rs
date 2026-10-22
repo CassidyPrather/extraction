@@ -897,8 +897,19 @@ pub(super) fn direct_raid(
             // (a hoarder's radio went to the bottom of the pack, out of
             // reach of a hand).
             in_crate.sort_by_key(|(_, id)| !KIT.contains(&id.as_str()));
+            // And what the job takes out (the card says: the relay box, the
+            // camera), if it's in there.
+            let out: Option<String> = view
+                .progression
+                .as_ref()
+                .and_then(|p| p.0.job.as_ref())
+                .and_then(|j| match errand(j) {
+                    Errand::Leave { item, .. } => Some(item),
+                    Errand::Photo(_) => Some("camera".to_owned()),
+                    _ => None,
+                });
             for (e, id) in in_crate {
-                if p.hoards || KIT.contains(&id.as_str()) {
+                if p.hoards || KIT.contains(&id.as_str()) || out.as_deref() == Some(id.as_str()) {
                     tasks.push(Task::Grab {
                         item: e,
                         side: Side::Right,
