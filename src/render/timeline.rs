@@ -10,6 +10,10 @@ use std::time::Instant;
 
 static START: OnceLock<Instant> = OnceLock::new();
 
+/// Frames begun: a step that waits on frames rather than work takes as
+/// many on any machine, so its seconds here say little about the headset's.
+static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// The process's start, as near as `main` can say.
 pub fn start() {
     let _ = START.get_or_init(Instant::now);
@@ -28,7 +32,11 @@ pub fn mark(what: &'static str) {
         return;
     }
     done.push(what);
-    info!("load: {what} at {:.2} s", since_start());
+    info!(
+        "load: {what} at {:.2} s (frame {})",
+        since_start(),
+        FRAMES.load(std::sync::atomic::Ordering::Relaxed)
+    );
 }
 
 pub struct TimelinePlugin;
@@ -42,17 +50,23 @@ impl Plugin for TimelinePlugin {
                 mark("startup done (zone, terrain, nav, props)")
             })
             .add_systems(First, first_frame)
-            .add_systems(Last, settled);
+            .add_systems(Last, (settled, leaving));
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             render.add_systems(bevy::render::Render, first_rendered);
         }
     }
 }
 
-fn first_frame(mut n: Local<u32>) {
-    *n += 1;
-    if *n == 1 {
+fn first_frame() {
+    if FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
         mark("first frame");
+    }
+}
+
+/// The way out: a valley change waits through the close as well.
+fn leaving(exit: MessageReader<AppExit>) {
+    if !exit.is_empty() {
+        mark("leaving (exit asked)");
     }
 }
 

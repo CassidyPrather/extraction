@@ -581,9 +581,11 @@ pub fn sight_blockers(map: &MapDef, hm: &Heightmap) -> Vec<([f32; 2], f32)> {
 
 /// A view of the anomaly `a` from `dist` off: of sixteen bearings, the one
 /// on the gentlest ground whose line to a metre over its centre is clear of
-/// rises, of `blockers` ([`sight_blockers`]) and of the other anomalies,
-/// and off roads and water. None if every side is blocked.
+/// rises, of `blockers` ([`sight_blockers`]), of every wall and of the
+/// other anomalies, and off roads and water. None if every side is
+/// blocked.
 pub fn view_of(
+    map: &MapDef,
     hm: &Heightmap,
     a: &AnomalySpec,
     others: &[AnomalySpec],
@@ -606,6 +608,12 @@ pub fn view_of(
         }) && blockers
             .iter()
             .all(|(b, r)| geom::polyline_closest(&line, *b).0 > *r)
+            // Walls by their faces (a long hall's side is far from its
+            // middle): every half metre of the line clear of them.
+            && (1..(dist * 2.0) as i32).all(|i| {
+                let t = i as f32 / (dist * 2.0);
+                clear_of_buildings(map, geom::lerp(cam, a.at, t), 0.3)
+            })
             && others
                 .iter()
                 .filter(|o| geom::dist(o.at, a.at) > 0.5)
@@ -827,7 +835,7 @@ mod tests {
             let view = all
                 .iter()
                 .filter(|a| a.kind == kind)
-                .find_map(|a| view_of(&hm, a, &all, &blockers, 20.0).map(|v| (a, v)));
+                .find_map(|a| view_of(&map, &hm, a, &all, &blockers, 20.0).map(|v| (a, v)));
             let (a, v) = view.unwrap_or_else(|| panic!("no clear view of a {kind:?}"));
             assert!((geom::dist(a.at, v.at) - 20.0).abs() < 0.01);
             // It looks at it.

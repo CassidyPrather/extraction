@@ -72,7 +72,7 @@ that the whole stairwell is open.
   ceiling slabs, doors). `no_daylight_in_the_rooms` casts rays every way
   from every room (doors shut) and none gets out.
 - **Going dark** (`go_dark`, client): below ground the global ambient
-  falls to 1.5%, the sun goes out and the fog's colour goes to black; the
+  falls to 0.2%, the sun goes out and the fog's colour goes to black; the
   eyes adapt 2.5 stops (`Exposure`). On the surface everything is as the
   sky left it. Rain and ash aren't drawn round an underground camera.
 - **Emergency lamps**: rooms with `lamp: Steady` or `Flicker` get an

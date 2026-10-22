@@ -3384,3 +3384,33 @@ fn a_building_you_cleared_is_found_shut() {
     assert_eq!(shut, ways.len(), "all its doors shut");
     assert_eq!(wedged, 1, "one wedged, another still a way in");
 }
+
+/// A light that wasn't there (a chemlight thrown, a room's lamps on),
+/// 18 m off in front of a walker: further than it makes out other signs,
+/// it comes to look; one 30 m off it doesn't see.
+#[test]
+fn a_new_light_draws_a_walker() {
+    let looked = |d: f32| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 330.0));
+        let post = zone.on_ground(100.0, 200.0);
+        let w = walker_at(&mut app, &zone, post);
+        app.world_mut().write_message(super::disturbed::Disturb {
+            at: zone.on_ground(post.x, post.z - d),
+            kind: super::disturbed::SignKind::Light,
+        });
+        for _ in 0..90 * 2 {
+            app.update();
+            if matches!(
+                app.world().get::<Brain>(w).unwrap(),
+                Brain::Investigate { .. }
+            ) {
+                return true;
+            }
+        }
+        false
+    };
+    assert!(super::disturbed::LIGHT_SIGHT > super::disturbed::SIGN_SIGHT);
+    assert!(looked(18.0), "a new light 18 m off draws it");
+    assert!(!looked(30.0), "one 30 m off it doesn't see");
+}

@@ -68,9 +68,20 @@ pub struct BuildingPlan {
     /// An underground site's cells shut only by heat nothing crosses:
     /// (cell, heat zone, its cost once that zone's vented).
     pub hot: Vec<(usize, u16, u8)>,
+    /// An underground site's live room's wet cells: open in the plan, as
+    /// they are once isolated; the raider shuts them (`shut_live`), since
+    /// it can't tell live from cut and a wrong guess kills.
+    pub live: Vec<usize>,
 }
 
 impl BuildingPlan {
+    /// The live room's water shut, for a raider that won't wade it.
+    pub fn shut_live(&mut self) {
+        for &k in &self.live {
+            self.grid.cost[k] = extraction_core::nav::BLOCKED;
+        }
+    }
+
     /// Heat zones vented: their cells walked again.
     pub fn vent(&mut self, zones: &[usize]) {
         let grid = &mut self.grid;
@@ -381,6 +392,7 @@ pub fn plan_buildings(
             half,
             levels,
             hot: Vec::new(),
+            live: Vec::new(),
         });
     }
     out
@@ -530,6 +542,26 @@ fn plan_site(
             }
         }
     }
+    // Live water's cells (see `live`; the crawlers keep out of it the same
+    // way, `underground::block_works`).
+    let mut live = Vec::new();
+    if let Some(v) = extraction_core::underground::layout(&b.prefab).and_then(|l| {
+        let v = l.live.as_ref()?;
+        l.rooms.iter().position(|room| room.id == v.room)
+    }) {
+        for j in 0..n {
+            for i in 0..n {
+                let c = grid.centre(i, j);
+                let wet = r.water_at(c) > 0.05;
+                let in_room = r.cell_of(c).is_some_and(|(a, z)| {
+                    matches!(r.cells[z * r.nx + a], extraction_core::underground::Cell::Room(k) if k as usize == v)
+                });
+                if wet && in_room && grid.cost[j * n + i] != extraction_core::nav::BLOCKED {
+                    live.push(j * n + i);
+                }
+            }
+        }
+    }
     let is_ground = |p: Vec2| {
         grid.cell_of(p.to_array())
             .is_some_and(|(i, j)| ground[j * n + i])
@@ -587,6 +619,7 @@ fn plan_site(
         inner,
         levels: Some(levels),
         hot,
+        live,
     }
 }
 

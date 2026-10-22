@@ -174,6 +174,22 @@ What changed, and worth a comment each:
   trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
   The A/X button no longer does these in the headset, except medicine
   with the one-handed comfort setting.
+- **Treating yourself.** A hit leaves a wound where it landed, on the
+  limb it hit, and each wound bleeds by itself (your health's bleeding is
+  their sum). Wind a dressing round that limb (thigh, arm, shin, chest),
+  not just your forearm: it binds only the wounds on that limb, so a
+  thigh and an arm wound take two dressings. A fall hard enough (about a
+  second-storey drop) breaks a shin: you limp, slowly and with no sprint,
+  until a splint (new, in medical loot) is held along the broken shin,
+  your other hand at the leg, for a second and a half while the straps
+  pull tight. You still limp a little. The water bottle (now "Canteen")
+  comes capped: take the cap in your other hand with the trigger and
+  twist three quarters of a turn before you can drink. All of it takes
+  as long as your hands take. Look down: open wounds show red on the
+  body, dressings as white bands, the splint's slats on the shin, and a
+  glove that touched an open wound is bloody, fading over a minute. Is
+  winding a dressing round your own thigh possible without looking? Is
+  the splint too fiddly with someone shooting at you, or too easy?
 - **Gestures.** A hand over your mouth quietens your breathing when
   you're winded (robots nearby can hear it). An open palm raised over
   your head is a gesture robots can read, though nothing reacts to it
@@ -437,6 +453,18 @@ said you don't use?
     keep the muzzle downrange for the second it takes? What happens if
     you open the bolt on it?
   - Is "re-pack the box at the bench" a cure you'd think of?
+- What a round does to the world (the training yard, or a wreck on a
+  raid).
+  - Crouch behind a car wreck's door with a drone or walker about: does
+    learning that it's no cover feel fair (you hear the round come
+    through), or cheap?
+  - Shoot a car door with the PM, then the AK: does the pistol's spark
+    and the rifle's spall out of the far side tell you which went
+    through?
+  - Put an AK round through a drone side on: do you see it come out the
+    far side?
+  - Graze a wreck's flank or a sheet wall: does the whine and the streak
+    read as a ricochet?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

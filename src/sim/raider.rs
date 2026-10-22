@@ -405,6 +405,9 @@ pub fn attach_raider(
         traits.minutes = m;
     }
     let mut plans = plan_buildings(&buildings, &doors);
+    for plan in &mut plans {
+        plan.shut_live();
+    }
     // Flues already vented are a way.
     vent_plans(
         &mut plans,

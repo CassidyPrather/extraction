@@ -2,20 +2,23 @@
 # A career of sim raids on one valley, one after another, the valley's
 # memory of the raider (`robots::memory`) carried from raid to raid.
 #
-#   scripts/sim-career.sh MAP HABIT SEED RAIDS OUT [memory|blank]
+#   scripts/sim-career.sh MAP HABIT SEED RAIDS OUT [memory|blank] [FROM]
 #
 # HABIT is `habit` (same region, same rendezvous every raid) or `varier`
 # (takes them in turn); `blank` starts every raid from a blank memory (as
 # `zone_memory::MEMORY` at 0 would). Each raid's telemetry goes to
 # OUT/<map>-<habit>-<mode>-s<seed>-r<raid>.jsonl, the memory beside it;
-# prints one line a raid: the run and its outcome.
+# prints one line a raid: the run and its outcome. FROM resumes a career
+# at that raid, keeping the memory it had.
 set -uo pipefail
-map=$1 habit=$2 seed=$3 raids=$4 out=$5 mode=${6:-memory}
+map=$1 habit=$2 seed=$3 raids=$4 out=$5 mode=${6:-memory} from=${7:-0}
 exe=${EXE:-target/fast/extraction}
 mkdir -p "$out"
 mem="$out/$map-$habit-$mode-s$seed.memory.ron"
-rm -f "$mem"
-for ((i = 0; i < raids; i++)); do
+if [ "$from" -eq 0 ]; then
+  rm -f "$mem"
+fi
+for ((i = from; i < raids; i++)); do
   run="$map-$habit-$mode-s$seed-r$(printf %02d "$i")"
   vars=(SIM_HABIT="$habit" SIM_RAID="$i" SIM_CAREER_SEED="$seed" RUST_LOG=warn)
   if [ "$mode" = memory ]; then
