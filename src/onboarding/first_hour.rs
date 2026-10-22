@@ -377,13 +377,16 @@ fn place_on_card(text: &str, zone: &crate::world::Zone) -> Option<(String, Vec2)
             .to_lowercase()
     };
     let text = flat(text);
+    // The job, not the driver's cache under it; and the place it names
+    // first (the longest name where two start there: "the old farm road").
+    let job = text.split("my cache").next().unwrap_or(&text);
     zone.map
         .markers
         .iter()
         .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
-        .filter(|m| text.contains(&flat(&m.name)))
-        .max_by_key(|m| m.name.len())
-        .map(|m| (m.name.clone(), Vec2::from(m.at)))
+        .filter_map(|m| job.find(&flat(&m.name)).map(|i| (i, m)))
+        .min_by_key(|(i, m)| (*i, std::cmp::Reverse(m.name.len())))
+        .map(|(_, m)| (m.name.clone(), Vec2::from(m.at)))
 }
 
 /// What a line gives of a place's way and distance ("north-east, 200 m"),
@@ -506,15 +509,14 @@ pub(super) fn direct_raid(
                     .flatten()
                     .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
             }
-            // "Back off low, cover between you": away from it, not round.
+            // "Low behind it, and keep still": a still shape behind cover
+            // isn't glimpsed; a moving one is, and found.
             First::ComingToLook if !p.reckless && !p.hoards => {
-                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
-                // Low, as told: a log pile hides you crouched, not stood up.
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = 0.0;
                 }
-                state.low_until = now + 25.0;
-                run_for_cover(&world.zone, here, from, 10.0)
+                state.low_until = now + 30.0;
+                vec![Task::Wait(30.0)]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {

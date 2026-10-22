@@ -63,7 +63,8 @@ pub enum First {
     /// Home with a job on the card: it's paid when the card is pressed.
     Payday,
     /// A machine that was shooting at you lost you, and is coming to where
-    /// it last saw you: that spot is the worst place to be.
+    /// it last saw you: a moving shape behind low cover is glimpsed, and
+    /// each glimpse moves its guess; a still one isn't.
     ComingToLook,
 }
 
@@ -200,7 +201,7 @@ impl First {
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
             First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
             First::ComingToLook => {
-                &["Truck: \"Back off low, cover between you. It's coming where it saw you.\""]
+                &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
             }
         }
     }

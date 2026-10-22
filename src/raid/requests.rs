@@ -405,7 +405,9 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
-            format!("{into} {place} {rel} the {}.", m.name)
+            // Not "out past the The Hollow".
+            let name = m.name.strip_prefix("The ").unwrap_or(&m.name);
+            format!("{into} {place} {rel} the {name}.")
         }
         None => format!("{into} {place}."),
     }
