@@ -52,6 +52,9 @@ pub struct Director {
     pub heat: f32,
     /// Seconds before another shot adds heat.
     pub heat_gap: f32,
+    /// The relays' network: jams, silent relays, distrusted ones
+    /// (`network`). Reports go through `queue_report`.
+    pub net: super::network::RelayNet,
 }
 
 /// Heat: a reported shot adds a point, at most one per this (s)...
@@ -118,6 +121,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         visits: Vec::new(),
         heat: 0.0,
         heat_gap: 0.0,
+        net: Default::default(),
     });
 }
 
