@@ -20,7 +20,8 @@ pub struct GunsmithPlugin;
 
 impl Plugin for GunsmithPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(setup_hacksaw)
+        app.add_message::<Worked>()
+            .add_observer(setup_hacksaw)
             .add_systems(PreUpdate, (apply_builds, follow_muzzles).chain())
             .add_systems(Update, fit_jaws)
             .add_systems(
@@ -37,6 +38,33 @@ impl Plugin for GunsmithPlugin {
                     .after(crate::interact::InteractSystems::Follow),
             );
     }
+}
+
+/// Something done at the vice, for the ear (`audio`) and anyone else.
+#[derive(Message, Clone, Copy, Debug, PartialEq)]
+pub struct Worked {
+    pub gun: Entity,
+    /// Where it happened.
+    pub at: Vec3,
+    pub what: Work,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Work {
+    /// A gun let go of into the jaws, and they closed on it.
+    Clamped,
+    /// A stroke of the hacksaw across a barrel (one each 15 cm of blade).
+    SawStroke,
+    /// Through: the end's off and falls (as scrap: it lands as scrap
+    /// does).
+    Cut,
+    /// A quarter turn of the spanner on a stock's screw.
+    ScrewTurn,
+    StockOff,
+    StockOn,
+    /// A bolt drawn out past its stop, and one slid home into a receiver.
+    BoltOut,
+    BoltIn,
 }
 
 /// A gun as it was made: kept to work its build out from.
@@ -202,9 +230,9 @@ pub const FIT_REACH: f32 = 0.1;
 pub const BOLT_PAST: f32 = 0.04;
 
 /// In the hacksaw's space: the handle, and the blade's two ends.
-pub const SAW_GRIP: Vec3 = Vec3::new(0.0, 0.0, 0.12);
-pub const BLADE_A: Vec3 = Vec3::new(0.0, -0.05, -0.02);
-pub const BLADE_B: Vec3 = Vec3::new(0.0, -0.05, -0.3);
+pub const SAW_GRIP: Vec3 = Vec3::new(0.0, -0.01, 0.16);
+pub const BLADE_A: Vec3 = Vec3::new(0.0, -0.045, 0.06);
+pub const BLADE_B: Vec3 = Vec3::new(0.0, -0.045, -0.2);
 
 /// The stock's screw, marked for the spanner while the gun's in the vice.
 #[derive(Component, Debug)]
@@ -269,6 +297,7 @@ pub fn clamp_guns(
     guns: Query<(&Gun, &GlobalTransform), (Without<crate::interact::Held>, Without<InVice>)>,
     taken: Query<Entity, (With<InVice>, Added<crate::interact::Held>)>,
     jaws: Query<(Entity, &GlobalTransform), With<ViceJaws>>,
+    mut worked: MessageWriter<Worked>,
 ) {
     for e in &taken {
         commands
@@ -287,6 +316,11 @@ pub fn clamp_guns(
         else {
             continue;
         };
+        worked.write(Worked {
+            gun: e,
+            at: jgt.translation(),
+            what: Work::Clamped,
+        });
         // Level, the muzzle out along the bench, the receiver in the jaws.
         let rot = jgt.rotation();
         let pos = jgt.translation() - rot * clamp_point(&gun.layout);
@@ -346,6 +380,7 @@ pub fn saw_barrels(
     mut commands: Commands,
     saws: Query<(&Item, &GlobalTransform, &crate::interact::Held)>,
     mut guns: Query<(
+        Entity,
         &mut Gun,
         &Item,
         &GlobalTransform,
@@ -356,6 +391,7 @@ pub fn saw_barrels(
     time: Res<Time>,
     mut last: Local<std::collections::HashMap<Entity, Vec3>>,
     mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    mut worked: MessageWriter<Worked>,
 ) {
     let dt = time.delta_secs().max(1e-4);
     let mut seen = Vec::new();
@@ -371,7 +407,7 @@ pub fn saw_barrels(
         let moved = last
             .insert(key, mid)
             .map_or(0.0, |p| (mid - p).dot(axis).abs());
-        for (mut gun, gitem, ggt, mut vice, factory) in &mut guns {
+        for (gun_e, mut gun, gitem, ggt, mut vice, factory) in &mut guns {
             let id = &catalog.get(gitem.kind()).id;
             if !extraction_core::gunsmith::workable(id).0 {
                 continue;
@@ -407,6 +443,11 @@ pub fn saw_barrels(
             };
             if (drawn / 0.15).floor() > ((drawn - moved) / 0.15).floor() {
                 crate::interact::tools::pulse(&mut haptics, held.side, (0.25, 0.02));
+                worked.write(Worked {
+                    gun: gun_e,
+                    at: on_barrel,
+                    what: Work::SawStroke,
+                });
             }
             if drawn < need {
                 vice.sawing = Some((spot, drawn));
@@ -415,6 +456,11 @@ pub fn saw_barrels(
             vice.sawing = None;
             gun.firearm.build.barrel_mm = Some(spot);
             crate::interact::tools::pulse(&mut haptics, held.side, (0.55, 0.06));
+            worked.write(Worked {
+                gun: gun_e,
+                at: on_barrel,
+                what: Work::Cut,
+            });
             // The end comes away: scrap.
             if let Some(scrap) = catalog.kind("scrap_metal") {
                 crate::items::spawn_item(
@@ -473,6 +519,7 @@ pub fn unscrew_stocks(
     screws: Query<&ChildOf, With<StockScrew>>,
     mut guns: Query<(&mut Gun, &Item, &GlobalTransform, &mut InVice)>,
     catalog: Res<Catalog>,
+    mut worked: MessageWriter<Worked>,
 ) {
     for t in turned.read() {
         let Ok(parent) = screws.get(t.target) else {
@@ -481,12 +528,27 @@ pub fn unscrew_stocks(
         let Ok((mut gun, item, gt, mut vice)) = guns.get_mut(parent.parent()) else {
             continue;
         };
+        let quarter = std::f32::consts::FRAC_PI_2;
+        let was = vice.screw;
         vice.screw += t.angle.abs();
+        let at = gt.transform_point(screw_point(&gun.layout));
+        if (vice.screw / quarter).floor() > (was / quarter).floor() {
+            worked.write(Worked {
+                gun: parent.parent(),
+                at,
+                what: Work::ScrewTurn,
+            });
+        }
         if vice.screw < STOCK_SCREW || !gun.firearm.build.stock {
             continue;
         }
         vice.screw = 0.0;
         gun.firearm.build.stock = false;
+        worked.write(Worked {
+            gun: parent.parent(),
+            at,
+            what: Work::StockOff,
+        });
         let id = part_item(&catalog.get(item.kind()).id, "stock");
         if let Some(kind) = catalog.kind(&id) {
             crate::items::spawn_item(
@@ -512,8 +574,9 @@ pub fn fit_parts(
     mut commands: Commands,
     mut released: RemovedComponents<crate::interact::Held>,
     parts: Query<(&Item, &GlobalTransform)>,
-    mut guns: Query<(&mut Gun, &Item, &GlobalTransform), With<InVice>>,
+    mut guns: Query<(Entity, &mut Gun, &Item, &GlobalTransform), With<InVice>>,
     catalog: Res<Catalog>,
+    mut worked: MessageWriter<Worked>,
 ) {
     use extraction_core::gunsmith::{BOLT_SHARE, fit_part};
     for e in released.read() {
@@ -522,7 +585,7 @@ pub fn fit_parts(
         };
         let pid = catalog.get(part.kind()).id.clone();
         let at = pgt.translation();
-        for (mut gun, item, ggt) in &mut guns {
+        for (gun_e, mut gun, item, ggt) in &mut guns {
             let id = &catalog.get(item.kind()).id;
             let b = gun.firearm.build;
             if pid == part_item(id, "stock")
@@ -531,6 +594,11 @@ pub fn fit_parts(
             {
                 gun.firearm.build.stock = true;
                 commands.entity(e).despawn();
+                worked.write(Worked {
+                    gun: gun_e,
+                    at,
+                    what: Work::StockOn,
+                });
                 break;
             }
             let way = gun
@@ -549,6 +617,11 @@ pub fn fit_parts(
                 f.build.bolt_out = false;
                 f.set_bolt_travel(1.0);
                 commands.entity(e).despawn();
+                worked.write(Worked {
+                    gun: gun_e,
+                    at,
+                    what: Work::BoltIn,
+                });
                 break;
             }
         }
@@ -569,6 +642,7 @@ pub fn draw_bolts(
     mut guns: Query<(Entity, &mut Gun, &Item, &GlobalTransform), With<InVice>>,
     catalog: Res<Catalog>,
     mut actions: MessageWriter<crate::interact::HandAction>,
+    mut worked: MessageWriter<Worked>,
 ) {
     use extraction_core::gunsmith::part_condition;
     for (_, mut hand, rig, player) in &mut hands {
@@ -593,6 +667,11 @@ pub fn draw_bolts(
         let Some(kind) = catalog.kind(&part_item(&id, "bolt")) else {
             continue;
         };
+        worked.write(Worked {
+            gun: gun_e,
+            at: stop,
+            what: Work::BoltOut,
+        });
         let f = &mut gun.firearm;
         f.build.bolt_out = true;
         // A round on the bolt face goes with it, onto the bench.
@@ -712,6 +791,119 @@ mod tests {
             .entity_mut(item)
             .insert(RigidBody::Dynamic);
         assert_eq!(r.vr.hand_state(side).holding, Some(item), "picked up");
+    }
+
+    /// A gun model's top-level node names.
+    fn nodes(id: &str) -> Vec<String> {
+        let path = crate::asset_root_path().join(format!("models/guns/{id}.glb"));
+        let b = std::fs::read(&path).unwrap_or_else(|_| panic!("{path:?}"));
+        let n = u32::from_le_bytes([b[12], b[13], b[14], b[15]]) as usize;
+        let j: serde_json::Value = serde_json::from_slice(&b[20..20 + n]).unwrap();
+        j["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|n| n["name"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    /// Every gun that can be worked at the vice draws what's been done to
+    /// it: its model has a barrel node to draw short if it can be cut, a
+    /// butt to take away and a stock item to come off as if its stock
+    /// comes off, and a bolt node and item if its bolt comes out.
+    #[test]
+    fn every_workable_gun_shows_its_work() {
+        let catalog = Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            if def.firearm.is_none() {
+                continue;
+            }
+            let id = def.id.as_str();
+            let (cut, stock, bolt) = extraction_core::gunsmith::workable(id);
+            if !(cut || stock || bolt) {
+                continue;
+            }
+            let names = nodes(id);
+            let has = |n: &str| names.iter().any(|m| m == n);
+            if cut && !(has("static_barrel") || has("barrels")) {
+                bad.push(format!("{id}: no barrel node to cut"));
+            }
+            if stock && !has("static_butt") {
+                bad.push(format!("{id}: no butt node"));
+            }
+            if stock && catalog.kind(&part_item(id, "stock")).is_none() {
+                bad.push(format!("{id}: no stock item"));
+            }
+            if bolt && !has("turnbolt") {
+                bad.push(format!("{id}: no bolt node"));
+            }
+            if bolt && catalog.kind(&part_item(id, "bolt")).is_none() {
+                bad.push(format!("{id}: no bolt item"));
+            }
+        }
+        // And no part for a gun it can't come off.
+        for (_, def) in catalog.iter().filter(|(_, d)| d.has_tag("gun_part")) {
+            let from = catalog.iter().any(|(_, g)| {
+                let (_, stock, bolt) = extraction_core::gunsmith::workable(&g.id);
+                (stock && part_item(&g.id, "stock") == def.id)
+                    || (bolt && part_item(&g.id, "bolt") == def.id)
+            });
+            if !from {
+                bad.push(format!("{}: comes off no gun", def.id));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Everything the vice needs or makes, and the rounds and cans that
+    /// came with it, can be had in play: found (a loot table), given (a
+    /// fitting's gift), made at the bench, or taken off a gun; a loose
+    /// round if its box can.
+    #[test]
+    fn what_the_vice_needs_and_makes_can_be_had() {
+        use extraction_core::fabrication::{Make, every_recipe};
+        use extraction_core::progression::Upgrade;
+        let catalog = Catalog::load();
+        let loot = std::fs::read_to_string(crate::asset_root_path().join("data/loot.ron")).unwrap();
+        let had = |id: &str| -> bool {
+            loot.contains(&format!("id: \"{id}\""))
+                || Upgrade::ALL
+                    .iter()
+                    .any(|u| crate::progression::gifts(*u).iter().any(|g| g.0 == id))
+                || every_recipe().any(
+                    |r| matches!(r.makes, Make::Items(out) if out.iter().any(|(o, _)| *o == id)),
+                )
+                || catalog.iter().any(|(_, g)| {
+                    let (_, stock, bolt) = extraction_core::gunsmith::workable(&g.id);
+                    (stock && part_item(&g.id, "stock") == id)
+                        || (bolt && part_item(&g.id, "bolt") == id)
+                })
+        };
+        let mut ids: Vec<String> = vec![
+            "hacksaw".into(),
+            "can_suppressor".into(),
+            "ammo_545_us".into(),
+            "ammo_762x39_us".into(),
+        ];
+        ids.extend(
+            catalog
+                .iter()
+                .filter(|(_, d)| d.has_tag("gun_part"))
+                .map(|(_, d)| d.id.clone()),
+        );
+        let mut bad: Vec<String> = ids.iter().filter(|id| !had(id)).cloned().collect();
+        // A loose round comes out of its box.
+        for round in ["round_545_us", "round_762x39_us"] {
+            let r = catalog.get(catalog.kind(round).unwrap());
+            let boxed = catalog.iter().any(|(_, b)| {
+                b.rounds > 1 && b.cartridge == r.cartridge && b.load == r.load && had(&b.id)
+            });
+            if !boxed {
+                bad.push(round.into());
+            }
+        }
+        assert!(bad.is_empty(), "can't be had: {bad:?}");
     }
 
     /// Whatever the hand holds, let go (the grip closed on it, then opened:
@@ -1042,7 +1234,8 @@ pub fn show_builds(
                 continue;
             };
             let (show, scale) = match name.as_str() {
-                "static_barrel" => (true, k),
+                // (The double's barrels hinge: they're drawn short too.)
+                "static_barrel" | "barrels" => (true, k),
                 "static_butt" => (b.stock, 1.0),
                 "turnbolt" => (!b.bolt_out, 1.0),
                 _ => continue,
