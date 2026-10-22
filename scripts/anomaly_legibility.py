@@ -172,12 +172,17 @@ def main() -> int:
     kinds = [n for n, _ in TARGETS if n in words] or [n for n, _ in TARGETS]
     conds = [w for w in WEATHERS if w in words] or WEATHERS
     if "--measure" not in sys.argv:
-        # Shots kept from a run with other cameras are no use: start over.
+        # A kind's shots kept from a run with another camera for it are no
+        # use: those go; the rest stay.
         cams = os.path.join(RAW, "cameras.json")
-        if os.path.exists(cams) and json.load(open(cams)) != [list(t) for t in TARGETS]:
-            import shutil
-            shutil.rmtree(RAW)
         os.makedirs(RAW, exist_ok=True)
+        if os.path.exists(cams):
+            old = dict(map(tuple, json.load(open(cams))))
+            for name, cam in TARGETS:
+                if old.get(name) != cam:
+                    for f in os.listdir(RAW):
+                        if f.startswith(f"{name}_") and f.endswith(".png"):
+                            os.remove(os.path.join(RAW, f))
         with open(cams, "w") as f:
             json.dump(TARGETS, f)
         jobs = [

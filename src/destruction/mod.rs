@@ -139,12 +139,28 @@ fn make_noise(mut broke: MessageReader<Broke>, mut noise: MessageWriter<crate::r
 /// The Surge has been through: every pane whole, every door back on its
 /// hinges, every crate nailed shut again (`persist::reset_zone`).
 pub fn surge(world: &mut World) {
-    world.resource_mut::<Broken>().0.clear();
-    glass::mend_all(world);
-    wood::mend_all(world);
-    breach::mend_all(world);
-    boards::mend_all(world);
-    strip::mend_all(world);
+    for i in 0..SURGE_STEPS {
+        surge_step(world, i);
+    }
+}
+
+/// `surge`'s parts, for mending over several frames (the Surge's reset at
+/// base, `persist::ZoneReset`: at once it was a frame's 9 ms).
+pub const SURGE_STEPS: usize = 5;
+
+/// One part of `surge`: the broken list and the glass, then the wood, the
+/// breaches, the boards, the strip.
+pub fn surge_step(world: &mut World, step: usize) {
+    match step {
+        0 => {
+            world.resource_mut::<Broken>().0.clear();
+            glass::mend_all(world);
+        }
+        1 => wood::mend_all(world),
+        2 => breach::mend_all(world),
+        3 => boards::mend_all(world),
+        _ => strip::mend_all(world),
+    }
 }
 
 #[cfg(test)]

@@ -141,7 +141,10 @@ Three ways over, west to east, each a different risk, and one under:
   at its toe, 105 m of steps on an embankment against the wall, to a gap
   in the parapet a third of the way from the east end. You climb it in
   full view of the valley below, and come out on the crest in full view
-  of the bed.
+  of the bed. The embankment is banked right up against the
+  face and walled on its outer side and round the landing, and the face's
+  set-backs are weathered steep: nowhere off it but over a wall, and
+  nothing on the face to land on (`dam.rs`'s `the_faces_have_no_ledges`).
 - **The spillway**, cut into the east abutment: a stepped concrete chute
   you climb from the filter house, walled in for most of its length, a
   Well standing in it beside the steps. At its head the catchwater path

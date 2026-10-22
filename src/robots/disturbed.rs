@@ -46,6 +46,11 @@ pub enum SignKind {
     Dragged,
     /// A loot spot cleared: a shelf, a table, a locker left bare.
     Looted,
+    /// A light that wasn't there: thrown, lit or switched on (a chemlight,
+    /// a hand flare, a dark room's lamps). Seen further than other signs in
+    /// the dark ([`LIGHT_SIGHT`]), and round a corner close by
+    /// ([`LIGHT_GLOW`]).
+    Light,
 }
 
 /// A disturbance: where, what, and since when (the robots' clock).
@@ -125,6 +130,10 @@ pub const ROUTE_UNCERTAINTY: f32 = 6.0;
 pub const DOOR_HAND: f32 = 2.5;
 /// A thing picked up within this of a loot spot (m) cleared it.
 pub const LOOT_HAND: f32 = 0.6;
+/// A new light is seen this far (m), whatever the light outside...
+pub const LIGHT_SIGHT: f32 = 20.0;
+/// ...and within this, round a corner: the glow on the walls.
+pub const LIGHT_GLOW: f32 = 6.0;
 
 pub struct DisturbedPlugin;
 
@@ -275,11 +284,15 @@ fn notice_signs(
             .filter(|s| {
                 let to = s.at + Vec3::Y * 0.5 - eye;
                 let d = to.length();
-                if d > reach || d < 0.01 {
+                let light = s.kind == SignKind::Light;
+                if d > if light { LIGHT_SIGHT } else { reach } || d < 0.01 {
                     return false;
                 }
                 if forward.angle_between(to / d).to_degrees() > senses.fov_deg * 0.5 {
                     return false;
+                }
+                if light && d < LIGHT_GLOW {
+                    return true;
                 }
                 // (Short of it: a door or a fence is the thing in the way.)
                 Dir3::new(to).ok().is_some_and(|dir| {

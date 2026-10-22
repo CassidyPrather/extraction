@@ -3558,6 +3558,19 @@ mod first_aid {
     fn dress(turns: f32) -> (bool, f32, f32) {
         let (mut vr, feet) = setup();
         let d = take(&mut vr, feet, "field_dressing");
+        // The bleed's in the left forearm (`interact::wounds`).
+        vr.app
+            .world_mut()
+            .entity_mut(vr.player)
+            .insert(crate::interact::wounds::Wounds(vec![
+                crate::interact::wounds::Wound {
+                    limb: crate::interact::wounds::Limb::Forearm(Side::Left),
+                    along: 0.5,
+                    around: 0.0,
+                    bleed: 1.0,
+                    dressed: false,
+                },
+            ]));
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
         let centre = wrist + Vec3::Z * 0.12;
@@ -3633,16 +3646,23 @@ mod first_aid {
     }
 
     /// Held at the mouth a moment, food is eaten; a bottle only drunk once
-    /// it's tipped up.
+    /// it's tipped up, and with its cap off.
     #[test]
     fn food_at_the_mouth_is_eaten_and_a_bottle_drunk_tipped_up() {
-        for (id, tip, eaten) in [
-            ("canned_stew", false, true),
-            ("water_bottle", false, false),
-            ("water_bottle", true, true),
+        for (id, tip, uncapped, eaten) in [
+            ("canned_stew", false, true, true),
+            ("water_bottle", false, true, false),
+            ("water_bottle", true, true, true),
+            ("water_bottle", true, false, false),
         ] {
             let (mut vr, feet) = setup();
             let food = take(&mut vr, feet, id);
+            if uncapped {
+                vr.app
+                    .world_mut()
+                    .entity_mut(food)
+                    .remove::<crate::interact::first_aid::Capped>();
+            }
             let mouth = feet + Vec3::new(0.0, 1.65 - 0.08, -0.07);
             let rot = if tip {
                 Quat::from_rotation_x(1.4)
@@ -3651,8 +3671,49 @@ mod first_aid {
             };
             vr.hand(Side::Right, mouth, rot, 1.0, 0.0);
             vr.step(140);
-            assert_eq!(gone(&vr, food), eaten, "{id} tipped {tip}");
+            assert_eq!(
+                gone(&vr, food),
+                eaten,
+                "{id} tipped {tip} uncapped {uncapped}"
+            );
         }
+    }
+
+    /// A bottle in the right hand; the left takes its cap (the trigger) and
+    /// twists it round: it comes off.
+    #[test]
+    fn a_bottle_cap_is_unscrewed_by_hand() {
+        use crate::interact::first_aid::Capped;
+        let (mut vr, feet) = setup();
+        let bottle = take(&mut vr, feet, "water_bottle");
+        assert!(
+            vr.app.world().get::<Capped>(bottle).is_some(),
+            "capped to start"
+        );
+        let top = {
+            let gt = vr.app.world().get::<GlobalTransform>(bottle).unwrap();
+            gt.transform_point(Vec3::Y * 0.108)
+        };
+        vr.hand(Side::Left, top, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.trigger(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(
+            vr.hand_state(Side::Left).handle.map(|h| h.0),
+            Some(bottle),
+            "the cap's in the left hand"
+        );
+        // A turn round the bottle's axis (up), over a second.
+        for i in 1..=64 {
+            let a = std::f32::consts::TAU * i as f32 / 64.0;
+            vr.hand(Side::Left, top, Quat::from_rotation_y(a), 0.0, 1.0);
+            vr.step(1);
+        }
+        vr.step(2);
+        assert!(
+            vr.app.world().get::<Capped>(bottle).is_none(),
+            "the cap's off"
+        );
     }
 }
 
@@ -5437,13 +5498,20 @@ mod salvage {
         vr.step(2);
     }
 
-    /// A spanner in the right hand, its head put to `bolt` (the handle
-    /// toward you), then swung `turns` times round it counterclockwise
-    /// (looking down on the bolt's head). Put down after.
-    fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
+    /// A spanner in the right hand, its head put to `bolt` (an
+    /// `Unboltable`; the handle toward you), then swung `turns` times
+    /// round it counterclockwise (looking down on the bolt's head). Put
+    /// down after. (For anyone's bolts: a car's wheel nuts too.)
+    pub(super) fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
         let bgt = *vr.app.world().get::<GlobalTransform>(bolt).unwrap();
         let at = bgt.translation();
-        let axis = (bgt.rotation() * Vec3::Y).normalize();
+        let out = vr
+            .app
+            .world()
+            .get::<crate::destruction::hooks::Unboltable>(bolt)
+            .expect("a bolt")
+            .axis;
+        let axis = (bgt.rotation() * out).normalize();
         let tool = vr.spawn(
             "spanner",
             Transform::from_translation(feet + Vec3::new(0.25, 0.9, -0.2)),
@@ -5687,5 +5755,454 @@ mod salvage {
         vr.app.world_mut().get_mut::<Live>(cell).unwrap().left = 0.0;
         vr.step(3);
         assert!(take(&mut vr, Side::Right, cell), "a cold cell stuck");
+    }
+}
+
+/// Wounds where you were hit (`interact::wounds`), bound one limb at a
+/// time by a dressing wound round it.
+#[cfg(test)]
+mod wounds {
+    use super::*;
+    use crate::interact::wounds::{Limb, Wounds, player_segments};
+    use crate::weapons::ballistics::Hit;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.hand_local(Side::Left, Vec3::new(-0.25, 1.0, -0.15), 0.0);
+        vr.hand_local(Side::Right, Vec3::new(0.25, 1.0, -0.15), 0.0);
+        vr.step(60);
+        (vr, feet)
+    }
+
+    /// Where on the body `limb` is now, `along` it.
+    fn on(vr: &mut Vr, limb: Limb, along: f32) -> Vec3 {
+        let segs = segments(vr);
+        let s = segs.iter().find(|s| s.limb == limb).expect("that limb");
+        s.a.lerp(s.b, along)
+    }
+
+    /// The body's limbs as they are now.
+    fn segments(vr: &mut Vr) -> Vec<crate::interact::wounds::Segment> {
+        {
+            let mut sys = bevy::ecs::system::SystemState::<(
+                Query<
+                    (
+                        &Transform,
+                        &RigInput,
+                        &crate::rig::stance::Stance,
+                        &Children,
+                    ),
+                    With<crate::rig::LocalPlayer>,
+                >,
+                Query<(&RigHand, &Hand)>,
+            )>::new(vr.app.world_mut());
+            let (players, hands) = sys.get(vr.app.world()).unwrap();
+            player_segments(vr.player, &players, &hands).expect("a stance")
+        }
+    }
+
+    /// The glove of a hand laid on an open wound comes away bloody; the
+    /// other stays clean.
+    #[test]
+    fn a_hand_on_a_wound_comes_away_bloody() {
+        let (mut vr, _) = setup();
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        let w = wounds(&vr)
+            .into_iter()
+            .find(|w| w.limb == Limb::Thigh(Side::Left))
+            .expect("a thigh wound");
+        let spot = segments(&mut vr)
+            .into_iter()
+            .find(|s| s.limb == w.limb)
+            .unwrap()
+            .point(w.along, w.around);
+        vr.move_hand(Side::Left, spot);
+        vr.step(60);
+        let blood = |vr: &mut Vr, side| {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&RigHand, Option<&crate::interact::wounds::Bloodied>)>();
+            q.iter(vr.app.world())
+                .find(|(rh, _)| rh.side == side)
+                .and_then(|(_, b)| b.map(|b| b.0))
+                .unwrap_or(0.0)
+        };
+        assert!(blood(&mut vr, Side::Left) > 0.5, "the left glove bloody");
+        assert_eq!(blood(&mut vr, Side::Right), 0.0, "the right clean");
+    }
+
+    /// A hit on the body at `at`.
+    fn shot(vr: &mut Vr, at: Vec3, damage: f32) {
+        let collider = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<(Entity, &ChildOf), With<crate::player::BodyCollider>>();
+            q.iter(vr.app.world())
+                .find(|(_, c)| c.parent() == vr.player)
+                .map(|(e, _)| e)
+                .expect("a body collider")
+        };
+        vr.app.world_mut().write_message(Hit {
+            entity: collider,
+            point: at,
+            normal: Vec3::Z,
+            velocity: Vec3::NEG_Z * 300.0,
+            damage,
+            shooter: None,
+            mass_g: 8.0,
+            load: Default::default(),
+            blow: None,
+        });
+        vr.step(2);
+    }
+
+    fn wounds(vr: &Vr) -> Vec<crate::interact::wounds::Wound> {
+        vr.app.world().get::<Wounds>(vr.player).unwrap().0.clone()
+    }
+
+    /// Shot in the left thigh and the right upper arm: two wounds, there,
+    /// bleeding. A dressing wound round the thigh binds the thigh; the arm
+    /// bleeds on.
+    #[test]
+    fn a_dressing_binds_the_limb_it_is_wound_round() {
+        let (mut vr, feet) = setup();
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        let arm = on(&mut vr, Limb::UpperArm(Side::Right), 0.5);
+        shot(&mut vr, arm, 30.0);
+        let w = wounds(&vr);
+        assert!(
+            w.iter()
+                .any(|w| w.limb == Limb::Thigh(Side::Left) && w.bleed > 0.0),
+            "a bleeding wound on the thigh: {w:?}"
+        );
+        assert!(
+            w.iter()
+                .any(|w| w.limb == Limb::UpperArm(Side::Right) && w.bleed > 0.0),
+            "and the arm: {w:?}"
+        );
+        // A dressing in the right hand, round the left thigh twice.
+        let dressing = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.15)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(dressing)
+            .insert(RigidBody::Static);
+        vr.hand(
+            Side::Right,
+            feet + Vec3::new(0.25, 1.0, -0.15),
+            Quat::IDENTITY,
+            1.0,
+            0.0,
+        );
+        vr.step(4);
+        vr.app
+            .world_mut()
+            .entity_mut(dressing)
+            .insert(RigidBody::Dynamic);
+        vr.step(6);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(dressing));
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(dressing).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        let centre = on(&mut vr, Limb::Thigh(Side::Left), 0.45);
+        for i in 0..=96 {
+            let a = i as f32 / 48.0 * std::f32::consts::TAU;
+            // Round it, in the horizontal plane (the thigh hangs down).
+            let at = centre + Vec3::new(a.cos(), 0.0, a.sin()) * 0.12;
+            vr.move_hand(Side::Right, at - off);
+            vr.step(1);
+        }
+        vr.step(4);
+        let w = wounds(&vr);
+        assert!(
+            w.iter()
+                .filter(|w| w.limb == Limb::Thigh(Side::Left))
+                .all(|w| w.dressed && w.bleed == 0.0),
+            "the thigh bound: {w:?}"
+        );
+        let arm_bleeds = w
+            .iter()
+            .filter(|w| w.limb == Limb::UpperArm(Side::Right))
+            .map(|w| w.bleed)
+            .sum::<f32>();
+        assert!(arm_bleeds > 0.0, "the arm bleeds on: {w:?}");
+        let h = vr
+            .app
+            .world()
+            .get::<crate::health::Health>(vr.player)
+            .unwrap();
+        assert!(
+            (h.bleeding - arm_bleeds).abs() < 0.05,
+            "health's bleeding is the arm's: {}",
+            h.bleeding
+        );
+    }
+
+    /// The broken shin's middle, and which way it runs.
+    fn shin(vr: &mut Vr) -> (Vec3, Vec3) {
+        let leg = vr
+            .app
+            .world()
+            .get::<crate::interact::wounds::Fracture>(vr.player)
+            .expect("a broken leg")
+            .leg;
+        let a = on(vr, Limb::Shin(leg), 0.0);
+        let b = on(vr, Limb::Shin(leg), 1.0);
+        ((a + b) / 2.0, (b - a).normalize())
+    }
+
+    /// A splint held to the shin `upright` (along it) or across it, the
+    /// other hand at the leg, for two seconds.
+    fn strap(upright: bool) -> (bool, f32, bool) {
+        use crate::interact::wounds::Fracture;
+        let (mut vr, feet) = setup();
+        vr.app
+            .world_mut()
+            .get_mut::<crate::player::Body>(vr.player)
+            .unwrap()
+            .impact = 12.0;
+        vr.step(4);
+        assert!(
+            vr.app.world().get::<Fracture>(vr.player).is_some(),
+            "broken"
+        );
+        let limp = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap()
+            .limping;
+        assert_eq!(limp, crate::interact::wounds::LIMP, "limping");
+        let at = feet + Vec3::new(0.25, 1.0, -0.15);
+        let turn = if upright {
+            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+        } else {
+            Quat::IDENTITY
+        };
+        let splint = vr.spawn(
+            "splint",
+            Transform::from_translation(at).with_rotation(turn),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(splint)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(4);
+        vr.app
+            .world_mut()
+            .entity_mut(splint)
+            .insert(RigidBody::Dynamic);
+        vr.step(6);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(splint));
+        let (mid, _) = shin(&mut vr);
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(splint).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        // Alongside the shin, a hand's width out in front of it.
+        let place = mid + Vec3::new(0.0, 0.0, -0.09);
+        for i in 1..=30 {
+            vr.move_hand(Side::Right, at.lerp(place - off, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.hand(
+            Side::Left,
+            mid + Vec3::new(0.08, 0.05, -0.05),
+            Quat::IDENTITY,
+            0.0,
+            0.0,
+        );
+        // Two seconds at the fixed rate.
+        vr.step(180);
+        let f = *vr.app.world().get::<Fracture>(vr.player).unwrap();
+        let limp = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap()
+            .limping;
+        (f.splinted, limp, vr.app.world().get_entity(splint).is_err())
+    }
+
+    /// A hard landing breaks a leg and you limp; a splint held along the
+    /// shin and strapped is on it, and you limp less.
+    #[test]
+    fn a_splint_strapped_along_a_broken_shin() {
+        let (splinted, limp, used) = strap(true);
+        assert!(splinted && used, "strapped on: {splinted} {used}");
+        assert_eq!(limp, crate::interact::wounds::SPLINTED_LIMP);
+    }
+
+    /// Held across the shin, it isn't a splint.
+    #[test]
+    fn a_splint_held_across_the_shin_does_nothing() {
+        let (splinted, _, used) = strap(false);
+        assert!(!splinted && !used);
+    }
+}
+
+/// Robots fight a hand (`robots::grip`): held, a walker kicks free and a
+/// drone tears loose.
+mod grips {
+    use super::*;
+    use crate::interact::fight::RobotGrip;
+    use crate::robots::{Awareness, Job, JobKind, PartRole, RobotPart};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn open() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(4);
+        (vr, feet)
+    }
+
+    fn job(at: Vec3) -> Job {
+        Job {
+            kind: JobKind::Watch,
+            site: at,
+            duration: f32::INFINITY,
+            exit: at,
+        }
+    }
+
+    /// Whether the right hand has hold of `robot`.
+    fn holding(vr: &mut Vr, robot: Entity) -> bool {
+        vr.app
+            .world_mut()
+            .query::<(&RigHand, &RobotGrip)>()
+            .iter(vr.app.world())
+            .any(|(h, g)| h.side == Side::Right && g.robot == robot)
+    }
+
+    /// A walker held by a leg kicks it free within a second (the hand
+    /// knocked off), and turns on whoever held it.
+    #[test]
+    fn a_walker_kicks_a_held_leg_free() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.1);
+        let walker = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker(&mut c, &zone, at, job(at));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its leg nearest you.
+        let leg = {
+            let mut q = vr.app.world_mut().query::<(&RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(p, _)| p.robot == walker && matches!(p.role, PartRole::Leg(_)))
+                .map(|(_, g)| g.translation())
+                .max_by(|a, b| a.z.total_cmp(&b.z))
+                .expect("a leg")
+        };
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, walker), "the hand has hold of its leg");
+        // Held still, hand closed: within a second it's kicked free.
+        let mut free_after = None;
+        for i in 0..90 {
+            vr.step(1);
+            if !holding(&mut vr, walker) {
+                free_after = Some(i);
+                break;
+            }
+        }
+        let ticks = free_after.expect("it never kicked free");
+        assert!(
+            ticks as f32 / 90.0 <= crate::robots::grip::KICK_AFTER + 0.2,
+            "kicked free after {ticks} ticks"
+        );
+        let player = vr.player;
+        let aware = vr.app.world().get::<Awareness>(walker).unwrap();
+        assert_eq!(aware.target, Some(player), "it turns on who held it");
+        assert!(aware.suspicion >= 1.0);
+    }
+
+    /// A drone held by its frame thrusts away harder and harder, and
+    /// tears out of the hand within a couple of seconds.
+    #[test]
+    fn a_held_drone_tears_free() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.25, 1.3, -0.6);
+        let drone = {
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::drone::spawn_drone(&mut c, at, job(at));
+            vr.app.world_mut().flush();
+            // (Blind and mindless: it holds station rather than go for you
+            // before it's taken.)
+            vr.app
+                .world_mut()
+                .entity_mut(e)
+                .remove::<crate::robots::Senses>()
+                .remove::<crate::robots::Brain>();
+            e
+        };
+        // It holds station at its post: let it settle there.
+        vr.step(90);
+        let middle = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(drone)
+            .unwrap()
+            .translation();
+        let from = middle + Vec3::new(0.0, 0.0, 0.45);
+        let hand = middle + Vec3::new(0.0, 0.0, 0.12);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(6);
+        for i in 1..=40 {
+            vr.move_hand(Side::Right, from.lerp(hand, i as f32 / 40.0));
+            vr.step(1);
+        }
+        // (Where it is now: it drifts a little holding station.)
+        let middle = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(drone)
+            .unwrap()
+            .translation();
+        vr.move_hand(Side::Right, middle + Vec3::new(0.0, 0.0, 0.12));
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, drone), "the hand has hold of it");
+        let mut tore = None;
+        for i in 0..(90 * 3) {
+            vr.step(1);
+            if !holding(&mut vr, drone) {
+                tore = Some(i);
+                break;
+            }
+        }
+        let ticks = tore.expect("still in the hand after 3 s");
+        assert!(ticks > 9, "not at once: {ticks} ticks");
+        let player = vr.player;
+        let aware = vr.app.world().get::<Awareness>(drone).unwrap();
+        assert_eq!(aware.target, Some(player), "it knows who held it");
     }
 }

@@ -8,6 +8,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::ammo::Load;
+use extraction_core::firearm_terminal::Stuff;
 use extraction_core::noise::Rng;
 
 use crate::world::Layer;
@@ -463,6 +464,19 @@ pub(crate) fn fly_projectiles(
     }
 }
 
+/// A sheet-steel box thicker than this (m) is a hollow body, not a skin.
+pub const HOLLOW_OVER: f32 = 0.04;
+
+/// What a built piece of `m`, `half` its box's half extents, is to a
+/// round: sheet steel made up into something thicker than a skin (a car's
+/// door, its body, a locker) is hollow.
+pub fn piece_stuff(m: crate::render::materials::Mat, half: Vec3) -> Stuff {
+    match super::impacts::stuff_of(m) {
+        Stuff::Sheet if half.min_element() * 2.0 > HOLLOW_OVER => Stuff::Shell,
+        s => s,
+    }
+}
+
 /// What a round has struck, as far as getting through it goes.
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct Struck<'w, 's> {
@@ -479,6 +493,10 @@ pub(crate) struct Struck<'w, 's> {
     items: Query<'w, 's, (), With<crate::items::Item>>,
     bodies: Query<'w, 's, (), With<crate::player::BodyCollider>>,
     robot_parts: Query<'w, 's, &'static crate::robots::RobotPart>,
+    robots: Query<'w, 's, &'static crate::robots::Robot>,
+    shapes: Query<'w, 's, (&'static Collider, &'static GlobalTransform)>,
+    held_items: Query<'w, 's, &'static crate::items::Item>,
+    catalog: Option<Res<'w, crate::items::Catalog>>,
 }
 
 impl Struck<'_, '_> {
@@ -497,13 +515,35 @@ impl Struck<'_, '_> {
         point: Vec3,
         dir: Vec3,
         cos_in: f32,
-    ) -> (extraction_core::firearm_terminal::Stuff, f32, f32) {
-        use extraction_core::firearm_terminal::Stuff;
+    ) -> (Stuff, f32, f32) {
         const SOLID: f32 = 10_000.0;
-        if self.bodies.contains(e) || self.items.contains(e) {
+        if self.bodies.contains(e) {
             return (Stuff::Plate, SOLID, 0.0);
         }
-        if self.robot_parts.contains(e) {
+        if self.items.contains(e) {
+            // A car's door carried off as a shield is the door it was.
+            if self.is_car_panel(e) {
+                let along = self.exit(e, point, dir);
+                return (Stuff::Shell, along * 1000.0 * cos_in.max(0.2), along);
+            }
+            return (Stuff::Plate, SOLID, 0.0);
+        }
+        if let Ok(part) = self.robot_parts.get(e) {
+            use crate::robots::{PartRole, RobotKind};
+            let light = self
+                .robots
+                .get(part.robot)
+                .is_ok_and(|r| r.kind == RobotKind::Drone);
+            let thin = light
+                || matches!(
+                    part.role,
+                    PartRole::Sensor | PartRole::Rotor(_) | PartRole::GasCell(_)
+                );
+            if thin && !matches!(part.role, PartRole::Armour(_)) {
+                // A thin housing, hollow: in one wall, across, out the other.
+                let along = self.exit(e, point, dir);
+                return (Stuff::Housing, along * 1000.0 * cos_in.max(0.2), along);
+            }
             return (Stuff::Plate, 30.0, 0.03);
         }
         if self.trees.contains(e) {
@@ -524,7 +564,7 @@ impl Struck<'_, '_> {
                     }
                 }
                 let along = exit.clamp(0.0, 5.0);
-                let stuff = super::impacts::stuff_of(m);
+                let stuff = piece_stuff(m, half);
                 return (stuff, along * 1000.0 * cos_in.max(0.2), along);
             }
         }
@@ -532,6 +572,29 @@ impl Struck<'_, '_> {
             return (Stuff::Concrete, SOLID, 0.0);
         }
         (Stuff::Soil, SOLID, 0.0)
+    }
+
+    /// A car's door, bonnet or boot lid, carried.
+    fn is_car_panel(&self, e: Entity) -> bool {
+        let (Ok(item), Some(catalog)) = (self.held_items.get(e), self.catalog.as_ref()) else {
+            return false;
+        };
+        ["car_door", "car_bonnet"]
+            .iter()
+            .any(|id| catalog.kind(id) == Some(item.kind()))
+    }
+
+    /// How far the line from `point` along `dir` runs inside `e`'s
+    /// collider before it comes out (m): a few centimetres if it can't
+    /// tell.
+    fn exit(&self, e: Entity, point: Vec3, dir: Vec3) -> f32 {
+        let Ok((collider, gt)) = self.shapes.get(e) else {
+            return 0.03;
+        };
+        let (_, rot, at) = gt.to_scale_rotation_translation();
+        collider
+            .cast_ray(at, rot, point + dir * 1e-3, dir, 5.0, false)
+            .map_or(0.03, |(d, _)| (d + 1e-3).clamp(0.005, 5.0))
     }
 
     /// A static thing that wears an exit mark.

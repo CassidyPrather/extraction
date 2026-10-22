@@ -250,28 +250,6 @@ fn census(world: &mut World) -> (HashMap<String, usize>, u32) {
     (ids, rounds)
 }
 
-/// What you own, by catalog id: the stash and everything on you.
-fn owned(world: &mut World) -> HashMap<String, usize> {
-    fn add(i: &SavedItem, out: &mut HashMap<String, usize>) {
-        *out.entry(i.id.clone()).or_default() += 1;
-        for x in &i.inserted {
-            add(x, out);
-        }
-    }
-    let s = snapshot(world);
-    let mut out = HashMap::new();
-    for i in s
-        .stash
-        .iter()
-        .chain(s.loadout.slots.iter().map(|s| &s.1))
-        .chain(&s.loadout.backpack)
-        .chain(&s.loadout.hands)
-    {
-        add(i, &mut out);
-    }
-    out
-}
-
 /// Saves, loads into a fresh game, and checks it holds the same.
 fn round_trip(a: &mut App, path: &Path, when: &str) -> App {
     let before = census(a.world_mut());
