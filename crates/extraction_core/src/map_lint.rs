@@ -321,6 +321,23 @@ pub const CHOICE_SHARED: f32 = 0.5;
 /// Something worth going to: a point of interest with loot or a
 /// walk-in building this near it.
 pub const CHOICE_LOOT: f32 = 40.0;
+/// The way out: from every rich place (a point of interest or artifact
+/// field in a region of danger [`FIELD_DANGER`] or worse), a second
+/// rendezvous is at most this much further than the nearest, metres
+/// (about two minutes more at a walk)...
+pub const OUT_EXTRA: f32 = 300.0;
+/// ...or within this walk of it, whichever is further (the rendezvous lie
+/// 350-450 m apart: from beside one, the next is that far)...
+pub const OUT_REACH: f32 = 500.0;
+/// ...the walks to both have cover ([`COVER_GAP`]) and part early: they
+/// are [`CHOICE_APART`] apart within this far along the shorter.
+pub const OUT_PART: f32 = 150.0;
+/// And a rendezvous's last stretch, where you wait laden for the truck:
+pub const LAST_STRETCH: f32 = 100.0;
+/// in it, no open run longer than this...
+pub const LAST_OPEN: f32 = 40.0;
+/// ...and no more than this share of it in a spotter's sight.
+pub const LAST_SPOTTED: f32 = 0.25;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -1344,6 +1361,150 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         // Each place worth going to early: reached, with loot, and a walk
         // to it with cover.
         let mut options: Vec<(String, f32, Vec<P2>)> = Vec::new();
+        // -- The way out: two ways home from every rich place ------------------
+        {
+            // A hunted player heading home takes the short way, not the
+            // easy road: plan on comfortable ground, every cell alike.
+            let flat = {
+                let mut g = comfy.clone();
+                for c in g.cost.iter_mut().filter(|c| **c != BLOCKED) {
+                    *c = 1;
+                }
+                g
+            };
+            let rvs: Vec<(&str, P2)> = map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| (m.name.as_str(), m.at))
+                .collect();
+            let rich: Vec<(&str, P2)> = map
+                .markers
+                .iter()
+                .filter(|m| matches!(m.kind, MarkerKind::Poi | MarkerKind::ArtifactField))
+                .filter(|m| {
+                    map.region_at(m.at)
+                        .is_some_and(|g| g.danger >= FIELD_DANGER)
+                })
+                .map(|m| (m.name.as_str(), m.at))
+                .collect();
+            let mut worst: Option<(String, f32)> = None;
+            let mut fine = 0;
+            for (name, at) in &rich {
+                // Each rendezvous: its walk, and whether it has cover all the way.
+                let mut outs: Vec<(&str, f32, Vec<P2>, bool)> = rvs
+                    .iter()
+                    .filter_map(|(rv, rat)| {
+                        let path = flat.path(*at, *rat)?;
+                        let pts = resample(&path);
+                        let ok = longest_gap(&pts, covered).0 <= COVER_GAP;
+                        Some((*rv, path_length(&path), pts, ok))
+                    })
+                    .collect();
+                outs.sort_by(|a, b| a.1.total_cmp(&b.1));
+                let Some(near) = outs.first().map(|o| o.1) else {
+                    continue;
+                };
+                let good: Vec<_> = outs
+                    .iter()
+                    .filter(|o| o.3 && o.1 <= (near + OUT_EXTRA).max(OUT_REACH))
+                    .collect();
+                // How far along either walk before it's CHOICE_APART off the
+                // other (from beside one rendezvous, the walk to it is a few
+                // metres and the other walk leaves it at once).
+                let parts = |a: &[P2], b: &[P2]| {
+                    let off = |x: &[P2], y: &[P2]| {
+                        x.iter()
+                            .position(|p| polyline_closest(y, *p).0 > CHOICE_APART)
+                            .map(|k| k as f32 * STEP)
+                    };
+                    match (off(a, b), off(b, a)) {
+                        (Some(p), Some(q)) => Some(p.min(q)),
+                        (p, q) => p.or(q),
+                    }
+                };
+                let two = good.iter().enumerate().any(|(i, a)| {
+                    good[i + 1..]
+                        .iter()
+                        .any(|b| parts(&a.2, &b.2).is_some_and(|d| d <= OUT_PART))
+                });
+                if two {
+                    fine += 1;
+                } else {
+                    let why = format!(
+                        "{} way(s) home with cover in reach, parting within {OUT_PART} m ({})",
+                        good.len(),
+                        outs.iter()
+                            .map(|o| format!(
+                                "{} {:.0} m{}",
+                                o.0,
+                                o.1,
+                                if o.3 { "" } else { ", open" }
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    );
+                    if worst.is_none() {
+                        worst = Some((name.to_string(), 0.0));
+                    }
+                    find(
+                        &mut r,
+                        Rule::Choice,
+                        format!("from {name}, one way home: {why}"),
+                        *at,
+                    );
+                }
+            }
+            r.measures.push(format!(
+                "the way out: {fine} of {} rich places have two ways home that part",
+                rich.len()
+            ));
+            // The last stretch to each rendezvous on every main route.
+            let spotters = crate::map_spotter::spotters(map);
+            for route in &routes {
+                let mut back = 0.0;
+                let mut k = route.points.len().saturating_sub(1);
+                while k > 0 && back < LAST_STRETCH {
+                    back += dist(route.points[k], route.points[k - 1]);
+                    k -= 1;
+                }
+                let last = &route.points[k..];
+                let (gap, at) = longest_gap(last, covered);
+                let seen = last
+                    .iter()
+                    .filter(|p| spotters.iter().any(|s| s.sees(map, hm, **p)))
+                    .count() as f32
+                    / last.len().max(1) as f32;
+                r.measures.push(format!(
+                "last {LAST_STRETCH} m to {}: longest open {gap:.0} m, {:.0}% in a spotter's sight",
+                route.to,
+                seen * 100.0
+            ));
+                if gap > LAST_OPEN {
+                    find(
+                        &mut r,
+                        Rule::Cover,
+                        format!(
+                            "{gap:.0} m in the open in the last {LAST_STRETCH} m to {}",
+                            route.to
+                        ),
+                        at,
+                    );
+                }
+                if seen > LAST_SPOTTED {
+                    find(
+                        &mut r,
+                        Rule::Spotter,
+                        format!(
+                            "{:.0}% of the last {LAST_STRETCH} m to {} is in a spotter's sight",
+                            seen * 100.0,
+                            route.to
+                        ),
+                        *last.last().unwrap_or(&at),
+                    );
+                }
+            }
+            let _ = worst;
+        }
+
         for poi in map.markers_of(&MarkerKind::Poi) {
             let Some(path) = comfy.path(ins, poi.at) else {
                 continue;
@@ -1753,6 +1914,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
+    let is_fence = |id: &str| id == "fence_garden";
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
             let (pa, pb) = (&solids[*a], &solids[*b]);
@@ -1777,6 +1939,20 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     &mut r,
                     Rule::Overlap,
                     format!("{:.1} m squeeze between {} and {}", walls, pa.name, pb.name),
+                    ra.at,
+                );
+            } else if walls < SEALED && (is_fence(&pa.prefab) != is_fence(&pb.prefab)) {
+                // A fence that stops just short of a wall leaves a slit a
+                // body can't take and a planner thinks it can: the sims'
+                // raiders ground against every garden built so, behind
+                // the house. A fence meets a wall with a gate's width.
+                find(
+                    &mut r,
+                    Rule::Overlap,
+                    format!(
+                        "a {:.1} m slit between {} and {}: leave a gate ({SQUEEZE} m)",
+                        walls, pa.name, pb.name
+                    ),
                     ra.at,
                 );
             }
@@ -2320,6 +2496,44 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Choice && f.what.contains("first ten minutes")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// With only one rendezvous, every rich place has one way home; and a
+    /// spotter over a rendezvous watches the last stretch to it.
+    #[test]
+    fn one_way_home_and_a_watched_rendezvous_are_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let mut seen = 0;
+        map.markers.retain(|m| {
+            if matches!(m.kind, MarkerKind::Rendezvous) {
+                seen += 1;
+                seen == 1
+            } else {
+                true
+            }
+        });
+        let rv = map.markers_of(&MarkerKind::Rendezvous).next().unwrap().at;
+        map.markers.push(crate::map::Marker {
+            kind: MarkerKind::Spotter,
+            at: [rv[0] + 30.0, rv[1] + 30.0],
+            rot: 0.0,
+            name: "Test spotter".into(),
+            y: 0.0,
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings.iter().any(|f| f.what.contains("one way home")),
+            "{}",
+            r.text()
+        );
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Spotter && f.what.contains("last")),
             "{}",
             r.text()
         );

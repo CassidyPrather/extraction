@@ -149,6 +149,16 @@ A good map makes the crossing a decision.
   `CHOICE_SHARED`). Not one corridor out of the drop. Now: Marrow 112°
   (Logging camp or Old farm), Kettle 146°, Cinder 88°, Sallow 122°,
   Rime 134°.
+- **The way out is a choice too**: from every rich place (a point of
+  interest or artifact field in a danger-2 region or worse), at least
+  two rendezvous are a sensible walk away: within 300 m of the nearest
+  (`OUT_EXTRA`) or 500 m (`OUT_REACH`), whichever is further, the
+  short way over comfortable ground (a hunted player cuts across, not
+  round by the road). Both walks have cover (`COVER_GAP`) and part
+  within 150 m (`OUT_PART`). And the last 100 m to each rendezvous
+  (`LAST_STRETCH`), where you wait laden for the truck, has no open run
+  over 40 m (`LAST_OPEN`) and no more than a quarter of it in a
+  spotter's sight (`LAST_SPOTTED`).
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.

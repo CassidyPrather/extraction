@@ -315,7 +315,7 @@
         (kind: Sentry(arc: 140.0, power: Some((133.6, -70.5))), at: (121.5, -63.5), rot: -30.0, name: "Chimney sentry"),
         // A spotter over the open ground the west way crosses to the fire
         // lookout: the east ways have the chimney's sentry (map_spotter).
-        (kind: Spotter, at: (-165.0, -36.0), name: "Ash pit spotter"),
+        (kind: Spotter, at: (-170.0, -10.0), name: "Ash pit spotter"),
         (kind: ArtifactField, at: (200.0, -150.0), name: "The slag heaps"),
         (kind: ArtifactField, at: (-200.0, 0.0), name: "The ash pit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
