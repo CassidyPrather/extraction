@@ -110,6 +110,33 @@ impl BuildingPlan {
         });
     }
 
+    /// Standing in (or by) heat its plan shuts, caught in it in a fight
+    /// or as it rose: those zones opened again, since a plan can't start
+    /// in a shut cell and the nearest open one may be through a wall.
+    /// Whether any were.
+    pub fn open_heat_at(&mut self, local: Vec2) -> bool {
+        let Some((i, j)) = self.grid.cell_of(local.to_array()) else {
+            return false;
+        };
+        let n = self.grid.n as i64;
+        let near = |k: usize| {
+            let (a, b) = ((k as i64 % n) - i as i64, (k as i64 / n) - j as i64);
+            a.abs() <= 1 && b.abs() <= 1
+        };
+        let mut zones: Vec<usize> = self
+            .hot
+            .iter()
+            .filter(|h| near(h.0))
+            .map(|h| h.1 as usize)
+            .collect();
+        zones.dedup();
+        if zones.is_empty() {
+            return false;
+        }
+        self.vent(&zones);
+        true
+    }
+
     pub fn to_local(&self, p: Vec3) -> Vec3 {
         self.xf.compute_affine().inverse().transform_point3(p)
     }
