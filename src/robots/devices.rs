@@ -184,12 +184,14 @@ pub struct DevicesPlugin;
 
 impl Plugin for DevicesPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<DeviceNoticed>().add_systems(
-            FixedUpdate,
-            (notice_devices, hunt_devices)
-                .chain()
-                .after(super::perceive),
-        );
+        app.add_message::<DeviceNoticed>()
+            .add_systems(
+                FixedUpdate,
+                (notice_devices, hunt_devices)
+                    .chain()
+                    .after(super::perceive),
+            )
+            .add_systems(FixedUpdate, (stage_scenarios, seat_cells_later));
     }
 }
 
@@ -494,5 +496,145 @@ mod tests {
         assert_eq!(r(Placed::CameraDrone), Reaction::Hunt);
         assert_eq!(r(Placed::Device(DeviceKind::Light)), Reaction::Investigate);
         assert_eq!(r(Placed::Device(DeviceKind::Laser)), Reaction::Investigate);
+    }
+}
+
+/// One scenario a device: it's set down running near a machine, which
+/// notices it (`NOTICED`) and does what its row says (a hunted or a
+/// dangerous one is shot: `WRECKED`). (name, item, who watches, shot?)
+pub const SCENARIOS: &[(&str, &str, Watcher, bool)] = &[
+    ("device_light", "flashlight", Watcher::Walker, false),
+    ("device_laser", "laser_module", Watcher::Walker, false),
+    ("device_cloak", "cloak_generator", Watcher::Drone, true),
+    ("device_jammer", "jammer", Watcher::Drone, true),
+    ("device_emp_trap", "emp_trap", Watcher::ArmedWalker, true),
+];
+
+/// Who's set by a scenario's device.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Watcher {
+    /// Unarmed, 8 m off, facing it.
+    Walker,
+    /// Armed, 13 m off, facing it.
+    ArmedWalker,
+    /// A survey drone, 30 m off and up.
+    Drone,
+}
+
+/// A scenario's device waits for its cell bay to be there to be seated.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct SeatCellLater(Entity);
+
+pub(crate) fn stage_scenarios(
+    mut commands: Commands,
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    zone: Res<crate::world::Zone>,
+    nav: Res<super::walker::Nav>,
+    catalog: Res<crate::items::Catalog>,
+) {
+    for s in setups.read() {
+        let Some(&(_, id, watcher, _)) = SCENARIOS.iter().find(|x| x.0 == s.name) else {
+            continue;
+        };
+        // Off to the bot's side, on open ground.
+        let f = Vec3::new(s.facing.x, 0.0, s.facing.z).normalize_or(Vec3::NEG_Z);
+        let side = Vec3::new(-f.z, 0.0, f.x);
+        let open = |d: Vec3| {
+            (2..=40).step_by(2).all(|m| {
+                let p = s.at + d * m as f32;
+                nav.0.walkable([p.x, p.z])
+            })
+        };
+        let dir = (0..16)
+            .map(|k| Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * side)
+            .find(|d| open(*d))
+            .unwrap_or(side);
+        let at = zone.on_ground(s.at.x + dir.x * 16.0, s.at.z + dir.z * 16.0) + Vec3::Y * 0.2;
+        let Some(kind) = catalog.kind(id) else {
+            continue;
+        };
+        let dev = crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        );
+        if id == "emp_trap" {
+            commands
+                .entity(dev)
+                .insert(crate::gadgets::Armed::Trap { radius: 4.0 });
+        } else if let Some(cell) = catalog.kind("power_cell") {
+            let c = crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: cell,
+                    transform: Transform::from_translation(at + Vec3::Y * 0.3),
+                    condition: 1.0,
+                },
+            );
+            commands.entity(dev).insert(SeatCellLater(c));
+        }
+        // The watcher, beyond it from the bot, facing it (walkers face -Z:
+        // set them on its +Z side).
+        let job = |site: Vec3| super::Job {
+            kind: super::JobKind::Watch,
+            site,
+            duration: 999.0,
+            exit: site,
+        };
+        match watcher {
+            Watcher::Walker | Watcher::ArmedWalker => {
+                let off = if watcher == Watcher::Walker {
+                    8.0
+                } else {
+                    13.0
+                };
+                let post = zone.on_ground(at.x, at.z + off);
+                super::walker::spawn_walker_with(
+                    &mut commands,
+                    &zone,
+                    post,
+                    job(post),
+                    watcher == Watcher::ArmedWalker,
+                    130.0,
+                );
+            }
+            Watcher::Drone => {
+                let site = at + dir * 30.0 + Vec3::Y * 12.0;
+                let mut j = job(site);
+                j.kind = super::JobKind::Survey;
+                super::drone::spawn_drone(&mut commands, site, j);
+            }
+        }
+        info!("scenario: a running {id} at {at:.0}");
+    }
+}
+
+/// Seat a scenario device's cell once its bay is there, and switch it on.
+pub(crate) fn seat_cells_later(
+    mut commands: Commands,
+    waiting: Query<(Entity, &SeatCellLater)>,
+    mut sockets: Query<(
+        Entity,
+        &mut crate::interact::Socket,
+        &crate::interact::SocketOwner,
+    )>,
+) {
+    for (dev, w) in &waiting {
+        let Some((se, mut socket, _)) = sockets.iter_mut().find(|(_, s, o)| {
+            o.0 == dev
+                && s.kind == crate::interact::SocketKind::Mount(extraction_core::items::Mount::Cell)
+        }) else {
+            continue;
+        };
+        crate::interact::seat_in_socket(&mut commands, w.0, se, &mut socket);
+        commands
+            .entity(dev)
+            .remove::<SeatCellLater>()
+            .insert(crate::items::usage::LightOn);
     }
 }
