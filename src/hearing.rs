@@ -916,13 +916,16 @@ mod tests {
         assert!(ls > lo && ls <= door + 1e-3, "shut {ls} open {lo}");
         // Same room: nothing lost; a storey up, a floor's.
         assert_eq!(h_open.loss_open(p3(pa, 0.0), p3(pa, 0.0)), 0.0);
-        let up = h_open.loss_open(p3(pa, 0.0), p3(pa, STOREY));
-        assert!((up - wall_loss(Stuff::Wood)).abs() < 1e-3, "upstairs {up}");
-        // A house's inside from its yard, door shut: its door or a wall.
+        // A house's inside from its yard, door shut: its door or a wall;
+        // and a storey up in it, a floor's loss (the house is two storeys
+        // tall; the shop isn't, and over its roof is out of doors).
         let house = graph("house_brick", false);
         let inside = somewhere_in(&house, 1).unwrap();
         let floor = house.floor;
         let h = Hearing::from_graphs(vec![house]);
+        let at = |up: f32| Vec3::new(inside.x, floor + 1.3 + up, inside.y);
+        let up = h.loss_open(at(0.0), at(STOREY));
+        assert!((up - wall_loss(Stuff::Wood)).abs() < 1e-3, "upstairs {up}");
         let yard = Vec3::new(0.0, floor + 1.3, 30.0);
         let l = h.loss_open(Vec3::new(inside.x, floor + 1.3, inside.y), yard);
         assert!(
