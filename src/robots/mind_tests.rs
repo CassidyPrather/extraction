@@ -3727,3 +3727,209 @@ fn a_jammer_item_is_a_jammer() {
         "a taught bench recipe makes it"
     );
 }
+
+/// A device switched on with a charged cell in it, set down at `at`.
+fn powered_device(app: &mut App, id: &str, at: Vec3) -> Entity {
+    let dev = spawn_item_at(app, id, at);
+    let cell = spawn_item_at(app, "power_cell", at + Vec3::Y * 0.3);
+    app.update();
+    let socket = app
+        .world_mut()
+        .query::<(
+            Entity,
+            &crate::interact::Socket,
+            &crate::interact::SocketOwner,
+        )>()
+        .iter(app.world())
+        .find(|(_, s, o)| {
+            o.0 == dev
+                && s.kind == crate::interact::SocketKind::Mount(extraction_core::items::Mount::Cell)
+        })
+        .map(|(e, ..)| e)
+        .expect("a cell bay");
+    let mut q =
+        bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
+            app.world_mut(),
+        );
+    let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
+    let mut s = sockets.get_mut(socket).unwrap();
+    crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+    q.apply(app.world_mut());
+    app.world_mut()
+        .entity_mut(dev)
+        .insert(crate::items::usage::LightOn);
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(
+        app.world()
+            .entity(dev)
+            .contains::<crate::gadgets::Powered>(),
+        "{id} is running"
+    );
+    dev
+}
+
+fn spawn_item_at(app: &mut App, id: &str, at: Vec3) -> Entity {
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind(id).unwrap(),
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    e
+}
+
+fn noticed(app: &App) -> u32 {
+    app.world()
+        .get_resource::<crate::bot::Counters>()
+        .and_then(|c| c.0.get(super::devices::NOTICED).copied())
+        .unwrap_or(0)
+}
+
+/// A light switched on and set down in front of a walker: it notices it
+/// (the tell) and comes to look.
+#[test]
+fn a_set_down_light_draws_a_walker_to_look() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let at = zone.on_ground(post.x + 2.0, post.z - 18.0) + Vec3::Y * 0.2;
+    powered_device(&mut app, "flashlight", at);
+    let mut looked = None;
+    for _ in 0..90 * 3 {
+        app.update();
+        if let Brain::Investigate { at: a, .. } = *app.world().get::<Brain>(w).unwrap() {
+            looked = Some(a);
+            break;
+        }
+    }
+    let a = looked.expect("it went to look at the light");
+    assert!(flat(a - at) < 4.0, "at the light: {a}");
+    assert!(noticed(&app) >= 1, "and the tell went out");
+}
+
+/// A running jammer: a drone's sensors pick up its draw from well off; it
+/// hunts it, and shoots it to pieces.
+#[test]
+fn a_running_jammer_is_hunted_and_shot() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0) + Vec3::Y * 0.2;
+    let jam = powered_device(&mut app, "jammer", at);
+    let site = at + Vec3::new(0.0, 12.0, 40.0);
+    let mut queue = CommandQueue::default();
+    {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            site,
+            Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 999.0,
+                exit: site,
+            },
+        );
+    }
+    queue.apply(app.world_mut());
+    let mut gone = false;
+    for _ in 0..90 * 40 {
+        app.update();
+        if app.world().get_entity(jam).is_err() {
+            gone = true;
+            break;
+        }
+    }
+    assert!(noticed(&app) >= 1, "the drone picked it up");
+    assert!(gone, "and shot it to pieces");
+}
+
+/// An armed EMP trap: a walker spots its lamp and shoots it from outside
+/// its reach; it goes off, and the walker isn't caught in it.
+#[test]
+fn an_armed_trap_is_shot_from_outside_its_reach() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            &zone,
+            post,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..60 {
+        app.update();
+    }
+    let at = zone.on_ground(post.x, post.z - 13.0) + Vec3::Y * 0.1;
+    let trap = spawn_item_at(&mut app, "emp_trap", at);
+    app.world_mut()
+        .entity_mut(trap)
+        .insert(crate::gadgets::Armed::Trap { radius: 4.0 });
+    #[derive(Resource, Default)]
+    struct Blasts(u32);
+    app.init_resource::<Blasts>().add_systems(
+        Last,
+        |mut b: MessageReader<crate::gadgets::EmpBlast>, mut n: ResMut<Blasts>| {
+            n.0 += b.read().count() as u32
+        },
+    );
+    let mut blown = false;
+    for _ in 0..90 * 20 {
+        app.update();
+        if app.world().resource::<Blasts>().0 > 0 {
+            blown = true;
+            break;
+        }
+    }
+    assert!(blown, "it shot the trap and it went off");
+    app.update();
+    assert!(
+        !app.world().entity(w).contains::<super::Stunned>(),
+        "from outside its reach"
+    );
+}
+
+/// An unarmed relay picks a running cloak's draw up, and reports it: a
+/// team is sent.
+#[test]
+fn a_relay_reports_a_hungry_device() {
+    let (mut app, player, zone, pylon, site) = network_app();
+    put(
+        &mut app,
+        player,
+        zone.on_ground(site.x + 300.0, site.z + 300.0),
+    );
+    app.world_mut()
+        .get_mut::<super::Senses>(pylon)
+        .unwrap()
+        .sight = 0.1;
+    let at = zone.on_ground(site.x + 30.0, site.z) + Vec3::Y * 0.2;
+    powered_device(&mut app, "cloak_generator", at);
+    for _ in 0..90 * 3 {
+        app.update();
+    }
+    let r = responses(&app);
+    assert!(!r.is_empty(), "it reported the cloak");
+    assert!(flat(r[0] - at) < 2.0, "where it is: {:?}", r);
+}
