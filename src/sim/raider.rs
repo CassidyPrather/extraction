@@ -1726,6 +1726,17 @@ fn duck(
 }
 
 /// The nearest spot within `reach` that `threat` can't see.
+/// The nearest spot just outside the anomaly `at` stands in, if it stands
+/// in one.
+fn out_of_anomaly(scene: &Scene, at: Vec2) -> Option<Vec2> {
+    scene
+        .anomalies
+        .iter()
+        .map(|(_, a, gt)| (gt.translation().xz(), a.radius))
+        .find(|(c, rad)| c.distance(at) < rad + 0.5)
+        .map(|(c, rad)| c + (at - c).normalize_or(Vec2::X) * (rad + 1.5))
+}
+
 fn cover_from(scene: &Scene, pos: Vec3, threat: Vec3, reach: f32) -> Option<(f32, Vec2)> {
     let mut best: Option<(f32, Vec2)> = None;
     for k in 0..12 {
@@ -1741,6 +1752,10 @@ fn cover_from(scene: &Scene, pos: Vec3, threat: Vec3, reach: f32) -> Option<(f32
                 || !scene.path_clear(pos + Vec3::Y * 0.9, eye - Vec3::Y * 0.6)
             {
                 break;
+            }
+            // Cover in an anomaly is no cover.
+            if out_of_anomaly(scene, p).is_some() {
+                continue;
             }
             if !scene.visible(threat, eye) && best.is_none_or(|b| d < b.0) {
                 best = Some((d, p));
@@ -1796,6 +1811,23 @@ fn fight_on(
             },
         ]);
         return;
+    }
+    // A fight that finds it standing in an anomaly (one it was working, or
+    // stepped into dodging): out of it first, then on with the fight.
+    if outcome.is_none() {
+        if let Some(out) = out_of_anomaly(scene, eye.xz()) {
+            log.event("reposition", json!({"why": "anomaly"}));
+            bot.replace([
+                Task::Release(Side::Left),
+                Task::WalkTo {
+                    to: out,
+                    within: 0.6,
+                },
+                Task::Support,
+                Task::Shoot { target, shots: 4 },
+            ]);
+            return;
+        }
     }
     let (loaded, spare) = scene.ammo(me, gun);
     // Hurt and still being hit: get out of its sight and see to it (the
