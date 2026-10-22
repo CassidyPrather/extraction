@@ -14,6 +14,7 @@ sweep's studio.
 | Press-kit stills | `scripts/capture_presskit.sh [maps]` | `target/presskit/index.html` to choose from; `--publish` to `docs/shots/showcase/` |
 | Trailer from a bot's raid | `scripts/capture_trailer.sh <map>` | `target/trailer/<map>/trailer.mp4`, `trailer_sheet.jpg` |
 | Looks-wrong sweep | `scripts/capture_sweep.sh [filter]` | `target/sweep/report.md`, `index.html` |
+| Visual diff of a merge round | `scripts/visual_diff.sh [old new]` | `target/vdiff/diff/<old>_<new>/sheet.jpg`, `index.html`, `report.json` |
 | What's new gallery | `scripts/capture_new.sh` | `docs/shots/capture/new/index.html` |
 | Turntables | `TURN=36 scripts/capture_sweep.sh <filter> <out>` | `<out>/<light>/<subject>.mp4`, `_strip.jpg` |
 | The cheap checks (sizes, furniture, z-fighting, camera paths) | `cargo test --lib capture -- --nocapture` | test failures and tallies |
@@ -297,3 +298,47 @@ cd - && BEFORE_BIN=/tmp/before/target/fast/extraction scripts/capture_new.sh
 
 Edit the subject lists in `scripts/capture_new.sh` and the captions in
 `scripts/capture_new.py` for the next pass.
+
+## Visual diff: `scripts/visual_diff.sh [old_sha new_sha]`
+
+The same cameras in every valley, shot by two builds at day, dusk, night
+and fog, compared for what changed. It's meant to catch the change nobody
+meant: the anomaly ring, a material breaking, a light going dark, a prop
+vanishing. Run it after each merge round. With no shas it compares main's
+tip with the end of the round before: the commit under main's latest
+cluster of three or more merges within ten minutes.
+
+- **Cameras.** `scripts/visual_diff/<map>.stills`, committed: an
+  insertion, the tallest landmark, a furnished interior, an anomaly and an
+  RV, in each of the five valleys. They're resolved from
+  `scripts/visual_diff/views.cine`, which names its targets in words every
+  valley answers to (`kind:Insertion`, `tallest`, `interior`). The
+  `--cine-dump` flag resolves them; `scripts/visual_diff_cameras.sh`
+  remakes them when a valley changes under them. Because they're written
+  out, a build from before the target words still shoots from the same
+  places.
+- **Builds.** Each sha is built once, in a worktree at
+  `target/vdiff/wt` with a shared `target/vdiff/build`. The first build
+  took 17 min and the next 6. Each is kept as `target/vdiff/bin/<sha>/`
+  next to a copy of its assets, which links in the generated textures
+  (gitignored, so a worktree lacks them). Shots go to
+  `target/vdiff/shots/<sha>/` at 960×540 with seed 7. Both are reused
+  next round and pruned to the newest three, about 250 MB a sha.
+- **The measure** (`scripts/visual_diff.py`) is 1 − SSIM on luminance, and
+  the share of pixels whose colour moved after a light blur. A shot
+  changed if structure passes 0.005 or more than 0.05% of pixels moved.
+  That catches a small lamp going dark, about 0.08% of the frame. The
+  same build shot twice gave identical pictures for 96 of the 100 shots.
+  The other four are Rime Fell by day, its falling snow, and each gets
+  twice its own measured noise from `scripts/visual_diff/noise.json`.
+  Remake that file with `scripts/visual_diff.py --calibrate a b
+  scripts/visual_diff/noise.json` from two runs of one build.
+- **The sheet** shows the 40 most changed shots, old | new | where it
+  changed (red over the new, greyed), ranked by how many times over its
+  threshold each is. `index.html` lists every shot's numbers.
+
+The first round, `77ce6f57` to `823b12f3`, changed 21 of 100 shots
+(`docs/shots/capture/vdiff/`):
+- every anomaly view, from Anomalies taking the haze's rim ring out;
+- Marrow Creek's dusk light shafts, from a warm haze to pale beams, with
+  no change to the shafts' own code.
