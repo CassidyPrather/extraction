@@ -3213,12 +3213,12 @@ mod tools {
     /// The longest the torque on the block has stayed at 100 N·m or more
     /// (seconds), as Destruction counts it toward giving.
     #[derive(Resource, Default)]
-    struct Strain {
+    pub(super) struct Strain {
         run: f32,
-        longest: f32,
+        pub(super) longest: f32,
     }
 
-    fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
+    pub(super) fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
         let hard = r.read().any(|p| p.torque >= 100.0);
         s.run = if hard { s.run + time.delta_secs() } else { 0.0 };
         s.longest = s.longest.max(s.run);
@@ -3228,7 +3228,7 @@ mod tools {
     /// with the bar leaning back toward `back` (level, toward you), then
     /// levered round the claw with the hands at `out` and `steady` metres up
     /// the bar from it, 0.45 rad, and held there.
-    fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
+    pub(super) fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
         let bar = vr.spawn(
             "crowbar",
             Transform::from_translation(
@@ -4834,6 +4834,64 @@ mod salvage {
             .condition;
         assert!(cond > 0.9, "as good as its leg: {cond}");
         assert!(take(&mut vr, Side::Left, servo), "it didn't lift out");
+    }
+
+    /// An armour plate on a wreck is pried off with a crowbar and comes
+    /// away as a plate to carry off, in the condition it was in when the
+    /// robot died (not as wreckage).
+    #[test]
+    fn a_plate_pried_off_a_wreck_is_a_plate_to_carry() {
+        let (mut vr, feet, wreck, _) = wreck(1.0);
+        vr.app
+            .init_resource::<super::tools::Strain>()
+            .add_systems(FixedUpdate, super::tools::strain);
+        // Its plate nearest you, a bit knocked about.
+        let (plate, at) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &mut RobotPart, &GlobalTransform)>();
+            let (e, mut p, gt) = q
+                .iter_mut(vr.app.world_mut())
+                .filter(|(_, p, _)| p.robot == wreck && matches!(p.role, PartRole::Armour(_)))
+                .max_by(|a, b| a.2.translation().z.total_cmp(&b.2.translation().z))
+                .expect("a plate on it");
+            p.hp = p.max_hp * 0.7;
+            (e, gt.translation())
+        };
+        // (Its condition was taken when it died: knocked about since, it's
+        // as good as it was then.)
+        let then = vr
+            .app
+            .world()
+            .get::<crate::robots::salvage::HealthAtDeath>(plate)
+            .expect("its health at death")
+            .0;
+        let back = (feet - at).with_y(0.0).normalize();
+        super::tools::work_bar(&mut vr, feet, at + back * 0.02, back, 0.67, 0.4);
+        vr.step(20);
+        assert!(vr.app.world().get_entity(plate).is_err(), "the plate held");
+        vr.grip(Side::Right, 0.0);
+        vr.grip(Side::Left, 0.0);
+        vr.step(20);
+        let catalog = vr.app.world().resource::<Catalog>().clone();
+        let item = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &crate::items::Item, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(_, i, g)| {
+                    catalog.get(i.0.kind).id == "robot_plate" && g.translation().distance(at) < 2.0
+                })
+                .map(|(e, i, _)| (e, i.0.condition))
+        };
+        let (item, cond) = item.expect("a plate to carry off, not wreckage");
+        assert!((cond - then).abs() < 0.01, "as it was: {cond} vs {then}");
+        assert!(
+            take(&mut vr, Side::Left, item),
+            "it didn't come up in the hand"
+        );
     }
 
     /// A walker's gun pod hangs on its cables: a hand can't take it until

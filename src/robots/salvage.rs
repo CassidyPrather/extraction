@@ -8,6 +8,9 @@
 //! - a **servo pack** at a hip whose leg came through is bolted on:
 //!   undo its [`BOLTS`] bolts with a spanner (Destruction's `Turned`,
 //!   `interact::tools::spanner`) and it lifts out;
+//! - an **armour plate** is pried off with a crowbar (the crowbar's own
+//!   plate seam, `interact::tools::crowbar`) and comes away as an item
+//!   (`armour::shed_plates`);
 //! - a **power cell** lifts out by hand, but not while the wreck is fresh:
 //!   for [`HOT_FOR`] seconds it's live, and a hand that closes on it is
 //!   thrown off by an arc.
@@ -79,6 +82,11 @@ pub fn condition(health: f32) -> f32 {
 pub fn scrap_for(mass: f32) -> usize {
     ((mass / KG_A_SCRAP).round() as usize).max(1)
 }
+
+/// A part's health when its robot died (a plate's, pried off a wreck
+/// later: `armour::shed_plates` gives it as an item in this condition).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct HealthAtDeath(pub f32);
 
 /// A wreck's salvage is fitted (once).
 #[derive(Component, Debug)]
@@ -276,6 +284,16 @@ fn fit_salvage(
     };
     for (e, robot, children, gait, legs, crawler, hound) in &wrecks {
         commands.entity(e).insert(Fitted);
+        // Its plates, for prying off (`armour::shed_plates`).
+        for c in children.iter() {
+            if let Ok((part, _, _)) = parts.get(c) {
+                if matches!(part.role, PartRole::Armour(_)) {
+                    commands
+                        .entity(c)
+                        .insert(HealthAtDeath(part.hp / part.max_hp.max(1.0)));
+                }
+            }
+        }
         if robot.kind != RobotKind::Walker || crawler || hound {
             continue;
         }

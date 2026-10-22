@@ -890,6 +890,12 @@
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
         ),
+        (
+            id: "robot_plate", dims: Some((0.3, 0.03, 0.28)), name: "Robot armour plate",
+            description: "Pried off a wreck's hull. Hardened steel, still scorched where it was hit.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 1.5,
+            tags: ["metal"],
+        ),
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
         (
