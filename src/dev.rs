@@ -911,8 +911,6 @@ fn climb_for_gallery(
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
-    held: Query<(), With<crate::interact::hand_climb::HandHold>>,
-    bodies: Query<&crate::player::Body>,
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -923,7 +921,7 @@ fn climb_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
         return;
     }
-    let Some((root_e, root, mut input, children)) = players.iter_mut().next() else {
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
         return;
     };
     state.0 += 1;
@@ -960,14 +958,6 @@ fn climb_for_gallery(
             .with_rotation(Quat::from_rotation_x(-0.4));
         h.tracked = true;
         h.grip = 1.0;
-    }
-    if f % 10 == 0 {
-        let holds = children.iter().filter(|c| held.contains(*c)).count();
-        info!(
-            "climb gallery {f}: holds {holds}, root y {}, body {:?}",
-            root.translation.y,
-            bodies.get(root_e).map(|b| (b.carried_kg, b.velocity))
-        );
     }
     if f == 30 {
         for c in children.iter() {
