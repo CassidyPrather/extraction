@@ -382,3 +382,53 @@ fn gauge_no_first_sight_stutter() {
     }
     assert!(over.is_empty(), "first-sight stutter:\n{}", over.join("\n"));
 }
+
+/// Seconds (and frames) from a valley's app being built until its world
+/// is in (`timeline::WorldReady`, and the preload landed), on this
+/// machine's CPU: what a map change costs before the GPU's share.
+#[test]
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_map_load_seconds() {
+    let _one_at_a_time = heavy();
+    for map in maps() {
+        let t = Instant::now();
+        let mut app = client_threads(&map, "clearing", None);
+        as_the_game_runs(&mut app);
+        let built = t.elapsed().as_secs_f64();
+        let mut frames = 0;
+        let mut marks: Vec<(String, f64, u32)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        loop {
+            app.update();
+            frames += 1;
+            let mut q = bevy::ecs::system::SystemState::<(
+                super::timeline::WorldReady,
+                Res<crate::models::Models>,
+                Res<Assets<bevy::gltf::Gltf>>,
+            )>::new(app.world_mut());
+            let (world, models, gltfs) = q.get_mut(app.world_mut()).unwrap();
+            let preload = models.handles().all(|h| gltfs.contains(h));
+            for (what, ok) in [
+                ("forest", world.forest()),
+                ("props", world.props()),
+                ("warm", world.materials()),
+                ("preload", preload),
+            ] {
+                if ok && seen.insert(what) {
+                    marks.push((what.into(), t.elapsed().as_secs_f64(), frames));
+                }
+            }
+            if seen.len() == 4 || frames > 3000 {
+                break;
+            }
+        }
+        println!(
+            "{map}: built {built:.2} s; {}",
+            marks
+                .iter()
+                .map(|(w, s, f)| format!("{w} {s:.2} s (frame {f})"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+}

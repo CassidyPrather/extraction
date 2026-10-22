@@ -1143,7 +1143,7 @@ pub(crate) mod tests {
                     Some(n) => bevy::app::TaskPoolPlugin {
                         task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
                     },
-                    None => bevy::app::TaskPoolPlugin::default(),
+                    None => crate::task_pools(),
                 })
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),

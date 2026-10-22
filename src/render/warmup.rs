@@ -661,7 +661,7 @@ fn shelve_start(
     proxies: Query<Entity, With<ProxyEye>>,
     free: Query<Entity, With<super::FreeCamera>>,
     cameras: Query<(), With<Camera>>,
-    forest: crate::world::trees::ForestSettled,
+    forest: Option<Res<crate::world::trees::ForestBuilt>>,
     props: Query<(), With<crate::world::buildings::PropsPending>>,
     mut warmed: ResMut<Warmed>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -763,9 +763,11 @@ fn shelve_start(
         }
     }
     shelf.stocking = now <= shelf.warm_for && now % RESTOCK == 1;
-    // Once the world has settled: a restock now (what streamed in since
-    // the last waits no longer), and warm once it's been out its frames.
-    let settled = forest.settled() && props.is_empty();
+    // Once the world has settled (the forest built, the buildings dressed;
+    // the impostors' pictures are views of their own, not the world's): a
+    // restock now (what streamed in since the last waits no longer), and
+    // warm once it's been out its frames.
+    let settled = forest.is_some() && props.is_empty();
     if settled && shelf.settled_at.is_none() {
         shelf.settled_at = Some(now);
         shelf.stocking = true;
