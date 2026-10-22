@@ -46,7 +46,8 @@ struct Lamp(Entity);
 fn dress(
     mut commands: Commands,
     layers: Query<(Entity, &Children), (With<Minelayer>, Without<Dressed>)>,
-    mines: Query<Entity, (With<LaidMine>, Without<Dressed>)>,
+    mines: Query<(Entity, &Transform), (With<LaidMine>, Without<Dressed>)>,
+    zone: Option<Res<crate::world::Zone>>,
     parts: Query<(&RobotPart, Has<Hopper>, &Transform)>,
     server: Res<AssetServer>,
     mut models: ResMut<Models>,
@@ -80,7 +81,7 @@ fn dress(
             for (e, _) in &layers {
                 commands.entity(e).insert(Dressed);
             }
-            for e in &mines {
+            for (e, _) in &mines {
                 commands.entity(e).insert(Dressed);
             }
             return;
@@ -90,9 +91,12 @@ fn dress(
         .get_or_insert_with(|| {
             (
                 meshes.add(Circle::new(0.5)),
+                // Turned earth, a little lighter than dark soil; the ring's
+                // own vertex colours fade it out at its rim.
                 materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.17, 0.13, 0.09),
+                    base_color: Color::srgb(0.42, 0.34, 0.26),
                     perceptual_roughness: 1.0,
+                    alpha_mode: AlphaMode::Blend,
                     ..default()
                 }),
                 meshes.add(Sphere::new(0.012)),
@@ -189,7 +193,7 @@ fn dress(
         commands.entity(e).insert((Lamp(light), Dressed));
         let _ = (HULL, HOPPER_AT, EYE);
     }
-    for e in &mines {
+    for (e, mt) in &mines {
         hang(
             &mut commands,
             &mut materials,
@@ -197,12 +201,17 @@ fn dress(
             "mine",
             Transform::IDENTITY,
         );
-        // Its ring of turned earth.
+        // Its ring of turned earth, draped over the ground round it (a
+        // flat disc sinks into a slope on one side and floats on the
+        // other).
+        let ring = match zone.as_ref() {
+            Some(z) => meshes.add(earth_ring(|x, y| z.ground(x, y), mt.translation)),
+            None => earth.clone(),
+        };
         commands.spawn((
-            Mesh3d(earth.clone()),
+            Mesh3d(ring),
             MeshMaterial3d(earth_mat.clone()),
-            Transform::from_xyz(0.0, 0.012, 0.0)
-                .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            Transform::IDENTITY,
             NotShadowCaster,
             ChildOf(e),
         ));
@@ -247,5 +256,77 @@ fn turn_lamps(layers: Query<(&Robot, &Lamp)>, mut lights: Query<&mut PointLight>
                 6000.0 * (0.5 + 0.5 * (t * 4.0).sin()).powi(3)
             };
         }
+    }
+}
+
+/// The ring of turned earth round a mine at `at`: an annulus from just
+/// under its rim out to [`EARTH_OUT`], each vertex on the ground
+/// (`ground(x, z)`) a little proud of it, faded out at its outer edge.
+/// Local to the mine.
+pub fn earth_ring(ground: impl Fn(f32, f32) -> f32, at: Vec3) -> Mesh {
+    let (pos, colours) = earth_ring_points(ground, at);
+    let n = pos.len() / 2;
+    let mut idx = Vec::with_capacity(n * 6);
+    for k in 0..n {
+        let (i0, o0) = (2 * k as u32, 2 * k as u32 + 1);
+        let (i1, o1) = (2 * ((k + 1) % n) as u32, 2 * ((k + 1) % n) as u32 + 1);
+        idx.extend_from_slice(&[i0, o1, o0, i0, i1, o1]);
+    }
+    let normals = vec![[0.0, 1.0, 0.0]; pos.len()];
+    Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        bevy::asset::RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colours)
+    .with_inserted_indices(bevy::mesh::Indices::U32(idx))
+}
+
+/// The ring's inner and outer radii (m), its lift off the ground, and its
+/// segments.
+pub const EARTH_IN: f32 = 0.13;
+pub const EARTH_OUT: f32 = 0.5;
+const EARTH_LIFT: f32 = 0.012;
+const EARTH_SEGS: usize = 20;
+
+/// The ring's vertices (inner, outer, ... round it), local to the mine,
+/// and their colours (opaque inside, clear at the rim).
+pub fn earth_ring_points(
+    ground: impl Fn(f32, f32) -> f32,
+    at: Vec3,
+) -> (Vec<[f32; 3]>, Vec<[f32; 4]>) {
+    let mut pos = Vec::with_capacity(EARTH_SEGS * 2);
+    let mut col = Vec::with_capacity(EARTH_SEGS * 2);
+    for k in 0..EARTH_SEGS {
+        let a = k as f32 * std::f32::consts::TAU / EARTH_SEGS as f32;
+        for (r, alpha) in [(EARTH_IN, 0.85), (EARTH_OUT, 0.0)] {
+            let (x, z) = (a.cos() * r, a.sin() * r);
+            let y = ground(at.x + x, at.z + z) - at.y + EARTH_LIFT;
+            pos.push([x, y, z]);
+            col.push([1.0, 1.0, 1.0, alpha]);
+        }
+    }
+    (pos, col)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// On a steep slope the ring lies on the ground all the way round:
+    /// never under it, never more than a couple of cm off it.
+    #[test]
+    fn the_earth_ring_lies_on_a_slope() {
+        let ground = |x: f32, z: f32| 10.0 + 0.6 * x - 0.3 * z + 0.05 * (x * 7.0).sin();
+        let at = Vec3::new(4.0, ground(4.0, -2.0), -2.0);
+        let (pos, col) = earth_ring_points(ground, at);
+        for p in &pos {
+            let g = ground(at.x + p[0], at.z + p[2]) - at.y;
+            let off = p[1] - g;
+            assert!(off > 0.0 && off < 0.03, "{off} off the ground at {p:?}");
+        }
+        assert!(col.iter().any(|c| c[3] == 0.0), "a soft rim");
+        assert!(col.iter().any(|c| c[3] > 0.5), "turned earth inside");
     }
 }
