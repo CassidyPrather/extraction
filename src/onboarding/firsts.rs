@@ -200,7 +200,7 @@ impl First {
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
             First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
             First::ComingToLook => {
-                &["Truck: \"Move, low, to other cover. It's coming where it saw you.\""]
+                &["Truck: \"Back off low, cover between you. It's coming where it saw you.\""]
             }
         }
     }

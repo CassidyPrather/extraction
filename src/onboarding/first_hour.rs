@@ -348,6 +348,8 @@ pub(super) struct Newcomer {
     at_gate: bool,
     /// Jobs done when it got home (pressing the card adds one).
     done_home: Option<u32>,
+    /// Keeping low till then (backing off behind cover).
+    low_until: f32,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -462,8 +464,9 @@ pub(super) fn direct_raid(
     // A cautious newcomer creeps once it's out.
     // Running for it, as told: upright and fast.
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
-    let creep =
-        p.reads && !fleeing && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    let creep = (p.reads || state.low_until > now)
+        && !fleeing
+        && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
     if input.crouch != creep {
         input.crouch = creep;
     }
@@ -496,12 +499,14 @@ pub(super) fn direct_raid(
                     .flatten()
                     .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
             }
-            // "Move, low, to other cover": not the cover it saw you at.
+            // "Back off low, cover between you": away from it, not round.
             First::ComingToLook if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                // Low, as told: a log pile hides you crouched, not stood up.
                 if let Some(f) = fight.as_mut() {
-                    f.flee_until = now + 12.0;
+                    f.flee_until = 0.0;
                 }
+                state.low_until = now + 25.0;
                 run_for_cover(&world.zone, here, from, 10.0)
             }
             First::Bleeding => {
@@ -1090,8 +1095,15 @@ fn under_a_roof(
                 .distance(here)
                 .total_cmp(&b.mid.xz().distance(here))
         })
-        .filter(|d| d.mid.xz().distance(here) < 40.0)?;
+        .filter(|d| d.mid.xz().distance(here) < 60.0)?;
     let out = d.out.xz().normalize_or(Vec2::Y);
+    let inside = d.mid.xz() - out * 2.5;
+    // Off to one side of the doorway: not in a look through it.
+    let aside = [out.perp(), -out.perp()]
+        .into_iter()
+        .map(|s| inside + s * 2.0)
+        .find(|p| entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building))
+        .unwrap_or(inside);
     Some(vec![
         Task::WalkTo {
             to: d.mid.xz() + out * 1.3,
@@ -1099,15 +1111,22 @@ fn under_a_roof(
         },
         Task::OpenDoor(d.door),
         Task::WalkTo {
-            to: d.mid.xz() - out * 2.0,
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: aside,
             within: 0.6,
         },
         Task::Wait(20.0),
     ])
 }
 
-/// `leave`: other cover than what's within this of here (where it saw you).
+/// `leave` > 0: it saw you here, and is coming to look. Back off from it,
+/// keeping this cover between you: to the next cover that way, or straight
+/// back.
 fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) -> Vec<Task> {
+    let away = (here - from).normalize_or(Vec2::Y);
     // Round the far side of something solid (not into trees: a look goes
     // between the trunks).
     let cover = zone
@@ -1115,14 +1134,16 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
         .placements
         .iter()
         .map(|b| Vec2::from(b.at))
-        .filter(|b| b.distance(here) < 60.0 && b.distance(here) > leave)
+        .filter(|b| b.distance(here) < 60.0)
+        .filter(|b| {
+            leave <= 0.0
+                || (b.distance(here) > leave && (*b - here).normalize_or_zero().dot(away) > 0.8)
+        })
         .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
     let to = match cover {
         Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
-        None => {
-            let across = (here - from).normalize_or(Vec2::Y).perp();
-            here + across * 25.0
-        }
+        None if leave > 0.0 => here + away * 30.0,
+        None => here + away.perp() * 25.0,
     };
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
