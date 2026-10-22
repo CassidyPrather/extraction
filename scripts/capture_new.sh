@@ -2,7 +2,7 @@
 # The "what's new" gallery: turntables, stills by day and night, a few
 # reels, and before/after pairs for fixes you can see. Shoots into
 # target/new/, then scripts/capture_new.py lays out docs/shots/capture/new/.
-#   scripts/capture_new.sh [parts...]   (default: turn after before reels)
+#   scripts/capture_new.sh [parts...]   (default: turn after before reels plough)
 # Env:
 #   BEFORE_BIN  a binary built from the tree with the fixes taken out (see
 #               docs/CAPTURE.md, "What's new"), for the before half of the
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 OUT=target/new
 PARTS=("$@")
-[ ${#PARTS[@]} -eq 0 ] && PARTS=(turn after before reels)
+[ ${#PARTS[@]} -eq 0 ] && PARTS=(turn after before reels plough)
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
 
 # New models: one turn each, by day and by night.
@@ -76,6 +76,22 @@ for PART in "${PARTS[@]}"; do
             reel tells_day marrow_creek 40,0,262,0,-6 tells,6,30 day
             # A walker leaving its prints in the lying snow at Rime's col.
             reel snow_prints rime_fell 60,0,-250,0,-14 walk,8,30 day
+            ;;
+        plough)
+            # Rime Fell's plough coming, plume up, and gone past (its lane
+            # and bank): orbits from scripts/capture_paths/new/plough.cine.
+            for STATE in plough plough:after; do
+                DIR="$OUT/cine/${STATE/:/_}"
+                rm -rf "$DIR"
+                DATA="$(mktemp -d)"
+                WGPU_BACKEND=vulkan timeout 1800 xvfb-run -a -s "-screen 0 1600x900x24" \
+                    "$BIN" --map rime_fell --data-dir "$DATA" --new-game --no-robots \
+                    --cinematic scripts/capture_paths/new/plough.cine --cine-preview 4 \
+                    --capture-out "$DIR" --camera -90,0,52 --gallery "$STATE" \
+                    --hour day --weather clearing --size 1600x900 --frames 60 2>&1 \
+                    | grep -E 'panicked' || true
+                rm -rf "$DATA"
+            done
             ;;
         *) echo "unknown part $PART"; exit 1 ;;
     esac

@@ -526,17 +526,18 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     .insert_resource(Time::<Fixed>::from_hz(90.0))
     .add_plugins(PhysicsPlugins::default())
     .add_plugins(GamePlugin);
-    if sim {
-        single_threaded(&mut app);
-    }
+    single_threaded(&mut app);
     app
 }
 
-/// Every schedule runs its systems one at a time, in one fixed order. On
-/// many threads, systems that touch the same things run in either order
-/// and two runs of one seed part within seconds; a sim (`--sim-run`, and
-/// so every `--sim N` raid) runs this way, on one task-pool thread, so it
-/// replays from its seed. Each sim is one process a core anyway.
+/// Every schedule runs its systems one at a time, in one fixed order. Every
+/// headless app runs this way: on many threads, systems that touch the
+/// same things run in either order and two runs of one seed part within
+/// seconds, and a one-player world gains nothing from them. Headless apps
+/// run side by side (sims a process a core, tests four at a time), and one
+/// thread each is two to three times faster than each spreading over all
+/// the cores. A sim also gets a one-thread task pool, so it replays from
+/// its seed.
 pub fn single_threaded(app: &mut App) {
     let mut schedules = app.world_mut().resource_mut::<Schedules>();
     for (_, schedule) in schedules.iter_mut() {

@@ -894,6 +894,10 @@ fn apply_restore(world: &mut World) {
         for w in &save.zone.wrecks {
             crate::robots::heavy::restore_wreck(world, w);
         }
+        world.insert_resource(crate::robots::memory::ZoneMind {
+            memory: save.zone.memory.clone().unwrap_or_default(),
+            ..default()
+        });
         for r in &save.zone.remains {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
@@ -1202,6 +1206,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         }
     }
     save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
+    save.zone.memory = world
+        .get_resource::<crate::robots::memory::ZoneMind>()
+        .map(|m| m.memory.clone())
+        .filter(|m| !m.is_blank());
     save.loadout = loadout;
     save
 }
@@ -1617,6 +1625,46 @@ mod tests {
         b.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
         let save = snapshot(b.world_mut());
         assert!(save.zone.raid.is_none());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// What the valley remembers of you is saved with it and back next
+    /// time; a valley that remembers nothing saves nothing.
+    #[test]
+    fn the_zone_remembers_you_across_saves() {
+        use extraction_core::zone_memory::RaidTrace;
+        let path = temp_save("memory.ron");
+        let mut a = app_with_save(&path);
+        assert!(
+            snapshot(a.world_mut()).zone.memory.is_none(),
+            "a fresh valley remembers nothing"
+        );
+        let mut t = RaidTrace::default();
+        t.walked(120.0, -40.0);
+        t.kills.push(([150.0, -60.0], "Walker".into()));
+        t.rv = Some([300.0, 10.0]);
+        a.world_mut()
+            .resource_mut::<crate::robots::memory::ZoneMind>()
+            .memory
+            .fold(&t);
+        let remembered = a
+            .world()
+            .resource::<crate::robots::memory::ZoneMind>()
+            .memory
+            .clone();
+        let save = snapshot(a.world_mut());
+        assert_eq!(save.zone.memory.as_ref(), Some(&remembered));
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let b = app_with_save(&path);
+        assert_eq!(
+            b.world()
+                .resource::<crate::robots::memory::ZoneMind>()
+                .memory,
+            remembered,
+            "back as it was"
+        );
         let _ = std::fs::remove_file(&path);
     }
 

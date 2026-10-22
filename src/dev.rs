@@ -24,7 +24,12 @@ impl Plugin for DevPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (pose_body_for_gallery, carry_for_gallery, climb_for_gallery)
+                (
+                    pose_body_for_gallery,
+                    carry_for_gallery,
+                    climb_for_gallery,
+                    fight_for_gallery,
+                )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
             );
@@ -140,6 +145,12 @@ fn gallery(
     if *stage == 3 {
         let mut parts = spec.split(',');
         let first = parts.next().unwrap_or("ak74");
+        // `+grime`, `+wet`, `+fog`: shown weathered (`weapons::weather`).
+        let first = first
+            .replace("+grime", "")
+            .replace("+wet", "")
+            .replace("+fog", "");
+        let first = first.as_str();
         // `ak74+open`: work the action, to check the moving parts.
         // `mp133+jam`: a double feed, to see it drawn in the port.
         let (first, jam) = match first.strip_suffix("+jam") {
@@ -907,7 +918,7 @@ fn climb_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut players: Query<
-        (&Transform, &mut crate::rig::RigInput, &Children),
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
@@ -921,7 +932,7 @@ fn climb_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
         return;
     }
-    let Some((root, mut input, children)) = players.iter_mut().next() else {
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
         return;
     };
     state.0 += 1;
@@ -974,6 +985,97 @@ fn climb_for_gallery(
                 });
             }
         }
+    }
+}
+
+/// `--gallery fight` (with `side` to see it from beside you): a crawler
+/// a metre ahead (`robots::indoor`), a crowbar raised in the right hand
+/// to strike, the left palm laid on the machine (`interact::fight`).
+#[allow(clippy::too_many_arguments)]
+fn fight_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput),
+        With<crate::rig::LocalPlayer>,
+    >,
+    parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+        return;
+    }
+    let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        let at = root.transform_point(Vec3::new(0.0, 0.0, -1.0));
+        let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+        state.1 = Some(crate::robots::walker::spawn_walker_sized(
+            &mut commands,
+            &zone,
+            at,
+            crate::robots::Job {
+                kind: crate::robots::JobKind::Watch,
+                site: at,
+                duration: f32::INFINITY,
+                exit: at,
+            },
+            false,
+            crate::robots::indoor::CRAWLER_HP,
+            crate::robots::indoor::CRAWLER_SIZE,
+            None,
+        ));
+        let bar = catalog.kind("crowbar").expect("a crowbar");
+        state.2 = Some(crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: bar,
+                transform: root.mul_transform(Transform::from_xyz(0.3, 1.2, -0.35)),
+                condition: 0.7,
+            },
+        ));
+    }
+    let (Some(crawler), Some(bar)) = (state.1, state.2) else {
+        return;
+    };
+    // The right hand on the bar, raised; the left on the crawler's body.
+    let raised = Vec3::new(0.28, 1.5, -0.3);
+    let body = parts
+        .iter()
+        .filter(|(p, _)| p.robot == crawler)
+        .map(|(_, g)| g.translation())
+        .max_by(|a, b| a.y.total_cmp(&b.y));
+    let palm = body
+        .map(|b| root.compute_affine().inverse().transform_point3(b) + Vec3::new(-0.05, 0.05, 0.22))
+        .unwrap_or(Vec3::new(-0.2, 0.8, -0.7));
+    let right = if f < 30 {
+        Vec3::new(0.3, 1.2, -0.35)
+    } else {
+        raised
+    };
+    for (side, at, rot) in [
+        (Side::Right, right, Quat::from_rotation_x(0.9)),
+        (Side::Left, palm, Quat::from_rotation_x(-0.3)),
+    ] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(at).with_rotation(rot);
+        h.tracked = true;
+    }
+    if f == 20 {
+        actions.write(crate::interact::HandAction::Grab {
+            player,
+            side: Side::Right,
+            item: bar,
+            point: None,
+        });
     }
 }
 
