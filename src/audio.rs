@@ -3425,6 +3425,11 @@ fn water_sounds(
 /// - wind moaning through each mill bay's broken windows and along the
 ///   avalanche galleries, a loop at each (`fell.wind`), and the
 ///   galleries' meltwater dripping (`water.drip`).
+///
+/// All of it is the wind's (`Conditions::wind`): in a storm or a
+/// blizzard the sheet bangs and the doors swing nearly three times as
+/// often as in a still fog, and the wind loops are at their cue's level,
+/// 10 dB under it in the fog.
 const ROPE_NEAR: f32 = 60.0;
 const WHEEL_NEAR: f32 = 80.0;
 const SHEET_NEAR: f32 = 160.0;
@@ -3440,7 +3445,9 @@ fn fell_sounds(
     mut commands: Commands,
     zone: Option<Res<Zone>>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
-    winds: Query<Entity, With<FellWind>>,
+    winds: Query<(Entity, &SampleEffects), With<FellWind>>,
+    mut volumes: Query<&mut VolumeNode>,
+    conditions: Option<Res<crate::world::weather::Conditions>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
@@ -3457,7 +3464,7 @@ fn fell_sounds(
         .as_ref()
         .is_none_or(|(name, _)| *name != zone.map.name)
     {
-        for e in &winds {
+        for (e, _) in &winds {
             commands.entity(e).despawn();
         }
         let found = emitters(&zone.map, &zone.hm);
@@ -3467,14 +3474,20 @@ fn fell_sounds(
             }
             if let Some(sample) = bank.pick("ambience/wind_works", &mut rng.0) {
                 let speed = rng.0.range(0.85, 1.1) as f64;
+                let cue = "fell.wind";
                 commands.spawn((
                     FellWind,
-                    SamplePlayer::new(sample)
-                        .looping()
-                        .with_volume(Volume::Decibels(mix::db("fell.wind"))),
+                    SamplePlayer::new(sample).looping(),
                     PlaybackSettings::default().with_speed(speed),
                     Transform::from_translation(w.at),
-                    Placed::new("fell.wind"),
+                    sample_effects![
+                        VolumeNode {
+                            volume: Volume::SILENT,
+                            ..default()
+                        },
+                        mix::spatial(cue),
+                        reverb_send(cue)
+                    ],
                 ));
             }
         }
@@ -3487,6 +3500,15 @@ fn fell_sounds(
         return;
     }
     let now = time.elapsed_secs();
+    let wind = conditions.map_or(0.5, |c| c.wind());
+    let wind_db = mix::db("fell.wind") + 20.0 * (0.25 + 0.75 * wind).log10();
+    for (_, effects) in &winds {
+        if let Ok(mut v) = volumes.get_effect_mut(effects) {
+            v.volume = Volume::Decibels(wind_db);
+        }
+    }
+    // Gusty weather works the loose things more often.
+    let calm = 1.5 - wind;
     let nearest = |s: Source| {
         works
             .iter()
@@ -3498,7 +3520,7 @@ fn fell_sounds(
         if now < next[i] {
             return false;
         }
-        next[i] = now + rng.0.range(lo, hi);
+        next[i] = now + rng.0.range(lo, hi) * calm;
         true
     };
     if due(0, 2.0, 6.0, &mut rng)
