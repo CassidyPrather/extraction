@@ -1158,6 +1158,12 @@ def main() -> int:
             builders[g](manifest, stamps, args.force)
     finally:
         STAMPS.write_text(json.dumps(stamps, indent=2, sort_keys=True) + "\n")
+    # BC7 copies of the colour and data maps (`scripts/bc7_textures.py`):
+    # the game loads them where the GPU takes BC, the originals elsewhere.
+    # Without etcpak they're skipped, and the originals load everywhere.
+    bake = Path(__file__).with_name("bc7_textures.py")
+    if subprocess.run([sys.executable, str(bake)], check=False).returncode != 0:
+        log("BC7 copies not made (pip install etcpak): the RGBA8 textures load instead")
     return 0
 
 

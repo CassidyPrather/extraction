@@ -16,9 +16,13 @@ use bevy::prelude::*;
 
 /// The ceiling, bytes: the 3060 laptop's 6 GB less the driver's,
 /// SteamVR's and the compositor's share.
-const VRAM_CEILING: u64 = 4_500 * 1024 * 1024;
+pub(crate) const VRAM_CEILING: u64 = 4_500 * 1024 * 1024;
 
-const MB: f64 = 1024.0 * 1024.0;
+/// What a valley may hold, under the ceiling: below the 2.0-2.2 GB they
+/// held with every texture RGBA8 (the colour and data maps are BC7 now).
+pub(crate) const VRAM_BUDGET: u64 = 2_000 * 1024 * 1024;
+
+pub(crate) const MB: f64 = 1024.0 * 1024.0;
 
 /// The eyes' width the targets are made at when holding the frame rate
 /// (`render::hold_rate`): the playtest's Beyond 2's recommended size.
@@ -142,64 +146,31 @@ pub fn measure(world: &mut World, eye_px: u64) -> Vram {
     v
 }
 
-fn holds(map: &str) {
-    let _one_at_a_time = super::budget::tests::heavy();
-    let mut app = super::budget::tests::client_threads(map, "clearing", None);
-    super::budget::tests::settle(&mut app);
-    // What loads at start loads in the background: until it has landed.
-    for _ in 0..2000 {
-        let loading = {
-            let server = app.world().resource::<AssetServer>();
-            let models = app.world().resource::<crate::models::Models>();
-            models.handles().any(|h| {
-                matches!(
-                    server.get_load_state(h),
-                    Some(bevy::asset::LoadState::Loading)
-                )
-            })
-        };
-        if !loading {
-            break;
-        }
-        app.update();
-        std::thread::sleep(std::time::Duration::from_millis(2));
-    }
-    for _ in 0..60 {
-        app.update();
-    }
+/// Counts what `world` (a valley's client, loaded) holds, prints it by
+/// kind and folder, and gives the total. `BUDGET_EYE_PX` sets the eyes'
+/// width; holding the frame rate (the default), their targets are the
+/// runtime's full size, the playtest's Beyond 2's 2980.
+pub(crate) fn report(map: &str, world: &mut World) -> u64 {
     let px = std::env::var("BUDGET_EYE_PX")
         .ok()
         .and_then(|v| v.parse().ok())
-        // Holding the frame rate (the default), the eyes' targets are the
-        // runtime's full size: the playtest's Beyond 2 asks for 2980.
         .unwrap_or(HELD_EYE_PX);
-    let v = measure(app.world_mut(), px);
+    let v = measure(world, px);
     println!(
-        "{map}: {:.0} MB of {:.0}: textures {:.0}, meshes {:.0}, shadows {:.0}, eye targets {:.0} (2 x {px}²)",
+        "    VRAM: {:.0} MB of {:.0} (budget {:.0}): textures {:.0}, meshes {:.0}, shadows {:.0}, eye targets {:.0} (2 x {px}²)",
         v.total() as f64 / MB,
         VRAM_CEILING as f64 / MB,
+        VRAM_BUDGET as f64 / MB,
         v.textures as f64 / MB,
         v.meshes as f64 / MB,
         v.shadows as f64 / MB,
         v.targets as f64 / MB
     );
-    for (f, b) in v.by_folder.iter().take(12) {
-        println!("    {f}: {:.0} MB", *b as f64 / MB);
+    for (f, b) in v.by_folder.iter().take(6) {
+        println!("        {f}: {:.0} MB", *b as f64 / MB);
     }
-    assert!(
-        v.total() <= VRAM_CEILING,
-        "{map} holds {:.0} MB on the GPU, over {:.0}",
-        v.total() as f64 / MB,
-        VRAM_CEILING as f64 / MB
-    );
-}
-
-#[test]
-#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
-fn gauge_every_valley_holds_its_vram() {
-    for (map, _) in extraction_core::map::VALLEYS {
-        holds(map);
-    }
+    let _ = map;
+    v.total()
 }
 
 /// The sums are right for what's easy to count by hand.

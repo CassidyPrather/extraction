@@ -585,6 +585,40 @@ causes, both fixed:
   aside). On lavapipe, "everything in" comes at frame 65, not 41: the
   compiling moved out of play and into the load.
 
+### A map change's wait
+
+`gauge_map_load_seconds` times each valley's load on the CPU, from its
+app being built to:
+
+- the preload landed;
+- the buildings dressed;
+- the warm-up shelf's settled restock out (`WorldReady`'s GPU share
+  aside).
+
+| valley | before | after |
+| - | - | - |
+| Marrow Creek | 9.6 s to the buildings (frame 24); warm only at the shelf's end | 7.7 s, all in (frame 18) |
+| Kettle Pass | 8.5 s to the buildings | 7.2 s |
+| Cinder Works | 7.0 s | 6.6 s |
+| Sallow Reservoir | 5.9 s | 6.2 s (noise) |
+| Rime Fell | 7.7 s | 8.7 s |
+
+Rime Fell is now the slowest, and the preload decides it.
+
+- **Buildings while loading.** Buildings are dressed 3 a frame so play
+  doesn't hitch. While the valley loads no one's playing, so it's 24
+  (`timeline::Loaded` marks the end of the load).
+- **The settled restock.** The warm-up's settled restock waits on the
+  forest built and the buildings dressed, not the impostors' pictures.
+- **The IO pool.** Models and textures load on the IO pool. It's now
+  three quarters of the cores' worth (2 to 8), on top of the cores, so
+  the compute pool keeps every thread (`crate::task_pools`). On this
+  4-core container every core is busy loading anyway, so it bought little
+  here (Marrow 8.6 s > 7.7 s). A laptop with more cores should gain more.
+
+What's left is the 213 models decoding. The relaunch around it is 0.9 s
+to close and about 0.2 s to start again.
+
 ## Holding the frame rate
 
 `render::hold_rate` keeps the headset at its refresh rate by rendering

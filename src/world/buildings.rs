@@ -5763,13 +5763,17 @@ pub fn dress_buildings(
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
     mut bakes: Local<std::collections::HashMap<String, Bake>>,
     breaches: Option<Res<crate::destruction::breach::Breaches>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     use crate::render::world_props::Resolved;
     // A few buildings a frame, each once its prefab's shading is baked
     // (in the background, `Bake`), so a valley's arrival doesn't hitch.
+    // While the valley loads no one's playing: eight times as many (the
+    // buildings were most of Marrow Creek's wait, 3 a frame).
+    let most = if loaded.is_some() { 3 } else { 24 };
     let mut built = 0;
     for (e, b, xf, mut wait) in &mut pending {
-        if built >= 3 {
+        if built >= most {
             break;
         }
         let Some(mut geo) = prefab(&b.prefab) else {

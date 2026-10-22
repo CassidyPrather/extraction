@@ -363,7 +363,9 @@ fn init_assets(
     let leaf: Handle<Image> = server
         .load_builder()
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load("textures/foliage/birch_leaves/albedo.ktx2");
+        .load(crate::render::textures::ktx2(
+            "textures/foliage/birch_leaves/albedo.ktx2",
+        ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let mut ground = |c: Color, emissive: LinearRgba| {
