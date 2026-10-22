@@ -613,7 +613,13 @@ fn walker_brain(
                 continue;
             }
         }
-        let lame = gait.is_some_and(|g| g.limp > LAME);
+        // Lame, or down to two legs (it crawls: `anim`), it fights from
+        // where it is: no chasing, no going round your side.
+        let lame =
+            gait.is_some_and(|g| g.limp > LAME) || w.feet.iter().filter(|f| f.alive).count() <= 2;
+        if lame && flanking.contains(e) {
+            commands.entity(e).remove::<Flanker>();
+        }
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
         if !single_minded {

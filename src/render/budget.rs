@@ -145,6 +145,10 @@ impl Plugin for BudgetPlugin {
         if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
             app.add_systems(Last, log_counts);
         }
+        if let Some(path) = std::env::var_os("EXTRACTION_FRAMELOG") {
+            app.insert_resource(FrameLog::open(path.into()))
+                .add_systems(Last, log_each_frame);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -2013,4 +2017,79 @@ fn log_counts(
         meshes.iter().count(),
     );
     last.1 = names;
+}
+
+/// `EXTRACTION_FRAMELOG=<path>`: a line a frame, `frame cpu_ms gpu_ms`.
+/// cpu_ms is the frame's real time (in a headset, what the player feels
+/// when the CPU is the slow side); gpu_ms is the newest timed frame's
+/// top-level render passes summed (a few frames late, as timestamps read
+/// back), or -1 when none came back this frame. `scripts/frames.py`
+/// gives the worst frame and the 99.9th percentile of each, so a single
+/// long frame isn't lost in an average (`docs/PERFORMANCE.md`, "Hitches").
+#[derive(Resource)]
+struct FrameLog {
+    out: Option<std::io::BufWriter<std::fs::File>>,
+    frame: u64,
+    seen: Option<std::time::Instant>,
+}
+
+impl FrameLog {
+    fn open(path: std::path::PathBuf) -> Self {
+        let out = std::fs::File::create(&path)
+            .map_err(|e| warn!("EXTRACTION_FRAMELOG {}: {e}", path.display()))
+            .ok()
+            .map(std::io::BufWriter::new);
+        Self {
+            out,
+            frame: 0,
+            seen: None,
+        }
+    }
+}
+
+fn log_each_frame(
+    time: Res<Time<Real>>,
+    store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
+    mut log: ResMut<FrameLog>,
+) {
+    use std::io::Write;
+    let cpu = time.delta_secs_f64() * 1000.0;
+    let mut gpu = -1.0;
+    let mut newest = log.seen;
+    if let Some(store) = &store {
+        let mut sum = 0.0;
+        let mut any = false;
+        for d in store.iter() {
+            let path = d.path().as_str();
+            let Some(pass) = path
+                .strip_prefix("render/")
+                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+            else {
+                continue;
+            };
+            // Top-level passes only (nested ones are inside them).
+            if pass.contains('/') {
+                continue;
+            }
+            if let Some(m) = d.measurement() {
+                if log.seen.is_none_or(|s| m.time > s) {
+                    sum += m.value;
+                    any = true;
+                    newest = newest.max(Some(m.time));
+                }
+            }
+        }
+        if any {
+            gpu = sum;
+        }
+    }
+    log.seen = newest;
+    log.frame += 1;
+    let frame = log.frame;
+    if let Some(out) = &mut log.out {
+        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3}");
+        if frame % 90 == 0 {
+            let _ = out.flush();
+        }
+    }
 }

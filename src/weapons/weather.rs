@@ -456,6 +456,7 @@ pub fn weather_looks(
             With<super::wear::Crown>,
             With<super::optics::Vignette>,
             With<super::optics::PostBlur>,
+            With<crate::render::gun_rest::RestMesh>,
         )>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -516,6 +517,37 @@ pub fn weather_looks(
                     m.perceptual_roughness = (rough + 0.35 * grime - 0.55 * wet).clamp(0.08, 1.0);
                 }
             }
+        }
+    }
+}
+
+/// `--gallery <gun>+grime+wet` and `scopeview:<scope>+fog` (dev): the
+/// things shown as filthy, soaked or fogged, held so.
+pub fn gallery_weather(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut things: Query<(&mut Weathering, Option<&mut Gun>)>,
+) {
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let first = spec.split(',').next().unwrap_or("");
+    let (grime, wet, fog) = (
+        first.contains("+grime"),
+        first.contains("+wet"),
+        first.contains("+fog"),
+    );
+    if !(grime || wet || fog) {
+        return;
+    }
+    for (mut w, gun) in &mut things {
+        if wet {
+            w.wet = 1.0;
+        }
+        if fog {
+            w.fog = 1.0;
+        }
+        if let (true, Some(mut g)) = (grime, gun) {
+            g.firearm.grime = 1.0;
         }
     }
 }

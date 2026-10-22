@@ -140,6 +140,12 @@ fn gallery(
     if *stage == 3 {
         let mut parts = spec.split(',');
         let first = parts.next().unwrap_or("ak74");
+        // `+grime`, `+wet`, `+fog`: shown weathered (`weapons::weather`).
+        let first = first
+            .replace("+grime", "")
+            .replace("+wet", "")
+            .replace("+fog", "");
+        let first = first.as_str();
         // `ak74+open`: work the action, to check the moving parts.
         // `mp133+jam`: a double feed, to see it drawn in the port.
         let (first, jam) = match first.strip_suffix("+jam") {
@@ -907,7 +913,7 @@ fn climb_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut players: Query<
-        (&Transform, &mut crate::rig::RigInput, &Children),
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
@@ -921,7 +927,7 @@ fn climb_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
         return;
     }
-    let Some((root, mut input, children)) = players.iter_mut().next() else {
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
         return;
     };
     state.0 += 1;

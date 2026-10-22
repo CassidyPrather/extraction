@@ -4516,6 +4516,73 @@ mod carry {
         );
     }
 
+    /// A shot deer (its carcass as `wildlife::bodies` makes one: a 50 kg
+    /// body lying on its side, settled) taken by a hind leg and drawn
+    /// back: it comes, slowly, along the ground, heard as a body dragged.
+    #[test]
+    fn a_deer_is_dragged_by_its_leg() {
+        use crate::interact::carry::{Bulky, Draggable, drag_speed};
+        use crate::wildlife::bodies::{Carcass, CarcassKind};
+        let (mut vr, feet, _) = with_a_door();
+        let (size, mass) = CarcassKind::Deer.body().unwrap();
+        let lies = feet + Vec3::new(-1.0, size.y * 0.5 + 0.02, -1.4);
+        let deer = vr
+            .app
+            .world_mut()
+            .spawn((
+                Name::new("Carcass"),
+                Carcass {
+                    kind: CarcassKind::Deer,
+                    at: lies,
+                    owner: Entity::PLACEHOLDER,
+                    index: 0,
+                },
+                Transform::from_translation(lies),
+                RigidBody::Dynamic,
+                Collider::cuboid(size.x, size.y, size.z),
+                Mass(mass),
+                LockedAxes::new().lock_rotation_x().lock_rotation_z(),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Bulky,
+                Draggable,
+                crate::robots::wreck::Settling::default(),
+            ))
+            .id();
+        vr.step(240);
+        // Its hind end is the nearer: a leg there.
+        let leg = lies + Vec3::new(0.0, 0.05, size.z * 0.45);
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(deer), "by the leg");
+        let start = at(&vr, deer);
+        let mut fastest = 0.0f32;
+        let back = feet + Vec3::new(-0.6, 0.7, 0.2);
+        for i in 0..150 {
+            vr.move_hand(Side::Right, leg.lerp(back, i as f32 / 150.0));
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(deer).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
+        vr.step(120);
+        let now = at(&vr, deer);
+        assert!(now.distance(start) > 0.5, "it came: {start} to {now}");
+        assert!(now.y - feet.y < 0.6, "along the ground: {now}");
+        assert!(fastest <= drag_speed(mass) + 0.15, "slowly: {fastest}");
+        let heard = vr.app.world().resource::<Heard>();
+        assert!(
+            heard
+                .dragged
+                .iter()
+                .any(|d| d.item == deer && d.stuff == crate::interact::touch::Stuff::Skin),
+            "heard as a body"
+        );
+    }
+
     /// Let go of a car door swung hard forward and it's a shove: it leaves
     /// slow, where a magazine thrown the same way flies.
     #[test]

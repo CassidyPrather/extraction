@@ -242,6 +242,16 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
+- a door you opened;
+- wire or a padlock cut;
+- crowbar marks;
+- broken glass or a smashed crate;
+- a wreck dragged from where it fell;
+- a loot spot left bare.
+
+Each is a sign with an age, in one registry. A robot that passes within sight of a fresh one (under 3 minutes) goes to look; an older one only makes it wary. Two fresh signs in a line are a route: it goes on past the newer, the way they run.
+
 **What you handle gives you away** (`robots/signs.rs`). A gun knocked on
 a doorframe, or let go so that it slaps back on its sling, is heard (up
 to 15 m for a hard knock). A dragged load scrapes, and robots hear it
@@ -640,6 +650,27 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   stopped by it. The muzzle is knocked back off it, the hands feel what it
   hit by material, and a hard knock (0.8 m/s or more) is heard
   (`GunBumped`). A gun's collider is its own shape, out to the muzzle.
+- **Weather and dirt** (`weapons/weather.rs`, `Firearm::grime` and
+  `::stiff`): every gun and scope takes the air where it is (its
+  carrier's chill, or its own roof).
+  - *Cold* soaks in over minutes (a roof warms it out faster) and stiffens
+    the oil. A stiff action cycles slower (11 rounds a second on automatic
+    to 7) and jams more.
+  - *Freezing*: a bolt-action left out cold and wet for 90 s freezes shut.
+    Slap the handle up to break it, or bring it in to thaw.
+  - *Fog*: a scope cold from outside brought under a roof fogs white
+    (`pso_fogged.png`). A glove across the lens clears it, and it comes
+    back slowly until the glass warms.
+  - *Sting*: taking hold of deep-cold metal stings the hand.
+  - *Grime* comes from rain and melting snow on an uncovered gun, a
+    dunking, and ash drifting down in the dry. It jams the action and
+    makes each shot foul it faster. A wet gun shines; a grimy one goes
+    dark and dull (`ak_clean_vs_grimy_wet.png`).
+  - *The cure*: clear the jam by hand, then run a glove along the
+    receiver. Each 12 cm stroke takes off a fifth of the grime and a
+    quarter of the wet. The cleaning kit takes the rest, fouling and all.
+  - *The gauge* (core): jams per 100 rounds are 0.08 clean, 4.2 cold,
+    5.9 grimy and 9.7 both, back to 1.3 after four strokes of a wipe.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
   muzzle path. Each is held as a player would: two hands (a handgun
   cupped), shouldered where there's a stock. The trigger

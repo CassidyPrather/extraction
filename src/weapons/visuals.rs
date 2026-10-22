@@ -55,6 +55,7 @@ impl Plugin for GunVisualsPlugin {
                 super::weather::weather_looks,
                 super::weather::add_lens_fog,
                 super::weather::fog_lenses,
+                super::weather::gallery_weather,
                 super::flares::flare_visuals,
                 super::crossbow::quarrel_visuals,
             ),
