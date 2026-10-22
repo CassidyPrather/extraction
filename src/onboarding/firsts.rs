@@ -281,7 +281,8 @@ impl Plugin for FirstsPlugin {
                 )
                     .chain()
                     .run_if(in_the_zone),
-            );
+            )
+            .add_systems(Update, spare_radio.run_if(in_the_zone));
     }
 }
 
@@ -645,6 +646,62 @@ fn convoy(
     *recovered = Some(now);
 }
 
+/// The spare: home with no radio (it went with the rest when you fell),
+/// the driver passes his through the hatch, or there'd be no calling him
+/// on the next raid.
+pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+
+/// Seconds at the truck before the driver notices there's no radio.
+const SPARE_AFTER: f32 = 2.0;
+
+fn spare_radio(
+    raid: Res<Raid>,
+    time: Res<Time>,
+    radios: Query<(
+        Entity,
+        &crate::items::Item,
+        Option<&crate::anomaly::artifacts::CarriedBy>,
+        &GlobalTransform,
+    )>,
+    catalog: Res<crate::items::Catalog>,
+    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
+    trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut raid_say: ResMut<Queue>,
+    mut home_for: Local<f32>,
+    mut handed: Local<bool>,
+) {
+    if raid.phase != Phase::AtBase {
+        *home_for = 0.0;
+        *handed = false;
+        return;
+    }
+    *home_for += time.delta_secs();
+    if *handed || *home_for < SPARE_AFTER {
+        return;
+    }
+    let (Some(me), Some(truck)) = (locals.iter().next(), trucks.iter().next()) else {
+        return;
+    };
+    let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
+    // On you, in the crate, or lying in the truck (on the ledge already).
+    let have = radios.iter().any(|(e, it, by, gt)| {
+        catalog.get(it.kind()).id == "radio"
+            && (by.is_some_and(|b| b.0 == me)
+                || in_crate(e)
+                || gt.translation().distance(truck.translation()) < 3.0)
+    });
+    *handed = true;
+    if !have {
+        handover.write(crate::raid::lev::HandOver {
+            id: "radio".into(),
+            condition: 0.8,
+        });
+        raid_say.lines.push_back(SPARE_RADIO.into());
+    }
+}
+
 /// Home from the Zone with a job on the card: nothing pays it but
 /// pressing the card (the first newcomers took the truck home, and the
 /// job sat unpaid into the next session).
@@ -756,6 +813,61 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home with no radio anywhere (it went with the rest at a fall): the
+    /// driver hands his spare over, and says so; with one, he doesn't.
+    #[test]
+    fn no_radio_home_gets_the_spare() {
+        let spoken_spare = |app: &App| {
+            app.world()
+                .resource::<Spoken>()
+                .0
+                .iter()
+                .filter(|l| *l == SPARE_RADIO)
+                .count()
+        };
+        let mut app = app();
+        // Leave the radio at home: the driver says nothing.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        let had = app
+            .world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .any(|i| {
+                app.world()
+                    .resource::<crate::items::Catalog>()
+                    .get(i.kind())
+                    .id
+                    == "radio"
+            });
+        if had {
+            assert_eq!(spoken_spare(&app), 0);
+        }
+        // Every radio gone: out and home, and the spare comes.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let radios: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item)>()
+            .iter(app.world())
+            .filter(|(_, i)| catalog.get(i.kind()).id == "radio")
+            .map(|(e, _)| e)
+            .collect();
+        for r in radios {
+            app.world_mut().despawn(r);
+        }
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        assert_eq!(spoken_spare(&app), 1);
     }
 
     /// Home from the Zone with the job unpaid: told to press the card, once.

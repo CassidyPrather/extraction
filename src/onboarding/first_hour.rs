@@ -429,6 +429,10 @@ pub(super) struct Newcomer {
     errand: Option<Errand>,
     /// Getting what it brought into the crate.
     crating: Option<crate::bot::crating::Crating>,
+    /// The find it last went for; and finds it went for and couldn't get
+    /// (out of reach, behind something): it looks for another.
+    reaching: Option<Entity>,
+    passed_over: Vec<Entity>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -559,7 +563,9 @@ pub(super) fn direct_raid(
     let creep = (p.reads || state.low_until > now)
         && !fleeing
         && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
-    if input.crouch != creep {
+    // (Bent down to the crate: that's the crating's to say.)
+    let crating = state.crating.as_ref().is_some_and(|c| !c.done());
+    if input.crouch != creep && !crating {
         input.crouch = creep;
     }
     bot.sprint = p.sprint || fleeing;
@@ -714,7 +720,14 @@ pub(super) fn direct_raid(
         return;
     }
     // Reckless: a machine in reach is a fight (once a minute at most).
+    // (With a gun: the last fall may have left it out there.)
+    let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
+        world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
+            && (held.is_some_and(|h| h.player == player) || sock.is_some() || bag.is_some())
+            && !view.stash.iter().any(|b| b.contents.contains(&e))
+    });
     if p.reckless
+        && armed
         && now - state.fought_at > 60.0
         && matches!(state.leg, Leg::Place | Leg::Rendezvous | Leg::Call)
         && world
@@ -782,6 +795,48 @@ pub(super) fn direct_raid(
                     tasks.push(Task::Stow(Side::Right));
                 }
             }
+            // No radio (it went with the rest at the last fall): the driver
+            // passes his spare through the hatch; off the ledge with it.
+            let has_radio = !carried(&world, &view, player, "radio").is_empty()
+                || view
+                    .stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter())
+                    .any(|e| world.id(*e) == Some("radio"));
+            if !has_radio {
+                let on_ledge = world.items.iter().find(|(_, it, gt, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && world.catalog.get(it.kind()).id == "radio"
+                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 3.0
+                });
+                if let Some((e, ..)) = on_ledge {
+                    if state.heard.iter().any(|l| l.contains("my spare")) {
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            "the driver's spare radio, off the ledge",
+                        );
+                    }
+                    tasks.push(Task::Grab {
+                        item: e,
+                        side: Side::Right,
+                    });
+                    tasks.push(Task::Stow(Side::Right));
+                } else if state.tries < 8 {
+                    state.tries += 1;
+                    tasks.push(Task::Wait(2.0));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                } else {
+                    state.note(now, Kind::Confused, "no radio, and none handed over");
+                }
+            }
+            state.tries = 0;
             state.errand = view
                 .progression
                 .as_ref()
@@ -915,9 +970,20 @@ pub(super) fn direct_raid(
         }
         Leg::Place if state.errand.as_ref().is_some_and(|e| *e != Errand::Look) => {
             let errand = state.errand.clone().unwrap_or(Errand::Look);
-            match errand_tasks(&errand, &world, &view, player, here, state.tries) {
-                Ok(Some(t)) => {
+            // Went for it, and it's still lying there: past it, to another.
+            if let Some(e) = state.reaching.take()
+                && world
+                    .items
+                    .get(e)
+                    .is_ok_and(|(_, _, _, h, s, b)| h.is_none() && s.is_none() && b.is_none())
+            {
+                state.passed_over.push(e);
+            }
+            let skip = state.passed_over.clone();
+            match errand_tasks(&errand, &world, &view, player, here, state.tries, &skip) {
+                Ok(Some((t, after))) => {
                     tasks.extend(t);
+                    state.reaching = after;
                     state.tries += 1;
                 }
                 Ok(None) => {
@@ -1463,7 +1529,8 @@ fn errand_tasks(
     player: Entity,
     here: Vec2,
     tries: u32,
-) -> Result<Option<Vec<Task>>, String> {
+    skip: &[Entity],
+) -> Result<Option<(Vec<Task>, Option<Entity>)>, String> {
     let job = view.progression.as_ref().and_then(|p| p.0.job.clone());
     match errand {
         Errand::Look => Ok(None),
@@ -1485,6 +1552,7 @@ fn errand_tasks(
                         && bag.is_none()
                         && fetch_takes(want, &world.catalog.get(it.kind()).id)
                         && !view.stash.iter().any(|b| b.contents.contains(e))
+                        && !skip.contains(e)
                 })
                 .map(|(e, _, gt, ..)| (e, gt.translation()))
                 .min_by(|a, b| a.1.xz().distance(from).total_cmp(&b.1.xz().distance(from)));
@@ -1502,7 +1570,7 @@ fn errand_tasks(
                 Task::Stow(Side::Right),
                 Task::Wait(0.5),
             ]);
-            Ok(Some(t))
+            Ok(Some((t, Some(e))))
         }
         Errand::Leave { item, at } => {
             if matches!(job, Some(Job::Plant { planted: true, .. })) {
@@ -1526,7 +1594,7 @@ fn errand_tasks(
                 Task::Release(Side::Right),
                 Task::Wait(2.0),
             ]);
-            Ok(Some(t))
+            Ok(Some((t, None)))
         }
         Errand::Photo(subject) => {
             if matches!(job, Some(Job::Photograph { taken: true, .. })) {
@@ -1564,7 +1632,7 @@ fn errand_tasks(
                 Task::Use(Side::Right),
                 Task::Wait(0.5),
             ]);
-            Ok(Some(t))
+            Ok(Some((t, None)))
         }
     }
 }
