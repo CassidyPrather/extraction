@@ -5471,7 +5471,7 @@ pub fn swing_doors(
         &mut Transform,
         &DoorLeaf,
         Has<crate::robots::doors::Wedged>,
-        Has<super::underground::PowerLocked>,
+        Option<&super::underground::PowerLocked>,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
@@ -5481,7 +5481,9 @@ pub fn swing_doors(
             if let Ok((mut d, _, _, wedged, locked)) = doors.get_mut(*item) {
                 if wedged {
                     raid.say("It won't budge: there's a wedge under it.");
-                } else if locked {
+                } else if locked.is_some_and(|l| l.stage == super::underground::SEALED) {
+                    raid.say("Bolted by the shelter's programme. It won't open again.");
+                } else if locked.is_some() {
                     raid.say("Locked fast: an electric bolt, and no power to it.");
                 } else {
                     d.open = !d.open;

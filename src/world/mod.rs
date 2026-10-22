@@ -18,6 +18,7 @@ pub mod fell;
 pub mod furnace;
 pub mod halos;
 pub mod impostors;
+pub mod lockdown;
 pub mod minefields;
 pub mod notes;
 pub mod overgrowth;

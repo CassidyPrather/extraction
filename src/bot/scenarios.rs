@@ -63,6 +63,7 @@ pub const NAMES: &[&str] = &[
     crate::robots::plough::SCENARIO,
     crate::world::cage::SCENARIO,
     crate::world::echo::SCENARIO,
+    crate::world::lockdown::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -570,6 +571,51 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::lockdown::SCENARIO => {
+            // The shelter: the generator started, the klaxon, the gas lock
+            // sealed; out by the escape tunnel.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::lockdown as lk;
+            let wait = extraction_core::underground::layout("bunker_marrow")
+                .and_then(|l| l.lockdown.as_ref())
+                .map_or(20.0, |k| k.after)
+                + 2.0;
+            vec![
+                Log(s(
+                    "shelter lockdown: start the generator, then out the escape tunnel",
+                )),
+                Setup(lk::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(wait),
+                Expect(Counter("shelter_sealed", 1, 1)),
+                OpenDoor(Entity::PLACEHOLDER),
+                WalkTo {
+                    to: lk::WAY[1],
+                    within: 0.8,
+                },
+                WalkTo {
+                    to: lk::WAY[2],
+                    within: 0.8,
+                },
+                WalkTo {
+                    to: lk::WAY[3],
+                    within: 0.6,
+                },
+                OpenDoor(Entity::PLACEHOLDER),
+                WalkTo {
+                    to: lk::WAY[4],
+                    within: 0.8,
+                },
+                OpenDoor(Entity::PLACEHOLDER),
+                WalkTo {
+                    to: lk::WAY[5],
+                    within: 0.8,
+                },
+                Expect(Near(lk::WAY[5], 1.5)),
+                Expect(HealthAtLeast(50.0)),
             ]
         }
         crate::world::echo::SCENARIO => {
