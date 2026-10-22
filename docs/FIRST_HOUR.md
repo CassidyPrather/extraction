@@ -327,3 +327,36 @@ Fixed since these runs, to be measured in the rerun:
 - **Audio:** the sentry chirps, and the hush's tone rises at 4 s.
 - **Here:** Lev warns of a walker's aim, a sentry's chirp and a hush, and
   a line about danger now is said 1.5 s after the last, not 5 s.
+
+## Second runs: with the fixes
+
+With Robot minds' look-before-shooting and let-go, Audio's sentry chirp and
+earlier hush tone, and the Driver's new lines:
+
+| Machine | Tell to first hit (all five) | Outcome |
+| - | - | - |
+| walker | 2.2 s at least (was 0.8 s), the Driver's "Break its line" with the aim | every newcomer down, 15–40 s later |
+| drone | 3–13 s, "Run across it, to cover" with the lock | every newcomer down, 10–35 s later |
+| sentry | 3.4 s at least, now with its chirp | every newcomer down |
+| hush | no harm: the tone (4 s) and the line come before its 8 s | |
+| night | the walker didn't see any of them | all five home |
+
+**No newcomer was hit without a tell first.** Every first hit came at
+least 2.2 s after a tell the newcomer could see or hear, and the death
+loop at the truck is gone.
+
+**Warned isn't enough on open ground.** The newcomers who do as they're
+told ran for the far side of the nearest building, or hard across the
+machine's line where there was none. They still went down to a walker or
+a drone on the Old farm road: it's open fields, with nothing within a
+sprint. That's the first machine's placement, not its tell.
+
+**The first job sent newcomers to a drone.** In the plain first hour, with
+no machine put there, the robot director's survey drones pick a named
+place to fly to. One picked the Old farm, the first job's place. On its
+first raid the cautious newcomer arrived as the drone did, and died.
+Survey drones now leave a career's first job place alone, as they already
+leave the rendezvous points (`robots::director::survey_places`, test
+`a_first_job_place_is_left_alone`). The first raid is meant to teach the
+way there and back; its first fight comes later, on the second or third
+job.

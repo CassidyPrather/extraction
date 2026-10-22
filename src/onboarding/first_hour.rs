@@ -434,7 +434,7 @@ pub(super) fn direct_raid(
     view: RaidView,
     raid: Res<Raid>,
     mut met: MessageReader<FirstMet>,
-    fight: Option<Res<Fight>>,
+    mut fight: Option<ResMut<Fight>>,
     mut state: Local<Newcomer>,
     time: Res<Time>,
 ) {
@@ -450,11 +450,14 @@ pub(super) fn direct_raid(
     let now = time.elapsed_secs();
     let here = root.translation.xz();
     // A cautious newcomer creeps once it's out.
-    let creep = p.reads && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    // Running for it, as told: upright and fast.
+    let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
+    let creep =
+        p.reads && !fleeing && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
     if input.crouch != creep {
         input.crouch = creep;
     }
-    bot.sprint = p.sprint;
+    bot.sprint = p.sprint || fleeing;
 
     // Heard: what the driver says is what it knows.
     let showing: Vec<String> = raid.log.iter().map(|(l, _)| l.clone()).collect();
@@ -469,8 +472,15 @@ pub(super) fn direct_raid(
         state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
-            First::Heard | First::DroneLock if !p.reckless => {
-                vec![Task::Wait(15.0)]
+            First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Run across it, to cover", "Break its line", "Down, out of
+            // its sweep": for it, as told.
+            First::DroneLock | First::Aimed | First::Sentry if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = now + 12.0;
+                }
+                run_for_cover(&world.zone, here, from)
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -932,6 +942,8 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
 #[derive(Resource, Default, Debug)]
 pub struct Fight {
     seeded: bool,
+    /// Running for cover until then.
+    pub flee_until: f32,
     pub tells: Vec<(f32, String)>,
     pub first_hit: Option<f32>,
     reacted: bool,
@@ -963,6 +975,26 @@ pub(super) struct Tells<'w, 's> {
     locks: MessageReader<'w, 's, crate::robots::drone::DroneLock>,
     sentries: MessageReader<'w, 's, crate::robots::sentry::SentryEvent>,
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
+}
+
+/// Into cover from a machine at `from`: round the far side of the nearest
+/// building within a sprint, or, in the open, hard across its line.
+fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task> {
+    let cover = zone
+        .map
+        .placements
+        .iter()
+        .map(|b| Vec2::from(b.at))
+        .filter(|b| b.distance(here) < 60.0)
+        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+    let to = match cover {
+        Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
+        None => {
+            let across = (here - from).normalize_or(Vec2::Y).perp();
+            here + across * 25.0
+        }
+    };
+    vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
 /// Where along the way to the first job the machine is met: the drop to
@@ -1099,7 +1131,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((mut bot, root, mut input)) = bots.single_mut() else {
+    let Ok((mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -1118,16 +1150,16 @@ pub(super) fn first_fight(
     } else if p.hoards && !hush {
         // Carries on.
         vec![]
+    } else if hush {
+        // Back out the way it came.
+        vec![Task::WalkTo {
+            to: here + away * 10.0,
+            within: 1.5,
+        }]
     } else {
-        // Down, out of its line, and still a while.
-        input.crouch = true;
-        vec![
-            Task::WalkTo {
-                to: here + away.perp() * 12.0 + away * 6.0,
-                within: 1.5,
-            },
-            Task::Wait(12.0),
-        ]
+        // For cover, as the driver says, upright and fast.
+        fight.flee_until = now + 12.0;
+        run_for_cover(&zone, here, from)
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
