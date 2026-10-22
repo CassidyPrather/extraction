@@ -335,7 +335,7 @@ pub struct Raider {
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
     /// Where it waits for the truck at rendezvous `.0` while the drones
-    /// survey a place nearby: in the lee of the shelter there
+    /// survey a place nearby: under the shelter's roof, or in its lee
     /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
     wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and

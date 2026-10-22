@@ -347,6 +347,8 @@ pub const WAIT_COVER: f32 = 15.0;
 pub const WAIT_HEIGHT: f32 = 1.2;
 /// How far off a shelter's wall its lee is, metres.
 pub const WAIT_LEE: f32 = 0.8;
+/// How far in from its door you wait under a roof, metres.
+pub const WAIT_IN: f32 = 1.2;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -622,10 +624,15 @@ pub fn watched_by(map: &MapDef, rv: P2) -> Option<(String, f32)> {
 
 /// Something to wait for the truck behind at the rendezvous at `rv`: the
 /// nearest roof or solid cover within [`WAIT_COVER`] (a walk-in building
-/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), how
-/// far off it is, and where to crouch in its lee, away from `from` (the
-/// drones' point of interest).
+/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), a
+/// roof first, how far off it is, and where to wait: under the roof, just
+/// in at its door (a drone that has seen you circles a wall, not a roof),
+/// else crouched in the lee, away from `from` (the drones' point of
+/// interest).
 pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)> {
+    let roof = |q: &Solid| {
+        crate::map_surge::roofed(&q.prefab) && !crate::map::prefab_entrances(&q.prefab).is_empty()
+    };
     let q = solids(map)
         .into_iter()
         .filter(|q| {
@@ -635,7 +642,22 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
                     || (q.prefab != "fence_garden"
                         && crate::map::prefab_footprint(&q.prefab)[1] >= WAIT_HEIGHT))
         })
-        .min_by(|a, b| a.rect.sdf(rv).total_cmp(&b.rect.sdf(rv)))?;
+        .min_by(|a, b| {
+            (!roof(a), a.rect.sdf(rv))
+                .partial_cmp(&(!roof(b), b.rect.sdf(rv)))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })?;
+    let d = q.rect.sdf(rv).max(0.0);
+    if roof(&q) {
+        let door = crate::map::prefab_entrances(&q.prefab)
+            .iter()
+            .min_by(|a, b| dist(q.rect.world(a.at), rv).total_cmp(&dist(q.rect.world(b.at), rv)))?;
+        let inside = q.rect.world([
+            door.at[0] - door.out[0] * WAIT_IN,
+            door.at[1] - door.out[1] * WAIT_IN,
+        ]);
+        return Some((q.name, d, inside));
+    }
     let away = geom::sub(q.rect.at, from);
     let l = geom::dist(q.rect.at, from).max(1e-3);
     let away = [away[0] / l, away[1] / l];
@@ -646,7 +668,7 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
         })
         .find(|p| q.rect.sdf(*p) >= WAIT_LEE)
         .unwrap_or(q.rect.at);
-    Some((q.name, q.rect.sdf(rv).max(0.0), lee))
+    Some((q.name, d, lee))
 }
 
 /// Every solid thing on the surface, placements first (in order: index
