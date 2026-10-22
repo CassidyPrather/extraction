@@ -505,6 +505,7 @@ pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
+    bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     robots: Query<
         'w,
@@ -723,7 +724,9 @@ pub(super) fn direct_raid(
     // (With a gun: the last fall may have left it out there.)
     let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
         world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
-            && (held.is_some_and(|h| h.player == player) || sock.is_some() || bag.is_some())
+            && (held.is_some_and(|h| h.player == player)
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
             && !view.stash.iter().any(|b| b.contents.contains(&e))
     });
     if p.reckless
@@ -795,83 +798,81 @@ pub(super) fn direct_raid(
                     tasks.push(Task::Stow(Side::Right));
                 }
             }
-            // No radio (it went with the rest at the last fall): the driver
-            // passes his spare through the hatch; off the ledge with it.
-            let has_radio = !carried(&world, &view, player, "radio").is_empty()
-                || view
-                    .stash
-                    .iter()
-                    .flat_map(|b| b.contents.iter())
-                    .any(|e| world.id(*e) == Some("radio"));
-            if !has_radio {
-                let on_ledge = world.items.iter().find(|(_, it, gt, held, sock, bag)| {
-                    held.is_none()
-                        && sock.is_none()
-                        && bag.is_none()
-                        && world.catalog.get(it.kind()).id == "radio"
-                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 3.0
-                });
-                if let Some((e, ..)) = on_ledge {
-                    if state.heard.iter().any(|l| l.contains("my spare")) {
-                        state.note(
-                            now,
-                            Kind::Learned,
-                            "the driver's spare radio, off the ledge",
-                        );
-                    }
-                    tasks.push(Task::Grab {
-                        item: e,
-                        side: Side::Right,
-                    });
-                    tasks.push(Task::Stow(Side::Right));
-                } else if state.tries < 8 {
-                    state.tries += 1;
-                    tasks.push(Task::Wait(2.0));
-                    let idle = bot.tasks.pop_back();
-                    bot.tasks.extend(tasks);
-                    bot.tasks.extend(idle);
-                    bot.restart();
-                    return;
-                } else {
-                    state.note(now, Kind::Confused, "no radio, and none handed over");
-                }
-            }
-            state.tries = 0;
             state.errand = view
                 .progression
                 .as_ref()
                 .and_then(|p| p.0.job.as_ref())
                 .map(errand);
-            // What the driver hands through the hatch for it (a thing to
-            // leave, a camera): off the ledge, into a pocket.
-            let handed = match &state.errand {
-                Some(Errand::Leave { item, .. }) => Some(item.clone()),
-                Some(Errand::Photo(_)) => Some("camera".to_owned()),
-                _ => None,
+            // Off the ledge under the hatch, what the driver passes through:
+            // his spare radio (the last one went with the rest at a fall),
+            // and what the job takes out (a thing to leave, the camera).
+            let mut need = vec![];
+            let in_crate = |id: &str| {
+                view.stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter())
+                    .any(|e| world.id(*e) == Some(id))
             };
-            if let Some(id) = handed {
-                let near_truck = |p: Vec3| p.xz().distance(at_truck(0.0, 0.0)) < 6.0;
-                if let Some((e, ..)) = world.items.iter().find(|(e, it, gt, held, sock, bag)| {
+            if carried(&world, &view, player, "radio").is_empty() && !in_crate("radio") {
+                need.push("radio".to_owned());
+            }
+            match &state.errand {
+                Some(Errand::Leave { item, .. })
+                    if carried(&world, &view, player, item).is_empty() =>
+                {
+                    need.push(item.clone())
+                }
+                Some(Errand::Photo(_)) if carried(&world, &view, player, "camera").is_empty() => {
+                    need.push("camera".to_owned())
+                }
+                _ => {}
+            }
+            let mut missing = vec![];
+            for id in need {
+                let on_ledge = world.items.iter().find(|(e, it, gt, held, sock, bag)| {
                     held.is_none()
                         && sock.is_none()
                         && bag.is_none()
-                        && near_truck(gt.translation())
-                        && world.catalog.get(it.kind()).id.starts_with(id.as_str())
+                        && world.catalog.get(it.kind()).id == id
+                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 4.0
                         && !view.stash.iter().any(|b| b.contents.contains(e))
-                }) {
-                    tasks.push(Task::Grab {
-                        item: e,
-                        side: Side::Right,
-                    });
-                    tasks.push(Task::Stow(Side::Right));
-                } else {
-                    state.note(
-                        now,
-                        Kind::Confused,
-                        format!("no {id} handed over for the job"),
-                    );
+                });
+                match on_ledge {
+                    Some((e, ..)) => {
+                        if state.heard.iter().any(|l| l.contains("off the ledge")) {
+                            state.note(
+                                now,
+                                Kind::Learned,
+                                format!("{id} off the ledge, as the driver said"),
+                            );
+                        }
+                        tasks.push(Task::Grab {
+                            item: e,
+                            side: Side::Right,
+                        });
+                        tasks.push(Task::Stow(Side::Right));
+                    }
+                    None => missing.push(id),
                 }
             }
+            if !missing.is_empty() && state.tries < 8 {
+                // Still coming through the hatch, perhaps: a moment.
+                state.tries += 1;
+                tasks.push(Task::Wait(2.0));
+                let idle = bot.tasks.pop_back();
+                bot.tasks.extend(tasks);
+                bot.tasks.extend(idle);
+                bot.restart();
+                return;
+            }
+            for id in missing {
+                state.note(
+                    now,
+                    Kind::Confused,
+                    format!("no {id}, and none handed over"),
+                );
+            }
+            state.tries = 0;
             state.leg = Leg::Card;
         }
         Leg::Card => {
@@ -1433,8 +1434,13 @@ fn carried(world: &World2, view: &RaidView, player: Entity, want: &str) -> Vec<E
         .items
         .iter()
         .filter(|(e, it, _, held, sock, bag)| {
+            // On this newcomer: in its hand, its slots or its own pack (not
+            // the pack it left where it fell, nor the stash crate).
             fetch_takes(want, &world.catalog.get(it.kind()).id)
-                && (held.is_some_and(|h| h.player == player) || sock.is_some() || bag.is_some())
+                && (held.is_some_and(|h| h.player == player)
+                    || sock
+                        .is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                    || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
                 && !view.stash.iter().any(|b| b.contents.contains(e))
         })
         .map(|(e, ..)| e)
