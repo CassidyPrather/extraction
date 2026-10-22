@@ -360,6 +360,25 @@ impl Occluders {
         }
     }
 
+    /// The top of what covers a point (where a ray straight up from it
+    /// last meets a piece), if anything does: a roof over a room, the
+    /// highest of a tower's floors.
+    pub fn cover_top(&self, p: Vec3) -> Option<f32> {
+        let c = ((p - self.lo) / self.cell).floor();
+        if c.x < 0.0 || c.z < 0.0 {
+            return None;
+        }
+        let (x, z) = (c.x as usize, c.z as usize);
+        if x >= self.dims[0] || z >= self.dims[2] {
+            return None;
+        }
+        self.columns[z * self.dims[0] + x]
+            .iter()
+            .filter_map(|&i| self.boxes[i as usize].hit(p, Vec3::Y, 100.0))
+            .map(|t| p.y + t)
+            .reduce(f32::max)
+    }
+
     /// Whether a point is inside one of the pieces.
     pub fn inside(&self, p: Vec3) -> bool {
         self.near(p).iter().any(|&i| {
