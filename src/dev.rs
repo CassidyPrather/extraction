@@ -29,6 +29,7 @@ impl Plugin for DevPlugin {
                     carry_for_gallery,
                     climb_for_gallery,
                     fight_for_gallery,
+                    treat_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -1077,6 +1078,72 @@ fn fight_for_gallery(
             point: None,
         });
     }
+}
+
+/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
+/// a body hurt and treated (`interact::wounds`, drawn by
+/// `render::wounds`). An open wound on the right thigh and the left
+/// forearm, a dressing round the right upper arm, a splint strapped on the
+/// right shin, and the left glove, turned palm up, bloody from the wound.
+fn treat_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (
+            Entity,
+            &mut crate::rig::RigInput,
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    mut frames: Local<u32>,
+) {
+    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+        return;
+    }
+    let Some((player, mut input, mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    let Some(mut wounds) = wounds else {
+        return;
+    };
+    *frames += 1;
+    let wound = |limb, along, around, bleed, dressed| Wound {
+        limb,
+        along,
+        around,
+        bleed,
+        dressed,
+    };
+    wounds.0 = vec![
+        wound(Limb::Thigh(Side::Right), 0.45, 1.4, 1.0, false),
+        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
+        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
+        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
+    ];
+    // Bleeding as the wounds have it, and in no danger of going down.
+    health.bleeding = 1.6;
+    health.hp = health.max;
+    if *frames == 2 {
+        commands.entity(player).insert(Fracture {
+            leg: Side::Right,
+            splinted: true,
+        });
+        for (h, rh) in &hands {
+            if rh.side == Side::Left {
+                commands.entity(h).insert(Bloodied(1.0));
+            }
+        }
+    }
+    // The left hand low and turned palm up.
+    let left = input.hand_mut(Side::Left);
+    left.pose = Transform::from_xyz(-0.18, 1.05, -0.32)
+        .with_rotation(Quat::from_rotation_z(std::f32::consts::PI) * Quat::from_rotation_x(0.4));
+    left.tracked = true;
 }
 
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment

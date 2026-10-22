@@ -174,6 +174,22 @@ What changed, and worth a comment each:
   trigger. Hold food to your mouth to eat, and tip a bottle up to drink.
   The A/X button no longer does these in the headset, except medicine
   with the one-handed comfort setting.
+- **Treating yourself.** A hit leaves a wound where it landed, on the
+  limb it hit, and each wound bleeds by itself (your health's bleeding is
+  their sum). Wind a dressing round that limb (thigh, arm, shin, chest),
+  not just your forearm: it binds only the wounds on that limb, so a
+  thigh and an arm wound take two dressings. A fall hard enough (about a
+  second-storey drop) breaks a shin: you limp, slowly and with no sprint,
+  until a splint (new, in medical loot) is held along the broken shin,
+  your other hand at the leg, for a second and a half while the straps
+  pull tight. You still limp a little. The water bottle (now "Canteen")
+  comes capped: take the cap in your other hand with the trigger and
+  twist three quarters of a turn before you can drink. All of it takes
+  as long as your hands take. Look down: open wounds show red on the
+  body, dressings as white bands, the splint's slats on the shin, and a
+  glove that touched an open wound is bloody, fading over a minute. Is
+  winding a dressing round your own thigh possible without looking? Is
+  the splint too fiddly with someone shooting at you, or too easy?
 - **Gestures.** A hand over your mouth quietens your breathing when
   you're winded (robots nearby can hear it). An open palm raised over
   your head is a gesture robots can read, though nothing reacts to it
