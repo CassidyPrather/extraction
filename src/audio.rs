@@ -322,6 +322,7 @@ impl Plugin for AudioPlugin {
             .init_resource::<HushNow>()
             .add_plugins(crate::audio_kit::KitSoundsPlugin)
             .add_plugins(crate::audio_fight::FightSoundsPlugin)
+            .init_resource::<crate::hearing::Hearing>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -5026,8 +5027,8 @@ fn room_acoustics(
 }
 
 /// A placed sound heard round or through what's between it and you
-/// (`acoustics::occlusion`, the robots' rule): checked as it starts, and
-/// every quarter second for loops, a few rays a frame.
+/// (`hearing::Hearing::path`, the robots' rule): checked as it starts,
+/// and every quarter second for loops.
 #[derive(Component)]
 struct Occluded {
     next: f32,
@@ -5051,9 +5052,8 @@ fn occlude(
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     hush: Res<HushNow>,
-    spatial: SpatialQuery,
-    doors: Query<&crate::world::buildings::Door>,
-    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    hearing: Res<crate::hearing::Hearing>,
+    zone: Option<Res<Zone>>,
     time: Res<Time>,
 ) {
     let Some(head) = listener.iter().next() else {
@@ -5061,16 +5061,8 @@ fn occlude(
     };
     let (ear, facing) = (head.translation(), head.forward().as_vec3());
     let now = time.elapsed_secs();
-    let openings: Vec<Vec3> = entrances
-        .map(|e| {
-            e.doors
-                .iter()
-                .filter(|d| crate::robots::doors::is_open(doors.get(d.door).ok()))
-                .map(|d| d.mid)
-                .collect()
-        })
-        .unwrap_or_default();
-    let mut budget = 24;
+    // Each a table read (`hearing`), but a frame needn't redo them all.
+    let mut budget = 128;
     for (e, gt, effects, player, occluded) in &players {
         let due = match occluded {
             None => true,
@@ -5081,8 +5073,10 @@ fn occlude(
         if !due || budget == 0 {
             continue;
         }
+        // The way the robots hear it too (`hearing`): round doors, through
+        // walls by what they're built of, up through floors and rock.
         let o = || {
-            let mut o = crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+            let mut o = hearing.path(zone.as_deref(), gt.translation(), ear);
             o.cutoff = o.cutoff.min(hush.cutoff);
             o
         };
