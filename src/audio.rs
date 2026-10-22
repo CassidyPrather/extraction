@@ -407,6 +407,7 @@ impl Plugin for AudioPlugin {
                         water_sounds,
                         sentry_sounds,
                         bat_sounds,
+                        fell_sounds,
                     ),
                 ),
             )
@@ -1231,6 +1232,10 @@ fn gun_sounds(
             // A spent case is heard where it lands (`casing_sounds`), a beat
             // after the shot; a live round worked out by hand, here.
             (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
+            // The carrier running home after the shot, a beat behind it,
+            // and an open bolt slamming forward just before it.
+            (FireEvent::CarrierHome, _) => ("guns/bolt_close", "gun.carrier_home", 0.0),
+            (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt", 0.0),
             _ => continue,
         };
         // Shots aren't pitch-shifted much: a gun has one voice.
@@ -1239,10 +1244,12 @@ fn gun_sounds(
         } else {
             0.07
         };
-        let speed = if matches!(ev.event, FireEvent::Malfunctioned(_)) {
-            0.72
-        } else {
-            1.0
+        let speed = match ev.event {
+            FireEvent::Malfunctioned(_) => 0.72,
+            // Small and quick inside the receiver.
+            FireEvent::CarrierHome => 1.35,
+            FireEvent::OpenBoltSlam => 0.9,
+            _ => 1.0,
         };
         play_at_speed(
             &mut commands,
@@ -3403,6 +3410,155 @@ fn water_sounds(
             }
         }
     }
+}
+
+/// Rime Fell's derelict works in the wind (`world::fell_sounds`, which
+/// says where; nothing there runs):
+///
+/// - the funicular's slack rope ticking and creaking on its rollers, at
+///   the roller nearest you within [`ROPE_NEAR`] (`fell.rope`);
+/// - the top station's bull wheel, the cut rope's end groaning on it
+///   (`fell.wheel`);
+/// - a loose sheet of the mill's corrugated roof banging once to three
+///   times now and then, heard across the settlement (`fell.sheet`);
+/// - the stopped car's doors creaking and banging (`fell.car`);
+/// - wind moaning through each mill bay's broken windows and along the
+///   avalanche galleries, a loop at each (`fell.wind`), and the
+///   galleries' meltwater dripping (`water.drip`).
+const ROPE_NEAR: f32 = 60.0;
+const WHEEL_NEAR: f32 = 80.0;
+const SHEET_NEAR: f32 = 160.0;
+const CAR_NEAR: f32 = 60.0;
+const GALLERY_DRIP_NEAR: f32 = 50.0;
+
+/// A wind loop at one of Rime Fell's works.
+#[derive(Component)]
+struct FellWind;
+
+#[allow(clippy::too_many_arguments)]
+fn fell_sounds(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    winds: Query<Entity, With<FellWind>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut works: Local<Option<(String, Vec<crate::world::fell_sounds::Emitter>)>>,
+    mut next: Local<[f32; 5]>,
+    mut bangs: Local<Vec<(f32, &'static str, Vec3, f64)>>,
+) {
+    use crate::world::fell_sounds::{Source, emitters};
+    let (Some(zone), Some(ear)) = (zone, listener.iter().next().map(|g| g.translation())) else {
+        return;
+    };
+    // Worked out once a map, its wind loops with it.
+    if works
+        .as_ref()
+        .is_none_or(|(name, _)| *name != zone.map.name)
+    {
+        for e in &winds {
+            commands.entity(e).despawn();
+        }
+        let found = emitters(&zone.map, &zone.hm);
+        for w in &found {
+            if !matches!(w.source, Source::MillBay | Source::Gallery) {
+                continue;
+            }
+            if let Some(sample) = bank.pick("ambience/wind_works", &mut rng.0) {
+                let speed = rng.0.range(0.85, 1.1) as f64;
+                commands.spawn((
+                    FellWind,
+                    SamplePlayer::new(sample)
+                        .looping()
+                        .with_volume(Volume::Decibels(mix::db("fell.wind"))),
+                    PlaybackSettings::default().with_speed(speed),
+                    Transform::from_translation(w.at),
+                    Placed::new("fell.wind"),
+                ));
+            }
+        }
+        *works = Some((zone.map.name.clone(), found));
+    }
+    let Some((_, works)) = works.as_ref() else {
+        return;
+    };
+    if works.is_empty() {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let nearest = |s: Source| {
+        works
+            .iter()
+            .filter(|w| w.source == s)
+            .map(|w| w.at)
+            .min_by(|a, b| a.distance(ear).total_cmp(&b.distance(ear)))
+    };
+    let mut due = |i: usize, lo: f32, hi: f32, rng: &mut AudioRng| {
+        if now < next[i] {
+            return false;
+        }
+        next[i] = now + rng.0.range(lo, hi);
+        true
+    };
+    if due(0, 2.0, 6.0, &mut rng)
+        && let Some(at) = nearest(Source::Rope).filter(|a| a.distance(ear) < ROPE_NEAR)
+    {
+        let speed = rng.0.range(0.5, 0.75) as f64;
+        bangs.push((now, "fell.rope", at, speed));
+    }
+    if due(1, 6.0, 14.0, &mut rng)
+        && let Some(at) = nearest(Source::BullWheel).filter(|a| a.distance(ear) < WHEEL_NEAR)
+    {
+        bangs.push((now, "fell.wheel", at, 0.8));
+    }
+    if due(2, 4.0, 15.0, &mut rng)
+        && let Some(at) = nearest(Source::MillSheet).filter(|a| a.distance(ear) < SHEET_NEAR)
+    {
+        let n = 1 + (rng.0.f32() * 2.99) as usize;
+        for i in 0..n {
+            let t = now + i as f32 * rng.0.range(0.25, 0.5);
+            bangs.push((t, "fell.sheet", at, 0.65));
+        }
+    }
+    if due(3, 5.0, 12.0, &mut rng)
+        && let Some(at) = nearest(Source::Car).filter(|a| a.distance(ear) < CAR_NEAR)
+    {
+        // A door swung on its hinge (the rope's creak, quicker), and as
+        // often as not banging to.
+        let speed = rng.0.range(0.6, 0.8) as f64;
+        bangs.push((now, "fell.rope", at, speed));
+        if rng.0.f32() < 0.6 {
+            bangs.push((now + rng.0.range(0.6, 1.2), "fell.car", at, 0.9));
+        }
+    }
+    if due(4, 0.3, 1.4, &mut rng)
+        && let Some(at) = nearest(Source::Gallery).filter(|a| a.distance(ear) < GALLERY_DRIP_NEAR)
+    {
+        let off = Vec3::new(rng.0.range(-3.0, 3.0), 0.0, rng.0.range(-3.0, 3.0));
+        bangs.push((now, "water.drip", at + off, 1.0));
+    }
+    bangs.retain(|&(t, cue, at, speed)| {
+        if now < t {
+            return true;
+        }
+        let set = mix::MIX
+            .iter()
+            .find(|c| c.name == cue)
+            .map_or("", |c| c.set);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            speed,
+            0.08,
+        );
+        false
+    });
 }
 
 /// A sentry (`robots::sentry`): its warning chirp, the second before it
