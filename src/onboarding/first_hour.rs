@@ -104,7 +104,15 @@ pub const ENCOUNTERS: [&str; 5] = ["walker", "drone", "hush", "sentry", "night"]
 pub struct Chain {
     pub personas: Vec<&'static Persona>,
     pub encounters: Vec<&'static str>,
+    /// Raids after the yard, one a job (the first hour is one).
+    pub raids: u32,
 }
+
+/// The first five jobs, by every newcomer: the yard, then a raid a job on
+/// the one career (`first_jobs`, or `first_jobs_<name>` for one).
+pub const JOBS: &str = "first_jobs";
+/// How many raids `first_jobs` runs.
+pub const JOBS_RAIDS: u32 = 5;
 
 /// The chain a `--scenario` name asks for, if it's one of these.
 pub fn chain(scenario: &str) -> Option<Chain> {
@@ -113,12 +121,29 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         return Some(Chain {
             personas: all(),
             encounters: vec![],
+            raids: 1,
+        });
+    }
+    if scenario == JOBS {
+        return Some(Chain {
+            personas: all(),
+            encounters: vec![],
+            raids: JOBS_RAIDS,
+        });
+    }
+    if let Some(name) = scenario.strip_prefix("first_jobs_") {
+        let p = PERSONAS.iter().find(|p| p.name.replace('-', "_") == name)?;
+        return Some(Chain {
+            personas: vec![p],
+            encounters: vec![],
+            raids: JOBS_RAIDS,
         });
     }
     if scenario == FIGHT {
         return Some(Chain {
             personas: all(),
             encounters: ENCOUNTERS.to_vec(),
+            raids: 1,
         });
     }
     if let Some(kind) = scenario.strip_prefix("first_fight_") {
@@ -126,6 +151,7 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         return Some(Chain {
             personas: all(),
             encounters: vec![e],
+            raids: 1,
         });
     }
     PERSONAS
@@ -134,6 +160,7 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         .map(|p| Chain {
             personas: vec![p],
             encounters: vec![],
+            raids: 1,
         })
 }
 
@@ -169,11 +196,12 @@ pub fn run_chain(chain: &Chain) -> AppExit {
         let dir_s = dir.to_string_lossy().to_string();
         let save = dir.join("career.ron").to_string_lossy().to_string();
         let mut ok = true;
-        for (stage, extra) in [
-            (YARD, vec![]),
-            // As the cord would open it: on to the next valley.
-            (RAID, vec!["--map".to_string(), "marrow_creek".to_string()]),
-        ] {
+        let stages = std::iter::once((YARD, vec![])).chain(
+            // As the cord would open it: on to the next valley; then a raid
+            // a job.
+            (0..chain.raids).map(|_| (RAID, vec!["--map".to_string(), "marrow_creek".to_string()])),
+        );
+        for (n, (stage, extra)) in stages.enumerate() {
             let mut cmd = std::process::Command::new(&exe);
             cmd.args(&passthrough)
                 .args(["--scenario", stage, "--personality", p.name])
@@ -182,7 +210,7 @@ pub fn run_chain(chain: &Chain) -> AppExit {
             if p.one_handed {
                 cmd.arg("--one-handed");
             }
-            println!("first hour: {} in {stage}", p.name);
+            println!("first hour: {} in {stage} ({n})", p.name);
             let status = cmd.status();
             if !status.is_ok_and(|s| s.success()) {
                 ok = false;
@@ -665,6 +693,11 @@ pub(super) fn direct_raid(
             format!("half an hour gone, still at {leg:?}"),
         );
         state.leg = Leg::Done;
+    }
+    // Woken from the last one's fall (a career resumed while down): not
+    // this raid's death; wait for the truck.
+    if matches!(raid.phase, Phase::Down { .. }) && state.leg == Leg::Camp {
+        return;
     }
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
