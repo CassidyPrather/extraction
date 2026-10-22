@@ -3933,3 +3933,101 @@ fn a_relay_reports_a_hungry_device() {
     assert!(!r.is_empty(), "it reported the cloak");
     assert!(flat(r[0] - at) < 2.0, "where it is: {:?}", r);
 }
+
+/// Sprinting across a walker's line of fire throws its aim off: its
+/// rounds go wide (CROSSING_SPREAD), not one a second into you.
+#[test]
+fn a_sprint_across_its_line_throws_a_walker_off() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Spreads(Vec<f32>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Spreads>().add_systems(
+        FixedPostUpdate,
+        |mut s: MessageReader<Shot>, mut out: ResMut<Spreads>| {
+            out.0
+                .extend(s.read().filter(|s| s.shooter.is_some()).map(|s| s.spread));
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let me = zone.on_ground(100.0, 200.0);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 225.0));
+    put(&mut app, player, me);
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    for _ in 0..90 * 6 {
+        // Running across its line (it's to the north, you go east).
+        put(&mut app, player, me);
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::new(5.0, 0.0, 0.0);
+        app.update();
+    }
+    let s = &app.world().resource::<Spreads>().0;
+    assert!(!s.is_empty(), "it fired");
+    assert!(
+        s.iter()
+            .all(|x| *x >= 0.025 + super::walker::CROSSING_SPREAD * 4.5),
+        "wide of a sprint: {s:?}"
+    );
+}
+
+/// A drone on its way home that sees you spares a burst or two, then goes
+/// on home: it doesn't hang over you.
+#[test]
+fn a_leaving_drone_spares_only_a_burst() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let site = me + Vec3::new(0.0, 14.0, 20.0);
+    let exit = zone.on_ground(400.0, 400.0);
+    let mut queue = CommandQueue::default();
+    let d = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            site,
+            Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 999.0,
+                exit,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    *app.world_mut().get_mut::<Brain>(d).unwrap() = Brain::Leave { to: exit };
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(d).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+        a.can_see_target = true;
+    }
+    let mut engaged = false;
+    let mut home_again = false;
+    for _ in 0..(90.0 * (super::drone::LEAVING_FIGHT + 4.0)) as usize {
+        put(&mut app, player, me);
+        app.update();
+        let Ok(b) = app.world().get_entity(d).map(|e| e.get::<Brain>().cloned()) else {
+            break;
+        };
+        match b {
+            Some(Brain::Engage) => engaged = true,
+            Some(Brain::Leave { .. }) if engaged => home_again = true,
+            _ => {}
+        }
+        if home_again {
+            break;
+        }
+    }
+    assert!(engaged, "it turned on you");
+    assert!(home_again, "then went on home");
+}
