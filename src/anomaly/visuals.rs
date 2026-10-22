@@ -479,8 +479,9 @@ fn init_assets(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
-    // Drained: the ground's colour gone grey, not painted over.
-    let hushed = ground(Color::srgba(0.55, 0.55, 0.53, 0.5), LinearRgba::BLACK);
+    // Pale dust settled out of the dead air, the ground's colour gone
+    // under it.
+    let hushed = ground(Color::srgba(0.68, 0.68, 0.66, 0.62), LinearRgba::BLACK);
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),

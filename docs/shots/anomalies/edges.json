@@ -4,27 +4,27 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 22.0,
+    "step": 14.2,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 20.2,
+    "step": 11.5,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 24.6,
+    "step": 14.5,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 26.9,
+    "step": 16.6,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 32.0,
+    "step": 12.6,
     "slip": 0.20000000298023224,
     "ok": true
    }
@@ -37,27 +37,27 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 32.8,
+    "step": 17.2,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 33.6,
+    "step": 19.7,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 31.0,
+    "step": 16.0,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 32.5,
+    "step": 17.6,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 31.7,
+    "step": 16.3,
     "slip": 0.10000000149011612,
     "ok": true
    }
@@ -70,32 +70,32 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 13.7,
+    "step": 9.3,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 8.9,
+    "step": 5.5,
     "slip": 0.10000000149011612,
-    "ok": true
+    "ok": false
    },
    {
-    "step": 15.6,
+    "step": 10.6,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 12.5,
+    "step": 8.3,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 4.9,
-    "slip": 0.30000001192092896,
+    "step": 2.7,
+    "slip": 0.10000000149011612,
     "ok": false
    }
   ],
-  "passing": 4,
+  "passing": 3,
   "ok": true
  }
 ]
