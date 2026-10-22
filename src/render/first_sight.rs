@@ -224,11 +224,11 @@ mod tests {
 
     /// After the valley has loaded, everything a raid can bring out comes
     /// out, and nothing loads from disk for it (models, textures). Slow: it
-    /// waits for the start's loads to land (`cargo test --lib -- --ignored
-    /// nothing_loads_mid_raid`).
+    /// waits for the start's loads to land (the gauge tier, `cargo test
+    /// --lib -- --ignored gauge_`).
     #[test]
-    #[ignore]
-    fn nothing_loads_mid_raid() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_nothing_loads_mid_raid() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         app.init_resource::<Loads>().add_systems(Last, record);
