@@ -524,6 +524,69 @@ The headset's session waits on it (or 20 s), `--screenshot` waits on its
 materials and buildings after `--frames` (or 180 s, with a warning), and
 "everything in" includes it.
 
+## Holding the frame rate
+
+`render::hold_rate` keeps the headset at its refresh rate by rendering
+more or less of each eye. The swapchain is made at the runtime's
+recommended size. Each frame, the eye cameras' viewports and the
+projection layer's image rects are set to the governed size, and the
+compositor scales that part to the display. No swapchain is made again.
+`bevy_mod_openxr`'s projection layer is replaced by `RectLayer`, the same
+layer but with the rect. Both read the frame's extracted `EyeRect`, so the
+cameras and the rect always agree.
+
+The governor (`Governor`) steps every 4 frames, from the GPU's measured
+time (timestamp queries, the top-level passes summed) against the
+display's period:
+
+- **Down** when the second-worst of the last 8 frames runs past 85% of the
+  period, by the square root of the overrun (time goes with the pixels),
+  at most 20% a step. A single long frame doesn't count: a pipeline built
+  or a hitch on the CPU isn't the pixels' doing.
+- **Up** 3% a step, at most once every half second after a drop, and only
+  if the 90th percentile of the last 45 frames would still fit 80% of
+  the target at the larger size. The band between up and down is the
+  hysteresis that keeps it from pumping.
+- **Floor:** the narrowest eye that keeps must-read text at 7.5 px of
+  x-height (`floor_eye_px`, about 1735 px across, from Legibility's
+  constants).
+- **Cap:** the runtime's recommended size.
+- **Start:** the SHARPNESS size. With HOLD FRAME RATE off it stays there.
+- **No GPU times** (no timestamp queries): it holds where it is.
+
+The frame log's fourth column is the eyes' width as a share of the
+runtime's recommended width. The report's `frames-summary.txt` gives its
+least, median and most per valley. The session log says, every ten
+seconds, the size, the GPU's time and the period it was held to.
+
+What it buys:
+
+| Run | Eyes | Eyes' GPU time a frame |
+| - | - | - |
+| Monado's simulated headset, lavapipe | 640x720 | 370-400 ms |
+| Monado's simulated headset, lavapipe | 320x360 (a quarter of the pixels) | 220 ms (45% less) |
+
+The opaque pass shrinks with the viewport. Tonemapping and MSAA
+writeback still cover the whole target, but they're small.
+
+`gauge_busy_moments_drop_the_scale_and_it_comes_back` runs the hitch
+gauge's forced events (the response team, the Surge and the rest) through
+the governor. Each frame's measured load is taken as the GPU's, with a
+modelled GPU (a fifth fixed, the rest the pixels'). Wherever frames ran
+late in a run, the scale came down within a step, and it was back within
+2.3 s:
+
+- the Surge: 0.62 > 0.57;
+- the response team: 0.58 > 0.56;
+- the Depot's residents: 0.62 > 0.55.
+
+That shows the steps on the real moments' shapes. What a headset's GPU
+spends is the frame log's to say.
+
+For a simulated runtime (whose period follows the game's own pace),
+`EXTRACTION_FRAME_BUDGET_MS` stands in for the period and
+`EXTRACTION_EYE_FLOOR_PX` for the floor.
+
 ## Empty meshes
 
 Bevy skips the GPU room for a mesh with no vertex data (or no indices)

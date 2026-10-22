@@ -158,6 +158,7 @@ pub fn handle_session(
 /// headset on a laptop GPU isn't asked for 3000 px). Read when the session
 /// is created, so a change takes effect on the next launch.
 fn size_swapchain(
+    mut commands: Commands,
     instance: Option<Res<OxrInstance>>,
     system: Option<Res<bevy_mod_openxr::resources::OxrSystemId>>,
     comfort: Res<super::comfort::Comfort>,
@@ -203,7 +204,29 @@ fn size_swapchain(
         rec.x,
         rec.y
     );
-    config.resolutions = Some(vec![size]);
+    commands.insert_resource(EyeSizes {
+        recommended: rec,
+        start: size,
+    });
+    // Holding the frame rate, the swapchain is the runtime's full size and
+    // the eyes render the part of it that fits (`render::hold_rate`).
+    if comfort.hold_rate {
+        info!(
+            "eyes: holding the frame rate, from {}x{} up to {}x{}",
+            size.x, size.y, rec.x, rec.y
+        );
+        config.resolutions = Some(vec![rec]);
+    } else {
+        config.resolutions = Some(vec![size]);
+    }
+}
+
+/// The eyes' sizes the runtime recommended, and that SHARPNESS asked for
+/// (where `render::hold_rate` starts, and stays with HOLD FRAME RATE off).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct EyeSizes {
+    pub recommended: UVec2,
+    pub start: UVec2,
 }
 
 /// What the controllers are, and the first time each control is used: so
