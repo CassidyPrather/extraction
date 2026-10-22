@@ -494,7 +494,15 @@ pub(super) fn direct_raid(
                 overhead
                     .then(|| under_a_roof(view.entrances.as_deref(), here))
                     .flatten()
-                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from))
+                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
+            }
+            // "Move, low, to other cover": not the cover it saw you at.
+            First::ComingToLook if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = now + 12.0;
+                }
+                run_for_cover(&world.zone, here, from, 10.0)
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1098,7 +1106,8 @@ fn under_a_roof(
     ])
 }
 
-fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task> {
+/// `leave`: other cover than what's within this of here (where it saw you).
+fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) -> Vec<Task> {
     // Round the far side of something solid (not into trees: a look goes
     // between the trunks).
     let cover = zone
@@ -1106,7 +1115,7 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task>
         .placements
         .iter()
         .map(|b| Vec2::from(b.at))
-        .filter(|b| b.distance(here) < 60.0)
+        .filter(|b| b.distance(here) < 60.0 && b.distance(here) > leave)
         .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
     let to = match cover {
         Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
@@ -1285,7 +1294,7 @@ pub(super) fn first_fight(
         (kind == "drone")
             .then(|| under_a_roof(entrances.as_deref(), here))
             .flatten()
-            .unwrap_or_else(|| run_for_cover(&zone, here, from))
+            .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);

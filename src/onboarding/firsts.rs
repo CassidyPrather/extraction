@@ -62,6 +62,9 @@ pub enum First {
     Hush,
     /// Home with a job on the card: it's paid when the card is pressed.
     Payday,
+    /// A machine that was shooting at you lost you, and is coming to where
+    /// it last saw you: that spot is the worst place to be.
+    ComingToLook,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -111,6 +114,7 @@ pub const ALL: &[First] = &[
     First::Sentry,
     First::Hush,
     First::Payday,
+    First::ComingToLook,
 ];
 
 impl First {
@@ -137,6 +141,7 @@ impl First {
                 | First::Aimed
                 | First::Sentry
                 | First::Hush
+                | First::ComingToLook
         )
     }
 
@@ -194,6 +199,9 @@ impl First {
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
             First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            First::ComingToLook => {
+                &["Truck: \"Move, low, to other cover. It's coming where it saw you.\""]
+            }
         }
     }
 }
@@ -356,17 +364,28 @@ fn robots_heard(
     mut looking: MessageReader<crate::robots::search::Investigating>,
     mut noticed: MessageReader<crate::robots::Noticed>,
     mut lost: MessageReader<crate::robots::search::LostYou>,
-    minds: Query<&Awareness>,
+    minds: Query<(Entity, &Awareness, Option<&crate::robots::Brain>)>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    mut hunting: Local<std::collections::HashSet<Entity>>,
     mut m: Meet,
 ) {
     let Some((me, at)) = locals.iter().next() else {
         return;
     };
-    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
-    let robots: Vec<Entity> = looking
-        .read()
-        .map(|e| e.robot)
+    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|(_, a, _)| a.target == Some(me));
+    let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
+    // Gone from shooting at you to coming to look.
+    if looked.iter().any(|r| hunting.contains(r) && about_me(*r)) {
+        m.meet(First::ComingToLook);
+    }
+    hunting.retain(|r| minds.contains(*r));
+    for (e, a, brain) in &minds {
+        if a.target == Some(me) && matches!(brain, Some(crate::robots::Brain::Engage)) {
+            hunting.insert(e);
+        }
+    }
+    let robots: Vec<Entity> = looked
+        .into_iter()
         .chain(noticed.read().map(|e| e.robot))
         .collect();
     if robots.into_iter().any(about_me) {
