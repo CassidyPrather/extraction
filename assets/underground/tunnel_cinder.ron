@@ -89,6 +89,8 @@
     live: Some((room: "overflow", isolator: ("switch_room", (-2.75, -1.5), 90.0))),
     // Over every kiosk's door: what's down there.
     sign: Some("CINDER WORKS SERVICE TUNNEL\nDANGER - LIVE CABLES"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.4),
     portals: [
         (),
         (at: (10.0, 53.0), rot: 180.0, y: 0.0),

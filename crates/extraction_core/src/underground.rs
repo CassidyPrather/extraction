@@ -311,6 +311,16 @@ pub struct Layout {
     /// The site seals itself once its power's on.
     #[serde(default)]
     pub lockdown: Option<LockdownDef>,
+    /// What's down there, as a raider reads a region's richness (0.6 a
+    /// picked-over village to 1.7 the richest): from its loot's tables, not
+    /// the surface it lies under. None: the region's.
+    #[serde(default)]
+    pub rich: Option<f32>,
+    /// Its entrance kiosk stands under cover from the danger of the region
+    /// above (beside a building, out of the yard): a raider can go down
+    /// without crossing the open.
+    #[serde(default)]
+    pub covered_entry: bool,
     /// Stencilled over every kiosk's door (a line per `\n`): what's down
     /// there, and what to mind. A kiosk with a `facade` has its own.
     #[serde(default)]

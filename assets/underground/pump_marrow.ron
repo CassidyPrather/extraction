@@ -85,6 +85,8 @@
     crawlers: 1,
     // Over every kiosk's door: what's down there.
     sign: Some("MARROW WATER BOARD\nPUMP STATION - KEEP CLEAR"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.3),
     portals: [
         (),
         // The outfall stair, from the pump hall up to the river bank.

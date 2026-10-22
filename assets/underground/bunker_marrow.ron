@@ -106,6 +106,8 @@
     lockdown: Some((after: 20.0, room: "hall", doors: ["lock", "decon"], out: "escape")),
     // Over every kiosk's door: what's down there.
     sign: Some("CIVIL DEFENCE\nPUBLIC SHELTER No. 4"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.2),
     portals: [
         (),
         (at: (0.0, 60.0), rot: 180.0, y: 0.6),
