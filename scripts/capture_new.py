@@ -38,10 +38,12 @@ PAIRS = {
     "n_wreck_uaz": "The same, on the UAZ.",
     "n_far_band": "The sky was fogged only in a fixed band near the horizon, so the far trees stood pale against clear cloud like cards. Now the sky fogs as the scene does.",
 }
+# Reels: caption, and the part of each frame to show (fractions of its
+# width and height: the robots, without the player's hands at the bottom).
 REELS = {
-    "tells_dusk": "Damage you can read at 24-36 m, at dusk: a walker on a shot leg, one with its eye shot dark, one with its core failing, and a drone with a rotor hit",
-    "tells_day": "The same by day",
-    "snow_prints": "A walker leaving prints in the lying snow at Rime Fell's col",
+    "tells_dusk": ("Damage you can read at 24-36 m, at dusk: a walker on a shot leg, one with its eye shot dark, one with its core failing, and a drone with a rotor hit", (0.34, 0.34, 0.66, 0.52)),
+    "tells_day": ("The same by day", (0.34, 0.34, 0.66, 0.52)),
+    "snow_prints": ("A walker leaving prints in the lying snow at Rime Fell's col", (0.25, 0.2, 1.0, 0.75)),
 }
 
 
@@ -68,9 +70,15 @@ def labelled_pair(before, after, dst, width=WIDTH):
     sheet.save(dst, quality=86)
 
 
-def reel_sheet(frames, dst, cols=4, width=WIDTH):
+def reel_sheet(frames, dst, crop=None, cols=3, width=WIDTH):
     w = width // cols
     ims = [Image.open(f).convert("RGB") for f in frames]
+    if crop:
+        ims = [
+            im.crop((int(crop[0] * im.width), int(crop[1] * im.height),
+                     int(crop[2] * im.width), int(crop[3] * im.height)))
+            for im in ims
+        ]
     ims = [im.resize((w, im.height * w // im.width)) for im in ims]
     rows = (len(ims) + cols - 1) // cols
     h = ims[0].height
@@ -113,7 +121,7 @@ def main(argv):
     before = os.path.join(shots, "before")
     rime, new_views, pairs = [], [], []
     for m in sorted(os.listdir(after)) if os.path.isdir(after) else []:
-        for mood in ("day", "night"):
+        for mood in ("day", "clear", "night"):
             mdir = os.path.join(after, m, mood)
             if not os.path.isdir(mdir):
                 continue
@@ -149,8 +157,9 @@ def main(argv):
         )
         if not frames:
             continue
-        reel_sheet(frames, os.path.join(gallery, f"reel_{name}.jpg"))
-        items.append((REELS.get(name, name), f"reel_{name}.jpg", None))
+        caption, crop = REELS.get(name, (name, None))
+        reel_sheet(frames, os.path.join(gallery, f"reel_{name}.jpg"), crop)
+        items.append((caption, f"reel_{name}.jpg", None))
     if items:
         sections.append(("Machines in motion", "Frame sequences, read left to right, top to bottom.", items))
 
