@@ -84,6 +84,18 @@ pub const PERSONAS: [Persona; 5] = [
     },
 ];
 
+/// A newcomer by name ("cautious", "reckless", "lost", "hoarder",
+/// "one-handed"), for other bots that want one's ways.
+pub fn named(name: &str) -> Option<&'static Persona> {
+    PERSONAS.iter().find(|p| p.name == name)
+}
+
+/// How `p` goes on foot: (sprinting, crouched). Out in the Zone the
+/// cautious one creeps; anyone runs when told to run for it (`fleeing`).
+pub fn gait(p: &Persona, fleeing: bool) -> (bool, bool) {
+    (p.sprint || fleeing, p.reads && !fleeing)
+}
+
 /// This session's newcomer (`--personality NAME`), in a first-hour run.
 pub fn current(opts: &LaunchOptions) -> Option<&'static Persona> {
     if !matches!(opts.scenario.as_deref(), Some(YARD | RAID)) {
