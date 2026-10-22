@@ -858,18 +858,19 @@ pub fn prefab_lift(id: &str) -> f32 {
     (prefab_foundation(id) - 0.4).clamp(0.0, 0.9)
 }
 
-/// How far a drowned building's silt bank runs out from its front wall at
+/// How far a drowned house's silt bank runs out from its front wall at
 /// most (m): sloped gently enough for a body to walk up it at a slant,
 /// from the silt at the sills down to the lowest the ground in front can
 /// be ([`prefab_lift`]). Above the ground only where the ground falls away.
+/// (The drowned chapel's sills stand higher: its bank is short.)
 pub const SILT_BANK_REACH: f32 = 6.6;
 
-/// Radius around a placement kept free of trees: a drowned building's
-/// out over its silt bank.
+/// Radius around a placement kept free of trees: a drowned house's out
+/// over its silt bank.
 pub fn prefab_clearance(id: &str) -> f32 {
     let [w, _, d] = prefab_footprint(id);
     let r = (w.max(d) * 0.5 + 4.0).max(6.0);
-    if id.ends_with("_drowned") {
+    if id.ends_with("_drowned") && prefab_base(id) != "chapel" {
         r.max(d * 0.5 + SILT_BANK_REACH + 1.0)
     } else {
         r
