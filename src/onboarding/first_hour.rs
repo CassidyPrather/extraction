@@ -437,6 +437,8 @@ pub(super) struct Newcomer {
     done_home: Option<u32>,
     /// Keeping low till then (backing off behind cover).
     low_until: f32,
+    /// When it last did as a machine's tell says (not more than every 15 s).
+    tell_at: f32,
     /// What the job asks.
     errand: Option<Errand>,
     /// Getting what it brought into the crate.
@@ -557,6 +559,8 @@ pub(super) fn direct_raid(
     mut fight: Option<ResMut<Fight>>,
     mut state: Local<Newcomer>,
     crates: crate::bot::crating::CrateWorld,
+    mut tells: Tells,
+    minds: Query<&crate::robots::Awareness>,
     time: Res<Time>,
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -592,8 +596,49 @@ pub(super) fn direct_raid(
         }
     }
     state.showing = showing;
-    for FirstMet(f) in met.read() {
-        state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
+    // The first time, what the driver says; after, the machine's own tell
+    // (the chirp, the gun settling): a newcomer who's learned what one
+    // means keeps doing as told.
+    let firsts: Vec<First> = met.read().map(|m| m.0).collect();
+    let on_me = |r: Entity| minds.get(r).is_ok_and(|a| a.target == Some(player));
+    let mut again: Vec<First> = vec![];
+    if tells.locks.read().any(|ev| on_me(ev.drone)) {
+        again.push(First::DroneLock);
+    }
+    if tells.aims.read().any(|ev| on_me(ev.walker)) {
+        again.push(First::Aimed);
+    }
+    if tells.sentries.read().any(|ev| {
+        ev.what == crate::robots::sentry::SentryAct::Chirp && ev.at.xz().distance(here) < 60.0
+    }) {
+        again.push(First::Sentry);
+    }
+    if !again.is_empty() {
+        // Warned: by the machine itself.
+        state.said_at = now;
+    }
+    again.retain(|f| !firsts.contains(f));
+    again.truncate(1);
+    if now - state.tell_at < 15.0 {
+        again.clear();
+    }
+    if !again.is_empty() {
+        state.tell_at = now;
+    }
+    let moments = firsts
+        .into_iter()
+        .map(|f| (f, true))
+        .chain(again.into_iter().map(|f| (f, false)));
+    for (f, first) in moments {
+        if first {
+            state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
+        } else {
+            state.note(
+                now,
+                Kind::Learned,
+                format!("{f:?} again: as the driver said before"),
+            );
+        }
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
@@ -611,7 +656,7 @@ pub(super) fn direct_raid(
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = now + 12.0;
                 }
-                let overhead = *f == First::DroneLock;
+                let overhead = f == First::DroneLock;
                 overhead
                     .then(|| under_a_roof(view.entrances.as_deref(), here))
                     .flatten()
@@ -867,7 +912,7 @@ pub(super) fn direct_raid(
                     None => missing.push(id),
                 }
             }
-            if !missing.is_empty() && state.tries < 8 {
+            if !missing.is_empty() && state.tries < 15 {
                 // Still coming through the hatch, perhaps: a moment.
                 state.tries += 1;
                 tasks.push(Task::Wait(2.0));
@@ -1132,15 +1177,30 @@ pub(super) fn direct_raid(
                             world.owners.get(s.socket).is_ok_and(|o| o.0 == player)
                         })
                 });
-                match radio {
-                    Some((e, ..)) => tasks.extend([
+                // ...or in its pack: pulled round, out, put back.
+                let in_pack = carried(&world, &view, player, "radio")
+                    .into_iter()
+                    .find(|e| world.items.get(*e).is_ok_and(|(.., bag)| bag.is_some()));
+                match (radio, in_pack) {
+                    (Some((e, ..)), _) => tasks.extend([
                         Task::Stow(Side::Left),
                         Task::Grab {
                             item: e,
                             side: Side::Left,
                         },
                     ]),
-                    None => {
+                    (None, Some(e)) => tasks.extend([
+                        Task::Stow(Side::Left),
+                        Task::ToggleBackpack,
+                        Task::Wait(0.6),
+                        Task::GrabFromHere {
+                            item: e,
+                            side: Side::Left,
+                        },
+                        Task::ToggleBackpack,
+                        Task::Wait(0.5),
+                    ]),
+                    (None, None) => {
                         state.note(now, Kind::Confused, "no radio to call the truck with");
                         state.leg = Leg::Done;
                     }
@@ -1353,8 +1413,6 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
-/// Into cover from a machine at `from`: round the far side of the nearest
-/// building within a sprint, or, in the open, hard across its line.
 /// Something above you: in under a roof, through the nearest door, if one's
 /// within a sprint (trees hide nobody from overhead: only their trunks stop
 /// a look).
@@ -1413,6 +1471,8 @@ fn under_a_roof(
     ])
 }
 
+/// Into cover from a machine at `from`: round the far side of the nearest
+/// building within a sprint, or, in the open, hard across its line.
 /// `leave` > 0: it saw you here, and is coming to look. Back off from it,
 /// keeping this cover between you: to the next cover that way, or straight
 /// back.
