@@ -253,8 +253,6 @@ pub fn gifts(u: Upgrade) -> &'static [(&'static str, u32, f32)] {
     match u {
         // The end of the second tier: the driver's own old carbine.
         Upgrade::BenchVice => &[
-            // And a saw for the vice (`weapons::gunsmith`).
-            ("hacksaw", 1, 1.0),
             ("sks", 1, 0.6),
             ("sks_clip", 2, 1.0),
             ("ammo_762x39", 1, 1.0),
