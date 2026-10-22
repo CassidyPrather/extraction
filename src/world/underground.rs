@@ -16,8 +16,8 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::underground::{
-    self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
-    STAIR_TOP, Stair, Style, TREAD, WALL,
+    self as ug, APRON, CEILING_RUN, Cell, KIOSK, KIOSK_FLOOR, Layout, PropKind, Raster, SLAB,
+    STAIR_HALF, STAIR_TOP, Stair, Style, TREAD, WALL,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -1288,6 +1288,7 @@ impl Plugin for UndergroundPlugin {
             Update,
             (
                 register_residents,
+                hang_signs,
                 wire_power,
                 throw_switches.after(wire_power),
                 generator_hum,
@@ -1341,6 +1342,94 @@ impl SitePower {
     /// The stage its next switch turns on, if any are still off.
     pub fn next(&self) -> Option<usize> {
         self.stages.iter().position(|s| !s.on)
+    }
+}
+
+/// The lamp over a kiosk's door (client: its light).
+#[derive(Component, Debug)]
+pub struct DoorLamp;
+
+/// What's over a kiosk's door, in the portal's own frame: the sign's
+/// centre and the lamp's (its ground at 0).
+fn over_door(top: f32) -> (Vec3, Vec3) {
+    let face = -KIOSK[1] - WALL * 0.5;
+    (
+        Vec3::new(0.0, top + 2.3, face - 0.02),
+        Vec3::new(0.0, top + 2.05, face - 0.12),
+    )
+}
+
+/// As sites are built: over every kiosk's door (bar one with a front of
+/// its own) the layout's sign, stencilled, and a lamp, so a site says
+/// from the surface what's down there.
+fn hang_signs(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+) {
+    for (site, b) in &buildings {
+        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+            continue;
+        };
+        for p in &r.portals {
+            if p.facade.is_some() {
+                continue;
+            }
+            let rot = Quat::from_rotation_y(-p.rot.to_radians());
+            let (sign, lamp) = over_door(KIOSK_FLOOR);
+            let place = |q: Vec3| {
+                let xz = p.to_site([q.x, q.z]);
+                Vec3::new(xz[0], p.y + q.y, xz[1])
+            };
+            if let Some(text) = &l.sign {
+                commands.spawn((
+                    Name::new("Site sign"),
+                    crate::raid::bench::ScreenText {
+                        text: text.clone(),
+                        size: Vec2::new(1.1, 0.32),
+                        style: crate::raid::bench::ScreenStyle::Card,
+                    },
+                    Transform::from_translation(place(sign))
+                        .with_rotation(rot * Quat::from_rotation_y(std::f32::consts::PI)),
+                    Visibility::default(),
+                    ChildOf(site),
+                ));
+            }
+            commands.spawn((
+                Name::new("Door lamp"),
+                DoorLamp,
+                Transform::from_translation(place(lamp)),
+                Visibility::default(),
+                ChildOf(site),
+            ));
+        }
+    }
+}
+
+/// Client: a kiosk's door lamp, a dim warm bulkhead light: the way down
+/// shows from across the valley at night.
+fn light_door_lamps(
+    mut commands: Commands,
+    lamps: Query<Entity, Added<DoorLamp>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for e in &lamps {
+        commands.entity(e).insert((
+            PointLight {
+                color: Color::srgb(1.0, 0.8, 0.55),
+                intensity: 6_000.0,
+                range: 7.0,
+                radius: 0.04,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Mesh3d(meshes.add(Sphere::new(0.06))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: GLOW,
+                ..default()
+            })),
+        ));
     }
 }
 
@@ -1957,6 +2046,7 @@ impl Plugin for UndergroundVisualsPlugin {
             Update,
             (
                 light_lamps,
+                light_door_lamps,
                 flicker,
                 torch,
                 near_doors_only,
@@ -3530,7 +3620,7 @@ mod tests {
             .collect();
         assert!(!held.is_empty(), "{id}: a door on its power");
         let dark = lamps(&vr);
-        let mut press = |vr: &mut crate::vr_harness::Vr| {
+        let press = |vr: &mut crate::vr_harness::Vr| {
             vr.app.world_mut().write_message(InteractEvent::Pressed {
                 item: switch,
                 player,

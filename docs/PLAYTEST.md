@@ -234,6 +234,16 @@ What changed, and worth a comment each:
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
   and how it feels.
+- **Holding the frame rate.** The eyes now render less when the GPU runs
+  late and more when it has room. It stays between the size where text
+  still reads and the headset's full size. The **HOLD FRAME RATE** card,
+  under SMOOTHING on the truck wall, turns it off (or start with
+  `--hold-rate 0`); then the eyes keep the SHARPNESS size. Tell me:
+  - whether you ever notice the view going soft or sharp, especially when
+    the response team arrives and in the Surge, where it should drop;
+  - whether it ever pumps (soft, sharp, soft) while nothing's happening.
+
+  The report has the eyes' size frame by frame.
 - **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
   the dearest per-eye cost the software renderer can measure; only the
   headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
@@ -501,6 +511,32 @@ said you don't use?
     far side?
   - Graze a wreck's flank or a sheet wall: does the whine and the streak
     read as a ricochet?
+- The shot as a sound.
+  - Fire the AK in a valley and on open ground with a drone overhead:
+    does it come to the right place in the open and cast about in the
+    valley?
+  - Put the PBS on, load the green-tipped subsonic box, and shoot from
+    cover: does the quiet feel earned?
+  - Fire across a walker's front from far off, suppressed: does it go
+    looking downrange instead of at you?
+  - Pack a food tin into a suppressor at the vice: is the wear on it
+    (louder by the magazine) clear enough?
+- Gunsmithing at the vice (once the driver has fitted it).
+  - Let a Mosin go at the vice's jaws: does it sit as if clamped?
+  - Saw its barrel off with the hacksaw: does the stroke feel like
+    sawing, and is a minute's work right?
+  - Fire the obrez: is the flash and the noise worth what it costs in
+    accuracy, and is it handier in a room?
+  - Take an AK's stock off with the spanner and put it back on.
+  - Draw a Mosin's bolt out past its stop and put it in another Mosin.
+- Reading a gun without a screen.
+  - Pick up a Mosin: can you tell from its cocking piece whether it's
+    cocked?
+  - Press-check an AK (draw the handle back a little): do you see the
+    round?
+  - Heft a full and an empty AK magazine: can you tell them apart?
+  - Hold a worn-out gun next to a new one: does the rust read, and does
+    its action drag?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -655,6 +691,7 @@ pump?
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
 | `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
+| `--hold-rate 0` | The eyes keep the SHARPNESS size instead of following the GPU's time |
 | `--report` | Write the report zip (above) and quit: no window or headset needed |
 | `--detail 0.5` | Less grass, fewer field stones, shorter shadows (0.25 to 1; 1 is the default). Try it if the frames log says the 1% figure is over 11 ms |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
@@ -662,9 +699,9 @@ pump?
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
-| `--weather NAME` | `drizzle`, `fog`, `downpour`, `storm` (a downpour with lightning), `clearing` |
+| `--weather NAME` | `drizzle` (or `rain`), `fog`, `downpour`, `storm` (a downpour with lightning), `clearing`; anything else stops with an error |
 | `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |
-| `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--hour NAME` | `dawn`, `day`, `dusk`, `night`, or a clock hour (`23`, `5:30`): dawn from 5, day from 7, dusk from 18, night from 21; anything else stops with an error |
 | `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |

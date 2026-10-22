@@ -203,6 +203,27 @@ impl Task {
     }
 }
 
+/// Waypoints on a circle of `r` round `centre` that take a walk from
+/// `from` to `to` round it rather than across it (none when the straight
+/// line keeps clear).
+pub fn round_about(from: Vec2, to: Vec2, centre: Vec2, r: f32) -> Vec<Vec2> {
+    let d = to - from;
+    let t = ((centre - from).dot(d) / d.length_squared().max(1e-6)).clamp(0.0, 1.0);
+    if (from + d * t).distance(centre) >= r - 0.5 {
+        return Vec::new();
+    }
+    let a0 = (from - centre).to_angle();
+    let a1 = (to - centre).to_angle();
+    let turn =
+        (a1 - a0 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    // A waypoint every radian or less of the way round.
+    let steps = turn.abs().ceil().max(1.0) as usize;
+    (1..=steps)
+        .map(|k| centre + Vec2::from_angle(a0 + turn * k as f32 / steps as f32) * r)
+        .filter(|p| p.distance(to) > 0.8)
+        .collect()
+}
+
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
 /// How high over its feet a standing bot's hand gets, arm up: what's higher
@@ -828,8 +849,20 @@ fn run_tasks(
                 if inside {
                     bot.note(format!("left {item}: still in the anomaly"));
                     bot.next();
-                } else if let Some(front) = bot.tasks.front_mut() {
+                    continue;
+                }
+                if let Some(front) = bot.tasks.front_mut() {
                     *front = Task::Grab { item, side };
+                }
+                // Round the anomaly to it, never across.
+                if let Ok((gt, _)) = ext.placed.get(item) {
+                    let to = gt.translation().xz();
+                    for p in round_about(pos, to, clear_of.xz(), radius + 1.0)
+                        .into_iter()
+                        .rev()
+                    {
+                        bot.tasks.push_front(Task::WalkTo { to: p, within: 0.6 });
+                    }
                 }
                 continue;
             }
@@ -1664,5 +1697,29 @@ fn run_tasks(
             }
         }
         let _ = &mags;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A walk to the far side of an anomaly goes round it; one that keeps
+    /// clear goes straight.
+    #[test]
+    fn a_walk_goes_round_an_anomaly_not_across() {
+        let c = Vec2::ZERO;
+        let way = round_about(Vec2::new(5.0, 0.0), Vec2::new(-5.0, 0.3), c, 3.0);
+        assert!(!way.is_empty());
+        let mut at = Vec2::new(5.0, 0.0);
+        for p in way.iter().chain([&Vec2::new(-5.0, 0.3)]) {
+            // Each leg keeps out of the 2 m that burns.
+            for k in 0..=10 {
+                let q = at.lerp(*p, k as f32 / 10.0);
+                assert!(q.distance(c) > 2.0, "{q} crosses it");
+            }
+            at = *p;
+        }
+        assert!(round_about(Vec2::new(5.0, 0.0), Vec2::new(5.0, 6.0), c, 3.0).is_empty());
     }
 }

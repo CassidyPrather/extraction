@@ -9,11 +9,13 @@ pub mod budget;
 pub mod cards;
 pub mod comfort;
 pub mod cpu;
+pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
+pub mod hold_rate;
 pub mod kit;
 pub mod kitchen;
 pub mod landmarks;
@@ -28,12 +30,14 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
+pub mod rv_beacons;
 pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
 pub mod tells;
 pub mod terrain_material;
+pub mod textures;
 pub mod timeline;
 pub mod tools;
 pub mod upgrades;
@@ -82,12 +86,15 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::PreloadPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
+        .add_plugins(hold_rate::HoldRatePlugin)
+        .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)

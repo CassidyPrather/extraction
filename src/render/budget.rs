@@ -1143,11 +1143,16 @@ pub(crate) mod tests {
                     Some(n) => bevy::app::TaskPoolPlugin {
                         task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
                     },
-                    None => bevy::app::TaskPoolPlugin::default(),
+                    None => crate::task_pools(),
                 })
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),
         );
+        // BC formats, as the game's GPUs have: the baked textures load as
+        // they ship (`render::textures`), and never reach a GPU here.
+        app.insert_resource(bevy::image::CompressedImageFormatSupport(
+            bevy::image::CompressedImageFormats::BC,
+        ));
         app.insert_resource(crate::LaunchOptions {
             flat: true,
             map: map.into(),
@@ -2068,7 +2073,9 @@ fn log_counts(
     last.1 = names;
 }
 
-/// A line a frame, `frame cpu_ms gpu_ms`, after `# map <valley>`, with
+/// A line a frame, `frame cpu_ms gpu_ms eye_scale` (the eyes' width as a
+/// share of the runtime's recommended, `render::hold_rate`; -1 with no
+/// headset), after `# map <valley>`, with
 /// `# world in` once `timeline::WorldReady` (the frames before it are the
 /// load's). Every real session writes `<data dir>/logs/frames-<when>-
 /// <valley>.txt` (the newest ten kept); `EXTRACTION_FRAMELOG=<path>` writes
@@ -2129,44 +2136,57 @@ impl FrameLog {
     }
 }
 
+/// The GPU's milliseconds for the newest frame whose timestamps came back
+/// since `seen` (top-level render passes summed), if any did.
+pub(crate) fn newest_gpu_ms(
+    store: &bevy::diagnostic::DiagnosticsStore,
+    seen: &mut Option<std::time::Instant>,
+) -> Option<f64> {
+    let mut sum = 0.0;
+    let mut any = false;
+    let mut newest = *seen;
+    for d in store.iter() {
+        let path = d.path().as_str();
+        let Some(pass) = path
+            .strip_prefix("render/")
+            .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+        else {
+            continue;
+        };
+        // Top-level passes only (nested ones are inside them).
+        if pass.contains('/') {
+            continue;
+        }
+        if let Some(m) = d.measurement() {
+            if seen.is_none_or(|s| m.time > s) {
+                sum += m.value;
+                any = true;
+                newest = newest.max(Some(m.time));
+            }
+        }
+    }
+    *seen = newest;
+    any.then_some(sum)
+}
+
 fn log_each_frame(
     time: Res<Time<Real>>,
     store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
     mut log: ResMut<FrameLog>,
     world: crate::render::timeline::WorldReady,
+    eyes: Option<Res<crate::render::hold_rate::EyeRect>>,
 ) {
     use std::io::Write;
     let cpu = time.delta_secs_f64() * 1000.0;
-    let mut gpu = -1.0;
-    let mut newest = log.seen;
-    if let Some(store) = &store {
-        let mut sum = 0.0;
-        let mut any = false;
-        for d in store.iter() {
-            let path = d.path().as_str();
-            let Some(pass) = path
-                .strip_prefix("render/")
-                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
-            else {
-                continue;
-            };
-            // Top-level passes only (nested ones are inside them).
-            if pass.contains('/') {
-                continue;
-            }
-            if let Some(m) = d.measurement() {
-                if log.seen.is_none_or(|s| m.time > s) {
-                    sum += m.value;
-                    any = true;
-                    newest = newest.max(Some(m.time));
-                }
-            }
-        }
-        if any {
-            gpu = sum;
-        }
-    }
-    log.seen = newest;
+    let mut seen = log.seen;
+    let gpu = store
+        .as_deref()
+        .and_then(|s| newest_gpu_ms(s, &mut seen))
+        .unwrap_or(-1.0);
+    log.seen = seen;
+    // The eyes' width as a share of the runtime's recommended (-1: no
+    // headset).
+    let scale = eyes.map_or(-1.0, |e| e.scale);
     log.frame += 1;
     let frame = log.frame;
     let world_in = !log.world_in && world.ready();
@@ -2175,7 +2195,7 @@ fn log_each_frame(
         if world_in {
             let _ = writeln!(out, "# world in");
         }
-        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3}");
+        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3} {scale:.3}");
         if frame % 90 == 0 {
             let _ = out.flush();
         }

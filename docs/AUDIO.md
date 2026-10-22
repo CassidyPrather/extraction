@@ -532,6 +532,119 @@ measures the cues on that output:
 | Front/back | 4–10 kHz over 0.5–3 kHz, ahead minus behind | ≥ 2.5 dB | 4.0 dB | 6.3 dB |
 | Up | the same, above minus ahead | ≥ 2.0 dB | 3.7 dB | 2.7 dB |
 
+### Finding a threat by ear
+
+Hearing that a drone is near is not enough: you have to find it. The
+localisation pass (`scripts/audio_localise.py`, run by the audit) takes
+each threat's own sound: the drone's rotor, a walker's footfall, a
+sentry's chirp, and the crawler's feet and its charging spark gun. It
+plays one second of it, at the ranges where the threat matters, with the
+distance muffle and any filter of its own, through the head-related
+responses on a grid of bearings and elevations
+(`audio::tests::localisation_grid` writes them). It then asks for three
+cues:
+
+- **Side**: a source at 90° must be either 3 dB louder in the near ear
+  or at least 300 µs earlier there.
+- **Front/back**: ahead must be at least 2 dB brighter than the mirror
+  bearing behind (4-10 kHz over 0.5-2 kHz, at 0/180° and 30/150°).
+  60/120° isn't asked: so near the ears' axis the responses themselves
+  barely differ. The reference stops at 2 kHz because our responses are
+  already 3 dB brighter ahead from 2 kHz up. Measured against 0.5-3 kHz,
+  the drone's rotor, whose low band sits there, read as no brighter ahead
+  than behind.
+- **Above** (the drone): at least 2 dB brighter overhead than level.
+
+It found two gaps, both fixed:
+
+1. **Past 40 m everything was panned** (`BINAURAL_REACH`), and the panner
+   gives a level difference only. A drone at 60 m was no more ahead than
+   behind, nor above. Signals (threats) now keep the ears' filter to
+   `SIGNAL_BINAURAL_REACH` (150 m, `audio::binaural_reach`). Details
+   still pan past 40 m, which keeps the voices (`HRTF_VOICES`) for what
+   matters.
+2. **Flat mode (binaural off) had no front/back at all.** The panner now
+   muffles a sound straight behind you to 5 kHz, easing in from the side
+   (`audio::behind_cutoff`, set by `occlude`, with occlusion's own muffle
+   taking the lower of the two). Flat, every threat now reads 9-18 dB
+   brighter ahead. Nothing in flat mode can tell above from level.
+
+In the headset every threat now separates side, front from back by 4-6
+dB, and the drone's height by about 4 dB, at every range measured (to
+100 m for the drone).
+
+## One world, one hearing
+
+What you hear muffled, a robot hears cut short, by the same number.
+`src/hearing.rs` (`HearingPlugin`, headless) builds each building into a
+small graph:
+
+- **Rooms.** The floor is flooded with the doors shut, and whatever reaches
+  the edge is outside. Walls are found at sill, ear and lintel height, as
+  thin, long pieces (a table is thick both ways). Where a cell is walled
+  below and open at ear height, it's a window.
+- **What joins rooms.** A door: open, 3 dB; shut, 5 dB for wood or 8 dB for
+  steel. A wall, by what it's built of (`touch::Stuff`): timber 6.9 dB
+  (the robots' `OCCLUDED`, which anchors the rest), metal 8, brick or
+  stone 10, a window 4.
+- **Room to room.** The loss from every room to every other is solved
+  once, and again only when one of the building's doors moves. Asking is
+  two lookups and a table read.
+- **Storeys, sites and the open.** Each storey up adds a floor (6.9 dB). A
+  site underground reaches the surface by its way out or through the rock
+  (14 dB), whichever is louder. Every site's ways out are its kiosks: the
+  room inside each kiosk's door joins the outside through that door, by
+  its state (or open, under an arch). Out in the open on both ends, a hill on
+  the heightmap or anything `acoustics::blocked` catches (a compound wall,
+  an outcrop, a house between) costs a wall.
+- **One knob.** `WALL_SCALE` moves every wall and door together. It's Robot
+  minds' to tune if indoor stealth swings.
+
+Both ears ask it. `audio::occlude` sets a sound's gain and muffle from
+`Hearing::path`. `robots::senses::perceive` scales a sound's reach by
+`10^(db/20)` from `Hearing::heard`, which also says whether anything beyond
+an open doorway was in the way (for a site's corridor walk).
+`Hearing::smear(at)` is how much a room spreads a robot's guess of where a
+sound came from: 1 in the open, up to 2.5 in a rock gallery, by the room's
+size and how hard its walls are.
+
+**The gauge** (`hearing::gauge::robots_hear_what_you_hear`, on Marrow
+Creek) finds a real walker's hearing threshold: the quietest noise it
+hears through the obstacle, against the same distance in the open. It
+asserts that the walker's loss and the player's agree within a dB:
+
+| Pair | Player | Walker |
+| --- | --- | --- |
+| A house, its door shut (heard by way of its window) | 4.0 dB | 4.0 dB |
+| The same, the door open | 3.0 | 3.0 |
+| The ranger tower's cabin, from the ground below | 4.0 | 4.0 |
+| The bunker's deepest room, from the surface over it (its doors shut: the rock is quieter) | 14.0 | 14.0 |
+| The bunker's way in (inside its kiosk), from the ground at its mouth, its steel door shut | 8.0 | 8.0 |
+| The same, the door open | 3.0 | 3.0 |
+
+## Hands on the machines
+
+`src/audio_fight.rs` (`FightSoundsPlugin`) and `audio::hit_sounds`:
+
+| What | Sound |
+| --- | --- |
+| A blow: a crowbar, a knife, a stock (an `Impact` slower than `BLOW_SPEED`, 40 m/s, which no round is) | `hit.blow`: what it struck, slowed (0.75-0.8) and duller than a round's hit, 12 dB down at `BLUNT_MIN` (2.5 m/s) to the cue's level at 10 m/s (`audio::blow_db`). Steel struck hard (over 6 m/s, a robot's panel) rings with `hit.blow_ring`, a clank under it. Until now a blow played a round's ping 12 dB down |
+| A palm shoving a robot (`interact::fight::Shoved`) | `fight.shove`, the flat of the hand on its plate (metal at 0.7), and `fight.stagger`, its servos catching it; 12 dB down at an 8 N·s push to the cue's level at 40 |
+| A robot fighting a grip (`Gripped`) | `fight.strain`, its servos whining against the hand, louder and higher the harder it pulls, every 0.35 s while it does |
+| A robot kicking free (`robots::grip::KickedFree`) | `fight.kick`, a hard clank, and its servos snapping round |
+| The crawler moving (it has no gait message: its speed is read from where it was) | `crawler.step`, many small metal feet (the walker's footfall at 2.2x), pattering every 0.11 s at a run, slower and softer at a creep; heard to 15 m (8 in a downpour) |
+| The crawler's spark gun charging (`robots::indoor::CrawlerCharge`, the tell) | `crawler.charge`, the electric crackle at 0.8, a Signal |
+| Its zap (`CrawlerZap`) | `crawler.zap`, a hard crackle snap at the emitter, and 6 dB down where it lands |
+
+| A held robot torn out of the hand (`interact::fight::TornFree`, a drone thrusting free) | `fight.torn`, metal wrenched (a creak at 1.9x), and `fight.lurch`, the machine whooshing away |
+| A round out through steel, a plank or a wall (`impacts::is_exit`) | the exit's crack, 6 dB under the entry, and `hit.spall`: bits clattering out 0.4 m past the hole (steel's drop at 1.7x, wood's knock at 1.4x, grit at 1.5x) |
+| Winding a dressing round a limb (`first_aid::Winding`) | `aid.wrap`, a short rasp of the bandage at each quarter turn; the tear when it's on is `use.bandage` |
+| Strapping a splint (`Strapping`) | `aid.strap`, a strap pulled tight (velcro) each half second, as the hand feels it; `aid.cinch` as it's on |
+| A bottle's cap twisted (`Capped`) | `aid.cap`, a plastic tick each quarter turn, and `aid.cap_off`, the pop; the swallow is `use.drink` |
+| A hand at an open wound (`wounds::Bloodied` coming on) | `aid.wet`, a wet squelch |
+
+Until now the crawler made no sound except its voice.
+
 ## What the machines say
 
 Every robot that has a mind speaks it (`src/robot_voice.rs`), so you can

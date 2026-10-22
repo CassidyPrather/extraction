@@ -17,9 +17,9 @@ comes too close:
 | You, standing still | 6 m |
 | You, moving | 6 m + 6.5 m per m/s: walking 15 m, sprinting 38 m |
 | You, crouched | 0.6 of that (a crouched creep gets to within 6 m) |
-| A walker or hound | 22 m |
-| A drone | 30 m |
-| The airship | 70 m |
+| A walker or hound | 55 m |
+| A drone | 70 m |
+| The airship | 110 m |
 | A shot or a blast | 0.6 of how far it carries (a rifle: 130 m) |
 
 For a minute and a half after a fright they're warier (1.3 times as far);
@@ -39,7 +39,8 @@ come down one by one. What that tells you:
 - **The Gate's rooks**: machines coming out put them up.
 
 What it tells the machines: a flock *you* flush is heard by robots within
-60 m (`flock::ALARM_REACH`), as a noise from you at the flock (6 m over
+100 m (`flock::ALARM_REACH`: further than a walker would put the birds up
+itself), as a noise from you at the flock (6 m over
 the roof, where the birds are). A robot that hears it comes to look where
 the birds were, not where you are. At most once a minute a flock
 (`ALARM_EVERY`). Flushed by a machine or a shot, they raise no alarm: the
@@ -137,7 +138,7 @@ bolt into the trees and settle somewhere else:
 | - | - | - |
 | You | 20 m standing, 20 + 16 m per m/s moving (walking 42 m), up to 80 | at 0.6 of that, or after 5 s of you still coming |
 | You, crouched | 0.55 of that (a creep at 0.5 m/s: 15 m) | likewise |
-| A walker or hound / drone / the airship | 50 / 45 / 90 m | at 0.6 of that |
+| A walker or hound / drone / the airship | 90 / 80 / 140 m | at 0.6 of that, or after 5 s of it still coming |
 | A shot or a blast | | within 0.7 of its reach |
 
 A run is flat out (10 m/s) for 8 s, then a trot, until whatever it was
@@ -271,12 +272,12 @@ little over life size so they read against the dusk.
 
 `wildlife::insects::Chorus` is how loud the small life round you is, 0
 to 1, for sound to play: crickets at dusk and night, flies and small
-birds by day. Machines hush it (silent within 60 m of a walker, hound or
-the airship and 120 m of a drone, Audio's masking radii, then a ramp out
-to 1.6 times that); a shot or blast, a flock going up or a herd bolting
-within 150 m
-drops it to almost nothing, and it comes back over a minute; rain and
-wind thin it. When the insects stop, something is close.
+birds by day. Machines hush it (silent within 60 m of a walker or hound
+and 120 m of a drone, Audio's masking radii, and 150 m of the airship's
+engines, then a ramp out to twice that); a shot or blast, a flock going
+up or a herd bolting within 150 m drops it to almost nothing, and it
+comes back over a minute; wind thins it, a drizzle barely (`1 - rain²`),
+a downpour stops it. When the insects stop, something is close.
 
 ## Checks
 
@@ -372,8 +373,9 @@ seeds, four a valley:
 
 Extraction 7 of 16 with, 8 of 16 without; raid times the same. Bots set
 off a flock every minute or so and raise the alarm once or twice a raid,
-but no robot was ever sent by birds: a robot has to be within 60 m of the
-flock you put up, and a careful raider isn't. Engagements went up in
+but no robot was ever sent by birds: a robot had to be within 60 m of the
+flock you put up (the reach then; 100 m now, and still none sent in the
+warning runs below), and a careful raider isn't. Engagements went up in
 three valleys and down in one, so Cinder Works (26 against 13) was run
 again at eight raids each way, logging the dogs' barks too:
 
@@ -385,3 +387,45 @@ again at eight raids each way, logging the dogs' barks too:
 The difference was noise. The animals don't change how raids go for a
 careful bot; they change what a player can read, and what a careless one
 pays for.
+
+## Warning
+
+The other way round: the valley tells you a machine is coming before it
+can see you. `wildlife::warning` (a sim gauge; nothing in play) logs an
+**approach** whenever a moving robot first has a clear line from its eye
+to your head inside its own sight (walker 75 m, drone 90, airship 170),
+after 20 s without one, having come at least 10 m meanwhile (it came to
+you, not you to it; machines arriving together are one). It was
+**warned** if 5 to 120 s before it gave a cue you could read: a flock it
+put up within 150 m of you, a herd it put to flight within 120 m, or the
+chorus round you cut by it to 0.6 or less while it would otherwise be
+singing (0.5 or more, the machine aside: not after a fright, not in a
+downpour). Underground, there's nothing to tell, and those are left out.
+`scripts/wildlife_warning.py target/sim/warning/*/` adds runs up.
+
+The first pass (three raids a valley, 6-minute plans) found 0-13% of
+approaches warned: flocks went up for a walker at 22 m and herds fled at
+30, far inside what the machines see, drizzle (the game's commonest
+weather) thinned the chorus to 0.65 of itself, the hush was off by 1.6x
+a walker's 60 m (0.6 at 82 m, against its 75 m sight), and the airship
+hushed it only within 60 m. So: birds and deer keep further from
+machines (above), a drizzle barely thins the chorus, the hush ramps out
+to twice its radius, and the airship's engines hush it within 150 m.
+Then, on fresh seeds (five raids a valley, seed 21 on):
+
+| Valley | Approaches | Warned | Where the wood wasn't already silent | Median lead (s) | Cues |
+| - | - | - | - | - | - |
+| Marrow Creek | 32 | 38% | 9 of 11 | 14 | hush 11, flush 2 |
+| Kettle Pass | 25 | 52% | 5 of 5 | 18 | hush 12, flush 1 |
+| Cinder Works | 11 | 36% | 3 of 3 | 11 | hush 4, flush 1 |
+| Sallow Reservoir | 18 | 56% | 6 of 7 | 12 | hush 10 |
+| Rime Fell | 17 | 76% | 7 of 7 | 17 | hush 11, flush 3 |
+
+Where the wood is singing, it warns of nearly every machine (30 of 33).
+The rest come while it's silent, almost always from your own shots (the
+bots fire a lot, and the machines come to the shots): a shot silences the
+wood for half a minute or more, and that's the price of firing. By kind,
+drones are warned least (31-89%: they come fast and high, over the
+flocks), the airship and walkers most. Flocks are a few, on buildings, so
+the chorus carries most of it; birds going up are the cue you see.
+

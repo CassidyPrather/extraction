@@ -112,6 +112,8 @@
     floods: [
         (room: Some("pump_gallery"), depth: 1.2),
     ],
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.6),
     portals: [
         // The intake ramp's kiosk, under a Custodian front.
         (facade: Some("depot_intake_facade")),

@@ -12,9 +12,12 @@
 //!   sinks or swamps the room once the boxes are gone.
 //! - **No outside images**: a model's textures are inside the file, or a
 //!   missing one renders as flat grey.
-//! - **Inside its clearance**: a prefab as drawn reaches no further from
-//!   its footing than the radius the map clears round it, or it stands in
-//!   the trees and rocks the map put just outside.
+//! - **Footprint, clearance and collider agree**: a prefab as drawn and
+//!   as it collides reaches no further from its footing than the radius
+//!   the map clears round it, or it stands in the trees and rocks the map
+//!   put just outside; the clearance is not much bigger than that (it
+//!   costs cover); nothing collides where nothing's drawn; its footprint
+//!   claims no more ground than it stands on.
 //! - **Held together**: every part of a model touches another part or the
 //!   ground; a nail over its loop or a board in mid-air shows from across
 //!   a room.
@@ -171,20 +174,88 @@ pub fn furniture_fits() -> Vec<Fit> {
     out
 }
 
-/// How far each surface prefab reaches from its footing as drawn (its
-/// boxes and models, `fighting::assemble`), against the radius the map
-/// clears round it: (id, reach, clearance), metres.
-pub fn reaches() -> Vec<(&'static str, f32, f32)> {
+/// A prefab's three measures of itself, building-local, metres: what it
+/// draws, what collides, and what the map thinks it is.
+#[derive(Clone, Debug)]
+pub struct Measures {
+    pub id: &'static str,
+    /// Drawn (boxes, gables, cylinders and models): bounds, low then high.
+    pub drawn: (Vec3, Vec3),
+    /// Its compound collider's bounds (`buildings::body`).
+    pub collides: Option<(Vec3, Vec3)>,
+    /// How far from its footing it reaches as drawn, across the ground.
+    pub reach: f32,
+    /// `map::prefab_footprint`.
+    pub footprint: [f32; 3],
+    /// `map::prefab_clearance`.
+    pub clearance: f32,
+}
+
+/// The corners of a piece's shape where it stands.
+fn piece_corners(p: &buildings::Piece) -> [Vec3; 8] {
+    let half = match p.shape {
+        Shape::Box(s) => s * 0.5,
+        Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+        Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+    };
+    let mut out = [Vec3::ZERO; 8];
+    for (k, c) in out.iter_mut().enumerate() {
+        let sign = Vec3::new(
+            if k & 1 == 0 { -1.0 } else { 1.0 },
+            if k & 2 == 0 { -1.0 } else { 1.0 },
+            if k & 4 == 0 { -1.0 } else { 1.0 },
+        );
+        *c = p.at.transform_point(sign * half);
+    }
+    out
+}
+
+fn bounds(points: impl Iterator<Item = Vec3>) -> Option<(Vec3, Vec3)> {
+    points.fold(None, |b, p| match b {
+        None => Some((p, p)),
+        Some((lo, hi)) => Some((lo.min(p), hi.max(p))),
+    })
+}
+
+/// Every surface prefab's [`Measures`].
+pub fn measures() -> Vec<Measures> {
     buildings::PREFABS
         .into_iter()
         .filter_map(|id| {
+            let geo = buildings::prefab(id)?;
             let (faces, _, _) = super::fighting::assemble(id)?;
-            let reach = faces
+            // `assemble` draws the boxes and models; gables and cylinders
+            // are drawn too.
+            let mut replaced = vec![false; geo.pieces.len()];
+            for d in &geo.props {
+                for i in d.pieces.clone() {
+                    replaced[i] = true;
+                }
+            }
+            let shapes: Vec<Vec3> = geo
+                .pieces
                 .iter()
-                .flat_map(|f| f.p)
-                .map(|p| p.x.hypot(p.z))
-                .fold(0.0, f32::max);
-            Some((id, reach, extraction_core::map::prefab_clearance(id)))
+                .zip(&replaced)
+                .filter(|(p, r)| !**r && !matches!(p.shape, Shape::Box(_)))
+                .flat_map(|(p, _)| piece_corners(p))
+                .collect();
+            let drawn: Vec<Vec3> = faces.iter().flat_map(|f| f.p).chain(shapes).collect();
+            let crates = crate::destruction::wood::crate_pieces(&geo);
+            let collides = bounds(
+                geo.pieces
+                    .iter()
+                    .zip(&crates)
+                    .filter(|(p, c)| p.collide && !**c)
+                    .flat_map(|(p, _)| piece_corners(p)),
+            );
+            Some(Measures {
+                id,
+                reach: drawn.iter().map(|p| p.x.hypot(p.z)).fold(0.0, f32::max),
+                drawn: bounds(drawn.into_iter())?,
+                collides,
+                footprint: extraction_core::map::prefab_footprint(id),
+                clearance: extraction_core::map::prefab_clearance(id),
+            })
         })
         .collect()
 }
@@ -307,28 +378,100 @@ mod tests {
         );
     }
 
-    /// Prints each prefab's reach (`-- --nocapture`) and holds it inside
-    /// its clearance. A ropeway's cables run on to the next pylon, over
-    /// whatever is in between.
+    /// Prints each prefab's measures (`-- --nocapture`) and holds them to
+    /// agreeing: what's drawn and what collides inside the map's clearance,
+    /// the clearance not much more than it needs (trees cleared for
+    /// nothing are cover lost), nothing colliding where nothing's drawn,
+    /// and the footprint the map lays out and walks round no bigger than
+    /// what stands on it. A ropeway's cables run on to the next pylon,
+    /// over whatever is in between; they don't collide.
     #[test]
-    fn prefabs_stay_inside_their_clearance() {
-        let all = reaches();
+    fn prefabs_footprint_clearance_and_collider_agree() {
+        let all = measures();
         assert!(all.len() > 30, "only {} prefabs", all.len());
         let mut bad = Vec::new();
-        for (id, reach, clear) in all {
-            println!("{id:<22} reaches {reach:5.1} m, clears {clear:5.1} m");
-            if reach > clear && !id.starts_with("ropeway") {
+        for m in &all {
+            let (lo, hi) = m.drawn;
+            let clear = m.clearance;
+            // (Its collider's box: a corner of it may be open ground.)
+            let solid = m.collides.map_or(0.0, |(a, b)| {
+                [a, b]
+                    .into_iter()
+                    .flat_map(|c| [c.x, c.z])
+                    .map(f32::abs)
+                    .fold(0.0, f32::max)
+            });
+            println!(
+                "{:<22} reaches {:5.1} m drawn, collides {solid:5.1} m out, clears {clear:5.1} m",
+                m.id, m.reach
+            );
+            let cables = m.id.starts_with("ropeway");
+            if m.reach > clear && !cables {
                 bad.push(format!(
-                    "{id}: reaches {reach:.1} m, the map clears {clear:.1} m"
+                    "{}: drawn reaches {:.1} m, the map clears {clear:.1} m",
+                    m.id, m.reach
+                ));
+            }
+            if solid > clear {
+                bad.push(format!(
+                    "{}: collides {solid:.1} m out, the map clears {clear:.1} m",
+                    m.id
+                ));
+            }
+            if !cables && clear > m.reach + CLEAR_SPARE {
+                bad.push(format!(
+                    "{}: clears {clear:.1} m, {:.1} m past all it draws ({:.1} m)",
+                    m.id,
+                    clear - m.reach,
+                    m.reach
+                ));
+            }
+            if let Some((a, b)) = m.collides {
+                let past = (lo - a).max(b - hi).max_element();
+                if past > COLLIDE_PAST {
+                    bad.push(format!(
+                        "{}: collides {past:.2} m past what it draws ({a:.1?}..{b:.1?} against {lo:.1?}..{hi:.1?})",
+                        m.id
+                    ));
+                }
+            }
+            for (axis, half, drawn) in [
+                ("x", m.footprint[0] * 0.5, lo.x.abs().max(hi.x.abs())),
+                ("z", m.footprint[2] * 0.5, lo.z.abs().max(hi.z.abs())),
+            ] {
+                if half > drawn + FOOTPRINT_SPARE {
+                    bad.push(format!(
+                        "{}: footprint {:.1} m along {axis}, it stands {:.1} m",
+                        m.id,
+                        half * 2.0,
+                        drawn * 2.0
+                    ));
+                }
+            }
+            let tall = m.footprint[1];
+            if (tall - hi.y).abs() > HEIGHT_SPARE {
+                bad.push(format!(
+                    "{}: footprint {tall:.1} m tall, it stands {:.1} m",
+                    m.id, hi.y
                 ));
             }
         }
-        assert!(
-            bad.is_empty(),
-            "prefabs past their clearance:\n{}",
-            bad.join("\n")
-        );
+        assert!(bad.is_empty(), "prefabs that disagree:\n{}", bad.join("\n"));
     }
+
+    /// How much further than a prefab draws the map may clear round it:
+    /// `prefab_clearance` gives a wall 4 m of open ground, and a little over.
+    const CLEAR_SPARE: f32 = 5.0;
+    /// How far a collider may stand out of what's drawn (a box's rounding,
+    /// a sill under a model's).
+    const COLLIDE_PAST: f32 = 0.15;
+    /// How much more ground than it stands on a footprint may claim, each
+    /// way along an axis.
+    const FOOTPRINT_SPARE: f32 = 1.0;
+    /// How far a footprint's height may be off what's drawn, either way: it
+    /// says what's a landmark, and where a building's inside ends (hearing,
+    /// shelter from the rain).
+    const HEIGHT_SPARE: f32 = 0.5;
 
     /// Prints every loose part (`-- --nocapture`) and fails on any not in
     /// `LOOSE_KNOWN`.

@@ -226,8 +226,8 @@ the one that comes to look finds you about half the time.
 (`Conditions::light_at`, Visual design's time of day): exposure scales by
 its square root, so dusk leaves about 0.6 of the day's, a room by day
 0.55, a full-moon night 0.28 and a black one 0.14. A torch lights you up wherever the sky doesn't, and its
-beam pointed at a robot in the dark is seen from 45 m. A **suppressor**
-carries a shot a third as far. Robots hear round open doorways and
+beam pointed at a robot in the dark is seen from 45 m. A shot is heard
+by its report and its crack (see "The shot as a sound" below). Robots hear round open doorways and
 through walls by the same rule the player's ears do (`acoustics`). A
 scope pointed into a low sun flashes, and robots see the flash further
 than they see a body: it places a still sniper roughly, where keeping
@@ -242,6 +242,18 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**They read what you set down** (`robots/devices.rs`). Every device you place gives something off: light, a hum, power draw (a drone's or a relay's sensors pick up a hungry device, 3 m a watt), and how far it bites. That alone sets what the machines do about it, from one table:
+- what bites (an armed trap) is shot from outside its reach;
+- what's hungry (10 W or more: a jammer, a cloak, a camera drone) is hunted and shot to scrap;
+- the rest (a light, a laser) is come and looked at.
+
+A machine that can't shoot reports what it can't deal with. The tell: it chirps and throws a scan beam at the device, then turns and goes to it.
+
+**Their network, turned against them** (`robots/network.rs`). Pylons, sentries, spotters and the airship report what they see, and a team follows. Every report goes through the director's network, so it can be worked on:
+- **Cut a pylon's cable** with bolt cutters and it goes silent. The silence is the tell: after 45 s a mender is sent, and once it has welded the torn cabinet whole the pylon is back on the network.
+- **Splice a salvaged radio** into a pylon or a spotter's winch (let go of it against the cabinet): it reports contact at a named place at least 150 m from you, and the team goes there. Do it twice to the same relay and they stop believing it: none of its reports go out, and a walker comes to look it over.
+- **A powered jammer** blocks every relay's reports within its radius, but a relay gone quiet in a jam is a sign too: after 40 s a team comes to roughly where the jammer is.
+
 **The Zone remembers you** (`robots/memory.rs`, `zone_memory`). Each valley keeps a compact memory of your habits, saved with it:
 - the 30 m cells you walk;
 - the rendezvous you get out from;
@@ -255,6 +267,23 @@ It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays of
 - where you've wrecked them more than once lately, one of their kind is left watching (an unarmed walker that calls the others, or a drone).
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
+
+**You can see what they remember** (`robots/recall.rs`). Every memory a machine keeps of you is one row in a table: how it fades, and what shows it. A memory with no rule or no tell fails the tests. So does a robot-keyed map, or a field of the structs memories live in, that the table doesn't name.
+
+| Memory | Fades | Tell |
+|---|---|---|
+| How sure it is | 0.05 a second | its voice, its head turning |
+| Where it last had you | given up after 70 s of looking | it comes and looks round |
+| A place it searched for nothing | 120 s (lures there go unanswered) | its paint mark, bright while fresh |
+| A sign of you it saw | 900 s | it goes to look at it |
+| A device of yours it saw, the one it hunts | while the device runs | its scan, then its gun |
+| Knocked down lately; you went under a roof (drone) | 10 s; 8 s | it backs off; it climbs away |
+| A relay's reports of you | 600 s after the last | its tally lamp: a red blink per report, up to three |
+| A relay's false reports; distrust | 900 s | an inspector; the lamp pulses amber |
+| A relay silenced; one quiet in a jam | until mended; while in the jam | a mender; a team |
+| The valley: your ways, rendezvous, kills, clearings, searches | to 0.6 a raid, gone under 0.1 | patrols and a sentry lean, a watcher, doors shut, last raid's marks |
+
+**Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
 
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
@@ -857,6 +886,169 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
     At most 32 are drawn.
   - A slug: one 32 g ball with 0.8 of the buckshot's summed harm, and a
     rifle's group.
+
+### The shot as a sound
+
+(`extraction_core::report`, `weapons/report.rs`, `weapons/reverb.rs`)
+
+- **The report**: the muzzle blast, heard all round the gun. It's
+  reckoned in decibels against the AK-74's, which carries 220 m; reach
+  doubles every 12 dB.
+  - A heavier powder charge is louder.
+  - A barrel too short to burn its charge is louder still, 4 dB per
+    halving.
+  - The PPSh's jacket is a compensator.
+  - What's on the muzzle takes decibels off.
+- **The crack**: a round faster than sound cracks along its flight. It's
+  heard only near the path (17 m either side for an AK round, 28 m for
+  the Mosin), and from the path. Each shot makes up to six cracks, 40 m
+  apart from 20 m out, before its report, and a gun cracks at most every
+  0.25 s.
+  - A robot that hears the report takes its word for where you are.
+  - A robot downrange that hears only the crack goes to look along the
+    line, away from you.
+- **Suppressors**: the PBS takes 18 dB off and lasts about 1500 rounds. A
+  can packed at the bench (any food tin and a piece of scrap, in the
+  vice) takes 14 dB off and lasts about 40.
+  - As either wears, it takes off less (the square root of its
+    condition).
+  - Either one fouls the gun twice as fast.
+  - A suppressor doesn't stop the crack.
+- **Subsonic rounds** (7U1 for 5.45, 7.62 US for 7.62x39; green tips):
+  a heavy bullet at 300 m/s on a lighter charge. They make no crack and
+  a slightly softer report.
+  - Under the PBS, an AK is heard about 68 m off.
+  - They drop fast, stop in a plank wall, and hit soft: harm goes by the
+    square root of their energy against ball's.
+- **Echo**: Audio's `hearing::Hearing::smear(at)` says how much a place
+  blurs where a sound seems to come from, for robots' ears. Indoors it
+  comes from the room. Outdoors it comes from `weapons::reverb::valley_smear`:
+  1 in the open, up to 2.2 in a valley whose sides rise 6 m within 70 m,
+  more when the sides face each other.
+- **The gauges**:
+  - `cargo test -p extraction_core the_hearing_gauge -- --nocapture`:
+    every gun's report bare, subsonic, and under each suppressor new and
+    at 10%.
+  - `the_crack_gauge`: each round's crack reach.
+
+  |            | ball | subsonic | PBS | PBS at 10% | can | can at 10% |
+  |---|---|---|---|---|---|---|
+  | PM         | 141 | - | 50 | 101 | 63 | 109 |
+  | Nagant     | 130 | - | 46 | 94 | 58 | 101 |
+  | TOZ-8 .22  | 94 | - | 40 | 68 | 42 | 73 |
+  | PPSh       | 181 | - | 64 | 130 | 81 | 140 |
+  | MP-133     | 237 | - | 84 | 170 | 105 | 183 |
+  | TOZ double | 211 | - | 75 | 152 | 94 | 163 |
+  | SKS        | 209 | 184 | 74 | 151 | 93 | 162 |
+  | AK-74      | 220 | 194 | 78 | 158 | 98 | 170 |
+  | RPK-74     | 196 | 172 | 69 | 141 | 87 | 152 |
+  | SVD        | 254 | - | 90 | 183 | 113 | 197 |
+  | Mosin      | 241 | - | 85 | 173 | 107 | 186 |
+
+  (Metres, in still air. Weather and walls cut these further.)
+
+### A gun's state, read in the hand
+
+(`weapons/legibility.rs`)
+
+No screen tells you a gun's state; the gun does, as its real counterpart
+would. A table of each gun's real tells, held against the models and the
+mechanism by `every_gun_shows_what_the_real_one_does`:
+
+- **Cocked**:
+  - an exposed hammer back (PM, Nagant, flare pistol);
+  - a turn-bolt's cocking piece standing 12 mm back off the bolt (Mosin,
+    TOZ-8);
+  - the double's two indicator pins standing 3 mm proud, each over its
+    cocked lock;
+  - the PPSh's bolt held back;
+  - a crossbow's string drawn.
+  - The AK, RPK and MP-133 show nothing: look in the port.
+- **Loaded**: with the action open (a press check), the round in the
+  chamber is there to see. A fired case sits a little proud on the
+  extractor. A revolver's cylinder shows its rounds, and a clip shows the
+  rounds standing in it.
+- **Empty**: the slide or carrier held open on the last round where the
+  real gun does it (PM, SKS, SVD). An empty box magazine shows its
+  follower between the lips.
+- **How full**: a magazine weighs what its rounds weigh (an AK's is 0.23 kg
+  empty, 0.56 kg full), so you heft it. The PM magazine's round-count
+  holes show brass up to how full it is.
+- **Condition**: below 0.8 the finish wears toward rust and bare steel, and
+  goes rougher. The crown nicks and the bore soots (`wear`). A worn action
+  (below 0.6), or a fouled one, drags in the hand as cold oil does
+  (`Firearm::action_drag`).
+- **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
+  scope are all on the model as they are.
+
+### Gunsmithing at the vice
+
+(`extraction_core::gunsmith`, `weapons/gunsmith.rs`)
+
+A gun let go of at the bench vice's jaws is clamped there, with its
+receiver in the jaws and the barrel out over the bench. Taken up, it's
+free again. What's done to a gun is its build, which is saved with it and
+worked out afresh from the gun as made whenever it changes.
+
+- **Cut the barrel** (the Mosin, the SKS, the TOZ double, the MP-133): draw
+  the hacksaw back and forth across the barrel where you want it to end.
+  About 1.2 m of blade over one spot cuts a rifle's barrel; a double's two
+  take 2 m. The end drops off as scrap.
+  - The muzzle comes back by what was cut, and a suppressor's mount
+    follows it.
+  - The bullet leaves slower, because less barrel means less push.
+  - It groups wider: the sight line is shorter and the front sight is
+    gone.
+  - It flashes more and is heard further (`report`'s 4 dB per halving).
+  - It's lighter and shorter.
+  - A cut doesn't grow back, and the bayonet's lug goes with the muzzle.
+- **Take the stock off** (those, and the AK and the RPK; not the SVD, whose
+  thumbhole stock is its grip): with
+  the gun clamped, its stock screw takes the spanner. Two turns, and the
+  stock lies on the bench as an item.
+  - With nothing to put to the shoulder, the kick climbs about 1.7 times
+    as much and it groups about 1.3 times as wide.
+  - It's lighter and shorter.
+  - Let the stock go behind the grip and it's back on.
+- **Swap parts** between guns of one model: a Mosin's bolt, drawn back to
+  its stop in the vice and on past it, comes out into the hand as an item
+  with its own condition. Let it go into any Mosin's open receiver and it
+  goes in.
+  - A gun's condition is its parts': the bolt is 35% of it.
+  - Each part's own condition is kept as its difference from the gun's,
+    so a good bolt raises a worn rifle by its share, and swapping back
+    puts both guns as they were.
+  - With its bolt out, a gun neither cycles nor fires.
+- **What it looks like**: every gun that can be worked has its barrel (and
+  forend) and its butt as model nodes of their own. A test holds it
+  (`every_workable_gun_shows_its_work`). A cut barrel is drawn shortened
+  back toward the breech (the double's hinged pair too), the butt is gone
+  when the stock's off, and the bolt is gone when it's out. A stock or
+  bolt off a gun is drawn from that same piece of the gun's model.
+- **Where the things come from**: the hacksaw comes with the vice and
+  turns up in toolboxes and workshops. Workshops sometimes hold someone's
+  half-finished work: a loose stock or a Mosin bolt. A test holds that the
+  vice's tools and parts, and the subsonic rounds and the can, can all be
+  found, given, made or taken off a gun
+  (`what_the_vice_needs_and_makes_can_be_had`).
+- **For the ear**: each step writes `weapons::gunsmith::Worked` (clamped,
+  saw stroke, cut, screw turn, stock off or on, bolt out or in). Audio
+  voices them.
+- **The gauge**: `cargo test -p extraction_core the_gunsmith_gauge --
+  --nocapture`
+
+  |                 | barrel mm | m/s | heard m | MOA | flash | kg | m | climb |
+  |---|---|---|---|---|---|---|---|---|
+  | Mosin           | 730 | 865 | 241 | 1.5 | 1.0 | 4.00 | 1.23 | 1.00 |
+  | Mosin, no stock | 730 | 865 | 241 | 1.9 | 1.0 | 3.25 | 0.93 | 1.89 |
+  | Mosin obrez     | 250 | 653 | 320 | 4.7 | 4.5 | 2.58 | 0.45 | 2.12 |
+  | TOZ double      | 720 | 400 | 211 | 150 | 1.0 | 3.20 | 1.12 | 1.00 |
+  | sawn-off        | 300 | 336 | 282 | 423 | 3.4 | 1.98 | 0.40 | 2.16 |
+  | SKS             | 520 | 735 | 209 | 3.0 | 1.0 | 3.85 | 1.05 | 1.00 |
+  | SKS cut         | 300 | 662 | 251 | 5.5 | 2.3 | 3.59 | 0.83 | 1.04 |
+  | MP-133 cut      | 350 | 367 | 268 | 237 | 1.8 | 3.14 | 0.97 | 1.04 |
+  | AK-74           | 415 | 900 | 220 | 4.0 | 1.0 | 3.30 | 0.94 | 1.00 |
+  | AK-74, no stock | 415 | 900 | 220 | 5.2 | 1.0 | 2.95 | 0.69 | 1.80 |
 
 ### Gadgets and attachments
 

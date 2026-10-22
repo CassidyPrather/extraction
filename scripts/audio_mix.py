@@ -38,7 +38,7 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 # downpour beds (by the masking model): a threat's warning reaches about as
 # far as the threat does.
 RANGE_TARGETS = {
-    "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8),
+    "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8), "anomaly.frost": (4, 2),
     "drone.rotor": (120, 40), "drone.lock": (60, 40), "walker.step": (60, 30),
     "door.blow": (60, 25), "door.broken": (80, 30), "anomaly.snare": (15, 10),
     "anomaly.burner": (20, 12), "anomaly.lift": (15, 10),

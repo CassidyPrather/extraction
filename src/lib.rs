@@ -9,6 +9,7 @@ pub mod anomaly;
 pub mod audio;
 pub mod audio_fight;
 pub mod audio_kit;
+pub mod audio_machines;
 pub mod audio_mix;
 pub mod audio_score;
 pub mod audio_underground;
@@ -22,6 +23,7 @@ pub mod dev;
 pub mod foley;
 pub mod gadgets;
 pub mod health;
+pub mod hearing;
 pub mod hud;
 pub mod interact;
 pub mod items;
@@ -99,6 +101,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                hearing::HearingPlugin,
                 radio::RadioPlugin,
             ),
         ))
@@ -257,6 +260,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     };
     capture_panics();
     let defaults = DefaultPlugins
+        .set(task_pools())
         .set(WindowPlugin {
             primary_window: Some(window),
             ..default()
@@ -315,6 +319,36 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
     app.run()
+}
+
+/// The task pools: Bevy's, but the IO pool (where models and textures are
+/// read and decoded as they load) three quarters of the cores' worth (2 to
+/// 8) rather than a quarter (1 to 4), on top of the cores, so the compute
+/// pool the systems run on keeps every thread it had. A valley's wait was
+/// its 213 models decoding one at a time on a 4-core machine; once they're
+/// in, the IO threads sleep.
+pub fn task_pools() -> bevy::app::TaskPoolPlugin {
+    use bevy::app::{TaskPoolOptions, TaskPoolThreadAssignmentPolicy as Policy};
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let quarter = ((cores as f32 * 0.25).round() as usize).clamp(1, 4);
+    let io = (cores * 3 / 4).clamp(2, 8);
+    let exactly = |n: usize| Policy {
+        min_threads: n,
+        max_threads: n,
+        percent: 0.0,
+        on_thread_spawn: None,
+        on_thread_destroy: None,
+    };
+    let total = cores + io.saturating_sub(quarter);
+    bevy::app::TaskPoolPlugin {
+        task_pool_options: TaskPoolOptions {
+            min_total_threads: total,
+            max_total_threads: total,
+            io: exactly(io),
+            async_compute: exactly(quarter),
+            ..Default::default()
+        },
+    }
 }
 
 /// Where this session's log goes: `<data dir>/logs/`, one file a session,

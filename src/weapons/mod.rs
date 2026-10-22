@@ -20,12 +20,16 @@ pub mod feel;
 pub mod flares;
 pub mod flat;
 pub mod grenades;
+pub mod gunsmith;
 pub mod impacts;
 pub mod layout;
+pub mod legibility;
 pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+pub mod report;
+pub mod reverb;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
@@ -67,6 +71,16 @@ pub struct Gun {
     /// one gun never hangs on how many others are lying about, nor on the
     /// order things were spawned in, and a drill replays.
     pub dice: Rng,
+    /// Its mass as built, if it's been worked at the vice (`gunsmith`);
+    /// else the catalog's.
+    pub mass: Option<f32>,
+}
+
+impl Gun {
+    /// Its mass (kg): as built, or `catalog` as made.
+    pub fn mass(&self, catalog: f32) -> f32 {
+        self.mass.unwrap_or(catalog)
+    }
 }
 
 /// A gun's seed: its kind and where it was first put (to the centimetre).
@@ -233,7 +247,9 @@ impl Plugin for WeaponsPlugin {
                 crossbow::CrossbowPlugin,
                 carry::CarryPlugin,
                 weather::WeatherPlugin,
+                report::ReportPlugin,
             ))
+            .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
             .add_systems(
                 FixedUpdate,
                 (
@@ -336,6 +352,7 @@ fn setup_gun_items(
         magwell,
         trigger: 0.0,
         dice: Rng::new(seed),
+        mass: None,
     });
 }
 
@@ -519,7 +536,7 @@ fn work_handles(
         let want = start + (z - z0) / h.travel.max(1e-3);
         // Cold oil: it drags, and a timid hand slides on it.
         let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);
-        let stiff = gun.firearm.stiff;
+        let stiff = gun.firearm.action_drag();
         let to = drag(travel, want.clamp(0.0, 1.0), stiff, pull, dt, h.travel);
         let events = gun.firearm.set_bolt_travel(to);
         grind(
@@ -582,7 +599,7 @@ fn work_handles(
                 }
                 let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                 let was = gun.firearm.bolt_travel;
-                let stiff = gun.firearm.stiff;
+                let stiff = gun.firearm.action_drag();
                 let to = drag(was, want, stiff, pull, dt, h.travel);
                 if to != want {
                     // The hand slides on the handle from where it got to.
@@ -617,7 +634,7 @@ fn work_handles(
                 if gun.firearm.handle_lift >= 0.95 {
                     let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                     let was = gun.firearm.bolt_travel;
-                    let stiff = gun.firearm.stiff;
+                    let stiff = gun.firearm.action_drag();
                     let to = drag(was, want, stiff, pull, dt, h.travel);
                     if to != want {
                         taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));

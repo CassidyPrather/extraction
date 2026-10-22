@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 
 main_guard()
@@ -161,36 +161,64 @@ def lerp_table(t, table):
     return table[0][1] if t < table[0][0] else table[-1][1]
 
 
-stock = Part("stock")
-# Rounded all over, oval through the wrist, the comb a little narrower
-# than the belly; the butt end square to the bore under its pad.
-stock.stock(stock_prof, -0.0455, 0.3595, "Wood",
-            lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
-            stations=56, power=2.4)
+# The stock in two, for the vice (`weapons::gunsmith`): the wrist stays on
+# the action as a grip, the butt comes off at its through-bolt.
+BUTT_Z = 0.07
 # Checkering round the wrist, both sides, where the hand closes on it.
 sc = Part("cut")
 wrist_check = Part("stock_checkering")
 wrist_check.checkering(sc, stock_prof,
                  lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
                  2.4, (0.014, 0.072, -0.021, 0.007))
-stock.cut(sc)
-# Rubber butt pad.
-pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
-             [0.0032, 0.004, 0.004, 0.0032], 3)
-stock.prism(pad, -0.0215, 0.0215, "Black", axis="x", bevel=0.003, segs=2)
-# Rear sling swivel under the butt.
-loop = [(0.25 + 0.009 * math.cos(a), -0.104 + 0.009 * math.sin(a))
-        for a in [math.pi + math.pi * i / 8 for i in range(9)]]
-stock.sweep(loop, section_rect(0.0025, 0.0025, 0.0007), "Steel", xf=RX(0.0))
-stock.box((0.006, 0.006, 0.02), (0.0, -0.097, 0.25), "Steel", bevel=0.0015,
-          xf=RX(math.atan2(0.032, 0.13), about=(0, -0.097, 0.25)))
+
+
+def stock_piece(name, lo, hi):
+    # Rounded all over, oval through the wrist, the comb a little narrower
+    # than the belly; the butt end square to the bore under its pad.
+    piece = Part(name)
+    piece.stock(stock_prof, -0.0455, 0.3595, "Wood",
+                lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
+                stations=56, power=2.4)
+    if lo is None:
+        # (The checkering is all on the wrist.)
+        piece.cut(sc)
+    # Rubber butt pad.
+    pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
+                 [0.0032, 0.004, 0.004, 0.0032], 3)
+    piece.prism(pad, -0.0215, 0.0215, "Black", axis="x", bevel=0.003, segs=2)
+    # Rear sling swivel under the butt.
+    loop = [(0.25 + 0.009 * math.cos(a), -0.104 + 0.009 * math.sin(a))
+            for a in [math.pi + math.pi * i / 8 for i in range(9)]]
+    piece.sweep(loop, section_rect(0.0025, 0.0025, 0.0007), "Steel", xf=RX(0.0))
+    piece.box((0.006, 0.006, 0.02), (0.0, -0.097, 0.25), "Steel", bevel=0.0015,
+              xf=RX(math.atan2(0.032, 0.13), about=(0, -0.097, 0.25)))
+    side = Part("cut")
+    if lo is not None:
+        side.box((0.2, 0.4, 1.0), (0.0, 0.0, lo - 0.5), "Wood")
+    if hi is not None:
+        side.box((0.2, 0.4, 1.0), (0.0, 0.0, hi + 0.5), "Wood")
+    piece.cut(side)
+    return piece
+
+
+stock = stock_piece("stock", None, BUTT_Z)
+stock_butt = stock_piece("stock_butt", BUTT_Z, None)
 
 # --- Front trigger ---------------------------------------------------------------------------
 trig = Part("trigger", origin=(0.0, -0.012, -0.05))
 trig.sweep(catmull([(-0.049, -0.017), (-0.0505, -0.025), (-0.048, -0.032), (-0.043, -0.036)], 3,
                    closed=False), section_rect(0.0045, 0.003, 0.0011), "Blued")
 
+# Cocking indicators: a pin each side of the top strap behind the fences,
+# its tip red; flush when its lock is down, standing proud when cocked
+# (`weapons::visuals`, `Indicator`).
+for i, sx in enumerate((-1, 1)):
+    pin = Part(f"indicator_{i}", origin=(sx * 0.0085, 0.0475, -0.086))
+    pin.cyl(0.0017, 0.0405, 0.0475, "Steel", segs=12, xf=T(sx * 0.0085, 0.0, -0.086) @ RX(-math.pi / 2))
+    pin.cyl(0.0017, 0.0475, 0.0485, "Red", segs=12, xf=T(sx * 0.0085, 0.0, -0.086) @ RX(-math.pi / 2))
+    make(pin, worn={})
 join("static", act, stock, wrist_check)
+join("static_butt", stock_butt)
 join("barrels", bar, fe_check)
 make(trig)
 
@@ -203,3 +231,4 @@ empty("pt_sling_front", (0.0, 0.006, -0.62))
 empty("pt_sling_rear", (0.0, -0.111, 0.25))
 report()
 export("assets/models/guns/toz_double.glb")
+export_part("static_butt", "assets/models/items/stock_toz_double.glb")

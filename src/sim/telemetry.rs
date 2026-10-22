@@ -143,6 +143,10 @@ pub fn record(
             &Body,
             Option<&Raider>,
             &Children,
+            (
+                Has<crate::world::workings::InGas>,
+                Has<crate::world::furnace::InHeat>,
+            ),
         ),
         With<LocalPlayer>,
     >,
@@ -165,7 +169,8 @@ pub fn record(
     let dt = time.delta_secs();
     log.t += dt;
     let t = log.t;
-    let Some((me, tf, health, body, raider, children)) = bots.iter().next() else {
+    let Some((me, tf, health, body, raider, children, (in_gas, in_heat))) = bots.iter().next()
+    else {
         return;
     };
     let pos = tf.translation;
@@ -294,6 +299,7 @@ pub fn record(
         let lost = last - hp;
         if lost > 1e-4 && hp < last {
             let mut rest = lost;
+            let mut claimed: Option<String> = None;
             let mut expect = std::mem::take(&mut tr.expect);
             for (cause, d, _) in expect.iter_mut() {
                 let take = d.min(rest);
@@ -305,23 +311,51 @@ pub fn record(
                 *tr.pending.entry(cause.clone()).or_default() += take;
                 log.recent.push((t, cause.clone(), take));
                 log.last_cause = cause.clone();
+                claimed = Some(cause.clone());
             }
             tr.expect = expect;
-            if rest > 0.05 {
-                let cause = if let Some(k) = &inside_kind {
-                    k.clone()
-                } else if raid.surging() {
-                    "surge".to_string()
-                } else if health.bleeding > 0.0 && rest <= health.bleeding * dt * 1.5 + 1e-3 {
-                    "bleeding".to_string()
-                } else if tr.recent_air > 0.4 {
-                    "fall".to_string()
-                } else {
-                    // Nothing above claimed it: say so rather than guess.
-                    "other".to_string()
-                };
+            // A sliver left over from a hit claimed this tick (armour and
+            // rounding make the bar's drop differ from the hit's damage by
+            // hundredths) is that hit's, not something else's.
+            if let Some(cause) = claimed.filter(|_| rest < 0.05) {
                 *tr.pending.entry(cause.clone()).or_default() += rest;
-                log.recent.push((t, cause.clone(), rest));
+                rest = 0.0;
+            }
+            // Every unclaimed loss counts, however small a tick of it is:
+            // gas at 2 hp a second is 0.02 a tick, and once that went
+            // unrecorded a raider died underground of nothing at all.
+            let mut parts: Vec<(String, f32)> = Vec::new();
+            if let Some(k) = &inside_kind {
+                parts.push((k.clone(), rest));
+            } else if raid.surging() {
+                parts.push(("surge".to_string(), rest));
+            } else {
+                let bleed = if health.bleeding > 0.0 {
+                    rest.min(health.bleeding * dt * 1.5 + 1e-3)
+                } else {
+                    0.0
+                };
+                if bleed > 0.0 {
+                    parts.push(("bleeding".to_string(), bleed));
+                }
+                let left = rest - bleed;
+                if left > 1e-4 {
+                    let cause = if in_gas {
+                        "gas"
+                    } else if in_heat {
+                        "heat"
+                    } else if tr.recent_air > 0.4 {
+                        "fall"
+                    } else {
+                        // Nothing above claimed it: say so rather than guess.
+                        "other"
+                    };
+                    parts.push((cause.to_string(), left));
+                }
+            }
+            for (cause, amount) in parts {
+                *tr.pending.entry(cause.clone()).or_default() += amount;
+                log.recent.push((t, cause.clone(), amount));
                 log.last_cause = cause;
             }
         }

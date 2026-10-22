@@ -39,8 +39,9 @@ cut.box((0.0056, 0.012, 0.022), (0.0, 0.0495, 0.001), "Blued")
 body.cut(cut)
 
 rest = Part("rest")
-# Follower showing between the lips.
-rest.box((0.0056, 0.003, 0.02), (0, 0.042, 0.001), "Black", bevel=0.0008, segs=1)
+# Follower showing between the lips (its own node: seen once empty).
+follower = Part("static_follower")
+follower.box((0.0056, 0.003, 0.02), (0, 0.042, 0.001), "Black", bevel=0.0008, segs=1)
 # Base plate with the heel lip the catch bites on.
 base = fillet([(-0.0076, -0.0158), (0.0076, -0.0158), (0.0076, 0.0162), (-0.0076, 0.0162)],
               [0.006, 0.006, 0.0025, 0.0025], 4)
@@ -53,5 +54,14 @@ cartridge(rnd, C9, T(0.0, 0.0458, 0.0128), segs=12, base=False)
 make(rnd)
 
 join("static_mag", body, rest, worn={})
+make(follower, worn={})
+# Brass behind each round-count hole, the bottom one first: the stack
+# fills from the bottom, so hole i shows brass while 2 * (i + 1) rounds
+# or more are in (`round_N` shows while it holds N or more).
+for i in range(4):
+    w = Part(f"round_{2 * (i + 1)}")
+    w.cyl(0.00145, -0.0052, 0.0052, "Brass", segs=10,
+          xf=T(0, -0.025 + i * 0.016, 0.004) @ RY(math.pi / 2))
+    make(w, worn=None)
 report()
 export("assets/models/mags/pm_mag.glb")

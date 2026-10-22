@@ -336,7 +336,7 @@ mod tests {
             xf.transform_point(Vec3::new(r.at[0] + x, l.floor_of(r) + 0.05, r.at[1]))
         };
         let player = vr.player;
-        let mut step = |vr: &mut crate::vr_harness::Vr, at: Vec3, speed: f32, head: f32| -> bool {
+        let step = |vr: &mut crate::vr_harness::Vr, at: Vec3, speed: f32, head: f32| -> bool {
             vr.stand(at, 0.0);
             vr.head(Vec3::new(0.0, head, 0.0));
             vr.step(10);

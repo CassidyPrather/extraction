@@ -15,8 +15,9 @@ looks like. Code: `src/anomaly/`, rules in
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
+| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
 
-Wells, mirrors and hushes don't move between cycles: the maps place them
+Wells, mirrors, hushes and frosts don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
 can still bloom any kind in your way.
 
@@ -58,6 +59,17 @@ round a metre off the heart turns a few degrees; a pistol round, at half
 the speed, about four times as much. Shooting across a well at a robot
 behind it misses. The pull reaches three radii; a walker can still walk
 out from twice the radius, not from the heart.
+
+### Frosts
+
+A frost's cold is the valley's cold: it's the one chill a body has (Fifth
+valley's `world::cold::Chill`), so a frost on top of an hour on the col is
+worse than either, and you warm it off the same way, under a roof or going
+down. Its stiffness is its own and only while you're in it: out, it leaves
+you in a couple of seconds. You're told before it bites, and you can always
+crawl out. The hearth and the rimestone are each other's way in: a hearth
+keeps a frost off, a rimestone keeps a burner off. Code:
+`src/anomaly/frost.rs`.
 
 ### Mirrors
 
@@ -113,12 +125,14 @@ carry it safe, or carry it live.
 | Mirror shard | mirror | use it to step up to 4 m ahead, once a minute | every 20–40 s its late reflection glints, and robots within 35 m hear where you are | it hangs in the fold; throw something through and reach in while it closes (1.5 s) |
 | Glass eye | rare, any field | held to your eye, walls go thin | strong attention | as its anomaly's stone |
 | Hushstone | hush | a small Hush round you (1.2 m): your steps and shots aren't heard | every detector you carry is mute; attention 1.5/s | it lies in the dead air: in and out before 8 s |
+| Rimestone | frost | a burner's coals don't take you | a little chill (0.15) never leaves you: a little stiff, always | the frost lies round it: carry a live hearth (it chills you a quarter as fast and never past 0.3, and the frost never bites), walk in and out; without one, leave it |
 | Stormglass | only the Surge's own blooms (about one a Surge) | the Surge passes over you as if you were under a roof | the whole Zone knows where you are (attention 3/s) | as its bloom's kind, once it has finished forming |
 
 Rules and numbers: `extraction_core::anomaly` (costs, harvesting);
 game side `src/anomaly/costs.rs`, `harvest.rs`, `artifacts.rs`.
 Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
-`harvest_well`, `harvest_mirror`, `harvest_hush` (in `--scenario all`).
+`harvest_well`, `harvest_mirror`, `harvest_hush`, `harvest_frost` (in
+`--scenario all`).
 
 **Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
 `hunter` sim raids, at most 20% of deliberate dives into anomalies may
@@ -138,6 +152,41 @@ Last measured, 6 hunter raids a valley over all four valleys:
 |---|---|---|---|---|
 | Novice | 42 | 17 (40%) | 18 | 1 |
 | Skilled | 37 | 16 (43%) | 9 | 0 |
+
+**Anomalies in a hunter's raid.** A hunter used to go only where the
+loot is (buildings, spots, the Surge's artifact fields), so it met a
+standing anomaly only by passing one. Now it knows the valley's standing
+anomalies (`SiteKind::Anomaly`, from the map's markers), and goes to
+their edge to see whether one has grown a stone this cycle
+(`SIM_NO_ANOMALY_SITES=1` for the old way). The band now also counts the
+raids that dive at all: at least half must (`MIN_DIVING_RAIDS`).
+
+Free play, 6 hunter raids a valley (12 minutes), raids that dive at
+least once, and what anomalies cost a dive:
+
+| Valley | Before | Skilled | hp a dive | Novice | hp a dive |
+|---|---|---|---|---|---|
+| Marrow Creek | 33% | 50% | 3 | 67% | 11 |
+| Kettle Pass | 33% | 67% | 7 | 50% | 7 |
+| Cinder Works | 83% | 83% | 9 | 100% | 16 |
+| Sallow Reservoir | 83% | 83% | 7 | 100% | 14 |
+| Rime Fell | 100% | 100% | 7 | 67% | 12 |
+
+No raid died in an anomaly. Most dives are still the Surge's kinds by
+the fields (burners, snares, lifts): a standing anomaly has a stone
+about one cycle in three, and in 60 raids hunters took a lodestone and a
+hushstone from them. They walked up to the fell's frosts and left them:
+a skilled raider goes into a frost only with a hearth on it, which it
+has to have won from a burner earlier in the raid. So the head-on
+measures stand beside free play:
+
+The frosts sit high on Rime Fell (the col, the scree), and the sims'
+raiders never get up to one in a 10 or 25 minute raid (18 and 8 hunter
+raids on the seeds that grow rimestones: no dive). So the Frost's band is
+measured head on (`sim::harvest` test): the same dive in to a 3 m frost's
+stone and out costs a novice 17 hp (frozen through, bitten), and with a
+live hearth 0 (chill held at 0.3). A skilled raider without a hearth
+leaves it.
 
 Skill halves what anomalies cost and takes the deaths out, and it gets
 into wells and wins more lifts. It doesn't yet win more stones overall.
@@ -217,16 +266,30 @@ deg²:
 | Burner | 12 | Cinder Works, downpour (on ash) |
 | Snare | 7 | Sallow Reservoir, fog |
 | Well | 19 | Rime Fell, downpour |
-| Mirror | 7 | Rime Fell, fog (on snow) |
-| Hush | 36 | Cinder Works, night |
+| Mirror | 2.2 | Rime Fell, fog (on snow) |
+| Hush | 3.1 | Sallow Reservoir, night |
+| Frost | 9.3 | Rime Fell, fog |
+
+(Mirror, Hush and Frost as measured once their rims were gone; see
+below.)
 
 What the valleys taught us, beyond Marrow:
 
 - **Snow takes added light.** The mirror's glint added light, and on
-  Rime Fell it changed almost nothing (0.4 deg² at night). Its rim now
-  always steps away from what's behind it, darker over light and lighter
-  over dark, and its glint does the same. Inverting the background
-  wouldn't work, because mid-grey fog inverts to itself.
+  Rime Fell it changed almost nothing (0.4 deg² at night). Its glint now
+  steps away from what's behind it, darker over light and lighter over
+  dark. Inverting the background wouldn't work, because mid-grey fog
+  inverts to itself.
+- **Nothing outlines an anomaly on the screen.** The Hush, the mirror
+  and the frost each had a rim: a bright or stepped-away band round the
+  edge of the haze card. It carried them through fog and snow, but it
+  was a circle on the glass, not a thing in the world. The rims are
+  gone; the haze fades out well inside its card; and the gauge fails any
+  anomaly whose change round its centre is a ring (`OUTLINE_MAX`: the old
+  frost rim scored 0.56, a lift's swirl 0.22). Without them every kind
+  still clears its floor, on what's in the world: the frost's rime and
+  glinting motes, the Hush's dim dead air and its edge of settled dust
+  (ragged, not a drawn line), the mirror's glint.
 - **A view needs to clear walls by their faces, not their middles.**
   On Kettle Pass the Hush's first view was a brick wall.
 
@@ -244,8 +307,7 @@ What it taught us:
   you see through it, and so does the well's lens at its heart. Both are
   applied after fog, so fog can't wash them out. Colour drain did almost
   nothing in grey weather, and colour-blind eyes miss it anyway.
-- **In the dark there's nothing to dim or brighten.** A Hush's rim
-  glows faintly of itself.
+- **In the dark there's nothing to dim or brighten.** A Hush at night
+  is its pale dust, and only just (3-6 deg² in three valleys).
 - **Motion reads from the corner of the eye.** The mirror carries a
-  glint that crosses it every 4 s, each mirror on its own beat. The
-  Hush's rim breathes in brightness only.
+  glint that crosses it every 4 s, each mirror on its own beat.

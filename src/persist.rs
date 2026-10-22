@@ -557,6 +557,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         f.condition = g.condition;
         f.fouling = g.fouling;
         f.grime = g.grime;
+        f.build = g.build;
     }
     for inner in &saved.inserted {
         let Some(m) = restore_item(world, inner, at) else {
@@ -966,6 +967,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
             grime: f.grime,
             internal_loads: f.internal_loads.clone(),
             chamber_loads: f.chamber_loads.clone(),
+            build: f.build,
         });
         saved.condition = f.condition;
         if let Some(m) = gun
