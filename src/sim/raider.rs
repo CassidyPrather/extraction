@@ -323,6 +323,8 @@ pub struct Raider {
     /// Health and carried kilograms as of this frame.
     hp: f32,
     kg: f32,
+    /// How full its pack is, 0..1.
+    pack_fill: f32,
     /// Attention from the artifacts it carries.
     heat: f32,
     /// Crouched since (raid seconds), when it is.
@@ -540,6 +542,7 @@ pub fn attach_raider(
                 debug: std::env::var_os("SIM_DEBUG").is_some(),
                 hp: 100.0,
                 kg: 0.0,
+                pack_fill: 0.0,
                 heat: 0.0,
                 crouched_since: None,
                 at_rv: false,
@@ -848,6 +851,10 @@ pub fn think(
         r.clock += dt;
         r.hp = health.hp;
         r.kg = body.carried_kg;
+        r.pack_fill = {
+            let (used, cap) = scene.pack_use(me);
+            (used / cap.max(1e-3)).clamp(0.0, 1.0)
+        };
         r.heat = scene.attention.get(me).map_or(0.0, |a| a.carried);
         let pos = tf.translation;
         let here = pos.xz();
@@ -2561,6 +2568,31 @@ fn route_exposure(map: &extraction_core::map::MapDef, from: Vec2, to: Vec2) -> f
     danger * d / 100.0
 }
 
+/// A deadliest-region destination looks this much worse while the pack is
+/// all but empty...
+const DEADLY_START: f32 = 0.3;
+/// ...that is, less full than this.
+const NEAR_EMPTY: f32 = 0.2;
+
+/// Nobody walks into the robots' own country with an empty pack and no
+/// reason: a player goes to the Depot under Marrow's Gate on purpose (a
+/// key, a recall, a job), not at minute zero. A danger-3 site scores
+/// [`DEADLY_START`] times as much while the pack is near-empty, unless
+/// it's the job or in the region set out for. A soft weight, not a ban:
+/// if everything else is worse, it's still the choice.
+fn deadly_start(r: &Raider, map: &extraction_core::map::MapDef, s: &Site) -> f32 {
+    let region = map.region_at(s.at.to_array());
+    let deadly = region.is_some_and(|g| g.danger >= 3);
+    let aimed = r
+        .objective
+        .is_some_and(|o| map.region_at(o.to_array()).map(|g| &g.name) == region.map(|g| &g.name));
+    if deadly && r.pack_fill < NEAR_EMPTY && !s.job && !aimed {
+        DEADLY_START
+    } else {
+        1.0
+    }
+}
+
 /// Picks the next site: worth, distance, the danger of the walk there, and
 /// the pull of the far side as the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
@@ -2592,7 +2624,14 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             _ if s.job && r.hp >= 50.0 && std::env::var_os("SIM_CONTRACT").is_some() => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
-            SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
+            // A big place looks worth more, up to a point: from the field
+            // map a player sees a big building, not its shelf count (an
+            // underground complex's forty spots had every fresh raider
+            // walk 566 m up Marrow's Gate road to the Depot, into the
+            // robots coming out).
+            SiteKind::Building(_) => {
+                r.traits.buildings * (1.0 + s.spots.min(BIG_SITE) as f32 * 0.35)
+            }
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
             // Picking over a wreck is for when nothing else is coming.
@@ -2621,6 +2660,7 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let score = pull * rich * aim
             / (1.0 + d / 80.0)
             / (1.0 + ROUTE_CAUTION * route_exposure(&scene.zone.map, here, s.at))
+            * deadly_start(r, &scene.zone.map, s)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
@@ -2629,6 +2669,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
     }
     best.map(|b| b.1)
 }
+
+/// Loot spots past this don't make a site look any bigger to a raider.
+const BIG_SITE: usize = 8;
 
 /// The job on the card, as a site to walk to (once): a scout's place, a
 /// contract's thing to bring (where it lies, once it's laid) or place to
