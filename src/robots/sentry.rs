@@ -212,6 +212,7 @@ pub fn spawn_sentry(
             },
             super::Breed("sentry"),
             super::heavy::OwnLook,
+            super::heavy::NotOnPatrol,
             Sentry {
                 centre,
                 arc,

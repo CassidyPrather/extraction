@@ -221,6 +221,9 @@ pub struct SavedGun {
     pub mode: usize,
     pub condition: f32,
     pub fouling: f32,
+    /// Weather's dirt in the action (`Firearm::grime`).
+    #[serde(default)]
+    pub grime: f32,
     /// The internal magazine's loads, and each chamber's.
     #[serde(default)]
     pub internal_loads: Loads,
@@ -615,6 +618,7 @@ mod tests {
             mode: 1,
             condition: 0.7,
             fouling: 0.2,
+            grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
         });
@@ -680,6 +684,7 @@ mod tests {
             mode: 1,
             condition: 0.7,
             fouling: 0.2,
+            grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
         });

@@ -145,6 +145,10 @@ impl Plugin for BudgetPlugin {
         if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
             app.add_systems(Last, log_counts);
         }
+        if let Some(path) = std::env::var_os("EXTRACTION_FRAMELOG") {
+            app.insert_resource(FrameLog::open(path.into()))
+                .add_systems(Last, log_each_frame);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -503,12 +507,21 @@ impl Knobs {
 /// The comfort board's SMOOTHING (`Comfort::msaa`, `--msaa`) on every
 /// view of the world: the headset's eyes, the flat camera, the mirror.
 /// Not offscreen views (a scope's picture, an impostor capture), which
-/// set their own.
+/// set their own. With it off, FXAA instead: one cheap pass that takes
+/// the edge off wires and rails (Visual design's call; no SMAA, no TAA,
+/// whose ghosting in a headset is a comfort problem). Foliage's alpha to
+/// coverage follows the samples by itself (`trees::foliage_alpha`).
 #[allow(clippy::type_complexity)]
 fn apply_msaa_setting(
+    mut commands: Commands,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut cams: Query<
-        (&mut Msaa, Option<&bevy::camera::RenderTarget>),
+        (
+            Entity,
+            &mut Msaa,
+            Option<&bevy::camera::RenderTarget>,
+            Has<bevy::anti_alias::fxaa::Fxaa>,
+        ),
         (With<Camera3d>, Without<crate::render::OffscreenCamera>),
     >,
 ) {
@@ -517,7 +530,7 @@ fn apply_msaa_setting(
     };
     let want = comfort.msaa_setting();
     let all = comfort.is_changed();
-    for (mut m, target) in &mut cams {
+    for (e, mut m, target, fxaa) in &mut cams {
         if !all && !m.is_added() {
             continue;
         }
@@ -526,6 +539,17 @@ fn apply_msaa_setting(
         }
         if *m != want {
             *m = want;
+        }
+        match (want == Msaa::Off, fxaa) {
+            (true, false) => {
+                commands
+                    .entity(e)
+                    .insert(bevy::anti_alias::fxaa::Fxaa::default());
+            }
+            (false, true) => {
+                commands.entity(e).remove::<bevy::anti_alias::fxaa::Fxaa>();
+            }
+            _ => {}
         }
     }
 }
@@ -1993,4 +2017,79 @@ fn log_counts(
         meshes.iter().count(),
     );
     last.1 = names;
+}
+
+/// `EXTRACTION_FRAMELOG=<path>`: a line a frame, `frame cpu_ms gpu_ms`.
+/// cpu_ms is the frame's real time (in a headset, what the player feels
+/// when the CPU is the slow side); gpu_ms is the newest timed frame's
+/// top-level render passes summed (a few frames late, as timestamps read
+/// back), or -1 when none came back this frame. `scripts/frames.py`
+/// gives the worst frame and the 99.9th percentile of each, so a single
+/// long frame isn't lost in an average (`docs/PERFORMANCE.md`, "Hitches").
+#[derive(Resource)]
+struct FrameLog {
+    out: Option<std::io::BufWriter<std::fs::File>>,
+    frame: u64,
+    seen: Option<std::time::Instant>,
+}
+
+impl FrameLog {
+    fn open(path: std::path::PathBuf) -> Self {
+        let out = std::fs::File::create(&path)
+            .map_err(|e| warn!("EXTRACTION_FRAMELOG {}: {e}", path.display()))
+            .ok()
+            .map(std::io::BufWriter::new);
+        Self {
+            out,
+            frame: 0,
+            seen: None,
+        }
+    }
+}
+
+fn log_each_frame(
+    time: Res<Time<Real>>,
+    store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
+    mut log: ResMut<FrameLog>,
+) {
+    use std::io::Write;
+    let cpu = time.delta_secs_f64() * 1000.0;
+    let mut gpu = -1.0;
+    let mut newest = log.seen;
+    if let Some(store) = &store {
+        let mut sum = 0.0;
+        let mut any = false;
+        for d in store.iter() {
+            let path = d.path().as_str();
+            let Some(pass) = path
+                .strip_prefix("render/")
+                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+            else {
+                continue;
+            };
+            // Top-level passes only (nested ones are inside them).
+            if pass.contains('/') {
+                continue;
+            }
+            if let Some(m) = d.measurement() {
+                if log.seen.is_none_or(|s| m.time > s) {
+                    sum += m.value;
+                    any = true;
+                    newest = newest.max(Some(m.time));
+                }
+            }
+        }
+        if any {
+            gpu = sum;
+        }
+    }
+    log.seen = newest;
+    log.frame += 1;
+    let frame = log.frame;
+    if let Some(out) = &mut log.out {
+        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3}");
+        if frame % 90 == 0 {
+            let _ = out.flush();
+        }
+    }
 }

@@ -4516,6 +4516,73 @@ mod carry {
         );
     }
 
+    /// A shot deer (its carcass as `wildlife::bodies` makes one: a 50 kg
+    /// body lying on its side, settled) taken by a hind leg and drawn
+    /// back: it comes, slowly, along the ground, heard as a body dragged.
+    #[test]
+    fn a_deer_is_dragged_by_its_leg() {
+        use crate::interact::carry::{Bulky, Draggable, drag_speed};
+        use crate::wildlife::bodies::{Carcass, CarcassKind};
+        let (mut vr, feet, _) = with_a_door();
+        let (size, mass) = CarcassKind::Deer.body().unwrap();
+        let lies = feet + Vec3::new(-1.0, size.y * 0.5 + 0.02, -1.4);
+        let deer = vr
+            .app
+            .world_mut()
+            .spawn((
+                Name::new("Carcass"),
+                Carcass {
+                    kind: CarcassKind::Deer,
+                    at: lies,
+                    owner: Entity::PLACEHOLDER,
+                    index: 0,
+                },
+                Transform::from_translation(lies),
+                RigidBody::Dynamic,
+                Collider::cuboid(size.x, size.y, size.z),
+                Mass(mass),
+                LockedAxes::new().lock_rotation_x().lock_rotation_z(),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Bulky,
+                Draggable,
+                crate::robots::wreck::Settling::default(),
+            ))
+            .id();
+        vr.step(240);
+        // Its hind end is the nearer: a leg there.
+        let leg = lies + Vec3::new(0.0, 0.05, size.z * 0.45);
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(deer), "by the leg");
+        let start = at(&vr, deer);
+        let mut fastest = 0.0f32;
+        let back = feet + Vec3::new(-0.6, 0.7, 0.2);
+        for i in 0..150 {
+            vr.move_hand(Side::Right, leg.lerp(back, i as f32 / 150.0));
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(deer).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
+        vr.step(120);
+        let now = at(&vr, deer);
+        assert!(now.distance(start) > 0.5, "it came: {start} to {now}");
+        assert!(now.y - feet.y < 0.6, "along the ground: {now}");
+        assert!(fastest <= drag_speed(mass) + 0.15, "slowly: {fastest}");
+        let heard = vr.app.world().resource::<Heard>();
+        assert!(
+            heard
+                .dragged
+                .iter()
+                .any(|d| d.item == deer && d.stuff == crate::interact::touch::Stuff::Skin),
+            "heard as a body"
+        );
+    }
+
     /// Let go of a car door swung hard forward and it's a shove: it leaves
     /// slow, where a magazine thrown the same way flies.
     #[test]
@@ -4545,5 +4612,225 @@ mod carry {
         let most = (2.0 * SHOVE / 16.0f32).sqrt();
         assert!(v.length() <= most + 0.3, "a shove: {} m/s", v.length());
         assert!(v.z < -0.5, "forward: {v}");
+    }
+}
+
+/// Gripping edges to climb and vault (`interact::hand_climb`): a wall top
+/// over your head, a fence, and a load that slows the pull.
+#[cfg(test)]
+mod vault {
+    use super::*;
+    use crate::interact::hand_climb::pull_rate;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Standing in the open facing -Z with a thin wall (or fence) `high`
+    /// over the ground, its near face 0.35 m ahead, `thick` through.
+    fn facing_a_wall(high: f32, thick: f32) -> (Vr, Vec3, Entity) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let wall = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0, high + 1.0, thick),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                Transform::from_translation(
+                    feet + Vec3::new(0.0, (high - 1.0) / 2.0, -0.35 - thick / 2.0),
+                ),
+            ))
+            .id();
+        vr.step(10);
+        (vr, feet, wall)
+    }
+
+    /// Both hands up on the top's near edge, gripping; then drawn down
+    /// (in the playspace, as arms pull) `by` metres over `ticks`.
+    fn grip_and_pull(vr: &mut Vr, top: f32, by: f32, ticks: usize) -> f32 {
+        let feet = vr.feet();
+        let up = top - feet.y + 0.03;
+        for side in [Side::Left, Side::Right] {
+            vr.hand_local(side, Vec3::new(0.25 * side.sign(), up, -0.38), 0.0);
+        }
+        vr.step(4);
+        for side in [Side::Left, Side::Right] {
+            vr.grip(side, 1.0);
+        }
+        vr.step(4);
+        let mut fastest = 0.0f32;
+        for i in 0..ticks {
+            let y = up - by * (i + 1) as f32 / ticks as f32;
+            for side in [Side::Left, Side::Right] {
+                vr.hand_local(side, Vec3::new(0.25 * side.sign(), y, -0.38), 1.0);
+            }
+            vr.step(1);
+            let v = vr
+                .app
+                .world()
+                .get::<crate::player::Body>(vr.player)
+                .unwrap()
+                .velocity;
+            fastest = fastest.max(v.y);
+        }
+        fastest
+    }
+
+    /// A wall's top above your head: reach up, grip its edge with both
+    /// hands, pull down, and you're up and over it, down the far side.
+    #[test]
+    fn grip_a_wall_top_above_your_head_and_pull_up_and_over() {
+        let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
+        let start = vr.feet();
+        grip_and_pull(&mut vr, feet.y + 2.0, 1.4, 90);
+        vr.step(30);
+        let now = vr.feet();
+        assert!(now.z < start.z - 0.5, "over the wall: {start} to {now}");
+        assert!((now.y - feet.y).abs() < 0.3, "down the far side: {now}");
+    }
+
+    /// A fence at hip height: grip its top rail, push down, and you vault
+    /// it, landing on the far side.
+    #[test]
+    fn vault_a_fence() {
+        let (mut vr, feet, _) = facing_a_wall(1.1, 0.06);
+        let start = vr.feet();
+        grip_and_pull(&mut vr, feet.y + 1.1, 0.5, 30);
+        vr.step(30);
+        let now = vr.feet();
+        assert!(now.z < start.z - 0.5, "over the fence: {start} to {now}");
+    }
+
+    /// Behind the truck, beside its steps: grip the bed's back edge (the
+    /// tailgate's sill, 1.1 m up) with both hands, push up, and you're in
+    /// the bed.
+    #[test]
+    fn climb_into_the_truck_over_the_tailgate() {
+        let mut vr = Vr::new("training_yard");
+        let truck = vr
+            .app
+            .world_mut()
+            .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>()
+            .iter(vr.app.world())
+            .next()
+            .expect("a truck in the yard")
+            .compute_transform();
+        // Facing the truck's front from behind it, a little off its steps.
+        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        let ground = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(behind.x, behind.z);
+        let fwd = truck.rotation * Vec3::NEG_Z;
+        let yaw = (-fwd.x).atan2(-fwd.z);
+        vr.stand(ground, yaw);
+        vr.step(10);
+        let sill = truck
+            .transform_point(Vec3::new(0.0, crate::raid::truck::FLOOR, 1.8))
+            .y;
+        let up = sill - vr.feet().y + 0.03;
+        // The edge is 0.45 m ahead of the feet here: the hands just over it.
+        let start = vr.feet();
+        for side in [Side::Left, Side::Right] {
+            vr.hand_local(side, Vec3::new(0.25 * side.sign(), up, -0.5), 0.0);
+        }
+        vr.step(4);
+        for side in [Side::Left, Side::Right] {
+            vr.grip(side, 1.0);
+        }
+        vr.step(4);
+        for i in 0..40 {
+            let y = up - 0.6 * (i + 1) as f32 / 40.0;
+            for side in [Side::Left, Side::Right] {
+                vr.hand_local(side, Vec3::new(0.25 * side.sign(), y, -0.5), 1.0);
+            }
+            vr.step(1);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        let local = truck.compute_affine().inverse().transform_point3(now);
+        assert!(
+            (now.y - sill).abs() < 0.15 && local.z < 1.8 && local.x.abs() < 1.1,
+            "in the bed: {start} to {now} (truck-local {local})"
+        );
+    }
+
+    /// The quarantine perimeter isn't climbed: hands on its top find
+    /// nothing to hold, and you stay this side.
+    #[test]
+    fn the_perimeter_fence_is_not_climbed() {
+        let (mut vr, feet, wall) = facing_a_wall(1.1, 0.06);
+        vr.app
+            .world_mut()
+            .entity_mut(wall)
+            .insert(crate::world::structures::Fence);
+        let start = vr.feet();
+        grip_and_pull(&mut vr, feet.y + 1.1, 0.5, 30);
+        vr.step(30);
+        let now = vr.feet();
+        assert!(now.z > start.z - 0.2, "still this side: {start} to {now}");
+    }
+
+    /// The same pull-up with 40-odd kg on you: you come up at a fraction of
+    /// the pace.
+    #[test]
+    fn a_load_slows_the_pull_up() {
+        let light = {
+            let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
+            grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
+        };
+        let mut kg = 0.0;
+        let heavy = {
+            let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
+            // Two heavy cells and a fuel can in the pack.
+            let bag = vr
+                .app
+                .world_mut()
+                .query_filtered::<(Entity, &GlobalTransform), With<crate::interact::body::Backpack>>()
+                .iter(vr.app.world())
+                .min_by(|a, b| {
+                    a.1.translation()
+                        .distance(feet)
+                        .total_cmp(&b.1.translation().distance(feet))
+                })
+                .map(|(e, _)| e)
+                .unwrap();
+            for id in ["heavy_cell", "heavy_cell", "fuel_can"] {
+                let item = vr.spawn(id, Transform::from_translation(feet + Vec3::Y * 3.0));
+                vr.app
+                    .world_mut()
+                    .get_mut::<crate::interact::body::Backpack>(bag)
+                    .unwrap()
+                    .contents
+                    .push(item);
+                vr.app.world_mut().entity_mut(item).insert((
+                    crate::interact::body::InBackpack { bag },
+                    ChildOf(bag),
+                    Transform::IDENTITY,
+                    RigidBodyDisabled,
+                    ColliderDisabled,
+                    Visibility::Hidden,
+                ));
+            }
+            vr.step(10);
+            kg = vr
+                .app
+                .world()
+                .get::<crate::player::Body>(vr.player)
+                .unwrap()
+                .carried_kg;
+            assert!(kg > 40.0, "laden: {kg} kg");
+            grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
+        };
+        assert!(light > 2.0, "unladen, up fast: {light}");
+        // (What the pack actually weighs, not a round number.)
+        let most = 4.0 * pull_rate(kg) + 0.05;
+        assert!(heavy <= most, "laden, slow: {heavy} (at most {most})");
     }
 }

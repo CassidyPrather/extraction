@@ -16,6 +16,7 @@ pub mod collector;
 pub mod damage;
 pub mod director;
 pub mod dirigible;
+pub mod disturbed;
 pub mod doors;
 pub mod drone;
 pub mod flee;
@@ -34,12 +35,15 @@ pub mod mender_look;
 mod mind_tests;
 pub mod minelayer;
 pub mod minelayer_look;
+pub mod plough;
+pub mod plough_look;
 pub mod pylon;
 pub mod reel;
 pub mod search;
 pub mod senses;
 pub mod sentry;
 pub mod sentry_look;
+pub mod signs;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;
@@ -257,6 +261,8 @@ impl Plugin for RobotsPlugin {
                 flee::FleePlugin,
                 sorter_mind::SorterMindPlugin,
                 tracks::TracksPlugin,
+                signs::SignsPlugin,
+                disturbed::DisturbedPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -280,6 +286,7 @@ impl Plugin for RobotsPlugin {
                     spotter::SpotterPlugin,
                     minelayer::MinelayerPlugin,
                     mender::MenderPlugin,
+                    plough::PloughPlugin,
                 ),
                 search::SearchPlugin,
                 indoor::IndoorPlugin,

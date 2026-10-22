@@ -319,6 +319,24 @@ fn reel(
                     .insert(TellCase(3));
                 first.unwrap()
             }
+            "dying" => {
+                // At 30 m: a walker on a bad leg limping across, and one
+                // facing you whose eye is shot out once the frames run.
+                let mut first = None;
+                for (k, (d, x)) in [(28.0f32, -6.0f32), (32.0, 3.0)].into_iter().enumerate() {
+                    let p = eye + flat * d + right * x;
+                    let at = zone.on_ground(p.x, p.z);
+                    let w = spawn_walker(&mut commands, &zone, at, job(at));
+                    // (Blind to the camera: they keep to the reel's script.)
+                    commands
+                        .entity(w)
+                        .remove::<Senses>()
+                        .remove::<Brain>()
+                        .insert(TellCase(k as u8));
+                    first.get_or_insert(w);
+                }
+                first.unwrap()
+            }
             "rubble" => {
                 // A heap of broken blocks across its way (Destruction's
                 // debris layer): do its feet stand on them?
@@ -395,7 +413,7 @@ fn reel(
         aware.can_see_target = sees;
         aware.exposure = if sees { 1.0 } else { 0.0 };
     }
-    if (what == "eyes" || what == "eyesfar") && frame == 5 {
+    if (what == "eyes" || what == "eyesfar" || what == "dying") && frame == 5 {
         // Turned to face you.
         for mut w in &mut walkers {
             w.yaw = flat.x.atan2(flat.z);
@@ -418,6 +436,7 @@ fn reel(
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
                 // The lame one walks across, so it limps.
                 "tells" | "tellsbefore" => vec![p(eye + flat * 24.0 + right * 6.0)],
+                "dying" => vec![p(eye + flat * 28.0 + right * 8.0)],
                 _ => vec![p(eye + flat * 6.0 + right * 8.0)],
             };
         }
@@ -499,6 +518,28 @@ fn reel(
     }
     // The damage for `tells`, once they're up: by case, the leg, the eye,
     // the core, the drone's rotor.
+    // `dying`: the leg hurt from the start; the eye shot out a few frames
+    // into the reel, so it catches the eye's last flicker.
+    if what == "dying" && (frame == 5 || frame == WARMUP + 5) {
+        for (e, mut p, gt) in &mut parts {
+            let Ok(case) = cases.get(p.robot) else {
+                continue;
+            };
+            match (case.0, p.role, frame == 5) {
+                (0, PartRole::Leg(1), true) => p.hp = p.max_hp * 0.3,
+                (1, PartRole::Sensor, false) => {
+                    p.hp = 0.0;
+                    destroyed.write(PartDestroyed {
+                        robot: p.robot,
+                        part: e,
+                        role: p.role,
+                        at: gt.translation(),
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
     if what == "tells" && frame == 5 {
         for (e, mut p, gt) in &mut parts {
             let Ok(case) = cases.get(p.robot) else {

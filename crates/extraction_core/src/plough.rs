@@ -98,11 +98,15 @@ pub fn bank_side(left_height: f32, right_height: f32) -> f32 {
     }
 }
 
+/// How long a lane stays clean (s) with snow falling this hard (0..1).
+pub fn lane_life(falling: f32) -> f32 {
+    1.0 / (1.0 / LANE_LIFE + falling / LANE_LIFE_FALLING)
+}
+
 /// Whether a lane cleared `age` seconds ago is still clean with snow
 /// falling this hard (0..1).
 pub fn lane_fresh(age: f32, falling: f32) -> bool {
-    let life = 1.0 / (1.0 / LANE_LIFE + falling / LANE_LIFE_FALLING);
-    age < life
+    age < lane_life(falling)
 }
 
 /// Whether a point at `ahead` metres in front of its middle and `side`
@@ -114,6 +118,86 @@ pub fn in_mouth(ahead: f32, side: f32) -> bool {
 /// Whether a point is in its lane ahead within the horn's reach.
 pub fn in_lane_ahead(ahead: f32, side: f32) -> bool {
     ahead > MOUTH - 0.4 && ahead < HORN_AHEAD && side.abs() < BLADE * 0.5 + 0.5
+}
+
+/// The plough's road, the placement tag of its shed, and where its beat
+/// turns back (short of the col's truck).
+pub const ROAD: &str = "Pass road";
+pub const SHED_TAG: &str = "roadmen";
+pub const STREET: &str = "Coldharbour street";
+pub const TRACK: &str = "Col track";
+pub const TURN_AT: [f32; 2] = [26.0, -224.0];
+
+/// A valley's plough beat (x/z), if it has one: from beside its shed up
+/// the [`ROAD`] to its end, then along the [`STREET`] to where the
+/// [`TRACK`] leaves it, and up that to [`TURN_AT`].
+pub fn beat(map: &crate::map::MapDef) -> Option<Vec<[f32; 2]>> {
+    let road = |n: &str| map.roads.iter().find(|r| r.name == n);
+    let pass = road(ROAD)?;
+    let shed = map
+        .placements
+        .iter()
+        .find(|p| p.tag == SHED_TAG)
+        .map(|p| p.at)
+        .unwrap_or(pass.points[0]);
+    let d2 = |a: [f32; 2], b: [f32; 2]| (a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2);
+    let from = (0..pass.points.len())
+        .min_by(|&a, &b| d2(pass.points[a], shed).total_cmp(&d2(pass.points[b], shed)))?;
+    let mut out: Vec<[f32; 2]> = pass.points[from..].to_vec();
+    if let (Some(street), Some(track)) = (road(STREET), road(TRACK)) {
+        let join = track.points[0];
+        for p in &street.points {
+            if d2(*p, *out.last()?) < 1.0 {
+                continue;
+            }
+            out.push(*p);
+            if d2(*p, join) < 1.0 {
+                break;
+            }
+        }
+        // Up the track until the stretch that passes its turning point.
+        for p in &track.points[1..] {
+            let a = *out.last()?;
+            let (dx, dz) = (p[0] - a[0], p[1] - a[1]);
+            let l2 = (dx * dx + dz * dz).max(1e-6);
+            let t = (((TURN_AT[0] - a[0]) * dx + (TURN_AT[1] - a[1]) * dz) / l2).clamp(0.0, 1.0);
+            if d2([a[0] + dx * t, a[1] + dz * t], TURN_AT) < 1.0 {
+                out.push(TURN_AT);
+                break;
+            }
+            out.push(*p);
+        }
+    }
+    Some(out)
+}
+
+/// Whether a bank may lie at `p`: off the road's junctions (10 m) and the
+/// huts' doors on it (8 m), and out of the galleries (where the downhill
+/// side is their columns).
+pub fn bank_ok(map: &crate::map::MapDef, p: [f32; 2]) -> bool {
+    let d = |a: [f32; 2]| ((a[0] - p[0]).powi(2) + (a[1] - p[1]).powi(2)).sqrt();
+    // Where other roads and paths leave the plough's.
+    let mine = [ROAD, STREET, TRACK];
+    let junctions = map
+        .roads
+        .iter()
+        .filter(|r| !mine.contains(&r.name.as_str()))
+        .flat_map(|r| [r.points[0], *r.points.last().unwrap_or(&r.points[0])]);
+    if junctions.into_iter().any(|j| d(j) < 10.0) {
+        return false;
+    }
+    if map
+        .placements
+        .iter()
+        .filter(|pl| matches!(pl.prefab.as_str(), "shed" | "mast_hut"))
+        .any(|pl| d(pl.at) < 8.0)
+    {
+        return false;
+    }
+    !map.roads
+        .iter()
+        .flat_map(|r| r.galleries.iter())
+        .any(|g| d(g.at) < g.length * 0.5 + 4.0)
 }
 
 /// Where it is on its beat.
@@ -233,6 +317,39 @@ mod tests {
         assert!(in_mouth(MOUTH + 0.2, 1.0));
         assert!(!in_mouth(MOUTH + 3.0, 0.0));
         assert!(!in_mouth(0.0, 0.0), "beside it, not in it");
+    }
+
+    /// Rime Fell's beat: from the roadmen's shed up the switchbacks, into
+    /// Coldharbour and up the col track, turning well short of the col's
+    /// truck; its bank kept off the junctions and out of the galleries.
+    #[test]
+    fn rime_fells_beat() {
+        let map = crate::map::MapDef::from_ron(crate::map::RIME_FELL).unwrap();
+        let b = beat(&map).expect("a beat");
+        let shed = map
+            .placements
+            .iter()
+            .find(|p| p.tag == SHED_TAG)
+            .unwrap()
+            .at;
+        let d = |a: [f32; 2], c: [f32; 2]| ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+        assert!(d(b[0], shed) < 30.0, "starts by its shed: {:?}", b[0]);
+        assert_eq!(*b.last().unwrap(), TURN_AT);
+        let len = length(&b);
+        assert!(len > 600.0 && len < 1500.0, "{len}");
+        for m in &map.markers {
+            if m.kind == crate::map::MarkerKind::Rendezvous {
+                assert!(d(m.at, TURN_AT) >= 40.0, "short of the truck");
+            }
+        }
+        // Inside a gallery: no bank.
+        assert!(!bank_ok(&map, [-150.0, 180.0]));
+        assert!(
+            !bank_ok(&map, [-150.0, 68.0]),
+            "the Miners' path leaves here"
+        );
+        let (mid, _) = along(&b, len * 0.6);
+        let _ = bank_ok(&map, mid);
     }
 
     #[test]

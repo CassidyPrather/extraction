@@ -48,6 +48,14 @@ impl ModelNode {
 impl Models {
     /// Starts loading `path` (relative to `assets/`) once; `None` if there is
     /// no such file, so the caller should use its blockout.
+    /// Every path asked for so far that's on disk (so loaded, or loading).
+    pub fn requested(&self) -> impl Iterator<Item = &str> {
+        self.handles
+            .iter()
+            .filter(|(_, h)| h.is_some())
+            .map(|(p, _)| p.as_str())
+    }
+
     pub fn request(&mut self, path: &str, server: &AssetServer) -> Option<Handle<Gltf>> {
         self.handles
             .entry(path.to_owned())

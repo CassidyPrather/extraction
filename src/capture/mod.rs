@@ -31,7 +31,7 @@ impl Plugin for CapturePlugin {
             sweep::SweepPlugin,
             trailer::TrailerPlugin,
         ))
-        .add_systems(PostUpdate, keep_alive)
+        .add_systems(PostUpdate, (keep_alive, hide_hands))
         .add_systems(Update, clear_air.after(crate::world::sky::WeatherLook))
         .add_systems(
             PostUpdate,
@@ -54,6 +54,30 @@ fn keep_alive(
     for mut h in &mut players {
         h.hp = h.max;
         h.bleeding = 0.0;
+    }
+}
+
+/// `--hide-hands`: the player's gloves and sleeves out of the picture, for
+/// reels and shots where the camera is the player's eye but the subject
+/// is in front of it (a walker crossing the snow, the gloves filling the
+/// bottom of every frame).
+fn hide_hands(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut parts: Query<
+        &mut Visibility,
+        Or<(
+            With<crate::render::props::HandVisual>,
+            With<crate::render::arms::Arm>,
+        )>,
+    >,
+) {
+    if !opts.capture.hide_hands {
+        return;
+    }
+    for mut v in &mut parts {
+        if *v != Visibility::Hidden {
+            *v = Visibility::Hidden;
+        }
     }
 }
 
@@ -108,9 +132,14 @@ pub struct CaptureOptions {
     pub sweep: Option<String>,
     /// `--sweep-lights day,dusk,night`: which lights to shoot under.
     pub sweep_lights: Option<String>,
+    /// `--sweep-turn N`: a turntable instead of the grid, N frames round
+    /// each subject from one full-window camera.
+    pub sweep_turn: Option<u32>,
     /// `--trailer SECONDS`: film the `--sim-run` raid, up to SECONDS of
     /// footage.
     pub trailer: Option<String>,
+    /// `--hide-hands 1`: hide the player's gloves and sleeves.
+    pub hide_hands: bool,
 }
 
 impl CaptureOptions {
@@ -125,7 +154,9 @@ impl CaptureOptions {
                 | "--fps"
                 | "--sweep"
                 | "--sweep-lights"
+                | "--sweep-turn"
                 | "--trailer"
+                | "--hide-hands"
         )
     }
 
@@ -138,7 +169,9 @@ impl CaptureOptions {
             "--fps" => self.fps = val.parse().ok().filter(|n| *n > 0),
             "--sweep" => self.sweep = Some(val),
             "--sweep-lights" => self.sweep_lights = Some(val),
+            "--sweep-turn" => self.sweep_turn = val.parse().ok().filter(|n| *n > 0),
             "--trailer" => self.trailer = Some(val),
+            "--hide-hands" => self.hide_hands = val != "0",
             _ => {}
         }
     }

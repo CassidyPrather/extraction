@@ -1664,6 +1664,13 @@ pub const SALVAGE: [&str; 4] = ["heavy_cell", "heavy_plate", "heavy_knee", "heav
 #[derive(Component, Debug)]
 pub struct OwnLook;
 
+/// A machine that isn't patrol strength: it doesn't count against the
+/// director's active robots (a sentry on its mast, a spotter on its
+/// tether, the plough on its road, a minelayer, a mender). The heavy, a
+/// responder, does count.
+#[derive(Component, Debug)]
+pub struct NotOnPatrol;
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

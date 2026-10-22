@@ -32,6 +32,8 @@ impl Plugin for RobotFxPlugin {
                 wreck_trails,
                 wreck_impacts,
                 drag_sparks,
+                scuff_dust,
+                eye_out,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -60,6 +62,9 @@ struct FxAssets {
     water: Handle<StandardMaterial>,
     /// A wound's coolant: pale green, a little lit so it reads at range.
     coolant: Handle<StandardMaterial>,
+    /// Dirt and snow kicked up by a dragged foot.
+    dust: Handle<StandardMaterial>,
+    snow_dust: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -101,6 +106,18 @@ fn assets(
         coolant: materials.add(StandardMaterial {
             base_color: Color::srgb(0.55, 0.95, 0.6),
             emissive: LinearRgba::rgb(0.6, 2.2, 0.8),
+            ..default()
+        }),
+        dust: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.42, 0.36, 0.28, 0.32),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        snow_dust: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.92, 0.95, 1.0, 0.4),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
             ..default()
         }),
         water: materials.add(StandardMaterial {
@@ -689,6 +706,105 @@ fn drag_sparks(
                 2.5,
             );
             n += 3;
+        }
+    }
+}
+
+/// An eye shot out: its socket spits a fistful of sparks as it goes
+/// (`visuals::last_flicker` is the eye's own last stutter).
+fn eye_out(
+    mut commands: Commands,
+    mut deaths: MessageReader<super::PartDestroyed>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+) {
+    let mut n = sparks.iter().len();
+    for d in deaths.read() {
+        if d.role != PartRole::Sensor || n >= MAX_SPARKS {
+            continue;
+        }
+        let a = assets(&mut commands, &existing, &mut meshes, &mut materials);
+        burst(&mut commands, &a, &mut dice, d.at, Vec3::Y, 10, 3.5);
+        n += 10;
+    }
+}
+
+/// A foot dragged along the ground kicks up dirt (snow where it lies):
+/// a dead leg trailing, or a bad one scuffing through its swing
+/// (`anim::SCUFF_UNTIL`). Low, quick puffs behind the foot, so a limp
+/// reads at range even in a still frame.
+#[allow(clippy::too_many_arguments)]
+fn scuff_dust(
+    mut commands: Commands,
+    walkers: Query<(
+        &super::walker::Walker,
+        &super::anim::Gait,
+        &super::walker::LegPoses,
+        &Robot,
+    )>,
+    puffs: Query<(), With<Puff>>,
+    zone: Option<Res<crate::world::Zone>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut dice: Local<Dice>,
+    time: Res<Time>,
+) {
+    let Some(zone) = zone else {
+        return;
+    };
+    let mut n = puffs.iter().len();
+    let dt = time.delta_secs();
+    let mut a = None;
+    for (w, g, poses, robot) in &walkers {
+        let speed = w.velocity.length();
+        if speed < 0.3 || robot.wrecked {
+            continue;
+        }
+        for (i, f) in w.feet.iter().enumerate() {
+            if n >= MAX_PUFFS {
+                return;
+            }
+            let dragging =
+                !f.alive || (g.leg_health[i] <= 0.5 && f.t > 0.0 && f.t < super::anim::SCUFF_UNTIL);
+            if !dragging {
+                continue;
+            }
+            let foot = poses.0[i][2];
+            if foot.y - zone.ground(foot.x, foot.z) > 0.12 {
+                continue;
+            }
+            // About eight a second at a walk.
+            if dice.f() > dt * 8.0 * speed {
+                continue;
+            }
+            let a = a.get_or_insert_with(|| {
+                assets(&mut commands, &existing, &mut meshes, &mut materials)
+            });
+            let snowy = snow.as_ref().is_some_and(|s| s.lies(foot.y) > 0.3);
+            let back = -w.velocity.normalize_or_zero();
+            let max = 0.7 + dice.f() * 0.5;
+            commands.spawn((
+                Puff {
+                    vel: back * 0.6 + Vec3::Y * (0.35 + dice.f() * 0.3) + dice.signed() * 0.15,
+                    life: max,
+                    max,
+                    size: 0.22 * g.size,
+                },
+                Mesh3d(a.puff.clone()),
+                MeshMaterial3d(if snowy {
+                    a.snow_dust.clone()
+                } else {
+                    a.dust.clone()
+                }),
+                Transform::from_translation(foot + Vec3::Y * 0.05).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+            n += 1;
         }
     }
 }
