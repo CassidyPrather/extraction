@@ -828,29 +828,41 @@ mod tests {
                 .count()
         };
         let mut app = app();
-        // Leave the radio at home: the driver says nothing.
+        // A radio in the stash crate: the driver says nothing.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let radio = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("radio").unwrap(),
+                    transform: Transform::IDENTITY,
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::raid::truck::Stash>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(stash)
+            .unwrap()
+            .contents
+            .push(radio);
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
         app.update();
         app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
         for _ in 0..(8 * 90) {
             app.update();
         }
-        let had = app
-            .world_mut()
-            .query::<&crate::items::Item>()
-            .iter(app.world())
-            .any(|i| {
-                app.world()
-                    .resource::<crate::items::Catalog>()
-                    .get(i.kind())
-                    .id
-                    == "radio"
-            });
-        if had {
-            assert_eq!(spoken_spare(&app), 0);
-        }
+        assert_eq!(spoken_spare(&app), 0);
         // Every radio gone: out and home, and the spare comes.
-        let catalog = app.world().resource::<crate::items::Catalog>().clone();
         let radios: Vec<Entity> = app
             .world_mut()
             .query::<(Entity, &crate::items::Item)>()
