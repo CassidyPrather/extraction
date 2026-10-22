@@ -30,6 +30,7 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
+pub mod rv_beacons;
 pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
@@ -91,6 +92,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)

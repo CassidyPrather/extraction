@@ -219,6 +219,15 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The funicular's ballast-water tower by the valley station: the cars
+        // went up full and came down empty.
+        (prefab: "water_tower", at: (110.0, 268.0), rot: 0.0),
+        // Coldharbour's lime-kiln chimney.
+        (prefab: "chimney", at: (0.0, 40.0), rot: 0.0),
+        // The survey tower on the fell.
+        (prefab: "survey_tower", at: (-120.0, 200.0), rot: 0.0),
         // The south gate.
         (prefab: "quarantine_gate", at: (-10.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0, tag: "gate_booth"),

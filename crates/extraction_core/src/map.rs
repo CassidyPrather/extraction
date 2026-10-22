@@ -882,6 +882,29 @@ pub fn prefab_clearance(id: &str) -> f32 {
     }
 }
 
+/// A prefab at least this many times longer than it's wide (a dam's face,
+/// a mill race) clears a strip round itself rather than the circle on its
+/// longest side ([`prefab_clearance`]), which for a 265 m dam emptied the
+/// valley for 130 m round it of every tree and rock.
+pub const CLEAR_STRIP: f32 = 3.0;
+/// How far round its footprint a long prefab's strip reaches.
+const STRIP_MARGIN: f32 = 4.0;
+
+/// Whether `p` is in the ground a placement keeps clear of trees and
+/// rocks, `extra` metres further out: the circle of [`prefab_clearance`]
+/// round it, or a long one's strip.
+pub fn placement_clears(pl: &Placement, p: P2, extra: f32) -> bool {
+    let [w, _, d] = prefab_footprint(&pl.prefab);
+    let (dx, dz) = (p[0] - pl.at[0], p[1] - pl.at[1]);
+    if w.max(d) < CLEAR_STRIP * w.min(d).max(0.1) {
+        return (dx * dx + dz * dz).sqrt() < prefab_clearance(&pl.prefab) + extra;
+    }
+    // In its own frame, as the nav grid turns a footprint.
+    let (s, c) = pl.rot.to_radians().sin_cos();
+    let (lx, lz) = (dx * c + dz * s, -dx * s + dz * c);
+    lx.abs() < w * 0.5 + STRIP_MARGIN + extra && lz.abs() < d * 0.5 + STRIP_MARGIN + extra
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
@@ -987,6 +1010,42 @@ mod tests {
 
     /// Every map file but the Training Yard is a valley on [`VALLEYS`], and
     /// the list's text is the file's.
+    /// A long prefab clears a strip round itself, not the circle on its
+    /// longest side: trees and rocks grow 20 m off a dam's face, not 130.
+    #[test]
+    fn a_long_prefab_clears_a_strip() {
+        let pl = Placement {
+            prefab: "dam_face".into(),
+            at: [0.0, 0.0],
+            rot: 0.0,
+            ..MapDef::from_ron(SALLOW_RESERVOIR).unwrap().placements[0].clone()
+        };
+        assert!(placement_clears(&pl, [100.0, 3.0], 0.0), "beside the face");
+        assert!(
+            !placement_clears(&pl, [0.0, 20.0], 0.0),
+            "20 m off the face"
+        );
+        assert!(!placement_clears(&pl, [100.0, -40.0], 0.0), "40 m off it");
+        let turned = Placement {
+            rot: 90.0,
+            ..pl.clone()
+        };
+        assert!(
+            placement_clears(&turned, [3.0, 100.0], 0.0),
+            "beside it, turned"
+        );
+        assert!(
+            !placement_clears(&turned, [20.0, 0.0], 0.0),
+            "off it, turned"
+        );
+        // A house keeps its circle.
+        let house = Placement {
+            prefab: "house_brick".into(),
+            ..pl
+        };
+        assert!(placement_clears(&house, [5.0, 5.0], 0.0));
+    }
+
     #[test]
     fn every_valley_is_on_the_list() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/maps");
