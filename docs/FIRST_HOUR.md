@@ -431,7 +431,7 @@ out of the shed through the wall.
 | reckless | a machine twice | yes | took it on | home |
 | lost | a drone over the Village | "heard you" 50 s, lock 6 s before the hit | off on its own | down |
 | hoarder | the same drone | 1 s, then the lock 9 s before the hit | carried on (no dressing on it) | down |
-| one-handed | the same drone | lock 10 s ahead | in at the shop door, off to the side | home, not hit |
+| one-handed | the same drone | "heard you", then the lock | in at the shop door, off to the side | home, not hit |
 
 Before the roofs and the drone's 8 s burst, the one-handed newcomer
 went down to this drone in 57 s.
