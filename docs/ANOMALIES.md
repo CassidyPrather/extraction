@@ -122,9 +122,36 @@ Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
 
 **Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
 `hunter` sim raids, at most 20% of deliberate dives into anomalies may
-end in death, and at least 30% must bring a stone out. Last measured (9
-hunter raids on Marrow Creek, 10 minutes each): 20 dives, 1 death in a
-snare (5%), 12 stones (60%).
+end in death, and at least 30% must bring a stone out. Per kind, it also
+reports stones taken a dive and health lost a dive, and the stones that
+raids which extracted brought home.
+
+Sim raiders harvest two ways (`sim::harvest`):
+
+- **Skilled** (the default): each kind's way, as in the harvest
+  scenarios. They bring four bolts.
+- **Novice** (`SIM_HARVEST=novice`): walk in, grab, walk out.
+
+Last measured, 6 hunter raids a valley over all four valleys:
+
+| | Dives | Stones | Health lost a dive | Anomaly deaths |
+|---|---|---|---|---|
+| Novice | 42 | 17 (40%) | 18 | 1 |
+| Skilled | 37 | 16 (43%) | 9 | 0 |
+
+Skill halves what anomalies cost and takes the deaths out, and it gets
+into wells and wins more lifts. It doesn't yet win more stones overall.
+A skilled raider's shots don't knock a hearth out of the coals in the
+sims, so it gets none, and leaves the stone rather than reach in.
+
+Two fixes the bands needed on the way:
+
+- A bot could grab anything at arm's length at any height. Novices
+  plucked a lift's stone riding 3 m up, which no hand can, and out-
+  harvested the skilled. Bots now reach no higher than `STAND_REACH`
+  (2.2 m) over their feet.
+- A wet aegis killed raiders who couldn't get dry in a downpour. Its
+  shocks now stop at `AEGIS_FLOOR` (20 hp).
 
 ## Looks, and what they cost
 
