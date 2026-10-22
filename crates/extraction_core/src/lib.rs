@@ -41,6 +41,7 @@ pub mod nav;
 pub mod noise;
 pub mod plough;
 pub mod progression;
+pub mod report;
 pub mod rocks;
 pub mod safehouse;
 pub mod save;

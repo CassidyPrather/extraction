@@ -297,13 +297,7 @@ impl Plugin for RobotsPlugin {
             ))
             .add_systems(
                 FixedUpdate,
-                (
-                    damage_parts,
-                    senses::door_noise,
-                    perceive,
-                    senses::gunshot_noise,
-                    wreck_loot,
-                )
+                (damage_parts, senses::door_noise, perceive, wreck_loot)
                     .chain()
                     .after(crate::weapons::ballistics::BallisticsSystems),
             );
