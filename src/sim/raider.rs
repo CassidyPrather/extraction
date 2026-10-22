@@ -2571,7 +2571,14 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             _ if s.job && r.hp >= 50.0 && std::env::var_os("SIM_CONTRACT").is_some() => 40.0,
             _ if s.job && r.hp >= 50.0 => 12.0,
             _ if s.job => 0.0,
-            SiteKind::Building(_) => r.traits.buildings * (1.0 + s.spots as f32 * 0.35),
+            // A big place looks worth more, up to a point: from the field
+            // map a player sees a big building, not its shelf count (an
+            // underground complex's forty spots had every fresh raider
+            // walk 566 m up Marrow's Gate road to the Depot, into the
+            // robots coming out).
+            SiteKind::Building(_) => {
+                r.traits.buildings * (1.0 + s.spots.min(BIG_SITE) as f32 * 0.35)
+            }
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
             // Picking over a wreck is for when nothing else is coming.
@@ -2606,6 +2613,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
     }
     best.map(|b| b.1)
 }
+
+/// Loot spots past this don't make a site look any bigger to a raider.
+const BIG_SITE: usize = 8;
 
 /// The job on the card, as a site to walk to (once): a scout's place, a
 /// contract's thing to bring (where it lies, once it's laid) or place to
