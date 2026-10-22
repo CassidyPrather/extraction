@@ -2179,6 +2179,17 @@ mod tests {
         }
     }
 
+    /// A stretch through a box is caught where it goes in; one beside it,
+    /// or that stops short, isn't.
+    #[test]
+    fn a_walk_through_a_house_is_caught() {
+        let half = Vec2::new(4.0, 3.0);
+        let t = segment_hits_box(Vec2::new(-10.0, 0.0), Vec2::new(10.0, 0.0), half).unwrap();
+        assert!((t - 0.3).abs() < 1e-4, "{t}");
+        assert!(segment_hits_box(Vec2::new(-10.0, 5.0), Vec2::new(10.0, 5.0), half).is_none());
+        assert!(segment_hits_box(Vec2::new(-10.0, 0.0), Vec2::new(-6.0, 0.0), half).is_none());
+    }
+
     /// The job's place, not the driver's cache under it.
     #[test]
     fn the_card_is_read_for_the_job_not_the_cache() {
