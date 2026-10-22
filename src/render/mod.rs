@@ -29,6 +29,7 @@ pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
 pub mod screen;
+pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
 pub mod tells;
@@ -79,6 +80,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
         .add_plugins(timeline::TimelinePlugin)
+        .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)

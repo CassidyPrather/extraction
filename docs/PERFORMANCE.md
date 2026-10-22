@@ -508,6 +508,19 @@ the way out, the exit asked and the world dropped (a valley change waits
 through the close too, then the next launch). Ask a playtester for those
 lines.
 
+## Empty meshes
+
+Bevy skips the GPU room for a mesh with no vertex data (or no indices)
+but still copies it in, logging "Use-after-free: attempted to copy element
+data for an unallocated key" each time the mesh is built or changed. A
+mesh made from a list is empty whenever its list is: the footprints, the
+machine prints and the lightning bolt, rebuilt as they change, logged
+18 or more a shot. `render::sound_meshes::never_empty` gives such a mesh
+one zero-area triangle, which draws nothing; build any mesh from a list
+that can be empty through it. In tests, an empty mesh added or changed
+fails the run (`no_empty_meshes`, in every client test), and
+`no_empty_mesh_reaches_the_gpu` settles Marrow Creek in a storm.
+
 ## VRAM
 
 `render::vram` counts what a valley holds on the GPU from the assets and
