@@ -518,7 +518,8 @@ pub fn part_salvage(
             "pylon_relay_coil",
             rng,
         ),
-        RobotKind::Sorter => tries(1, 0.7, "sorter_servo_pack", rng),
+        // Its servo pack is bolted on its wreck (`salvage`).
+        RobotKind::Sorter => Vec::new(),
     }
 }
 

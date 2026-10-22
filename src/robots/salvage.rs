@@ -51,6 +51,8 @@ pub const BOLT_TURN: f32 = std::f32::consts::TAU;
 /// How far out of the hip the bolts' heads stand (m): proud of the hull,
 /// so a spanner gets to them.
 const BOLT_PROUD: f32 = 0.1;
+/// Bolts holding the Sorter's servo pack on (a bigger mount).
+pub const SORTER_BOLTS: usize = 4;
 /// Servo packs a walker wreck gives up at most (its soundest hips).
 pub const MOST_SERVOS: usize = 2;
 
@@ -81,6 +83,15 @@ pub fn condition(health: f32) -> f32 {
 /// Pieces of scrap metal a part this heavy (kg) is, shot through.
 pub fn scrap_for(mass: f32) -> usize {
     ((mass / KG_A_SCRAP).round() as usize).max(1)
+}
+
+/// Where a wreck's servo pack is (in its space), and the health of the
+/// limb it drove when it fell: the Sorter's, at its shoulder
+/// (`sorter::wreck_sorters`).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ServoAt {
+    pub local: Vec3,
+    pub health: f32,
 }
 
 /// A part's health when its robot died (a plate's, pried off a wreck
@@ -263,6 +274,7 @@ fn fit_salvage(
             &Children,
             Option<&super::anim::Gait>,
             Option<&super::wreck::WreckLegs>,
+            Option<&ServoAt>,
             Has<super::indoor::Crawler>,
             Has<super::hound::Hound>,
         ),
@@ -282,7 +294,7 @@ fn fit_salvage(
     let Some(catalog) = catalog else {
         return;
     };
-    for (e, robot, children, gait, legs, crawler, hound) in &wrecks {
+    for (e, robot, children, gait, legs, servo, crawler, hound) in &wrecks {
         commands.entity(e).insert(Fitted);
         // Its plates, for prying off (`armour::shed_plates`).
         for c in children.iter() {
@@ -292,6 +304,42 @@ fn fit_salvage(
                         .entity(c)
                         .insert(HealthAtDeath(part.hp / part.max_hp.max(1.0)));
                 }
+            }
+        }
+        let bolt_look = match (meshes.as_mut(), materials.as_mut()) {
+            (Some(m), Some(s)) => Some((
+                m.add(Cylinder::new(0.014, 0.02)),
+                s.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.33, 0.3),
+                    metallic: 0.8,
+                    perceptual_roughness: 0.4,
+                    ..default()
+                }),
+            )),
+            _ => None,
+        };
+        // The Sorter's servo pack, bolted on at its shoulder.
+        if let Some(sv) = servo {
+            if let Some((seat_e, _)) = seat(
+                &mut commands,
+                &catalog,
+                e,
+                "sorter_servo_pack",
+                Transform::from_translation(sv.local),
+                1.0,
+                sv.health,
+                Hold::Bolts,
+            ) {
+                bolt_on(
+                    &mut commands,
+                    e,
+                    seat_e,
+                    sv.local + Vec3::Y * 0.2,
+                    Quat::IDENTITY,
+                    SORTER_BOLTS,
+                    0.15,
+                    &bolt_look,
+                );
             }
         }
         if robot.kind != RobotKind::Walker || crawler || hound {
@@ -329,18 +377,6 @@ fn fit_salvage(
             .filter(|(_, h)| *h > 0.0)
             .collect();
         sound.sort_by(|a, b| b.1.total_cmp(&a.1));
-        let bolt_look = match (meshes.as_mut(), materials.as_mut()) {
-            (Some(m), Some(s)) => Some((
-                m.add(Cylinder::new(0.014, 0.02)),
-                s.add(StandardMaterial {
-                    base_color: Color::srgb(0.35, 0.33, 0.3),
-                    metallic: 0.8,
-                    perceptual_roughness: 0.4,
-                    ..default()
-                }),
-            )),
-            _ => None,
-        };
         for (i, health) in sound.into_iter().take(MOST_SERVOS) {
             let hip = shape.hip(i) * size;
             let out = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
@@ -358,39 +394,16 @@ fn fit_salvage(
             ) else {
                 continue;
             };
-            for k in 0..BOLTS {
-                let a = k as f32 * std::f32::consts::TAU / BOLTS as f32;
-                let local = Transform::from_translation(
-                    hip + out * BOLT_PROUD + face * (Vec3::new(a.cos(), 0.0, a.sin()) * 0.06),
-                )
-                .with_rotation(face);
-                let bolt = commands
-                    .spawn((
-                        Name::new("Salvage bolt"),
-                        Bolt { seat: seat_e },
-                        OnWreck { wreck: e, local },
-                        Unboltable {
-                            needs: BOLT_TURN,
-                            axis: Vec3::Y,
-                            turned: 0.0,
-                        },
-                        Collider::sphere(0.02),
-                        CollisionLayers::new(
-                            crate::world::Layer::Item,
-                            [crate::world::Layer::World],
-                        ),
-                        local,
-                        Visibility::default(),
-                    ))
-                    .id();
-                if let Some((mesh, mat)) = &bolt_look {
-                    commands.entity(bolt).insert((
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(mat.clone()),
-                        NotShadowCaster,
-                    ));
-                }
-            }
+            bolt_on(
+                &mut commands,
+                e,
+                seat_e,
+                hip + out * BOLT_PROUD,
+                face,
+                BOLTS,
+                0.06,
+                &bolt_look,
+            );
         }
         // The gun pod, where the turret was, on its cables.
         for c in children.iter() {
@@ -462,6 +475,51 @@ fn fit_salvage(
                     ));
                 }
             }
+        }
+    }
+}
+
+/// `n` bolts in a ring of `radius` round `centre` (the wreck's space),
+/// their heads facing `face`'s +Y, holding the part in `seat` on.
+#[allow(clippy::too_many_arguments)]
+fn bolt_on(
+    commands: &mut Commands,
+    wreck: Entity,
+    seat: Entity,
+    centre: Vec3,
+    face: Quat,
+    n: usize,
+    radius: f32,
+    look: &Option<(Handle<Mesh>, Handle<StandardMaterial>)>,
+) {
+    for k in 0..n {
+        let a = k as f32 * std::f32::consts::TAU / n as f32;
+        let local = Transform::from_translation(
+            centre + face * (Vec3::new(a.cos(), 0.0, a.sin()) * radius),
+        )
+        .with_rotation(face);
+        let bolt = commands
+            .spawn((
+                Name::new("Salvage bolt"),
+                Bolt { seat },
+                OnWreck { wreck, local },
+                Unboltable {
+                    needs: BOLT_TURN,
+                    axis: Vec3::Y,
+                    turned: 0.0,
+                },
+                Collider::sphere(0.02),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                local,
+                Visibility::default(),
+            ))
+            .id();
+        if let Some((mesh, mat)) = look {
+            commands.entity(bolt).insert((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                NotShadowCaster,
+            ));
         }
     }
 }
