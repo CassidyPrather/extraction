@@ -225,6 +225,13 @@ struct Site {
 const STUCK_REPEATS: u32 = 3;
 /// How much of its grid round that waypoint it gives up, metres.
 const STUCK_BLOCK: f32 = 1.5;
+/// Blocked this many waypoints round one spot, it's in a pocket (a ledge
+/// it fell onto, a corner the grid can't see): it gives up wider discs and
+/// steps further out of it.
+const POCKET_BLOCKS: u32 = 3;
+/// ...and this many, it gives up where it was going: another rendezvous,
+/// or another site.
+const POCKET_GIVE_UP: u32 = 6;
 
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -299,6 +306,8 @@ pub struct Raider {
     anchor: (Vec2, f32),
     /// Where it last got stuck, and how many times in a row near there.
     stuck_spot: (Vec2, u32),
+    /// Where it has been blocking waypoints, and how many round there.
+    pocket: (Vec2, u32),
     scan: f32,
     clock: f32,
     retreat_until: f32,
@@ -514,6 +523,7 @@ pub fn attach_raider(
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
                 stuck_spot: (Vec2::ZERO, 0),
+                pocket: (Vec2::ZERO, 0),
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
@@ -898,8 +908,9 @@ pub fn think(
                 r.anchor = (here, r.clock);
                 log.event(
                     "stuck",
-                    json!({"x": round(here.x, 1), "z": round(here.y, 1), "doing": r.doing(),
-                           "task": format!("{:?}", bot.tasks.front())}),
+                    json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
+                           "ground": round(scene.zone.ground(here.x, here.y), 1),
+                           "doing": r.doing(), "task": format!("{:?}", bot.tasks.front())}),
                 );
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
@@ -909,24 +920,40 @@ pub fn think(
                 } else {
                     (here, 1)
                 };
+                let mut step = 3.0;
                 if r.stuck_spot.1 >= STUCK_REPEATS
                     && let Some(Task::WalkTo { to, .. }) = bot.tasks.front()
                 {
+                    r.pocket = if here.distance(r.pocket.0) < 6.0 {
+                        (r.pocket.0, r.pocket.1 + 1)
+                    } else {
+                        (here, 1)
+                    };
+                    let radius = if r.pocket.1 >= POCKET_BLOCKS {
+                        step = 8.0;
+                        STUCK_BLOCK * 2.5
+                    } else {
+                        STUCK_BLOCK
+                    };
                     r.grid.block(
                         extraction_core::nav::Obstacle::Circle {
                             at: to.to_array(),
-                            radius: STUCK_BLOCK,
+                            radius,
                         },
                         0.0,
                     );
                     log.event(
                         "stuck_block",
-                        json!({"x": round(to.x, 1), "z": round(to.y, 1)}),
+                        json!({"x": round(to.x, 1), "z": round(to.y, 1), "pocket": r.pocket.1}),
                     );
                     r.stuck_spot.1 = 0;
+                    if r.pocket.1 >= POCKET_GIVE_UP {
+                        give_up_goal(r, &scene, here, &mut log);
+                        r.pocket.1 = 0;
+                    }
                 }
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
-                let side = here + Vec2::new(a.cos(), a.sin()) * 3.0;
+                let side = here + Vec2::new(a.cos(), a.sin()) * step;
                 // Give up on what it was reaching for; sidestep; replan.
                 if let Act::Take(_, item) = r.act {
                     r.skip.insert(item);
@@ -1033,6 +1060,34 @@ pub fn think(
             Stage::Done => {}
         }
         r.interrupted = false;
+    }
+}
+
+/// Caught in a pocket it can't plan its way out of: give up the goal that
+/// keeps drawing it back in. Heading out, it picks the next rendezvous
+/// instead; travelling to a site, it crosses the site off.
+fn give_up_goal(r: &mut Raider, scene: &Scene, here: Vec2, log: &mut SimLog) {
+    match r.act {
+        Act::ToRv | Act::Board => {
+            let mut rvs: Vec<(usize, f32)> = scene
+                .zone
+                .map
+                .markers_of(&MarkerKind::Rendezvous)
+                .enumerate()
+                .filter(|(i, _)| Some(*i) != r.rv)
+                .map(|(i, m)| (i, Vec2::from_array(m.at).distance(here)))
+                .collect();
+            rvs.sort_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some(&(next, _)) = rvs.first() {
+                log.event("pocket_rv", json!({"from": r.rv, "to": next}));
+                r.rv = Some(next);
+            }
+        }
+        Act::Travel(s) | Act::Search(s) => {
+            r.sites[s].tries = r.sites[s].tries.max(3);
+            log.event("pocket_site", json!({"site": s}));
+        }
+        _ => {}
     }
 }
 
