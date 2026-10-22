@@ -65,7 +65,7 @@ impl Plugin for AnomalyVisualsPlugin {
         .add_systems(
             Update,
             (
-                (dress_anomalies, dress_scars).run_if(|| !hidden()),
+                (dress_anomalies, dress_scars, grass_anomalies).run_if(|| !hidden()),
                 (react_to_events, pulse, snare_arcs).chain(),
                 blink_flashes,
                 dress_items,
@@ -82,6 +82,51 @@ impl Plugin for AnomalyVisualsPlugin {
 /// `EXTRACTION_HIDE_ANOMALIES` set: the anomalies keep working but aren't
 /// dressed, so a shot of the same view with and without them measures what
 /// their looks add (`scripts/anomaly_legibility.py`).
+/// The four anomalies nearest the eye (within 80 m), for the plants in
+/// them (`world::cover::AnomalyGrass`): written only when that set, or
+/// one of them, changes.
+fn grass_anomalies(
+    grass: Option<ResMut<crate::world::cover::AnomalyGrass>>,
+    anomalies: Query<(&super::Anomaly, &GlobalTransform)>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(mut grass) = grass else {
+        return;
+    };
+    let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let mut near: Vec<(f32, Vec4, f32)> = anomalies
+        .iter()
+        .map(|(a, g)| {
+            let c = g.translation();
+            (
+                c.distance(eye),
+                c.extend(a.radius),
+                crate::world::cover::AnomalyGrass::code(a.kind),
+            )
+        })
+        .filter(|(d, ..)| *d < 80.0)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut want = crate::world::cover::AnomalyGrass::default();
+    for (i, (_, at, kind)) in near.into_iter().take(4).enumerate() {
+        want.spots[i] = at;
+        want.kinds[i] = kind;
+    }
+    // Moved less than a few centimetres (a Surge-born one creeping): as
+    // it was.
+    let same = grass.kinds == want.kinds
+        && grass
+            .spots
+            .iter()
+            .zip(want.spots)
+            .all(|(a, b)| a.distance_squared(b) < 0.05 * 0.05);
+    if !same {
+        *grass = want;
+    }
+}
+
 fn hidden() -> bool {
     static HIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *HIDE.get_or_init(|| std::env::var_os("EXTRACTION_HIDE_ANOMALIES").is_some())

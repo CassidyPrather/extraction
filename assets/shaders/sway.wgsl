@@ -38,6 +38,14 @@ struct Sway {
     robot_b: vec4<f32>,
     robot_c: vec4<f32>,
     robot_d: vec4<f32>,
+    // The nearest anomalies (`anomaly::visuals::grass_anomalies`): xyz the
+    // centre, w its radius (0: none); `kinds` the kind of each (1 lift,
+    // 2 burner, 3 snare, 4 well, 5 mirror, 6 hush, 7 frost).
+    anomaly_a: vec4<f32>,
+    anomaly_b: vec4<f32>,
+    anomaly_c: vec4<f32>,
+    anomaly_d: vec4<f32>,
+    kinds: vec4<f32>,
 }
 
 // How far a plant here sinks into lying snow (m): with the snow's depth,
@@ -67,6 +75,87 @@ fn parted(world: vec3<f32>, hand: vec4<f32>, weight: f32) -> vec3<f32> {
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> sway: Sway;
 
+// What an anomaly does to the plants in it, out to its edge and no
+// further (the edge firm within 15 cm, so where the grass changes is where
+// it starts): `still` how much of the wind it takes away, `o` how it moves
+// them, `sink` how far it presses them down.
+struct InAnomaly {
+    still: f32,
+    o: vec3<f32>,
+    sink: f32,
+}
+
+fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32) -> InAnomaly {
+    var r: InAnomaly;
+    r.still = 0.0;
+    r.o = vec3<f32>(0.0);
+    r.sink = 0.0;
+    if (a.w <= 0.0) {
+        return r;
+    }
+    let rel = world.xz - a.xz;
+    let d = length(rel);
+    let inside = 1.0 - smoothstep(a.w - 0.15, a.w, d);
+    if (inside <= 0.0 || abs(world.y - a.y) > 3.0) {
+        return r;
+    }
+    let t = globals.time;
+    let k = i32(kind + 0.5);
+    let toward = -rel / max(d, 1e-3);
+    if (k == 1) {
+        // A lift: stretched up and circling, the tips round its middle.
+        let round = vec2<f32>(-toward.y, toward.x);
+        let spin = sin(t * 2.2 + phase * 6.283);
+        r.still = 1.0;
+        r.o = vec3<f32>(round.x * spin, 0.6, round.y * spin) * 0.12 * weight;
+    } else if (k == 2) {
+        // A burner: burnt to the ground.
+        r.still = 1.0;
+        r.sink = 0.5;
+    } else if (k == 3) {
+        // A snare: standing on end, quivering.
+        r.still = 1.0;
+        r.o = vec3<f32>(sin(t * 37.0 + phase * 40.0), 0.4, cos(t * 41.0 + phase * 31.0))
+            * vec3<f32>(0.015, 0.1, 0.015) * weight;
+    } else if (k == 4) {
+        // A well: laid flat toward its heart.
+        r.still = 1.0;
+        r.o = vec3<f32>(toward.x, -0.6, toward.y) * 0.3 * weight;
+    } else if (k == 6) {
+        // A hush: dead still, whatever the wind.
+        r.still = 1.0;
+    } else if (k == 7) {
+        // A frost: stiff, bowed under the rime.
+        r.still = 1.0;
+        r.o = vec3<f32>(0.0, -0.08, 0.0) * weight;
+        r.sink = 0.03;
+    }
+    r.still *= inside;
+    r.o *= inside;
+    r.sink *= inside;
+    return r;
+}
+
+fn anomalies(world: vec3<f32>, weight: f32, phase: f32) -> InAnomaly {
+    var r = in_anomaly(world, sway.anomaly_a, sway.kinds.x, weight, phase);
+    for (var i = 1; i < 4; i++) {
+        var a = sway.anomaly_b;
+        var k = sway.kinds.y;
+        if (i == 2) {
+            a = sway.anomaly_c;
+            k = sway.kinds.z;
+        } else if (i == 3) {
+            a = sway.anomaly_d;
+            k = sway.kinds.w;
+        }
+        let n = in_anomaly(world, a, k, weight, phase);
+        r.still = max(r.still, n.still);
+        r.o += n.o;
+        r.sink = max(r.sink, n.sink);
+    }
+    return r;
+}
+
 fn offset(world: vec3<f32>, weight: f32, phase: f32) -> vec3<f32> {
     let t = globals.time;
     let dir = normalize(vec2<f32>(sway.wind.x, sway.wind.y) + vec2<f32>(1e-4, 0.0));
@@ -77,7 +166,8 @@ fn offset(world: vec3<f32>, weight: f32, phase: f32) -> vec3<f32> {
     let flutter = sin(t * 3.1 + phase * 6.283 + along * 0.7) * 0.35
         + sin(t * 5.3 + phase * 11.0) * 0.15;
     let push = sway.wind.z * (0.6 * gust + flutter * (0.4 + 0.6 * gust));
-    var o = vec3<f32>(dir.x, 0.0, dir.y) * push * 0.18 * weight;
+    let held = anomalies(world, weight, phase);
+    var o = vec3<f32>(dir.x, 0.0, dir.y) * push * 0.18 * weight * (1.0 - held.still) + held.o;
     // Lean away from the walker's legs.
     let away = world.xz - sway.pusher.xz;
     let d = length(away);
@@ -110,9 +200,13 @@ fn vertex(vertex: Vertex) -> VertexOutput {
         vec4<f32>(vertex.position, 1.0)
     );
 #ifdef VERTEX_UVS_B
+    let sunk = max(
+        buried(out.world_position.xyz, vertex.uv_b.y),
+        anomalies(out.world_position.xyz, vertex.uv_b.x, vertex.uv_b.y).sink
+    );
     out.world_position = vec4<f32>(
         out.world_position.xyz + offset(out.world_position.xyz, vertex.uv_b.x, vertex.uv_b.y)
-            - vec3<f32>(0.0, buried(out.world_position.xyz, vertex.uv_b.y), 0.0),
+            - vec3<f32>(0.0, sunk, 0.0),
         1.0
     );
 #endif
