@@ -144,7 +144,10 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                     .unwrap()
                     .0,
             ),
-            // (A task may take 30 s at most: two waits.)
+            // (A task may take 30 s at most: several waits; a device's draw
+            // takes `devices::EM_SETTLE` to stand out.)
+            Wait(15.0),
+            Wait(15.0),
             Wait(15.0),
             Wait(15.0),
             Expect(Counter(dv::NOTICED, 1, 100)),

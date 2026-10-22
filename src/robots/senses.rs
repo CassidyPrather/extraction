@@ -48,7 +48,9 @@ pub const GRASS_HIDE: f32 = 0.35;
 /// ...beyond this range (closer, the robot sees into the grass).
 pub const GRASS_NEAR: f32 = 4.0;
 /// Under trees (forest ground) beyond [`CANOPY_NEAR`], standing or not,
-/// this much of you shows through the trunks and the leaves...
+/// this much of you shows through the trunks and the leaves to a machine
+/// looking across, not down (steeper than [`GRASS_STEEP`] it sees down
+/// through them)...
 pub const CANOPY_HIDE: f32 = 0.6;
 /// ...from this far off (m).
 pub const CANOPY_NEAR: f32 = 20.0;
@@ -251,7 +253,8 @@ pub fn exposure(c: &SightCase) -> f32 {
     } else {
         c.still
     };
-    let canopy = if c.canopy && c.distance > CANOPY_NEAR {
+    // (From above, a drone or a spotter sees down through the trees.)
+    let canopy = if c.canopy && c.distance > CANOPY_NEAR && c.depression <= GRASS_STEEP {
         CANOPY_HIDE
     } else {
         1.0
@@ -830,6 +833,18 @@ mod tests {
             exposure(&SightCase {
                 canopy: true,
                 ..near
+            })
+        );
+        // From above, through the leaves.
+        let above = SightCase {
+            depression: GRASS_STEEP + 0.1,
+            ..case()
+        };
+        assert_eq!(
+            exposure(&above),
+            exposure(&SightCase {
+                canopy: true,
+                ..above
             })
         );
     }
