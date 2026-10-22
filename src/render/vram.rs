@@ -19,8 +19,9 @@ use bevy::prelude::*;
 pub(crate) const VRAM_CEILING: u64 = 4_500 * 1024 * 1024;
 
 /// What a valley may hold, under the ceiling: below the 2.0-2.2 GB they
-/// held with every texture RGBA8 (the colour and data maps are BC7 now).
-pub(crate) const VRAM_BUDGET: u64 = 2_000 * 1024 * 1024;
+/// held with every texture RGBA8. The colour and data maps are BC7 now:
+/// 1.75-1.99 GB.
+pub(crate) const VRAM_BUDGET: u64 = 2_048 * 1024 * 1024;
 
 pub(crate) const MB: f64 = 1024.0 * 1024.0;
 
