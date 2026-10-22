@@ -2540,8 +2540,29 @@ fn kind_name(k: SiteKind) -> &'static str {
     }
 }
 
-/// Picks the next site: worth, distance, and the pull of the far side as
-/// the clock runs down.
+/// How much a long walk through dangerous country puts a site off, per
+/// [`route_exposure`] unit.
+const ROUTE_CAUTION: f32 = 0.15;
+
+/// The danger a walk from `from` to `to` crosses, as a player reads it off
+/// the field map: the regions' danger (0 calm .. 3 deadly) along the
+/// straight line, summed per hundred metres. A rich site past a deadly
+/// road is worth less than the same site next door.
+fn route_exposure(map: &extraction_core::map::MapDef, from: Vec2, to: Vec2) -> f32 {
+    let d = from.distance(to);
+    let steps = (d / 40.0).ceil().max(1.0) as usize;
+    let danger: f32 = (0..=steps)
+        .map(|k| {
+            let p = from.lerp(to, k as f32 / steps as f32);
+            map.region_at(p.to_array()).map_or(0.0, |r| r.danger as f32)
+        })
+        .sum::<f32>()
+        / (steps + 1) as f32;
+    danger * d / 100.0
+}
+
+/// Picks the next site: worth, distance, the danger of the walk there, and
+/// the pull of the far side as the clock runs down.
 fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
     // `SIM_SITE=<prefab>`: that site first, while it's there to be done
     // (a smoke test of one underground site, say).
@@ -2597,7 +2618,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let aim = r.objective.map_or(1.0, |o| {
             1.0 + OBJECTIVE_PULL * (1.0 - s.at.distance(o) / OBJECTIVE_REACH).clamp(0.0, 1.0)
         });
-        let score = pull * rich * aim / (1.0 + d / 80.0)
+        let score = pull * rich * aim
+            / (1.0 + d / 80.0)
+            / (1.0 + ROUTE_CAUTION * route_exposure(&scene.zone.map, here, s.at))
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
