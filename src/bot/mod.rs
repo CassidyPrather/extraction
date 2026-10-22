@@ -100,6 +100,14 @@ pub enum Task {
     /// Use the item in this hand (radio, dressing, food): what VR's primary
     /// button and flat mode's U do.
     Use(Side),
+    /// Grab `item` as `Grab` does, unless it still lies within `radius` of
+    /// `clear_of` (a stone not yet out of a burner's coals): then leave it.
+    GrabClear {
+        item: Entity,
+        side: Side,
+        clear_of: Vec3,
+        radius: f32,
+    },
     /// Throw what's in this hand at a point (a bolt into an anomaly).
     Throw {
         side: Side,
@@ -169,6 +177,17 @@ impl Task {
             Task::GrabFromHere { item, side } => Task::GrabFromHere {
                 item,
                 side: side.other(),
+            },
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => Task::GrabClear {
+                item,
+                side: side.other(),
+                clear_of,
+                radius,
             },
             Task::Use(side) => Task::Use(side.other()),
             Task::Throw { side, at } => Task::Throw {
@@ -795,6 +814,24 @@ fn run_tasks(
             continue;
         }
         match task {
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => {
+                let inside = ext.placed.get(item).is_ok_and(|(gt, _)| {
+                    let p = gt.translation();
+                    Vec2::new(p.x - clear_of.x, p.z - clear_of.z).length() < radius
+                });
+                if inside {
+                    bot.note(format!("left {item}: still in the anomaly"));
+                    bot.next();
+                } else if let Some(front) = bot.tasks.front_mut() {
+                    *front = Task::Grab { item, side };
+                }
+                continue;
+            }
             Task::Wait(s) => {
                 if bot.elapsed >= s {
                     bot.next();

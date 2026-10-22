@@ -367,6 +367,11 @@ impl LaunchOptions {
         if o.scenario.as_deref() == Some(crate::onboarding::first_hour::RAID) {
             o.robots = true;
         }
+        // The cage is the adit's, on Rime Fell.
+        if o.scenario.as_deref() == Some(crate::world::cage::SCENARIO) && !o.map_explicit {
+            o.map = "rime_fell".into();
+            o.map_explicit = true;
+        }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {
             o.map = crate::camp::TRAINING_YARD.into();
