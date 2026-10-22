@@ -75,6 +75,7 @@ LAMP_CHARACTERS = {
     "mill_race": "Oc(2) 8s",
     "ropeway_station": "Oc(2) 8s",
     "observatory": "Oc(2) 8s",
+    "factory_hall": "Oc(2) 8s",
     "headframe": "Iso 4s",
     "sorting_gantry": "Iso 4s",
     "funicular_upper": "Iso 4s",

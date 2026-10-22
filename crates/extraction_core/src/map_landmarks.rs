@@ -549,7 +549,9 @@ pub fn character(kind: &str) -> Character {
         "survey_tower" => FLASH_3,
         "robot_gate" => FLASH_4,
         "water_tower" => OCCULTING,
-        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" => OCCULTING_2,
+        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
+            OCCULTING_2
+        }
         "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
         "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASH,
         _ => STEADY,
@@ -727,6 +729,7 @@ mod tests {
             "mill_race",
             "ropeway_station",
             "observatory",
+            "factory_hall",
             "headframe",
             "sorting_gantry",
             "funicular_upper",
