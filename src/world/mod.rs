@@ -12,6 +12,7 @@ pub mod clutter;
 pub mod cold;
 pub mod cover;
 pub mod dam;
+pub mod dark;
 pub mod decay;
 pub mod echo;
 pub mod fell;

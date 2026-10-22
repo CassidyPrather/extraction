@@ -1307,6 +1307,7 @@ impl Plugin for UndergroundPlugin {
             super::echo::EchoPlugin,
             super::lockdown::LockdownPlugin,
             super::live::LivePlugin,
+            super::dark::DarkPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
