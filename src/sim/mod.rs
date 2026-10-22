@@ -112,7 +112,6 @@ fn career_memory(
 /// `harvest::kit`), laid out by the insertion point.
 fn spawn_sim_kit(
     mut commands: Commands,
-    opts: Res<LaunchOptions>,
     zone: Res<Zone>,
     catalog: Res<crate::items::Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
