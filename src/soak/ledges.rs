@@ -44,31 +44,29 @@ const CELL: f32 = 0.5;
 /// At least this many cells: room for a body (0.6 m across) to stand.
 const MIN_CELLS: usize = 3;
 
-/// Known walks: (map, prefab, why). Nothing yet.
-const WALKS: &[(&str, &str, &str)] = &[];
-
-/// Perches found and with their owners: (map, prefab, who, what). Each
-/// comes off when it's fixed; a perch anywhere else fails the test.
-const OPEN: &[(&str, &str, &str, &str)] = &[
-    (
-        "sallow_reservoir",
-        "dam_face",
-        "Fourth valley",
-        "the face's course steps: being weathered at 60 degrees",
-    ),
-    (
-        "sallow_reservoir",
-        "water_tower",
-        "Models: world",
-        "three 1 m2 pieces of the gallery, 12.5 m up",
-    ),
+/// Known walks: (map, prefab, why). (The probe's half-metre cells are
+/// coarser than some walks: they read a narrow ring as cut off.)
+const WALKS: &[(&str, &str, &str)] = &[
     (
         "marrow_creek",
         "water_tower",
-        "Models: world",
-        "the same gallery pieces",
+        "a 0.45 m ring round the tank, wide enough for the 0.28 m capsule, the ladder at its back",
+    ),
+    (
+        "sallow_reservoir",
+        "water_tower",
+        "a 0.45 m ring round the tank, wide enough for the 0.28 m capsule, the ladder at its back",
     ),
 ];
+
+/// Perches found and with their owners: (map, prefab, who, what). Each
+/// comes off when it's fixed; a perch anywhere else fails the test.
+const OPEN: &[(&str, &str, &str, &str)] = &[(
+    "sallow_reservoir",
+    "dam_face",
+    "Fourth valley",
+    "the face's course steps: being weathered at 60 degrees",
+)];
 
 /// A standable surface in a column: its height and whether it's the ground.
 #[derive(Clone, Copy, Debug)]
