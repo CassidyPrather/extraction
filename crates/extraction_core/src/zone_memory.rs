@@ -169,6 +169,30 @@ impl ZoneMemory {
             * MEMORY
     }
 
+    /// The most habitual of the cells round `(x, z)` (it and its eight
+    /// neighbours): how near your usual ways a place is.
+    pub fn corridor_near(&self, x: f32, z: f32) -> f32 {
+        let mut best = 0.0f32;
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                best = best.max(self.corridor(x + dx as f32 * CELL, z + dz as f32 * CELL));
+            }
+        }
+        best
+    }
+
+    /// How habitual the most habitual cell within `r` of `at` is (0..1,
+    /// times [`MEMORY`]): read-only, for anything that wants to keep to,
+    /// or keep off, your usual ways.
+    pub fn heat_near(&self, at: [f32; 2], r: f32) -> f32 {
+        self.heat
+            .iter()
+            .filter(|(c, _)| dist(centre(*c), at) <= r + CELL * 0.71)
+            .map(|(_, w)| (w / HEAT_MAX).min(1.0))
+            .fold(0.0, f32::max)
+            * MEMORY
+    }
+
     /// The rendezvous you favour, if you favour one: where, and how
     /// strongly (0..1, times [`MEMORY`]).
     pub fn favourite_rv(&self) -> Option<([f32; 2], f32)> {
@@ -284,6 +308,8 @@ mod tests {
         }
         let habit = m.corridor(100.0, 100.0);
         assert!(habit > 0.8, "a habit: {habit}");
+        assert!(m.heat_near([110.0, 110.0], 10.0) > 0.8);
+        assert_eq!(m.heat_near([600.0, 600.0], 50.0), 0.0);
         assert!(
             m.favourite_rv()
                 .is_some_and(|(at, s)| at == [500.0, 20.0] && s > 0.5)

@@ -242,6 +242,20 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**The Zone remembers you** (`robots/memory.rs`, `zone_memory`). Each valley keeps a compact memory of your habits, saved with it:
+- the 30 m cells you walk;
+- the rendezvous you get out from;
+- where you wreck its machines;
+- the loot spots you clear.
+
+It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays off within a few raids. When you next step out, it leans, gently and capped:
+- patrols pick places on your usual ways up to twice as often;
+- the sentry nearest your favourite rendezvous turns its sweep toward it, by at most a quarter of its arc;
+- up to two buildings you cleared are found with their doors shut, one wedged if there's another way in;
+- one machine of the kind you wrecked is left watching where you did it.
+
+The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
