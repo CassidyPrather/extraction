@@ -340,6 +340,10 @@ pub struct Raider {
     crouched_since: Option<f32>,
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
+    /// Where it waits for the truck at rendezvous `.0` while the drones
+    /// survey a place nearby: in the lee of the shelter there
+    /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
+    wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
@@ -569,6 +573,7 @@ pub fn attach_raider(
                 heat: 0.0,
                 crouched_since: None,
                 at_rv: false,
+                wait_at: None,
                 after_vent: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
@@ -3592,15 +3597,35 @@ fn extract_step(
             ];
         }
     }
-    r.at_rv = here.distance(approach) <= 4.0;
-    if here.distance(approach) > 4.0 {
+    // Till the truck's stopped, wait in a shelter's lee if drones watch
+    // the place; then walk out to the tailgate.
+    let waiting = matches!(phase, Phase::TruckWaiting { .. });
+    if r.wait_at.is_none_or(|(at, _)| at != rv) {
+        let at = rvs[rv].1.to_array();
+        let lee = extraction_core::map_lint::watched_by(&zone.map, at).and_then(|(poi, _)| {
+            let from = zone
+                .map
+                .markers_of(&MarkerKind::Poi)
+                .find(|m| m.name == poi)?
+                .at;
+            extraction_core::map_lint::wait_shelter(&zone.map, at, from)
+                .map(|(_, _, lee)| Vec2::from_array(lee))
+        });
+        r.wait_at = Some((rv, lee));
+    }
+    let goal = match r.wait_at {
+        Some((_, Some(lee))) if !waiting => lee,
+        _ => approach,
+    };
+    r.at_rv = here.distance(goal) <= 4.0;
+    if here.distance(goal) > 4.0 {
         r.act = Act::ToRv;
         if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
-        return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {
+        return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
-                to: approach,
+                to: goal,
                 within: 2.0,
             }]
         });

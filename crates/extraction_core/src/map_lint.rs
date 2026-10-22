@@ -377,6 +377,15 @@ pub const LAST_STRETCH: f32 = 100.0;
 pub const LAST_OPEN: f32 = 40.0;
 /// ...and no more than this share of it in a spotter's sight.
 pub const LAST_SPOTTED: f32 = 0.25;
+/// A rendezvous a survey drone sees while it circles a point of interest
+/// (its orbit and this much more)...
+pub const SURVEY_SIGHT: f32 = 90.0;
+/// ...has something to wait behind this near where the truck stops: a
+/// roof, or solid cover (anything 1.2 m tall but a garden fence).
+pub const WAIT_COVER: f32 = 15.0;
+pub const WAIT_HEIGHT: f32 = 1.2;
+/// How far off a shelter's wall its lee is, metres.
+pub const WAIT_LEE: f32 = 0.8;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -639,6 +648,44 @@ impl Solid {
         let out = geom::sub(shell.world([0.0, -shell.half[1] - 1.0]), at);
         Some((at, out))
     }
+}
+
+/// The point of interest whose survey drones see the rendezvous at `rv`
+/// (their orbit plus [`SURVEY_SIGHT`]), nearest first, and how far off.
+pub fn watched_by(map: &MapDef, rv: P2) -> Option<(String, f32)> {
+    map.markers_of(&MarkerKind::Poi)
+        .map(|m| (m.name.clone(), dist(m.at, rv)))
+        .filter(|(_, d)| *d <= crate::map_sentry::SURVEY_ORBIT + SURVEY_SIGHT)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Something to wait for the truck behind at the rendezvous at `rv`: the
+/// nearest roof or solid cover within [`WAIT_COVER`] (a walk-in building
+/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), how
+/// far off it is, and where to crouch in its lee, away from `from` (the
+/// drones' point of interest).
+pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)> {
+    let q = solids(map)
+        .into_iter()
+        .filter(|q| {
+            q.rect.sdf(rv) <= WAIT_COVER
+                && (q.kiosk()
+                    || crate::map_surge::roofed(&q.prefab)
+                    || (q.prefab != "fence_garden"
+                        && crate::map::prefab_footprint(&q.prefab)[1] >= WAIT_HEIGHT))
+        })
+        .min_by(|a, b| a.rect.sdf(rv).total_cmp(&b.rect.sdf(rv)))?;
+    let away = geom::sub(q.rect.at, from);
+    let l = geom::dist(q.rect.at, from).max(1e-3);
+    let away = [away[0] / l, away[1] / l];
+    let lee = (0..120)
+        .map(|k| {
+            let s = k as f32 * 0.25;
+            [q.rect.at[0] + away[0] * s, q.rect.at[1] + away[1] * s]
+        })
+        .find(|p| q.rect.sdf(*p) >= WAIT_LEE)
+        .unwrap_or(q.rect.at);
+    Some((q.name, q.rect.sdf(rv).max(0.0), lee))
 }
 
 /// Every solid thing on the surface, placements first (in order: index
@@ -1647,6 +1694,38 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         // Each place worth going to early: reached, with loot, and a walk
         // to it with cover.
         let mut options: Vec<(String, f32, Vec<P2>)> = Vec::new();
+        // -- Waiting for the truck under a drone's eye --------------------------
+        for m in map.markers_of(&MarkerKind::Rendezvous) {
+            let Some((poi, d)) = watched_by(map, m.at) else {
+                continue;
+            };
+            let from = map
+                .markers_of(&MarkerKind::Poi)
+                .find(|p| p.name == poi)
+                .map_or(m.at, |p| p.at);
+            let shelter = wait_shelter(map, m.at, from);
+            r.measures.push(format!(
+                "rendezvous {}: {poi} {d:.0} m off (a survey drone's eye); {}",
+                m.name,
+                shelter
+                    .as_ref()
+                    .map_or("nothing to wait behind".to_string(), |(q, d, _)| format!(
+                        "waits behind the {q} {d:.0} m off"
+                    ))
+            ));
+            if shelter.is_none() {
+                find(
+                    &mut r,
+                    Rule::Cover,
+                    format!(
+                        "nothing within {WAIT_COVER} m to wait behind at {}, under the drones that survey {poi}",
+                        m.name
+                    ),
+                    m.at,
+                );
+            }
+        }
+
         // -- The way out: two ways home from every rich place ------------------
         {
             // A hunted player heading home takes the short way, not the
@@ -2926,6 +3005,24 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Spotter && f.what.contains("last")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Take away the bus shelter at Marrow's Bus depot and the wait for
+    /// the truck there, under the depot drones' orbit, has nothing to
+    /// wait behind.
+    #[test]
+    fn a_wait_under_the_drones_without_shelter_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.placements.retain(|p| p.tag != "bus_shelter");
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Cover && f.what.contains("to wait behind at Bus depot")),
             "{}",
             r.text()
         );
