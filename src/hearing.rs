@@ -340,6 +340,29 @@ impl Graph {
                     .push((*e, r1, r2, door_loss(Stuff::of_mat(d.mat)), *open));
             }
         }
+        // A site's ways in: each kiosk's door (at its -Z end) opens on the
+        // ground outside, which the raster doesn't reach. Its room joins
+        // the outside there, through the kiosk's door if one hangs in it
+        // (as it stands), or open (an arch).
+        if let Some(r) = raster {
+            use extraction_core::underground::KIOSK;
+            for portal in &r.portals {
+                let inside = Vec2::from(portal.to_site([0.0, -KIOSK[1] + 0.6]));
+                let outside = Vec2::from(portal.to_site([0.0, -KIOSK[1] - 0.6]));
+                let room = g.room_near(inside);
+                if room == NONE || room == OUTSIDE {
+                    continue;
+                }
+                let leaf = doors.iter().find(|(_, d, _)| {
+                    let (a, along, w) = gap(d);
+                    (a + along * w * 0.5).distance((inside + outside) * 0.5) < 1.5
+                });
+                g.doors.push(match leaf {
+                    Some((e, d, open)) => (*e, room, OUTSIDE, door_loss(Stuff::of_mat(d.mat)), *open),
+                    None => (Entity::PLACEHOLDER, room, OUTSIDE, DOORWAY_LOSS, true),
+                });
+            }
+        }
         // Walls join the rooms either side of them, by the quietest
         // between each pair (a window lets more through than brick); a
         // site's rooms are cut in the rock.
@@ -1112,6 +1135,30 @@ mod gauge {
                 post,
                 None,
             ));
+            // Its way in: inside the kiosk's door, from the ground at its
+            // mouth.
+            let r = extraction_core::underground::raster("bunker_marrow").unwrap();
+            let p = &r.portals[0];
+            let k = extraction_core::underground::KIOSK[1];
+            let world = g.inv.inverse();
+            let at = |z: f32, y: f32| {
+                let q = p.to_site([0.0, z]);
+                world.transform_point3(Vec3::new(q[0], y, q[1]))
+            };
+            let noise = at(-k + 1.0, p.top() + 0.3);
+            let mouth = at(-k - 5.0, 0.0);
+            let post = zone.on_ground(mouth.x, mouth.z);
+            pairs.push(("the bunker's way in, from its mouth".into(), noise, post, None));
+            // The door of the kiosk the noise is in.
+            let room = g.place(noise).map(|p| p.0);
+            let kiosk = g
+                .doors
+                .iter()
+                .find(|d| d.2 == OUTSIDE && Some(d.1) == room && d.0 != Entity::PLACEHOLDER)
+                .map(|d| d.0);
+            if kiosk.is_some() {
+                pairs.push(("the same, its door open".into(), noise, post, kiosk));
+            }
         }
         let mut worst = 0.0f32;
         for (name, noise, post, open) in pairs {
