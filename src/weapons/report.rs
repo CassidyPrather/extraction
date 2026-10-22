@@ -346,7 +346,7 @@ mod tests {
         assert!(fouled > 25.0 * per * 1.5, "{fouled}");
     }
 
-    /// An SVD fired from the hand at nothing, a drone hanging 200 m down
+    /// An SVD fired from the hand at nothing, a drone hanging 150 m down
     /// the line and 8 m off it. Bare, it hears the report and looks back
     /// toward the shooter; under the PBS the report doesn't reach it, only
     /// the crack going by, and it looks for the shooter out by itself.
@@ -358,11 +358,11 @@ mod tests {
                 fit(&mut r, "pbs_suppressor");
             }
             load_with(&mut r, "svd", 5, Load::Standard);
-            aim_up(&mut r, 0.17);
+            aim_up(&mut r, 0.3);
             let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
             let (muzzle, fwd) = (gt.translation(), gt.forward().as_vec3());
             let side = fwd.cross(Vec3::Y).normalize();
-            let at = muzzle + fwd * 200.0 + side * 8.0;
+            let at = muzzle + fwd * 150.0 + side * 8.0;
             let drone = {
                 let mut commands = r.vr.app.world_mut().commands();
                 let job = crate::robots::Job {
@@ -392,12 +392,12 @@ mod tests {
             "bare: it looks {:.0} m from the shooter",
             bare.distance(muzzle)
         );
-        assert!(bare.distance(muzzle) < 80.0, "the report gives you away");
+        assert!(bare.distance(muzzle) < 70.0, "the report gives you away");
         let (quiet, muzzle) = heard_at(true);
         println!(
             "suppressed: it looks {:.0} m from the shooter",
             quiet.distance(muzzle)
         );
-        assert!(quiet.distance(muzzle) > 150.0, "the crack misleads it");
+        assert!(quiet.distance(muzzle) > 110.0, "the crack misleads it");
     }
 }
