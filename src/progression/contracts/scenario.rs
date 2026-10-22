@@ -63,6 +63,7 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_scour_key", "scour_key"),
     ("contract_the_heavy", "the_heavy"),
     ("contract_annas_tape", "annas_tape"),
+    ("contract_up_the_fell", "up_the_fell"),
 ];
 
 /// The last task while the scenario runs: the director adds each step's.

@@ -112,6 +112,7 @@ fn career_memory(
 /// `harvest::kit`), laid out by the insertion point.
 fn spawn_sim_kit(
     mut commands: Commands,
+    opts: Res<LaunchOptions>,
     zone: Res<Zone>,
     catalog: Res<crate::items::Catalog>,
     opts: Res<crate::launch::LaunchOptions>,
@@ -121,6 +122,11 @@ fn spawn_sim_kit(
     };
     let mut kit = vec!["radio", "field_dressing", "field_dressing"];
     kit.extend(raider::contract_kit());
+    // Bound for Rime Fell, a career has the hearth "Up the fell" gave it:
+    // the way into the frost (`progression::contracts`).
+    if opts.map == "rime_fell" && !kit.contains(&"art_hearth") {
+        kit.push("art_hearth");
+    }
     kit.extend(harvest::kit(
         opts.personality.as_deref().unwrap_or("looter"),
     ));

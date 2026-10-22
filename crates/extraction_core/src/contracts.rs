@@ -158,7 +158,8 @@ pub const CONTRACTS: &[Contract] = &[
         kit: &[("relay_box", 1)],
         pay: &[("power_cell", 2), ("ammo_545", 2)],
         trust: 1,
-        unlocks: &[Unlock::Recipe("pack_545_ap")],
+        // (Learning how their relays talk, you learn to drown them out.)
+        unlocks: &[Unlock::Recipe("pack_545_ap"), Unlock::Recipe("make_jammer")],
         done: "",
     },
     Contract {
@@ -294,6 +295,28 @@ pub const CONTRACTS: &[Contract] = &[
         trust: 2,
         unlocks: &[],
         done: "",
+    },
+    Contract {
+        id: "up_the_fell",
+        name: "Up the fell",
+        giver: "Lev",
+        says: &[
+            "There's a weather station on top of Rime Fell. Put a relay in it. Take the stone: it's cold up there, and colder in the frost.",
+        ],
+        offered: Offered::Deep { trust: 6 },
+        raided_all: false,
+        after: &["scour_key"],
+        steps: &[Step::Plant {
+            map: "rime_fell",
+            place: "The observatory",
+            item: "relay_box",
+        }],
+        // A hearth: the way into the frost (`docs/ANOMALIES.md`).
+        kit: &[("relay_box", 1), ("art_hearth", 1)],
+        pay: &[("hand_flare", 2), ("ammo_762r_ap", 2)],
+        trust: 2,
+        unlocks: &[Unlock::Valley("rime_fell")],
+        done: "Driver: \"Rime Fell. On the card now. Keep that stone warm.\"",
     },
     Contract {
         id: "the_heavy",
@@ -520,6 +543,7 @@ mod tests {
                 "walker_portrait",
                 "the_overflow",
                 "scour_key",
+                "up_the_fell",
                 "the_heavy"
             ]
         );
@@ -603,6 +627,6 @@ mod tests {
         assert!(next_contract(&p).is_none(), "the heavy wants more trust");
         p.trust = 5;
         assert_eq!(next_contract(&p).map(|c| c.id), Some("the_heavy"));
-        assert_eq!(recipes(&p), vec!["pack_545_ap"]);
+        assert_eq!(recipes(&p), vec!["pack_545_ap", "make_jammer"]);
     }
 }
