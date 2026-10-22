@@ -358,7 +358,9 @@ impl Graph {
                     (a + along * w * 0.5).distance((inside + outside) * 0.5) < 1.5
                 });
                 g.doors.push(match leaf {
-                    Some((e, d, open)) => (*e, room, OUTSIDE, door_loss(Stuff::of_mat(d.mat)), *open),
+                    Some((e, d, open)) => {
+                        (*e, room, OUTSIDE, door_loss(Stuff::of_mat(d.mat)), *open)
+                    }
                     None => (Entity::PLACEHOLDER, room, OUTSIDE, DOORWAY_LOSS, true),
                 });
             }
@@ -1148,7 +1150,12 @@ mod gauge {
             let noise = at(-k + 1.0, p.top() + 0.3);
             let mouth = at(-k - 5.0, 0.0);
             let post = zone.on_ground(mouth.x, mouth.z);
-            pairs.push(("the bunker's way in, from its mouth".into(), noise, post, None));
+            pairs.push((
+                "the bunker's way in, from its mouth".into(),
+                noise,
+                post,
+                None,
+            ));
             // The door of the kiosk the noise is in.
             let room = g.place(noise).map(|p| p.0);
             let kiosk = g

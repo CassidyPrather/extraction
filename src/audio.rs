@@ -322,6 +322,7 @@ impl Plugin for AudioPlugin {
             .init_resource::<HushNow>()
             .add_plugins(crate::audio_kit::KitSoundsPlugin)
             .add_plugins(crate::audio_fight::FightSoundsPlugin)
+            .add_plugins(crate::audio_machines::MachineSoundsPlugin)
             .init_resource::<crate::hearing::Hearing>()
             .init_resource::<Binaural>()
             .add_observer(place)
