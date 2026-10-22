@@ -40,6 +40,8 @@ Your data folder is `%APPDATA%\extraction` on Windows
 | Comfort settings | `settings.ron` |
 | This session's log (last ten kept) | `logs/session-*.log` |
 | A crash report, if it crashes | `logs/crash-*.txt` |
+| Frame times, one line a frame (last ten kept) | `logs/frames-*.txt` |
+| Reports to send back (below) | `reports/report-*.zip` |
 | Every raid you play, as telemetry | `raids/<map>/raid*.jsonl` |
 | Marks you made (below) | `marks/*.png` |
 
@@ -239,8 +241,42 @@ screenshot is saved. Afterwards you only need to remember the number.
 
 ## After a session
 
-Send me (or keep for me) the newest `logs/session-*.log`, any `crash-*`,
-the `raids/` folder and `marks/`. From the repository,
+### Sending a report
+
+**Press REPORT** on the board at the truck, under your career sheet.
+It writes one zip and the card shows its name. Send that one file back.
+If the game won't start or crashed, run `extraction --report` instead
+(no window or headset needed). It prints where the zip went.
+
+The zip lands in your data folder's `reports` folder:
+
+- Windows: `%APPDATA%\extraction\reports\report-<number>.zip` (paste
+  `%APPDATA%\extraction\reports` into Explorer's address bar)
+- Linux: `~/.local/share/extraction/reports/report-<number>.zip`
+
+It holds:
+
+- the game's build;
+- your GPU and driver;
+- the headset runtime and headset model, and the size each eye renders
+  at, as OpenXR reports them;
+- the newest session logs and any crash reports;
+- each valley's frame times (CPU and GPU, typical and worst);
+- how long loading took;
+- your comfort settings;
+- your last raid's recording.
+
+It holds nothing else from your computer. In everything in it, your home
+folder, user name and computer name are replaced with `~`, `<user>` and
+`<host>`. Open it and look if you like. `README.txt` inside says what
+each file is.
+
+Marks' screenshots (`marks/`) aren't in it. Send those too if you made
+any.
+
+### Your raids as heatmaps
+
+From the repository,
 
 ```bash
 scripts/sim-report.sh marrow_creek "%APPDATA%/extraction/raids/marrow_creek"
@@ -583,6 +619,7 @@ pump?
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
 | `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
+| `--report` | Write the report zip (above) and quit: no window or headset needed |
 | `--detail 0.5` | Less grass, fewer field stones, shorter shadows (0.25 to 1; 1 is the default). Try it if the frames log says the 1% figure is over 11 ms |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
 | `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |

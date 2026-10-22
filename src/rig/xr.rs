@@ -166,6 +166,17 @@ fn size_swapchain(
     let (Some(instance), Some(system), Some(config)) = (instance, system, config.as_mut()) else {
         return;
     };
+    // For the playtest report (`report`): the runtime and headset as
+    // OpenXR names them (models, not serials).
+    if let Ok(p) = instance.properties() {
+        crate::report::log_fact(
+            "runtime",
+            &format!("{} {}", p.runtime_name, p.runtime_version),
+        );
+    }
+    if let Ok(p) = instance.system_properties(system.0) {
+        crate::report::log_fact("headset", &p.system_name);
+    }
     let Ok(views) = instance.enumerate_view_configuration_views(
         system.0,
         openxr::ViewConfigurationType::PRIMARY_STEREO,
