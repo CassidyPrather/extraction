@@ -613,6 +613,7 @@ mod tests {
         // loosens a plate besides (`robots::part_damage`).
         let want = crate::robots::part_damage(
             PartRole::Armour(10),
+            true,
             eye,
             Some(extraction_core::melee::Blow::Blunt),
         );
