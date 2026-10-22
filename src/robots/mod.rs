@@ -42,6 +42,7 @@ pub mod search;
 pub mod senses;
 pub mod sentry;
 pub mod sentry_look;
+pub mod signs;
 pub mod sorter;
 pub mod sorter_look;
 pub mod sorter_mind;
@@ -259,6 +260,7 @@ impl Plugin for RobotsPlugin {
                 flee::FleePlugin,
                 sorter_mind::SorterMindPlugin,
                 tracks::TracksPlugin,
+                signs::SignsPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

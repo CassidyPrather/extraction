@@ -238,6 +238,15 @@ and comes within sight of a fresh print of yours (12 m by day, less as
 light and weather close in) reads the trail on, about 15 m along while
 it's fresh, and goes to look there; arrived, it reads on. It walks your
 trail to you unless the snow has filled it in: fresh snow is the cover.
+A plough's fresh lane takes no prints, but a trail that stops at its
+edge says you walked it: the robot goes on along the lane the way you
+were heading (`robots/signs.rs`).
+
+**What you handle gives you away** (`robots/signs.rs`). A gun knocked on
+a doorframe, or let go so that it slaps back on its sling, is heard (up
+to 15 m for a hard knock). A dragged load scrapes, and robots hear it
+twice a second. A car door or panel in your hands makes you more to see,
+and while it swings you aren't keeping still, however still you stand.
 A crate you break is gone for them too: where it stood is walkable again
 and no longer cover.
 

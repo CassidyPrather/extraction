@@ -390,6 +390,7 @@ pub(crate) fn perceive(
         Option<Res<crate::weapons::flares::Starlight>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
+    loads: Query<(&crate::interact::Held, &LinearVelocity), With<crate::interact::carry::Bulky>>,
     sensors: Query<&RobotPart>,
     parts_of: Query<&Children>,
     mut noises: MessageReader<Noise>,
@@ -462,6 +463,9 @@ pub(crate) fn perceive(
         dark: Option<f32>,
         /// A torch on: where, and which way its beam goes.
         torch: Option<(Vec3, Vec3)>,
+        /// A bulky load in your hands: how fast it's moving
+        /// (`signs::LOAD_SHOWS`).
+        load: Option<f32>,
     }
     let targets: Vec<Seen> = players
         .iter()
@@ -526,6 +530,11 @@ pub(crate) fn perceive(
                 .max(starlight.as_ref().map_or(0.0, |s| s.at(head))),
                 dark,
                 torch,
+                load: loads
+                    .iter()
+                    .filter(|(h, _)| h.player == e)
+                    .map(|(_, v)| v.0.length())
+                    .reduce(f32::max),
             }
         })
         .collect();
@@ -602,12 +611,20 @@ pub(crate) fn perceive(
                     ground_fog: conditions.ground_fog,
                     light: t.light,
                     height: t.height,
-                    speed: t.speed,
+                    // A swinging load isn't keeping still.
+                    speed: match t.load {
+                        Some(v) if v > super::signs::LOAD_SWINGING => t.speed.max(v),
+                        _ => t.speed,
+                    },
                     cover: t.cover,
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
                     dark: t.dark,
                     still: motion.map_or(STILL, |m| m.0),
                 });
+                // A load in your hands is more of you to see.
+                if t.load.is_some() && dist < reach {
+                    e *= super::signs::LOAD_SHOWS;
+                }
                 // In the dark (underground, or a dim sky), a torch pointed
                 // this way is a light in its eyes.
                 let dim = t.dark.is_some() || conditions.light_at(false) < 0.5;
