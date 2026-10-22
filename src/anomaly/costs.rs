@@ -32,6 +32,8 @@ pub struct ArtifactBite {
     pub player: Entity,
     pub at: Vec3,
     pub what: Bite,
+    /// Health it took (none at the aegis's floor, none for a glint).
+    pub damage: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -157,10 +159,12 @@ pub fn bites(
             b.shock -= dt;
             if b.shock <= 0.0 {
                 b.shock = aegis_shock_in(b.dice.f32());
+                let before = health.hp;
                 if !health.down && health.hp > AEGIS_FLOOR {
                     health.hp = (health.hp - AEGIS_SHOCK).max(AEGIS_FLOOR);
                     health.since_hit = 0.0;
                 }
+                let took = before - health.hp;
                 let me = locals.contains(p);
                 if b.since_shock > 60.0 {
                     b.told_dying = false;
@@ -184,6 +188,7 @@ pub fn bites(
                     player: p,
                     at,
                     what: Bite::Shock,
+                    damage: took,
                 });
             }
         }
@@ -200,6 +205,7 @@ pub fn bites(
                     player: p,
                     at,
                     what: Bite::Glint,
+                    damage: 0.0,
                 });
             }
         }

@@ -185,6 +185,9 @@ impl Task {
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
+/// How high over its feet a standing bot's hand gets, arm up: what's higher
+/// (a lift's stone riding its column) no hand takes.
+pub const STAND_REACH: f32 = 2.2;
 /// A seated bot's eye (the rig lifts it to a standing one).
 pub const SEATED_EYE: f32 = 1.2;
 /// The lowest a seated hand gets, leaning: over the feet, unlifted.
@@ -1327,6 +1330,17 @@ fn run_tasks(
                 let flat = Vec2::new(at.x, at.z);
                 if pos.distance(flat) > REACH {
                     bot.walk = Some(flat);
+                } else if at.y - root.translation.y > STAND_REACH {
+                    // Over its head, out of any hand's reach: it waits a
+                    // little (it may come down), then gives up.
+                    bot.walk = None;
+                    bot.retry += dt;
+                    if bot.retry > 3.0 {
+                        bot.failed += 1;
+                        bot.note(format!("FAIL {item} is out of reach overhead"));
+                        bot.retry = 0.0;
+                        bot.next();
+                    }
                 } else {
                     bot.walk = None;
                     bot.retry += dt;
