@@ -5,7 +5,8 @@
 //! it gives off while it runs ([`Gives`]): light (`glow`, m it's seen at),
 //! sound (`hum`, m it's heard at), power draw (`draw`, watts: the
 //! machines' own sensors pick a hungry device up, [`EM_PER_WATT`] m a
-//! watt, if they're a drone or a relay), and how far it bites (`danger`).
+//! watt, if they're a drone or a relay, once it's run [`EM_SETTLE`]),
+//! and how far it bites (`danger`).
 //! What they do follows from that alone ([`reaction`]), so a new device
 //! gets its behaviour from its row:
 //!
@@ -136,8 +137,11 @@ pub enum Reaction {
 
 /// A device this hungry (W) or more is hunted.
 pub const HUNT_DRAW: f32 = 10.0;
-/// A drone's or a relay's sensors pick up a device this far a watt (m).
+/// A drone's or a relay's sensors pick up a device this far a watt (m)...
 pub const EM_PER_WATT: f32 = 3.0;
+/// ...once it's been running this long (s): its draw takes a while to
+/// stand out, so a device buys you that much before it's a beacon.
+pub const EM_SETTLE: f32 = 30.0;
 /// They shoot one from within this (m)...
 pub const SHOOT_RANGE: f32 = 25.0;
 /// ...having held it in sight this long (s)...
@@ -244,6 +248,7 @@ fn notice_devices(
     mut counters: Option<ResMut<crate::bot::Counters>>,
     time: Res<Time>,
     mut seen: Local<HashMap<Entity, (f32, HashSet<Entity>)>>,
+    mut since: Local<HashMap<Entity, f32>>,
 ) {
     let mut director = director;
     let now = time.elapsed_secs();
@@ -255,6 +260,11 @@ fn notice_devices(
         })
         .collect();
     seen.retain(|e, _| robots.contains(*e));
+    // How long each has been running.
+    since.retain(|e, _| running.iter().any(|r| r.0 == *e));
+    for r in &running {
+        since.entry(r.0).or_insert(now);
+    }
     if running.is_empty() {
         return;
     }
@@ -292,7 +302,8 @@ fn notice_devices(
                         .is_none()
                 });
             let hears = d < g.hum * senses.hearing;
-            let senses_draw = sensor && d < g.draw * EM_PER_WATT;
+            let settled = since.get(&dev).is_some_and(|t| now - t >= EM_SETTLE);
+            let senses_draw = sensor && settled && d < g.draw * EM_PER_WATT;
             if !(sees || hears || senses_draw) {
                 continue;
             }
