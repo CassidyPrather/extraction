@@ -55,6 +55,10 @@ pub const JAM_GUESS: f32 = 25.0;
 pub const JAM_AGAIN: f32 = 180.0;
 /// A jammer's reach when nothing says otherwise (m).
 pub const JAM_RADIUS: f32 = 60.0;
+/// Counters a scenario reads: pylons silenced, reports kept from going
+/// out.
+pub const SILENCED: &str = "relay_silenced";
+pub const BLOCKED: &str = "relay_blocked";
 
 /// What the director's network knows of itself this tick.
 #[derive(Debug, Default, Clone)]
@@ -65,6 +69,8 @@ pub struct RelayNet {
     pub silenced: HashSet<Entity>,
     /// Relays it no longer believes.
     pub distrusted: HashSet<Entity>,
+    /// Reports kept from going out, so far (for a scenario's counter).
+    pub blocked: u32,
 }
 
 impl RelayNet {
@@ -83,6 +89,7 @@ impl Director {
             || self.net.distrusted.contains(&relay)
             || self.net.jammed(from)
         {
+            self.net.blocked += 1;
             return false;
         }
         self.queue_response(delay, at);
@@ -125,18 +132,21 @@ pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(name_jammers).add_systems(
-            FixedUpdate,
-            (
-                jams,
-                wire_pylons,
-                cut_cables,
-                mend_silence,
-                splice,
-                notice_jams,
+        app.add_observer(name_jammers)
+            .add_systems(
+                FixedUpdate,
+                (
+                    jams,
+                    wire_pylons,
+                    cut_cables,
+                    mend_silence,
+                    splice,
+                    notice_jams,
+                    count_blocked,
+                )
+                    .chain(),
             )
-                .chain(),
-        );
+            .add_systems(FixedUpdate, stage_scenario);
     }
 }
 
@@ -208,6 +218,8 @@ fn cut_cables(
     mut commands: Commands,
     mut cuts: MessageReader<crate::destruction::hooks::Cut>,
     cables: Query<&PylonCable>,
+    mut pylons: Query<&mut Pylon>,
+    mut counters: Option<ResMut<crate::bot::Counters>>,
     mut parts: Query<&mut RobotPart>,
     director: Option<ResMut<Director>>,
     time: Res<Time>,
@@ -222,6 +234,13 @@ fn cut_cables(
         };
         let p = cable.pylon;
         director.net.silenced.insert(p);
+        // (What it tries to report now is what's kept from going out.)
+        if let Ok(mut pylon) = pylons.get_mut(p) {
+            pylon.report_cooldown = 0.0;
+        }
+        if let Some(c) = counters.as_mut() {
+            c.bump(SILENCED);
+        }
         commands.entity(p).try_insert(Silenced {
             since: time.elapsed_secs(),
             sent: false,
@@ -240,7 +259,7 @@ fn cut_cables(
 #[allow(clippy::too_many_arguments)]
 fn mend_silence(
     mut commands: Commands,
-    mut silent: Query<(Entity, &mut Silenced, &Transform, &Robot), With<Pylon>>,
+    mut silent: Query<(Entity, &mut Silenced, &Transform, &Robot, &mut Pylon)>,
     parts: Query<&RobotPart>,
     menders: Query<(), With<super::mender::Mender>>,
     director: Option<ResMut<Director>>,
@@ -253,7 +272,7 @@ fn mend_silence(
     let now = time.elapsed_secs();
     let live: HashSet<Entity> = silent.iter().map(|(e, ..)| e).collect();
     director.net.silenced.retain(|e| live.contains(e));
-    for (e, mut s, t, robot) in &mut silent {
+    for (e, mut s, t, robot, mut pylon) in &mut silent {
         if robot.wrecked {
             continue;
         }
@@ -264,6 +283,8 @@ fn mend_silence(
         if whole {
             commands.entity(e).remove::<Silenced>();
             director.net.silenced.remove(&e);
+            // Back on the network: what it sees goes out straight away.
+            pylon.report_cooldown = 0.0;
             spawn_cable(&mut commands, e, t.translation);
             info!("network: a pylon's wired up again");
             continue;
@@ -445,5 +466,82 @@ fn notice_jams(
             director.queue_response(delay, guess);
             info!("network: a jam noticed; a team sent to find it");
         }
+    }
+}
+
+/// The reports kept from going out, for a scenario.
+fn count_blocked(director: Option<Res<Director>>, counters: Option<ResMut<crate::bot::Counters>>) {
+    if let (Some(d), Some(mut c)) = (director, counters) {
+        let n = d.net.blocked;
+        if c.0.get(BLOCKED).copied().unwrap_or(0) != n {
+            c.0.insert(BLOCKED, n);
+        }
+    }
+}
+
+/// The scenario: a running pylon ahead; the bot cuts its cable, then walks
+/// out in front of it in plain view. It's seen, and nothing goes out.
+pub const SCENARIO: &str = "relay_cut";
+/// Where the bot walks to after the cut (the setup fills it in: in front
+/// of the pylon).
+pub const VIEW_PLACEHOLDER: Vec2 = Vec2::new(-2.0e6, -2.0e6);
+
+pub(crate) fn stage_scenario(
+    mut commands: Commands,
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    zone: Res<Zone>,
+    nav: Res<super::walker::Nav>,
+    catalog: Res<crate::items::Catalog>,
+    mut bots: Query<&mut crate::bot::Bot>,
+) {
+    for s in setups.read() {
+        if s.name != SCENARIO {
+            continue;
+        }
+        let f = Vec3::new(s.facing.x, 0.0, s.facing.z).normalize_or(Vec3::NEG_Z);
+        let open = |d: Vec3| {
+            (2..=34).step_by(2).all(|m| {
+                let p = s.at + d * m as f32;
+                nav.0.walkable([p.x, p.z])
+            })
+        };
+        let dir = (0..16)
+            .map(|k| Quat::from_rotation_y(k as f32 * std::f32::consts::TAU / 16.0) * f)
+            .find(|d| open(*d))
+            .unwrap_or(f);
+        let site = zone.on_ground(s.at.x + dir.x * 10.0, s.at.z + dir.z * 10.0);
+        let pylon = super::pylon::spawn_pylon(&mut commands, site, 9999.0, site);
+        commands.queue(move |w: &mut World| {
+            if let Some(mut p) = w.get_mut::<Pylon>(pylon) {
+                p.progress = 1.0;
+                p.state = PylonState::Running { left: 9999.0 };
+            }
+        });
+        let view = Vec2::new(site.x + dir.x * 20.0, site.z + dir.z * 20.0);
+        for mut bot in &mut bots {
+            for t in bot.tasks.iter_mut() {
+                if let crate::bot::Task::WalkTo { to, .. } = t {
+                    if *to == VIEW_PLACEHOLDER {
+                        *to = view;
+                    }
+                }
+            }
+        }
+        if let Some(kind) = catalog.kind("bolt_cutters") {
+            let side = Vec3::new(-dir.z, 0.0, dir.x);
+            let p = s.at + side * 0.7 + dir * 0.5;
+            crate::items::spawn_item(
+                &mut commands,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(
+                        zone.on_ground(p.x, p.z) + Vec3::Y * 0.1,
+                    ),
+                    condition: 1.0,
+                },
+            );
+        }
+        info!("scenario: a running pylon at {site:.0}");
     }
 }
