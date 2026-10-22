@@ -348,6 +348,8 @@ pub(super) struct Newcomer {
     at_gate: bool,
     /// Jobs done when it got home (pressing the card adds one).
     done_home: Option<u32>,
+    /// Keeping low till then (backing off behind cover).
+    low_until: f32,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -375,13 +377,16 @@ fn place_on_card(text: &str, zone: &crate::world::Zone) -> Option<(String, Vec2)
             .to_lowercase()
     };
     let text = flat(text);
+    // The job, not the driver's cache under it; and the place it names
+    // first (the longest name where two start there: "the old farm road").
+    let job = text.split("my cache").next().unwrap_or(&text);
     zone.map
         .markers
         .iter()
         .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
-        .filter(|m| text.contains(&flat(&m.name)))
-        .max_by_key(|m| m.name.len())
-        .map(|m| (m.name.clone(), Vec2::from(m.at)))
+        .filter_map(|m| job.find(&flat(&m.name)).map(|i| (i, m)))
+        .min_by_key(|(i, m)| (*i, std::cmp::Reverse(m.name.len())))
+        .map(|(_, m)| (m.name.clone(), Vec2::from(m.at)))
 }
 
 /// What a line gives of a place's way and distance ("north-east, 200 m"),
@@ -462,8 +467,9 @@ pub(super) fn direct_raid(
     // A cautious newcomer creeps once it's out.
     // Running for it, as told: upright and fast.
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
-    let creep =
-        p.reads && !fleeing && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    let creep = (p.reads || state.low_until > now)
+        && !fleeing
+        && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
     if input.crouch != creep {
         input.crouch = creep;
     }
@@ -485,7 +491,14 @@ pub(super) fn direct_raid(
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
-            First::DroneLock | First::Aimed | First::Sentry if !p.reckless && !p.hoards => {
+            // "Down, out of its sweep": low, and away from it (a sentry
+            // doesn't come after you).
+            First::Sentry if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                state.low_until = now + 25.0;
+                run_for_cover(&world.zone, here, from, 1.0)
+            }
+            First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = now + 12.0;
@@ -494,7 +507,16 @@ pub(super) fn direct_raid(
                 overhead
                     .then(|| under_a_roof(view.entrances.as_deref(), here))
                     .flatten()
-                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from))
+                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
+            }
+            // "Low behind it, and keep still": a still shape behind cover
+            // isn't glimpsed; a moving one is, and found.
+            First::ComingToLook if !p.reckless && !p.hoards => {
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = 0.0;
+                }
+                state.low_until = now + 30.0;
+                vec![Task::Wait(30.0)]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1082,8 +1104,15 @@ fn under_a_roof(
                 .distance(here)
                 .total_cmp(&b.mid.xz().distance(here))
         })
-        .filter(|d| d.mid.xz().distance(here) < 40.0)?;
+        .filter(|d| d.mid.xz().distance(here) < 60.0)?;
     let out = d.out.xz().normalize_or(Vec2::Y);
+    let inside = d.mid.xz() - out * 2.5;
+    // Off to one side of the doorway: not in a look through it.
+    let aside = [out.perp(), -out.perp()]
+        .into_iter()
+        .map(|s| inside + s * 2.0)
+        .find(|p| entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building))
+        .unwrap_or(inside);
     Some(vec![
         Task::WalkTo {
             to: d.mid.xz() + out * 1.3,
@@ -1091,14 +1120,31 @@ fn under_a_roof(
         },
         Task::OpenDoor(d.door),
         Task::WalkTo {
-            to: d.mid.xz() - out * 2.0,
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: aside,
             within: 0.6,
         },
         Task::Wait(20.0),
+        // And out the way it came in, not through a wall.
+        Task::WalkTo {
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.5,
+            within: 0.8,
+        },
     ])
 }
 
-fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task> {
+/// `leave` > 0: it saw you here, and is coming to look. Back off from it,
+/// keeping this cover between you: to the next cover that way, or straight
+/// back.
+fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) -> Vec<Task> {
+    let away = (here - from).normalize_or(Vec2::Y);
     // Round the far side of something solid (not into trees: a look goes
     // between the trunks).
     let cover = zone
@@ -1107,13 +1153,15 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task>
         .iter()
         .map(|b| Vec2::from(b.at))
         .filter(|b| b.distance(here) < 60.0)
+        .filter(|b| {
+            leave <= 0.0
+                || (b.distance(here) > leave && (*b - here).normalize_or_zero().dot(away) > 0.8)
+        })
         .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
     let to = match cover {
         Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
-        None => {
-            let across = (here - from).normalize_or(Vec2::Y).perp();
-            here + across * 25.0
-        }
+        None if leave > 0.0 => here + away * 30.0,
+        None => here + away.perp() * 25.0,
     };
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
@@ -1285,7 +1333,7 @@ pub(super) fn first_fight(
         (kind == "drone")
             .then(|| under_a_roof(entrances.as_deref(), here))
             .flatten()
-            .unwrap_or_else(|| run_for_cover(&zone, here, from))
+            .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);

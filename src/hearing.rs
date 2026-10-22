@@ -590,6 +590,9 @@ pub struct Hearing {
 const VALLEY_CELL: f32 = 8.0;
 
 /// The ground's smear on a grid over the map.
+/// The valley smear's grid cell, metres.
+const VALLEY_CELL: f32 = 8.0;
+
 #[derive(Default)]
 struct Valley {
     n: usize,

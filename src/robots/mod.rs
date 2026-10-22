@@ -14,6 +14,7 @@ pub mod anim;
 pub mod armour;
 pub mod collector;
 pub mod damage;
+pub mod devices;
 pub mod director;
 pub mod dirigible;
 pub mod disturbed;
@@ -269,6 +270,7 @@ impl Plugin for RobotsPlugin {
                 disturbed::DisturbedPlugin,
                 memory::MemoryPlugin,
                 network::NetworkPlugin,
+                devices::DevicesPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
