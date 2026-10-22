@@ -1666,10 +1666,7 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
     // Textures are fetched (`scripts/fetch_assets.py`), not in git: a
     // material is textured if the fetch manifest has its set, whether or
     // not this checkout has fetched it.
-    let manifest = root
-        .parent()
-        .unwrap()
-        .join("scripts/assets_manifest.json");
+    let manifest = root.parent().unwrap().join("scripts/assets_manifest.json");
     let Ok(text) = std::fs::read_to_string(&manifest) else {
         eprintln!("no {} (a packaged build): skipped", manifest.display());
         return;
