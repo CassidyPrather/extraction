@@ -54,7 +54,7 @@ struct Moving {
 fn dress(
     mut commands: Commands,
     ploughs: Query<(Entity, &Children), (With<Plough>, Without<Dressed>)>,
-    banks: Query<Entity, (With<BankPiece>, Without<Dressed>)>,
+    banks: Query<(Entity, &Transform), (With<BankPiece>, Without<Dressed>)>,
     parts: Query<&RobotPart>,
     hatches: Query<(), With<PloughHatch>>,
     cells: Query<(), With<PloughCell>>,
@@ -81,7 +81,7 @@ fn dress(
             for (e, _) in &ploughs {
                 commands.entity(e).insert(Dressed);
             }
-            for e in &banks {
+            for (e, _) in &banks {
                 commands.entity(e).insert(Dressed);
             }
             return;
@@ -242,17 +242,40 @@ fn dress(
         ));
         let _ = HATCH;
     }
-    for e in &banks {
+    for (e, bt) in &banks {
         hang(
             &mut commands,
             &mut materials,
             e,
             "bank",
-            Transform::IDENTITY,
+            bank_shape(bt.translation),
             2,
         );
         commands.entity(e).insert(Dressed);
     }
+}
+
+/// Each section of bank its own shape, from where it lies: longer than
+/// its step so it runs into its neighbours, higher or lower, wider or
+/// narrower, turned a little off the road, so the bank reads as one
+/// thrown heap and not a row of the same piece.
+fn bank_shape(at: Vec3) -> Transform {
+    let mut h = (at.x * 100.0).round() as i64 as u64
+        ^ ((at.z * 100.0).round() as i64 as u64).rotate_left(21);
+    let mut next = || {
+        h = h
+            .wrapping_mul(0x5851_f42d_4c95_7f2d)
+            .wrapping_add(0x1405_7b7e_f767_814f);
+        ((h >> 40) as f32) / (1u64 << 24) as f32
+    };
+    let (len, high, wide, turn, sink) = (next(), next(), next(), next(), next());
+    Transform::from_xyz(0.0, -0.05 - 0.15 * sink, 0.0)
+        .with_rotation(Quat::from_rotation_y((turn - 0.5) * 0.18))
+        .with_scale(Vec3::new(
+            0.8 + 0.45 * wide,
+            0.65 + 0.55 * high,
+            1.3 + 0.3 * len,
+        ))
 }
 
 /// The auger turns and the beacon sweeps while it runs; the plume while
