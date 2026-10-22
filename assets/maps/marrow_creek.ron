@@ -214,6 +214,14 @@
             mix: [(Spruce, 0.6), (Pine, 0.2), (Birch, 0.2)],
             polygon: [(32.0, 206.0), (76.0, 200.0), (78.0, 160.0), (28.0, 172.0)],
         ),
+        // On the knoll between the drop and the Old farm: newcomers cut
+        // across this field to the first job, and Onboarding's first-fight
+        // personas died in it with nothing in reach.
+        (
+            name: "Knoll spinney", seed: 11, density: 1.4, undergrowth: 0.6,
+            mix: [(Birch, 0.5), (Spruce, 0.5)],
+            polygon: [(82.0, 230.0), (102.0, 226.0), (104.0, 208.0), (84.0, 210.0)],
+        ),
         (
             name: "South gate stand", seed: 8, density: 1.2, undergrowth: 0.5,
             mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
@@ -224,6 +232,11 @@
     placements: [
         // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
         (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
+        // The Old farm's wood stores across the field from the drop: cover
+        // every 25 m or so on the way a newcomer walks to the first job.
+        (prefab: "log_pile", at: (63.0, 251.0), rot: 48.0),
+        (prefab: "log_pile", at: (112.0, 197.0), rot: 48.0),
+        (prefab: "log_pile", at: (131.0, 178.0), rot: 48.0),
         // South gate: the fence and the truck pull-in.
         (prefab: "quarantine_gate", at: (40.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (47.8, 285.0), rot: 90.0),
