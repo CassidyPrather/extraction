@@ -186,6 +186,10 @@ pub fn apply_builds(
                 barrel_mm: mm,
             },
         ));
+        if build.barrel_mm.is_some() {
+            // The bayonet's lug went with the muzzle.
+            commands.entity(e).try_remove::<super::melee::Bayonet>();
+        }
         gun.layout = layout;
         gun.mass = Some(mass);
         factory.applied = build;
@@ -1237,6 +1241,7 @@ pub fn show_builds(
                 // (The double's barrels hinge: they're drawn short too.)
                 "static_barrel" | "barrels" => (true, k),
                 "static_butt" => (b.stock, 1.0),
+                "bayonet" => (b.barrel_mm.is_none(), 1.0),
                 "turnbolt" => (!b.bolt_out, 1.0),
                 _ => continue,
             };
