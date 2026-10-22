@@ -524,6 +524,69 @@ The headset's session waits on it (or 20 s), `--screenshot` waits on its
 materials and buildings after `--frames` (or 180 s, with a warning), and
 "everything in" includes it.
 
+## Holding the frame rate
+
+`render::hold_rate` keeps the headset at its refresh rate by rendering
+more or less of each eye. The swapchain is made at the runtime's
+recommended size. Each frame, the eye cameras' viewports and the
+projection layer's image rects are set to the governed size, and the
+compositor scales that part to the display. No swapchain is made again.
+`bevy_mod_openxr`'s projection layer is replaced by `RectLayer`, the same
+layer but with the rect. Both read the frame's extracted `EyeRect`, so the
+cameras and the rect always agree.
+
+The governor (`Governor`) steps every 4 frames, from the GPU's measured
+time (timestamp queries, the top-level passes summed) against the
+display's period:
+
+- **Down** when the second-worst of the last 8 frames runs past 85% of the
+  period, by the square root of the overrun (time goes with the pixels),
+  at most 20% a step. A single long frame doesn't count: a pipeline built
+  or a hitch on the CPU isn't the pixels' doing.
+- **Up** 3% a step, at most once every half second after a drop, and only
+  if the 90th percentile of the last 45 frames would still fit 80% of
+  the target at the larger size. The band between up and down is the
+  hysteresis that keeps it from pumping.
+- **Floor:** the narrowest eye that keeps must-read text at 7.5 px of
+  x-height (`floor_eye_px`, about 1735 px across, from Legibility's
+  constants).
+- **Cap:** the runtime's recommended size.
+- **Start:** the SHARPNESS size. With HOLD FRAME RATE off it stays there.
+- **No GPU times** (no timestamp queries): it holds where it is.
+
+The frame log's fourth column is the eyes' width as a share of the
+runtime's recommended width. The report's `frames-summary.txt` gives its
+least, median and most per valley. The session log says, every ten
+seconds, the size, the GPU's time and the period it was held to.
+
+What it buys:
+
+| Run | Eyes | Eyes' GPU time a frame |
+| - | - | - |
+| Monado's simulated headset, lavapipe | 640x720 | 370-400 ms |
+| Monado's simulated headset, lavapipe | 320x360 (a quarter of the pixels) | 220 ms (45% less) |
+
+The opaque pass shrinks with the viewport. Tonemapping and MSAA
+writeback still cover the whole target, but they're small.
+
+`gauge_busy_moments_drop_the_scale_and_it_comes_back` runs the hitch
+gauge's forced events (the response team, the Surge and the rest) through
+the governor. Each frame's measured load is taken as the GPU's, with a
+modelled GPU (a fifth fixed, the rest the pixels'). Wherever frames ran
+late in a run, the scale came down within a step, and it was back within
+2.3 s:
+
+- the Surge: 0.62 > 0.57;
+- the response team: 0.58 > 0.56;
+- the Depot's residents: 0.62 > 0.55.
+
+That shows the steps on the real moments' shapes. What a headset's GPU
+spends is the frame log's to say.
+
+For a simulated runtime (whose period follows the game's own pace),
+`EXTRACTION_FRAME_BUDGET_MS` stands in for the period and
+`EXTRACTION_EYE_FLOOR_PX` for the floor.
+
 ## Empty meshes
 
 Bevy skips the GPU room for a mesh with no vertex data (or no indices)
@@ -540,26 +603,32 @@ fails the run (`no_empty_meshes`, in every client test), and
 ## VRAM
 
 `render::vram` counts what a valley holds on the GPU from the assets and
-views, without a GPU: textures (format, size, mips, layers), meshes
-(vertex and index buffers), the sun's cascades (per eye) and shadowed
-lights' maps, and both eyes' targets at the auto eye size (1800², MSAA
-4x: multisampled HDR colour and depth, the resolve, the tonemapped image,
-the swapchain's). `gauge_every_valley_holds_its_vram` holds each valley
-under 4.5 GB, the 3060 laptop's 6 GB less the driver's, the compositor's
-and SteamVR's share, and prints the biggest texture folders.
+views, without a GPU:
+
+- textures (format, size, mips, layers);
+- meshes (vertex and index buffers);
+- the sun's cascades (per eye) and shadowed lights' maps;
+- both eyes' targets, with 4x MSAA: the multisampled HDR colour and
+  depth, the resolve, the tonemapped image, and the swapchain's.
+
+The eye targets are counted at the runtime's full size, 2980² for the
+playtest's Beyond 2. Holding the frame rate (`render::hold_rate`), they're
+made that big.
+
+`gauge_every_valley_holds_its_vram` holds each valley under 4.5 GB (the
+3060 laptop's 6 GB, less the driver's, the compositor's and SteamVR's
+share) and prints the biggest texture folders.
 
 | valley | total | textures | meshes | shadows | eye targets |
 |---|---|---|---|---|---|
-| Marrow Creek | 1.5 GB | 546 MB | 558 MB | 16 MB | 396 MB |
-| Kettle Pass | 1.5 GB | 541 | 585 | 16 | 396 |
-| Cinder Works | 1.4 GB | 532 | 465 | 16 | 396 |
-| Sallow Reservoir | 1.3 GB | 514 | 358 | 16 | 396 |
-| Rime Fell | 1.5 GB | 502 | 595 | 16 | 396 |
+| Marrow Creek | 2.2 GB | 546 MB | 558 MB | 16 MB | 1084 MB |
+| Kettle Pass | 2.2 GB | 542 | 585 | 16 | 1084 |
+| Cinder Works | 2.1 GB | 532 | 465 | 16 | 1084 |
+| Sallow Reservoir | 2.0 GB | 515 | 358 | 16 | 1084 |
+| Rime Fell | 2.2 GB | 501 | 603 | 16 | 1084 |
 
-A third of the ceiling: nothing to stream or cut yet. The terrain's
-texture arrays are 112 MB; each material set about 16 MB. Not counted:
-the driver's own buffers, pipelines and staging, which the 1.5 GB margin
-under the ceiling covers.
+At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
+GB. Under half the ceiling either way: nothing to stream or cut yet.
 
 ## Small things' shadows
 

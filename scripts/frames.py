@@ -26,7 +26,7 @@ def main():
     for line in open(args[0]):
         if line.startswith("#"):
             continue
-        f, c, g = line.split()
+        f, c, g = line.split()[:3]
         f, c, g = int(f), float(c), float(g)
         if f <= skip:
             continue

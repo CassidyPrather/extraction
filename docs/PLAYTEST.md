@@ -234,6 +234,16 @@ What changed, and worth a comment each:
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
   and how it feels.
+- **Holding the frame rate.** The eyes now render less when the GPU runs
+  late and more when it has room. It stays between the size where text
+  still reads and the headset's full size. The **HOLD FRAME RATE** card,
+  under SMOOTHING on the truck wall, turns it off (or start with
+  `--hold-rate 0`); then the eyes keep the SHARPNESS size. Tell me:
+  - whether you ever notice the view going soft or sharp, especially when
+    the response team arrives and in the Surge, where it should drop;
+  - whether it ever pumps (soft, sharp, soft) while nothing's happening.
+
+  The report has the eyes' size frame by frame.
 - **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
   the dearest per-eye cost the software renderer can measure; only the
   headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
@@ -665,6 +675,7 @@ pump?
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
 | `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
+| `--hold-rate 0` | The eyes keep the SHARPNESS size instead of following the GPU's time |
 | `--report` | Write the report zip (above) and quit: no window or headset needed |
 | `--detail 0.5` | Less grass, fewer field stones, shorter shadows (0.25 to 1; 1 is the default). Try it if the frames log says the 1% figure is over 11 ms |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
