@@ -10,6 +10,13 @@
 //!   fly) is knocked back; a walker or a crawler rocks, and enough of it
 //!   (a small one sooner) puts it on the ground (`robots::anim::Gait`).
 //!   [`Shoved`] says so, for the machines' minds and for Audio.
+//! - **A closed hand holds a robot.** Grip a drone's frame or a walker's
+//!   leg and the hand holds it there ([`RobotGrip`]): a drone is pinned,
+//!   pulled to the hand as hard as an arm pulls (it fights with its
+//!   rotors); a walking machine held by a leg is wrenched by a yank
+//!   (knocked and dazed by the hand's speed). It fights the grip: pulled
+//!   more than [`SLIP`] from the hand, the grip slips. [`Gripped`] goes out
+//!   each tick it's held, for the machines' minds to fight it.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -44,6 +51,32 @@ pub struct Shoved {
     pub by: Entity,
 }
 
+/// A robot held this far from the hand slips the grip, metres.
+pub const SLIP: f32 = 0.3;
+/// How hard an arm pulls a held robot to the hand, newtons.
+pub const HOLD: f32 = 400.0;
+/// A yank this fast (m/s) on a held leg wrenches it.
+pub const WRENCH: f32 = 2.0;
+
+/// A hand closed on a live robot's part, at `local` (the part's frame).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RobotGrip {
+    pub robot: Entity,
+    pub part: Entity,
+    pub local: Vec3,
+}
+
+/// A robot held by a hand, each tick it's held: `strain` is how far the
+/// hand would have it moved (m), for its mind to fight.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Gripped {
+    pub robot: Entity,
+    pub part: Entity,
+    pub at: Vec3,
+    pub strain: Vec3,
+    pub by: Entity,
+}
+
 /// A crowbar's last claw position and what it struck lately.
 #[derive(Component, Default)]
 pub struct BarStroke {
@@ -56,12 +89,17 @@ pub struct FightPlugin;
 impl Plugin for FightPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Shoved>()
+            .add_message::<Gripped>()
             .add_observer(bar_strokes)
             .add_systems(
                 FixedUpdate,
                 (
                     strike_with_bars.after(super::InteractSystems::Follow),
                     shove.after(PhysicsSystems::Writeback),
+                    (take_robots, hold_robots)
+                        .chain()
+                        .after(super::InteractSystems::Grab)
+                        .before(super::InteractSystems::Follow),
                 ),
             );
     }
@@ -226,6 +264,129 @@ fn shove(
             amplitude: (0.3 + push / 60.0).min(0.6),
             seconds: 0.05,
         });
+    }
+}
+
+/// A gripping, empty hand on a live robot's part takes hold of it; an
+/// opened hand lets go.
+#[allow(clippy::type_complexity)]
+fn take_robots(
+    mut commands: Commands,
+    hands: Query<
+        (Entity, &Hand, Option<&RobotGrip>),
+        (With<RigHand>, Without<super::hand_climb::HandHold>),
+    >,
+    parts: Query<(&RobotPart, &GlobalTransform)>,
+    robots: Query<&crate::robots::Robot>,
+    spatial: SpatialQuery,
+) {
+    for (e, hand, grip) in &hands {
+        let closed = hand.grip_down && hand.holding.is_none() && hand.handle.is_none();
+        match (grip, closed) {
+            (Some(_), false) => {
+                commands.entity(e).remove::<RobotGrip>();
+            }
+            (None, true) => {
+                let at = hand.world.translation;
+                let hit = spatial
+                    .shape_intersections(
+                        &Collider::sphere(0.07),
+                        at,
+                        Quat::IDENTITY,
+                        &SpatialQueryFilter::from_mask([Layer::Robot]),
+                    )
+                    .into_iter()
+                    .find_map(|c| parts.get(c).ok().map(|p| (c, p)));
+                let Some((part_e, (part, gt))) = hit else {
+                    continue;
+                };
+                // A wreck's for dragging (`carry`), not holding.
+                if robots.get(part.robot).is_ok_and(|r| r.wrecked) {
+                    continue;
+                }
+                commands.entity(e).insert(RobotGrip {
+                    robot: part.robot,
+                    part: part_e,
+                    local: gt.affine().inverse().transform_point3(at),
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A held robot: a flying one pulled to the hand, a walking one wrenched
+/// by a yank; pulled away past [`SLIP`], it's free.
+#[allow(clippy::type_complexity)]
+fn hold_robots(
+    mut commands: Commands,
+    hands: Query<(Entity, &Hand, &RigHand, &RobotGrip, &ChildOf)>,
+    parts: Query<&GlobalTransform, With<RobotPart>>,
+    mut bodies: Query<(
+        &RigidBody,
+        &Position,
+        &mut LinearVelocity,
+        &mut AngularVelocity,
+        Option<&Mass>,
+    )>,
+    mut gaits: Query<(&mut crate::robots::anim::Gait, &GlobalTransform)>,
+    mut gripped: MessageWriter<Gripped>,
+    mut haptics: MessageWriter<Haptic>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs().max(1e-4);
+    for (e, hand, rh, grip, player) in &hands {
+        let Ok(part) = parts.get(grip.part) else {
+            commands.entity(e).remove::<RobotGrip>();
+            continue;
+        };
+        let at = part.transform_point(grip.local);
+        let strain = hand.world.translation - at;
+        if strain.length() > SLIP {
+            // Torn free.
+            commands.entity(e).remove::<RobotGrip>();
+            haptics.write(Haptic {
+                side: rh.side,
+                amplitude: 0.5,
+                seconds: 0.06,
+            });
+            continue;
+        }
+        if let Ok((kind, pos, mut v, mut w, mass)) = bodies.get_mut(grip.robot)
+            && *kind == RigidBody::Dynamic
+        {
+            // Pulled to the hand at the point held, as hard as an arm pulls.
+            let m = mass.map_or(6.0, |m| m.0).max(0.5);
+            let r = at - pos.0;
+            let point_v = v.0 + w.0.cross(r);
+            let want = strain * 12.0 + hand.velocity;
+            let j = ((want - point_v) * m).clamp_length_max(HOLD * dt);
+            v.0 += j / m;
+            w.0 += r.cross(j) / (m * 0.05);
+        }
+        if let Ok((mut gait, body)) = gaits.get_mut(grip.robot) {
+            let yank = hand.velocity.length();
+            if yank > WRENCH {
+                let impulse = hand.velocity * super::fight::PALM;
+                gait.knock(at - body.translation(), impulse / 10.0);
+                gait.daze(impulse.length() * SHOVE_DAZE * dt * 8.0, hand.velocity);
+            }
+        }
+        gripped.write(Gripped {
+            robot: grip.robot,
+            part: grip.part,
+            at,
+            strain,
+            by: player.parent(),
+        });
+        // It fights: the hand feels it.
+        if strain.length() > 0.05 {
+            haptics.write(Haptic {
+                side: rh.side,
+                amplitude: (0.15 + strain.length()).min(0.5),
+                seconds: dt * 1.5,
+            });
+        }
     }
 }
 
