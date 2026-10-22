@@ -137,7 +137,13 @@ pub struct CraneLever {
 }
 
 /// Where a fitting is on a room's wall, site space, facing into the room.
-fn wall_pose(l: &ug::Layout, room: &str, at: [f32; 2], rot: f32, up: f32) -> Option<Transform> {
+pub(super) fn wall_pose(
+    l: &ug::Layout,
+    room: &str,
+    at: [f32; 2],
+    rot: f32,
+    up: f32,
+) -> Option<Transform> {
     let room = l.rooms.iter().find(|r| r.id == room)?;
     let q = Quat::from_rotation_y(-rot.to_radians());
     let p = Vec3::new(
@@ -148,7 +154,7 @@ fn wall_pose(l: &ug::Layout, room: &str, at: [f32; 2], rot: f32, up: f32) -> Opt
     Some(Transform::from_translation(p + q * Vec3::new(0.0, 0.0, -0.12)).with_rotation(q))
 }
 
-fn lever_bundle(name: &'static str, pose: Transform, site: Entity) -> impl Bundle {
+pub(super) fn lever_bundle(name: &'static str, pose: Transform, site: Entity) -> impl Bundle {
     (
         Name::new(name),
         crate::raid::truck::Pressable::BenchRun,
