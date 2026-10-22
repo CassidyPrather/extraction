@@ -4639,6 +4639,61 @@ mod vault {
         assert!(now.z < start.z - 0.5, "over the fence: {start} to {now}");
     }
 
+    /// Behind the truck, beside its steps: grip the bed's back edge (the
+    /// tailgate's sill, 1.1 m up) with both hands, push up, and you're in
+    /// the bed.
+    #[test]
+    fn climb_into_the_truck_over_the_tailgate() {
+        let mut vr = Vr::new("training_yard");
+        let truck = vr
+            .app
+            .world_mut()
+            .query_filtered::<&GlobalTransform, With<crate::raid::truck::Truck>>()
+            .iter(vr.app.world())
+            .next()
+            .expect("a truck in the yard")
+            .compute_transform();
+        // Facing the truck's front from behind it, a little off its steps.
+        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        let ground = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(behind.x, behind.z);
+        let fwd = truck.rotation * Vec3::NEG_Z;
+        let yaw = (-fwd.x).atan2(-fwd.z);
+        vr.stand(ground, yaw);
+        vr.step(10);
+        let sill = truck
+            .transform_point(Vec3::new(0.0, crate::raid::truck::FLOOR, 1.8))
+            .y;
+        let up = sill - vr.feet().y + 0.03;
+        // The edge is 0.45 m ahead of the feet here: the hands just over it.
+        let start = vr.feet();
+        for side in [Side::Left, Side::Right] {
+            vr.hand_local(side, Vec3::new(0.25 * side.sign(), up, -0.5), 0.0);
+        }
+        vr.step(4);
+        for side in [Side::Left, Side::Right] {
+            vr.grip(side, 1.0);
+        }
+        vr.step(4);
+        for i in 0..40 {
+            let y = up - 0.6 * (i + 1) as f32 / 40.0;
+            for side in [Side::Left, Side::Right] {
+                vr.hand_local(side, Vec3::new(0.25 * side.sign(), y, -0.5), 1.0);
+            }
+            vr.step(1);
+        }
+        vr.step(30);
+        let now = vr.feet();
+        let local = truck.compute_affine().inverse().transform_point3(now);
+        assert!(
+            (now.y - sill).abs() < 0.15 && local.z < 1.8 && local.x.abs() < 1.1,
+            "in the bed: {start} to {now} (truck-local {local})"
+        );
+    }
+
     /// The quarantine perimeter isn't climbed: hands on its top find
     /// nothing to hold, and you stay this side.
     #[test]
