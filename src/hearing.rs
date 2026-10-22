@@ -935,6 +935,12 @@ mod tests {
             l > DOORWAY_LOSS && l <= wall_loss(Stuff::Stone) + 1e-3,
             "house {l}"
         );
+        // A noise 6 m over its roof is out of doors: nothing lost to the
+        // yard, and heard inside as from the yard.
+        let roof = Vec3::new(inside.x, h.graphs[0].top + 6.0, inside.y);
+        assert_eq!(h.loss_open(roof, yard), 0.0, "over the roof to the yard");
+        let indoors = Vec3::new(inside.x, floor + 1.3, inside.y);
+        assert_eq!(h.loss_open(roof, indoors), l, "over the roof, heard inside");
         // A site below: its deepest room from the ground over it.
         let id = extraction_core::underground::SITES[0].0;
         let site = graph(id, true);
