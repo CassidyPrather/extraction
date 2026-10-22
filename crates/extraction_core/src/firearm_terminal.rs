@@ -39,10 +39,16 @@ pub enum Stuff {
     ArmourPlate,
     /// A steel helmet: softer, thinner.
     Helmet,
+    /// A hollow sheet-steel body: two skins and what's between them (a
+    /// car's door, its body, a locker). Its thickness is its depth.
+    Shell,
+    /// A robot's thin housing: a hollow pressed-steel case, two walls and
+    /// its works between them (a drone's shell, an eye's casing).
+    Housing,
 }
 
 impl Stuff {
-    pub const ALL: [Stuff; 12] = [
+    pub const ALL: [Stuff; 14] = [
         Stuff::Planks,
         Stuff::Logs,
         Stuff::Plaster,
@@ -55,6 +61,8 @@ impl Stuff {
         Stuff::Soil,
         Stuff::ArmourPlate,
         Stuff::Helmet,
+        Stuff::Shell,
+        Stuff::Housing,
     ];
 
     /// Joules a millimetre of path costs a round.
@@ -72,7 +80,28 @@ impl Stuff {
             Stuff::Soil => 40.0,
             Stuff::ArmourPlate => 600.0,
             Stuff::Helmet => 200.0,
+            // What's between the walls, by the millimetre of depth.
+            Stuff::Shell => 0.4,
+            Stuff::Housing => 0.3,
         }
+    }
+
+    /// A hollow thing's walls, joules head on, whatever its depth: two
+    /// skins of 0.8 mm sheet for a car's door; two walls of a millimetre
+    /// of plate for a robot's housing.
+    pub fn walls_j(self) -> f32 {
+        match self {
+            Stuff::Shell => 2.0 * 0.8 * Stuff::Sheet.cost_per_mm(),
+            Stuff::Housing => 2.0 * 1.0 * Stuff::Plate.cost_per_mm(),
+            _ => 0.0,
+        }
+    }
+
+    /// Joules a round loses on its way through this, `thickness_mm` square
+    /// to its face, coming in at `cos_in` off the normal.
+    pub fn path_j(self, thickness_mm: f32, cos_in: f32) -> f32 {
+        let slant = cos_in.max(0.2);
+        (self.walls_j() + self.cost_per_mm() * self.real_thickness_mm(thickness_mm)) / slant
     }
 
     /// How thick it really is, millimetres, given its collider's thickness:
@@ -95,7 +124,12 @@ impl Stuff {
     pub fn hard(self) -> bool {
         matches!(
             self,
-            Stuff::Sheet | Stuff::Plate | Stuff::ArmourPlate | Stuff::Helmet
+            Stuff::Sheet
+                | Stuff::Plate
+                | Stuff::ArmourPlate
+                | Stuff::Helmet
+                | Stuff::Shell
+                | Stuff::Housing
         )
     }
 
@@ -109,6 +143,8 @@ impl Stuff {
                 | Stuff::Brick
                 | Stuff::ArmourPlate
                 | Stuff::Helmet
+                | Stuff::Shell
+                | Stuff::Housing
         )
     }
 }
@@ -199,15 +235,14 @@ pub fn strike_load(
             };
         }
     }
-    let path = stuff.real_thickness_mm(thickness_mm) / cos_in.max(0.2);
-    let cost = stuff.cost_per_mm()
+    let cost = stuff.path_j(thickness_mm, cos_in)
         * if load == Load::Ap && stuff.hard() {
             AP_HARD
         } else {
             1.0
         };
-    let left = energy_j(mass_g, speed) - cost * path;
-    if left > 0.0 && path.is_finite() {
+    let left = energy_j(mass_g, speed) - cost;
+    if left > 0.0 && cost.is_finite() {
         Outcome::Through {
             speed: speed_for(mass_g, left),
         }
@@ -472,6 +507,139 @@ mod tests {
             (Outcome::Through { speed: a }, Outcome::Through { speed: b }) => assert!(b < a),
             (Outcome::Through { .. }, Outcome::Stop) => {}
             other => panic!("{other:?}"),
+        }
+    }
+
+    /// The rounds on the gauge: the player's cartridges at their guns'
+    /// muzzle velocities, and the robots' 8 g rounds at theirs.
+    const ROUNDS: [(&str, f32, f32); 13] = [
+        ("22lr", 2.6, 330.0),
+        ("nagant", 7.0, 272.0),
+        ("pm", 6.1, 315.0),
+        ("buck pellet", 3.5, 400.0),
+        ("ppsh", 5.5, 490.0),
+        ("ak", 3.4, 900.0),
+        ("sks", 7.9, 735.0),
+        ("slug", 32.0, 380.0),
+        ("mosin", 9.6, 865.0),
+        ("drone", 8.0, 380.0),
+        ("walker", 8.0, 450.0),
+        ("sentry", 8.0, 600.0),
+        ("heavy", 8.0, 700.0),
+    ];
+
+    /// The things on the gauge, as the world builds them: each a stack of
+    /// layers a round meets in turn (material, collider mm).
+    const TARGETS: [(&str, &[(Stuff, f32)]); 11] = [
+        ("tin wall", &[(Stuff::Sheet, 20.0)]),
+        ("plank wall", &[(Stuff::Planks, 100.0)]),
+        ("plaster wall", &[(Stuff::Plaster, 150.0)]),
+        ("car door", &[(Stuff::Shell, 92.0)]),
+        // In a door, across the body, out the far door.
+        (
+            "whole car",
+            &[
+                (Stuff::Shell, 92.0),
+                (Stuff::Shell, 1190.0),
+                (Stuff::Shell, 92.0),
+            ],
+        ),
+        ("drone shell", &[(Stuff::Housing, 130.0)]),
+        ("robot plate", &[(Stuff::Plate, 30.0)]),
+        ("log wall", &[(Stuff::Logs, 250.0)]),
+        ("brick wall", &[(Stuff::Brick, 250.0)]),
+        ("concrete", &[(Stuff::Concrete, 200.0)]),
+        ("tree", &[(Stuff::Logs, 300.0)]),
+    ];
+
+    /// The penetration gauge: every round against every thing, head on,
+    /// printed as a table (`cargo test -p extraction_core gauge --
+    /// --nocapture`) and held to what cover should mean. A car door is
+    /// cover from a pistol and buckshot and false against everything
+    /// else, a walker's gun among them; a whole car broadside stops all but
+    /// the big rifle rounds and a slug; a drone's shell lets a rifle round
+    /// through and out the far side; brick and concrete stop everything.
+    #[test]
+    fn the_penetration_gauge() {
+        let mut table = format!("{:>13}", "");
+        for (r, _, _) in ROUNDS {
+            table += &format!("{r:>7}", r = &r[..r.len().min(6)]);
+        }
+        let left = |(_, m, v): (&str, f32, f32), (_, layers): (&str, &[(Stuff, f32)])| {
+            let mut v = v;
+            for &(s, mm) in layers {
+                match strike(s, m, v, 1.0, mm, 1.0) {
+                    Outcome::Through { speed } => v = speed,
+                    _ => return 0.0,
+                }
+            }
+            energy_j(m, v)
+        };
+        for t in TARGETS {
+            table += &format!("\n{:>13}", t.0);
+            for r in ROUNDS {
+                let j = left(r, t);
+                table += &if j > 0.0 {
+                    format!("{:>7.0}", j)
+                } else {
+                    format!("{:>7}", "-")
+                };
+            }
+        }
+        println!("Joules left after the target, head on (- stops):\n{table}");
+        let goes = |round: &str, target: &str| {
+            let r = ROUNDS.iter().find(|r| r.0 == round).unwrap();
+            let t = TARGETS.iter().find(|t| t.0 == target).unwrap();
+            left(*r, *t) > 0.0
+        };
+        let all = ROUNDS.map(|r| r.0);
+        let stops_door = ["22lr", "nagant", "pm", "buck pellet"];
+        for r in all {
+            assert_eq!(
+                goes(r, "car door"),
+                !stops_door.contains(&r),
+                "{r} and a car door\n{table}"
+            );
+        }
+        for r in ["drone", "walker", "sentry", "heavy"] {
+            assert!(goes(r, "car door"), "a car door is no cover from a {r}");
+        }
+        for r in all {
+            let through = goes(r, "whole car");
+            let big = matches!(r, "sks" | "slug" | "mosin" | "heavy");
+            assert_eq!(through, big, "{r} through a whole car\n{table}");
+        }
+        for r in all {
+            let through = goes(r, "drone shell");
+            let rifle = matches!(r, "ak" | "sks" | "slug" | "mosin" | "sentry" | "heavy");
+            assert_eq!(through, rifle, "{r} through a drone's shell\n{table}");
+        }
+        for r in all {
+            for t in ["brick wall", "concrete", "robot plate"] {
+                assert!(!goes(r, t), "{r} through {t}\n{table}");
+            }
+        }
+    }
+
+    /// A car door turned to the line is thicker: a drone's round that goes
+    /// through one square on stops in it at 45 degrees; a walker's still
+    /// comes through.
+    #[test]
+    fn a_car_door_at_a_slant() {
+        let door = |v: f32, cos: f32| strike(Stuff::Shell, 8.0, v, cos, 92.0, 1.0);
+        assert!(matches!(door(380.0, 1.0), Outcome::Through { .. }));
+        assert_eq!(door(380.0, 0.7), Outcome::Stop);
+        assert!(matches!(door(450.0, 0.7), Outcome::Through { .. }));
+    }
+
+    /// The new hollow things glance a grazing round like any hard face.
+    #[test]
+    fn shells_glance() {
+        for s in [Stuff::Shell, Stuff::Housing] {
+            assert!(matches!(
+                strike(s, 3.4, 900.0, 0.05, 92.0, 0.0),
+                Outcome::Ricochet { .. }
+            ));
         }
     }
 }

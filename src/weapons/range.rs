@@ -42,8 +42,16 @@ pub const GUNS: [&str; 11] = [
     "ppsh",
 ];
 
+/// Robots' guns on the range, firing their own 8 g rounds through the same
+/// projectiles: (name, muzzle speed, damage), as `robots` fires them.
+pub const ROBOT_GUNS: [(&str, f32, f32); 3] = [
+    ("walker", 450.0, 14.0),
+    ("drone", 380.0, 9.0),
+    ("sentry", 600.0, 16.0),
+];
+
 /// The panels: a material and its thickness, as buildings use them.
-pub const PANELS: [(Mat, f32); 9] = [
+pub const PANELS: [(Mat, f32); 10] = [
     (Mat::Planks, 0.1),
     (Mat::LogWall, 0.25),
     (Mat::Plaster, 0.15),
@@ -53,14 +61,33 @@ pub const PANELS: [(Mat, f32); 9] = [
     (Mat::Corrugated, 0.02),
     (Mat::RobotShell, 0.03),
     (Mat::Glass, 0.01),
+    // A car's door, as a wreck's parts are (`destruction::strip`): a
+    // hollow of two skins.
+    (Mat::PaintedMetal, 0.092),
 ];
 
-/// Head on: does `gun` get through `mat`?
-pub fn expected(gun: &str, mat: Mat) -> Expect {
+/// Head on: does `gun` get through `mat`, `thick` metres of it?
+pub fn expected(gun: &str, mat: Mat, thick: f32) -> Expect {
     use Expect::*;
     let rifle = matches!(gun, "ak74" | "mosin" | "sks" | "svd" | "rpk74");
-    match super::impacts::stuff_of(mat) {
+    // Pistols, revolvers, buckshot and a .22: what a car door stops.
+    let light = matches!(
+        gun,
+        "pm_pistol" | "nagant" | "toz_double" | "mp133" | "toz8"
+    );
+    match super::ballistics::piece_stuff(mat, Vec3::splat(thick * 0.5)) {
         Stuff::Glass => Through,
+        Stuff::Shell => {
+            if light {
+                Stop
+            } else {
+                Through
+            }
+        }
+        // Robots' rounds: through planks; a walker's and a sentry's
+        // through plaster too, a drone's not.
+        Stuff::Planks if matches!(gun, "walker" | "drone" | "sentry") => Through,
+        Stuff::Plaster if matches!(gun, "walker" | "sentry") => Through,
         // A .22 stops in tin.
         Stuff::Sheet if gun != "toz8" => Through,
         Stuff::Planks | Stuff::Plaster if rifle => Through,
@@ -73,8 +100,8 @@ pub fn expected(gun: &str, mat: Mat) -> Expect {
 }
 
 /// At a graze: hard faces turn rifle rounds.
-pub fn expected_graze(mat: Mat) -> Option<Expect> {
-    super::impacts::stuff_of(mat)
+pub fn expected_graze(mat: Mat, thick: f32) -> Option<Expect> {
+    super::ballistics::piece_stuff(mat, Vec3::splat(thick * 0.5))
         .ricochets()
         .then_some(Expect::Glance)
 }
@@ -131,7 +158,31 @@ pub fn run_range(app: &mut App) -> Vec<Cell> {
     let catalog = app.world().resource::<Catalog>().clone();
     let mut cells = Vec::new();
     let mut guns = Vec::new();
-    for (g, id) in GUNS.iter().enumerate() {
+    let names = GUNS.iter().chain(ROBOT_GUNS.iter().map(|(n, _, _)| n));
+    for (g, id) in names.enumerate() {
+        let robot = ROBOT_GUNS.iter().any(|(n, _, _)| n == id);
+        if robot {
+            // A robot's gun: no cartridge, its own round.
+            let gun = app.world_mut().spawn(Name::new("Robot's gun")).id();
+            guns.push((*id, gun));
+        }
+        for (mat, thick) in PANELS.iter() {
+            if !robot {
+                break;
+            }
+            cells.push(Cell {
+                gun: id,
+                mat: *mat,
+                graze: false,
+                want: expected(id, *mat, *thick),
+                shots: 0,
+                through: 0,
+                glanced: 0,
+            });
+        }
+        if robot {
+            continue;
+        }
         let kind = catalog.kind(id).expect("a gun on the range");
         let gun = {
             let mut commands = app.world_mut().commands();
@@ -146,17 +197,20 @@ pub fn run_range(app: &mut App) -> Vec<Cell> {
             )
         };
         guns.push((*id, gun));
-        for (mat, _) in PANELS.iter() {
+        for (mat, thick) in PANELS.iter() {
             cells.push(Cell {
                 gun: id,
                 mat: *mat,
                 graze: false,
-                want: expected(id, *mat),
+                want: expected(id, *mat, *thick),
                 shots: 0,
                 through: 0,
                 glanced: 0,
             });
-            if let (Some(want), true) = (expected_graze(*mat), *id == "ak74" || *id == "mosin") {
+            if let (Some(want), true) = (
+                expected_graze(*mat, *thick),
+                *id == "ak74" || *id == "mosin",
+            ) {
                 cells.push(Cell {
                     gun: id,
                     mat: *mat,
@@ -220,13 +274,13 @@ pub fn run_range(app: &mut App) -> Vec<Cell> {
     for i in 0..cells.len() {
         let gun_id = cells[i].gun;
         let gun = guns.iter().find(|(id, _)| *id == gun_id).unwrap().1;
-        let def = app
-            .world()
-            .get::<Gun>(gun)
-            .expect("the range's gun")
-            .firearm
-            .def
-            .clone();
+        let (speed, damage) = match ROBOT_GUNS.iter().find(|(n, _, _)| *n == gun_id) {
+            Some((_, v, d)) => (*v, *d),
+            None => {
+                let g = app.world().get::<Gun>(gun).expect("the range's gun");
+                (g.firearm.def.muzzle_velocity, g.firearm.def.damage)
+            }
+        };
         let at = Vec3::new(i as f32 * SPACING, ALTITUDE, 0.0);
         let shots = if cells[i].graze { 8 } else { 3 };
         for k in 0..shots {
@@ -247,8 +301,8 @@ pub fn run_range(app: &mut App) -> Vec<Cell> {
                 shooter: None,
                 origin,
                 direction: dir,
-                speed: def.muzzle_velocity,
-                damage: def.damage,
+                speed,
+                damage,
                 projectiles: 1,
                 spread: 0.0,
                 recoil: 0.0,
@@ -307,8 +361,178 @@ mod tests {
         app.cleanup();
         app.update();
         let cells = run_range(&mut app);
-        assert!(cells.len() >= GUNS.len() * PANELS.len());
+        assert!(cells.len() >= (GUNS.len() + ROBOT_GUNS.len()) * PANELS.len());
         let bad = failures(&cells);
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    use crate::rig::Side;
+    use crate::weapons::ballistics::Hit;
+    use crate::weapons::feel::vr_tests::{Range, fire, hold, load, take_in};
+    use extraction_core::firearm::FireMode;
+
+    /// The hits written from now on, as the tick after `n` steps reads them.
+    fn hits_over(vr: &mut crate::vr_harness::Vr, n: usize) -> Vec<Hit> {
+        let mut cursor = vr
+            .app
+            .world()
+            .resource::<Messages<Hit>>()
+            .get_cursor_current();
+        let mut out = Vec::new();
+        for _ in 0..n {
+            vr.step(1);
+            out.extend(
+                cursor
+                    .read(vr.app.world().resource::<Messages<Hit>>())
+                    .cloned(),
+            );
+        }
+        out
+    }
+
+    /// A car door carried off a wreck and held up in the left hand as a
+    /// shield: a pistol's round stops in it; a walker's 8 g round comes
+    /// through it into the body behind.
+    #[test]
+    fn a_car_door_stops_a_pistol_not_a_walkers_round() {
+        let mut vr = crate::vr_harness::Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(0.0, 30.0);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.65, 0.0));
+        let mut r = Range {
+            vr,
+            gun: Entity::PLACEHOLDER,
+            feet,
+        };
+        let door = take_in(
+            &mut r,
+            Side::Left,
+            "car_door",
+            feet + Vec3::new(0.0, 1.25, -0.4),
+        );
+        r.vr.step(20);
+        assert_eq!(r.vr.hand_state(Side::Left).holding, Some(door));
+        let walker_gun = r.vr.app.world_mut().spawn(Name::new("Walker's gun")).id();
+        let pistol = r.vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(6.0, 0.3, 6.0)),
+        );
+        r.vr.app
+            .world_mut()
+            .entity_mut(pistol)
+            .insert(RigidBody::Static);
+        r.vr.step(3);
+        let mut bodies =
+            r.vr.app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::player::BodyCollider>>();
+        let body: Vec<Entity> = bodies.iter(r.vr.app.world()).collect();
+        let shoot = |r: &mut Range, gun: Entity, speed: f32, damage: f32| {
+            // From 15 m off, at the chest, through the door's face beside the
+            // hand on it.
+            let at = r.feet + Vec3::new(0.18, 1.35, -15.0);
+            r.vr.app.world_mut().write_message(Shot {
+                gun,
+                shooter: Some(gun),
+                origin: at,
+                direction: Vec3::Z,
+                speed,
+                damage,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: 7,
+            });
+            let hits = hits_over(&mut r.vr, 10);
+            let on_door = hits.iter().any(|h| h.entity == door);
+            let on_body = hits.iter().any(|h| body.contains(&h.entity));
+            (on_door, on_body)
+        };
+        let (door_hit, hurt) = shoot(&mut r, pistol, 315.0, 34.0);
+        assert!(door_hit, "the pistol's round meets the door");
+        assert!(!hurt, "and stops in it");
+        let (door_hit, hurt) = shoot(&mut r, walker_gun, ROBOT_GUNS[0].1, ROBOT_GUNS[0].2);
+        assert!(door_hit, "the walker's round meets the door");
+        assert!(hurt, "and comes through it");
+    }
+
+    /// A rifle round fired from the hand goes in one side of a drone's
+    /// thin shell and out the other, on to the plate behind it; a pistol's
+    /// lodges in it.
+    #[test]
+    fn a_rifle_round_goes_through_a_drone_and_on() {
+        let through = |id: &str, family: &str| -> (bool, bool) {
+            let mut r = hold(id, false, false);
+            load(&mut r, family, 10, FireMode::Semi);
+            r.vr.step(5);
+            let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+            let fwd = gt.forward().as_vec3();
+            let at = gt.translation() + fwd * 8.0;
+            // Side on to the line, held still and senseless.
+            let drone = {
+                let mut commands = r.vr.app.world_mut().commands();
+                let job = crate::robots::Job {
+                    kind: crate::robots::JobKind::Survey,
+                    site: at,
+                    duration: 1.0e6,
+                    exit: at,
+                };
+                crate::robots::drone::spawn_drone(&mut commands, at, job)
+            };
+            r.vr.app.world_mut().flush();
+            r.vr.app.world_mut().entity_mut(drone).insert((
+                RigidBody::Static,
+                crate::robots::Stunned(60.0),
+                Transform::from_translation(at).looking_to(fwd.cross(Vec3::Y).normalize(), Vec3::Y),
+            ));
+            let witness =
+                r.vr.app
+                    .world_mut()
+                    .spawn((
+                        Witness { cell: 0 },
+                        Transform::from_translation(at + fwd * 3.0).looking_to(fwd, Vec3::Y),
+                        RigidBody::Static,
+                        Collider::cuboid(1.5, 1.5, 0.05),
+                        CollisionLayers::new(Layer::World, LayerMask::ALL),
+                    ))
+                    .id();
+            r.vr.step(5);
+            let mut cursor =
+                r.vr.app
+                    .world()
+                    .resource::<Messages<Hit>>()
+                    .get_cursor_current();
+            assert_eq!(fire(&mut r, 1, false).len(), 1, "{id} fired");
+            let mut hits = Vec::new();
+            for _ in 0..20 {
+                r.vr.step(1);
+                hits.extend(
+                    cursor
+                        .read(r.vr.app.world().resource::<Messages<Hit>>())
+                        .cloned(),
+                );
+            }
+            let mut parts = r.vr.app.world_mut().query::<&crate::robots::RobotPart>();
+            let on_drone = hits.iter().any(|h| {
+                parts
+                    .get(r.vr.app.world(), h.entity)
+                    .is_ok_and(|p| p.robot == drone)
+            });
+            (on_drone, hits.iter().any(|h| h.entity == witness))
+        };
+        assert_eq!(
+            through("ak74", "ak545"),
+            (true, true),
+            "an AK round: through and on"
+        );
+        assert_eq!(
+            through("pm_pistol", "pm"),
+            (true, false),
+            "a pistol's: lodged"
+        );
     }
 }
