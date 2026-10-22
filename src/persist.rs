@@ -1253,6 +1253,7 @@ fn relocate(world: &mut World) {
         return;
     };
     if let Some(path) = world.resource::<SaveSlot>().0.clone() {
+        finish_zone_reset(world);
         let save = snapshot(world);
         if let Some(mut career) = world.get_resource_mut::<CareerState>() {
             career.0.store(&save);
@@ -1274,6 +1275,19 @@ fn save_on_request_or_exit(world: &mut World) {
         .is_some_and(|m| !m.is_empty());
     if !asked && !exiting {
         return;
+    }
+    // A reset under way at base: never save the Zone half-swept. Leaving,
+    // finish it first (a hitch on the way out costs nothing); otherwise
+    // its last step asks for the save.
+    if world.contains_resource::<ZoneReset>() {
+        if !exiting {
+            return;
+        }
+        finish_zone_reset(world);
+        world
+            .resource_mut::<Messages<SaveNow>>()
+            .drain()
+            .for_each(drop);
     }
     let Some(path) = world.resource::<SaveSlot>().0.clone() else {
         return;
@@ -1323,7 +1337,17 @@ struct ZoneReset {
     gone: usize,
 }
 
-/// Loose items swept a frame.
+/// Runs a reset under way to its end now.
+fn finish_zone_reset(world: &mut World) {
+    for _ in 0..100_000 {
+        if !world.contains_resource::<ZoneReset>() {
+            return;
+        }
+        step_zone_reset(world);
+    }
+}
+
+/// Loose items swept a frame (and fresh loot let fall).
 const SWEEP_PER_FRAME: usize = 40;
 
 fn step_zone_reset(world: &mut World) {
@@ -1357,8 +1381,36 @@ fn step_zone_reset(world: &mut World) {
             r.step = 4;
         }
         4 => {
+            // Rolled at rest, let fall a few at a time: hundreds of new
+            // bodies settling at once was the next judder (the swept
+            // collision pass 19 ms).
+            let before: std::collections::HashSet<Entity> = world
+                .query_filtered::<Entity, With<Item>>()
+                .iter(world)
+                .collect();
             crate::items::loot::roll_zone_loot(world);
+            let fresh: Vec<Entity> = world
+                .query_filtered::<(Entity, &RigidBody), With<Item>>()
+                .iter(world)
+                .filter(|(e, b)| !before.contains(e) && **b == RigidBody::Dynamic)
+                .map(|(e, _)| e)
+                .collect();
+            for e in &fresh {
+                world.entity_mut(*e).insert(RigidBody::Static);
+            }
+            r.loose = fresh;
             r.step = 5;
+        }
+        5 => {
+            let take = r.loose.len().min(SWEEP_PER_FRAME);
+            for e in r.loose.drain(..take) {
+                if let Ok(mut e) = world.get_entity_mut(e) {
+                    e.insert(RigidBody::Dynamic);
+                }
+            }
+            if r.loose.is_empty() {
+                r.step = 6;
+            }
         }
         _ => {
             finish_reset(world, r.gone);
@@ -1836,6 +1888,43 @@ mod tests {
         through_the_reset(&mut b);
         let left = b.world_mut().query::<&Heavy>().iter(b.world()).count();
         assert_eq!(left, 0, "swept away");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Quitting while the reset at base is under way finishes it before
+    /// saving: the save has the new cycle and the fresh loot, never a
+    /// Zone half-swept. A save asked for mid-reset waits for its end.
+    #[test]
+    fn quitting_mid_reset_saves_it_finished() {
+        let path = temp_save("surge_quit.ron");
+        let mut a = app_with_save(&path);
+        a.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
+        // Started, not finished (a step a frame).
+        a.update();
+        assert!(a.world().contains_resource::<ZoneReset>(), "under way");
+        a.world_mut().write_message(SaveNow);
+        a.update();
+        assert!(
+            a.world().contains_resource::<ZoneReset>(),
+            "a save asked for mid-reset doesn't hurry it"
+        );
+        a.world_mut().write_message(AppExit::Success);
+        a.update();
+        assert!(
+            !a.world().contains_resource::<ZoneReset>(),
+            "finished to leave"
+        );
+        drop(a);
+        let mut b = app_with_save(&path);
+        let raid = b.world().resource::<Raid>();
+        assert_eq!(raid.cycle, 1, "the save has the new cycle");
+        let loose = count::<(
+            With<Item>,
+            Without<InBackpack>,
+            Without<InSocket>,
+            Without<Held>,
+        )>(b.world_mut());
+        assert!(loose > 20, "and the fresh loot ({loose} loose)");
         let _ = std::fs::remove_file(&path);
     }
 
