@@ -147,6 +147,7 @@ pub fn handle_session(
                 "gave up waiting on the load"
             }
         );
+        crate::render::timeline::mark("headset session asked for");
         create.write_default();
         gate.waiting = None;
     }

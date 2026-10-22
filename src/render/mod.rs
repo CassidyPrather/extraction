@@ -33,6 +33,7 @@ pub mod spikes;
 pub mod stats;
 pub mod tells;
 pub mod terrain_material;
+pub mod timeline;
 pub mod tools;
 pub mod upgrades;
 pub mod vr_budget;
@@ -76,6 +77,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(timeline::TimelinePlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
