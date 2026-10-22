@@ -6056,3 +6056,153 @@ mod wounds {
         assert!(!splinted && !used);
     }
 }
+
+/// Robots fight a hand (`robots::grip`): held, a walker kicks free and a
+/// drone tears loose.
+mod grips {
+    use super::*;
+    use crate::interact::fight::RobotGrip;
+    use crate::robots::{Awareness, Job, JobKind, PartRole, RobotPart};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn open() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(4);
+        (vr, feet)
+    }
+
+    fn job(at: Vec3) -> Job {
+        Job {
+            kind: JobKind::Watch,
+            site: at,
+            duration: f32::INFINITY,
+            exit: at,
+        }
+    }
+
+    /// Whether the right hand has hold of `robot`.
+    fn holding(vr: &mut Vr, robot: Entity) -> bool {
+        vr.app
+            .world_mut()
+            .query::<(&RigHand, &RobotGrip)>()
+            .iter(vr.app.world())
+            .any(|(h, g)| h.side == Side::Right && g.robot == robot)
+    }
+
+    /// A walker held by a leg kicks it free within a second (the hand
+    /// knocked off), and turns on whoever held it.
+    #[test]
+    fn a_walker_kicks_a_held_leg_free() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.1);
+        let walker = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker(&mut c, &zone, at, job(at));
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its leg nearest you.
+        let leg = {
+            let mut q = vr.app.world_mut().query::<(&RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(p, _)| p.robot == walker && matches!(p.role, PartRole::Leg(_)))
+                .map(|(_, g)| g.translation())
+                .max_by(|a, b| a.z.total_cmp(&b.z))
+                .expect("a leg")
+        };
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, walker), "the hand has hold of its leg");
+        // Held still, hand closed: within a second it's kicked free.
+        let mut free_after = None;
+        for i in 0..90 {
+            vr.step(1);
+            if !holding(&mut vr, walker) {
+                free_after = Some(i);
+                break;
+            }
+        }
+        let ticks = free_after.expect("it never kicked free");
+        assert!(
+            ticks as f32 / 90.0 <= crate::robots::grip::KICK_AFTER + 0.2,
+            "kicked free after {ticks} ticks"
+        );
+        let player = vr.player;
+        let aware = vr.app.world().get::<Awareness>(walker).unwrap();
+        assert_eq!(aware.target, Some(player), "it turns on who held it");
+        assert!(aware.suspicion >= 1.0);
+    }
+
+    /// A drone held by its frame thrusts away harder and harder, and
+    /// tears out of the hand within a couple of seconds.
+    #[test]
+    fn a_held_drone_tears_free() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.25, 1.3, -0.6);
+        let drone = {
+            let mut c = vr.app.world_mut().commands();
+            let e = crate::robots::drone::spawn_drone(&mut c, at, job(at));
+            vr.app.world_mut().flush();
+            // (Blind and mindless: it holds station rather than go for you
+            // before it's taken.)
+            vr.app
+                .world_mut()
+                .entity_mut(e)
+                .remove::<crate::robots::Senses>()
+                .remove::<crate::robots::Brain>();
+            e
+        };
+        // It holds station at its post: let it settle there.
+        vr.step(90);
+        let middle = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(drone)
+            .unwrap()
+            .translation();
+        let from = middle + Vec3::new(0.0, 0.0, 0.45);
+        let hand = middle + Vec3::new(0.0, 0.0, 0.12);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(6);
+        for i in 1..=40 {
+            vr.move_hand(Side::Right, from.lerp(hand, i as f32 / 40.0));
+            vr.step(1);
+        }
+        // (Where it is now: it drifts a little holding station.)
+        let middle = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(drone)
+            .unwrap()
+            .translation();
+        vr.move_hand(Side::Right, middle + Vec3::new(0.0, 0.0, 0.12));
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(holding(&mut vr, drone), "the hand has hold of it");
+        let mut tore = None;
+        for i in 0..(90 * 3) {
+            vr.step(1);
+            if !holding(&mut vr, drone) {
+                tore = Some(i);
+                break;
+            }
+        }
+        let ticks = tore.expect("still in the hand after 3 s");
+        assert!(ticks > 9, "not at once: {ticks} ticks");
+        let player = vr.player;
+        let aware = vr.app.world().get::<Awareness>(drone).unwrap();
+        assert_eq!(aware.target, Some(player), "it knows who held it");
+    }
+}

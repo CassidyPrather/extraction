@@ -61,12 +61,7 @@ const WALKS: &[(&str, &str, &str)] = &[
 
 /// Perches found and with their owners: (map, prefab, who, what). Each
 /// comes off when it's fixed; a perch anywhere else fails the test.
-const OPEN: &[(&str, &str, &str, &str)] = &[(
-    "sallow_reservoir",
-    "dam_face",
-    "Fourth valley",
-    "the face's course steps: being weathered at 60 degrees",
-)];
+const OPEN: &[(&str, &str, &str, &str)] = &[];
 
 /// A standable surface in a column: its height and whether it's the ground.
 #[derive(Clone, Copy, Debug)]
