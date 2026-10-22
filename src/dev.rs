@@ -46,16 +46,38 @@ fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
 }
 
+/// The longest a screenshot waits on the world beyond its frames, seconds
+/// (the software renderer is slow; a material that never readies mustn't
+/// hang a shot).
+const SHOT_WAIT_MAX: f32 = 180.0;
+
+/// `--screenshot`: after `--frames` frames, and once the ground's and the
+/// buildings' materials are on the GPU and the buildings dressed
+/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
+/// had trees floating over no ground.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut count: ResMut<FrameCount>,
+    world: crate::render::timeline::WorldReady,
+    time: Res<Time<Real>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
     if count.requested || count.frames < opts.frames {
         return;
+    }
+    if !(world.materials() && world.props()) {
+        if time.elapsed_secs() < SHOT_WAIT_MAX {
+            return;
+        }
+        warn!(
+            "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
+             (materials ready: {}, buildings dressed: {})",
+            world.materials(),
+            world.props()
+        );
     }
     count.requested = true;
     if let Some(dir) = path.parent() {

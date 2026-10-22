@@ -94,7 +94,8 @@ pub struct SessionGate {
 /// `bevy_mod_xr`'s `auto_handle_session` (switched off in `lib.rs`), but
 /// the session is only created once the load has settled: no building
 /// still waiting on its props, the forest built and its impostors taken,
-/// or [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
+/// every drawn thing's material ready (`timeline::WorldReady`), or
+/// [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
 /// own loader, and the first frame the player sees is a steady one (the
 /// load's own frames ran 60-100 ms each for a second, docs/PERFORMANCE.md
 /// "Hitches").
@@ -106,8 +107,7 @@ pub fn handle_session(
     mut end: MessageWriter<bevy_mod_xr::session::XrEndSessionMessage>,
     mut destroy: MessageWriter<bevy_mod_xr::session::XrDestroySessionMessage>,
     mut gate: ResMut<SessionGate>,
-    pending: Query<(), With<crate::world::buildings::PropsPending>>,
-    forest: crate::world::trees::ForestSettled,
+    world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
     mut no_auto_restart: Local<bool>,
 ) {
@@ -136,7 +136,7 @@ pub fn handle_session(
         return;
     };
     *waited += time.delta_secs();
-    let settled = pending.is_empty() && forest.settled();
+    let settled = world.ready();
     if settled || *waited >= SESSION_WAIT_MAX {
         info!(
             "headset: starting the session after {:.1} s ({})",
