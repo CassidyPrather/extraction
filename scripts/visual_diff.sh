@@ -2,9 +2,10 @@
 # Visual regression sweep: the same cameras in every valley, shot at day,
 # dusk, night and fog by two builds, compared for what changed.
 #   scripts/visual_diff.sh [old_sha new_sha]
-# Without shas: main's tip against the end of the round before (the last
-# first-parent commit before main's latest burst of merges; MAIN_REF,
-# default origin/claude/serene-clarke-rcgj62).
+# Without shas: main's tip against the end of the round before: the
+# first-parent commit under main's latest round, its latest cluster of
+# three or more merges within ten minutes. MAIN_REF defaults to
+# origin/claude/serene-clarke-rcgj62.
 #
 # Each sha is built once, in a worktree at target/vdiff/wt (always the same
 # path, so the shared target/vdiff/build stays incremental). It is kept as
@@ -18,7 +19,7 @@
 #
 # Output: target/vdiff/diff/<old>_<new>/sheet.jpg (changed shots side by
 # side, most changed first), index.html and report.json. Env: MAPS,
-# MOODS, KEEP, THRESHOLD (see scripts/visual_diff.py).
+# MOODS, KEEP, STRUCTURE and PIXELS (thresholds; see scripts/visual_diff.py).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 ROOT="$(pwd)"
@@ -35,21 +36,23 @@ if [ $# -ge 2 ]; then
 else
     git fetch -q origin "${MAIN_REF#origin/}" || true
     NEW="$(git rev-parse --short=8 "$MAIN_REF")"
-    # The round before: walk main's first parents back past the latest
-    # burst of merges (commits within 45 min of each other) to the first
-    # commit before it.
+    # The round before: main's latest round is its latest cluster of three
+    # or more "Merge polish" commits within ten minutes; the round before
+    # ends at the first-parent commit just under it.
     OLD="$(git log --first-parent --format='%h %ct %s' "$MAIN_REF" | python3 -c '
 import sys
 rows = [l.split(" ", 2) for l in sys.stdin.read().splitlines()]
-seen_merge = False
-prev_t = None
-for h, t, s in rows:
-    t = int(t)
-    if seen_merge and prev_t is not None and prev_t - t > 45 * 60:
-        print(h[:8]); break
-    if s.startswith("Merge polish"):
-        seen_merge = True
-    prev_t = t
+rows = [(h, int(t), s) for h, t, s in rows]
+for i, (h, t, s) in enumerate(rows):
+    if not s.startswith("Merge polish"):
+        continue
+    burst = [j for j in range(i, len(rows)) if rows[j][2].startswith("Merge polish") and t - rows[j][1] <= 600]
+    if len(burst) >= 3:
+        last = burst[-1]
+        while last + 1 < len(rows) and t - rows[last + 1][1] <= 600:
+            last += 1
+        print(rows[last + 1][0][:8])
+        break
 ')"
 fi
 echo "visual diff: $OLD -> $NEW"
