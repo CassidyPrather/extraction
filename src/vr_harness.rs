@@ -5564,7 +5564,8 @@ mod wounds {
             0.0,
             0.0,
         );
-        vr.step(128);
+        // Two seconds at the fixed rate.
+        vr.step(180);
         let f = *vr.app.world().get::<Fracture>(vr.player).unwrap();
         let limp = vr
             .app
