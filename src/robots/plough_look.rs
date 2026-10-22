@@ -403,7 +403,13 @@ fn gallery(
     }
     let here = best.0;
     let after = state.contains("after");
-    let start = if after { here + 25.0 } else { here - 30.0 };
+    let start = if after {
+        here + 25.0
+    } else if state.contains("close") {
+        here - 12.0
+    } else {
+        here - 30.0
+    };
     let e = super::plough::spawn_plough(&mut commands, &zone, points.clone());
     *held = Some((e, start.max(0.0)));
     commands.queue(move |w: &mut World| {
