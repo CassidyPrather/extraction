@@ -23,6 +23,6 @@ for ((i = 0; i < raids; i++)); do
   fi
   env "${vars[@]}" "$exe" --sim-run "$run" --map "$map" --seed $((seed * 100 + i)) \
     --personality looter --sim-out "$out" > /dev/null 2>&1
-  outcome=$(grep -o '"outcome":"[a-z]*"' "$out/$run.jsonl" 2>/dev/null | head -1 | cut -d'"' -f4)
+  outcome=$(grep '"ev":"end"' "$out/$run.jsonl" 2>/dev/null | grep -o '"outcome":"[a-z]*"' | cut -d'"' -f4)
   echo "$run ${outcome:-none}"
 done
