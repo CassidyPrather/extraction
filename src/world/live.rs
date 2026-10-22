@@ -76,6 +76,8 @@ pub struct Shocked {
 pub struct Isolated {
     pub site: Entity,
     pub cut: bool,
+    /// The isolator, where it clunks.
+    pub at: Vec3,
 }
 
 /// The arcing over a live room's water (client: its light).
@@ -130,6 +132,7 @@ fn pull_isolators(
         out.write(Isolated {
             site: iso.site,
             cut: iso.cut,
+            at: gt.translation(),
         });
         noise.write(crate::robots::Noise {
             at: gt.translation(),

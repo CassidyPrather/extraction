@@ -427,8 +427,8 @@ after the lights, it seals itself.
 - *Bots.* A raider routes round a sealed door, and leaves by a door
   that opens (`PowerLocked` doors were already so).
 
-Shot: the hall with the klaxon sounding, its lamp turning
-(`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
+Shot: the hall with the klaxon sounding, its amber lamp sweeping the
+wall and a crawler coming to it (`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
 shelter sounding from the start, for shots).
 
 ### One of its own: the service tunnel's live water
@@ -452,8 +452,8 @@ layout's `live`): throw the breaker and the way in opens onto live water.
   scenario `live_water` throws the breaker, pulls the isolator and wades in
   unhurt.
 
-Shot: the overflow chamber's water live, the arcing over it
-(`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
+Shot: the overflow chamber's water live, cold blue under the arcing,
+its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
 from the start, for shots).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
