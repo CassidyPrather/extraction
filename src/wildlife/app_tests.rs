@@ -143,14 +143,15 @@ fn walker_at(app: &mut App, zone: &Zone, post: Vec3, behind: Vec3) -> Entity {
     w
 }
 
-/// Flush a flock with a walker 35 m off, its back to you and the birds:
+/// Flush a flock with a walker 75 m off (past where it'd flush them
+/// itself), its back to you and the birds:
 /// it hears the birds go up and walks over to look where they were. Stand
 /// just out of the flock's reach instead and it never stirs.
 #[test]
 fn a_walker_goes_to_look_where_you_flushed_the_birds() {
     for flush in [true, false] {
         let (mut app, player, zone) = app();
-        let (_, centre, post) = one_flock(&mut app, &zone, 35.0);
+        let (_, centre, post) = one_flock(&mut app, &zone, 75.0);
         // Standing still 14 m off the far side of the building to start with
         // (the walker's back to you), then (or not) right beside it, under
         // the birds.
@@ -198,7 +199,13 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
                 ours.first()
                     .is_some_and(|f| f.alarm && f.by == Some(player))
             );
-            assert!(looked < 8.0, "went to look {looked:.1} m from the flock");
+            // Heard from afar, where is a guess: within HEARD_SPREAD of
+            // the distance.
+            let spread = crate::robots::senses::HEARD_SPREAD * post.distance(centre);
+            assert!(
+                looked < spread.max(8.0),
+                "went to look {looked:.1} m from the flock ({spread:.1} m allowed)"
+            );
         } else {
             assert!(ours.is_empty(), "flushed from 14 m standing still");
             assert_eq!(looked, f32::MAX, "investigated with no birds going up");
