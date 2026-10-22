@@ -344,7 +344,17 @@ fn a_search_takes_in_doorways_and_cover() {
     let (app, _, _) = app(None);
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    let door = e.doors.first().expect("a door");
+    // A door with open ground before it (which comes first in the list
+    // depends on the valley's buildings).
+    let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
+    let door = e
+        .doors
+        .iter()
+        .find(|d| {
+            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+        })
+        .expect("a door with open ground before it");
     let at = door.mid + door.out * 6.0;
     let spots = plan_search(
         at,
