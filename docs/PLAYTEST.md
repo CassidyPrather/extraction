@@ -413,6 +413,14 @@ said you don't use?
     does the sling catch it?
   - Walk through a doorway with it raised: do the knocks feel and sound
     right, and never too often?
+- Weather.
+  - On Rime Fell, leave the Mosin outside for a few minutes, then pick it
+    up: does it bite your hand, and is the bolt frozen until you slap it?
+  - Bring the PSO in from the cold to the hut or the truck: does the
+    fog, and wiping it with your glove, read?
+  - In a Sallow downpour or Cinder's ash, does a dirty gun look it and
+    jam more?
+  - Does wiping the receiver with your glove feel like enough of a cure?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
