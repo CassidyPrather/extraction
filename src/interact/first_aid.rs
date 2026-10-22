@@ -136,12 +136,17 @@ fn wrap_dressings(
         };
         // Round a limb, not the arm holding it.
         let at = gt.translation();
-        let round = segs
+        // The limb it's already going round while it still is (a wrap
+        // round a thigh passes near the other), else the nearest.
+        let near = segs
             .iter()
             .filter(|s| !matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side))
             .map(|s| (s, s.locate(at)))
-            .filter(|(s, (t, _, d))| (-0.05..=1.05).contains(t) && *d <= s.r + ROUND)
-            .min_by(|a, b| (a.1.2 - a.0.r).total_cmp(&(b.1.2 - b.0.r)));
+            .filter(|(s, (t, _, d))| (-0.05..=1.05).contains(t) && *d <= s.r + ROUND);
+        let round = match near.clone().find(|(s, _)| Some(s.limb) == w.limb) {
+            Some(kept) => Some(kept),
+            None => near.min_by(|a, b| (a.1.2 - a.0.r).total_cmp(&(b.1.2 - b.0.r))),
+        };
         let Some((seg, (_, a, _))) = round else {
             w.away += time.delta_secs();
             if w.away > 0.6 {

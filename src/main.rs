@@ -48,6 +48,7 @@ fn main() -> AppExit {
     }
     let tooling = opts.tooling();
     let exit = extraction::run(opts);
+    extraction::render::timeline::mark("closed (world dropped)");
     // The truck drove to another valley: open the game again there. A
     // tooling run ends where it is.
     if let Some(to) = extraction::take_restart().filter(|_| !tooling) {

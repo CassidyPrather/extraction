@@ -401,6 +401,7 @@ fn apply_weather(
     ambient.color = weather.ambient_color;
     let look = crate::render::grade::Look::for_map(&zone.map.name);
     adapt.base = look.exposure;
+    adapt.base_lift = look.shadow_lift;
     let grading = look.grading();
     for (mut fog, grade) in &mut fogs {
         *fog = weather.fog();

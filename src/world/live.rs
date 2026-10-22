@@ -370,24 +370,30 @@ fn arc(
 ) {
     let t = time.elapsed_secs();
     for (e, a, light) in &mut arcs {
-        let Some(mut light) = light else {
-            commands.entity(e).insert(PointLight {
-                color: Color::srgb(0.55, 0.75, 1.0),
-                intensity: 0.0,
-                range: 7.0,
-                shadow_maps_enabled: false,
-                ..default()
-            });
-            continue;
+        // (A light only while it's live: dead, it costs nothing.)
+        let on = live.0.contains(&a.site);
+        let mut light = match (on, light) {
+            (true, Some(l)) => l,
+            (true, None) => {
+                commands.entity(e).insert(PointLight {
+                    color: Color::srgb(0.55, 0.75, 1.0),
+                    intensity: 0.0,
+                    range: 7.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                });
+                continue;
+            }
+            (false, Some(_)) => {
+                commands.entity(e).remove::<PointLight>();
+                continue;
+            }
+            (false, None) => continue,
         };
         // A spark now and then, never steady.
         let snap = ((t * 23.0).sin() * (t * 7.3).sin()).abs() > 0.82
             || std::env::var_os("EXTRACTION_LIVE").is_some();
-        light.intensity = if live.0.contains(&a.site) && snap {
-            40_000.0
-        } else {
-            0.0
-        };
+        light.intensity = if snap { 40_000.0 } else { 0.0 };
     }
 }
 
