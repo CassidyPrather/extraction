@@ -2395,7 +2395,9 @@ pub(crate) fn go_dark(
     if k < 1e-3 && day.written.is_none() {
         return;
     }
-    let dark = 1.0 - k * 0.985;
+    // Down to a fifth of a percent: with the grade's lift gone below
+    // (`render::grade::Below`), an unlit room is black, not grey.
+    let dark = 1.0 - k * 0.998;
     ambient.brightness = day.base.0 * dark;
     for mut s in &mut suns {
         s.illuminance = day.base.1 * (1.0 - k);

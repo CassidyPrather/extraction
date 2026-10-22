@@ -187,7 +187,8 @@ fn glow(
         let level = match g.kind {
             GlowKind::Chem => (g.left / 60.0).clamp(0.15, 1.0),
             GlowKind::Flare => {
-                0.75 + 0.25 * ((t * 31.0 + e.index() as f32).sin() * (t * 17.0).sin()).abs()
+                0.75 + 0.25
+                    * ((t * 31.0 + e.to_bits() as f32 * 0.37).sin() * (t * 17.0).sin()).abs()
             }
         };
         match light {
