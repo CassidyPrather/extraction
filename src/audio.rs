@@ -321,6 +321,7 @@ impl Plugin for AudioPlugin {
             .add_plugins(crate::audio_underground::UndergroundSoundsPlugin)
             .init_resource::<HushNow>()
             .add_plugins(crate::audio_kit::KitSoundsPlugin)
+            .add_plugins(crate::audio_fight::FightSoundsPlugin)
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -1075,6 +1076,16 @@ fn fault_sounds(
             ("guns/bolt_open", "gun.bolt_open", 1.0, None),
         ],
         FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        // A hang-fire: the hammer's fall and nothing, a dud's click; the
+        // shot it owes comes as a `Fired` of its own.
+        FireEvent::HangFire => &[("guns/dry_fire", "gun.dry_fire", 1.0, None)],
+        // Out of battery: the case bursts outside the chamber. A flat,
+        // harsh crack (between a squib and a shot: no barrel behind it)
+        // and the brass and gas clattering out of the open action.
+        FireEvent::OutOfBattery => &[
+            ("guns/rifle_shot", "gun.out_of_battery", 1.3, Some(3000.0)),
+            ("physical/drop_metal", "gun.burst_case", 1.4, None),
+        ],
         _ => return false,
     };
     for &(set, cue, speed, cutoff) in layers {
@@ -1292,6 +1303,20 @@ fn shot_sounds(
 /// Speed (m/s) a round hits at full level; slower ones hit softer.
 const IMPACT_FULL_SPEED: f32 = 300.0;
 
+/// Slower than this (m/s) it's no round but a blow (a crowbar, a knife,
+/// a stock: `Hit::blow`, which `Impact` doesn't carry): the fastest swing
+/// is a few tens of m/s, the slowest spent fragment hundreds.
+pub const BLOW_SPEED: f32 = 40.0;
+/// A blow at this speed (m/s) lands at its cue's level; at
+/// [`extraction_core::melee::BLUNT_MIN`], 12 dB under.
+const BLOW_FULL: f32 = 10.0;
+
+/// How far under its cue a blow at `speed` m/s lands, dB.
+pub fn blow_db(speed: f32) -> f32 {
+    let min = extraction_core::melee::BLUNT_MIN;
+    -12.0 * (1.0 - ((speed - min) / (BLOW_FULL - min)).clamp(0.0, 1.0))
+}
+
 /// Rounds landing, as `weapons::impacts` classes them (so the sound and
 /// the spray can't disagree): concrete, wood, steel, glass, earth, water,
 /// a robot's part (armour rings, an eye shatters), a body. A round
@@ -1306,6 +1331,47 @@ fn hit_sounds(
 ) {
     use crate::weapons::impacts::ImpactKind as K;
     for i in impacts.read() {
+        let v = i.velocity.length();
+        if v < BLOW_SPEED {
+            // A blow: what it struck, struck with weight (slower, duller,
+            // `hit.blow`), as loud as the swing; steel struck hard rings
+            // with a clank under it (a crowbar on a robot's panel).
+            let (set, speed) = match i.kind {
+                K::Masonry => ("impacts/concrete", 0.8),
+                K::Wood => ("impacts/wood", 0.8),
+                K::Metal | K::Robot => ("impacts/metal", 0.75),
+                K::Glass => ("physical/glass_break", 1.2),
+                K::Soil => ("impacts/dirt", 0.8),
+                K::Water => ("footsteps/water", 1.2),
+                K::Body => ("physical/body_hit", 0.9),
+            };
+            let db = blow_db(v);
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(i.point),
+                "hit.blow",
+                db,
+                speed,
+                0.08,
+            );
+            if matches!(i.kind, K::Metal | K::Robot) && v > 6.0 {
+                play_at_speed(
+                    &mut commands,
+                    &bank,
+                    &mut rng.0,
+                    "machines/clank",
+                    Some(i.point),
+                    "hit.blow_ring",
+                    db,
+                    1.1,
+                    0.08,
+                );
+            }
+            continue;
+        }
         // Out of the far side: the surface faces along the round.
         let exit = i.entity.is_some() && i.normal.dot(i.velocity) > 0.0;
         let trim = if exit { -6.0 } else { 0.0 };
@@ -2836,7 +2902,7 @@ fn slapbacks(
 /// The detector's stone ping and an artifact's crackle, synthesised
 /// (`robot_voice::render_ping`, `render_crackle`).
 const PING_SET: &str = "device/stone_ping";
-const CRACKLE_SET: &str = "device/crackle";
+pub(crate) const CRACKLE_SET: &str = "device/crackle";
 
 /// The Zone's smaller voices (`anomaly`):
 ///
@@ -5529,6 +5595,43 @@ mod tests {
             "above brighter than ahead by {:.1} dB",
             up - front
         );
+    }
+
+    /// The head-related responses on a grid of bearings (clockwise from
+    /// ahead, level) and elevations (ahead and behind), for the audit's
+    /// localisation pass (`scripts/audio_localise.py`), which plays each
+    /// threat's own sound through them at the ranges it matters: written
+    /// to target/audio_audit/hrir_grid.json. Our sphere only (the one the
+    /// game loads).
+    #[test]
+    fn localisation_grid() {
+        let ours = std::fs::read(crate::asset_root_path().join("audio/hrir/sadie_d2_kemar.bin"))
+            .expect("the sphere is built");
+        let dir = |az: f32, el: f32| {
+            let (a, e) = (az.to_radians(), el.to_radians());
+            [a.sin() * e.cos(), e.sin(), -a.cos() * e.cos()]
+        };
+        let mut grid = serde_json::Map::new();
+        let level = [0.0, 30.0, 60.0, 90.0, 120.0, 150.0, 180.0].map(|a| (a, 0.0));
+        let raised = [30.0, 60.0, 85.0].map(|e| (0.0, e));
+        let behind_up = [(180.0, 30.0), (180.0, 60.0)];
+        for (az, el) in level.into_iter().chain(raised).chain(behind_up) {
+            let (l, r) = render_from(&ours, dir(az, el));
+            grid.insert(
+                format!("az{az:.0}_el{el:.0}"),
+                serde_json::json!({ "left": l, "right": r }),
+            );
+        }
+        let out = crate::asset_root_path().join("../target/audio_audit");
+        let _ = std::fs::create_dir_all(&out);
+        std::fs::write(
+            out.join("hrir_grid.json"),
+            serde_json::to_string(&serde_json::json!({ "rate": 48000, "grid": grid })).unwrap(),
+        )
+        .unwrap();
+        // Sanity: a source at the right is louder in the right ear.
+        let (l, r) = render_from(&ours, dir(90.0, 0.0));
+        assert!(band_db(&r, 500.0, 10000.0) > band_db(&l, 500.0, 10000.0) + 6.0);
     }
 
     /// Near sounds take the head-related filter while there are voices;
