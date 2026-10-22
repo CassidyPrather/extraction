@@ -834,6 +834,7 @@ impl Builder {
     /// `width` wide, out to -Z from the wall whose centre line is at `z`
     /// (`thick` thick). A body walks up a slope at any slant; up steps at
     /// a slant its step up met the doorway's jamb, and bots stuck there.
+    /// Its foot is at most `map::SILT_BANK_REACH` out: the map clears that.
     /// Returns how far out from the wall's centre line it meets the ground.
     fn silt_bank(&mut self, z: f32, thick: f32, width: f32, y0: f32) -> f32 {
         let run = 2.6;

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Checks a batch of sim raids for harvesting that is risky but not
 murderous: a share of deliberate dives into anomalies end in death, and a
-share of them bring a stone out.
+share of them bring a stone out; and that anomalies are part of a raid at
+all: a share of the raids dive at least once.
 
     scripts/sim.sh marrow_creek 9 --personality hunter --jobs 3 --sim-minutes 10
     scripts/harvest_band.py target/sim/marrow_creek
@@ -30,6 +31,9 @@ STONE = {
 MAX_DEATHS_PER_DIVE = 0.2
 # Stones brought out per deliberate dive.
 MIN_STONES_PER_DIVE = 0.3
+# Hunter raids that dive into at least one anomaly: anomalies are part of a
+# hunter's raid, not something it meets by chance.
+MIN_DIVING_RAIDS = 0.5
 
 
 def main(path: str) -> int:
@@ -43,13 +47,16 @@ def main(path: str) -> int:
     by_kind = collections.Counter()
     deaths = collections.Counter()
     stones = collections.Counter()
+    diving = 0
     for r in runs:
+        dived = False
         with open(r) as f:
             for line in f:
                 e = json.loads(line)
                 ev = e.get("ev") or e.get("event")
                 if ev == "anomaly_enter" and e.get("deliberate"):
                     dives += 1
+                    dived = True
                     by_kind[e.get("kind", "?")] += 1
                 elif ev == "death":
                     deaths[e.get("cause", "?")] += 1
@@ -61,11 +68,14 @@ def main(path: str) -> int:
                     for item in e.get("loot") or []:
                         if str(item).startswith("art_"):
                             out[item] += 1
+        diving += dived
     harvest_deaths = sum(n for c, n in deaths.items() if c in KINDS)
     taken = sum(stones.values())
     per_dive = harvest_deaths / dives if dives else 0.0
     yield_ = taken / dives if dives else 0.0
+    share = diving / len(runs)
     print(f"{len(runs)} runs, {dives} deliberate dives")
+    print(f"raids that dive at least once: {diving} ({share:.0%})")
     print(f"deaths in anomalies: {harvest_deaths} ({per_dive:.0%} a dive); all deaths {dict(deaths)}")
     print(f"stones taken: {taken} ({yield_:.0%} a dive) {dict(stones)}")
     print(f"stones brought out (raids that extracted): {sum(out.values())} {dict(out)}")
@@ -82,6 +92,9 @@ def main(path: str) -> int:
     ok = True
     if dives == 0:
         print("FAIL no deliberate dives: nobody tried")
+        ok = False
+    if share < MIN_DIVING_RAIDS:
+        print(f"FAIL fewer than {MIN_DIVING_RAIDS:.0%} of raids dive at all")
         ok = False
     if per_dive > MAX_DEATHS_PER_DIVE:
         print(f"FAIL more than {MAX_DEATHS_PER_DIVE:.0%} of dives kill")
