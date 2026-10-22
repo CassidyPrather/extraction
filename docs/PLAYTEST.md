@@ -421,6 +421,14 @@ said you don't use?
   - In a Sallow downpour or Cinder's ash, does a dirty gun look it and
     jam more?
   - Does wiping the receiver with your glove feel like enough of a cure?
+- Cold actions and old rounds.
+  - On Rime Fell, work a cold Mosin's bolt or the MP-133's pump: does it
+    drag? Does a gentle pull slide off it, and does a short stroke you
+    then have to finish read as your own doing?
+  - Load surplus or rain-soaked rounds and fire: when one clicks, do you
+    keep the muzzle downrange for the second it takes? What happens if
+    you open the bolt on it?
+  - Is "re-pack the box at the bench" a cure you'd think of?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
