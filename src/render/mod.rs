@@ -34,6 +34,7 @@ pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
+pub mod stress;
 pub mod tells;
 pub mod terrain_material;
 pub mod textures;
