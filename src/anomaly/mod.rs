@@ -17,6 +17,7 @@
 pub mod artifacts;
 pub mod costs;
 pub mod detector;
+pub mod frost;
 pub mod harvest;
 pub mod hush;
 pub mod mirrors;
@@ -229,6 +230,7 @@ impl Plugin for AnomalyPlugin {
                         harvest::heat,
                         harvest::cool_scald,
                         hush::press,
+                        frost::chill,
                         measure_attention,
                         spend_attention,
                         age_blooms,
@@ -488,7 +490,14 @@ fn lifts(
 fn burners(
     mut anomalies: Query<(Entity, &mut Anomaly, &GlobalTransform), Without<surge::Forming>>,
     agitation: Res<surge::Agitation>,
-    mut players: Query<(&GlobalTransform, &mut Health), With<Player>>,
+    mut players: Query<
+        (
+            &GlobalTransform,
+            &mut Health,
+            Option<&artifacts::ArtifactEffects>,
+        ),
+        With<Player>,
+    >,
     parts: Query<(), With<crate::robots::RobotPart>>,
     spatial: SpatialQuery,
     time: Res<Time>,
@@ -502,11 +511,12 @@ fn burners(
         }
         let c = gt.translation();
         let mut inside = false;
-        for (pt, mut h) in &mut players {
+        for (pt, mut h, fx) in &mut players {
             let rel = pt.translation() - c;
             if Vec2::new(rel.x, rel.z).length() < a.radius && rel.y < 2.5 {
                 inside = true;
-                if !h.down {
+                // A live rimestone on you: the coals don't take.
+                if !h.down && !fx.is_some_and(|fx| fx.rimestone) {
                     h.hp -= 14.0 * (1.0 + agitation.0) * dt;
                     h.since_hit = 0.0;
                 }

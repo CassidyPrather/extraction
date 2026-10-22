@@ -15,8 +15,9 @@ looks like. Code: `src/anomaly/`, rules in
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
+| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.12/s at its edge to 0.35/s at its heart, so three seconds in and you're frozen through and shivering for minutes after; in it you stiffen (up to 85% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (6 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
 
-Wells, mirrors and hushes don't move between cycles: the maps place them
+Wells, mirrors, hushes and frosts don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
 can still bloom any kind in your way.
 
@@ -58,6 +59,17 @@ round a metre off the heart turns a few degrees; a pistol round, at half
 the speed, about four times as much. Shooting across a well at a robot
 behind it misses. The pull reaches three radii; a walker can still walk
 out from twice the radius, not from the heart.
+
+### Frosts
+
+A frost's cold is the valley's cold: it's the one chill a body has (Fifth
+valley's `world::cold::Chill`), so a frost on top of an hour on the col is
+worse than either, and you warm it off the same way, under a roof or going
+down. Its stiffness is its own and only while you're in it: out, it leaves
+you in a couple of seconds. You're told before it bites, and you can always
+crawl out. The hearth and the rimestone are each other's way in: a hearth
+keeps a frost off, a rimestone keeps a burner off. Code:
+`src/anomaly/frost.rs`.
 
 ### Mirrors
 
@@ -113,12 +125,14 @@ carry it safe, or carry it live.
 | Mirror shard | mirror | use it to step up to 4 m ahead, once a minute | every 20–40 s its late reflection glints, and robots within 35 m hear where you are | it hangs in the fold; throw something through and reach in while it closes (1.5 s) |
 | Glass eye | rare, any field | held to your eye, walls go thin | strong attention | as its anomaly's stone |
 | Hushstone | hush | a small Hush round you (1.2 m): your steps and shots aren't heard | every detector you carry is mute; attention 1.5/s | it lies in the dead air: in and out before 8 s |
+| Rimestone | frost | a burner's coals don't take you | a little chill (0.15) never leaves you: a little stiff, always | the frost lies round it: carry a live hearth (it chills you a quarter as fast and never past 0.3, and the frost never bites), walk in and out; without one, leave it |
 | Stormglass | only the Surge's own blooms (about one a Surge) | the Surge passes over you as if you were under a roof | the whole Zone knows where you are (attention 3/s) | as its bloom's kind, once it has finished forming |
 
 Rules and numbers: `extraction_core::anomaly` (costs, harvesting);
 game side `src/anomaly/costs.rs`, `harvest.rs`, `artifacts.rs`.
 Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
-`harvest_well`, `harvest_mirror`, `harvest_hush` (in `--scenario all`).
+`harvest_well`, `harvest_mirror`, `harvest_hush`, `harvest_frost` (in
+`--scenario all`).
 
 **Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
 `hunter` sim raids, at most 20% of deliberate dives into anomalies may

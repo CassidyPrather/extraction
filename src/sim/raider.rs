@@ -3215,12 +3215,17 @@ fn take_item(
                         junk: first,
                         spare: first.and_then(|j| junk_but(r, scene, j)),
                         gun: r.gun,
+                        hearth: carries(scene, "art_hearth"),
                     };
                     if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
                     {
                         r.diving = true;
                         tasks.extend(way);
                         return Some(tasks);
+                    }
+                    // Into a frost without a hearth, nobody who knows does.
+                    if kind == AnomalyKind::Frost {
+                        return None;
                     }
                 }
                 if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
@@ -3278,6 +3283,16 @@ fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
         .filter(|(_, v)| *v <= 3.0)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(e, _)| e)
+}
+
+/// Whether something of kind `id` is in its pack.
+fn carries(scene: &Scene, id: &str) -> bool {
+    scene.bags.iter().find(|b| b.carried).is_some_and(|me| {
+        me.contents
+            .iter()
+            .filter_map(|e| scene.items.get(*e).ok())
+            .any(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
+    })
 }
 
 /// Getting out: radio, walk to the RV, board, pull the bell.

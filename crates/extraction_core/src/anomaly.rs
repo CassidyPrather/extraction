@@ -223,26 +223,33 @@ pub fn hush_press(secs: f32) -> f32 {
 
 // --- Frosts ----------------------------------------------------------------
 
-/// Chill a second at a frost's heart (0..1: at 1 you're at its worst):
-/// about three seconds from warm to stiff.
+/// A frost feeds the body's one chill, the valley's (`cold`: 0 warm ..= 1
+/// frozen through), so a frost and the weather add up, and a roof (or
+/// going down) warms you back, slowly. Inside one, the chill stiffens you
+/// and, frozen through, bites.
+///
+/// Chill a second at a frost's heart: about three seconds from warm to
+/// frozen through.
 pub const FROST_CHILL: f32 = 0.35;
 /// And at its edge.
 pub const FROST_CHILL_EDGE: f32 = 0.12;
-/// Chill shed a second out of it.
+/// Pace a second the stiffness leaves you once you're out of it (the cold
+/// itself stays: it's the valley's to warm off).
 pub const FROST_THAW: f32 = 0.25;
-/// How much of your pace full chill takes: never all of it, so you can
-/// always crawl out.
+/// How much of your pace full chill takes in a frost: never all of it, so
+/// you can always crawl out.
 pub const FROST_SLOW: f32 = 0.85;
 /// Chill at which you're told your legs are going.
 pub const FROST_WARN: f32 = 0.4;
-/// Health a second it takes at full chill.
+/// Health a second a frost takes from whoever's in it frozen through.
 pub const FROST_BITE: f32 = 6.0;
-/// A live hearth on you: chill builds at this share of the rate, and never
-/// past `FROST_HEARTH_CAP` (it never bites).
+/// A live hearth on you: a frost chills you at this share of the rate, and
+/// never past `FROST_HEARTH_CAP`; it stiffens you no more than that, and
+/// never bites.
 pub const FROST_HEARTH: f32 = 0.25;
 pub const FROST_HEARTH_CAP: f32 = 0.3;
 /// A live rimestone on you keeps this much chill on you always (a little
-/// slower), and a burner's heat can't touch you.
+/// stiff), and a burner's heat can't touch you.
 pub const RIMESTONE_CHILL: f32 = 0.15;
 
 /// Chill a second `d` from a frost's centre (radius `r`): its heart is
@@ -254,8 +261,9 @@ pub fn frost_rate(d: f32, r: f32) -> f32 {
     FROST_CHILL_EDGE + (FROST_CHILL - FROST_CHILL_EDGE) * (1.0 - d / r)
 }
 
-/// One step of a body's chill: `inside_rate` from [`frost_rate`] (0 out of
-/// any frost), with or without a live hearth or rimestone on it.
+/// One step of a frost on a body's chill: `inside_rate` from
+/// [`frost_rate`] (0 out of any frost: the chill is left to the valley),
+/// with or without a live hearth or rimestone on it.
 pub fn chill_step(chill: f32, inside_rate: f32, hearth: bool, rimestone: bool, dt: f32) -> f32 {
     let floor = if rimestone { RIMESTONE_CHILL } else { 0.0 };
     let next = if inside_rate > 0.0 {
@@ -267,14 +275,20 @@ pub fn chill_step(chill: f32, inside_rate: f32, hearth: bool, rimestone: bool, d
         let cap = if hearth { FROST_HEARTH_CAP } else { 1.0 };
         (chill + rate * dt).min(cap.max(chill))
     } else {
-        chill - FROST_THAW * dt
+        chill
     };
     next.clamp(floor, 1.0)
 }
 
-/// Pace kept at `chill`.
+/// The share of pace a frost takes from a body at `chill` standing in it.
+pub fn frost_stiffness(chill: f32, hearth: bool) -> f32 {
+    let c = chill.clamp(0.0, 1.0);
+    FROST_SLOW * if hearth { c.min(FROST_HEARTH_CAP) } else { c }
+}
+
+/// Pace kept at `chill` in a frost.
 pub fn frost_pace(chill: f32) -> f32 {
-    1.0 - FROST_SLOW * chill.clamp(0.0, 1.0)
+    1.0 - frost_stiffness(chill, false)
 }
 
 // --- Mirrors ---------------------------------------------------------------
@@ -932,13 +946,15 @@ mod tests {
             "a hearth: never past its cap"
         );
         assert!(frost_pace(FROST_HEARTH_CAP) > 0.7);
+        assert!(
+            frost_stiffness(0.9, true) < 0.3,
+            "chilled by the weather, a hearth still keeps you moving"
+        );
         assert_eq!(frost_rate(3.1, 3.0), 0.0, "nothing outside it");
-        // Out of it you thaw, but a rimestone keeps a little cold on you.
-        let mut c = 1.0;
-        for _ in 0..(10.0 / dt) as usize {
-            c = chill_step(c, 0.0, false, true, dt);
-        }
-        assert!((c - RIMESTONE_CHILL).abs() < 1e-4);
+        // Out of it the cold is the valley's to warm off; a rimestone keeps
+        // a little on you whatever.
+        assert_eq!(chill_step(0.8, 0.0, false, false, dt), 0.8);
+        assert_eq!(chill_step(0.0, 0.0, false, true, dt), RIMESTONE_CHILL);
     }
 
     #[test]
