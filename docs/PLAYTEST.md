@@ -501,6 +501,16 @@ said you don't use?
     far side?
   - Graze a wreck's flank or a sheet wall: does the whine and the streak
     read as a ricochet?
+- The shot as a sound.
+  - Fire the AK in a valley and on open ground with a drone overhead:
+    does it come to the right place in the open and cast about in the
+    valley?
+  - Put the PBS on, load the green-tipped subsonic box, and shoot from
+    cover: does the quiet feel earned?
+  - Fire across a walker's front from far off, suppressed: does it go
+    looking downrange instead of at you?
+  - Pack a food tin into a suppressor at the vice: is the wear on it
+    (louder by the magazine) clear enough?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

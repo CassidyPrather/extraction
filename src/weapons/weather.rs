@@ -849,7 +849,7 @@ mod tests {
             let wld = vr.app.world();
             let g = wld.get::<Gun>(gun).unwrap();
             let gt = wld.get::<GlobalTransform>(gun).unwrap();
-            let (lo, hi) = g.layout.bounds();
+            let (_, hi) = g.layout.bounds();
             let y = hi.y + 0.02;
             (
                 gt.transform_point(Vec3::new(0.0, y, -0.3)),

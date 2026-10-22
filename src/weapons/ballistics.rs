@@ -223,6 +223,21 @@ pub(crate) fn fire_shots(
                 shot.spread.min(SLUG_SPREAD),
                 shot.speed * SLUG_SPEED,
             )
+        } else if load == Load::Subsonic {
+            // Slower than sound, a heavier bullet: harm by the square root
+            // of its energy against ball's.
+            let speed = load.speed(shot.speed);
+            let ball = guns.get(shot.gun).map_or(mass_g, |g| {
+                extraction_core::firearm_terminal::bullet_mass_g(&g.firearm.def.cartridge)
+            });
+            let share =
+                (mass_g * speed * speed / (ball * shot.speed * shot.speed).max(1e-3)).sqrt();
+            (
+                shot.projectiles.max(1),
+                shot.damage * share.min(1.0),
+                shot.spread,
+                speed,
+            )
         } else {
             (
                 shot.projectiles.max(1),
