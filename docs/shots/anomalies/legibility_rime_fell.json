@@ -122,32 +122,32 @@
  {
   "kind": "mirror",
   "weather": "fog",
-  "changed": 0.001,
+  "changed": 0.0059,
   "noise": 0.0,
-  "over_noise": 0.001,
-  "deg2": 1.17,
+  "over_noise": 0.0059,
+  "deg2": 7.07,
   "floor": 1.0,
   "ok": true
  },
  {
   "kind": "mirror",
   "weather": "downpour",
-  "changed": 0.0016,
+  "changed": 0.008,
   "noise": 0.0,
-  "over_noise": 0.0016,
-  "deg2": 1.88,
+  "over_noise": 0.008,
+  "deg2": 9.56,
   "floor": 1.0,
   "ok": true
  },
  {
   "kind": "mirror",
   "weather": "night",
-  "changed": 0.0004,
+  "changed": 0.0072,
   "noise": 0.0,
-  "over_noise": 0.0004,
-  "deg2": 0.44,
+  "over_noise": 0.0072,
+  "deg2": 8.63,
   "floor": 1.0,
-  "ok": false
+  "ok": true
  },
  {
   "kind": "hush",
