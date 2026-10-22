@@ -2860,3 +2860,223 @@ fn a_crawling_walker_doesnt_flank() {
         );
     }
 }
+
+/// A door you left open 9 m in front of a walker on its rounds: it comes
+/// to look.
+#[test]
+fn a_door_left_open_draws_a_walker() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let door = zone.on_ground(post.x + 2.0, post.z - 9.0);
+    app.world_mut().write_message(super::disturbed::Disturb {
+        at: door,
+        kind: super::disturbed::SignKind::DoorOpened,
+    });
+    let mut looked = None;
+    for _ in 0..90 * 2 {
+        app.update();
+        if let Brain::Investigate { at, .. } = *app.world().get::<Brain>(w).unwrap() {
+            looked = Some(at);
+            break;
+        }
+    }
+    let at = looked.expect("it went to look at the door");
+    assert!(
+        flat(at - door) < super::disturbed::SIGN_UNCERTAINTY + 1.0,
+        "at the door: {at}"
+    );
+}
+
+/// A sign left long ago only makes a walker wary: it doesn't go to look.
+#[test]
+fn an_old_sign_only_makes_a_walker_wary() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let now = app.world().resource::<Time<Fixed>>().elapsed_secs();
+    app.world_mut()
+        .resource_mut::<super::disturbed::Signs>()
+        .leave(
+            zone.on_ground(post.x + 2.0, post.z - 9.0),
+            super::disturbed::SignKind::Cut,
+            now - super::disturbed::SIGN_FRESH * 2.0,
+        );
+    let mut wary = 0.0f32;
+    for _ in 0..90 * 3 {
+        app.update();
+        wary = wary.max(app.world().get::<Awareness>(w).unwrap().suspicion);
+        assert!(
+            !matches!(
+                app.world().get::<Brain>(w).unwrap(),
+                Brain::Investigate { .. }
+            ),
+            "an old sign doesn't send it to look"
+        );
+    }
+    assert!(wary > 0.15, "but it's wary: {wary:.2}");
+}
+
+/// Two fresh signs in a line (a window broken, then a door opened further
+/// on): the walker reads the route and goes to look on past the newer.
+#[test]
+fn signs_in_a_line_give_a_walker_your_route() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let now = app.world().resource::<Time<Fixed>>().elapsed_secs();
+    {
+        let mut signs = app.world_mut().resource_mut::<super::disturbed::Signs>();
+        signs.leave(
+            zone.on_ground(post.x - 5.0, post.z - 10.0),
+            super::disturbed::SignKind::Glass,
+            now - 60.0,
+        );
+        signs.leave(
+            zone.on_ground(post.x + 3.0, post.z - 10.0),
+            super::disturbed::SignKind::DoorOpened,
+            now - 10.0,
+        );
+    }
+    let mut looked = None;
+    for _ in 0..90 * 2 {
+        app.update();
+        if let Brain::Investigate { at, .. } = *app.world().get::<Brain>(w).unwrap() {
+            looked = Some(at);
+            break;
+        }
+    }
+    let at = looked.expect("it went to look");
+    assert!(
+        at.x - post.x > 3.0 + super::disturbed::ROUTE_LEAD * 0.6,
+        "on past the newer, east: {at}"
+    );
+}
+
+/// What you change is recorded; what a robot does isn't: a fence cut by
+/// you is a sign, one cut by anyone else isn't; a door opened with you at
+/// it is, one opened with nobody near isn't.
+#[test]
+fn what_you_disturb_is_recorded() {
+    use super::disturbed::{SignKind, Signs};
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    app.update();
+    let wire = |app: &mut App, at: Vec3| {
+        app.world_mut()
+            .spawn((
+                Transform::from_translation(at),
+                GlobalTransform::from_translation(at),
+            ))
+            .id()
+    };
+    let mine = wire(&mut app, me + Vec3::X);
+    let theirs = wire(&mut app, me + Vec3::new(30.0, 0.0, 0.0));
+    let someone = app.world_mut().spawn_empty().id();
+    app.world_mut()
+        .write_message(crate::destruction::hooks::Cut {
+            target: mine,
+            by: player,
+        });
+    app.world_mut()
+        .write_message(crate::destruction::hooks::Cut {
+            target: theirs,
+            by: someone,
+        });
+    app.update();
+    let cuts: Vec<Vec3> = app
+        .world()
+        .resource::<Signs>()
+        .0
+        .iter()
+        .filter(|s| s.kind == SignKind::Cut)
+        .map(|s| s.at)
+        .collect();
+    assert_eq!(cuts.len(), 1, "yours, not theirs: {cuts:?}");
+    assert!(cuts[0].distance(me + Vec3::X) < 0.1);
+    // Doors: one at your hand, one far off, both swung open.
+    let door = |app: &mut App, at: Vec3| {
+        app.world_mut()
+            .spawn((
+                crate::world::buildings::Door {
+                    open: false,
+                    angle: 0.0,
+                },
+                Transform::from_translation(at),
+                GlobalTransform::from_translation(at),
+            ))
+            .id()
+    };
+    let near = door(&mut app, me + Vec3::Z);
+    let far = door(&mut app, me + Vec3::new(0.0, 0.0, 40.0));
+    app.update();
+    for d in [near, far] {
+        app.world_mut()
+            .get_mut::<crate::world::buildings::Door>(d)
+            .unwrap()
+            .open = true;
+    }
+    app.update();
+    let doors: Vec<Vec3> = app
+        .world()
+        .resource::<Signs>()
+        .0
+        .iter()
+        .filter(|s| s.kind == SignKind::DoorOpened)
+        .map(|s| s.at)
+        .collect();
+    assert_eq!(doors.len(), 1, "the one you opened: {doors:?}");
+    assert!(doors[0].distance(me + Vec3::Z) < 0.5);
+}
+
+/// A carcass dragged from where it fell (Wildlife's: `Draggable`) leaves
+/// a sign where it's got to; a car door dragged along (not a body)
+/// doesn't.
+#[test]
+fn a_carcass_dragged_off_leaves_a_sign() {
+    use super::disturbed::{SignKind, Signs};
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    app.update();
+    let deer = app
+        .world_mut()
+        .spawn((
+            crate::wildlife::bodies::Carcass {
+                kind: crate::wildlife::bodies::CarcassKind::Deer,
+                at: me,
+                owner: Entity::PLACEHOLDER,
+                index: 0,
+            },
+            crate::interact::carry::Bulky,
+            crate::interact::carry::Draggable,
+        ))
+        .id();
+    let door = app.world_mut().spawn(crate::interact::carry::Bulky).id();
+    let drag = |item: Entity, at: Vec3| crate::interact::carry::Dragged {
+        item,
+        at,
+        speed: 1.0,
+        stuff: crate::interact::touch::Stuff::Metal,
+        rolling: false,
+    };
+    let deer_at = me + Vec3::new(3.0, 0.0, 0.0);
+    app.world_mut().write_message(drag(deer, deer_at));
+    app.world_mut()
+        .write_message(drag(door, me + Vec3::new(-6.0, 0.0, 0.0)));
+    app.update();
+    let dragged: Vec<Vec3> = app
+        .world()
+        .resource::<Signs>()
+        .0
+        .iter()
+        .filter(|s| s.kind == SignKind::Dragged)
+        .map(|s| s.at)
+        .collect();
+    assert_eq!(dragged.len(), 1, "the body, not the door: {dragged:?}");
+    assert!(dragged[0].distance(deer_at) < 0.1);
+}

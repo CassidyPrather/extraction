@@ -49,3 +49,4 @@ pub mod spotter;
 pub mod terrain;
 pub mod underground;
 pub mod unity;
+pub mod zone_memory;

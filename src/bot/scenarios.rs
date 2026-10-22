@@ -61,6 +61,9 @@ pub const NAMES: &[&str] = &[
     crate::robots::minelayer::SCENARIO,
     crate::robots::mender::SCENARIO,
     crate::robots::plough::SCENARIO,
+    crate::world::cage::SCENARIO,
+    crate::world::echo::SCENARIO,
+    crate::world::lockdown::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -568,6 +571,89 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::lockdown::SCENARIO => {
+            // The shelter: the generator started, the klaxon, the gas lock
+            // sealed; out by the escape tunnel.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::lockdown as lk;
+            let wait = extraction_core::underground::layout("bunker_marrow")
+                .and_then(|l| l.lockdown.as_ref())
+                .map_or(20.0, |k| k.after)
+                + 2.0;
+            vec![
+                Log(s(
+                    "shelter lockdown: start the generator, then out the escape tunnel",
+                )),
+                Setup(lk::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(wait),
+                Expect(Counter("shelter_sealed", 1, 1)),
+                WalkTo {
+                    to: lk::OUT,
+                    within: 1.0,
+                },
+                Expect(Near(lk::OUT, 1.5)),
+                Expect(HealthAtLeast(50.0)),
+            ]
+        }
+        crate::world::echo::SCENARIO => {
+            // The dam's gallery: its length on foot, upright; every step
+            // comes back.
+            use crate::bot::Expect::{Counter, Near};
+            use crate::world::echo as ec;
+            vec![
+                Log(s("gallery echo: the inspection gallery's length on foot")),
+                Setup(ec::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: ec::FAR_END,
+                    within: 1.0,
+                },
+                Expect(Near(ec::FAR_END, 2.0)),
+                Expect(Counter("gallery_echoes", 10, 1000)),
+            ]
+        }
+        crate::world::cage::SCENARIO => {
+            // The adit's winze: into the cage at the shaft station and rung
+            // down; at the foot, sent up and called back; ridden up and out.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::cage as cg;
+            let ride = cg::BELL_WAIT + 12.0 / cg::CAGE_SPEED + 3.0;
+            vec![
+                Log(s("cage ride: down the adit's winze and back up")),
+                Setup(cg::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_FOOT,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_TOP,
+                    within: 0.8,
+                },
+                Expect(Near(cg::AT_TOP, 1.5)),
+                Expect(HealthAtLeast(99.0)),
+                Expect(Counter("cage_rides", 2, 2)),
+                Expect(Counter("cage_crushed", 0, 0)),
             ]
         }
         crate::robots::plough::SCENARIO => {

@@ -1303,6 +1303,9 @@ impl Plugin for UndergroundPlugin {
         .add_plugins((
             super::workings::WorkingsPlugin,
             super::furnace::FurnacePlugin,
+            super::cage::CagePlugin,
+            super::echo::EchoPlugin,
+            super::lockdown::LockdownPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1346,12 +1349,17 @@ pub struct PowerSwitch {
     pub stage: usize,
 }
 
-/// A door held shut until its stage of its site's power is on.
+/// A door held shut until its stage of its site's power is on; or, its
+/// stage [`SEALED`], shut by the site's lockdown for good.
 #[derive(Component, Debug)]
 pub struct PowerLocked {
     pub site: Entity,
     pub stage: usize,
 }
+
+/// A [`PowerLocked`] stage no switch frees: bolted by a lockdown
+/// (`world::lockdown`).
+pub const SEALED: usize = usize::MAX;
 
 /// Where a stage's power switch is, building space, and which way it
 /// faces.
@@ -1888,6 +1896,8 @@ impl Plugin for UndergroundVisualsPlugin {
         app.add_plugins((
             super::workings::WorkingsVisualsPlugin,
             super::furnace::FurnaceVisualsPlugin,
+            super::cage::CageVisualsPlugin,
+            super::lockdown::LockdownVisualsPlugin,
         ))
         .add_systems(
             Update,

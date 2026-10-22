@@ -100,6 +100,10 @@ pub struct ZoneSave {
     /// headset battery): the raid resumes where you stood. `None` at base.
     #[serde(default)]
     pub raid: Option<RaidSave>,
+    /// What the valley remembers of your habits (`zone_memory`): none
+    /// for a fresh career, or a save from before it remembered.
+    #[serde(default)]
+    pub memory: Option<crate::zone_memory::ZoneMemory>,
 }
 
 /// A raid in progress: where you stood and how it stood.
@@ -328,6 +332,9 @@ impl ZoneSave {
     /// Mends a valley's state read from a file: drops what lies nowhere
     /// (NaN or a world away), mends the rest. Says what it did.
     pub fn sanitize(&mut self, fixed: &mut Vec<String>) {
+        if let Some(m) = &mut self.memory {
+            m.sanitize();
+        }
         if let Some(r) = &mut self.raid {
             let timer = match &mut r.phase {
                 RaidPhaseSave::TruckCalled { eta: t, .. }

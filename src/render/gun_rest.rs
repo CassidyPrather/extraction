@@ -440,7 +440,8 @@ mod tests {
     /// Guns lying in a valley rest; the drawn meshes under a resting gun
     /// are its merged ones only.
     #[test]
-    fn guns_lying_about_rest() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_guns_lying_about_rest() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         for _ in 0..(SETTLE as usize * 3 + 60) {

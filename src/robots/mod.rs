@@ -16,6 +16,7 @@ pub mod collector;
 pub mod damage;
 pub mod director;
 pub mod dirigible;
+pub mod disturbed;
 pub mod doors;
 pub mod drone;
 pub mod flee;
@@ -261,6 +262,7 @@ impl Plugin for RobotsPlugin {
                 sorter_mind::SorterMindPlugin,
                 tracks::TracksPlugin,
                 signs::SignsPlugin,
+                disturbed::DisturbedPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
