@@ -142,7 +142,12 @@ What changed, and worth a comment each:
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
   its top and pull down: one pull and you're over. Through a window you
-  end up inside. If climbing makes you queasy, the **CLIMBING** card on
+  end up inside. Or grip the edge: close your hands on a wall's top (even
+  one above your head: reach up and pull yourself up), a fence's top
+  rail or the truck's tailgate, and pull; over a fence or a thin wall you
+  come down the other side. The more you carry, the slower you pull
+  yourself up; with a full pack it's hard work. The quarantine
+  perimeter fence can't be climbed, nor the machines. If climbing makes you queasy, the **CLIMBING** card on
   the comfort board takes you straight to the top instead, with a quick
   blink rather than a jump. Mark it if you ever rise when you only meant
   to lean on a table.

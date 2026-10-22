@@ -907,7 +907,7 @@ fn climb_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut players: Query<
-        (&Transform, &mut crate::rig::RigInput, &Children),
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
@@ -921,7 +921,7 @@ fn climb_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
         return;
     }
-    let Some((root, mut input, children)) = players.iter_mut().next() else {
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
         return;
     };
     state.0 += 1;
