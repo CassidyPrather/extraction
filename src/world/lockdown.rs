@@ -183,101 +183,85 @@ fn run_lockdown(
 }
 
 /// The scenario: in the shelter's generator room, the bot starts it, waits
-/// out the klaxon, and goes out by the escape tunnel through the dorm, the
-/// mess and the medical post (`shelter_sealed`).
+/// out the klaxon, and goes out by the escape tunnel (`shelter_sealed`).
 pub const SCENARIO: &str = "shelter_lockdown";
-/// Filled in by the setup: rooms' centres on the way, in order (the
-/// generator room's, the dorm's, the mess's, the corner by the medical
-/// post, the medical post's, the escape tunnel's).
-pub const WAY: [Vec2; 6] = [
-    Vec2::new(-9003.0, 0.0),
-    Vec2::new(-9003.0, 1.0),
-    Vec2::new(-9003.0, 2.0),
-    Vec2::new(-9003.0, 3.0),
-    Vec2::new(-9003.0, 4.0),
-    Vec2::new(-9003.0, 5.0),
-];
+/// Filled in by the setup: the way out to the escape tunnel (a walk
+/// there stands for the route, doors and all).
+pub const OUT: Vec2 = Vec2::new(-9003.0, 0.0);
 
-/// The scenario staged: the bot into the generator room; its walks, its
-/// switch and its doors (the dorm's from the generator room, the medical
-/// post's, the escape tunnel's) filled in.
+/// The scenario staged: the bot into the generator room; its switch, and
+/// its way out to the escape tunnel (as a raider would go), filled in.
 #[allow(clippy::type_complexity)]
 fn stage_scenario(
     mut setups: MessageReader<crate::bot::scenarios::Setup>,
-    sites: Query<(&Building, &Transform, &SitePower), Without<crate::rig::LocalPlayer>>,
-    doors: Query<(Entity, &GlobalTransform), With<DoorLeaf>>,
-    mut players: Query<(&mut Transform, &mut crate::bot::Bot), With<crate::rig::LocalPlayer>>,
+    buildings: Query<(Entity, &Building, &Transform)>,
+    leaves: Query<(Entity, &DoorLeaf, &ChildOf)>,
+    power: Query<&SitePower>,
+    mut players: Query<
+        (&mut Transform, &mut crate::bot::Bot),
+        (With<crate::rig::LocalPlayer>, Without<Building>),
+    >,
 ) {
     for s in setups.read() {
         if s.name != SCENARIO {
             continue;
         }
-        let Some((l, xf, switch)) = sites.iter().find_map(|(b, xf, p)| {
+        let Some((site, l, xf)) = buildings.iter().find_map(|(e, b, xf)| {
             ug::layout(&b.prefab)
                 .filter(|l| l.lockdown.is_some())
-                .map(|l| (l, *xf, p.stages[0].switch))
+                .map(|l| (e, l, *xf))
         }) else {
             error!("lockdown scenario: no shelter on this map");
             continue;
         };
-        let room = |id: &str| l.rooms.iter().find(|r| r.id == id);
-        let (Some(engine), Some(dorm), Some(mess), Some(med), Some(esc)) = (
-            room("generator"),
-            room("dorm"),
-            room("mess"),
-            room("medical"),
-            room("escape"),
-        ) else {
+        let Ok(switch) = power.get(site).map(|p| p.stages[0].switch) else {
             continue;
         };
-        let w = |p: [f32; 2], y: f32| xf.transform_point(Vec3::new(p[0], y, p[1]));
-        let flat = |p: Vec3| Vec2::new(p.x, p.z);
-        let y = l.floor;
-        let way = [
-            flat(w(engine.at, y)),
-            flat(w(dorm.at, y)),
-            flat(w(mess.at, y)),
-            flat(w([mess.at[0], med.at[1]], y)),
-            flat(w(med.at, y)),
-            flat(w(esc.at, y)),
-        ];
-        // The doors on the way: nearest each wall it's crossed at.
-        let door_near = |p: [f32; 2]| {
-            let at = w(p, y);
-            doors
-                .iter()
-                .min_by(|a, b| {
-                    let d = |g: &GlobalTransform| flat(g.translation()).distance(flat(at));
-                    d(a.1).total_cmp(&d(b.1))
-                })
-                .map(|(e, _)| e)
-                .unwrap_or(Entity::PLACEHOLDER)
+        let Some(plan) = crate::sim::indoor::plan_buildings(&buildings, &leaves)
+            .into_iter()
+            .find(|p| p.entity == site)
+        else {
+            continue;
         };
-        let mut presses = [
-            door_near([dorm.at[0] - dorm.size[0] * 0.5, dorm.at[1]]),
-            door_near([med.at[0] + med.size[0] * 0.5, med.at[1]]),
-            door_near([esc.at[0], esc.at[1] - esc.size[1] * 0.5]),
-        ]
-        .into_iter();
+        let room = |id: &str| l.rooms.iter().find(|r| r.id == id);
+        let (Some(engine), Some(out)) =
+            (room("generator"), room(&l.lockdown.as_ref().unwrap().out))
+        else {
+            continue;
+        };
+        let start = xf.transform_point(Vec3::new(
+            engine.at[0],
+            l.floor_of(engine) + 0.05,
+            engine.at[1],
+        ));
+        let Some(route) = crate::sim::raider::indoor_route(&plan, start, out.at.into(), 1.0) else {
+            error!("lockdown scenario: no way out to `{}`", out.id);
+            continue;
+        };
+        let end = xf.transform_point(Vec3::new(out.at[0], l.floor_of(out), out.at[1]));
         for (mut t, mut bot) in &mut players {
-            t.translation = w(engine.at, y + 0.05);
-            for task in bot.tasks.iter_mut() {
+            t.translation = start;
+            let tasks: Vec<crate::bot::Task> = bot.tasks.drain(..).collect();
+            for task in tasks {
                 match task {
-                    crate::bot::Task::WalkTo { to, .. }
-                    | crate::bot::Task::Expect(crate::bot::Expect::Near(to, _)) => {
-                        if let Some(k) = WAY.iter().position(|p| p == to) {
-                            *to = way[k];
-                        }
+                    crate::bot::Task::WalkTo { to, .. } if to == OUT => {
+                        bot.tasks.extend(route.iter().cloned());
                     }
-                    crate::bot::Task::Press(e) if *e == Entity::PLACEHOLDER => *e = switch,
-                    crate::bot::Task::OpenDoor(e) if *e == Entity::PLACEHOLDER => {
-                        *e = presses.next().unwrap_or(Entity::PLACEHOLDER);
+                    crate::bot::Task::Expect(crate::bot::Expect::Near(to, r)) if to == OUT => {
+                        bot.tasks
+                            .push_back(crate::bot::Task::Expect(crate::bot::Expect::Near(
+                                Vec2::new(end.x, end.z),
+                                r,
+                            )));
                     }
-                    _ => {}
+                    crate::bot::Task::Press(e) if e == Entity::PLACEHOLDER => {
+                        bot.tasks.push_back(crate::bot::Task::Press(switch));
+                    }
+                    other => bot.tasks.push_back(other),
                 }
             }
         }
-        info!("scenario: the shelter's way out {way:?}");
+        info!("scenario: the shelter's way out, {} steps", route.len());
     }
 }
 

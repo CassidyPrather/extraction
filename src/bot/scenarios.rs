@@ -591,30 +591,11 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Press(Entity::PLACEHOLDER),
                 Wait(wait),
                 Expect(Counter("shelter_sealed", 1, 1)),
-                OpenDoor(Entity::PLACEHOLDER),
                 WalkTo {
-                    to: lk::WAY[1],
-                    within: 0.8,
+                    to: lk::OUT,
+                    within: 1.0,
                 },
-                WalkTo {
-                    to: lk::WAY[2],
-                    within: 0.8,
-                },
-                WalkTo {
-                    to: lk::WAY[3],
-                    within: 0.6,
-                },
-                OpenDoor(Entity::PLACEHOLDER),
-                WalkTo {
-                    to: lk::WAY[4],
-                    within: 0.8,
-                },
-                OpenDoor(Entity::PLACEHOLDER),
-                WalkTo {
-                    to: lk::WAY[5],
-                    within: 0.8,
-                },
-                Expect(Near(lk::WAY[5], 1.5)),
+                Expect(Near(lk::OUT, 1.5)),
                 Expect(HealthAtLeast(50.0)),
             ]
         }
