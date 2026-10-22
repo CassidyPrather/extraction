@@ -175,6 +175,12 @@ is (`cold: 1.0` in the map; every other valley is 0).
   aim shakes; every few seconds a shiver runs through both hands.
 - Your breath shows in the cold air (the snow's, `world::snow`).
 
+- The Frost (Anomalies' seventh kind, `anomaly::frost`) feeds the same
+  chill: standing in one adds fast, stiffens you and, frozen through,
+  bites; out of it this system thaws you. Two stand on the fell: the
+  "Col frost" by the col's truck and the "Scree frost" on the upper
+  slopes. A live hearth stone keeps it off.
+
 So the summit and the col are places you go to and leave, and the
 buildings on the way are where you stop: the galleries, the bivouac,
 the col hut, the snow survey hut.

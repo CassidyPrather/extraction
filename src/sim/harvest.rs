@@ -13,6 +13,8 @@
 //! - Well: in for the stone at its heart and straight out, healthy or not
 //!   at all.
 //! - Hush: in and out before the silence presses (anyone does that).
+//! - Frost: in only with a live hearth on you (it keeps the chill off);
+//!   without one, it's left.
 
 use bevy::prelude::*;
 use extraction_core::anomaly::{AnomalyKind, HOT_SECS};
@@ -44,6 +46,8 @@ pub struct Kit {
     pub spare: Option<Entity>,
     /// Its gun, slung or in hand.
     pub gun: Option<Entity>,
+    /// A live hearth on it, anywhere.
+    pub hearth: bool,
 }
 
 /// The tasks to take `stone` (at `at`) from the anomaly of `kind` centred
@@ -158,6 +162,15 @@ pub fn plan(
             ]);
             t.push(back);
         }
+        AnomalyKind::Frost => {
+            // The hearth keeps the chill from ever biting or stiffening
+            // you much: straight in and out.
+            if !kit.hearth {
+                return None;
+            }
+            t.extend(take);
+            t.push(back);
+        }
         AnomalyKind::Well | AnomalyKind::Hush => {
             t.extend(take);
             t.push(back);
@@ -203,6 +216,7 @@ mod tests {
             junk: Some(bolt),
             spare: None,
             gun: None,
+            hearth: false,
         };
         let way = plan(
             AnomalyKind::Snare,
@@ -252,11 +266,13 @@ mod tests {
             junk: Some(e),
             spare: Some(e),
             gun: Some(e),
+            hearth: true,
         };
         let bare = Kit {
             junk: None,
             spare: None,
             gun: None,
+            hearth: false,
         };
         for kind in AnomalyKind::ALL {
             let t = plan(

@@ -15,7 +15,7 @@ import json
 import os
 import sys
 
-KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror", "Hush"}
+KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror", "Hush", "Frost"}
 # Each kind's own stone.
 STONE = {
     "Lift": "art_featherstone",
@@ -24,6 +24,7 @@ STONE = {
     "Well": "art_lodestone",
     "Mirror": "art_shard",
     "Hush": "art_hushstone",
+    "Frost": "art_rimestone",
 }
 # Deaths in anomalies per deliberate dive: some, never most.
 MAX_DEATHS_PER_DIVE = 0.2

@@ -2,7 +2,9 @@
 //! hear and feel"): a signal flare's pop and hiss, the RPK's bipod
 //! swinging and locking, a palm slapped on whatever it meets, a held gun
 //! knocked into a wall, something heavy dragged over the ground, and the
-//! lights for the dark: a chemlight snapped, a hand flare struck. (The
+//! lights for the dark: a chemlight snapped, a hand flare struck; and
+//! treatment: a dressing wound on, a splint strapped, a bottle's cap
+//! twisted off, a hand at a wound. (The
 //! pump-action's rack is a gun event, heard with the rest in
 //! `audio::gun_sounds`.)
 //!
@@ -46,6 +48,7 @@ impl Plugin for KitSoundsPlugin {
                     grind_sounds,
                     lit_sounds,
                     flare_burns,
+                    treatment_sounds,
                 ),
             );
     }
@@ -356,6 +359,152 @@ fn flare_burns(
     }
 }
 
+/// What treatment was where last frame: a dressing's quarter turns round
+/// the limb, a splint's half seconds strapping, a cap's quarter turns.
+#[derive(Clone, Copy)]
+struct Treating {
+    steps: f32,
+    at: Vec3,
+    splint: bool,
+}
+
+/// Treatment with the hands (`interact::first_aid`, `wounds`), which
+/// sends no messages: its state is read.
+///
+/// - A dressing wound round a limb (`Winding`): a short rasp of cloth at
+///   each quarter turn (`aid.wrap`); the tear when it's done is the use's
+///   (`use.bandage`).
+/// - A splint strapped along the shin (`Strapping`): a strap pulled
+///   tight each half second, as the hand feels it (`aid.strap`, velcro),
+///   and cinched hard when it's on (`aid.cinch`).
+/// - A bottle's cap twisted (`Capped`): a plastic tick at each quarter
+///   turn (`aid.cap`) and the pop as it comes off (`aid.cap_off`); the
+///   swallow is the drink's (`use.drink`).
+/// - A hand at an open wound (`Bloodied` coming on): a wet squelch
+///   (`aid.wet`).
+#[allow(clippy::type_complexity)]
+fn treatment_sounds(
+    mut commands: Commands,
+    windings: Query<(
+        Entity,
+        &crate::interact::first_aid::Winding,
+        &GlobalTransform,
+    )>,
+    straps: Query<(
+        Entity,
+        &crate::interact::first_aid::Strapping,
+        &GlobalTransform,
+    )>,
+    caps: Query<(
+        Entity,
+        &crate::interact::first_aid::Capped,
+        &GlobalTransform,
+    )>,
+    places: Query<&GlobalTransform>,
+    bloodied: Query<&GlobalTransform, Added<crate::interact::wounds::Bloodied>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut was: Local<HashMap<Entity, Treating>>,
+) {
+    let sound = |commands: &mut Commands, rng: &mut AudioRng, set, cue, at, speed| {
+        play_at_speed(
+            commands,
+            &bank,
+            &mut rng.0,
+            set,
+            Some(at),
+            cue,
+            0.0,
+            speed,
+            0.08,
+        );
+    };
+    let mut seen = Vec::new();
+    let now = windings
+        .iter()
+        .map(|(e, w, g)| {
+            (
+                e,
+                (w.turns * 4.0).floor(),
+                g.translation(),
+                false,
+                "aid.wrap",
+            )
+        })
+        .chain(
+            straps
+                .iter()
+                .map(|(e, s, g)| (e, (s.0 * 2.0).floor(), g.translation(), true, "aid.strap")),
+        )
+        .chain(caps.iter().map(|(e, c, g)| {
+            (
+                e,
+                (c.twisted * 4.0).floor(),
+                g.translation(),
+                false,
+                "aid.cap",
+            )
+        }));
+    for (e, steps, at, splint, cue) in now {
+        seen.push(e);
+        let before = was.insert(e, Treating { steps, at, splint });
+        if before.is_some_and(|b| steps > b.steps) {
+            let (set, speed) = match cue {
+                "aid.wrap" => ("physical/bandage", 1.25),
+                "aid.strap" => ("physical/velcro", 1.3),
+                _ => ("physical/handle_plastic", 1.8),
+            };
+            sound(&mut commands, &mut rng, set, cue, at, speed);
+        }
+    }
+    // Gone from its state: a splint strapped on (it leaves the hand), a cap
+    // off (the bottle stays, capless).
+    let mut done = Vec::new();
+    was.retain(|e, t| {
+        let keep = seen.contains(e);
+        if !keep {
+            done.push((*e, *t));
+        }
+        keep
+    });
+    for (e, t) in done {
+        if t.splint {
+            if t.steps >= 2.0 {
+                sound(
+                    &mut commands,
+                    &mut rng,
+                    "physical/velcro",
+                    "aid.cinch",
+                    t.at,
+                    0.9,
+                );
+            }
+        } else if let Ok(g) = places.get(e)
+            && caps.get(e).is_err()
+            && windings.get(e).is_err()
+        {
+            sound(
+                &mut commands,
+                &mut rng,
+                "physical/handle_plastic",
+                "aid.cap_off",
+                g.translation(),
+                1.3,
+            );
+        }
+    }
+    for g in &bloodied {
+        sound(
+            &mut commands,
+            &mut rng,
+            "footsteps/mud",
+            "aid.wet",
+            g.translation(),
+            1.4,
+        );
+    }
+}
+
 /// The shortest gap between two grinds heard (s): Weapon feel ticks every
 /// 60 ms, about twice as often as a grind sounds.
 const GRIND_EVERY: f32 = 0.11;
@@ -537,6 +686,12 @@ mod tests {
             ("physical/handle_plastic", "glow.snap"),
             ("physical/zip", "glow.strike"),
             ("anomaly/burner_roar", "glow.burn"),
+            ("physical/bandage", "aid.wrap"),
+            ("physical/velcro", "aid.strap"),
+            ("physical/velcro", "aid.cinch"),
+            ("physical/handle_plastic", "aid.cap"),
+            ("physical/handle_plastic", "aid.cap_off"),
+            ("footsteps/mud", "aid.wet"),
         ];
         for s in [
             Stuff::Wood,

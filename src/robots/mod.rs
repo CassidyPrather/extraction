@@ -37,6 +37,7 @@ pub mod mender_look;
 mod mind_tests;
 pub mod minelayer;
 pub mod minelayer_look;
+pub mod network;
 pub mod plough;
 pub mod plough_look;
 pub mod pylon;
@@ -267,6 +268,7 @@ impl Plugin for RobotsPlugin {
                 signs::SignsPlugin,
                 disturbed::DisturbedPlugin,
                 memory::MemoryPlugin,
+                network::NetworkPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -299,13 +301,7 @@ impl Plugin for RobotsPlugin {
             ))
             .add_systems(
                 FixedUpdate,
-                (
-                    damage_parts,
-                    senses::door_noise,
-                    perceive,
-                    senses::gunshot_noise,
-                    wreck_loot,
-                )
+                (damage_parts, senses::door_noise, perceive, wreck_loot)
                     .chain()
                     .after(crate::weapons::ballistics::BallisticsSystems),
             );

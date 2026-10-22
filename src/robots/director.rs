@@ -52,6 +52,9 @@ pub struct Director {
     pub heat: f32,
     /// Seconds before another shot adds heat.
     pub heat_gap: f32,
+    /// The relays' network: jams, silent relays, distrusted ones
+    /// (`network`). Reports go through `queue_report`.
+    pub net: super::network::RelayNet,
 }
 
 /// Heat: a reported shot adds a point, at most one per this (s)...
@@ -118,6 +121,7 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         visits: Vec::new(),
         heat: 0.0,
         heat_gap: 0.0,
+        net: Default::default(),
     });
 }
 
@@ -227,6 +231,27 @@ pub fn gate(zone: &Zone) -> Vec3 {
     zone.on_ground(m[0], m[1])
 }
 
+/// Where a survey drone may be sent: the named places, but not over a
+/// rendezvous (it doesn't loiter where you wait for the truck), nor a
+/// career's first job.
+pub fn survey_places(zone: &Zone, first_job_at: Option<Vec2>) -> Vec<[f32; 2]> {
+    let keep_off: Vec<Vec2> = zone
+        .map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| Vec2::from_array(m.at))
+        .chain(first_job_at)
+        .collect();
+    zone.map
+        .markers_of(&MarkerKind::Poi)
+        .map(|m| m.at)
+        .filter(|p| {
+            keep_off
+                .iter()
+                .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
+        })
+        .collect()
+}
+
 fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
@@ -246,8 +271,18 @@ fn run_director(
     time: Res<Time>,
     // What the valley remembers of your ways (`memory`): patrols lean on it.
     mind: Option<Res<super::memory::ZoneMind>>,
+    progression: Option<Res<crate::progression::Progression>>,
 ) {
     let mind = mind.as_deref();
+    // A career's first job: its place is left alone (a survey drone sent
+    // to the Old farm met every newcomer the driver sent there, on open
+    // ground, on their first raid). `docs/FIRST_HOUR.md`.
+    let first_job_at: Option<Vec2> = progression
+        .as_ref()
+        .filter(|p| p.0.done == 0)
+        .and_then(|p| p.0.job.as_ref())
+        .and_then(|j| j.mark())
+        .map(|(_, at)| Vec2::from_array(at));
     if !director.enabled {
         return;
     }
@@ -356,22 +391,7 @@ fn run_director(
         return;
     }
     director.next_job = director.rng.range(50.0, 110.0);
-    // Not over the rendezvous: a survey drone doesn't loiter where you
-    // wait for the truck.
-    let rvs: Vec<Vec2> = zone
-        .map
-        .markers_of(&MarkerKind::Rendezvous)
-        .map(|m| Vec2::from_array(m.at))
-        .collect();
-    let pois: Vec<[f32; 2]> = zone
-        .map
-        .markers_of(&MarkerKind::Poi)
-        .map(|m| m.at)
-        .filter(|p| {
-            rvs.iter()
-                .all(|r| r.distance(Vec2::from_array(*p)) > SURVEY_CLEAR)
-        })
-        .collect();
+    let pois = survey_places(&zone, first_job_at);
     let sites: Vec<[f32; 2]> = zone
         .map
         .markers_of(&MarkerKind::WorkSite)
@@ -417,5 +437,36 @@ fn run_director(
                 exit,
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod first_job_tests {
+    use super::*;
+
+    /// Survey drones go to the Old farm on any raid but a career's first,
+    /// whose job is to scout it.
+    #[test]
+    fn a_first_job_place_is_left_alone() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<Zone>();
+        let farm = zone
+            .map
+            .markers_of(&MarkerKind::Poi)
+            .find(|m| m.name == "Old farm")
+            .map(|m| m.at)
+            .expect("the Old farm");
+        assert!(survey_places(zone, None).contains(&farm));
+        assert!(!survey_places(zone, Some(Vec2::from_array(farm))).contains(&farm));
     }
 }

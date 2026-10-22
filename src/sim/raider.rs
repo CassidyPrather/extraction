@@ -2895,19 +2895,30 @@ const OBJECTIVE_REACH: f32 = 120.0;
 
 /// The region a raider sets out for: any region with something to loot
 /// in it and some danger (the calm insertion is where it starts), the
-/// richer the likelier.
+/// richer the likelier; never the machines' gate, and the deadliest
+/// country less often.
 fn choose_objective(map: &MapDef, sites: &[Site], seed: u64) -> Option<Vec2> {
     let regions: Vec<_> = map
         .regions
         .iter()
         .filter(|g| g.danger > 0)
+        // Not the machines' own gate: nobody plans a raid around walking
+        // into it.
+        .filter(|g| {
+            !map.markers_of(&MarkerKind::RobotGate)
+                .any(|m| extraction_core::geom::point_in_polygon(&g.polygon, m.at))
+        })
         .filter(|g| {
             sites
                 .iter()
                 .any(|s| extraction_core::geom::point_in_polygon(&g.polygon, s.at.to_array()))
         })
         .collect();
-    let weights: Vec<f32> = regions.iter().map(|g| g.richness()).collect();
+    // The deadliest country is a raid's aim now and then, not by default.
+    let weights: Vec<f32> = regions
+        .iter()
+        .map(|g| g.richness() * if g.danger >= 3 { 0.3 } else { 1.0 })
+        .collect();
     let g = regions[Rng::new(seed ^ 0x0B1E).weighted(&weights)?];
     let n = g.polygon.len().max(1) as f32;
     Some(g.polygon.iter().map(|p| Vec2::from_array(*p)).sum::<Vec2>() / n)
@@ -3281,12 +3292,17 @@ fn take_item(
                         junk: first,
                         spare: first.and_then(|j| junk_but(r, scene, j)),
                         gun: r.gun,
+                        hearth: carries(scene, "art_hearth"),
                     };
                     if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
                     {
                         r.diving = true;
                         tasks.extend(way);
                         return Some(tasks);
+                    }
+                    // Into a frost without a hearth, nobody who knows does.
+                    if kind == AnomalyKind::Frost {
+                        return None;
                     }
                 }
                 if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
@@ -3344,6 +3360,16 @@ fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
         .filter(|(_, v)| *v <= 3.0)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(e, _)| e)
+}
+
+/// Whether something of kind `id` is in its pack.
+fn carries(scene: &Scene, id: &str) -> bool {
+    scene.bags.iter().find(|b| b.carried).is_some_and(|me| {
+        me.contents
+            .iter()
+            .filter_map(|e| scene.items.get(*e).ok())
+            .any(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
+    })
 }
 
 /// Getting out: radio, walk to the RV, board, pull the bell.

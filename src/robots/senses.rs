@@ -12,7 +12,8 @@
 //! looks straight through you.
 //!
 //! **Hearing**: every sound has a reach in metres for ordinary ears
-//! ([`Noise::radius`]): gunshots by calibre ([`gunshot_reach`]), footsteps
+//! ([`Noise::radius`]): gunshots by calibre (`weapons::report`; robots'
+//! own by [`gunshot_reach`]), footsteps
 //! by surface, speed and crouch ([`footstep_reach`]), doors, things that
 //! land (`items::impacts`), robots at work. A wall or a hill between the
 //! sound and the robot cuts its reach to [`OCCLUDED`]. A heard sound tells
@@ -295,33 +296,6 @@ struct Sound {
     at: Vec3,
     radius: f32,
     source: Option<Entity>,
-}
-
-/// Shots are heard a long way off: how far by calibre.
-/// A suppressor fitted cuts the report to `gadgets::SUPPRESSED_REACH`; a
-/// hound's bite isn't a shot at all.
-pub(crate) fn gunshot_noise(
-    mut shots: MessageReader<crate::weapons::ballistics::Shot>,
-    mut noise: MessageWriter<Noise>,
-    suppressed: Query<(), With<crate::gadgets::Suppressed>>,
-    hounds: Query<(), With<super::hound::Hound>>,
-    reports: Query<&crate::weapons::armoury::Report>,
-) {
-    for s in shots.read() {
-        if hounds.contains(s.gun) {
-            continue;
-        }
-        let k = if suppressed.contains(s.gun) {
-            crate::gadgets::SUPPRESSED_REACH
-        } else {
-            1.0
-        } * reports.get(s.gun).map_or(1.0, |r| r.0);
-        noise.write(Noise {
-            at: s.origin,
-            radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
-            source: s.shooter,
-        });
-    }
 }
 
 /// A door swinging open or shut is heard: whoever's next to it did it.

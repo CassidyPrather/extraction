@@ -253,7 +253,7 @@ fn pose_pylons(
 
 /// A running pylon reports what its dish sees: a response team follows.
 fn report_pylons(
-    mut pylons: Query<(&mut Pylon, &Awareness, &Robot)>,
+    mut pylons: Query<(Entity, &mut Pylon, &Awareness, &Robot, &Transform)>,
     director: Option<ResMut<Director>>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
@@ -262,7 +262,7 @@ fn report_pylons(
         return;
     };
     let dt = time.delta_secs();
-    for (mut p, aware, robot) in &mut pylons {
+    for (e, mut p, aware, robot, t) in &mut pylons {
         p.report_cooldown -= dt;
         if robot.wrecked
             || !matches!(p.state, PylonState::Running { .. })
@@ -274,7 +274,9 @@ fn report_pylons(
         }
         if let Some(at) = aware.target.and_then(|t| targets.get(t).ok()) {
             let delay = director.rng.range(15.0, 30.0);
-            director.queue_response(delay, at.translation());
+            // Through the network (`network`): a cut, a jam or distrust
+            // keeps it from going out.
+            director.queue_report(e, t.translation, delay, at.translation());
             p.report_cooldown = 75.0;
             info!("pylon: reported someone at {:.0}", at.translation());
         }

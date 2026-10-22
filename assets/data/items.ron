@@ -83,7 +83,7 @@
             category: Firearm, size: Bulky, mass: 3.6, bulk: 5.5,
             firearm: Some((
                 action: SemiAuto, open_bolt: true, cartridge: "7.62x25", magazine_family: Some("ppsh_drum"),
-                modes: [Safe, Auto, Semi], rpm: 900.0,
+                modes: [Safe, Auto, Semi], rpm: 900.0, report: 1.25,
                 muzzle_velocity: 490.0, damage: 32.0, spread_moa: 8.0, recoil: 1.6, kick: (climb: 1.25, walk: 0.35),
                 wear_per_shot: 0.0006,
             )),
@@ -135,7 +135,7 @@
             category: Firearm, size: Bulky, mass: 2.9, bulk: 5.0,
             firearm: Some((
                 action: BoltAction, cartridge: "22lr", internal_capacity: 0,
-                modes: [Semi], rimfire: true, report: 0.4,
+                modes: [Semi], rimfire: true,
                 muzzle_velocity: 330.0, damage: 16.0, spread_moa: 2.0, recoil: 0.25,
                 wear_per_shot: 0.0002, fouling_per_shot: 0.006,
             )),
@@ -385,6 +385,18 @@
             tags: ["brass", "powder"],
         ),
         (
+            id: "ammo_545_us", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 subsonic rounds (box)",
+            description: "7U1, black and green tips: a long heavy bullet on a light charge, slower than sound. No crack down the range, and under a suppressor hardly a cough. It drops fast and hits soft.",
+            category: Ammo, size: Small, mass: 0.34, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Subsonic,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_762x39_us", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 subsonic rounds (box)",
+            description: "7.62 US, black and green tips: a heavy bullet slower than sound. No crack, and under a suppressor hardly a cough. It drops fast.",
+            category: Ammo, size: Small, mass: 0.4, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Subsonic,
+            tags: ["brass", "powder"],
+        ),
+        (
             id: "ammo_762x39_ap", dims: Some((0.061, 0.046, 0.032)), name: "7.62x39 AP rounds (box)",
             description: "Steel-cored BZ, black and red tips.",
             category: Ammo, size: Small, mass: 0.36, bulk: 0.2, cartridge: Some("7.62x39"), rounds: 20, load: Ap,
@@ -461,6 +473,8 @@
         (id: "shell_12ga", dims: Some((0.02, 0.02, 0.07)), name: "12 gauge shell", category: Ammo, size: Tiny, mass: 0.04, bulk: 0.02, cartridge: Some("12ga"), rounds: 1, tags: ["brass", "powder", "polymer"]),
         (id: "round_545_ap", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 AP round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
         (id: "round_545_tracer", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 tracer round", category: Ammo, size: Tiny, mass: 0.011, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
+        (id: "round_545_us", dims: Some((0.01, 0.01, 0.057)), name: "5.45x39 subsonic round", category: Ammo, size: Tiny, mass: 0.012, bulk: 0.005, cartridge: Some("5.45x39"), rounds: 1, load: Subsonic, tags: ["brass", "powder"]),
+        (id: "round_762x39_us", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 subsonic round", category: Ammo, size: Tiny, mass: 0.019, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Subsonic, tags: ["brass", "powder"]),
         (id: "round_762x39_ap", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 AP round", category: Ammo, size: Tiny, mass: 0.0163, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
         (id: "round_762x39_tracer", dims: Some((0.0112, 0.0112, 0.056)), name: "7.62x39 tracer round", category: Ammo, size: Tiny, mass: 0.016, bulk: 0.006, cartridge: Some("7.62x39"), rounds: 1, load: Tracer, tags: ["brass", "powder"]),
         (id: "round_762r_ap", dims: Some((0.0125, 0.0125, 0.077)), name: "7.62x54R AP round", category: Ammo, size: Tiny, mass: 0.022, bulk: 0.008, cartridge: Some("7.62x54R"), rounds: 1, load: Ap, tags: ["brass", "powder"]),
@@ -512,6 +526,12 @@
             description: "A long can that threads onto a rifle's muzzle. The shot is a cough, not a crack: robots hear it from a third as far.",
             category: Attachment, size: Small, mass: 0.45, bulk: 0.25, mount: Some(Muzzle),
             tags: ["metal", "suppressor"],
+        ),
+        (
+            id: "can_suppressor", dims: Some((0.075, 0.075, 0.13)), name: "Can suppressor",
+            description: "A food tin packed with washers and wire, clamped on a rifle's muzzle. It takes the edge off the shot for a few dozen rounds, then it's a tin with a hole in it. Fouls the gun as it goes.",
+            category: Attachment, size: Small, mass: 0.3, bulk: 0.3, mount: Some(Muzzle),
+            tags: ["metal", "suppressor", "homemade"],
         ),
         (
             id: "side_rail", dims: Some((0.027, 0.013, 0.1)), name: "Side-mount rail",
@@ -737,15 +757,15 @@
         (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
         (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
         (id: "onion", name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
-        (id: "canned_tomato", dims: Some((0.075, 0.11, 0.075)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal"]),
+        (id: "canned_tomato", dims: Some((0.075, 0.11, 0.075)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal", "can"]),
         (id: "flour_sack", name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
         (id: "rice_bag", name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
-        (id: "canned_beans", dims: Some((0.075, 0.11, 0.075)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal"]),
+        (id: "canned_beans", dims: Some((0.075, 0.11, 0.075)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal", "can"]),
         (id: "sugar_cubes", name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
         (id: "tea_tin", name: "Tea tin", category: Food, size: Small, mass: 0.12, bulk: 0.2, tags: ["food:TeaLeaf", "metal"]),
         (id: "spice_jar", name: "Spice jar", category: Food, size: Tiny, mass: 0.06, bulk: 0.05, tags: ["food:Spice", "glass"]),
         (id: "salt_packet", name: "Salt", category: Food, size: Tiny, mass: 0.05, bulk: 0.04, tags: ["food:Salt"]),
-        (id: "canned_stew", dims: Some((0.09, 0.07, 0.09)), name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal"]),
+        (id: "canned_stew", dims: Some((0.09, 0.07, 0.09)), name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal", "can"]),
         (id: "crackers", name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
 
         // Cooked and prepared (made at the camp kitchen; see raid/kitchen.rs).
@@ -1015,6 +1035,11 @@
             id: "art_shard", dims: Some((0.02, 0.11, 0.05)), name: "Mirror shard",
             description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
+        ),
+        (
+            id: "art_rimestone", dims: Some((0.045, 0.04, 0.04)), name: "Rimestone",
+            description: "A pale knuckle of stone furred with a frost that grows back as fast as you rub it off. Carried, fire can't take you: a burner's coals don't touch you. The cold in it is in you too; you're always a little stiff.",
+            category: Artifact, size: Small, mass: 0.4, bulk: 0.1, attention: 1.1,
         ),
 
         // ---------------------------------------------------------------
