@@ -28,8 +28,10 @@ const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
 pub const MAX_REACH_UP: f32 = 2.1;
 /// The most one cell's floor may stand over its neighbour's and still be
-/// walked between (a stair's riser is 0.2).
-const STEP_UP: f32 = 0.45;
+/// walked between (a stair's riser is 0.2): under the body's own step
+/// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
+/// where it stands 0.42 over the ground and the body can't.
+const STEP_UP: f32 = 0.35;
 
 #[derive(Clone, Debug)]
 pub struct DoorInfo {
@@ -247,6 +249,24 @@ pub fn plan_buildings(
                         crate::world::fell::stepped_floor(&b.prefab, c).unwrap_or(floor)
                     })
                     .collect()
+            })
+            // A drowned building: silt inside to the sills, banked down to
+            // the ground out of its doorway. Each cell's floor is what's
+            // under it (the ground round it at 0), so the bank's flanks by
+            // the wall are a drop, not a way in.
+            .or_else(|| {
+                b.prefab.ends_with("_drowned").then(|| {
+                    (0..n * n)
+                        .map(|k| {
+                            let c = Vec2::from(grid.centre(k % n, k / n));
+                            geo.pieces
+                                .iter()
+                                .filter(|p| p.collide)
+                                .filter_map(|p| surface_under(p.shape, p.at, c, floor + 0.1))
+                                .fold(0.0f32, f32::max)
+                        })
+                        .collect()
+                })
             });
         for piece in geo.pieces.iter().filter(|p| p.collide) {
             let c = piece.at.translation;
@@ -254,6 +274,15 @@ pub fn plan_buildings(
                 .as_ref()
                 .and_then(|l| grid.cell_of([c.x, c.z]).map(|(i, j)| l[j * n + i]))
                 .unwrap_or(floor);
+            // What the floor itself is made of there (the silt, its bank,
+            // buried at its foot) is walked on, not round: the levels say
+            // where it rises.
+            if levels.is_some()
+                && surface_under(piece.shape, piece.at, c.xz(), under + 0.15)
+                    .is_some_and(|y| y <= under + 0.15)
+            {
+                continue;
+            }
             if let Some(ob) = obstacle(piece.shape, piece.at, under) {
                 grid.block(ob, CLEARANCE);
             }
@@ -357,10 +386,14 @@ pub fn plan_buildings(
             }
         }
         if infos.is_empty() {
-            // An open structure: come in from wherever is open.
+            // An open structure: come in from wherever is open, all round
+            // it 1.2 m out (on a rectangle: on an ellipse the diagonals
+            // fall inside a big building's corners).
             for k in 0..8 {
                 let a = k as f32 * std::f32::consts::TAU / 8.0;
-                let p = Vec2::new(a.cos() * (half.x + 1.2), a.sin() * (half.y + 1.2));
+                let d = Vec2::new(a.cos(), a.sin());
+                let out = half + Vec2::splat(1.2);
+                let p = d / (d.x.abs() / out.x).max(d.y.abs() / out.y);
                 if grid.walkable(p.to_array()) {
                     entries.push(p);
                 }
@@ -624,6 +657,39 @@ fn plan_site(
 }
 
 /// A collider piece as an obstacle on the floor, if it's in the way.
+/// The top of a piece under building-local `p` (x, z), coming down from
+/// `from`: where a ray straight down from there first meets it. None if
+/// it misses, or starts inside it.
+fn surface_under(shape: Shape, at: Transform, p: Vec2, from: f32) -> Option<f32> {
+    let half = match shape {
+        Shape::Box(s) => s * 0.5,
+        Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+        Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+    };
+    let inv = at.rotation.inverse();
+    let o = inv * (Vec3::new(p.x, from, p.y) - at.translation);
+    let d = inv * Vec3::NEG_Y;
+    let (mut t0, mut t1) = (f32::NEG_INFINITY, f32::INFINITY);
+    for k in 0..3 {
+        if d[k].abs() < 1e-6 {
+            if o[k].abs() > half[k] {
+                return None;
+            }
+            continue;
+        }
+        let (a, c) = ((-half[k] - o[k]) / d[k], (half[k] - o[k]) / d[k]);
+        t0 = t0.max(a.min(c));
+        t1 = t1.min(a.max(c));
+    }
+    if let Shape::Cylinder(r, _) = shape {
+        let q = o + d * t0.max(0.0);
+        if q.x * q.x + q.z * q.z > r * r {
+            return None;
+        }
+    }
+    (t0 <= t1 && t0 >= 0.0).then(|| from - t0)
+}
+
 fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
     let (size, circle) = match shape {
         Shape::Box(s) => (s, None),
@@ -1213,6 +1279,95 @@ mod tests {
             assert!(
                 failed.is_empty(),
                 "{} of {tried} doors failed:\n{}",
+                failed.len(),
+                failed.join("\n")
+            );
+        }
+    }
+
+    /// A drowned house has no doors, only a doorway with its silt banked up
+    /// in steps: from every way in its plan offers, a bot walks to stand
+    /// by each of its loot spots.
+    #[test]
+    fn every_drowned_house_lets_a_bot_in() {
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let mut failed = Vec::new();
+            let mut tried = 0;
+            for plan in plans.iter().filter(|p| p.name.ends_with("_drowned")) {
+                let geo = prefab(&plan.name).unwrap();
+                for &entry in &plan.entries {
+                    for spot in &geo.loot {
+                        let Some(goal) =
+                            super::super::raider::stand_near(plan, entry, spot.at.xz())
+                        else {
+                            failed.push(format!("{map} {}: nowhere by {:?}", plan.name, spot.at));
+                            continue;
+                        };
+                        let start = plan.to_world(entry);
+                        let ground = app
+                            .world()
+                            .resource::<crate::world::Zone>()
+                            .ground(start.x, start.z);
+                        {
+                            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+                            t.translation = Vec3::new(start.x, ground + 0.05, start.z);
+                        }
+                        app.world_mut()
+                            .get_mut::<crate::player::Body>(player)
+                            .unwrap()
+                            .velocity = Vec3::ZERO;
+                        app.update();
+                        let pos = app.world().get::<Transform>(player).unwrap().translation;
+                        let Some(tasks) =
+                            super::super::raider::indoor_route(plan, pos, goal, 0.3)
+                        else {
+                            failed.push(format!(
+                                "{map} {} entry {entry:.1?}: no route to {goal:.1?}",
+                                plan.name
+                            ));
+                            continue;
+                        };
+                        tried += 1;
+                        app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                        for _ in 0..90 * 25 {
+                            app.update();
+                            if app.world().get::<Bot>(player).unwrap().done() {
+                                break;
+                            }
+                        }
+                        let t = app.world().get::<Transform>(player).unwrap().translation;
+                        let got = plan.to_local(t).xz();
+                        if got.distance(goal) > 0.9 {
+                            failed.push(format!(
+                                "{map} {} at {:.0?}: entry {entry:.2?} goal {goal:.2?}, stopped at {got:.2?} (y {:.2})",
+                                plan.name,
+                                plan.xf.translation,
+                                plan.to_local(t).y
+                            ));
+                        }
+                    }
+                }
+            }
+            println!("{map}: {tried} walks into drowned houses");
+            assert!(
+                failed.is_empty(),
+                "{} of {tried} walks failed:\n{}",
                 failed.len(),
                 failed.join("\n")
             );
