@@ -364,6 +364,9 @@ enum Leg {
     Board,
     /// Home: the card pressed, for the job's pay.
     Paid,
+    /// Paid: what the driver passes through the hatch after (the pay, the
+    /// next contract's kit), off the ledge.
+    Handed,
     Done,
 }
 
@@ -519,6 +522,7 @@ pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
+    hatch: Res<'w, crate::raid::lev::Handovers>,
     bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     robots: Query<
@@ -1288,13 +1292,49 @@ pub(super) fn direct_raid(
                 tasks.push(Task::Wait(if p.reads { 4.0 } else { 1.0 }));
             } else if state.done_home.is_some_and(|d| done > d) {
                 state.note(now, Kind::Learned, "pressed the card: the job paid");
-                state.leg = Leg::Done;
+                state.leg = Leg::Handed;
+                state.tries = 0;
             } else if state.tries >= 3 {
                 state.note(now, Kind::Stuck, "home, and the card won't take the job");
                 state.leg = Leg::Done;
             } else if let Some((card, _)) = view.card.iter().next() {
                 tasks.push(Task::Press(card));
                 tasks.push(Task::Wait(2.0));
+                state.tries += 1;
+            } else {
+                state.leg = Leg::Done;
+            }
+        }
+        Leg::Handed => {
+            let ledge: Vec<Entity> = world
+                .items
+                .iter()
+                .filter(|(e, _, gt, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 4.0
+                        && view.hatch.handed.iter().any(|(_, h)| h == e)
+                })
+                .map(|(e, ..)| e)
+                .collect();
+            if view.hatch.busy() && state.tries < 30 {
+                tasks.push(Task::Wait(1.0));
+                state.tries += 1;
+            } else if let Some(&e) = ledge.first().filter(|_| state.tries < 40) {
+                let id = world.id(e).unwrap_or("?").to_owned();
+                state.note(
+                    now,
+                    Kind::Learned,
+                    format!("{id} off the ledge, from the driver"),
+                );
+                tasks.extend([
+                    Task::Grab {
+                        item: e,
+                        side: Side::Right,
+                    },
+                    Task::Stow(Side::Right),
+                ]);
                 state.tries += 1;
             } else {
                 state.leg = Leg::Done;
