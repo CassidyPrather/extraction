@@ -217,6 +217,184 @@ pub fn landmarks(map: &MapDef, hm: &Heightmap) -> Vec<Landmark> {
     out
 }
 
+/// A tree's crown, for sight lines: from this far up its trunk...
+const CROWN_BASE: f32 = 3.0;
+/// ...to this tall (times its scale; the spruce run 15-22 m)...
+const CROWN_TOP: f32 = 16.0;
+/// ...and this wide each way.
+const CROWN_RADIUS: f32 = 2.2;
+/// A line through this many crowns is hidden; through fewer it glimpses.
+const CROWNS_HIDE: usize = 2;
+
+/// The valley's tree crowns, bucketed for sight lines through them.
+pub struct Canopy {
+    cells: std::collections::HashMap<(i32, i32), Vec<(P2, f32, f32)>>,
+}
+
+impl Canopy {
+    const CELL: f32 = 8.0;
+
+    pub fn new(map: &MapDef, hm: &Heightmap) -> Self {
+        let mut cells: std::collections::HashMap<(i32, i32), Vec<(P2, f32, f32)>> =
+            Default::default();
+        for t in crate::forest::scatter_trees(map, hm) {
+            let at = [t.pos[0], t.pos[2]];
+            let foot = t.pos[1];
+            cells.entry(Self::key(at)).or_default().push((
+                at,
+                foot + CROWN_BASE,
+                foot + CROWN_TOP * t.scale,
+            ));
+        }
+        Canopy { cells }
+    }
+
+    fn key(p: P2) -> (i32, i32) {
+        (
+            (p[0] / Self::CELL).floor() as i32,
+            (p[1] / Self::CELL).floor() as i32,
+        )
+    }
+
+    /// Whether the crowns hide a line from eye height at `from` to the
+    /// point `top` metres up at `to`.
+    pub fn hides(&self, hm: &Heightmap, from: P2, to: P2, top: f32) -> bool {
+        let eye = hm.height(from) + 1.7;
+        let d = dist(from, to);
+        let n = (d / 2.0).ceil().max(1.0) as usize;
+        let mut hit: Vec<P2> = Vec::new();
+        for i in 1..n {
+            let t = i as f32 / n as f32;
+            let q = geom::lerp(from, to, t);
+            let y = eye + (top - eye) * t;
+            let (ci, cj) = Self::key(q);
+            for di in -1..=1 {
+                for dj in -1..=1 {
+                    let Some(v) = self.cells.get(&(ci + di, cj + dj)) else {
+                        continue;
+                    };
+                    for (at, lo, hi) in v {
+                        if y > *lo
+                            && y < *hi
+                            && dist(*at, q) < CROWN_RADIUS
+                            && !hit.iter().any(|h| dist(*h, *at) < 0.1)
+                        {
+                            hit.push(*at);
+                            if hit.len() >= CROWNS_HIDE {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+/// A landmark reads from this far per metre it stands over its ground
+/// (angular size), between the ordinary range and twice it: a 12 m tower
+/// at the ordinary 200 m, a 45 m mast at 400.
+const SIGHT_PER_METRE: f32 = 10.0;
+
+impl Landmark {
+    /// How far off it reads, given the ordinary `range`: further the taller
+    /// it stands over its own ground.
+    pub fn sight(&self, hm: &Heightmap, range: f32) -> f32 {
+        let tall = self
+            .tops
+            .iter()
+            .map(|(at, top)| top - hm.height(*at))
+            .fold(0.0, f32::max);
+        (tall * SIGHT_PER_METRE).clamp(range, range * 2.0)
+    }
+
+    /// As [`Landmark::seen`], with the trees in the way too.
+    pub fn seen_through(
+        &self,
+        hm: &Heightmap,
+        canopy: &Canopy,
+        from: P2,
+        range: f32,
+    ) -> Option<f32> {
+        let mut near: Vec<(P2, f32, f32)> = self
+            .tops
+            .iter()
+            .map(|(at, top)| (*at, *top, dist(from, *at)))
+            .filter(|t| t.2 <= range)
+            .collect();
+        near.sort_by(|a, b| a.2.total_cmp(&b.2));
+        near.into_iter()
+            .find(|(at, top, _)| {
+                sees(hm, from, *at, top - hm.height(*at)) && !canopy.hides(hm, from, *at, *top)
+            })
+            .map(|t| t.2)
+    }
+}
+
+/// How many landmarks you can tell apart from eye height at `p`, through
+/// the land and the trees, each within its own [`Landmark::sight`] of the
+/// ordinary `range`: two of a kind count once.
+/// Counts up to `enough`.
+pub fn kinds_in_sight(
+    marks: &[Landmark],
+    hm: &Heightmap,
+    canopy: &Canopy,
+    p: P2,
+    range: f32,
+    enough: usize,
+) -> usize {
+    let mut kinds: Vec<&str> = Vec::new();
+    for m in marks {
+        if kinds.contains(&m.kind.as_str()) {
+            continue;
+        }
+        if m.seen_through(hm, canopy, p, m.sight(hm, range)).is_some() {
+            kinds.push(&m.kind);
+            if kinds.len() >= enough {
+                break;
+            }
+        }
+    }
+    kinds.len()
+}
+
+/// Where orientation is gauged: walkable ground (on `walk`, every `step`
+/// metres) inside the valley's regions, less what's deeper than `edge`
+/// into a wood (nothing's in sight there in any valley: you steer by its
+/// edge, and the wood is where you are), which is counted apart.
+pub fn gauge_cells(
+    map: &MapDef,
+    walk: &crate::nav::NavGrid,
+    step: f32,
+    edge: f32,
+) -> (Vec<P2>, usize) {
+    let (mut out, mut deep) = (Vec::new(), 0);
+    let stride = (step / walk.cell).round().max(1.0) as usize;
+    for j in (0..walk.n).step_by(stride) {
+        for i in (0..walk.n).step_by(stride) {
+            let p = walk.centre(i, j);
+            if walk.cost[j * walk.n + i] == crate::nav::BLOCKED
+                || !map
+                    .regions
+                    .iter()
+                    .any(|reg| geom::point_in_polygon(&reg.polygon, p))
+            {
+                continue;
+            }
+            if map.forests.iter().any(|f| {
+                geom::point_in_polygon(&f.polygon, p)
+                    && geom::polygon_edge_distance(&f.polygon, p) > edge
+            }) {
+                deep += 1;
+                continue;
+            }
+            out.push(p);
+        }
+    }
+    (out, deep)
+}
+
 /// Whether any landmark's top is in sight from `p` within `range`.
 pub fn in_sight(marks: &[Landmark], hm: &Heightmap, p: P2, range: f32) -> bool {
     marks.iter().any(|m| m.seen(hm, p, range).is_some())

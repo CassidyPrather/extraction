@@ -415,6 +415,10 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The Authority's telemetry mast on the west abutment: the gauges' readings went out by radio.
+        (prefab: "radio_mast", at: (-200.0, 120.0), rot: 0.0),
         // South gate.
         (prefab: "quarantine_gate", at: (25.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (32.8, 285.0), rot: 90.0),

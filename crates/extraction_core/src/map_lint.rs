@@ -286,6 +286,15 @@ pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
+/// From this share of the walkable valley two landmarks you can tell apart
+/// are in sight within [`CLEAR_SIGHT`], over the land and through the
+/// trees (sampled every `TWO_MARKS_STEP`; the blind cells are reported by
+/// `POCKET` square).
+pub const TWO_MARKS_SHARE: f32 = 0.9;
+pub const TWO_MARKS_STEP: f32 = 8.0;
+/// Further into a wood than this from its edge is deep in it.
+pub const WOOD_EDGE: f32 = 25.0;
+const POCKET: f32 = 40.0;
 /// From every rendezvous a landmark is in sight within this, metres, so
 /// "head for the mast" is a plan.
 pub const RV_LANDMARK: f32 = 200.0;
@@ -1285,6 +1294,71 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    // You can always tell where you are: from nearly anywhere you can walk,
+    // two landmarks you can tell apart are in sight over the land and the
+    // trees (in VR there's no glancing at a map).
+    let canopy = crate::map_landmarks::Canopy::new(map, hm);
+    let (spots, deep) = crate::map_landmarks::gauge_cells(map, &walk, TWO_MARKS_STEP, WOOD_EDGE);
+    let cells = spots.len();
+    let (mut two, mut two_fog) = (0usize, 0usize);
+    let mut blind: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    for p in spots {
+        let k = crate::map_landmarks::kinds_in_sight(&marks, hm, &canopy, p, CLEAR_SIGHT, 2);
+        if k >= 2 {
+            two += 1;
+            if crate::map_landmarks::kinds_in_sight(&marks, hm, &canopy, p, FOG_SIGHT, 2) >= 2 {
+                two_fog += 1;
+            }
+        } else {
+            let key = (
+                (p[0] / POCKET).floor() as i32,
+                (p[1] / POCKET).floor() as i32,
+            );
+            let e = blind.entry(key).or_insert((0, p));
+            e.0 += 1;
+        }
+    }
+    let share = two as f32 / cells.max(1) as f32;
+    let mut pockets: Vec<(usize, P2)> = blind.into_values().collect();
+    pockets.sort_by(|a, b| b.0.cmp(&a.0));
+    let cell_area = TWO_MARKS_STEP * TWO_MARKS_STEP;
+    let worst: Vec<String> = pockets
+        .iter()
+        .take(4)
+        .map(|(n, p)| {
+            format!(
+                "{:.0} m² at ({:.0}, {:.0})",
+                *n as f32 * cell_area,
+                p[0],
+                p[1]
+            )
+        })
+        .collect();
+    r.measures.push(format!(
+        "two landmarks in sight (land and trees): {:.1}% of the walkable valley out of the deep woods ({:.0}% in fog; {:.0}% of it deep in woods){}",
+        share * 100.0,
+        two_fog as f32 * 100.0 / cells.max(1) as f32,
+        deep as f32 * 100.0 / (cells + deep).max(1) as f32,
+        if worst.is_empty() {
+            String::new()
+        } else {
+            format!("; blind pockets {}", worst.join(", "))
+        }
+    ));
+
+    if share < TWO_MARKS_SHARE {
+        find(
+            &mut r,
+            Rule::Landmark,
+            format!(
+                "two landmarks in sight from only {:.0}% of the walkable valley (at least {:.0}%)",
+                share * 100.0,
+                TWO_MARKS_SHARE * 100.0
+            ),
+            pockets.first().map_or(ins, |p| p.1),
+        );
+    }
+
     // The rendezvous is where a landmark is: one in sight within
     // RV_LANDMARK, and (measured) one within fog range.
     for m in map.markers_of(&MarkerKind::Rendezvous) {
