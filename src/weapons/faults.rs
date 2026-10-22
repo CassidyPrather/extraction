@@ -67,6 +67,10 @@ fn fault_feel(
             FireEvent::BoltStuck => (0.6, 0.08),
             FireEvent::BoltFreed => (0.4, 0.02),
             FireEvent::Rodded => (0.3, 0.04),
+            FireEvent::Malfunctioned(Malfunction::ShortStroke) => (0.3, 0.05),
+            // A click like a dud's; the shot after it comes as a shot.
+            FireEvent::HangFire => (0.35, 0.02),
+            FireEvent::OutOfBattery => (1.0, 0.3),
             _ => continue,
         };
         let Ok((h, gt)) = held.get(ev.gun) else {
@@ -77,7 +81,7 @@ fn fault_feel(
             amplitude: feel.0,
             seconds: feel.1,
         });
-        if matches!(ev.event, FireEvent::Bulged { .. }) {
+        if matches!(ev.event, FireEvent::Bulged { .. } | FireEvent::OutOfBattery) {
             if let Some((body, _)) = bodies.iter().find(|(_, p)| p.parent() == h.player) {
                 hits.write(Hit {
                     entity: body,

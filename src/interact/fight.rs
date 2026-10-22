@@ -58,7 +58,9 @@ pub const HOLD: f32 = 400.0;
 /// A yank this fast (m/s) on a held leg wrenches it.
 pub const WRENCH: f32 = 2.0;
 
-/// A hand closed on a live robot's part, at `local` (the part's frame).
+/// A hand closed on a live robot's part, at `local` (in the robot's own
+/// frame: its physics pose, which moves every tick, unlike a part's
+/// propagated transform).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct RobotGrip {
     pub robot: Entity,
@@ -232,7 +234,9 @@ fn shove(
         let Ok((hand, rh, player)) = hands.get(hand_body.hand) else {
             continue;
         };
-        if hand.grip_down || hand.holding.is_some() {
+        // (A hand on a gun's handguard is the gun's: its butt strikes, not
+        // the palm: `weapons::melee`.)
+        if hand.grip_down || hand.holding.is_some() || hand.supporting.is_some() {
             continue;
         }
         let at = part_at.translation();
@@ -276,8 +280,9 @@ fn take_robots(
         (Entity, &Hand, Option<&RobotGrip>),
         (With<RigHand>, Without<super::hand_climb::HandHold>),
     >,
-    parts: Query<(&RobotPart, &GlobalTransform)>,
+    parts: Query<&RobotPart>,
     robots: Query<&crate::robots::Robot>,
+    poses: Query<(Option<&Position>, Option<&Rotation>, &GlobalTransform)>,
     spatial: SpatialQuery,
 ) {
     for (e, hand, grip) in &hands {
@@ -297,22 +302,40 @@ fn take_robots(
                     )
                     .into_iter()
                     .find_map(|c| parts.get(c).ok().map(|p| (c, p)));
-                let Some((part_e, (part, gt))) = hit else {
+                let Some((part_e, part)) = hit else {
                     continue;
                 };
                 // A wreck's for dragging (`carry`), not holding.
                 if robots.get(part.robot).is_ok_and(|r| r.wrecked) {
                     continue;
                 }
+                let Some(pose) = robot_pose(&poses, part.robot) else {
+                    continue;
+                };
                 commands.entity(e).insert(RobotGrip {
                     robot: part.robot,
                     part: part_e,
-                    local: gt.affine().inverse().transform_point3(at),
+                    local: pose.compute_affine().inverse().transform_point3(at),
                 });
             }
             _ => {}
         }
     }
+}
+
+/// Where a robot's body is now: its physics pose if it has one, else its
+/// transform.
+fn robot_pose(
+    poses: &Query<(Option<&Position>, Option<&Rotation>, &GlobalTransform)>,
+    robot: Entity,
+) -> Option<Transform> {
+    let (pos, rot, gt) = poses.get(robot).ok()?;
+    let mut t = gt.compute_transform();
+    if let (Some(p), Some(r)) = (pos, rot) {
+        t.translation = p.0;
+        t.rotation = r.0;
+    }
+    Some(t)
 }
 
 /// A held robot: a flying one pulled to the hand, a walking one wrenched
@@ -321,7 +344,7 @@ fn take_robots(
 fn hold_robots(
     mut commands: Commands,
     hands: Query<(Entity, &Hand, &RigHand, &RobotGrip, &ChildOf)>,
-    parts: Query<&GlobalTransform, With<RobotPart>>,
+    poses: Query<(Option<&Position>, Option<&Rotation>, &GlobalTransform)>,
     mut bodies: Query<(
         &RigidBody,
         &Position,
@@ -336,11 +359,11 @@ fn hold_robots(
 ) {
     let dt = time.delta_secs().max(1e-4);
     for (e, hand, rh, grip, player) in &hands {
-        let Ok(part) = parts.get(grip.part) else {
+        let Some(pose) = robot_pose(&poses, grip.robot) else {
             commands.entity(e).remove::<RobotGrip>();
             continue;
         };
-        let at = part.transform_point(grip.local);
+        let at = pose.transform_point(grip.local);
         let strain = hand.world.translation - at;
         if strain.length() > SLIP {
             // Torn free.

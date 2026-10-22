@@ -64,6 +64,7 @@ pub const NAMES: &[&str] = &[
     crate::world::cage::SCENARIO,
     crate::world::echo::SCENARIO,
     crate::world::lockdown::SCENARIO,
+    crate::world::live::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -571,6 +572,36 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::live::SCENARIO => {
+            // The service tunnel: the vault's breaker in (the overflow's
+            // water live), the switch room's isolator pulled, and into the
+            // overflow chamber unhurt.
+            use crate::bot::Expect::{Counter, HealthAtLeast};
+            use crate::world::live as lv;
+            vec![
+                Log(s(
+                    "live water: the breaker, the isolator, then the overflow chamber",
+                )),
+                Setup(lv::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::TO_ISOLATOR,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::INTO_IT,
+                    within: 1.0,
+                },
+                Wait(2.0),
+                Expect(Counter("live_isolated", 1, 1)),
+                Expect(Counter("live_jolts", 0, 0)),
+                Expect(HealthAtLeast(99.0)),
             ]
         }
         crate::world::lockdown::SCENARIO => {

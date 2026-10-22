@@ -1306,6 +1306,7 @@ impl Plugin for UndergroundPlugin {
             super::cage::CagePlugin,
             super::echo::EchoPlugin,
             super::lockdown::LockdownPlugin,
+            super::live::LivePlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1728,6 +1729,8 @@ pub struct Works {
     pub falls: Vec<(Vec3, f32, Vec2)>,
     /// Each gas pocket, still there.
     pub gas: Vec<bool>,
+    /// Its live water live (`world::live`).
+    pub live: bool,
 }
 
 impl Works {
@@ -1738,6 +1741,7 @@ impl Works {
             heat: l.heat.iter().map(|h| h.level).collect(),
             falls: Vec::new(),
             gas: vec![true; l.gas.len()],
+            live: false,
         }
     }
 
@@ -1751,15 +1755,16 @@ impl Works {
             && close(&self.heat, &o.heat, 0.05)
             && self.falls.len() == o.falls.len()
             && self.gas == o.gas
+            && self.live == o.live
     }
 }
 
 /// Shut a site's grid where its works make it impassable: deep water
 /// (a basin's at its level now), heat nothing crosses, a pit, a fallen
-/// roof. And make dear what its residents keep out of but can be drawn
-/// into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a noise in
-/// it still brings them, and their sparks set it off), and heat short of
-/// scorching (they keep to the cool side).
+/// roof, live water. And make dear what its residents keep out of but can
+/// be drawn into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a
+/// noise in it still brings them, and their sparks set it off), and heat
+/// short of scorching (they keep to the cool side).
 fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
     for j in 0..grid.n {
         for i in 0..grid.n {
@@ -1785,7 +1790,13 @@ fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster,
                 d.x.abs() <= half.x && d.z.abs() <= half.y
             });
             let k = j * grid.n + i;
-            if depth >= ug::DEEP || hot || r.pit[q] || fallen {
+            // Live water: nobody wades it.
+            let shocking = w.live
+                && depth > 0.05
+                && l.live.as_ref().is_some_and(
+                    |v| matches!(r.cells[q], ug::Cell::Room(k) if l.rooms[k as usize].id == v.room),
+                );
+            if depth >= ug::DEEP || hot || r.pit[q] || fallen || shocking {
                 grid.cost[k] = extraction_core::nav::BLOCKED;
                 continue;
             }
@@ -1824,6 +1835,7 @@ fn regrid_residents(
     heat: Option<Res<super::furnace::Heat>>,
     gas: Option<Res<super::workings::Gas>>,
     falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
+    live: Option<Res<super::live::Live>>,
     mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
     time: Res<Time>,
     mut every: Local<f32>,
@@ -1870,6 +1882,7 @@ fn regrid_residents(
                 .and_then(|g| g.live.get(site))
                 .cloned()
                 .unwrap_or_else(|| vec![true; l.gas.len()]),
+            live: live.as_ref().is_some_and(|v| v.0.contains(site)),
         };
         if now.same(&g.works) {
             continue;
@@ -1898,6 +1911,7 @@ impl Plugin for UndergroundVisualsPlugin {
             super::furnace::FurnaceVisualsPlugin,
             super::cage::CageVisualsPlugin,
             super::lockdown::LockdownVisualsPlugin,
+            super::live::LiveVisualsPlugin,
         ))
         .add_systems(
             Update,

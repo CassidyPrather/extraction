@@ -68,6 +68,7 @@ pub enum JamKind {
     Eject,
     Feed,
     Double,
+    Short,
 }
 
 impl From<Malfunction> for JamKind {
@@ -76,6 +77,7 @@ impl From<Malfunction> for JamKind {
             Malfunction::FailureToEject => JamKind::Eject,
             Malfunction::FailureToFeed => JamKind::Feed,
             Malfunction::DoubleFeed => JamKind::Double,
+            Malfunction::ShortStroke => JamKind::Short,
         }
     }
 }
@@ -84,6 +86,7 @@ pub const ALL: &[First] = &[
     First::Jam(JamKind::Eject),
     First::Jam(JamKind::Feed),
     First::Jam(JamKind::Double),
+    First::Jam(JamKind::Short),
     First::Heard,
     First::LostYou,
     First::DroneLock,
@@ -144,6 +147,9 @@ impl First {
             First::Jam(JamKind::Feed) => &["Truck: \"Slap the mag home, then rack. Didn't feed.\""],
             First::Jam(JamKind::Double) => {
                 &["Truck: \"Mag out, rack, mag back in. Two rounds jammed.\""]
+            }
+            First::Jam(JamKind::Short) => {
+                &["Truck: \"Work that bolt all the way. Cold oil; pull hard.\""]
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],

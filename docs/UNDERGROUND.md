@@ -352,6 +352,7 @@ already there), then the mine, then the cellars.
 
 | `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | the gallery carries sound (below); a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | `world::echo`: `Echoed`; a room's `carries`; the layout's `basins` (a still one) | `the_gallery_carries_sound_its_length`, `a_walk_carries_and_a_creep_does_not`; scenario `gallery_echo` |
 | `bunker_marrow` | Marrow (-10, 70), escape stair 60 m north | its lockdown (above): the generator started, a klaxon, and the gas lock sealed | `world::lockdown`: `Lockdown`, `KlaxonLamp`, `Klaxon`, `Sealed`; the layout's `lockdown`; `underground::SEALED` | `the_shelter_seals_and_the_tunnel_stays_open`, `a_sealed_shelter_can_be_left`; scenario `shelter_lockdown` |
+| `tunnel_cinder` | Cinder (73, -2) turned 180 | its live water (above): the overflow chamber live on the vault's breaker till the switch room's isolator cuts it | `world::live`: `Live`, `Isolator`, `Arcing`, `Shocked`, `Isolated`; the layout's `live`; `Works::live` | `the_overflow_is_live_till_isolated`, `crawlers_keep_out_of_live_water`; scenario `live_water` |
 | `adit_rime` | Rime Fell (160, -55) turned 180, exit (121, -2) on the mill's back apron | the winze's cage, down to the deep level (below); the one warm place on the fell (any roof stops the Cold's chill, `world::cold`); a flooded sump on the loop; the lamp room's breaker lights the drift and opens the magazine | `world::cage`: `Cage`, `CageBell`, `GateLamp`, `CageRung`, `CageArrived`, `CageCrushed`; the layout's `cage`, `floods` and `power` | `riding_the_cage_and_standing_under_it`, `nothing_walks_into_the_winze`; scenario `cage_ride` |
 
 ### One of its own: the adit's cage
@@ -426,9 +427,34 @@ after the lights, it seals itself.
 - *Bots.* A raider routes round a sealed door, and leaves by a door
   that opens (`PowerLocked` doors were already so).
 
-Shot: the hall with the klaxon sounding, its lamp turning
-(`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
+Shot: the hall with the klaxon sounding, its amber lamp sweeping the
+wall and a crawler coming to it (`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
 shelter sounding from the start, for shots).
+
+### One of its own: the service tunnel's live water
+
+The service tunnel's (`tunnel_cinder`) overflow chamber is flooded 0.7 m
+deep and lit off the cable vault's breaker, which also unbolts its door.
+Its lamps hang on their cables down into the water (`world::live`, the
+layout's `live`): throw the breaker and the way in opens onto live water.
+
+- *The tell.* Blue arcing snapping over the water (`Arcing`), its hum
+  (Audio's, asked for), and at its door you're told: "The water ahead
+  hums, and blue light snaps over it: it's live."
+- *The hurt.* Standing in it, a jolt of 22 every half second
+  (`Shocked`): four or five and you're down.
+- *The way.* The isolator on the switch room's wall cuts the chamber's
+  circuit (`Isolator`, `Isolated`), and the water's dead; pull it again
+  and it's live (with a crawler wading, say).
+- *Bots.* The crawlers' grid shuts the chamber's water while it's live
+  (`Works::live`, `block_works`) and opens it isolated
+  (`crawlers_keep_out_of_live_water`); `the_overflow_is_live_till_isolated`;
+  scenario `live_water` throws the breaker, pulls the isolator and wades in
+  unhurt.
+
+Shot: the overflow chamber's water live, cold blue under the arcing,
+its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
+from the start, for shots).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
