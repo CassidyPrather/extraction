@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 932 passed, 0 failed, 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
 | 5955943 | 12:10 | 20/20 exit 0, 10 extracted (Marrow 0/4) | 925 passed, 0 failed, all within budget, 29 min | gauges 15/15 in 20 min: green |
 | ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 907 passed, 0 failed, all within budget, 31 min | gauges 14/14 in 17 min: the first fully green round |
 | 7f23655 | 08:00 | 10/10 exit 0, 5 extracted (lowest yet) | 900 passed, 0 failed, 33 min wall; 1 over budget (soak walls 123.5 s) | gauges 13/14 in 16 min (busy moment: fix on Performance's branch) |
@@ -48,7 +49,8 @@ None in the suite or gauges as of ce0f10b.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | `choose_site` gave a building 0.35 pull per loot spot without limit, so the Depot's underground complex outscored every site and a fresh raider marched up the Gate road, the robots' commute | Map design | fixed on claude/polish-map-design-2 (spots past 8 add no pull): seed 2 now extracts with 36 items, seed 4 dies later with 35; to confirm on main |
+| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | `choose_site` gave a building 0.35 pull per loot spot without limit, so the Depot's underground complex outscored every site and a fresh raider marched up the Gate road, the robots' commute | Map design, coordinator | 7b03261's route exposure doesn't change it under SIM_NO_JOB=1 (seeds 2, 7, 8 still go to the Depot, Marrow 0/8); Map design's per-spot cap (claude/polish-map-design-2) not merged yet |
+| `sim::indoor::tests::every_drowned_house_lets_a_bot_in` over budget (293.7 s > 120) | | a new whole-valley walk | World models | routed 13:40 |
 
 ## Closed
 
