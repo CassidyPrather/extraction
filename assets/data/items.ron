@@ -1068,5 +1068,19 @@
             description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
         ),
+        // Old surplus lots (`Load::Surplus`): tired primers that misfire and
+        // hang-fire now and then. Restored at the bench they're good again.
+        (
+            id: "ammo_762r_surplus", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R surplus rounds (box)",
+            description: "Wartime ball in a tarred paper wrap, the brass gone brown. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Surplus,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545_surplus", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 surplus rounds (box)",
+            description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
+            tags: ["brass", "powder"],
+        ),
     ],
 )
