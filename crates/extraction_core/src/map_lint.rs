@@ -411,7 +411,15 @@ pub const VIEW_MAX: usize = 16;
 /// with no roof, no rooms and no loot, under two metres tall (a lorry 2.2).
 /// They stand by the roads in ones and twos; counted as buildings, every
 /// wreck on a road through a village would cost it a house.
-pub const VIEW_LIGHT: &[&str] = &["fence_garden", "wreck_lada", "wreck_uaz", "wreck_lorry"];
+///
+/// A log pile is one too: ten log cylinders, no roof, nothing inside.
+pub const VIEW_LIGHT: &[&str] = &[
+    "fence_garden",
+    "wreck_lada",
+    "wreck_uaz",
+    "wreck_lorry",
+    "log_pile",
+];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
 /// grid blocks only the cells whose middles fall within 0.7 m of a run

@@ -67,9 +67,13 @@ pub struct BuildingPlan {
     /// floor under each cell, building-local y (NaN where there's none).
     /// A point belongs to the plan only near its cell's floor.
     pub levels: Option<Vec<f32>>,
-    /// An underground site's cells shut only by heat (any that hurts):
+    /// An underground site's cells shut only by heat nothing crosses:
     /// (cell, heat zone, its cost once that zone's vented).
     pub hot: Vec<(usize, u16, u8)>,
+    /// Its cells in heat that hurts but can be crossed: open in the plan;
+    /// the raider shuts them like `hot` (`shut_live`), since a slow burn
+    /// over a long search kills as surely (Cinder's burner gallery).
+    pub warm: Vec<(usize, u16, u8)>,
     /// An underground site's live room's wet cells: open in the plan, as
     /// they are once isolated; the raider shuts them (`shut_live`), since
     /// it can't tell live from cut and a wrong guess kills.
@@ -81,12 +85,17 @@ pub struct BuildingPlan {
 }
 
 impl BuildingPlan {
-    /// The live room's water and the gas shut, for a raider that won't
-    /// wade the one or breathe the other.
+    /// The live room's water, the gas and the warm heat shut, for a
+    /// raider that won't wade, breathe or stand in them; the heat opens
+    /// again when vented, as `hot` does.
     pub fn shut_live(&mut self) {
         for &k in self.live.iter().chain(&self.gas) {
             self.grid.cost[k] = extraction_core::nav::BLOCKED;
         }
+        for &(k, ..) in &self.warm {
+            self.grid.cost[k] = extraction_core::nav::BLOCKED;
+        }
+        self.hot.append(&mut self.warm);
     }
 
     /// Heat zones vented: their cells walked again.
@@ -99,6 +108,33 @@ impl BuildingPlan {
             }
             !open
         });
+    }
+
+    /// Standing in (or by) heat its plan shuts, caught in it in a fight
+    /// or as it rose: those zones opened again, since a plan can't start
+    /// in a shut cell and the nearest open one may be through a wall.
+    /// Whether any were.
+    pub fn open_heat_at(&mut self, local: Vec2) -> bool {
+        let Some((i, j)) = self.grid.cell_of(local.to_array()) else {
+            return false;
+        };
+        let n = self.grid.n as i64;
+        let near = |k: usize| {
+            let (a, b) = ((k as i64 % n) - i as i64, (k as i64 / n) - j as i64);
+            a.abs() <= 1 && b.abs() <= 1
+        };
+        let mut zones: Vec<usize> = self
+            .hot
+            .iter()
+            .filter(|h| near(h.0))
+            .map(|h| h.1 as usize)
+            .collect();
+        zones.dedup();
+        if zones.is_empty() {
+            return false;
+        }
+        self.vent(&zones);
+        true
     }
 
     pub fn to_local(&self, p: Vec3) -> Vec3 {
@@ -430,6 +466,7 @@ pub fn plan_buildings(
             half,
             levels,
             hot: Vec::new(),
+            warm: Vec::new(),
             live: Vec::new(),
             gas: Vec::new(),
         });
@@ -563,7 +600,7 @@ fn plan_site(
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
     // is vented (`BuildingPlan::vent`).
-    let mut hot = Vec::new();
+    let (mut hot, mut warm) = (Vec::new(), Vec::new());
     if let Some(l) = extraction_core::underground::layout(&b.prefab) {
         for j in 0..n {
             for i in 0..n {
@@ -571,12 +608,13 @@ fn plan_site(
                 let Some(z) = r.heat_at(grid.centre(i, j)) else {
                     continue;
                 };
-                // Any heat that hurts: a slow burn kills as surely, over
-                // a long search (Cinder's burner gallery, seed 2).
-                if l.heat[z as usize].level <= 0.0 {
+                let level = l.heat[z as usize].level;
+                if level <= 0.0 || grid.cost[k] == extraction_core::nav::BLOCKED {
                     continue;
                 }
-                if grid.cost[k] != extraction_core::nav::BLOCKED {
+                if level < extraction_core::underground::SCORCHING {
+                    warm.push((k, z, grid.cost[k]));
+                } else {
                     hot.push((k, z, grid.cost[k]));
                     grid.cost[k] = extraction_core::nav::BLOCKED;
                 }
@@ -673,6 +711,7 @@ fn plan_site(
         inner,
         levels: Some(levels),
         hot,
+        warm,
         live,
         gas,
     }

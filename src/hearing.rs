@@ -340,6 +340,31 @@ impl Graph {
                     .push((*e, r1, r2, door_loss(Stuff::of_mat(d.mat)), *open));
             }
         }
+        // A site's ways in: each kiosk's door (at its -Z end) opens on the
+        // ground outside, which the raster doesn't reach. Its room joins
+        // the outside there, through the kiosk's door if one hangs in it
+        // (as it stands), or open (an arch).
+        if let Some(r) = raster {
+            use extraction_core::underground::KIOSK;
+            for portal in &r.portals {
+                let inside = Vec2::from(portal.to_site([0.0, -KIOSK[1] + 0.6]));
+                let outside = Vec2::from(portal.to_site([0.0, -KIOSK[1] - 0.6]));
+                let room = g.room_near(inside);
+                if room == NONE || room == OUTSIDE {
+                    continue;
+                }
+                let leaf = doors.iter().find(|(_, d, _)| {
+                    let (a, along, w) = gap(d);
+                    (a + along * w * 0.5).distance((inside + outside) * 0.5) < 1.5
+                });
+                g.doors.push(match leaf {
+                    Some((e, d, open)) => {
+                        (*e, room, OUTSIDE, door_loss(Stuff::of_mat(d.mat)), *open)
+                    }
+                    None => (Entity::PLACEHOLDER, room, OUTSIDE, DOORWAY_LOSS, true),
+                });
+            }
+        }
         // Walls join the rooms either side of them, by the quietest
         // between each pair (a window lets more through than brick); a
         // site's rooms are cut in the rock.
@@ -556,6 +581,45 @@ pub struct Hearing {
     pub graphs: Vec<Graph>,
     tiles: HashMap<(i32, i32), Vec<u16>>,
     dirty: bool,
+    /// Out in the open, how much the ground round smears a sound
+    /// (`weapons::reverb::valley_smear`), on its grid.
+    valley: Valley,
+}
+
+/// The ground's smear on a grid over the map.
+/// The valley smear's grid cell, metres.
+const VALLEY_CELL: f32 = 8.0;
+
+#[derive(Default)]
+struct Valley {
+    n: usize,
+    origin: f32,
+    smear: Vec<f32>,
+}
+
+impl Valley {
+    fn of(zone: &Zone) -> Self {
+        use crate::weapons::reverb::valley_smear;
+        let n = (zone.map.size / VALLEY_CELL).ceil() as usize;
+        let origin = -zone.map.size * 0.5;
+        let smear = (0..n * n)
+            .map(|k| {
+                let x = origin + ((k % n) as f32 + 0.5) * VALLEY_CELL;
+                let z = origin + ((k / n) as f32 + 0.5) * VALLEY_CELL;
+                valley_smear(|x, z| zone.ground(x, z), x, z)
+            })
+            .collect();
+        Self { n, origin, smear }
+    }
+
+    fn at(&self, p: Vec3) -> f32 {
+        let cell = VALLEY_CELL;
+        let (i, j) = ((p.x - self.origin) / cell, (p.z - self.origin) / cell);
+        if self.n == 0 || i < 0.0 || j < 0.0 || i as usize >= self.n || j as usize >= self.n {
+            return 1.0;
+        }
+        self.smear[j as usize * self.n + i as usize]
+    }
 }
 
 /// Where a point is: in a building's room (graph, room, storey), or out.
@@ -586,6 +650,7 @@ impl Hearing {
             graphs,
             tiles,
             dirty: false,
+            valley: Valley::default(),
         }
     }
 
@@ -629,12 +694,13 @@ impl Hearing {
 
     /// How much where a sound at `at` seems to come from is smeared by
     /// the room it rings in, for a robot's guess (`robots::senses`,
-    /// `HEARD_SPREAD`): 1 in the open or a small soft room, up to 2 in a
-    /// big hard hall, 2.5 in a rock gallery.
+    /// `HEARD_SPREAD`): 1 in a small soft room, up to 2 in a big hard
+    /// hall, 2.5 in a rock gallery; outside, by how the ground rises round
+    /// it (1 on a plain, up to 2.2 in a narrow valley).
     pub fn smear(&self, at: Vec3) -> f32 {
         match self.place(at) {
             Place::In(g, room, _) => self.graphs[g].smear[room as usize],
-            Place::Out => 1.0,
+            Place::Out => self.valley.at(at),
         }
     }
 
@@ -701,11 +767,12 @@ pub fn over_a_hill(zone: &Zone, from: Vec3, to: Vec3) -> bool {
 #[allow(clippy::type_complexity)]
 fn build_graphs(
     mut hearing: ResMut<Hearing>,
+    zone: Option<Res<Zone>>,
     added: Query<(), Added<Building>>,
     buildings: Query<(Entity, &Building, &Transform)>,
     leaves: Query<(Entity, &DoorLeaf, &ChildOf, Option<&Door>)>,
 ) {
-    if !added.is_empty() {
+    if !added.is_empty() || zone.as_ref().is_some_and(|z| z.is_changed()) {
         hearing.dirty = true;
         return;
     }
@@ -724,6 +791,9 @@ fn build_graphs(
         })
         .collect();
     *hearing = Hearing::from_graphs(graphs);
+    if let Some(zone) = zone {
+        hearing.valley = Valley::of(&zone);
+    }
 }
 
 /// A door opened or shut, broken or gone: its building's table again.
@@ -1070,6 +1140,35 @@ mod gauge {
                 post,
                 None,
             ));
+            // Its way in: inside the kiosk's door, from the ground at its
+            // mouth.
+            let r = extraction_core::underground::raster("bunker_marrow").unwrap();
+            let p = &r.portals[0];
+            let k = extraction_core::underground::KIOSK[1];
+            let world = g.inv.inverse();
+            let at = |z: f32, y: f32| {
+                let q = p.to_site([0.0, z]);
+                world.transform_point3(Vec3::new(q[0], y, q[1]))
+            };
+            let noise = at(-k + 1.0, p.top() + 0.3);
+            let mouth = at(-k - 5.0, 0.0);
+            let post = zone.on_ground(mouth.x, mouth.z);
+            pairs.push((
+                "the bunker's way in, from its mouth".into(),
+                noise,
+                post,
+                None,
+            ));
+            // The door of the kiosk the noise is in.
+            let room = g.place(noise).map(|p| p.0);
+            let kiosk = g
+                .doors
+                .iter()
+                .find(|d| d.2 == OUTSIDE && Some(d.1) == room && d.0 != Entity::PLACEHOLDER)
+                .map(|d| d.0);
+            if kiosk.is_some() {
+                pairs.push(("the same, its door open".into(), noise, post, kiosk));
+            }
         }
         let mut worst = 0.0f32;
         for (name, noise, post, open) in pairs {

@@ -971,6 +971,7 @@ pub fn think(
                         r.pocket.1 = 0;
                     }
                 }
+                open_heat_here(r, pos, &mut log);
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
                 let side = here + Vec2::new(a.cos(), a.sin()) * step;
                 // Give up on what it was reaching for; sidestep; replan.
@@ -997,6 +998,10 @@ pub fn think(
             r.calm = (r.clock, r.hp);
         } else if r.calm.1 - r.hp > HAZARD_HP
             && r.combat.is_none()
+            && {
+                open_heat_here(r, pos, &mut log);
+                true
+            }
             && let Some(tasks) = leave_building(r, &scene, pos)
         {
             log.event(
@@ -1102,6 +1107,24 @@ pub fn think(
             Stage::Done => {}
         }
         r.interrupted = false;
+    }
+}
+
+/// In heat its plan shuts (a fight took it in, or it's stuck by it):
+/// the heat opened in that plan, so the way out can be planned.
+fn open_heat_here(r: &mut Raider, pos: Vec3, log: &mut SimLog) {
+    if let Some(plan) = r
+        .plans
+        .iter_mut()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+    {
+        let local = plan.to_local(pos).xz();
+        if plan.open_heat_at(local) {
+            log.event(
+                "heat_open",
+                json!({"site": plan.name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+            );
+        }
     }
 }
 

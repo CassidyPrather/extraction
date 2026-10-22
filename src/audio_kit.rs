@@ -49,6 +49,7 @@ impl Plugin for KitSoundsPlugin {
                     lit_sounds,
                     flare_burns,
                     treatment_sounds,
+                    frost_sounds,
                 ),
             );
     }
@@ -505,6 +506,50 @@ fn treatment_sounds(
     }
 }
 
+/// A frost taking you (`anomaly::frost`, through the body's one chill,
+/// `world::cold::Chill`): as it starts to (the warning, `FROST_WARN`) a
+/// sharp, cold catch of the breath (`frost.gasp`); frozen through, as it
+/// bites, ice cracking (`frost.bite`). In your head, as the line is said.
+fn frost_sounds(
+    mut commands: Commands,
+    chills: Query<&crate::world::cold::Chill, With<crate::rig::LocalPlayer>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut was: Local<f32>,
+) {
+    let Some(c) = chills.iter().next() else {
+        return;
+    };
+    let before = std::mem::replace(&mut *was, c.level);
+    let warn = extraction_core::anomaly::FROST_WARN;
+    if before < warn && c.level >= warn {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "body/breath",
+            None,
+            "frost.gasp",
+            0.0,
+            1.35,
+            0.05,
+        );
+    }
+    if before < 1.0 && c.level >= 1.0 {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/ice_crack",
+            None,
+            "frost.bite",
+            0.0,
+            1.0,
+            0.08,
+        );
+    }
+}
+
 /// The shortest gap between two grinds heard (s): Weapon feel ticks every
 /// 60 ms, about twice as often as a grind sounds.
 const GRIND_EVERY: f32 = 0.11;
@@ -692,6 +737,8 @@ mod tests {
             ("physical/handle_plastic", "aid.cap"),
             ("physical/handle_plastic", "aid.cap_off"),
             ("footsteps/mud", "aid.wet"),
+            ("body/breath", "frost.gasp"),
+            ("physical/ice_crack", "frost.bite"),
         ];
         for s in [
             Stuff::Wood,

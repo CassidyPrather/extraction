@@ -208,6 +208,22 @@ fn size_swapchain(
         recommended: rec,
         start: size,
     });
+    // For the report: the eyes' targets' memory at the size they're made
+    // (`render::vram` counts the rest; the valleys hold 2.0-2.2 GB).
+    let made = if comfort.hold_rate { rec } else { size };
+    let samples = u64::from(comfort.msaa.max(1));
+    let px = u64::from(made.x) * u64::from(made.y);
+    let bytes = 2 * px * (8 * samples + 4 * samples + 8 + 4 + 4);
+    crate::report::log_fact(
+        "eye targets",
+        &format!(
+            "about {} MB (2 x {}x{}, MSAA {}x)",
+            bytes / (1024 * 1024),
+            made.x,
+            made.y,
+            samples
+        ),
+    );
     // Holding the frame rate, the swapchain is the runtime's full size and
     // the eyes render the part of it that fits (`render::hold_rate`).
     if comfort.hold_rate {
