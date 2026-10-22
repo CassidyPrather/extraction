@@ -193,6 +193,7 @@ fn shock(
     mut next: Local<f32>,
     mut told: Local<HashSet<Entity>>,
 ) {
+    told.retain(|e| bodies.contains(*e));
     if live.0.is_empty() {
         return;
     }
