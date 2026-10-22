@@ -153,7 +153,10 @@ pub fn record(
     mut shots: MessageReader<Shot>,
     mut hits: MessageReader<Hit>,
     mut anomaly_events: MessageReader<AnomalyEvent>,
-    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
+    (mut bites, mut shocks): (
+        MessageReader<crate::anomaly::costs::ArtifactBite>,
+        MessageReader<crate::world::live::Shocked>,
+    ),
     (names, parents): (Query<&Name>, Query<&ChildOf>),
 ) {
     if log.finished {
@@ -242,6 +245,13 @@ pub fn record(
         // put down to it.
         if b.player == me && b.what == crate::anomaly::costs::Bite::Shock && b.damage > 0.0 {
             tr.expect.push(("aegis".into(), b.damage, 0.3));
+        }
+    }
+    // Live water throwing whoever wades in.
+    for s in shocks.read() {
+        if s.player == me {
+            tr.expect
+                .push(("live_water".into(), crate::world::live::SHOCK, 0.3));
         }
     }
     tr.recent_air = body.airborne.max(tr.recent_air - dt);
