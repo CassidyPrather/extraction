@@ -235,6 +235,20 @@ mod tests {
         e
     }
 
+    /// The gun turned up `rad` in the hand, clear of the yard's berms.
+    fn aim_up(r: &mut Range, rad: f32) {
+        let h = r.vr.hand_state(Side::Right).world;
+        let right = h.rotation * Vec3::X;
+        r.vr.hand(
+            Side::Right,
+            h.translation,
+            Quat::from_axis_angle(right, rad) * h.rotation,
+            1.0,
+            0.0,
+        );
+        r.vr.step(20);
+    }
+
     /// One pull of the trigger: the report's reach (m) and how many cracks
     /// went down the line.
     fn one_shot(r: &mut Range) -> (f32, usize) {
@@ -286,7 +300,7 @@ mod tests {
                 fit(&mut r, c);
             }
             load_with(&mut r, "ak545", 5, load);
-            r.vr.step(3);
+            aim_up(&mut r, 0.17);
             one_shot(&mut r)
         };
         let (bare, bare_cracks) = shot(Load::Standard, None);
@@ -344,7 +358,7 @@ mod tests {
                 fit(&mut r, "pbs_suppressor");
             }
             load_with(&mut r, "svd", 5, Load::Standard);
-            r.vr.step(3);
+            aim_up(&mut r, 0.17);
             let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
             let (muzzle, fwd) = (gt.translation(), gt.forward().as_vec3());
             let side = fwd.cross(Vec3::Y).normalize();
