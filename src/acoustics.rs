@@ -348,18 +348,32 @@ pub const DOORWAY_CUTOFF: f32 = 3_000.0;
 /// line from just above the source and the line from `HEARD_OVER` above
 /// it are both cut. (Robots try only the raised line, which through a
 /// doorway runs into the lintel.)
+///
+/// And it bends round what's narrow (a tree's trunk, a post): a line is
+/// cut only if the lines `ROUND_NARROW` to either side of it are cut too.
+/// A trunk costs a sound next to nothing; a ridge or a wall costs it
+/// `wall_db`.
 pub fn blocked(spatial: &SpatialQuery, from: Vec3, to: Vec3) -> bool {
     let world = SpatialQueryFilter::from_mask([Layer::World]);
-    [0.3, HEARD_OVER].into_iter().all(|up| {
-        let src = from + Vec3::Y * up;
+    let cut = |src: Vec3, to: Vec3| {
         let d = src.distance(to);
         Dir3::new(to - src).ok().is_some_and(|dir| {
             spatial
                 .cast_ray(src, dir, (d - 0.5).max(0.0), true, &world)
                 .is_some()
         })
+    };
+    let side = (to - from).cross(Vec3::Y).normalize_or_zero() * ROUND_NARROW;
+    [0.3, HEARD_OVER].into_iter().all(|up| {
+        let src = from + Vec3::Y * up;
+        cut(src, to)
+            && (side == Vec3::ZERO || (cut(src + side, to + side) && cut(src - side, to - side)))
     })
 }
+
+/// How far to either side `blocked` looks round something narrow, m:
+/// wider than any trunk, narrower than a wall or a hill.
+pub const ROUND_NARROW: f32 = 1.0;
 
 /// How a sound at `from` reaches a listener at `to`: in the clear, round
 /// the edge of one of `openings` (open doorways: both legs clear), or
@@ -731,6 +745,43 @@ mod tests {
         }
         assert!(passed >= 5, "only {passed} doors let sound out");
         assert!(failed.len() * 3 <= passed, "{passed} passed; {failed:?}");
+    }
+
+    /// A tree's trunk on the line is not a hill: the sound bends round
+    /// it (Wildlife's flock alarm lost half its reach to one).
+    #[test]
+    fn a_trunk_is_not_a_hill() {
+        let mut app = app("marrow_creek");
+        let trees: Vec<Vec3> = app
+            .world_mut()
+            .query_filtered::<&Transform, With<crate::world::trees::Tree>>()
+            .iter(app.world())
+            .map(|t| t.translation)
+            .take(200)
+            .collect();
+        let (mut cut, mut round) = (0, 0);
+        for t in trees {
+            // Across the trunk at chest height, 6 m either side.
+            let from = t + Vec3::new(-6.0, 1.0, 0.0);
+            let to = t + Vec3::new(6.0, 1.5, 0.0);
+            let (straight, heard) = app
+                .world_mut()
+                .run_system_once(move |spatial: SpatialQuery| {
+                    let world = SpatialQueryFilter::from_mask([Layer::World]);
+                    let src = from + Vec3::Y * 0.3;
+                    let dir = Dir3::new(to - src).unwrap();
+                    let hit = spatial.cast_ray(src, dir, src.distance(to), true, &world);
+                    (hit.is_some(), blocked(&spatial, from, to))
+                })
+                .unwrap();
+            if straight {
+                cut += 1;
+                round += usize::from(!heard);
+            }
+        }
+        assert!(cut >= 20, "only {cut} lines cut by a trunk");
+        // (In a stand, the lines either side meet trunks of their own.)
+        assert!(round * 10 >= cut * 7, "{round} of {cut} bent round");
     }
 
     /// Rain is loudest in the open, duller under a roof, gone underground.
