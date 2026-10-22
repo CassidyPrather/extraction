@@ -659,3 +659,377 @@ pub fn follow_muzzles(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interact::GripRole;
+    use crate::rig::Side;
+    use crate::weapons::feel::vr_tests::{Range, glide_side, gun_mut, hold, take_in};
+    use extraction_core::gunsmith::{BOLT_SHARE, fit_part};
+
+    /// Jaws at where `r`'s gun's receiver is now, the gun let go into them.
+    fn clamp(r: &mut Range, gun: Entity, side: Side) -> Entity {
+        let gt = *r.vr.app.world().get::<GlobalTransform>(gun).unwrap();
+        let layout = r.vr.app.world().get::<Gun>(gun).unwrap().layout.clone();
+        let jaws =
+            r.vr.app
+                .world_mut()
+                .spawn((
+                    ViceJaws,
+                    Transform::from_translation(gt.transform_point(clamp_point(&layout)))
+                        .with_rotation(gt.rotation()),
+                ))
+                .id();
+        r.vr.step(2);
+        r.vr.grip(side, 0.0);
+        r.vr.step(4);
+        assert!(
+            r.vr.app.world().get::<InVice>(gun).is_some(),
+            "clamped in the vice"
+        );
+        jaws
+    }
+
+    /// Something lying loose, taken into the `side` hand where it is.
+    fn pick_up(r: &mut Range, side: Side, item: Entity) {
+        let at =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(item)
+                .unwrap()
+                .translation();
+        r.vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Static);
+        r.vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(3);
+        r.vr.grip(side, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(item)
+            .insert(RigidBody::Dynamic);
+        assert_eq!(r.vr.hand_state(side).holding, Some(item), "picked up");
+    }
+
+    /// The first loose item of `id`.
+    fn find(r: &mut Range, id: &str) -> Option<Entity> {
+        let catalog = r.vr.app.world().resource::<Catalog>().clone();
+        let mut q = r.vr.app.world_mut().query::<(Entity, &Item)>();
+        q.iter(r.vr.app.world())
+            .find(|(_, i)| catalog.get(i.kind()).id == id)
+            .map(|(e, _)| e)
+    }
+
+    /// A Mosin clamped in the vice, the right hand saws across its barrel
+    /// 250 mm out from the breech: through, it's an obrez: the barrel's
+    /// that long, the bullet leaves slower, the muzzle's come back, and
+    /// the end lies on the bench as scrap.
+    #[test]
+    fn sawing_a_mosin_down_to_an_obrez() {
+        let mut r = hold("mosin", false, false);
+        let gun = r.gun;
+        clamp(&mut r, gun, Side::Right);
+        let before = gun_mut(&mut r).layout.muzzle;
+        let scrap_before = find(&mut r, "scrap_metal");
+        let near = r.feet + Vec3::new(0.35, 1.0, 0.0);
+        let saw = take_in(&mut r, Side::Right, "hacksaw", near);
+        r.vr.step(5);
+        // The saw across the barrel, 480 mm back from the muzzle.
+        let gt = *r.vr.app.world().get::<GlobalTransform>(gun).unwrap();
+        let muzzle = gt.transform_point(before);
+        let back = gt.rotation() * Vec3::Z;
+        let spot = muzzle + back * 0.48;
+        let across = gt.rotation() * Vec3::X;
+        let saw_rot = gt.rotation() * Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2);
+        let mid = (BLADE_A + BLADE_B) * 0.5;
+        let offset =
+            r.vr.app
+                .world()
+                .get::<crate::interact::Held>(saw)
+                .unwrap()
+                .offset;
+        let hand_at = |shift: f32| {
+            let s = Transform::from_translation(spot - saw_rot * mid + across * shift)
+                .with_rotation(saw_rot);
+            let h = s.compute_affine() * offset.compute_affine().inverse();
+            let (_, rot, at) = h.to_scale_rotation_translation();
+            (at, rot)
+        };
+        let (at, rot) = hand_at(0.0);
+        r.vr.hand(Side::Right, at, rot, 1.0, 0.0);
+        r.vr.step(20);
+        // Back and forth, ±6 cm, a stroke every 0.4 s, for four seconds.
+        for i in 0..360 {
+            let shift = 0.06 * (i as f32 / 36.0 * std::f32::consts::TAU).sin();
+            let (at, rot) = hand_at(shift);
+            r.vr.hand(Side::Right, at, rot, 1.0, 0.0);
+            r.vr.step(1);
+            if gun_mut(&mut r).firearm.build.barrel_mm.is_some() {
+                break;
+            }
+        }
+        r.vr.step(5);
+        let mut g = gun_mut(&mut r);
+        let cut = g.firearm.build.barrel_mm.expect("sawn through");
+        println!(
+            "obrez: barrel {cut:.0} mm, {:.0} m/s, muzzle z {:.2} (was {:.2})",
+            g.firearm.def.muzzle_velocity, g.layout.muzzle.z, before.z
+        );
+        assert!((cut - 250.0).abs() < 40.0, "{cut}");
+        assert!(g.firearm.def.muzzle_velocity < 0.85 * 865.0);
+        assert!(g.layout.muzzle.z > before.z + 0.4, "the muzzle's come back");
+        let _ = &mut g;
+        assert!(
+            find(&mut r, "scrap_metal").is_some() && scrap_before.is_none(),
+            "the end's off"
+        );
+    }
+
+    /// Clamped, a Mosin's stock screw takes the spanner: two turns and the
+    /// stock's off (lighter, nothing to shoulder); let go behind the grip
+    /// again, it's back on.
+    #[test]
+    fn the_stock_comes_off_with_the_spanner_and_goes_back_on() {
+        use crate::interact::tools::spanner::{GRIP as S_GRIP, HEAD as S_HEAD, Spanner};
+        let mut r = hold("mosin", false, false);
+        let gun = r.gun;
+        clamp(&mut r, gun, Side::Right);
+        r.vr.step(3);
+        let screw = {
+            let mut q =
+                r.vr.app
+                    .world_mut()
+                    .query_filtered::<Entity, With<StockScrew>>();
+            q.iter(r.vr.app.world()).next().expect("the stock's screw")
+        };
+        let at =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(screw)
+                .unwrap()
+                .translation();
+        let axis = Vec3::Y;
+        let near = r.feet + Vec3::new(0.35, 1.0, 0.0);
+        let tool = take_in(&mut r, Side::Right, "spanner", near);
+        let grip = r.vr.hand_state(Side::Right).world.translation;
+        let reach = S_HEAD - S_GRIP;
+        let to = at - reach;
+        glide_side(&mut r, Side::Right, grip, to, 20);
+        r.vr.step(4);
+        assert!(
+            r.vr.app.world().get::<Spanner>(tool).unwrap().on.is_some(),
+            "the spanner's on the screw"
+        );
+        let flat = (to - at) - axis * (to - at).dot(axis);
+        let (rad, d0) = (flat.length(), flat.normalize());
+        let side = axis.cross(d0);
+        let turns = 2.3;
+        let n = (90.0 * turns) as usize;
+        for i in 1..=n {
+            let a = i as f32 / n as f32 * turns * std::f32::consts::TAU;
+            let p = at + (to - at).dot(axis) * axis + (d0 * a.cos() + side * a.sin()) * rad;
+            r.vr.move_hand(Side::Right, p);
+            r.vr.step(1);
+        }
+        r.vr.step(5);
+        let catalog = r.vr.app.world().resource::<Catalog>().clone();
+        let mass = catalog.get(catalog.kind("mosin").unwrap()).mass;
+        {
+            let g = gun_mut(&mut r);
+            assert!(!g.firearm.build.stock, "the stock's off");
+            assert!(g.mass(mass) < mass - 0.5, "lighter: {}", g.mass(mass));
+            assert!(
+                super::super::feel::butt(&g).is_none(),
+                "nothing to shoulder"
+            );
+        }
+        let stock = find(&mut r, "stock_mosin").expect("the stock lies by it");
+        // Back on: the spanner down, the stock to behind the grip.
+        r.vr.grip(Side::Right, 0.0);
+        r.vr.step(3);
+        r.vr.app.world_mut().entity_mut(tool).despawn();
+        pick_up(&mut r, Side::Left, stock);
+        let gt = *r.vr.app.world().get::<GlobalTransform>(gun).unwrap();
+        let layout = gun_mut(&mut r).layout.clone();
+        let goes = gt.transform_point(stock_point(&layout));
+        let from = r.vr.hand_state(Side::Left).world.translation;
+        let held =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(stock)
+                .unwrap()
+                .translation();
+        glide_side(&mut r, Side::Left, from, from + (goes - held), 20);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        assert!(gun_mut(&mut r).firearm.build.stock, "back on");
+        assert!(
+            r.vr.app.world().get_entity(stock).is_err(),
+            "the stock's on the gun"
+        );
+    }
+
+    /// Two Mosins in two vices, one worn, one good: each one's bolt drawn
+    /// out past its stop comes out into the hand as itself; the good bolt
+    /// let go into the worn rifle's receiver goes in, and the worn rifle
+    /// comes up by the bolt's share.
+    #[test]
+    fn a_good_bolt_into_a_worn_mosin() {
+        let draw = |r: &mut Range, gun: Entity| -> Entity {
+            let handle = r.vr.point(gun, |p| *p == GripRole::Handle(0));
+            let (up, back) = {
+                let gt = r.vr.app.world().get::<GlobalTransform>(gun).unwrap();
+                (gt.up().as_vec3(), gt.back().as_vec3())
+            };
+            let travel =
+                r.vr.app
+                    .world()
+                    .get::<Gun>(gun)
+                    .unwrap()
+                    .layout
+                    .handle
+                    .as_ref()
+                    .unwrap()
+                    .travel;
+            r.vr.hand(Side::Left, handle, Quat::IDENTITY, 0.0, 0.0);
+            r.vr.step(30);
+            r.vr.trigger(Side::Left, 1.0);
+            r.vr.step(2);
+            assert!(r.vr.hand_state(Side::Left).handle.is_some(), "on the bolt");
+            let lifted = handle + up * 0.045;
+            glide_side(r, Side::Left, handle, lifted, 15);
+            glide_side(r, Side::Left, lifted, lifted + back * (travel + 0.1), 30);
+            r.vr.step(5);
+            let held =
+                r.vr.hand_state(Side::Left)
+                    .holding
+                    .expect("the bolt in the hand");
+            r.vr.trigger(Side::Left, 0.0);
+            held
+        };
+        let mut r = hold("mosin", false, false);
+        let worn = r.gun;
+        gun_mut(&mut r).firearm.condition = 0.3;
+        clamp(&mut r, worn, Side::Right);
+        // The good one, beside it.
+        let at = r.feet + Vec3::new(-0.45, 1.2, -0.45);
+        let good = r.vr.spawn("mosin", Transform::from_translation(at));
+        r.vr.app
+            .world_mut()
+            .entity_mut(good)
+            .insert(RigidBody::Static);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .get_mut::<Gun>(good)
+            .unwrap()
+            .firearm
+            .condition = 0.9;
+        let grip = r.vr.point(good, |p| *p == GripRole::Primary);
+        let rake =
+            r.vr.app
+                .world()
+                .get::<Gun>(good)
+                .unwrap()
+                .layout
+                .grip
+                .rotation;
+        r.vr.hand(Side::Right, grip, rake, 1.0, 0.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(good)
+            .insert(RigidBody::Dynamic);
+        r.vr.step(10);
+        clamp(&mut r, good, Side::Right);
+        // The worn one's bolt out, and set down out of the way.
+        let worn_bolt = draw(&mut r, worn);
+        let catalog = r.vr.app.world().resource::<Catalog>().clone();
+        let it = r.vr.app.world().get::<Item>(worn_bolt).unwrap();
+        assert_eq!(catalog.get(it.kind()).id, "bolt_mosin");
+        assert!(
+            (it.condition - 0.3).abs() < 0.01,
+            "a worn bolt: {}",
+            it.condition
+        );
+        assert!(gun_mut(&mut r).firearm.build.bolt_out);
+        let away = r.vr.hand_state(Side::Left).world.translation + Vec3::new(0.0, 0.0, 0.6);
+        let from = r.vr.hand_state(Side::Left).world.translation;
+        glide_side(&mut r, Side::Left, from, away, 15);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        // The good one's out, and into the worn one.
+        let good_bolt = draw(&mut r, good);
+        let way = {
+            let gt = *r.vr.app.world().get::<GlobalTransform>(worn).unwrap();
+            let h =
+                r.vr.app
+                    .world()
+                    .get::<Gun>(worn)
+                    .unwrap()
+                    .layout
+                    .handle
+                    .clone()
+                    .unwrap();
+            gt.transform_point(h.grab + Vec3::Z * h.travel)
+        };
+        let from = r.vr.hand_state(Side::Left).world.translation;
+        let held =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(good_bolt)
+                .unwrap()
+                .translation();
+        glide_side(&mut r, Side::Left, from, from + (way - held), 20);
+        r.vr.grip(Side::Left, 0.0);
+        r.vr.step(5);
+        let g = gun_mut(&mut r);
+        let (want, _) = fit_part(0.3, 0.0, 0.9, BOLT_SHARE);
+        println!(
+            "worn rifle with the good bolt: {:.2} (want {want:.2})",
+            g.firearm.condition
+        );
+        assert!(!g.firearm.build.bolt_out, "the good bolt's in");
+        assert!((g.firearm.condition - want).abs() < 0.01);
+        assert!(r.vr.app.world().get_entity(good_bolt).is_err());
+    }
+}
+
+/// A gun's model as built: its barrel (and the forend with it) drawn
+/// back along the bore to its cut length, its butt gone when the stock's
+/// off, its bolt gone when it's out.
+pub fn show_builds(
+    guns: Query<(&Gun, &Children, Option<&Built>, Option<&Factory>)>,
+    mut parts: Query<(&Name, &mut Transform, &mut Visibility), With<super::visuals::GunPart>>,
+) {
+    for (gun, children, built, factory) in &guns {
+        let b = gun.firearm.build;
+        let k = match (built, factory) {
+            (Some(bt), Some(f)) => bt.barrel_mm / f.barrel_mm,
+            _ => 1.0,
+        };
+        for c in children.iter() {
+            let Ok((name, mut t, mut vis)) = parts.get_mut(c) else {
+                continue;
+            };
+            let (show, scale) = match name.as_str() {
+                "static_barrel" => (true, k),
+                "static_butt" => (b.stock, 1.0),
+                "turnbolt" => (!b.bolt_out, 1.0),
+                _ => continue,
+            };
+            t.scale.z = scale;
+            let want = if show {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            if *vis != want {
+                *vis = want;
+            }
+        }
+    }
+}
