@@ -87,6 +87,9 @@ pub const SHORT_RUN: &[&str] = &[
     "Truck: \"Short run. That's a can of fuel. Get in.\"",
 ];
 
+/// The first job's way home, from the gate, on the house.
+pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
+
 pub const NO_FUEL: &str = "Truck: \"No fuel in the stores for the short run. Head for an RV.\"";
 
 pub const PULLING_OUT: &[&str] = &[
@@ -439,7 +442,7 @@ mod tests {
             COMING_HOME_QUIET,
             CHATTER_CLOSE,
             CHATTER_FAR,
-            &[NO_FUEL],
+            &[NO_FUEL, FIRST_SHORT_RUN],
         ];
         for pool in pools {
             for line in pool {

@@ -242,6 +242,11 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**Their network, turned against them** (`robots/network.rs`). Pylons, sentries, spotters and the airship report what they see, and a team follows. Every report goes through the director's network, so it can be worked on:
+- **Cut a pylon's cable** with bolt cutters and it goes silent. The silence is the tell: after 45 s a mender is sent, and once it has welded the torn cabinet whole the pylon is back on the network.
+- **Splice a salvaged radio** into a pylon or a spotter's winch (let go of it against the cabinet): it reports contact at a named place at least 150 m from you, and the team goes there. Do it twice to the same relay and they stop believing it: none of its reports go out, and a walker comes to look it over.
+- **A powered jammer** blocks every relay's reports within its radius, but a relay gone quiet in a jam is a sign too: after 40 s a team comes to roughly where the jammer is.
+
 **The Zone remembers you** (`robots/memory.rs`, `zone_memory`). Each valley keeps a compact memory of your habits, saved with it:
 - the 30 m cells you walk;
 - the rendezvous you get out from;
@@ -249,10 +254,10 @@ were heading (`robots/signs.rs`).
 - the loot spots you clear.
 
 It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays off within a few raids. When you next step out, it leans, gently and capped:
-- patrols pick places on your usual ways up to twice as often;
+- patrols pick places on your usual ways up to 1.5 times as often;
 - the sentry nearest your favourite rendezvous turns its sweep toward it, by at most a quarter of its arc;
-- up to two buildings you cleared are found with their doors shut, one wedged if there's another way in;
-- one machine of the kind you wrecked is left watching where you did it.
+- up to two buildings you cleared are found with their doors shut, and once clearing one is a habit, one door is wedged if there's another way in;
+- where you've wrecked them more than once lately, one of their kind is left watching (an unarmed walker that calls the others, or a drone).
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
 

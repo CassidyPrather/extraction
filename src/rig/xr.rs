@@ -94,7 +94,8 @@ pub struct SessionGate {
 /// `bevy_mod_xr`'s `auto_handle_session` (switched off in `lib.rs`), but
 /// the session is only created once the load has settled: no building
 /// still waiting on its props, the forest built and its impostors taken,
-/// or [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
+/// every drawn thing's material ready (`timeline::WorldReady`), or
+/// [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
 /// own loader, and the first frame the player sees is a steady one (the
 /// load's own frames ran 60-100 ms each for a second, docs/PERFORMANCE.md
 /// "Hitches").
@@ -106,8 +107,7 @@ pub fn handle_session(
     mut end: MessageWriter<bevy_mod_xr::session::XrEndSessionMessage>,
     mut destroy: MessageWriter<bevy_mod_xr::session::XrDestroySessionMessage>,
     mut gate: ResMut<SessionGate>,
-    pending: Query<(), With<crate::world::buildings::PropsPending>>,
-    forest: crate::world::trees::ForestSettled,
+    world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
     mut no_auto_restart: Local<bool>,
 ) {
@@ -136,7 +136,7 @@ pub fn handle_session(
         return;
     };
     *waited += time.delta_secs();
-    let settled = pending.is_empty() && forest.settled();
+    let settled = world.ready();
     if settled || *waited >= SESSION_WAIT_MAX {
         info!(
             "headset: starting the session after {:.1} s ({})",
@@ -158,6 +158,7 @@ pub fn handle_session(
 /// headset on a laptop GPU isn't asked for 3000 px). Read when the session
 /// is created, so a change takes effect on the next launch.
 fn size_swapchain(
+    mut commands: Commands,
     instance: Option<Res<OxrInstance>>,
     system: Option<Res<bevy_mod_openxr::resources::OxrSystemId>>,
     comfort: Res<super::comfort::Comfort>,
@@ -166,6 +167,17 @@ fn size_swapchain(
     let (Some(instance), Some(system), Some(config)) = (instance, system, config.as_mut()) else {
         return;
     };
+    // For the playtest report (`report`): the runtime and headset as
+    // OpenXR names them (models, not serials).
+    if let Ok(p) = instance.properties() {
+        crate::report::log_fact(
+            "runtime",
+            &format!("{} {}", p.runtime_name, p.runtime_version),
+        );
+    }
+    if let Ok(p) = instance.system_properties(system.0) {
+        crate::report::log_fact("headset", &p.system_name);
+    }
     let Ok(views) = instance.enumerate_view_configuration_views(
         system.0,
         openxr::ViewConfigurationType::PRIMARY_STEREO,
@@ -192,7 +204,29 @@ fn size_swapchain(
         rec.x,
         rec.y
     );
-    config.resolutions = Some(vec![size]);
+    commands.insert_resource(EyeSizes {
+        recommended: rec,
+        start: size,
+    });
+    // Holding the frame rate, the swapchain is the runtime's full size and
+    // the eyes render the part of it that fits (`render::hold_rate`).
+    if comfort.hold_rate {
+        info!(
+            "eyes: holding the frame rate, from {}x{} up to {}x{}",
+            size.x, size.y, rec.x, rec.y
+        );
+        config.resolutions = Some(vec![rec]);
+    } else {
+        config.resolutions = Some(vec![size]);
+    }
+}
+
+/// The eyes' sizes the runtime recommended, and that SHARPNESS asked for
+/// (where `render::hold_rate` starts, and stays with HOLD FRAME RATE off).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct EyeSizes {
+    pub recommended: UVec2,
+    pub start: UVec2,
 }
 
 /// What the controllers are, and the first time each control is used: so

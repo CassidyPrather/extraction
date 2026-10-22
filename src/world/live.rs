@@ -57,6 +57,47 @@ impl Plugin for LiveVisualsPlugin {
 #[derive(Resource, Default, Debug)]
 pub struct Live(pub HashSet<Entity>);
 
+impl Live {
+    /// Whether a world point stands in live water now (for anything that
+    /// walks: a raider's route, say). `sites` as `Query<(Entity, &Building,
+    /// &Transform)>` gives them.
+    pub fn at<'a>(
+        &self,
+        sites: impl IntoIterator<Item = (Entity, &'a Building, &'a Transform)>,
+        p: Vec3,
+    ) -> bool {
+        if self.0.is_empty() {
+            return false;
+        }
+        sites
+            .into_iter()
+            .filter(|(e, _, _)| self.0.contains(e))
+            .any(|(_, b, xf)| {
+                live_water(&b.prefab, xf.compute_affine().inverse().transform_point3(p))
+            })
+    }
+}
+
+/// Whether a site-space point is in a site's live room's water (if it
+/// were live): within its room, over flooded floor, near the floor.
+pub fn live_water(prefab: &str, q: Vec3) -> bool {
+    let (Some(l), Some(r)) = (ug::layout(prefab), ug::raster(prefab)) else {
+        return false;
+    };
+    let Some(room) = l
+        .live
+        .as_ref()
+        .and_then(|v| l.rooms.iter().find(|r| r.id == v.room))
+    else {
+        return false;
+    };
+    (q.x - room.at[0]).abs() < room.size[0] * 0.5
+        && (q.z - room.at[1]).abs() < room.size[1] * 0.5
+        && (q.y - l.floor_of(room)).abs() < 2.0
+        && r.cell_of([q.x, q.z])
+            .is_some_and(|(a, c)| r.water[c * r.nx + a] > 0.05)
+}
+
 /// A site's isolator: `cut`, its room's circuit is off.
 #[derive(Component, Debug)]
 pub struct Isolator {
@@ -206,7 +247,7 @@ fn shock(
         if !live.0.contains(&site) {
             continue;
         }
-        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+        let Some(l) = ug::layout(&b.prefab) else {
             continue;
         };
         let Some(room) = l
@@ -227,10 +268,7 @@ fn shock(
             if near && told.insert(e) {
                 raid.say("The water ahead hums, and blue light snaps over it: it's live.");
             }
-            let inside = dx < 0.0
-                && dz < 0.0
-                && r.cell_of([q.x, q.z])
-                    .is_some_and(|(a, c)| r.water[c * r.nx + a] > 0.05);
+            let inside = dx < 0.0 && dz < 0.0 && live_water(&b.prefab, q);
             if !inside || body.wading < 0.05 || !jolt || h.down {
                 continue;
             }
@@ -370,24 +408,30 @@ fn arc(
 ) {
     let t = time.elapsed_secs();
     for (e, a, light) in &mut arcs {
-        let Some(mut light) = light else {
-            commands.entity(e).insert(PointLight {
-                color: Color::srgb(0.55, 0.75, 1.0),
-                intensity: 0.0,
-                range: 7.0,
-                shadow_maps_enabled: false,
-                ..default()
-            });
-            continue;
+        // (A light only while it's live: dead, it costs nothing.)
+        let on = live.0.contains(&a.site);
+        let mut light = match (on, light) {
+            (true, Some(l)) => l,
+            (true, None) => {
+                commands.entity(e).insert(PointLight {
+                    color: Color::srgb(0.55, 0.75, 1.0),
+                    intensity: 0.0,
+                    range: 7.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                });
+                continue;
+            }
+            (false, Some(_)) => {
+                commands.entity(e).remove::<PointLight>();
+                continue;
+            }
+            (false, None) => continue,
         };
         // A spark now and then, never steady.
         let snap = ((t * 23.0).sin() * (t * 7.3).sin()).abs() > 0.82
             || std::env::var_os("EXTRACTION_LIVE").is_some();
-        light.intensity = if live.0.contains(&a.site) && snap {
-            40_000.0
-        } else {
-            0.0
-        };
+        light.intensity = if snap { 40_000.0 } else { 0.0 };
     }
 }
 

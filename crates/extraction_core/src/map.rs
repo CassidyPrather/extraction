@@ -425,8 +425,9 @@ pub fn prefab_base(id: &str) -> &str {
 /// prefab's own tests check these agree with what it builds.
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
     match prefab_base(id) {
-        // The face stair's retaining wall (world::dam::stair_wall).
-        "dam_face" => &[([72.5, 10.6], [60.0, 1.5])],
+        // The face stair's walls (world::dam::stair_wall): along the
+        // stair and the landing's south side, and the landing's east side.
+        "dam_face" => &[([79.0, 10.6], [66.5, 1.5]), ([144.0, 5.55], [1.5, 3.55])],
         _ => &[],
     }
 }
@@ -561,8 +562,8 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             Entrance {
                 at: [0.0, z],
                 out: [0.0, -1.0],
-                width: 1.1,
-                clear: 4.21,
+                width: 1.6,
+                clear: 3.6,
             }
         }
         const PLANK: [Entrance; 1] = [door(-3.59)];
@@ -570,8 +571,8 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
         const CHAPEL: [Entrance; 1] = [Entrance {
             at: [0.0, -7.18],
             out: [0.0, -1.0],
-            width: 1.4,
-            clear: 4.13,
+            width: 2.0,
+            clear: 3.6,
         }];
         return match base {
             "house_plank" => &PLANK,

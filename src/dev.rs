@@ -29,6 +29,7 @@ impl Plugin for DevPlugin {
                     carry_for_gallery,
                     climb_for_gallery,
                     fight_for_gallery,
+                    treat_for_gallery,
                     spall_for_gallery,
                 )
                     .chain()
@@ -47,16 +48,38 @@ fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
 }
 
+/// The longest a screenshot waits on the world beyond its frames, seconds
+/// (the software renderer is slow; a material that never readies mustn't
+/// hang a shot).
+const SHOT_WAIT_MAX: f32 = 180.0;
+
+/// `--screenshot`: after `--frames` frames, and once the ground's and the
+/// buildings' materials are on the GPU and the buildings dressed
+/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
+/// had trees floating over no ground.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut count: ResMut<FrameCount>,
+    world: crate::render::timeline::WorldReady,
+    time: Res<Time<Real>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
     if count.requested || count.frames < opts.frames {
         return;
+    }
+    if !(world.materials() && world.props()) {
+        if time.elapsed_secs() < SHOT_WAIT_MAX {
+            return;
+        }
+        warn!(
+            "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
+             (materials ready: {}, buildings dressed: {})",
+            world.materials(),
+            world.props()
+        );
     }
     count.requested = true;
     if let Some(dir) = path.parent() {
@@ -1196,6 +1219,80 @@ fn spall_for_gallery(
             });
         }
     }
+}
+
+/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
+/// a body hurt and treated (`interact::wounds`, drawn by
+/// `render::wounds`). An open wound on the right thigh and the left
+/// forearm, a dressing round the right upper arm, a splint strapped on the
+/// right shin, and the left glove, turned palm up, bloody from the wound.
+fn treat_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &mut crate::rig::RigInput,
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    mut frames: Local<u32>,
+) {
+    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+        return;
+    }
+    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    let Some(mut wounds) = wounds else {
+        return;
+    };
+    *frames += 1;
+    let wound = |limb, along, around, bleed, dressed| Wound {
+        limb,
+        along,
+        around,
+        bleed,
+        dressed,
+    };
+    // Round a limb hanging down, the angle that faces out to your right
+    // and a little forward (`Segment::point`'s frame).
+    let x = Vec3::NEG_Y.any_orthonormal_vector();
+    let y = Vec3::NEG_Y.cross(x);
+    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
+    let facing = out.dot(y).atan2(out.dot(x));
+    wounds.0 = vec![
+        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
+        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
+        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
+        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
+    ];
+    // Bleeding as the wounds have it, and in no danger of going down.
+    health.bleeding = 1.6;
+    health.hp = health.max;
+    if *frames == 2 {
+        commands.entity(player).insert(Fracture {
+            leg: Side::Right,
+            splinted: true,
+        });
+        for (h, rh) in &hands {
+            if rh.side == Side::Left {
+                commands.entity(h).insert(Bloodied(1.0));
+            }
+        }
+    }
+    // The left hand low and turned palm up (its palm faces +X, inward).
+    let left = input.hand_mut(Side::Left);
+    left.pose = Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
+        Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    );
+    left.tracked = true;
 }
 
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment

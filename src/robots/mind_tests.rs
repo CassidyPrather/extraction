@@ -344,7 +344,17 @@ fn a_search_takes_in_doorways_and_cover() {
     let (app, _, _) = app(None);
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    let door = e.doors.first().expect("a door");
+    // A door with open ground before it (which comes first in the list
+    // depends on the valley's buildings).
+    let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
+    let door = e
+        .doors
+        .iter()
+        .find(|d| {
+            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+        })
+        .expect("a door with open ground before it");
     let at = door.mid + door.out * 6.0;
     let spots = plan_search(
         at,
@@ -3383,4 +3393,337 @@ fn a_building_you_cleared_is_found_shut() {
         .count();
     assert_eq!(shut, ways.len(), "all its doors shut");
     assert_eq!(wedged, 1, "one wedged, another still a way in");
+}
+
+/// A light that wasn't there (a chemlight thrown, a room's lamps on),
+/// 18 m off in front of a walker: further than it makes out other signs,
+/// it comes to look; one 30 m off it doesn't see.
+#[test]
+fn a_new_light_draws_a_walker() {
+    let looked = |d: f32| {
+        let (mut app, player, zone) = app(None);
+        put(&mut app, player, zone.on_ground(100.0, 330.0));
+        let post = zone.on_ground(100.0, 200.0);
+        let w = walker_at(&mut app, &zone, post);
+        app.world_mut().write_message(super::disturbed::Disturb {
+            at: zone.on_ground(post.x, post.z - d),
+            kind: super::disturbed::SignKind::Light,
+        });
+        for _ in 0..90 * 2 {
+            app.update();
+            if matches!(
+                app.world().get::<Brain>(w).unwrap(),
+                Brain::Investigate { .. }
+            ) {
+                return true;
+            }
+        }
+        false
+    };
+    assert!(super::disturbed::LIGHT_SIGHT > super::disturbed::SIGN_SIGHT);
+    assert!(looked(18.0), "a new light 18 m off draws it");
+    assert!(!looked(30.0), "one 30 m off it doesn't see");
+}
+
+/// A running pylon at `site`, the director on with nothing else to do,
+/// and you standing in plain view of it.
+fn network_app() -> (App, Entity, Zone, Entity, Vec3) {
+    let (mut app, player, zone) = app(None);
+    let site = zone.on_ground(100.0, 210.0);
+    let exit = super::director::gate(&zone);
+    let mut queue = CommandQueue::default();
+    let pylon = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::pylon::spawn_pylon(&mut c, site, 999.0, exit)
+    };
+    queue.apply(app.world_mut());
+    {
+        let mut p = app
+            .world_mut()
+            .get_mut::<super::pylon::Pylon>(pylon)
+            .unwrap();
+        p.progress = 1.0;
+        p.state = super::pylon::PylonState::Running { left: 9999.0 };
+    }
+    {
+        let mut d = app.world_mut().resource_mut::<super::director::Director>();
+        d.enabled = true;
+        d.next_job = 1e9;
+        d.next_logistics = 1e9;
+    }
+    put(
+        &mut app,
+        player,
+        zone.on_ground(site.x + 25.0, site.z + 10.0),
+    );
+    app.update();
+    (app, player, zone, pylon, site)
+}
+
+fn responses(app: &App) -> Vec<Vec3> {
+    app.world()
+        .resource::<super::director::Director>()
+        .responses
+        .iter()
+        .map(|r| r.1)
+        .collect()
+}
+
+fn cable_of(app: &mut App, pylon: Entity) -> Option<Entity> {
+    app.world_mut()
+        .query::<(Entity, &super::network::PylonCable)>()
+        .iter(app.world())
+        .find(|(_, c)| c.pylon == pylon)
+        .map(|(e, _)| e)
+}
+
+/// Cut a pylon's cable: it sees you, and nobody comes.
+#[test]
+fn a_cut_cable_silences_a_pylon() {
+    let (mut app, player, _zone, pylon, _) = network_app();
+    let cable = cable_of(&mut app, pylon).expect("a running pylon has a cable");
+    app.world_mut()
+        .write_message(crate::destruction::hooks::Cut {
+            target: cable,
+            by: player,
+        });
+    for _ in 0..90 * 10 {
+        app.update();
+    }
+    assert!(
+        app.world().get::<Awareness>(pylon).unwrap().can_see_target,
+        "it sees you"
+    );
+    assert!(
+        responses(&app).is_empty(),
+        "but it's silent: {:?}",
+        responses(&app)
+    );
+}
+
+/// A silent pylon is noticed: a mender comes, and once its cabinet's
+/// welded whole it's wired up and reporting again.
+#[test]
+fn a_silent_pylon_gets_a_mender_and_comes_back() {
+    let (mut app, player, _zone, pylon, _) = network_app();
+    let cable = cable_of(&mut app, pylon).unwrap();
+    app.world_mut()
+        .write_message(crate::destruction::hooks::Cut {
+            target: cable,
+            by: player,
+        });
+    for _ in 0..(90.0 * (super::network::SILENCE_NOTICED + 2.0)) as usize {
+        app.update();
+    }
+    let menders = app
+        .world_mut()
+        .query::<&super::mender::Mender>()
+        .iter(app.world())
+        .count();
+    assert!(menders >= 1, "a mender's been sent");
+    // Welded whole (as the mender would).
+    {
+        let mut q = app.world_mut().query::<&mut super::RobotPart>();
+        for mut p in q.iter_mut(app.world_mut()) {
+            if p.robot == pylon && p.role == super::PartRole::Core {
+                p.hp = p.max_hp;
+            }
+        }
+    }
+    app.update();
+    app.update();
+    assert!(
+        !app.world()
+            .entity(pylon)
+            .contains::<super::network::Silenced>()
+    );
+    assert!(cable_of(&mut app, pylon).is_some(), "wired up again");
+    let mut reported = false;
+    for _ in 0..90 * 10 {
+        app.update();
+        if !responses(&app).is_empty() {
+            reported = true;
+            break;
+        }
+    }
+    assert!(reported, "and it reports you again");
+}
+
+/// A salvaged radio let go against a pylon's cabinet is spliced in: it
+/// reports contact somewhere far from you, and the radio's gone into it.
+#[test]
+fn a_spliced_radio_sends_them_elsewhere() {
+    let (mut app, player, _zone, pylon, site) = network_app();
+    // Out of its sight while you work on it from behind (so its own true
+    // report doesn't muddle this one).
+    app.world_mut()
+        .get_mut::<super::Senses>(pylon)
+        .unwrap()
+        .sight = 0.1;
+    let me = site + Vec3::new(1.0, 0.0, 0.0);
+    put(&mut app, player, me);
+    let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+    app.world_mut()
+        .write_message(crate::interact::InteractEvent::Released {
+            item: radio,
+            side: crate::rig::Side::Left,
+            speed: 0.0,
+        });
+    app.update();
+    app.update();
+    assert!(
+        app.world().get_entity(radio).is_err(),
+        "the radio's spliced in"
+    );
+    let r = responses(&app);
+    assert_eq!(r.len(), 1, "one false report: {r:?}");
+    assert!(
+        flat(r[0] - me) >= super::network::DECOY_FROM - 1.0,
+        "somewhere you aren't: {} m off",
+        flat(r[0] - me)
+    );
+}
+
+fn spawn_radio(app: &mut App, at: Vec3) -> Entity {
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("radio").unwrap(),
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    e
+}
+
+/// The same pylon feeding a second false report isn't believed: no team
+/// goes, it's distrusted (even a true report of it is ignored), and a
+/// walker is sent to look it over.
+#[test]
+fn a_second_false_report_gets_a_pylon_distrusted() {
+    let (mut app, player, _zone, pylon, site) = network_app();
+    app.world_mut()
+        .get_mut::<super::Senses>(pylon)
+        .unwrap()
+        .sight = 0.1;
+    put(&mut app, player, site + Vec3::new(1.0, 0.0, 0.0));
+    for _ in 0..2 {
+        let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+        app.world_mut()
+            .write_message(crate::interact::InteractEvent::Released {
+                item: radio,
+                side: crate::rig::Side::Left,
+                speed: 0.0,
+            });
+        app.update();
+        app.update();
+    }
+    assert_eq!(responses(&app).len(), 1, "only the first was believed");
+    assert!(
+        app.world()
+            .resource::<super::director::Director>()
+            .net
+            .distrusted
+            .contains(&pylon)
+    );
+    assert_eq!(
+        watchers_near(&mut app, zone_post(site)),
+        1,
+        "someone's coming to look it over"
+    );
+    // Now it sees you for real, and still nobody comes for that.
+    app.world_mut()
+        .get_mut::<super::Senses>(pylon)
+        .unwrap()
+        .sight = 85.0;
+    put(&mut app, player, site + Vec3::new(25.0, 0.0, 10.0));
+    for _ in 0..90 * 10 {
+        app.update();
+    }
+    assert_eq!(responses(&app).len(), 1, "a distrusted pylon's ignored");
+}
+
+/// Where the inspector stands: by the relay.
+fn zone_post(site: Vec3) -> Vec3 {
+    site + Vec3::new(3.0, 0.0, 3.0)
+}
+
+/// A powered jammer by a pylon: what it sees doesn't get out. But the
+/// quiet's a sign: before long a team comes to find the jammer.
+#[test]
+fn a_jammer_blocks_reports_but_is_noticed() {
+    let (mut app, _player, _zone, _pylon, site) = network_app();
+    let jam = site + Vec3::new(-20.0, 0.5, 5.0);
+    app.world_mut().spawn((
+        super::network::Jammer { radius: 40.0 },
+        crate::gadgets::Powered,
+        Transform::from_translation(jam),
+        GlobalTransform::from_translation(jam),
+    ));
+    for _ in 0..90 * 10 {
+        app.update();
+    }
+    assert!(responses(&app).is_empty(), "jammed: {:?}", responses(&app));
+    let mut found = None;
+    for _ in 0..(90.0 * super::network::JAM_NOTICED) as usize {
+        app.update();
+        if let Some(r) = responses(&app).first() {
+            found = Some(*r);
+            break;
+        }
+    }
+    let r = found.expect("they come to find the jam");
+    assert!(
+        flat(r - jam) <= super::network::JAM_GUESS,
+        "roughly where it is: {} m off",
+        flat(r - jam)
+    );
+}
+
+/// The bench's jammer is a jammer: a device that draws hard from its cell
+/// and, switched on with power, blocks the relays round it.
+#[test]
+fn a_jammer_item_is_a_jammer() {
+    let (mut app, _player, zone) = app(None);
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("jammer").expect("a jammer in the catalog"),
+                transform: Transform::from_translation(zone.on_ground(100.0, 200.0) + Vec3::Y),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let j = app
+        .world()
+        .get::<super::network::Jammer>(e)
+        .expect("it jams");
+    assert_eq!(j.radius, super::network::JAM_RADIUS);
+    let d = app
+        .world()
+        .get::<crate::gadgets::Device>(e)
+        .expect("a device");
+    assert_eq!(d.kind, crate::gadgets::DeviceKind::Jammer);
+    assert!(d.watts >= 15.0, "battery-hungry: {} W", d.watts);
+    assert!(
+        extraction_core::fabrication::CONTRACT_RECIPES
+            .iter()
+            .any(|r| r.makes == extraction_core::fabrication::Make::Items(&[("jammer", 1)])),
+        "a taught bench recipe makes it"
+    );
 }

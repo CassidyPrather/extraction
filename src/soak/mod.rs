@@ -14,6 +14,7 @@ pub mod census;
 #[cfg(test)]
 mod chaos;
 pub mod drive;
+pub mod ledges;
 #[cfg(test)]
 mod physics;
 #[cfg(test)]
@@ -117,6 +118,7 @@ mod tests {
             ("src/interact/touch.rs", "last", "keyed by hand"),
             ("src/destruction/breach.rs", "geos", "buildings"),
             ("src/world/snow.rs", "last", "players' footsteps"),
+            ("src/world/live.rs", "told", "players, told once"),
             ("src/world/underground.rs", "inside", "players"),
             ("src/wildlife/rats.rs", "*", "buildings"),
             ("src/world/furnace.rs", "*", "buildings"),

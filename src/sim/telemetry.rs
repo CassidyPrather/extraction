@@ -143,6 +143,7 @@ pub fn record(
             &Body,
             Option<&Raider>,
             &Children,
+            Has<crate::world::workings::InGas>,
         ),
         With<LocalPlayer>,
     >,
@@ -153,7 +154,10 @@ pub fn record(
     mut shots: MessageReader<Shot>,
     mut hits: MessageReader<Hit>,
     mut anomaly_events: MessageReader<AnomalyEvent>,
-    mut bites: MessageReader<crate::anomaly::costs::ArtifactBite>,
+    (mut bites, mut shocks): (
+        MessageReader<crate::anomaly::costs::ArtifactBite>,
+        MessageReader<crate::world::live::Shocked>,
+    ),
     (names, parents): (Query<&Name>, Query<&ChildOf>),
 ) {
     if log.finished {
@@ -162,7 +166,7 @@ pub fn record(
     let dt = time.delta_secs();
     log.t += dt;
     let t = log.t;
-    let Some((me, tf, health, body, raider, children)) = bots.iter().next() else {
+    let Some((me, tf, health, body, raider, children, in_gas)) = bots.iter().next() else {
         return;
     };
     let pos = tf.translation;
@@ -244,6 +248,13 @@ pub fn record(
             tr.expect.push(("aegis".into(), b.damage, 0.3));
         }
     }
+    // Live water throwing whoever wades in.
+    for s in shocks.read() {
+        if s.player == me {
+            tr.expect
+                .push(("live_water".into(), crate::world::live::SHOCK, 0.3));
+        }
+    }
     tr.recent_air = body.airborne.max(tr.recent_air - dt);
 
     // Anomalies: walking into one, and anything one does nearby.
@@ -297,21 +308,39 @@ pub fn record(
                 log.last_cause = cause.clone();
             }
             tr.expect = expect;
-            if rest > 0.05 {
-                let cause = if let Some(k) = &inside_kind {
-                    k.clone()
-                } else if raid.surging() {
-                    "surge".to_string()
-                } else if health.bleeding > 0.0 && rest <= health.bleeding * dt * 1.5 + 1e-3 {
-                    "bleeding".to_string()
-                } else if tr.recent_air > 0.4 {
-                    "fall".to_string()
+            // Every unclaimed loss counts, however small a tick of it is:
+            // gas at 2 hp a second is 0.02 a tick, and once that went
+            // unrecorded a raider died underground of nothing at all.
+            let mut parts: Vec<(String, f32)> = Vec::new();
+            if let Some(k) = &inside_kind {
+                parts.push((k.clone(), rest));
+            } else if raid.surging() {
+                parts.push(("surge".to_string(), rest));
+            } else {
+                let bleed = if health.bleeding > 0.0 {
+                    rest.min(health.bleeding * dt * 1.5 + 1e-3)
                 } else {
-                    // Nothing above claimed it: say so rather than guess.
-                    "other".to_string()
+                    0.0
                 };
-                *tr.pending.entry(cause.clone()).or_default() += rest;
-                log.recent.push((t, cause.clone(), rest));
+                if bleed > 0.0 {
+                    parts.push(("bleeding".to_string(), bleed));
+                }
+                let left = rest - bleed;
+                if left > 1e-4 {
+                    let cause = if in_gas {
+                        "gas"
+                    } else if tr.recent_air > 0.4 {
+                        "fall"
+                    } else {
+                        // Nothing above claimed it: say so rather than guess.
+                        "other"
+                    };
+                    parts.push((cause.to_string(), left));
+                }
+            }
+            for (cause, amount) in parts {
+                *tr.pending.entry(cause.clone()).or_default() += amount;
+                log.recent.push((t, cause.clone(), amount));
                 log.last_cause = cause;
             }
         }

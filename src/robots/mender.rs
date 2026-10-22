@@ -96,6 +96,7 @@ impl Plugin for MenderPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<MenderEvent>()
             .init_resource::<crate::bot::Counters>()
+            .init_resource::<MendersSent>()
             .add_systems(
                 FixedUpdate,
                 (mender_mind, mender_salvage)
@@ -395,7 +396,8 @@ fn send_mender(
     menders: Query<(), With<Mender>>,
     robots: Query<&Robot>,
     parts: Query<&RobotPart>,
-    mut sent: Local<(u32, f32)>,
+    mut sent: ResMut<MendersSent>,
+    mut wait: Local<f32>,
     time: Res<Time>,
 ) {
     let (Some(zone), Some(director)) = (zone, director) else {
@@ -404,11 +406,11 @@ fn send_mender(
     if !director.enabled || raid.as_ref().is_some_and(|r| r.recalled) {
         return;
     }
-    sent.1 -= time.delta_secs();
-    if sent.1 > 0.0 || sent.0 >= PER_RAID || !menders.is_empty() {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 || sent.0 >= PER_RAID || !menders.is_empty() {
         return;
     }
-    sent.1 = 5.0;
+    *wait = 5.0;
     let missing: f32 = parts
         .iter()
         .filter(|p| p.alive() && robots.get(p.robot).is_ok_and(|r| !r.wrecked))
@@ -417,14 +419,34 @@ fn send_mender(
     if missing < SEND_AT {
         return;
     }
+    request_mender(&mut commands, &zone, &mut sent, false, "the valley's hurt");
+}
+
+/// Menders sent this raid (at most [`PER_RAID`], whoever sends them).
+#[derive(Resource, Debug, Default)]
+pub struct MendersSent(pub u32);
+
+/// A mender out from the gate, if the raid's budget allows and none is
+/// out (`out`): for anything that wants one sent (the hurt valley, a cut
+/// relay). Its patient it picks itself, the worst hurt near at hand.
+pub fn request_mender(
+    commands: &mut Commands,
+    zone: &Zone,
+    sent: &mut MendersSent,
+    out: bool,
+    why: &str,
+) -> Option<Entity> {
+    if out || sent.0 >= PER_RAID {
+        return None;
+    }
     sent.0 += 1;
-    let gate = super::director::gate(&zone);
-    info!("mender: out from the gate ({missing:.0} hp to mend)");
-    spawn_mender(
-        &mut commands,
+    let gate = super::director::gate(zone);
+    info!("mender: out from the gate ({why})");
+    Some(spawn_mender(
+        commands,
         gate + Vec3::Y * rules::CRUISE,
         gate + Vec3::Y * 6.0,
-    );
+    ))
 }
 
 /// The scenario: a damaged pylon ahead and a mender coming to weld it.

@@ -320,6 +320,8 @@ enum Leg {
     Call,
     Rendezvous,
     Board,
+    /// Home: the card pressed, for the job's pay.
+    Paid,
     Done,
 }
 
@@ -340,6 +342,12 @@ pub(super) struct Newcomer {
     heard: Vec<String>,
     /// What the log held last frame.
     showing: Vec<String>,
+    /// The job card, as read.
+    card: String,
+    /// Back at the gate to call (the card said so).
+    at_gate: bool,
+    /// Jobs done when it got home (pressing the card adds one).
+    done_home: Option<u32>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -407,7 +415,9 @@ fn heading_in(line: &str) -> Option<(Vec2, f32)> {
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
-    card: Query<'w, 's, &'static ScreenText, With<RequestCard>>,
+    card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
+    progression: Option<Res<'w, crate::progression::Progression>>,
+    entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -434,7 +444,7 @@ pub(super) fn direct_raid(
     view: RaidView,
     raid: Res<Raid>,
     mut met: MessageReader<FirstMet>,
-    fight: Option<Res<Fight>>,
+    mut fight: Option<ResMut<Fight>>,
     mut state: Local<Newcomer>,
     time: Res<Time>,
 ) {
@@ -450,11 +460,14 @@ pub(super) fn direct_raid(
     let now = time.elapsed_secs();
     let here = root.translation.xz();
     // A cautious newcomer creeps once it's out.
-    let creep = p.reads && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    // Running for it, as told: upright and fast.
+    let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
+    let creep =
+        p.reads && !fleeing && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
     if input.crouch != creep {
         input.crouch = creep;
     }
-    bot.sprint = p.sprint;
+    bot.sprint = p.sprint || fleeing;
 
     // Heard: what the driver says is what it knows.
     let showing: Vec<String> = raid.log.iter().map(|(l, _)| l.clone()).collect();
@@ -469,8 +482,19 @@ pub(super) fn direct_raid(
         state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
-            First::Heard | First::DroneLock if !p.reckless => {
-                vec![Task::Wait(15.0)]
+            First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Run across it, to cover", "Break its line", "Down, out of
+            // its sweep": for it, as told.
+            First::DroneLock | First::Aimed | First::Sentry if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = now + 12.0;
+                }
+                let overhead = *f == First::DroneLock;
+                overhead
+                    .then(|| under_a_roof(view.entrances.as_deref(), here))
+                    .flatten()
+                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from))
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -649,11 +673,12 @@ pub(super) fn direct_raid(
                 .card
                 .iter()
                 .next()
-                .map(|c| c.text.clone())
+                .map(|(_, c)| c.text.clone())
                 .unwrap_or_default();
             if p.reads {
                 tasks.push(Task::Wait(4.0));
             }
+            state.card = text.split_whitespace().collect::<Vec<_>>().join(" ");
             match place_on_card(&text, &world.zone) {
                 Some((name, at)) => {
                     state.note(
@@ -753,7 +778,38 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Call => {
-            if raid.phase == Phase::AtBase {
+            // "Call me from the gate after": back the way it came first.
+            let drop = world
+                .zone
+                .map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::Insertion)
+                .map(|m| Vec2::from(m.at));
+            if state.card.contains("from the gate")
+                && !state.at_gate
+                && raid.phase == Phase::Out
+                && let Some(drop) = drop
+            {
+                state.at_gate = true;
+                if drop.distance(here) > 20.0 {
+                    state.note(now, Kind::Learned, "back to the gate, as the card said");
+                    tasks.extend(world.legs(here, drop));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+            }
+            if let Phase::TruckWaiting { rv, .. } = raid.phase
+                && rv == crate::raid::SHORT_EXFIL
+            {
+                // It came back for us at the gate: in.
+                state.note(now, Kind::Learned, "the truck came back to the gate");
+                tasks.extend(world.go_home(here, &raid, 0));
+                state.leg = Leg::Board;
+            } else if raid.phase == Phase::AtBase {
                 // Still by the truck: out first (the radio's for the Zone).
                 let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
                 tasks.extend(world.legs(here, away));
@@ -844,7 +900,8 @@ pub(super) fn direct_raid(
         Leg::Board => match raid.phase {
             Phase::Extracting { .. } | Phase::AtBase => {
                 state.note(now, Kind::Learned, "in the truck and away");
-                state.leg = Leg::Done;
+                state.leg = Leg::Paid;
+                state.tries = 0;
             }
             Phase::TruckWaiting { .. } => {
                 tasks.extend(world.go_home(here, &raid, state.tries));
@@ -854,6 +911,40 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Call;
             }
         },
+        Leg::Paid => {
+            let done = view.progression.as_ref().map_or(0, |p| p.0.done);
+            if raid.phase != Phase::AtBase {
+                tasks.push(Task::Wait(1.0));
+            } else if state.done_home.is_none() {
+                state.done_home = Some(done);
+                // Told to, by the driver, or read on the card.
+                let told = state.heard.iter().any(|l| l.contains("press the card"));
+                let read = view
+                    .card
+                    .iter()
+                    .any(|(_, c)| c.text.to_lowercase().contains("press here"));
+                if !told && !read {
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        "home, and nothing says how the job is paid",
+                    );
+                }
+                tasks.push(Task::Wait(if p.reads { 4.0 } else { 1.0 }));
+            } else if state.done_home.is_some_and(|d| done > d) {
+                state.note(now, Kind::Learned, "pressed the card: the job paid");
+                state.leg = Leg::Done;
+            } else if state.tries >= 3 {
+                state.note(now, Kind::Stuck, "home, and the card won't take the job");
+                state.leg = Leg::Done;
+            } else if let Some((card, _)) = view.card.iter().next() {
+                tasks.push(Task::Press(card));
+                tasks.push(Task::Wait(2.0));
+                state.tries += 1;
+            } else {
+                state.leg = Leg::Done;
+            }
+        }
         Leg::Done => {
             if !state.reported {
                 state.reported = true;
@@ -932,6 +1023,8 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
 #[derive(Resource, Default, Debug)]
 pub struct Fight {
     seeded: bool,
+    /// Running for cover until then.
+    pub flee_until: f32,
     pub tells: Vec<(f32, String)>,
     pub first_hit: Option<f32>,
     reacted: bool,
@@ -965,6 +1058,66 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
+/// Into cover from a machine at `from`: round the far side of the nearest
+/// building within a sprint, or, in the open, hard across its line.
+/// Something above you: in under a roof, through the nearest door, if one's
+/// within a sprint (trees hide nobody from overhead: only their trunks stop
+/// a look).
+fn under_a_roof(
+    entrances: Option<&crate::robots::doors::Entrances>,
+    here: Vec2,
+) -> Option<Vec<Task>> {
+    let entrances = entrances?;
+    let d = entrances
+        .doors
+        .iter()
+        .filter(|d| {
+            // A way in from outside: its far side is under that roof.
+            let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
+            entrances.building_at(inside) == Some(d.building)
+        })
+        .min_by(|a, b| {
+            a.mid
+                .xz()
+                .distance(here)
+                .total_cmp(&b.mid.xz().distance(here))
+        })
+        .filter(|d| d.mid.xz().distance(here) < 40.0)?;
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    Some(vec![
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.3,
+            within: 0.6,
+        },
+        Task::OpenDoor(d.door),
+        Task::WalkTo {
+            to: d.mid.xz() - out * 2.0,
+            within: 0.6,
+        },
+        Task::Wait(20.0),
+    ])
+}
+
+fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task> {
+    // Round the far side of something solid (not into trees: a look goes
+    // between the trunks).
+    let cover = zone
+        .map
+        .placements
+        .iter()
+        .map(|b| Vec2::from(b.at))
+        .filter(|b| b.distance(here) < 60.0)
+        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+    let to = match cover {
+        Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
+        None => {
+            let across = (here - from).normalize_or(Vec2::Y).perp();
+            here + across * 25.0
+        }
+    };
+    vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
+}
+
 /// Where along the way to the first job the machine is met: the drop to
 /// the Old farm, a little short of halfway.
 fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
@@ -994,6 +1147,7 @@ pub(super) fn first_fight(
     mut tells: Tells,
     mut bots: Query<(&mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -1099,7 +1253,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((mut bot, root, mut input)) = bots.single_mut() else {
+    let Ok((mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -1118,16 +1272,20 @@ pub(super) fn first_fight(
     } else if p.hoards && !hush {
         // Carries on.
         vec![]
+    } else if hush {
+        // Back out the way it came.
+        vec![Task::WalkTo {
+            to: here + away * 10.0,
+            within: 1.5,
+        }]
     } else {
-        // Down, out of its line, and still a while.
-        input.crouch = true;
-        vec![
-            Task::WalkTo {
-                to: here + away.perp() * 12.0 + away * 6.0,
-                within: 1.5,
-            },
-            Task::Wait(12.0),
-        ]
+        // For cover, as the driver says, upright and fast: under a roof
+        // from a drone.
+        fight.flee_until = now + 12.0;
+        (kind == "drone")
+            .then(|| under_a_roof(entrances.as_deref(), here))
+            .flatten()
+            .unwrap_or_else(|| run_for_cover(&zone, here, from))
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);

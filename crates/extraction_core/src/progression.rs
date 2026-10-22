@@ -334,11 +334,22 @@ pub const PARTS: &[&str] = &[
     "rotor_assembly",
     "robot_gunpod",
     "robot_ammo_belt",
+    // Taken off a wreck by hand (`robots::salvage`).
+    "robot_plate",
+    "walker_leg_actuator",
+    "sorter_servo_pack",
+];
+
+/// What else a fetch of `want` takes: a servo comes off a walker in its
+/// leg, and off the Sorter in a pack.
+const ALSO: &[(&str, &str)] = &[
+    ("servo", "walker_leg_actuator"),
+    ("servo", "sorter_servo_pack"),
 ];
 
 /// Whether an item of `id` counts toward a fetch of `want`.
 pub fn fetch_takes(want: &str, id: &str) -> bool {
-    want == id || (want == ANY_PARTS && PARTS.contains(&id))
+    want == id || (want == ANY_PARTS && PARTS.contains(&id)) || ALSO.contains(&(want, id))
 }
 
 /// The worst condition a fetch of `want` takes an `id` in: a machine's part
@@ -1203,6 +1214,8 @@ mod tests {
         assert!(!fetch_takes(ANY_PARTS, "canned_stew"));
         assert!(fetch_takes("servo", "servo"));
         assert!(!fetch_takes("servo", "sensor_eye"));
+        assert!(fetch_takes("servo", "walker_leg_actuator"));
+        assert!(fetch_takes(ANY_PARTS, "robot_plate"));
         assert_eq!(fetch_condition("robot_gunpod", "robot_gunpod"), 0.5);
         assert_eq!(fetch_condition(ANY_PARTS, "servo"), 0.3);
         assert_eq!(fetch_condition("canned_stew", "canned_stew"), 0.0);

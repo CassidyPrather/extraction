@@ -49,6 +49,9 @@ pub enum DeviceKind {
     Laser,
     /// Set down and switched on, it hides everyone inside its bubble.
     Cloak,
+    /// Switched on, the machines' relays near it can't report
+    /// (`robots::network::Jammer`).
+    Jammer,
 }
 
 /// Switched on *and* has power this tick.
@@ -219,7 +222,7 @@ fn item_mounts(
             Transform::from_xyz(0.0, 0.006, 0.0),
             Transform::from_xyz(0.0, 0.016, 0.0),
         ),
-        "flashlight" | "weapon_light" | "laser_module" | "cloak_generator" => {
+        "flashlight" | "weapon_light" | "laser_module" | "cloak_generator" | "jammer" => {
             let id = catalog.get(item.kind()).id.as_str();
             spawn_mount(
                 &mut commands,
@@ -232,6 +235,8 @@ fn item_mounts(
                 "laser_module" => (0.6, DeviceKind::Laser),
                 // A cell runs it for about forty minutes.
                 "cloak_generator" => (15.0, DeviceKind::Cloak),
+                // Hungrier still: a cell lasts it about half an hour.
+                "jammer" => (20.0, DeviceKind::Jammer),
                 _ => (6.0, DeviceKind::Light),
             };
             commands.entity(e).insert(Device { watts, kind });
@@ -367,7 +372,7 @@ fn mark_suppressed(
 }
 
 /// The cell seated in an item's own cell compartment.
-fn cell_of(item: Entity, sockets: &Query<(&Socket, &SocketOwner)>) -> Option<Entity> {
+pub(crate) fn cell_of(item: Entity, sockets: &Query<(&Socket, &SocketOwner)>) -> Option<Entity> {
     sockets
         .iter()
         .find(|(s, o)| o.0 == item && s.kind == SocketKind::Mount(Mount::Cell))
@@ -463,6 +468,14 @@ fn arm_and_switch(
                 } else {
                     commands.entity(u.item).insert(LightOn);
                     raid.say("The generator whines up. Set it down and stay close.");
+                }
+            }
+            "jammer" => {
+                if on.contains(u.item) {
+                    commands.entity(u.item).remove::<LightOn>();
+                } else {
+                    commands.entity(u.item).insert(LightOn);
+                    raid.say("The jammer whines up. Every relay near you goes deaf.");
                 }
             }
             "emp_trap" => {

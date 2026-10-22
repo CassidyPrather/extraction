@@ -702,6 +702,12 @@
             tags: ["electronics", "metal"],
         ),
         (
+            id: "jammer", dims: Some((0.16, 0.24, 0.2)), name: "Relay jammer",
+            description: "Bench-made, all whip aerials. Switched on, the machines' relays nearby go deaf. Drinks a cell fast, and they notice the quiet.",
+            category: Gadget, size: Medium, mass: 1.2, bulk: 3.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
             id: "deployable_cover", dims: Some((0.6, 0.12, 0.5)), name: "Deployable cover",
             description: "A folding ballistic panel on legs.",
             category: Gadget, size: Large, mass: 6.0, bulk: 8.0,
@@ -752,7 +758,7 @@
         // ---------------------------------------------------------------
         // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
         // ---------------------------------------------------------------
-        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Water bottle", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
+        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Canteen", description: "A canteen of water. Twist the cap off before you drink.", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
         (id: "condensed_milk", name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
         (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
         (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
@@ -1090,6 +1096,11 @@
             description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
+        (
+            id: "art_rimestone", dims: Some((0.045, 0.04, 0.04)), name: "Rimestone",
+            description: "A pale knuckle of stone furred with a frost that grows back as fast as you rub it off. Carried, fire can't take you: a burner's coals don't touch you. The cold in it is in you too; you're always a little stiff.",
+            category: Artifact, size: Small, mass: 0.4, bulk: 0.1, attention: 1.1,
+        ),
 
         // ---------------------------------------------------------------
         // The valley keys: the Quarantine Authority's depot keys, one per
@@ -1173,6 +1184,18 @@
             description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
             tags: ["brass", "powder"],
+        ),
+        // Throwable lights for the dark (`world::glow`): snapped or struck
+        // on the Use button, then thrown, or kept in a hand.
+        (
+            id: "chemlight", dims: Some((0.028, 0.028, 0.15)), name: "Chemlight",
+            description: "A green light stick in a foil wrap. Bend it till it snaps inside and shake: ten minutes of light, and not a sound.",
+            category: Gadget, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["polymer"],
+        ),
+        (
+            id: "hand_flare", dims: Some((0.03, 0.03, 0.23)), name: "Hand flare",
+            description: "A road flare in a red paper tube. Strike the cap across the end: a minute of hissing red fire, and every eye in the dark on it.",
+            category: Gadget, size: Small, mass: 0.18, bulk: 0.08, tags: ["powder"],
         ),
     ],
 )

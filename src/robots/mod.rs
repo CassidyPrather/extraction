@@ -23,6 +23,7 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod grip;
 pub mod heavy;
 pub mod heavy_look;
 pub mod heavy_mind;
@@ -36,6 +37,7 @@ pub mod mender_look;
 mod mind_tests;
 pub mod minelayer;
 pub mod minelayer_look;
+pub mod network;
 pub mod plough;
 pub mod plough_look;
 pub mod pylon;
@@ -266,6 +268,7 @@ impl Plugin for RobotsPlugin {
                 signs::SignsPlugin,
                 disturbed::DisturbedPlugin,
                 memory::MemoryPlugin,
+                network::NetworkPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -281,6 +284,7 @@ impl Plugin for RobotsPlugin {
                     flight::FlightPlugin,
                     wreck::WreckPlugin,
                     salvage::SalvagePlugin,
+                    grip::GripPlugin,
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
@@ -310,10 +314,19 @@ impl Plugin for RobotsPlugin {
 /// shot. Elsewhere a blow is its harm.
 pub const BLUNT_LOOSENS: f32 = 1.8;
 
-/// What a hit of `damage` does to a part in this role.
-pub fn part_damage(role: PartRole, damage: f32, blow: Option<extraction_core::melee::Blow>) -> f32 {
+/// What a hit of `damage` does to a part in this role. A weak point (a
+/// heavy's bolt: `weapons::melee::WeakPoint`) has its own multiplier,
+/// already in `damage`: no more on top.
+pub fn part_damage(
+    role: PartRole,
+    weak: bool,
+    damage: f32,
+    blow: Option<extraction_core::melee::Blow>,
+) -> f32 {
     match (role, blow) {
-        (PartRole::Armour(_), Some(extraction_core::melee::Blow::Blunt)) => damage * BLUNT_LOOSENS,
+        (PartRole::Armour(_), Some(extraction_core::melee::Blow::Blunt)) if !weak => {
+            damage * BLUNT_LOOSENS
+        }
         _ => damage,
     }
 }
@@ -321,7 +334,11 @@ pub fn part_damage(role: PartRole, damage: f32, blow: Option<extraction_core::me
 /// Bullets (and blows) damage the part they strike.
 fn damage_parts(
     mut hits: MessageReader<Hit>,
-    mut parts: Query<(&mut RobotPart, &GlobalTransform)>,
+    mut parts: Query<(
+        &mut RobotPart,
+        &GlobalTransform,
+        Has<crate::weapons::melee::WeakPoint>,
+    )>,
     mut robots: Query<&mut Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
     mut noise: MessageWriter<Noise>,
@@ -331,7 +348,7 @@ fn damage_parts(
 ) {
     let now = time.elapsed_secs();
     for hit in hits.read() {
-        let Ok((mut part, gt)) = parts.get_mut(hit.entity) else {
+        let Ok((mut part, gt, weak)) = parts.get_mut(hit.entity) else {
             continue;
         };
         if !part.alive() {
@@ -343,7 +360,7 @@ fn damage_parts(
             radius: 40.0,
             source: hit.shooter,
         });
-        part.hp -= part_damage(part.role, hit.damage, hit.blow);
+        part.hp -= part_damage(part.role, weak, hit.damage, hit.blow);
         if part.hp <= 0.0 {
             destroyed.write(PartDestroyed {
                 robot: part.robot,
@@ -695,10 +712,13 @@ mod tests {
     fn blunt_blows_shake_plates_loose() {
         use extraction_core::melee::Blow;
         let plate = PartRole::Armour(0);
-        assert!(part_damage(plate, 10.0, Some(Blow::Blunt)) > 10.0);
-        assert_eq!(part_damage(plate, 10.0, Some(Blow::Edge)), 10.0);
-        assert_eq!(part_damage(plate, 10.0, None), 10.0);
-        assert_eq!(part_damage(PartRole::Core, 10.0, Some(Blow::Blunt)), 10.0);
+        assert!(part_damage(plate, false, 10.0, Some(Blow::Blunt)) > 10.0);
+        assert_eq!(part_damage(plate, false, 10.0, Some(Blow::Edge)), 10.0);
+        assert_eq!(part_damage(plate, false, 10.0, None), 10.0);
+        let core = PartRole::Core;
+        assert_eq!(part_damage(core, false, 10.0, Some(Blow::Blunt)), 10.0);
+        // A heavy's bolt is a weak point: its own multiplier, not this.
+        assert_eq!(part_damage(plate, true, 10.0, Some(Blow::Blunt)), 10.0);
     }
 
     /// A wreck's salvage is its own: other robots wrecked first, somewhere

@@ -359,13 +359,14 @@ fn breathe(
 }
 
 /// A spark in a live pocket: a shot fired from or through it, a grenade
-/// going off in it, a torch switched on in it. It goes up: everyone in
+/// going off in it, a torch switched on in it, a burning flare in it. It goes up: everyone in
 /// it is hurt, it's heard a long way off, and the air's clear after.
 #[allow(clippy::too_many_arguments)]
 fn ignite(
     mut shots: MessageReader<crate::weapons::ballistics::Shot>,
     mut grenades: MessageReader<crate::weapons::grenades::GrenadeEvent>,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), Added<crate::gadgets::Powered>>,
+    flares: Query<&GlobalTransform, With<super::glow::Burning>>,
     sites: Query<(Entity, &Building, &Transform)>,
     parts: Query<(Entity, &GlobalTransform), With<crate::robots::RobotPart>>,
     bodies: Query<(Entity, &GlobalTransform), With<crate::player::BodyCollider>>,
@@ -396,6 +397,8 @@ fn ignite(
             sparks.push(gt.translation());
         }
     }
+    // A burning flare: an open flame, carried or thrown into it.
+    sparks.extend(flares.iter().map(|gt| gt.translation()));
     for p in sparks {
         for (site, b, xf) in &sites {
             let Some(g) = pocket_at(b, xf, p) else {

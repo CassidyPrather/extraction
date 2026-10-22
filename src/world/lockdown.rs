@@ -282,25 +282,21 @@ fn count_seals(mut sealed: MessageReader<Sealed>, mut counters: ResMut<crate::bo
 /// otherwise.
 fn turn_the_lamp(
     mut commands: Commands,
-    mut lamps: Query<(Entity, &KlaxonLamp, &mut Transform, Option<&mut SpotLight>)>,
+    mut lamps: Query<(
+        Entity,
+        &KlaxonLamp,
+        &mut Transform,
+        Has<SpotLight>,
+        Has<Mesh3d>,
+    )>,
     sites: Query<&Lockdown>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
-    for (e, lamp, mut t, light) in &mut lamps {
-        let on = sites.get(lamp.site).is_ok_and(|l| l.left.is_some());
-        let Some(mut light) = light else {
+    for (e, lamp, mut t, lit, drawn) in &mut lamps {
+        if !drawn {
             commands.entity(e).insert((
-                SpotLight {
-                    color: Color::srgb(1.0, 0.38, 0.0),
-                    intensity: 0.0,
-                    range: 18.0,
-                    outer_angle: 0.5,
-                    inner_angle: 0.3,
-                    shadow_maps_enabled: false,
-                    ..default()
-                },
                 Mesh3d(meshes.add(Sphere::new(0.13))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(0.6, 0.35, 0.05),
@@ -308,9 +304,22 @@ fn turn_the_lamp(
                     ..default()
                 })),
             ));
-            continue;
-        };
-        light.intensity = if on { 400_000.0 } else { 0.0 };
+        }
+        // (A light only while it sounds: dark, it costs nothing.)
+        let on = sites.get(lamp.site).is_ok_and(|l| l.left.is_some());
+        if on && !lit {
+            commands.entity(e).insert(SpotLight {
+                color: Color::srgb(1.0, 0.38, 0.0),
+                intensity: 400_000.0,
+                range: 18.0,
+                outer_angle: 0.5,
+                inner_angle: 0.3,
+                shadow_maps_enabled: false,
+                ..default()
+            });
+        } else if !on && lit {
+            commands.entity(e).remove::<SpotLight>();
+        }
         if on {
             let yaw = time.elapsed_secs() * 4.0;
             t.rotation = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-0.5);
