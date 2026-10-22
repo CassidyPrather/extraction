@@ -20,6 +20,7 @@ pub mod feel;
 pub mod flares;
 pub mod flat;
 pub mod grenades;
+pub mod gunsmith;
 pub mod impacts;
 pub mod layout;
 pub mod melee;
@@ -69,6 +70,16 @@ pub struct Gun {
     /// one gun never hangs on how many others are lying about, nor on the
     /// order things were spawned in, and a drill replays.
     pub dice: Rng,
+    /// Its mass as built, if it's been worked at the vice (`gunsmith`);
+    /// else the catalog's.
+    pub mass: Option<f32>,
+}
+
+impl Gun {
+    /// Its mass (kg): as built, or `catalog` as made.
+    pub fn mass(&self, catalog: f32) -> f32 {
+        self.mass.unwrap_or(catalog)
+    }
 }
 
 /// A gun's seed: its kind and where it was first put (to the centimetre).
@@ -237,7 +248,7 @@ impl Plugin for WeaponsPlugin {
                 weather::WeatherPlugin,
                 report::ReportPlugin,
             ))
-            .add_plugins(reverb::ReverbPlugin)
+            .add_plugins(gunsmith::GunsmithPlugin)
             .add_systems(
                 FixedUpdate,
                 (
@@ -340,6 +351,7 @@ fn setup_gun_items(
         magwell,
         trigger: 0.0,
         dice: Rng::new(seed),
+        mass: None,
     });
 }
 
