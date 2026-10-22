@@ -3711,9 +3711,9 @@ fn a_jammer_item_is_a_jammer() {
     assert_eq!(d.kind, crate::gadgets::DeviceKind::Jammer);
     assert!(d.watts >= 15.0, "battery-hungry: {} W", d.watts);
     assert!(
-        extraction_core::fabrication::RECIPES
+        extraction_core::fabrication::CONTRACT_RECIPES
             .iter()
             .any(|r| r.makes == extraction_core::fabrication::Make::Items(&[("jammer", 1)])),
-        "the bench makes it"
+        "a taught bench recipe makes it"
     );
 }
