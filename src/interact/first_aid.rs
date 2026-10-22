@@ -138,7 +138,7 @@ fn wrap_dressings(
         let at = gt.translation();
         // The limb it's already going round while it still is (a wrap
         // round a thigh passes near the other), else the nearest.
-        let mut near = segs
+        let near = segs
             .iter()
             .filter(|s| !matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side))
             .map(|s| (s, s.locate(at)))

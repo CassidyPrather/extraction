@@ -5357,7 +5357,14 @@ mod wounds {
 
     /// Where on the body `limb` is now, `along` it.
     fn on(vr: &mut Vr, limb: Limb, along: f32) -> Vec3 {
-        let segs = {
+        let segs = segments(vr);
+        let s = segs.iter().find(|s| s.limb == limb).expect("that limb");
+        s.a.lerp(s.b, along)
+    }
+
+    /// The body's limbs as they are now.
+    fn segments(vr: &mut Vr) -> Vec<crate::interact::wounds::Segment> {
+        {
             let mut sys = bevy::ecs::system::SystemState::<(
                 Query<
                     (
@@ -5372,9 +5379,39 @@ mod wounds {
             )>::new(vr.app.world_mut());
             let (players, hands) = sys.get(vr.app.world()).unwrap();
             player_segments(vr.player, &players, &hands).expect("a stance")
+        }
+    }
+
+    /// The glove of a hand laid on an open wound comes away bloody; the
+    /// other stays clean.
+    #[test]
+    fn a_hand_on_a_wound_comes_away_bloody() {
+        let (mut vr, _) = setup();
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        let w = wounds(&vr)
+            .into_iter()
+            .find(|w| w.limb == Limb::Thigh(Side::Left))
+            .expect("a thigh wound");
+        let spot = segments(&mut vr)
+            .into_iter()
+            .find(|s| s.limb == w.limb)
+            .unwrap()
+            .point(w.along, w.around);
+        vr.move_hand(Side::Left, spot);
+        vr.step(60);
+        let blood = |vr: &mut Vr, side| {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(&RigHand, Option<&crate::interact::wounds::Bloodied>)>();
+            q.iter(vr.app.world())
+                .find(|(rh, _)| rh.side == side)
+                .and_then(|(_, b)| b.map(|b| b.0))
+                .unwrap_or(0.0)
         };
-        let s = segs.iter().find(|s| s.limb == limb).expect("that limb");
-        s.a.lerp(s.b, along)
+        assert!(blood(&mut vr, Side::Left) > 0.5, "the left glove bloody");
+        assert_eq!(blood(&mut vr, Side::Right), 0.0, "the right clean");
     }
 
     /// A hit on the body at `at`.
