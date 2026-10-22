@@ -59,6 +59,10 @@ pub struct Debris {
 #[derive(Component)]
 pub struct Broken;
 
+/// A walker wreck's legs, their health as it fell (0: shot off).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct WreckLegs(pub [f32; 4]);
+
 /// Moving until it has lain still a moment, then made static.
 #[derive(Component, Debug, Default)]
 pub struct Settling {
@@ -227,6 +231,8 @@ fn break_up(
                 // hinge at the knee) and fold under it as it drops; the
                 // weak ones come away as it lands (`collapse`).
                 let mut hips = [None; 4];
+                // Each leg's health as it fell: its hip servo's, for salvage.
+                let mut legs = [0.0f32; 4];
                 for (i, [hip, knee, foot]) in poses.0.iter().copied().enumerate() {
                     let out = Vec3::new(hip.x - t.translation.x, 0.0, hip.z - t.translation.z)
                         .normalize_or(Vec3::X);
@@ -303,8 +309,11 @@ fn break_up(
                         .map_or(0.0, |(p, ..)| p.hp / p.max_hp.max(1.0));
                     let weak = !w.feet[i].alive || health < 0.4;
                     hips[i] = Some((hip_joint, upper, weak));
+                    legs[i] = if w.feet[i].alive { health } else { 0.0 };
                 }
-                commands.entity(e).insert(Collapse { t: 0.0, hips, seed });
+                commands
+                    .entity(e)
+                    .insert((Collapse { t: 0.0, hips, seed }, WreckLegs(legs)));
                 // A panel or two blown off the orb, and the turret.
                 for k in 0..2u32 {
                     let a = jitter(seed, 20 + k) * std::f32::consts::PI;

@@ -8,6 +8,9 @@
 //!   off (quieter than battering it down), a crate's lid pops and it
 //!   spills open.
 //! - [`Cuttable`] / [`Cut`]: bolt cutters through a padlock or a wire.
+//! - [`Unboltable`] / [`Turned`]: a spanner's head on a bolt, turned round
+//!   it (`interact::tools::spanner`); whoever owns the bolt counts the
+//!   turns and takes it out (a wreck's servo pack: `robots::salvage`).
 //!
 //! A [`Hit`] with no round mass (`mass_g: 0`) is a blow: a butt stroke, a
 //! blade, a blast. Wood takes blows at full weight and rounds at less
@@ -75,6 +78,26 @@ pub struct Cut {
     pub by: Entity,
 }
 
+/// A bolt a spanner's head goes on: turned `needs` radians (counted,
+/// in `turned`, by whoever owns it from [`Turned`]) and it's out. `axis`
+/// is the way it comes out, in its own space; turning it counterclockwise
+/// looking down on its head (right-handed about `axis`) undoes it.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Unboltable {
+    pub needs: f32,
+    pub axis: Vec3,
+    pub turned: f32,
+}
+
+/// A spanner turned a [`Unboltable`] this tick, undoing it by `angle`
+/// radians (a back-swing, ratcheting, counts nothing).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Turned {
+    pub target: Entity,
+    pub angle: f32,
+    pub by: Entity,
+}
+
 /// How long enough torque must be held before a seam gives, seconds.
 pub const PRY_HOLD: f32 = 0.4;
 /// A plank door's latch side: torque to wrench it (a long bar, a hard
@@ -91,6 +114,7 @@ impl Plugin for HooksPlugin {
             .add_message::<Breach>()
             .add_message::<Pried>()
             .add_message::<Cut>()
+            .add_message::<Turned>()
             .add_systems(
                 FixedUpdate,
                 (smash, pry, cut).in_set(super::DestructionSystems),

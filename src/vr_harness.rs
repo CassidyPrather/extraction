@@ -4553,7 +4553,8 @@ mod carry {
 mod salvage {
     use super::*;
     use crate::interact::tools::cutters::{JAWS, LEFT};
-    use crate::robots::salvage::{Arced, Cable, Hold, Live, SalvageSeat};
+    use crate::interact::tools::spanner::{GRIP as SPANNER_GRIP, HEAD as SPANNER_HEAD, Spanner};
+    use crate::robots::salvage::{Arced, Bolt, Cable, Hold, Live, SalvageSeat};
     use crate::robots::{Job, JobKind, PartRole, Robot, RobotPart};
 
     const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
@@ -4712,6 +4713,127 @@ mod salvage {
             e.despawn();
         }
         vr.step(2);
+    }
+
+    /// A spanner in the right hand, its head put to `bolt` (the handle
+    /// toward you), then swung `turns` times round it counterclockwise
+    /// (looking down on the bolt's head). Put down after.
+    fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
+        let bgt = *vr.app.world().get::<GlobalTransform>(bolt).unwrap();
+        let at = bgt.translation();
+        let axis = (bgt.rotation() * Vec3::Y).normalize();
+        let tool = vr.spawn(
+            "spanner",
+            Transform::from_translation(feet + Vec3::new(0.25, 0.9, -0.2)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let grip = vr.point(tool, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        // Head to the bolt: held as it was picked up, the head is this far
+        // from the hand.
+        let reach = SPANNER_HEAD - SPANNER_GRIP;
+        let to = at - reach;
+        for i in 1..=20 {
+            vr.move_hand(Side::Right, grip.lerp(to, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(4);
+        assert!(
+            vr.app.world().get::<Spanner>(tool).unwrap().on.is_some(),
+            "the spanner's head went on the bolt"
+        );
+        // Round it, the handle at its length from the bolt.
+        let flat = (to - at) - axis * (to - at).dot(axis);
+        let (r, d0) = (flat.length(), flat.normalize());
+        let side = axis.cross(d0);
+        let n = (90.0 * turns) as usize;
+        for i in 1..=n {
+            if vr.app.world().get_entity(bolt).is_err() {
+                break;
+            }
+            let a = i as f32 / n as f32 * turns * std::f32::consts::TAU;
+            let p = at + (to - at).dot(axis) * axis + (d0 * a.cos() + side * a.sin()) * r;
+            vr.move_hand(Side::Right, p);
+            vr.step(1);
+        }
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+        if let Ok(e) = vr.app.world_mut().get_entity_mut(tool) {
+            e.despawn();
+        }
+        vr.step(2);
+    }
+
+    /// A servo pack at a sound hip is bolted on: a hand can't take it;
+    /// each bolt turned out with a spanner (a turn and a bit; a half turn
+    /// isn't enough), and once all are out it lifts out, as good as the
+    /// leg was.
+    #[test]
+    fn a_servo_pack_lifts_out_once_its_bolts_are_undone() {
+        let (mut vr, feet, wreck, seats) = wreck(1.0);
+        let (seat, servo) = seats
+            .iter()
+            .filter(|(_, s)| s.hold == Hold::Bolts)
+            // The one nearest you.
+            .min_by(|a, b| {
+                let d = |e: Entity| {
+                    vr.app
+                        .world()
+                        .get::<GlobalTransform>(e)
+                        .unwrap()
+                        .translation()
+                        .z
+                };
+                d(b.1.item).total_cmp(&d(a.1.item))
+            })
+            .map(|(e, s)| (*e, s.item))
+            .expect("a servo pack bolted on");
+        let bolts = |vr: &mut Vr| -> Vec<Entity> {
+            let mut q = vr.app.world_mut().query::<(Entity, &Bolt)>();
+            q.iter(vr.app.world())
+                .filter(|(_, b)| b.seat == seat)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        let all = bolts(&mut vr);
+        assert_eq!(all.len(), crate::robots::salvage::BOLTS, "its bolts");
+        // Half a turn on the first: still in.
+        unbolt(&mut vr, feet, all[0], 0.5);
+        assert!(
+            vr.app.world().get_entity(all[0]).is_ok(),
+            "out on half a turn"
+        );
+        for b in &all {
+            unbolt(&mut vr, feet, *b, 1.2);
+        }
+        let left = bolts(&mut vr);
+        assert!(left.is_empty(), "bolts left in: {}", left.len());
+        // (Held still for the hands.)
+        vr.app
+            .world_mut()
+            .entity_mut(wreck)
+            .remove::<crate::robots::wreck::Settling>()
+            .insert(RigidBody::Static);
+        vr.step(3);
+        assert!(grabbable(&vr, servo), "unbolted, it's to be had");
+        let cond = vr
+            .app
+            .world()
+            .get::<crate::items::Item>(servo)
+            .unwrap()
+            .0
+            .condition;
+        assert!(cond > 0.9, "as good as its leg: {cond}");
+        assert!(take(&mut vr, Side::Left, servo), "it didn't lift out");
     }
 
     /// A walker's gun pod hangs on its cables: a hand can't take it until

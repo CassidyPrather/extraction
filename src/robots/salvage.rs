@@ -5,6 +5,9 @@
 //!
 //! - a **gun pod** hangs on its cables: cut them (bolt cutters,
 //!   Destruction's `Cut`) and it's free;
+//! - a **servo pack** at a hip whose leg came through is bolted on:
+//!   undo its [`BOLTS`] bolts with a spanner (Destruction's `Turned`,
+//!   `interact::tools::spanner`) and it lifts out;
 //! - a **power cell** lifts out by hand, but not while the wreck is fresh:
 //!   for [`HOT_FOR`] seconds it's live, and a hand that closes on it is
 //!   thrown off by an arc.
@@ -21,7 +24,7 @@ use bevy::prelude::*;
 use super::heavy::Fastened;
 use super::walker::WalkerTurret;
 use super::{PartRole, Robot, RobotKind, RobotPart};
-use crate::destruction::hooks::Cuttable;
+use crate::destruction::hooks::{Cuttable, Turned, Unboltable};
 use crate::interact::{Hand, Socket, SocketKind, seat_in_socket};
 use crate::items::{Catalog, SpawnItem, spawn_item};
 
@@ -38,6 +41,15 @@ pub const CABLES: usize = 2;
 /// How thick a cable is to the cutters' jaws (m): a hand needn't find a
 /// 12 mm wire to the millimetre.
 const CABLE_REACH: f32 = 0.035;
+/// Bolts holding a servo pack on, and how far each turns to come out
+/// (radians: a turn).
+pub const BOLTS: usize = 3;
+pub const BOLT_TURN: f32 = std::f32::consts::TAU;
+/// How far out of the hip the bolts' heads stand (m): proud of the hull,
+/// so a spanner gets to them.
+const BOLT_PROUD: f32 = 0.1;
+/// Servo packs a walker wreck gives up at most (its soundest hips).
+pub const MOST_SERVOS: usize = 2;
 
 pub struct SalvagePlugin;
 
@@ -48,7 +60,8 @@ impl Plugin for SalvagePlugin {
             (
                 fit_salvage,
                 follow_wrecks,
-                cables_cut,
+                bolts_turned,
+                holds_gone,
                 cool_cells,
                 live_cells,
             )
@@ -76,6 +89,8 @@ pub struct Fitted;
 pub enum Hold {
     /// Cables, cut one by one.
     Cables,
+    /// Bolts, undone one by one.
+    Bolts,
     /// Nothing but the charge in it (a cell).
     Live,
 }
@@ -92,7 +107,20 @@ pub struct SalvageSeat {
 #[derive(Component, Debug)]
 pub struct Cable {
     pub seat: Entity,
-    /// The wreck it's on, and where on it.
+}
+
+/// One of the bolts holding a part on: undo it (`Unboltable`).
+#[derive(Component, Debug)]
+pub struct Bolt {
+    pub seat: Entity,
+}
+
+/// A cable or a bolt: its own collider, carried with the wreck it's on
+/// ([`follow_wrecks`]). A settled wreck's child colliders aren't kept
+/// where it is, and the tools' queries would look for them where they
+/// were.
+#[derive(Component, Debug)]
+pub struct OnWreck {
     pub wreck: Entity,
     pub local: Transform,
 }
@@ -226,6 +254,7 @@ fn fit_salvage(
             &Robot,
             &Children,
             Option<&super::anim::Gait>,
+            Option<&super::wreck::WreckLegs>,
             Has<super::indoor::Crawler>,
             Has<super::hound::Hound>,
         ),
@@ -245,7 +274,7 @@ fn fit_salvage(
     let Some(catalog) = catalog else {
         return;
     };
-    for (e, robot, children, gait, crawler, hound) in &wrecks {
+    for (e, robot, children, gait, legs, crawler, hound) in &wrecks {
         commands.entity(e).insert(Fitted);
         if robot.kind != RobotKind::Walker || crawler || hound {
             continue;
@@ -271,6 +300,79 @@ fn fit_salvage(
                 left: HOT_FOR,
                 next: 0.0,
             });
+        }
+        // The servo packs at the soundest hips, bolted on.
+        let shape = gait.map_or(super::anim::Shape::Orb, |g| g.shape);
+        let mut sound: Vec<(usize, f32)> = legs
+            .map(|l| l.0)
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+            .filter(|(_, h)| *h > 0.0)
+            .collect();
+        sound.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let bolt_look = match (meshes.as_mut(), materials.as_mut()) {
+            (Some(m), Some(s)) => Some((
+                m.add(Cylinder::new(0.014, 0.02)),
+                s.add(StandardMaterial {
+                    base_color: Color::srgb(0.35, 0.33, 0.3),
+                    metallic: 0.8,
+                    perceptual_roughness: 0.4,
+                    ..default()
+                }),
+            )),
+            _ => None,
+        };
+        for (i, health) in sound.into_iter().take(MOST_SERVOS) {
+            let hip = shape.hip(i) * size;
+            let out = Vec3::new(hip.x, 0.0, hip.z).normalize_or(Vec3::X);
+            // Facing out of the hip, the bolts round it.
+            let face = Quat::from_rotation_arc(Vec3::Y, out);
+            let Some((seat_e, _)) = seat(
+                &mut commands,
+                &catalog,
+                e,
+                "walker_leg_actuator",
+                Transform::from_translation(hip).with_rotation(face),
+                size,
+                health,
+                Hold::Bolts,
+            ) else {
+                continue;
+            };
+            for k in 0..BOLTS {
+                let a = k as f32 * std::f32::consts::TAU / BOLTS as f32;
+                let local = Transform::from_translation(
+                    hip + out * BOLT_PROUD + face * (Vec3::new(a.cos(), 0.0, a.sin()) * 0.06),
+                )
+                .with_rotation(face);
+                let bolt = commands
+                    .spawn((
+                        Name::new("Salvage bolt"),
+                        Bolt { seat: seat_e },
+                        OnWreck { wreck: e, local },
+                        Unboltable {
+                            needs: BOLT_TURN,
+                            axis: Vec3::Y,
+                            turned: 0.0,
+                        },
+                        Collider::sphere(0.02),
+                        CollisionLayers::new(
+                            crate::world::Layer::Item,
+                            [crate::world::Layer::World],
+                        ),
+                        local,
+                        Visibility::default(),
+                    ))
+                    .id();
+                if let Some((mesh, mat)) = &bolt_look {
+                    commands.entity(bolt).insert((
+                        Mesh3d(mesh.clone()),
+                        MeshMaterial3d(mat.clone()),
+                        NotShadowCaster,
+                    ));
+                }
+            }
         }
         // The gun pod, where the turret was, on its cables.
         for c in children.iter() {
@@ -315,11 +417,8 @@ fn fit_salvage(
                 let cable = commands
                     .spawn((
                         Name::new("Salvage cable"),
-                        Cable {
-                            seat: seat_e,
-                            wreck: e,
-                            local,
-                        },
+                        Cable { seat: seat_e },
+                        OnWreck { wreck: e, local },
                         Cuttable { needs: 0.0 },
                         // (Thicker than it looks, so jaws put to it find it;
                         // found as a padlock is, a collider that meets only
@@ -353,15 +452,21 @@ fn fit_salvage(
 /// wreck gone takes its cables.
 fn follow_wrecks(
     mut commands: Commands,
-    mut cables: Query<(Entity, &Cable, &mut Transform, &mut Position, &mut Rotation)>,
+    mut on: Query<(
+        Entity,
+        &OnWreck,
+        &mut Transform,
+        &mut Position,
+        &mut Rotation,
+    )>,
     wrecks: Query<&GlobalTransform>,
 ) {
-    for (e, cable, mut t, mut pos, mut rot) in &mut cables {
-        let Ok(gt) = wrecks.get(cable.wreck) else {
+    for (e, w, mut t, mut pos, mut rot) in &mut on {
+        let Ok(gt) = wrecks.get(w.wreck) else {
             commands.entity(e).despawn();
             continue;
         };
-        let at = gt.mul_transform(cable.local).compute_transform();
+        let at = gt.mul_transform(w.local).compute_transform();
         let at = Transform::from_translation(at.translation).with_rotation(at.rotation);
         if t.translation.distance_squared(at.translation) > 1e-8
             || t.rotation.angle_between(at.rotation) > 1e-4
@@ -373,22 +478,44 @@ fn follow_wrecks(
     }
 }
 
-/// Cables go (Destruction's `cut` takes a cut thing away): a part with
-/// none left on it is free.
-fn cables_cut(
+/// A bolt turned far enough is out.
+fn bolts_turned(
+    mut commands: Commands,
+    mut turns: MessageReader<Turned>,
+    mut bolts: Query<&mut Unboltable, With<Bolt>>,
+) {
+    for t in turns.read() {
+        let Ok(mut u) = bolts.get_mut(t.target) else {
+            continue;
+        };
+        u.turned += t.angle;
+        if u.turned >= u.needs {
+            commands.entity(t.target).try_despawn();
+        }
+    }
+}
+
+/// A part with nothing left holding it on is free: its cables cut
+/// (Destruction's `cut` takes a cut thing away), its bolts out.
+fn holds_gone(
     mut commands: Commands,
     seats: Query<(Entity, &SalvageSeat)>,
     cables: Query<&Cable>,
+    bolts: Query<&Bolt>,
     fastened: Query<(), With<Fastened>>,
 ) {
     for (seat, s) in &seats {
-        if s.hold != Hold::Cables || !fastened.contains(s.item) {
+        if !fastened.contains(s.item) {
             continue;
         }
-        if cables.iter().any(|c| c.seat == seat) {
-            continue;
+        let held = match s.hold {
+            Hold::Cables => cables.iter().any(|c| c.seat == seat),
+            Hold::Bolts => bolts.iter().any(|b| b.seat == seat),
+            Hold::Live => continue,
+        };
+        if !held {
+            free(&mut commands, s.item);
         }
-        free(&mut commands, s.item);
     }
 }
 

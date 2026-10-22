@@ -813,6 +813,12 @@
             tags: ["steel"],
         ),
         (
+            id: "spanner", dims: Some((0.04, 0.015, 0.3)), name: "Spanner",
+            description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
+            category: Tool, size: Small, mass: 0.5, bulk: 0.3,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
