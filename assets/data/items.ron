@@ -813,6 +813,12 @@
             tags: ["steel"],
         ),
         (
+            id: "spanner", dims: Some((0.04, 0.015, 0.3)), name: "Spanner",
+            description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
+            category: Tool, size: Small, mass: 0.5, bulk: 0.3,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
@@ -883,6 +889,12 @@
             description: "You can carry it. You can even pull the trigger, with both hands and a prayer.",
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
+        ),
+        (
+            id: "robot_plate", dims: Some((0.3, 0.03, 0.28)), name: "Robot armour plate",
+            description: "Pried off a wreck's hull. Hardened steel, still scorched where it was hit.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 1.5,
+            tags: ["metal"],
         ),
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
