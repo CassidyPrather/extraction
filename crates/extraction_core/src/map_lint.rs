@@ -302,6 +302,16 @@ pub const BEACON_APPROACH: f32 = 300.0;
 pub const BEACON_SIGHT: f32 = 250.0;
 /// Further into a wood than this from its edge is deep in it.
 pub const WOOD_EDGE: f32 = 25.0;
+/// How far a landmark's lamp and a rendezvous beacon show after dark (the
+/// game's halo reaches: `render::landmarks`, `render::rv_beacons`).
+pub const LAMP_REACH: f32 = 320.0;
+pub const BEACON_REACH: f32 = 400.0;
+/// After dark, from this share of the walkable valley (out of the deep
+/// woods) a lamp is in sight, and two (a bearing to steer by) from this...
+pub const NIGHT_ONE: f32 = 0.95;
+pub const NIGHT_TWO: f32 = 0.9;
+/// ...and in fog a landmark or lamp within [`FOG_SIGHT`] from this.
+pub const FOG_ONE: f32 = 0.9;
 const POCKET: f32 = 40.0;
 /// From every rendezvous a landmark is in sight within this, metres, so
 /// "head for the mast" is a plan.
@@ -1371,6 +1381,100 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
     ));
 
+    // At night and in fog: lights to steer by, the landmarks' lamps and the
+    // rendezvous beacons (the game's `render::landmarks`, `rv_beacons`).
+    let beacons: Vec<P2> = map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| crate::map_landmarks::beacon_at(m.at))
+        .collect();
+    let (mut night, mut night2, mut fog, mut fog2) = (0usize, 0usize, 0usize, 0usize);
+    let mut dark: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    let mut murk: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    for p in &gauge {
+        let key = (
+            (p[0] / POCKET).floor() as i32,
+            (p[1] / POCKET).floor() as i32,
+        );
+        let n = crate::map_landmarks::lights_in_sight(
+            &marks,
+            &beacons,
+            hm,
+            &canopy,
+            *p,
+            (LAMP_REACH, BEACON_REACH),
+            false,
+            2,
+        );
+        night += (n >= 1) as usize;
+        night2 += (n >= 2) as usize;
+        if n == 0 {
+            dark.entry(key).or_insert((0, *p)).0 += 1;
+        }
+        let f = crate::map_landmarks::lights_in_sight(
+            &marks,
+            &beacons,
+            hm,
+            &canopy,
+            *p,
+            (FOG_SIGHT, FOG_SIGHT),
+            true,
+            2,
+        );
+        fog += (f >= 1) as usize;
+        fog2 += (f >= 2) as usize;
+        if f == 0 {
+            murk.entry(key).or_insert((0, *p)).0 += 1;
+        }
+    }
+    let pct = |n: usize| n as f32 * 100.0 / cells.max(1) as f32;
+    let worst_of = |m: std::collections::HashMap<(i32, i32), (usize, P2)>| {
+        let mut v: Vec<(usize, P2)> = m.into_values().collect();
+        v.sort_by(|a, b| b.0.cmp(&a.0));
+        v.iter()
+            .take(3)
+            .map(|(n, p)| {
+                format!(
+                    "{:.0} m² at ({:.0}, {:.0})",
+                    *n as f32 * cell_area,
+                    p[0],
+                    p[1]
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    r.measures.push(format!(
+        "at night a lamp in sight from {:.1}% of the walkable valley (two from {:.0}%; dark pockets {}); in fog a landmark or lamp within {FOG_SIGHT:.0} m from {:.1}% (two from {:.0}%; blind {})",
+        pct(night),
+        pct(night2),
+        worst_of(dark),
+        pct(fog),
+        pct(fog2),
+        worst_of(murk),
+    ));
+
+    for (got, floor, what) in [
+        (pct(night), NIGHT_ONE * 100.0, "at night a lamp in sight"),
+        (
+            pct(night2),
+            NIGHT_TWO * 100.0,
+            "at night two lamps in sight",
+        ),
+        (
+            pct(fog),
+            FOG_ONE * 100.0,
+            "in fog a landmark or lamp in sight",
+        ),
+    ] {
+        if got < floor {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!("{what} from only {got:.0}% of the walkable valley (at least {floor:.0}%)"),
+                ins,
+            );
+        }
+    }
     if share < TWO_MARKS_SHARE {
         find(
             &mut r,

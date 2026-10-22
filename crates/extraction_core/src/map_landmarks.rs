@@ -359,6 +359,59 @@ pub fn kinds_in_sight(
     kinds.len()
 }
 
+/// How many lights to steer by are in sight from eye height at `p`
+/// through the land and the trees, counting up to `enough`: each
+/// landmark by its lamp on its highest top within `lamp_range`, each
+/// rendezvous beacon (`beacons`: where it stands) within `beacon_range`.
+/// At night that's all there is to see; in fog, with `lamp_range` the fog's
+/// reach, a landmark's whole height (any top) counts, the structure being
+/// as visible as its lamp that near.
+pub fn lights_in_sight(
+    marks: &[Landmark],
+    beacons: &[P2],
+    hm: &Heightmap,
+    canopy: &Canopy,
+    p: P2,
+    (lamp_range, beacon_range): (f32, f32),
+    any_top: bool,
+    enough: usize,
+) -> usize {
+    let mut n = 0;
+    for m in marks {
+        let seen = if any_top {
+            m.seen_through(hm, canopy, p, lamp_range).is_some()
+        } else {
+            m.tops
+                .iter()
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .is_some_and(|(at, top)| {
+                    dist(p, *at) <= lamp_range
+                        && sees(hm, p, *at, top - hm.height(*at))
+                        && !canopy.hides(hm, p, *at, *top)
+                })
+        };
+        if seen {
+            n += 1;
+            if n >= enough {
+                return n;
+            }
+        }
+    }
+    for b in beacons {
+        let top = hm.height(*b) + BEACON_HEIGHT;
+        if dist(p, *b) <= beacon_range
+            && sees(hm, p, *b, BEACON_HEIGHT)
+            && !canopy.hides(hm, p, *b, top)
+        {
+            n += 1;
+            if n >= enough {
+                return n;
+            }
+        }
+    }
+    n
+}
+
 /// Whether `p` is further than `edge` into a wood.
 pub fn deep_in_woods(map: &MapDef, p: P2, edge: f32) -> bool {
     map.forests.iter().any(|f| {
