@@ -526,8 +526,40 @@ pub const HRTF_VOICES: usize = 24;
 
 /// Past this distance (m) a placed sound is panned: far off, its muffle
 /// and reverb tell where it is more than the ears' filter does, and the
-/// voices are kept for what's near.
+/// voices are kept for what's near...
 pub const BINAURAL_REACH: f32 = 40.0;
+/// ...except a Signal (a threat: a drone, a walker's gait, a sentry's
+/// chirp), which keeps the ears' filter as far as it matters: panned, a
+/// drone at 60 m is no more ahead than behind, nor above
+/// (`scripts/audio_localise.py`).
+pub const SIGNAL_BINAURAL_REACH: f32 = 150.0;
+
+/// How far a placed sound playing `cue` keeps the head-related filter.
+pub fn binaural_reach(cue: &str) -> f32 {
+    if mix::MIX
+        .iter()
+        .any(|c| c.name == cue && c.role == mix::Role::Signal)
+    {
+        SIGNAL_BINAURAL_REACH
+    } else {
+        BINAURAL_REACH
+    }
+}
+
+/// Panned (flat mode, or past its binaural reach), a sound straight
+/// behind you is muffled to this (Hz), easing in from your side: the
+/// pinna's shade, so front and back still differ without the ears'
+/// filter.
+pub const BEHIND_CUTOFF: f32 = 5_000.0;
+
+/// The panner's muffle (Hz) for a sound in direction `to` (from you) with
+/// you facing `facing`: none ahead or beside, [`BEHIND_CUTOFF`] straight
+/// behind, eased between in octaves.
+pub fn behind_cutoff(facing: Vec3, to: Vec3) -> f32 {
+    let (f, t) = (facing.xz().normalize_or_zero(), to.xz().normalize_or_zero());
+    let behind = (-f.dot(t)).clamp(0.0, 1.0);
+    (20_480f32.log2() + (BEHIND_CUTOFF.log2() - 20_480f32.log2()) * behind).exp2()
+}
 
 /// The head-related filter's FFT slices: 128-sample slices of a 385-tap
 /// sphere make 512-point FFTs (`scripts/audio_hrir.py`, TAPS).
@@ -570,9 +602,10 @@ fn binaural_switch(
 }
 
 /// Whether a placed sound `distance` m off, with `voices` already
-/// binaural, is heard through the head-related filter.
-pub fn binaural_voice(on: bool, voices: usize, distance: f32) -> bool {
-    on && voices < HRTF_VOICES && distance < BINAURAL_REACH
+/// binaural, is heard through the head-related filter, out to `reach`
+/// ([`binaural_reach`]).
+pub fn binaural_voice(on: bool, voices: usize, distance: f32, reach: f32) -> bool {
+    on && voices < HRTF_VOICES && distance < reach
 }
 
 fn place(
@@ -596,7 +629,14 @@ fn place(
     };
     let mut e = commands.entity(add.entity);
     match binaural.sphere.as_ref() {
-        Some(sphere) if binaural_voice(binaural.on, voices.iter().count(), distance) => {
+        Some(sphere)
+            if binaural_voice(
+                binaural.on,
+                voices.iter().count(),
+                distance,
+                binaural_reach(cue),
+            ) =>
+        {
             e.insert((
                 BinauralVoice,
                 sample_effects![
@@ -4994,9 +5034,10 @@ fn occlude(
     entrances: Option<Res<crate::robots::doors::Entrances>>,
     time: Res<Time>,
 ) {
-    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+    let Some(head) = listener.iter().next() else {
         return;
     };
+    let (ear, facing) = (head.translation(), head.forward().as_vec3());
     let now = time.elapsed_secs();
     let openings: Vec<Vec3> = entrances
         .map(|e| {
@@ -5025,7 +5066,9 @@ fn occlude(
         };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {
             budget -= 1;
-            let o = o();
+            let mut o = o();
+            // Panned: what's behind you, shaded as the pinna would.
+            o.cutoff = o.cutoff.min(behind_cutoff(facing, gt.translation() - ear));
             let v = Volume::Decibels(o.db);
             if node.volume != v {
                 node.volume = v;
@@ -5638,10 +5681,31 @@ mod tests {
     /// far ones, or past the cap, or in flat mode, pan.
     #[test]
     fn binaural_is_for_what_is_near() {
-        assert!(binaural_voice(true, 0, 3.0));
-        assert!(!binaural_voice(false, 0, 3.0));
-        assert!(!binaural_voice(true, HRTF_VOICES, 3.0));
-        assert!(!binaural_voice(true, 0, BINAURAL_REACH + 1.0));
+        let near = BINAURAL_REACH;
+        assert!(binaural_voice(true, 0, 3.0, near));
+        assert!(!binaural_voice(false, 0, 3.0, near));
+        assert!(!binaural_voice(true, HRTF_VOICES, 3.0, near));
+        assert!(!binaural_voice(true, 0, BINAURAL_REACH + 1.0, near));
+        // A threat keeps the ears' filter further; a detail doesn't.
+        assert_eq!(binaural_reach("drone.rotor"), SIGNAL_BINAURAL_REACH);
+        assert_eq!(binaural_reach("gear.plate"), BINAURAL_REACH);
+        assert!(binaural_voice(
+            true,
+            0,
+            100.0,
+            binaural_reach("drone.rotor")
+        ));
+    }
+
+    /// Panned, a sound behind you is muffled, one ahead or beside isn't.
+    #[test]
+    fn the_panner_darkens_what_is_behind() {
+        let ahead = Vec3::NEG_Z;
+        assert!(behind_cutoff(ahead, Vec3::NEG_Z) > 20_000.0);
+        assert!(behind_cutoff(ahead, Vec3::X) > 20_000.0);
+        assert!((behind_cutoff(ahead, Vec3::Z) - BEHIND_CUTOFF).abs() < 1.0);
+        let half = behind_cutoff(ahead, Vec3::new(1.0, 0.0, 1.0));
+        assert!(BEHIND_CUTOFF < half && half < 20_000.0);
     }
 
     /// Heavier sounds louder and lower, within bounds.
