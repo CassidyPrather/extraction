@@ -459,6 +459,14 @@ said you don't use?
     looking downrange instead of at you?
   - Pack a food tin into a suppressor at the vice: is the wear on it
     (louder by the magazine) clear enough?
+- Gunsmithing at the vice (once the driver has fitted it).
+  - Let a Mosin go at the vice's jaws: does it sit as if clamped?
+  - Saw its barrel off with the hacksaw: does the stroke feel like
+    sawing, and is a minute's work right?
+  - Fire the obrez: is the flash and the noise worth what it costs in
+    accuracy, and is it handier in a room?
+  - Take an AK's stock off with the spanner and put it back on.
+  - Draw a Mosin's bolt out past its stop and put it in another Mosin.
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
