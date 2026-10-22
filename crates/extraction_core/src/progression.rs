@@ -341,6 +341,17 @@ pub fn fetch_takes(want: &str, id: &str) -> bool {
     want == id || (want == ANY_PARTS && PARTS.contains(&id))
 }
 
+/// The worst condition a fetch of `want` takes an `id` in: a machine's part
+/// shot through isn't the part (where you hit it matters), and the gun pod
+/// he wants "whole, if you can". Anything else, in any state.
+pub fn fetch_condition(want: &str, id: &str) -> f32 {
+    match (want, id) {
+        ("robot_gunpod", "robot_gunpod") => 0.5,
+        (_, id) if PARTS.contains(&id) => 0.3,
+        _ => 0.0,
+    }
+}
+
 /// Why the driver wants it (any tier's reason for that item).
 /// Past the ladder, a deep fetch is half the time one named stone
 /// (`docs/ANOMALIES.md`): each line hints at its trick. The stormglass is
@@ -1188,6 +1199,9 @@ mod tests {
         assert!(!fetch_takes(ANY_PARTS, "canned_stew"));
         assert!(fetch_takes("servo", "servo"));
         assert!(!fetch_takes("servo", "sensor_eye"));
+        assert_eq!(fetch_condition("robot_gunpod", "robot_gunpod"), 0.5);
+        assert_eq!(fetch_condition(ANY_PARTS, "servo"), 0.3);
+        assert_eq!(fetch_condition("canned_stew", "canned_stew"), 0.0);
         let cat = crate::items::ItemCatalog::from_ron(crate::items::BUILTIN_CATALOG).unwrap();
         for id in PARTS {
             assert!(cat.kind(id).is_some(), "{id}");
