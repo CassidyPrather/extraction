@@ -143,9 +143,15 @@ pub struct Print {
 #[derive(Resource, Debug, Default)]
 pub struct Tracks {
     prints: VecDeque<Print>,
+    /// Everything else's (the machines' feet), kept apart so a few
+    /// walkers can't push the player's trail out (`add_other`).
+    others: VecDeque<Print>,
     /// Bumped whenever the prints change (for whoever draws them).
     pub version: u32,
 }
+
+/// How many of the machines' prints are kept, apart from the player's.
+pub const MAX_OTHER_PRINTS: usize = 120;
 
 /// How many prints are kept (the oldest go first).
 pub const MAX_PRINTS: usize = 240;
@@ -167,8 +173,46 @@ impl Tracks {
         self.prints.is_empty()
     }
 
+    /// The machines' prints, oldest first (`add_other`).
+    pub fn others(&self) -> impl DoubleEndedIterator<Item = &Print> {
+        self.others.iter()
+    }
+
+    /// A print from anything but a player (a walker's foot): kept in its
+    /// own ring of `MAX_OTHER_PRINTS`, drawn as a pad, not a boot, where
+    /// it lands (no stride offset). `prints`, `newest_near` and `after`
+    /// stay the players' own.
+    pub fn add_other(&mut self, p: Print) {
+        if self.others.len() == MAX_OTHER_PRINTS {
+            self.others.pop_front();
+        }
+        self.others.push_back(p);
+        self.version = self.version.wrapping_add(1);
+    }
+
+    /// Drops every print (players' and others') inside a rectangle on the
+    /// ground: `half_width` either side of the line from `at` along
+    /// `along` (any length; only its direction across the ground counts)
+    /// for `len` metres. Snow thrown off by a plough takes its prints with
+    /// it.
+    pub fn wipe(&mut self, at: Vec3, half_width: f32, along: Vec3, len: f32) {
+        let dir = Vec2::new(along.x, along.z).normalize_or(Vec2::NEG_Y);
+        let inside = |p: &Print| {
+            let d = Vec2::new(p.at.x - at.x, p.at.z - at.z);
+            let t = d.dot(dir);
+            (0.0..=len).contains(&t) && d.perp_dot(dir).abs() <= half_width
+        };
+        let before = self.prints.len() + self.others.len();
+        self.prints.retain(|p| !inside(p));
+        self.others.retain(|p| !inside(p));
+        if self.prints.len() + self.others.len() != before {
+            self.version = self.version.wrapping_add(1);
+        }
+    }
+
     pub fn clear(&mut self) {
         self.prints.clear();
+        self.others.clear();
         self.version = self.version.wrapping_add(1);
     }
 
@@ -197,20 +241,60 @@ impl Tracks {
     /// `dt` seconds of weather: prints fill, faster while it snows, and
     /// the full ones go.
     pub fn weather(&mut self, falling: f32, dt: f32) {
-        if self.prints.is_empty() {
+        if self.prints.is_empty() && self.others.is_empty() {
             return;
         }
         let rate = 1.0 / PRINT_LIFE + falling / PRINT_LIFE_FALLING;
-        for p in &mut self.prints {
+        for p in self.prints.iter_mut().chain(self.others.iter_mut()) {
             p.fill += dt * rate;
         }
-        let before = self.prints.len();
+        let before = self.prints.len() + self.others.len();
         self.prints.retain(|p| p.fill < 1.0);
-        if self.prints.len() != before {
+        self.others.retain(|p| p.fill < 1.0);
+        if self.prints.len() + self.others.len() != before {
             self.version = self.version.wrapping_add(1);
         }
     }
 }
+
+/// Lanes packed through the snow (a plough's, `robots::plough`): each
+/// from `a` to `b` across the ground, `half_width` either side, and how
+/// fresh it is (1 new, 0 gone). The terrain draws them packed (flatter,
+/// darker, greyer) for as long as they're fresh. The newest
+/// `render::terrain_material::LANES` are drawn; whoever packs them keeps
+/// the list (and only writes it when it changes).
+#[derive(Resource, Clone, Debug, Default, PartialEq)]
+pub struct Packed {
+    pub lanes: Vec<PackedLane>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PackedLane {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub half_width: f32,
+    pub fresh: f32,
+}
+
+impl Packed {
+    /// The lanes as the terrain's uniform wants them: the newest (last)
+    /// `LANES`.
+    pub fn params(&self) -> crate::render::terrain_material::LaneParams {
+        use crate::render::terrain_material::LANES;
+        let mut p = crate::render::terrain_material::LaneParams::default();
+        let skip = self.lanes.len().saturating_sub(LANES);
+        for (i, l) in self.lanes.iter().skip(skip).enumerate() {
+            p.ends[i] = Vec4::new(l.a.x, l.a.y, l.b.x, l.b.y);
+            p.extra[i] = Vec4::new(l.fresh.clamp(0.0, 1.0), l.half_width, 0.0, 0.0);
+        }
+        p
+    }
+}
+
+/// Where the snow is stepped and prints are laid: a system that drops
+/// prints (a ploughed lane takes none) runs `.after(Treading)`.
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Treading;
 
 pub struct SnowPlugin;
 
@@ -218,8 +302,9 @@ impl Plugin for SnowPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<crate::player::Footstep>()
             .init_resource::<Snow>()
+            .init_resource::<Packed>()
             .init_resource::<Tracks>()
-            .add_systems(Update, (snow_with_weather, tread).chain());
+            .add_systems(Update, (snow_with_weather, tread).chain().in_set(Treading));
     }
 }
 
@@ -321,8 +406,10 @@ impl Plugin for SnowVisualsPlugin {
     }
 }
 
+/// A layer of drawn prints: its mesh, and whether it's the players'
+/// boots or the machines' pads.
 #[derive(Component)]
-struct PrintMesh(Handle<Mesh>);
+struct PrintMesh(Handle<Mesh>, bool);
 
 /// A boot's print, as an alpha mask: sole and heel, a tread across them.
 fn print_texture() -> Image {
@@ -361,34 +448,75 @@ fn spawn_prints(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let mesh = meshes.add(print_mesh(&[], |_, _| 0.0, |_, _| Vec3::Y));
-    let material = materials.add(StandardMaterial {
-        // Trodden snow: packed, in its own shade.
-        base_color: Color::srgb(0.52, 0.56, 0.64),
-        base_color_texture: Some(images.add(print_texture())),
-        perceptual_roughness: 0.6,
-        alpha_mode: AlphaMode::Blend,
-        depth_bias: 40.0,
-        ..default()
-    });
-    commands.spawn((
-        Name::new("Footprints"),
-        PrintMesh(mesh.clone()),
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::IDENTITY,
-        Visibility::Hidden,
-        // Its bounds change with every print (Bevy computes them once).
-        bevy::camera::visibility::NoFrustumCulling,
-        NotShadowCaster,
-        NotShadowReceiver,
-    ));
+    for boots in [true, false] {
+        let mesh = meshes.add(print_mesh(&[], boots, |_, _| 0.0, |_, _| Vec3::Y));
+        let material = materials.add(StandardMaterial {
+            // Trodden snow: packed, in its own shade.
+            base_color: Color::srgb(0.52, 0.56, 0.64),
+            base_color_texture: Some(images.add(if boots {
+                print_texture()
+            } else {
+                pad_texture()
+            })),
+            perceptual_roughness: 0.6,
+            alpha_mode: AlphaMode::Blend,
+            depth_bias: 40.0,
+            ..default()
+        });
+        commands.spawn((
+            Name::new(if boots {
+                "Footprints"
+            } else {
+                "Machine prints"
+            }),
+            PrintMesh(mesh.clone(), boots),
+            Mesh3d(mesh),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            Visibility::Hidden,
+            // Its bounds change with every print (Bevy computes them once).
+            bevy::camera::visibility::NoFrustumCulling,
+            NotShadowCaster,
+            NotShadowReceiver,
+        ));
+    }
 }
 
-/// The prints as quads laid on the ground (a boot's size), each fading as
-/// it fills.
+/// A machine's foot pad, as an alpha mask: a round pad pressed in, its
+/// rim pressed hardest.
+fn pad_texture() -> Image {
+    let n = 32u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r = (u * u + v * v).sqrt();
+            let pad = ((0.9 - r) * 8.0).clamp(0.0, 1.0);
+            let rim = 0.75 + 0.25 * ((r - 0.7) * 12.0).clamp(0.0, 1.0);
+            let a = (pad * rim * 255.0) as u8;
+            data.extend_from_slice(&[255, 255, 255, a]);
+        }
+    }
+    Image::new(
+        bevy::render::render_resource::Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        bevy::render::render_resource::TextureDimension::D2,
+        data,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
+/// The prints as quads laid on the ground (a boot's size, beside the
+/// stride's line; or a machine's pad, where it landed), each fading as it
+/// fills.
 fn print_mesh(
     prints: &[Print],
+    boots: bool,
     ground: impl Fn(f32, f32) -> f32,
     normal: impl Fn(f32, f32) -> Vec3,
 ) -> Mesh {
@@ -400,15 +528,21 @@ fn print_mesh(
     for (i, p) in prints.iter().enumerate() {
         let fwd = Vec3::new(-p.yaw.sin(), 0.0, -p.yaw.cos());
         let side = Vec3::new(-fwd.z, 0.0, fwd.x);
-        let foot = p.at + side * if p.left { -0.11 } else { 0.11 };
+        let foot = if boots {
+            p.at + side * if p.left { -0.11 } else { 0.11 }
+        } else {
+            p.at
+        };
+        // A boot's sole, or a machine's round pad.
+        let (hw, hl) = if boots { (0.065, 0.15) } else { (0.13, 0.13) };
         let n = normal(foot.x, foot.z);
         let a = (1.0 - p.fill).clamp(0.0, 1.0).powf(0.7);
         let b = (i * 4) as u32;
         for (s, f, u, v) in [
-            (-0.065, 0.15, 0.0, 0.0),
-            (0.065, 0.15, 1.0, 0.0),
-            (0.065, -0.15, 1.0, 1.0),
-            (-0.065, -0.15, 0.0, 1.0),
+            (-hw, hl, 0.0, 0.0),
+            (hw, hl, 1.0, 0.0),
+            (hw, -hl, 1.0, 1.0),
+            (-hw, -hl, 0.0, 1.0),
         ] {
             let c = foot + side * s + fwd * f;
             pos.push([c.x, ground(c.x, c.z) + 0.03, c.z]);
@@ -418,15 +552,19 @@ fn print_mesh(
         }
         idx.extend_from_slice(&[b, b + 2, b + 1, b, b + 3, b + 2]);
     }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    // No prints yet: one triangle that draws nothing (an empty mesh is an
+    // error on the GPU).
+    crate::render::sound_meshes::never_empty(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+        .with_inserted_indices(Indices::U32(idx)),
     )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-    .with_inserted_indices(Indices::U32(idx))
 }
 
 /// For screenshots (`EXTRACTION_DEMO_TRACKS=1`, with `--snow`): a
@@ -437,6 +575,7 @@ fn demo_trail(
     cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     zone: Res<super::Zone>,
     mut tracks: ResMut<Tracks>,
+    mut packed: ResMut<Packed>,
     mut laid: Local<Option<Vec3>>,
 ) {
     if snow.cover <= 0.0 || std::env::var("EXTRACTION_DEMO_TRACKS").is_err() {
@@ -451,6 +590,19 @@ fn demo_trail(
     }
     *laid = Some(eye.translation());
     tracks.clear();
+    // And a ploughed lane beside it, 3 m to the right, 30 m out.
+    {
+        let f = eye.forward().as_vec3();
+        let d = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
+        let right = Vec2::new(-d.y, d.x);
+        let a = eye.translation().xz() + right * 3.5 + d * 2.0;
+        packed.lanes = vec![PackedLane {
+            a,
+            b: a + d * 30.0,
+            half_width: 1.5,
+            fresh: 1.0,
+        }];
+    }
     let f = eye.forward().as_vec3();
     let mut dir = Vec2::new(f.x, f.z).normalize_or(Vec2::NEG_Y);
     let mut at = eye.translation().xz() + dir * 1.5;
@@ -487,8 +639,12 @@ fn draw_prints(
         return;
     }
     *last = (tracks.version, now);
-    let prints: Vec<Print> = tracks.prints().copied().collect();
     for (m, mut vis) in &mut q {
+        let prints: Vec<Print> = if m.1 {
+            tracks.prints().copied().collect()
+        } else {
+            tracks.others().copied().collect()
+        };
         vis.set_if_neq(if prints.is_empty() {
             Visibility::Hidden
         } else {
@@ -497,6 +653,7 @@ fn draw_prints(
         if let Some(mut mesh) = meshes.get_mut(&m.0) {
             *mesh = print_mesh(
                 &prints,
+                m.1,
                 |x, z| zone.ground(x, z),
                 |x, z| Vec3::from_array(zone.hm.normal([x, z])),
             );
@@ -767,6 +924,43 @@ mod tests {
             });
         }
         assert_eq!(r.len(), MAX_PRINTS);
+        // The machines' prints keep to their own ring: a walker's stride
+        // can't push the player's trail out.
+        let walker = Entity::from_raw_u32(9).unwrap();
+        for i in 0..(MAX_OTHER_PRINTS * 3) {
+            r.add_other(Print {
+                at: Vec3::Z * i as f32,
+                yaw: 0.0,
+                left: false,
+                by: walker,
+                fill: 0.0,
+            });
+        }
+        assert_eq!(r.len(), MAX_PRINTS);
+        assert_eq!(r.others().count(), MAX_OTHER_PRINTS);
+        // A plough's lane takes the prints it runs over, and no others.
+        let mut w = Tracks::default();
+        for (i, x) in [0.0, 1.0, 3.0].into_iter().enumerate() {
+            w.add(Print {
+                at: Vec3::new(x, 40.0, -5.0),
+                yaw: 0.0,
+                left: i % 2 == 0,
+                by: a,
+                fill: 0.0,
+            });
+        }
+        w.add_other(Print {
+            at: Vec3::new(0.5, 40.0, -9.0),
+            yaw: 0.0,
+            left: false,
+            by: walker,
+            fill: 0.0,
+        });
+        // A lane 3 m wide up the z axis from z 0 to -12, centred on x 0.
+        w.wipe(Vec3::new(0.0, 40.0, 0.0), 1.5, Vec3::NEG_Z, 12.0);
+        assert_eq!(w.prints().map(|p| p.at.x).collect::<Vec<_>>(), vec![3.0]);
+        assert_eq!(w.others().count(), 0);
+        assert!(r.prints().all(|p| p.by == a), "the players' own");
         assert_eq!(r.prints().next().unwrap().at.x, 10.0);
     }
 

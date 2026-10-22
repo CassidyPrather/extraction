@@ -15,6 +15,7 @@ noise floor).
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
     scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
     scripts/anomaly_legibility.py --noise    # and a second shot without, for the noise floor
+    scripts/anomaly_legibility.py --map=rime_fell  # another valley
 
 Writes a contact sheet, docs/shots/anomalies/legibility.png, and the
 numbers, legibility.json beside it (the shots stay in target/legibility). Exits non-zero when a kind falls under its
@@ -30,13 +31,20 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-OUT = os.path.join(ROOT, "docs", "shots", "anomalies", "legibility")
-RAW = os.path.join(ROOT, "target", "legibility")
+# The valley: `--map NAME` (Marrow Creek by default). Its sheet and numbers
+# are legibility.* for Marrow, legibility_<map>.* for the others.
+MAP = next(
+    (a.split("=", 1)[1] for a in sys.argv if a.startswith("--map=")),
+    "marrow_creek",
+)
+SUFFIX = "" if MAP == "marrow_creek" else f"_{MAP}"
+OUT = os.path.join(ROOT, "docs", "shots", "anomalies", f"legibility{SUFFIX}")
+RAW = os.path.join(ROOT, "target", "legibility", MAP)
 BIN = os.path.join(ROOT, "target", "fast", "extraction")
 
 def targets() -> list:
-    """For each kind, a camera 20 m off one of its anomalies on Marrow (seed
-    1, cycle 0), on the side with a clear line: no rise, trunk or other
+    """For each kind, a camera 20 m off one of its anomalies in the valley
+    (seed 1, cycle 0), on the side with a clear line: no rise, trunk or other
     anomaly between, off roads, on gentle ground (`anomaly::view_of`, via
     the anomaly-views tool), aimed at a metre over its centre."""
     subprocess.run(
@@ -45,7 +53,7 @@ def targets() -> list:
         cwd=ROOT, check=True,
     )
     out = subprocess.run(
-        [os.path.join(ROOT, "target", "fast", "anomaly-views"), "marrow_creek", "1", "0", "20"],
+        [os.path.join(ROOT, "target", "fast", "anomaly-views"), MAP, "1", "0", "20"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout
     return [
@@ -72,10 +80,14 @@ BOX = (560, 260, 1040, 620)
 # A pixel "changed" when its luminance moved by this much (of white): a
 # few just-noticeable differences at the grey of fog.
 STEP = 0.04
-# What each kind must change, beyond the noise, as a share of the box. A
-# mirror is meant to be almost nothing, a glint: it's held to less.
-FLOOR = {"mirror": 0.01}
-DEFAULT_FLOOR = 0.03
+# Pixels a degree in the shots: Bevy's 75 degrees is the vertical field
+# of view, over 900 rows.
+PX_PER_DEG = 900 / 75
+# What each kind must change, beyond the noise, in square degrees: about a
+# head at 10 m, which you'd notice. A mirror is meant to be almost nothing,
+# a glint: it's held to less.
+FLOOR = {"mirror": 1.0}
+DEFAULT_FLOOR = 2.0
 
 
 def shot(name: str, cam: str, weather: str, hide: bool, n: int) -> str:
@@ -89,7 +101,7 @@ def shot(name: str, cam: str, weather: str, hide: bool, n: int) -> str:
         env["EXTRACTION_HIDE_ANOMALIES"] = "1"
     cmd = [
         "timeout", "900", "xvfb-run", "-a", "-s", "-screen 0 1600x900x24",
-        BIN, "--map", "marrow_creek", "--data-dir", data, "--no-robots",
+        BIN, "--map", MAP, "--data-dir", data, "--no-robots",
         "--new-game", *CONDITIONS[weather], "--screenshot", out,
         "--frames", "150", "--camera", cam,
     ]
@@ -113,14 +125,19 @@ def measure(name: str, weather: str) -> dict:
     if os.path.exists(second):
         noise = float((np.abs(luma(second) - off) > STEP).mean())
     floor = FLOOR.get(name, DEFAULT_FLOOR)
+    # The box's share, in square degrees.
+    x0, y0, x1, y1 = BOX
+    area = (x1 - x0) * (y1 - y0) / PX_PER_DEG**2
+    seen = (changed - noise) * area
     return {
         "kind": name,
         "weather": weather,
         "changed": round(changed, 4),
         "noise": round(noise, 4),
         "over_noise": round(changed - noise, 4),
+        "deg2": round(seen, 2),
         "floor": floor,
-        "ok": changed - noise >= floor,
+        "ok": seen >= floor,
     }
 
 
@@ -137,7 +154,7 @@ def sheet(results: list) -> None:
         d.rectangle((0, 0, 320, 18), fill=(0, 0, 0))
         d.text(
             (4, 3),
-            f"{r['kind']} {r['weather']}: {r['over_noise']:.1%} {mark}",
+            f"{r['kind']} {r['weather']}: {r['deg2']:.1f} deg2 {mark}",
             fill=(255, 255, 255),
         )
         tiles.append(t)
@@ -147,7 +164,7 @@ def sheet(results: list) -> None:
     for r, t in zip(results, tiles):
         col, row = WEATHERS.index(r["weather"]), names.index(r["kind"])
         out.paste(t, (col * 320, row * 260))
-    out.save(os.path.join(ROOT, "docs", "shots", "anomalies", "legibility.png"))
+    out.save(OUT + ".png")
 
 
 def main() -> int:
@@ -155,12 +172,17 @@ def main() -> int:
     kinds = [n for n, _ in TARGETS if n in words] or [n for n, _ in TARGETS]
     conds = [w for w in WEATHERS if w in words] or WEATHERS
     if "--measure" not in sys.argv:
-        # Shots kept from a run with other cameras are no use: start over.
+        # A kind's shots kept from a run with another camera for it are no
+        # use: those go; the rest stay.
         cams = os.path.join(RAW, "cameras.json")
-        if os.path.exists(cams) and json.load(open(cams)) != [list(t) for t in TARGETS]:
-            import shutil
-            shutil.rmtree(RAW)
         os.makedirs(RAW, exist_ok=True)
+        if os.path.exists(cams):
+            old = dict(map(tuple, json.load(open(cams))))
+            for name, cam in TARGETS:
+                if old.get(name) != cam:
+                    for f in os.listdir(RAW):
+                        if f.startswith(f"{name}_") and f.endswith(".png"):
+                            os.remove(os.path.join(RAW, f))
         with open(cams, "w") as f:
             json.dump(TARGETS, f)
         jobs = [
@@ -196,8 +218,8 @@ def main() -> int:
     for r in results:
         print(
             f"{r['kind']:7} {r['weather']:9} changed {r['changed']:6.1%}"
-            f"  noise {r['noise']:6.1%}  over {r['over_noise']:6.1%}"
-            f"  floor {r['floor']:.0%}  {'ok' if r['ok'] else 'LOW'}"
+            f"  noise {r['noise']:6.1%}  seen {r['deg2']:5.1f} deg2"
+            f"  floor {r['floor']:.1f}  {'ok' if r['ok'] else 'LOW'}"
         )
     low = [r for r in results if not r["ok"]]
     print("anomaly legibility OK" if not low else f"{len(low)} under their floor")

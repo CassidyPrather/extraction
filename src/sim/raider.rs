@@ -220,6 +220,19 @@ struct Site {
     job: bool,
 }
 
+/// Stuck this many times running near one spot, the raider gives up the
+/// waypoint it was making for (blocks it in its own grid) and replans.
+const STUCK_REPEATS: u32 = 3;
+/// How much of its grid round that waypoint it gives up, metres.
+const STUCK_BLOCK: f32 = 1.5;
+/// Blocked this many waypoints round one spot, it's in a pocket (a ledge
+/// it fell onto, a corner the grid can't see): it gives up wider discs and
+/// steps further out of it.
+const POCKET_BLOCKS: u32 = 3;
+/// ...and this many, it gives up where it was going: another rendezvous,
+/// or another site.
+const POCKET_GIVE_UP: u32 = 6;
+
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Act {
@@ -287,10 +300,14 @@ pub struct Raider {
     /// give up.
     interrupted: bool,
     pack_full: bool,
-    rv: Option<usize>,
+    pub rv: Option<usize>,
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
+    /// Where it last got stuck, and how many times in a row near there.
+    stuck_spot: (Vec2, u32),
+    /// Where it has been blocking waypoints, and how many round there.
+    pocket: (Vec2, u32),
     scan: f32,
     clock: f32,
     retreat_until: f32,
@@ -310,6 +327,8 @@ pub struct Raider {
     heat: f32,
     /// Crouched since (raid seconds), when it is.
     crouched_since: Option<f32>,
+    /// Waiting at the rendezvous for the truck (it keeps low and still).
+    at_rv: bool,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
@@ -386,6 +405,9 @@ pub fn attach_raider(
         traits.minutes = m;
     }
     let mut plans = plan_buildings(&buildings, &doors);
+    for plan in &mut plans {
+        plan.shut_live();
+    }
     // Flues already vented are a way.
     vent_plans(
         &mut plans,
@@ -456,7 +478,10 @@ pub fn attach_raider(
         }
     }
     let seed = opts.seed;
-    let objective = choose_objective(&zone.map, &sites, seed);
+    let (objective, career_rv) = match career_habit() {
+        Some(h) => h.choose(&zone.map, &sites),
+        None => (choose_objective(&zone.map, &sites, seed), None),
+    };
     log.event(
         "start",
         json!({"run": run, "map": opts.map, "seed": seed, "personality": traits.name,
@@ -472,7 +497,10 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
-    for id in contract_kit() {
+    for id in contract_kit()
+        .into_iter()
+        .chain(super::harvest::kit(traits.name))
+    {
         kit.push(Task::PickUp {
             id: id.to_owned(),
             side: Side::Left,
@@ -497,9 +525,11 @@ pub fn attach_raider(
                 burned: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
-                rv: None,
+                rv: career_rv,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
+                stuck_spot: (Vec2::ZERO, 0),
+                pocket: (Vec2::ZERO, 0),
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
@@ -512,6 +542,7 @@ pub fn attach_raider(
                 kg: 0.0,
                 heat: 0.0,
                 crouched_since: None,
+                at_rv: false,
                 after_vent: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
@@ -883,11 +914,52 @@ pub fn think(
                 r.anchor = (here, r.clock);
                 log.event(
                     "stuck",
-                    json!({"x": round(here.x, 1), "z": round(here.y, 1), "doing": r.doing(),
-                           "task": format!("{:?}", bot.tasks.front())}),
+                    json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
+                           "ground": round(scene.zone.ground(here.x, here.y), 1),
+                           "doing": r.doing(), "task": format!("{:?}", bot.tasks.front())}),
                 );
+                // Stuck again and again in one place: the waypoint it's
+                // making for can't be reached from here, whatever the grid
+                // says. Block it in its own grid so the next plan goes round.
+                r.stuck_spot = if here.distance(r.stuck_spot.0) < 4.0 {
+                    (r.stuck_spot.0, r.stuck_spot.1 + 1)
+                } else {
+                    (here, 1)
+                };
+                let mut step = 3.0;
+                if r.stuck_spot.1 >= STUCK_REPEATS
+                    && let Some(Task::WalkTo { to, .. }) = bot.tasks.front()
+                {
+                    r.pocket = if here.distance(r.pocket.0) < 6.0 {
+                        (r.pocket.0, r.pocket.1 + 1)
+                    } else {
+                        (here, 1)
+                    };
+                    let radius = if r.pocket.1 >= POCKET_BLOCKS {
+                        step = 8.0;
+                        STUCK_BLOCK * 2.5
+                    } else {
+                        STUCK_BLOCK
+                    };
+                    r.grid.block(
+                        extraction_core::nav::Obstacle::Circle {
+                            at: to.to_array(),
+                            radius,
+                        },
+                        0.0,
+                    );
+                    log.event(
+                        "stuck_block",
+                        json!({"x": round(to.x, 1), "z": round(to.y, 1), "pocket": r.pocket.1}),
+                    );
+                    r.stuck_spot.1 = 0;
+                    if r.pocket.1 >= POCKET_GIVE_UP {
+                        give_up_goal(r, &scene, here, &mut log);
+                        r.pocket.1 = 0;
+                    }
+                }
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
-                let side = here + Vec2::new(a.cos(), a.sin()) * 3.0;
+                let side = here + Vec2::new(a.cos(), a.sin()) * step;
                 // Give up on what it was reaching for; sidestep; replan.
                 if let Act::Take(_, item) = r.act {
                     r.skip.insert(item);
@@ -994,6 +1066,34 @@ pub fn think(
             Stage::Done => {}
         }
         r.interrupted = false;
+    }
+}
+
+/// Caught in a pocket it can't plan its way out of: give up the goal that
+/// keeps drawing it back in. Heading out, it picks the next rendezvous
+/// instead; travelling to a site, it crosses the site off.
+fn give_up_goal(r: &mut Raider, scene: &Scene, here: Vec2, log: &mut SimLog) {
+    match r.act {
+        Act::ToRv | Act::Board => {
+            let mut rvs: Vec<(usize, f32)> = scene
+                .zone
+                .map
+                .markers_of(&MarkerKind::Rendezvous)
+                .enumerate()
+                .filter(|(i, _)| Some(*i) != r.rv)
+                .map(|(i, m)| (i, Vec2::from_array(m.at).distance(here)))
+                .collect();
+            rvs.sort_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some(&(next, _)) = rvs.first() {
+                log.event("pocket_rv", json!({"from": r.rv, "to": next}));
+                r.rv = Some(next);
+            }
+        }
+        Act::Travel(s) | Act::Search(s) => {
+            r.sites[s].tries = r.sites[s].tries.max(3);
+            log.event("pocket_site", json!({"site": s}));
+        }
+        _ => {}
     }
 }
 
@@ -1317,7 +1417,9 @@ fn sneak(
     }
     // Afloat it ducks too, as a player does: a flooded doorway's head is
     // a hand over the water.
-    let low = wary || swimming;
+    // Waiting for the truck: low and still, as a player who's learnt
+    // about drones does.
+    let low = wary || swimming || (r.at_rv && !hurrying);
     if low != input.crouch {
         input.crouch = low;
         if low {
@@ -2660,6 +2762,66 @@ fn add_safehouse_site(r: &mut Raider, scene: &Scene) {
     });
 }
 
+/// A career's raider, over raid after raid (`SIM_HABIT`, with
+/// `SIM_RAID` the raid's number in the career and `SIM_CAREER_SEED` the
+/// career's): a creature of habit goes the same way to the same region
+/// and out the same rendezvous every raid; a varier takes the regions and
+/// the rendezvous in turn. For measuring what the Zone's memory of you
+/// does (`robots::memory`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CareerHabit {
+    pub varies: bool,
+    pub raid: u32,
+    pub seed: u64,
+}
+
+/// The career habit knob, from the environment, if this is a career run.
+pub fn career_habit() -> Option<CareerHabit> {
+    let varies = match std::env::var("SIM_HABIT").ok()?.as_str() {
+        "habit" => false,
+        "varier" => true,
+        _ => return None,
+    };
+    let num = |k: &str| std::env::var(k).ok().and_then(|v| v.parse::<u64>().ok());
+    Some(CareerHabit {
+        varies,
+        raid: num("SIM_RAID").unwrap_or(0) as u32,
+        seed: num("SIM_CAREER_SEED").unwrap_or(1),
+    })
+}
+
+impl CareerHabit {
+    /// This raid's objective region and the rendezvous it means to leave by.
+    fn choose(&self, map: &MapDef, sites: &[Site]) -> (Option<Vec2>, Option<usize>) {
+        let rvs = map.markers_of(&MarkerKind::Rendezvous).count().max(1);
+        if !self.varies {
+            return (
+                choose_objective(map, sites, self.seed),
+                Some(self.seed as usize % rvs),
+            );
+        }
+        let regions: Vec<_> = map
+            .regions
+            .iter()
+            .filter(|g| g.danger > 0)
+            .filter(|g| {
+                sites
+                    .iter()
+                    .any(|s| extraction_core::geom::point_in_polygon(&g.polygon, s.at.to_array()))
+            })
+            .collect();
+        let objective = (!regions.is_empty()).then(|| {
+            let g = regions[(self.raid as usize + self.seed as usize) % regions.len()];
+            let n = g.polygon.len().max(1) as f32;
+            g.polygon.iter().map(|p| Vec2::from_array(*p)).sum::<Vec2>() / n
+        });
+        (
+            objective,
+            Some((self.raid as usize + self.seed as usize) % rvs),
+        )
+    }
+}
+
 /// How much better a site at the raid's objective looks, and how far
 /// from the region's middle that fades out, metres.
 const OBJECTIVE_PULL: f32 = 3.0;
@@ -3036,14 +3198,31 @@ fn take_item(
                 .map(|(_, a, gt)| (a.kind, gt.translation(), a.radius))
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
+                let skilled = super::harvest::skilled(r.traits.name);
                 // Not hurt, it doesn't; and nobody careful reaches into a
-                // well's heart.
-                if r.traits.avoid_anomalies && (r.hp < 60.0 || kind == AnomalyKind::Well) {
+                // well's heart (unless it knows how: in and straight out).
+                if r.traits.avoid_anomalies
+                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                {
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
+                if skilled {
+                    let first = junk(r, scene);
+                    let kit = super::harvest::Kit {
+                        junk: first,
+                        spare: first.and_then(|j| junk_but(r, scene, j)),
+                        gun: r.gun,
+                    };
+                    if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
+                    {
+                        r.diving = true;
+                        tasks.extend(way);
+                        return Some(tasks);
+                    }
+                }
                 if matches!(kind, AnomalyKind::Snare | AnomalyKind::Mirror)
                     && r.traits.test_anomalies
                 {
@@ -3074,6 +3253,19 @@ fn take_item(
     }
     tasks.extend(grab);
     Some(tasks)
+}
+
+/// Something else worthless from the pack, not `first`.
+fn junk_but(r: &Raider, scene: &Scene, first: Entity) -> Option<Entity> {
+    let me = scene.bags.iter().find(|b| b.carried)?;
+    me.contents
+        .iter()
+        .filter(|e| **e != first)
+        .filter_map(|e| scene.items.get(*e).ok())
+        .map(|(e, it, ..)| (e, r.traits.value(scene.catalog.get(it.kind()))))
+        .filter(|(_, v)| *v <= 3.0)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(e, _)| e)
 }
 
 /// Something worthless from the pack, to throw.
@@ -3152,6 +3344,7 @@ fn extract_step(
             ];
         }
     }
+    r.at_rv = here.distance(approach) <= 4.0;
     if here.distance(approach) > 4.0 {
         r.act = Act::ToRv;
         if let Some(out) = leave_building(r, scene, pos) {

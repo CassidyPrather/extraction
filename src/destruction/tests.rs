@@ -1663,14 +1663,19 @@ fn nothing_we_spawn_is_drawn_without_its_model_or_its_texture() {
         let (m, _) = super::wood::model_node(m);
         root.join(crate::render::world_props::path(m)).exists()
     };
+    // Textures are fetched (`scripts/fetch_assets.py`), not in git: a
+    // material is textured if the fetch manifest has its set, whether or
+    // not this checkout has fetched it.
+    let manifest = root.parent().unwrap().join("scripts/assets_manifest.json");
+    let Ok(text) = std::fs::read_to_string(&manifest) else {
+        eprintln!("no {} (a packaged build): skipped", manifest.display());
+        return;
+    };
+    let sets: serde_json::Value = serde_json::from_str(&text).unwrap();
+    let sets = &sets["materials"]["sets"];
     let textured = |mat: crate::render::materials::Mat| {
         let (dir, ..) = mat.info();
-        dir.is_none_or(|d| {
-            root.join("textures/materials")
-                .join(d)
-                .join("albedo.ktx2")
-                .exists()
-        })
+        dir.is_none_or(|d| sets.get(d).is_some())
     };
     let mut bad = Vec::new();
     for m in super::wood::CRATE_MODELS
@@ -1913,6 +1918,19 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     }
     assert!(app.world().get_entity(door).is_err(), "prised off");
     assert_eq!(doors(&mut app), before + 1, "a car door to carry");
+    // Lying on its largest face, not standing on an edge.
+    let up = app
+        .world_mut()
+        .query::<(&crate::items::Item, &GlobalTransform)>()
+        .iter(app.world())
+        .filter(|(i, g)| i.kind() == id && g.translation().distance(door_at) < 2.0)
+        .map(|(_, g)| g.rotation())
+        .next()
+        .expect("the door, by the car");
+    let dims = catalog.get(id).dims.expect("car_door's dims");
+    let thin = Vec3::from(dims).min_position();
+    let axis = up * [Vec3::X, Vec3::Y, Vec3::Z][thin];
+    assert!(axis.y.abs() > 0.9, "the door lies flat ({axis})");
     assert!(
         app.world().resource::<Broken>().0.contains(&key(door_at)),
         "and it stays off till the Surge"

@@ -238,9 +238,10 @@ pub fn record(
 
     // A carried artifact biting back.
     for b in bites.read() {
-        if b.player == me && b.what == crate::anomaly::costs::Bite::Shock {
-            tr.expect
-                .push(("aegis".into(), extraction_core::anomaly::AEGIS_SHOCK, 0.3));
+        // What it took (nothing at its floor), so nothing else's damage is
+        // put down to it.
+        if b.player == me && b.what == crate::anomaly::costs::Bite::Shock && b.damage > 0.0 {
+            tr.expect.push(("aegis".into(), b.damage, 0.3));
         }
     }
     tr.recent_air = body.airborne.max(tr.recent_air - dt);

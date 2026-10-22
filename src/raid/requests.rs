@@ -136,7 +136,8 @@ fn press_card(
         // What's in the stash, and in a bag or a mount of something in it (a
         // stone sealed in its lead case counts): (the bag or socket that
         // holds it, the item).
-        let in_stash = |id: &str, n: u32| -> Vec<(Entity, Entity)> {
+        // (`whole`: only those in the condition the fetch takes.)
+        let in_stash_as = |id: &str, n: u32, whole: bool| -> Vec<(Entity, Entity)> {
             let Ok(top) = bags.get(stash) else {
                 return Vec::new();
             };
@@ -156,16 +157,26 @@ fn press_card(
                 .chain(mounted)
                 .filter(|(_, e)| {
                     items.get(*e).is_ok_and(|i| {
-                        extraction_core::progression::fetch_takes(id, &catalog.get(i.kind()).id)
+                        let of = &catalog.get(i.kind()).id;
+                        extraction_core::progression::fetch_takes(id, of)
+                            && (!whole
+                                || i.0.condition
+                                    >= extraction_core::progression::fetch_condition(id, of))
                     })
                 })
                 .take(n as usize)
                 .collect()
         };
+        let in_stash = |id: &str, n: u32| in_stash_as(id, n, true);
         let handed: Vec<(Entity, Entity)> = match &job {
             Job::Fetch { item: id, n } => {
                 let have = in_stash(id, *n);
                 if (have.len() as u32) < *n {
+                    // There are some, but shot through.
+                    if in_stash_as(id, *n, false).len() > have.len() {
+                        raid.say(lines::FETCH_WORN);
+                        continue;
+                    }
                     raid.say(lines::fetch_short(
                         have.len(),
                         *n,

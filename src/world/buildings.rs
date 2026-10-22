@@ -5484,7 +5484,7 @@ pub fn swing_doors(
         &mut Transform,
         &DoorLeaf,
         Has<crate::robots::doors::Wedged>,
-        Has<super::underground::PowerLocked>,
+        Option<&super::underground::PowerLocked>,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
@@ -5494,7 +5494,9 @@ pub fn swing_doors(
             if let Ok((mut d, _, _, wedged, locked)) = doors.get_mut(*item) {
                 if wedged {
                     raid.say("It won't budge: there's a wedge under it.");
-                } else if locked {
+                } else if locked.is_some_and(|l| l.stage == super::underground::SEALED) {
+                    raid.say("Bolted by the shelter's programme. It won't open again.");
+                } else if locked.is_some() {
                     raid.say("Locked fast: an electric bolt, and no power to it.");
                 } else {
                     d.open = !d.open;
@@ -5764,10 +5766,13 @@ pub fn dress_buildings(
             .as_ref()
             .map_or(0, |h| crate::destruction::breach::apply(&mut geo, xf, &h.0));
         // Old snow on its roof and sills, where it lies all winter
-        // (`decay::snow_load`).
-        let snowed = zone.as_ref().is_some_and(|z| {
-            z.map.snow > 0.0 && super::snow::snow_line(&z.map).is_some_and(|l| xf.translation.y > l)
-        });
+        // (`decay::snow_load`). Not down an underground site: nothing
+        // there is open to the sky.
+        let snowed = extraction_core::underground::layout(&b.prefab).is_none()
+            && zone.as_ref().is_some_and(|z| {
+                z.map.snow > 0.0
+                    && super::snow::snow_line(&z.map).is_some_and(|l| xf.translation.y > l)
+            });
         if snowed {
             let load = super::decay::snow_load(&geo, &occluders(&geo));
             geo.pieces.extend(load);
@@ -6151,8 +6156,7 @@ pub fn dress_buildings(
             let at = Vec2::new(xf.translation.x, xf.translation.z);
             let north = xf.rotation.inverse() * Vec3::NEG_Z;
             let gseed = super::overgrowth::seed(at, &b.prefab);
-            let mut growth =
-                super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
+            let mut growth = super::overgrowth::grow_on(&b.prefab, &geo, &occluders, gseed, north);
             // Saplings through a ruin's floor, bushes at the walls' feet.
             let ruin = extraction_core::map::prefab_base(&b.prefab) != b.prefab;
             let wild = super::overgrowth::reclaim(&geo, &occluders, gseed, ruin);

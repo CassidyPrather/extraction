@@ -57,6 +57,14 @@ pub const NAMES: &[&str] = &[
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
     crate::robots::sentry::SCENARIO,
+    crate::robots::spotter::SCENARIO,
+    crate::robots::minelayer::SCENARIO,
+    crate::robots::mender::SCENARIO,
+    crate::robots::plough::SCENARIO,
+    crate::world::cage::SCENARIO,
+    crate::world::echo::SCENARIO,
+    crate::world::lockdown::SCENARIO,
+    crate::world::live::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -565,6 +573,308 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
             ]
+        }
+        crate::world::live::SCENARIO => {
+            // The service tunnel: the vault's breaker in (the overflow's
+            // water live), the switch room's isolator pulled, and into the
+            // overflow chamber unhurt.
+            use crate::bot::Expect::{Counter, HealthAtLeast};
+            use crate::world::live as lv;
+            vec![
+                Log(s(
+                    "live water: the breaker, the isolator, then the overflow chamber",
+                )),
+                Setup(lv::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::TO_ISOLATOR,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::INTO_IT,
+                    within: 1.0,
+                },
+                Wait(2.0),
+                Expect(Counter("live_isolated", 1, 1)),
+                Expect(Counter("live_jolts", 0, 0)),
+                Expect(HealthAtLeast(99.0)),
+            ]
+        }
+        crate::world::lockdown::SCENARIO => {
+            // The shelter: the generator started, the klaxon, the gas lock
+            // sealed; out by the escape tunnel.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::lockdown as lk;
+            let wait = extraction_core::underground::layout("bunker_marrow")
+                .and_then(|l| l.lockdown.as_ref())
+                .map_or(20.0, |k| k.after)
+                + 2.0;
+            vec![
+                Log(s(
+                    "shelter lockdown: start the generator, then out the escape tunnel",
+                )),
+                Setup(lk::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(wait),
+                Expect(Counter("shelter_sealed", 1, 1)),
+                WalkTo {
+                    to: lk::OUT,
+                    within: 1.0,
+                },
+                Expect(Near(lk::OUT, 1.5)),
+                Expect(HealthAtLeast(50.0)),
+            ]
+        }
+        crate::world::echo::SCENARIO => {
+            // The dam's gallery: its length on foot, upright; every step
+            // comes back.
+            use crate::bot::Expect::{Counter, Near};
+            use crate::world::echo as ec;
+            vec![
+                Log(s("gallery echo: the inspection gallery's length on foot")),
+                Setup(ec::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: ec::FAR_END,
+                    within: 1.0,
+                },
+                Expect(Near(ec::FAR_END, 2.0)),
+                Expect(Counter("gallery_echoes", 10, 1000)),
+            ]
+        }
+        crate::world::cage::SCENARIO => {
+            // The adit's winze: into the cage at the shaft station and rung
+            // down; at the foot, sent up and called back; ridden up and out.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::cage as cg;
+            let ride = cg::BELL_WAIT + 12.0 / cg::CAGE_SPEED + 3.0;
+            vec![
+                Log(s("cage ride: down the adit's winze and back up")),
+                Setup(cg::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_FOOT,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_TOP,
+                    within: 0.8,
+                },
+                Expect(Near(cg::AT_TOP, 1.5)),
+                Expect(HealthAtLeast(99.0)),
+                Expect(Counter("cage_rides", 2, 2)),
+                Expect(Counter("cage_crushed", 0, 0)),
+            ]
+        }
+        crate::robots::plough::SCENARIO => {
+            // A plough coming along a snowy road. A tin in its way goes in
+            // the bank. The bot drops a crowbar in its lane and steps back:
+            // it jams, its hatch springs, and the bot shoots the cell.
+            use crate::robots::plough as pl;
+            vec![
+                Log(s("plough jam: a crowbar in its lane, then its cell")),
+                Setup(pl::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("ak74"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Gun(MacroKind::Mode),
+                PickUp {
+                    id: s("crowbar"),
+                    side: Side::Left,
+                },
+                WalkTo {
+                    to: pl::LAY_PLACEHOLDER,
+                    within: 0.6,
+                },
+                Release(Side::Left),
+                WalkTo {
+                    to: pl::BACK_PLACEHOLDER,
+                    within: 1.0,
+                },
+                Support,
+                // Till it reaches the crowbar and jams.
+                Wait(10.0),
+                Expect(super::Expect::Counter(pl::JAMS, 1, 9)),
+                Shoot {
+                    target: Entity::PLACEHOLDER,
+                    shots: 25,
+                },
+                Wait(3.0),
+                Expect(super::Expect::RobotHits(1)),
+                Expect(super::Expect::Counter(pl::BURIED, 1, 9)),
+                Expect(super::Expect::Wrecked(1)),
+                Expect(super::Expect::Alive),
+            ]
+        }
+        crate::robots::mender::SCENARIO | crate::robots::mender::CONTROL => {
+            // A hurt pylon ahead, a mender coming to weld it. The bot
+            // waits for the arc and shoots the mender off it; the control
+            // lets it work.
+            use crate::robots::mender as md;
+            let shoot = name == md::SCENARIO;
+            let mut t = vec![
+                Log(s(if shoot {
+                    "mender: shoot the mender off the machine it's welding"
+                } else {
+                    "mender control: let it weld"
+                })),
+                Setup(md::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("ak74"),
+                    side: Side::Right,
+                },
+                PickUp {
+                    id: s("ak_mag"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Gun(MacroKind::Reload),
+                Expect(super::Expect::GunRounds(20, 31)),
+                // Off safe.
+                Gun(MacroKind::Mode),
+                Support,
+                // Till it's there and welding.
+                Wait(8.0),
+            ];
+            if shoot {
+                t.extend([
+                    Shoot {
+                        target: Entity::PLACEHOLDER,
+                        shots: 30,
+                    },
+                    Wait(20.0),
+                    Expect(super::Expect::RobotHits(1)),
+                    Expect(super::Expect::Wrecked(1)),
+                    // Shot off before it's done (left to it, it welds 130 or so).
+                    Expect(super::Expect::Counter(md::WELDED, 0, 80)),
+                ]);
+            } else {
+                t.extend([
+                    Wait(20.0),
+                    Expect(super::Expect::Counter(md::WELDED, 100, 100_000)),
+                ]);
+            }
+            t
+        }
+        crate::robots::minelayer::SCENARIO | crate::robots::minelayer::CONTROL => {
+            // A field of mines across the way. The bot walks up to the
+            // first, cuts its lead, goes round the end of the rest and on.
+            // The control walks straight through.
+            use crate::robots::minelayer as ml;
+            let careful = name == ml::SCENARIO;
+            let mut t = vec![
+                Log(s(if careful {
+                    "minefield: spot the first mine, cut it, go round the rest"
+                } else {
+                    "minefield control: straight through"
+                })),
+                Setup(ml::SCENARIO),
+                Wait(1.0),
+            ];
+            if careful {
+                t.extend([
+                    PickUp {
+                        id: s("bolt_cutters"),
+                        side: Side::Right,
+                    },
+                    WalkTo {
+                        to: ml::MINE_PLACEHOLDER,
+                        within: 0.6,
+                    },
+                    Cut { within: 2.0 },
+                    Wait(1.0),
+                    WalkTo {
+                        to: ml::ROUND_PLACEHOLDER,
+                        within: 1.0,
+                    },
+                ]);
+            }
+            t.extend([
+                WalkTo {
+                    to: ml::PAST_PLACEHOLDER,
+                    within: 1.5,
+                },
+                Wait(2.0),
+            ]);
+            if careful {
+                t.extend([
+                    Expect(super::Expect::Counter(ml::DISARMED, 1, 1)),
+                    Expect(super::Expect::Counter(ml::BLOWN, 0, 0)),
+                    Expect(super::Expect::HealthAtLeast(99.0)),
+                ]);
+            } else {
+                t.push(Expect(super::Expect::Counter(ml::BLOWN, 1, 9)));
+            }
+            t
+        }
+        crate::robots::spotter::SCENARIO | crate::robots::spotter::CONTROL => {
+            // Under a spotter's balloon (straight under it is blind), cut
+            // its tether and walk out across the ground it watched: no
+            // call. The control walks out without the cut, and is called.
+            let cut = name == crate::robots::spotter::SCENARIO;
+            let mut t = vec![
+                Log(s(if cut {
+                    "spotter tether: in under a spotter, cut it loose, walk out"
+                } else {
+                    "spotter control: walk out under a spotter's watch"
+                })),
+                Setup(crate::robots::spotter::SCENARIO),
+                Wait(1.0),
+            ];
+            if cut {
+                t.extend([
+                    PickUp {
+                        id: s("bolt_cutters"),
+                        side: Side::Right,
+                    },
+                    Cut { within: 20.0 },
+                    Wait(3.0),
+                ]);
+            }
+            t.extend([
+                WalkTo {
+                    to: crate::robots::spotter::PAST_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(12.0),
+                Expect(if cut {
+                    super::Expect::Counter(crate::robots::spotter::CALLS, 0, 0)
+                } else {
+                    super::Expect::Counter(crate::robots::spotter::CALLS, 1, 9)
+                }),
+                Expect(super::Expect::Alive),
+            ]);
+            t
         }
         crate::onboarding::bot::SCENARIO | crate::onboarding::first_hour::YARD => {
             crate::onboarding::bot::opening()

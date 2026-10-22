@@ -216,6 +216,36 @@ funicular is always cheaper, by design), the barracks, the compressor
 house. The open upper slopes kill: drones and walkers see you a long way
 off up there.
 
+## Underground: the adit
+
+Underground's site `adit_rime` (`assets/underground/adit_rime.ron`):
+the mine in the knoll, in at a kiosk beside the adit house at
+(160, -55), out on the mill's back apron at (121, -2), the rooms at
+floor 97.25 under x 115-175, z -91 to 0. A roof over you, so the one
+warm place on the fell. Keep both kiosk pads clear; moving the adit
+house or the mill's apron means re-seating it (tell Underground).
+
+## The Plough
+
+Heavy's machine (`extraction_core::plough`): a Custodian snow-blower that
+works the Pass road from the roadmen's hut (the shed tagged `roadmen`) up
+the switchbacks, through both galleries, along the street and up the Col
+track, turning at (40, -240), short of the col's truck. It throws snow
+only where snow lies (over 84 m), banking it beside the road clear of the
+other roads' ends, the huts' doors and the galleries. Its packed lane
+takes no prints. Don't move or retag the roadmen's hut without telling
+Heavy.
+
+## Frame budget
+
+Performance measured it on main (f4916fa): nothing to trim. Draws peak at
+388 of 1200 (Coldharbour's street), triangles at 419k of 900k, overdraw
+at most 2.47 (inside the mill). The tightest number is the gate view's
+sun-shadow triangles, 532k of 700k, most of it the guns at the truck.
+The scree draws about 140 merged rocks a view (35-40k triangles); the
+galleries, the funicular and the mill never make a view's top five. First
+frame in 4.3 s, the quickest valley; busy-moment hitches like the others.
+
 ## Status
 
 Lint-clean under every rule on main (doors, Surge, landmarks), the fit

@@ -324,12 +324,17 @@
         (kind: ShortExfil, at: (46.0, 276.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (25.0, -255.0), name: "Bus depot"),
         (kind: Rendezvous, at: (215.0, -235.0), name: "Rail yard"),
-        (kind: Rendezvous, at: (-232.0, -128.0), name: "Ranger tower"),
+        (kind: Rendezvous, at: (-190.0, -97.0), name: "Ranger tower"),
         (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 140.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: 30.0, name: "Depot sentry"),
+        (kind: Sentry(arc: 60.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: -20.0, name: "Depot sentry"),
         (kind: Sentry(arc: 140.0, power: Some((148.9, -76.4))), at: (139.0, -66.5), rot: -15.0, name: "Hollow sentry"),
+        // A spotter over the open ground the road north crosses to the
+        // depot and the yard: an alarm, not a gun, where nothing else
+        // watches (map_spotter). Cut its tether at the winch, timing its
+        // turn.
+        (kind: Spotter, at: (30.0, -150.0), name: "Bank spotter"),
         (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).

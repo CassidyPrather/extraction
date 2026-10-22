@@ -1303,6 +1303,12 @@ impl Plugin for UndergroundPlugin {
         .add_plugins((
             super::workings::WorkingsPlugin,
             super::furnace::FurnacePlugin,
+            super::cage::CagePlugin,
+            super::echo::EchoPlugin,
+            super::lockdown::LockdownPlugin,
+            super::live::LivePlugin,
+            super::dark::DarkPlugin,
+            super::glow::GlowPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1346,12 +1352,17 @@ pub struct PowerSwitch {
     pub stage: usize,
 }
 
-/// A door held shut until its stage of its site's power is on.
+/// A door held shut until its stage of its site's power is on; or, its
+/// stage [`SEALED`], shut by the site's lockdown for good.
 #[derive(Component, Debug)]
 pub struct PowerLocked {
     pub site: Entity,
     pub stage: usize,
 }
+
+/// A [`PowerLocked`] stage no switch frees: bolted by a lockdown
+/// (`world::lockdown`).
+pub const SEALED: usize = usize::MAX;
 
 /// Where a stage's power switch is, building space, and which way it
 /// faces.
@@ -1448,9 +1459,10 @@ fn wire_power(
     }
 }
 
-/// Throwing a switch: its stage comes on (for good), the doors it held
-/// are free, its lamps light (and the robots know it), and it clanks or
-/// roars loud enough to bring the crawlers. Out of turn, it's dead.
+/// Throwing a switch: its stage comes on, the doors it held are free (for
+/// good), its lamps light (and the robots know it), and it clanks or roars
+/// loud enough to bring the crawlers. Out of turn, it's dead. Thrown again,
+/// it's off, and the stages after it: a dead zone.
 #[allow(clippy::too_many_arguments)]
 fn throw_switches(
     mut commands: Commands,
@@ -1473,7 +1485,35 @@ fn throw_switches(
         let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
             continue;
         };
+        // Thrown again: off, and every stage downstream with it (relays
+        // drop). Its lamps die, for the eye and the machines; the doors it
+        // freed stay free.
         if power.on(sw.stage) {
+            let off: Vec<usize> = (sw.stage..power.stages.len())
+                .filter(|k| power.on(*k))
+                .collect();
+            for k in &off {
+                power.stages[*k].on = false;
+            }
+            raid.say(match power.stages[sw.stage].kind {
+                ug::PowerKind::Generator => {
+                    "You kill the generator. It runs down to nothing, and the lamps with it."
+                }
+                ug::PowerKind::Breaker => "The breaker comes out. Relays drop, and the lamps die.",
+            });
+            noise.write(crate::robots::Noise {
+                at: at.translation(),
+                radius: 20.0,
+                source: None,
+            });
+            if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
+                let dark: Vec<Vec3> = powered_lamps(l, &off)
+                    .map(|p| xf.transform_point(p))
+                    .collect();
+                lighting
+                    .lamps
+                    .retain(|(p, _)| !dark.iter().any(|d| d.distance(*p) < 0.01));
+            }
             continue;
         }
         if power.next() != Some(sw.stage) {
@@ -1500,18 +1540,26 @@ fn throw_switches(
         });
         raid.say(line);
         if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
-            for room in l
+            let rooms = l
                 .rooms
                 .iter()
-                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage)
-            {
-                let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
+                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage);
+            for (room, p) in rooms.zip(powered_lamps(l, &[sw.stage])) {
                 lighting
                     .lamps
                     .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
             }
         }
     }
+}
+
+/// Where the lamps of these power stages hang (site space): as the
+/// machines see them (`throw_switches`).
+fn powered_lamps<'a>(l: &'a Layout, stages: &'a [usize]) -> impl Iterator<Item = Vec3> + 'a {
+    l.rooms
+        .iter()
+        .filter(|room| room.lamp == ug::Lamp::Powered && stages.contains(&room.stage))
+        .map(|room| Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]))
 }
 
 /// Wading underground is loud: the water slops off the walls. (Footsteps
@@ -1720,6 +1768,8 @@ pub struct Works {
     pub falls: Vec<(Vec3, f32, Vec2)>,
     /// Each gas pocket, still there.
     pub gas: Vec<bool>,
+    /// Its live water live (`world::live`).
+    pub live: bool,
 }
 
 impl Works {
@@ -1730,6 +1780,7 @@ impl Works {
             heat: l.heat.iter().map(|h| h.level).collect(),
             falls: Vec::new(),
             gas: vec![true; l.gas.len()],
+            live: false,
         }
     }
 
@@ -1743,15 +1794,16 @@ impl Works {
             && close(&self.heat, &o.heat, 0.05)
             && self.falls.len() == o.falls.len()
             && self.gas == o.gas
+            && self.live == o.live
     }
 }
 
 /// Shut a site's grid where its works make it impassable: deep water
 /// (a basin's at its level now), heat nothing crosses, a pit, a fallen
-/// roof. And make dear what its residents keep out of but can be drawn
-/// into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a noise in
-/// it still brings them, and their sparks set it off), and heat short of
-/// scorching (they keep to the cool side).
+/// roof, live water. And make dear what its residents keep out of but can
+/// be drawn into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a
+/// noise in it still brings them, and their sparks set it off), and heat
+/// short of scorching (they keep to the cool side).
 fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
     for j in 0..grid.n {
         for i in 0..grid.n {
@@ -1777,7 +1829,13 @@ fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster,
                 d.x.abs() <= half.x && d.z.abs() <= half.y
             });
             let k = j * grid.n + i;
-            if depth >= ug::DEEP || hot || r.pit[q] || fallen {
+            // Live water: nobody wades it.
+            let shocking = w.live
+                && depth > 0.05
+                && l.live.as_ref().is_some_and(
+                    |v| matches!(r.cells[q], ug::Cell::Room(k) if l.rooms[k as usize].id == v.room),
+                );
+            if depth >= ug::DEEP || hot || r.pit[q] || fallen || shocking {
                 grid.cost[k] = extraction_core::nav::BLOCKED;
                 continue;
             }
@@ -1816,6 +1874,7 @@ fn regrid_residents(
     heat: Option<Res<super::furnace::Heat>>,
     gas: Option<Res<super::workings::Gas>>,
     falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
+    live: Option<Res<super::live::Live>>,
     mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
     time: Res<Time>,
     mut every: Local<f32>,
@@ -1862,6 +1921,7 @@ fn regrid_residents(
                 .and_then(|g| g.live.get(site))
                 .cloned()
                 .unwrap_or_else(|| vec![true; l.gas.len()]),
+            live: live.as_ref().is_some_and(|v| v.0.contains(site)),
         };
         if now.same(&g.works) {
             continue;
@@ -1888,6 +1948,10 @@ impl Plugin for UndergroundVisualsPlugin {
         app.add_plugins((
             super::workings::WorkingsVisualsPlugin,
             super::furnace::FurnaceVisualsPlugin,
+            super::cage::CageVisualsPlugin,
+            super::lockdown::LockdownVisualsPlugin,
+            super::live::LiveVisualsPlugin,
+            super::glow::GlowVisualsPlugin,
         ))
         .add_systems(
             Update,
@@ -2331,7 +2395,9 @@ pub(crate) fn go_dark(
     if k < 1e-3 && day.written.is_none() {
         return;
     }
-    let dark = 1.0 - k * 0.985;
+    // Down to a fifth of a percent: with the grade's lift gone below
+    // (`render::grade::Below`), an unlit room is black, not grey.
+    let dark = 1.0 - k * 0.998;
     ambient.brightness = day.base.0 * dark;
     for mut s in &mut suns {
         s.illuminance = day.base.1 * (1.0 - k);
@@ -3023,6 +3089,19 @@ mod tests {
         );
     }
 
+    /// The valleys with an underground site placed (a new valley may
+    /// not have one yet: Rime Fell).
+    fn site_valleys() -> Vec<&'static str> {
+        extraction_core::map::VALLEYS
+            .iter()
+            .filter(|(_, text)| {
+                extraction_core::map::MapDef::from_ron(text)
+                    .is_ok_and(|m| !ug::placed(&m).is_empty())
+            })
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
     fn app(map: &str) -> App {
         let opts = LaunchOptions {
             robots: false,
@@ -3107,7 +3186,7 @@ mod tests {
     /// ground everywhere past the kiosks.
     #[test]
     fn no_daylight_in_the_rooms() {
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let mut app = app(map);
             let sites = sites_on(&app);
             assert!(!sites.is_empty(), "{map}: a site");
@@ -3179,7 +3258,7 @@ mod tests {
     /// steps, not the ground (the heightfield's cells are open there).
     #[test]
     fn the_ground_is_open_over_the_stairs() {
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let mut app = app(map);
             for (site, xf) in sites_on(&app) {
                 let r = ug::raster(&site.id).unwrap();
@@ -3233,7 +3312,7 @@ mod tests {
     fn crawlers_walk_their_rounds_in_the_dark() {
         use crate::robots::indoor::Crawler;
         use crate::robots::senses::Lighting;
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let opts = LaunchOptions {
                 robots: true,
                 map: map.to_string(),
@@ -3416,6 +3495,72 @@ mod tests {
         assert!(seen, "the torch gave you away");
     }
 
+    /// A breaker thrown again comes out: its lamps die (for the machines
+    /// too: a dead zone), the doors it freed stay free; thrown once more,
+    /// the lamps are back.
+    #[test]
+    fn the_breaker_comes_out_again() {
+        use crate::interact::InteractEvent;
+        let mut vr = crate::vr_harness::Vr::new("cinder_works");
+        let player = vr.player;
+        let (site, switch, id) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &super::super::buildings::Building, &SitePower)>();
+            q.iter(vr.app.world())
+                .find(|(_, b, _)| b.prefab == "tunnel_cinder")
+                .map(|(e, b, p)| (e, p.stages[0].switch, b.prefab.clone()))
+                .expect("the service tunnel, powered")
+        };
+        let lamps = |vr: &crate::vr_harness::Vr| {
+            vr.app
+                .world()
+                .resource::<crate::robots::senses::Lighting>()
+                .lamps
+                .len()
+        };
+        let held: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &PowerLocked)>()
+            .iter(vr.app.world())
+            .filter(|(_, l)| l.site == site)
+            .map(|(e, _)| e)
+            .collect();
+        assert!(!held.is_empty(), "{id}: a door on its power");
+        let dark = lamps(&vr);
+        let mut press = |vr: &mut crate::vr_harness::Vr| {
+            vr.app.world_mut().write_message(InteractEvent::Pressed {
+                item: switch,
+                player,
+            });
+            vr.step(3);
+        };
+        press(&mut vr);
+        assert!(vr.app.world().get::<SitePower>(site).unwrap().on(0));
+        let lit = lamps(&vr);
+        assert!(lit > dark, "{id}: its lamps light for the machines");
+        press(&mut vr);
+        assert!(
+            !vr.app.world().get::<SitePower>(site).unwrap().on(0),
+            "off again"
+        );
+        assert_eq!(
+            lamps(&vr),
+            dark,
+            "{id}: its lamps out, for the machines too"
+        );
+        for d in &held {
+            assert!(
+                vr.app.world().get::<PowerLocked>(*d).is_none(),
+                "{id}: a door it freed stays free"
+            );
+        }
+        press(&mut vr);
+        assert_eq!(lamps(&vr), lit, "{id}: and on again");
+    }
+
     /// Power, through the headset: in every site the powered doors won't
     /// open; a switch out of turn does nothing; a hand squeezed on each
     /// stage's breaker or generator pull-start, in order, turns it on;
@@ -3425,7 +3570,7 @@ mod tests {
         use crate::interact::InteractEvent;
         use crate::rig::Side;
         use crate::world::buildings::Door;
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let mut vr = crate::vr_harness::Vr::new(map);
             vr.step(3);
             let player = vr.player;
@@ -3561,7 +3706,7 @@ mod tests {
     /// deep water while the bots' plan only costs it.
     #[test]
     fn floods_wade_swim_and_keep_crawlers_out() {
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let mut app = app(map);
             app.update();
             let (site, xf) = sites_on(&app).remove(0);
@@ -4116,7 +4261,7 @@ mod tests {
         use crate::bot::Bot;
         use crate::rig::LocalPlayer;
         use crate::sim::indoor::{BuildingPlan, plan_buildings};
-        for (map, _) in extraction_core::map::VALLEYS {
+        for map in site_valleys() {
             let mut app = app(map);
             let plans: Vec<BuildingPlan> = app
                 .world_mut()

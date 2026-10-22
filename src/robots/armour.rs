@@ -233,7 +233,11 @@ fn shed_plates(
         Option<&super::walker::Walker>,
         Option<&super::RobotSeed>,
     )>,
-    heavies: Query<(), With<super::heavy::Heavy>>,
+    // (The heavy and the machines that dress themselves see to their own
+    // plates and pieces: a sentry's junction box, a minelayer's hopper.)
+    heavies: Query<(), Or<(With<super::heavy::Heavy>, With<super::heavy::OwnLook>)>>,
+    at_death: Query<&super::salvage::HealthAtDeath>,
+    catalog: Option<Res<crate::items::Catalog>>,
 ) {
     for ev in events.read() {
         let PartRole::Armour(plate) = ev.role else {
@@ -249,6 +253,28 @@ fn shed_plates(
             continue;
         }
         let (scale, rot, at) = gt.to_scale_rotation_translation();
+        // Pried off a wreck: salvage, a plate to carry off, as good as it
+        // was when the robot died (`salvage`).
+        let kind = catalog.as_ref().and_then(|c| c.kind("robot_plate"));
+        if let (true, Ok(h), Some(kind), Some(catalog)) = (
+            robot.wrecked && matches!(robot.kind, RobotKind::Walker | RobotKind::Drone),
+            at_death.get(ev.part),
+            kind,
+            catalog.as_ref(),
+        ) {
+            crate::items::spawn_item(
+                &mut commands,
+                catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(at + rot * Vec3::Y * 0.05)
+                        .with_rotation(rot),
+                    condition: super::salvage::condition(h.0),
+                },
+            );
+            commands.entity(ev.part).despawn();
+            continue;
+        }
         let out = rot * Vec3::Y;
         let v0 = lin
             .map(|v| v.0)

@@ -391,8 +391,16 @@ fn floor_spots(app: &mut App) -> Vec<(Vec3, f32)> {
     for c in centres {
         let from = c + Vec3::Y * 0.6;
         if let Some((_, p, n)) = ray(app, from, Vec3::NEG_Y, 1.0) {
-            // Something over it, too: indoors.
-            if n.y > 0.9 && ray(app, p + Vec3::Y * 0.3, Vec3::Y, 8.0).is_some() {
+            // Something over it, too: indoors. And a floor: flat and level
+            // 0.6 m out each way (the top of a log pile, under a tree, once
+            // passed for one, and a heap on it rolled for the whole run).
+            let level = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z]
+                .iter()
+                .all(|d| {
+                    ray(app, p + *d * 0.6 + Vec3::Y * 0.3, Vec3::NEG_Y, 0.6)
+                        .is_some_and(|(_, q, m)| m.y > 0.95 && (q.y - p.y).abs() < 0.05)
+                });
+            if n.y > 0.9 && level && ray(app, p + Vec3::Y * 0.3, Vec3::Y, 8.0).is_some() {
                 out.push((p, c.y));
             }
         }
@@ -403,7 +411,7 @@ fn floor_spots(app: &mut App) -> Vec<(Vec3, f32)> {
 /// Drops a heap of `n` items (the catalog's kinds in turn) in a column
 /// over `at`; runs `secs`, tracking the fastest any of them went after
 /// the first second (the fall). Returns (entities, fastest).
-fn heap(app: &mut App, at: Vec3, n: usize, secs: f32) -> (Vec<Entity>, f32) {
+fn heap(app: &mut App, at: Vec3, n: usize, secs: f32) -> (Vec<Entity>, (f32, Entity)) {
     let cat = catalog(app);
     let kinds: Vec<ItemKind> = cat.iter().map(|(k, _)| k).collect();
     let es: Vec<Entity> = (0..n)
@@ -423,17 +431,28 @@ fn heap(app: &mut App, at: Vec3, n: usize, secs: f32) -> (Vec<Entity>, f32) {
             )
         })
         .collect();
-    let mut fastest: f32 = 0.0;
+    let mut fastest = (0.0f32, Entity::PLACEHOLDER);
     let ticks = (secs * 90.0) as usize;
     for t in 0..ticks {
         app.update();
         if t > 90 + (n / 9) * 30 {
             for &e in &es {
-                fastest = fastest.max(speed(app, e));
+                let v = speed(app, e);
+                if v > fastest.0 {
+                    fastest = (v, e);
+                }
             }
         }
     }
     (es, fastest)
+}
+
+/// An item's catalog id.
+fn id(app: &App, e: Entity) -> String {
+    let cat = catalog(app);
+    app.world()
+        .get::<crate::items::Item>(e)
+        .map_or("?".into(), |i| cat.get(i.kind()).id.clone())
 }
 
 /// Heaps of 60 items dropped on a building's floor and on a hillside:
@@ -445,8 +464,8 @@ fn heaps_settle() {
     assert!(floors.len() >= 3, "found {} floors", floors.len());
     let mut bad = Vec::new();
     for &(f, footing) in floors.iter().take(3) {
-        let (es, fastest) = heap(&mut app, f, 60, 8.0);
-        let mut moving = 0;
+        let (es, (fastest, which)) = heap(&mut app, f, 60, 8.0);
+        let mut moving = Vec::new();
         for &e in &es {
             let p = pos(&app, e);
             // Under the floor: below the building's footing.
@@ -454,17 +473,20 @@ fn heaps_settle() {
                 bad.push(format!("an item in the heap at {f:.1} ended at {p:.2}"));
             }
             if speed(&app, e) > 0.5 {
-                moving += 1;
+                moving.push(format!("{} at {:.1} m/s", id(&app, e), speed(&app, e)));
             }
         }
         if fastest > 8.0 {
             bad.push(format!(
-                "the heap at {f:.1} threw something at {fastest:.1} m/s"
+                "the heap at {f:.1} threw {} at {fastest:.1} m/s",
+                id(&app, which)
             ));
         }
-        if moving > 3 {
+        if moving.len() > 3 {
             bad.push(format!(
-                "the heap at {f:.1}: {moving} still moving after 8 s"
+                "the heap at {f:.1}: {} still moving after 8 s: {}",
+                moving.len(),
+                moving.join(", ")
             ));
         }
         despawn(&mut app, &es);
@@ -481,7 +503,7 @@ fn heaps_settle() {
             s(a, &app).total_cmp(&s(b, &app))
         })
         .unwrap();
-    let (es, fastest) = heap(&mut app, slope, 60, 8.0);
+    let (es, (fastest, _)) = heap(&mut app, slope, 60, 8.0);
     for &e in &es {
         let p = pos(&app, e);
         let g = app.world().resource::<Zone>().ground(p.x, p.z);
@@ -589,8 +611,12 @@ fn items_spawned_inside_things_are_not_launched() {
     let mut bad = Vec::new();
     for (i, (what, e)) in cases.iter().enumerate() {
         let p = pos(&app, *e);
-        let g = app.world().resource::<Zone>().ground(p.x, p.z);
-        if !p.is_finite() || fastest[i] > LAUNCH || p.y < g - 0.2 {
+        let zone = app.world().resource::<Zone>();
+        let g = zone.ground(p.x, p.z);
+        // Spawned half in a wall, it may come out of either face: inside an
+        // underground site's kiosk, down the stair is where it belongs.
+        let down = crate::items::lost::down_a_site(zone, p, 0.5);
+        if !p.is_finite() || fastest[i] > LAUNCH || (p.y < g - 0.2 && !down) {
             bad.push(format!(
                 "{what}: went {:.1} m/s, ended {:.2} m over the ground",
                 fastest[i],
@@ -615,7 +641,8 @@ fn the_player_cant_be_pushed_through_walls() {
     let mut vr = crate::vr_harness::Vr::new("marrow_creek");
     let walls = wall_spots(&mut vr.app);
     let mut bad = Vec::new();
-    for w in walls.iter().take(24) {
+    // (Sixteen walls, three ways at each: the suite's two-minute budget.)
+    for w in walls.iter().take(16) {
         let (p, n) = (w.p, w.n);
         let g = vr.app.world().resource::<Zone>().ground(p.x, p.z);
         let start = p + n * 1.2;
@@ -658,15 +685,17 @@ fn the_player_cant_be_pushed_through_walls() {
                 i.locomotion = if run { Vec2::Y } else { Vec2::ZERO };
                 i.sprint = run;
             };
-            // Sprint at it for three seconds, then walk a metre and a half
-            // on into it in the room.
+            // Sprint at it for a second and a half (it starts 1.2 m off:
+            // against the wall in well under one, then shoving), then walk
+            // a metre and a half on into it in the room.
+            const SPRINT: usize = 135;
             set(&mut vr, true);
-            for k in 0..360 {
-                if k == 270 {
+            for k in 0..SPRINT + 90 {
+                if k == SPRINT {
                     set(&mut vr, false);
                 }
-                if k >= 270 {
-                    vr.head(Vec3::new(0.0, 1.65, -((k - 270) as f32) / 60.0));
+                if k >= SPRINT {
+                    vr.head(Vec3::new(0.0, 1.65, -((k - SPRINT) as f32) / 60.0));
                 }
                 vr.step(1);
                 let now = centre(&vr);

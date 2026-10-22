@@ -718,6 +718,12 @@
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
+            id: "splint", dims: Some((0.06, 0.03, 0.45)), name: "Splint",
+            description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
+            category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
+            tags: ["wood"],
+        ),
+        (
             id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Regen injector",
             description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,
@@ -726,7 +732,7 @@
         // ---------------------------------------------------------------
         // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
         // ---------------------------------------------------------------
-        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Water bottle", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
+        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Canteen", description: "A canteen of water. Twist the cap off before you drink.", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
         (id: "condensed_milk", name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
         (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
         (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
@@ -813,6 +819,12 @@
             tags: ["steel"],
         ),
         (
+            id: "spanner", dims: Some((0.04, 0.015, 0.3)), name: "Spanner",
+            description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
+            category: Tool, size: Small, mass: 0.5, bulk: 0.3,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
@@ -884,6 +896,12 @@
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
         ),
+        (
+            id: "robot_plate", dims: Some((0.3, 0.03, 0.28)), name: "Robot armour plate",
+            description: "Pried off a wreck's hull. Hardened steel, still scorched where it was hit.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 1.5,
+            tags: ["metal"],
+        ),
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
         (
@@ -946,6 +964,12 @@
             id: "heavy_claw", dims: Some((0.32, 0.564, 0.32)), name: "Manipulator claw",
             description: "Three fingers of a demolition unit's hand. They tore doors off; they still close if you touch the wrong wire.",
             category: RobotPart, size: Bulky, mass: 15.0, bulk: 10.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
+            id: "pressure_mine", dims: Some((0.31, 0.1, 0.31)), name: "Pressure mine (safe)",
+            description: "A minelayer's mine with its lead cut. The plate still clicks if you press it; nothing answers. The charge inside is worth something to someone.",
+            category: RobotPart, size: Medium, mass: 2.4, bulk: 1.2,
             tags: ["electronics", "metal"],
         ),
 
@@ -1061,6 +1085,32 @@
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
             description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
+        ),
+        // Old surplus lots (`Load::Surplus`): tired primers that misfire and
+        // hang-fire now and then. Restored at the bench they're good again.
+        (
+            id: "ammo_762r_surplus", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R surplus rounds (box)",
+            description: "Wartime ball in a tarred paper wrap, the brass gone brown. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Surplus,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545_surplus", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 surplus rounds (box)",
+            description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
+            tags: ["brass", "powder"],
+        ),
+        // Throwable lights for the dark (`world::glow`): snapped or struck
+        // on the Use button, then thrown, or kept in a hand.
+        (
+            id: "chemlight", dims: Some((0.028, 0.028, 0.15)), name: "Chemlight",
+            description: "A green light stick in a foil wrap. Bend it till it snaps inside and shake: ten minutes of light, and not a sound.",
+            category: Gadget, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["polymer"],
+        ),
+        (
+            id: "hand_flare", dims: Some((0.03, 0.03, 0.23)), name: "Hand flare",
+            description: "A road flare in a red paper tube. Strike the cap across the end: a minute of hissing red fire, and every eye in the dark on it.",
+            category: Gadget, size: Small, mass: 0.18, bulk: 0.08, tags: ["powder"],
         ),
     ],
 )

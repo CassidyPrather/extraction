@@ -4,6 +4,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use extraction_core::ammo::{Load, Loads};
 use extraction_core::fabrication::{Make, TrayItem, available_taught, plan, recipe};
 
 use super::Raid;
@@ -294,6 +295,42 @@ pub fn run_bench(
                 }
                 bench.last = Some(format!("Made: {}", made.join(", ")));
             }
+            Make::Restore => {
+                // The box stays; the powder's used up. Its old and damp
+                // rounds are pulled, dried, re-primed and re-charged: good
+                // ball again.
+                let mut restored = 0;
+                for e in &used {
+                    let Ok((mut item, None)) = items.get_mut(*e) else {
+                        continue;
+                    };
+                    let def = catalog.get(item.kind());
+                    if def.category != extraction_core::items::Category::Ammo {
+                        commands.entity(*e).despawn();
+                        continue;
+                    }
+                    let (n, base) = (item.rounds, def.load);
+                    let mut stack = Vec::new();
+                    for _ in 0..n {
+                        stack.push(item.loads.pop_or(n - stack.len() as u32, base));
+                    }
+                    stack.reverse();
+                    for l in &mut stack {
+                        if matches!(l, Load::Surplus | Load::Damp) {
+                            *l = Load::Standard;
+                            restored += 1;
+                        }
+                    }
+                    item.loads = Loads(stack);
+                }
+                bag.contents.retain(|e| {
+                    !used.contains(e)
+                        || items.get(*e).is_ok_and(|(i, _)| {
+                            catalog.get(i.kind()).category == extraction_core::items::Category::Ammo
+                        })
+                });
+                bench.last = Some(format!("Re-packed {restored} rounds"));
+            }
             Make::Repair(amount) => {
                 // The gun stays; the parts are used up.
                 let mut gun_e = None;
@@ -459,5 +496,95 @@ mod tests {
             "untouched: {have:?}"
         );
         assert!(!have.contains(&"powder".to_string()), "{have:?}");
+    }
+    /// A box of surplus with a round gone damp, and powder: the bench's
+    /// restore makes every old and damp round good ball again; the box
+    /// stays and the powder's used.
+    #[test]
+    fn the_bench_restores_old_and_damp_rounds() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let (bench_e, tray) = app
+            .world_mut()
+            .query::<(Entity, &Bench)>()
+            .iter(app.world())
+            .map(|(e, b)| (e, b.tray.unwrap()))
+            .next()
+            .expect("the truck has a bench");
+        let catalog = app.world().resource::<Catalog>().clone();
+        let put = |app: &mut App, id: &str| -> Entity {
+            let kind = catalog.kind(id).unwrap();
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let e = {
+                let mut c = Commands::new(&mut queue, app.world());
+                spawn_item(
+                    &mut c,
+                    &catalog,
+                    SpawnItem {
+                        kind,
+                        transform: Transform::IDENTITY,
+                        condition: 1.0,
+                    },
+                )
+            };
+            queue.apply(app.world_mut());
+            app.world_mut()
+                .get_mut::<Backpack>(tray)
+                .unwrap()
+                .contents
+                .push(e);
+            app.world_mut().entity_mut(e).insert((
+                InBackpack { bag: tray },
+                ChildOf(tray),
+                RigidBodyDisabled,
+                ColliderDisabled,
+            ));
+            e
+        };
+        let box_e = put(&mut app, "ammo_762r_surplus");
+        put(&mut app, "powder");
+        {
+            let mut it = app.world_mut().get_mut::<Item>(box_e).unwrap();
+            let n = it.rounds;
+            assert!(it.loads.spoil(n, Load::Surplus, 2), "one damp");
+        }
+        app.update();
+        {
+            let mut b = app.world_mut().get_mut::<Bench>(bench_e).unwrap();
+            let i = b
+                .options
+                .iter()
+                .position(|o| *o == "restore_rounds")
+                .unwrap_or_else(|| panic!("restore in {:?}", b.options));
+            b.selected = i;
+            b.running = Some(("restore_rounds", 0.0));
+        }
+        app.update();
+        app.update();
+        let it = app.world().get::<Item>(box_e).expect("the box stays");
+        let mut loads = it.loads.clone();
+        let n = it.rounds;
+        let rounds: Vec<Load> = (0..n).map(|i| loads.pop_or(n - i, Load::Surplus)).collect();
+        assert_eq!(rounds.len(), 10);
+        assert!(
+            rounds.iter().all(|l| *l == Load::Standard),
+            "all good ball: {rounds:?}"
+        );
+        let bag = app.world().get::<Backpack>(tray).unwrap().contents.clone();
+        assert!(bag.contains(&box_e));
+        assert!(
+            !bag.iter()
+                .filter_map(|e| app.world().get::<Item>(*e))
+                .any(|i| catalog.get(i.kind()).id == "powder"),
+            "the powder's used"
+        );
     }
 }

@@ -61,6 +61,20 @@ pub struct TerrainExt {
     #[texture(105, dimension = "2d_array")]
     #[sampler(106)]
     pub arm: Option<Handle<Image>>,
+    /// Packed lanes through the snow (`world::snow::Packed`).
+    #[uniform(107)]
+    pub lanes: LaneParams,
+}
+
+/// How many packed lanes the terrain draws.
+pub const LANES: usize = 16;
+
+/// Lanes packed through the snow: per lane (a.x, a.z, b.x, b.z), and its
+/// freshness (0..1, 0: none) and half width in `extra` (x, y).
+#[derive(Clone, Copy, Debug, Default, ShaderType, Reflect)]
+pub struct LaneParams {
+    pub ends: [Vec4; LANES],
+    pub extra: [Vec4; LANES],
 }
 
 impl MaterialExtension for TerrainExt {
@@ -130,6 +144,7 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
             albedo: load("albedo", true),
             normal: load("normal", false),
             arm: load("arm", false),
+            lanes: LaneParams::default(),
         },
     }
 }

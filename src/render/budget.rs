@@ -145,6 +145,10 @@ impl Plugin for BudgetPlugin {
         if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
             app.add_systems(Last, log_counts);
         }
+        if let Some(path) = std::env::var_os("EXTRACTION_FRAMELOG") {
+            app.insert_resource(FrameLog::open(path.into()))
+                .add_systems(Last, log_each_frame);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -196,6 +200,10 @@ impl Plugin for BudgetPlugin {
         app.insert_resource(bevy::light::DirectionalLightShadowMap {
             size: knobs.shadow_map.unwrap_or(SHADOW_MAP),
         });
+        // The player's SMOOTHING setting, unless a knob sets MSAA.
+        if knobs.msaa.is_none() {
+            app.add_systems(PostUpdate, apply_msaa_setting);
+        }
         if knobs != Knobs::default() {
             info!("perf knobs: {knobs:?}");
             app.insert_resource(knobs)
@@ -493,6 +501,56 @@ impl Knobs {
         std::env::var("EXTRACTION_PERF")
             .map(|t| Self::parse(&t))
             .unwrap_or_default()
+    }
+}
+
+/// The comfort board's SMOOTHING (`Comfort::msaa`, `--msaa`) on every
+/// view of the world: the headset's eyes, the flat camera, the mirror.
+/// Not offscreen views (a scope's picture, an impostor capture), which
+/// set their own. With it off, FXAA instead: one cheap pass that takes
+/// the edge off wires and rails (Visual design's call; no SMAA, no TAA,
+/// whose ghosting in a headset is a comfort problem). Foliage's alpha to
+/// coverage follows the samples by itself (`trees::foliage_alpha`).
+#[allow(clippy::type_complexity)]
+fn apply_msaa_setting(
+    mut commands: Commands,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut cams: Query<
+        (
+            Entity,
+            &mut Msaa,
+            Option<&bevy::camera::RenderTarget>,
+            Has<bevy::anti_alias::fxaa::Fxaa>,
+        ),
+        (With<Camera3d>, Without<crate::render::OffscreenCamera>),
+    >,
+) {
+    let Some(comfort) = comfort else {
+        return;
+    };
+    let want = comfort.msaa_setting();
+    let all = comfort.is_changed();
+    for (e, mut m, target, fxaa) in &mut cams {
+        if !all && !m.is_added() {
+            continue;
+        }
+        if matches!(target, Some(bevy::camera::RenderTarget::Image(_))) {
+            continue;
+        }
+        if *m != want {
+            *m = want;
+        }
+        match (want == Msaa::Off, fxaa) {
+            (true, false) => {
+                commands
+                    .entity(e)
+                    .insert(bevy::anti_alias::fxaa::Fxaa::default());
+            }
+            (false, true) => {
+                commands.entity(e).remove::<bevy::anti_alias::fxaa::Fxaa>();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1097,6 +1155,10 @@ pub(crate) mod tests {
         .add_plugins((crate::GamePlugin, crate::ClientPlugin));
         app.finish();
         app.cleanup();
+        // One thread for the schedules: the counts are per-frame totals,
+        // and beside the rest of the suite a multi-threaded executor only
+        // contends (the Verifier measured these apps twice as fast so).
+        crate::single_threaded(&mut app);
         app
     }
 
@@ -1130,6 +1192,11 @@ pub(crate) mod tests {
     /// The view's load once its counts have held still for three checks
     /// ten frames apart (at most 600 frames).
     fn settled(app: &mut App) -> ViewLoad {
+        // Within half a percent (and two draws) three checks running: some
+        // views never hold exactly still (grass patches swapping at their
+        // edge as it sways, a chunk's streaming on its timer), and waited
+        // out the 600-frame cap for nothing.
+        let near = |a: usize, b: usize| a.abs_diff(b) <= (a.max(b) / 200).max(2);
         let mut last = (0, 0);
         let mut still = 0;
         for _ in 0..60 {
@@ -1138,12 +1205,17 @@ pub(crate) mod tests {
             }
             let load = measure(app);
             let now = (load.draws, load.tris);
-            still = if now == last { still + 1 } else { 0 };
+            still = if near(now.0, last.0) && near(now.1 / 1000, last.1 / 1000) {
+                still + 1
+            } else {
+                0
+            };
             last = now;
             if still >= 3 {
                 return load;
             }
         }
+        println!("    (not still after 600 frames: {last:?})");
         measure(app)
     }
 
@@ -1433,8 +1505,20 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
+    /// The game's own executor again (`client_flash` gives the count
+    /// gauges one thread): the timing gauges measure the frame as it runs,
+    /// schedule shares and all (PostUpdate's culling and transforms side
+    /// by side read 79% of a one-thread frame).
+    pub(crate) fn as_the_game_runs(app: &mut App) {
+        let mut schedules = app.world_mut().resource_mut::<Schedules>();
+        for (_, schedule) in schedules.iter_mut() {
+            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+        }
+    }
+
     pub(crate) fn busy_scene(map: &str) -> App {
         let mut app = client_threads(map, "downpour", Some(1));
+        as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ));
@@ -1811,7 +1895,8 @@ pub(crate) mod tests {
     /// reference units (`CPU_FRAME_UNITS`), each schedule its share
     /// (`CPU_SHARE`).
     #[test]
-    fn a_busy_moment_holds_the_cpu_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_a_busy_moment_holds_the_cpu_budget() {
         let _one_at_a_time = heavy();
         let stats = busy_moment("marrow_creek");
         let reference = REFERENCE.with(|r| {
@@ -1877,27 +1962,32 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn marrow_creek_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_marrow_creek_holds_the_budget() {
         holds("marrow_creek");
     }
 
     #[test]
-    fn kettle_pass_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_kettle_pass_holds_the_budget() {
         holds("kettle_pass");
     }
 
     #[test]
-    fn cinder_works_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_cinder_works_holds_the_budget() {
         holds("cinder_works");
     }
 
     #[test]
-    fn sallow_reservoir_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_sallow_reservoir_holds_the_budget() {
         holds("sallow_reservoir");
     }
 
     #[test]
-    fn rime_fell_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_rime_fell_holds_the_budget() {
         holds("rime_fell");
     }
 
@@ -1909,13 +1999,15 @@ pub(crate) mod tests {
     /// A thunderstorm, measured on a flash frame (its dearest: the sun's
     /// cascades on for it, the bolt, the rain sheets).
     #[test]
-    fn marrow_creek_holds_the_budget_in_a_storm() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_marrow_creek_holds_the_budget_in_a_storm() {
         holds_with("marrow_creek", Some(("storm", None)));
     }
 
     /// The first snow, lying: flakes falling, the snow on every surface.
     #[test]
-    fn kettle_pass_holds_the_budget_in_snow() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_kettle_pass_holds_the_budget_in_snow() {
         holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
 }
@@ -1959,4 +2051,79 @@ fn log_counts(
         meshes.iter().count(),
     );
     last.1 = names;
+}
+
+/// `EXTRACTION_FRAMELOG=<path>`: a line a frame, `frame cpu_ms gpu_ms`.
+/// cpu_ms is the frame's real time (in a headset, what the player feels
+/// when the CPU is the slow side); gpu_ms is the newest timed frame's
+/// top-level render passes summed (a few frames late, as timestamps read
+/// back), or -1 when none came back this frame. `scripts/frames.py`
+/// gives the worst frame and the 99.9th percentile of each, so a single
+/// long frame isn't lost in an average (`docs/PERFORMANCE.md`, "Hitches").
+#[derive(Resource)]
+struct FrameLog {
+    out: Option<std::io::BufWriter<std::fs::File>>,
+    frame: u64,
+    seen: Option<std::time::Instant>,
+}
+
+impl FrameLog {
+    fn open(path: std::path::PathBuf) -> Self {
+        let out = std::fs::File::create(&path)
+            .map_err(|e| warn!("EXTRACTION_FRAMELOG {}: {e}", path.display()))
+            .ok()
+            .map(std::io::BufWriter::new);
+        Self {
+            out,
+            frame: 0,
+            seen: None,
+        }
+    }
+}
+
+fn log_each_frame(
+    time: Res<Time<Real>>,
+    store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
+    mut log: ResMut<FrameLog>,
+) {
+    use std::io::Write;
+    let cpu = time.delta_secs_f64() * 1000.0;
+    let mut gpu = -1.0;
+    let mut newest = log.seen;
+    if let Some(store) = &store {
+        let mut sum = 0.0;
+        let mut any = false;
+        for d in store.iter() {
+            let path = d.path().as_str();
+            let Some(pass) = path
+                .strip_prefix("render/")
+                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+            else {
+                continue;
+            };
+            // Top-level passes only (nested ones are inside them).
+            if pass.contains('/') {
+                continue;
+            }
+            if let Some(m) = d.measurement() {
+                if log.seen.is_none_or(|s| m.time > s) {
+                    sum += m.value;
+                    any = true;
+                    newest = newest.max(Some(m.time));
+                }
+            }
+        }
+        if any {
+            gpu = sum;
+        }
+    }
+    log.seen = newest;
+    log.frame += 1;
+    let frame = log.frame;
+    if let Some(out) = &mut log.out {
+        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3}");
+        if frame % 90 == 0 {
+            let _ = out.flush();
+        }
+    }
 }

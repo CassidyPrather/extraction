@@ -24,7 +24,15 @@ impl Plugin for DevPlugin {
             )
             .add_systems(
                 PreUpdate,
-                pose_body_for_gallery.after(crate::rig::RigDriverSystems),
+                (
+                    pose_body_for_gallery,
+                    carry_for_gallery,
+                    climb_for_gallery,
+                    fight_for_gallery,
+                    treat_for_gallery,
+                )
+                    .chain()
+                    .after(crate::rig::RigDriverSystems),
             );
     }
 }
@@ -138,6 +146,12 @@ fn gallery(
     if *stage == 3 {
         let mut parts = spec.split(',');
         let first = parts.next().unwrap_or("ak74");
+        // `+grime`, `+wet`, `+fog`: shown weathered (`weapons::weather`).
+        let first = first
+            .replace("+grime", "")
+            .replace("+wet", "")
+            .replace("+fog", "");
+        let first = first.as_str();
         // `ak74+open`: work the action, to check the moving parts.
         // `mp133+jam`: a double feed, to see it drawn in the port.
         let (first, jam) = match first.strip_suffix("+jam") {
@@ -731,6 +745,405 @@ fn wear_kit(
             false
         });
     }
+}
+
+/// `--gallery carry` (or `drag`, `pack`; with `side` to see it from
+/// beside you): your hands on things (`interact::carry`). `carry`: a car
+/// door taken by its two ends off the ground and held up across you;
+/// `drag`: taken by its near end in the right hand and drawn back, the
+/// far end on the ground; `pack`: your pack off the left shoulder, hanging
+/// open in front of you, a dressing in it and the right hand reaching in.
+#[allow(clippy::too_many_arguments)]
+fn carry_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
+        With<crate::rig::LocalPlayer>,
+    >,
+    torsos: Query<&Children, With<crate::interact::body::Torso>>,
+    bags: Query<Entity, With<crate::interact::body::Backpack>>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let (carry, drag, pack) = (
+        spec.contains("carry"),
+        spec.contains("drag"),
+        spec.contains("pack"),
+    );
+    if !carry && !drag && !pack {
+        return;
+    }
+    let Some((player, root, mut input, children)) = players.iter_mut().next() else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    let local = |v: Vec3| Transform::from_translation(v);
+    let hand = |input: &mut crate::rig::RigInput, side: Side, at: Vec3| {
+        let h = input.hand_mut(side);
+        h.pose = local(at);
+        h.tracked = true;
+    };
+    if f == 10 && (carry || drag) {
+        let id = catalog.kind("car_door").expect("a car door");
+        // Flat on the ground ahead; across you to carry, pointing away to
+        // drag.
+        let turn = if carry {
+            Quat::IDENTITY
+        } else {
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+        };
+        let at = root.mul_transform(
+            Transform::from_xyz(0.0, 0.08, -0.6)
+                .with_rotation(turn * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        );
+        let mut c = commands.reborrow();
+        state.1 = Some(crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: id,
+                transform: at,
+                condition: 0.6,
+            },
+        ));
+    }
+    if f == 10 && pack {
+        let id = catalog.kind("field_dressing").expect("a dressing");
+        let mut c = commands.reborrow();
+        state.1 = Some(crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: id,
+                transform: *root,
+                condition: 1.0,
+            },
+        ));
+    }
+    let Some(thing) = state.1 else {
+        return;
+    };
+    if carry {
+        // Down to its ends, take hold, and up.
+        let (l, r) = if f < 60 {
+            (Vec3::new(-0.44, 0.12, -0.6), Vec3::new(0.44, 0.12, -0.6))
+        } else {
+            (Vec3::new(-0.42, 0.95, -0.42), Vec3::new(0.42, 0.95, -0.42))
+        };
+        hand(&mut input, Side::Left, l);
+        hand(&mut input, Side::Right, r);
+        if f == 40 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Right,
+                item: thing,
+                point: None,
+            });
+        }
+        if f == 45 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Left,
+                item: thing,
+                point: None,
+            });
+        }
+    } else if drag {
+        let near = Vec3::new(0.0, 0.12, -0.16);
+        let back = Vec3::new(0.25, 0.8, 0.15);
+        let t = ((f as f32 - 50.0) / 80.0).clamp(0.0, 1.0);
+        hand(&mut input, Side::Right, near.lerp(back, t));
+        if f == 40 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Right,
+                item: thing,
+                point: None,
+            });
+        }
+    } else if pack {
+        let Some(bag) = children
+            .iter()
+            .filter_map(|c| torsos.get(c).ok())
+            .flat_map(|k| k.iter())
+            .find(|e| bags.contains(*e))
+        else {
+            return;
+        };
+        if f == 20 {
+            // A dressing in the pack.
+            commands.queue(move |world: &mut World| {
+                if let Some(mut b) = world.get_mut::<crate::interact::body::Backpack>(bag) {
+                    b.contents.push(thing);
+                }
+                world.entity_mut(thing).insert((
+                    crate::interact::body::InBackpack { bag },
+                    ChildOf(bag),
+                    Transform::from_xyz(0.05, 0.12, 0.0),
+                    avian3d::prelude::RigidBodyDisabled,
+                    avian3d::prelude::ColliderDisabled,
+                    Visibility::Hidden,
+                ));
+            });
+        }
+        let shoulder = Vec3::new(-0.15, 1.6, 0.12);
+        let front = Vec3::new(-0.05, 1.2, -0.42);
+        let t = ((f as f32 - 40.0) / 30.0).clamp(0.0, 1.0);
+        hand(&mut input, Side::Left, shoulder.lerp(front, t));
+        hand(&mut input, Side::Right, Vec3::new(0.15, 1.0, -0.38));
+        if f == 30 {
+            actions.write(crate::interact::HandAction::Grab {
+                player,
+                side: Side::Left,
+                item: bag,
+                point: None,
+            });
+        }
+    }
+}
+
+/// `--gallery climb` (with `side` to see it from beside you): a wall 2 m
+/// high ahead, both hands gripping its top's near edge
+/// (`interact::hand_climb`), drawn down: you pull yourself up it. A flat
+/// rig's hands don't grip the world themselves, so the holds are put on
+/// them here; the climbing is the game's.
+#[allow(clippy::type_complexity)]
+fn climb_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    time: Res<Time>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut state: Local<(u32, f32)>,
+) {
+    use crate::interact::hand_climb::{HandHold, Hold};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
+        return;
+    }
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        state.1 = root.translation.y;
+        commands.spawn((
+            Name::new("Gallery wall"),
+            avian3d::prelude::RigidBody::Static,
+            avian3d::prelude::Collider::cuboid(2.4, 2.0, 0.25),
+            avian3d::prelude::CollisionLayers::new(
+                crate::world::Layer::World,
+                avian3d::prelude::LayerMask::ALL,
+            ),
+            root.mul_transform(Transform::from_xyz(0.0, 1.0, -0.48)),
+            Mesh3d(meshes.add(Cuboid::new(2.4, 2.0, 0.25))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.46, 0.44, 0.4),
+                perceptual_roughness: 0.95,
+                ..default()
+            })),
+        ));
+    }
+    if f < 10 {
+        return;
+    }
+    let top = state.1 + 2.0;
+    // Up on the edge, then drawn down a metre over a second and a half.
+    let pull = ((f as f32 - 40.0) / 96.0).clamp(0.0, 1.0);
+    let up = top + 0.03 - root.translation.y - pull * 1.0;
+    for side in [Side::Left, Side::Right] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_xyz(0.22 * side.sign(), up, -0.38)
+            .with_rotation(Quat::from_rotation_x(-0.4));
+        h.tracked = true;
+        h.grip = 1.0;
+    }
+    if f == 30 {
+        for c in children.iter() {
+            if let Ok((e, rh)) = hands.get(c) {
+                let at = root.transform_point(Vec3::new(
+                    0.22 * rh.side.sign(),
+                    top + 0.03 - root.translation.y,
+                    -0.38,
+                ));
+                commands.entity(e).insert(HandHold {
+                    on: Hold::Edge { top },
+                    at,
+                    since: time.elapsed_secs(),
+                });
+            }
+        }
+    }
+}
+
+/// `--gallery fight` (with `side` to see it from beside you): a crawler
+/// a metre ahead (`robots::indoor`), a crowbar raised in the right hand
+/// to strike, the left palm laid on the machine (`interact::fight`).
+#[allow(clippy::too_many_arguments)]
+fn fight_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput),
+        With<crate::rig::LocalPlayer>,
+    >,
+    parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+        return;
+    }
+    let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        let at = root.transform_point(Vec3::new(0.0, 0.0, -1.0));
+        let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+        state.1 = Some(crate::robots::walker::spawn_walker_sized(
+            &mut commands,
+            &zone,
+            at,
+            crate::robots::Job {
+                kind: crate::robots::JobKind::Watch,
+                site: at,
+                duration: f32::INFINITY,
+                exit: at,
+            },
+            false,
+            crate::robots::indoor::CRAWLER_HP,
+            crate::robots::indoor::CRAWLER_SIZE,
+            None,
+        ));
+        let bar = catalog.kind("crowbar").expect("a crowbar");
+        state.2 = Some(crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: bar,
+                transform: root.mul_transform(Transform::from_xyz(0.3, 1.2, -0.35)),
+                condition: 0.7,
+            },
+        ));
+    }
+    let (Some(crawler), Some(bar)) = (state.1, state.2) else {
+        return;
+    };
+    // The right hand on the bar, raised; the left on the crawler's body.
+    let raised = Vec3::new(0.28, 1.5, -0.3);
+    let body = parts
+        .iter()
+        .filter(|(p, _)| p.robot == crawler)
+        .map(|(_, g)| g.translation())
+        .max_by(|a, b| a.y.total_cmp(&b.y));
+    let palm = body
+        .map(|b| root.compute_affine().inverse().transform_point3(b) + Vec3::new(-0.05, 0.05, 0.22))
+        .unwrap_or(Vec3::new(-0.2, 0.8, -0.7));
+    let right = if f < 30 {
+        Vec3::new(0.3, 1.2, -0.35)
+    } else {
+        raised
+    };
+    for (side, at, rot) in [
+        (Side::Right, right, Quat::from_rotation_x(0.9)),
+        (Side::Left, palm, Quat::from_rotation_x(-0.3)),
+    ] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(at).with_rotation(rot);
+        h.tracked = true;
+    }
+    if f == 20 {
+        actions.write(crate::interact::HandAction::Grab {
+            player,
+            side: Side::Right,
+            item: bar,
+            point: None,
+        });
+    }
+}
+
+/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
+/// a body hurt and treated (`interact::wounds`, drawn by
+/// `render::wounds`). An open wound on the right thigh and the left
+/// forearm, a dressing round the right upper arm, a splint strapped on the
+/// right shin, and the left glove, turned palm up, bloody from the wound.
+fn treat_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (
+            Entity,
+            &mut crate::rig::RigInput,
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    mut frames: Local<u32>,
+) {
+    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+        return;
+    }
+    let Some((player, mut input, mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    let Some(mut wounds) = wounds else {
+        return;
+    };
+    *frames += 1;
+    let wound = |limb, along, around, bleed, dressed| Wound {
+        limb,
+        along,
+        around,
+        bleed,
+        dressed,
+    };
+    wounds.0 = vec![
+        wound(Limb::Thigh(Side::Right), 0.45, 1.4, 1.0, false),
+        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
+        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
+        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
+    ];
+    // Bleeding as the wounds have it, and in no danger of going down.
+    health.bleeding = 1.6;
+    health.hp = health.max;
+    if *frames == 2 {
+        commands.entity(player).insert(Fracture {
+            leg: Side::Right,
+            splinted: true,
+        });
+        for (h, rh) in &hands {
+            if rh.side == Side::Left {
+                commands.entity(h).insert(Bloodied(1.0));
+            }
+        }
+    }
+    // The left hand low and turned palm up.
+    let left = input.hand_mut(Side::Left);
+    left.pose = Transform::from_xyz(-0.18, 1.05, -0.32)
+        .with_rotation(Quat::from_rotation_z(std::f32::consts::PI) * Quat::from_rotation_x(0.4));
+    left.tracked = true;
 }
 
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment

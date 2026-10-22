@@ -351,6 +351,9 @@ pub enum MarkerKind {
         #[serde(default)]
         power: Option<P2>,
     },
+    /// A spotter's winch (`robots::spotter`): a balloon on a tether over
+    /// it, watching the ground round about and calling in the others.
+    Spotter,
 }
 
 fn sentry_arc() -> f32 {
@@ -422,8 +425,9 @@ pub fn prefab_base(id: &str) -> &str {
 /// prefab's own tests check these agree with what it builds.
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
     match prefab_base(id) {
-        // The face stair's retaining wall (world::dam::stair_wall).
-        "dam_face" => &[([72.5, 10.6], [60.0, 1.5])],
+        // The face stair's walls (world::dam::stair_wall): along the
+        // stair and the landing's south side, and the landing's east side.
+        "dam_face" => &[([79.0, 10.6], [66.5, 1.5]), ([144.0, 5.55], [1.5, 3.55])],
         _ => &[],
     }
 }

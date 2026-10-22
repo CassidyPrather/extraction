@@ -12,6 +12,7 @@
 //! Nothing here changes the game's rules: the raider drives the same
 //! `RigInput` and `HandAction`s as a player, through [`crate::bot`].
 
+pub mod harvest;
 pub mod indoor;
 pub mod playtest;
 pub mod raider;
@@ -43,19 +44,86 @@ impl Plugin for SimPlugin {
             .add_systems(Update, armour_up)
             .add_systems(
                 Update,
-                (raider::think, telemetry::record, telemetry::finish).chain(),
+                (
+                    raider::think,
+                    telemetry::record,
+                    telemetry::finish,
+                    career_memory,
+                )
+                    .chain(),
             );
     }
 }
 
+/// A career of sim raids (`SIM_MEMORY_FILE`): the valley's memory of the
+/// raider (`robots::memory`) is read from the file before the raid and,
+/// with this raid folded in, written back once it ends. Without the file
+/// each raid starts from a blank memory, as `zone_memory::MEMORY` at 0
+/// would leave it.
+fn career_memory(
+    log: Res<telemetry::SimLog>,
+    raid: Res<crate::raid::Raid>,
+    zone: Res<Zone>,
+    mut mind: ResMut<crate::robots::memory::ZoneMind>,
+    bots: Query<&raider::Raider>,
+    mut state: Local<(bool, bool)>,
+) {
+    let Some(path) = std::env::var_os("SIM_MEMORY_FILE").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let (loaded, written) = &mut *state;
+    if !*loaded {
+        *loaded = true;
+        if let Some(m) = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| ron::from_str::<extraction_core::zone_memory::ZoneMemory>(&t).ok())
+        {
+            mind.memory = m;
+            mind.memory.sanitize();
+        }
+        return;
+    }
+    if !log.finished || *written {
+        return;
+    }
+    *written = true;
+    // Out (or down, or out of time) before the raid's own turn folded it.
+    if !mind.trace.is_empty() {
+        if matches!(raid.phase, crate::raid::Phase::Extracting { .. }) && mind.trace.rv.is_none() {
+            mind.trace.rv = bots
+                .iter()
+                .find_map(|r| r.rv)
+                .and_then(|i| zone.map.markers_of(&MarkerKind::Rendezvous).nth(i))
+                .map(|m| m.at);
+        }
+        let trace = std::mem::take(&mut mind.trace);
+        mind.memory.fold(&trace);
+    }
+    match ron::ser::to_string_pretty(&mind.memory, ron::ser::PrettyConfig::new()) {
+        Ok(text) => {
+            let _ = std::fs::write(&path, text);
+        }
+        Err(e) => warn!("sim: memory not written: {e}"),
+    }
+}
+
 /// What a fresh game keeps in the truck's stash and the dev cache lacks:
-/// the radio and two dressings, laid out by the insertion point.
-fn spawn_sim_kit(mut commands: Commands, zone: Res<Zone>, catalog: Res<crate::items::Catalog>) {
+/// the radio and two dressings (and a skilled raider's bolts,
+/// `harvest::kit`), laid out by the insertion point.
+fn spawn_sim_kit(
+    mut commands: Commands,
+    zone: Res<Zone>,
+    catalog: Res<crate::items::Catalog>,
+    opts: Res<crate::launch::LaunchOptions>,
+) {
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
     let mut kit = vec!["radio", "field_dressing", "field_dressing"];
     kit.extend(raider::contract_kit());
+    kit.extend(harvest::kit(
+        opts.personality.as_deref().unwrap_or("looter"),
+    ));
     for (i, id) in kit.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
             continue;
@@ -351,6 +419,45 @@ mod tests {
                 app.update();
             }
         }
+    }
+
+    /// A sim replays from its seed: two raids on one seed write the same
+    /// telemetry, event for event. (On many threads they parted within
+    /// half a minute; see `crate::single_threaded`.)
+    #[test]
+    fn a_seed_plays_the_same_raid_twice() {
+        let run = |n: u32| {
+            let dir =
+                std::env::temp_dir().join(format!("extraction-replay-{}-{n}", std::process::id()));
+            let opts = LaunchOptions {
+                sim_run: Some("replay".into()),
+                sim_out: Some(dir.clone()),
+                map: "sallow_reservoir".into(),
+                seed: 1,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..90 * 60 {
+                app.update();
+            }
+            app.world_mut().resource_mut::<telemetry::SimLog>().flush();
+            let text = std::fs::read_to_string(dir.join("replay.jsonl")).unwrap();
+            let _ = std::fs::remove_dir_all(&dir);
+            text
+        };
+        let (a, b) = (run(0), run(1));
+        assert!(a.lines().count() > 40, "the raid got going:\n{a}");
+        if let Some((i, (x, y))) = a
+            .lines()
+            .zip(b.lines())
+            .enumerate()
+            .find(|(_, (x, y))| x != y)
+        {
+            panic!("the two runs part at event {i}:\n{x}\n{y}");
+        }
+        assert_eq!(a.lines().count(), b.lines().count());
     }
 
     /// Damage the telemetry can't place isn't called a fall: a wet aegis in

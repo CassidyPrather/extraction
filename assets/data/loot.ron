@@ -46,6 +46,8 @@
             Item(id: "ammo_9x18", weight: 3.0),
             Item(id: "ammo_545", weight: 2.0),
             Item(id: "ammo_762r", weight: 1.2),
+            Item(id: "ammo_762r_surplus", weight: 0.8),
+            Item(id: "ammo_545_surplus", weight: 0.6),
             Item(id: "ammo_12ga", weight: 2.0),
             Item(id: "pm_mag", weight: 1.0, condition: (0.4, 1.0)),
             Item(id: "ak_mag", weight: 0.6, condition: (0.4, 1.0)),
@@ -169,6 +171,7 @@
         "medical": (rolls: (1, 2), entries: [
             Item(id: "field_dressing", weight: 4.0),
             Item(id: "regen_injector", weight: 1.0),
+            Item(id: "splint", weight: 1.0),
             Nothing(weight: 2.0),
         ]),
         "gadgets": (rolls: (1, 1), entries: [
@@ -220,9 +223,9 @@
         "walker_wreck": (rolls: (2, 3), entries: [
             Item(id: "servo", weight: 3.0, condition: (0.2, 0.9)),
             Item(id: "sensor_eye", weight: 1.0, condition: (0.2, 0.9)),
-            Item(id: "robot_cell", weight: 1.2, condition: (0.1, 0.8)),
+            // (Its cell and gun pod are on the wreck, taken off by hand:
+            // robots/salvage.rs.)
             Item(id: "scrap_metal", weight: 2.0),
-            Item(id: "robot_gunpod", weight: 0.5, condition: (0.2, 0.7)),
             Item(id: "robot_ammo_belt", weight: 1.0),
         ]),
         "dirigible_wreck": (rolls: (5, 8), entries: [

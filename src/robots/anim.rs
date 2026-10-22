@@ -41,6 +41,13 @@ const ACCEL: f32 = 2.6;
 const TURN_RATE: f32 = 1.7;
 const TURN_RESPONSE: f32 = 5.0;
 const STEP_HEIGHT: f32 = 0.26;
+/// A badly hurt leg (half health or less) drags its foot this far through
+/// its swing before lifting it.
+pub const SCUFF_UNTIL: f32 = 0.4;
+/// The hitch as weight comes on the leg it favours: a drop (bob speed,
+/// m/s, at a dead leg's worth of hurt) and a roll onto that side (rad/s).
+const HITCH_DIP: f32 = 1.4;
+const HITCH_ROLL: f32 = 1.3;
 
 /// Kept low (a grappler lying in wait, `Intent::low`), the orb sits this
 /// much lower on bent legs.
@@ -171,6 +178,52 @@ pub struct Gait {
     fall: Vec3,
     /// Getting up: seconds left, feet first, then the body rises on them.
     pub rising: f32,
+    /// How far each planted foot has slid on ice since it came down.
+    slid: [f32; LEGS],
+}
+
+/// Ice: steeper than this (rise over run) a planted foot creeps downhill
+/// on it, faster the steeper; once one has gone this far it stumbles.
+pub const ICE_GRIP: f32 = 0.25;
+pub const SLIP_SPEED: f32 = 1.6;
+pub const STUMBLE_AFTER: f32 = 0.12;
+
+/// Feet on ice: `downhill(p)` is the slope under a point as a horizontal
+/// vector (rise over run, pointing down it), or none where there's no ice.
+/// A planted foot on a slope past `ICE_GRIP` slides down it; one that
+/// has slid `STUMBLE_AFTER` jolts the body and steps afresh.
+pub fn slip_feet(
+    w: &mut Walker,
+    g: &mut Gait,
+    dt: f32,
+    downhill: impl Fn(Vec3) -> Option<Vec3>,
+    ground: &mut impl FnMut(Vec3) -> f32,
+) {
+    for i in 0..LEGS {
+        let f = &mut w.feet[i];
+        if !f.alive || f.t < 1.0 {
+            g.slid[i] = 0.0;
+            continue;
+        }
+        let Some(slope) = downhill(f.planted) else {
+            g.slid[i] = 0.0;
+            continue;
+        };
+        let steep = slope.length() - ICE_GRIP;
+        if steep <= 0.0 {
+            continue;
+        }
+        let step = slope.normalize_or_zero() * SLIP_SPEED * steep * dt;
+        let p = f.planted + step;
+        f.planted = Vec3::new(p.x, ground(p), p.z);
+        g.slid[i] += step.length();
+        if g.slid[i] > STUMBLE_AFTER {
+            g.slid[i] = 0.0;
+            // A lurch toward the slipping foot; it'll step from where it is.
+            g.wobble_vel += Vec3::Y.cross(slope.normalize_or_zero()) * 0.9;
+            g.dazed += 0.15;
+        }
+    }
 }
 
 /// Damage that knocks a walker off its feet in one hit (or two quick
@@ -214,6 +267,7 @@ impl Default for Gait {
             floored: 0.0,
             fall: Vec3::ZERO,
             rising: 0.0,
+            slid: [0.0; LEGS],
         }
     }
 }
@@ -380,6 +434,10 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
+    // The leg it favours: its worst living one, once it's been hit.
+    let favoured = (0..LEGS)
+        .filter(|i| w.feet[*i].alive && g.leg_health[*i] <= 0.7)
+        .min_by(|a, b| g.leg_health[*a].total_cmp(&g.leg_health[*b]));
     // Down to two legs it can't stand: belly on the ground, it hauls
     // itself along on what it has left.
     let crawling = alive_legs == 2 && !drive.down;
@@ -482,9 +540,18 @@ pub fn step_walker(
             let k = ((nt - 0.3) / 0.7).clamp(0.0, 1.0);
             k * k * (3.0 - 2.0 * k)
         };
+        // The bad leg barely clears the ground: it scuffs through the
+        // first of its swing, then swings low (fx kicks dirt up off it).
+        let scuff = if favoured == Some(i) {
+            let late = ((nt - SCUFF_UNTIL) / (1.0 - SCUFF_UNTIL)).clamp(0.0, 1.0);
+            (0.3 + 0.7 * h) * if h <= 0.5 { late } else { 1.0 }
+        } else {
+            1.0
+        };
         let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) * (1.0 - 0.4 * g.crouch)
             + dy.abs() * 0.4)
-            * (std::f32::consts::PI * nt).sin();
+            * (std::f32::consts::PI * nt).sin()
+            * scuff;
         let xz = f.from.lerp(f.to, s);
         f.planted = Vec3::new(xz.x, f.from.y + dy * sv + lift, xz.z);
         if nt >= 1.0 {
@@ -493,6 +560,17 @@ pub fn step_walker(
             // A heavy foot taking weight; a bad leg buckles a little more.
             kick += (0.22 + 0.1 * fast.min(1.0) + (1.0 - h) * 0.5)
                 * if g.shape == Shape::Heavy { 1.6 } else { 1.0 };
+            // The hitch: weight on the bad leg, it gives; the body drops
+            // and rolls onto that side, and comes up off it quick.
+            if favoured == Some(i) {
+                let hurt = 1.0 - h;
+                kick += HITCH_DIP * hurt;
+                let hip = g.shape.hip(i);
+                let side = Vec3::Y
+                    .cross(rot * Vec3::new(hip.x, 0.0, hip.z))
+                    .normalize_or_zero();
+                g.wobble_vel += side * HITCH_ROLL * hurt;
+            }
         }
         w.feet[i] = f;
     }
@@ -602,7 +680,7 @@ pub fn step_walker(
     let bob_target = 0.025 * swing * fast.min(1.0) + if g.leap > 0.0 { 0.12 * s } else { 0.0 };
     g.bob_vel -= kick;
     g.bob_vel += ((bob_target - g.sway.y) * 140.0 - g.bob_vel * 15.0) * dt;
-    let bob = (g.sway.y + g.bob_vel * dt).clamp(-0.15, 0.08);
+    let bob = (g.sway.y + g.bob_vel * dt).clamp(-0.15 - 0.1 * s, 0.08);
 
     // Weight over the planted feet.
     let (mut psum, mut pn) = (Vec3::ZERO, 0.0f32);
@@ -763,6 +841,7 @@ pub fn leg_poses(w: &Walker, g: &Gait, t: &Transform) -> [[Vec3; 3]; LEGS] {
 #[allow(clippy::type_complexity)]
 pub(crate) fn walk(
     mut walkers: Query<(
+        Entity,
         &mut Walker,
         &mut Gait,
         &mut Transform,
@@ -779,12 +858,15 @@ pub(crate) fn walk(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut steps: MessageWriter<WalkerStep>,
+    snow: Option<Res<crate::world::snow::Snow>>,
 ) {
     let dt = time.delta_secs();
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
-    for (mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in &mut walkers {
+    for (entity, mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in
+        &mut walkers
+    {
         let pos = t.translation - g.sway;
         // Steering along the path.
         let mut desired = Vec3::ZERO;
@@ -828,10 +910,24 @@ pub(crate) fn walk(
                     .map(|hit| hit.distance)
             })
         };
+        let (by, yaw) = (entity, w.yaw);
         let mut landed = |at: Vec3| {
-            steps.write(WalkerStep { at });
+            steps.write(WalkerStep { at, by, yaw });
         };
         step_walker(&mut w, &mut g, &mut t, &drive, dt, &mut ground, &mut landed);
+        if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
+            // Lying snow packs to ice under it: steep ground is treacherous.
+            let ice = |p: Vec3| {
+                if snow.lies(p.y) < 0.3 {
+                    return None;
+                }
+                let e = 0.4;
+                let dx = zone.ground(p.x + e, p.z) - zone.ground(p.x - e, p.z);
+                let dz = zone.ground(p.x, p.z + e) - zone.ground(p.x, p.z - e);
+                Some(-Vec3::new(dx, 0.0, dz) / (2.0 * e))
+            };
+            slip_feet(&mut w, &mut g, dt, ice, &mut ground);
+        }
         poses.0 = leg_poses(&w, &g, &t);
         // Leg colliders follow the lower segments (local to the root).
         // Built from parts rather than a matrix, so the scale stays exactly
@@ -861,8 +957,33 @@ impl Plugin for AnimPlugin {
                 knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
                 haul_lines.after(super::perceive),
                 kick_loose,
+                print_snow,
             ),
         );
+    }
+}
+
+/// A foot coming down in lying snow leaves a print (`world::snow`): the
+/// machines' own ring, so walkers can't push the player's trail out.
+fn print_snow(
+    mut steps: MessageReader<super::walker::WalkerStep>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    tracks: Option<ResMut<crate::world::snow::Tracks>>,
+) {
+    let (Some(snow), Some(mut tracks)) = (snow, tracks) else {
+        steps.clear();
+        return;
+    };
+    for step in steps.read() {
+        if snow.lies(step.at.y) > 0.25 {
+            tracks.add_other(crate::world::snow::Print {
+                at: step.at,
+                yaw: step.yaw,
+                left: false,
+                by: step.by,
+                fill: 0.0,
+            });
+        }
     }
 }
 
@@ -1457,6 +1578,75 @@ mod tests {
         assert!(moved >= 2, "{moved} of 12 moved");
     }
 
+    /// A walker in lying snow leaves prints where its feet come down, in
+    /// the machines' own ring (the player's trail is left alone); with no
+    /// snow, none.
+    #[test]
+    fn walkers_print_the_snow() {
+        let walk = |snowy: bool| {
+            // Rime Fell's col lies above its snow line; the training yard
+            // has none.
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    map: if snowy { "rime_fell" } else { "training_yard" }.into(),
+                    map_explicit: true,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let at = if snowy {
+                zone.on_ground(70.0, -262.0)
+            } else {
+                zone.on_ground(40.0, 230.0)
+            };
+            let walker = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = super::super::walker::spawn_walker(
+                    &mut c,
+                    &zone,
+                    at,
+                    super::super::Job {
+                        kind: super::super::JobKind::Survey,
+                        site: at,
+                        duration: 999.0,
+                        exit: at,
+                    },
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..20 {
+                app.update();
+            }
+            app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+                vec![Vec3::new(at.x + 5.0, 0.0, at.z)];
+            for _ in 0..(90 * 4) {
+                app.update();
+            }
+            let tracks = app.world().resource::<crate::world::snow::Tracks>();
+            let mine: Vec<Vec3> = tracks
+                .others()
+                .filter(|p| p.by == walker)
+                .map(|p| p.at)
+                .collect();
+            (mine, tracks.prints().count(), at)
+        };
+        let (prints, theirs, at) = walk(true);
+        assert!(prints.len() >= 6, "{} prints in the snow", prints.len());
+        assert_eq!(theirs, 0, "none in the player's trail");
+        assert!(prints.iter().all(|p| p.distance(at) < 8.0 && p.is_finite()));
+        assert!(walk(false).0.is_empty(), "no snow, no prints");
+    }
+
     /// Underground, below the terrain, footing is the floor the ray finds,
     /// never the heightfield overhead.
     #[test]
@@ -1739,6 +1929,117 @@ mod tests {
                 "{dead:?}: it crawled {went:.2} m in 10 s"
             );
         }
+    }
+
+    /// A walker on a bad leg hitches: each time weight comes on that leg
+    /// the body drops and rolls more than a whole one's does, and the bad
+    /// foot scuffs along the ground through the first of its swing.
+    #[test]
+    fn a_bad_leg_hitches_and_scuffs() {
+        let walk = |health: f32| {
+            let flat = |_: Vec3| 0.0;
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            g.leg_health[1] = health;
+            let (mut low, mut high, mut roll) = (f32::MAX, f32::MIN, 0.0f32);
+            let mut scuffed = (0, 0);
+            for k in 0..(8 * 90) {
+                let drive = Drive {
+                    desired: Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| 0.0,
+                    &mut |_| {},
+                );
+                // Past the start-up, measure the bob and the roll.
+                if k > 2 * 90 {
+                    low = low.min(t.translation.y);
+                    high = high.max(t.translation.y);
+                    roll = roll.max(g.wobble.length());
+                    let f = &w.feet[1];
+                    if f.t > 0.05 && f.t < SCUFF_UNTIL {
+                        scuffed.1 += 1;
+                        if f.planted.y < 0.02 {
+                            scuffed.0 += 1;
+                        }
+                    }
+                }
+            }
+            (high - low, roll, scuffed)
+        };
+        let (bob, roll, _) = walk(1.0);
+        let (hbob, hroll, (low, swung)) = walk(0.3);
+        assert!(
+            hbob > bob * 2.0 && hbob > 0.06,
+            "it dips: {hbob:.3} m vs {bob:.3} m"
+        );
+        assert!(hroll > roll * 2.0, "and rolls: {hroll:.3} vs {roll:.3}");
+        assert!(
+            swung > 0 && low * 10 >= swung * 9,
+            "it scuffs: {low}/{swung}"
+        );
+    }
+
+    /// On an icy slope its planted feet creep downhill and it stumbles;
+    /// on a gentle one, or without ice, they hold.
+    #[test]
+    fn feet_slip_on_ice_slopes() {
+        let run = |grade: f32, icy: bool| {
+            let hill = move |p: Vec3| -grade * p.x;
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &hill);
+            let start: Vec<Vec3> = w.feet.iter().map(|f| f.planted).collect();
+            let mut wobbled = 0.0f32;
+            for _ in 0..(3 * 90) {
+                let drive = Drive {
+                    desired: Vec3::ZERO,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                let dt = 1.0 / 90.0;
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    dt,
+                    &mut |p| hill(p),
+                    &mut |_| {},
+                );
+                let ice = |_: Vec3| icy.then_some(Vec3::new(grade, 0.0, 0.0));
+                slip_feet(&mut w, &mut g, dt, ice, &mut |p| hill(p));
+                wobbled = wobbled.max(g.wobble.length());
+                for f in w.feet.iter().filter(|f| f.t >= 1.0) {
+                    assert!(
+                        (f.planted.y - hill(f.planted)).abs() < 1e-3,
+                        "a foot off the slope"
+                    );
+                }
+            }
+            let slid = w
+                .feet
+                .iter()
+                .zip(&start)
+                .map(|(f, s)| f.planted.x - s.x)
+                .fold(f32::MIN, f32::max);
+            (slid, wobbled)
+        };
+        let (slid, wobbled) = run(0.45, true);
+        assert!(slid > 0.1, "it slid {slid:.2} m down the ice");
+        assert!(wobbled > 0.02, "it stumbled ({wobbled:.3})");
+        assert!(run(0.45, false).0 < 0.05, "dry, it holds");
+        assert!(run(0.15, true).0 < 0.05, "a gentle icy slope holds");
     }
 
     /// Turning on the spot, it steps round rather than skating its feet.

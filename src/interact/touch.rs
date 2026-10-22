@@ -93,7 +93,7 @@ pub struct HandStruck {
 /// What the collider `e` (or the thing it's part of) is made of, met at
 /// `at`.
 #[allow(clippy::type_complexity)]
-fn stuff_of(
+pub(crate) fn stuff_of(
     e: Entity,
     at: Vec3,
     parents: &Query<&ChildOf>,

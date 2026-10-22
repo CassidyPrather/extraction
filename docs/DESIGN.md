@@ -238,6 +238,39 @@ and comes within sight of a fresh print of yours (12 m by day, less as
 light and weather close in) reads the trail on, about 15 m along while
 it's fresh, and goes to look there; arrived, it reads on. It walks your
 trail to you unless the snow has filled it in: fresh snow is the cover.
+A plough's fresh lane takes no prints, but a trail that stops at its
+edge says you walked it: the robot goes on along the lane the way you
+were heading (`robots/signs.rs`).
+
+**The Zone remembers you** (`robots/memory.rs`, `zone_memory`). Each valley keeps a compact memory of your habits, saved with it:
+- the 30 m cells you walk;
+- the rendezvous you get out from;
+- where you wreck its machines;
+- the loot spots you clear.
+
+It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays off within a few raids. When you next step out, it leans, gently and capped:
+- patrols pick places on your usual ways up to twice as often;
+- the sentry nearest your favourite rendezvous turns its sweep toward it, by at most a quarter of its arc;
+- up to two buildings you cleared are found with their doors shut, one wedged if there's another way in;
+- one machine of the kind you wrecked is left watching where you did it.
+
+The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
+
+**The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
+- a door you opened;
+- wire or a padlock cut;
+- crowbar marks;
+- broken glass or a smashed crate;
+- a wreck dragged from where it fell;
+- a loot spot left bare.
+
+Each is a sign with an age, in one registry. A robot that passes within sight of a fresh one (under 3 minutes) goes to look; an older one only makes it wary. Two fresh signs in a line are a route: it goes on past the newer, the way they run.
+
+**What you handle gives you away** (`robots/signs.rs`). A gun knocked on
+a doorframe, or let go so that it slaps back on its sling, is heard (up
+to 15 m for a hard knock). A dragged load scrapes, and robots hear it
+twice a second. A car door or panel in your hands makes you more to see,
+and while it swings you aren't keeping still, however still you stand.
 A crate you break is gone for them too: where it stood is walkable again
 and no longer cover.
 
@@ -411,6 +444,101 @@ burner, well); a hand pulling its cell through the headset path
 behind a well while a heavy comes for it); `--gallery
 heavy[:open|:hot|:down]` and `docs/shots/heavy/`.
 
+### The sentry: learn it, then walk past it
+
+A turret head on a 4.6 m mast at the Gates, the Depot's mouths and key
+pits (`robots/sentry.rs`, its rules `extraction_core::sentry`; placed as
+`MarkerKind::Sentry` by Map design, held to `map_sentry`'s lint). It is
+built to be got round, not shot down:
+
+- **Its sweep is learnable.** End to end at 24°/s with a pause at each end;
+  **behind it is blind**: its head can't turn past its arc.
+- **It warns**: a chirp, then a second before the first round of a burst;
+  out of sight two seconds and it has to chirp again.
+- **It's drawn**: a thrown can's clatter, a hot artifact or a mirror shard
+  flying past turns it for five seconds.
+- **It runs on a cable** to a junction box behind it: bolt cutters through
+  any stretch, or the box wrecked, and it's dark. An EMP blinds it; the
+  recall cuts the depots off from it. A heavy lured into its arc takes its
+  rounds. At night its searchlight sweeps with it.
+- Wrecked (its head shot through), it hangs off its mast, a landmark.
+
+Checks: the rules' tests; the body's (sweep, chirp before fire, never
+behind, a cut dark, real bolt cutters on its cable, a noise draws it, a
+heavy in its fire); `sentry_cable` (a bot gets behind one, cuts the cable,
+walks through its arc unhurt; without the cut it's shot down).
+
+### The spotter, the minelayer and the mender
+
+Three more of the Custodian's machines, none armed, each with a tell, a
+weakness, salvage and a scenario.
+
+**The spotter** (`robots/spotter.rs`, `extraction_core::spotter`): an
+observation balloon 24 m up on a tether, a camera under it turning a slow
+circle (40 s a turn, a 100° view). It needs 3.5 s of you in view for a fix;
+its beacon blinks faster and goes red as the fix builds, and a full fix
+sounds a klaxon that brings robots near it to look and queues a response
+to where you stood. *Weakness:* straight under it is blind (about 20 m
+round the winch): get to the winch and cut the tether, or wreck the winch,
+and it rises and drifts off downwind. *Salvage:* hole the envelope and it
+sinks to the ground: a gas valve, fabric, its eye if whole. Placed by
+`MarkerKind::Spotter`. Scenario `spotter_tether` (no call);
+`spotter_control` walks out under its watch and is called.
+
+**The minelayer** (`robots/minelayer.rs`, `extraction_core::minelayer`):
+a slow tracked crawler that sets out from the gate five minutes into a
+raid and lays a staggered line of four pressure mines across the way at
+two points of interest. *Tell:* the grind of its tracks, the chunk of its
+chute; each mine blinks red every two seconds in a ring of turned earth.
+A mine arms after 4 s, clicks under 25 kg and goes off 0.35 s later.
+*Disarm* by cutting its lead with bolt cutters or holding a hand on its
+prong for 2.5 s: either way a safe `pressure_mine` to sell; or shoot it
+from out of its 4 m reach. *Weakness:* its striped hopper: hole it and the
+mines in it cook off with it. Seen, it turns tail and drops a mine
+behind it. *Salvage:* its cell, a servo, and the mines left in a whole
+hopper. Scenario `minefield` (spot, cut, go round, unhurt);
+`minefield_control` walks straight through and sets one off.
+
+**The mender** (`robots/mender.rs`, `extraction_core::mender`): a small
+quadcopter with a welding arm, sent from the gate when the valley's
+machines are hurt (120 hp missing; two a raid). It picks the worst hurt
+near at hand and welds back 9 hp a second, only what's still there.
+*Tell:* the arc's blue-white flicker, seen a valley off. *Weakness:* it
+hangs still and low beside the part it welds; shoot its arm off and it
+can mend nothing. *Salvage:* as a drone, and a kit of spare parts.
+Scenario `mender_weld` (shoot it off a hurt pylon);
+`mender_control` lets it weld the pylon whole.
+
+### The plough: Rime Fell's snow machine
+
+A machine that only makes sense in snow (`robots/plough.rs`, its rules
+`extraction_core::plough`): a tracked rotary snow-blower that keeps
+Rime Fell's Pass road open for the Custodian's convoys. It runs the road
+up from its shed and back, on a beat (about 10 minutes), only while snow
+lies; it never leaves the road and carries no gun.
+
+- **The tell.** Its amber beacon, its auger's roar, and a plume of snow
+  arcing out of its chute that you see across the valley. Anyone in its
+  lane ahead gets its horn about 8 s before it arrives: it doesn't stop.
+- **The lane.** Behind it the road is packed and clean (`Lanes`): it
+  takes no prints while it's fresh (25 min dry, 6 in a blizzard), so it's
+  the one way through the snow the print-reading machines can't follow,
+  and it's in full view, and the plough comes back.
+- **The bank.** What lies in its way, loot and all, goes out of its chute
+  into a bank on the downhill side, buried. A hand held in the bank
+  (1.2 s) digs it out.
+- **The weakness.** Anything of 1.5 kg or more (a crowbar, a rifle, a
+  fuel can) in its auger jams it for 30 s: the engine hatch springs and
+  its power cell rides up out of its well, to be shot. Its body shrugs
+  off rounds. An EMP stalls it.
+- **The salvage.** Its fuel, its auger's scrap, a servo.
+
+Checks: the rules' tests (its beat, the horn's lead, the lane, the
+bank side); the body's (the horn then the auger, a tin buried and dug
+out by a hand, a crowbar's jam); `plough_jam` (a tin buried, a crowbar
+laid in its lane jams it, the bot shoots the cell); `--gallery
+plough[:after]` and `docs/shots/plough/` (before and after it passes).
+
 ### Death and the memorial convoy
 
 When you go down, a collection robot is dispatched from the Gate to recover
@@ -519,14 +647,82 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   - The Nagant flips off its high bore; the PM is snappy.
   - The flare pistol is a long, slow shove.
   - The TOZ-8 .22 barely moves.
+- **A cupped pistol** (`layout::cup`): a handgun has a place under its
+  grip for the other palm. Cupped there, it counts as two hands: a stiffer
+  spring and more mass behind it. It steadies the gun without aiming it,
+  so the gun hand still points it. A PM's kick drops from 313 to 82 mrad.
+  Shot: `docs/shots/weapon-feel/pistol_cupped.png`.
+- **Held out or tucked in**: away from the chest a gun's weight tells in
+  its sway. `SWAY_REACH` is 1.6 mrad per kg at arm's length (65 cm from
+  the chest), falling to nothing tucked in at 30 cm. A second hand halves
+  it, and a stock against the shoulder bears it.
+- **The sling** (`weapons/carry.rs`): a gun you've slung once stays on
+  its sling. Let it go anywhere, not thrown, and the sling catches it back
+  where it hangs instead of dropping it. Thrown, or put in a bag or someone
+  else's hands, it's off the sling.
+- **Bumps**: a held gun carried into a wall, a doorframe or a tree is
+  stopped by it. The muzzle is knocked back off it, the hands feel what it
+  hit by material, and a hard knock (0.8 m/s or more) is heard
+  (`GunBumped`). A gun's collider is its own shape, out to the muzzle.
+- **Weather and dirt** (`weapons/weather.rs`, `Firearm::grime` and
+  `::stiff`): every gun and scope takes the air where it is (its
+  carrier's chill, or its own roof).
+  - *Cold* soaks in over minutes (a roof warms it out faster) and stiffens
+    the oil. A stiff action cycles slower (11 rounds a second on automatic
+    to 7) and jams more.
+  - *Freezing*: a bolt-action left out cold and wet for 90 s freezes shut.
+    Slap the handle up to break it, or bring it in to thaw.
+  - *Fog*: a scope cold from outside brought under a roof fogs white
+    (`pso_fogged.png`). A glove across the lens clears it, and it comes
+    back slowly until the glass warms.
+  - *Sting*: taking hold of deep-cold metal stings the hand.
+  - *Grime* comes from rain and melting snow on an uncovered gun, a
+    dunking, and ash drifting down in the dry. It jams the action and
+    makes each shot foul it faster. A wet gun shines; a grimy one goes
+    dark and dull (`ak_clean_vs_grimy_wet.png`).
+  - *The cure*: clear the jam by hand, then run a glove along the
+    receiver. Each 12 cm stroke takes off a fifth of the grime and a
+    quarter of the wet. The cleaning kit takes the rest, fouling and all.
+  - *The gauge* (core): jams per 100 rounds are 0.08 clean, 4.2 cold,
+    5.9 grimy and 9.7 both, back to 1.3 after four strokes of a wipe.
+- **Stiff actions in the hand** (`weapons::drag`): in cold oil a bolt,
+  pump or charging handle drags. It follows the hand no faster than
+  3 m/s divided by (1 + 3 × stiffness), and doesn't move at all unless the
+  hand pulls at 0.35 m/s × stiffness; a timid hand slides on it. It
+  grinds in the hand as it moves (`ActionGrind` for Audio). A cold
+  bolt brought back short and pushed home has short-stroked
+  (`Malfunction::ShortStroke`): the trigger's dead until it's worked
+  fully. Gauge: a 10 cm stroke at 2 m/s takes 0.06 s warm, 0.14 s cold.
+- **Ammunition condition** (`Load::Surplus`, `Load::Damp`,
+  `Firearm::ammo_cold`): old surplus lots and rounds that got wet (ball's
+  plain primers; AP, tracers, slugs and stars are sealed) misfire and
+  hang-fire. So does a round as cold as the gun.
+  - *Wetting*: a box, magazine or gun soaked past 0.6 turns a round damp
+    every 45 s.
+  - *A hang-fire* is a click, then the shot 0.3 to 1 s later from wherever
+    the muzzle is by then. Open the action on it first and it goes off out
+    of battery: it hurts the hand and the gun.
+  - *Restoring*: the bench's "Re-pack a box's old or damp rounds" (a box
+    and powder) makes them good ball again.
+  - *The gauge*, misfires and hang-fires per 100 rounds:
+
+    | Rounds | Misfires | Hang-fires |
+    |---|---|---|
+    | fresh | 0.17 | 0 |
+    | surplus | 3.2 | 3.3 |
+    | damp | 18.8 | 7.9 |
+    | cold-soaked | 4.4 | 5.5 |
+    | scavenged re-pack | 4.75 | 0 |
+
+    The re-pack's trouble is the squib. The longest hang was 1.0 s.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
-  muzzle path. Each is held as a player would: two hands where there's
-  a place for the second, shouldered where there's a stock. The trigger
+  muzzle path. Each is held as a player would: two hands (a handgun
+  cupped), shouldered where there's a stock. The trigger
   is held for half a second on its most automatic setting. The gauge:
   - Each pair of guns must differ in peak rise and its timing, peak push,
     the climb and walk left at the end, and shots, by at least 8.
-  - Each must stay under 0.14 rad of climb with two hands, or 0.4 for a
-    pistol in one.
+  - Each must stay under 0.14 rad of climb with two hands. A cup must at
+    least halve a handgun's kick in one hand.
   - A single shot must be back within a third of its peak by the end.
   - A new gun in the catalog is measured with the rest.
   - `cargo test every_gun_has_its_own -- --nocapture` prints the table.
@@ -585,8 +781,43 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   plank wall; rifles go through planks, plaster and tin; only the Mosin
   through a log wall; brick, concrete, rock, earth and robot plate stop
   everything. Grazing a hard face (under about 20 degrees) mostly turns
-  the round, keeping 60% of its speed. The range test
-  (`weapons/range.rs`) fires every gun at every material to hold it.
+  the round, keeping 60% of its speed, with a whine and a streak of
+  sparks. The range test (`weapons/range.rs`) fires every gun, and the
+  robots' guns, at every material to hold it.
+  - Hollow things cost their walls whatever their depth, plus a little
+    per millimetre for what's inside. A sheet-steel box thicker than 4 cm
+    (a car's door, its body, a bus, a locker) is a shell: two skins of
+    0.8 mm sheet, about 440 J for a door. A car door stops pistols,
+    revolvers, buckshot and a .22, and nothing else. A walker's, a
+    sentry's or a drone's round comes through it, and a door carried as
+    a shield is the same door. Broadside, a whole car (door, body, door)
+    stops everything but the SKS, the Mosin, the SVD, a slug and a
+    heavy's gun. An angled door is thicker: a drone's round that comes
+    through square on stops in it at 45 degrees.
+  - Robots: a drone's every part and any robot's eye, rotor or gas cell
+    is a thin housing, two 1 mm walls of plate with its works between.
+    Rifle rounds go in one side and out the other, on to whatever is
+    behind; pistol and SMG rounds lodge. Walkers' cores, legs and guns,
+    and all armour plates, are solid plate.
+  - Robots' rounds are 8 g through the same projectiles, and a walker's
+    blind fire reasons with the same costs (`destruction::through`).
+  - Out the far side, the round throws spall on along its line: a cone
+    of hot sparks and flakes from steel, long splinters from boards, dust
+    and grit from masonry, a fan of shards from glass.
+  - The gauge (`cargo test -p extraction_core the_penetration_gauge --
+    --nocapture`) prints what each round has left, in joules, after each
+    thing, square on:
+
+    |              | .22 | Nagant | PM | buck | PPSh | AK | SKS | slug | Mosin | drone | walker | sentry | heavy |
+    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+    | tin wall     | - | 59 | 103 | 80 | 460 | 1177 | 1934 | 2110 | 3391 | 378 | 610 | 1240 | 1760 |
+    | plank wall   | - | - | - | - | 330 | 1047 | 1804 | 1980 | 3261 | 248 | 480 | 1110 | 1630 |
+    | plaster wall | - | - | - | - | - | 657 | 1414 | 1590 | 2871 | - | 90 | 720 | 1240 |
+    | car door     | - | - | - | - | 223 | 940 | 1697 | 1874 | 3155 | 141 | 373 | 1003 | 1523 |
+    | whole car    | - | - | - | - | - | - | 384 | 561 | 1842 | - | - | - | 210 |
+    | drone shell  | - | - | - | - | - | 538 | 1295 | 1471 | 2752 | - | - | 601 | 1121 |
+    | log wall, tree | - | - | - | - | - | - | - | - | 511 | - | - | - | - |
+    | robot plate, brick, concrete | - | - | - | - | - | - | - | - | - | - | - | - | - |
 - **Grenades** (RGD-5, F-1): the other hand's trigger pulls the ring; the
   gripping hand holds the spoon, safe while it holds; let go (or B to
   cook) and the spoon flies, 3.6-3.8 s. A pinned grenade never goes off.

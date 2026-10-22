@@ -138,6 +138,9 @@ pub struct LegPoses(pub [[Vec3; 3]; LEGS]);
 #[derive(Message, Clone, Copy, Debug)]
 pub struct WalkerStep {
     pub at: Vec3,
+    /// Whose foot, and which way it was facing (radians about +Y, 0 = -Z).
+    pub by: Entity,
+    pub yaw: f32,
 }
 
 pub struct WalkerPlugin;
@@ -455,17 +458,32 @@ fn walker_brain(
     mut raid: ResMut<crate::raid::Raid>,
     mut blows: MessageWriter<super::doors::DoorBlow>,
     spatial: SpatialQuery,
-    (mut shots, mut crouches, mut bites, mut seed, minds, flanking, (parts, retreating)): (
+    (
+        mut shots,
+        mut crouches,
+        mut bites,
+        mut seed,
+        minds,
+        flanking,
+        (parts, retreating, mut floorings),
+    ): (
         MessageWriter<Shot>,
         MessageWriter<super::hound::HoundCrouch>,
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
         Query<&super::senses::MindSeed>,
         Query<(), With<Flanker>>,
-        (Query<&RobotPart>, Query<(), With<Retreating>>),
+        (
+            Query<&RobotPart>,
+            Query<(), With<Retreating>>,
+            Local<std::collections::HashMap<Entity, (bool, f32)>>,
+        ),
     ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
+    // Each walker: on the ground now, and when it last went down.
+    floorings.retain(|e, _| walkers.contains(*e));
     let sweep = time.elapsed_secs() * 1.1;
     let mut paths_left = PATH_BUDGET;
     // How much core each robot has left (0..1).
@@ -569,7 +587,39 @@ fn walker_brain(
             }
             continue;
         }
-        let lame = gait.is_some_and(|g| g.limp > LAME);
+        // Knocked off its feet (`anim::Gait::daze`): it holds. Up again,
+        // it fights from fresh cover (where it was may not be cover from
+        // where you are now). Down twice inside KNOCKED_AGAIN, it's had
+        // enough and breaks off.
+        if let Some(g) = gait {
+            let down = g.down();
+            let (was, last) = floorings
+                .get(&e)
+                .copied()
+                .unwrap_or((false, f32::NEG_INFINITY));
+            if down && !was {
+                if now - last < KNOCKED_AGAIN && !retreating.contains(e) {
+                    commands.entity(e).insert(Retreating);
+                }
+                floorings.insert(e, (true, now));
+            } else if !down && was {
+                floorings.insert(e, (false, last));
+            }
+            if down || g.rising > 0.0 {
+                w.cover = None;
+                w.rethink = 0.0;
+                w.goal = None;
+                w.path.clear();
+                continue;
+            }
+        }
+        // Lame, or down to two legs (it crawls: `anim`), it fights from
+        // where it is: no chasing, no going round your side.
+        let lame =
+            gait.is_some_and(|g| g.limp > LAME) || w.feet.iter().filter(|f| f.alive).count() <= 2;
+        if lame && flanking.contains(e) {
+            commands.entity(e).remove::<Flanker>();
+        }
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
         if !single_minded {
@@ -794,7 +844,8 @@ fn walker_brain(
                     (Some(tp), _) => {
                         // Badly hurt, it breaks off: back to cover away from
                         // you (and says so), still shooting.
-                        let hurt = cores.get(&e).is_some_and(|c| *c < RETREAT_AT);
+                        let hurt = cores.get(&e).is_some_and(|c| *c < RETREAT_AT)
+                            || retreating.contains(e);
                         if hurt && !retreating.contains(e) {
                             commands.entity(e).insert(Retreating);
                             w.rethink = 0.0;
@@ -975,6 +1026,9 @@ pub const SHORT_PATH: f32 = 12.0;
 pub const RETREAT_AT: f32 = 0.35;
 /// ...to cover about this much further from you (m).
 pub const RETREAT_DIST: f32 = 14.0;
+/// Knocked down again within this long (s) of the last time, a walker
+/// breaks off as a badly hurt one does.
+pub const KNOCKED_AGAIN: f32 = 10.0;
 
 /// A walker that's broken off, hurt (it keeps shooting from further back).
 #[derive(Component, Debug)]
@@ -1068,7 +1122,15 @@ fn pick_cover(pos: Vec3, target: Vec3, nav: NavRef, spatial: &SpatialQuery) -> O
 
 #[allow(clippy::too_many_arguments)]
 fn walker_guns(
-    mut walkers: Query<(Entity, &mut Walker, &Brain, &Awareness, &Robot, &Children)>,
+    mut walkers: Query<(
+        Entity,
+        &mut Walker,
+        &Brain,
+        &Awareness,
+        &Robot,
+        &Children,
+        Option<&super::anim::Gait>,
+    )>,
     turrets: Query<(&GlobalTransform, &RobotPart), With<WalkerTurret>>,
     parts: Query<&RobotPart>,
     targets: Query<&GlobalTransform>,
@@ -1091,9 +1153,11 @@ fn walker_guns(
             .get(*e)
             .is_ok_and(|(_, _, b, ..)| matches!(b, Brain::Engage))
     });
-    for (e, mut w, brain, aware, robot, children) in &mut walkers {
+    for (e, mut w, brain, aware, robot, children, gait) in &mut walkers {
         w.gun_cooldown -= dt;
-        if robot.wrecked || !matches!(brain, Brain::Engage) {
+        // Knocked down, or getting up, it can't shoot, and must aim afresh.
+        let floored = gait.is_some_and(|g| g.down() || g.rising > 0.0);
+        if robot.wrecked || !matches!(brain, Brain::Engage) || floored {
             w.aim = 0.0;
             blind.remove(&e);
             continue;

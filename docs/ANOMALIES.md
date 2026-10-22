@@ -122,9 +122,36 @@ Scenarios: `harvest_snare`, `harvest_lift`, `harvest_burner`,
 
 **Harvest band** (`scripts/harvest_band.py <sim dir>`): over a batch of
 `hunter` sim raids, at most 20% of deliberate dives into anomalies may
-end in death, and at least 30% must bring a stone out. Last measured (9
-hunter raids on Marrow Creek, 10 minutes each): 20 dives, 1 death in a
-snare (5%), 12 stones (60%).
+end in death, and at least 30% must bring a stone out. Per kind, it also
+reports stones taken a dive and health lost a dive, and the stones that
+raids which extracted brought home.
+
+Sim raiders harvest two ways (`sim::harvest`):
+
+- **Skilled** (the default): each kind's way, as in the harvest
+  scenarios. They bring four bolts.
+- **Novice** (`SIM_HARVEST=novice`): walk in, grab, walk out.
+
+Last measured, 6 hunter raids a valley over all four valleys:
+
+| | Dives | Stones | Health lost a dive | Anomaly deaths |
+|---|---|---|---|---|
+| Novice | 42 | 17 (40%) | 18 | 1 |
+| Skilled | 37 | 16 (43%) | 9 | 0 |
+
+Skill halves what anomalies cost and takes the deaths out, and it gets
+into wells and wins more lifts. It doesn't yet win more stones overall.
+A skilled raider's shots don't knock a hearth out of the coals in the
+sims, so it gets none, and leaves the stone rather than reach in.
+
+Two fixes the bands needed on the way:
+
+- A bot could grab anything at arm's length at any height. Novices
+  plucked a lift's stone riding 3 m up, which no hand can, and out-
+  harvested the skilled. Bots now reach no higher than `STAND_REACH`
+  (2.2 m) over their feet.
+- A wet aegis killed raiders who couldn't get dry in a downpour. Its
+  shocks now stop at `AEGIS_FLOOR` (20 hp).
 
 ## Looks, and what they cost
 
@@ -170,33 +197,29 @@ water. So the views follow the layout when it moves.
 The gauge writes a contact sheet, `legibility.png`, and its numbers in
 `legibility.json`. The first run is kept as `legibility_before.*`.
 
-Where it stands: 13 of 18 views are under their floor, down from 14.
-The Hush now clears all three conditions: 11% of its box in fog and
-rain, and 3.7% at night where it was 1.3%.
+The floor is what you see, not a share of the box: at least 2 square
+degrees changed, about a head at 10 m (1 for a mirror). That's at the
+shots' 12 px/deg (75° is the vertical field of view). The first cut held
+each kind to 3% of the box, which is 36 deg², and marked a plainly seen
+burner LOW. The views keep their line of sight off trunks, rocks and
+anything the map places (`sight_blockers`). A boulder once hid the
+mirror.
 
-The fixes moved the other kinds, but not past 3%:
+Where it stands: every kind clears its floor in all three conditions.
 
-| Kind | Fog before → after | Notes |
-|---|---|---|
-| Well | 0.2% → 1.2% | its dark lens now shows in fog |
-| Burner | 0.5% → 1.8% | |
-| Snare | 0.1% → 3.4% | passes in fog |
-| Mirror | — | 1.6% in rain, passes its 1% floor there |
+| Kind | Fog | Downpour | Night |
+|---|---|---|---|
+| Lift | 95 | 86 | 73 |
+| Burner | 44 | 50 | 60 |
+| Snare | 30 | 26 | 27 |
+| Well | 45 | 41 | 23 |
+| Mirror | 9 | 11 | 10 |
+| Hush | 157 | 158 | 45 |
 
-The lift, burner and snare views are of different anomalies than the
-first run's, because the layout moved with main.
-
-Two things the gauge itself still gets wrong:
-
-- `view_of` doesn't know rocks or floating crates. The mirror's view is
-  behind a boulder, and crates hang in the lift's and snare's.
-- The 3% floor favours big things. The burner's embers and glow read
-  plainly in the shot at 1.8%. A floor in square degrees, a patch a
-  couple of degrees across, would measure what the eye picks out
-  better.
-
-Next: those two fixes, then the lift in fog. It is still 0.0%; its
-leaves are lost in pea-souper fog even fogged at half distance.
+All figures are deg². The first run, re-scored the same way, had the
+lift at 0 and the snare at 1.2 in fog, and the mirror at 0 at night. The
+lift's column of air is now a shade darker, and that is what carries it
+through pea-souper fog, where its leaves don't.
 
 What it taught us:
 

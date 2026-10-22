@@ -9,6 +9,7 @@ torchlight, with the best loot behind the most risk.
 | Kettle Pass | `mine_kettle` | Mine gallery behind the mine office: shaft station, lamp room, main drive, crosscuts, a tall stope, explosives magazine, sump, refuge chamber, raise | 10 | Entrance incline; the raise's stair |
 | Cinder Works | `tunnel_cinder` | Service tunnel and pump room under the factory hall: stair hall, two tunnels, pump room, valve chamber, switch room, store, cable vault, workshop, overflow chamber | 10 | Entrance stair; a stair south of the hall |
 | Sallow Reservoir | `gallery_sallow` | The dam's inspection gallery: a landing under the toe, 44 m of gallery under the crest (seepage ankle deep), plumb-line chamber, weir chamber, gauge room, a passage under the bed to the draw-off tower | 6 | Entrance by the valve house; a stair up beside the tower on the bed |
+| Rime Fell | `adit_rime` | Coldharbour's mine in the knoll over the ore mill: the stair foot by the adit house, the lamp room (breaker), the drift, a timbered stope, the powder magazine, the haulage south past a flooded sump to the ore bin; off the drift the shaft station and the winze's cage, down 12 m to the deep level (its station, the vein drive, the assay store) | 13 | Entrance beside the adit house; a stair up onto the mill's back apron |
 
 Plans: `docs/underground/<site>.svg` (regenerate with
 `PLAN_DIR=$PWD/docs/underground cargo test -p extraction_core plans_draw`).
@@ -71,7 +72,7 @@ that the whole stairwell is open.
   ceiling slabs, doors). `no_daylight_in_the_rooms` casts rays every way
   from every room (doors shut) and none gets out.
 - **Going dark** (`go_dark`, client): below ground the global ambient
-  falls to 1.5%, the sun goes out and the fog's colour goes to black; the
+  falls to 0.2%, the sun goes out and the fog's colour goes to black; the
   eyes adapt 2.5 stops (`Exposure`). On the surface everything is as the
   sky left it. Rain and ash aren't drawn round an underground camera.
 - **Emergency lamps**: rooms with `lamp: Steady` or `Flicker` get an
@@ -349,7 +350,111 @@ already there), then the mine, then the cellars.
 | `deep_kettle` | Kettle (-54, 106), incline (-54, 173) | firedamp in the old heading (and its corridor) and a dip; the canary; a cart on the haulage rail; shoring between heading and refuge | `world::workings`: `Gas`, `InGas`, `GasIgnited`, `Canary`, `MineCart`, `Shoring`, `Fall`, `RoofFell` | `crossing_the_gas_with_the_canary`, `the_cart_rolls_and_the_roof_falls` |
 | `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
 
-| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
+| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | the gallery carries sound (below); a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | `world::echo`: `Echoed`; a room's `carries`; the layout's `basins` (a still one) | `the_gallery_carries_sound_its_length`, `a_walk_carries_and_a_creep_does_not`; scenario `gallery_echo` |
+| `bunker_marrow` | Marrow (-10, 70), escape stair 60 m north | its lockdown (above): the generator started, a klaxon, and the gas lock sealed | `world::lockdown`: `Lockdown`, `KlaxonLamp`, `Klaxon`, `Sealed`; the layout's `lockdown`; `underground::SEALED` | `the_shelter_seals_and_the_tunnel_stays_open`, `a_sealed_shelter_can_be_left`; scenario `shelter_lockdown` |
+| `tunnel_cinder` | Cinder (73, -2) turned 180 | its live water (above): the overflow chamber live on the vault's breaker till the switch room's isolator cuts it | `world::live`: `Live`, `Isolator`, `Arcing`, `Shocked`, `Isolated`; the layout's `live`; `Works::live` | `the_overflow_is_live_till_isolated`, `crawlers_keep_out_of_live_water`; scenario `live_water` |
+| `adit_rime` | Rime Fell (160, -55) turned 180, exit (121, -2) on the mill's back apron | the winze's cage, down to the deep level (below); the one warm place on the fell (any roof stops the Cold's chill, `world::cold`); a flooded sump on the loop; the lamp room's breaker lights the drift and opens the magazine | `world::cage`: `Cage`, `CageBell`, `GateLamp`, `CageRung`, `CageArrived`, `CageCrushed`; the layout's `cage`, `floods` and `power` | `riding_the_cage_and_standing_under_it`, `nothing_walks_into_the_winze`; scenario `cage_ride` |
+
+### One of its own: the adit's cage
+
+Each site gets one mechanic met nowhere else. The adit's is the winze's
+cage (`world::cage`, the layout's `cage`: a `pit` room for the shaft, the
+room at its top beside it, the bells). The deep level (the station at
+the winze's foot, the vein drive, the assay store with the best of the
+adit's loot) is reached only by it.
+
+- *Riding.* A bell pull at the shaft station, one at the foot, one in
+  the cage. A landing's bell calls the cage there, or sends it from
+  there; the cage's own sends it to the other stop. Whoever stands in it
+  rides (12 m at 1.5 m/s).
+- *The tell.* A bell rung (heard 35 m, a Noise), the cage waits 2 s
+  before it moves, the landings' lamps flashing amber; a landing's lamp
+  is green with the cage there and red over the open shaft. (The bell,
+  the winding engine and the rope are Audio's, asked for: `CageRung`,
+  `Cage`.)
+- *The hurt.* The open shaft is a 12 m drop (the fall hurts). Stand in
+  the shaft's foot as it comes down and it comes down on you (70, and a
+  bleed) and stops there, its rope slack; its own bell takes it back up.
+- *Bots.* The shaft is a pit: the raiders' routes and the crawlers'
+  grid stop at its edge, top and foot (`nothing_walks_into_the_winze`),
+  and the deep level is behind the works.
+
+Shots: the cage at the shaft station, its lamp green
+(`docs/shots/underground/r_cage.jpg`); up the open winze from its foot to
+the cage's floor 12 m overhead (`r_winze.jpg`).
+
+### One of its own: the gallery that carries
+
+The dam gallery's is sound (`world::echo`, a room's `carries`): 44 m of
+bare concrete under the crest carries every sound made in it its whole
+length and a little over (48 m).
+
+- *What carries.* Any noise made in it (a shot, a tin knocked over, a
+  thrown bolt landing, a valve), and your steps there upright at a walk
+  or faster. Crouched, or slower than 1 m/s, they don't.
+- *The tell.* Your first carried step: your steps come back to you off
+  the far end (told; `Echoed` for the ear, Audio's echo).
+- *The hurt.* The gallery's crawler hears you from the far end and
+  comes, with a fair idea where; and the gallery is the only way to the
+  gauge room's breaker and the tower stair. Turned round, a thrown tin
+  at one end draws it the length of the gallery while you go by the
+  other.
+- *Bots.* Nothing new: a raider's steps carry like yours.
+
+Shot: the gallery's length, the crawler at its far end, as it carries
+(`docs/shots/underground/s_gallery.jpg`).
+
+### One of its own: the shelter's lockdown
+
+The civil-defence shelter's (`bunker_marrow`) programme is still set
+(`world::lockdown`, the layout's `lockdown`): start its generator and,
+after the lights, it seals itself.
+
+- *The tell.* A klaxon in the hall every 2.5 s (heard 50 m: a Noise,
+  `Klaxon` for the ear), an amber lamp turning on the hall's ceiling, and
+  a voice off a tape: "Attack warning. Shelter sealing in 20 seconds."
+- *The hurt.* Twenty seconds on, the gas lock's two doors swing to and
+  bolt for good (`PowerLocked` at stage `SEALED`; a hand on one is told
+  so). The way you came in is shut, and the klaxon has brought the two
+  crawlers. Out by the escape tunnel past the medical post, or chest
+  deep through the drain from the filter plant to the gas lock's stair.
+- *Always a way out.* The layout's check: sealed, every room still
+  reaches `out` (the escape tunnel), and a way out leaves from it
+  (`a_sealed_shelter_can_be_left`); in the game, a raider's route from
+  the hall to the tunnel goes through no sealed door
+  (`the_shelter_seals_and_the_tunnel_stays_open`); scenario
+  `shelter_lockdown` starts the generator, waits it out and walks out.
+- *Bots.* A raider routes round a sealed door, and leaves by a door
+  that opens (`PowerLocked` doors were already so).
+
+Shot: the hall with the klaxon sounding, its amber lamp sweeping the
+wall and a crawler coming to it (`docs/shots/underground/m_klaxon.jpg`; `EXTRACTION_LOCKDOWN=1` sets a
+shelter sounding from the start, for shots).
+
+### One of its own: the service tunnel's live water
+
+The service tunnel's (`tunnel_cinder`) overflow chamber is flooded 0.7 m
+deep and lit off the cable vault's breaker, which also unbolts its door.
+Its lamps hang on their cables down into the water (`world::live`, the
+layout's `live`): throw the breaker and the way in opens onto live water.
+
+- *The tell.* Blue arcing snapping over the water (`Arcing`), its hum
+  (Audio's, asked for), and at its door you're told: "The water ahead
+  hums, and blue light snaps over it: it's live."
+- *The hurt.* Standing in it, a jolt of 22 every half second
+  (`Shocked`): four or five and you're down.
+- *The way.* The isolator on the switch room's wall cuts the chamber's
+  circuit (`Isolator`, `Isolated`), and the water's dead; pull it again
+  and it's live (with a crawler wading, say).
+- *Bots.* The crawlers' grid shuts the chamber's water while it's live
+  (`Works::live`, `block_works`) and opens it isolated
+  (`crawlers_keep_out_of_live_water`); `the_overflow_is_live_till_isolated`;
+  scenario `live_water` throws the breaker, pulls the isolator and wades in
+  unhurt.
+
+Shot: the overflow chamber's water live, cold blue under the arcing,
+its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
+from the start, for shots).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
@@ -362,6 +467,10 @@ Shots of the gallery (`docs/shots/underground/s_*.jpg`, torch on): down
 its 44 m with the seepage underfoot and a crawler at the far end
 (`s_gallery`), the gauge room under its lamp (`s_gauge`), and the exit
 kiosk on the bed beside the draw-off tower (`s_tower`).
+
+Shots of the adit (`docs/shots/underground/r_*.jpg`): the drift by
+torchlight, a tub on the rail (`r_drift`), and the exit kiosk on the
+mill's back apron, the snow on the knoll behind it (`r_out`).
 
 Layout data added for them: `basins`, `drains`, `gas`, `rails`, `carts`,
 `shoring`, `items`, `heat`, `vents`, `crane`, a room's `pit`, a
