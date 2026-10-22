@@ -909,3 +909,205 @@ mod tests {
         assert!(most <= 1.0 + ROCK_HARD + 1e-3);
     }
 }
+
+/// The gauge: for set pairs on Marrow Creek, what a walker actually hears
+/// (its threshold, found by trying louder and quieter noises: through the
+/// obstacle against the same distance in the open) agrees with the dB the
+/// player's ears lose on the same path, within a dB.
+#[cfg(test)]
+mod gauge {
+    use super::*;
+    use crate::robots::{Awareness, Brain, Job, JobKind, Noise};
+    use bevy::ecs::world::CommandQueue;
+
+    fn app() -> (App, Zone) {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        // The player out of the way, standing still (no footsteps).
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = zone.on_ground(250.0, -250.0);
+        (app, zone)
+    }
+
+    fn walker(app: &mut App, zone: &Zone, post: Vec3) -> Entity {
+        let mut queue = CommandQueue::default();
+        let w = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::robots::walker::spawn_walker_with(
+                &mut c,
+                zone,
+                post,
+                Job {
+                    kind: JobKind::Watch,
+                    site: post,
+                    duration: 999.0,
+                    exit: post,
+                },
+                false,
+                130.0,
+            )
+        };
+        queue.apply(app.world_mut());
+        for _ in 0..90 {
+            app.update();
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Working {
+            at: post,
+            left: 999.0,
+        };
+        w
+    }
+
+    /// The quietest noise at `at` the walker hears (its radius, m).
+    fn threshold(app: &mut App, robot: Entity, at: Vec3) -> f32 {
+        let (mut lo, mut hi) = (0.2f32, 400.0f32);
+        for _ in 0..16 {
+            let r = (lo * hi).sqrt();
+            app.world_mut()
+                .get_mut::<Awareness>(robot)
+                .unwrap()
+                .suspicion = 0.0;
+            app.world_mut().write_message(Noise {
+                at,
+                radius: r,
+                source: None,
+            });
+            app.update();
+            let heard = app.world().get::<Awareness>(robot).unwrap().suspicion > 1e-4;
+            if heard {
+                hi = r;
+            } else {
+                lo = r;
+            }
+        }
+        hi
+    }
+
+    fn to_world(g: &Graph, room: u16, up: f32) -> Vec3 {
+        let k = g.room.iter().position(|r| *r == room).unwrap();
+        let floor = g.levels.as_ref().map_or(g.floor, |l| l[k]);
+        let local = Vec3::new(
+            g.origin + ((k % g.n) as f32 + 0.5) * CELL,
+            floor + up,
+            g.origin + ((k / g.n) as f32 + 0.5) * CELL,
+        );
+        g.inv.inverse().transform_point3(local)
+    }
+
+    #[test]
+    fn robots_hear_what_you_hear() {
+        let (mut app, zone) = app();
+        let graph_of = |app: &mut App, prefab: &str| -> usize {
+            let e = app
+                .world_mut()
+                .query::<(Entity, &Building)>()
+                .iter(app.world())
+                .find(|(_, b)| b.prefab == prefab)
+                .unwrap()
+                .0;
+            app.world()
+                .resource::<Hearing>()
+                .graphs
+                .iter()
+                .position(|g| g.building == e)
+                .unwrap()
+        };
+        // (name, the noise, where the walker stands; a door to open first)
+        let mut pairs: Vec<(String, Vec3, Vec3, Option<Entity>)> = Vec::new();
+        {
+            let k = graph_of(&mut app, "house_brick");
+            let h = app.world().resource::<Hearing>();
+            let g = &h.graphs[k];
+            let (door, a, b, ..) = g.doors[0];
+            let inside = if a == OUTSIDE { b } else { a };
+            let noise = to_world(g, inside, 0.3);
+            let out = to_world(g, OUTSIDE, 0.0);
+            let away = (out - noise).with_y(0.0).normalize_or_zero();
+            let post = zone.on_ground(noise.x + away.x * 7.0, noise.z + away.z * 7.0);
+            pairs.push(("house, door shut".into(), noise, post, None));
+            pairs.push(("house, door open".into(), noise, post, Some(door)));
+        }
+        {
+            let k = graph_of(&mut app, "ranger_tower");
+            let h = app.world().resource::<Hearing>();
+            let g = &h.graphs[k];
+            let cabin = (1..g.rooms as u16).next().unwrap();
+            let noise = to_world(g, cabin, 0.3);
+            let post = zone.on_ground(noise.x + 6.0, noise.z);
+            pairs.push(("the tower's cabin, from below".into(), noise, post, None));
+        }
+        {
+            let k = graph_of(&mut app, "bunker_marrow");
+            let h = app.world().resource::<Hearing>();
+            let g = &h.graphs[k];
+            let deep = (1..g.rooms as u16)
+                .min_by(|a, b| to_world(g, *a, 0.0).y.total_cmp(&to_world(g, *b, 0.0).y))
+                .unwrap();
+            let noise = to_world(g, deep, 0.3);
+            let post = zone.on_ground(noise.x, noise.z);
+            pairs.push((
+                "the bunker's deepest room, from above".into(),
+                noise,
+                post,
+                None,
+            ));
+        }
+        let mut worst = 0.0f32;
+        for (name, noise, post, open) in pairs {
+            if let Some(d) = open {
+                if let Some(mut door) = app.world_mut().get_mut::<Door>(d) {
+                    door.open = true;
+                    door.angle = 1.5;
+                }
+                app.update();
+            }
+            let robot = walker(&mut app, &zone, post);
+            let ear = app
+                .world()
+                .get::<GlobalTransform>(robot)
+                .unwrap()
+                .translation();
+            // The same distance off in the open, on the far side of it.
+            let clear = ear + (ear - noise).with_y(0.0).normalize_or_zero() * noise.distance(ear);
+            let clear = clear.with_y(
+                zone.ground(clear.x, clear.z)
+                    + (noise.y - zone.ground(noise.x, noise.z)).clamp(0.0, 2.0),
+            );
+            let r_through = threshold(&mut app, robot, noise);
+            let r_open = threshold(&mut app, robot, clear);
+            // How much louder it must be made through than in the open,
+            // distance for distance: the robot's loss, dB.
+            let robot_db =
+                20.0 * ((r_through / noise.distance(ear)) / (r_open / clear.distance(ear))).log10();
+            let player_db = app
+                .world()
+                .resource::<Hearing>()
+                .loss(Some(&zone), noise, ear, None);
+            eprintln!(
+                "{name}: the player loses {player_db:.1} dB; the walker hears it {robot_db:.1} dB down"
+            );
+            worst = worst.max((robot_db - player_db).abs());
+            app.world_mut().entity_mut(robot).despawn();
+        }
+        assert!(worst < 1.0, "player and robot disagree by {worst:.1} dB");
+    }
+}
