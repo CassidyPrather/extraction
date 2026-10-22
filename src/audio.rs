@@ -1075,6 +1075,16 @@ fn fault_sounds(
             ("guns/bolt_open", "gun.bolt_open", 1.0, None),
         ],
         FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        // A hang-fire: the hammer's fall and nothing, a dud's click; the
+        // shot it owes comes as a `Fired` of its own.
+        FireEvent::HangFire => &[("guns/dry_fire", "gun.dry_fire", 1.0, None)],
+        // Out of battery: the case bursts outside the chamber. A flat,
+        // harsh crack (between a squib and a shot: no barrel behind it)
+        // and the brass and gas clattering out of the open action.
+        FireEvent::OutOfBattery => &[
+            ("guns/rifle_shot", "gun.out_of_battery", 1.3, Some(3000.0)),
+            ("physical/drop_metal", "gun.burst_case", 1.4, None),
+        ],
         _ => return false,
     };
     for &(set, cue, speed, cutoff) in layers {

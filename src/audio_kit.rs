@@ -16,6 +16,7 @@ use crate::audio::{AudioRng, SoundBank, play_at_speed, play_filtered_db, reverb_
 use crate::audio_mix as mix;
 use crate::interact::carry::{DRAG_SPEED, Dragged};
 use crate::interact::touch::{HandStruck, SLAP, Stuff};
+use crate::weapons::ActionGrind;
 use crate::weapons::armoury::Bipod;
 use crate::weapons::carry::GunBumped;
 use crate::weapons::flares::Flare;
@@ -29,6 +30,7 @@ impl Plugin for KitSoundsPlugin {
         app.add_message::<HandStruck>()
             .add_message::<GunBumped>()
             .add_message::<Dragged>()
+            .add_message::<ActionGrind>()
             .add_systems(
                 Update,
                 (
@@ -38,6 +40,7 @@ impl Plugin for KitSoundsPlugin {
                     slap_sounds,
                     bump_sounds,
                     drag_sounds,
+                    grind_sounds,
                 ),
             );
     }
@@ -278,6 +281,46 @@ fn bump_sounds(
     }
 }
 
+/// The shortest gap between two grinds heard (s): Weapon feel ticks every
+/// 60 ms, about twice as often as a grind sounds.
+const GRIND_EVERY: f32 = 0.11;
+
+/// A stiff action worked (`weapons::ActionGrind`: a cold bolt, pump or
+/// charging handle): a dry metal grate under the hand, as loud as it's
+/// stiff, 20 dB down at the faintest.
+fn grind_sounds(
+    mut commands: Commands,
+    mut grinds: MessageReader<ActionGrind>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut quiet_until: Local<f32>,
+) {
+    let now = time.elapsed_secs();
+    for g in grinds.read() {
+        if now < *quiet_until {
+            continue;
+        }
+        *quiet_until = now + GRIND_EVERY;
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/handle_metal",
+            Some(g.at),
+            "gun.grind",
+            grind_db(g.stiff),
+            1.6,
+            0.12,
+        );
+    }
+}
+
+/// How far under its cue a grind of a `stiff` (0..1) action is, dB.
+fn grind_db(stiff: f32) -> f32 {
+    20.0 * stiff.clamp(0.1, 1.0).log10()
+}
+
 /// A drag's loop, following the thing dragged.
 #[derive(Component)]
 struct DragLoop {
@@ -391,6 +434,8 @@ mod tests {
         assert!(slap_db(3.0) < slap_db(4.5));
         assert_eq!(bump_db(BUMP), SLAP_SOFT_DB);
         assert_eq!(bump_db(BUMP_FULL), 0.0);
+        assert_eq!(grind_db(1.0), 0.0);
+        assert!((grind_db(0.0) + 20.0).abs() < 1e-4);
     }
 
     /// A drag is the cue's level at a full haul, softer and lower slower.
@@ -413,6 +458,7 @@ mod tests {
             ("machines/clank", "bipod.lock"),
             ("physical/handle_metal", "bipod.swing"),
             ("physical/drop_metal", "gun.bump"),
+            ("physical/handle_metal", "gun.grind"),
         ];
         for s in [
             Stuff::Wood,
