@@ -20,6 +20,7 @@ impl Plugin for GadgetVisualsPlugin {
             Update,
             (
                 beams,
+                low_cell_beams.after(beams),
                 lasers,
                 dress_gadgets,
                 compass_needles,
@@ -75,6 +76,59 @@ fn beams(
                 commands.entity(b).despawn();
             }
             _ => {}
+        }
+    }
+}
+
+/// A torch's cell below this share of its charge dims it, and below
+/// [`GUTTER_BELOW`] it gutters: the tell before it dies.
+pub const DIM_BELOW: f32 = 0.2;
+pub const GUTTER_BELOW: f32 = 0.05;
+
+/// How bright a torch is on a cell with `share` of its charge left (1
+/// full): full to [`DIM_BELOW`], down to 0.4 by [`GUTTER_BELOW`], and
+/// below that a weak glow that drops out now and then (`t` seconds, `seed`
+/// its own).
+pub fn cell_brightness(share: f32, t: f32, seed: f32) -> f32 {
+    if share >= DIM_BELOW {
+        return 1.0;
+    }
+    if share >= GUTTER_BELOW {
+        let k = (share - GUTTER_BELOW) / (DIM_BELOW - GUTTER_BELOW);
+        return 0.4 + 0.6 * k;
+    }
+    let drop = ((t * 7.1 + seed).sin() * (t * 2.3 + seed * 0.7).sin()) > 0.55;
+    if drop { 0.03 } else { 0.3 }
+}
+
+/// Underground and anywhere: a torch on a low cell dims, then gutters
+/// (`cell_brightness`), after `beams` has lit it at full.
+fn low_cell_beams(
+    devices: Query<(Entity, &Device, &Children), With<Powered>>,
+    mut beams: Query<&mut SpotLight, With<Beam>>,
+    sockets: Query<(&super::Socket, &super::SocketOwner)>,
+    cells: Query<&Item>,
+    catalog: Res<Catalog>,
+    time: Res<Time>,
+) {
+    let t = time.elapsed_secs();
+    for (e, dev, children) in &devices {
+        if dev.kind != DeviceKind::Light {
+            continue;
+        }
+        // No cell (a hearth's feeding it): full.
+        let share = super::cell_of(e, &sockets)
+            .and_then(|c| cells.get(c).ok())
+            .map_or(1.0, |i| {
+                let full = catalog.get(i.kind()).battery_wh;
+                if full > 0.0 { i.charge_wh / full } else { 1.0 }
+            });
+        let level = cell_brightness(share, t, (e.to_bits() % 97) as f32);
+        for c in children.iter() {
+            if let Ok(mut l) = beams.get_mut(c) {
+                l.intensity = 250_000.0 * level;
+                l.range = 45.0 * level.sqrt();
+            }
         }
     }
 }
@@ -985,5 +1039,27 @@ fn mark_job(
             (None, Some(m)) => commands.entity(m).despawn(),
             (None, None) => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod low_cell_tests {
+    use super::*;
+
+    /// Full till a fifth is left, dimmer to 40% by a twentieth, then a
+    /// weak glow that drops out now and then.
+    #[test]
+    fn a_low_cell_dims_then_gutters() {
+        assert_eq!(cell_brightness(1.0, 0.0, 0.0), 1.0);
+        assert_eq!(cell_brightness(DIM_BELOW, 0.0, 0.0), 1.0);
+        let mid = cell_brightness(0.12, 0.0, 0.0);
+        assert!(mid > 0.4 && mid < 1.0, "{mid}");
+        assert!((cell_brightness(GUTTER_BELOW, 0.0, 0.0) - 0.4).abs() < 1e-4);
+        let low: Vec<f32> = (0..400)
+            .map(|k| cell_brightness(0.02, k as f32 * 0.05, 3.0))
+            .collect();
+        assert!(low.iter().all(|l| *l <= 0.3), "dim, guttering");
+        assert!(low.iter().any(|l| *l < 0.05), "it drops out");
+        assert!(low.iter().filter(|l| **l >= 0.3).count() > 200, "mostly on");
     }
 }

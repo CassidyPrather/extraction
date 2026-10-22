@@ -10,6 +10,7 @@ use bevy::prelude::*;
 
 use crate::interact::Hand;
 use crate::interact::wounds::{Bloodied, Fracture, Limb, Wounds, player_segments};
+use crate::render::props::{HandVisual, glove_frame};
 use crate::rig::stance::{Stance, StanceSystems};
 use crate::rig::{LocalPlayer, RigHand, RigInput};
 
@@ -202,28 +203,26 @@ fn mark_splint(
     }
 }
 
-/// A palm that's touched a wound: blood on it, as much as there is.
+/// A palm that's touched a wound: blood on it, as much as there is. The
+/// patch rides the drawn glove (`render::props::HandVisual`), on its palm.
 #[allow(clippy::type_complexity)]
 fn mark_palms(
     mut commands: Commands,
     mut marks: ResMut<Marks>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    hands: Query<(Entity, &Hand, Option<&Bloodied>), With<RigHand>>,
-    mut parts: Query<
-        (
-            &mut Transform,
-            &mut Visibility,
-            &MeshMaterial3d<StandardMaterial>,
-        ),
-        (Without<RigHand>, Without<LocalPlayer>),
-    >,
+    gloves: Query<(Entity, &HandVisual)>,
+    bloods: Query<&Bloodied>,
+    mut parts: Query<(&mut Visibility, &MeshMaterial3d<StandardMaterial>), Without<HandVisual>>,
 ) {
     let marks = &mut *marks;
     let Some(look) = marks.look.as_ref() else {
         return;
     };
-    for (hand_e, hand, blood) in &hands {
-        let patch = match marks.palms.iter().find(|(h, _)| *h == hand_e) {
+    for (glove, v) in &gloves {
+        if v.ghost {
+            continue;
+        }
+        let patch = match marks.palms.iter().find(|(g, _)| *g == glove) {
             Some((_, p)) => *p,
             None => {
                 // Each palm its own material: how bloody is its alpha.
@@ -234,24 +233,28 @@ fn mark_palms(
                     ..default()
                 });
                 let p = mark(&mut commands, &look.patch, &mat);
-                marks.palms.push((hand_e, p));
+                // On the palm: the unrolled glove's underside (-Y), a
+                // little toward the fingers, rolled on as the glove is.
+                commands.entity(p).insert((
+                    ChildOf(glove),
+                    glove_frame(v.side).mul_transform(
+                        Transform::from_xyz(0.0, -0.016, -0.028)
+                            .with_scale(Vec3::new(0.032, 0.004, 0.042)),
+                    ),
+                ));
+                marks.palms.push((glove, p));
                 p
             }
         };
-        let Ok((mut t, mut vis, mat)) = parts.get_mut(patch) else {
+        let Ok((mut vis, mat)) = parts.get_mut(patch) else {
             continue;
         };
-        let amount = blood.map_or(0.0, |b| b.0);
+        let amount = bloods.get(v.hand).map_or(0.0, |b| b.0);
         if amount < 0.03 {
-            *vis = Visibility::Hidden;
+            vis.set_if_neq(Visibility::Hidden);
             continue;
         }
-        // On the palm: the glove's -Y side, a little toward the fingers.
-        let world = hand.felt.unwrap_or(hand.world);
-        *t = world
-            .mul_transform(Transform::from_xyz(0.0, -0.028, -0.03))
-            .with_scale(Vec3::new(0.034, 0.005, 0.045));
-        *vis = Visibility::Inherited;
+        vis.set_if_neq(Visibility::Inherited);
         if let Some(mut m) = materials.get_mut(&mat.0) {
             m.base_color.set_alpha(0.85 * amount);
         }

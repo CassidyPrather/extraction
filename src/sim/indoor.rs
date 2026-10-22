@@ -1349,8 +1349,7 @@ mod tests {
                             .velocity = Vec3::ZERO;
                         app.update();
                         let pos = app.world().get::<Transform>(player).unwrap().translation;
-                        let Some(tasks) =
-                            super::super::raider::indoor_route(plan, pos, goal, 0.3)
+                        let Some(tasks) = super::super::raider::indoor_route(plan, pos, goal, 0.3)
                         else {
                             failed.push(format!(
                                 "{map} {} entry {entry:.1?}: no route to {goal:.1?}",

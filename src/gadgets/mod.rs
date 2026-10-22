@@ -367,7 +367,7 @@ fn mark_suppressed(
 }
 
 /// The cell seated in an item's own cell compartment.
-fn cell_of(item: Entity, sockets: &Query<(&Socket, &SocketOwner)>) -> Option<Entity> {
+pub(crate) fn cell_of(item: Entity, sockets: &Query<(&Socket, &SocketOwner)>) -> Option<Entity> {
     sockets
         .iter()
         .find(|(s, o)| o.0 == item && s.kind == SocketKind::Mount(Mount::Cell))
