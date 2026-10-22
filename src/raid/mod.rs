@@ -560,6 +560,17 @@ mod tests {
 
     #[test]
     fn the_short_exfil_burns_a_can_of_fuel() {
+        assert!(short_exfil_burns_the_can(1), "the can was burnt");
+    }
+
+    #[test]
+    fn the_first_jobs_short_run_is_on_the_house() {
+        assert!(!short_exfil_burns_the_can(0), "the can was kept");
+    }
+
+    /// Calls the truck to the short exfil with a can in the stash, `done` jobs
+    /// into the career; true when the can went.
+    fn short_exfil_burns_the_can(done: u32) -> bool {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -609,6 +620,10 @@ mod tests {
             .translation = zone.on_ground(m[0], m[1] - 20.0);
         app.update();
         app.update();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .done = done;
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
         app.world_mut().write_message(RadioCall { player });
         app.update();
@@ -619,6 +634,6 @@ mod tests {
                 ..
             }
         ));
-        assert!(app.world().get_entity(can).is_err(), "the can was burnt");
+        app.world().get_entity(can).is_err()
     }
 }
