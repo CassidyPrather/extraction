@@ -524,6 +524,67 @@ The headset's session waits on it (or 20 s), `--screenshot` waits on its
 materials and buildings after `--frames` (or 180 s, with a warning), and
 "everything in" includes it.
 
+## First contact
+
+A hitch the player meets only the first time: a model, material,
+effect, sound or building's inside first seen, or the first fight.
+
+### The CPU
+
+`render::first_contact` walks each valley's tour, then a fight, twice,
+in a new game per run. The tour is every placement from outside and in,
+the notes, signs and terminals, and the open ground. The second walk is
+the steady state.
+
+A stop counts as a first contact when its first-pass worst frame is over
+1.2x its steady self (and 3 ms) in every run of three. The harness's
+frames jitter by more than a small hitch, so one run decides nothing.
+Each contact is named with what came in round it:
+
+- the assets that loaded;
+- what was spawned, by name;
+- with `FIRST_PROFILE=1` and `--features "bevy/trace bevy/debug"`, the
+  systems that took the time.
+
+`gauge_no_first_sight_stutter` fails a valley over 1.2x in every run.
+
+On all five valleys no stop was a first contact in every run. One was
+in two runs of three: Rime Fell's compressor terminal, 80 ms first
+against 42 ms steady, which didn't recur in a third. No asset loads
+mid-walk (the preload's doing), and no named system over a few ms. What
+was left was the harness's own jitter.
+
+### The GPU
+
+A pipeline is built per material, mesh layout and kind of view, the
+first time something needing it is drawn. `EXTRACTION_PIPELINES=1` logs
+each, and `scripts/xr_check.sh` with it shows what a headset meets. Two
+causes, both fixed:
+
+- **The eyes' kind of view.** The headset's eyes have a custom
+  projection, a kind of view of its own. Warmed on the flat camera, every
+  pipeline was built again as the session began: 58 on Monado's yard, in
+  the player's first seconds in the headset. Now, while the session
+  waits on the load, a proxy eye carries the warm-up shelf instead
+  (`warmup::ProxyEye`): the eyes' projection, look and samples, drawing
+  into a small image under the world. After the session, 2 are built
+  where 58 were:
+  - a skinned X-ray (the shelf leaves skinned meshes alone);
+  - a terrain variant.
+
+  The `--mirror` window's are still built then. It's a view of its own
+  too, and only for whoever is watching.
+- **What streamed in last.** The shelf restocks every 45 frames. On
+  Marrow's tour, 28 pipelines were queued 8 frames after the world
+  counted as in, by the restock after it. Once the world settles, the
+  shelf now restocks at once, and `timeline::WorldReady` waits for that
+  restock's pipelines too (`warmup::Warmed`). That gate covers the
+  session, `--screenshot` and "everything in".
+
+  After the world is in, the tour now builds none (the screenshot's own
+  aside). On lavapipe, "everything in" comes at frame 65, not 41: the
+  compiling moved out of play and into the load.
+
 ## Holding the frame rate
 
 `render::hold_rate` keeps the headset at its refresh rate by rendering

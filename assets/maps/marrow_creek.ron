@@ -234,6 +234,11 @@
         (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
         // The Old farm's wood stores across the field from the drop: cover
         // every 25 m or so on the way a newcomer walks to the first job.
+        // A roof to get under on the first walks (only a roof hides you
+        // from a drone): a field shed by the knoll on the way to the Old
+        // farm, and one by the road north to the Village.
+        (prefab: "shed", at: (86.0, 240.0), rot: 237.0, tag: "field_shed"),
+        (prefab: "shed", at: (40.0, 150.0), rot: 270.0, tag: "roadside_shed"),
         (prefab: "log_pile", at: (63.0, 251.0), rot: 48.0),
         (prefab: "log_pile", at: (112.0, 197.0), rot: 48.0),
         (prefab: "log_pile", at: (131.0, 178.0), rot: 48.0),

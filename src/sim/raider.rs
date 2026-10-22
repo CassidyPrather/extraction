@@ -204,6 +204,10 @@ enum SiteKind {
     Building(usize),
     Spot,
     Field,
+    /// A standing anomaly the valley is known for (a well, a mirror, a
+    /// hush, a frost): it grows a stone some cycles, and a hunter goes to
+    /// see.
+    Anomaly,
     Wreck(Entity),
 }
 
@@ -328,8 +332,6 @@ pub struct Raider {
     /// Health and carried kilograms as of this frame.
     hp: f32,
     kg: f32,
-    /// How full its pack is, 0..1.
-    pack_fill: f32,
     /// Attention from the artifacts it carries.
     heat: f32,
     /// Crouched since (raid seconds), when it is.
@@ -467,6 +469,19 @@ pub fn attach_raider(
                     job: false,
                 });
             }
+            // (`SIM_NO_ANOMALY_SITES=1`: as before hunters knew them, to
+            // compare runs.)
+            MarkerKind::Anomaly { .. } if std::env::var_os("SIM_NO_ANOMALY_SITES").is_none() => {
+                sites.push(Site {
+                    name: m.name.clone(),
+                    kind: SiteKind::Anomaly,
+                    at: Vec2::from_array(m.at),
+                    spots: 1,
+                    visited: false,
+                    tries: 0,
+                    job: false,
+                })
+            }
             MarkerKind::ArtifactField => sites.push(Site {
                 name: m.name.clone(),
                 kind: SiteKind::Field,
@@ -548,7 +563,6 @@ pub fn attach_raider(
                 debug: std::env::var_os("SIM_DEBUG").is_some(),
                 hp: 100.0,
                 kg: 0.0,
-                pack_fill: 0.0,
                 heat: 0.0,
                 crouched_since: None,
                 at_rv: false,
@@ -857,10 +871,6 @@ pub fn think(
         r.clock += dt;
         r.hp = health.hp;
         r.kg = body.carried_kg;
-        r.pack_fill = {
-            let (used, cap) = scene.pack_use(me);
-            (used / cap.max(1e-3)).clamp(0.0, 1.0)
-        };
         r.heat = scene.attention.get(me).map_or(0.0, |a| a.carried);
         let pos = tf.translation;
         let here = pos.xz();
@@ -971,6 +981,7 @@ pub fn think(
                         r.pocket.1 = 0;
                     }
                 }
+                open_heat_here(r, pos, &mut log);
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
                 let side = here + Vec2::new(a.cos(), a.sin()) * step;
                 // Give up on what it was reaching for; sidestep; replan.
@@ -997,6 +1008,10 @@ pub fn think(
             r.calm = (r.clock, r.hp);
         } else if r.calm.1 - r.hp > HAZARD_HP
             && r.combat.is_none()
+            && {
+                open_heat_here(r, pos, &mut log);
+                true
+            }
             && let Some(tasks) = leave_building(r, &scene, pos)
         {
             log.event(
@@ -1102,6 +1117,24 @@ pub fn think(
             Stage::Done => {}
         }
         r.interrupted = false;
+    }
+}
+
+/// In heat its plan shuts (a fight took it in, or it's stuck by it):
+/// the heat opened in that plan, so the way out can be planned.
+fn open_heat_here(r: &mut Raider, pos: Vec3, log: &mut SimLog) {
+    if let Some(plan) = r
+        .plans
+        .iter_mut()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+    {
+        let local = plan.to_local(pos).xz();
+        if plan.open_heat_at(local) {
+            log.event(
+                "heat_open",
+                json!({"site": plan.name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+            );
+        }
     }
 }
 
@@ -2604,6 +2637,7 @@ fn kind_name(k: SiteKind) -> &'static str {
         SiteKind::Building(_) => "building",
         SiteKind::Spot => "spot",
         SiteKind::Field => "field",
+        SiteKind::Anomaly => "anomaly",
         SiteKind::Wreck(_) => "wreck",
     }
 }
@@ -2627,31 +2661,6 @@ fn route_exposure(map: &extraction_core::map::MapDef, from: Vec2, to: Vec2) -> f
         .sum::<f32>()
         / (steps + 1) as f32;
     danger * d / 100.0
-}
-
-/// A deadliest-region destination looks this much worse while the pack is
-/// all but empty...
-const DEADLY_START: f32 = 0.3;
-/// ...that is, less full than this.
-const NEAR_EMPTY: f32 = 0.2;
-
-/// Nobody walks into the robots' own country with an empty pack and no
-/// reason: a player goes to the Depot under Marrow's Gate on purpose (a
-/// key, a recall, a job), not at minute zero. A danger-3 site scores
-/// [`DEADLY_START`] times as much while the pack is near-empty, unless
-/// it's the job or in the region set out for. A soft weight, not a ban:
-/// if everything else is worse, it's still the choice.
-fn deadly_start(r: &Raider, map: &extraction_core::map::MapDef, s: &Site) -> f32 {
-    let region = map.region_at(s.at.to_array());
-    let deadly = region.is_some_and(|g| g.danger >= 3);
-    let aimed = r
-        .objective
-        .is_some_and(|o| map.region_at(o.to_array()).map(|g| &g.name) == region.map(|g| &g.name));
-    if deadly && r.pack_fill < NEAR_EMPTY && !s.job && !aimed {
-        DEADLY_START
-    } else {
-        1.0
-    }
 }
 
 /// Picks the next site: worth, distance, the danger of the walk there, and
@@ -2695,6 +2704,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             }
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
+            // One stone at most, and only some cycles; but a hunter knows
+            // where they are.
+            SiteKind::Anomaly => r.traits.fields * 1.5,
             // Picking over a wreck is for when nothing else is coming.
             SiteKind::Wreck(_) if r.hp < 60.0 || heat > 0.0 => 0.0,
             SiteKind::Wreck(_) => 4.0,
@@ -2721,7 +2733,6 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         let score = pull * rich * aim
             / (1.0 + d / 80.0)
             / (1.0 + ROUTE_CAUTION * route_exposure(&scene.zone.map, here, s.at))
-            * deadly_start(r, &scene.zone.map, s)
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
@@ -3186,6 +3197,8 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
     let within = match r.sites[s].kind {
         SiteKind::Building(_) => 0.6,
         SiteKind::Field => 8.0,
+        // Its edge, from where the stone is seen (or isn't).
+        SiteKind::Anomaly => 5.0,
         _ => 2.0,
     };
     travel(&r.grid, pos.xz(), to, within)
@@ -3198,6 +3211,7 @@ fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
             r.plans[b].in_grid(pos) && site_target(r, scene, s, pos).distance(pos.xz()) < 3.0
         }
         SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
+        SiteKind::Anomaly => site.at.distance(pos.xz()) < 8.0,
         _ => site.at.distance(pos.xz()) < 6.0,
     }
 }
@@ -3217,7 +3231,9 @@ fn pick_item(me: Entity, r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Opti
             continue;
         }
         let def = scene.catalog.get(it.kind());
-        if site.kind == SiteKind::Field && def.category != Category::Artifact {
+        if matches!(site.kind, SiteKind::Field | SiteKind::Anomaly)
+            && def.category != Category::Artifact
+        {
             continue;
         }
         // A contract's thing to bring is worth more than anything.
@@ -3673,6 +3689,7 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         }
         SiteKind::Spot => at.xz().distance(site.at) < 5.0,
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
+        SiteKind::Anomaly => at.xz().distance(site.at) < 6.0,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
     }
 }
