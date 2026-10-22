@@ -5440,4 +5440,106 @@ mod wounds {
             h.bleeding
         );
     }
+
+    /// The broken shin's middle, and which way it runs.
+    fn shin(vr: &mut Vr) -> (Vec3, Vec3) {
+        let leg = vr
+            .app
+            .world()
+            .get::<crate::interact::wounds::Fracture>(vr.player)
+            .expect("a broken leg")
+            .leg;
+        let a = on(vr, Limb::Shin(leg), 0.0);
+        let b = on(vr, Limb::Shin(leg), 1.0);
+        ((a + b) / 2.0, (b - a).normalize())
+    }
+
+    /// A splint held to the shin `upright` (along it) or across it, the
+    /// other hand at the leg, for two seconds.
+    fn strap(upright: bool) -> (bool, f32, bool) {
+        use crate::interact::wounds::Fracture;
+        let (mut vr, feet) = setup();
+        vr.app
+            .world_mut()
+            .get_mut::<crate::player::Body>(vr.player)
+            .unwrap()
+            .impact = 12.0;
+        vr.step(4);
+        assert!(
+            vr.app.world().get::<Fracture>(vr.player).is_some(),
+            "broken"
+        );
+        let limp = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap()
+            .limping;
+        assert_eq!(limp, crate::interact::wounds::LIMP, "limping");
+        let at = feet + Vec3::new(0.25, 1.0, -0.15);
+        let turn = if upright {
+            Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)
+        } else {
+            Quat::IDENTITY
+        };
+        let splint = vr.spawn(
+            "splint",
+            Transform::from_translation(at).with_rotation(turn),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(splint)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(4);
+        vr.app
+            .world_mut()
+            .entity_mut(splint)
+            .insert(RigidBody::Dynamic);
+        vr.step(6);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(splint));
+        let (mid, _) = shin(&mut vr);
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(splint).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        // Alongside the shin, a hand's width out in front of it.
+        let place = mid + Vec3::new(0.0, 0.0, -0.09);
+        for i in 1..=30 {
+            vr.move_hand(Side::Right, at.lerp(place - off, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.hand(
+            Side::Left,
+            mid + Vec3::new(0.08, 0.05, -0.05),
+            Quat::IDENTITY,
+            0.0,
+            0.0,
+        );
+        vr.step(128);
+        let f = *vr.app.world().get::<Fracture>(vr.player).unwrap();
+        let limp = vr
+            .app
+            .world()
+            .get::<crate::player::Body>(vr.player)
+            .unwrap()
+            .limping;
+        (f.splinted, limp, vr.app.world().get_entity(splint).is_err())
+    }
+
+    /// A hard landing breaks a leg and you limp; a splint held along the
+    /// shin and strapped is on it, and you limp less.
+    #[test]
+    fn a_splint_strapped_along_a_broken_shin() {
+        let (splinted, limp, used) = strap(true);
+        assert!(splinted && used, "strapped on: {splinted} {used}");
+        assert_eq!(limp, crate::interact::wounds::SPLINTED_LIMP);
+    }
+
+    /// Held across the shin, it isn't a splint.
+    #[test]
+    fn a_splint_held_across_the_shin_does_nothing() {
+        let (splinted, _, used) = strap(false);
+        assert!(!splinted && !used);
+    }
 }
