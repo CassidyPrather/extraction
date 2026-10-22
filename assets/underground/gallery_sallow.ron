@@ -71,6 +71,8 @@
     ],
     patrol: ["gallery", "gauge_room", "gallery", "plumb_chamber"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("SALLOW DAM\nINSPECTION GALLERY"),
     portals: [
         (),
         // Up beside the draw-off tower, on its west side, the door to the

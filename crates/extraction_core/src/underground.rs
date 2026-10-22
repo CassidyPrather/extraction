@@ -311,6 +311,10 @@ pub struct Layout {
     /// The site seals itself once its power's on.
     #[serde(default)]
     pub lockdown: Option<LockdownDef>,
+    /// Stencilled over every kiosk's door (a line per `\n`): what's down
+    /// there, and what to mind. A kiosk with a `facade` has its own.
+    #[serde(default)]
+    pub sign: Option<String>,
     /// A flooded room whose water goes live with its lamps' power, and the
     /// isolator that cuts it.
     #[serde(default)]

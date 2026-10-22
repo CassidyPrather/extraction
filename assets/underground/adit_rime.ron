@@ -105,6 +105,8 @@
     )),
     patrol: ["adit_foot", "drift", "haulage", "drift"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("COLDHARBOUR ADIT No. 2\nCAGE TO LOWER LEVEL"),
     portals: [
         // Down from beside the adit house, north into the knoll.
         (),

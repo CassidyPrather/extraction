@@ -87,6 +87,8 @@
     // isolator in the switch room cuts the chamber's circuit (and its
     // light).
     live: Some((room: "overflow", isolator: ("switch_room", (-2.75, -1.5), 90.0))),
+    // Over every kiosk's door: what's down there.
+    sign: Some("CINDER WORKS SERVICE TUNNEL\nDANGER - LIVE CABLES"),
     portals: [
         (),
         (at: (10.0, 53.0), rot: 180.0, y: 0.0),

@@ -67,6 +67,8 @@
     items: [(id: "canary", room: "cage_landing", at: (-2.2, 0.6), y: 1.0)],
     patrol: ["haulage", "crosscut", "refuge", "crosscut", "haulage", "stables"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("DEEP WORKINGS - FIREDAMP\nNO NAKED LIGHTS"),
     portals: [
         (),
         // The old incline, up from the crosscut.

@@ -80,6 +80,8 @@
     items: [(id: "work_boots", room: "sump", at: (-1.4, 2.4), y: 0.0)],
     patrol: ["upper_gallery", "control", "upper_gallery", "valve_gallery"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("MARROW WATER BOARD\nPUMP STATION - KEEP CLEAR"),
     portals: [
         (),
         // The outfall stair, from the pump hall up to the river bank.

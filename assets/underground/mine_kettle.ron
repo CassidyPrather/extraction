@@ -77,6 +77,8 @@
         (link: Some(("lamp_room", "west_crosscut")), depth: 1.35),
         (room: Some("sump"), depth: 0.4),
     ],
+    // Over every kiosk's door: what's down there.
+    sign: Some("KETTLE PASS COLLIERY\nNo. 1 DRIFT"),
     portals: [
         (),
         (at: (0.0, 58.0), rot: 180.0, y: 0.4),
