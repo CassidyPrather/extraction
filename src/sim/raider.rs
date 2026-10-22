@@ -204,6 +204,10 @@ enum SiteKind {
     Building(usize),
     Spot,
     Field,
+    /// A standing anomaly the valley is known for (a well, a mirror, a
+    /// hush, a frost): it grows a stone some cycles, and a hunter goes to
+    /// see.
+    Anomaly,
     Wreck(Entity),
 }
 
@@ -461,6 +465,19 @@ pub fn attach_raider(
                     tries: 0,
                     job: false,
                 });
+            }
+            // (`SIM_NO_ANOMALY_SITES=1`: as before hunters knew them, to
+            // compare runs.)
+            MarkerKind::Anomaly { .. } if std::env::var_os("SIM_NO_ANOMALY_SITES").is_none() => {
+                sites.push(Site {
+                    name: m.name.clone(),
+                    kind: SiteKind::Anomaly,
+                    at: Vec2::from_array(m.at),
+                    spots: 1,
+                    visited: false,
+                    tries: 0,
+                    job: false,
+                })
             }
             MarkerKind::ArtifactField => sites.push(Site {
                 name: m.name.clone(),
@@ -2575,6 +2592,7 @@ fn kind_name(k: SiteKind) -> &'static str {
         SiteKind::Building(_) => "building",
         SiteKind::Spot => "spot",
         SiteKind::Field => "field",
+        SiteKind::Anomaly => "anomaly",
         SiteKind::Wreck(_) => "wreck",
     }
 }
@@ -2666,6 +2684,9 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             }
             SiteKind::Spot => r.traits.spots,
             SiteKind::Field => r.traits.fields * 3.0,
+            // One stone at most, and only some cycles; but a hunter knows
+            // where they are.
+            SiteKind::Anomaly => r.traits.fields * 1.5,
             // Picking over a wreck is for when nothing else is coming.
             SiteKind::Wreck(_) if r.hp < 60.0 || heat > 0.0 => 0.0,
             SiteKind::Wreck(_) => 4.0,
@@ -3146,6 +3167,8 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
     let within = match r.sites[s].kind {
         SiteKind::Building(_) => 0.6,
         SiteKind::Field => 8.0,
+        // Its edge, from where the stone is seen (or isn't).
+        SiteKind::Anomaly => 5.0,
         _ => 2.0,
     };
     travel(&r.grid, pos.xz(), to, within)
@@ -3158,6 +3181,7 @@ fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
             r.plans[b].in_grid(pos) && site_target(r, scene, s, pos).distance(pos.xz()) < 3.0
         }
         SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
+        SiteKind::Anomaly => site.at.distance(pos.xz()) < 8.0,
         _ => site.at.distance(pos.xz()) < 6.0,
     }
 }
@@ -3177,7 +3201,9 @@ fn pick_item(me: Entity, r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Opti
             continue;
         }
         let def = scene.catalog.get(it.kind());
-        if site.kind == SiteKind::Field && def.category != Category::Artifact {
+        if matches!(site.kind, SiteKind::Field | SiteKind::Anomaly)
+            && def.category != Category::Artifact
+        {
             continue;
         }
         // A contract's thing to bring is worth more than anything.
@@ -3633,6 +3659,7 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         }
         SiteKind::Spot => at.xz().distance(site.at) < 5.0,
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
+        SiteKind::Anomaly => at.xz().distance(site.at) < 6.0,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
     }
 }
