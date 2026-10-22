@@ -688,6 +688,18 @@ fn plan_site(
             }
         })
         .collect();
+    // A pocket (cells a body stands in that no way in reaches: between a
+    // prop and a wall, say) is no place: shut, or a raider making for the
+    // nearest standing to its loot picks one it can't get to, and sticks.
+    // (Heat and live water count as ways through, being shut for now;
+    // what's behind the works stays as it is.)
+    let through: Vec<usize> = hot
+        .iter()
+        .chain(&warm)
+        .map(|h| h.0)
+        .chain(live.iter().copied())
+        .collect();
+    shut_pockets(&mut grid, &entries, &through, |c| site_closed(&b.prefab, c));
     let mut inner: Option<(Vec2, Vec2)> = None;
     for j in 0..n {
         for i in 0..n {
@@ -718,6 +730,67 @@ fn plan_site(
         warm,
         live,
         gas,
+    }
+}
+
+/// Whether a site-space point is behind its works (a room the stair
+/// doesn't reach till something's done: past a pit, heat, the cage; or a
+/// corridor between two such).
+pub fn site_closed(prefab: &str, c: [f32; 2]) -> bool {
+    use extraction_core::underground::{self as ug, Cell};
+    let (Some(l), Some(r)) = (ug::layout(prefab), ug::raster(prefab)) else {
+        return false;
+    };
+    let open = l.open_rooms();
+    let room = |id: &str| l.rooms.iter().position(|q| q.id == id);
+    match r.at(c) {
+        Cell::Room(k) => !open[k as usize],
+        Cell::Hall(li) => l.links.get(li as usize).is_some_and(|k| {
+            [&k.from, &k.to]
+                .iter()
+                .all(|id| room(id).is_some_and(|q| !open[q]))
+        }),
+        _ => false,
+    }
+}
+
+/// Shut the cells a body could stand in that no way in reaches (`through`
+/// cells count as passable, though shut), bar those `closed` says are
+/// behind the works.
+fn shut_pockets(
+    grid: &mut NavGrid,
+    entries: &[Vec2],
+    through: &[usize],
+    closed: impl Fn([f32; 2]) -> bool,
+) {
+    let n = grid.n;
+    let passable = |grid: &NavGrid, k: usize| grid.cost[k] != BLOCKED || through.contains(&k);
+    let mut seen = vec![false; n * n];
+    let mut stack: Vec<(usize, usize)> = entries
+        .iter()
+        .filter_map(|e| grid.nearest_walkable(e.to_array()))
+        .filter_map(|c| grid.cell_of(c))
+        .collect();
+    for &(i, j) in &stack {
+        seen[j * n + i] = true;
+    }
+    while let Some((i, j)) = stack.pop() {
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (a, c) = (i as i64 + di, j as i64 + dj);
+            if a < 0 || c < 0 || a >= n as i64 || c >= n as i64 {
+                continue;
+            }
+            let k = c as usize * n + a as usize;
+            if !seen[k] && passable(grid, k) {
+                seen[k] = true;
+                stack.push((a as usize, c as usize));
+            }
+        }
+    }
+    for k in 0..n * n {
+        if !seen[k] && grid.cost[k] != BLOCKED && !closed(grid.centre(k % n, k / n)) {
+            grid.cost[k] = BLOCKED;
+        }
     }
 }
 
@@ -1497,7 +1570,9 @@ mod tests {
                             continue;
                         }
                         let k = nj as usize * n + ni as usize;
-                        if !seen[k] && g.cost[k] != BLOCKED {
+                        let through = plan.hot.iter().chain(&plan.warm).any(|h| h.0 == k)
+                            || plan.live.contains(&k);
+                        if !seen[k] && (g.cost[k] != BLOCKED || through) {
                             seen[k] = true;
                             stack.push((ni as usize, nj as usize));
                         }
@@ -1506,11 +1581,7 @@ mod tests {
                 let cut: Vec<[f32; 2]> = (0..n * n)
                     .filter(|k| g.cost[*k] != BLOCKED && !seen[*k])
                     .map(|k| g.centre(k % n, k / n))
-                    .filter(|c| {
-                        let at = plan.world2(Vec2::from_array(*c));
-                        let y = plan.floor_at(Vec2::from_array(*c));
-                        !behind_the_works(plan, Vec3::new(at.x, y + 0.5, at.y))
-                    })
+                    .filter(|c| !site_closed(&plan.name, *c))
                     .collect();
                 if !cut.is_empty() {
                     pockets.push(format!(
