@@ -3,6 +3,8 @@
 use bevy::prelude::*;
 
 fn main() -> AppExit {
+    // Waiting is timed from here (`render::timeline`).
+    extraction::render::timeline::start();
     // `extraction soak ...`: a long headless run held to the leak gauge.
     if std::env::args().nth(1).as_deref() == Some("soak") {
         return extraction::soak::drive::cli(std::env::args().skip(2));
