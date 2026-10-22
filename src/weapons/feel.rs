@@ -2314,6 +2314,13 @@ pub(crate) mod vr_tests {
             }
             fire(&mut r, 1, true);
         }
+        // The jam made, its wear and dirt off again: a worn, fouled action
+        // drags (`Firearm::action_drag`), and this is about the jam.
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 1.0;
+            g.firearm.fouling = 0.0;
+        }
         let ejected = |r: &mut Range| {
             let mut q = r.vr.app.world_mut().query::<&crate::weapons::Casing>();
             q.iter(r.vr.app.world()).count()
