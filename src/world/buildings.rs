@@ -5236,6 +5236,24 @@ fn boxcar(b: &mut Builder) {
         Mat::RustyMetal,
         true,
     );
+    // Old sleepers stacked into steps at the doorway, in front of its open
+    // half: a floor 1.26 m up in four risers the body steps (`map_doors`
+    // holds the ground at their foot to a step).
+    let (face, tread, floor) = (w * 0.5 + 0.035, 0.4, f + 0.06);
+    let rise = floor / 4.0;
+    for k in 1..4 {
+        let top = rise * (4 - k) as f32;
+        let x = face + tread * (k as f32 - 0.5);
+        b.bx(
+            Vec3::new(tread - 0.01, top + 0.3, 1.3),
+            Vec3::new(x, (top - 0.3) * 0.5, -0.4),
+            Mat::Timber,
+        );
+    }
+    let steps = 3.0 * tread;
+    if let Some(e) = b.geo.entrances.iter_mut().find(|e| e.out == [1.0, 0.0]) {
+        e.clear = steps + 1.0;
+    }
     // Ladders at diagonally opposite corners, couplers at both ends.
     for (end, x) in [(-1.0f32, -1.1f32), (1.0, 1.1)] {
         let z = end * (d * 0.5 + 0.06);
