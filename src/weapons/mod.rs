@@ -248,7 +248,7 @@ impl Plugin for WeaponsPlugin {
                 weather::WeatherPlugin,
                 report::ReportPlugin,
             ))
-            .add_plugins((reverb::ReverbPlugin, gunsmith::GunsmithPlugin))
+            .add_plugins(gunsmith::GunsmithPlugin)
             .add_systems(
                 FixedUpdate,
                 (

@@ -714,6 +714,15 @@ mod tests {
         assert_eq!(r.vr.hand_state(side).holding, Some(item), "picked up");
     }
 
+    /// Whatever the hand holds, let go (the grip closed on it, then opened:
+    /// a bolt drawn out came into the hand with the grip open).
+    fn let_go(r: &mut Range, side: Side) {
+        r.vr.grip(side, 1.0);
+        r.vr.step(2);
+        r.vr.grip(side, 0.0);
+        r.vr.step(5);
+    }
+
     /// The first loose item of `id`.
     fn find(r: &mut Range, id: &str) -> Option<Entity> {
         let catalog = r.vr.app.world().resource::<Catalog>().clone();
@@ -735,7 +744,26 @@ mod tests {
         let before = gun_mut(&mut r).layout.muzzle;
         let scrap_before = find(&mut r, "scrap_metal");
         let near = r.feet + Vec3::new(0.35, 1.0, 0.0);
-        let saw = take_in(&mut r, Side::Right, "hacksaw", near);
+        let saw = r.vr.spawn("hacksaw", Transform::from_translation(near));
+        r.vr.app
+            .world_mut()
+            .entity_mut(saw)
+            .insert(RigidBody::Static);
+        r.vr.step(2);
+        let handle = r.vr.point(saw, |p| *p == GripRole::Primary);
+        r.vr.hand(Side::Right, handle, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(3);
+        r.vr.grip(Side::Right, 1.0);
+        r.vr.step(3);
+        r.vr.app
+            .world_mut()
+            .entity_mut(saw)
+            .insert(RigidBody::Dynamic);
+        assert_eq!(
+            r.vr.hand_state(Side::Right).holding,
+            Some(saw),
+            "took the saw"
+        );
         r.vr.step(5);
         // The saw across the barrel, 480 mm back from the muzzle.
         let gt = *r.vr.app.world().get::<GlobalTransform>(gun).unwrap();
@@ -959,8 +987,7 @@ mod tests {
         let away = r.vr.hand_state(Side::Left).world.translation + Vec3::new(0.0, 0.0, 0.6);
         let from = r.vr.hand_state(Side::Left).world.translation;
         glide_side(&mut r, Side::Left, from, away, 15);
-        r.vr.grip(Side::Left, 0.0);
-        r.vr.step(5);
+        let_go(&mut r, Side::Left);
         // The good one's out, and into the worn one.
         let good_bolt = draw(&mut r, good);
         let way = {
@@ -984,8 +1011,7 @@ mod tests {
                 .unwrap()
                 .translation();
         glide_side(&mut r, Side::Left, from, from + (way - held), 20);
-        r.vr.grip(Side::Left, 0.0);
-        r.vr.step(5);
+        let_go(&mut r, Side::Left);
         let g = gun_mut(&mut r);
         let (want, _) = fit_part(0.3, 0.0, 0.9, BOLT_SHARE);
         println!(
