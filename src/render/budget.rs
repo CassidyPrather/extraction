@@ -503,12 +503,21 @@ impl Knobs {
 /// The comfort board's SMOOTHING (`Comfort::msaa`, `--msaa`) on every
 /// view of the world: the headset's eyes, the flat camera, the mirror.
 /// Not offscreen views (a scope's picture, an impostor capture), which
-/// set their own.
+/// set their own. With it off, FXAA instead: one cheap pass that takes
+/// the edge off wires and rails (Visual design's call; no SMAA, no TAA,
+/// whose ghosting in a headset is a comfort problem). Foliage's alpha to
+/// coverage follows the samples by itself (`trees::foliage_alpha`).
 #[allow(clippy::type_complexity)]
 fn apply_msaa_setting(
+    mut commands: Commands,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut cams: Query<
-        (&mut Msaa, Option<&bevy::camera::RenderTarget>),
+        (
+            Entity,
+            &mut Msaa,
+            Option<&bevy::camera::RenderTarget>,
+            Has<bevy::anti_alias::fxaa::Fxaa>,
+        ),
         (With<Camera3d>, Without<crate::render::OffscreenCamera>),
     >,
 ) {
@@ -517,7 +526,7 @@ fn apply_msaa_setting(
     };
     let want = comfort.msaa_setting();
     let all = comfort.is_changed();
-    for (mut m, target) in &mut cams {
+    for (e, mut m, target, fxaa) in &mut cams {
         if !all && !m.is_added() {
             continue;
         }
@@ -526,6 +535,17 @@ fn apply_msaa_setting(
         }
         if *m != want {
             *m = want;
+        }
+        match (want == Msaa::Off, fxaa) {
+            (true, false) => {
+                commands
+                    .entity(e)
+                    .insert(bevy::anti_alias::fxaa::Fxaa::default());
+            }
+            (false, true) => {
+                commands.entity(e).remove::<bevy::anti_alias::fxaa::Fxaa>();
+            }
+            _ => {}
         }
     }
 }

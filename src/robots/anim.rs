@@ -41,6 +41,13 @@ const ACCEL: f32 = 2.6;
 const TURN_RATE: f32 = 1.7;
 const TURN_RESPONSE: f32 = 5.0;
 const STEP_HEIGHT: f32 = 0.26;
+/// A badly hurt leg (half health or less) drags its foot this far through
+/// its swing before lifting it.
+pub const SCUFF_UNTIL: f32 = 0.4;
+/// The hitch as weight comes on the leg it favours: a drop (bob speed,
+/// m/s, at a dead leg's worth of hurt) and a roll onto that side (rad/s).
+const HITCH_DIP: f32 = 1.4;
+const HITCH_ROLL: f32 = 1.3;
 
 /// Kept low (a grappler lying in wait, `Intent::low`), the orb sits this
 /// much lower on bent legs.
@@ -427,6 +434,10 @@ pub fn step_walker(
         .fold(0.0f32, f32::max);
     let missing = LEGS - alive_legs;
     g.limp = ((worst - 0.4).max(0.0) / 0.6 * 0.5 + missing as f32 * 0.55).min(1.0);
+    // The leg it favours: its worst living one, once it's been hit.
+    let favoured = (0..LEGS)
+        .filter(|i| w.feet[*i].alive && g.leg_health[*i] <= 0.7)
+        .min_by(|a, b| g.leg_health[*a].total_cmp(&g.leg_health[*b]));
     // Down to two legs it can't stand: belly on the ground, it hauls
     // itself along on what it has left.
     let crawling = alive_legs == 2 && !drive.down;
@@ -529,9 +540,18 @@ pub fn step_walker(
             let k = ((nt - 0.3) / 0.7).clamp(0.0, 1.0);
             k * k * (3.0 - 2.0 * k)
         };
+        // The bad leg barely clears the ground: it scuffs through the
+        // first of its swing, then swings low (fx kicks dirt up off it).
+        let scuff = if favoured == Some(i) {
+            let late = ((nt - SCUFF_UNTIL) / (1.0 - SCUFF_UNTIL)).clamp(0.0, 1.0);
+            (0.3 + 0.7 * h) * if h <= 0.5 { late } else { 1.0 }
+        } else {
+            1.0
+        };
         let lift = (STEP_HEIGHT * s * (0.8 + 0.4 * fast.min(1.0)) * (1.0 - 0.4 * g.crouch)
             + dy.abs() * 0.4)
-            * (std::f32::consts::PI * nt).sin();
+            * (std::f32::consts::PI * nt).sin()
+            * scuff;
         let xz = f.from.lerp(f.to, s);
         f.planted = Vec3::new(xz.x, f.from.y + dy * sv + lift, xz.z);
         if nt >= 1.0 {
@@ -540,6 +560,17 @@ pub fn step_walker(
             // A heavy foot taking weight; a bad leg buckles a little more.
             kick += (0.22 + 0.1 * fast.min(1.0) + (1.0 - h) * 0.5)
                 * if g.shape == Shape::Heavy { 1.6 } else { 1.0 };
+            // The hitch: weight on the bad leg, it gives; the body drops
+            // and rolls onto that side, and comes up off it quick.
+            if favoured == Some(i) {
+                let hurt = 1.0 - h;
+                kick += HITCH_DIP * hurt;
+                let hip = g.shape.hip(i);
+                let side = Vec3::Y
+                    .cross(rot * Vec3::new(hip.x, 0.0, hip.z))
+                    .normalize_or_zero();
+                g.wobble_vel += side * HITCH_ROLL * hurt;
+            }
         }
         w.feet[i] = f;
     }
@@ -649,7 +680,7 @@ pub fn step_walker(
     let bob_target = 0.025 * swing * fast.min(1.0) + if g.leap > 0.0 { 0.12 * s } else { 0.0 };
     g.bob_vel -= kick;
     g.bob_vel += ((bob_target - g.sway.y) * 140.0 - g.bob_vel * 15.0) * dt;
-    let bob = (g.sway.y + g.bob_vel * dt).clamp(-0.15, 0.08);
+    let bob = (g.sway.y + g.bob_vel * dt).clamp(-0.15 - 0.1 * s, 0.08);
 
     // Weight over the planted feet.
     let (mut psum, mut pn) = (Vec3::ZERO, 0.0f32);
@@ -1898,6 +1929,64 @@ mod tests {
                 "{dead:?}: it crawled {went:.2} m in 10 s"
             );
         }
+    }
+
+    /// A walker on a bad leg hitches: each time weight comes on that leg
+    /// the body drops and rolls more than a whole one's does, and the bad
+    /// foot scuffs along the ground through the first of its swing.
+    #[test]
+    fn a_bad_leg_hitches_and_scuffs() {
+        let walk = |health: f32| {
+            let flat = |_: Vec3| 0.0;
+            let (mut w, mut g, mut t) = walker_at(Vec3::new(0.0, BODY_HEIGHT, 0.0), &flat);
+            g.leg_health[1] = health;
+            let (mut low, mut high, mut roll) = (f32::MAX, f32::MIN, 0.0f32);
+            let mut scuffed = (0, 0);
+            for k in 0..(8 * 90) {
+                let drive = Drive {
+                    desired: Vec3::X * SPEED,
+                    face: None,
+                    pace: 1.0,
+                    down: false,
+                    stunned: false,
+                    low: false,
+                };
+                step_walker(
+                    &mut w,
+                    &mut g,
+                    &mut t,
+                    &drive,
+                    1.0 / 90.0,
+                    &mut |_| 0.0,
+                    &mut |_| {},
+                );
+                // Past the start-up, measure the bob and the roll.
+                if k > 2 * 90 {
+                    low = low.min(t.translation.y);
+                    high = high.max(t.translation.y);
+                    roll = roll.max(g.wobble.length());
+                    let f = &w.feet[1];
+                    if f.t > 0.05 && f.t < SCUFF_UNTIL {
+                        scuffed.1 += 1;
+                        if f.planted.y < 0.02 {
+                            scuffed.0 += 1;
+                        }
+                    }
+                }
+            }
+            (high - low, roll, scuffed)
+        };
+        let (bob, roll, _) = walk(1.0);
+        let (hbob, hroll, (low, swung)) = walk(0.3);
+        assert!(
+            hbob > bob * 2.0 && hbob > 0.06,
+            "it dips: {hbob:.3} m vs {bob:.3} m"
+        );
+        assert!(hroll > roll * 2.0, "and rolls: {hroll:.3} vs {roll:.3}");
+        assert!(
+            swung > 0 && low * 10 >= swung * 9,
+            "it scuffs: {low}/{swung}"
+        );
     }
 
     /// On an icy slope its planted feet creep downhill and it stumbles;

@@ -137,7 +137,12 @@ pub fn tell(role: PartRole, health: f32) -> Tell {
             motion: Motion::Gutter,
             ..t
         },
-        (PartRole::Sensor, Band::Gone) => Tell { dark: true, ..t },
+        // Out for good, and its socket spits now and then.
+        (PartRole::Sensor, Band::Gone) => Tell {
+            sparks: 0.6,
+            dark: true,
+            ..t
+        },
         (PartRole::Core, Band::Hurt) => Tell { sparks: 0.8, ..t },
         (PartRole::Core, Band::Failing) => Tell {
             sparks: 1.5,
@@ -224,7 +229,8 @@ mod tests {
         let rotor = tell(PartRole::Rotor(2), 0.5);
         assert_eq!(rotor.motion, Motion::Wobble);
         assert!(rotor.smoke > 0.0);
-        assert!(tell(PartRole::Sensor, 0.0).dark);
+        let eye = tell(PartRole::Sensor, 0.0);
+        assert!(eye.dark && eye.sparks > 0.0, "a dead eye's socket sparks");
         let core = tell(PartRole::Core, 0.2);
         assert!(core.sparks > 0.0 && core.coolant > 0.0);
     }
