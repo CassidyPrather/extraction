@@ -196,7 +196,7 @@ fn spawn_cable(commands: &mut Commands, pylon: Entity, at: Vec3) {
         // What the cutters' jaws find: a thin overlap-only box down the
         // cabinet's side, which nothing collides with or shoots.
         Sensor,
-        Collider::cuboid(0.06, 0.7, 0.06),
+        Collider::cuboid(0.08, 0.7, 0.08),
         CollisionLayers::new(Layer::Hand, LayerMask::NONE),
         Transform::from_translation(cable_at(at)),
         Visibility::default(),
