@@ -889,11 +889,13 @@ pub(super) fn direct_raid(
                 }
                 Ok(None) => {
                     state.note(now, Kind::Learned, errand_done(&errand, &world));
+                    tasks.extend(way_out(&world, &view, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
                 Err(why) => {
                     state.note(now, Kind::Stuck, why);
+                    tasks.extend(way_out(&world, &view, here).0);
                     state.leg = Leg::Call;
                     state.tries = 0;
                 }
@@ -1349,8 +1351,50 @@ fn name_of(world: &World2, id: &str) -> String {
         .unwrap_or_else(|| id.replace('_', " "))
 }
 
+/// Indoors at `here`: out by the nearest door, and where that leaves it.
+fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
+    let Some(en) = view.entrances.as_deref() else {
+        return (vec![], here);
+    };
+    let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
+    let Some(b) = en.building_at(at) else {
+        return (vec![], here);
+    };
+    let Some(d) = en
+        .doors
+        .iter()
+        .filter(|d| d.building == b)
+        .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
+        .min_by(|a, c| {
+            a.mid
+                .xz()
+                .distance(here)
+                .total_cmp(&c.mid.xz().distance(here))
+        })
+    else {
+        return (vec![], here);
+    };
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    let outside = d.mid.xz() + out * 2.0;
+    (
+        vec![
+            Task::WalkTo {
+                to: d.mid.xz() - out * 1.2,
+                within: 0.5,
+            },
+            Task::OpenDoor(d.door),
+            Task::WalkTo {
+                to: outside,
+                within: 0.6,
+            },
+        ],
+        outside,
+    )
+}
+
 /// To `p` from `here`: indoors, round to its building's door, open it, in.
 fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
+    let (mut t, here) = way_out(world, view, here);
     let door = view.entrances.as_deref().and_then(|en| {
         let b = en.building_at(p)?;
         en.doors
@@ -1361,11 +1405,12 @@ fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
             .copied()
     });
     let Some(d) = door else {
-        return world.legs(here, p.xz());
+        t.extend(world.legs(here, p.xz()));
+        return t;
     };
     let out = d.out.xz().normalize_or(Vec2::Y);
     let front = d.mid.xz() + out * 1.3;
-    let mut t = world.legs(here, front);
+    t.extend(world.legs(here, front));
     t.extend([
         Task::OpenDoor(d.door),
         Task::WalkTo {
