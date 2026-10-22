@@ -234,7 +234,9 @@ fn shove(
         let Ok((hand, rh, player)) = hands.get(hand_body.hand) else {
             continue;
         };
-        if hand.grip_down || hand.holding.is_some() {
+        // (A hand on a gun's handguard is the gun's: its butt strikes, not
+        // the palm: `weapons::melee`.)
+        if hand.grip_down || hand.holding.is_some() || hand.supporting.is_some() {
             continue;
         }
         let at = part_at.translation();
