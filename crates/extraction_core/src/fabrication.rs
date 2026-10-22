@@ -225,6 +225,19 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 16.0,
     },
     Recipe {
+        id: "make_jammer",
+        name: "Build a relay jammer",
+        // A salvaged radio's guts, a cell to drive it, scrap for the
+        // aerials and the box (`robots::network::Jammer`).
+        needs: &[
+            (Need::Item("radio"), 1),
+            (Need::Item("power_cell"), 1),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("jammer", 1)]),
+        seconds: 20.0,
+    },
+    Recipe {
         id: "pack_762x39",
         name: "Re-pack 7.62x39 (box of 20)",
         needs: &[

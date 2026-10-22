@@ -3677,3 +3677,43 @@ fn a_jammer_blocks_reports_but_is_noticed() {
         flat(r - jam)
     );
 }
+
+/// The bench's jammer is a jammer: a device that draws hard from its cell
+/// and, switched on with power, blocks the relays round it.
+#[test]
+fn a_jammer_item_is_a_jammer() {
+    let (mut app, _player, zone) = app(None);
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("jammer").expect("a jammer in the catalog"),
+                transform: Transform::from_translation(zone.on_ground(100.0, 200.0) + Vec3::Y),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let j = app
+        .world()
+        .get::<super::network::Jammer>(e)
+        .expect("it jams");
+    assert_eq!(j.radius, super::network::JAM_RADIUS);
+    let d = app
+        .world()
+        .get::<crate::gadgets::Device>(e)
+        .expect("a device");
+    assert_eq!(d.kind, crate::gadgets::DeviceKind::Jammer);
+    assert!(d.watts >= 15.0, "battery-hungry: {} W", d.watts);
+    assert!(
+        extraction_core::fabrication::RECIPES
+            .iter()
+            .any(|r| r.makes == extraction_core::fabrication::Make::Items(&[("jammer", 1)])),
+        "the bench makes it"
+    );
+}
