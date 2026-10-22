@@ -3239,7 +3239,17 @@ fn a_walker_is_left_watching_where_you_killed_one() {
         "one left watching"
     );
     let said = driver_said(&app);
-    assert!(said.iter().any(|s| s.contains("watching")), "{said:?}");
+    // One of the watcher's lines, whatever place it names.
+    let watcher = |s: &String| {
+        crate::raid::lines::MEMORY_WATCHER
+            .iter()
+            .chain(crate::raid::lines::MEMORY_WATCHER_AWAY)
+            .any(|l| {
+                let (a, b) = l.split_once("{rv}").unwrap_or((l, ""));
+                s.starts_with(a) && s.ends_with(b)
+            })
+    };
+    assert!(said.iter().any(watcher), "{said:?}");
     // And only once: stepping out again with the watcher still about
     // leaves one more (the memory is the same), never a crowd at once.
     assert_eq!(said.len(), 1, "{said:?}");

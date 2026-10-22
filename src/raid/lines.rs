@@ -311,35 +311,35 @@ pub const CALLED_OUT: &[&str] = &[
 /// The Zone remembers you (`robots::memory`). Picked up on your usual
 /// way, near `{rv}` (a place)...
 pub const MEMORY_CONTACT: &[&str] = &[
-    "Machine talk, close: contact again, near {rv}.",
-    "The radio stutters: they've had you near {rv} before.",
-    "Chirps on the radio. Near {rv} again, they say.",
+    "Machine talk, close. They know you by {rv} now.",
+    "The radio clicks in their tones: {rv} again.",
+    "Chirps, near. They've had you by {rv} before.",
 ];
 /// ...or nowhere it can name.
 pub const MEMORY_CONTACT_AWAY: &[&str] = &[
-    "Machine talk, close: contact again, your usual way.",
-    "The radio stutters. They know the way you come.",
+    "Machine talk, close. They know the way you come.",
+    "The radio clicks: your usual way. They were waiting.",
 ];
 /// Stepping out: one of theirs left watching where you wrecked one, by
 /// `{rv}`...
 pub const MEMORY_WATCHER: &[&str] = &[
-    "Driver: \"They've left one watching by {rv}.\"",
-    "Driver: \"One of theirs is stood by {rv}. Waiting.\"",
+    "Driver: \"Mind {rv}. They've left one there.\"",
+    "Driver: \"One stands by {rv} now. Since your last.\"",
 ];
 /// ...or somewhere it can't name.
 pub const MEMORY_WATCHER_AWAY: &[&str] =
-    &["Driver: \"They've left one where you dropped theirs.\""];
+    &["Driver: \"Where you dropped theirs, there's another stood now.\""];
 /// The rendezvous you always use, `{rv}`.
 pub const MEMORY_RV: &[&str] = &[
-    "Driver: \"They'll mind {rv}. You always come out there.\"",
-    "Driver: \"{rv} again? They'll be expecting you.\"",
+    "Driver: \"{rv} again? They've noticed.\"",
+    "Driver: \"Not {rv} every time. They count.\"",
 ];
 /// A building you cleared, by `{rv}`, found shut.
-pub const MEMORY_SHUT: &[&str] = &["Driver: \"Somebody's shut up by {rv} since you were in.\""];
+pub const MEMORY_SHUT: &[&str] = &["Driver: \"Your place by {rv}? Shut again.\""];
 /// Nothing in particular, but you keep to the same ways.
 pub const MEMORY_WAYS: &[&str] = &[
-    "Driver: \"They've been walking your ways in. Mix it up.\"",
-    "Driver: \"Same way in as always? They'll know it.\"",
+    "Driver: \"Same way in every time. Even I could find you.\"",
+    "Driver: \"Go in another way. They count, you know.\"",
 ];
 
 /// Fills a line's `{rv}`, `{s}` and `{b}`; a place leading a line gets a
