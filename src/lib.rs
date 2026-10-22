@@ -7,6 +7,7 @@
 pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
+pub mod audio_fight;
 pub mod audio_kit;
 pub mod audio_mix;
 pub mod audio_score;
@@ -35,6 +36,7 @@ pub mod qa;
 pub mod radio;
 pub mod raid;
 pub mod render;
+pub mod report;
 pub mod rig;
 pub mod robot_voice;
 pub mod robots;
@@ -110,6 +112,7 @@ pub struct ClientPlugin;
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(report::ReportPlugin);
         app.add_plugins((
             render::RenderPlugin,
             world::WorldVisualsPlugin,
