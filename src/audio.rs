@@ -3412,116 +3412,150 @@ fn water_sounds(
     }
 }
 
-/// Rime Fell's works in the wind (`world::fell`): the funicular's haul
-/// rope creaking against its rollers, nearest you along the line
-/// ([`FELL_ROPE`]) within [`ROPE_NEAR`]; the top station's bull wheel
-/// ([`BULL_WHEEL`], 8 m up) groaning as the rope tugs at it; and a sheet
-/// of the mill's corrugated roof come loose ([`MILL_SHEET`], on the top
-/// bay's roof), banging once to three times now and then, heard across
-/// the settlement. Nothing runs: it is all the wind.
-pub const FELL: &str = "Rime Fell";
-pub const FELL_ROPE: [[f32; 2]; 3] = [[62.0, 214.0], [60.0, 120.0], [58.0, 10.0]];
-pub const BULL_WHEEL: Vec3 = Vec3::new(71.0, 8.0, 0.0);
-/// The loose sheet: xz, and its height (m, absolute: the top bay's roof).
-pub const MILL_SHEET: Vec3 = Vec3::new(131.0, 108.5, 5.0);
+/// Rime Fell's derelict works in the wind (`world::fell_sounds`, which
+/// says where; nothing there runs):
+///
+/// - the funicular's slack rope ticking and creaking on its rollers, at
+///   the roller nearest you within [`ROPE_NEAR`] (`fell.rope`);
+/// - the top station's bull wheel, the cut rope's end groaning on it
+///   (`fell.wheel`);
+/// - a loose sheet of the mill's corrugated roof banging once to three
+///   times now and then, heard across the settlement (`fell.sheet`);
+/// - the stopped car's doors creaking and banging (`fell.car`);
+/// - wind moaning through each mill bay's broken windows and along the
+///   avalanche galleries, a loop at each (`fell.wind`), and the
+///   galleries' meltwater dripping (`water.drip`).
 const ROPE_NEAR: f32 = 60.0;
 const WHEEL_NEAR: f32 = 80.0;
 const SHEET_NEAR: f32 = 160.0;
+const CAR_NEAR: f32 = 60.0;
+const GALLERY_DRIP_NEAR: f32 = 50.0;
 
-/// The nearest point to `p` on the polyline `line`, in xz.
-fn nearest_on(line: &[[f32; 2]], p: Vec2) -> Vec2 {
-    let mut best = Vec2::from(line[0]);
-    for w in line.windows(2) {
-        let (a, b) = (Vec2::from(w[0]), Vec2::from(w[1]));
-        let t = ((p - a).dot(b - a) / (b - a).length_squared()).clamp(0.0, 1.0);
-        let q = a + (b - a) * t;
-        if q.distance(p) < best.distance(p) {
-            best = q;
-        }
-    }
-    best
-}
+/// A wind loop at one of Rime Fell's works.
+#[derive(Component)]
+struct FellWind;
 
+#[allow(clippy::too_many_arguments)]
 fn fell_sounds(
     mut commands: Commands,
     zone: Option<Res<Zone>>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    winds: Query<Entity, With<FellWind>>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
     time: Res<Time>,
-    mut next: Local<[f32; 3]>,
-    mut bangs: Local<Vec<f32>>,
+    mut works: Local<Option<(String, Vec<crate::world::fell_sounds::Emitter>)>>,
+    mut next: Local<[f32; 5]>,
+    mut bangs: Local<Vec<(f32, &'static str, Vec3, f64)>>,
 ) {
+    use crate::world::fell_sounds::{Source, emitters};
     let (Some(zone), Some(ear)) = (zone, listener.iter().next().map(|g| g.translation())) else {
         return;
     };
-    if zone.map.name != FELL {
+    // Worked out once a map, its wind loops with it.
+    if works
+        .as_ref()
+        .is_none_or(|(name, _)| *name != zone.map.name)
+    {
+        for e in &winds {
+            commands.entity(e).despawn();
+        }
+        let found = emitters(&zone.map, &zone.hm);
+        for w in &found {
+            if !matches!(w.source, Source::MillBay | Source::Gallery) {
+                continue;
+            }
+            if let Some(sample) = bank.pick("ambience/wind_works", &mut rng.0) {
+                let speed = rng.0.range(0.85, 1.1) as f64;
+                commands.spawn((
+                    FellWind,
+                    SamplePlayer::new(sample)
+                        .looping()
+                        .with_volume(Volume::Decibels(mix::db("fell.wind"))),
+                    PlaybackSettings::default().with_speed(speed),
+                    Transform::from_translation(w.at),
+                    Placed::new("fell.wind"),
+                ));
+            }
+        }
+        *works = Some((zone.map.name.clone(), found));
+    }
+    let Some((_, works)) = works.as_ref() else {
+        return;
+    };
+    if works.is_empty() {
         return;
     }
     let now = time.elapsed_secs();
-    let rope = nearest_on(&FELL_ROPE, Vec2::new(ear.x, ear.z));
-    let rope_at = zone.on_ground(rope.x, rope.y) + Vec3::Y * 1.5;
-    if now >= next[0] {
-        next[0] = now + rng.0.range(3.0, 8.0);
-        if rope_at.distance(ear) < ROPE_NEAR {
-            let speed = rng.0.range(0.5, 0.7) as f64;
-            play_at_speed(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "physical/door_creak",
-                Some(rope_at),
-                "fell.rope",
-                0.0,
-                speed,
-                0.05,
-            );
+    let nearest = |s: Source| {
+        works
+            .iter()
+            .filter(|w| w.source == s)
+            .map(|w| w.at)
+            .min_by(|a, b| a.distance(ear).total_cmp(&b.distance(ear)))
+    };
+    let mut due = |i: usize, lo: f32, hi: f32, rng: &mut AudioRng| {
+        if now < next[i] {
+            return false;
+        }
+        next[i] = now + rng.0.range(lo, hi);
+        true
+    };
+    if due(0, 2.0, 6.0, &mut rng)
+        && let Some(at) = nearest(Source::Rope).filter(|a| a.distance(ear) < ROPE_NEAR)
+    {
+        let speed = rng.0.range(0.5, 0.75) as f64;
+        bangs.push((now, "fell.rope", at, speed));
+    }
+    if due(1, 6.0, 14.0, &mut rng)
+        && let Some(at) = nearest(Source::BullWheel).filter(|a| a.distance(ear) < WHEEL_NEAR)
+    {
+        bangs.push((now, "fell.wheel", at, 0.8));
+    }
+    if due(2, 4.0, 15.0, &mut rng)
+        && let Some(at) = nearest(Source::MillSheet).filter(|a| a.distance(ear) < SHEET_NEAR)
+    {
+        let n = 1 + (rng.0.f32() * 2.99) as usize;
+        for i in 0..n {
+            let t = now + i as f32 * rng.0.range(0.25, 0.5);
+            bangs.push((t, "fell.sheet", at, 0.65));
         }
     }
-    let wheel = Vec3::new(
-        BULL_WHEEL.x,
-        zone.ground(BULL_WHEEL.x, BULL_WHEEL.z) + BULL_WHEEL.y,
-        BULL_WHEEL.z,
-    );
-    if now >= next[1] {
-        next[1] = now + rng.0.range(6.0, 14.0);
-        if wheel.distance(ear) < WHEEL_NEAR {
-            play_at_speed(
-                &mut commands,
-                &bank,
-                &mut rng.0,
-                "machines/groan",
-                Some(wheel),
-                "fell.wheel",
-                0.0,
-                0.8,
-                0.08,
-            );
+    if due(3, 5.0, 12.0, &mut rng)
+        && let Some(at) = nearest(Source::Car).filter(|a| a.distance(ear) < CAR_NEAR)
+    {
+        // A door swung on its hinge (the rope's creak, quicker), and as
+        // often as not banging to.
+        let speed = rng.0.range(0.6, 0.8) as f64;
+        bangs.push((now, "fell.rope", at, speed));
+        if rng.0.f32() < 0.6 {
+            bangs.push((now + rng.0.range(0.6, 1.2), "fell.car", at, 0.9));
         }
     }
-    if now >= next[2] {
-        next[2] = now + rng.0.range(4.0, 15.0);
-        if MILL_SHEET.distance(ear) < SHEET_NEAR {
-            let n = 1 + (rng.0.f32() * 2.99) as usize;
-            for i in 0..n {
-                bangs.push(now + i as f32 * rng.0.range(0.25, 0.5));
-            }
-        }
+    if due(4, 0.3, 1.4, &mut rng)
+        && let Some(at) = nearest(Source::Gallery).filter(|a| a.distance(ear) < GALLERY_DRIP_NEAR)
+    {
+        let off = Vec3::new(rng.0.range(-3.0, 3.0), 0.0, rng.0.range(-3.0, 3.0));
+        bangs.push((now, "water.drip", at + off, 1.0));
     }
-    bangs.retain(|&t| {
+    bangs.retain(|&(t, cue, at, speed)| {
         if now < t {
             return true;
         }
+        let set = mix::MIX
+            .iter()
+            .find(|c| c.name == cue)
+            .map_or("", |c| c.set);
         play_at_speed(
             &mut commands,
             &bank,
             &mut rng.0,
-            "impacts/metal",
-            Some(MILL_SHEET),
-            "fell.sheet",
+            set,
+            Some(at),
+            cue,
             0.0,
-            0.65,
-            0.1,
+            speed,
+            0.08,
         );
         false
     });
