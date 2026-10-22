@@ -47,6 +47,8 @@ pub struct ArtifactEffects {
     pub glass_eye: Option<Entity>,
     /// The Surge passes over you as if you were under a roof.
     pub stormglass: bool,
+    /// Burners don't burn you, and a little chill never leaves you.
+    pub rimestone: bool,
 }
 
 /// Recharge time for the aegis knot.
@@ -172,6 +174,7 @@ fn artifact_effects(
         let mut hearth = false;
         let mut eye = None;
         let mut storm = false;
+        let mut rime = false;
         for (e, item, by, held) in &carried {
             if by.0 != p {
                 continue;
@@ -180,6 +183,7 @@ fn artifact_effects(
                 "art_aegis" => aegis = true,
                 "art_hearth" => hearth = true,
                 "art_stormglass" => storm = true,
+                "art_rimestone" => rime = true,
                 "art_glasseye" if held.is_some() => eye = Some(e),
                 _ => {}
             }
@@ -188,6 +192,7 @@ fn artifact_effects(
         fx.hearth = hearth;
         fx.glass_eye = eye;
         fx.stormglass = storm;
+        fx.rimestone = rime;
         fx.aegis_recharge = (fx.aegis_recharge - dt).max(0.0);
     }
 }

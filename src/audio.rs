@@ -2119,6 +2119,11 @@ fn anomaly_loops(
                     }
                     // Dead air: nothing to hear (Anomalies).
                     extraction_core::anomaly::AnomalyKind::Hush => continue,
+                    // A frost's thin crystal tinkle; the mirror's shimmer
+                    // stands in until it has its own (Anomalies).
+                    extraction_core::anomaly::AnomalyKind::Frost => {
+                        ("anomaly/mirror_shimmer", "anomaly.mirror")
+                    }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((

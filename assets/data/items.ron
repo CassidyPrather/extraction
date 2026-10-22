@@ -1016,6 +1016,11 @@
             description: "A sliver of something not quite glass. Your reflection in it moves a moment late, and now and then it glints where anything can see. Hold it and use it to step through, a few metres ahead; it needs a minute to brighten again.",
             category: Artifact, size: Tiny, mass: 0.05, bulk: 0.03, attention: 0.8,
         ),
+        (
+            id: "art_rimestone", dims: Some((0.045, 0.04, 0.04)), name: "Rimestone",
+            description: "A pale knuckle of stone furred with a frost that grows back as fast as you rub it off. Carried, fire can't take you: a burner's coals don't touch you. The cold in it is in you too; you're always a little stiff.",
+            category: Artifact, size: Small, mass: 0.4, bulk: 0.1, attention: 1.1,
+        ),
 
         // ---------------------------------------------------------------
         // The valley keys: the Quarantine Authority's depot keys, one per
