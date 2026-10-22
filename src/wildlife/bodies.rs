@@ -11,6 +11,12 @@
 //! everything, "animals included" (`docs/LORE.md`), and a robot that
 //! takes the carcass (despawns it) takes the body with it. [`Killed`]
 //! says so for sound and the sim.
+//!
+//! A deer's or a dog's carcass is a body of its own, for a hand to drag
+//! (`interact::carry`: [`Draggable`](crate::interact::carry::Draggable),
+//! by its mass, never lifted): a box the size of the animal lying on its
+//! side, turning only about the vertical, on the items' layer. The herd
+//! draws the dead animal wherever the carcass has got to ([`drag_along`]).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -34,7 +40,23 @@ pub enum CarcassKind {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Carcass {
     pub kind: CarcassKind,
+    /// Where it fell.
     pub at: Vec3,
+    /// Its flock or herd, and which one it was.
+    pub owner: Entity,
+    pub index: usize,
+}
+
+impl CarcassKind {
+    /// A draggable body's size lying down (m, across, up, along) and
+    /// mass (kg); none for a bird's.
+    pub fn body(self) -> Option<(Vec3, f32)> {
+        match self {
+            CarcassKind::Deer => Some((Vec3::new(0.7, 0.3, 1.1), 50.0)),
+            CarcassKind::Dog => Some((Vec3::new(0.55, 0.24, 0.85), 25.0)),
+            CarcassKind::Bird | CarcassKind::Heron => None,
+        }
+    }
 }
 
 /// An animal died: shot (`by` the shooter), caught by a hound, or blown up.
@@ -68,7 +90,7 @@ impl Plugin for BodiesPlugin {
             .init_resource::<Shots>()
             .add_systems(
                 FixedUpdate,
-                (give_bodies, take_hits, deaths, follow)
+                (give_bodies, take_hits, deaths, drag_along, follow)
                     .chain()
                     .after(super::WildlifeSystems)
                     .after(crate::weapons::ballistics::BallisticsSystems),
@@ -167,29 +189,56 @@ fn deaths(
 ) {
     let mut by: HashMap<(Entity, usize), Option<Entity>> =
         shots.0.drain(..).map(|(o, i, s)| ((o, i), s)).collect();
-    let mut dead =
-        |owner: Entity, i: usize, at: Vec3, kind: CarcassKind, commands: &mut Commands| -> bool {
-            match known.get(&(owner, i)) {
-                // Taken away?
-                Some(c) => !carcasses.contains(*c),
-                None => {
-                    let c = commands
-                        .spawn((
-                            Name::new("Carcass"),
-                            Carcass { kind, at },
-                            Transform::from_translation(at),
-                        ))
-                        .id();
-                    known.insert((owner, i), c);
-                    killed.write(Killed {
-                        at,
+    let mut dead = |owner: Entity,
+                    index: usize,
+                    at: Vec3,
+                    yaw: f32,
+                    kind: CarcassKind,
+                    commands: &mut Commands|
+     -> bool {
+        match known.get(&(owner, index)) {
+            // Taken away?
+            Some(c) => !carcasses.contains(*c),
+            None => {
+                let mut c = commands.spawn((
+                    Name::new("Carcass"),
+                    Carcass {
                         kind,
-                        by: by.remove(&(owner, i)).flatten(),
-                    });
-                    false
+                        at,
+                        owner,
+                        index,
+                    },
+                    Transform::from_translation(at),
+                ));
+                if let Some((size, mass)) = kind.body() {
+                    c.insert((
+                        Transform::from_translation(at + Vec3::Y * size.y * 0.5)
+                            .with_rotation(super::herd_look::facing(yaw)),
+                        RigidBody::Dynamic,
+                        Collider::cuboid(size.x, size.y, size.z),
+                        Mass(mass),
+                        LockedAxes::new().lock_rotation_x().lock_rotation_z(),
+                        CollisionLayers::new(Layer::Item, [Layer::World]),
+                        crate::interact::Grabbable {
+                            points: vec![crate::interact::GrabPoint::free()],
+                        },
+                        crate::interact::carry::Bulky,
+                        crate::interact::carry::Draggable,
+                        crate::robots::wreck::Settling::default(),
+                    ));
                 }
+                let c = c.id();
+                let i = index;
+                known.insert((owner, i), c);
+                killed.write(Killed {
+                    at,
+                    kind,
+                    by: by.remove(&(owner, i)).flatten(),
+                });
+                false
             }
-        };
+        }
+    };
     for (e, mut f) in &mut flocks {
         let kind = if f.species == Species::Heron {
             CarcassKind::Heron
@@ -200,7 +249,7 @@ fn deaths(
             // Placed when it's down (it may still be falling).
             if b.state == BirdState::Dead
                 && b.vel == Vec3::ZERO
-                && dead(e, i, b.pos, kind, &mut commands)
+                && dead(e, i, b.pos, 0.0, kind, &mut commands)
             {
                 b.state = BirdState::Gone;
             }
@@ -212,10 +261,36 @@ fn deaths(
             Kind::Dog => CarcassKind::Dog,
         };
         for (i, b) in h.beasts.iter_mut().enumerate() {
-            if b.state == State::Dead && !b.gone && dead(e, i, b.pos, kind, &mut commands) {
+            if b.state == State::Dead && !b.gone && dead(e, i, b.pos, b.yaw, kind, &mut commands) {
                 b.gone = true;
             }
         }
+    }
+}
+
+/// A dragged carcass takes the dead animal with it: the herd draws it
+/// where the carcass lies, facing its way, on the ground under it (kept
+/// level, on a slope the box rests on its downhill edge; the herd lies the
+/// body along the ground).
+pub fn drag_along(
+    carcasses: Query<(&Carcass, &Transform)>,
+    mut herds: Query<&mut Herd>,
+    zone: Res<crate::world::Zone>,
+) {
+    for (c, t) in &carcasses {
+        if c.kind.body().is_none() {
+            continue;
+        }
+        let Ok(mut h) = herds.get_mut(c.owner) else {
+            continue;
+        };
+        let Some(b) = h.beasts.get_mut(c.index) else {
+            continue;
+        };
+        let p = t.translation;
+        b.pos = p.with_y(zone.ground(p.x, p.z));
+        let (turn, _, _) = t.rotation.to_euler(EulerRot::YXZ);
+        b.yaw = -turn - std::f32::consts::FRAC_PI_2;
     }
 }
 
