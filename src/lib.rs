@@ -22,6 +22,7 @@ pub mod dev;
 pub mod foley;
 pub mod gadgets;
 pub mod health;
+pub mod hearing;
 pub mod hud;
 pub mod interact;
 pub mod items;
@@ -99,6 +100,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                hearing::HearingPlugin,
                 radio::RadioPlugin,
             ),
         ))
