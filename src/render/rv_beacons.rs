@@ -1,7 +1,9 @@
-//! Rendezvous beacons: a steel pole with a steady green lamp beside where
-//! the truck parks at each rendezvous (`map_landmarks::beacon_at`), so the
-//! way out can be found from the valley side before the truck's there, in
-//! drizzle and at dusk. `map_lint` holds each in sight from most of the
+//! Rendezvous beacons: a steel pole with a green lamp flashing its number
+//! (`map_landmarks::beacon_character`: the map's first rendezvous once,
+//! its second twice...) beside where the truck parks at each
+//! (`map_landmarks::beacon_at`), so the way out can be found, and told
+//! which, from the valley side before the truck's there, in drizzle and
+//! after dark. `map_lint` holds each in sight from most of the
 //! way in. Green: the landmarks' lamps are red (`landmarks`), the drones'
 //! beacons amber and blinking.
 
@@ -9,9 +11,9 @@ use avian3d::prelude::*;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
-use extraction_core::map_landmarks::{BEACON_HEIGHT, beacon_at};
+use extraction_core::map_landmarks::{BEACON_HEIGHT, beacon_at, beacon_character};
 
-use super::landmarks::{DayGlow, falloff};
+use super::landmarks::{DayGlow, Lamp, falloff};
 use crate::world::Zone;
 use crate::world::halos::{Halo, HaloReach};
 
@@ -75,7 +77,7 @@ fn spawn_beacons(
         fog_enabled: false,
         ..default()
     });
-    for rv in zone.map.markers_of(&MarkerKind::Rendezvous) {
+    for (i, rv) in zone.map.markers_of(&MarkerKind::Rendezvous).enumerate() {
         let at = beacon_at(rv.at);
         let foot = zone.on_ground(at[0], at[1]);
         // The plate faces the valley's middle, where you come from.
@@ -105,6 +107,9 @@ fn spawn_beacons(
                 ));
                 c.spawn((
                     Name::new("Beacon lamp"),
+                    // Green, flashing its number: which way out it is.
+                    Lamp(beacon_character(i)),
+                    Visibility::default(),
                     Mesh3d(lamp_mesh.clone()),
                     MeshMaterial3d(lamp.clone()),
                     Transform::from_xyz(0.0, pole_h + LAMP_R, 0.0),

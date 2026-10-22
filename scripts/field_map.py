@@ -57,6 +57,37 @@ LANDMARK_NAMES = {
     "observatory": "observatory",
     "funicular_upper": "top station",
 }
+# Each landmark's lamp has a character, as lights on masts and at sea do
+# (extraction_core::map_landmarks::character; a test holds these to it), and
+# the key lists the ones on the sheet, so the lamps in sight after dark can
+# be named: two named are a fix.
+LAMP_CHARACTERS = {
+    "chimney": "F",
+    "radio_mast": "Q",
+    "steeple": "Fl 5s",
+    "chapel": "Fl 5s",
+    "ranger_tower": "Fl(2) 6s",
+    "survey_tower": "Fl(3) 9s",
+    "robot_gate": "Fl(4) 12s",
+    "water_tower": "Oc 4s",
+    "draw_off_tower": "Oc(2) 8s",
+    "mill_race": "Oc(2) 8s",
+    "ropeway_station": "Oc(2) 8s",
+    "observatory": "Oc(2) 8s",
+    "headframe": "Iso 4s",
+    "sorting_gantry": "Iso 4s",
+    "funicular_upper": "Iso 4s",
+    "dam_face": "LFl 8s",
+    "dam_face_end": "LFl 8s",
+    "dam_back": "LFl 8s",
+    "dam_back_end": "LFl 8s",
+    "blast_furnace": "LFl 8s",
+    "ropeway_pylon": "LFl 8s",
+    "ore_mill": "LFl 8s",
+}
+# The rendezvous beacons, green, in the map's order of them
+# (map_landmarks::beacon_character).
+BEACON_CHARACTERS = ["G Fl 5s", "G Fl(2) 7s", "G Fl(3) 9s", "G Fl(4) 11s"]
 RUIN_STATES = ("_damaged", "_burnt", "_drowned")
 
 
@@ -247,6 +278,22 @@ def main():
             r = 9 if m["kind"] == "Rendezvous" else 13
             taken.append((x - r, y - r, x + r, y + r))
 
+    # The lamps' key: how to read the characters by each landmark's and
+    # rendezvous' name, on a card pasted in the corner with the fewest
+    # marks under it, kept clear of labels.
+    f_key = font(round(LABEL_MM * mm))
+    lh = LABEL_MM * mm * 1.15
+    how = ["lamps: F steady  Q quick  Fl flash", "Oc dark a moment  Iso half on", "LFl long  (n) a group  G green: way out"]
+    kw = max(d.textlength(t, font=f_key) for t in how) + 20
+    kh = lh * len(how) + 14
+    pts = [px(p["at"]) for p in meta["placements"]] + [px(m["at"]) for m in meta["markers"]]
+    corners = [(18, 60), (N - kw - 18, 100), (18, N - kh - 60), (N - kw - 18, N - kh - 30)]
+    kx, ky = min(
+        corners,
+        key=lambda c: sum(1 for x, y in pts if c[0] - 20 <= x <= c[0] + kw + 20 and c[1] - 20 <= y <= c[1] + kh + 20),
+    )
+    taken.append((kx - 4, ky - 4, kx + kw + 4, ky + kh + 4))
+
     def around(x, y, w, h, gap):
         # Right, left, above, below, then the corners, then further out.
         out = []
@@ -264,14 +311,18 @@ def main():
             ]
         return out
 
-    # Marker labels: they must stay clear.
+    # Marker labels: they must stay clear. A rendezvous says its beacon's
+    # lamp, green, the way out it is.
+    green = (40, 120, 50)
+    rv_i = 0
     for m in meta["markers"]:
         x, y = px(m["at"])
         if m["kind"] == "Rendezvous":
-            t = "RV"
+            t = "RV " + BEACON_CHARACTERS[min(rv_i, len(BEACON_CHARACTERS) - 1)]
+            rv_i += 1
             w = d.textlength(t, font=f_small)
             spots = [(x + 9, y + 4 - LABEL_MM * mm / 2)] + around(x, y, w, LABEL_MM * mm, 10)
-            labels.append((place(t, f_small, spots), t, f_small, red))
+            labels.append((place(t, f_small, spots), t, f_small, green))
         elif m["kind"] == "RobotGate":
             t = "keep away"
             w = d.textlength(t, font=f_small)
@@ -304,6 +355,8 @@ def main():
     for name, p in named:
         x, y = px(p["at"])
         y -= gh * 0.25
+        # Its lamp's character after its name: the lamp in sight, found.
+        name = name + " " + LAMP_CHARACTERS.get(prefab_base(p["prefab"]), "F")
         w = d.textlength(name, font=f_small)
         labels.append((place(name, f_small, around(x, y, w, LABEL_MM * mm, gh * 0.55)), name, f_small, pencil))
 
@@ -345,6 +398,10 @@ def main():
         d.ellipse([x - lr, top - lr, x + lr, top + lr], fill=(190, 30, 20))
     for xy, t, f, c in labels:
         d.text(xy, t, fill=c, font=f, **HALO)
+    # The lamps' key, its corner kept before the labels were placed.
+    d.rectangle([kx, ky, kx + kw, ky + kh], fill=(220, 207, 176), outline=pencil, width=2)
+    for j, t in enumerate(how):
+        d.text((kx + 10, ky + 7 + lh * j), t, fill=pencil, font=f_small)
     # North arrow and a pencilled scale.
     d.text((N - 50, 18), "N", fill=pencil, font=f_med, **HALO)
     d.line([(N - 42, 44), (N - 42, 90)], fill=pencil, width=2)

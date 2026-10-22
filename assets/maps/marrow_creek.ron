@@ -232,6 +232,10 @@
     placements: [
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
+        // The machines' smelter stack behind the Gate: what they take, they melt.
+        (prefab: "chimney", at: (-240.0, -280.0), rot: 0.0),
+        // The pumping station's standpipe tower.
+        (prefab: "water_tower", at: (-212.0, -25.0), rot: 0.0),
         // The quarantine checkpoint's incinerator stack, outside the gate:
         // what came out of the Zone was burnt.
         (prefab: "chimney", at: (85.0, 310.0), rot: 0.0),

@@ -307,7 +307,8 @@ pub const WOOD_EDGE: f32 = 25.0;
 pub const LAMP_REACH: f32 = 320.0;
 pub const BEACON_REACH: f32 = 400.0;
 /// After dark, from this share of the walkable valley (out of the deep
-/// woods) a lamp is in sight, and two (a bearing to steer by) from this...
+/// woods) a lamp is in sight, and two of different characters (lamps you
+/// can name: a fix) from this...
 pub const NIGHT_ONE: f32 = 0.95;
 pub const NIGHT_TWO: f32 = 0.9;
 /// ...and in fog a landmark or lamp within [`FOG_SIGHT`] from this.
@@ -1444,7 +1445,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             .join(", ")
     };
     r.measures.push(format!(
-        "at night a lamp in sight from {:.1}% of the walkable valley (two from {:.0}%; dark pockets {}); in fog a landmark or lamp within {FOG_SIGHT:.0} m from {:.1}% (two from {:.0}%; blind {})",
+        "at night a lamp in sight from {:.1}% of the walkable valley, two you can name by their characters (a fix) from {:.1}% (dark pockets {}); in fog a landmark or lamp within {FOG_SIGHT:.0} m from {:.1}% (two from {:.0}%; blind {})",
         pct(night),
         pct(night2),
         worst_of(dark),
@@ -2540,6 +2541,36 @@ mod tests {
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
         );
+        // Its key's lamp characters are the game's.
+        let table = |name: &str| -> &str {
+            let from = src
+                .find(&format!("{name} = {{"))
+                .unwrap_or_else(|| panic!("no {name}"));
+            &src[from..from + src[from..].find("\n}").unwrap()]
+        };
+        let chars = table("LAMP_CHARACTERS");
+        let names = table("LANDMARK_NAMES");
+        for line in names.lines().skip(1) {
+            let Some(base) = line
+                .trim()
+                .strip_prefix('"')
+                .and_then(|l| l.split('"').next())
+            else {
+                continue;
+            };
+            let want = crate::map_landmarks::character(crate::map_landmarks::kind(base)).name;
+            assert!(
+                chars.contains(&format!("    \"{base}\": \"{want}\",")),
+                "field_map.py's LAMP_CHARACTERS has {base} other than {want}"
+            );
+        }
+        for i in 0..4 {
+            let want = crate::map_landmarks::beacon_character(i).name;
+            assert!(
+                src.contains(&format!("\"{want}\"")),
+                "field_map.py's BEACON_CHARACTERS lacks {want}"
+            );
+        }
     }
 
     /// Every wreck is a light prop (`VIEW_LIGHT` names them again).

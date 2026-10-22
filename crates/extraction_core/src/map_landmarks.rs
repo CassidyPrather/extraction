@@ -359,10 +359,11 @@ pub fn kinds_in_sight(
     kinds.len()
 }
 
-/// How many lights to steer by are in sight from eye height at `p`
-/// through the land and the trees, counting up to `enough`: each
-/// landmark by its lamp on its highest top within `lamp_range`, each
-/// rendezvous beacon (`beacons`: where it stands) within `beacon_range`.
+/// How many lights you can name are in sight from eye height at `p`
+/// through the land and the trees, counting up to `enough`: the
+/// landmarks' lamps by their [`character`]s (each on its highest top,
+/// within `lamp_range`), each rendezvous beacon (`beacons`: where it
+/// stands, its own character) within `beacon_range`.
 /// At night that's all there is to see; in fog, with `lamp_range` the fog's
 /// reach, a landmark's whole height (any top) counts, the structure being
 /// as visible as its lamp that near.
@@ -376,8 +377,15 @@ pub fn lights_in_sight(
     any_top: bool,
     enough: usize,
 ) -> usize {
+    // Lamps you can name: one per character (two chimneys' steady lamps
+    // in sight are one thing to steer by), each beacon its own.
+    let mut seen_chars: Vec<&str> = Vec::new();
     let mut n = 0;
     for m in marks {
+        let name = character(&m.kind).name;
+        if seen_chars.contains(&name) {
+            continue;
+        }
         let seen = if any_top {
             m.seen_through(hm, canopy, p, lamp_range).is_some()
         } else {
@@ -391,6 +399,7 @@ pub fn lights_in_sight(
                 })
         };
         if seen {
+            seen_chars.push(name);
             n += 1;
             if n >= enough {
                 return n;
@@ -452,9 +461,132 @@ pub fn gauge_cells(
     (out, deep)
 }
 
-/// A rendezvous's beacon: a pole with a steady green lamp (the game's
-/// `world::rv_beacon`), so the way out can be found from the valley side
-/// before the truck's there. It stands this far off the side of where the
+/// A lamp's character, as the lights of masts and lights at sea have
+/// them: when in each period it's lit. A landmark's is its kind's
+/// ([`character`]), the same in every valley so it's learnt once, and no
+/// two kinds in one valley share one, so two lamps in sight after dark
+/// are two you can name: a fix, not only a bearing. The field map's key
+/// lists them (`scripts/field_map.py`, held to these by a test).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Character {
+    /// As the light lists write it: `Fl(2) 6s`.
+    pub name: &'static str,
+    /// Seconds.
+    pub period: f32,
+    /// When in the period it's lit, seconds from its start.
+    pub lit: &'static [(f32, f32)],
+}
+
+impl Character {
+    pub fn lit_at(&self, t: f32) -> bool {
+        let u = t.rem_euclid(self.period);
+        self.lit.iter().any(|(a, b)| u >= *a && u < *b)
+    }
+}
+
+/// Steady: the chimneys' (an obstruction light).
+pub const STEADY: Character = Character {
+    name: "F",
+    period: 1.0,
+    lit: &[(0.0, 1.0)],
+};
+/// A quick flash, every second: the masts'.
+pub const QUICK: Character = Character {
+    name: "Q",
+    period: 1.0,
+    lit: &[(0.0, 0.35)],
+};
+pub const FLASH: Character = Character {
+    name: "Fl 5s",
+    period: 5.0,
+    lit: &[(0.0, 0.6)],
+};
+pub const FLASH_2: Character = Character {
+    name: "Fl(2) 6s",
+    period: 6.0,
+    lit: &[(0.0, 0.5), (1.2, 1.7)],
+};
+pub const FLASH_3: Character = Character {
+    name: "Fl(3) 9s",
+    period: 9.0,
+    lit: &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)],
+};
+pub const FLASH_4: Character = Character {
+    name: "Fl(4) 12s",
+    period: 12.0,
+    lit: &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
+};
+/// Lit, put out for a moment.
+pub const OCCULTING: Character = Character {
+    name: "Oc 4s",
+    period: 4.0,
+    lit: &[(0.0, 3.0)],
+};
+pub const OCCULTING_2: Character = Character {
+    name: "Oc(2) 8s",
+    period: 8.0,
+    lit: &[(0.0, 5.0), (5.8, 7.2)],
+};
+/// As long lit as dark.
+pub const ISOPHASE: Character = Character {
+    name: "Iso 4s",
+    period: 4.0,
+    lit: &[(0.0, 2.0)],
+};
+pub const LONG_FLASH: Character = Character {
+    name: "LFl 8s",
+    period: 8.0,
+    lit: &[(0.0, 2.0)],
+};
+
+/// A landmark kind's lamp ([`kind`]).
+pub fn character(kind: &str) -> Character {
+    match kind {
+        "chimney" => STEADY,
+        "radio_mast" => QUICK,
+        "steeple" => FLASH,
+        "ranger_tower" => FLASH_2,
+        "survey_tower" => FLASH_3,
+        "robot_gate" => FLASH_4,
+        "water_tower" => OCCULTING,
+        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" => OCCULTING_2,
+        "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
+        "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASH,
+        _ => STEADY,
+    }
+}
+
+/// The rendezvous beacons are green, each flashing its number (the map's
+/// order of them: 1, 2, 3...), so each says which way out it is.
+pub fn beacon_character(i: usize) -> Character {
+    const B: [Character; 4] = [
+        Character {
+            name: "G Fl 5s",
+            period: 5.0,
+            lit: &[(0.0, 0.8)],
+        },
+        Character {
+            name: "G Fl(2) 7s",
+            period: 7.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4)],
+        },
+        Character {
+            name: "G Fl(3) 9s",
+            period: 9.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4), (3.2, 4.0)],
+        },
+        Character {
+            name: "G Fl(4) 11s",
+            period: 11.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4), (3.2, 4.0), (4.8, 5.6)],
+        },
+    ];
+    B[i.min(B.len() - 1)]
+}
+
+/// A rendezvous's beacon: a pole with a green lamp flashing its number
+/// ([`beacon_character`]; the game's `render::rv_beacons`), so the way out
+/// can be found from the valley side before the truck's there. It stands this far off the side of where the
 /// truck parks (`raid::truck::rv_pose`: its bed toward the map's middle)...
 pub const BEACON_OFF: f32 = 7.0;
 /// ...its lamp this high.
@@ -577,6 +709,89 @@ pub struct RouteSight {
 
 #[cfg(test)]
 mod tests {
+
+    /// After dark two lamps in sight are two you can name: in every valley
+    /// no two kinds of landmark share a lamp's character, and every kind
+    /// has one of its own choosing (not the steady lamp by default).
+    #[test]
+    fn every_valleys_lamps_tell_apart() {
+        let named = [
+            "chimney",
+            "radio_mast",
+            "steeple",
+            "ranger_tower",
+            "survey_tower",
+            "robot_gate",
+            "water_tower",
+            "draw_off_tower",
+            "mill_race",
+            "ropeway_station",
+            "observatory",
+            "headframe",
+            "sorting_gantry",
+            "funicular_upper",
+            "dam",
+            "blast_furnace",
+            "ropeway_pylon",
+            "ore_mill",
+        ];
+        for (id, text) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let mut by: Vec<(String, &str)> = Vec::new();
+            for m in landmarks(&map, &hm) {
+                assert!(
+                    named.contains(&m.kind.as_str()),
+                    "{id}: {} has no lamp character of its own",
+                    m.kind
+                );
+                let c = character(&m.kind).name;
+                if let Some((k, _)) = by.iter().find(|(k, n)| *n == c && *k != m.kind) {
+                    panic!("{id}: {} and {k} both {c}", m.kind);
+                }
+                by.push((m.kind.clone(), c));
+            }
+        }
+    }
+
+    /// The characters are what they say: lit for some of the period, dark
+    /// for some (but the steady one), and the beacons all different.
+    #[test]
+    fn characters_flash_as_written() {
+        for c in [
+            STEADY,
+            QUICK,
+            FLASH,
+            FLASH_2,
+            FLASH_3,
+            FLASH_4,
+            OCCULTING,
+            OCCULTING_2,
+            ISOPHASE,
+            LONG_FLASH,
+        ] {
+            let lit = (0..1000)
+                .filter(|i| c.lit_at(*i as f32 * c.period / 1000.0))
+                .count();
+            if c.name == "F" {
+                assert_eq!(lit, 1000);
+            } else {
+                assert!(lit > 0 && lit < 1000, "{}: lit {lit} of 1000", c.name);
+            }
+            let flashes = c
+                .name
+                .split(['(', ')'])
+                .nth(1)
+                .and_then(|n| n.parse::<usize>().ok());
+            if let Some(n) = flashes {
+                assert_eq!(c.lit.len(), n, "{}", c.name);
+            }
+        }
+        let b: Vec<&str> = (0..4).map(|i| beacon_character(i).name).collect();
+        for (i, x) in b.iter().enumerate() {
+            assert!(!b[..i].contains(x));
+        }
+    }
     use super::*;
     use crate::map::{SALLOW_RESERVOIR, TRAINING_YARD, TerrainFeature};
 

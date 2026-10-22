@@ -19,7 +19,7 @@ pub struct LandmarkLampsPlugin;
 
 impl Plugin for LandmarkLampsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_landmarks, day_glows));
+        app.add_systems(Update, (light_landmarks, day_glows, flash_lamps));
     }
 }
 
@@ -42,6 +42,27 @@ const HALO_R: f32 = 1.0;
 const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
 const HALO_REACH: f32 = 320.0;
 const DAY_R: f32 = 1.4;
+
+/// A lamp's character (`map_landmarks::character`): when in its period
+/// it's lit. Its halo and glow, its children, go out with it.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
+
+/// Every lamp lit or dark by its character on the game's clock; with the
+/// clock stopped (a frozen capture), lit.
+fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibility)>) {
+    let t = time.elapsed_secs();
+    for (lamp, mut v) in &mut lamps {
+        let want = if time.is_paused() || lamp.0.lit_at(t) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *v != want {
+            *v = want;
+        }
+    }
+}
 
 /// A lamp's daytime glow.
 #[derive(Component)]
@@ -113,6 +134,10 @@ fn light_landmarks(
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
+                Lamp(extraction_core::map_landmarks::character(
+                    extraction_core::map_landmarks::kind(&b.prefab),
+                )),
+                Visibility::default(),
                 Mesh3d(lamp_mesh),
                 MeshMaterial3d(lamp),
                 Transform::from_translation(at),
