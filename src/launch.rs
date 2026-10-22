@@ -5,6 +5,7 @@
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
+//! extraction --report [--data-dir DIR]
 //! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
 //!            [--sim-minutes M] [--sim-out DIR]
 //! ```
@@ -69,6 +70,8 @@ pub struct LaunchOptions {
     pub new_game: bool,
     /// Don't write raid recordings (`sim::playtest`).
     pub no_record: bool,
+    /// Write the playtest report (`report`) and quit.
+    pub report: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -163,6 +166,7 @@ impl Default for LaunchOptions {
             save: None,
             new_game: false,
             no_record: false,
+            report: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -227,6 +231,7 @@ impl LaunchOptions {
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
+                "--report" => o.report = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"

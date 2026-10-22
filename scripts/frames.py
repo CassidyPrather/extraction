@@ -24,6 +24,8 @@ def main():
     cpu, gpu = [], []
     worst_cpu = worst_gpu = (0.0, 0)
     for line in open(args[0]):
+        if line.startswith("#"):
+            continue
         f, c, g = line.split()
         f, c, g = int(f), float(c), float(g)
         if f <= skip:

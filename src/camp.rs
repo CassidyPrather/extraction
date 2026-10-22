@@ -52,6 +52,8 @@ pub enum CampCard {
     PackUp,
     /// In the training yard: on to the Zone.
     SkipYard,
+    /// Writes the playtest report (`report`) to send back.
+    Report,
 }
 
 #[derive(Resource, Default)]
@@ -67,6 +69,8 @@ struct CampState {
     /// In the yard: the cord was pulled once before the end; a second
     /// pull before this goes.
     cord_until: f32,
+    /// What REPORT last wrote (the zip's name), or why it couldn't.
+    report: Option<String>,
 }
 
 /// Whether this session opens at the camp: a real game (or `--camp`), not
@@ -211,6 +215,13 @@ fn spawn_camp(
             ));
         }
     }
+    // Under the career sheet: REPORT, for the playtest's report.
+    commands.spawn((
+        card(CampCard::Report, Vec2::new(0.4, 0.08)),
+        crate::render::legibility::TextSource::Card,
+        Transform::from_xyz(-0.28, -0.405, z),
+        ChildOf(board),
+    ));
     // You start at the table, facing the board (the truck beyond it).
     if opts.plays_for_real() && opts.camera.is_none() {
         state.stand = Some(pose * Transform::from_xyz(0.0, 0.0, 1.15));
@@ -368,6 +379,24 @@ fn press_camp(
                     exit.write(AppExit::Success);
                 }
             }
+            CampCard::Report => {
+                let data = opts
+                    .data_dir
+                    .clone()
+                    .unwrap_or_else(crate::persist::data_dir);
+                state.report = Some(match crate::report::write_report(&data) {
+                    Ok(path) => {
+                        info!("report: written to {}", path.display());
+                        raid.say("The driver nods. \"Send that back to them.\"");
+                        path.file_name()
+                            .map_or(String::new(), |n| n.to_string_lossy().to_string())
+                    }
+                    Err(e) => {
+                        warn!("report: couldn't write it: {e}");
+                        "couldn't write it".into()
+                    }
+                });
+            }
             CampCard::SkipYard => {
                 if crate::persist::owns_profile(&opts) {
                     crate::persist::mark_trained(&opts);
@@ -433,6 +462,10 @@ fn camp_text(
             CampCard::NewCareer => "NEW CAREER".into(),
             CampCard::PackUp => "PACK UP".into(),
             CampCard::SkipYard => "ON TO THE ZONE\n(skip the yard)".into(),
+            CampCard::Report => match &state.report {
+                Some(done) => format!("REPORT: {done}\n(in the reports folder)"),
+                None => "REPORT (for the playtest)".into(),
+            },
         };
         if text.text != t {
             text.text = t;
@@ -539,9 +572,17 @@ mod tests {
             CampCard::Training,
             CampCard::NewCareer,
             CampCard::PackUp,
+            CampCard::Report,
         ] {
             assert!(card(&mut valley, c).is_some(), "no {c:?} card at camp");
         }
+        // REPORT writes the playtest's zip in the profile.
+        let report = card(&mut valley, CampCard::Report).unwrap();
+        press(&mut valley, report);
+        let zips = std::fs::read_dir(dir.join("reports"))
+            .map(|d| d.count())
+            .unwrap_or(0);
+        assert_eq!(zips, 1, "REPORT writes one zip in <data dir>/reports");
         valley.world_mut().write_message(crate::persist::SaveNow);
         valley.update();
         assert!(
