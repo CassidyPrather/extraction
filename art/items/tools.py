@@ -1,4 +1,4 @@
-"""Hand tools for Hands' interactions: a crowbar and bolt cutters. Writes
+"""Hand tools for Hands' interactions: a crowbar, bolt cutters and a hacksaw. Writes
 assets/models/items/<id>.glb in item space (origin at the centre of the
 item's dims box, -Z forward), built in place round the grip points Hands'
 code uses (so not re-centred).
@@ -16,7 +16,12 @@ code uses (so not re-centred).
                                  -0.14), rubber grips ending at (-+0.07, 0,
                                  +0.26); they spread turning about Y
 
-Materials: Iron, Red, Steel, Black, Rubber.
+- `hacksaw` (dims 0.03 x 0.12 x 0.45), blade forward along the bottom:
+  one node, `body`. The grip at (0, -0.01, 0.16); the blade's teeth along
+  y -0.045 from z +0.06 to -0.2 (`weapons::gunsmith::{SAW_GRIP, BLADE_A,
+  BLADE_B}`), the frame arched over it.
+
+Materials: Iron, Red, Steel, Black, Rubber, Wood.
 """
 
 import math
@@ -118,7 +123,26 @@ def bolt_cutters():
     return parts
 
 
+# --- Hacksaw -----------------------------------------------------------------------------------
+
+def hacksaw():
+    p = Part("body")
+    # The wooden pistol grip at the back, below the frame.
+    p.box((0.026, 0.09, 0.07), (0.0, -0.015, 0.165), "Wood", bevel=0.008, segs=2)
+    # The frame: a red steel tube, up from the grip, along the top and down
+    # to the blade's front pin.
+    rod(p, (0.0, -0.042, 0.105), (0.0, 0.045, 0.105), 0.006, "Red", segs=10)
+    rod(p, (0.0, 0.045, 0.105), (0.0, 0.045, -0.215), 0.006, "Red", segs=10)
+    rod(p, (0.0, 0.045, -0.215), (0.0, -0.042, -0.215), 0.006, "Red", segs=10)
+    # The blade, its teeth down.
+    p.box((0.0012, 0.012, 0.31), (0.0, -0.045, -0.055), "Steel")
+    # The wing nut that tensions it, at the front pin.
+    p.box((0.018, 0.006, 0.004), (0.0, -0.04, -0.222), "Iron", bevel=0.001)
+    return [p]
+
+
 if __name__ == "__main__":
-    for item_id, build in (("crowbar", crowbar), ("bolt_cutters", bolt_cutters)):
+    for item_id, build in (("crowbar", crowbar), ("bolt_cutters", bolt_cutters),
+                           ("hacksaw", hacksaw)):
         if wanted(item_id):
             item(item_id, build)
