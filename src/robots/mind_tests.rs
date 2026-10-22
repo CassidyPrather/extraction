@@ -2617,6 +2617,7 @@ fn a_swinging_car_door_gives_you_away() {
             depression: 0.0,
             dark: None,
             still,
+            canopy: false,
         };
         // Where it tells most: still well under seen, swinging well over.
         let margin = |d: f32| {
