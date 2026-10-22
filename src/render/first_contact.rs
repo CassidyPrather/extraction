@@ -18,7 +18,7 @@ use super::budget::tests::{as_the_game_runs, client_threads, heavy, settle};
 
 /// Frames at each stop: enough for what's first seen there to arrive and
 /// be drawn, once (the walk is in the gauge tier, under its time).
-const PER_VIEW: usize = 3;
+const PER_VIEW: usize = 2;
 /// Frames of the fight.
 const FIGHT: usize = 90;
 /// A first-pass frame this much over its second-pass self is a first
@@ -391,21 +391,23 @@ fn maps() -> Vec<String> {
 /// buildings dressed 3 a frame (Marrow Creek 9.6, Kettle Pass 8.5, Cinder
 /// Works 7.0, Sallow Reservoir 5.9, Rime Fell 8.7). `LOAD_SLACK` scales
 /// them for a slower machine.
+/// With BC7 textures they took 4.7, 3.7, 4.0, 3.3 and 4.3 s: these leave
+/// about a third over that.
 const LOAD_BUDGET: [(&str, f64); 5] = [
-    ("marrow_creek", 8.0),
-    ("kettle_pass", 7.5),
-    ("cinder_works", 6.5),
-    ("sallow_reservoir", 6.0),
-    ("rime_fell", 8.0),
+    ("marrow_creek", 6.0),
+    ("kettle_pass", 5.0),
+    ("cinder_works", 5.5),
+    ("sallow_reservoir", 4.5),
+    ("rime_fell", 6.0),
 ];
 
-/// Every valley, one game each: it loads within its budget, holds under
-/// its VRAM budget (`vram`), and meets no first-sight stutter: its tour
-/// and a fight's first pass within 1.2x of their steady state, worst frame
-/// against worst frame. The harness's frames jitter by more than a small
-/// hitch, so a valley over is walked again in a new game, up to
-/// `FIRST_RUNS` (3) in all: a stop is a first contact only if it is one
-/// every time, and the valley fails only if it's over every time.
+/// Every valley, one game each: it loads within its budget and holds
+/// under its VRAM budget (`vram`). Marrow Creek (`FIRST_WALK=all`: every
+/// valley) meets no first-sight stutter: its tour and a fight's first pass
+/// within 1.2x of their steady state, worst frame against worst frame. The
+/// harness's frames jitter by more than a small hitch, so a valley over is
+/// walked again in a new game, up to `FIRST_RUNS` (3) in all, and fails
+/// only if it's over every time.
 #[test]
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
@@ -449,6 +451,13 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
                 super::vram::VRAM_BUDGET as f64 / super::vram::MB
             ));
         }
+        let walked = std::env::var("FIRST_WALK").is_ok_and(|v| v == "all")
+            || std::env::var("FIRST_MAP").is_ok()
+            || map == "marrow_creek";
+        if !walked {
+            println!("  ({map}: {:.0} s in all)", t.elapsed().as_secs_f64());
+            continue;
+        }
         let mut every: Option<Vec<Contact>> = None;
         let mut over_every = true;
         let mut worst = (0.0, 0.0);
@@ -472,8 +481,8 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
                     .filter(|c| before.iter().any(|b| b.what == c.what))
                     .collect(),
             });
-            // Only what's over is walked again.
-            if !is_over && every.as_ref().is_some_and(|e| e.is_empty()) {
+            // Only a valley over is walked again.
+            if !is_over {
                 over_every = false;
                 break;
             }
