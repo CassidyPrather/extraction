@@ -5,6 +5,7 @@
     scripts/test_times.py --threads 2     # as many test threads as that
     scripts/test_times.py --json FILE     # check a run already recorded
     scripts/test_times.py --budget 90     # seconds a test may take
+    scripts/test_times.py -- --skip render::budget   # libtest's own filters
 
 Runs the lib test binary with libtest's own timing (`--report-time`, its
 JSON format; RUSTC_BOOTSTRAP=1 is set for the test process only, so the
@@ -62,7 +63,7 @@ def test_binary():
     sys.exit("no lib test binary in cargo's output")
 
 
-def run(threads, record):
+def run(threads, record, extra):
     env = dict(os.environ, RUSTC_BOOTSTRAP="1", RUST_LOG="off")
     with open(record, "w") as f:
         subprocess.run(
@@ -74,6 +75,7 @@ def run(threads, record):
                 "--format",
                 "json",
                 "--report-time",
+                *extra,
             ],
             cwd=ROOT,
             env=env,
@@ -101,12 +103,13 @@ def main():
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--budget", type=float, default=120.0)
     ap.add_argument("--top", type=int, default=20)
+    ap.add_argument("libtest", nargs="*", help="after --: passed to the test binary")
     args = ap.parse_args()
 
     record = args.json
     if not record:
         record = ROOT / "target" / "test_times.json"
-        run(args.threads, record)
+        run(args.threads, record, args.libtest)
     ran = times(record)
     slow = slow_list()
 
