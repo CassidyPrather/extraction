@@ -2697,3 +2697,166 @@ fn a_trail_that_stops_at_a_ploughed_lane_is_followed_along_it() {
         "on along it, east: {at}"
     );
 }
+
+/// Knocked off its feet mid-fight, a walker holds its fire while it's
+/// down and getting up, drops the cover it had, and once up must aim
+/// afresh before it fires again.
+#[test]
+fn a_knocked_down_walker_holds_fire_and_aims_afresh() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, f32)>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        FixedPostUpdate,
+        |mut s: MessageReader<Shot>, time: Res<Time>, mut f: ResMut<Fired>| {
+            let now = time.elapsed_secs();
+            f.0.extend(s.read().filter_map(|s| s.shooter).map(|e| (e, now)));
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let me = zone.on_ground(100.0, 200.0);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    put(&mut app, player, me);
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    // Fighting: it has fired by now.
+    for _ in 0..90 * 5 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    let clock = |app: &App| app.world().resource::<Time<Fixed>>().elapsed_secs();
+    assert!(
+        app.world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .any(|(e, _)| *e == w),
+        "it was firing"
+    );
+    // A heavy round: down it goes.
+    app.world_mut()
+        .get_mut::<super::anim::Gait>(w)
+        .unwrap()
+        .daze(super::anim::KNOCKDOWN_DAMAGE * 1.2, Vec3::X);
+    let floored = clock(&app);
+    let up = floored + super::anim::FLOORED_FOR + super::anim::RISE_FOR;
+    let mut cover_while_down = false;
+    for _ in 0..90 * 8 {
+        put(&mut app, player, me);
+        app.update();
+        let g = app.world().get::<super::anim::Gait>(w).unwrap();
+        if g.down() || g.rising > 0.0 {
+            cover_while_down |= app
+                .world()
+                .get::<super::walker::Walker>(w)
+                .unwrap()
+                .cover
+                .is_some();
+        }
+    }
+    let after: Vec<f32> = app
+        .world()
+        .resource::<Fired>()
+        .0
+        .iter()
+        .filter(|(e, t)| *e == w && *t > floored + 0.05)
+        .map(|(_, t)| *t)
+        .collect();
+    let first = *after.first().expect("it fired again once up");
+    assert!(
+        first >= up + super::walker::AIM_TIME - 0.1,
+        "held fire down, aimed afresh up: first round {:.2} s after the knock (up at {:.2})",
+        first - floored,
+        up - floored
+    );
+    assert!(!cover_while_down, "it let go of its old cover");
+}
+
+/// Knocked down once, a walker gets up and fights on; knocked down again
+/// inside KNOCKED_AGAIN, it breaks off.
+#[test]
+fn knocked_down_twice_a_walker_breaks_off() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 218.0));
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let knock = |app: &mut App| {
+        app.world_mut()
+            .get_mut::<super::anim::Gait>(w)
+            .unwrap()
+            .daze(super::anim::KNOCKDOWN_DAMAGE * 1.2, Vec3::X);
+        let back_up = super::anim::FLOORED_FOR + super::anim::RISE_FOR + 0.5;
+        for _ in 0..(90.0 * back_up) as usize {
+            put(app, player, me);
+            app.update();
+        }
+    };
+    knock(&mut app);
+    assert!(
+        !app.world()
+            .entity(w)
+            .contains::<super::walker::Retreating>(),
+        "once, it fights on"
+    );
+    knock(&mut app);
+    assert!(
+        app.world()
+            .entity(w)
+            .contains::<super::walker::Retreating>(),
+        "twice in a few seconds, it breaks off"
+    );
+}
+
+/// Down to two legs, a walker hauls itself along on its belly: it fights
+/// from where it is, and never goes round your side.
+#[test]
+fn a_crawling_walker_doesnt_flank() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let a = walker_at(&mut app, &zone, zone.on_ground(98.0, 225.0));
+    let b = walker_at(&mut app, &zone, zone.on_ground(102.0, 225.0));
+    for w in [a, b] {
+        {
+            let mut walker = app.world_mut().get_mut::<super::walker::Walker>(w).unwrap();
+            walker.feet[0].alive = false;
+            walker.feet[1].alive = false;
+        }
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    }
+    let start = [a, b].map(|w| app.world().get::<Transform>(w).unwrap().translation);
+    for _ in 0..90 * 8 {
+        put(&mut app, player, me);
+        app.update();
+        for w in [a, b] {
+            assert!(
+                !app.world().entity(w).contains::<super::walker::Flanker>(),
+                "a crawler doesn't flank"
+            );
+        }
+    }
+    for (w, s) in [a, b].into_iter().zip(start) {
+        let now = app.world().get::<Transform>(w).unwrap().translation;
+        assert!(
+            flat(now - s) < 4.0,
+            "it fought from where it was: {s} -> {now}"
+        );
+    }
+}
