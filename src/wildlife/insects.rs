@@ -69,6 +69,12 @@ pub fn hush(distance: f32, near: f32) -> f32 {
     ((distance - near) / (near * (HUSH_RAMP - 1.0))).clamp(0.0, 1.0)
 }
 
+/// How much of the chorus the weather leaves: rain and wind thin it, a
+/// downpour stops it.
+pub fn weather(c: &crate::world::weather::Conditions) -> f32 {
+    (1.0 - c.rain).max(0.0) * (1.0 - 0.6 * c.wind())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn chorus(
     mut chorus: ResMut<Chorus>,
@@ -114,7 +120,7 @@ pub(crate) fn chorus(
             Hour::Dusk | Hour::Night => Singers::Crickets,
             _ => Singers::Day,
         };
-        ((1.0 - c.rain).max(0.0) * (1.0 - 0.6 * c.wind()), kind)
+        (weather(c), kind)
     });
     let target = machines * chorus.fright * weather;
     // Falls fast, comes back slowly.
