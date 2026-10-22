@@ -48,7 +48,7 @@ None in the suite or gauges as of ce0f10b.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | a death corridor; the raider's first goal ignores route danger | Map design, coordinator (src/sim) | routed 12:10 |
+| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | `choose_site` gave a building 0.35 pull per loot spot without limit, so the Depot's underground complex outscored every site and a fresh raider marched up the Gate road, the robots' commute | Map design | fixed on claude/polish-map-design-2 (spots past 8 add no pull): seed 2 now extracts with 36 items, seed 4 dies later with 35; to confirm on main |
 
 ## Closed
 
