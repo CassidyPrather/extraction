@@ -12,6 +12,13 @@ MIN_CONTRAST against what's behind it once fog and dark have had their
 way; or, a light, at least LAMP_AREA pixels at LAMP_CONTRAST. Every vantage needs at least one. The exit status is the number of
 vantages with none.
 
+With --lamps (the shots of `--wayfind-lamps`, after dark): each
+landmark's lamp from 150 m and 300 m must be measurably brighter than
+what's round it: its brightest pixel (within LAMP_NEAR of where it lands)
+at least LAMP_LIFT times and LAMP_STEP over the brighter of the same
+spot without the lamp and the median round it. The exit status is the
+number of lamp views that fail.
+
 Time is frozen while a view is shot, the difference is taken only inside
 the landmark's box in the picture, and only its largest blob counts.
 """
@@ -109,6 +116,29 @@ def measure(d, v):
     return area, contrast, lamp, (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
 
 
+# --lamps: a lamp in the dark against what's round it.
+LAMP_NEAR = 2
+LAMP_ROUND = 12
+LAMP_LIFT = 1.4
+LAMP_STEP = 0.02
+
+
+def lamp_shines(d, v):
+    """(peak, surroundings): the lamp's brightest pixel, and the brighter
+    of the same spot without it and the median round it (with it)."""
+    a = lum(os.path.join(d, v["with"]))
+    b = lum(os.path.join(d, v["without"]))
+    h, w = a.shape
+    x, y = (int(round(c)) for c in v["at"])
+    if not (0 <= x < w and 0 <= y < h):
+        return 0.0, 1.0
+    n, r = LAMP_NEAR, LAMP_ROUND
+    peak = float(a[max(0, y - n):y + n + 1, max(0, x - n):x + n + 1].max())
+    behind = float(b[max(0, y - n):y + n + 1, max(0, x - n):x + n + 1].max())
+    win = a[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1]
+    return peak, max(behind, float(np.median(win)))
+
+
 # --afford: an interactable from 1.5 m stands out from what it's on.
 AFFORD_AREA = 60
 AFFORD_CONTRAST = 0.15
@@ -116,7 +146,8 @@ AFFORD_CONTRAST = 0.15
 
 def main(argv):
     afford = "--afford" in argv
-    argv = [a for a in argv if a != "--afford"]
+    lamps = "--lamps" in argv
+    argv = [a for a in argv if a not in ("--afford", "--lamps")]
     sheet = None
     if "--sheet" in argv:
         i = argv.index("--sheet")
@@ -124,6 +155,18 @@ def main(argv):
         argv = argv[:i] + argv[i + 2:]
     d = argv[0]
     views = json.load(open(os.path.join(d, "wayfind.json")))
+    if lamps:
+        dim = 0
+        for v in views:
+            if not v.get("at"):
+                continue
+            peak, round_ = lamp_shines(d, v)
+            ok = peak >= round_ * LAMP_LIFT and peak - round_ >= LAMP_STEP
+            dim += not ok
+            print(f"{'ok  ' if ok else 'DIM '} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
+                  f"lamp {peak:.3f}, round it {round_:.3f} ({peak / max(round_, 1e-4):.1f}x)")
+        print(f"{dim} lamp view(s) not brighter than what's round them")
+        return dim
     by_from = {}
     rows = []
     sky = {}

@@ -1,7 +1,7 @@
-// A lamp's halo (`world::halos`): drawn on the far side of a sphere round
-// the lamp, so it shows from anywhere, the eye inside it too. How close
-// the view ray passes to the lamp, as a share of the sphere's radius,
-// falls out of the far face's normal: t = sin(angle(normal, view)). A
+// A lamp's halo (`world::halos`): drawn on the near side of a sphere round
+// the lamp, in front of the lamp's own bulb. How close the view ray
+// passes to the lamp, as a share of the sphere's radius, falls out of the
+// face's normal: t = sin(angle(normal, view)). A
 // tight bright core, a soft wide halo that spreads more in damp air, and
 // the fog takes it with distance.
 

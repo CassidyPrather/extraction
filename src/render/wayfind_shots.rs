@@ -8,6 +8,11 @@
 //! `scripts/wayfind.py` measures its size and contrast and says whether
 //! you could steer by it. Writes `wayfind.json` beside the pictures.
 //!
+//! `--wayfind-lamps DIR` shoots only the landmarks' lamps
+//! (`render::landmarks`), each from [`LAMP_AT`] metres off, standing where
+//! the lamp's in sight: shoot it after dark, and `scripts/wayfind.py`
+//! checks the lamp is brighter than what's round it.
+//!
 //! `--afford DIR` does the same for interactables (`render::affordance`):
 //! up to three of each kind on the map, from 1.5 m in front of it at eye
 //! height, with and without it: does it stand out from what it's on?
@@ -34,6 +39,9 @@ pub const NEAREST: f32 = 5.0;
 /// (`map_lint`'s uniqueness range), to see how far they really carry.
 pub const FARTHEST: f32 = 320.0;
 
+/// How far off `--wayfind-lamps` shoots each landmark's lamp (m).
+pub const LAMP_AT: [f32; 2] = [150.0, 300.0];
+
 pub struct WayfindShotsPlugin;
 
 impl Plugin for WayfindShotsPlugin {
@@ -56,6 +64,9 @@ struct View {
     without: String,
     /// The landmark's box in the picture: x, y, w, h (pixels).
     rect: [f32; 4],
+    /// A lamp's view: where the lamp lands in the picture (pixels).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    at: Option<[f32; 2]>,
     #[serde(skip)]
     entity: Option<Entity>,
     /// Its footprint (w, h, d) and pose, for `rect`.
@@ -152,6 +163,7 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
             with: format!("{i:03}_a.png"),
             without: format!("{i:03}_b.png"),
             rect: [0.0; 4],
+            at: None,
             entity: Some(e),
             // Centred on the thing (its box goes round its middle).
             size,
@@ -248,6 +260,73 @@ fn vantage(
         })
 }
 
+/// Every landmark lamp (a `Halo` that carries far), from each of
+/// [`LAMP_AT`] off: standing, from the first of 16 bearings with the lamp
+/// in sight and on the map; else level with the lamp (over what's in the
+/// way), on the first bearing on the map.
+fn plan_lamps(
+    zone: &Zone,
+    lamps: &Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    spatial: &avian3d::prelude::SpatialQuery,
+) -> Vec<View> {
+    let half = zone.map.size * 0.5 - 2.0;
+    let mut found: Vec<(Entity, Vec3)> = lamps.iter().map(|(e, g)| (e, g.translation())).collect();
+    found.sort_by_key(|(e, _)| *e);
+    let filter = avian3d::prelude::SpatialQueryFilter::default();
+    let mut v = Vec::new();
+    for (e, lamp) in found {
+        for d in LAMP_AT {
+            let bearings = (0..16).map(|i| {
+                let a = i as f32 * std::f32::consts::TAU / 16.0;
+                Vec3::new(a.cos(), 0.0, a.sin())
+            });
+            let on_map: Vec<Vec3> = bearings
+                .map(|b| lamp + b * d)
+                .filter(|p| p.x.abs() < half && p.z.abs() < half)
+                .collect();
+            let standing = |p: Vec3| zone.on_ground(p.x, p.z) + Vec3::Y * EYE;
+            // In sight: nothing stops the line short of the lamp's own
+            // building (a couple of metres under it).
+            let seen = |eye: Vec3| {
+                let Ok(dir) = Dir3::new(lamp - eye) else {
+                    return false;
+                };
+                let run = eye.distance(lamp) - 3.0;
+                spatial.cast_ray(eye, dir, run, true, &filter).is_none()
+            };
+            let eye = on_map
+                .iter()
+                .map(|p| standing(*p))
+                .find(|eye| seen(*eye))
+                .or_else(|| {
+                    on_map
+                        .first()
+                        .map(|p| Vec3::new(p.x, standing(*p).y.max(lamp.y), p.z))
+                });
+            let Some(eye) = eye else {
+                continue;
+            };
+            let i = v.len();
+            v.push(View {
+                from: format!("{d:.0} m"),
+                landmark: format!("lamp {e}"),
+                distance: eye.distance(lamp),
+                eye: eye.to_array(),
+                look: lamp.to_array(),
+                with: format!("{i:03}_a.png"),
+                without: format!("{i:03}_b.png"),
+                rect: [0.0; 4],
+                at: Some([0.0; 2]),
+                entity: Some(e),
+                // A box a halo across round the lamp.
+                size: Vec3::splat(2.0),
+                pose: Transform::from_translation(lamp - Vec3::Y * 1.75),
+            });
+        }
+    }
+    v
+}
+
 /// How near the middle of an interactable a sight line must get to see it.
 const NEAR_ENOUGH: f32 = 0.1;
 
@@ -264,6 +343,8 @@ fn shoot(
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
     weather: Res<crate::world::sky::Weather>,
+    lamps: Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    spatial: avian3d::prelude::SpatialQuery,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -284,6 +365,13 @@ fn shoot(
     }
     let state = &mut *state;
     let views = state.views.get_or_insert_with(|| {
+        if opts.wayfind_lamps {
+            let v = plan_lamps(&zone, &lamps, &spatial);
+            let _ = std::fs::create_dir_all(dir);
+            time.pause();
+            info!("wayfind: {} lamp views", v.len());
+            return v;
+        }
         let mut from: Vec<(String, Vec3)> = Vec::new();
         for m in &zone.map.markers {
             // Where the truck sets you down (its stop is inside the truck).
@@ -320,6 +408,7 @@ fn shoot(
                     with: format!("{i:03}_a.png"),
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
+                    at: None,
                     entity: Some(*e),
                     size: *size,
                     pose: *pose,
@@ -344,6 +433,7 @@ fn shoot(
                     with: format!("{i:03}_a.png"),
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
+                    at: None,
                     entity: None,
                     size: Vec3::ZERO,
                     pose: Transform::IDENTITY,
@@ -431,6 +521,12 @@ fn shoot(
         let lo = lo.max(Vec2::ZERO);
         let hi = hi.min(Vec2::new(w, h));
         views[state.next].rect = [lo.x, lo.y, (hi.x - lo.x).max(0.0), (hi.y - lo.y).max(0.0)];
+        if view.at.is_some() {
+            views[state.next].at = camera
+                .world_to_viewport(&cam_gt, Vec3::from_array(view.look))
+                .ok()
+                .map(|p| p.to_array());
+        }
     }
     state.shooting = true;
     let file = if state.phase == 0 {
