@@ -228,21 +228,21 @@ pub fn hush_press(secs: f32) -> f32 {
 /// going down) warms you back, slowly. Inside one, the chill stiffens you
 /// and, frozen through, bites.
 ///
-/// Chill a second at a frost's heart: about three seconds from warm to
-/// frozen through.
-pub const FROST_CHILL: f32 = 0.35;
+/// Chill a second at a frost's heart: a second and a quarter from warm to
+/// frozen through, so even a dash in for its stone and out costs you.
+pub const FROST_CHILL: f32 = 0.8;
 /// And at its edge.
-pub const FROST_CHILL_EDGE: f32 = 0.12;
+pub const FROST_CHILL_EDGE: f32 = 0.3;
 /// Pace a second the stiffness leaves you once you're out of it (the cold
 /// itself stays: it's the valley's to warm off).
 pub const FROST_THAW: f32 = 0.25;
 /// How much of your pace full chill takes in a frost: never all of it, so
 /// you can always crawl out.
-pub const FROST_SLOW: f32 = 0.85;
+pub const FROST_SLOW: f32 = 0.7;
 /// Chill at which you're told your legs are going.
 pub const FROST_WARN: f32 = 0.4;
 /// Health a second a frost takes from whoever's in it frozen through.
-pub const FROST_BITE: f32 = 6.0;
+pub const FROST_BITE: f32 = 8.0;
 /// A live hearth on you: a frost chills you at this share of the rate, and
 /// never past `FROST_HEARTH_CAP`; it stiffens you no more than that, and
 /// never bites.

@@ -146,13 +146,15 @@ fn system(sessions: &[PathBuf], scrub: &Scrub) -> String {
     // The newest session that got as far as saying what it ran on.
     for s in sessions {
         let text = read(s, scrub);
-        let facts: Vec<&str> = text
+        let facts: Vec<String> = text
             .lines()
             .filter_map(|l| {
                 l.split_once("report: ")
-                    .map(|(_, f)| f)
-                    .or_else(|| l.split_once(" eyes: ").map(|(_, f)| f))
-                    .map(|f| f.trim())
+                    .map(|(_, f)| f.trim().to_string())
+                    .or_else(|| {
+                        l.split_once(" eyes: ")
+                            .map(|(_, f)| format!("eyes: {}", f.trim()))
+                    })
             })
             .collect();
         if facts.is_empty() {
@@ -160,11 +162,7 @@ fn system(sessions: &[PathBuf], scrub: &Scrub) -> String {
         }
         out += &format!("\nfrom {}:\n", name(s));
         for f in facts {
-            if f.starts_with(|c: char| c.is_ascii_digit()) {
-                out += &format!("eyes: {f}\n");
-            } else {
-                out += &format!("{f}\n");
-            }
+            out += &format!("{f}\n");
         }
         break;
     }
@@ -184,7 +182,7 @@ pub fn frames_summary(frames: &[PathBuf], scrub: &Scrub) -> String {
             .unwrap_or("?")
             .to_string();
         let from = text.lines().position(|l| l == "# world in").unwrap_or(0);
-        let (mut cpu, mut gpu) = (Vec::new(), Vec::new());
+        let (mut cpu, mut gpu, mut eyes) = (Vec::new(), Vec::new(), Vec::new());
         for l in text.lines().skip(from) {
             let mut it = l.split_whitespace();
             let (Some(_), Some(c), Some(g)) = (it.next(), it.next(), it.next()) else {
@@ -196,6 +194,12 @@ pub fn frames_summary(frames: &[PathBuf], scrub: &Scrub) -> String {
             cpu.push(c);
             if g >= 0.0 {
                 gpu.push(g);
+            }
+            // The eyes' width as a share of the runtime's (a headset's).
+            if let Some(e) = it.next().and_then(|e| e.parse::<f64>().ok()) {
+                if e >= 0.0 {
+                    eyes.push(e);
+                }
             }
         }
         out += &format!("{map} ({})\n", name(f));
@@ -213,6 +217,15 @@ pub fn frames_summary(frames: &[PathBuf], scrub: &Scrub) -> String {
                 pct(0.99),
                 pct(0.999),
                 v[v.len() - 1]
+            );
+        }
+        if !eyes.is_empty() {
+            eyes.sort_by(f64::total_cmp);
+            out += &format!(
+                "  eye scale (share of the runtime's width): least {:.2}, p50 {:.2}, most {:.2}\n",
+                eyes[0],
+                eyes[eyes.len() / 2],
+                eyes[eyes.len() - 1]
             );
         }
         out += "\n";
@@ -486,7 +499,8 @@ mod tests {
         let mut frames =
             String::from("# map marrow_creek\n1 900.000 -1.000\n2 500.000 -1.000\n# world in\n");
         for f in 3..=1002 {
-            frames += &format!("{f} {} {}\n", if f == 500 { 40.0 } else { 10.0 }, 8.0);
+            let eye = if (500..520).contains(&f) { 0.55 } else { 0.70 };
+            frames += &format!("{f} {} {} {eye}\n", if f == 500 { 40.0 } else { 10.0 }, 8.0);
         }
         std::fs::write(logs.join("frames-100-marrow_creek.txt"), frames).unwrap();
         std::fs::write(data.join("settings.ron"), "(msaa: 4)").unwrap();
@@ -541,6 +555,12 @@ mod tests {
             "load frames left out: {summary}"
         );
         assert!(summary.contains("gpu: 1000 frames, p50 8.0"), "{summary}");
+        assert!(
+            summary.contains(
+                "eye scale (share of the runtime's width): least 0.55, p50 0.70, most 0.70"
+            ),
+            "{summary}"
+        );
         for (n, body) in &entries {
             for private in ["kestrel", home] {
                 assert!(!body.contains(private), "{n} holds {private}: {body}");
