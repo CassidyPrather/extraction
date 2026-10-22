@@ -40,6 +40,8 @@ pub fn kit(personality: &str) -> Vec<&'static str> {
 pub struct Kit {
     /// Something worthless to throw.
     pub junk: Option<Entity>,
+    /// And another.
+    pub spare: Option<Entity>,
     /// Its gun, slung or in hand.
     pub gun: Option<Entity>,
 }
@@ -95,14 +97,20 @@ pub fn plan(
             t.push(back);
         }
         AnomalyKind::Lift => {
-            t.extend(throw(kit.junk?, 1.2));
+            // Something has to stay in it to wind it up: dropped in at its
+            // base (a lob at the core sails through), two to be sure.
+            t.extend(throw(kit.junk?, 0.0));
+            if let Some(second) = kit.spare {
+                t.extend(throw(second, 0.0));
+            }
             // Clear of the pop, then the stone, wherever it lands.
             let out = (edge - centre.xz()).normalize_or(Vec2::X);
             t.push(Task::WalkTo {
                 to: centre.xz() + out * (rad + 6.0),
                 within: 1.0,
             });
-            t.push(Task::Wait(9.0));
+            // It pops about four seconds after it's wound.
+            t.push(Task::Wait(7.0));
             t.extend(take);
         }
         AnomalyKind::Burner => {
@@ -119,8 +127,17 @@ pub fn plan(
                 Task::Fire { at, shots: 3 },
                 Task::Release(Side::Left),
                 Task::Wait(HOT_SECS + 2.0),
+                // Out of the coals and cool, it's taken; still in them (the
+                // shots missed), it's left: never a hand into the fire.
+                Task::GrabClear {
+                    item: stone,
+                    side: Side::Left,
+                    clear_of: centre,
+                    radius: rad + 0.6,
+                },
+                Task::Stow(Side::Left),
+                Task::Wait(0.2),
             ]);
-            t.extend(take);
             t.push(back);
         }
         AnomalyKind::Well | AnomalyKind::Hush => {
@@ -140,10 +157,12 @@ mod tests {
         let e = Entity::from_raw_u32(7).unwrap();
         let full = Kit {
             junk: Some(e),
+            spare: Some(e),
             gun: Some(e),
         };
         let bare = Kit {
             junk: None,
+            spare: None,
             gun: None,
         };
         for kind in AnomalyKind::ALL {
@@ -158,7 +177,7 @@ mod tests {
             );
             assert!(t.is_some_and(|t| {
                 t.iter()
-                    .any(|t| matches!(t, Task::Grab { item, .. } if *item == e))
+                    .any(|t| matches!(t, Task::Grab { item, .. } | Task::GrabClear { item, .. } if *item == e))
             }));
             let needs = !matches!(kind, AnomalyKind::Well | AnomalyKind::Hush);
             let none = plan(
