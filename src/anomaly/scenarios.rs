@@ -13,24 +13,26 @@ use crate::rig::Side;
 use crate::weapons::flat::MacroKind;
 use crate::world::Zone;
 
-pub const NAMES: [&str; 6] = [
+pub const NAMES: [&str; 7] = [
     "harvest_snare",
     "harvest_lift",
     "harvest_burner",
     "harvest_well",
     "harvest_mirror",
     "harvest_hush",
+    "harvest_frost",
 ];
 
 /// Where each scenario's anomaly goes, from the insertion point: west of
 /// it, apart from each other, a short walk.
-const SPOTS: [[f32; 2]; 6] = [
+const SPOTS: [[f32; 2]; 7] = [
     [-22.0, -12.0],
     [-22.0, -36.0],
     [-48.0, -12.0],
     [-48.0, -38.0],
     [-35.0, -60.0],
     [-10.0, -60.0],
+    [-60.0, -62.0],
 ];
 
 /// How far east of an anomaly's edge the bot may stand, metres: every
@@ -293,6 +295,40 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 stand(c, r + 2.0),
             ];
             t.extend(end("art_hushstone"));
+            t
+        }
+        "harvest_frost" => {
+            let r = 3.0;
+            let c = spot(zone, 6, AnomalyKind::Frost, r);
+            let mut t = vec![
+                Log(s(
+                    "harvest frost: a live hearth in the pack keeps the cold off; in for the stone and out",
+                )),
+                Teleport(c + Vec3::X * (r + ARRIVE)),
+                stand(c, r + 2.0),
+                Stage {
+                    kind: AnomalyKind::Frost,
+                    at: c,
+                    radius: r,
+                    artifact: s("art_rimestone"),
+                    kit: vec![(s("art_hearth"), kit_at(c, r + 2.0))],
+                },
+                Wait(1.0),
+                PickUp {
+                    id: s("art_hearth"),
+                    side: Side::Left,
+                },
+                Stow(Side::Left),
+                Wait(0.5),
+                PickUp {
+                    id: s("art_rimestone"),
+                    side: Side::Right,
+                },
+                stand(c, r + 2.0),
+            ];
+            t.extend(end("art_rimestone"));
+            // Never bitten.
+            t.push(Expect(crate::bot::Expect::HealthAtLeast(95.0)));
             t
         }
         _ => return None,

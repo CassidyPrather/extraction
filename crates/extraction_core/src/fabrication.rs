@@ -17,6 +17,8 @@ pub enum Need {
     AmmoBox,
     /// Any firearm below full condition.
     WornGun,
+    /// Any item with this tag.
+    Tagged(&'static str),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -281,6 +283,13 @@ pub const VICE_RECIPES: &[Recipe] = &[
         seconds: 12.0,
     },
     Recipe {
+        id: "can_suppressor",
+        name: "Pack a tin into a suppressor",
+        needs: &[(Need::Tagged("can"), 1), (Need::Item("scrap_metal"), 1)],
+        makes: Make::Items(&[("can_suppressor", 1)]),
+        seconds: 20.0,
+    },
+    Recipe {
         id: "repair_gun_fine",
         name: "Strip and rebuild a worn gun",
         needs: &[(Need::WornGun, 1), (Need::Item("spare_parts"), 2)],
@@ -361,6 +370,7 @@ fn fits(need: Need, item: &TrayItem, catalog: &ItemCatalog) -> bool {
             def.category == Category::Ammo && def.rounds > 1 && def.id.starts_with("ammo_")
         }
         Need::WornGun => def.firearm.is_some() && item.condition < 0.99,
+        Need::Tagged(tag) => def.has_tag(tag),
     }
 }
 
@@ -435,6 +445,28 @@ mod tests {
             .collect()
     }
 
+    /// Any tin of food and a handful of scrap make a can suppressor, in the
+    /// vice.
+    #[test]
+    fn a_tin_and_scrap_make_a_suppressor() {
+        let cat = cat();
+        for tin in ["canned_beans", "canned_stew", "canned_tomato"] {
+            let t = tray(&cat, &[tin, "scrap_metal"]);
+            assert!(
+                available_at(&t, &cat, 1)
+                    .iter()
+                    .any(|r| r.id == "can_suppressor"),
+                "{tin}"
+            );
+        }
+        let t = tray(&cat, &["tea_tin", "scrap_metal"]);
+        assert!(
+            !available_at(&t, &cat, 1)
+                .iter()
+                .any(|r| r.id == "can_suppressor")
+        );
+    }
+
     #[test]
     fn every_recipe_names_real_items() {
         let cat = cat();
@@ -469,6 +501,11 @@ mod tests {
                             // The lightest ammo box.
                             Need::AmmoBox => 0.17,
                             Need::WornGun => 0.0,
+                            Need::Tagged(tag) => cat
+                                .iter()
+                                .filter(|(_, d)| d.has_tag(tag))
+                                .map(|(_, d)| d.mass)
+                                .fold(f32::INFINITY, f32::min),
                         }
                 })
                 .sum();
