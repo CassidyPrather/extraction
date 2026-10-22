@@ -301,4 +301,108 @@ mod tests {
             assert_eq!(none.is_none(), needs, "{kind:?}");
         }
     }
+
+    /// A frost's two bands, measured: a novice walks in for the stone and
+    /// out; a skilled raider does the same with a live hearth in its pack.
+    /// Both come out with it; the novice pays for it.
+    #[test]
+    fn a_hearth_takes_the_frost_out_of_a_frost_dive() {
+        use crate::interact::body::{Backpack, InBackpack};
+        use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
+        let dive = |hearth: bool| -> (f32, bool, f32) {
+            let mut app = crate::headless_app(Default::default(), false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let w = app.world_mut();
+            let p = w
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .iter(w)
+                .next()
+                .unwrap();
+            w.resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+            let me = w.get::<GlobalTransform>(p).unwrap().translation();
+            let centre = w
+                .resource::<crate::world::Zone>()
+                .on_ground(me.x, me.z - 6.0);
+            crate::anomaly::spawn_anomaly(w, AnomalyKind::Frost, centre, 3.0, None);
+            let stone =
+                crate::anomaly::surge::grow(w, "art_rimestone", centre + Vec3::Y * 0.15).unwrap();
+            if hearth {
+                let pack = w
+                    .query::<(Entity, &Backpack)>()
+                    .iter(w)
+                    .find(|(_, b)| b.owner == p && b.carried)
+                    .map(|(e, _)| e)
+                    .unwrap();
+                let e = crate::anomaly::surge::grow(w, "art_hearth", Vec3::ZERO).unwrap();
+                w.get_mut::<Backpack>(pack).unwrap().contents.push(e);
+                w.entity_mut(e).insert((
+                    InBackpack { bag: pack },
+                    ChildOf(pack),
+                    RigidBodyDisabled,
+                    ColliderDisabled,
+                ));
+            }
+            let edge = Vec2::new(me.x, me.z);
+            let kit = Kit {
+                junk: None,
+                spare: None,
+                gun: None,
+                hearth,
+            };
+            let tasks = if hearth {
+                plan(AnomalyKind::Frost, centre, 3.0, edge, stone, centre, &kit).unwrap()
+            } else {
+                assert!(
+                    plan(AnomalyKind::Frost, centre, 3.0, edge, stone, centre, &kit).is_none(),
+                    "no hearth, no skilled way in"
+                );
+                vec![
+                    Task::Grab {
+                        item: stone,
+                        side: Side::Left,
+                    },
+                    Task::Stow(Side::Left),
+                    Task::Wait(0.2),
+                    Task::WalkTo {
+                        to: edge,
+                        within: 0.8,
+                    },
+                ]
+            };
+            app.update();
+            let full = app.world().get::<crate::health::Health>(p).unwrap().hp;
+            app.world_mut()
+                .entity_mut(p)
+                .insert(crate::bot::Bot::new(tasks));
+            let mut peak: f32 = 0.0;
+            for _ in 0..90 * 25 {
+                app.update();
+                peak = peak.max(
+                    app.world()
+                        .get::<crate::world::cold::Chill>(p)
+                        .map_or(0.0, |c| c.level),
+                );
+            }
+            let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
+            let taken = app
+                .world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(stone)
+                .is_some_and(|c| c.0 == p);
+            (full - hp, taken, peak)
+        };
+        let (novice, n_took, n_peak) = dive(false);
+        let (skilled, s_took, s_peak) = dive(true);
+        println!(
+            "frost dive: novice lost {novice:.0} hp, chill to {n_peak:.2}; \
+             with a hearth {skilled:.0} hp, chill to {s_peak:.2}"
+        );
+        assert!(n_took && s_took, "both come out with it");
+        assert_eq!(skilled, 0.0, "a hearth: never bitten");
+        assert!(
+            (5.0..60.0).contains(&novice),
+            "a novice is bitten, not killed ({novice:.0} hp)"
+        );
+    }
 }

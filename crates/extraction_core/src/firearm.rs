@@ -432,6 +432,9 @@ pub struct Firearm {
     /// A round hanging fire.
     #[serde(default)]
     pub hang: Option<Hang>,
+    /// What it's been made into at the vice (`gunsmith`).
+    #[serde(default)]
+    pub build: crate::gunsmith::Build,
     trigger_down: bool,
     /// Semi-auto needs the trigger released before the next shot.
     trigger_reset: bool,
@@ -485,6 +488,7 @@ impl Firearm {
             stiff: 0.0,
             ammo_cold: 0.0,
             hang: None,
+            build: crate::gunsmith::Build::default(),
             trigger_down: false,
             trigger_reset: true,
             cooldown: 0.0,
@@ -581,6 +585,8 @@ impl Firearm {
     /// Advances timers. Call once per fixed tick with the trigger state;
     /// handles automatic fire. `roll` supplies uniform randoms in `0..1`.
     pub fn update(&mut self, dt: f32, trigger: bool, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        // With its bolt out there's nothing for the trigger to let go.
+        let trigger = trigger && !self.build.bolt_out;
         // Up to a tick of overshoot carries into the next interval, so the
         // cyclic rate holds whatever the tick.
         self.cooldown = (self.cooldown - dt).max(-dt);

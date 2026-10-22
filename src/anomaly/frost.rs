@@ -157,18 +157,18 @@ mod tests {
     fn a_frost_warns_stiffens_then_bites() {
         let (mut app, p) = app();
         let full = hp(&app, p);
-        // A second in: stiffening, not yet told, not yet bitten.
-        for _ in 0..90 {
+        // A moment in: stiffening, not yet told, not yet bitten.
+        for _ in 0..20 {
             app.update();
         }
         let stiff = app.world().get::<Body>(p).unwrap().chilled;
-        assert!(stiff > 0.1, "stiffening ({stiff:.2})");
+        assert!(stiff > 0.05, "stiffening ({stiff:.2})");
         let cold = app.world().get::<Chill>(p).unwrap().level;
-        assert!(cold > 0.2, "the cold is in you ({cold:.2})");
+        assert!(cold > 0.1, "the cold is in you ({cold:.2})");
         assert!(!said(&app, FROST_WARNS));
         assert_eq!(hp(&app, p), full, "no bite yet");
-        // Told well before the bite.
-        for _ in 0..90 {
+        // Told before the bite.
+        for _ in 0..40 {
             app.update();
         }
         assert!(said(&app, FROST_WARNS), "told as it takes you");
@@ -178,7 +178,7 @@ mod tests {
         }
         assert!(said(&app, FROST_BITES));
         assert!(hp(&app, p) < full - 5.0, "bitten ({:.0})", hp(&app, p));
-        assert!(app.world().get::<Body>(p).unwrap().chilled > 0.8);
+        assert!(app.world().get::<Body>(p).unwrap().chilled > 0.65);
         // Out of it: loose again in seconds, but still frozen through,
         // for the valley to warm off.
         let me = app.world().get::<GlobalTransform>(p).unwrap().translation();

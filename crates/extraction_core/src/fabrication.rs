@@ -94,6 +94,28 @@ pub const RECIPES: &[Recipe] = &[
         makes: Make::Items(&[("power_cell", 2)]),
         seconds: 6.0,
     },
+    // (Salvage taken off a wreck by hand, `robots::salvage`.)
+    Recipe {
+        id: "strip_plate",
+        name: "Cut up an armour plate",
+        needs: &[(Need::Item("robot_plate"), 1)],
+        makes: Make::Items(&[("scrap_metal", 1)]),
+        seconds: 6.0,
+    },
+    Recipe {
+        id: "strip_actuator",
+        name: "Strip a leg actuator",
+        needs: &[(Need::Item("walker_leg_actuator"), 1)],
+        makes: Make::Items(&[("servo", 1), ("scrap_metal", 2)]),
+        seconds: 8.0,
+    },
+    Recipe {
+        id: "strip_servo_pack",
+        name: "Strip a servo pack",
+        needs: &[(Need::Item("sorter_servo_pack"), 1)],
+        makes: Make::Items(&[("servo", 2), ("scrap_metal", 4)]),
+        seconds: 12.0,
+    },
     // --- Breaking spares down ------------------------------------------
     // (A second multitool or torch is clutter; its insides aren't.)
     Recipe {
@@ -299,8 +321,22 @@ pub const VICE_RECIPES: &[Recipe] = &[
 ];
 
 /// What the driver's contracts teach the bench (`contracts::Unlock`):
-/// armour-piercing re-packs, each for its contract.
+/// armour-piercing re-packs, each for its contract, and the relay jammer.
 pub const CONTRACT_RECIPES: &[Recipe] = &[
+    Recipe {
+        id: "make_jammer",
+        name: "Build a relay jammer",
+        // Taught by "The mast relay" (`progression::contracts`). A
+        // salvaged radio's guts, a cell to drive it, scrap for the
+        // aerials and the box (`robots::network::Jammer`).
+        needs: &[
+            (Need::Item("radio"), 1),
+            (Need::Item("power_cell"), 1),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("jammer", 1)]),
+        seconds: 20.0,
+    },
     Recipe {
         id: "pack_545_ap",
         name: "Re-pack 5.45x39 AP (box of 30)",

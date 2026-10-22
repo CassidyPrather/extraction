@@ -185,13 +185,29 @@ pub(super) fn direct(
             tasks.push(Task::Wait(4.0));
         }
         if p.hoards {
+            // Not what this station's about to use: that stays out.
+            let wanted: Vec<Entity> = world
+                .tasks_for(goal, player, here)
+                .iter()
+                .filter_map(|t| match t {
+                    Task::Grab { item, .. } | Task::GrabFromHere { item, .. } => Some(*item),
+                    _ => None,
+                })
+                .collect();
+            // With a free hand: what's in the other stays there.
+            let free = [Side::Right, Side::Left]
+                .into_iter()
+                .find(|s| world.holding(*s).is_none());
             let mut n = 0;
-            for e in world.loose_near(here, 6.0).into_iter().take(3) {
-                tasks.push(Task::GrabFromHere {
-                    item: e,
-                    side: Side::Right,
-                });
-                tasks.push(Task::Stow(Side::Right));
+            for (e, side) in world
+                .loose_near(here, 6.0)
+                .into_iter()
+                .filter(|e| !wanted.contains(e))
+                .take(3)
+                .filter_map(|e| Some((e, free?)))
+            {
+                tasks.push(Task::GrabFromHere { item: e, side });
+                tasks.push(Task::Stow(side));
                 n += 1;
             }
             if n > 0 {
@@ -528,12 +544,25 @@ impl DirectorWorld<'_, '_> {
             Goal::Search => {
                 t.extend(self.free_hands());
                 if let Some((e, at)) = self.placed(Placed::HouseFind) {
-                    // In at the door, then to the crate beside it.
+                    // Round to the door and in square through it (a slant
+                    // jams on the jamb), then the crate beside it: from
+                    // wherever it was, not through a wall.
                     if let Some(d) = &self.doorway {
                         let mid = d.0.xz();
-                        let inward = (at.xz() - mid).normalize_or_zero();
+                        let hinge = self
+                            .doors
+                            .iter()
+                            .map(|(_, _, gt)| gt.translation().xz())
+                            .min_by(|a, b| a.distance(mid).total_cmp(&b.distance(mid)));
+                        let towards = (at.xz() - mid).normalize_or_zero();
+                        let inward = hinge
+                            .map(|h| (mid - h).normalize_or_zero().perp())
+                            .filter(|n| *n != Vec2::ZERO)
+                            .map(|n| if n.dot(towards) < 0.0 { -n } else { n })
+                            .unwrap_or(towards);
+                        t.extend(self.go(here, mid - inward * 1.2, 0.5));
                         t.push(WalkTo {
-                            to: mid + inward * 0.5,
+                            to: mid + inward * 0.6,
                             within: 0.4,
                         });
                     }
