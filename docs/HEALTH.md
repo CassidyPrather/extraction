@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 039a64a | 06:40 | 10/10 exit 0, 7 extracted; Sallow seed 1 timed out stuck | 879 passed, 0 failed, all within budget, 36 min wall (5630 test-s) | gauges: 13/14 in 18 min (busy moment's PostUpdate share) |
 | 18ba914 | 04:30 | 10/10 clean, 8 extracted | 856 passed, 0 failed, all within budget; 4912 test-seconds (render gauges skipped by hand) | first round with single-threaded headless apps |
 | 4d45a5f | 03:40 | | 846 tests minus gauges in 24 min: 1 FAILED | single-threaded headless apps |
 | 24d1ef0 | 02:00 | | 842 of 861 timed, 0 FAILED; 2 h wall | the profile: render gauges 45% |
@@ -40,7 +41,12 @@ from: the container runs out of memory.
 
 ## Open failures
 
-None as of 18ba914 (suite and smoke). The gauge tier runs from round 25 on.
+As of 039a64a.
+
+| test / run | det. / flaky | class | owner | status |
+| - | - | - | - | - |
+| `render::budget::tests::gauge_a_busy_moment_holds_the_cpu_budget`: PostUpdate 79% of the frame > 50% (frame 23 ms, 42 units: the total is fine) | ? | share limits set for the multi-threaded executor, now measured single-threaded? | Performance | routed 06:40 |
+| Sim: Sallow seed 1 times out stuck at (79-82, 148-152) on the way to the rendezvous; stuck_block fired 51 times, each moving the target 1-3 m | sims are deterministic now: rerunning to confirm | a pocket: blocking one waypoint at a time never gets out | coordinator (src/sim) | routed 06:40 |
 
 ## Closed
 
