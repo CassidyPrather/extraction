@@ -46,7 +46,7 @@ As of 039a64a.
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
 | `render::budget::tests::gauge_a_busy_moment_holds_the_cpu_budget`: PostUpdate 79% of the frame > 50% (frame 23 ms, 42 units: the total is fine) | ? | share limits set for the multi-threaded executor, now measured single-threaded? | Performance | routed 06:40 |
-| Sim: Sallow seed 1 times out stuck at (79-82, 148-152) on the way to the rendezvous; stuck_block fired 51 times, each moving the target 1-3 m | sims are deterministic now: rerunning to confirm | a pocket: blocking one waypoint at a time never gets out | coordinator (src/sim) | routed 06:40 |
+| Sim: Sallow seed 1 times out stuck at (79-82, 148-152) on the way to the rendezvous; stuck_block fired 51 times, each moving the target 1-3 m | det.: a rerun is byte-identical (2097 events); 34 HP of real falls, so maybe a drop it can't climb back out of | a pocket: blocking one waypoint at a time never gets out | coordinator (src/sim) | routed 06:40 |
 
 ## Closed
 
