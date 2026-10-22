@@ -549,7 +549,7 @@ pub const WATER_TOWERS: &[Character] = &[
     ch("Oc(3) 8s", 8.0, &[(0.0, 4.4), (5.0, 5.6), (6.2, 7.2)]),
 ];
 /// A Morse letter: the intake tower's, the mill's, the ropeway station's,
-/// the observatory's.
+/// the observatory's, the works hall's.
 pub const MORSE: &[Character] = &[
     ch("Mo(A) 8s", 8.0, &[(0.0, 0.5), (1.0, 2.5)]),
     ch("Mo(U) 10s", 10.0, &[(0.0, 0.5), (1.0, 1.5), (2.0, 3.5)]),
@@ -578,7 +578,9 @@ pub fn family(kind: &str) -> &'static [Character] {
         "survey_tower" => SURVEYS,
         "robot_gate" => GATES,
         "water_tower" => WATER_TOWERS,
-        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" => MORSE,
+        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
+            MORSE
+        }
         "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
         "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASHES,
         _ => CHIMNEYS,
