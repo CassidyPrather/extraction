@@ -96,6 +96,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(blink::BlinkPlugin)
         .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
+        .init_resource::<grade::Below>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
         // After the underground's darkening, which takes whatever ambient it
