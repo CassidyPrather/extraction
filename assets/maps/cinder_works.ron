@@ -232,6 +232,8 @@
     placements: [
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
+        // The burnt chapel's tower, standing over what the fire left.
+        (prefab: "steeple", at: (-108.0, -252.0), rot: 0.0),
         // The charcoal burners' kiln chimney in Cinder wood.
         (prefab: "chimney", at: (-220.0, -180.0), rot: 0.0),
         // The relay mast over the mast hut.
