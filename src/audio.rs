@@ -1412,8 +1412,8 @@ fn hit_sounds(
             }
             continue;
         }
-        // Out of the far side: the surface faces along the round.
-        let exit = i.entity.is_some() && i.normal.dot(i.velocity) > 0.0;
+        // Out of the far side (a door, a drone's shell, a plank).
+        let exit = crate::weapons::impacts::is_exit(i);
         let trim = if exit { -6.0 } else { 0.0 };
         let (set, cue, speed) = match i.kind {
             K::Masonry => ("impacts/concrete", "hit.impact", 1.0),
@@ -1454,6 +1454,28 @@ fn hit_sounds(
             if exit { speed * 0.9 } else { speed },
             0.08,
         );
+        // Out through steel, a plank or a wall, it throws spall out of
+        // the far side: a spray of bits clattering just past the hole
+        // (`hit.spall`).
+        let spall = match i.kind {
+            K::Metal | K::Robot => Some(("physical/drop_metal", 1.7)),
+            K::Wood => Some(("impacts/wood", 1.4)),
+            K::Masonry => Some(("impacts/concrete", 1.5)),
+            _ => None,
+        };
+        if let Some((set, speed)) = spall.filter(|_| exit) {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(i.point + i.velocity.normalize_or_zero() * 0.4),
+                "hit.spall",
+                trim + 6.0,
+                speed,
+                0.12,
+            );
+        }
     }
     // A round glancing off at a graze (`ballistics::Ricochet`): the whine,
     // a little along the way it left.

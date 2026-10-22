@@ -587,6 +587,13 @@ dB, and the drone's height by about 4 dB, at every range measured (to
 | The crawler's spark gun charging (`robots::indoor::CrawlerCharge`, the tell) | `crawler.charge`, the electric crackle at 0.8, a Signal |
 | Its zap (`CrawlerZap`) | `crawler.zap`, a hard crackle snap at the emitter, and 6 dB down where it lands |
 
+| A held robot torn out of the hand (`interact::fight::TornFree`, a drone thrusting free) | `fight.torn`, metal wrenched (a creak at 1.9x), and `fight.lurch`, the machine whooshing away |
+| A round out through steel, a plank or a wall (`impacts::is_exit`) | the exit's crack, 6 dB under the entry, and `hit.spall`: bits clattering out 0.4 m past the hole (steel's drop at 1.7x, wood's knock at 1.4x, grit at 1.5x) |
+| Winding a dressing round a limb (`first_aid::Winding`) | `aid.wrap`, a short rasp of the bandage at each quarter turn; the tear when it's on is `use.bandage` |
+| Strapping a splint (`Strapping`) | `aid.strap`, a strap pulled tight (velcro) each half second, as the hand feels it; `aid.cinch` as it's on |
+| A bottle's cap twisted (`Capped`) | `aid.cap`, a plastic tick each quarter turn, and `aid.cap_off`, the pop; the swallow is `use.drink` |
+| A hand at an open wound (`wounds::Bloodied` coming on) | `aid.wet`, a wet squelch |
+
 Until now the crawler made no sound except its voice.
 
 ## What the machines say
