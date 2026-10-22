@@ -24,8 +24,8 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
-| 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 1 FAILED (`prefabs_stay_inside_their_clearance`), 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
 | 98f85f0 | 17:40 | 32/32 exit 0, 3 timeouts (Cinder 7 can't board at Fire lookout; Cinder 3, Marrow 1 pockets); Kettle 4/4, Sallow 4/8, Marrow 3/8, Cinder 3/8, Rime 2/4 | 6 FAILED (cellars_cinder ×3, prefab clearance, item boxes, walker-looks-at-flock), all within budget, 30 min | gauges 16/16 in 22 min |
+| 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 1 FAILED (`prefabs_stay_inside_their_clearance`), 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
 | 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 1 FAILED (`prefabs_stay_inside_their_clearance`), 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
 | 5955943 | 12:10 | 20/20 exit 0, 10 extracted (Marrow 0/4) | 925 passed, 0 failed, all within budget, 29 min | gauges 15/15 in 20 min: green |
 | ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 3 FAILED (wounds ×2, melee `a_butt_finds_the_weak_points`), all within budget, 31 min | gauges 14/14 in 17 min (not green after all: see note) |
@@ -53,9 +53,9 @@ As of 98f85f0.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `world::underground::tests::a_bot_goes_down_and_out_the_other_way`, `sim::indoor` every_loot_spot ×2: all in cellars_cinder ("no route out"; 3 cellar spots out of reach) | new in 98f85f0 | hurting heat shut in the shared BuildingPlan (7617df18)? | coordinator / Underground | routed 17:40 |
-| `capture::checks::tests::prefabs_stay_inside_their_clearance` (drowned houses reach 10.1-10.6 m past 8-9 m) | since 7b03261 | silt banks past the map's clearance | World models | routed 17:40 |
-| `models::tests::every_item_model_fits_its_box` (stock_mosin, stock_ak74, bolt_mosin) | new in 98f85f0 | new parts' boxes | Weapon feel / Kit models | routed 17:40 |
+| `world::underground::tests::a_bot_goes_down_and_out_the_other_way`, `sim::indoor` every_loot_spot ×2: all in cellars_cinder ("no route out"; 3 cellar spots out of reach) | new in 98f85f0 | hurting heat shut in the shared BuildingPlan (7617df18) | coordinator | fix in round 33: warm heat closed only in the raider's plan |
+| `capture::checks::tests::prefabs_stay_inside_their_clearance` (drowned houses reach 10.1-10.6 m past 8-9 m) | since 7b03261 | silt banks past the map's clearance | World models | fixed in fa9073b2 (clearance covers the banks; round 34) |
+| `models::tests::every_item_model_fits_its_box` (stock_mosin, stock_ak74, bolt_mosin) | new in 98f85f0 | new parts' boxes | Weapon feel | fixed in 8ca71ac8 (round 33) |
 | `wildlife::app_tests::a_walker_goes_to_look_where_you_flushed_the_birds` (f32::MAX: no Investigate target) | new in 98f85f0 | | Wildlife / Robot minds | routed 17:40 |
 | Sim: Cinder seed 7 can't board the truck at Fire lookout (two windows) | det. | the truck on a 7 m hill by the ranger tower? | coordinator | routed 17:40 |
 | Sim: Cinder 3 and Marrow 1 stuck in pockets (35-40 stuck_blocks) | det. | | coordinator | routed 17:40 |
