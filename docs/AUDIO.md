@@ -573,6 +573,55 @@ In the headset every threat now separates side, front from back by 4-6
 dB, and the drone's height by about 4 dB, at every range measured (to
 100 m for the drone).
 
+## One world, one hearing
+
+What you hear muffled, a robot hears cut short, by the same number.
+`src/hearing.rs` (`HearingPlugin`, headless) builds each building into a
+small graph:
+
+- **Rooms.** The floor is flooded with the doors shut, and whatever reaches
+  the edge is outside. Walls are found at sill, ear and lintel height, as
+  thin, long pieces (a table is thick both ways). Where a cell is walled
+  below and open at ear height, it's a window.
+- **What joins rooms.** A door: open, 3 dB; shut, 5 dB for wood or 8 dB for
+  steel. A wall, by what it's built of (`touch::Stuff`): timber 6.9 dB
+  (the robots' `OCCLUDED`, which anchors the rest), metal 8, brick or
+  stone 10, a window 4.
+- **Room to room.** The loss from every room to every other is solved
+  once, and again only when one of the building's doors moves. Asking is
+  two lookups and a table read.
+- **Storeys, sites and the open.** Each storey up adds a floor (6.9 dB). A
+  site underground reaches the surface by its way out or through the rock
+  (14 dB), whichever is louder. Every site's ways out are its kiosks: the
+  room inside each kiosk's door joins the outside through that door, by
+  its state (or open, under an arch). Out in the open on both ends, a hill on
+  the heightmap or anything `acoustics::blocked` catches (a compound wall,
+  an outcrop, a house between) costs a wall.
+- **One knob.** `WALL_SCALE` moves every wall and door together. It's Robot
+  minds' to tune if indoor stealth swings.
+
+Both ears ask it. `audio::occlude` sets a sound's gain and muffle from
+`Hearing::path`. `robots::senses::perceive` scales a sound's reach by
+`10^(db/20)` from `Hearing::heard`, which also says whether anything beyond
+an open doorway was in the way (for a site's corridor walk).
+`Hearing::smear(at)` is how much a room spreads a robot's guess of where a
+sound came from: 1 in the open, up to 2.5 in a rock gallery, by the room's
+size and how hard its walls are.
+
+**The gauge** (`hearing::gauge::robots_hear_what_you_hear`, on Marrow
+Creek) finds a real walker's hearing threshold: the quietest noise it
+hears through the obstacle, against the same distance in the open. It
+asserts that the walker's loss and the player's agree within a dB:
+
+| Pair | Player | Walker |
+| --- | --- | --- |
+| A house, its door shut (heard by way of its window) | 4.0 dB | 4.0 dB |
+| The same, the door open | 3.0 | 3.0 |
+| The ranger tower's cabin, from the ground below | 4.0 | 4.0 |
+| The bunker's deepest room, from the surface over it (its doors shut: the rock is quieter) | 14.0 | 14.0 |
+| The bunker's way in (inside its kiosk), from the ground at its mouth, its steel door shut | 8.0 | 8.0 |
+| The same, the door open | 3.0 | 3.0 |
+
 ## Hands on the machines
 
 `src/audio_fight.rs` (`FightSoundsPlugin`) and `audio::hit_sounds`:

@@ -242,6 +242,13 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**They read what you set down** (`robots/devices.rs`). Every device you place gives something off: light, a hum, power draw (a drone's or a relay's sensors pick up a hungry device, 3 m a watt), and how far it bites. That alone sets what the machines do about it, from one table:
+- what bites (an armed trap) is shot from outside its reach;
+- what's hungry (10 W or more: a jammer, a cloak, a camera drone) is hunted and shot to scrap;
+- the rest (a light, a laser) is come and looked at.
+
+A machine that can't shoot reports what it can't deal with. The tell: it chirps and throws a scan beam at the device, then turns and goes to it.
+
 **Their network, turned against them** (`robots/network.rs`). Pylons, sentries, spotters and the airship report what they see, and a team follows. Every report goes through the director's network, so it can be worked on:
 - **Cut a pylon's cable** with bolt cutters and it goes silent. The silence is the tell: after 45 s a mender is sent, and once it has welded the torn cabinet whole the pylon is back on the network.
 - **Splice a salvaged radio** into a pylon or a spotter's winch (let go of it against the cabinet): it reports contact at a named place at least 150 m from you, and the team goes there. Do it twice to the same relay and they stop believing it: none of its reports go out, and a walker comes to look it over.
@@ -896,10 +903,11 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   - Under the PBS, an AK is heard about 68 m off.
   - They drop fast, stop in a plank wall, and hit soft: harm goes by the
     square root of their energy against ball's.
-- **Echo** (`weapons::reverb::Reverb`): a precomputed smear on where a
-  sound seems to come from, for robots' ears. It's 1 in the open and up
-  to 2.2 in a valley whose sides rise 6 m within 70 m (more when they
-  face each other), 2 under a roof, and 3 in a room built to carry sound.
+- **Echo**: Audio's `hearing::Hearing::smear(at)` says how much a place
+  blurs where a sound seems to come from, for robots' ears. Indoors it
+  comes from the room. Outdoors it comes from `weapons::reverb::valley_smear`:
+  1 in the open, up to 2.2 in a valley whose sides rise 6 m within 70 m,
+  more when the sides face each other.
 - **The gauges**:
   - `cargo test -p extraction_core the_hearing_gauge -- --nocapture`:
     every gun's report bare, subsonic, and under each suppressor new and
@@ -921,6 +929,63 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   | Mosin      | 241 | - | 85 | 173 | 107 | 186 |
 
   (Metres, in still air. Weather and walls cut these further.)
+
+### Gunsmithing at the vice
+
+(`extraction_core::gunsmith`, `weapons/gunsmith.rs`)
+
+A gun let go of at the bench vice's jaws is clamped there, with its
+receiver in the jaws and the barrel out over the bench. Taken up, it's
+free again. What's done to a gun is its build, which is saved with it and
+worked out afresh from the gun as made whenever it changes.
+
+- **Cut the barrel** (the Mosin, the SKS, the TOZ double, the MP-133): draw
+  the hacksaw back and forth across the barrel where you want it to end.
+  About 1.2 m of blade over one spot cuts a rifle's barrel; a double's two
+  take 2 m. The end drops off as scrap.
+  - The muzzle comes back by what was cut, and a suppressor's mount
+    follows it.
+  - The bullet leaves slower, because less barrel means less push.
+  - It groups wider: the sight line is shorter and the front sight is
+    gone.
+  - It flashes more and is heard further (`report`'s 4 dB per halving).
+  - It's lighter and shorter.
+  - A cut doesn't grow back.
+- **Take the stock off** (those, and the AK, the RPK and the SVD): with
+  the gun clamped, its stock screw takes the spanner. Two turns, and the
+  stock lies on the bench as an item.
+  - With nothing to put to the shoulder, the kick climbs about 1.7 times
+    as much and it groups about 1.3 times as wide.
+  - It's lighter and shorter.
+  - Let the stock go behind the grip and it's back on.
+- **Swap parts** between guns of one model: a Mosin's bolt, drawn back to
+  its stop in the vice and on past it, comes out into the hand as an item
+  with its own condition. Let it go into any Mosin's open receiver and it
+  goes in.
+  - A gun's condition is its parts': the bolt is 35% of it.
+  - Each part's own condition is kept as its difference from the gun's,
+    so a good bolt raises a worn rifle by its share, and swapping back
+    puts both guns as they were.
+  - With its bolt out, a gun neither cycles nor fires.
+- **What it looks like**: the Mosin's barrel and forend, and its butt, are
+  their own model nodes. A cut barrel is drawn shortened back to the
+  breech, the butt is gone when the stock's off, and the bolt is gone
+  when it's out. The AK's butt likewise.
+- **The gauge**: `cargo test -p extraction_core the_gunsmith_gauge --
+  --nocapture`
+
+  |                 | barrel mm | m/s | heard m | MOA | flash | kg | m | climb |
+  |---|---|---|---|---|---|---|---|---|
+  | Mosin           | 730 | 865 | 241 | 1.5 | 1.0 | 4.00 | 1.23 | 1.00 |
+  | Mosin, no stock | 730 | 865 | 241 | 1.9 | 1.0 | 3.25 | 0.93 | 1.89 |
+  | Mosin obrez     | 250 | 653 | 320 | 4.7 | 4.5 | 2.58 | 0.45 | 2.12 |
+  | TOZ double      | 720 | 400 | 211 | 150 | 1.0 | 3.20 | 1.12 | 1.00 |
+  | sawn-off        | 300 | 336 | 282 | 423 | 3.4 | 1.98 | 0.40 | 2.16 |
+  | SKS             | 520 | 735 | 209 | 3.0 | 1.0 | 3.85 | 1.05 | 1.00 |
+  | SKS cut         | 300 | 662 | 251 | 5.5 | 2.3 | 3.59 | 0.83 | 1.04 |
+  | MP-133 cut      | 350 | 367 | 268 | 237 | 1.8 | 3.14 | 0.97 | 1.04 |
+  | AK-74           | 415 | 900 | 220 | 4.0 | 1.0 | 3.30 | 0.94 | 1.00 |
+  | AK-74, no stock | 415 | 900 | 220 | 5.2 | 1.0 | 2.95 | 0.69 | 1.80 |
 
 ### Gadgets and attachments
 

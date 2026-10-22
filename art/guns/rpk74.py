@@ -20,7 +20,7 @@ import sys
 from mathutils import Matrix, Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard,
                     make, report, section_rect)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
@@ -328,7 +328,9 @@ bipod.cyl(0.0022, -0.016, 0.016, "Steel", segs=8,
           xf=T(0, py - 0.0005, pz - 0.0255) @ RY(math.pi / 2))
 
 # --- Build --------------------------------------------------------------------------------
-join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper, stock, butt, worn={})
+join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper, worn={})
+# The butt, off its tang screws at the vice (`weapons::gunsmith`).
+join("static_butt", stock, butt, worn={})
 for p in (carrier, selector, trig):
     make(p, worn={})
 make(bipod, worn=None)  # thin legs: edge wear would turn them all bare steel
@@ -358,3 +360,4 @@ empty("pt_sling_front", (-0.0172, 0.0435, PIVOT[2]))
 empty("pt_sling_rear", (-0.0205, -0.048, 0.218))
 report()
 export("assets/models/guns/rpk74.glb")
+export_part("static_butt", "assets/models/items/stock_rpk74.glb")

@@ -405,7 +405,9 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
-            format!("{into} {place} {rel} the {}.", m.name)
+            // Not "out past the The Hollow".
+            let name = m.name.strip_prefix("The ").unwrap_or(&m.name);
+            format!("{into} {place} {rel} the {name}.")
         }
         None => format!("{into} {place}."),
     }
@@ -470,6 +472,7 @@ fn way_from_the_drop(
     job: &extraction_core::progression::Job,
     map: &str,
     zone: &crate::world::Zone,
+    first_job: bool,
 ) -> String {
     let seen = matches!(
         job,
@@ -484,8 +487,14 @@ fn way_from_the_drop(
     else {
         return String::new();
     };
+    // The first job, home from the gate (free: `raid::radio_calls`).
+    let home = if first_job {
+        " Call me from the gate after."
+    } else {
+        ""
+    };
     format!(
-        "\nFrom the drop: {}. Ringed on your map.",
+        "\nFrom the drop: {}. Ringed on your map.{home}",
         crate::raid::lines::way(drop, at)
     )
 }
@@ -526,7 +535,7 @@ fn card_text(
     match &p.job {
         Some(job) => {
             text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
-            text += &way_from_the_drop(job, &opts.map, &zone);
+            text += &way_from_the_drop(job, &opts.map, &zone, p.done == 0);
         }
         None => text += lines::NOTHING_YET,
     }

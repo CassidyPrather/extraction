@@ -232,6 +232,8 @@ const POCKET_BLOCKS: u32 = 3;
 /// ...and this many, it gives up where it was going: another rendezvous,
 /// or another site.
 const POCKET_GIVE_UP: u32 = 6;
+/// Health lost to nothing it can see before it gets out (see `calm`).
+const HAZARD_HP: f32 = 8.0;
 
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -304,6 +306,9 @@ pub struct Raider {
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
+    /// Since when (raid seconds) it's been losing health with nothing
+    /// hitting it or bleeding, and its health then.
+    calm: (f32, f32),
     /// Where it last got stuck, and how many times in a row near there.
     stuck_spot: (Vec2, u32),
     /// Where it has been blocking waypoints, and how many round there.
@@ -528,6 +533,7 @@ pub fn attach_raider(
                 rv: career_rv,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
+                calm: (0.0, 100.0),
                 stuck_spot: (Vec2::ZERO, 0),
                 pocket: (Vec2::ZERO, 0),
                 scan: 0.0,
@@ -958,6 +964,7 @@ pub fn think(
                         r.pocket.1 = 0;
                     }
                 }
+                open_heat_here(r, pos, &mut log);
                 let a = r.rng.range(0.0, std::f32::consts::TAU);
                 let side = here + Vec2::new(a.cos(), a.sin()) * step;
                 // Give up on what it was reaching for; sidestep; replan.
@@ -975,6 +982,33 @@ pub fn think(
             }
         } else {
             r.anchor = (here, r.clock);
+        }
+
+        // Hurting with nothing hitting it and no wound bleeding: heat, gas,
+        // whatever its plan didn't know of. Out of the building, and that
+        // site crossed off.
+        if health.since_hit < 3.0 || health.bleeding > 0.05 || r.hp > r.calm.1 {
+            r.calm = (r.clock, r.hp);
+        } else if r.calm.1 - r.hp > HAZARD_HP
+            && r.combat.is_none()
+            && {
+                open_heat_here(r, pos, &mut log);
+                true
+            }
+            && let Some(tasks) = leave_building(r, &scene, pos)
+        {
+            log.event(
+                "hazard",
+                json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
+                       "lost": round(r.calm.1 - r.hp, 0), "secs": round(r.clock - r.calm.0, 1)}),
+            );
+            r.calm = (r.clock, r.hp);
+            if let Act::Travel(s) | Act::Search(s) | Act::Take(s, _) = r.act {
+                r.sites[s].tries = r.sites[s].tries.max(3);
+            }
+            r.act = Act::Idle;
+            r.interrupted = true;
+            bot.replace(tasks);
         }
 
         if !bot.done() {
@@ -1066,6 +1100,24 @@ pub fn think(
             Stage::Done => {}
         }
         r.interrupted = false;
+    }
+}
+
+/// In heat its plan shuts (a fight took it in, or it's stuck by it):
+/// the heat opened in that plan, so the way out can be planned.
+fn open_heat_here(r: &mut Raider, pos: Vec3, log: &mut SimLog) {
+    if let Some(plan) = r
+        .plans
+        .iter_mut()
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+    {
+        let local = plan.to_local(pos).xz();
+        if plan.open_heat_at(local) {
+            log.event(
+                "heat_open",
+                json!({"site": plan.name, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+            );
+        }
     }
 }
 
@@ -1719,6 +1771,17 @@ fn duck(
 }
 
 /// The nearest spot within `reach` that `threat` can't see.
+/// The nearest spot just outside the anomaly `at` stands in, if it stands
+/// in one.
+fn out_of_anomaly(scene: &Scene, at: Vec2) -> Option<Vec2> {
+    scene
+        .anomalies
+        .iter()
+        .map(|(_, a, gt)| (gt.translation().xz(), a.radius))
+        .find(|(c, rad)| c.distance(at) < rad + 0.5)
+        .map(|(c, rad)| c + (at - c).normalize_or(Vec2::X) * (rad + 1.5))
+}
+
 fn cover_from(scene: &Scene, pos: Vec3, threat: Vec3, reach: f32) -> Option<(f32, Vec2)> {
     let mut best: Option<(f32, Vec2)> = None;
     for k in 0..12 {
@@ -1734,6 +1797,10 @@ fn cover_from(scene: &Scene, pos: Vec3, threat: Vec3, reach: f32) -> Option<(f32
                 || !scene.path_clear(pos + Vec3::Y * 0.9, eye - Vec3::Y * 0.6)
             {
                 break;
+            }
+            // Cover in an anomaly is no cover.
+            if out_of_anomaly(scene, p).is_some() {
+                continue;
             }
             if !scene.visible(threat, eye) && best.is_none_or(|b| d < b.0) {
                 best = Some((d, p));
@@ -1789,6 +1856,23 @@ fn fight_on(
             },
         ]);
         return;
+    }
+    // A fight that finds it standing in an anomaly (one it was working, or
+    // stepped into dodging): out of it first, then on with the fight.
+    if outcome.is_none() {
+        if let Some(out) = out_of_anomaly(scene, eye.xz()) {
+            log.event("reposition", json!({"why": "anomaly"}));
+            bot.replace([
+                Task::Release(Side::Left),
+                Task::WalkTo {
+                    to: out,
+                    within: 0.6,
+                },
+                Task::Support,
+                Task::Shoot { target, shots: 4 },
+            ]);
+            return;
+        }
     }
     let (loaded, spare) = scene.ammo(me, gun);
     // Hurt and still being hit: get out of its sight and see to it (the
