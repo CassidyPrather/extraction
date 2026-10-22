@@ -514,6 +514,20 @@ fn cage_looks(
     };
     for (e, c) in &cages {
         let iron = materials.add(iron());
+        let (hx, hz) = (c.half.x, c.half.y);
+        // The floor's worn chequer plate: rough, not a mirror under a torch.
+        commands.spawn((
+            crate::render::world_props::Blockout,
+            Mesh3d(meshes.add(Cuboid::new(hx * 2.0, 0.06, hz * 2.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(0.12, 0.11, 0.1),
+                perceptual_roughness: 0.95,
+                metallic: 0.1,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, -0.03, 0.0),
+            ChildOf(e),
+        ));
         let mut bar = |size: Vec3, at: Vec3| {
             commands.spawn((
                 crate::render::world_props::Blockout,
@@ -523,8 +537,6 @@ fn cage_looks(
                 ChildOf(e),
             ));
         };
-        let (hx, hz) = (c.half.x, c.half.y);
-        bar(Vec3::new(hx * 2.0, 0.06, hz * 2.0), Vec3::Y * -0.03);
         bar(Vec3::new(hx * 2.0, 0.05, hz * 2.0), Vec3::Y * (WALL + 0.1));
         // Corner posts, and the side mesh as bars.
         for (sx, sz) in [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)] {
