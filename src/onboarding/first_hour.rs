@@ -417,6 +417,7 @@ pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
+    entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -489,7 +490,11 @@ pub(super) fn direct_raid(
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = now + 12.0;
                 }
-                run_for_cover(&world.zone, here, from)
+                let overhead = *f == First::DroneLock;
+                overhead
+                    .then(|| under_a_roof(view.entrances.as_deref(), here))
+                    .flatten()
+                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from))
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1055,7 +1060,47 @@ pub(super) struct Tells<'w, 's> {
 
 /// Into cover from a machine at `from`: round the far side of the nearest
 /// building within a sprint, or, in the open, hard across its line.
+/// Something above you: in under a roof, through the nearest door, if one's
+/// within a sprint (trees hide nobody from overhead: only their trunks stop
+/// a look).
+fn under_a_roof(
+    entrances: Option<&crate::robots::doors::Entrances>,
+    here: Vec2,
+) -> Option<Vec<Task>> {
+    let entrances = entrances?;
+    let d = entrances
+        .doors
+        .iter()
+        .filter(|d| {
+            // A way in from outside: its far side is under that roof.
+            let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
+            entrances.building_at(inside) == Some(d.building)
+        })
+        .min_by(|a, b| {
+            a.mid
+                .xz()
+                .distance(here)
+                .total_cmp(&b.mid.xz().distance(here))
+        })
+        .filter(|d| d.mid.xz().distance(here) < 40.0)?;
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    Some(vec![
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.3,
+            within: 0.6,
+        },
+        Task::OpenDoor(d.door),
+        Task::WalkTo {
+            to: d.mid.xz() - out * 2.0,
+            within: 0.6,
+        },
+        Task::Wait(20.0),
+    ])
+}
+
 fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2) -> Vec<Task> {
+    // Round the far side of something solid (not into trees: a look goes
+    // between the trunks).
     let cover = zone
         .map
         .placements
@@ -1102,6 +1147,7 @@ pub(super) fn first_fight(
     mut tells: Tells,
     mut bots: Query<(&mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -1233,9 +1279,13 @@ pub(super) fn first_fight(
             within: 1.5,
         }]
     } else {
-        // For cover, as the driver says, upright and fast.
+        // For cover, as the driver says, upright and fast: under a roof
+        // from a drone.
         fight.flee_until = now + 12.0;
-        run_for_cover(&zone, here, from)
+        (kind == "drone")
+            .then(|| under_a_roof(entrances.as_deref(), here))
+            .flatten()
+            .unwrap_or_else(|| run_for_cover(&zone, here, from))
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
