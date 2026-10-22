@@ -140,6 +140,15 @@ A good map makes the crossing a decision.
   (`CHOICE_APART`, `CHOICE_ENDS`, `CHOICE_DETOUR`). A creek or a canal
   needs at least two crossings that matter (a bridge in plain view, a
   footbridge in the trees, a ford).
+- **The first ten minutes are a choice too**: from the insertion, at
+  least two places with loot (a point of interest with loot or a walk-in
+  building within 40 m, `CHOICE_LOOT`) are within a 450 m comfortable
+  walk (`FIRST_REACH`), each walk with cover all the way (`COVER_GAP`),
+  their bearings at least 50° apart (`CHOICE_ANGLE`) and their walks
+  parting (no more than half the shorter within 30 m of the other,
+  `CHOICE_SHARED`). Not one corridor out of the drop. Now: Marrow 112°
+  (Logging camp or Old farm), Kettle 146°, Cinder 88°, Sallow 122°,
+  Rime 134°.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.
