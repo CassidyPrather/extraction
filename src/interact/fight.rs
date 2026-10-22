@@ -79,6 +79,15 @@ pub struct Gripped {
     pub by: Entity,
 }
 
+/// A held robot torn out of the hand: pulled more than [`SLIP`] from it.
+/// `at` is where it was held.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct TornFree {
+    pub robot: Entity,
+    pub at: Vec3,
+    pub by: Entity,
+}
+
 /// A crowbar's last claw position and what it struck lately.
 #[derive(Component, Default)]
 pub struct BarStroke {
@@ -92,6 +101,7 @@ impl Plugin for FightPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Shoved>()
             .add_message::<Gripped>()
+            .add_message::<TornFree>()
             .add_observer(bar_strokes)
             .add_systems(
                 FixedUpdate,
@@ -354,6 +364,7 @@ fn hold_robots(
     )>,
     mut gaits: Query<(&mut crate::robots::anim::Gait, &GlobalTransform)>,
     mut gripped: MessageWriter<Gripped>,
+    mut torn: MessageWriter<TornFree>,
     mut haptics: MessageWriter<Haptic>,
     time: Res<Time>,
 ) {
@@ -368,6 +379,11 @@ fn hold_robots(
         if strain.length() > SLIP {
             // Torn free.
             commands.entity(e).remove::<RobotGrip>();
+            torn.write(TornFree {
+                robot: grip.robot,
+                at,
+                by: player.parent(),
+            });
             haptics.write(Haptic {
                 side: rh.side,
                 amplitude: 0.5,

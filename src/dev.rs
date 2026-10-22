@@ -1091,6 +1091,7 @@ fn treat_for_gallery(
     mut players: Query<
         (
             Entity,
+            &Transform,
             &mut crate::rig::RigInput,
             &mut crate::health::Health,
             Option<&mut crate::interact::wounds::Wounds>,
@@ -1105,7 +1106,7 @@ fn treat_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
         return;
     }
-    let Some((player, mut input, mut health, wounds)) = players.iter_mut().next() else {
+    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
         return;
     };
     let Some(mut wounds) = wounds else {
@@ -1119,8 +1120,14 @@ fn treat_for_gallery(
         bleed,
         dressed,
     };
+    // Round a limb hanging down, the angle that faces out to your right
+    // and a little forward (`Segment::point`'s frame).
+    let x = Vec3::NEG_Y.any_orthonormal_vector();
+    let y = Vec3::NEG_Y.cross(x);
+    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
+    let facing = out.dot(y).atan2(out.dot(x));
     wounds.0 = vec![
-        wound(Limb::Thigh(Side::Right), 0.45, 1.4, 1.0, false),
+        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
         wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
         wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
         wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
@@ -1139,10 +1146,11 @@ fn treat_for_gallery(
             }
         }
     }
-    // The left hand low and turned palm up.
+    // The left hand low and turned palm up (its palm faces +X, inward).
     let left = input.hand_mut(Side::Left);
-    left.pose = Transform::from_xyz(-0.18, 1.05, -0.32)
-        .with_rotation(Quat::from_rotation_z(std::f32::consts::PI) * Quat::from_rotation_x(0.4));
+    left.pose = Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
+        Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    );
     left.tracked = true;
 }
 

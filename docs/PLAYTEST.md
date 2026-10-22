@@ -178,8 +178,8 @@ What changed, and worth a comment each:
   limb it hit, and each wound bleeds by itself (your health's bleeding is
   their sum). Wind a dressing round that limb (thigh, arm, shin, chest),
   not just your forearm: it binds only the wounds on that limb, so a
-  thigh and an arm wound take two dressings. A fall hard enough (about a
-  second-storey drop) breaks a shin: you limp, slowly and with no sprint,
+  thigh and an arm wound take two dressings. A fall hard enough (landing at
+  11 m/s, about a 6 m drop) breaks a shin: you limp, slowly and with no sprint,
   until a splint (new, in medical loot) is held along the broken shin,
   your other hand at the leg, for a second and a half while the straps
   pull tight. You still limp a little. The water bottle (now "Canteen")
