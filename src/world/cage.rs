@@ -34,7 +34,8 @@ impl Plugin for CagePlugin {
         app.add_message::<CageRung>()
             .add_message::<CageArrived>()
             .add_message::<CageCrushed>()
-            .add_systems(Update, wire_cage)
+            .init_resource::<crate::bot::Counters>()
+            .add_systems(Update, (wire_cage, stage_scenario, count_rides))
             .add_systems(
                 FixedUpdate,
                 (ring_bells, run_cage)
@@ -391,6 +392,111 @@ fn run_cage(
     }
 }
 
+/// The scenario: on the adit's shaft station, the bot steps into the
+/// cage and rings it down; at the foot it sends it up and calls it back,
+/// rides it up, and steps out where it began, unhurt (`cage_rides`).
+pub const SCENARIO: &str = "cage_ride";
+/// Filled in by the setup: in the cage, out at its foot, out at its top.
+pub const IN_CAGE: Vec2 = Vec2::new(-9001.0, 1.0);
+pub const AT_FOOT: Vec2 = Vec2::new(-9001.0, 2.0);
+pub const AT_TOP: Vec2 = Vec2::new(-9001.0, 3.0);
+
+/// The scenario staged: the bot onto the shaft station, its walks and its
+/// bells filled in (the bells in order: the cage's, the foot's twice, the
+/// cage's).
+fn stage_scenario(
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    cages: Query<(Entity, &Cage)>,
+    sites: Query<(&Building, &Transform), Without<crate::rig::LocalPlayer>>,
+    bells: Query<(Entity, &CageBell)>,
+    mut players: Query<(&mut Transform, &mut crate::bot::Bot), With<crate::rig::LocalPlayer>>,
+) {
+    for s in setups.read() {
+        if s.name != SCENARIO {
+            continue;
+        }
+        let Some((cage, c)) = cages.iter().next() else {
+            error!("cage scenario: no cage on this map");
+            continue;
+        };
+        let Ok((b, xf)) = sites.get(c.site) else {
+            continue;
+        };
+        let Some(l) = ug::layout(&b.prefab) else {
+            continue;
+        };
+        let Some(def) = &l.cage else {
+            continue;
+        };
+        let room = |id: &str| l.rooms.iter().find(|r| r.id == id);
+        // The foot's way out: the room linked to the shaft.
+        let foot = l
+            .links
+            .iter()
+            .find_map(|k| {
+                (k.from == def.shaft)
+                    .then_some(&k.to)
+                    .or((k.to == def.shaft).then_some(&k.from))
+            })
+            .and_then(|id| room(id));
+        let (Some(top), Some(foot)) = (room(&def.top), foot) else {
+            continue;
+        };
+        let w = |at: [f32; 2], y: f32| xf.transform_point(Vec3::new(at[0], y, at[1]));
+        let flat = |p: Vec3| Vec2::new(p.x, p.z);
+        let in_cage = flat(w(c.at.into(), c.y));
+        let at_top = w(top.at, l.floor_of(top) + 0.05);
+        let at_foot = flat(w(foot.at, l.floor_of(foot)));
+        let bell = |stop: Option<bool>| {
+            bells
+                .iter()
+                .find(|(_, b)| b.cage == cage && b.stop == stop)
+                .map(|(e, _)| e)
+                .unwrap_or(Entity::PLACEHOLDER)
+        };
+        let mut presses =
+            [bell(None), bell(Some(false)), bell(Some(false)), bell(None)].into_iter();
+        for (mut t, mut bot) in &mut players {
+            t.translation = at_top;
+            for task in bot.tasks.iter_mut() {
+                match task {
+                    crate::bot::Task::WalkTo { to, .. }
+                    | crate::bot::Task::Expect(crate::bot::Expect::Near(to, _)) => {
+                        if *to == IN_CAGE {
+                            *to = in_cage;
+                        } else if *to == AT_FOOT {
+                            *to = at_foot;
+                        } else if *to == AT_TOP {
+                            *to = flat(at_top);
+                        }
+                    }
+                    crate::bot::Task::Press(e) if *e == Entity::PLACEHOLDER => {
+                        *e = presses.next().unwrap_or(Entity::PLACEHOLDER);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        info!("scenario: the cage at {in_cage:?}, its foot {at_foot:?}, its top {at_top:?}");
+    }
+}
+
+/// Counts the rides with someone in the cage, and the crushings.
+fn count_rides(
+    mut arrived: MessageReader<CageArrived>,
+    mut crushed: MessageReader<CageCrushed>,
+    mut counters: ResMut<crate::bot::Counters>,
+) {
+    for a in arrived.read() {
+        if !a.riders.is_empty() {
+            counters.bump("cage_rides");
+        }
+    }
+    for _ in crushed.read() {
+        counters.bump("cage_crushed");
+    }
+}
+
 /// Client: the cage drawn (its floor, mesh sides, bonnet, rope) and its
 /// landings' lamps.
 fn cage_looks(
@@ -641,5 +747,88 @@ mod tests {
             Some(true),
             "its own bell takes it back up"
         );
+    }
+
+    /// Nothing walks into the winze by accident: a raider's routes stop
+    /// at its edge, top and foot, and the crawlers' grid has it shut.
+    #[test]
+    fn nothing_walks_into_the_winze() {
+        use crate::sim::indoor::{BuildingPlan, plan_buildings};
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: true,
+                map: "rime_fell".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..10 {
+            app.update();
+        }
+        let plan: BuildingPlan = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &super::super::buildings::DoorLeaf, &ChildOf)>| {
+                    plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == SITE)
+            .unwrap();
+        let l = ug::layout(SITE).unwrap();
+        let room = |id: &str| l.rooms.iter().find(|r| r.id == id).unwrap();
+        let at = |id: &str| {
+            let r = room(id);
+            plan.xf
+                .transform_point(Vec3::new(r.at[0], l.floor_of(r) + 0.1, r.at[1]))
+        };
+        let winze = Vec2::from(room("winze").at);
+        let drift = Vec2::from(room("drift").at);
+        assert!(
+            crate::sim::raider::indoor_route(&plan, at("plat"), drift, 0.5).is_some(),
+            "the shaft station's on the way"
+        );
+        for from in ["plat", "level_station"] {
+            assert!(
+                crate::sim::raider::indoor_route(&plan, at(from), winze, 0.3).is_none(),
+                "a raider walked from {from} into the winze"
+            );
+        }
+        let grids = app
+            .world()
+            .resource::<crate::world::underground::ResidentGrids>();
+        let sites = &grids
+            .0
+            .values()
+            .find(|g| g.id == SITE)
+            .expect("the adit's residents")
+            .sites;
+        let indoor = app.world().resource::<crate::robots::indoor::IndoorSites>();
+        let w = room("winze");
+        for &k in sites {
+            let grid = &indoor.sites[k].nav.grid;
+            let mut seen = 0;
+            for j in 0..grid.n {
+                for i in 0..grid.n {
+                    let c = grid.centre(i, j);
+                    if (c[0] - w.at[0]).abs() < w.size[0] * 0.5 - 0.2
+                        && (c[1] - w.at[1]).abs() < w.size[1] * 0.5 - 0.2
+                    {
+                        seen += 1;
+                        assert_eq!(
+                            grid.cost[j * grid.n + i],
+                            extraction_core::nav::BLOCKED,
+                            "the winze open to crawlers at {c:?}"
+                        );
+                    }
+                }
+            }
+            assert!(seen > 0, "the crawlers' grid covers the winze");
+        }
     }
 }
