@@ -1015,10 +1015,10 @@ fn last_flicker(
         }
         let k = flicker_lit(f.left);
         if let Some(mut m) = materials.get_mut(&f.core) {
-            m.emissive = LinearRgba::rgb(12.0, 2.4, 0.7) * k;
+            m.emissive = LinearRgba::rgb(5.0, 0.35, 0.08) * k;
         }
         let want = crate::world::halos::Halo {
-            color: LinearRgba::rgb(1.0, 0.25, 0.08) * 3.0 * k,
+            color: LinearRgba::rgb(1.0, 0.12, 0.04) * 3.0 * k,
             radius: if k > 0.0 { f.radius } else { 0.0 },
         };
         halo.set_if_neq(want);
