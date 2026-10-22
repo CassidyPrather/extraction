@@ -166,16 +166,17 @@ pub struct HazeParams {
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
     /// x: how much colour it drains from what's seen through it (a Hush's
-    /// dead air), y: how much it dims it, z: its rim's brightening, w: the
-    /// rim's breathing (rad/s).
+    /// dead air), y: how much it dims it, most at the heart and fading out
+    /// well inside the card (never an outline: a card's rim is a circle on
+    /// the screen, not a thing in the world); z, w: unused.
     pub drain: Vec4,
-    /// Light of its own, for the dark: x: the rim's, y: a glint sweeping
-    /// the disc, z: seconds between glints, w: this one's beat (set from
-    /// where it stands).
+    /// A glint, light of its own for the dark: y: how bright, sweeping the
+    /// disc, z: seconds between glints, w: this one's beat (set from where
+    /// it stands); x: unused.
     pub glow: Vec4,
-    /// x: a step its rim takes away from what's behind, darker over light
-    /// and lighter over dark (it shows on snow, in fog and at night), y: 1
-    /// for a glint that does the same.
+    /// y: 1 for a glint that steps away from what's behind instead,
+    /// darker over light and lighter over dark (it shows on snow, in fog
+    /// and at night); x, z, w: unused.
     pub edge: Vec4,
 }
 
@@ -776,12 +777,11 @@ fn dress_anomalies(
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
                         drain: Vec4::ZERO,
                         // A glint crossing it every few seconds: motion,
-                        // seen from the side of the eye, in any weather.
+                        // seen from the side of the eye, in any weather, set
+                        // off from what's behind (it shows on snow and at
+                        // night, where light added doesn't).
                         glow: Vec4::new(0.0, 0.9, 4.0, 0.0),
-                        // And always a faint rim set off from what's behind,
-                        // which shows on snow and at night where light added
-                        // doesn't.
-                        edge: Vec4::new(0.2, 1.0, 0.0, 0.0),
+                        edge: Vec4::new(0.0, 1.0, 0.0, 0.0),
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
                     0.0,
@@ -793,9 +793,8 @@ fn dress_anomalies(
                 Some(&a.hushed),
                 vec![soft(7.0, 60, 0.1, Vec3::new(0.85, 0.85, 0.82), 0.9)],
                 (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
-                // Seen through, the world inside goes dim (and greyer),
-                // inside a slow-pulsing bright rim: luminance and motion,
-                // which carry in fog and to colour-blind eyes.
+                // Seen through, the world inside goes dim and greyer:
+                // luminance, which carries in fog and to colour-blind eyes.
                 Some((
                     1.02,
                     0.2,
@@ -803,10 +802,8 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
                         wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::new(0.6, 0.5, 1.2, 1.1),
-                        // In the dark there's nothing to brighten: its rim
-                        // glows faintly of itself.
-                        glow: Vec4::new(0.12, 0.0, 0.0, 0.0),
+                        drain: Vec4::new(0.6, 0.5, 0.0, 0.0),
+                        glow: Vec4::ZERO,
                         edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
@@ -814,8 +811,7 @@ fn dress_anomalies(
                 )),
             ),
             // Still cold: ice crystals hanging and glinting, pale mist,
-            // hoar on the ground and a rim set off from what's behind (it
-            // stands on snow), and a faint cold light for the dark.
+            // hoar on the ground, and a faint cold light for the dark.
             AnomalyKind::Frost => (
                 Some(&a.frosted),
                 vec![
@@ -832,7 +828,7 @@ fn dress_anomalies(
                         tint: Vec4::ZERO,
                         drain: Vec4::new(0.3, 0.0, 0.0, 0.0),
                         glow: Vec4::ZERO,
-                        edge: Vec4::new(0.2, 0.0, 0.0, 0.0),
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,

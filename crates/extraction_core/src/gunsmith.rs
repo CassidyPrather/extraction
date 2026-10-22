@@ -60,7 +60,7 @@ pub fn workable(id: &str) -> (bool, bool, bool) {
         "toz_double" => (true, true, false),
         "sks" => (true, true, false),
         "mp133" => (true, true, false),
-        "ak74" | "rpk74" | "svd" => (false, true, false),
+        "ak74" | "rpk74" => (false, true, false),
         _ => (false, false, false),
     }
 }
@@ -302,15 +302,7 @@ mod tests {
     /// Every gun that can be worked has its barrel listed.
     #[test]
     fn workable_guns_have_barrels() {
-        for id in [
-            "mosin",
-            "toz_double",
-            "sks",
-            "mp133",
-            "ak74",
-            "rpk74",
-            "svd",
-        ] {
+        for id in ["mosin", "toz_double", "sks", "mp133", "ak74", "rpk74"] {
             assert!(workable(id).1);
             assert!(barrel_mm(id).is_some(), "{id}");
         }

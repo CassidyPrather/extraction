@@ -130,6 +130,8 @@ pub struct Graph {
     /// Its bounds, building-local (x, z).
     lo: Vec2,
     hi: Vec2,
+    /// Its roof, building-local: over it is the open air (not a site's).
+    top: f32,
     room: Vec<u16>,
     pub rooms: usize,
     /// Each door: its leaf, the rooms either side, its loss shut, open now.
@@ -318,6 +320,8 @@ impl Graph {
             levels,
             lo,
             hi,
+            // Its height and a little (a roof's ridge, a chimney).
+            top: foot.y + 0.5,
             room,
             rooms,
             doors: Vec::new(),
@@ -541,7 +545,7 @@ impl Graph {
             }
             None => self.floor,
         };
-        if l.y < floor - 1.0 {
+        if l.y < floor - 1.0 || (!self.site && l.y > self.top) {
             return None;
         }
         let room = self.room_near(Vec2::new(l.x, l.z));
@@ -586,10 +590,10 @@ pub struct Hearing {
     valley: Valley,
 }
 
-/// The ground's smear on a grid over the map.
-/// The valley smear's grid cell, metres.
+/// The valley grid's cell (m).
 const VALLEY_CELL: f32 = 8.0;
 
+/// The ground's smear on a grid over the map.
 #[derive(Default)]
 struct Valley {
     n: usize,

@@ -382,3 +382,76 @@ there. Later jobs pay for the short run with a can of fuel as before
 and `the_short_exfil_burns_a_can_of_fuel`). In the plain first hour, all
 five newcomers now go to the farm, back to the gate and home without
 meeting a machine.
+
+## Jobs 2 and 3: the first natural fight
+
+With the first job safe, the question is whether the first real fight
+still comes, and fairly, by job 2. It does: every newcomer met a machine
+on job 2, a drone over the Village or a walker on the way. Every one was
+told before the first hit: "Something heard you", then the lock and "Run
+across it, to cover", 4 to 25 s ahead.
+
+Found, and fixed in the game:
+- **Nothing said how a job is paid.** The newcomers rode home and the
+  job sat unpaid into the next session, so job 2 never came. Home from
+  the Zone with a job on the card, the driver now says "Home. Now press
+  the card: that's the job paid." (once a career, `firsts::payday`).
+- **A drone sees down through trees and round walls.** Robot sight is a
+  ray stopped only by solid things, and trees only have trunks. Against
+  a drone the only cover is a roof. The drone line goes on: "Under a
+  roof's best. It sees down through trees."
+- **A machine that lost you comes to where it saw you.** Behind a log
+  pile, the cautious newcomer was lost to the walker, sat still, and the
+  walker walked 25 s to that pile. Moving away was worse: a moving shape
+  over low cover is glimpsed, and each glimpse moves the machine's guess
+  (Robot minds). New, once a career, when a machine that was shooting at
+  you goes to look: "Low behind it, and keep still. It only finds what
+  moves." (`First::ComingToLook`).
+- **The driver's cache line read "out past the The Hollow".**
+
+With Robot minds and Map design, on their branches:
+- Map design: log piles every ~25 m from the drop to the Old farm, and a
+  roofed shed on each first walk (drop to the Old farm, drop to the
+  Village).
+- Robot minds: a walker's aim spreads on a target sprinting across its
+  line; out of its sight it settles its aim again (with the tell) before
+  it fires; a drone on its way home fights 8 s at most, and not at all
+  once you're under a roof; and trees hide you from afar.
+
+The bot's own faults, fixed on the way: it read the job's place off the
+cache line under it (and went to The Hollow, sentry country, not the
+Village); it sat in a shed's doorway, in a look through it; and it walked
+out of the shed through the wall.
+
+### Job 2, natural, all three branches together
+
+| Newcomer | What came | Warned | What it did | Outcome |
+| - | - | - | - | - |
+| cautious | nothing near the Village | | | home |
+| reckless | a machine twice | yes | took it on | home |
+| lost | a drone over the Village | "heard you" 50 s, lock 6 s before the hit | off on its own | down |
+| hoarder | the same drone | 1 s, then the lock 9 s before the hit | carried on (no dressing on it) | down |
+| one-handed | the same drone | "heard you", then the lock | in at the shop door, off to the side | home, not hit |
+
+Before the roofs and the drone's 8 s burst, the one-handed newcomer
+went down to this drone in 57 s.
+
+### Seeded fights, all three branches together (the machine put on the road)
+
+| Newcomer | Walker: tell → hit | dead after | Drone: tell → hit | dead after |
+| - | - | - | - | - |
+| cautious | 2.2 s | 23 s | 62.7 s (in the shed) | 72 s |
+| reckless | 11.3 s | 46 s | 11.3 s | 40 s |
+| lost | 4.4 s | 32 s | 13.6 s | 158 s |
+| hoarder | 6.6 s | 11 s | 3.9 s | 23 s |
+| one-handed | 34.0 s | 7 s | 7.8 s | 97 s |
+
+Before this round a walker killed a newcomer 8 s after the first hit; a
+drone, 10 to 35 s. A machine put right on the road a newcomer walks still
+wins in the end. That is the seeded test, harder than the game's own
+placement, which on job 2 sent three of five home.
+
+Still open: the bot can't do a fetch job (find the watch, put it in the
+crate), so the record stops at job 2. And the lost and the hoarder do as
+their habits say, not as they're told; a person like them would die the
+same way.
