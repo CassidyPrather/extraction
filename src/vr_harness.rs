@@ -5049,18 +5049,25 @@ mod fight {
             ChildOf(drone),
         ));
         vr.step(4);
-        // The hand on its frame (its near side), closed.
+        // The hand reaches in to its frame (its near side), slowly, and
+        // closes.
         let on = at + Vec3::new(0.0, 0.0, 0.15);
-        vr.hand(Side::Right, on, Quat::IDENTITY, 0.0, 0.0);
-        vr.step(3);
+        let from = at + Vec3::new(0.0, 0.0, 0.45);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(10);
+        for i in 1..=20 {
+            vr.move_hand(Side::Right, from.lerp(on, i as f32 / 20.0));
+            vr.step(1);
+        }
         vr.grip(Side::Right, 1.0);
         vr.step(3);
+        let took = at_of(&vr, drone);
         vr.app.world_mut().entity_mut(drone).insert(Flees);
         vr.step(64);
         let held = at_of(&vr, drone);
         assert!(
-            held.distance(at) < 0.2,
-            "held in the hand: {held} (was {at})"
+            held.distance(took) < 0.2,
+            "held in the hand: {held} (taken at {took})"
         );
         // Moved, it comes.
         for i in 1..=30 {
@@ -5069,7 +5076,7 @@ mod fight {
         }
         vr.step(10);
         let moved = at_of(&vr, drone);
-        assert!(moved.x < at.x - 0.25, "it came with the hand: {moved}");
+        assert!(moved.x < took.x - 0.25, "it came with the hand: {moved}");
         // Let go: off it goes.
         vr.grip(Side::Right, 0.0);
         vr.step(64);

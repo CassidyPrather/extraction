@@ -114,7 +114,7 @@ fn spawn_hand_bodies(
 #[allow(clippy::type_complexity)]
 fn drive_hand_bodies(
     mut commands: Commands,
-    hands: Query<&Hand>,
+    hands: Query<(&Hand, Has<super::fight::RobotGrip>)>,
     mut bodies: Query<(
         Entity,
         &mut HandBody,
@@ -128,12 +128,13 @@ fn drive_hand_bodies(
 ) {
     let dt = time.delta_secs().max(1e-4);
     for (e, mut body, mut pos, mut rot, mut lin, mut ang) in &mut bodies {
-        let Ok(hand) = hands.get(body.hand) else {
+        let Ok((hand, gripping)) = hands.get(body.hand) else {
             commands.entity(e).despawn();
             continue;
         };
         let target = hand.world;
-        let busy = hand.holding.is_some() || hand.handle.is_some();
+        // (A hand holding a robot rides on it, as on an item: `fight`.)
+        let busy = hand.holding.is_some() || hand.handle.is_some() || gripping;
         // Loose things only when nothing's in reach to take; never what it
         // holds (the held item's own body does that work).
         body.quiet = if busy {
