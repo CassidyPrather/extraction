@@ -67,19 +67,24 @@ pub struct BuildingPlan {
     /// floor under each cell, building-local y (NaN where there's none).
     /// A point belongs to the plan only near its cell's floor.
     pub levels: Option<Vec<f32>>,
-    /// An underground site's cells shut only by heat nothing crosses:
+    /// An underground site's cells shut only by heat (any that hurts):
     /// (cell, heat zone, its cost once that zone's vented).
     pub hot: Vec<(usize, u16, u8)>,
     /// An underground site's live room's wet cells: open in the plan, as
     /// they are once isolated; the raider shuts them (`shut_live`), since
     /// it can't tell live from cut and a wrong guess kills.
     pub live: Vec<usize>,
+    /// An underground site's gas pockets' cells: open in the plan (gas
+    /// doesn't stop feet); the raider shuts them (`shut_live`), since it
+    /// carries no canary and can't tell a pocket that's gone up.
+    pub gas: Vec<usize>,
 }
 
 impl BuildingPlan {
-    /// The live room's water shut, for a raider that won't wade it.
+    /// The live room's water and the gas shut, for a raider that won't
+    /// wade the one or breathe the other.
     pub fn shut_live(&mut self) {
-        for &k in &self.live {
+        for &k in self.live.iter().chain(&self.gas) {
             self.grid.cost[k] = extraction_core::nav::BLOCKED;
         }
     }
@@ -426,6 +431,7 @@ pub fn plan_buildings(
             levels,
             hot: Vec::new(),
             live: Vec::new(),
+            gas: Vec::new(),
         });
     }
     out
@@ -565,7 +571,9 @@ fn plan_site(
                 let Some(z) = r.heat_at(grid.centre(i, j)) else {
                     continue;
                 };
-                if l.heat[z as usize].level < extraction_core::underground::SCORCHING {
+                // Any heat that hurts: a slow burn kills as surely, over
+                // a long search (Cinder's burner gallery, seed 2).
+                if l.heat[z as usize].level <= 0.0 {
                     continue;
                 }
                 if grid.cost[k] != extraction_core::nav::BLOCKED {
@@ -592,6 +600,19 @@ fn plan_site(
                 if wet && in_room && grid.cost[j * n + i] != extraction_core::nav::BLOCKED {
                     live.push(j * n + i);
                 }
+            }
+        }
+    }
+    // Gas pockets' cells (see `gas`).
+    let mut gas = Vec::new();
+    for j in 0..n {
+        for i in 0..n {
+            let k = j * n + i;
+            let foul = r
+                .cell_of(grid.centre(i, j))
+                .is_some_and(|(a, z)| r.gas[z * r.nx + a].is_some());
+            if foul && grid.cost[k] != extraction_core::nav::BLOCKED {
+                gas.push(k);
             }
         }
     }
@@ -653,6 +674,7 @@ fn plan_site(
         levels: Some(levels),
         hot,
         live,
+        gas,
     }
 }
 

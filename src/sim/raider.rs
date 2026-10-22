@@ -232,6 +232,8 @@ const POCKET_BLOCKS: u32 = 3;
 /// ...and this many, it gives up where it was going: another rendezvous,
 /// or another site.
 const POCKET_GIVE_UP: u32 = 6;
+/// Health lost to nothing it can see before it gets out (see `calm`).
+const HAZARD_HP: f32 = 8.0;
 
 /// What the raider is in the middle of.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -304,6 +306,9 @@ pub struct Raider {
     radioed_at: f32,
     /// Stuck detection: where it was, and since when.
     anchor: (Vec2, f32),
+    /// Since when (raid seconds) it's been losing health with nothing
+    /// hitting it or bleeding, and its health then.
+    calm: (f32, f32),
     /// Where it last got stuck, and how many times in a row near there.
     stuck_spot: (Vec2, u32),
     /// Where it has been blocking waypoints, and how many round there.
@@ -530,6 +535,7 @@ pub fn attach_raider(
                 rv: career_rv,
                 radioed_at: -999.0,
                 anchor: (Vec2::ZERO, 0.0),
+                calm: (0.0, 100.0),
                 stuck_spot: (Vec2::ZERO, 0),
                 pocket: (Vec2::ZERO, 0),
                 scan: 0.0,
@@ -982,6 +988,29 @@ pub fn think(
             }
         } else {
             r.anchor = (here, r.clock);
+        }
+
+        // Hurting with nothing hitting it and no wound bleeding: heat, gas,
+        // whatever its plan didn't know of. Out of the building, and that
+        // site crossed off.
+        if health.since_hit < 3.0 || health.bleeding > 0.05 || r.hp > r.calm.1 {
+            r.calm = (r.clock, r.hp);
+        } else if r.calm.1 - r.hp > HAZARD_HP
+            && r.combat.is_none()
+            && let Some(tasks) = leave_building(r, &scene, pos)
+        {
+            log.event(
+                "hazard",
+                json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
+                       "lost": round(r.calm.1 - r.hp, 0), "secs": round(r.clock - r.calm.0, 1)}),
+            );
+            r.calm = (r.clock, r.hp);
+            if let Act::Travel(s) | Act::Search(s) | Act::Take(s, _) = r.act {
+                r.sites[s].tries = r.sites[s].tries.max(3);
+            }
+            r.act = Act::Idle;
+            r.interrupted = true;
+            bot.replace(tasks);
         }
 
         if !bot.done() {
