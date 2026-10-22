@@ -165,6 +165,8 @@
             Item(id: "knife", weight: 0.3),
             // For taking a wreck apart by hand (`robots::salvage`).
             Item(id: "spanner", weight: 0.6),
+            // For the vice (`weapons::gunsmith`).
+            Item(id: "hacksaw", weight: 0.3),
             Nothing(weight: 2.0),
         ]),
         "workshop": (rolls: (2, 4), entries: [
@@ -180,7 +182,19 @@
             Item(id: "servo", weight: 0.3, condition: (0.3, 0.9)),
             Item(id: "power_cell", weight: 1.0),
             Item(id: "spanner", weight: 0.8),
+            Item(id: "hacksaw", weight: 0.5),
+            // Someone's half-finished work on a gun.
+            Table(name: "gun_parts", weight: 0.4),
             Nothing(weight: 2.0),
+        ]),
+        "gun_parts": (rolls: (1, 1), entries: [
+            Item(id: "stock_mosin", weight: 1.0, condition: (0.3, 0.9)),
+            Item(id: "stock_sks", weight: 0.8, condition: (0.3, 0.9)),
+            Item(id: "stock_ak74", weight: 0.8, condition: (0.3, 0.9)),
+            Item(id: "stock_rpk74", weight: 0.3, condition: (0.3, 0.9)),
+            Item(id: "stock_toz_double", weight: 0.6, condition: (0.3, 0.9)),
+            Item(id: "stock_mp133", weight: 0.6, condition: (0.3, 0.9)),
+            Item(id: "bolt_mosin", weight: 0.8, condition: (0.2, 0.95)),
         ]),
         "medical": (rolls: (1, 2), entries: [
             Item(id: "field_dressing", weight: 4.0),

@@ -364,6 +364,28 @@ fn gallery(
                     }
                 }
             }
+            // An SKS and a TOZ double as made, each over itself cut down
+            // at the vice: barrel short and stock off.
+            "sawn" => {
+                use extraction_core::gunsmith::Build;
+                let cut = |mm: f32| Build {
+                    barrel_mm: Some(mm),
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.2);
+                for (id, up, build) in [
+                    ("sks", 0.32, None),
+                    ("sks", 0.12, Some(cut(260.0))),
+                    ("toz_double", -0.1, None),
+                    ("toz_double", -0.3, Some(cut(300.0))),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()

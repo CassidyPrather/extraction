@@ -950,8 +950,9 @@ worked out afresh from the gun as made whenever it changes.
     gone.
   - It flashes more and is heard further (`report`'s 4 dB per halving).
   - It's lighter and shorter.
-  - A cut doesn't grow back.
-- **Take the stock off** (those, and the AK, the RPK and the SVD): with
+  - A cut doesn't grow back, and the bayonet's lug goes with the muzzle.
+- **Take the stock off** (those, and the AK and the RPK; not the SVD, whose
+  thumbhole stock is its grip): with
   the gun clamped, its stock screw takes the spanner. Two turns, and the
   stock lies on the bench as an item.
   - With nothing to put to the shoulder, the kick climbs about 1.7 times
@@ -967,10 +968,21 @@ worked out afresh from the gun as made whenever it changes.
     so a good bolt raises a worn rifle by its share, and swapping back
     puts both guns as they were.
   - With its bolt out, a gun neither cycles nor fires.
-- **What it looks like**: the Mosin's barrel and forend, and its butt, are
-  their own model nodes. A cut barrel is drawn shortened back to the
-  breech, the butt is gone when the stock's off, and the bolt is gone
-  when it's out. The AK's butt likewise.
+- **What it looks like**: every gun that can be worked has its barrel (and
+  forend) and its butt as model nodes of their own. A test holds it
+  (`every_workable_gun_shows_its_work`). A cut barrel is drawn shortened
+  back toward the breech (the double's hinged pair too), the butt is gone
+  when the stock's off, and the bolt is gone when it's out. A stock or
+  bolt off a gun is drawn from that same piece of the gun's model.
+- **Where the things come from**: the hacksaw comes with the vice and
+  turns up in toolboxes and workshops. Workshops sometimes hold someone's
+  half-finished work: a loose stock or a Mosin bolt. A test holds that the
+  vice's tools and parts, and the subsonic rounds and the can, can all be
+  found, given, made or taken off a gun
+  (`what_the_vice_needs_and_makes_can_be_had`).
+- **For the ear**: each step writes `weapons::gunsmith::Worked` (clamped,
+  saw stroke, cut, screw turn, stock off or on, bolt out or in). Audio
+  voices them.
 - **The gauge**: `cargo test -p extraction_core the_gunsmith_gauge --
   --nocapture`
 

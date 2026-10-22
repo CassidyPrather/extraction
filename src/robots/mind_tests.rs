@@ -3820,8 +3820,8 @@ fn a_set_down_light_draws_a_walker_to_look() {
     assert!(noticed(&app) >= 1, "and the tell went out");
 }
 
-/// A running jammer: a drone's sensors pick up its draw from well off; it
-/// hunts it, and shoots it to pieces.
+/// A running jammer: once it's run a while, a drone's sensors pick up its
+/// draw from well off; it hunts it, and shoots it to pieces.
 #[test]
 fn a_running_jammer_is_hunted_and_shot() {
     let (mut app, player, zone) = app(None);
@@ -3845,7 +3845,7 @@ fn a_running_jammer_is_hunted_and_shot() {
     }
     queue.apply(app.world_mut());
     let mut gone = false;
-    for _ in 0..90 * 40 {
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 40.0)) as usize {
         app.update();
         if app.world().get_entity(jam).is_err() {
             gone = true;
@@ -3927,7 +3927,7 @@ fn a_relay_reports_a_hungry_device() {
         .sight = 0.1;
     let at = zone.on_ground(site.x + 30.0, site.z) + Vec3::Y * 0.2;
     powered_device(&mut app, "cloak_generator", at);
-    for _ in 0..90 * 3 {
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 3.0)) as usize {
         app.update();
     }
     let r = responses(&app);
