@@ -845,7 +845,7 @@
             tags: ["steel"],
         ),
         (
-            id: "stock_mosin", dims: Some((0.06, 0.15, 0.42)), name: "Mosin stock",
+            id: "stock_mosin", dims: Some((0.044, 0.13, 0.265)), name: "Mosin stock",
             description: "The Mosin's butt and wrist, off its tang screw. It goes back on behind the grip, in the vice.",
             category: Material, size: Medium, mass: 0.75, bulk: 0.8,
             tags: ["wood", "gun_part"],
@@ -869,7 +869,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_ak74", dims: Some((0.045, 0.13, 0.27)), name: "AK-74 stock",
+            id: "stock_ak74", dims: Some((0.046, 0.163, 0.29)), name: "AK-74 stock",
             description: "The AK's laminated butt, off its tang screws.",
             category: Material, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood", "gun_part"],
@@ -887,7 +887,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "bolt_mosin", dims: Some((0.04, 0.06, 0.2)), name: "Mosin bolt",
+            id: "bolt_mosin", dims: Some((0.081, 0.034, 0.174)), name: "Mosin bolt",
             description: "A Mosin's whole bolt, drawn out past its stop at the vice. It goes into any Mosin's receiver, and takes its wear with it: a good one makes a worn rifle better.",
             category: Material, size: Small, mass: 0.35, bulk: 0.2,
             tags: ["steel", "gun_part"],

@@ -9,6 +9,7 @@ pub mod anomaly;
 pub mod audio;
 pub mod audio_fight;
 pub mod audio_kit;
+pub mod audio_machines;
 pub mod audio_mix;
 pub mod audio_score;
 pub mod audio_underground;

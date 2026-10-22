@@ -592,7 +592,9 @@ small graph:
   two lookups and a table read.
 - **Storeys, sites and the open.** Each storey up adds a floor (6.9 dB). A
   site underground reaches the surface by its way out or through the rock
-  (14 dB), whichever is louder. Out in the open on both ends, a hill on
+  (14 dB), whichever is louder. Every site's ways out are its kiosks: the
+  room inside each kiosk's door joins the outside through that door, by
+  its state (or open, under an arch). Out in the open on both ends, a hill on
   the heightmap or anything `acoustics::blocked` catches (a compound wall,
   an outcrop, a house between) costs a wall.
 - **One knob.** `WALL_SCALE` moves every wall and door together. It's Robot
@@ -616,7 +618,9 @@ asserts that the walker's loss and the player's agree within a dB:
 | A house, its door shut (heard by way of its window) | 4.0 dB | 4.0 dB |
 | The same, the door open | 3.0 | 3.0 |
 | The ranger tower's cabin, from the ground below | 4.0 | 4.0 |
-| The bunker's deepest room, from the surface over it | 14.0 | 14.0 |
+| The bunker's deepest room, from the surface over it (its doors shut: the rock is quieter) | 14.0 | 14.0 |
+| The bunker's way in (inside its kiosk), from the ground at its mouth, its steel door shut | 8.0 | 8.0 |
+| The same, the door open | 3.0 | 3.0 |
 
 ## Hands on the machines
 

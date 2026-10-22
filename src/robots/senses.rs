@@ -50,6 +50,11 @@ pub const POSTURE_MIN: f32 = 0.45;
 pub const GRASS_HIDE: f32 = 0.35;
 /// ...beyond this range (closer, the robot sees into the grass).
 pub const GRASS_NEAR: f32 = 4.0;
+/// Under trees (forest ground) beyond [`CANOPY_NEAR`], standing or not,
+/// this much of you shows through the trunks and the leaves...
+pub const CANOPY_HIDE: f32 = 0.6;
+/// ...from this far off (m).
+pub const CANOPY_NEAR: f32 = 20.0;
 /// Looked down on from steeper than this (radians), grass hides half as
 /// well: a drone overhead sees into it.
 pub const GRASS_STEEP: f32 = 0.6;
@@ -216,6 +221,8 @@ pub struct SightCase {
     /// What keeping still leaves of you to this robot ([`STILL`], or its
     /// [`MotionSight`]).
     pub still: f32,
+    /// Standing among trees (forest ground): [`CANOPY_HIDE`].
+    pub canopy: bool,
 }
 
 /// How much of you a robot makes out (see the module docs).
@@ -247,7 +254,12 @@ pub fn exposure(c: &SightCase) -> f32 {
     } else {
         c.still
     };
-    let e = range * fog * light * posture * hidden * motion;
+    let canopy = if c.canopy && c.distance > CANOPY_NEAR {
+        CANOPY_HIDE
+    } else {
+        1.0
+    };
+    let e = range * fog * light * posture * hidden * motion * canopy;
     if c.distance < POINT_BLANK {
         e.max(0.9)
     } else {
@@ -433,6 +445,8 @@ pub(crate) fn perceive(
         height: f32,
         speed: f32,
         cover: bool,
+        /// Among trees (`SightCase::canopy`).
+        canopy: bool,
         /// The sky's light on you (`SightCase::light`).
         light: f32,
         /// In the dark: how lit (see `SightCase::dark`).
@@ -496,6 +510,7 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
+                canopy: !indoors && zone.forest_cover(p[0], p[1]) > 0.5,
                 // Your torch lights you when the sky doesn't; so does a
                 // white star overhead (`weapons::flares`).
                 light: if torch.is_some() {
@@ -589,6 +604,7 @@ pub(crate) fn perceive(
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
                     dark: t.dark,
                     still: motion.map_or(STILL, |m| m.0),
+                    canopy: t.canopy,
                 });
                 // A load in your hands is more of you to see.
                 if t.load.is_some() && dist < reach {
@@ -766,6 +782,32 @@ pub fn heard_guess(at: Vec3, spread: f32, seed: u64) -> Vec3 {
 mod tests {
     use super::*;
 
+    /// Among trees, far off, you show less, standing or not; close by,
+    /// trees don't hide you.
+    #[test]
+    fn trees_hide_you_from_afar() {
+        let open = exposure(&case());
+        let trees = exposure(&SightCase {
+            canopy: true,
+            ..case()
+        });
+        assert!(
+            (trees - open * CANOPY_HIDE).abs() < 1e-4,
+            "{open} -> {trees}"
+        );
+        let near = SightCase {
+            distance: CANOPY_NEAR - 2.0,
+            ..case()
+        };
+        assert_eq!(
+            exposure(&near),
+            exposure(&SightCase {
+                canopy: true,
+                ..near
+            })
+        );
+    }
+
     fn case() -> SightCase {
         SightCase {
             distance: 30.0,
@@ -778,6 +820,7 @@ mod tests {
             depression: 0.05,
             dark: None,
             still: STILL,
+            canopy: false,
         }
     }
 

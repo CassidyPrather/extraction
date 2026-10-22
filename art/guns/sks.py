@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 from _kit import text  # noqa: E402
 
@@ -71,31 +71,50 @@ def stock_power(z):
     return 3.4 if z < -0.03 else 2.5
 
 
-stock = Part("stock")
-stock.stock(stock_prof, -0.5515, 0.2995, "Wood", stock_w, stations=110, segs=32,
-            power=stock_power)
-sc = Part("cut")
-# The sling slot through the butt.
-sc.prism(fillet([(0.14, -0.05), (0.18, -0.058), (0.18, -0.066), (0.14, -0.058)], 0.0035, 2),
-         -0.04, 0.04, "Wood", axis="x")
-stock.cut(sc)
+# The stock is made in three, for the vice (`weapons::gunsmith`): the
+# forend goes with the barrel, the middle round the receiver and the wrist
+# stays, and the butt comes off at its screw.
+FORE_Z = -0.27
+BUTT_Z = 0.07
 
-furn = Part("furniture")
+
+def stock_piece(name, lo, hi):
+    piece = Part(name)
+    piece.stock(stock_prof, -0.5515, 0.2995, "Wood", stock_w, stations=110, segs=32,
+                power=stock_power)
+    sc = Part("cut")
+    # The sling slot through the butt.
+    sc.prism(fillet([(0.14, -0.05), (0.18, -0.058), (0.18, -0.066), (0.14, -0.058)], 0.0035, 2),
+             -0.04, 0.04, "Wood", axis="x")
+    if lo is not None:
+        sc.box((0.2, 0.4, 1.0), (0.0, 0.0, lo - 0.5), "Wood")
+    if hi is not None:
+        sc.box((0.2, 0.4, 1.0), (0.0, 0.0, hi + 0.5), "Wood")
+    piece.cut(sc)
+    return piece
+
+
+stock_fore = stock_piece("stock_fore", None, FORE_Z)
+stock = stock_piece("stock", FORE_Z, BUTT_Z)
+stock_butt = stock_piece("stock_butt", BUTT_Z, None)
+
+butt_furn = Part("butt_furniture")
 # Steel butt plate with its trap door.
 bp = fillet([(0.2995, 0.0105), (0.309, 0.0095), (0.309, -0.113), (0.2995, -0.1135)],
             [0.0, 0.002, 0.002, 0.0], 2)
-furn.prism(bp, -0.0205, 0.0205, "Blued", axis="x", bevel=0.0015, segs=1)
-furn.box((0.024, 0.05, 0.004), (0.0, -0.045, 0.3105), "Blued", bevel=0.0012)
+butt_furn.prism(bp, -0.0205, 0.0205, "Blued", axis="x", bevel=0.0015, segs=1)
+butt_furn.box((0.024, 0.05, 0.004), (0.0, -0.045, 0.3105), "Blued", bevel=0.0012)
 # The trap door's hinge pin and thumb notch, the plate's two slotted screws.
-furn.cyl(0.0015, -0.011, 0.011, "Blued", segs=12, xf=T(0, -0.0198, 0.311) @ RY(math.pi / 2),
+butt_furn.cyl(0.0015, -0.011, 0.011, "Blued", segs=12, xf=T(0, -0.0198, 0.311) @ RY(math.pi / 2),
          chamfer=0.0003)
 bpc = Part("cut")
 bpc.box((0.01, 0.004, 0.003), (0, -0.07, 0.3122), "Blued", bevel=0.0012, segs=2)
 for y in (-0.004, -0.098):
-    furn.lathe([(0.0, 0.3105), (0.0023, 0.3103), (0.0034, 0.3097), (0.0037, 0.309), (0.0037, 0.308),
+    butt_furn.lathe([(0.0, 0.3105), (0.0023, 0.3103), (0.0034, 0.3097), (0.0037, 0.309), (0.0037, 0.308),
                 (0.0, 0.308)], "Steel", segs=12, xf=T(0, y, 0))
     bpc.box((0.006, 0.0009, 0.0016), (0, y, 0.3108), "Steel")
-furn.cut(bpc)
+butt_furn.cut(bpc)
+furn = Part("furniture")
 # Upper handguard over the gas tube.
 hg = fillet([(-0.0145, 0.0605), (0.0145, 0.0605), (0.0145, 0.075), (0.0, 0.0845),
              (-0.0145, 0.075)], [0.0042, 0.0042, 0.006, 0.01, 0.006], 6)
@@ -113,7 +132,7 @@ furn.prism(nose, -0.562, -0.55, "Blued", axis="z", bevel=0.001, segs=2)
 for z0, y0, xs in ((0.16, -0.075, -0.021), (-0.474, 0.0, -0.0195)):
     loop = [(z0 + 0.011 * math.cos(a), y0 + 0.011 * math.sin(a))
             for a in [math.pi * 0.5 + math.pi * i / 16 for i in range(17)]]
-    furn.sweep(loop, section_rect(0.0028, 0.0028, 0.0008, segs=3), "Blued", xf=T(xs, 0, 0))
+    (butt_furn if z0 > 0 else furn).sweep(loop, section_rect(0.0028, 0.0028, 0.0008, segs=3), "Blued", xf=T(xs, 0, 0))
 
 # --- Receiver ----------------------------------------------------------------------
 recv = Part("receiver")
@@ -176,7 +195,9 @@ for k in range(3):
             segs=1, xf=RX(0.4, about=(0, -0.017, -0.012)))
 
 # --- Barrel, gas system, sights, bayonet ----------------------------------------------
-barrel = Part("barrel")
+# Its origin at the breech, on the bore: a cut barrel is drawn as this
+# scaled back along the bore toward it.
+barrel = Part("barrel", origin=(0.0, BORE, -0.262))
 barrel.lathe([(0.0044, MUZZLE + 0.002), (0.0095, MUZZLE), (0.0105, MUZZLE + 0.004),
               (0.0105, -0.6), (0.0115, -0.45), (0.0128, -0.28), (0.0145, -0.262),
               (0.0, -0.262)], "Blued", segs=36, xf=T(0, BORE, 0))
@@ -278,7 +299,9 @@ trig = Part("trigger", origin=(0.0, -0.005, -0.045))
 trig.sweep(catmull([(-0.05, -0.012), (-0.052, -0.022), (-0.049, -0.031), (-0.044, -0.035)], 5,
                    closed=False), section_rect(0.005, 0.0035, 0.0012), "Blued")
 
-join("static", stock, furn, recv, mag, barrel, leaf, worn={})
+join("static", stock, recv, mag, worn={})
+join("static_barrel", barrel, leaf, stock_fore, furn, worn={})
+join("static_butt", stock_butt, butt_furn, worn={})
 for p in (carrier, trig, bayonet):
     make(p, worn={})
 
@@ -294,3 +317,4 @@ empty("pt_sling_front", (-0.0195, 0.0, -0.482))
 empty("pt_sling_rear", (-0.021, -0.075, 0.152))
 report()
 export("assets/models/guns/sks.glb")
+export_part("static_butt", "assets/models/items/stock_sks.glb")
