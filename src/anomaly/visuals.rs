@@ -354,8 +354,18 @@ fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
             // Full to 0.93 of it, nothing past 1.02.
             let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
             let grain = 0.85 + 0.15 * ((x * 7919 + y * 104_729) % 613) as f32 / 613.0;
-            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * grain;
-            data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
+            // Blotches a few tenths of a radius across, in its colour (and
+            // its glow: a burner's coals in patches, not a lit disc).
+            let (px, py) = (u * 1.1, v * 1.1);
+            let blot = 0.5
+                + 0.25 * ((px * 9.0 + 0.3).sin() * (py * 7.0 + 1.1).cos())
+                + 0.15 * ((px * 17.0 + py * 13.0).sin())
+                + 0.1 * ((px * 31.0 - py * 23.0 + 2.0).sin());
+            let tone = (0.45 + 0.55 * blot.clamp(0.0, 1.0)) * grain;
+            let alpha =
+                (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot.clamp(0.0, 1.0));
+            let c = (tone * 255.0) as u8;
+            data.extend_from_slice(&[c, c, c, (alpha * 255.0) as u8]);
         }
     }
     images.add(Image::new(
@@ -453,6 +463,7 @@ fn init_assets(
             base_color: c,
             base_color_texture: Some(mark.clone()),
             emissive,
+            emissive_texture: Some(mark.clone()),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 0.95,
             depth_bias: 50.0,
@@ -460,23 +471,25 @@ fn init_assets(
         })
     };
     let scorch = ground(
-        Color::srgba(0.02, 0.018, 0.015, 0.92),
-        LinearRgba::rgb(0.14, 0.02, 0.0),
+        Color::srgba(0.03, 0.025, 0.02, 0.92),
+        LinearRgba::rgb(0.07, 0.01, 0.0),
     );
     let flattened = ground(Color::srgba(0.08, 0.07, 0.05, 0.6), LinearRgba::BLACK);
     let glassy = ground(
         Color::srgba(0.22, 0.26, 0.32, 0.55),
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
-    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
+    // Drained: the ground's colour gone grey, not painted over.
+    let hushed = ground(Color::srgba(0.55, 0.55, 0.53, 0.5), LinearRgba::BLACK);
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),
         LinearRgba::rgb(0.0, 0.01, 0.03),
     );
+    // Pressed dark and hard, the faintest violet in it.
     let crushed = ground(
-        Color::srgba(0.03, 0.025, 0.035, 0.85),
-        LinearRgba::rgb(0.02, 0.0, 0.05),
+        Color::srgba(0.045, 0.04, 0.045, 0.85),
+        LinearRgba::rgb(0.004, 0.0, 0.01),
     );
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.

@@ -4,32 +4,98 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 21.9,
+    "step": 22.0,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 20.1,
+    "step": 20.2,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 24.4,
+    "step": 24.6,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 26.5,
+    "step": 26.9,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 31.9,
+    "step": 32.0,
     "slip": 0.20000000298023224,
     "ok": true
    }
   ],
   "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 32.8,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 33.6,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 31.0,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 32.5,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 31.7,
+    "slip": 0.10000000149011612,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 13.7,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 8.9,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 15.6,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 12.5,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 4.9,
+    "slip": 0.30000001192092896,
+    "ok": false
+   }
+  ],
+  "passing": 4,
   "ok": true
  }
 ]
