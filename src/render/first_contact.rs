@@ -30,6 +30,8 @@ const SLACK_MS: f64 = 3.0;
 struct Arrivals {
     loads: Vec<String>,
     spawned: usize,
+    /// What was spawned, by name (the nearest named ancestor's).
+    named: std::collections::HashMap<String, usize>,
 }
 
 fn note_loads<A: Asset>(
@@ -46,8 +48,25 @@ fn note_loads<A: Asset>(
     }
 }
 
-fn note_spawns(added: Query<(), Added<Transform>>, mut arrivals: ResMut<Arrivals>) {
-    arrivals.spawned += added.iter().count();
+fn note_spawns(
+    added: Query<Entity, Added<Transform>>,
+    names: Query<&Name>,
+    parents: Query<&ChildOf>,
+    mut arrivals: ResMut<Arrivals>,
+) {
+    for e in &added {
+        arrivals.spawned += 1;
+        let mut at = Some(e);
+        let mut name = "(unnamed)".to_string();
+        while let Some(x) = at {
+            if let Ok(n) = names.get(x) {
+                name = n.to_string();
+                break;
+            }
+            at = parents.get(x).ok().map(|p| p.parent());
+        }
+        *arrivals.named.entry(name).or_default() += 1;
+    }
 }
 
 pub(crate) struct Frame {
@@ -55,6 +74,7 @@ pub(crate) struct Frame {
     pub stop: usize,
     pub loads: Vec<String>,
     pub spawned: usize,
+    pub named: std::collections::HashMap<String, usize>,
     /// The frame's slowest systems, with the profile (`FIRST_PROFILE=1`
     /// and `--features bevy/trace`).
     pub systems: Vec<(String, f64)>,
@@ -159,6 +179,7 @@ fn pass(app: &mut App, views: &[crate::tour::View]) -> Vec<Frame> {
             stop,
             loads: a.loads,
             spawned: a.spawned,
+            named: a.named,
             systems: systems(),
         });
     };
@@ -245,7 +266,21 @@ pub(crate) fn walk(map: &str) -> (f64, f64, Vec<Contact>, usize) {
                     }
                 )
             } else if spawned > 50 {
-                format!("first-run system ({spawned} things spawned) {named}")
+                let mut by: std::collections::HashMap<&str, usize> = Default::default();
+                for fr in near {
+                    for (k, n) in &fr.named {
+                        *by.entry(k.as_str()).or_default() += n;
+                    }
+                }
+                let mut by: Vec<_> = by.into_iter().collect();
+                by.sort_by(|a, b| b.1.cmp(&a.1));
+                let top = by
+                    .iter()
+                    .take(4)
+                    .map(|(k, n)| format!("{n} {k}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("first-run system ({spawned} things spawned: {top}) {named}")
             } else {
                 format!("first-run system {named}")
             };
