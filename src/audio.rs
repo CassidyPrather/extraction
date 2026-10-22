@@ -407,6 +407,7 @@ impl Plugin for AudioPlugin {
                         water_sounds,
                         sentry_sounds,
                         bat_sounds,
+                        fell_sounds,
                     ),
                 ),
             )
@@ -3409,6 +3410,121 @@ fn water_sounds(
             }
         }
     }
+}
+
+/// Rime Fell's works in the wind (`world::fell`): the funicular's haul
+/// rope creaking against its rollers, nearest you along the line
+/// ([`FELL_ROPE`]) within [`ROPE_NEAR`]; the top station's bull wheel
+/// ([`BULL_WHEEL`], 8 m up) groaning as the rope tugs at it; and a sheet
+/// of the mill's corrugated roof come loose ([`MILL_SHEET`], on the top
+/// bay's roof), banging once to three times now and then, heard across
+/// the settlement. Nothing runs: it is all the wind.
+pub const FELL: &str = "Rime Fell";
+pub const FELL_ROPE: [[f32; 2]; 3] = [[62.0, 214.0], [60.0, 120.0], [58.0, 10.0]];
+pub const BULL_WHEEL: Vec3 = Vec3::new(71.0, 8.0, 0.0);
+/// The loose sheet: xz, and its height (m, absolute: the top bay's roof).
+pub const MILL_SHEET: Vec3 = Vec3::new(131.0, 108.5, 5.0);
+const ROPE_NEAR: f32 = 60.0;
+const WHEEL_NEAR: f32 = 80.0;
+const SHEET_NEAR: f32 = 160.0;
+
+/// The nearest point to `p` on the polyline `line`, in xz.
+fn nearest_on(line: &[[f32; 2]], p: Vec2) -> Vec2 {
+    let mut best = Vec2::from(line[0]);
+    for w in line.windows(2) {
+        let (a, b) = (Vec2::from(w[0]), Vec2::from(w[1]));
+        let t = ((p - a).dot(b - a) / (b - a).length_squared()).clamp(0.0, 1.0);
+        let q = a + (b - a) * t;
+        if q.distance(p) < best.distance(p) {
+            best = q;
+        }
+    }
+    best
+}
+
+fn fell_sounds(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut next: Local<[f32; 3]>,
+    mut bangs: Local<Vec<f32>>,
+) {
+    let (Some(zone), Some(ear)) = (zone, listener.iter().next().map(|g| g.translation())) else {
+        return;
+    };
+    if zone.map.name != FELL {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let rope = nearest_on(&FELL_ROPE, Vec2::new(ear.x, ear.z));
+    let rope_at = zone.on_ground(rope.x, rope.y) + Vec3::Y * 1.5;
+    if now >= next[0] {
+        next[0] = now + rng.0.range(3.0, 8.0);
+        if rope_at.distance(ear) < ROPE_NEAR {
+            let speed = rng.0.range(0.5, 0.7) as f64;
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "physical/door_creak",
+                Some(rope_at),
+                "fell.rope",
+                0.0,
+                speed,
+                0.05,
+            );
+        }
+    }
+    let wheel = Vec3::new(
+        BULL_WHEEL.x,
+        zone.ground(BULL_WHEEL.x, BULL_WHEEL.z) + BULL_WHEEL.y,
+        BULL_WHEEL.z,
+    );
+    if now >= next[1] {
+        next[1] = now + rng.0.range(6.0, 14.0);
+        if wheel.distance(ear) < WHEEL_NEAR {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "machines/groan",
+                Some(wheel),
+                "fell.wheel",
+                0.0,
+                0.8,
+                0.08,
+            );
+        }
+    }
+    if now >= next[2] {
+        next[2] = now + rng.0.range(4.0, 15.0);
+        if MILL_SHEET.distance(ear) < SHEET_NEAR {
+            let n = 1 + (rng.0.f32() * 2.99) as usize;
+            for i in 0..n {
+                bangs.push(now + i as f32 * rng.0.range(0.25, 0.5));
+            }
+        }
+    }
+    bangs.retain(|&t| {
+        if now < t {
+            return true;
+        }
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "impacts/metal",
+            Some(MILL_SHEET),
+            "fell.sheet",
+            0.0,
+            0.65,
+            0.1,
+        );
+        false
+    });
 }
 
 /// A sentry (`robots::sentry`): its warning chirp, the second before it
