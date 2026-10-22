@@ -1308,6 +1308,7 @@ impl Plugin for UndergroundPlugin {
             super::lockdown::LockdownPlugin,
             super::live::LivePlugin,
             super::dark::DarkPlugin,
+            super::glow::GlowPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1950,6 +1951,7 @@ impl Plugin for UndergroundVisualsPlugin {
             super::cage::CageVisualsPlugin,
             super::lockdown::LockdownVisualsPlugin,
             super::live::LiveVisualsPlugin,
+            super::glow::GlowVisualsPlugin,
         ))
         .add_systems(
             Update,

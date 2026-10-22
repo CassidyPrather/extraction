@@ -1094,5 +1094,17 @@
             category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
             tags: ["brass", "powder"],
         ),
+        // Throwable lights for the dark (`world::glow`): snapped or struck
+        // on the Use button, then thrown, or kept in a hand.
+        (
+            id: "chemlight", dims: Some((0.028, 0.028, 0.15)), name: "Chemlight",
+            description: "A green light stick in a foil wrap. Bend it till it snaps inside and shake: ten minutes of light, and not a sound.",
+            category: Gadget, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["polymer"],
+        ),
+        (
+            id: "hand_flare", dims: Some((0.03, 0.03, 0.23)), name: "Hand flare",
+            description: "A road flare in a red paper tube. Strike the cap across the end: a minute of hissing red fire, and every eye in the dark on it.",
+            category: Gadget, size: Small, mass: 0.18, bulk: 0.08, tags: ["powder"],
+        ),
     ],
 )

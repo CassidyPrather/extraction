@@ -18,6 +18,7 @@ pub mod echo;
 pub mod fell;
 pub mod fell_sounds;
 pub mod furnace;
+pub mod glow;
 pub mod halos;
 pub mod impostors;
 pub mod live;
