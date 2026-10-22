@@ -159,7 +159,9 @@ fn energise(
         };
         let on = v.stage(l).is_some_and(|k| power.on(k));
         let cut = isolators.iter().any(|i| i.site == site && i.cut);
-        let now = on && !cut;
+        // (Screenshots of it, `EXTRACTION_LIVE=1`: live from the start.)
+        let shot = std::env::var_os("EXTRACTION_LIVE").is_some();
+        let now = (on || shot) && !cut;
         if now != live.0.contains(&site) {
             if now {
                 live.0.insert(site);
@@ -375,7 +377,8 @@ fn arc(
             continue;
         };
         // A spark now and then, never steady.
-        let snap = ((t * 23.0).sin() * (t * 7.3).sin()).abs() > 0.82;
+        let snap = ((t * 23.0).sin() * (t * 7.3).sin()).abs() > 0.82
+            || std::env::var_os("EXTRACTION_LIVE").is_some();
         light.intensity = if live.0.contains(&a.site) && snap {
             40_000.0
         } else {
