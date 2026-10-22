@@ -17,6 +17,7 @@
 pub mod body;
 pub mod carry;
 pub mod far;
+pub mod fight;
 pub mod first_aid;
 pub mod flat;
 pub mod gestures;
@@ -321,6 +322,7 @@ impl Plugin for InteractPlugin {
                 gestures::GesturesPlugin,
                 touch::TouchPlugin,
                 carry::CarryPlugin,
+                fight::FightPlugin,
                 read::ReadPlugin,
             ));
     }

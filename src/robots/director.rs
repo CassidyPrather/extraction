@@ -231,20 +231,23 @@ fn run_director(
     mut commands: Commands,
     mut director: ResMut<Director>,
     zone: Res<Zone>,
-    // Robots that live in a site (underground residents) and the map's
-    // standing emplacements (sentries, spotters) aren't the director's to
+    // Robots that live in a site (underground residents) and the machines
+    // that aren't patrol strength (`heavy::NotOnPatrol`: sentries,
+    // spotters, the plough, minelayers, menders) aren't the director's to
     // count: they'd use up the budget for the valley's roaming robots.
     robots: Query<
         &Robot,
         (
             Without<super::indoor::LocalNav>,
-            Without<super::sentry::Sentry>,
-            Without<super::spotter::Spotter>,
+            Without<super::heavy::NotOnPatrol>,
         ),
     >,
     pylons: Query<(), With<super::pylon::Pylon>>,
     time: Res<Time>,
+    // What the valley remembers of your ways (`memory`): patrols lean on it.
+    mind: Option<Res<super::memory::ZoneMind>>,
 ) {
+    let mind = mind.as_deref();
     if !director.enabled {
         return;
     }
@@ -375,7 +378,7 @@ fn run_director(
         .map(|m| m.at)
         .collect();
     if director.rng.chance(0.6) && !pois.is_empty() {
-        let p = pois[director.rng.below(pois.len())];
+        let p = pois[super::memory::lean_pick(&mut director.rng, &pois, mind)];
         info!("director: survey drone to {p:?}");
         spawn_drone(
             &mut commands,
@@ -401,7 +404,7 @@ fn run_director(
         super::pylon::spawn_pylon(&mut commands, site, duration, exit);
         super::pylon::send_builders(&mut commands, &zone, site, duration, exit);
     } else if !sites.is_empty() {
-        let s = sites[director.rng.below(sites.len())];
+        let s = sites[super::memory::lean_pick(&mut director.rng, &sites, mind)];
         info!("director: walker to work site {s:?}");
         spawn_walker(
             &mut commands,

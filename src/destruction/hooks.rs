@@ -246,8 +246,9 @@ fn pry(
     }
 }
 
-/// Nothing here is cuttable yet (padlocks and wire would be); a cut
-/// through a [`Cuttable`] takes it away.
+/// A cut through a [`Cuttable`] (a padlock's shackle, a sentry's cable,
+/// a wrecked robot's) takes it away: whoever made it cuttable watches for
+/// it going.
 fn cut(mut commands: Commands, mut cuts: MessageReader<Cut>, things: Query<&Cuttable>) {
     for c in cuts.read() {
         if things.contains(c.target) {

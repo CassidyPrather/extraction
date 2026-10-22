@@ -482,7 +482,10 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
-    for id in contract_kit() {
+    for id in contract_kit()
+        .into_iter()
+        .chain(super::harvest::kit(traits.name))
+    {
         kit.push(Task::PickUp {
             id: id.to_owned(),
             side: Side::Left,
@@ -3086,8 +3089,10 @@ fn take_item(
                 let edge = centre.xz() + out * (rad + 1.8);
                 tasks.extend(travel(&r.grid, pos.xz(), edge, 0.8).unwrap_or_default());
                 if skilled {
+                    let first = junk(r, scene);
                     let kit = super::harvest::Kit {
-                        junk: junk(r, scene),
+                        junk: first,
+                        spare: first.and_then(|j| junk_but(r, scene, j)),
                         gun: r.gun,
                     };
                     if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
@@ -3127,6 +3132,19 @@ fn take_item(
     }
     tasks.extend(grab);
     Some(tasks)
+}
+
+/// Something else worthless from the pack, not `first`.
+fn junk_but(r: &Raider, scene: &Scene, first: Entity) -> Option<Entity> {
+    let me = scene.bags.iter().find(|b| b.carried)?;
+    me.contents
+        .iter()
+        .filter(|e| **e != first)
+        .filter_map(|e| scene.items.get(*e).ok())
+        .map(|(e, it, ..)| (e, r.traits.value(scene.catalog.get(it.kind()))))
+        .filter(|(_, v)| *v <= 3.0)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(e, _)| e)
 }
 
 /// Something worthless from the pack, to throw.

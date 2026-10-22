@@ -14,6 +14,8 @@ sweep's studio.
 | Press-kit stills | `scripts/capture_presskit.sh [maps]` | `target/presskit/index.html` to choose from; `--publish` to `docs/shots/showcase/` |
 | Trailer from a bot's raid | `scripts/capture_trailer.sh <map>` | `target/trailer/<map>/trailer.mp4`, `trailer_sheet.jpg` |
 | Looks-wrong sweep | `scripts/capture_sweep.sh [filter]` | `target/sweep/report.md`, `index.html` |
+| What's new gallery | `scripts/capture_new.sh` | `docs/shots/capture/new/index.html` |
+| Turntables | `TURN=36 scripts/capture_sweep.sh <filter> <out>` | `<out>/<light>/<subject>.mp4`, `_strip.jpg` |
 | The cheap checks (sizes, furniture, z-fighting, camera paths) | `cargo test --lib capture -- --nocapture` | test failures and tallies |
 
 Everything is deterministic: the same seed, map, hour, weather and path
@@ -244,3 +246,45 @@ top face.
 Item models are already held to their collider boxes by
 `models::tests::every_item_model_fits_its_box`, and model materials to the
 game's names by `every_model_material_is_mapped`.
+
+## What's new: `scripts/capture_new.sh`
+
+Shoots a gallery of what changed since the last pass into
+`docs/shots/capture/new/`:
+
+- **Turntables** of new models, by day and by night. `--sweep-turn N` puts
+  one full-window camera in the sweep's studio and steps it N times round
+  each subject. `scripts/capture_turntable.py` makes a looping mp4 and a
+  strip of each.
+- **Stills** from `scripts/capture_paths/new/<map>.stills`, by day and by
+  night. Marrow's are shot with `--gallery minefields`.
+- **Reels** from Robot bodies' `--gallery reel:` with `--hide-hands 1`, so
+  the gloves stay out of frame. They're cropped to the robots.
+- **Before/after pairs** of fixes you can see. A pair is the same view from
+  the same tree with only the fix taken out, so nothing else differs. To
+  build the before binary:
+
+```bash
+git worktree add /tmp/before HEAD
+cd /tmp/before
+git show <fix> -- <file> | git apply -R   # each fix's hunks
+# Generated textures are gitignored. Without them a worktree draws its
+# trees as blobs and its grass flat green:
+for d in foliage materials sky terrain; do
+    ln -s "$OLDPWD/assets/textures/$d" assets/textures/$d
+done
+ln -s "$OLDPWD/assets/.cache" assets/.cache
+CARGO_TARGET_DIR=/tmp/before/target cargo build --profile fast
+cd - && BEFORE_BIN=/tmp/before/target/fast/extraction scripts/capture_new.sh
+```
+
+  The binary reads its assets from its own checkout, so a reverted shader
+  goes with it. The current pairs revert three fixes:
+  - `08dbe5cd`: the mine drawn at its modelling offset.
+  - `78a71777` and `e50ce87d`: wrecks placed level, and ivy on vehicles.
+    This was done by having `Heightmap::wheels` return None and
+    `prefab_is_vehicle` return false.
+  - `30519ac`: the sky's fixed 8° fog band, as the sky shader drew it before.
+
+Edit the subject lists in `scripts/capture_new.sh` and the captions in
+`scripts/capture_new.py` for the next pass.

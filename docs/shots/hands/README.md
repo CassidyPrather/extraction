@@ -67,3 +67,8 @@ eye and from beside; the same door taken by its near end in one hand and
 drawn back, the far end on the ground, scraping; and the pack swung off
 the left shoulder, hanging open in front of you for the right hand to
 reach into.
+`17_climbing.jpg` (`--gallery climb+behind`, flat mode with the hands
+posed and their holds put on by the gallery; `interact::hand_climb`): a
+wall 2 m high, from behind. Reaching up to its top, gripping its edge
+(`Hold::Edge`), and pulled up until the head is over it; a moment later
+you're over and down the far side.

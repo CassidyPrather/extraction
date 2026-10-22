@@ -1,0 +1,6 @@
+# Lib tests allowed past scripts/test_times.py's default budget (120 s at
+# four test threads): name, seconds, why. Keep it short; a slow test is
+# better cut (fewer frames, a small arena) than listed.
+world::underground::tests::a_bot_goes_down_and_out_the_other_way 360 a bot walks every site end to end, in every valley
+world::underground::tests::crawlers_walk_their_rounds_in_the_dark 200 every site's crawlers walk a full round
+sim::indoor::tests::every_door_lets_a_bot_in 200 a bot through every door of every building in every valley

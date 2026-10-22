@@ -417,6 +417,10 @@ pub fn aegis_shock_in(roll: f32) -> f32 {
 
 /// Health a wet aegis's shock takes.
 pub const AEGIS_SHOCK: f32 = 5.0;
+/// A wet aegis's shocks don't take you below this: they still hurt, crack
+/// and draw the machines, but a stone you can't get dry in a downpour isn't
+/// a slow death for carrying it.
+pub const AEGIS_FLOOR: f32 = 20.0;
 
 /// A carried hearth runs you hot: stamina a second it takes back (a
 /// rested walker gets 1/8 a second, so you still recover, at half speed).

@@ -217,6 +217,7 @@ fn drag(
             Option<&Supported>,
             Has<Draggable>,
             Option<&Grabbable>,
+            Has<crate::wildlife::bodies::Carcass>,
         ),
         With<Bulky>,
     >,
@@ -231,7 +232,7 @@ fn drag(
     let dt = time.delta_secs().max(1e-4);
     *heard -= dt;
     let mut loudest: Option<crate::robots::Noise> = None;
-    for (e, held, item, pos, rot, mut lin, mut ang, gravity, mass, support, wreck, grab) in
+    for (e, held, item, pos, rot, mut lin, mut ang, gravity, mass, support, wreck, grab, carcass) in
         &mut things
     {
         let two = support.is_some() && !wreck;
@@ -298,7 +299,12 @@ fn drag(
                     item: e,
                     at: ground,
                     speed,
-                    stuff: def.map_or(Stuff::Metal, stuff_of),
+                    // A carcass is dragged by its hide; a wreck scrapes.
+                    stuff: if carcass {
+                        Stuff::Skin
+                    } else {
+                        def.map_or(Stuff::Metal, stuff_of)
+                    },
                     rolling: def.is_some_and(|d| d.id.contains("wheel")),
                 });
                 let radius = DRAG_HEARD * (speed / top).clamp(0.3, 1.0);

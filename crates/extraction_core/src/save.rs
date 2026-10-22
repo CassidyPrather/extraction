@@ -100,6 +100,10 @@ pub struct ZoneSave {
     /// headset battery): the raid resumes where you stood. `None` at base.
     #[serde(default)]
     pub raid: Option<RaidSave>,
+    /// What the valley remembers of your habits (`zone_memory`): none
+    /// for a fresh career, or a save from before it remembered.
+    #[serde(default)]
+    pub memory: Option<crate::zone_memory::ZoneMemory>,
 }
 
 /// A raid in progress: where you stood and how it stood.
@@ -221,6 +225,9 @@ pub struct SavedGun {
     pub mode: usize,
     pub condition: f32,
     pub fouling: f32,
+    /// Weather's dirt in the action (`Firearm::grime`).
+    #[serde(default)]
+    pub grime: f32,
     /// The internal magazine's loads, and each chamber's.
     #[serde(default)]
     pub internal_loads: Loads,
@@ -325,6 +332,9 @@ impl ZoneSave {
     /// Mends a valley's state read from a file: drops what lies nowhere
     /// (NaN or a world away), mends the rest. Says what it did.
     pub fn sanitize(&mut self, fixed: &mut Vec<String>) {
+        if let Some(m) = &mut self.memory {
+            m.sanitize();
+        }
         if let Some(r) = &mut self.raid {
             let timer = match &mut r.phase {
                 RaidPhaseSave::TruckCalled { eta: t, .. }
@@ -615,6 +625,7 @@ mod tests {
             mode: 1,
             condition: 0.7,
             fouling: 0.2,
+            grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
         });
@@ -680,6 +691,7 @@ mod tests {
             mode: 1,
             condition: 0.7,
             fouling: 0.2,
+            grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
         });

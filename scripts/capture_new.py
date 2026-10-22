@@ -22,7 +22,7 @@ TURNS = {
     "robots__spotter": "The spotter: a balloon on a tether, watching a road",
     "robots__minelayer": "The minelayer and its mine",
     "robots__mender": "The mender, which welds other machines back together",
-    "robots__plough": "Heavy's plough (the model; not in the game yet)",
+    "robots__plough": "Heavy's plough (the model, its parts laid out)",
     "props__gramophone": "A gramophone",
     "props__upright_piano": "An upright piano",
 }
@@ -33,15 +33,23 @@ VIEWS = {
     "n_far_band": "Sallow's far tree line against the sky in drizzle",
 }
 PAIRS = {
-    "n_minefield": "The mines drew 3 m from their rings of earth, two on the road. Now each sits in its own ring.",
+    "n_minefield": "The mines drew 3 m from their rings of earth, one on the road, and the rings were black pies cut by the slope. Now each mine sits in a soft ring of turned earth that lies on the ground.",
     "n_wreck_lada": "Wrecks stood level on a slope, wheels in the air or sunk, with ivy up their sides. Now they pitch and roll onto all four wheels, and no ivy.",
     "n_wreck_uaz": "The same, on the UAZ.",
     "n_far_band": "The sky was fogged only in a fixed band near the horizon, so the far trees stood pale against clear cloud like cards. Now the sky fogs as the scene does.",
 }
+# Orbits shot with --cine-preview (<shots>/cine/<name>/<shot>/fNNNNN.png):
+# caption, and which of the frames to show.
+CINE = {
+    "plough": ("Rime Fell's plough on the pass road below Coldharbour, its plume up", (1, 2)),
+    "plough_after": ("And after it has gone by: the packed lane it leaves (no prints for a while) and the bank it threw, loot buried in it", (1, 2)),
+}
+# Reels: caption, and the part of each frame to show (fractions of its
+# width and height: the robots, without the player's hands at the bottom).
 REELS = {
-    "tells_dusk": "Damage you can read at 24-36 m, at dusk: a walker on a shot leg, one with its eye shot dark, one with its core failing, and a drone with a rotor hit",
-    "tells_day": "The same by day",
-    "snow_prints": "A walker leaving prints in the lying snow at Rime Fell's col",
+    "tells_dusk": ("Damage you can read at 24-36 m, at dusk: a walker on a shot leg, one with its eye shot dark, one with its core failing, and a drone with a rotor hit", (0.34, 0.34, 0.66, 0.52)),
+    "tells_day": ("The same by day", (0.34, 0.34, 0.66, 0.52)),
+    "snow_prints": ("A walker leaving prints in the lying snow at Rime Fell's col", (0.25, 0.2, 1.0, 0.75)),
 }
 
 
@@ -68,9 +76,15 @@ def labelled_pair(before, after, dst, width=WIDTH):
     sheet.save(dst, quality=86)
 
 
-def reel_sheet(frames, dst, cols=4, width=WIDTH):
+def reel_sheet(frames, dst, crop=None, cols=3, width=WIDTH):
     w = width // cols
     ims = [Image.open(f).convert("RGB") for f in frames]
+    if crop:
+        ims = [
+            im.crop((int(crop[0] * im.width), int(crop[1] * im.height),
+                     int(crop[2] * im.width), int(crop[3] * im.height)))
+            for im in ims
+        ]
     ims = [im.resize((w, im.height * w // im.width)) for im in ims]
     rows = (len(ims) + cols - 1) // cols
     h = ims[0].height
@@ -113,7 +127,7 @@ def main(argv):
     before = os.path.join(shots, "before")
     rime, new_views, pairs = [], [], []
     for m in sorted(os.listdir(after)) if os.path.isdir(after) else []:
-        for mood in ("day", "night"):
+        for mood in ("day", "clear", "night"):
             mdir = os.path.join(after, m, mood)
             if not os.path.isdir(mdir):
                 continue
@@ -140,6 +154,24 @@ def main(argv):
     if new_views:
         sections.append(("In the valleys", "", new_views))
 
+    # Orbits.
+    items = []
+    cdir = os.path.join(shots, "cine")
+    for name, (caption, pick) in CINE.items():
+        frames = sorted(
+            os.path.join(root, f)
+            for root, _, fs in os.walk(os.path.join(cdir, name))
+            for f in fs
+            if f.endswith(".png")
+        )
+        for k in pick:
+            if k < len(frames):
+                out = f"cine_{name}_{k}.jpg"
+                jpeg(frames[k], os.path.join(gallery, out))
+                items.append((caption, out, None))
+    if items:
+        sections.append(("The plough", "Heavy's plough, in the game now.", items))
+
     # Reels.
     items = []
     rdir = os.path.join(shots, "reels")
@@ -149,8 +181,9 @@ def main(argv):
         )
         if not frames:
             continue
-        reel_sheet(frames, os.path.join(gallery, f"reel_{name}.jpg"))
-        items.append((REELS.get(name, name), f"reel_{name}.jpg", None))
+        caption, crop = REELS.get(name, (name, None))
+        reel_sheet(frames, os.path.join(gallery, f"reel_{name}.jpg"), crop)
+        items.append((caption, f"reel_{name}.jpg", None))
     if items:
         sections.append(("Machines in motion", "Frame sequences, read left to right, top to bottom.", items))
 

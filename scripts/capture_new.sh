@@ -2,7 +2,7 @@
 # The "what's new" gallery: turntables, stills by day and night, a few
 # reels, and before/after pairs for fixes you can see. Shoots into
 # target/new/, then scripts/capture_new.py lays out docs/shots/capture/new/.
-#   scripts/capture_new.sh [parts...]   (default: turn after before reels)
+#   scripts/capture_new.sh [parts...]   (default: turn after before reels plough)
 # Env:
 #   BEFORE_BIN  a binary built from the tree with the fixes taken out (see
 #               docs/CAPTURE.md, "What's new"), for the before half of the
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 OUT=target/new
 PARTS=("$@")
-[ ${#PARTS[@]} -eq 0 ] && PARTS=(turn after before reels)
+[ ${#PARTS[@]} -eq 0 ] && PARTS=(turn after before reels plough)
 BIN="${EXTRACTION_BIN:-./target/fast/extraction}"
 
 # New models: one turn each, by day and by night.
@@ -32,7 +32,7 @@ reel() { # name map camera reel [hour]
     WGPU_BACKEND=vulkan timeout 1800 xvfb-run -a -s "-screen 0 1280x720x24" \
         "$BIN" --map "$map" --screenshot "$dir/f.png" --frames 99999 --camera "$cam" \
         --no-robots --data-dir "$data" --new-game --hour "$hour" --weather clearing \
-        --gallery "reel:$what" --size 1280x720 2>&1 | grep -E 'panicked' || true
+        --gallery "reel:$what" --hide-hands 1 --size 1280x720 2>&1 | grep -E 'panicked' || true
     rm -rf "$data"
     echo "reel $name: $(ls "$dir"/f_*.png 2>/dev/null | wc -l) frames"
 }
@@ -47,7 +47,11 @@ for PART in "${PARTS[@]}"; do
             for MAP in "${AFTER_MAPS[@]}"; do
                 ARGS=""
                 [ "$MAP" = marrow_creek ] && ARGS="--gallery minefields"
-                OUT="$OUT/after" MOODS="day night" SIZE=1600x900 \
+                # The pairs are by drizzle (as the fixes were found);
+                # Rime Fell shows best on a clear day.
+                MOODS="day night"
+                [ "$MAP" = rime_fell ] && MOODS="clear night"
+                OUT="$OUT/after" MOODS="$MOODS" SIZE=1600x900 \
                     STILLS_DIR=scripts/capture_paths/new GAME_ARGS="$ARGS" \
                     scripts/capture_presskit.sh "$MAP"
             done
@@ -72,6 +76,22 @@ for PART in "${PARTS[@]}"; do
             reel tells_day marrow_creek 40,0,262,0,-6 tells,6,30 day
             # A walker leaving its prints in the lying snow at Rime's col.
             reel snow_prints rime_fell 60,0,-250,0,-14 walk,8,30 day
+            ;;
+        plough)
+            # Rime Fell's plough coming, plume up, and gone past (its lane
+            # and bank): orbits from scripts/capture_paths/new/plough.cine.
+            for STATE in plough plough:after; do
+                DIR="$OUT/cine/${STATE/:/_}"
+                rm -rf "$DIR"
+                DATA="$(mktemp -d)"
+                WGPU_BACKEND=vulkan timeout 1800 xvfb-run -a -s "-screen 0 1600x900x24" \
+                    "$BIN" --map rime_fell --data-dir "$DATA" --new-game --no-robots \
+                    --cinematic scripts/capture_paths/new/plough.cine --cine-preview 4 \
+                    --capture-out "$DIR" --camera -90,0,52 --gallery "$STATE" \
+                    --hour day --weather clearing --size 1600x900 --frames 60 2>&1 \
+                    | grep -E 'panicked' || true
+                rm -rf "$DATA"
+            done
             ;;
         *) echo "unknown part $PART"; exit 1 ;;
     esac

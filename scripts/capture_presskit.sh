@@ -10,7 +10,7 @@
 # GAME_ARGS (more game flags, e.g. "--gallery minefields").
 # Moods: golden (dusk, clearing, the sun 7 degrees up), night (clearing,
 # by torchlight), rain (a downpour by day), surge (the Surge raging,
-# drizzle), day (the reference look: drizzle by day).
+# drizzle), day (the reference look: drizzle by day), clear (a clear day).
 # Shot through --cinematic, which steps time a frame at a time, so the
 # Surge (gone in minutes of real time) rages in every still.
 set -euo pipefail
@@ -34,6 +34,7 @@ for MAP in "${MAPS[@]}"; do
             # truck's pull-in, a few seconds in.
             surge) ARGS=(--hour day --weather drizzle --surge-in -40); FRAMES=300 ;;
             day) ARGS=(--hour day --weather drizzle) ;;
+            clear) ARGS=(--hour day --weather clearing) ;;
             *) echo "unknown mood $MOOD"; exit 1 ;;
         esac
         DIR="$OUT/$MAP/$MOOD"

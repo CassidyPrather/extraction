@@ -378,6 +378,50 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
         .next()
         .expect("a carcass");
     assert_eq!(app.world().resource::<Deaths>().0.len(), 1);
+    // A body to drag: it comes to rest on the ground, lying, and the deer
+    // is drawn where it's dragged to.
+    {
+        let w = app.world();
+        assert!(
+            w.get::<crate::interact::carry::Draggable>(carcass)
+                .is_some()
+        );
+        assert!(w.get::<crate::interact::Grabbable>(carcass).is_some());
+        assert_eq!(w.get::<Mass>(carcass).map(|m| m.0), Some(50.0));
+    }
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let lying = |app: &App| {
+        let t = app.world().get::<Transform>(carcass).unwrap().translation;
+        let b = &app.world().get::<Herd>(herd_e).unwrap().beasts[index];
+        (t, b.pos)
+    };
+    // Drawn on the ground under it (the box, kept level, may rest on its
+    // downhill edge).
+    let under = |t: Vec3| t.with_y(zone.ground(t.x, t.z));
+    for _ in 0..90 * 3 {
+        app.update();
+    }
+    let (t, drawn) = lying(&app);
+    let ground = zone.ground(t.x, t.z);
+    assert!(
+        (0.1..0.5).contains(&(t.y - ground)),
+        "the carcass at {t}, the ground {ground:.2}"
+    );
+    assert!(drawn.distance(under(t)) < 0.01);
+    let to = t + Vec3::new(3.0, 0.0, 0.0);
+    let to = to.with_y(zone.ground(to.x, to.z) + 0.3);
+    app.world_mut()
+        .entity_mut(carcass)
+        .insert((RigidBody::Dynamic, Position(to)));
+    for _ in 0..90 {
+        app.update();
+    }
+    let (t, drawn) = lying(&app);
+    assert!(
+        t.xz().distance(to.xz()) < 0.3,
+        "dragged to {to}, lies at {t}"
+    );
+    assert!(drawn.distance(under(t)) < 0.01, "drawn at {drawn}");
     // The Custodian takes it.
     app.world_mut().despawn(carcass);
     for _ in 0..5 {

@@ -100,6 +100,14 @@ pub enum Task {
     /// Use the item in this hand (radio, dressing, food): what VR's primary
     /// button and flat mode's U do.
     Use(Side),
+    /// Grab `item` as `Grab` does, unless it still lies within `radius` of
+    /// `clear_of` (a stone not yet out of a burner's coals): then leave it.
+    GrabClear {
+        item: Entity,
+        side: Side,
+        clear_of: Vec3,
+        radius: f32,
+    },
     /// Throw what's in this hand at a point (a bolt into an anomaly).
     Throw {
         side: Side,
@@ -170,6 +178,17 @@ impl Task {
                 item,
                 side: side.other(),
             },
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => Task::GrabClear {
+                item,
+                side: side.other(),
+                clear_of,
+                radius,
+            },
             Task::Use(side) => Task::Use(side.other()),
             Task::Throw { side, at } => Task::Throw {
                 side: side.other(),
@@ -185,6 +204,9 @@ impl Task {
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
+/// How high over its feet a standing bot's hand gets, arm up: what's higher
+/// (a lift's stone riding its column) no hand takes.
+pub const STAND_REACH: f32 = 2.2;
 /// A seated bot's eye (the rig lifts it to a standing one).
 pub const SEATED_EYE: f32 = 1.2;
 /// The lowest a seated hand gets, leaning: over the feet, unlifted.
@@ -792,6 +814,24 @@ fn run_tasks(
             continue;
         }
         match task {
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => {
+                let inside = ext.placed.get(item).is_ok_and(|(gt, _)| {
+                    let p = gt.translation();
+                    Vec2::new(p.x - clear_of.x, p.z - clear_of.z).length() < radius
+                });
+                if inside {
+                    bot.note(format!("left {item}: still in the anomaly"));
+                    bot.next();
+                } else if let Some(front) = bot.tasks.front_mut() {
+                    *front = Task::Grab { item, side };
+                }
+                continue;
+            }
             Task::Wait(s) => {
                 if bot.elapsed >= s {
                     bot.next();
@@ -1327,6 +1367,17 @@ fn run_tasks(
                 let flat = Vec2::new(at.x, at.z);
                 if pos.distance(flat) > REACH {
                     bot.walk = Some(flat);
+                } else if at.y - root.translation.y > STAND_REACH {
+                    // Over its head, out of any hand's reach: it waits a
+                    // little (it may come down), then gives up.
+                    bot.walk = None;
+                    bot.retry += dt;
+                    if bot.retry > 3.0 {
+                        bot.failed += 1;
+                        bot.note(format!("FAIL {item} is out of reach overhead"));
+                        bot.retry = 0.0;
+                        bot.next();
+                    }
                 } else {
                     bot.walk = None;
                     bot.retry += dt;

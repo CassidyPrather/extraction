@@ -50,13 +50,22 @@ impl Plugin for SimPlugin {
 }
 
 /// What a fresh game keeps in the truck's stash and the dev cache lacks:
-/// the radio and two dressings, laid out by the insertion point.
-fn spawn_sim_kit(mut commands: Commands, zone: Res<Zone>, catalog: Res<crate::items::Catalog>) {
+/// the radio and two dressings (and a skilled raider's bolts,
+/// `harvest::kit`), laid out by the insertion point.
+fn spawn_sim_kit(
+    mut commands: Commands,
+    zone: Res<Zone>,
+    catalog: Res<crate::items::Catalog>,
+    opts: Res<crate::launch::LaunchOptions>,
+) {
     let Some(ins) = zone.marker(&MarkerKind::Insertion) else {
         return;
     };
     let mut kit = vec!["radio", "field_dressing", "field_dressing"];
     kit.extend(raider::contract_kit());
+    kit.extend(harvest::kit(
+        opts.personality.as_deref().unwrap_or("looter"),
+    ));
     for (i, id) in kit.iter().enumerate() {
         let Some(kind) = catalog.kind(id) else {
             continue;

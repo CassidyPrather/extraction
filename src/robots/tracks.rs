@@ -6,7 +6,8 @@
 //! and goes to look there: it isn't sure (the lead is a guess, with
 //! [`TRAIL_UNCERTAINTY`]), so it investigates, not fights. Arrived, it
 //! sees the next prints and reads on, so it walks your trail to you,
-//! unless the snow has filled it in. Prints are small: it makes them out
+//! unless the snow has filled it in. A trail that stops at a plough's
+//! fresh lane went on along it (`signs::along_lane`). Prints are small: it makes them out
 //! at [`TRACK_SIGHT`] by day, less as the light goes or the weather
 //! closes in (`Conditions::sight`).
 //!
@@ -66,6 +67,10 @@ fn read_tracks(
     mut robots: Query<(Entity, &Robot, &Senses, &GlobalTransform, &mut Awareness)>,
     players: Query<(), With<crate::player::Player>>,
     tracks: Option<Res<Tracks>>,
+    (lanes, snow): (
+        Option<Res<super::plough::Lanes>>,
+        Option<Res<crate::world::snow::Snow>>,
+    ),
     conditions: Res<crate::world::weather::Conditions>,
     spatial: SpatialQuery,
     time: Res<Time>,
@@ -112,15 +117,32 @@ fn read_tracks(
             continue;
         };
         let lead = read_on(&tracks, &print);
+        // Where the trail stops at a fresh lane, on along the lane.
+        let heading = if lead.at.distance(print.at) > 0.5 {
+            (lead.at - print.at).xz()
+        } else {
+            Vec2::new(-lead.yaw.sin(), -lead.yaw.cos())
+        };
+        let lane = lanes
+            .as_ref()
+            .filter(|_| tracks.after(&lead).is_none())
+            .and_then(|l| {
+                let falling = snow.as_ref().map_or(0.0, |s| s.falling);
+                super::signs::along_lane(l, now, falling, lead.at, heading)
+            });
+        let (guess, uncertainty) = match lane {
+            Some(at) => (at, super::signs::LANE_UNCERTAINTY),
+            None => (lead.at, TRAIL_UNCERTAINTY),
+        };
         // A lead further along than what it had, or a first one.
         let better = aware
             .last_known
-            .is_none_or(|lk| lk.distance(lead.at) > 1.0 || aware.uncertainty > TRAIL_UNCERTAINTY);
+            .is_none_or(|lk| lk.distance(guess) > 1.0 || aware.uncertainty > uncertainty);
         if !better {
             continue;
         }
-        aware.last_known = Some(lead.at);
-        aware.uncertainty = TRAIL_UNCERTAINTY;
+        aware.last_known = Some(guess);
+        aware.uncertainty = uncertainty;
         aware.suspicion = aware.suspicion.max(TRAIL_SUSPICION);
         aware.news = true;
         if aware.target.is_none() {

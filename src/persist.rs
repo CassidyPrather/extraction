@@ -556,6 +556,7 @@ pub(crate) fn restore_item(world: &mut World, saved: &SavedItem, at: Transform) 
         f.mode = g.mode.min(f.def.modes.len().saturating_sub(1));
         f.condition = g.condition;
         f.fouling = g.fouling;
+        f.grime = g.grime;
     }
     for inner in &saved.inserted {
         let Some(m) = restore_item(world, inner, at) else {
@@ -893,6 +894,10 @@ fn apply_restore(world: &mut World) {
         for w in &save.zone.wrecks {
             crate::robots::heavy::restore_wreck(world, w);
         }
+        world.insert_resource(crate::robots::memory::ZoneMind {
+            memory: save.zone.memory.clone().unwrap_or_default(),
+            ..default()
+        });
         for r in &save.zone.remains {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
@@ -958,6 +963,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
             mode: f.mode,
             condition: f.condition,
             fouling: f.fouling,
+            grime: f.grime,
             internal_loads: f.internal_loads.clone(),
             chamber_loads: f.chamber_loads.clone(),
         });
@@ -1200,6 +1206,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
         }
     }
     save.zone.wrecks = crate::robots::heavy::save_wrecks(world);
+    save.zone.memory = world
+        .get_resource::<crate::robots::memory::ZoneMind>()
+        .map(|m| m.memory.clone())
+        .filter(|m| !m.is_blank());
     save.loadout = loadout;
     save
 }
@@ -1251,6 +1261,7 @@ fn relocate(world: &mut World) {
         return;
     };
     if let Some(path) = world.resource::<SaveSlot>().0.clone() {
+        finish_zone_reset(world);
         let save = snapshot(world);
         if let Some(mut career) = world.get_resource_mut::<CareerState>() {
             career.0.store(&save);
@@ -1273,6 +1284,19 @@ fn save_on_request_or_exit(world: &mut World) {
     if !asked && !exiting {
         return;
     }
+    // A reset under way at base: never save the Zone half-swept. Leaving,
+    // finish it first (a hitch on the way out costs nothing); otherwise
+    // its last step asks for the save.
+    if world.contains_resource::<ZoneReset>() {
+        if !exiting {
+            return;
+        }
+        finish_zone_reset(world);
+        world
+            .resource_mut::<Messages<SaveNow>>()
+            .drain()
+            .for_each(drop);
+    }
     let Some(path) = world.resource::<SaveSlot>().0.clone() else {
         return;
     };
@@ -1289,6 +1313,11 @@ fn save_on_request_or_exit(world: &mut World) {
 /// Back at base after the Surge has been through: the Zone resets. Loose
 /// items and remains are gone, fresh loot is rolled, the clock restarts.
 fn surge_reset_at_base(world: &mut World) {
+    // Under way: a step a frame (`ZoneReset`).
+    if world.contains_resource::<ZoneReset>() {
+        step_zone_reset(world);
+        return;
+    }
     let due = {
         let raid = world.resource::<Raid>();
         raid.phase == Phase::AtBase && raid.surge_in() <= 0.0
@@ -1296,12 +1325,112 @@ fn surge_reset_at_base(world: &mut World) {
     if !due {
         return;
     }
-    reset_zone(world);
+    let loose = loose_items(world);
+    world.insert_resource(ZoneReset {
+        step: 0,
+        loose,
+        gone: 0,
+    });
+    step_zone_reset(world);
 }
 
-/// Wipes and re-rolls the Zone. Also used when you sleep through a Surge.
-pub fn reset_zone(world: &mut World) {
-    let loose: Vec<Entity> = world
+/// A Surge reset at base, a step a frame: done at once it was one frame
+/// of 37 ms and more (the homecoming's hitch: the sweep 18, the mending 9,
+/// the loot 7, then the next frame setting up what came), a judder in the
+/// headset as the truck pulls in.
+#[derive(Resource)]
+struct ZoneReset {
+    step: u32,
+    loose: Vec<Entity>,
+    gone: usize,
+}
+
+/// Runs a reset under way to its end now.
+fn finish_zone_reset(world: &mut World) {
+    for _ in 0..100_000 {
+        if !world.contains_resource::<ZoneReset>() {
+            return;
+        }
+        step_zone_reset(world);
+    }
+}
+
+/// Loose items swept a frame (and fresh loot let fall).
+const SWEEP_PER_FRAME: usize = 40;
+
+fn step_zone_reset(world: &mut World) {
+    let Some(mut r) = world.remove_resource::<ZoneReset>() else {
+        return;
+    };
+    match r.step {
+        0 => {
+            let take = r.loose.len().min(SWEEP_PER_FRAME);
+            for e in r.loose.drain(..take) {
+                if let Ok(e) = world.get_entity_mut(e) {
+                    e.despawn();
+                    r.gone += 1;
+                }
+            }
+            if r.loose.is_empty() {
+                r.step = 1;
+            }
+        }
+        1 => {
+            r.gone += sweep_remains_and_wrecks(world);
+            new_cycle(world);
+            r.step = 2;
+        }
+        2 => {
+            crate::destruction::surge(world);
+            r.step = 3;
+        }
+        3 => {
+            crate::anomaly::spawn_cycle_anomalies(world);
+            r.step = 4;
+        }
+        4 => {
+            // Rolled at rest, let fall a few at a time: hundreds of new
+            // bodies settling at once was the next judder (the swept
+            // collision pass 19 ms).
+            let before: std::collections::HashSet<Entity> = world
+                .query_filtered::<Entity, With<Item>>()
+                .iter(world)
+                .collect();
+            crate::items::loot::roll_zone_loot(world);
+            let fresh: Vec<Entity> = world
+                .query_filtered::<(Entity, &RigidBody), With<Item>>()
+                .iter(world)
+                .filter(|(e, b)| !before.contains(e) && **b == RigidBody::Dynamic)
+                .map(|(e, _)| e)
+                .collect();
+            for e in &fresh {
+                world.entity_mut(*e).insert(RigidBody::Static);
+            }
+            r.loose = fresh;
+            r.step = 5;
+        }
+        5 => {
+            let take = r.loose.len().min(SWEEP_PER_FRAME);
+            for e in r.loose.drain(..take) {
+                if let Ok(mut e) = world.get_entity_mut(e) {
+                    e.insert(RigidBody::Dynamic);
+                }
+            }
+            if r.loose.is_empty() {
+                r.step = 6;
+            }
+        }
+        _ => {
+            finish_reset(world, r.gone);
+            return;
+        }
+    }
+    world.insert_resource(r);
+}
+
+/// Loose items: lying in the Zone, not in a bag, a socket or a hand.
+fn loose_items(world: &mut World) -> Vec<Entity> {
+    world
         .query_filtered::<Entity, (
             With<Item>,
             Without<InBackpack>,
@@ -1309,37 +1438,58 @@ pub fn reset_zone(world: &mut World) {
             Without<Held>,
         )>()
         .iter(world)
-        .collect();
+        .collect()
+}
+
+/// The dead's bags and the robots' wrecks; how many items went with them.
+fn sweep_remains_and_wrecks(world: &mut World) -> usize {
     let bags: Vec<(Entity, Vec<Entity>)> = world
         .query_filtered::<(Entity, &Backpack), With<Remains>>()
         .iter(world)
         .map(|(e, b)| (e, b.contents.clone()))
         .collect();
     let mut gone = 0;
-    for e in loose {
-        // Magazines in loose guns go with their gun (despawn is recursive).
-        world.despawn(e);
-        gone += 1;
-    }
     for (bag, contents) in bags {
         gone += contents.len();
         world.despawn(bag);
     }
     crate::robots::heavy::clear_wrecks(world);
     crate::robots::wreck::clear_wrecks(world);
-    let cycle = {
-        let mut raid = world.resource_mut::<Raid>();
-        raid.cycle += 1;
-        raid.clock = 0.0;
-        raid.say("The Surge has passed. The Zone is different now.");
-        raid.cycle
-    };
+    gone
+}
+
+fn new_cycle(world: &mut World) {
+    let mut raid = world.resource_mut::<Raid>();
+    raid.cycle += 1;
+    raid.clock = 0.0;
+    raid.say("The Surge has passed. The Zone is different now.");
+}
+
+fn finish_reset(world: &mut World, gone: usize) {
+    crate::progression::safehouse::relay_leftovers(world);
+    let cycle = world.resource::<Raid>().cycle;
+    info!("Surge reset: cycle {cycle}, {gone} items swept away");
+    world.write_message(SaveNow);
+}
+
+/// Wipes and re-rolls the Zone, all at once. Also used when you sleep
+/// through a Surge (at base the reset goes a step a frame instead,
+/// `surge_reset_at_base`).
+pub fn reset_zone(world: &mut World) {
+    let mut gone = 0;
+    for e in loose_items(world) {
+        // Magazines in loose guns go with their gun (despawn is recursive).
+        if let Ok(e) = world.get_entity_mut(e) {
+            e.despawn();
+            gone += 1;
+        }
+    }
+    gone += sweep_remains_and_wrecks(world);
+    new_cycle(world);
     crate::destruction::surge(world);
     crate::anomaly::spawn_cycle_anomalies(world);
     crate::items::loot::roll_zone_loot(world);
-    crate::progression::safehouse::relay_leftovers(world);
-    info!("Surge reset: cycle {cycle}, {gone} items swept away");
-    world.write_message(SaveNow);
+    finish_reset(world, gone);
 }
 
 #[cfg(test)]
@@ -1360,6 +1510,22 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Runs a Surge reset at base through (a step a frame, `ZoneReset`).
+    fn through_the_reset(app: &mut App) {
+        app.update();
+        for _ in 0..200 {
+            if !app.world().contains_resource::<ZoneReset>() {
+                break;
+            }
+            app.update();
+        }
+        assert!(
+            !app.world().contains_resource::<ZoneReset>(),
+            "the reset finished"
+        );
+        app.update();
     }
 
     fn count<F: bevy::ecs::query::QueryFilter>(world: &mut World) -> usize {
@@ -1446,6 +1612,46 @@ mod tests {
         b.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
         let save = snapshot(b.world_mut());
         assert!(save.zone.raid.is_none());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// What the valley remembers of you is saved with it and back next
+    /// time; a valley that remembers nothing saves nothing.
+    #[test]
+    fn the_zone_remembers_you_across_saves() {
+        use extraction_core::zone_memory::RaidTrace;
+        let path = temp_save("memory.ron");
+        let mut a = app_with_save(&path);
+        assert!(
+            snapshot(a.world_mut()).zone.memory.is_none(),
+            "a fresh valley remembers nothing"
+        );
+        let mut t = RaidTrace::default();
+        t.walked(120.0, -40.0);
+        t.kills.push(([150.0, -60.0], "Walker".into()));
+        t.rv = Some([300.0, 10.0]);
+        a.world_mut()
+            .resource_mut::<crate::robots::memory::ZoneMind>()
+            .memory
+            .fold(&t);
+        let remembered = a
+            .world()
+            .resource::<crate::robots::memory::ZoneMind>()
+            .memory
+            .clone();
+        let save = snapshot(a.world_mut());
+        assert_eq!(save.zone.memory.as_ref(), Some(&remembered));
+        let mut career = a.world().resource::<CareerState>().0.clone();
+        career.store(&save);
+        write_career(&path, &career);
+        let b = app_with_save(&path);
+        assert_eq!(
+            b.world()
+                .resource::<crate::robots::memory::ZoneMind>()
+                .memory,
+            remembered,
+            "back as it was"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1727,10 +1933,46 @@ mod tests {
         assert_eq!((again[0].plates, again[0].cell), (w.plates, w.cell));
         // The Surge takes it.
         b.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
-        b.update();
-        b.update();
+        through_the_reset(&mut b);
         let left = b.world_mut().query::<&Heavy>().iter(b.world()).count();
         assert_eq!(left, 0, "swept away");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Quitting while the reset at base is under way finishes it before
+    /// saving: the save has the new cycle and the fresh loot, never a
+    /// Zone half-swept. A save asked for mid-reset waits for its end.
+    #[test]
+    fn quitting_mid_reset_saves_it_finished() {
+        let path = temp_save("surge_quit.ron");
+        let mut a = app_with_save(&path);
+        a.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
+        // Started, not finished (a step a frame).
+        a.update();
+        assert!(a.world().contains_resource::<ZoneReset>(), "under way");
+        a.world_mut().write_message(SaveNow);
+        a.update();
+        assert!(
+            a.world().contains_resource::<ZoneReset>(),
+            "a save asked for mid-reset doesn't hurry it"
+        );
+        a.world_mut().write_message(AppExit::Success);
+        a.update();
+        assert!(
+            !a.world().contains_resource::<ZoneReset>(),
+            "finished to leave"
+        );
+        drop(a);
+        let mut b = app_with_save(&path);
+        let raid = b.world().resource::<Raid>();
+        assert_eq!(raid.cycle, 1, "the save has the new cycle");
+        let loose = count::<(
+            With<Item>,
+            Without<InBackpack>,
+            Without<InSocket>,
+            Without<Held>,
+        )>(b.world_mut());
+        assert!(loose > 20, "and the fresh loot ({loose} loose)");
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1749,7 +1991,7 @@ mod tests {
         let before = loose(a.world_mut());
         assert!(before > 20, "the Zone has loot");
         a.world_mut().resource_mut::<Raid>().clock = SURGE_AFTER + 1.0;
-        a.update();
+        through_the_reset(&mut a);
         let raid = a.world().resource::<Raid>();
         assert_eq!(raid.cycle, 1);
         assert_eq!(raid.clock, 0.0);

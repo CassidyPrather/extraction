@@ -94,6 +94,8 @@ pub const EXPEDITION_NO_NIGHT: &str =
     "Driver: \"That's not two days. Sleep out there, then bring it.\"";
 pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. The table.\"";
 
+pub const FETCH_WORN: &str = "Driver: \"That one's shot through. I want them whole.\"";
+
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
     format!("Driver: \"That's {have} of {n} {name}. In the stash, mind.\"")
 }
@@ -342,6 +344,7 @@ mod tests {
             NO_RECORDER.into(),
             NO_LETTER.into(),
             fetch_short(2, 3, name),
+            FETCH_WORN.into(),
             scout_not_seen(place),
             paid_nothing(&thanks(Some(place))),
             LETTER_HOME.into(),
