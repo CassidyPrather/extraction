@@ -7,11 +7,13 @@ scenarios; this page covers the slow half, run after each main push:
 - **smoke**: one sim raid per valley and seed from a copied `fast` binary,
   `SIM_NO_JOB=1 RUST_BACKTRACE=1 <bin> --sim-run smoke --map M --seed S
   --sim-out DIR --headless`, four at a time. Pass = exits 0 with no panic.
-- **suite**: `cargo test --workspace --no-fail-fast -j 4 -- --test-threads=4
-  --skip render::budget --skip render::legibility`, then those two groups
-  alone with `--test-threads=2`: they render in a debug build at about
-  4 fps and are load-sensitive by nature. All in one go, the suite takes
-  over an hour on four cores.
+- **suite**: `cargo test --workspace --no-fail-fast -j 4 -- --test-threads=4`
+  (~25 min since headless apps run single-threaded), timed with
+  `scripts/test_times.py` (fails a test past its budget).
+- **gauges**: `cargo test --lib -- --ignored gauge_` (Performance's render
+  gauges, one at a time; a failure there is Performance's).
+
+The tiers are in `docs/TESTING.md`.
 
 Never run sims and the suite at once, nor rebuild a binary sims are running
 from: the container runs out of memory.
@@ -20,7 +22,9 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
-| 8e63945 | 22:00 | next | rechecks: 5 of 8 pass | |
+| 4d45a5f | 03:40 | | 846 tests minus gauges in 24 min: 1 FAILED | single-threaded headless apps |
+| 24d1ef0 | 02:00 | | 842 of 861 timed, 0 FAILED; 2 h wall | the profile: render gauges 45% |
+| 8e63945 | 22:00 | 10/10 clean, 7 extracted | rechecks: 5 of 8 pass | sims 2-3x faster single-threaded |
 | eb0bcd4 | 20:00 | 11/11 clean: Marrow and Sallow seeds 1-4, Kettle, Cinder, Rime Fell seed 1; 7 extracted; stuck_block fired 3 times, no timeouts | 798 passed, 8 failed | |
 | bdb219a | 17:30 | | 781 passed, 10 failed (7 fixed by eb0bcd4) | |
 | 7505d1e | 16:50 | | stopped at 615/790: 6 FAILED | |
@@ -35,18 +39,18 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of 8e63945; det. = fails every time, alone too.
+As of 4d45a5f; det. = fails every time, alone too.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `robots::dirigible::tests::a_logistics_run_lands_a_full_pod` ("the pod came down") | det. | since 6599c83d (speed cap; per-robot loot seeds)? | Robot bodies | routed 22:00 |
-| `items::impacts::tests::a_thrown_can_draws_a_walker_to_look` ("the walker went to look") | det. | hearing change | Robot minds | routed 22:00 |
-| `soak::physics::heaps_settle` (heap at (-150, 25.8, 150) throws at 8.4 m/s; 7 still moving after 8 s) | det. (3/3 alone) | two new speed caps? catalog-order inputs? | Soak | routed 22:00 |
+| `robots::mind_tests::a_crawling_walker_doesnt_flank` | det. | 692def5a "WIP: knockdown-aware walker minds (not yet compiled or tested)" reached main | Robot minds | routed 03:40 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| the dirigible pod (a spotter counted against the director's budget, since bb5dbaf0), `heaps_settle` (a log pile taken for a floor), Rime Fell's bats and ducks | 24d1ef0 / 4d45a5f | Robot bodies, Soak, Wildlife |
+| the suite took ~2 h at 4 threads | this branch (single-threaded headless apps) + Performance's gauge tier | Verifier, Performance |
 | Rime Fell bats and ducks (no water birds above the snow line; the tarn is too small for a raft), Soak's launch test (an item down a site is fine), drone chirp, thrown bolt | 8e63945 | Wildlife, Soak, Robot minds |
 | underground ×5 on Rime Fell (no site), sentry `a_heavy_walks_into_its_fire` (the assert reads backwards: it fails when the sentry never fires), save fuzz's misfit magazine | eb0bcd4 | Underground, Heavy, Soak |
 | sims not reproducible from their seed | f1c4fd4 (single-threaded sims) | Verifier |
