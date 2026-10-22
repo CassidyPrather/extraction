@@ -3030,8 +3030,24 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
                 .map(|e| plan.world2(*e))
                 .unwrap_or(site.at)
         }
+        // Its edge on this side: its middle is no place to walk to (the
+        // grid keeps out of it).
+        SiteKind::Anomaly => {
+            let rad = anomaly_radius(scene, site.at);
+            site.at + (pos.xz() - site.at).normalize_or(Vec2::X) * (rad + 2.5)
+        }
         _ => site.at,
     }
+}
+
+/// The radius of the anomaly standing at `at` (a standing one's marker),
+/// or a typical one's if none is there.
+fn anomaly_radius(scene: &Scene, at: Vec2) -> f32 {
+    scene
+        .anomalies
+        .iter()
+        .find(|(_, _, gt)| gt.translation().xz().distance(at) < 3.0)
+        .map_or(3.0, |(_, a, _)| a.radius)
 }
 
 /// Vents opened (site, vent): their zones' cells walked again in those
@@ -3197,8 +3213,7 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
     let within = match r.sites[s].kind {
         SiteKind::Building(_) => 0.6,
         SiteKind::Field => 8.0,
-        // Its edge, from where the stone is seen (or isn't).
-        SiteKind::Anomaly => 5.0,
+        SiteKind::Anomaly => 1.5,
         _ => 2.0,
     };
     travel(&r.grid, pos.xz(), to, within)
@@ -3211,7 +3226,8 @@ fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
             r.plans[b].in_grid(pos) && site_target(r, scene, s, pos).distance(pos.xz()) < 3.0
         }
         SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
-        SiteKind::Anomaly => site.at.distance(pos.xz()) < 8.0,
+        // At its edge, from where the stone is seen (or isn't).
+        SiteKind::Anomaly => site.at.distance(pos.xz()) < anomaly_radius(scene, site.at) + 4.0,
         _ => site.at.distance(pos.xz()) < 6.0,
     }
 }
@@ -3689,7 +3705,7 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         }
         SiteKind::Spot => at.xz().distance(site.at) < 5.0,
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
-        SiteKind::Anomaly => at.xz().distance(site.at) < 6.0,
+        SiteKind::Anomaly => at.xz().distance(site.at) < 4.5,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
     }
 }
