@@ -120,6 +120,14 @@ What changed, and worth a comment each:
   stronger. A fast slap makes a sound; a slow touch doesn't. The bolt
   slamming home, a magazine seating and a round chambering each feel
   different now. Say if any two materials feel the same to you.
+- **Hand to hand.** Swing the crowbar hard into a machine and it dents
+  it (a tap does nothing; the eye and the legs give most). Shove a small
+  drone or a crawler with an open palm and it's knocked back, a crawler
+  off its feet if you put your weight in it. Close your hand on a
+  drone's frame and you hold it there, fighting you; close it on a
+  crawler's leg and yank, and you wrench it over. Your hands stop on a
+  machine rather than going through it, and you feel them meet it. Say
+  if a hit you meant didn't land, or one you didn't mean did.
 - **Heavy things.** A car door, a bus panel, a wheel, a heavy's claw:
   take it by both ends and lift it. It's heavy: it swings on when you
   stop and comes round late when you turn, and you walk slower and can't

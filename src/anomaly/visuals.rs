@@ -173,6 +173,10 @@ pub struct HazeParams {
     /// the disc, z: seconds between glints, w: this one's beat (set from
     /// where it stands).
     pub glow: Vec4,
+    /// x: a step its rim takes away from what's behind, darker over light
+    /// and lighter over dark (it shows on snow, in fog and at night), y: 1
+    /// for a glint that does the same.
+    pub edge: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -678,6 +682,7 @@ fn dress_anomalies(
                         // shows through fog where its leaves don't.
                         drain: Vec4::new(0.0, 0.22, 0.0, 0.0),
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -699,6 +704,7 @@ fn dress_anomalies(
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
                         drain: Vec4::ZERO,
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -717,6 +723,7 @@ fn dress_anomalies(
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
                         drain: Vec4::ZERO,
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -743,6 +750,7 @@ fn dress_anomalies(
                         // dims, which a grey fog can't hide.
                         drain: Vec4::new(0.3, 0.4, 0.0, 0.0),
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -763,6 +771,10 @@ fn dress_anomalies(
                         // A glint crossing it every few seconds: motion,
                         // seen from the side of the eye, in any weather.
                         glow: Vec4::new(0.0, 0.9, 4.0, 0.0),
+                        // And always a faint rim set off from what's behind,
+                        // which shows on snow and at night where light added
+                        // doesn't.
+                        edge: Vec4::new(0.2, 1.0, 0.0, 0.0),
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
                     0.0,
@@ -788,6 +800,7 @@ fn dress_anomalies(
                         // In the dark there's nothing to brighten: its rim
                         // glows faintly of itself.
                         glow: Vec4::new(0.12, 0.0, 0.0, 0.0),
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,

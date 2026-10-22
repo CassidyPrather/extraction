@@ -37,6 +37,10 @@ struct Haze {
     // with it), y: a glint sweeping across the disc now and then (a mirror),
     // z: seconds between glints, w: this one's beat (0..1, from its spot).
     glow: vec4<f32>,
+    // x: a step its rim takes away from what's behind (darker over light:
+    // snow, fog; lighter over dark: night), y: the glint too, rather than
+    // adding light.
+    edge: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> haze: Haze;
@@ -171,6 +175,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let breathe = 0.65 + 0.35 * sin(t * haze.drain.w);
     behind *= 1.0 + haze.drain.z * band * breathe;
     behind += vec3<f32>(haze.glow.x * band * breathe);
+    // An edge that shows on any ground: darker where what's behind is
+    // light (snow, fog), lighter where it's dark (night), by a fixed step.
+    let away = select(-1.0, 1.0, grey < 0.5);
+    behind = max(behind + vec3<f32>(away * haze.edge.x * band), vec3<f32>(0.0));
     // A glint: a bright bar crossing the disc in the first third of each
     // period, then gone (each anomaly on its own beat).
     if (haze.glow.y > 0.0) {
@@ -178,7 +186,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let at = -1.6 + 3.2 * clamp(phase * 3.0, 0.0, 1.0);
         let across = (q.x + q.y) * 0.7071 - at;
         let bar = exp(-(across * across) / 0.0225);
-        behind += vec3<f32>(haze.glow.y * bar * (1.0 - smoothstep(0.8, 0.95, length(q))));
+        let lit = bar * (1.0 - smoothstep(0.8, 0.95, length(q)));
+        if (haze.edge.y > 0.5) {
+            let away_g = select(-1.0, 1.0, grey < 0.5);
+            behind = max(behind + vec3<f32>(away_g * haze.glow.y * 0.5 * lit), vec3<f32>(0.0));
+        } else {
+            behind += vec3<f32>(haze.glow.y * lit);
+        }
     }
     // The heart's glow: a soft spot, never the card's outline.
     let glow = haze.tint.a * pow(max(0.0, 1.0 - length(q)), 3.0) * select(1.0, 0.0, mode == 2);

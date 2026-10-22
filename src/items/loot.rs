@@ -53,6 +53,24 @@ fn spawn_zone_loot(world: &mut World) {
 
 /// Rolls every loot marker and building loot spot for the current cycle.
 pub fn roll_zone_loot(world: &mut World) {
+    for i in 0..ROLL_STEPS {
+        roll_zone_loot_step(world, i);
+    }
+}
+
+/// The roll's parts, for doing it over several frames (the Surge's reset
+/// at base, `persist::ZoneReset`: at once it was a frame's 7 ms and the
+/// next frame's setting up of all that came). The same seed and order,
+/// so the same loot.
+pub const ROLL_STEPS: usize = 5;
+
+/// One part of `roll_zone_loot`: the markers' loot, the scenes' things,
+/// the buildings' loot, the tapes, the artifacts.
+pub fn roll_zone_loot_step(world: &mut World, step: usize) {
+    if step == 4 {
+        crate::anomaly::roll_artifacts(world);
+        return;
+    }
     let opts = world.resource::<LaunchOptions>().clone();
     let cycle = world.resource::<crate::raid::Raid>().cycle;
     let seed = cycle_seed(&opts, cycle);
@@ -61,24 +79,26 @@ pub fn roll_zone_loot(world: &mut World) {
         let zone = world.resource::<Zone>();
         let loot = world.resource::<Loot>();
         let catalog = world.resource::<Catalog>();
-        let spots = world.get_resource::<crate::world::buildings::BuildingLoot>();
         let mut commands =
             Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
-        spawn_marker_loot(&mut commands, zone, loot, catalog, seed);
-        crate::world::scenes::spawn_things(
-            &mut commands,
-            &opts.map,
-            zone,
-            catalog,
-            crate::world::scenes::gates(world, &opts.map),
-        );
-        if let Some(spots) = spots {
-            spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
+        match step {
+            0 => spawn_marker_loot(&mut commands, zone, loot, catalog, seed),
+            1 => crate::world::scenes::spawn_things(
+                &mut commands,
+                &opts.map,
+                zone,
+                catalog,
+                crate::world::scenes::gates(world, &opts.map),
+            ),
+            2 => {
+                if let Some(spots) = world.get_resource::<crate::world::buildings::BuildingLoot>() {
+                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
+                }
+            }
+            _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map),
         }
-        crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map);
     }
     queue.apply(world);
-    crate::anomaly::roll_artifacts(world);
 }
 fn load_tables(mut commands: Commands, catalog: Res<Catalog>) {
     let path = crate::asset_root_path().join("data/loot.ron");
