@@ -448,6 +448,19 @@ mod tests {
                 seed: 7,
             });
             let hits = hits_over(&mut r.vr, 10);
+            let w = r.vr.app.world();
+            eprintln!(
+                "DBG door {:?}",
+                w.get::<GlobalTransform>(door).map(|g| g.translation())
+            );
+            for h in &hits {
+                eprintln!(
+                    "DBG hit {:?} {:?} {:?}",
+                    w.get::<Name>(h.entity),
+                    h.point,
+                    h.damage
+                );
+            }
             let on_door = hits.iter().any(|h| h.entity == door);
             let on_body = hits.iter().any(|h| body.contains(&h.entity));
             (on_door, on_body)
@@ -515,6 +528,16 @@ mod tests {
                         .read(r.vr.app.world().resource::<Messages<Hit>>())
                         .cloned(),
                 );
+            }
+            {
+                let w = r.vr.app.world();
+                eprintln!(
+                    "DBG fwd {fwd:?} at {at:?} drone {:?}",
+                    w.get::<GlobalTransform>(drone).map(|g| g.translation())
+                );
+                for h in &hits {
+                    eprintln!("DBG hit {:?} {:?}", w.get::<Name>(h.entity), h.point);
+                }
             }
             let mut parts = r.vr.app.world_mut().query::<&crate::robots::RobotPart>();
             let on_drone = hits.iter().any(|h| {
