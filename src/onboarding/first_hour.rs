@@ -370,6 +370,53 @@ enum Leg {
     Done,
 }
 
+/// `--job KIND`: the career's job, so a kind that seldom comes up on the
+/// ladder runs live (the place it's put is the game's own).
+pub fn seeded_job(kind: &str) -> Option<Job> {
+    let map = "marrow_creek".to_owned();
+    Some(match kind {
+        "recover" => Job::Recover {
+            map,
+            region: "Village".into(),
+            at: None,
+            place: None,
+            overnight: false,
+        },
+        "letter" => Job::Letter,
+        "ledger" => Job::Ledger,
+        "photograph" => Job::Photograph {
+            subject: Subject::Walker,
+            taken: false,
+        },
+        "fetch" => Job::Fetch {
+            item: "canned_stew".into(),
+            n: 2,
+        },
+        _ => return None,
+    })
+}
+
+pub(super) fn seed_job(
+    opts: Res<LaunchOptions>,
+    progression: Option<ResMut<crate::progression::Progression>>,
+    mut done: Local<bool>,
+) {
+    let (Some(kind), Some(mut progression)) = (opts.job.as_deref(), progression) else {
+        return;
+    };
+    if *done || opts.scenario.as_deref() != Some(RAID) {
+        return;
+    }
+    *done = true;
+    match seeded_job(kind) {
+        Some(job) => {
+            info!("first raid: seeded job {job:?}");
+            progression.0.job = Some(job);
+        }
+        None => warn!("--job {kind}: not a kind I can seed"),
+    }
+}
+
 /// What a job asks of a newcomer, the way one goes about it. Every kind of
 /// job has one (`every_job_kind_has_a_way`): the first-hour record never
 /// stops at a job the newcomer can't do.
@@ -830,7 +877,7 @@ pub(super) fn direct_raid(
                 "camp: \"Your kit is in the crate in the truck\"",
             );
             // Round to the tailgate and up into the bed.
-            tasks.extend(world.legs(here, at_truck(0.0, 4.0)));
+            tasks.extend(route(&world, &view, here, at_truck(0.0, 4.0)));
             for (x, z) in [(0.05, 0.3), (-0.2, -0.6)] {
                 tasks.push(Task::WalkTo {
                     to: at_truck(x, z),
@@ -972,7 +1019,7 @@ pub(super) fn direct_raid(
                         format!("the job card: {}", text.replace('\n', " ")),
                     );
                     state.goal = None;
-                    tasks.extend(world.legs(here, at_truck(0.0, 4.0)));
+                    tasks.extend(route(&world, &view, here, at_truck(0.0, 4.0)));
                     state.leg = Leg::Place;
                 }
                 None => {
@@ -1010,7 +1057,7 @@ pub(super) fn direct_raid(
                     .find(|m| m.kind == MarkerKind::Insertion)
                     .map(|m| Vec2::from(m.at))
                 {
-                    tasks.extend(world.legs(from, drop));
+                    tasks.extend(route(&world, &view, from, drop));
                     from = drop;
                 }
             }
@@ -1023,10 +1070,10 @@ pub(super) fn direct_raid(
                 let side = if side.dot(-from) >= 0.0 { side } else { -side };
                 let wrong = from + side * 70.0;
                 state.note(now, Kind::Confused, "set off the wrong way");
-                tasks.extend(world.legs(from, wrong));
+                tasks.extend(route(&world, &view, from, wrong));
                 from = wrong;
             }
-            tasks.extend(world.legs(from, at));
+            tasks.extend(route(&world, &view, from, at));
             state.note(now, Kind::Learned, format!("on to {name}"));
             state.leg = Leg::Place;
         }
@@ -1074,7 +1121,7 @@ pub(super) fn direct_raid(
             } else if close || state.tries >= 3 {
                 // There, but not noted: about the place's middle.
                 if let Some((_, g)) = state.goal.clone() {
-                    tasks.extend(world.legs(here, g));
+                    tasks.extend(route(&world, &view, here, g));
                     tasks.push(Task::Wait(3.0));
                 }
                 state.tries += 1;
@@ -1084,7 +1131,7 @@ pub(super) fn direct_raid(
                     state.tries = 0;
                 }
             } else if let Some((_, g)) = state.goal.clone() {
-                tasks.extend(world.legs(here, g));
+                tasks.extend(route(&world, &view, here, g));
                 state.tries += 1;
             }
         }
@@ -1105,7 +1152,7 @@ pub(super) fn direct_raid(
                 state.at_gate = true;
                 if drop.distance(here) > 20.0 {
                     state.note(now, Kind::Learned, "back to the gate, as the card said");
-                    tasks.extend(world.legs(here, drop));
+                    tasks.extend(route(&world, &view, here, drop));
                     let idle = bot.tasks.pop_back();
                     bot.tasks.extend(tasks);
                     bot.tasks.extend(idle);
@@ -1123,7 +1170,7 @@ pub(super) fn direct_raid(
             } else if raid.phase == Phase::AtBase {
                 // Still by the truck: out first (the radio's for the Zone).
                 let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
-                tasks.extend(world.legs(here, away));
+                tasks.extend(route(&world, &view, here, away));
             } else if let Phase::TruckCalled { .. } | Phase::TruckWaiting { .. } = raid.phase {
                 // What it said: a name, maybe a way.
                 // The truck's last word on where.
@@ -1167,7 +1214,7 @@ pub(super) fn direct_raid(
                 if let Some(rv) = rv {
                     // Near it, to wait: not on the spot itself.
                     let near = rv + (here - rv).normalize_or(Vec2::Y) * 8.0;
-                    tasks.extend(world.legs(here, near));
+                    tasks.extend(route(&world, &view, here, near));
                 }
                 state.leg = Leg::Rendezvous;
             } else if world.radio_in_hand() {
@@ -1539,6 +1586,114 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
+/// Clear of walls round a building's box, m: a body (0.28) and a stride.
+const ROUND: f32 = 2.0;
+
+/// From `from` to `to` on foot, round any building in the way (the
+/// straight line through the village went into a house wall and stayed
+/// there): the waypoints after `from`.
+fn round_buildings(view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
+    let Some(en) = view.entrances.as_deref() else {
+        return vec![to];
+    };
+    let mut points = vec![to];
+    let mut at = from;
+    let mut out = vec![];
+    // A few detours at most; each from where the last left off.
+    for _ in 0..6 {
+        let Some(&next) = points.last() else {
+            break;
+        };
+        // The first box this stretch goes through, nearest along it.
+        let hit = en
+            .shells
+            .iter()
+            .filter_map(|s| {
+                let inv = s.xf.compute_affine().inverse();
+                let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                let b = inv.transform_point3(Vec3::new(next.x, 0.0, next.y)).xz();
+                let half = s.half + Vec2::splat(ROUND * 0.5);
+                segment_hits_box(a, b, half).map(|t| (t, s))
+            })
+            .filter(|(t, _)| *t > 0.0)
+            .min_by(|x, y| x.0.total_cmp(&y.0));
+        let Some((_, s)) = hit else {
+            out.push(points.pop().unwrap_or(next));
+            at = *out.last().unwrap_or(&next);
+            if points.is_empty() {
+                break;
+            }
+            continue;
+        };
+        // Round its nearer side: the two corners on that side, out by
+        // `ROUND`.
+        let xf = s.xf.compute_affine();
+        let inv = xf.inverse();
+        let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+        let b = inv.transform_point3(Vec3::new(next.x, 0.0, next.y)).xz();
+        let h = s.half + Vec2::splat(ROUND);
+        let dir = (b - a).normalize_or(Vec2::X);
+        let side = if dir.perp().dot(-a) > 0.0 { -1.0 } else { 1.0 };
+        // Corners in order along the way, on the chosen side.
+        let mut corners: Vec<Vec2> = [
+            Vec2::new(-h.x, -h.y),
+            Vec2::new(h.x, -h.y),
+            Vec2::new(h.x, h.y),
+            Vec2::new(-h.x, h.y),
+        ]
+        .into_iter()
+        .filter(|c| dir.perp().dot(*c) * side >= 0.0)
+        .collect();
+        corners.sort_by(|p, q| dir.dot(*p).total_cmp(&dir.dot(*q)));
+        let world_pts: Vec<Vec2> = corners
+            .into_iter()
+            .map(|c| xf.transform_point3(Vec3::new(c.x, 0.0, c.y)).xz())
+            .collect();
+        // Next go to them in order, then on to where it was going.
+        for p in world_pts.into_iter().rev() {
+            points.push(p);
+        }
+    }
+    out.extend(points.into_iter().rev());
+    out
+}
+
+/// Where along a→b (0..1) it first enters the box |x| < half, if it does.
+fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
+    let d = b - a;
+    let (mut t0, mut t1) = (0.0f32, 1.0f32);
+    for i in 0..2 {
+        let (p, v, h) = (a[i], d[i], half[i]);
+        if v.abs() < 1e-6 {
+            if p.abs() > h {
+                return None;
+            }
+        } else {
+            let (mut lo, mut hi) = ((-h - p) / v, (h - p) / v);
+            if lo > hi {
+                std::mem::swap(&mut lo, &mut hi);
+            }
+            t0 = t0.max(lo);
+            t1 = t1.min(hi);
+            if t0 > t1 {
+                return None;
+            }
+        }
+    }
+    Some(t0)
+}
+
+/// `legs`, round the buildings in the way.
+fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+    let mut at = from;
+    let mut t = vec![];
+    for p in round_buildings(view, from, to) {
+        t.extend(world.legs(at, p));
+        at = p;
+    }
+    t
+}
+
 /// What the newcomer carries that `want` stands for: in a hand, a pocket
 /// or the pack (not the stash crate).
 fn carried(world: &World2, view: &RaidView, player: Entity, want: &str) -> Vec<Entity> {
@@ -1622,12 +1777,12 @@ fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
             .copied()
     });
     let Some(d) = door else {
-        t.extend(world.legs(here, p.xz()));
+        t.extend(route(&world, &view, here, p.xz()));
         return t;
     };
     let out = d.out.xz().normalize_or(Vec2::Y);
     let front = d.mid.xz() + out * 1.3;
-    t.extend(world.legs(here, front));
+    t.extend(route(&world, &view, here, front));
     t.extend([
         Task::OpenDoor(d.door),
         Task::WalkTo {
@@ -1701,7 +1856,7 @@ fn errand_tasks(
             let Some(e) = carried(world, view, player, item).first().copied() else {
                 return Err(format!("no {name} on me to leave"));
             };
-            let mut t = world.legs(here, *at);
+            let mut t = route(&world, &view, here, *at);
             t.extend([
                 Task::Grab {
                     item: e,
@@ -1739,7 +1894,7 @@ fn errand_tasks(
             };
             // Near enough to fill the picture, not so near it shoots.
             let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
-            let mut t = world.legs(here, stand);
+            let mut t = route(&world, &view, here, stand);
             t.extend([
                 Task::Grab {
                     item: camera,
