@@ -293,24 +293,24 @@ fn turn_the_lamp(
         let Some(mut light) = light else {
             commands.entity(e).insert((
                 SpotLight {
-                    color: Color::srgb(1.0, 0.55, 0.1),
+                    color: Color::srgb(1.0, 0.38, 0.0),
                     intensity: 0.0,
-                    range: 14.0,
+                    range: 18.0,
                     outer_angle: 0.5,
                     inner_angle: 0.3,
                     shadow_maps_enabled: false,
                     ..default()
                 },
-                Mesh3d(meshes.add(Cylinder::new(0.09, 0.14))),
+                Mesh3d(meshes.add(Sphere::new(0.13))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgb(0.6, 0.35, 0.05),
-                    emissive: LinearRgba::rgb(2.0, 0.9, 0.1),
+                    emissive: LinearRgba::rgb(12.0, 4.0, 0.2),
                     ..default()
                 })),
             ));
             continue;
         };
-        light.intensity = if on { 60_000.0 } else { 0.0 };
+        light.intensity = if on { 400_000.0 } else { 0.0 };
         if on {
             let yaw = time.elapsed_secs() * 4.0;
             t.rotation = Quat::from_rotation_y(yaw) * Quat::from_rotation_x(-0.5);

@@ -29,7 +29,19 @@ impl Plugin for LivePlugin {
         app.init_resource::<Live>()
             .add_message::<Shocked>()
             .add_message::<Isolated>()
-            .add_systems(Update, (wire_live, pull_isolators, energise, shock).chain());
+            .init_resource::<crate::bot::Counters>()
+            .add_systems(
+                Update,
+                (
+                    wire_live,
+                    pull_isolators,
+                    energise,
+                    shock,
+                    stage_scenario,
+                    count_jolts,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -222,6 +234,122 @@ fn shock(
                 player: e,
                 at: gt.translation(),
             });
+        }
+    }
+}
+
+/// The scenario: in the service tunnel's cable vault, the bot throws its
+/// breaker (the overflow chamber's door opens, its water live), goes to
+/// the switch room's isolator, pulls it, and wades into the chamber
+/// unhurt (`live_isolated`, no `live_jolts`).
+pub const SCENARIO: &str = "live_water";
+/// Filled in by the setup: the way to the isolator, and into the chamber
+/// (walks there stand for the routes, doors and all).
+pub const TO_ISOLATOR: Vec2 = Vec2::new(-9004.0, 0.0);
+pub const INTO_IT: Vec2 = Vec2::new(-9004.0, 1.0);
+
+/// The scenario staged: the bot into the cable vault; its breaker, its
+/// isolator and its two routes filled in.
+#[allow(clippy::type_complexity)]
+fn stage_scenario(
+    mut setups: MessageReader<crate::bot::scenarios::Setup>,
+    buildings: Query<(Entity, &Building, &Transform)>,
+    leaves: Query<(Entity, &super::buildings::DoorLeaf, &ChildOf)>,
+    power: Query<&SitePower>,
+    isolators: Query<(Entity, &Isolator)>,
+    mut players: Query<
+        (&mut Transform, &mut crate::bot::Bot),
+        (With<crate::rig::LocalPlayer>, Without<Building>),
+    >,
+) {
+    for s in setups.read() {
+        if s.name != SCENARIO {
+            continue;
+        }
+        let Some((site, l, xf)) = buildings.iter().find_map(|(e, b, xf)| {
+            ug::layout(&b.prefab)
+                .filter(|l| l.live.is_some())
+                .map(|l| (e, l, *xf))
+        }) else {
+            error!("live water scenario: none on this map");
+            continue;
+        };
+        let (Ok(p), Some((iso, _))) = (
+            power.get(site),
+            isolators.iter().find(|(_, i)| i.site == site),
+        ) else {
+            continue;
+        };
+        let v = l.live.as_ref().unwrap();
+        let Some(stage) = v.stage(l) else {
+            continue;
+        };
+        let breaker = p.stages[stage].switch;
+        let room = |id: &str| l.rooms.iter().find(|r| r.id == id);
+        let (Some(vault), Some(switches), Some(live)) = (
+            l.power.get(stage).and_then(|p| room(&p.room)),
+            room(&v.isolator.0),
+            room(&v.room),
+        ) else {
+            continue;
+        };
+        let Some(plan) = crate::sim::indoor::plan_buildings(&buildings, &leaves)
+            .into_iter()
+            .find(|p| p.entity == site)
+        else {
+            continue;
+        };
+        let at =
+            |r: &ug::Room| xf.transform_point(Vec3::new(r.at[0], l.floor_of(r) + 0.05, r.at[1]));
+        let start = at(vault);
+        let iso_at = Vec2::from(switches.at) + Vec2::from(v.isolator.1) * 0.5;
+        let (Some(first), Some(second)) = (
+            crate::sim::raider::indoor_route(&plan, start, iso_at, 0.8),
+            crate::sim::raider::indoor_route(&plan, at(switches), live.at.into(), 1.0),
+        ) else {
+            error!("live water scenario: no way round");
+            continue;
+        };
+        for (mut t, mut bot) in &mut players {
+            t.translation = start;
+            let mut presses = [breaker, iso].into_iter();
+            let tasks: Vec<crate::bot::Task> = bot.tasks.drain(..).collect();
+            for task in tasks {
+                match task {
+                    crate::bot::Task::WalkTo { to, .. } if to == TO_ISOLATOR => {
+                        bot.tasks.extend(first.iter().cloned());
+                    }
+                    crate::bot::Task::WalkTo { to, .. } if to == INTO_IT => {
+                        bot.tasks.extend(second.iter().cloned());
+                    }
+                    crate::bot::Task::Press(e) if e == Entity::PLACEHOLDER => {
+                        let e = presses.next().unwrap_or(Entity::PLACEHOLDER);
+                        bot.tasks.push_back(crate::bot::Task::Press(e));
+                    }
+                    other => bot.tasks.push_back(other),
+                }
+            }
+        }
+        info!(
+            "scenario: live water, {} and {} steps",
+            first.len(),
+            second.len()
+        );
+    }
+}
+
+/// Counts the isolators pulled and the jolts taken.
+fn count_jolts(
+    mut shocked: MessageReader<Shocked>,
+    mut isolated: MessageReader<Isolated>,
+    mut counters: ResMut<crate::bot::Counters>,
+) {
+    for _ in shocked.read() {
+        counters.bump("live_jolts");
+    }
+    for i in isolated.read() {
+        if i.cut {
+            counters.bump("live_isolated");
         }
     }
 }
