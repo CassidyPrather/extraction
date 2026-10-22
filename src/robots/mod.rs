@@ -497,12 +497,9 @@ pub fn part_salvage(
     match kind {
         RobotKind::Walker if crawler => tries(1, 0.5, "crawler_capacitor", rng),
         RobotKind::Walker if hound => Vec::new(),
-        RobotKind::Walker => tries(
-            count(|r| matches!(r, PartRole::Leg(_))),
-            0.3,
-            "walker_leg_actuator",
-            rng,
-        ),
+        // A walker's servo packs are bolted on its wreck, taken off by hand
+        // (`salvage`), not dropped.
+        RobotKind::Walker => Vec::new(),
         RobotKind::Drone => tries(
             count(|r| matches!(r, PartRole::Rotor(_))),
             0.35,
@@ -623,22 +620,26 @@ mod tests {
     }
 
     /// Whole parts give up their own salvage: never more than two of a
-    /// kind, nothing from parts that are gone, nothing from a hound, and
-    /// every id is a real item.
+    /// kind, nothing from parts that are gone, nothing from a hound (and
+    /// nothing loose from a walker: its are on the wreck), and every id
+    /// is a real item.
     #[test]
     fn whole_parts_come_off_as_salvage() {
         let mut rng = extraction_core::noise::Rng::new(9);
         let legs: Vec<PartRole> = (0..4).map(PartRole::Leg).collect();
+        let rotors: Vec<PartRole> = (0..4).map(PartRole::Rotor).collect();
         let mut seen = 0;
         for _ in 0..200 {
-            let got = part_salvage(RobotKind::Walker, false, false, &legs, &mut rng);
+            let got = part_salvage(RobotKind::Drone, false, false, &rotors, &mut rng);
             assert!(got.len() <= 2);
-            assert!(got.iter().all(|id| *id == "walker_leg_actuator"));
+            assert!(got.iter().all(|id| *id == "drone_rotor_motor"));
             seen += got.len();
         }
-        // About 0.3 a leg, four legs, capped at two: roughly 1.1 a wreck.
-        assert!((150..300).contains(&seen), "{seen} actuators in 200 wrecks");
-        assert!(part_salvage(RobotKind::Walker, false, false, &[], &mut rng).is_empty());
+        // About 0.35 a rotor, four rotors, capped at two.
+        assert!((150..320).contains(&seen), "{seen} motors in 200 wrecks");
+        assert!(part_salvage(RobotKind::Drone, false, false, &[], &mut rng).is_empty());
+        // A walker's servo packs are bolted on (`salvage`), not dropped.
+        assert!(part_salvage(RobotKind::Walker, false, false, &legs, &mut rng).is_empty());
         assert!(part_salvage(RobotKind::Walker, false, true, &legs, &mut rng).is_empty());
         let catalog = crate::items::Catalog::load();
         let all = [
