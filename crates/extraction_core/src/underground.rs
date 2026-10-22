@@ -163,7 +163,23 @@ pub struct Room {
     /// The power stage its `Lamp::Powered` lamp is on.
     #[serde(default)]
     pub stage: usize,
+    /// Long, bare and hard: it carries every sound made in it its whole
+    /// length (`world::echo`).
+    #[serde(default)]
+    pub carries: bool,
 }
+
+impl Room {
+    /// How far a sound made in it carries, if it carries: its length and a
+    /// little over (metres).
+    pub fn carry(&self) -> Option<f32> {
+        self.carries
+            .then(|| self.size[0].max(self.size[1]) + CARRY_OVER)
+    }
+}
+
+/// How far past a carrying room's length its sounds reach (metres).
+pub const CARRY_OVER: f32 = 4.0;
 
 fn room_height() -> f32 {
     2.6

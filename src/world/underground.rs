@@ -1304,6 +1304,7 @@ impl Plugin for UndergroundPlugin {
             super::workings::WorkingsPlugin,
             super::furnace::FurnacePlugin,
             super::cage::CagePlugin,
+            super::echo::EchoPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()

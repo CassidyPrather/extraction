@@ -13,6 +13,7 @@ pub mod cold;
 pub mod cover;
 pub mod dam;
 pub mod decay;
+pub mod echo;
 pub mod fell;
 pub mod furnace;
 pub mod halos;
