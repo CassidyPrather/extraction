@@ -359,6 +359,9 @@ fn break_up(
                         commands.entity(c).despawn();
                         continue;
                     }
+                    // A turret that came through stays on its cables:
+                    // salvage (`salvage`). One shot through is torn off.
+                    let turret = turret && !part.alive();
                     if turret {
                         let at = Transform::from_translation(gt.translation())
                             .with_rotation(gt.rotation());

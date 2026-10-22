@@ -38,6 +38,7 @@ pub mod plough;
 pub mod plough_look;
 pub mod pylon;
 pub mod reel;
+pub mod salvage;
 pub mod search;
 pub mod senses;
 pub mod sentry;
@@ -273,6 +274,7 @@ impl Plugin for RobotsPlugin {
                     anim::AnimPlugin,
                     flight::FlightPlugin,
                     wreck::WreckPlugin,
+                    salvage::SalvagePlugin,
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
