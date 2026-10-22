@@ -481,6 +481,17 @@ def run(sets, out):
         gear[c["name"]] = dict(heard=heard, robots=gear_ref)
         if not GEAR_HEARD[0] <= heard / gear_ref <= GEAR_HEARD[1]:
             c["flags"].append(f"heard to {heard} m, robots to {gear_ref:g} m")
+    # A drag (src/interact/carry.rs) at a full haul: robots hear it to
+    # DRAG_HEARD; your ears should hear it about as far.
+    drag_ref = float(re.search(r"DRAG_HEARD: f32 = ([\d.]+)",
+                               (ROOT / "src" / "interact" / "carry.rs").read_text()).group(1))
+    for c in mix:
+        if not c["name"].startswith("drag."):
+            continue
+        heard = audible_range(c["name"], sets, mix, calm)
+        gear[c["name"]] = dict(heard=heard, robots=drag_ref)
+        if not GEAR_HEARD[0] <= heard / drag_ref <= GEAR_HEARD[1]:
+            c["flags"].append(f"heard to {heard} m, robots to {drag_ref:g} m")
     # Startle: the loudest each sudden sound gets, up close.
     def up_close(c, extra=0.0):
         loud = max(f["momentary_max"] for f in sets[c["set"]]["files"]) + filter_loss(c, sets)

@@ -1231,6 +1231,10 @@ fn gun_sounds(
             // A spent case is heard where it lands (`casing_sounds`), a beat
             // after the shot; a live round worked out by hand, here.
             (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
+            // The carrier running home after the shot, a beat behind it,
+            // and an open bolt slamming forward just before it.
+            (FireEvent::CarrierHome, _) => ("guns/bolt_close", "gun.carrier_home", 0.0),
+            (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt", 0.0),
             _ => continue,
         };
         // Shots aren't pitch-shifted much: a gun has one voice.
@@ -1239,10 +1243,12 @@ fn gun_sounds(
         } else {
             0.07
         };
-        let speed = if matches!(ev.event, FireEvent::Malfunctioned(_)) {
-            0.72
-        } else {
-            1.0
+        let speed = match ev.event {
+            FireEvent::Malfunctioned(_) => 0.72,
+            // Small and quick inside the receiver.
+            FireEvent::CarrierHome => 1.35,
+            FireEvent::OpenBoltSlam => 0.9,
+            _ => 1.0,
         };
         play_at_speed(
             &mut commands,
