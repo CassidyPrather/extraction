@@ -727,7 +727,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             at: [1.53, 0.0],
             out: [1.0, 0.0],
             width: 2.0,
-            clear: 1.0,
+            clear: 2.2,
         }],
         "factory_hall" => &[
             Entrance {
