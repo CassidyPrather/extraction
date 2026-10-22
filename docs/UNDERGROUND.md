@@ -350,7 +350,7 @@ already there), then the mine, then the cellars.
 | `deep_kettle` | Kettle (-54, 106), incline (-54, 173) | firedamp in the old heading (and its corridor) and a dip; the canary; a cart on the haulage rail; shoring between heading and refuge | `world::workings`: `Gas`, `InGas`, `GasIgnited`, `Canary`, `MineCart`, `Shoring`, `Fall`, `RoofFell` | `crossing_the_gas_with_the_canary`, `the_cart_rolls_and_the_roof_falls` |
 | `cellars_cinder` | Cinder (-154, 168), exit (-178, 142) | the flue scorching till vented; the hot burner gallery (Burners); the crane over the ash pit to the far ledge | `world::furnace`: `Heat`, `VentLever`, `Vented`, `InHeat`, `Crane`, `CraneLever`; pit faces; pits and scorching cells walls to bots | `venting_the_cellar_and_riding_the_crane` |
 
-| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | not a signature site: the dam's inspection gallery, a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | the layout's `basins` (a still one) | `a_bot_goes_down_and_out_the_other_way` |
+| `gallery_sallow` | Sallow (-6, 172) turned 180, exit (-31, 102.5) | the gallery carries sound (below); a third way through the dam under cover (Fourth valley's ask); seepage ankle deep the length of the gallery | `world::echo`: `Echoed`; a room's `carries`; the layout's `basins` (a still one) | `the_gallery_carries_sound_its_length`, `a_walk_carries_and_a_creep_does_not`; scenario `gallery_echo` |
 | `adit_rime` | Rime Fell (160, -55) turned 180, exit (121, -2) on the mill's back apron | the winze's cage, down to the deep level (below); the one warm place on the fell (any roof stops the Cold's chill, `world::cold`); a flooded sump on the loop; the lamp room's breaker lights the drift and opens the magazine | `world::cage`: `Cage`, `CageBell`, `GateLamp`, `CageRung`, `CageArrived`, `CageCrushed`; the layout's `cage`, `floods` and `power` | `riding_the_cage_and_standing_under_it`, `nothing_walks_into_the_winze`; scenario `cage_ride` |
 
 ### One of its own: the adit's cage
@@ -377,9 +377,30 @@ adit's loot) is reached only by it.
   grid stop at its edge, top and foot (`nothing_walks_into_the_winze`),
   and the deep level is behind the works.
 
-Shots: the cage at the shaft station under its green lamp
-(`docs/shots/underground/r_cage.jpg`); up the open winze from its foot,
-the cage away overhead (`r_winze.jpg`).
+Shots: the cage at the shaft station, its lamp green
+(`docs/shots/underground/r_cage.jpg`); up the open winze from its foot to
+the cage's floor 12 m overhead (`r_winze.jpg`).
+
+### One of its own: the gallery that carries
+
+The dam gallery's is sound (`world::echo`, a room's `carries`): 44 m of
+bare concrete under the crest carries every sound made in it its whole
+length and a little over (48 m).
+
+- *What carries.* Any noise made in it (a shot, a tin knocked over, a
+  thrown bolt landing, a valve), and your steps there upright at a walk
+  or faster. Crouched, or slower than 1 m/s, they don't.
+- *The tell.* Your first carried step: your steps come back to you off
+  the far end (told; `Echoed` for the ear, Audio's echo).
+- *The hurt.* The gallery's crawler hears you from the far end and
+  comes, with a fair idea where; and the gallery is the only way to the
+  gauge room's breaker and the tower stair. Turned round, a thrown tin
+  at one end draws it the length of the gallery while you go by the
+  other.
+- *Bots.* Nothing new: a raider's steps carry like yours.
+
+Shot: the gallery's length, the crawler at its far end, as it carries
+(`docs/shots/underground/s_gallery.jpg`).
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
