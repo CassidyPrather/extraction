@@ -5237,7 +5237,15 @@ mod fight {
     /// its face, not inside it, and the hand feels it.
     #[test]
     fn a_hand_stops_on_a_robot() {
+        #[derive(Resource, Default)]
+        struct Felt(usize);
         let (mut vr, feet) = open();
+        vr.app.init_resource::<Felt>().add_systems(
+            Update,
+            |mut h: MessageReader<crate::rig::shapes::HapticShape>, mut f: ResMut<Felt>| {
+                f.0 += h.read().count();
+            },
+        );
         let box_at = feet + Vec3::new(0.25, 1.3, -0.6);
         part(&mut vr, PartRole::Core, box_at);
         let from = feet + Vec3::new(0.25, 1.3, -0.2);
@@ -5255,5 +5263,9 @@ mod fight {
             "stopped at its face: {} (face {face})",
             felt.translation.z
         );
+        assert!(
+            vr.app.world().resource::<Felt>().0 > 0,
+            "and the hand felt it"
+        )
     }
 }
