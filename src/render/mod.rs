@@ -41,6 +41,7 @@ pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;
 pub mod world_props;
+pub mod wounds;
 
 use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -80,6 +81,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
+        .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
