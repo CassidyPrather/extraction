@@ -63,6 +63,10 @@ pub struct Broken;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct WreckLegs(pub [f32; 4]);
 
+/// A walker wreck this small or smaller (a crawler's) is stepped over once
+/// it has settled (`settle`).
+pub const STEP_OVER_SIZE: f32 = 0.8;
+
 /// Moving until it has lain still a moment, then made static.
 #[derive(Component, Debug, Default)]
 pub struct Settling {
@@ -705,11 +709,20 @@ fn spiral(
 /// Pieces that have lain still a moment, or tumbled long enough, stop.
 fn settle(
     mut commands: Commands,
-    mut moving: Query<(Entity, &mut Settling, &LinearVelocity, &AngularVelocity)>,
+    mut moving: Query<(
+        Entity,
+        &mut Settling,
+        &LinearVelocity,
+        &AngularVelocity,
+        Option<&super::anim::Gait>,
+        Option<&Children>,
+    )>,
+    // (Immutable: a hull's layers are replaced, not edited.)
+    layered: Query<(), With<CollisionLayers>>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut s, v, w) in &mut moving {
+    for (e, mut s, v, w, gait, children) in &mut moving {
         s.age += dt;
         let k = (dt * 8.0).min(1.0);
         s.v = s.v.lerp(v.0, k);
@@ -721,6 +734,21 @@ fn settle(
                 .entity(e)
                 .remove::<Settling>()
                 .insert(RigidBody::Static);
+            // A small carcass (a crawler's) lying in a doorway mustn't wall
+            // anyone in: its hull goes on Item, as its legs are, and the
+            // player's move-and-slide (World and Robot) steps over it.
+            // Bullets and hands still meet it. A walker's full-size hull
+            // stays solid (it can be dragged clear).
+            if gait.is_some_and(|g| g.size <= STEP_OVER_SIZE) {
+                for c in children.into_iter().flatten() {
+                    if layered.contains(*c) {
+                        commands.entity(*c).insert(CollisionLayers::new(
+                            Layer::Item,
+                            [Layer::World, Layer::Robot, Layer::Item],
+                        ));
+                    }
+                }
+            }
         }
     }
 }
@@ -728,6 +756,78 @@ fn settle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A crawler's carcass, settled, can be stepped over (its hull on
+    /// Item, not Robot: the player's move-and-slide meets World and Robot);
+    /// a full-size walker's hull stays solid.
+    #[test]
+    fn a_crawlers_carcass_is_stepped_over_a_walkers_isnt() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let mut spawn = |app: &mut App, x: f32, size: f32| {
+            let at = zone.on_ground(x, 230.0);
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker_sized(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+                false,
+                60.0,
+                size,
+                None,
+            );
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        let crawler = spawn(&mut app, 40.0, super::super::indoor::CRAWLER_SIZE);
+        let walker = spawn(&mut app, 48.0, 1.0);
+        for _ in 0..30 {
+            app.update();
+        }
+        for e in [crawler, walker] {
+            app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+        }
+        for _ in 0..(90 * 12) {
+            app.update();
+        }
+        let blocks = |app: &mut App, e: Entity| -> bool {
+            assert_eq!(
+                app.world().get::<RigidBody>(e),
+                Some(&RigidBody::Static),
+                "settled"
+            );
+            let children: Vec<Entity> = app
+                .world()
+                .get::<Children>(e)
+                .map(|c| c.iter().collect())
+                .unwrap_or_default();
+            children.iter().any(|c| {
+                app.world()
+                    .get::<CollisionLayers>(*c)
+                    .is_some_and(|l| l.memberships.has_all(Layer::Robot))
+            })
+        };
+        assert!(
+            !blocks(&mut app, crawler),
+            "a crawler's carcass walls you in"
+        );
+        assert!(blocks(&mut app, walker), "a walker's hull isn't solid");
+    }
 
     /// A walker shot through the core comes apart: its pieces fall, come to
     /// rest on the ground (not through it) within seconds, and nothing is
