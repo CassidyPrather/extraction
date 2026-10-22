@@ -1075,9 +1075,10 @@ fn dress_pylon_cable(
         c.spawn((
             Mesh3d(box_mesh),
             MeshMaterial3d(steel),
-            // At the run's foot, on the ground by the cabinet (the run is
-            // 0.7 m, centred 0.35 m up).
-            Transform::from_xyz(0.0, -0.27, 0.0),
+            // At the run's foot, on the ground, out from the cabinet's
+            // wall the cable runs down (the run is 0.7 m, centred 0.35 m
+            // up, on the +X side).
+            Transform::from_xyz(0.06, -0.27, 0.0),
         ));
     });
 }
