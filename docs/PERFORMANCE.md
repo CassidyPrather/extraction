@@ -505,8 +505,24 @@ player waits on, from `main`'s first line: plugins building, start-up
 (zone, terrain, nav, props), the first frame rendered, the preload landed,
 the forest streamed, the buildings dressed, the warm-up shelf done, and on
 the way out, the exit asked and the world dropped (a valley change waits
-through the close too, then the next launch). Ask a playtester for those
-lines.
+through the close too, then the next launch). Each line carries its frame
+number: a step that waits on frames takes as many anywhere, one that
+waits on work doesn't. Ask a playtester for those lines.
+
+### Ready to look at
+
+Bevy draws nothing for a thing whose material isn't prepared (its
+textures still loading) or whose pipeline is still compiling. On the
+software renderer the ground's and buildings' pipelines took 18 s, so a
+screenshot at a fixed frame 30 had trees floating over no ground.
+`timeline::WorldReady` is the one answer to "is the world in": the
+buildings dressed, the forest built with its impostors taken, and the
+render world clear of unprepared materials and compiling pipelines for 4
+frames in a row (`Unprepared`, counted once a frame's draws are queued; a
+material that just readied queues its pipelines a frame or two later).
+The headset's session waits on it (or 20 s), `--screenshot` waits on its
+materials and buildings after `--frames` (or 180 s, with a warning), and
+"everything in" includes it.
 
 ## Empty meshes
 
