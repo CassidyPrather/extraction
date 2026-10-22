@@ -261,8 +261,14 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" | "damaged" => {
-                let at = eye + flat * if what == "shot" { 3.5 } else { 5.0 };
+            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" => {
+                let at = eye
+                    + flat
+                        * if matches!(what, "shot" | "salvage") {
+                            3.5
+                        } else {
+                            5.0
+                        };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }
             "crawler" | "zap" => {
@@ -390,6 +396,8 @@ fn reel(
         state.subject = Some(e);
         state.kill_at = match what {
             "wreck" | "dronewreck" => Some(WARMUP + 6),
+            // Down before the frames start: they open on the wreck fitted.
+            "salvage" => Some(6),
             _ => None,
         };
         return;
@@ -578,6 +586,30 @@ fn reel(
                 _ => {}
             }
         }
+    }
+    // `salvage`: the wreck with what came through seated on it (the gun
+    // pod on its cables, the servo packs on their bolts, the cell); then
+    // the cables cut and the bolts out, as the tools would (`salvage`).
+    if what == "salvage" && (frame == WARMUP + 60 || frame == WARMUP + 100) {
+        let bolts = frame == WARMUP + 100;
+        commands.queue(move |world: &mut World| {
+            let mut q = world.query::<(
+                Entity,
+                Option<&super::salvage::Cable>,
+                Option<&super::salvage::Bolt>,
+                &super::salvage::OnWreck,
+            )>();
+            let gone: Vec<Entity> = q
+                .iter(world)
+                .filter(|(_, c, b, w)| {
+                    w.wreck == subject && if bolts { b.is_some() } else { c.is_some() }
+                })
+                .map(|(e, ..)| e)
+                .collect();
+            for e in gone {
+                world.despawn(e);
+            }
+        });
     }
     // One heavy round into its side: it goes down, lies a moment, gets up.
     // (Its core is made to take it: this is about the knock.)
