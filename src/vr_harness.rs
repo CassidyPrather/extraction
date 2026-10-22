@@ -5075,6 +5075,14 @@ mod fight {
                 }
             },
         );
+        #[derive(Resource, Default)]
+        struct Torn(usize);
+        vr.app.init_resource::<Torn>().add_systems(
+            FixedPostUpdate,
+            |mut m: MessageReader<crate::interact::fight::TornFree>, mut t: ResMut<Torn>| {
+                t.0 += m.read().count();
+            },
+        );
         let at = feet + Vec3::new(0.25, 1.3, -0.6);
         let drone = vr
             .app
@@ -5161,6 +5169,12 @@ mod fight {
         vr.step(10);
         let moved = at_of(&vr, drone);
         assert!(moved.x < took.x - 0.25, "it came with the hand: {moved}");
+        assert_eq!(vr.app.world().resource::<Torn>().0, 0, "not torn yet");
+        // Snatched away faster than it can follow: torn out of the hand.
+        let gone = hand + Vec3::NEG_X * 0.4 + Vec3::Z * 0.5;
+        vr.move_hand(Side::Right, gone);
+        vr.step(2);
+        assert_eq!(vr.app.world().resource::<Torn>().0, 1, "torn free");
         // Let go: off it goes.
         vr.grip(Side::Right, 0.0);
         vr.step(64);
