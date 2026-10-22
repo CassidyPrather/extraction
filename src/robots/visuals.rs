@@ -21,40 +21,41 @@ pub struct RobotVisualsPlugin;
 
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            super::reel::ReelPlugin,
-            super::fx::RobotFxPlugin,
-            super::sorter_look::SorterLookPlugin,
-            super::heavy_look::HeavyLookPlugin,
-            super::sentry_look::SentryLookPlugin,
-            super::spotter_look::SpotterLookPlugin,
-            super::minelayer_look::MinelayerLookPlugin,
-            super::mender_look::MenderLookPlugin,
-            super::plough_look::PloughLookPlugin,
-        ))
-        .add_systems(
-            Update,
-            (
-                (request_models, dress_parts).chain(),
-                spin_rotors,
-                spin_propellers,
-                pose_leg_visuals,
-                dim_dead_eyes,
-                last_flicker,
-                blink_beacons,
-                show_halos,
-                dress_pylon_masts,
-                pylon_work_lights,
-                lock_flares,
-                scorch,
-                dress_debris,
-                alert_eyes,
-                shell_by_light,
-                super::weathering::weather_meshes,
-                part_plants,
-                drone_lamps,
-            ),
-        );
+        app.add_observer(dress_pylon_cable)
+            .add_plugins((
+                super::reel::ReelPlugin,
+                super::fx::RobotFxPlugin,
+                super::sorter_look::SorterLookPlugin,
+                super::heavy_look::HeavyLookPlugin,
+                super::sentry_look::SentryLookPlugin,
+                super::spotter_look::SpotterLookPlugin,
+                super::minelayer_look::MinelayerLookPlugin,
+                super::mender_look::MenderLookPlugin,
+                super::plough_look::PloughLookPlugin,
+            ))
+            .add_systems(
+                Update,
+                (
+                    (request_models, dress_parts).chain(),
+                    spin_rotors,
+                    spin_propellers,
+                    pose_leg_visuals,
+                    dim_dead_eyes,
+                    last_flicker,
+                    blink_beacons,
+                    show_halos,
+                    dress_pylon_masts,
+                    pylon_work_lights,
+                    lock_flares,
+                    scorch,
+                    dress_debris,
+                    alert_eyes,
+                    shell_by_light,
+                    super::weathering::weather_meshes,
+                    part_plants,
+                    drone_lamps,
+                ),
+            );
     }
 }
 
@@ -1023,6 +1024,60 @@ fn last_flicker(
         };
         halo.set_if_neq(want);
     }
+}
+
+/// A pylon's cable (`network::PylonCable`, Robot minds'): a dark cable
+/// down the cabinet's side into a small junction box at its foot, what a
+/// player puts the cutters to. Its look rides the cable, so it goes when
+/// the cable's cut and comes back with a new one once a mender has welded
+/// the cabinet.
+fn dress_pylon_cable(
+    add: On<Add, super::network::PylonCable>,
+    mut commands: Commands,
+    // (Not in a headless app: nothing to see there.)
+    meshes: Option<ResMut<Assets<Mesh>>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut look: Local<Option<[(Handle<Mesh>, Handle<StandardMaterial>); 2]>>,
+) {
+    let (Some(mut meshes), Some(mut materials)) = (meshes, materials) else {
+        return;
+    };
+    let [(cable, rubber), (box_mesh, steel)] = look
+        .get_or_insert_with(|| {
+            [
+                (
+                    meshes.add(Cylinder::new(0.014, 0.7)),
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.06, 0.06, 0.06),
+                        perceptual_roughness: 0.7,
+                        ..default()
+                    }),
+                ),
+                (
+                    meshes.add(Cuboid::new(0.12, 0.15, 0.08)),
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.42, 0.44, 0.4),
+                        metallic: 0.6,
+                        perceptual_roughness: 0.5,
+                        ..default()
+                    }),
+                ),
+            ]
+        })
+        .clone();
+    commands.entity(add.entity).with_children(|c| {
+        c.spawn((
+            Mesh3d(cable),
+            MeshMaterial3d(rubber),
+            Transform::IDENTITY,
+            NotShadowCaster,
+        ));
+        c.spawn((
+            Mesh3d(box_mesh),
+            MeshMaterial3d(steel),
+            Transform::from_xyz(0.0, -0.4, 0.0),
+        ));
+    });
 }
 
 /// A beacon at full flash, and how much of it glows between flashes.
