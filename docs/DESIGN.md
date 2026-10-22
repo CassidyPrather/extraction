@@ -268,6 +268,23 @@ It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays of
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
 
+**You can see what they remember** (`robots/recall.rs`). Every memory a machine keeps of you is one row in a table: how it fades, and what shows it. A memory with no rule or no tell fails the tests. So does a robot-keyed map, or a field of the structs memories live in, that the table doesn't name.
+
+| Memory | Fades | Tell |
+|---|---|---|
+| How sure it is | 0.05 a second | its voice, its head turning |
+| Where it last had you | given up after 70 s of looking | it comes and looks round |
+| A place it searched for nothing | 120 s (lures there go unanswered) | its paint mark, bright while fresh |
+| A sign of you it saw | 900 s | it goes to look at it |
+| A device of yours it saw, the one it hunts | while the device runs | its scan, then its gun |
+| Knocked down lately; you went under a roof (drone) | 10 s; 8 s | it backs off; it climbs away |
+| A relay's reports of you | 600 s after the last | its tally lamp: a red blink per report, up to three |
+| A relay's false reports; distrust | 900 s | an inspector; the lamp pulses amber |
+| A relay silenced; one quiet in a jam | until mended; while in the jam | a mender; a team |
+| The valley: your ways, rendezvous, kills, clearings, searches | to 0.6 a raid, gone under 0.1 | patrols and a sentry lean, a watcher, doors shut, last raid's marks |
+
+**Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
@@ -929,6 +946,40 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   | Mosin      | 241 | - | 85 | 173 | 107 | 186 |
 
   (Metres, in still air. Weather and walls cut these further.)
+
+### A gun's state, read in the hand
+
+(`weapons/legibility.rs`)
+
+No screen tells you a gun's state; the gun does, as its real counterpart
+would. A table of each gun's real tells, held against the models and the
+mechanism by `every_gun_shows_what_the_real_one_does`:
+
+- **Cocked**:
+  - an exposed hammer back (PM, Nagant, flare pistol);
+  - a turn-bolt's cocking piece standing 12 mm back off the bolt (Mosin,
+    TOZ-8);
+  - the double's two indicator pins standing 3 mm proud, each over its
+    cocked lock;
+  - the PPSh's bolt held back;
+  - a crossbow's string drawn.
+  - The AK, RPK and MP-133 show nothing: look in the port.
+- **Loaded**: with the action open (a press check), the round in the
+  chamber is there to see. A fired case sits a little proud on the
+  extractor. A revolver's cylinder shows its rounds, and a clip shows the
+  rounds standing in it.
+- **Empty**: the slide or carrier held open on the last round where the
+  real gun does it (PM, SKS, SVD). An empty box magazine shows its
+  follower between the lips.
+- **How full**: a magazine weighs what its rounds weigh (an AK's is 0.23 kg
+  empty, 0.56 kg full), so you heft it. The PM magazine's round-count
+  holes show brass up to how full it is.
+- **Condition**: below 0.8 the finish wears toward rust and bare steel, and
+  goes rougher. The crown nicks and the bore soots (`wear`). A worn action
+  (below 0.6), or a fouled one, drags in the hand as cold oil does
+  (`Firearm::action_drag`).
+- **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
+  scope are all on the model as they are.
 
 ### Gunsmithing at the vice
 

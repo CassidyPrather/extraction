@@ -67,7 +67,9 @@ for sx in (-1, 1):
     lip = fillet([(sx * 0.0042, TOP - 0.0055), (sx * 0.0078, TOP - 0.0055), (sx * 0.0078, TOP),
                   (sx * 0.0058, TOP), (sx * 0.0042, TOP - 0.0022)], 0.0007, 2)
     body.prism(lip, -0.010, 0.038, "Steel", axis="z")
-body.box((0.0084, 0.006, 0.042), (0.0, TOP - 0.0125, 0.013), "Black", bevel=0.0008, segs=1)
+# (Its own node, uncut by the mouth: seen between the lips once empty.)
+follower = Part("static_follower")
+follower.box((0.0084, 0.006, 0.042), (0.0, TOP - 0.0125, 0.013), "Black", bevel=0.0008, segs=1)
 # Floor plate square across the curve's end, with its tab at the back.
 fp = [(-0.101, -0.1035), (-0.025, -0.1145), (-0.022, -0.1195), (-0.0235, -0.125), (-0.100, -0.1145)]
 body.prism(fillet(stretch(fp), 0.0015, 2), -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
@@ -88,5 +90,6 @@ for n, (x, y) in enumerate(((0.0024, TOP - 0.0032), (-0.0024, TOP - 0.0072)), 1)
     make(rnd, worn=None)
 
 join("static_mag", body, worn={})
+make(follower, worn={})
 report()
 export("assets/models/mags/rpk_mag.glb")

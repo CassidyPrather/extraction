@@ -23,7 +23,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde_json::json;
 
-use super::insects::{self, HUSH_NEAR, HUSH_NEAR_DRONE};
+use super::insects;
 use super::{FlushCause, Flushed};
 use crate::robots::{Breed, Robot, RobotKind, Senses};
 use crate::sim::telemetry::{SimLog, round};
@@ -59,6 +59,9 @@ pub(crate) struct Track {
     cues: Vec<(f32, &'static str)>,
     /// Hushing the chorus now (a cue when it starts).
     hushing: bool,
+    /// How near a flock and a herd it's been: (t, flock, herd), the last
+    /// [`LOOK_BACK`] seconds.
+    near: VecDeque<(f32, f32, f32)>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -70,6 +73,11 @@ pub(crate) fn log_warnings(
     conditions: Option<Res<crate::world::weather::Conditions>>,
     spatial: SpatialQuery,
     (mut flushed, mut startled): (MessageReader<Flushed>, MessageReader<super::herd::Startled>),
+    (flocks, herds, zone): (
+        Query<&super::flock::Flock>,
+        Query<&super::herd::Herd>,
+        Res<crate::world::Zone>,
+    ),
     mut tracks: Local<HashMap<Entity, Track>>,
     mut next: Local<f32>,
 ) {
@@ -106,7 +114,20 @@ pub(crate) fn log_warnings(
         (format!("{:?}", c.hour), c.rain)
     });
     let filter = SpatialQueryFilter::from_mask(crate::world::Layer::World);
+    let under = |p: Vec3| p.y < zone.ground(p.x, p.z) - 2.0;
+    let flocks: Vec<Vec3> = flocks.iter().map(|f| f.mean()).collect();
+    let herds: Vec<Vec3> = herds
+        .iter()
+        .filter_map(|h| h.leader().map(|b| b.pos))
+        .collect();
+    let nearest = |ps: &[Vec3], p: Vec3| {
+        ps.iter()
+            .map(|q| q.xz().distance(p.xz()))
+            .fold(f32::MAX, f32::min)
+    };
     let mut alive = Vec::new();
+    // Machines that come together (a pair of walkers) are one approach.
+    let mut logged: Vec<Vec3> = Vec::new();
     for (e, robot, breed, senses, gt) in &robots {
         if robot.wrecked || matches!(robot.kind, RobotKind::Pylon | RobotKind::Sorter) {
             continue;
@@ -119,11 +140,16 @@ pub(crate) fn log_warnings(
             tr.path.pop_front();
         }
         tr.cues.retain(|(s, _)| t - s < LOOK_BACK);
-        let near = if robot.kind == RobotKind::Drone {
-            HUSH_NEAR_DRONE
-        } else {
-            HUSH_NEAR
-        };
+        tr.near
+            .push_back((t, nearest(&flocks, at), nearest(&herds, at)));
+        while tr.near.front().is_some_and(|(s, _, _)| t - s > LOOK_BACK) {
+            tr.near.pop_front();
+        }
+        let near = insects::hush_near(match robot.kind {
+            RobotKind::Drone => super::ThreatKind::Drone,
+            RobotKind::Dirigible => super::ThreatKind::Dirigible,
+            _ => super::ThreatKind::Walker,
+        });
         let hushing = singing >= SINGING && insects::hush(at.distance(foot), near) <= HUSH_CUE;
         if hushing && !tr.hushing {
             tr.cues.push((t, "hush"));
@@ -143,7 +169,9 @@ pub(crate) fn log_warnings(
                 .path
                 .front()
                 .is_some_and(|(_, p)| p.xz().distance(at.xz()) >= CAME);
-            if fresh && came {
+            let together = logged.iter().any(|p| p.distance(at) < 3.0);
+            if fresh && came && !together {
+                logged.push(at);
                 let lead = tr
                     .cues
                     .iter()
@@ -158,12 +186,20 @@ pub(crate) fn log_warnings(
                     .collect();
                 kinds.sort_unstable();
                 kinds.dedup();
+                let (flock, herd) = tr
+                    .near
+                    .iter()
+                    .fold((f32::MAX, f32::MAX), |(f, h), n| (f.min(n.1), h.min(n.2)));
+                let far = |d: f32| (d < f32::MAX).then(|| round(d, 0));
                 log.event(
                     "approach",
                     json!({"robot": crate::robots::robot_name(robot.kind, breed),
                            "dist": round(d, 1), "warned": lead.is_some(),
                            "lead": lead.map(|l| round(l, 1)), "cues": kinds,
                            "hour": hour, "rain": round(rain, 2),
+                           "singing": round(singing, 2),
+                           "under": under(at) || under(foot),
+                           "flock": far(flock), "herd": far(herd),
                            "x": round(at.x, 1), "z": round(at.z, 1)}),
                 );
             }

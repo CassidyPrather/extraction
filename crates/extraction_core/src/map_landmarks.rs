@@ -799,6 +799,7 @@ mod tests {
             "mill_race",
             "ropeway_station",
             "observatory",
+            "factory_hall",
             "headframe",
             "sorting_gantry",
             "funicular_upper",

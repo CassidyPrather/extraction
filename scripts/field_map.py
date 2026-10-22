@@ -46,6 +46,7 @@ LANDMARK_NAMES = {
     "steeple": "steeple",
     "headframe": "pithead",
     "blast_furnace": "furnace",
+    "factory_hall": "works hall",
     "dam_face": "dam",
     "dam_face_end": "dam",
     "dam_back": "dam",

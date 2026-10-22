@@ -27,7 +27,8 @@ def approaches(directory):
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if ev.get("ev") == "approach" or ev.get("event") == "approach":
+            # Underground (a site, a mine) there's no wildlife to tell.
+            if ev.get("ev") == "approach" and not ev.get("under"):
                 out.append(ev)
     return runs, out
 

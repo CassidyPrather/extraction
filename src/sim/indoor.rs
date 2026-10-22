@@ -19,6 +19,10 @@ pub const CELL: f32 = 0.25;
 const MARGIN: f32 = 3.0;
 /// The player capsule's radius plus a little.
 const CLEARANCE: f32 = 0.22;
+/// Down an underground site, the whole capsule's radius (`player`'s 0.28):
+/// a gap between props narrower than a body is no way, or a raider routed
+/// through it sticks there.
+pub const SITE_CLEARANCE: f32 = 0.28;
 /// Geometry in this band above the floor blocks walking (below it you step
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
@@ -584,7 +588,7 @@ fn plan_site(
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
         if let Some(ob) = obstacle(piece.shape, piece.at, floor, false) {
-            grid.block(ob, CLEARANCE);
+            grid.block(ob, SITE_CLEARANCE);
         }
     }
     for (_, leaf) in mine {
@@ -599,7 +603,7 @@ fn plan_site(
                 half: [def.width * 0.5, 0.04],
                 yaw: along.y.atan2(along.x),
             },
-            CLEARANCE,
+            SITE_CLEARANCE,
         );
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
@@ -688,6 +692,18 @@ fn plan_site(
             }
         })
         .collect();
+    // A pocket (cells a body stands in that no way in reaches: between a
+    // prop and a wall, say) is no place: shut, or a raider making for the
+    // nearest standing to its loot picks one it can't get to, and sticks.
+    // (Heat and live water count as ways through, being shut for now;
+    // what's behind the works stays as it is.)
+    let through: Vec<usize> = hot
+        .iter()
+        .chain(&warm)
+        .map(|h| h.0)
+        .chain(live.iter().copied())
+        .collect();
+    shut_pockets(&mut grid, &entries, &through, |c| site_closed(&b.prefab, c));
     let mut inner: Option<(Vec2, Vec2)> = None;
     for j in 0..n {
         for i in 0..n {
@@ -718,6 +734,67 @@ fn plan_site(
         warm,
         live,
         gas,
+    }
+}
+
+/// Whether a site-space point is behind its works (a room the stair
+/// doesn't reach till something's done: past a pit, heat, the cage; or a
+/// corridor between two such).
+pub fn site_closed(prefab: &str, c: [f32; 2]) -> bool {
+    use extraction_core::underground::{self as ug, Cell};
+    let (Some(l), Some(r)) = (ug::layout(prefab), ug::raster(prefab)) else {
+        return false;
+    };
+    let open = l.open_rooms();
+    let room = |id: &str| l.rooms.iter().position(|q| q.id == id);
+    match r.at(c) {
+        Cell::Room(k) => !open[k as usize],
+        Cell::Hall(li) => l.links.get(li as usize).is_some_and(|k| {
+            [&k.from, &k.to]
+                .iter()
+                .all(|id| room(id).is_some_and(|q| !open[q]))
+        }),
+        _ => false,
+    }
+}
+
+/// Shut the cells a body could stand in that no way in reaches (`through`
+/// cells count as passable, though shut), bar those `closed` says are
+/// behind the works.
+fn shut_pockets(
+    grid: &mut NavGrid,
+    entries: &[Vec2],
+    through: &[usize],
+    closed: impl Fn([f32; 2]) -> bool,
+) {
+    let n = grid.n;
+    let passable = |grid: &NavGrid, k: usize| grid.cost[k] != BLOCKED || through.contains(&k);
+    let mut seen = vec![false; n * n];
+    let mut stack: Vec<(usize, usize)> = entries
+        .iter()
+        .filter_map(|e| grid.nearest_walkable(e.to_array()))
+        .filter_map(|c| grid.cell_of(c))
+        .collect();
+    for &(i, j) in &stack {
+        seen[j * n + i] = true;
+    }
+    while let Some((i, j)) = stack.pop() {
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (a, c) = (i as i64 + di, j as i64 + dj);
+            if a < 0 || c < 0 || a >= n as i64 || c >= n as i64 {
+                continue;
+            }
+            let k = c as usize * n + a as usize;
+            if !seen[k] && passable(grid, k) {
+                seen[k] = true;
+                stack.push((a as usize, c as usize));
+            }
+        }
+    }
+    for k in 0..n * n {
+        if !seen[k] && grid.cost[k] != BLOCKED && !closed(grid.centre(k % n, k / n)) {
+            grid.cost[k] = BLOCKED;
+        }
     }
 }
 
@@ -1464,6 +1541,72 @@ mod tests {
     /// can stand in (furniture's colliders in place, the capsule's
     /// clearance round them) is within a bot's reach of it (`bot::REACH`),
     /// from a door.
+    /// Down every underground site, for a whole body (`SITE_CLEARANCE`):
+    /// every cell it can stand in, bar those behind the works (past a pit,
+    /// heat or the cage), joins up with the ways out. No pocket a raider
+    /// could be routed into or caught in.
+    #[test]
+    fn every_site_cell_reaches_a_way_out() {
+        let mut pockets = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app)
+                .iter()
+                .filter(|p| extraction_core::underground::layout(&p.name).is_some())
+            {
+                let g = &plan.grid;
+                let n = g.n;
+                let mut seen = vec![false; n * n];
+                let mut stack: Vec<(usize, usize)> = plan
+                    .entries
+                    .iter()
+                    .filter_map(|e| g.nearest_walkable(e.to_array()))
+                    .filter_map(|c| g.cell_of(c))
+                    .collect();
+                for &(i, j) in &stack {
+                    seen[j * n + i] = true;
+                }
+                while let Some((i, j)) = stack.pop() {
+                    for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                        let (ni, nj) = (i as i64 + di, j as i64 + dj);
+                        if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                            continue;
+                        }
+                        let k = nj as usize * n + ni as usize;
+                        let through = plan.hot.iter().chain(&plan.warm).any(|h| h.0 == k)
+                            || plan.live.contains(&k);
+                        if !seen[k] && (g.cost[k] != BLOCKED || through) {
+                            seen[k] = true;
+                            stack.push((ni as usize, nj as usize));
+                        }
+                    }
+                }
+                let cut: Vec<[f32; 2]> = (0..n * n)
+                    .filter(|k| g.cost[*k] != BLOCKED && !seen[*k])
+                    .map(|k| g.centre(k % n, k / n))
+                    .filter(|c| !site_closed(&plan.name, *c))
+                    .collect();
+                if !cut.is_empty() {
+                    pockets.push(format!(
+                        "{map} {}: {} cells cut off, e.g. {:.1?}",
+                        plan.name,
+                        cut.len(),
+                        &cut[..cut.len().min(4)]
+                    ));
+                }
+            }
+        }
+        assert!(pockets.is_empty(), "pockets:\n{}", pockets.join("\n"));
+    }
+
     #[test]
     fn every_loot_spot_is_in_reach() {
         const REACH: f32 = crate::bot::REACH;

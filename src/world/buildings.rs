@@ -2981,6 +2981,21 @@ fn pump_station(b: &mut Builder) {
         ],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
+    // The boiler's chimney, out of the roof by the back wall: what the
+    // pit and the quarry it pumps out are found by (`map_lint`'s
+    // `REGION_MARK`).
+    // (Its foot in the roof's slab, not flush under it.)
+    let (sx, sz, foot, top) = (4.6, 3.6, f + h + 0.1, 8.0);
+    b.bx(
+        Vec3::new(1.0, top - 0.1 - foot, 1.0),
+        Vec3::new(sx, (foot + top - 0.1) * 0.5, sz),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(1.2, 0.2, 1.2),
+        Vec3::new(sx, top - 0.1, sz),
+        Mat::Brick,
+    );
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
@@ -5748,13 +5763,17 @@ pub fn dress_buildings(
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
     mut bakes: Local<std::collections::HashMap<String, Bake>>,
     breaches: Option<Res<crate::destruction::breach::Breaches>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     use crate::render::world_props::Resolved;
     // A few buildings a frame, each once its prefab's shading is baked
     // (in the background, `Bake`), so a valley's arrival doesn't hitch.
+    // While the valley loads no one's playing: eight times as many (the
+    // buildings were most of Marrow Creek's wait, 3 a frame).
+    let most = if loaded.is_some() { 3 } else { 24 };
     let mut built = 0;
     for (e, b, xf, mut wait) in &mut pending {
-        if built >= 3 {
+        if built >= most {
             break;
         }
         let Some(mut geo) = prefab(&b.prefab) else {

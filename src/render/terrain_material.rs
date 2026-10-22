@@ -115,7 +115,7 @@ pub fn terrain_material(asset_server: &AssetServer) -> TerrainMaterial {
                     s.is_srgb = srgb;
                     s.sampler = ImageSampler::Descriptor(repeat_sampler());
                 })
-                .load(format!("{ARRAY_DIR}/{name}.ktx2"))
+                .load(super::textures::ktx2(&format!("{ARRAY_DIR}/{name}.ktx2")))
         })
     };
     if !textured {

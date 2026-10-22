@@ -116,7 +116,7 @@ pub const SIGN_SUSPICION: f32 = super::search::INVESTIGATE_AT + 0.1;
 /// ...unsure of where you were by this (m).
 pub const SIGN_UNCERTAINTY: f32 = 4.0;
 /// An older one, up to this (s), only makes it wary: this suspicious.
-pub const SIGN_LIFE: f32 = 900.0;
+pub const SIGN_LIFE: f32 = super::recall::lasts(super::recall::Memory::Sign);
 pub const OLD_SUSPICION: f32 = super::search::INVESTIGATE_AT * 0.7;
 /// Signs it saw within this long (s) of each other...
 pub const ROUTE_WITHIN: f32 = 300.0;

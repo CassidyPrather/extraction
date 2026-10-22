@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 77ce6f5 | 20:40 | 32/32 exit 0, 17 extracted (Kettle 3/4, Rime 3/4, Cinder 4/8, Marrow 4/8, Sallow 3/8); Cinder 7 boards now; Cinder 3 and Marrow 1 still time out in pockets | 6 FAILED (a_search, spotter, cloak, DeviceNoticed sound, clearance, item boxes); cellar tests pass; 31 min | gauges 16/17 (hold_rate), 51 min |
 | 98f85f0 | 17:40 | 32/32 exit 0, 3 timeouts (Cinder 7 can't board at Fire lookout; Cinder 3, Marrow 1 pockets); Kettle 4/4, Sallow 4/8, Marrow 3/8, Cinder 3/8, Rime 2/4 | 6 FAILED (cellars_cinder ×3, prefab clearance, item boxes, walker-looks-at-flock), all within budget, 30 min | gauges 16/16 in 22 min |
 | 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 1 FAILED (`prefabs_stay_inside_their_clearance`), 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
 | 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 1 FAILED (`prefabs_stay_inside_their_clearance`), 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
@@ -49,21 +50,20 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 98f85f0.
+As of 77ce6f5 (round 33); 823b12f (round 34) being checked.
 
-| test / run | det. / flaky | class | owner | status |
-| - | - | - | - | - |
-| `world::underground::tests::a_bot_goes_down_and_out_the_other_way`, `sim::indoor` every_loot_spot ×2: all in cellars_cinder ("no route out"; 3 cellar spots out of reach) | new in 98f85f0 | hurting heat shut in the shared BuildingPlan (7617df18) | coordinator | fix in round 33: warm heat closed only in the raider's plan |
-| `capture::checks::tests::prefabs_stay_inside_their_clearance` (drowned houses reach 10.1-10.6 m past 8-9 m) | since 7b03261 | silt banks past the map's clearance | World models | fixed in fa9073b2 (clearance covers the banks; round 34) |
-| `models::tests::every_item_model_fits_its_box` (stock_mosin, stock_ak74, bolt_mosin) | new in 98f85f0 | new parts' boxes | Weapon feel | fixed in 8ca71ac8 (round 33) |
-| `wildlife::app_tests::a_walker_goes_to_look_where_you_flushed_the_birds` (f32::MAX: no Investigate target) | new in 98f85f0 | | Wildlife / Robot minds | routed 17:40 |
-| Sim: Cinder seed 7 can't board the truck at Fire lookout (two windows) | det. | the truck on a 7 m hill by the ranger tower? | coordinator | routed 17:40 |
-| Sim: Cinder 3 and Marrow 1 stuck in pockets (35-40 stuck_blocks) | det. | | coordinator | routed 17:40 |
+| test / run | class | owner | status |
+| - | - | - | - |
+| `robots::mind_tests::a_search_takes_in_doorways_and_cover`, `robots::spotter::tests::it_sees_you_in_the_open_and_calls`, `gadgets::tests::a_running_cloak_hides_you_from_a_drone` | robot senses | Robot minds | routed by the coordinator |
+| `render::hold_rate::tests::gauge_busy_moments_drop_the_scale_and_it_comes_back` ("drone wreck: a run late and no drop"); the gauge tier took 51 min | | Performance (1500 s target) | routed |
+| `audio_machines::tests::the_dangers_are_heard` (no sound for DeviceNoticed), `prefabs_stay_inside_their_clearance`, `every_item_model_fits_its_box` (stock_mp133, stock_rpk74) | | Audio, World models, Weapon feel | pass on 823b12f per the coordinator's gate: to confirm |
+| Sim: Cinder seed 3 at (70-88, -8…-20) and Marrow seed 1 at (-1…-22, 90-96) time out in pockets | stuck_block can't get out | coordinator | after round 34 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| cellars_cinder ×3 (warm heat shut for every plan), Cinder 7 couldn't board at Fire lookout | 77ce6f5 | coordinator |
 | sim telemetry dropped every unclaimed loss under 0.05 hp a tick (gas, heat, slow bleeding: a death of "nothing"); heat and gas now named | d5c2291e (round 32), 19e8be63 (round 33) | Verifier |
 | the raider waded into live water (Cinder seed 4 now extracts); telemetry names live water | 5955943 / a1edafef | coordinator, Underground, Verifier |
 | the busy-moment gauge (share limits under one thread), the Sallow pocket (escalation), Soak's walls over budget | ce0f10b | Performance, coordinator, Soak |
