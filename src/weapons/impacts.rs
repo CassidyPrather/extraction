@@ -113,7 +113,12 @@ pub fn kind_of_stuff(s: extraction_core::firearm_terminal::Stuff) -> ImpactKind 
     match s {
         Stuff::Planks | Stuff::Logs => ImpactKind::Wood,
         Stuff::Plaster | Stuff::Brick | Stuff::Concrete | Stuff::Rock => ImpactKind::Masonry,
-        Stuff::Sheet | Stuff::Plate | Stuff::ArmourPlate | Stuff::Helmet => ImpactKind::Metal,
+        Stuff::Sheet
+        | Stuff::Plate
+        | Stuff::ArmourPlate
+        | Stuff::Helmet
+        | Stuff::Shell
+        | Stuff::Housing => ImpactKind::Metal,
         Stuff::Glass => ImpactKind::Glass,
         Stuff::Soil => ImpactKind::Soil,
     }
@@ -602,6 +607,93 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
     }
 }
 
+/// What a round throws out of the far side of what it went through, on
+/// along its line (`n` is the way it went): steel spalls a cone of hot
+/// flakes, boards blow out long splinters, masonry a cone of dust and
+/// grit, glass a fan of shards.
+fn spall(kind: ImpactKind) -> Vec<Spray> {
+    let cone = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
+        n,
+        mesh: |a| a.ball.clone(),
+        mat,
+        size: Vec3::splat(0.07),
+        out: 3.5,
+        scatter: 0.9,
+        life: 1.1,
+        grow: 2.6,
+        gravity: -0.2,
+        drag: 3.5,
+        wind: 0.7,
+        ..SPRAY
+    };
+    match kind {
+        ImpactKind::Metal | ImpactKind::Robot => vec![
+            Spray {
+                n: 16,
+                mat: |a| a.spark.clone(),
+                size: Vec3::new(0.004, 0.004, 0.09),
+                out: 7.0,
+                scatter: 2.2,
+                life: 0.25,
+                align: true,
+                ..SPRAY
+            },
+            Spray {
+                n: 5,
+                mat: |a| a.flake.clone(),
+                size: Vec3::new(0.014, 0.003, 0.012),
+                out: 4.5,
+                scatter: 1.8,
+                life: 0.8,
+                spin: 30.0,
+                ..SPRAY
+            },
+        ],
+        ImpactKind::Wood => vec![
+            cone(|a| a.soil_dust.clone(), 2),
+            Spray {
+                n: 10,
+                mat: |a| a.splinter.clone(),
+                size: Vec3::new(0.01, 0.01, 0.11),
+                out: 5.0,
+                scatter: 1.6,
+                life: 1.0,
+                spin: 30.0,
+                ..SPRAY
+            },
+        ],
+        ImpactKind::Masonry => vec![
+            cone(|a| a.dust.clone(), 6),
+            Spray {
+                n: 9,
+                size: Vec3::splat(0.026),
+                out: 4.0,
+                scatter: 1.4,
+                life: 0.8,
+                spin: 20.0,
+                ..SPRAY
+            },
+        ],
+        ImpactKind::Glass => vec![Spray {
+            n: 12,
+            mat: |a| a.shard.clone(),
+            size: Vec3::new(0.03, 0.003, 0.022),
+            out: 3.5,
+            scatter: 1.2,
+            life: 0.9,
+            spin: 18.0,
+            ..SPRAY
+        }],
+        k => recipe(k),
+    }
+}
+
+/// An impact on the far side of what the round went through: its surface
+/// faces along the round.
+pub fn is_exit(imp: &Impact) -> bool {
+    imp.entity.is_some() && imp.normal.dot(imp.velocity) > 0.0
+}
+
 /// Throws one spray's bits from `at`: out along `n`, carried along
 /// `glance`.
 pub(crate) fn spray_bits(
@@ -690,7 +782,9 @@ fn spawn_fx(
         let dir = imp.velocity.normalize_or_zero();
         // Off the surface, the way a round glances.
         let glance = (dir - 2.0 * dir.dot(n) * n).normalize_or(n);
-        let sprays = if imp.kind == ImpactKind::Robot {
+        let sprays = if is_exit(imp) {
+            spall(imp.kind)
+        } else if imp.kind == ImpactKind::Robot {
             robot_recipe(imp.part, imp.hurt)
         } else {
             recipe(imp.kind)
@@ -796,6 +890,21 @@ fn age_decals(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Out of the far side, a round throws more, and harder, on along its
+    /// line than it splashes back off the face it went in by.
+    #[test]
+    fn spall_is_thrown_on_harder_than_the_entry_splash() {
+        let push = |v: Vec<Spray>| v.iter().map(|s| s.n as f32 * s.out).sum::<f32>();
+        for k in [
+            ImpactKind::Metal,
+            ImpactKind::Wood,
+            ImpactKind::Masonry,
+            ImpactKind::Glass,
+        ] {
+            assert!(push(spall(k)) > 1.5 * push(recipe(k)), "{k:?}");
+        }
+    }
 
     /// A round fired down into the creek splashes at its surface (it used
     /// to fly on through to the bed and kick up dirt).

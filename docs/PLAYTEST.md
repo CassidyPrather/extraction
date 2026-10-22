@@ -453,6 +453,18 @@ said you don't use?
     keep the muzzle downrange for the second it takes? What happens if
     you open the bolt on it?
   - Is "re-pack the box at the bench" a cure you'd think of?
+- What a round does to the world (the training yard, or a wreck on a
+  raid).
+  - Crouch behind a car wreck's door with a drone or walker about: does
+    learning that it's no cover feel fair (you hear the round come
+    through), or cheap?
+  - Shoot a car door with the PM, then the AK: does the pistol's spark
+    and the rifle's spall out of the far side tell you which went
+    through?
+  - Put an AK round through a drone side on: do you see it come out the
+    far side?
+  - Graze a wreck's flank or a sheet wall: does the whine and the streak
+    read as a ricochet?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

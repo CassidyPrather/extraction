@@ -781,8 +781,43 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   plank wall; rifles go through planks, plaster and tin; only the Mosin
   through a log wall; brick, concrete, rock, earth and robot plate stop
   everything. Grazing a hard face (under about 20 degrees) mostly turns
-  the round, keeping 60% of its speed. The range test
-  (`weapons/range.rs`) fires every gun at every material to hold it.
+  the round, keeping 60% of its speed, with a whine and a streak of
+  sparks. The range test (`weapons/range.rs`) fires every gun, and the
+  robots' guns, at every material to hold it.
+  - Hollow things cost their walls whatever their depth, plus a little
+    per millimetre for what's inside. A sheet-steel box thicker than 4 cm
+    (a car's door, its body, a bus, a locker) is a shell: two skins of
+    0.8 mm sheet, about 440 J for a door. A car door stops pistols,
+    revolvers, buckshot and a .22, and nothing else. A walker's, a
+    sentry's or a drone's round comes through it, and a door carried as
+    a shield is the same door. Broadside, a whole car (door, body, door)
+    stops everything but the SKS, the Mosin, the SVD, a slug and a
+    heavy's gun. An angled door is thicker: a drone's round that comes
+    through square on stops in it at 45 degrees.
+  - Robots: a drone's every part and any robot's eye, rotor or gas cell
+    is a thin housing, two 1 mm walls of plate with its works between.
+    Rifle rounds go in one side and out the other, on to whatever is
+    behind; pistol and SMG rounds lodge. Walkers' cores, legs and guns,
+    and all armour plates, are solid plate.
+  - Robots' rounds are 8 g through the same projectiles, and a walker's
+    blind fire reasons with the same costs (`destruction::through`).
+  - Out the far side, the round throws spall on along its line: a cone
+    of hot sparks and flakes from steel, long splinters from boards, dust
+    and grit from masonry, a fan of shards from glass.
+  - The gauge (`cargo test -p extraction_core the_penetration_gauge --
+    --nocapture`) prints what each round has left, in joules, after each
+    thing, square on:
+
+    |              | .22 | Nagant | PM | buck | PPSh | AK | SKS | slug | Mosin | drone | walker | sentry | heavy |
+    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+    | tin wall     | - | 59 | 103 | 80 | 460 | 1177 | 1934 | 2110 | 3391 | 378 | 610 | 1240 | 1760 |
+    | plank wall   | - | - | - | - | 330 | 1047 | 1804 | 1980 | 3261 | 248 | 480 | 1110 | 1630 |
+    | plaster wall | - | - | - | - | - | 657 | 1414 | 1590 | 2871 | - | 90 | 720 | 1240 |
+    | car door     | - | - | - | - | 223 | 940 | 1697 | 1874 | 3155 | 141 | 373 | 1003 | 1523 |
+    | whole car    | - | - | - | - | - | - | 384 | 561 | 1842 | - | - | - | 210 |
+    | drone shell  | - | - | - | - | - | 538 | 1295 | 1471 | 2752 | - | - | 601 | 1121 |
+    | log wall, tree | - | - | - | - | - | - | - | - | 511 | - | - | - | - |
+    | robot plate, brick, concrete | - | - | - | - | - | - | - | - | - | - | - | - | - |
 - **Grenades** (RGD-5, F-1): the other hand's trigger pulls the ring; the
   gripping hand holds the spoon, safe while it holds; let go (or B to
   cook) and the spoon flies, 3.6-3.8 s. A pinned grenade never goes off.
