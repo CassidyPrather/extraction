@@ -94,6 +94,16 @@ pub const STAND_INS: &[StandIn] = &[
         render: canary,
     },
     StandIn {
+        set: "anomaly/frost",
+        variants: 2,
+        render: frost,
+    },
+    StandIn {
+        set: "physical/ice_crack",
+        variants: 4,
+        render: ice_crack,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -703,6 +713,50 @@ fn klaxon(rng: &mut Rng, sr: f32) -> Vec<f32> {
             let env = (t / 0.03).min(1.0) * ((secs - t) / 0.12).clamp(0.0, 1.0);
             let shaped: f32 = horn.iter_mut().map(|(b, w)| b.run(src) * *w).sum();
             (shaped + 0.15 * buzz) * env
+        })
+        .collect()
+}
+
+/// A frost's still cold, heard: a thin, high crystal tinkle (sparse pings
+/// at 3.5-8 kHz, each ringing off) with the ice creaking under it now and
+/// then (a slow, low groan of filtered noise), 2 s, looped.
+fn frost(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let mut x = vec![0.0f32; n];
+    // The tinkle: a ping every 60-220 ms, wrapping round the loop.
+    let mut t = 0.0f32;
+    while t < LOOP_SECS {
+        let f = 3_500.0 + rng.f32() * 4_500.0;
+        let a = 0.3 + 0.7 * rng.f32();
+        let len = (0.25 * sr) as usize;
+        let start = (t * sr) as usize;
+        for i in 0..len {
+            let s = i as f32 / sr;
+            x[(start + i) % n] += a * (TAU * f * s).sin() * (-s * 18.0).exp();
+        }
+        t += 0.06 + rng.f32() * 0.16;
+    }
+    // The creak: once a loop, a second of a slow groan.
+    let mut groan = Bp::new(180.0 * jitter(rng, 0.2), 6.0, sr);
+    let at = (rng.f32() * LOOP_SECS * sr) as usize;
+    let len = sr as usize;
+    for i in 0..len {
+        let e = (std::f32::consts::PI * i as f32 / len as f32).sin();
+        x[(at + i) % n] += 1.5 * groan.run(noise(rng)) * e;
+    }
+    x
+}
+
+/// Ice cracking: a hard, bright snap and its short ring, 0.4 s.
+fn ice_crack(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (0.4 * sr) as usize;
+    let mut ring = Bp::new(2_400.0 * jitter(rng, 0.2), 12.0, sr);
+    let mut body = Bp::new(600.0 * jitter(rng, 0.2), 1.5, sr);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let snap = noise(rng) * (-t * 90.0).exp();
+            snap * 0.6 + ring.run(snap) * 3.0 + body.run(snap) * (-t * 25.0).exp()
         })
         .collect()
 }
