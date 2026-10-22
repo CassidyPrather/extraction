@@ -9,6 +9,7 @@ pub mod budget;
 pub mod cards;
 pub mod comfort;
 pub mod cpu;
+pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
 pub mod grade;

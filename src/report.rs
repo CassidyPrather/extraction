@@ -41,6 +41,9 @@ pub fn write_report(data: &Path) -> std::io::Result<PathBuf> {
          frames/             one line a frame: frame cpu_ms gpu_ms\n\
          settings.ron        your comfort settings\n\
          raid/               the last raid's recording\n\n\
+         system.txt's \"eye targets\" is the eyes' share of the GPU's memory;\n\
+         the rest (textures, meshes, shadows) runs about 1.1 GB a valley\n\
+         (the VRAM gauge: 2.0-2.2 GB in all at a 2980-wide eye).\n\n\
          Your home folder, user name and computer name are replaced with\n\
          ~, <user> and <host> in everything here.\n",
     );
