@@ -448,6 +448,13 @@ mod tests {
                     ));
                 }
             }
+            let tall = m.footprint[1];
+            if (tall - hi.y).abs() > HEIGHT_SPARE {
+                bad.push(format!(
+                    "{}: footprint {tall:.1} m tall, it stands {:.1} m",
+                    m.id, hi.y
+                ));
+            }
         }
         assert!(bad.is_empty(), "prefabs that disagree:\n{}", bad.join("\n"));
     }
@@ -461,6 +468,10 @@ mod tests {
     /// How much more ground than it stands on a footprint may claim, each
     /// way along an axis.
     const FOOTPRINT_SPARE: f32 = 1.0;
+    /// How far a footprint's height may be off what's drawn, either way: it
+    /// says what's a landmark, and where a building's inside ends (hearing,
+    /// shelter from the rain).
+    const HEIGHT_SPARE: f32 = 0.5;
 
     /// Prints every loose part (`-- --nocapture`) and fails on any not in
     /// `LOOSE_KNOWN`.

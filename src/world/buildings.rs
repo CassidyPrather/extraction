@@ -2981,6 +2981,21 @@ fn pump_station(b: &mut Builder) {
         ],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
+    // The boiler's chimney, out of the roof by the back wall: what the
+    // pit and the quarry it pumps out are found by (`map_lint`'s
+    // `REGION_MARK`).
+    // (Its foot in the roof's slab, not flush under it.)
+    let (sx, sz, foot, top) = (4.6, 3.6, f + h + 0.1, 8.0);
+    b.bx(
+        Vec3::new(1.0, top - 0.1 - foot, 1.0),
+        Vec3::new(sx, (foot + top - 0.1) * 0.5, sz),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(1.2, 0.2, 1.2),
+        Vec3::new(sx, top - 0.1, sz),
+        Mat::Brick,
+    );
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
