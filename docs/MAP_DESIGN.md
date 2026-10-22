@@ -159,6 +159,17 @@ A good map makes the crossing a decision.
   (`LAST_STRETCH`), where you wait laden for the truck, has no open run
   over 40 m (`LAST_OPEN`) and no more than a quarter of it in a
   spotter's sight (`LAST_SPOTTED`).
+- **Waiting for the truck under a drone's eye is survivable**: a
+  rendezvous within a survey drone's sight of the point of interest it
+  orbits (the orbit, 14 m, plus 90 m: `SURVEY_SIGHT`) has a roof or
+  solid cover a body can wait behind (a walk-in building or a kiosk, or
+  anything 1.2 m high, `WAIT_HEIGHT`, but a garden fence) within 15 m
+  of where the truck stops (`WAIT_COVER`). Don't move the rendezvous: a
+  tense wait under a landmark is the design. Put the shelter in the
+  place's story (the bus shelter at the depot, the platelayers' hut at
+  the rail yard, the lodge's woodshed), 10-13 m off, on the side away
+  from the rendezvous beacon (`map_landmarks::beacon_at`: 7 m off the
+  truck's side), clear of the truck (`TRUCK_ROOM`) and its tailgate.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.

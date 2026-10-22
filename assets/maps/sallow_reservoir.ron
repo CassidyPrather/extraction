@@ -386,6 +386,14 @@
         (prefab: "quarantine_gate", at: (25.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (32.8, 285.0), rot: 90.0),
 
+        // A roof to wait under for the truck at each pickup, out of the
+        // survey drones' eye, on the far side from its beacon: the boat
+        // shed at Sallow Head, the bridge-keeper's hut at the inflow, the
+        // gauge hut by the gauge house.
+        (prefab: "shed", at: (-191.3, -264.7), rot: 232.0, tag: "boat_shed"),
+        (prefab: "shed", at: (36.0, -251.0), rot: 331.0, tag: "bridge_hut"),
+        (prefab: "shed", at: (238.1, -35.2), rot: 349.0, tag: "gauge_hut"),
+
         // The dam: its downstream and upstream faces either side of the
         // crest, and the draw-off tower in front of it on the bed, its own
         // bridge to the crest (src/world/dam.rs).

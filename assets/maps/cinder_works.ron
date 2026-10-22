@@ -282,6 +282,9 @@
         (prefab: "rail_shed", at: (51.5, -261.0), rot: 195.0),
         (prefab: "mast_hut", at: (95.0, -238.0), rot: 350.0),
         (prefab: "signal_box", at: (100.0, -262.0), rot: 0.0),
+        // A linesman's hut by the sidings pickup: a roof to wait under for the
+        // truck while the drones circle the yard.
+        (prefab: "shed", at: (88.0, -246.0), rot: 312.0, tag: "linesmans_hut"),
 
         // The thing in the slag.
         (prefab: "anomaly_core", at: (200.0, -150.0), rot: 0.0),
