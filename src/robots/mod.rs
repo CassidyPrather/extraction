@@ -37,6 +37,7 @@ pub mod mender_look;
 mod mind_tests;
 pub mod minelayer;
 pub mod minelayer_look;
+pub mod network;
 pub mod plough;
 pub mod plough_look;
 pub mod pylon;
@@ -267,6 +268,7 @@ impl Plugin for RobotsPlugin {
                 signs::SignsPlugin,
                 disturbed::DisturbedPlugin,
                 memory::MemoryPlugin,
+                network::NetworkPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

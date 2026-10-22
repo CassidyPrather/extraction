@@ -242,6 +242,11 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**Their network, turned against them** (`robots/network.rs`). Pylons, sentries, spotters and the airship report what they see, and a team follows. Every report goes through the director's network, so it can be worked on:
+- **Cut a pylon's cable** with bolt cutters and it goes silent. The silence is the tell: after 45 s a mender is sent, and once it has welded the torn cabinet whole the pylon is back on the network.
+- **Splice a salvaged radio** into a pylon or a spotter's winch (let go of it against the cabinet): it reports contact at a named place at least 150 m from you, and the team goes there. Do it twice to the same relay and they stop believing it: none of its reports go out, and a walker comes to look it over.
+- **A powered jammer** blocks every relay's reports within its radius, but a relay gone quiet in a jam is a sign too: after 40 s a team comes to roughly where the jammer is.
+
 **The Zone remembers you** (`robots/memory.rs`, `zone_memory`). Each valley keeps a compact memory of your habits, saved with it:
 - the 30 m cells you walk;
 - the rendezvous you get out from;
