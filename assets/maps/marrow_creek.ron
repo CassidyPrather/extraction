@@ -134,6 +134,12 @@
         // Footpath from the logging camp up through the trees, over the
         // creek on the pumping station's footbridge, and on up through the
         // pines to the mast road.
+        // On from the forest path's end to the district road under the
+        // mast: the pumping station's second way home, to the Bus depot.
+        (
+            name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-110.0, -108.0), (-85.0, -122.0), (-60.0, -134.0), (-35.0, -146.0), (-12.0, -158.0), (8.0, -168.0)],
+        ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(-160.0, 140.0), (-166.0, 122.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
@@ -352,7 +358,7 @@
         // depot and the yard: an alarm, not a gun, where nothing else
         // watches (map_spotter). Cut its tether at the winch, timing its
         // turn.
-        (kind: Spotter, at: (30.0, -150.0), name: "Bank spotter"),
+        (kind: Spotter, at: (40.0, -85.0), name: "Bank spotter"),
         (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
