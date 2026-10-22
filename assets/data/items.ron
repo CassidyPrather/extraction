@@ -732,7 +732,7 @@
         // ---------------------------------------------------------------
         // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
         // ---------------------------------------------------------------
-        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Water bottle", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
+        (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Canteen", description: "A canteen of water. Twist the cap off before you drink.", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
         (id: "condensed_milk", name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
         (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
         (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
