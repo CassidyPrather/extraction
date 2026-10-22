@@ -1128,6 +1128,15 @@ fn under_a_roof(
             within: 0.6,
         },
         Task::Wait(20.0),
+        // And out the way it came in, not through a wall.
+        Task::WalkTo {
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.5,
+            within: 0.8,
+        },
     ])
 }
 
