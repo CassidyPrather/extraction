@@ -28,7 +28,7 @@ use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
 use extraction_core::noise::Rng;
 
-use super::squad::{CHIRP_REACH, Coordination, RADIO_REACH, Role, SquadCall};
+use super::squad::{CHIRP_REACH, Coordination, Role, SquadCall};
 use super::{Awareness, Brain, Job, JobKind};
 use crate::rig::{LocalPlayer, RigInput};
 use crate::world::Zone;
@@ -39,10 +39,18 @@ pub const SEEDS: u64 = 24;
 pub const PACE: f32 = 3.0;
 /// It's a moment after a call before it acts on it (s).
 pub const REACT: f32 = 1.5;
-/// Breaking away from a flanker, or off lit ground, lasts this long (s)...
-pub const BREAK_FOR: f32 = 6.0;
-/// ...this far off its way (radians).
-pub const BREAK_ANGLE: f32 = 0.9;
+/// Its pace between covers (m/s): a sprint.
+pub const SPRINT: f32 = 4.5;
+/// Its bounds, cover to cover, are at most this long (m)...
+pub const BOUND: f32 = 18.0;
+/// ...with this long in each, crouched (s).
+pub const COVER_WAIT: f32 = 2.0;
+/// It sees machines this far (m), where nothing's in the way.
+pub const SIGHT: f32 = 80.0;
+/// It keeps this far off lit ground (m).
+pub const LIT_RADIUS: f32 = 10.0;
+/// What it's told it keeps in mind this long (s).
+pub const TOLD_FOR: f32 = 15.0;
 /// Within this of a rendezvous it's out (m).
 pub const OUT_AT: f32 = 12.0;
 /// A drill ends after this long, whatever (s).
@@ -85,10 +93,47 @@ fn hear(mut calls: MessageReader<SquadCall>, mut h: ResMut<Heard>, time: Res<Tim
 struct Newcomer {
     goal: usize,
     path: Vec<Vec2>,
-    /// Breaking away: toward here, until then.
-    away: Option<(Vec2, f32)>,
+    /// Where it's running to next.
+    bound: Option<Vec2>,
+    /// In cover until then.
+    cover_until: f32,
+    /// What it's been told, and when.
+    told: Vec<(SquadCall, f32)>,
     /// Lit ground to keep off.
     lit: Option<Vec2>,
+}
+
+/// The next cover toward the way out: a walkable point a bound ahead,
+/// out of sight of as many of the machines it knows of as it can be, and
+/// off lit ground.
+fn next_cover(
+    nav: &extraction_core::nav::NavGrid,
+    here: Vec2,
+    path: &[Vec2],
+    goal: Vec2,
+    exposed: &dyn Fn(Vec2) -> usize,
+    lit: Option<Vec2>,
+) -> Vec2 {
+    let ahead = path.first().copied().unwrap_or(goal);
+    let way = (ahead - here).normalize_or(Vec2::X);
+    let mut best: Option<(f32, Vec2)> = None;
+    for r in [6.0, 10.0, 14.0, BOUND] {
+        for k in -4..=4 {
+            let p = here + Vec2::from_angle(k as f32 * 0.35).rotate(way) * r;
+            if !nav.walkable(p.to_array()) || !nav.line_clear(here.to_array(), p.to_array()) {
+                continue;
+            }
+            if lit.is_some_and(|l| l.distance(p) < LIT_RADIUS) {
+                continue;
+            }
+            // Out of sight first, then the most way made.
+            let score = exposed(p) as f32 * 100.0 + p.distance(goal) - here.distance(goal);
+            if best.is_none_or(|(b, _)| score < b) {
+                best = Some((score, p));
+            }
+        }
+    }
+    best.map_or(ahead, |(_, p)| p)
 }
 
 fn rendezvous(zone: &Zone) -> Vec<(String, Vec2)> {
@@ -244,7 +289,9 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     let mut me = Newcomer {
         goal: nearest,
         path: route(&app, start, rvs[nearest].1),
-        away: None,
+        bound: None,
+        cover_until: 0.0,
+        told: vec![],
         lit: None,
     };
     let mut here = start;
@@ -268,26 +315,38 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         if t > DRILL_TIME {
             break (false, false);
         }
-        // What it heard, a moment ago.
+        // What it heard: a chirp near, a moment ago; the radio, once it's
+        // said it.
         let now = app.world().resource::<Time>().elapsed_secs();
-        let heard: Vec<SquadCall> = {
+        let mut heard: Vec<SquadCall> = vec![];
+        {
             let h = &app.world().resource::<Heard>().0;
-            let ready: Vec<SquadCall> = h
+            for (c, when) in h.iter().skip(acted) {
+                if now - when < REACT {
+                    break;
+                }
+                acted += 1;
+                if c.at.xz().distance(here) < CHIRP_REACH {
+                    heard.push(*c);
+                }
+            }
+            let a = &app.world().resource::<super::squad::Aired>().0;
+            let fresh: Vec<SquadCall> = a
                 .iter()
-                .skip(acted)
-                .take_while(|(_, when)| now - when >= REACT)
+                .filter(|(_, when)| now - when >= REACT && now - when < REACT + 1.0)
                 .map(|(c, _)| *c)
                 .collect();
-            acted += ready.len();
-            ready
-        };
+            for c in fresh {
+                if !heard.contains(&c) && !me.told.iter().any(|(x, _)| *x == c) {
+                    heard.push(c);
+                }
+            }
+        }
         for call in heard.iter().filter(|c| c.target == player) {
-            let d = call.at.xz().distance(here);
-            if !arm.listen || d > RADIO_REACH.max(CHIRP_REACH) {
+            if !arm.listen || me.told.iter().any(|(x, _)| x == call) {
                 continue;
             }
-            let way =
-                (me.path.first().copied().unwrap_or(rvs[me.goal].1) - here).normalize_or(Vec2::X);
+            me.told.push((*call, t));
             let post = call.post.xz();
             match call.role {
                 Role::CutOff => {
@@ -301,57 +360,81 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                     if let Some(i) = other {
                         me.goal = i;
                         me.path = route(&app, here, rvs[i].1);
+                        me.bound = None;
                         heeded += 1;
                     }
                 }
-                Role::Flank => {
-                    let to = post - here;
-                    let left = way.perp_dot(to) > 0.0;
-                    let turn = if left { -BREAK_ANGLE } else { BREAK_ANGLE };
-                    let dir = Vec2::from_angle(turn).rotate(way);
-                    me.away = Some((here + dir * PACE * BREAK_FOR, t + BREAK_FOR));
-                    heeded += 1;
-                }
+                Role::Flank | Role::Pin => heeded += 1,
                 Role::Spot => {
                     me.lit = Some(post);
                     heeded += 1;
                 }
-                Role::Pin | Role::Call => {}
+                Role::Call => {}
             }
         }
-        // Where to now.
-        if me.away.is_some_and(|(_, until)| t > until) {
-            me.away = None;
-            me.path = route(&app, here, rvs[me.goal].1);
-        }
+        me.told.retain(|(_, when)| t - when < TOLD_FOR);
+        // The machines it knows of: those it can see, and (listening)
+        // where it's been told they're going.
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let seen: Vec<Vec2> = squad
+            .iter()
+            .filter_map(|e| {
+                let r = app.world().get::<super::Robot>(*e)?;
+                if r.wrecked || r.kind == super::RobotKind::Drone {
+                    return None;
+                }
+                let p = app.world().get::<Transform>(*e)?.translation.xz();
+                (p.distance(here) < SIGHT && nav.line_clear(here.to_array(), p.to_array()))
+                    .then_some(p)
+            })
+            .collect();
+        let mut threats = seen.clone();
+        threats.extend(
+            me.told
+                .iter()
+                .filter(|(c, _)| matches!(c.role, Role::Flank | Role::Pin | Role::CutOff))
+                .map(|(c, _)| c.post.xz()),
+        );
+        let exposed = |p: Vec2| {
+            threats
+                .iter()
+                .filter(|th| th.distance(p) < SIGHT && nav.line_clear(p.to_array(), th.to_array()))
+                .count()
+        };
         while me.path.len() > 1 && me.path[0].distance(here) < 1.5 {
             me.path.remove(0);
         }
-        let mut aim = match me.away {
-            Some((p, _)) => p,
-            None => me.path.first().copied().unwrap_or(rvs[me.goal].1),
-        };
-        // Keep off lit ground: round it, not through it.
-        if let Some(lit) = me.lit {
-            let to = aim - here;
-            let off = lit - here;
-            if off.length() < 25.0 && to.normalize_or_zero().dot(off.normalize_or_zero()) > 0.7 {
-                aim = here + Vec2::from_angle(BREAK_ANGLE).rotate(to);
-            }
+        // In cover: crouched, a breath, then the next bound.
+        let crouch = me.bound.is_none() && t < me.cover_until;
+        if let Some(mut rig) = app.world_mut().get_mut::<RigInput>(player) {
+            rig.crouch = crouch;
         }
-        let step = (aim - here).clamp_length_max(PACE * dt);
+        if crouch {
+            continue;
+        }
+        if me.bound.is_none() {
+            me.bound = Some(if threats.is_empty() {
+                // Nobody in sight: straight on.
+                me.path.first().copied().unwrap_or(rvs[me.goal].1)
+            } else {
+                next_cover(&nav, here, &me.path, rvs[me.goal].1, &exposed, me.lit)
+            });
+        }
+        let aim = me.bound.unwrap();
+        let pace = if threats.is_empty() { PACE } else { SPRINT };
+        let step = (aim - here).clamp_length_max(pace * dt);
         let next = here + step;
-        let walkable = app
-            .world()
-            .resource::<super::walker::Nav>()
-            .0
-            .walkable(next.to_array());
-        if walkable {
+        if nav.walkable(next.to_array()) {
             here = next;
         } else {
-            // Into a wall: back on the way.
-            me.away = None;
             me.path = route(&app, here, rvs[me.goal].1);
+            me.bound = None;
+        }
+        if here.distance(aim) < 0.8 {
+            me.bound = None;
+            if !threats.is_empty() {
+                me.cover_until = t + COVER_WAIT;
+            }
         }
         put(&mut app, here);
     };

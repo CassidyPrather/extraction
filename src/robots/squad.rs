@@ -84,6 +84,13 @@ pub struct SquadCall {
     pub target: Entity,
 }
 
+/// The calls a radio has said, and when (s): what a player with one has
+/// heard, for bots that act on it. The last [`AIRED_KEPT`].
+#[derive(Resource, Default, Debug)]
+pub struct Aired(pub Vec<(SquadCall, f32)>);
+
+pub const AIRED_KEPT: usize = 32;
+
 /// Whether machines share a plan at all (the sims' other arm).
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct Coordination {
@@ -102,6 +109,7 @@ impl Plugin for SquadPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SquadCall>()
             .init_resource::<Coordination>()
+            .init_resource::<Aired>()
             .add_systems(
                 FixedPostUpdate,
                 (plan_squads, relays_call, count_calls).chain(),
@@ -402,7 +410,11 @@ fn radio_calls(
     zone: Option<Res<Zone>>,
     mut chatter: MessageWriter<crate::raid::chatter::RobotChatter>,
     time: Res<Time>,
-    (mut said, mut waiting): (Local<(f32, u32)>, Local<Vec<(SquadCall, f32)>>),
+    (mut said, mut waiting, mut aired): (
+        Local<(f32, u32)>,
+        Local<Vec<(SquadCall, f32)>>,
+        ResMut<Aired>,
+    ),
 ) {
     let Some(mut raid) = raid else {
         calls.clear();
@@ -466,6 +478,10 @@ fn radio_calls(
                 .map(|m| m.name.clone())
         });
         raid.say(call_line(call, me, rv_name.as_deref(), said.1));
+        aired.0.push((*call, now));
+        if aired.0.len() > AIRED_KEPT {
+            aired.0.remove(0);
+        }
         said.0 = now;
         said.1 += 1;
         chatter.write(crate::raid::chatter::RobotChatter {
