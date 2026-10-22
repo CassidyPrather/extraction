@@ -167,21 +167,21 @@
  {
   "kind": "hush",
   "weather": "fog",
-  "changed": 0.0657,
+  "changed": 0.0655,
   "noise": 0.0,
-  "over_noise": 0.0657,
-  "deg2": 78.83,
+  "over_noise": 0.0655,
+  "deg2": 78.62,
   "floor": 2.0,
-  "outline": 0.06,
+  "outline": 0.07,
   "ok": true
  },
  {
   "kind": "hush",
   "weather": "downpour",
-  "changed": 0.0764,
+  "changed": 0.076,
   "noise": 0.0,
-  "over_noise": 0.0764,
-  "deg2": 91.65,
+  "over_noise": 0.076,
+  "deg2": 91.24,
   "floor": 2.0,
   "outline": 0.17,
   "ok": true
