@@ -130,11 +130,17 @@ fn leaves_of(
 }
 
 /// What changes look on a gun nobody holds, kept out of the merge (and
-/// so drawn as it is): the muzzle crown fouls and nicks (a rod down the
-/// bore, oil touched to a gun on a table: `weapons::wear`), and a
-/// scope's vignette follows the eye through a rifle lying on a sill
-/// (`weapons::optics`).
-const LIVE: [&str; 2] = ["Muzzle crown", "Vignette"];
+/// so drawn as it is):
+/// - the muzzle crown fouls and nicks (a rod down the bore, oil touched
+///   to a gun on a table: `weapons::wear`);
+/// - a scope's vignette follows the eye through a rifle lying on a sill
+///   (`weapons::optics`);
+/// - a cold scope's lens fogs and clears (`weapons::weather`).
+///
+/// (Rain and grime on a gun lying out give its parts their own
+/// materials once, which wakes it, see `wake_handled`; after that their
+/// tint changes in the material the merged meshes share, and shows.)
+const LIVE: [&str; 3] = ["Muzzle crown", "Vignette", "Lens fog"];
 
 /// What a merged mesh shares: its material and how it casts the sun's
 /// shadow.
@@ -177,13 +183,20 @@ fn wake_handled(
     >,
     merged: Query<(), With<RestMesh>>,
     names: Query<&Name>,
+    rematerialled: Query<Entity, (Changed<MeshMaterial3d<StandardMaterial>>, Without<RestMesh>)>,
     mut vis: Query<&mut Visibility>,
 ) {
+    // A merged part given a material of its own (a gun weathering): the
+    // merged meshes still wear the old one.
+    let rematerialled: std::collections::HashSet<Entity> = rematerialled.iter().collect();
     // (Something put on, taken off, or gone: removing a parent isn't a
     // change to one.)
     let reparented = !moved.is_empty() | (unparented.read().count() > 0);
     for (gun, rest) in &resting {
         let mut wake = handled(gun, &hands, &players, &parents);
+        if !wake && !rematerialled.is_empty() {
+            wake = rest.leaves.iter().any(|(e, _)| rematerialled.contains(e));
+        }
         if !wake && reparented {
             // Something came or went: the leaves under it now aren't the
             // ones merged.
@@ -533,6 +546,17 @@ mod tests {
         app.update();
         app.update();
         awake(&mut app, gun, &leaves, "pushed in");
+        // A part given a material of its own (a gun weathering).
+        let (gun, leaves) = a_resting_gun(&mut app);
+        let own = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        app.world_mut()
+            .entity_mut(leaves[0])
+            .insert(MeshMaterial3d(own));
+        app.update();
+        awake(&mut app, gun, &leaves, "weathered");
         // Something taken off.
         let (gun, leaves) = a_resting_gun(&mut app);
         let off = leaves[0];
