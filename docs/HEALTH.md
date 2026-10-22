@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 18ba914 | 04:30 | 10/10 clean, 8 extracted | 856 passed, 0 failed, all within budget; 4912 test-seconds (render gauges skipped by hand) | first round with single-threaded headless apps |
 | 4d45a5f | 03:40 | | 846 tests minus gauges in 24 min: 1 FAILED | single-threaded headless apps |
 | 24d1ef0 | 02:00 | | 842 of 861 timed, 0 FAILED; 2 h wall | the profile: render gauges 45% |
 | 8e63945 | 22:00 | 10/10 clean, 7 extracted | rechecks: 5 of 8 pass | sims 2-3x faster single-threaded |
@@ -39,16 +40,13 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of 4d45a5f; det. = fails every time, alone too.
-
-| test / run | det. / flaky | class | owner | status |
-| - | - | - | - | - |
-| `robots::mind_tests::a_crawling_walker_doesnt_flank` | det. | 692def5a "WIP: knockdown-aware walker minds (not yet compiled or tested)" reached main | Robot minds | routed 03:40 |
+None as of 18ba914 (suite and smoke). The gauge tier runs from round 25 on.
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| `robots::mind_tests::a_crawling_walker_doesnt_flank` (a walker took the flank before its limp caught up) | 18ba914 (8b9fabb6) | Robot minds |
 | the dirigible pod (a spotter counted against the director's budget, since bb5dbaf0), `heaps_settle` (a log pile taken for a floor), Rime Fell's bats and ducks | 24d1ef0 / 4d45a5f | Robot bodies, Soak, Wildlife |
 | the suite took ~2 h at 4 threads | this branch (single-threaded headless apps) + Performance's gauge tier | Verifier, Performance |
 | Rime Fell bats and ducks (no water birds above the snow line; the tarn is too small for a raft), Soak's launch test (an item down a site is fine), drone chirp, thrown bolt | 8e63945 | Wildlife, Soak, Robot minds |
