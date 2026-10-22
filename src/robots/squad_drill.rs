@@ -23,6 +23,8 @@
 //! a drill to `SIM_DRILL_OUT` (default `target/squad_drill.jsonl`); the
 //! plain test runs one of each.
 
+use avian3d::prelude::*;
+use bevy::ecs::system::SystemState;
 use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 use extraction_core::map::MarkerKind;
@@ -294,6 +296,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         told: vec![],
         lit: None,
     };
+    let mut sight: SystemState<SpatialQuery> = SystemState::new(app.world_mut());
     let mut here = start;
     let mut heeded = 0;
     let mut acted = 0usize;
@@ -373,34 +376,6 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             }
         }
         me.told.retain(|(_, when)| t - when < TOLD_FOR);
-        // The machines it knows of: those it can see, and (listening)
-        // where it's been told they're going.
-        let nav = app.world().resource::<super::walker::Nav>().0.clone();
-        let seen: Vec<Vec2> = squad
-            .iter()
-            .filter_map(|e| {
-                let r = app.world().get::<super::Robot>(*e)?;
-                if r.wrecked || r.kind == super::RobotKind::Drone {
-                    return None;
-                }
-                let p = app.world().get::<Transform>(*e)?.translation.xz();
-                (p.distance(here) < SIGHT && nav.line_clear(here.to_array(), p.to_array()))
-                    .then_some(p)
-            })
-            .collect();
-        let mut threats = seen.clone();
-        threats.extend(
-            me.told
-                .iter()
-                .filter(|(c, _)| matches!(c.role, Role::Flank | Role::Pin | Role::CutOff))
-                .map(|(c, _)| c.post.xz()),
-        );
-        let exposed = |p: Vec2| {
-            threats
-                .iter()
-                .filter(|th| th.distance(p) < SIGHT && nav.line_clear(p.to_array(), th.to_array()))
-                .count()
-        };
         while me.path.len() > 1 && me.path[0].distance(here) < 1.5 {
             me.path.remove(0);
         }
@@ -412,16 +387,61 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         if crouch {
             continue;
         }
-        if me.bound.is_none() {
-            me.bound = Some(if threats.is_empty() {
-                // Nobody in sight: straight on.
-                me.path.first().copied().unwrap_or(rvs[me.goal].1)
-            } else {
-                next_cover(&nav, here, &me.path, rvs[me.goal].1, &exposed, me.lit)
+        // The machines it knows of: those it can see, and (listening)
+        // where it's been told they're going. Seen is seen: a ray, as
+        // their eyes and guns have it.
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let (calm, chosen) = {
+            let sq = sight.get(app.world());
+            let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+            let los = |a: Vec2, b: Vec2| {
+                let from = ground(a) + Vec3::Y * 1.3;
+                let to = ground(b) + Vec3::Y * 1.5;
+                let d = to - from;
+                Dir3::new(d).map_or(true, |dir| {
+                    sq.cast_ray(from, dir, d.length(), true, &world).is_none()
+                })
+            };
+            let seen: Vec<Vec2> = squad
+                .iter()
+                .filter_map(|e| {
+                    let r = app.world().get::<super::Robot>(*e)?;
+                    if r.wrecked || r.kind == super::RobotKind::Drone {
+                        return None;
+                    }
+                    let p = app.world().get::<Transform>(*e)?.translation.xz();
+                    (p.distance(here) < SIGHT && los(here, p)).then_some(p)
+                })
+                .collect();
+            let mut threats = seen;
+            threats.extend(
+                me.told
+                    .iter()
+                    .filter(|(c, _)| matches!(c.role, Role::Flank | Role::Pin | Role::CutOff))
+                    .map(|(c, _)| c.post.xz()),
+            );
+            let exposed = |p: Vec2| {
+                threats
+                    .iter()
+                    .filter(|th| th.distance(p) < SIGHT && los(p, **th))
+                    .count()
+            };
+            let chosen = me.bound.is_none().then(|| {
+                if threats.is_empty() {
+                    // Nobody in sight: straight on.
+                    me.path.first().copied().unwrap_or(rvs[me.goal].1)
+                } else {
+                    next_cover(&nav, here, &me.path, rvs[me.goal].1, &exposed, me.lit)
+                }
             });
+            (threats.is_empty(), chosen)
+        };
+        if me.bound.is_none() {
+            me.bound = chosen;
         }
+        let threats_empty = calm;
         let aim = me.bound.unwrap();
-        let pace = if threats.is_empty() { PACE } else { SPRINT };
+        let pace = if threats_empty { PACE } else { SPRINT };
         let step = (aim - here).clamp_length_max(pace * dt);
         let next = here + step;
         if nav.walkable(next.to_array()) {
@@ -432,7 +452,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         }
         if here.distance(aim) < 0.8 {
             me.bound = None;
-            if !threats.is_empty() {
+            if !threats_empty {
                 me.cover_until = t + COVER_WAIT;
             }
         }
