@@ -6,6 +6,13 @@
 //! over it and down the far side, if it's thin).
 //! Let go with both hands, or lift your palms, and you fall.
 //!
+//! Or grip the edge: close a hand on a ledge, a wall top (up to [`EDGE_HIGH`],
+//! over your head: a pull-up), a fence's top rail or the truck's tailgate,
+//! and it holds there as a palm does; two holds (palms or grips) pull you
+//! up, and over a fence or a thin wall you go down the far side. How fast
+//! you can pull yourself up goes with what you carry ([`pull_rate`]: the
+//! load, and whatever you're hauling).
+//!
 //! The comfort setting `climb_teleport` skips the pulling for those it
 //! makes sick: a grip on a ladder, or both palms on a ledge, puts you at
 //! the top. On a ladder the stick climbs too (flat mode, or tired arms).
@@ -35,6 +42,19 @@ const ON_TOP: f32 = 0.07;
 /// Tops you can mantle: this far over your feet.
 pub const LEDGE_LOW: f32 = 0.5;
 pub const LEDGE_HIGH: f32 = 1.9;
+/// A top gripped from below can be this high over your feet: a wall's top
+/// above your head, reached up for.
+pub const EDGE_HIGH: f32 = 2.3;
+/// Pulling yourself up gets slower with load past this (kg), and with
+/// [`LOAD_LIMP`] kg on you, barely at all.
+pub const LOAD_EASY: f32 = 12.0;
+pub const LOAD_LIMP: f32 = 55.0;
+
+/// How fast you can pull yourself up (a share of the unladen rate) with
+/// this much on you, kg.
+pub fn pull_rate(kg: f32) -> f32 {
+    (1.0 - (kg - LOAD_EASY).max(0.0) / (LOAD_LIMP - LOAD_EASY)).clamp(0.12, 1.0)
+}
 /// Pushed up until the top is at your waist (this far over your feet),
 /// you're on it: one pull from a ledge at head height gets you there.
 const OVER: f32 = 1.0;
@@ -47,6 +67,8 @@ const MANTLE_IN: f32 = 0.35;
 /// slides this far.
 const LIFT: f32 = 0.05;
 const SLIDE: f32 = 0.15;
+/// A gripped top's edge is within this of the hand.
+const EDGE_REACH: f32 = 0.12;
 
 pub struct HandClimbPlugin;
 
@@ -99,6 +121,12 @@ impl Ladder {
     }
 }
 
+/// Not to be climbed: the palms and grips find nothing on it. The
+/// quarantine perimeter's `world::structures::Fence` and anything of a
+/// robot's (a sentry's mast) count as this too.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct NoClimb;
+
 /// What a hand is holding the body by, at `at` (world).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct HandHold {
@@ -113,6 +141,8 @@ pub enum Hold {
     Ladder(Entity),
     /// A palm pressed on a top this high.
     Ledge { top: f32 },
+    /// A hand gripping the edge of a top this high.
+    Edge { top: f32 },
 }
 
 /// Climbing on hand holds (as against a rope), so it's ours to end; and
@@ -138,6 +168,15 @@ pub struct ClimbedOver {
 #[allow(clippy::type_complexity)]
 fn plant_palms(
     mut commands: Commands,
+    barred: Query<
+        (),
+        Or<(
+            With<NoClimb>,
+            With<crate::world::structures::Fence>,
+            With<crate::robots::Robot>,
+        )>,
+    >,
+    parents: Query<&ChildOf>,
     players: Query<(&Transform, &Children), (With<Player>, With<LocalPlayer>)>,
     hands: Query<(Entity, &Hand, Option<&HandHold>), With<RigHand>>,
     driver: Res<RigDriver>,
@@ -156,6 +195,13 @@ fn plant_palms(
             let busy = hand.grip_down || hand.holding.is_some() || hand.handle.is_some();
             match hold.map(|h| h.on) {
                 Some(Hold::Ladder(_)) => continue,
+                // A grip on an edge holds until the hand opens.
+                Some(Hold::Edge { .. }) => {
+                    if !hand.grip_down || hand.holding.is_some() {
+                        commands.entity(e).remove::<HandHold>();
+                    }
+                    continue;
+                }
                 Some(Hold::Ledge { .. }) => {
                     let at = hold.unwrap().at;
                     if busy || p.y > at.y + LIFT || p.xz().distance(at.xz()) > SLIDE {
@@ -163,9 +209,14 @@ fn plant_palms(
                     }
                     continue;
                 }
-                None if busy => continue,
+                None if busy
+                    && !(hand.grip_down && hand.holding.is_none() && hand.handle.is_none()) =>
+                {
+                    continue;
+                }
                 None => {}
             }
+            let gripping = hand.grip_down;
             // The top under the palm, found from a little above it (the
             // tracked hand may be pressed into it).
             let from = p + Vec3::Y * 0.25;
@@ -181,13 +232,43 @@ fn plant_palms(
             if hit.normal.y < 0.7 || hit.distance < 0.01 {
                 continue;
             }
-            let top = from.y - hit.distance;
-            let over_feet = top - root.translation.y;
-            if !(LEDGE_LOW..=LEDGE_HIGH).contains(&over_feet) || p.y > top + ON_TOP {
+            // Not the map's perimeter, nor a robot's kit.
+            let mut up = Some(hit.entity);
+            let mut no = false;
+            for _ in 0..4 {
+                let Some(e) = up else { break };
+                no |= barred.contains(e);
+                up = parents.get(e).ok().map(|p| p.parent());
+            }
+            if no {
                 continue;
             }
+            let top = from.y - hit.distance;
+            let over_feet = top - root.translation.y;
+            let high = if gripping { EDGE_HIGH } else { LEDGE_HIGH };
+            if !(LEDGE_LOW..=high).contains(&over_feet) || p.y > top + ON_TOP {
+                continue;
+            }
+            // A grip needs an edge to close on: the top ends within a hand's
+            // width of the hand, toward you (the near edge of a wall, a
+            // rail, a tailgate) and not in the middle of a table.
+            if gripping {
+                let toward = (root.translation - p).with_y(0.0).normalize_or_zero();
+                let beside = p + toward * EDGE_REACH + Vec3::Y * 0.25;
+                let filter = SpatialQueryFilter::from_mask([Layer::World]);
+                let edge = spatial
+                    .cast_ray(beside, Dir3::NEG_Y, 0.25 + 0.15, true, &filter)
+                    .is_none();
+                if !edge {
+                    continue;
+                }
+            }
             commands.entity(e).insert(HandHold {
-                on: Hold::Ledge { top },
+                on: if gripping {
+                    Hold::Edge { top }
+                } else {
+                    Hold::Ledge { top }
+                },
                 at: p,
                 since: time.elapsed_secs(),
             });
@@ -235,7 +316,7 @@ fn climb_with_hands(
                 Some((Hold::Ladder(_), h)) if ladder.is_none_or(|l| h.since > l.2.since) => {
                     ladder = Some((e, hand, h));
                 }
-                Some((Hold::Ledge { .. }, h)) => ledge.push((hand, h)),
+                Some((Hold::Ledge { .. } | Hold::Edge { .. }, h)) => ledge.push((hand, h)),
                 _ => {}
             }
         }
@@ -278,7 +359,7 @@ fn climb_with_hands(
             let top = ledge
                 .iter()
                 .map(|(_, h)| match h.on {
-                    Hold::Ledge { top } => top,
+                    Hold::Ledge { top } | Hold::Edge { top } => top,
                     _ => f32::MIN,
                 })
                 .fold(f32::MIN, f32::max);
@@ -325,7 +406,9 @@ fn climb_with_hands(
                 Climbing,
             ));
         }
-        body.velocity = pull.clamp_length_max(MAX_PULL);
+        // What you carry (and haul) slows you: the arms lift less of it.
+        let rate = pull_rate(body.carried_kg) * (1.0 - body.hauling);
+        body.velocity = pull.clamp_length_max(MAX_PULL * rate);
         body.airborne = 0.0;
     }
 }

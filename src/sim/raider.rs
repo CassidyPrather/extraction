@@ -482,7 +482,10 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
-    for id in contract_kit() {
+    for id in contract_kit()
+        .into_iter()
+        .chain(super::harvest::kit(traits.name))
+    {
         kit.push(Task::PickUp {
             id: id.to_owned(),
             side: Side::Left,

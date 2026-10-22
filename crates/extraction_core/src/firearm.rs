@@ -147,6 +147,14 @@ impl Default for Kick {
     }
 }
 
+/// The malfunction chance per unit of grime, and of stiffness.
+pub const GRIME_JAMS: f32 = 0.06;
+pub const STIFF_JAMS: f32 = 0.04;
+/// A shot's fouling grows by this share per unit of grime.
+pub const GRIME_FOULS: f32 = 2.0;
+/// A stiff action cycles this much slower at the worst.
+pub const STIFF_SLOWS: f32 = 0.6;
+
 const fn one() -> u32 {
     1
 }
@@ -373,6 +381,15 @@ pub struct Firearm {
     pub condition: f32,
     /// 0..=1. Dirt from shooting; cleaning removes it.
     pub fouling: f32,
+    /// 0..=1. Dirt from outside in the action: rain and damp, ash, snow
+    /// melting in it. It jams the action as fouling does, and a shot
+    /// fouls a grimy gun faster. A field wipe takes it off ([`Self::wipe`]).
+    #[serde(default)]
+    pub grime: f32,
+    /// 0..=1. Its oil stiffened by cold: the action drags, cycles slower
+    /// and jams more. Warmth undoes it.
+    #[serde(default)]
+    pub stiff: f32,
     trigger_down: bool,
     /// Semi-auto needs the trigger released before the next shot.
     trigger_reset: bool,
@@ -422,6 +439,8 @@ impl Firearm {
             action_released: false,
             condition: condition.clamp(0.0, 1.0),
             fouling: 0.0,
+            grime: 0.0,
+            stiff: 0.0,
             trigger_down: false,
             trigger_reset: true,
             cooldown: 0.0,
@@ -735,7 +754,8 @@ impl Firearm {
         self.last_fired = load;
         events.push(Event::Fired { barrel });
         self.wear();
-        self.cooldown = self.cooldown.min(0.0) + 60.0 / self.def.rpm.max(1.0);
+        self.cooldown = self.cooldown.min(0.0)
+            + 60.0 / self.def.rpm.max(1.0) * (1.0 + STIFF_SLOWS * self.stiff);
         (events, true)
     }
 
@@ -868,7 +888,8 @@ impl Firearm {
     fn wear(&mut self) {
         self.condition =
             (self.condition - self.def.wear_per_shot * (1.0 + 2.0 * self.fouling)).max(0.0);
-        self.fouling = (self.fouling + self.def.fouling_per_shot).min(1.0);
+        self.fouling =
+            (self.fouling + self.def.fouling_per_shot * (1.0 + GRIME_FOULS * self.grime)).min(1.0);
     }
 
     /// Chance per cycle that a self-loader jams: one in a thousand for a
@@ -876,7 +897,12 @@ impl Firearm {
     /// one in six worn out and filthy.
     pub fn malfunction_chance(&self) -> f32 {
         let wear = (1.0 - self.condition).powi(2);
-        (0.001 + 0.15 * wear + 0.03 * self.fouling).min(0.5)
+        (0.001
+            + 0.15 * wear
+            + 0.03 * self.fouling
+            + GRIME_JAMS * self.grime
+            + STIFF_JAMS * self.stiff)
+            .min(0.5)
     }
 
     /// The gas system's stroke after a shot: eject, cock, feed (or jam, or
@@ -1418,9 +1444,18 @@ impl Firearm {
         moved
     }
 
-    /// Cleaning: removes fouling. `effort` is 0..=1 of a full cleaning.
+    /// Cleaning: removes fouling (and the grime with it). `effort` is
+    /// 0..=1 of a full cleaning.
     pub fn clean(&mut self, effort: f32) {
-        self.fouling = (self.fouling - effort.clamp(0.0, 1.0)).max(0.0);
+        let e = effort.clamp(0.0, 1.0);
+        self.fouling = (self.fouling - e).max(0.0);
+        self.grime = (self.grime - e).max(0.0);
+    }
+
+    /// A field wipe: a glove run over the action takes off `effort` of the
+    /// grime; the fouling inside wants a proper cleaning.
+    pub fn wipe(&mut self, effort: f32) {
+        self.grime = (self.grime - effort.clamp(0.0, 1.0)).max(0.0);
     }
 
     /// Repair with spare parts: restores condition, never above `cap` (worn
@@ -1943,6 +1978,123 @@ mod tests {
         gun.insert_magazine(mag("pm", 8)).unwrap();
         gun.take_off_stop();
         assert!(gun.release_bolt().contains(&Event::Chambered));
+    }
+
+    /// Jams per hundred rounds, `n` rounds through a well-kept rifle as
+    /// stiff and grimy as given, a trigger press each (each jam cleared by
+    /// a rack); and its rounds a second on automatic.
+    fn weathered_run(stiff: f32, grime: f32, n: u32) -> (f32, f32) {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        gun.stiff = stiff;
+        gun.grime = grime;
+        while gun.fire_mode() != FireMode::Semi {
+            gun.cycle_mode();
+        }
+        let mut rng = crate::noise::Rng::new(7);
+        let mut roll = || rng.f32();
+        let (mut shots, mut jams, mut presses) = (0u32, 0u32, 0u32);
+        while shots < n {
+            presses += 1;
+            assert!(presses < 3 * n, "stuck: {gun:?}");
+            if gun.rounds_in_feed() == 0 {
+                let _ = gun.remove_magazine();
+                gun.insert_magazine(mag("ak545", 30)).unwrap();
+            }
+            // (A dud leaves the hammer down on it: rack that out too.)
+            if gun.malfunction.is_some() || gun.chambers[0].is_none() || !gun.hammers_cocked[0] {
+                gun.malfunction = None;
+                gun.mag_unseated = false;
+                rack(&mut gun);
+            }
+            let mut ev = gun.update(0.2, true, &mut roll);
+            ev.extend(gun.update(0.2, false, &mut roll));
+            for e in &ev {
+                match e {
+                    Event::Fired { .. } => shots += 1,
+                    Event::Malfunctioned(_) => jams += 1,
+                    _ => {}
+                }
+            }
+        }
+        // A second of automatic from a fresh magazine.
+        let mut auto = Firearm::new(rifle(), 1.0);
+        auto.stiff = stiff;
+        while auto.fire_mode() != FireMode::Auto {
+            auto.cycle_mode();
+        }
+        auto.insert_magazine(mag("ak545", 30)).unwrap();
+        rack(&mut auto);
+        let mut lucky = lucky();
+        let mut fired = 0;
+        for _ in 0..1000 {
+            fired += auto
+                .update(0.001, true, &mut lucky)
+                .iter()
+                .filter(|e| matches!(e, Event::Fired { .. }))
+                .count();
+        }
+        (jams as f32 * 100.0 / n as f32, fired as f32)
+    }
+
+    /// The weather's gauge: a warm, dry, well-kept rifle hardly jams; cold
+    /// oil jams it more and slows it; grime from rain and ash jams it
+    /// more still; a field wipe takes it most of the way back.
+    #[test]
+    fn weather_jams_a_gun_and_a_wipe_takes_it_back() {
+        let n = 6000;
+        let (clean, rate) = weathered_run(0.0, 0.0, n);
+        let (cold, cold_rate) = weathered_run(1.0, 0.0, n);
+        let (grimy, _) = weathered_run(0.0, 1.0, n);
+        let (both, _) = weathered_run(1.0, 1.0, n);
+        let mut wiped = Firearm::new(rifle(), 1.0);
+        wiped.grime = 1.0;
+        for _ in 0..4 {
+            wiped.wipe(0.2);
+        }
+        let (after, _) = weathered_run(0.0, wiped.grime, n);
+        println!(
+            "jams per 100: clean {clean:.2}, cold {cold:.2}, grimy {grimy:.2}, both {both:.2}, \
+             wiped {after:.2}; rounds/s clean {rate:.1}, cold {cold_rate:.1}"
+        );
+        assert!(clean < 0.5, "well kept: {clean}");
+        assert!(cold > 2.0 * clean.max(0.1), "cold oil: {cold} vs {clean}");
+        assert!(grimy > cold, "grime worse than cold: {grimy} vs {cold}");
+        assert!(both > grimy, "both worse still: {both}");
+        assert!(after < grimy * 0.4, "wiped down: {after} vs {grimy}");
+        assert!(
+            cold_rate < rate * 0.75,
+            "stiff cycles slower: {cold_rate} vs {rate}"
+        );
+    }
+
+    /// A grimy gun fouls faster with each shot; the cleaning kit takes the
+    /// grime with the fouling, a wipe only the grime.
+    #[test]
+    fn grime_fouls_faster_and_cleaning_takes_both() {
+        let def = FirearmDef {
+            fouling_per_shot: 0.004,
+            ..rifle()
+        };
+        let foul = |grime: f32| {
+            let mut gun = Firearm::new(def.clone(), 1.0);
+            gun.grime = grime;
+            gun.cycle_mode();
+            gun.insert_magazine(mag("ak545", 30)).unwrap();
+            rack(&mut gun);
+            for _ in 0..20 {
+                shoot(&mut gun);
+            }
+            gun
+        };
+        let dry = foul(0.0).fouling;
+        let mut gun = foul(1.0);
+        assert!(gun.fouling > 2.5 * dry, "{} vs {dry}", gun.fouling);
+        let fouling = gun.fouling;
+        gun.wipe(0.5);
+        assert_eq!(gun.fouling, fouling, "a wipe leaves the bore");
+        assert!((gun.grime - 0.5).abs() < 1e-6);
+        gun.clean(1.0);
+        assert_eq!((gun.fouling, gun.grime), (0.0, 0.0));
     }
 
     #[test]

@@ -16,6 +16,15 @@ import os
 import sys
 
 KINDS = {"Lift", "Burner", "Snare", "Well", "Mirror", "Hush"}
+# Each kind's own stone.
+STONE = {
+    "Lift": "art_featherstone",
+    "Burner": "art_hearth",
+    "Snare": "art_aegis",
+    "Well": "art_lodestone",
+    "Mirror": "art_shard",
+    "Hush": "art_hushstone",
+}
 # Deaths in anomalies per deliberate dive: some, never most.
 MAX_DEATHS_PER_DIVE = 0.2
 # Stones brought out per deliberate dive.
@@ -28,6 +37,8 @@ def main(path: str) -> int:
         print(f"no runs in {path}")
         return 2
     dives = 0
+    out = collections.Counter()
+    hurt = collections.Counter()
     by_kind = collections.Counter()
     deaths = collections.Counter()
     stones = collections.Counter()
@@ -41,8 +52,14 @@ def main(path: str) -> int:
                     by_kind[e.get("kind", "?")] += 1
                 elif ev == "death":
                     deaths[e.get("cause", "?")] += 1
+                elif ev == "damage" and e.get("cause") in KINDS:
+                    hurt[e["cause"]] += float(e.get("amount", 0.0))
                 elif ev == "loot" and str(e.get("item", "")).startswith("art_"):
                     stones[e["item"]] += 1
+                elif ev == "end" and e.get("outcome") == "extracted":
+                    for item in e.get("loot") or []:
+                        if str(item).startswith("art_"):
+                            out[item] += 1
     harvest_deaths = sum(n for c, n in deaths.items() if c in KINDS)
     taken = sum(stones.values())
     per_dive = harvest_deaths / dives if dives else 0.0
@@ -50,9 +67,17 @@ def main(path: str) -> int:
     print(f"{len(runs)} runs, {dives} deliberate dives")
     print(f"deaths in anomalies: {harvest_deaths} ({per_dive:.0%} a dive); all deaths {dict(deaths)}")
     print(f"stones taken: {taken} ({yield_:.0%} a dive) {dict(stones)}")
+    print(f"stones brought out (raids that extracted): {sum(out.values())} {dict(out)}")
+    lost = sum(hurt.values())
+    print(f"health lost in anomalies: {lost:.0f} ({lost / max(dives, 1):.0f} hp a dive)")
     for kind in sorted(KINDS):
         if by_kind[kind] or deaths[kind]:
-            print(f"  {kind:7} {by_kind[kind]:3} dives, {deaths[kind]:2} deaths")
+            got = stones[STONE[kind]]
+            print(
+                f"  {kind:7} {by_kind[kind]:3} dives, {deaths[kind]:2} deaths,"
+                f" {got:2} stones taken ({got / max(by_kind[kind], 1):.0%}),"
+                f" {hurt[kind] / max(by_kind[kind], 1):4.0f} hp lost a dive"
+            )
     ok = True
     if dives == 0:
         print("FAIL no deliberate dives: nobody tried")

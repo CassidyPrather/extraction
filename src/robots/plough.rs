@@ -90,14 +90,21 @@ pub struct Buried {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct BankPiece;
 
-/// A stretch of packed lane behind it (for its look).
-#[derive(Component, Debug, Clone, Copy)]
-pub struct LanePiece;
-
-/// Stretches of road it's cleared, and when (the raid clock): a lane takes
-/// no new prints while it's fresh (`rules::lane_fresh`).
+/// Stretches of road it's cleared, and when (the raid clock, last
+/// cleared): straight runs of up to [`RUN_LEN`], each new bit of lane
+/// joining the last run while it carries straight on. A lane takes no
+/// prints while it's fresh (`rules::lane_fresh`): [`wipe_lanes`] takes
+/// them up as they're laid. The terrain draws them packed
+/// (`world::snow::Packed`, [`pack_lanes`]).
 #[derive(Resource, Debug, Default)]
 pub struct Lanes(pub Vec<(Vec2, Vec2, f32)>);
+
+/// The longest a lane's run gets (m), and how far it may bend and still
+/// be the same run (radians).
+pub const RUN_LEN: f32 = 25.0;
+const RUN_BEND: f32 = 0.15;
+/// The most runs kept (the oldest go).
+const RUNS: usize = 256;
 
 impl Lanes {
     /// Whether `p` lies in a lane still fresh at `now` with snow falling
@@ -107,6 +114,29 @@ impl Lanes {
         self.0.iter().any(|(a, b, t)| {
             rules::lane_fresh(now - t, falling) && seg_dist(q, *a, *b) < rules::BLADE * 0.5
         })
+    }
+
+    /// A bit of lane cleared from `a` to `b` at `now`: onto the last run
+    /// if it carries it straight on, else a new run.
+    pub fn clear(&mut self, a: Vec2, b: Vec2, now: f32) {
+        if a.distance(b) < 1e-3 {
+            return;
+        }
+        if let Some((ra, rb, t)) = self.0.last_mut() {
+            let run = *rb - *ra;
+            let more = b - a;
+            let straight =
+                run.length() < 1e-3 || run.normalize().angle_to(more.normalize()).abs() < RUN_BEND;
+            if rb.distance(a) < 0.5 && straight && ra.distance(b) <= RUN_LEN {
+                *rb = b;
+                *t = now;
+                return;
+            }
+        }
+        self.0.push((a, b, now));
+        if self.0.len() > RUNS {
+            self.0.remove(0);
+        }
     }
 }
 
@@ -153,7 +183,11 @@ impl Plugin for PloughPlugin {
                     .chain()
                     .before(PhysicsSystems::First),
             )
-            .add_systems(FixedUpdate, (place_ploughs, stage_scenario));
+            .add_systems(FixedUpdate, (place_ploughs, stage_scenario))
+            .add_systems(
+                Update,
+                (wipe_lanes, pack_lanes).after(crate::world::snow::Treading),
+            );
     }
 }
 
@@ -291,14 +325,11 @@ fn plough_drive(
         let in_snow = !p.needs_snow || snow.as_ref().is_some_and(|sn| sn.lies(ground.y) > 0.05);
         p.ploughing = moving && in_snow;
         if p.ploughing {
-            lanes.0.push((
+            lanes.clear(
                 Vec2::new(before.x, before.z),
                 Vec2::new(ground.x, ground.z),
                 now,
-            ));
-            if lanes.0.len() > 4000 {
-                lanes.0.drain(0..1000);
-            }
+            );
             // The bank, every few metres of new road ploughed, on the
             // downhill side.
             if (s - p.banked).abs() >= BANK_STEP {
@@ -307,18 +338,6 @@ fn plough_drive(
                 let b = ground + side * rules::BANK_OUT;
                 // (Not at a junction or a hut's door, nor in a gallery.)
                 let bank_here = rules::bank_ok(&zone.map, [b.x, b.z]);
-                // The packed lane it leaves (a strip over the snow).
-                commands.spawn((
-                    Name::new("Plough lane"),
-                    LanePiece,
-                    OfPlough(e),
-                    Transform::from_translation(ground + Vec3::Y * 0.08).with_rotation(
-                        Quat::from_rotation_y(
-                            -extraction_core::sentry::bearing([0.0, 0.0], dir).to_radians(),
-                        ),
-                    ),
-                    Visibility::default(),
-                ));
                 if bank_here {
                     commands.spawn((
                         Name::new("Plough bank"),
@@ -334,6 +353,66 @@ fn plough_drive(
                 }
             }
         }
+    }
+}
+
+/// Prints laid in a fresh lane go as they're made (the lane takes none):
+/// a scan of the fresh runs, only when the prints have changed.
+fn wipe_lanes(
+    lanes: Res<Lanes>,
+    tracks: Option<ResMut<crate::world::snow::Tracks>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    mut seen: Local<u32>,
+    time: Res<Time>,
+) {
+    let Some(mut tracks) = tracks else { return };
+    if tracks.version == *seen || lanes.0.is_empty() {
+        return;
+    }
+    let now = time.elapsed_secs();
+    let falling = snow.map_or(0.0, |s| s.falling);
+    for (a, b, t) in &lanes.0 {
+        if !rules::lane_fresh(now - t, falling) {
+            continue;
+        }
+        let along = *b - *a;
+        tracks.wipe(
+            Vec3::new(a.x, 0.0, a.y),
+            rules::BLADE * 0.5,
+            Vec3::new(along.x, 0.0, along.y),
+            along.length(),
+        );
+    }
+    *seen = tracks.version;
+}
+
+/// The fresh runs to the terrain, to draw packed: written only when a run
+/// is added or its freshness crosses a step.
+fn pack_lanes(
+    lanes: Res<Lanes>,
+    packed: Option<ResMut<crate::world::snow::Packed>>,
+    snow: Option<Res<crate::world::snow::Snow>>,
+    time: Res<Time>,
+) {
+    let Some(mut packed) = packed else { return };
+    let now = time.elapsed_secs();
+    let life = rules::lane_life(snow.map_or(0.0, |s| s.falling));
+    let want: Vec<crate::world::snow::PackedLane> = lanes
+        .0
+        .iter()
+        .filter_map(|(a, b, t)| {
+            let fresh = 1.0 - (now - t) / life;
+            (fresh > 0.0).then(|| crate::world::snow::PackedLane {
+                a: *a,
+                b: *b,
+                half_width: rules::BLADE * 0.5,
+                // In steps, so it's written now and then, not every frame.
+                fresh: (fresh * 20.0).ceil() / 20.0,
+            })
+        })
+        .collect();
+    if packed.lanes != want {
+        packed.lanes = want;
     }
 }
 
@@ -815,6 +894,77 @@ mod tests {
                 .resource::<Acts>()
                 .0
                 .contains(&PloughAct::Dug)
+        );
+    }
+
+    /// A valley with every one of these machines out (its sentries and
+    /// spotter on the map, a minelayer, two menders, a plough) still
+    /// sends a logistics run and a response team: none of them count
+    /// against the director's active robots (`heavy::NotOnPatrol`).
+    #[test]
+    fn the_machines_leave_the_director_room() {
+        let opts = crate::LaunchOptions {
+            robots: true,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let nav = app
+            .world()
+            .resource::<super::super::walker::Nav>()
+            .0
+            .clone();
+        {
+            let mut c = app.world_mut().commands();
+            let at = zone.on_ground(40.0, 230.0);
+            super::super::minelayer::spawn_minelayer(&mut c, &zone, &nav, at, vec![at], at);
+            for k in 0..2 {
+                let m = at + Vec3::new(k as f32 * 5.0, 9.0, 0.0);
+                super::super::mender::spawn_mender(&mut c, m, m);
+            }
+            spawn_plough(&mut c, &zone, vec![[60.0, 240.0], [60.0, 200.0]]);
+            app.world_mut().flush();
+        }
+        app.update();
+        let standing = app
+            .world_mut()
+            .query_filtered::<&Robot, With<super::super::heavy::NotOnPatrol>>()
+            .iter(app.world())
+            .count();
+        assert!(standing >= 6, "a valley's worth of them: {standing}");
+        {
+            let mut d = app
+                .world_mut()
+                .resource_mut::<super::super::director::Director>();
+            d.next_logistics = 0.0;
+            d.response_cooldown = 0.0;
+            let at = zone.on_ground(40.0, 230.0);
+            d.queue_response(0.0, at);
+        }
+        for _ in 0..90 {
+            app.update();
+        }
+        let mut q = app
+            .world_mut()
+            .query::<(&Robot, Option<&super::super::Job>)>();
+        let robots: Vec<(RobotKind, Option<super::super::JobKind>)> = q
+            .iter(app.world())
+            .map(|(r, j)| (r.kind, j.map(|j| j.kind)))
+            .collect();
+        assert!(
+            robots.iter().any(|(k, _)| *k == RobotKind::Dirigible),
+            "a logistics run: {robots:?}"
+        );
+        assert!(
+            robots
+                .iter()
+                .any(|(_, j)| *j == Some(super::super::JobKind::Response)),
+            "a response team: {robots:?}"
         );
     }
 
