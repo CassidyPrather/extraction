@@ -651,24 +651,33 @@ fn convoy(
 /// on the next raid.
 pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
 
-/// Seconds at the truck before the driver notices there's no radio.
+/// The same for what a job needs taken out (a thing to leave, the camera):
+/// lost at a fall, the job couldn't be done.
+pub fn spare_for(name: &str) -> String {
+    format!("Truck: \"Lost the {name}? Here's another, off the ledge.\"")
+}
+
+/// Seconds at the truck before the driver notices what's missing.
 const SPARE_AFTER: f32 = 2.0;
 
+#[allow(clippy::too_many_arguments)]
 fn spare_radio(
     raid: Res<Raid>,
     time: Res<Time>,
-    radios: Query<(
+    items: Query<(
         Entity,
         &crate::items::Item,
         Option<&crate::anomaly::artifacts::CarriedBy>,
         &GlobalTransform,
     )>,
     catalog: Res<crate::items::Catalog>,
+    progression: Option<Res<crate::progression::Progression>>,
     stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
     trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
     locals: Query<Entity, With<LocalPlayer>>,
+    hatch: Res<crate::raid::lev::Handovers>,
     mut handover: MessageWriter<crate::raid::lev::HandOver>,
-    mut raid_say: ResMut<Queue>,
+    mut queue: ResMut<Queue>,
     mut home_for: Local<f32>,
     mut handed: Local<bool>,
 ) {
@@ -678,27 +687,49 @@ fn spare_radio(
         return;
     }
     *home_for += time.delta_secs();
-    if *handed || *home_for < SPARE_AFTER {
+    // (What's on its way through the hatch already counts, once it's down.)
+    if *handed || *home_for < SPARE_AFTER || hatch.busy() {
         return;
     }
     let (Some(me), Some(truck)) = (locals.iter().next(), trucks.iter().next()) else {
         return;
     };
+    *handed = true;
     let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
     // On you, in the crate, or lying in the truck (on the ledge already).
-    let have = radios.iter().any(|(e, it, by, gt)| {
-        catalog.get(it.kind()).id == "radio"
-            && (by.is_some_and(|b| b.0 == me)
-                || in_crate(e)
-                || gt.translation().distance(truck.translation()) < 3.0)
-    });
-    *handed = true;
-    if !have {
+    let have = |id: &str| {
+        items.iter().any(|(e, it, by, gt)| {
+            catalog.get(it.kind()).id == id
+                && (by.is_some_and(|b| b.0 == me)
+                    || in_crate(e)
+                    || gt.translation().distance(truck.translation()) < 3.0)
+        })
+    };
+    use extraction_core::progression::Job;
+    let job = progression.as_ref().and_then(|p| p.0.job.clone());
+    let wanted: Option<String> = match job {
+        Some(Job::Plant {
+            item,
+            planted: false,
+            ..
+        }) => Some(item),
+        Some(Job::Photograph { taken: false, .. }) => Some("camera".into()),
+        _ => None,
+    };
+    if !have("radio") {
         handover.write(crate::raid::lev::HandOver {
             id: "radio".into(),
             condition: 0.8,
         });
-        raid_say.lines.push_back(SPARE_RADIO.into());
+        queue.lines.push_back(SPARE_RADIO.into());
+    }
+    if let Some(id) = wanted.filter(|id| !have(id)) {
+        let name = catalog
+            .kind(&id)
+            .map(|k| catalog.get(k).name.to_lowercase())
+            .unwrap_or_else(|| id.replace('_', " "));
+        handover.write(crate::raid::lev::HandOver { id, condition: 1.0 });
+        queue.lines.push_back(spare_for(&name));
     }
 }
 
