@@ -61,6 +61,7 @@ const WALKS: &[(&str, &str, &str)] = &[
 
 /// Perches found and with their owners: (map, prefab, who, what). Each
 /// comes off when it's fixed; a perch anywhere else fails the test.
+#[cfg(test)]
 const OPEN: &[(&str, &str, &str, &str)] = &[];
 
 /// A standable surface in a column: its height and whether it's the ground.
