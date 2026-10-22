@@ -49,11 +49,13 @@ pub const GRASS_HIDE: f32 = 0.35;
 pub const GRASS_NEAR: f32 = 4.0;
 /// Under trees (forest ground) beyond [`CANOPY_NEAR`], standing or not,
 /// this much of you shows through the trunks and the leaves to a machine
-/// looking across, not down (steeper than [`GRASS_STEEP`] it sees down
-/// through them)...
+/// looking across, not down (one [`CANOPY_ABOVE`] or more above you sees
+/// down through them)...
 pub const CANOPY_HIDE: f32 = 0.6;
 /// ...from this far off (m).
 pub const CANOPY_NEAR: f32 = 20.0;
+/// A machine this far (m) above you looks down through the trees.
+pub const CANOPY_ABOVE: f32 = 8.0;
 /// Looked down on from steeper than this (radians), grass hides half as
 /// well: a drone overhead sees into it.
 pub const GRASS_STEEP: f32 = 0.6;
@@ -254,7 +256,8 @@ pub fn exposure(c: &SightCase) -> f32 {
         c.still
     };
     // (From above, a drone or a spotter sees down through the trees.)
-    let canopy = if c.canopy && c.distance > CANOPY_NEAR && c.depression <= GRASS_STEEP {
+    let above = c.distance * c.depression.max(0.0).sin();
+    let canopy = if c.canopy && c.distance > CANOPY_NEAR && above < CANOPY_ABOVE {
         CANOPY_HIDE
     } else {
         1.0
@@ -837,7 +840,7 @@ mod tests {
         );
         // From above, through the leaves.
         let above = SightCase {
-            depression: GRASS_STEEP + 0.1,
+            depression: (CANOPY_ABOVE / 30.0 + 0.05).asin(),
             ..case()
         };
         assert_eq!(
