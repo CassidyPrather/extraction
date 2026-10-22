@@ -1457,9 +1457,10 @@ fn wire_power(
     }
 }
 
-/// Throwing a switch: its stage comes on (for good), the doors it held
-/// are free, its lamps light (and the robots know it), and it clanks or
-/// roars loud enough to bring the crawlers. Out of turn, it's dead.
+/// Throwing a switch: its stage comes on, the doors it held are free (for
+/// good), its lamps light (and the robots know it), and it clanks or roars
+/// loud enough to bring the crawlers. Out of turn, it's dead. Thrown again,
+/// it's off, and the stages after it: a dead zone.
 #[allow(clippy::too_many_arguments)]
 fn throw_switches(
     mut commands: Commands,
@@ -1482,7 +1483,35 @@ fn throw_switches(
         let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
             continue;
         };
+        // Thrown again: off, and every stage downstream with it (relays
+        // drop). Its lamps die, for the eye and the machines; the doors it
+        // freed stay free.
         if power.on(sw.stage) {
+            let off: Vec<usize> = (sw.stage..power.stages.len())
+                .filter(|k| power.on(*k))
+                .collect();
+            for k in &off {
+                power.stages[*k].on = false;
+            }
+            raid.say(match power.stages[sw.stage].kind {
+                ug::PowerKind::Generator => {
+                    "You kill the generator. It runs down to nothing, and the lamps with it."
+                }
+                ug::PowerKind::Breaker => "The breaker comes out. Relays drop, and the lamps die.",
+            });
+            noise.write(crate::robots::Noise {
+                at: at.translation(),
+                radius: 20.0,
+                source: None,
+            });
+            if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
+                let dark: Vec<Vec3> = powered_lamps(l, &off)
+                    .map(|p| xf.transform_point(p))
+                    .collect();
+                lighting
+                    .lamps
+                    .retain(|(p, _)| !dark.iter().any(|d| d.distance(*p) < 0.01));
+            }
             continue;
         }
         if power.next() != Some(sw.stage) {
@@ -1509,18 +1538,26 @@ fn throw_switches(
         });
         raid.say(line);
         if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
-            for room in l
+            let rooms = l
                 .rooms
                 .iter()
-                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage)
-            {
-                let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
+                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage);
+            for (room, p) in rooms.zip(powered_lamps(l, &[sw.stage])) {
                 lighting
                     .lamps
                     .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
             }
         }
     }
+}
+
+/// Where the lamps of these power stages hang (site space): as the
+/// machines see them (`throw_switches`).
+fn powered_lamps<'a>(l: &'a Layout, stages: &'a [usize]) -> impl Iterator<Item = Vec3> + 'a {
+    l.rooms
+        .iter()
+        .filter(|room| room.lamp == ug::Lamp::Powered && stages.contains(&room.stage))
+        .map(|room| Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]))
 }
 
 /// Wading underground is loud: the water slops off the walls. (Footsteps
@@ -3451,6 +3488,72 @@ mod tests {
                 .can_see_target;
         }
         assert!(seen, "the torch gave you away");
+    }
+
+    /// A breaker thrown again comes out: its lamps die (for the machines
+    /// too: a dead zone), the doors it freed stay free; thrown once more,
+    /// the lamps are back.
+    #[test]
+    fn the_breaker_comes_out_again() {
+        use crate::interact::InteractEvent;
+        let mut vr = crate::vr_harness::Vr::new("cinder_works");
+        let player = vr.player;
+        let (site, switch, id) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &super::super::buildings::Building, &SitePower)>();
+            q.iter(vr.app.world())
+                .find(|(_, b, _)| b.prefab == "tunnel_cinder")
+                .map(|(e, b, p)| (e, p.stages[0].switch, b.prefab.clone()))
+                .expect("the service tunnel, powered")
+        };
+        let lamps = |vr: &crate::vr_harness::Vr| {
+            vr.app
+                .world()
+                .resource::<crate::robots::senses::Lighting>()
+                .lamps
+                .len()
+        };
+        let held: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &PowerLocked)>()
+            .iter(vr.app.world())
+            .filter(|(_, l)| l.site == site)
+            .map(|(e, _)| e)
+            .collect();
+        assert!(!held.is_empty(), "{id}: a door on its power");
+        let dark = lamps(&vr);
+        let mut press = |vr: &mut crate::vr_harness::Vr| {
+            vr.app.world_mut().write_message(InteractEvent::Pressed {
+                item: switch,
+                player,
+            });
+            vr.step(3);
+        };
+        press(&mut vr);
+        assert!(vr.app.world().get::<SitePower>(site).unwrap().on(0));
+        let lit = lamps(&vr);
+        assert!(lit > dark, "{id}: its lamps light for the machines");
+        press(&mut vr);
+        assert!(
+            !vr.app.world().get::<SitePower>(site).unwrap().on(0),
+            "off again"
+        );
+        assert_eq!(
+            lamps(&vr),
+            dark,
+            "{id}: its lamps out, for the machines too"
+        );
+        for d in &held {
+            assert!(
+                vr.app.world().get::<PowerLocked>(*d).is_none(),
+                "{id}: a door it freed stays free"
+            );
+        }
+        press(&mut vr);
+        assert_eq!(lamps(&vr), lit, "{id}: and on again");
     }
 
     /// Power, through the headset: in every site the powered doors won't
