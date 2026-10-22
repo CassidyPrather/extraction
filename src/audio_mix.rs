@@ -325,6 +325,7 @@ pub const MIX: &[Cue] = &[
     cue!("robot.shot", "guns/pistol_shot", -3.0, 120.0, 30.0, Action, 20.0),
     cue!("drone.rotor", "machines/drone_rotor", -4.0, 75.0, 20.0, Signal),
     cue!("drone.lock", "machines/drone_lock", -28.0, 80.0, 20.0, Signal, 25.0),
+    cue!("lock.tick", "physical/switch", -8.0, 80.0, 20.0, Signal, 25.0),
     cue!("walker.step", "footsteps/metal", -2.5, 85.0, 25.0, Signal, 16.0),
     cue!("convoy.loaded", "machines/clank", -2.0, 90.0, 40.0, Event, 15.0),
     cue!("convoy.delivered", "machines/groan", -2.0, 90.0, 60.0, Event, 15.0),
