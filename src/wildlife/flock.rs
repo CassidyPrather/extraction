@@ -56,8 +56,10 @@ pub const WARY_FOR: f32 = 90.0;
 /// At night they roost: this much closer before they go.
 pub const ROOSTING: f32 = 0.6;
 
-/// A flock a player flushes is heard this far by robots...
-pub const ALARM_REACH: f32 = 60.0;
+/// A flock a player flushes is heard this far by robots (further than a
+/// walker flushes it itself, [`FLUSH_WALKER`], or it'd never be one of
+/// yours)...
+pub const ALARM_REACH: f32 = 100.0;
 /// ...at most once a flock in this many seconds, from this far above
 /// where it sat (they're up in a second or two).
 pub const ALARM_EVERY: f32 = 60.0;
