@@ -5751,10 +5751,13 @@ pub fn dress_buildings(
             .as_ref()
             .map_or(0, |h| crate::destruction::breach::apply(&mut geo, xf, &h.0));
         // Old snow on its roof and sills, where it lies all winter
-        // (`decay::snow_load`).
-        let snowed = zone.as_ref().is_some_and(|z| {
-            z.map.snow > 0.0 && super::snow::snow_line(&z.map).is_some_and(|l| xf.translation.y > l)
-        });
+        // (`decay::snow_load`). Not down an underground site: nothing
+        // there is open to the sky.
+        let snowed = extraction_core::underground::layout(&b.prefab).is_none()
+            && zone.as_ref().is_some_and(|z| {
+                z.map.snow > 0.0
+                    && super::snow::snow_line(&z.map).is_some_and(|l| xf.translation.y > l)
+            });
         if snowed {
             let load = super::decay::snow_load(&geo, &occluders(&geo));
             geo.pieces.extend(load);
