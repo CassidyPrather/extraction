@@ -15,6 +15,7 @@ noise floor).
     scripts/anomaly_legibility.py hush night # shoots just these (kinds, conditions)
     scripts/anomaly_legibility.py --fresh    # shoots again what's already shot
     scripts/anomaly_legibility.py --noise    # and a second shot without, for the noise floor
+    scripts/anomaly_legibility.py --map=rime_fell  # another valley
 
 Writes a contact sheet, docs/shots/anomalies/legibility.png, and the
 numbers, legibility.json beside it (the shots stay in target/legibility). Exits non-zero when a kind falls under its
@@ -30,13 +31,20 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-OUT = os.path.join(ROOT, "docs", "shots", "anomalies", "legibility")
-RAW = os.path.join(ROOT, "target", "legibility")
+# The valley: `--map NAME` (Marrow Creek by default). Its sheet and numbers
+# are legibility.* for Marrow, legibility_<map>.* for the others.
+MAP = next(
+    (a.split("=", 1)[1] for a in sys.argv if a.startswith("--map=")),
+    "marrow_creek",
+)
+SUFFIX = "" if MAP == "marrow_creek" else f"_{MAP}"
+OUT = os.path.join(ROOT, "docs", "shots", "anomalies", f"legibility{SUFFIX}")
+RAW = os.path.join(ROOT, "target", "legibility", MAP)
 BIN = os.path.join(ROOT, "target", "fast", "extraction")
 
 def targets() -> list:
-    """For each kind, a camera 20 m off one of its anomalies on Marrow (seed
-    1, cycle 0), on the side with a clear line: no rise, trunk or other
+    """For each kind, a camera 20 m off one of its anomalies in the valley
+    (seed 1, cycle 0), on the side with a clear line: no rise, trunk or other
     anomaly between, off roads, on gentle ground (`anomaly::view_of`, via
     the anomaly-views tool), aimed at a metre over its centre."""
     subprocess.run(
@@ -45,7 +53,7 @@ def targets() -> list:
         cwd=ROOT, check=True,
     )
     out = subprocess.run(
-        [os.path.join(ROOT, "target", "fast", "anomaly-views"), "marrow_creek", "1", "0", "20"],
+        [os.path.join(ROOT, "target", "fast", "anomaly-views"), MAP, "1", "0", "20"],
         cwd=ROOT, check=True, capture_output=True, text=True,
     ).stdout
     return [
@@ -93,7 +101,7 @@ def shot(name: str, cam: str, weather: str, hide: bool, n: int) -> str:
         env["EXTRACTION_HIDE_ANOMALIES"] = "1"
     cmd = [
         "timeout", "900", "xvfb-run", "-a", "-s", "-screen 0 1600x900x24",
-        BIN, "--map", "marrow_creek", "--data-dir", data, "--no-robots",
+        BIN, "--map", MAP, "--data-dir", data, "--no-robots",
         "--new-game", *CONDITIONS[weather], "--screenshot", out,
         "--frames", "150", "--camera", cam,
     ]
@@ -156,7 +164,7 @@ def sheet(results: list) -> None:
     for r, t in zip(results, tiles):
         col, row = WEATHERS.index(r["weather"]), names.index(r["kind"])
         out.paste(t, (col * 320, row * 260))
-    out.save(os.path.join(ROOT, "docs", "shots", "anomalies", "legibility.png"))
+    out.save(OUT + ".png")
 
 
 def main() -> int:

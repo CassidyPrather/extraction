@@ -251,6 +251,10 @@ is what it did before.
 | A signal flare leaving the muzzle (`weapons::flares::Flare` appearing) | `flare.pop`, a soft dull pop (a pistol's report low-passed to 1.2 kHz); then `flare.burn`, a fizzing hiss on the star as it flies and lies burning, silent until it lights and fading with its glow over its last second (`audio_kit`) | the shot's kick | the shot only; the star burned silently |
 | The RPK's bipod swung down or up (`weapons::armoury::Bipod`) | `bipod.swing`, a short metal creak as the legs start to move; `bipod.lock`, a clank as they lock down or fold home; at most one every 0.15 s per gun | — | silent |
 | A bare hand striking something at 1.5 m/s or more (`interact::touch::HandStruck`) | a palm slap by what it met: `hand.slap_wood`, `hand.slap_metal`, `hand.slap_stone` (concrete), `hand.slap_glass` (a small knock, the break sped up), `hand.slap_skin` (a robot's soft parts, a dull thud), `hand.slap_wire` (a chain-link rattle); 12 dB down and dull at 1.5 m/s, the cue's level and full brightness at 6 m/s (`audio_kit::slap_db`) | that material's shape, by speed (`rig::shapes`) | felt, not heard |
+| A held gun carried into a wall, a doorframe or a tree at 0.8 m/s or more (`weapons::carry::GunBumped`) | what it met as a hand would slap it, 3 dB under and duller, under `gun.bump`, the steel's own knock; 12 dB down at 0.8 m/s, the cue's level at 3 m/s (`audio_kit::bump_sounds`) | Weapon feel's, by material (gun hand, support hand at 0.6) | felt, not heard |
+| The carrier running home after a shot (`CarrierHome`), an open bolt slamming forward before one (`OpenBoltSlam`) | `gun.carrier_home`, a small, quick bolt clack sped up 1.35x a beat behind the report; `gun.open_bolt`, a heavier one at 0.9x just ahead of it | Weapon feel's beats | silent |
+| Something bulky dragged over the ground (`interact::carry::Dragged`: a car door, a panel, a wheel, a body, a robot's hull) | one loop per thing, following it: `drag.metal` (a sheet scraping through its ringing modes, catching and slipping), `drag.wood`, `drag.roll` (a wheel's rumble and tread), `drag.body` (cloth and limbs in tugs); 15 dB down and low at a crawl, the cue's level at `DRAG_SPEED`; gone 0.15 s after it stops. Stand-ins (`synth_foley`), heard about as far as robots hear the drag (`DRAG_HEARD`, the audit checks) | — | silent |
+| A heavy thing landing (an `ItemImpact` over 8 kg: a thrown door, a wheel) | its drop sound, with `drop.heavy` under it, the ground taking the weight (earth at half speed), louder with mass and speed | — | — |
 | A scope's elevation drum turned a detent (`weapons::zero::TurretClicked`) | `scope.click`, a small quick click | a tick in the turning hand (`weapons::zero`) | silent |
 | The ending (`raid::epilogue`) | the score falls to silence over ~6 s while it's active; the crates opening: `epilogue.creak`, a long low lid at hers, then five fainter round the stacks a beat apart; him at her crate: nothing added, the wind and room held down 9 dB for 10 s (`Hush`) | — | the score played on |
 | A round meeting your armour (`weapons::armour::ArmourStruck`) | stopped: `armour.clang` and `armour.thump` through it; turned: `armour.ping`; through: the clang and then the wet `armour.thump`. The clang is levelled just under your rifle up close | a hit, if it hurts you | silent |
@@ -728,6 +732,29 @@ heavy's footfall); each break you hear about as far as robots do
   New Sallow's flooded street laps at its edge (`water_sounds`; both
   stand-ins until recordings can be fetched).
 
+## Rime Fell
+
+Nothing on Rime Fell runs. Every sound there is the wind working on the
+derelict works. `world::fell_sounds::emitters` (Fifth valley's) says
+where each one is, worked out from the map, and `audio::fell_sounds`
+voices them:
+
+- **The funicular's rope**: the slack rope creaks on its rollers at the
+  roller nearest you within 60 m, every 2-6 s (`fell.rope`).
+- **The bull wheel**: the top station's wheel, 8 m up, groans as the cut
+  rope's end tugs at it (`fell.wheel`).
+- **The mill's loose sheet**: a corrugated sheet on the headhouse,
+  about 20 m up, bangs one to three times every 4-15 s. It is heard to
+  160 m, across the settlement (`fell.sheet`).
+- **The stopped car**: a door swings (the rope's creak, quicker) and
+  bangs to about half the time (`fell.car`).
+- **Wind through the works**: a loop in each mill bay, which the
+  acoustics probe makes roomy, and along each avalanche gallery
+  (`fell.wind`). The galleries' meltwater drips within 50 m.
+- **The mill slaps back**: its front, 20 m wide and 9 m up, facing down
+  the slope, is a reflector (`acoustics::reflectors`, "ore_mill"). A
+  shot 50 m down the slope from it comes back about 0.3 s later.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,
@@ -755,6 +782,10 @@ gone.
 | A zone cooling (its `Heat` share falling) | `ug.heat_tick`: a casing's tink slowed, at random points in the room, quick at first and slowing as it cools; it stops when the room has cooled. Heard within 35 m |
 | The crane running (`Crane::dir` not 0) | `ug.crane`, the hum at 1.6 (the trolley's motor whining); `ug.chain` clinking at the hook every 0.25-0.5 s; `ug.crane_clank` as its brake lets go, and again at the end of its run |
 | A vent's or the crane's lever (`VentLever`, `CraneLever`) | `ug.lever`, a heavy thunk under the press's click |
+| A cage bell pull rung (`world::cage::CageRung`) | `ug.cage_bell`: the mine bell, three strokes 0.45 s apart, a Signal heard to the bell's 35 m (`BELL_HEARD`, the audit checks) |
+| The cage starting to ride (its `wait` out, `to` set) | `ug.cage_strain`, the groan slowed: the winding engine taking the strain at the shaft's head; then `ug.cage_rope`, the hum at 1.3, the rope singing over the sheave, from the head (not the cage) while it rides, easing out at the stop |
+| The cage at a stop (`CageArrived`) | `ug.cage_land`, a clank onto the keps, and `ug.cage_gate`, the latch |
+| The cage come down on someone (`CageCrushed`) | `ug.cage_crush`, metal slowed to half: the iron floor's thud, and `ug.cage_body` |
 
 Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
 rough voice at about 160 Hz through the throat's formants, sharp onset,
