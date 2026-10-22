@@ -3646,16 +3646,23 @@ mod first_aid {
     }
 
     /// Held at the mouth a moment, food is eaten; a bottle only drunk once
-    /// it's tipped up.
+    /// it's tipped up, and with its cap off.
     #[test]
     fn food_at_the_mouth_is_eaten_and_a_bottle_drunk_tipped_up() {
-        for (id, tip, eaten) in [
-            ("canned_stew", false, true),
-            ("water_bottle", false, false),
-            ("water_bottle", true, true),
+        for (id, tip, uncapped, eaten) in [
+            ("canned_stew", false, true, true),
+            ("water_bottle", false, true, false),
+            ("water_bottle", true, true, true),
+            ("water_bottle", true, false, false),
         ] {
             let (mut vr, feet) = setup();
             let food = take(&mut vr, feet, id);
+            if uncapped {
+                vr.app
+                    .world_mut()
+                    .entity_mut(food)
+                    .remove::<crate::interact::first_aid::Capped>();
+            }
             let mouth = feet + Vec3::new(0.0, 1.65 - 0.08, -0.07);
             let rot = if tip {
                 Quat::from_rotation_x(1.4)
@@ -3664,8 +3671,49 @@ mod first_aid {
             };
             vr.hand(Side::Right, mouth, rot, 1.0, 0.0);
             vr.step(140);
-            assert_eq!(gone(&vr, food), eaten, "{id} tipped {tip}");
+            assert_eq!(
+                gone(&vr, food),
+                eaten,
+                "{id} tipped {tip} uncapped {uncapped}"
+            );
         }
+    }
+
+    /// A bottle in the right hand; the left takes its cap (the trigger) and
+    /// twists it round: it comes off.
+    #[test]
+    fn a_bottle_cap_is_unscrewed_by_hand() {
+        use crate::interact::first_aid::Capped;
+        let (mut vr, feet) = setup();
+        let bottle = take(&mut vr, feet, "water_bottle");
+        assert!(
+            vr.app.world().get::<Capped>(bottle).is_some(),
+            "capped to start"
+        );
+        let top = {
+            let gt = vr.app.world().get::<GlobalTransform>(bottle).unwrap();
+            gt.transform_point(Vec3::Y * 0.108)
+        };
+        vr.hand(Side::Left, top, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.trigger(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(
+            vr.hand_state(Side::Left).handle.map(|h| h.0),
+            Some(bottle),
+            "the cap's in the left hand"
+        );
+        // A turn round the bottle's axis (up), over a second.
+        for i in 1..=64 {
+            let a = std::f32::consts::TAU * i as f32 / 64.0;
+            vr.hand(Side::Left, top, Quat::from_rotation_y(a), 0.0, 1.0);
+            vr.step(1);
+        }
+        vr.step(2);
+        assert!(
+            vr.app.world().get::<Capped>(bottle).is_none(),
+            "the cap's off"
+        );
     }
 }
 
@@ -5322,7 +5370,7 @@ mod wounds {
                 >,
                 Query<(&RigHand, &Hand)>,
             )>::new(vr.app.world_mut());
-            let (players, hands) = sys.get(vr.app.world());
+            let (players, hands) = sys.get(vr.app.world()).unwrap();
             player_segments(vr.player, &players, &hands).expect("a stance")
         };
         let s = segs.iter().find(|s| s.limb == limb).expect("that limb");

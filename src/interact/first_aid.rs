@@ -10,7 +10,9 @@
 //! - **An injector** goes in the thigh. Put its tip to your thigh and pull
 //!   the trigger.
 //! - **Food** goes to your mouth: hold it there a moment. A bottle has to
-//!   be tipped up to drink.
+//!   be tipped up to drink, and its cap off first ([`Capped`]): the other
+//!   hand takes the cap (the trigger, as a gun's slide is taken) and
+//!   twists it [`UNSCREW`] of a turn.
 //!
 //! Each, done, uses the item as the button used to (`items::usage`). The
 //! button still works for medicine with the one-handed comfort setting,
@@ -30,6 +32,16 @@ use extraction_core::items::Category;
 
 /// Turns round the forearm a dressing takes.
 const WRAP_TURNS: f32 = 1.5;
+/// How far round a bottle's cap is twisted to come off, turns.
+pub const UNSCREW: f32 = 0.75;
+
+/// A bottle with its cap on: it won't drink.
+#[derive(Component, Debug, Default)]
+pub struct Capped {
+    /// How far it's been twisted, turns.
+    pub twisted: f32,
+}
+
 /// How long a splint takes to strap on, s.
 pub const STRAP: f32 = 1.5;
 
@@ -50,9 +62,16 @@ pub struct FirstAidPlugin;
 
 impl Plugin for FirstAidPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.add_observer(cap_bottles).add_systems(
             FixedUpdate,
-            (wrap_dressings, strap_splints, inject, eat_and_drink).after(InteractSystems::Follow),
+            (
+                wrap_dressings,
+                strap_splints,
+                unscrew,
+                inject,
+                eat_and_drink,
+            )
+                .after(InteractSystems::Follow),
         );
     }
 }
@@ -270,6 +289,68 @@ fn strap_splints(
     }
 }
 
+/// A water bottle comes with its cap on, and a handle at it to twist.
+fn cap_bottles(
+    add: On<Add, Item>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut commands: Commands,
+) {
+    let e = add.entity;
+    let Ok(item) = items.get(e) else {
+        return;
+    };
+    let def = catalog.get(item.kind());
+    if def.id != "water_bottle" {
+        return;
+    }
+    let top = def.size_m()[1] / 2.0 - 0.012;
+    commands.queue(move |world: &mut World| {
+        let Ok(mut ent) = world.get_entity_mut(e) else {
+            return;
+        };
+        if let Some(mut g) = ent.get_mut::<super::Grabbable>() {
+            g.points.push(super::GrabPoint::new(
+                Transform::from_xyz(0.0, top, 0.0),
+                super::GripRole::Handle(0),
+                0.06,
+            ));
+        }
+        ent.insert(Capped::default());
+    });
+}
+
+/// The other hand on a held bottle's cap, twisting it round the bottle's
+/// axis: off, once it's gone round far enough.
+fn unscrew(
+    mut commands: Commands,
+    mut hands: Query<(&RigHand, &mut Hand)>,
+    mut bottles: Query<(&GlobalTransform, &mut Capped)>,
+    mut haptics: MessageWriter<Haptic>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (rh, mut hand) in &mut hands {
+        let Some((bottle, 0)) = hand.handle else {
+            continue;
+        };
+        let Ok((gt, mut cap)) = bottles.get_mut(bottle) else {
+            continue;
+        };
+        let axis = gt.rotation() * Vec3::Y;
+        let before = (cap.twisted * 4.0).floor();
+        cap.twisted += hand.angular_velocity.dot(axis).abs() * dt / std::f32::consts::TAU;
+        if (cap.twisted * 4.0).floor() > before {
+            pulse(&mut haptics, rh.side, TICK);
+        }
+        if cap.twisted >= UNSCREW {
+            commands.entity(bottle).remove::<Capped>();
+            hand.handle = None;
+            pulse(&mut haptics, rh.side, CLICK);
+        }
+    }
+}
+
 /// An injector's tip on the thigh, and the trigger.
 fn inject(
     items: Query<(Entity, &Item, &Held, &GlobalTransform)>,
@@ -319,7 +400,14 @@ fn inject(
 #[allow(clippy::type_complexity)]
 fn eat_and_drink(
     mut commands: Commands,
-    mut items: Query<(Entity, &Item, &Held, &GlobalTransform, Option<&mut Eating>)>,
+    mut items: Query<(
+        Entity,
+        &Item,
+        &Held,
+        &GlobalTransform,
+        Option<&mut Eating>,
+        Has<Capped>,
+    )>,
     players: Query<(&GlobalTransform, &RigInput), With<Player>>,
     catalog: Res<Catalog>,
     driver: Res<RigDriver>,
@@ -330,9 +418,10 @@ fn eat_and_drink(
     if *driver != RigDriver::Xr {
         return;
     }
-    for (e, item, held, gt, eating) in &mut items {
+    for (e, item, held, gt, eating, capped) in &mut items {
         let def = catalog.get(item.kind());
-        if def.category != Category::Food {
+        // (A capped bottle doesn't pour.)
+        if def.category != Category::Food || capped {
             continue;
         }
         let Ok((root, input)) = players.get(held.player) else {
