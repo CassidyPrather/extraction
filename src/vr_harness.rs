@@ -5437,13 +5437,20 @@ mod salvage {
         vr.step(2);
     }
 
-    /// A spanner in the right hand, its head put to `bolt` (the handle
-    /// toward you), then swung `turns` times round it counterclockwise
-    /// (looking down on the bolt's head). Put down after.
-    fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
+    /// A spanner in the right hand, its head put to `bolt` (an
+    /// `Unboltable`; the handle toward you), then swung `turns` times
+    /// round it counterclockwise (looking down on the bolt's head). Put
+    /// down after. (For anyone's bolts: a car's wheel nuts too.)
+    pub(super) fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
         let bgt = *vr.app.world().get::<GlobalTransform>(bolt).unwrap();
         let at = bgt.translation();
-        let axis = (bgt.rotation() * Vec3::Y).normalize();
+        let out = vr
+            .app
+            .world()
+            .get::<crate::destruction::hooks::Unboltable>(bolt)
+            .expect("a bolt")
+            .axis;
+        let axis = (bgt.rotation() * out).normalize();
         let tool = vr.spawn(
             "spanner",
             Transform::from_translation(feet + Vec3::new(0.25, 0.9, -0.2)),
