@@ -53,6 +53,14 @@ pub const BREAK_LANDING: f32 = 11.0;
 pub const LIMP: f32 = 0.55;
 pub const SPLINTED_LIMP: f32 = 0.2;
 
+/// How bloody a hand is from touching a wound, 0..1: it comes in half a
+/// second on an open wound, and wears off over a minute.
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct Bloodied(pub f32);
+
+/// A hand this near an open wound gets blood on it, m.
+pub const TOUCHES: f32 = 0.12;
+
 /// A broken leg, splinted or not.
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub struct Fracture {
@@ -241,7 +249,7 @@ pub struct WoundsPlugin;
 
 impl Plugin for WoundsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, give_wounds)
+        app.add_systems(Update, (give_wounds, bloody_hands))
             .add_systems(FixedUpdate, break_legs.before(crate::health::HealthSystems))
             .add_systems(
                 FixedUpdate,
@@ -322,6 +330,55 @@ fn break_legs(
             bleed: 0.0,
             dressed: false,
         });
+    }
+}
+
+/// A hand on an open wound comes away bloody; it wears off.
+#[allow(clippy::type_complexity)]
+fn bloody_hands(
+    mut commands: Commands,
+    players: Query<(Entity, &Wounds, &Children), With<LocalPlayer>>,
+    bodies: Query<(&Transform, &RigInput, &Stance, &Children), With<LocalPlayer>>,
+    hands: Query<(&RigHand, &Hand)>,
+    mut bloods: Query<&mut Bloodied>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (player, wounds, children) in &players {
+        let Some(segs) = player_segments(player, &bodies, &hands) else {
+            continue;
+        };
+        let open: Vec<Vec3> = wounds
+            .0
+            .iter()
+            .filter(|w| !w.dressed && w.bleed > 0.0)
+            .filter_map(|w| {
+                segs.iter()
+                    .find(|s| s.limb == w.limb)
+                    .map(|s| s.point(w.along, w.around))
+            })
+            .collect();
+        for c in children.iter() {
+            let Ok((_, hand)) = hands.get(c) else {
+                continue;
+            };
+            let touching = open
+                .iter()
+                .any(|p| p.distance(hand.world.translation) < TOUCHES);
+            match bloods.get_mut(c) {
+                Ok(mut b) => {
+                    b.0 = if touching {
+                        (b.0 + dt * 2.0).min(1.0)
+                    } else {
+                        (b.0 - dt / 60.0).max(0.0)
+                    };
+                }
+                Err(_) if touching => {
+                    commands.entity(c).insert(Bloodied(dt * 2.0));
+                }
+                Err(_) => {}
+            }
+        }
     }
 }
 
