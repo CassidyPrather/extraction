@@ -60,6 +60,8 @@ pub enum First {
     Sentry,
     /// In a hush: the quiet that presses.
     Hush,
+    /// Home with a job on the card: it's paid when the card is pressed.
+    Payday,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -108,6 +110,7 @@ pub const ALL: &[First] = &[
     First::Aimed,
     First::Sentry,
     First::Hush,
+    First::Payday,
 ];
 
 impl First {
@@ -189,6 +192,7 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
+            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
         }
     }
 }
@@ -261,6 +265,7 @@ impl Plugin for FirstsPlugin {
                         deaths,
                         convoy,
                         asked,
+                        payday,
                     ),
                     speak,
                 )
@@ -619,6 +624,26 @@ fn convoy(
     *recovered = Some(now);
 }
 
+/// Home from the Zone with a job on the card: nothing pays it but
+/// pressing the card (the first newcomers took the truck home, and the
+/// job sat unpaid into the next session).
+fn payday(
+    raid: Res<Raid>,
+    progression: Option<Res<crate::progression::Progression>>,
+    mut was_out: Local<bool>,
+    mut m: Meet,
+) {
+    let home = raid.phase == Phase::AtBase;
+    let back = *was_out && home;
+    *was_out = matches!(raid.phase, Phase::Extracting { .. });
+    if back
+        && !m.met(First::Payday)
+        && progression.is_some_and(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
+    {
+        m.meet(First::Payday);
+    }
+}
+
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
     for MeetFirst(f) in asks.read() {
         m.meet(*f);
@@ -710,6 +735,39 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home from the Zone with the job unpaid: told to press the card, once.
+    #[test]
+    fn home_with_a_job_is_told_to_press_the_card() {
+        let mut app = app();
+        if app
+            .world()
+            .resource::<crate::progression::Progression>()
+            .0
+            .job
+            .is_none()
+        {
+            app.world_mut()
+                .resource_mut::<crate::progression::Progression>()
+                .0
+                .job = Some(extraction_core::progression::Job::Letter);
+        }
+        for _ in 0..2 {
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 99.0 };
+            app.update();
+            app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+            for _ in 0..(10 * 90) {
+                app.update();
+            }
+        }
+        let line = First::Payday.lines()[0];
+        let spoken = &app.world().resource::<Spoken>().0;
+        assert_eq!(
+            spoken.iter().filter(|s| *s == line).count(),
+            1,
+            "{spoken:?}"
+        );
     }
 
     /// The moments that come from a message, met twice over through the

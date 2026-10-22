@@ -320,6 +320,8 @@ enum Leg {
     Call,
     Rendezvous,
     Board,
+    /// Home: the card pressed, for the job's pay.
+    Paid,
     Done,
 }
 
@@ -344,6 +346,8 @@ pub(super) struct Newcomer {
     card: String,
     /// Back at the gate to call (the card said so).
     at_gate: bool,
+    /// Jobs done when it got home (pressing the card adds one).
+    done_home: Option<u32>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -411,7 +415,8 @@ fn heading_in(line: &str) -> Option<(Vec2, f32)> {
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
-    card: Query<'w, 's, &'static ScreenText, With<RequestCard>>,
+    card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
+    progression: Option<Res<'w, crate::progression::Progression>>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -663,7 +668,7 @@ pub(super) fn direct_raid(
                 .card
                 .iter()
                 .next()
-                .map(|c| c.text.clone())
+                .map(|(_, c)| c.text.clone())
                 .unwrap_or_default();
             if p.reads {
                 tasks.push(Task::Wait(4.0));
@@ -890,7 +895,8 @@ pub(super) fn direct_raid(
         Leg::Board => match raid.phase {
             Phase::Extracting { .. } | Phase::AtBase => {
                 state.note(now, Kind::Learned, "in the truck and away");
-                state.leg = Leg::Done;
+                state.leg = Leg::Paid;
+                state.tries = 0;
             }
             Phase::TruckWaiting { .. } => {
                 tasks.extend(world.go_home(here, &raid, state.tries));
@@ -900,6 +906,40 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Call;
             }
         },
+        Leg::Paid => {
+            let done = view.progression.as_ref().map_or(0, |p| p.0.done);
+            if raid.phase != Phase::AtBase {
+                tasks.push(Task::Wait(1.0));
+            } else if state.done_home.is_none() {
+                state.done_home = Some(done);
+                // Told to, by the driver, or read on the card.
+                let told = state.heard.iter().any(|l| l.contains("press the card"));
+                let read = view
+                    .card
+                    .iter()
+                    .any(|(_, c)| c.text.to_lowercase().contains("press here"));
+                if !told && !read {
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        "home, and nothing says how the job is paid",
+                    );
+                }
+                tasks.push(Task::Wait(if p.reads { 4.0 } else { 1.0 }));
+            } else if state.done_home.is_some_and(|d| done > d) {
+                state.note(now, Kind::Learned, "pressed the card: the job paid");
+                state.leg = Leg::Done;
+            } else if state.tries >= 3 {
+                state.note(now, Kind::Stuck, "home, and the card won't take the job");
+                state.leg = Leg::Done;
+            } else if let Some((card, _)) = view.card.iter().next() {
+                tasks.push(Task::Press(card));
+                tasks.push(Task::Wait(2.0));
+                state.tries += 1;
+            } else {
+                state.leg = Leg::Done;
+            }
+        }
         Leg::Done => {
             if !state.reported {
                 state.reported = true;
