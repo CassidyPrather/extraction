@@ -236,9 +236,30 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
-                "--weather" => o.weather = Some(val()),
+                "--weather" => {
+                    let v = val();
+                    if !crate::world::weather::WEATHERS.contains(&v.as_str()) {
+                        // Loudly: an unknown weather once quietly became
+                        // drizzle, and screenshot scripts show only errors.
+                        eprintln!(
+                            "ERROR --weather {v}: expected one of {}",
+                            crate::world::weather::WEATHERS.join(", ")
+                        );
+                        std::process::exit(2);
+                    }
+                    o.weather = Some(v);
+                }
                 "--snow" => o.snow = val().parse::<f32>().ok().map(|s| s.clamp(0.0, 1.0)),
-                "--hour" => o.hour = Some(val()),
+                "--hour" => {
+                    let v = val();
+                    if crate::world::weather::Hour::parse(&v).is_none() {
+                        eprintln!(
+                            "ERROR --hour {v}: expected dawn, day, dusk, night or a clock hour (23, 5:30)"
+                        );
+                        std::process::exit(2);
+                    }
+                    o.hour = Some(v);
+                }
                 "--moon" => {
                     o.moon = match val().as_str() {
                         "new" => Some(0.0),

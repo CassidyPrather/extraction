@@ -568,9 +568,9 @@ pump?
 | `--camp` | Set up the camp table even in a screenshot |
 | `--new-game` | Ignore the saved career |
 | `--surge-in SECONDS` | Bring the Surge close (try 330 for the warning) |
-| `--weather NAME` | `drizzle`, `fog`, `downpour`, `storm` (a downpour with lightning), `clearing` |
+| `--weather NAME` | `drizzle` (or `rain`), `fog`, `downpour`, `storm` (a downpour with lightning), `clearing`; anything else stops with an error |
 | `--snow N` | Kettle Pass: snow falling now, and this much (0 to 1) already lying above the snow line |
-| `--hour NAME` | `dawn`, `day`, `dusk`, `night` |
+| `--hour NAME` | `dawn`, `day`, `dusk`, `night`, or a clock hour (`23`, `5:30`): dawn from 5, day from 7, dusk from 18, night from 21; anything else stops with an error |
 | `--moon NAME` | The moon's phase at night: `new`, `crescent`, `quarter`, `gibbous`, `full`, `waning` |
 | `--sun-elevation DEG` | How high the sun is at dawn and dusk (20 by default) |
 | `--no-robots` | An empty Zone, for looking around |
