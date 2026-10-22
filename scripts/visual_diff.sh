@@ -49,7 +49,9 @@ if [ $# -ge 2 ]; then
     OLD="$(git rev-parse --short=8 "$1")"
     NEW="$(git rev-parse --short=8 "$2")"
 else
-    git fetch -q origin "${MAIN_REF#origin/}" || true
+    case "$MAIN_REF" in
+        origin/*) git fetch -q origin "${MAIN_REF#origin/}" || true ;;
+    esac
     NEW="$(git rev-parse --short=8 "$MAIN_REF")"
     # The round before: main's latest round is its latest cluster of three
     # or more "Merge polish" commits within ten minutes; the round before
