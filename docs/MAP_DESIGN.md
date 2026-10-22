@@ -140,6 +140,15 @@ A good map makes the crossing a decision.
   (`CHOICE_APART`, `CHOICE_ENDS`, `CHOICE_DETOUR`). A creek or a canal
   needs at least two crossings that matter (a bridge in plain view, a
   footbridge in the trees, a ford).
+- **The first ten minutes are a choice too**: from the insertion, at
+  least two places with loot (a point of interest with loot or a walk-in
+  building within 40 m, `CHOICE_LOOT`) are within a 450 m comfortable
+  walk (`FIRST_REACH`), each walk with cover all the way (`COVER_GAP`),
+  their bearings at least 50° apart (`CHOICE_ANGLE`) and their walks
+  parting (no more than half the shorter within 30 m of the other,
+  `CHOICE_SHARED`). Not one corridor out of the drop. Now: Marrow 112°
+  (Logging camp or Old farm), Kettle 146°, Cinder 88°, Sallow 122°,
+  Rime 134°.
 - Routes differ in kind, not just in line: the road (fast, open, seen),
   the woods (slow, hidden), the high ground (a climb, a view). The cheap
   way should be the exposed one.
@@ -485,6 +494,15 @@ fine on a monitor makes people sick or tired in a headset.
   kept clear but their ground isn't held. The forest and rock scatter
   keep off door strips (`map_doors::clear_of_doors`). Staged scenes
   (`assets/data/scenes.ron`) are the game's and aren't checked.
+- **No pockets**: the walkers' grid judges each 2 m cell by the slope at
+  its middle, so a bank between two middles is invisible to it. Every
+  step between walkable neighbours is walked every 25 cm (bridges at
+  their decks); one that climbs or drops more than a step (0.4 m,
+  `BODY_STEP`) over ground steeper than the body stands on (49.5°,
+  `BODY_SLOPE`, the game's `walk_over`) is a false step, and ground the
+  insertion reaches only over false steps is a pocket (`map_pockets`,
+  `POCKET_MIN` 16 m²). None in the five valleys; the measure prints each
+  valley's false steps.
 - **No forced jumps**: nothing that matters is only reached by jumping,
   climbing or swimming. Water deeper than 0.9 m is a wall on the nav
   grid, and the lint's reach is on that grid.
