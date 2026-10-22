@@ -9,7 +9,7 @@
 //! See docs/PERFORMANCE.md, "Hitches".
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use bevy::prelude::*;
     use std::time::Instant;
 

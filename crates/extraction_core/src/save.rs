@@ -233,6 +233,9 @@ pub struct SavedGun {
     pub internal_loads: Loads,
     #[serde(default)]
     pub chamber_loads: Vec<Load>,
+    /// What it's been made into at the vice.
+    #[serde(default)]
+    pub build: crate::gunsmith::Build,
 }
 
 /// A whole career in one file: what you own and carry, your record and
@@ -628,6 +631,7 @@ mod tests {
             grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
+            build: Default::default(),
         });
         let mut mag = item("ak_mag");
         mag.rounds = 29;
@@ -694,6 +698,7 @@ mod tests {
             grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
+            build: Default::default(),
         });
         let mut mag = item("ak_mag");
         mag.rounds = 29;

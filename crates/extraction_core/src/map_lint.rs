@@ -325,6 +325,14 @@ pub const OPEN_FAR: f32 = 70.0;
 pub const OPEN_SHARE: f32 = 0.03;
 const OPEN_STEP: f32 = 4.0;
 const OPEN_LADDER: [f32; 6] = [30.0, 35.0, 40.0, 50.0, 70.0, 100.0];
+/// The first hour's walks: from the insertion to every point of interest
+/// this near it (the first jobs' places, the village by the gate).
+pub const FIRST_WALK: f32 = 300.0;
+/// On those, the longest stretch with no cover within reach: a newcomer
+/// warned by the Driver has about four seconds, and runs for the nearest
+/// thing between them and the machine (Onboarding's first-fight personas
+/// died in Marrow's open fields on the way to the Old farm).
+pub const FIRST_COVER_GAP: f32 = 40.0;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -1487,6 +1495,33 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 at,
             );
         }
+    }
+    for poi in map.markers_of(&MarkerKind::Poi) {
+        if dist(poi.at, ins) > FIRST_WALK {
+            continue;
+        }
+        // The way a player who keeps to easy ground goes, and the straight
+        // line a newcomer takes toward a roof they can see.
+        let n = (dist(ins, poi.at) / STEP).ceil().max(1.0) as usize;
+        let straight: Vec<P2> = (0..=n)
+            .map(|i| geom::lerp(ins, poi.at, i as f32 / n as f32))
+            .collect();
+        let walks = comfy
+            .path(ins, poi.at)
+            .map(|p| resample(&p))
+            .into_iter()
+            .chain([straight]);
+        let (gap, at) = walks
+            .map(|pts| longest_gap(&pts, covered))
+            .fold((0.0f32, ins), |a, b| if b.0 > a.0 { b } else { a });
+        r.measures.push(format!(
+            "first walk to {}: longest open {gap:.0} m",
+            poi.name
+        ));
+        // Measured, not held: the lint's cover (any boulder, three trunks)
+        // is more than a newcomer uses; Onboarding's first-fight scenario
+        // is the judge of these walks.
+        let _ = (FIRST_COVER_GAP, at);
     }
 
     // How far from cover the open ground runs, anywhere you can walk in the

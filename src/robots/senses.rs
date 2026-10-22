@@ -15,8 +15,10 @@
 //! ([`Noise::radius`]): gunshots by calibre (`weapons::report`; robots'
 //! own by [`gunshot_reach`]), footsteps
 //! by surface, speed and crouch ([`footstep_reach`]), doors, things that
-//! land (`items::impacts`), robots at work. A wall or a hill between the
-//! sound and the robot cuts its reach to [`OCCLUDED`]. A heard sound tells
+//! land (`items::impacts`), robots at work. What's between the sound and
+//! the robot cuts its reach, by the same path the player's ears hear it
+//! by (`crate::hearing`): a timber wall to [`OCCLUDED`], each wall or shut
+//! door by what it's made of, an open doorway a little. A heard sound tells
 //! the robot *where the sound was*, not where you are: it goes there.
 //! Quiet sounds only nudge suspicion ([`HEARD_FULL`]), so one footstep
 //! behind a walker makes it turn, a few make it look.
@@ -352,9 +354,9 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
+    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
-        Query<&crate::world::buildings::Door>,
+        Option<Res<crate::hearing::Hearing>>,
         Res<crate::gadgets::Cloaks>,
         Res<crate::world::weather::Conditions>,
         Res<Zone>,
@@ -511,13 +513,6 @@ pub(crate) fn perceive(
                     .reduce(f32::max),
             }
         })
-        .collect();
-    // Open doorways, for sound to come round.
-    let openings: Vec<Vec3> = entrances
-        .doors
-        .iter()
-        .filter(|e| super::doors::is_open(doors.get(e.door).ok()))
-        .map(|e| e.mid)
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
     for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant, mind_seed) in
@@ -676,15 +671,20 @@ pub(crate) fn perceive(
             if d >= reach * if site.is_some() { CORRIDOR } else { 1.0 } {
                 continue;
             }
-            // Through a wall or over a hill it carries less far; round an
-            // open doorway a little less far. The same rule the player's
-            // ears follow (`acoustics::occlusion`): a sound that's quieter
-            // by `db` carries `10^(db/20)` as far.
-            let occ = crate::acoustics::occlusion(&spatial, &openings, s.at, ear);
+            // Through walls and shut doors, up through floors and rock,
+            // over a hill it carries less far; round an open doorway a
+            // little less far. The same path the player's ears hear it by
+            // (`hearing`, a table read): a sound that's quieter by `db`
+            // carries `10^(db/20)` as far.
+            let blocked = |a: Vec3, b: Vec3| crate::acoustics::blocked(&spatial, a, b);
+            let (occ, through_wall) = hearing
+                .as_deref()
+                .map_or((crate::acoustics::CLEAR, false), |h| {
+                    h.heard(Some(&zone), s.at, ear, Some(&blocked))
+                });
             let occluded = occ.db < 0.0;
             let mut heard_over = d;
             if occluded {
-                let through_wall = occ.db <= crate::acoustics::wall_db() + 0.01;
                 let walk = site
                     .filter(|_| through_wall && corridor_budget > 0)
                     .and_then(|l| {

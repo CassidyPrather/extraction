@@ -31,6 +31,7 @@ impl Plugin for GunVisualsPlugin {
                 build_gun_meshes,
                 finish_gun_models,
                 animate_parts,
+                super::gunsmith::show_builds,
                 seat_mag_visuals,
                 show_mag_rounds,
                 show_chambers,
@@ -572,6 +573,7 @@ mod tests {
                 magwell: None,
                 trigger: 0.0,
                 dice: extraction_core::noise::Rng::new(0),
+                mass: None,
             })
             .id();
         let node = |app: &mut App, name: String| {

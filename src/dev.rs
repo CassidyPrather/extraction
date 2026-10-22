@@ -155,6 +155,7 @@ fn gallery(
     mut stage: Local<u32>,
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
+    mut worked: Local<Vec<(Entity, extraction_core::gunsmith::Build)>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut jamming: Local<bool>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -336,6 +337,33 @@ fn gallery(
             }
             // `first_person_hands` and `wear_kit` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") => {}
+            // A Mosin as made, and under it one sawn down to an obrez at
+            // the vice (`weapons::gunsmith`), and an AK with and without
+            // its stock.
+            "obrez" => {
+                use extraction_core::gunsmith::Build;
+                let obrez = Build {
+                    barrel_mm: Some(250.0),
+                    stock: false,
+                    ..Default::default()
+                };
+                let bare = Build {
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.3);
+                for (id, up, build) in [
+                    ("mosin", 0.32, None),
+                    ("mosin", 0.1, Some(obrez)),
+                    ("ak74", -0.12, None),
+                    ("ak74", -0.32, Some(bare)),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -381,6 +409,13 @@ fn gallery(
     }
     // Seat magazines once their guns have wells; open actions.
     if *stage > 3 {
+        worked.retain(|(e, b)| {
+            let Ok(mut g) = guns.get_mut(*e) else {
+                return true;
+            };
+            g.firearm.build = *b;
+            false
+        });
         opening.retain(|&e| {
             let Ok(mut gun) = guns.get_mut(e) else {
                 return true;

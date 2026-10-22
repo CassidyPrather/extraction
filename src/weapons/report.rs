@@ -113,7 +113,9 @@ fn shot_noise(
         let load = gun.firearm.last_fired;
         let cartridge = gun.firearm.def.cartridge.clone();
         let id = &catalog.get(item.kind()).id;
-        let barrel = report::barrel_mm(id).unwrap_or_else(|| report::full_burn_mm(&cartridge));
+        let barrel = report::barrel_mm(id)
+            .map(|f| extraction_core::gunsmith::barrel_now(&gun.firearm.build, f))
+            .unwrap_or_else(|| report::full_burn_mm(&cartridge));
         let can = muzzle_can(
             s.gun,
             &sockets,

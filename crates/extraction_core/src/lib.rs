@@ -19,6 +19,7 @@ pub mod forest;
 pub mod fracture;
 pub mod geom;
 pub mod grenade;
+pub mod gunsmith;
 pub mod heavy;
 pub mod inventory;
 pub mod items;

@@ -4,7 +4,9 @@
 //! with two landmarks in sight. A designer's aid: it suggests, the map
 //! says what fits the valley's story.
 //!
-//! Usage: `landmark-plan <map.ron> <prefab,prefab,...> [picks] [grid m]`
+//! Usage: `landmark-plan <map.ron> <prefab,prefab,...> [picks] [grid m]
+//! [--avoid x,z,r ...]` (no spot within `r` of `x,z`: a view already as
+//! busy as `map_lint`'s ViewLoad allows).
 //!
 //! Prints the valley's landmarks, then picks greedily: the best (spot,
 //! prefab) by ground gained, added to the map, and again.
@@ -22,14 +24,22 @@ fn main() {
         std::process::exit(2);
     };
     let picks: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3);
+    let avoid: Vec<(P2, f32)> = args
+        .windows(2)
+        .filter(|w| w[0] == "--avoid")
+        .filter_map(|w| {
+            let v: Vec<f32> = w[1].split(',').filter_map(|t| t.parse().ok()).collect();
+            (v.len() == 3).then(|| ([v[0], v[1]], v[2]))
+        })
+        .collect();
     let grid: f32 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(40.0);
     let text = std::fs::read_to_string(src).expect("read map");
     let mut map = MapDef::from_ron(&text).expect("parse map");
     let hm = Heightmap::build(&map);
     let canopy = Canopy::new(&map, &hm);
     let walk = extraction_core::map_nav::zone_grid(&map, &hm, extraction_core::map_nav::MAX_SLOPE);
-    // Twice the lint's step: a plan, not a verdict.
-    let (cells, _) = map_landmarks::gauge_cells(&map, &walk, TWO_MARKS_STEP * 2.0, WOOD_EDGE);
+    // The lint's own sampling, so the plan's numbers are its numbers.
+    let (cells, _) = map_landmarks::gauge_cells(&map, &walk, TWO_MARKS_STEP, WOOD_EDGE);
     let share = |map: &MapDef| {
         let marks = map_landmarks::landmarks(map, &hm);
         let two = cells
@@ -57,7 +67,11 @@ fn main() {
     for j in 0..=n {
         for i in 0..=n {
             let p = [-320.0 + i as f32 * grid, -320.0 + j as f32 * grid];
-            if !walk.walkable(p) || hm.slope_deg(p) > 12.0 || hm.road_at(p).weight > 0 {
+            if !walk.walkable(p)
+                || hm.slope_deg(p) > 12.0
+                || hm.road_at(p).weight > 0
+                || avoid.iter().any(|(c, r)| dist(*c, p) < *r)
+            {
                 continue;
             }
             if map.placements.iter().any(|q| {
