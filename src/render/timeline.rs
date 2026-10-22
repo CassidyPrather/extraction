@@ -42,7 +42,7 @@ impl Plugin for TimelinePlugin {
                 mark("startup done (zone, terrain, nav, props)")
             })
             .add_systems(First, first_frame)
-            .add_systems(Last, settled);
+            .add_systems(Last, (settled, leaving));
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             render.add_systems(bevy::render::Render, first_rendered);
         }
@@ -53,6 +53,13 @@ fn first_frame(mut n: Local<u32>) {
     *n += 1;
     if *n == 1 {
         mark("first frame");
+    }
+}
+
+/// The way out: a valley change waits through the close as well.
+fn leaving(exit: MessageReader<AppExit>) {
+    if !exit.is_empty() {
+        mark("leaving (exit asked)");
     }
 }
 
