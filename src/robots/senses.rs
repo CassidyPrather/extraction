@@ -100,7 +100,7 @@ pub const GLIMPSE_SPREAD_MIN: f32 = 3.0;
 pub const SIGHT_GAIN: f32 = 1.5;
 pub const SIGHT_GAIN_NEAR: f32 = 30.0;
 /// Suspicion lost per second with nothing seen.
-pub const SUSPICION_DECAY: f32 = 0.05;
+pub const SUSPICION_DECAY: f32 = super::recall::per_second(super::recall::Memory::Suspicion);
 
 // --- Darkness --------------------------------------------------------
 
@@ -162,7 +162,7 @@ pub const HEARD_OVER: f32 = 1.2;
 /// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
 /// gave up: a lure that keeps going wears out its welcome. (Sounds you
 /// make there still count.)
-pub const BORED_FOR: f32 = 120.0;
+pub const BORED_FOR: f32 = super::recall::lasts(super::recall::Memory::Lure);
 pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
