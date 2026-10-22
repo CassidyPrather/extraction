@@ -242,6 +242,16 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
+- a door you opened;
+- wire or a padlock cut;
+- crowbar marks;
+- broken glass or a smashed crate;
+- a wreck dragged from where it fell;
+- a loot spot left bare.
+
+Each is a sign with an age, in one registry. A robot that passes within sight of a fresh one (under 3 minutes) goes to look; an older one only makes it wary. Two fresh signs in a line are a route: it goes on past the newer, the way they run.
+
 **What you handle gives you away** (`robots/signs.rs`). A gun knocked on
 a doorframe, or let go so that it slaps back on its sling, is heard (up
 to 15 m for a hard knock). A dragged load scrapes, and robots hear it
