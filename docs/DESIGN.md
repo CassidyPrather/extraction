@@ -249,10 +249,10 @@ were heading (`robots/signs.rs`).
 - the loot spots you clear.
 
 It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays off within a few raids. When you next step out, it leans, gently and capped:
-- patrols pick places on your usual ways up to twice as often;
+- patrols pick places on your usual ways up to 1.5 times as often;
 - the sentry nearest your favourite rendezvous turns its sweep toward it, by at most a quarter of its arc;
-- up to two buildings you cleared are found with their doors shut, one wedged if there's another way in;
-- one machine of the kind you wrecked is left watching where you did it.
+- up to two buildings you cleared are found with their doors shut, and once clearing one is a habit, one door is wedged if there's another way in;
+- where you've wrecked them more than once lately, one of their kind is left watching (an unarmed walker that calls the others, or a drone).
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
 
