@@ -718,6 +718,12 @@
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
+            id: "splint", dims: Some((0.06, 0.03, 0.45)), name: "Splint",
+            description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
+            category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
+            tags: ["wood"],
+        ),
+        (
             id: "regen_injector", dims: Some((0.024, 0.027, 0.13)), name: "Regen injector",
             description: "Jab it in your thigh. Something in the Zone makes these work better than they should.",
             category: Medical, size: Small, mass: 0.1, bulk: 0.08,

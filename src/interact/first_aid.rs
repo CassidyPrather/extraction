@@ -4,6 +4,9 @@
 //!   against the limb (a thigh, a shin, an arm, the chest, the belly, the
 //!   head) and circle it round, one and a half turns. It binds that limb's
 //!   wounds; the others bleed on.
+//! - **A splint** goes along a broken shin (`wounds::Fracture`): hold it
+//!   along the shin, the other hand at the leg strapping it, for
+//!   [`STRAP`] seconds, and you walk on it (limping less).
 //! - **An injector** goes in the thigh. Put its tip to your thigh and pull
 //!   the trigger.
 //! - **Food** goes to your mouth: hold it there a moment. A bottle has to
@@ -27,6 +30,9 @@ use extraction_core::items::Category;
 
 /// Turns round the forearm a dressing takes.
 const WRAP_TURNS: f32 = 1.5;
+/// How long a splint takes to strap on, s.
+pub const STRAP: f32 = 1.5;
+
 /// How far out from a limb's surface a dressing held to it may be (m).
 const ROUND: f32 = 0.07;
 /// An injector's tip, in its own space, and how near the thigh it must be.
@@ -46,7 +52,7 @@ impl Plugin for FirstAidPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            (wrap_dressings, inject, eat_and_drink).after(InteractSystems::Follow),
+            (wrap_dressings, strap_splints, inject, eat_and_drink).after(InteractSystems::Follow),
         );
     }
 }
@@ -161,6 +167,105 @@ fn wrap_dressings(
             pulse(&mut haptics, held.side, CLICK);
             pulse(&mut haptics, held.side.other(), CLICK);
             *w = Winding::default();
+        }
+    }
+}
+
+/// How long a splint's been held along the broken shin.
+#[derive(Component, Debug, Default)]
+pub struct Strapping(pub f32);
+
+/// A splint held along the broken shin, the other hand at it: strapped
+/// on, after a while.
+#[allow(clippy::type_complexity)]
+fn strap_splints(
+    mut commands: Commands,
+    mut items: Query<(
+        Entity,
+        &Item,
+        &Held,
+        &GlobalTransform,
+        Option<&mut Strapping>,
+    )>,
+    players: Query<
+        (
+            &Transform,
+            &RigInput,
+            &crate::rig::stance::Stance,
+            &Children,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(&RigHand, &Hand)>,
+    mut broken: Query<&mut super::wounds::Fracture>,
+    catalog: Res<Catalog>,
+    mut haptics: MessageWriter<Haptic>,
+    time: Res<Time>,
+) {
+    for (e, item, held, gt, strapping) in &mut items {
+        if catalog.get(item.kind()).id != "splint" {
+            continue;
+        }
+        let Ok(mut fracture) = broken.get_mut(held.player) else {
+            continue;
+        };
+        if fracture.splinted {
+            continue;
+        }
+        let Some(segs) = super::wounds::player_segments(held.player, &players, &hands) else {
+            continue;
+        };
+        let Some(shin) = segs
+            .iter()
+            .find(|s| s.limb == super::wounds::Limb::Shin(fracture.leg))
+        else {
+            continue;
+        };
+        let along = (shin.b - shin.a).normalize_or(Vec3::NEG_Y);
+        let axis = gt.rotation() * Vec3::Z;
+        let (t, _, d) = shin.locate(gt.translation());
+        let mid = shin.a.lerp(shin.b, 0.5);
+        let other = players.get(held.player).ok().and_then(|(.., children)| {
+            children.iter().find_map(|c| {
+                hands
+                    .get(c)
+                    .ok()
+                    .filter(|(rh, _)| rh.side != held.side)
+                    .map(|(_, h)| h.world.translation)
+            })
+        });
+        let laid = axis.dot(along).abs() > 0.8
+            && (0.1..=0.9).contains(&t)
+            && d < shin.r + 0.08
+            && other.is_some_and(|o| o.distance(mid) < 0.25);
+        let Some(mut s) = strapping else {
+            commands.entity(e).insert(Strapping::default());
+            continue;
+        };
+        if !laid {
+            s.0 = 0.0;
+            continue;
+        }
+        let before = (s.0 * 2.0).floor();
+        s.0 += time.delta_secs();
+        if (s.0 * 2.0).floor() > before {
+            // A strap pulled tight, each half second.
+            pulse(&mut haptics, held.side.other(), TICK);
+        }
+        if s.0 >= STRAP {
+            fracture.splinted = true;
+            pulse(&mut haptics, held.side, CLICK);
+            pulse(&mut haptics, held.side.other(), CLICK);
+            // On the leg now: out of the hand, and gone.
+            let hand = held.hand;
+            commands.queue(move |world: &mut World| {
+                if let Some(mut h) = world.get_mut::<Hand>(hand)
+                    && h.holding == Some(e)
+                {
+                    h.holding = None;
+                }
+                world.despawn(e);
+            });
         }
     }
 }

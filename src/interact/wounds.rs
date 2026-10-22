@@ -8,6 +8,10 @@
 //! A dressing wound round a limb (`first_aid`) stops that limb's wounds,
 //! not the rest; they show on the drawn body and the glove that touched
 //! them (`render::wounds`).
+//!
+//! A hard landing ([`BREAK_LANDING`]) breaks a leg ([`Fracture`]): you
+//! limp ([`LIMP`]) until a splint is strapped along the shin
+//! (`first_aid`), and a little after ([`SPLINTED_LIMP`]).
 
 use bevy::prelude::*;
 
@@ -40,6 +44,20 @@ pub struct Wound {
     pub around: f32,
     pub bleed: f32,
     pub dressed: bool,
+}
+
+/// Landing this fast (m/s) breaks a leg (a safe one is under
+/// `health::SAFE_LANDING`).
+pub const BREAK_LANDING: f32 = 11.0;
+/// How much slower a broken leg walks you, and splinted.
+pub const LIMP: f32 = 0.55;
+pub const SPLINTED_LIMP: f32 = 0.2;
+
+/// A broken leg, splinted or not.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct Fracture {
+    pub leg: Side,
+    pub splinted: bool,
 }
 
 /// The local player's wounds.
@@ -223,12 +241,14 @@ pub struct WoundsPlugin;
 
 impl Plugin for WoundsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, give_wounds).add_systems(
-            FixedUpdate,
-            (place_hits, sync_wounds)
-                .chain()
-                .after(crate::health::HealthSystems),
-        );
+        app.add_systems(Update, give_wounds)
+            .add_systems(FixedUpdate, break_legs.before(crate::health::HealthSystems))
+            .add_systems(
+                FixedUpdate,
+                (place_hits, sync_wounds, limp)
+                    .chain()
+                    .after(crate::health::HealthSystems),
+            );
     }
 }
 
@@ -272,6 +292,50 @@ fn place_hits(
             bleed: 0.0,
             dressed: false,
         });
+    }
+}
+
+/// A landing hard enough breaks a leg (the one that took it: the left on
+/// odd landings, for want of better), and the fall's bleeding is in that
+/// shin. Read before `health::falls` takes the landing.
+fn break_legs(
+    mut commands: Commands,
+    mut players: Query<(Entity, &crate::player::Body, &mut Wounds, Option<&Fracture>)>,
+) {
+    for (e, body, mut wounds, broken) in &mut players {
+        if body.impact < BREAK_LANDING || broken.is_some() {
+            continue;
+        }
+        let leg = if (body.impact * 10.0) as i32 % 2 == 0 {
+            Side::Right
+        } else {
+            Side::Left
+        };
+        commands.entity(e).insert(Fracture {
+            leg,
+            splinted: false,
+        });
+        wounds.0.push(Wound {
+            limb: Limb::Shin(leg),
+            along: 0.5,
+            around: 0.0,
+            bleed: 0.0,
+            dressed: false,
+        });
+    }
+}
+
+/// A broken leg slows you; splinted, less.
+fn limp(mut players: Query<(&mut crate::player::Body, Option<&Fracture>), With<Wounds>>) {
+    for (mut body, f) in &mut players {
+        let want = match f {
+            Some(f) if f.splinted => SPLINTED_LIMP,
+            Some(_) => LIMP,
+            None => 0.0,
+        };
+        if body.limping != want {
+            body.limping = want;
+        }
     }
 }
 

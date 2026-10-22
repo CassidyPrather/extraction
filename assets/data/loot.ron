@@ -169,6 +169,7 @@
         "medical": (rolls: (1, 2), entries: [
             Item(id: "field_dressing", weight: 4.0),
             Item(id: "regen_injector", weight: 1.0),
+            Item(id: "splint", weight: 1.0),
             Nothing(weight: 2.0),
         ]),
         "gadgets": (rolls: (1, 1), entries: [
