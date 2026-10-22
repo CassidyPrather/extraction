@@ -308,6 +308,40 @@ pub const CALLED_OUT: &[&str] = &[
     "Two-tone chirps, close. More of them coming.",
 ];
 
+/// The Zone remembers you (`robots::memory`). Picked up on your usual
+/// way, near `{rv}` (a place)...
+pub const MEMORY_CONTACT: &[&str] = &[
+    "Machine talk, close: contact again, near {rv}.",
+    "The radio stutters: they've had you near {rv} before.",
+    "Chirps on the radio. Near {rv} again, they say.",
+];
+/// ...or nowhere it can name.
+pub const MEMORY_CONTACT_AWAY: &[&str] = &[
+    "Machine talk, close: contact again, your usual way.",
+    "The radio stutters. They know the way you come.",
+];
+/// Stepping out: one of theirs left watching where you wrecked one, by
+/// `{rv}`...
+pub const MEMORY_WATCHER: &[&str] = &[
+    "Driver: \"They've left one watching by {rv}.\"",
+    "Driver: \"One of theirs is stood by {rv}. Waiting.\"",
+];
+/// ...or somewhere it can't name.
+pub const MEMORY_WATCHER_AWAY: &[&str] =
+    &["Driver: \"They've left one where you dropped theirs.\""];
+/// The rendezvous you always use, `{rv}`.
+pub const MEMORY_RV: &[&str] = &[
+    "Driver: \"They'll mind {rv}. You always come out there.\"",
+    "Driver: \"{rv} again? They'll be expecting you.\"",
+];
+/// A building you cleared, by `{rv}`, found shut.
+pub const MEMORY_SHUT: &[&str] = &["Driver: \"Somebody's shut up by {rv} since you were in.\""];
+/// Nothing in particular, but you keep to the same ways.
+pub const MEMORY_WAYS: &[&str] = &[
+    "Driver: \"They've been walking your ways in. Mix it up.\"",
+    "Driver: \"Same way in as always? They'll know it.\"",
+];
+
 /// Fills a line's `{rv}`, `{s}` and `{b}`; a place leading a line gets a
 /// capital.
 pub fn fill(line: &str, rv: &str, s: f32, b: &str) -> String {
@@ -366,7 +400,14 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 27] = [
+        let pools: [&[&str]; 34] = [
+            MEMORY_CONTACT,
+            MEMORY_CONTACT_AWAY,
+            MEMORY_WATCHER,
+            MEMORY_WATCHER_AWAY,
+            MEMORY_RV,
+            MEMORY_SHUT,
+            MEMORY_WAYS,
             crate::raid::epilogue::FOUND,
             BEAT_ENDED,
             &[

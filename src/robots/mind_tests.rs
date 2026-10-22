@@ -3310,3 +3310,67 @@ fn a_sentry_minds_your_favourite_rendezvous() {
         "by no more than a quarter of its arc"
     );
 }
+
+/// A building you cleared, remembered: stepping out, its doors are shut,
+/// and one wedged only if there's another way in.
+#[test]
+fn a_building_you_cleared_is_found_shut() {
+    let (mut app, player, zone) = app(None);
+    for _ in 0..3 {
+        app.update();
+    }
+    // A building with two or more doors, and a loot spot in it.
+    let found = {
+        let entrances = app.world().resource::<super::doors::Entrances>();
+        let loot = &app
+            .world()
+            .resource::<crate::world::buildings::BuildingLoot>()
+            .0;
+        loot.iter().find_map(|s| {
+            let b = entrances.building_at(s.at + Vec3::Y * 0.3)?;
+            let ways: Vec<Entity> = entrances
+                .doors
+                .iter()
+                .filter(|d| d.building == b)
+                .map(|d| d.door)
+                .collect();
+            (ways.len() >= 2).then_some((s.at, ways))
+        })
+    };
+    let Some((spot, ways)) = found else {
+        eprintln!("no two-door building with loot in this valley: nothing to test");
+        return;
+    };
+    for d in &ways {
+        app.world_mut()
+            .get_mut::<crate::world::buildings::Door>(*d)
+            .unwrap()
+            .open = true;
+    }
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..3 {
+            let t = extraction_core::zone_memory::RaidTrace {
+                looted: vec![[spot.x, spot.z]],
+                ..default()
+            };
+            mind.memory.fold(&t);
+        }
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    let shut = ways
+        .iter()
+        .filter(|d| {
+            !app.world()
+                .get::<crate::world::buildings::Door>(**d)
+                .unwrap()
+                .open
+        })
+        .count();
+    let wedged = ways
+        .iter()
+        .filter(|d| app.world().entity(**d).contains::<super::doors::Wedged>())
+        .count();
+    assert_eq!(shut, ways.len(), "all its doors shut");
+    assert_eq!(wedged, 1, "one wedged, another still a way in");
+}

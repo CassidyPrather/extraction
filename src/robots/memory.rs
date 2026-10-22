@@ -178,7 +178,16 @@ fn place_near(zone: &Zone, at: [f32; 2]) -> Option<String> {
         })
         .filter(|(_, d)| *d < 150.0)
         .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(m, _)| crate::raid::lines::the(&m.name))
+        .map(|(m, _)| m.name.clone())
+}
+
+/// The `n`th way of saying a memory line, about `place` if it has one.
+fn line(with: &[&str], without: &[&str], place: Option<&str>, n: u32) -> String {
+    use crate::raid::lines::{fill, pick};
+    match place {
+        Some(p) => fill(pick(with, n), p, 0.0, ""),
+        None => fill(pick(without, n), "", 0.0, ""),
+    }
 }
 
 /// The raid's turns: its start (the machines lean on what they remember)
@@ -245,9 +254,13 @@ fn raid_turns(
                 continue;
             };
             *said = true;
-            let place = place_near(&zone, [me.x, me.z])
-                .map_or("on your usual way".to_string(), |p| format!("near {p}"));
-            raid.say(format!("Radio: \"...contact again, {place}...\""));
+            let place = place_near(&zone, [me.x, me.z]);
+            raid.say(line(
+                crate::raid::lines::MEMORY_CONTACT,
+                crate::raid::lines::MEMORY_CONTACT_AWAY,
+                place.as_deref(),
+                mind.memory.raids,
+            ));
             chatter.write(crate::raid::chatter::RobotChatter {
                 radio,
                 at: n.at,
@@ -301,9 +314,11 @@ fn raid_turns(
             .markers_of(&MarkerKind::Rendezvous)
             .find(|m| m.at == at)
         {
-            remarks.push(format!(
-                "Driver: \"They'll be minding {}. You always come out there.\"",
-                crate::raid::lines::the(&m.name)
+            remarks.push(line(
+                crate::raid::lines::MEMORY_RV,
+                crate::raid::lines::MEMORY_RV,
+                Some(&m.name),
+                mind.memory.raids,
             ));
         }
     }
@@ -338,8 +353,11 @@ fn raid_turns(
             }
             if done.len() == 1 {
                 if let Some(place) = place_near(&zone, at) {
-                    remarks.push(format!(
-                        "Driver: \"Somebody's shut up {place} since you were in.\""
+                    remarks.push(line(
+                        crate::raid::lines::MEMORY_SHUT,
+                        crate::raid::lines::MEMORY_SHUT,
+                        Some(&place),
+                        mind.memory.raids,
                     ));
                 }
             }
@@ -371,15 +389,23 @@ fn raid_turns(
         } else {
             super::walker::spawn_walker(&mut commands, &zone, site, job);
         }
-        let place = place_near(&zone, at)
-            .map_or("where you left theirs".to_string(), |p| format!("by {p}"));
         remarks.insert(
             0,
-            format!("Driver: \"They've left one watching, {place}.\""),
+            line(
+                crate::raid::lines::MEMORY_WATCHER,
+                crate::raid::lines::MEMORY_WATCHER_AWAY,
+                place_near(&zone, at).as_deref(),
+                mind.memory.raids,
+            ),
         );
     }
     if remarks.is_empty() && mind.memory.heat.iter().any(|h| h.1 >= 1.5) {
-        remarks.push("Driver: \"They've been walking your ways in. Mix it up.\"".into());
+        remarks.push(line(
+            crate::raid::lines::MEMORY_WAYS,
+            crate::raid::lines::MEMORY_WAYS,
+            None,
+            mind.memory.raids,
+        ));
     }
     // The strongest, said once.
     if let Some(r) = remarks.into_iter().next() {
