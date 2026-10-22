@@ -340,6 +340,10 @@ pub(super) struct Newcomer {
     heard: Vec<String>,
     /// What the log held last frame.
     showing: Vec<String>,
+    /// The job card, as read.
+    card: String,
+    /// Back at the gate to call (the card said so).
+    at_gate: bool,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -664,6 +668,7 @@ pub(super) fn direct_raid(
             if p.reads {
                 tasks.push(Task::Wait(4.0));
             }
+            state.card = text.split_whitespace().collect::<Vec<_>>().join(" ");
             match place_on_card(&text, &world.zone) {
                 Some((name, at)) => {
                     state.note(
@@ -763,7 +768,38 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Call => {
-            if raid.phase == Phase::AtBase {
+            // "Call me from the gate after": back the way it came first.
+            let drop = world
+                .zone
+                .map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::Insertion)
+                .map(|m| Vec2::from(m.at));
+            if state.card.contains("from the gate")
+                && !state.at_gate
+                && raid.phase == Phase::Out
+                && let Some(drop) = drop
+            {
+                state.at_gate = true;
+                if drop.distance(here) > 20.0 {
+                    state.note(now, Kind::Learned, "back to the gate, as the card said");
+                    tasks.extend(world.legs(here, drop));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+            }
+            if let Phase::TruckWaiting { rv, .. } = raid.phase
+                && rv == crate::raid::SHORT_EXFIL
+            {
+                // It came back for us at the gate: in.
+                state.note(now, Kind::Learned, "the truck came back to the gate");
+                tasks.extend(world.go_home(here, &raid, 0));
+                state.leg = Leg::Board;
+            } else if raid.phase == Phase::AtBase {
                 // Still by the truck: out first (the radio's for the Zone).
                 let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
                 tasks.extend(world.legs(here, away));
