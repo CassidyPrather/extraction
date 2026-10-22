@@ -153,6 +153,33 @@ Last measured, 6 hunter raids a valley over all four valleys:
 | Novice | 42 | 17 (40%) | 18 | 1 |
 | Skilled | 37 | 16 (43%) | 9 | 0 |
 
+**Anomalies in a hunter's raid.** A hunter used to go only where the
+loot is (buildings, spots, the Surge's artifact fields), so it met a
+standing anomaly only by passing one. Now it knows the valley's standing
+anomalies (`SiteKind::Anomaly`, from the map's markers), and goes to
+their edge to see whether one has grown a stone this cycle
+(`SIM_NO_ANOMALY_SITES=1` for the old way). The band now also counts the
+raids that dive at all: at least half must (`MIN_DIVING_RAIDS`).
+
+Free play, 6 hunter raids a valley (12 minutes), raids that dive at
+least once, and what anomalies cost a dive:
+
+| Valley | Before | Skilled | hp a dive | Novice | hp a dive |
+|---|---|---|---|---|---|
+| Marrow Creek | 33% | 50% | 3 | 67% | 11 |
+| Kettle Pass | 33% | 67% | 7 | 50% | 7 |
+| Cinder Works | 83% | 83% | 9 | 100% | 16 |
+| Sallow Reservoir | 83% | 83% | 7 | 100% | 14 |
+| Rime Fell | 100% | 100% | 7 | 67% | 12 |
+
+No raid died in an anomaly. Most dives are still the Surge's kinds by
+the fields (burners, snares, lifts): a standing anomaly has a stone
+about one cycle in three, and in 60 raids hunters took a lodestone and a
+hushstone from them. They walked up to the fell's frosts and left them:
+a skilled raider goes into a frost only with a hearth on it, which it
+has to have won from a burner earlier in the raid. So the head-on
+measures stand beside free play:
+
 The frosts sit high on Rime Fell (the col, the scree), and the sims'
 raiders never get up to one in a 10 or 25 minute raid (18 and 8 hunter
 raids on the seeds that grow rimestones: no dive). So the Frost's band is
