@@ -1914,6 +1914,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
+    let is_fence = |id: &str| id == "fence_garden";
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
             let (pa, pb) = (&solids[*a], &solids[*b]);
@@ -1938,6 +1939,20 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     &mut r,
                     Rule::Overlap,
                     format!("{:.1} m squeeze between {} and {}", walls, pa.name, pb.name),
+                    ra.at,
+                );
+            } else if walls < SEALED && (is_fence(&pa.prefab) != is_fence(&pb.prefab)) {
+                // A fence that stops just short of a wall leaves a slit a
+                // body can't take and a planner thinks it can: the sims'
+                // raiders ground against every garden built so, behind
+                // the house. A fence meets a wall with a gate's width.
+                find(
+                    &mut r,
+                    Rule::Overlap,
+                    format!(
+                        "a {:.1} m slit between {} and {}: leave a gate ({SQUEEZE} m)",
+                        walls, pa.name, pb.name
+                    ),
                     ra.at,
                 );
             }

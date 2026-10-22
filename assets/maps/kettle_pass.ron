@@ -322,22 +322,22 @@
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // The gatekeeper's garden, open to the north.
-        (prefab: "fence_garden", at: (68.15, 225.90), rot: 180.0),
-        (prefab: "fence_garden", at: (63.80, 221.75), rot: 90.0),
+        (prefab: "fence_garden", at: (66.65, 225.90), rot: 180.0),
+        (prefab: "fence_garden", at: (62.30, 221.75), rot: 90.0),
         // The weir cottage's side garden (the lane runs behind it), open to the north.
-        (prefab: "fence_garden", at: (-107.35, 157.40), rot: 0.0),
-        (prefab: "fence_garden", at: (-111.70, 153.25), rot: 90.0),
+        (prefab: "fence_garden", at: (-108.85, 157.40), rot: 0.0),
+        (prefab: "fence_garden", at: (-113.20, 153.25), rot: 90.0),
         // Behind the camp cabin, open to the south.
-        (prefab: "fence_garden", at: (245.35, 224.60), rot: 0.0),
-        (prefab: "fence_garden", at: (249.70, 228.75), rot: 270.0),
+        (prefab: "fence_garden", at: (246.85, 224.60), rot: 0.0),
+        (prefab: "fence_garden", at: (251.20, 228.75), rot: 270.0),
         // Beside the lodge's second cabin, open to the east.
-        (prefab: "fence_garden", at: (229.10, -180.15), rot: 90.0),
-        (prefab: "fence_garden", at: (233.25, -175.80), rot: 180.0),
+        (prefab: "fence_garden", at: (229.10, -178.65), rot: 90.0),
+        (prefab: "fence_garden", at: (233.25, -174.30), rot: 180.0),
         // The low farm's paddock behind the house, open to the east.
-        (prefab: "fence_garden", at: (-189.90, 203.35), rot: 90.0),
-        (prefab: "fence_garden", at: (-189.90, 211.85), rot: 90.0),
-        (prefab: "fence_garden", at: (-185.75, 216.20), rot: 0.0),
-        (prefab: "fence_garden", at: (-177.25, 216.20), rot: 0.0),
+        (prefab: "fence_garden", at: (-189.90, 204.85), rot: 90.0),
+        (prefab: "fence_garden", at: (-189.90, 213.35), rot: 90.0),
+        (prefab: "fence_garden", at: (-185.75, 217.70), rot: 0.0),
+        (prefab: "fence_garden", at: (-177.25, 217.70), rot: 0.0),
 
         // Car wrecks (Destruction strips their doors, bonnets, boots and
         // wheels): cover on the verges, never on the road.
