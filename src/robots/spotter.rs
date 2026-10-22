@@ -399,7 +399,8 @@ fn spotter_mind(
                 let Some(p) = seen else { continue };
                 info!("spotter: called the others to {p:.0}");
                 if let Some(d) = director.as_mut() {
-                    d.queue_response(rules::RESPONSE_DELAY, p);
+                    // Through the network (`robots::network`).
+                    d.queue_report(e, s.winch, rules::RESPONSE_DELAY, p);
                 }
                 noise.write(super::Noise {
                     at,

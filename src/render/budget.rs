@@ -145,8 +145,23 @@ impl Plugin for BudgetPlugin {
         if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
             app.add_systems(Last, log_counts);
         }
-        if let Some(path) = std::env::var_os("EXTRACTION_FRAMELOG") {
-            app.insert_resource(FrameLog::open(path.into()))
+        // Every real session keeps one (for the playtest report,
+        // `crate::report`); `EXTRACTION_FRAMELOG` puts it elsewhere.
+        let opts = app
+            .world()
+            .get_resource::<crate::launch::LaunchOptions>()
+            .cloned();
+        let path = std::env::var_os("EXTRACTION_FRAMELOG")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                let o = opts.as_ref()?;
+                (!o.headless && !o.tooling() && crate::persist::owns_profile(o))
+                    .then(|| FrameLog::in_logs(&o.map))
+                    .flatten()
+            });
+        if let Some(path) = path {
+            let map = opts.map_or_else(String::new, |o| o.map);
+            app.insert_resource(FrameLog::open(path, &map))
                 .add_systems(Last, log_each_frame);
         }
         let span = RenderSpan::default();
@@ -2053,7 +2068,11 @@ fn log_counts(
     last.1 = names;
 }
 
-/// `EXTRACTION_FRAMELOG=<path>`: a line a frame, `frame cpu_ms gpu_ms`.
+/// A line a frame, `frame cpu_ms gpu_ms`, after `# map <valley>`, with
+/// `# world in` once `timeline::WorldReady` (the frames before it are the
+/// load's). Every real session writes `<data dir>/logs/frames-<when>-
+/// <valley>.txt` (the newest ten kept); `EXTRACTION_FRAMELOG=<path>` writes
+/// there instead.
 /// cpu_ms is the frame's real time (in a headset, what the player feels
 /// when the CPU is the slow side); gpu_ms is the newest timed frame's
 /// top-level render passes summed (a few frames late, as timestamps read
@@ -2065,18 +2084,47 @@ struct FrameLog {
     out: Option<std::io::BufWriter<std::fs::File>>,
     frame: u64,
     seen: Option<std::time::Instant>,
+    world_in: bool,
 }
 
 impl FrameLog {
-    fn open(path: std::path::PathBuf) -> Self {
-        let out = std::fs::File::create(&path)
-            .map_err(|e| warn!("EXTRACTION_FRAMELOG {}: {e}", path.display()))
+    /// This session's frame log in the logs folder, keeping the newest ten.
+    fn in_logs(map: &str) -> Option<std::path::PathBuf> {
+        let dir = crate::persist::data_dir().join("logs");
+        std::fs::create_dir_all(&dir).ok()?;
+        let mut old: Vec<_> = std::fs::read_dir(&dir)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("frames-"))
+            })
+            .collect();
+        old.sort();
+        while old.len() >= 10 {
+            let _ = std::fs::remove_file(old.remove(0));
+        }
+        let when = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        Some(dir.join(format!("frames-{when}-{map}.txt")))
+    }
+
+    fn open(path: std::path::PathBuf, map: &str) -> Self {
+        use std::io::Write;
+        let mut out = std::fs::File::create(&path)
+            .map_err(|e| warn!("frame log {}: {e}", path.display()))
             .ok()
             .map(std::io::BufWriter::new);
+        if let Some(out) = &mut out {
+            let _ = writeln!(out, "# map {map}");
+        }
         Self {
             out,
             frame: 0,
             seen: None,
+            world_in: false,
         }
     }
 }
@@ -2085,6 +2133,7 @@ fn log_each_frame(
     time: Res<Time<Real>>,
     store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
     mut log: ResMut<FrameLog>,
+    world: crate::render::timeline::WorldReady,
 ) {
     use std::io::Write;
     let cpu = time.delta_secs_f64() * 1000.0;
@@ -2120,7 +2169,12 @@ fn log_each_frame(
     log.seen = newest;
     log.frame += 1;
     let frame = log.frame;
+    let world_in = !log.world_in && world.ready();
+    log.world_in |= world_in;
     if let Some(out) = &mut log.out {
+        if world_in {
+            let _ = writeln!(out, "# world in");
+        }
         let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3}");
         if frame % 90 == 0 {
             let _ = out.flush();

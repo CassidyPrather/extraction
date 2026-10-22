@@ -61,6 +61,7 @@ pub const NAMES: &[&str] = &[
     crate::robots::spotter::SCENARIO,
     crate::robots::minelayer::SCENARIO,
     crate::robots::mender::SCENARIO,
+    crate::robots::network::SCENARIO,
     crate::robots::plough::SCENARIO,
     crate::world::cage::SCENARIO,
     crate::world::echo::SCENARIO,
@@ -552,6 +553,28 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::network::SCENARIO => {
+            use crate::bot::Expect::Counter;
+            use crate::robots::network as net;
+            vec![
+                Log(s("relay cut: cut a pylon's cable, then stand in its view")),
+                Setup(net::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                WalkTo {
+                    to: net::VIEW_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(15.0),
+                Expect(Counter(net::SILENCED, 1, 1)),
+                Expect(Counter(net::BLOCKED, 1, 1000)),
+            ]
+        }
         crate::robots::sentry::SCENARIO => {
             vec![
                 Log(s(

@@ -26,6 +26,8 @@ pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+pub mod report;
+pub mod reverb;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
@@ -233,7 +235,9 @@ impl Plugin for WeaponsPlugin {
                 crossbow::CrossbowPlugin,
                 carry::CarryPlugin,
                 weather::WeatherPlugin,
+                report::ReportPlugin,
             ))
+            .add_plugins(reverb::ReverbPlugin)
             .add_systems(
                 FixedUpdate,
                 (
