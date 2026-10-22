@@ -178,5 +178,35 @@
   "deg2": 38.61,
   "floor": 2.0,
   "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "fog",
+  "changed": 0.0311,
+  "noise": 0.0,
+  "over_noise": 0.0311,
+  "deg2": 37.33,
+  "floor": 2.0,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "downpour",
+  "changed": 0.0348,
+  "noise": 0.0,
+  "over_noise": 0.0348,
+  "deg2": 41.82,
+  "floor": 2.0,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "night",
+  "changed": 0.046,
+  "noise": 0.0,
+  "over_noise": 0.046,
+  "deg2": 55.21,
+  "floor": 2.0,
+  "ok": true
  }
 ]
