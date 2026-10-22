@@ -7,6 +7,7 @@ pub mod ao;
 pub mod beams;
 pub mod bridges;
 pub mod buildings;
+pub mod cage;
 pub mod clutter;
 pub mod cold;
 pub mod cover;

@@ -1303,6 +1303,7 @@ impl Plugin for UndergroundPlugin {
         .add_plugins((
             super::workings::WorkingsPlugin,
             super::furnace::FurnacePlugin,
+            super::cage::CagePlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1888,6 +1889,7 @@ impl Plugin for UndergroundVisualsPlugin {
         app.add_plugins((
             super::workings::WorkingsVisualsPlugin,
             super::furnace::FurnaceVisualsPlugin,
+            super::cage::CageVisualsPlugin,
         ))
         .add_systems(
             Update,
