@@ -203,38 +203,36 @@ fn add_chambers(
     materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
-    let (Some(mut meshes), Some(mut materials)) = (meshes, materials) else {
-        return;
-    };
-    let (mesh, mat) = look
-        .get_or_insert_with(|| {
-            (
-                meshes.add(Cylinder::new(0.0055, 0.03)),
-                materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.78, 0.6, 0.3),
-                    metallic: 0.9,
-                    perceptual_roughness: 0.35,
-                    ..default()
-                }),
-            )
-        })
-        .clone();
+    // Drawn where there's drawing; kept track of headless all the same.
+    if let (Some(mut meshes), Some(mut materials), None) = (meshes, materials, look.as_ref()) {
+        *look = Some((
+            meshes.add(Cylinder::new(0.0055, 0.03)),
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(0.78, 0.6, 0.3),
+                metallic: 0.9,
+                perceptual_roughness: 0.35,
+                ..default()
+            }),
+        ));
+    }
     for (e, gun) in &guns {
         let f = &gun.firearm;
         if f.def.action == ActionKind::Revolver || f.def.cartridge == "bolt" {
             continue;
         }
         for i in 0..f.chambers.len() {
-            commands.entity(e).with_child((
+            let mut c = commands.spawn((
                 Name::new("Chamber"),
                 ChamberShow { gun: e, chamber: i },
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(mat.clone()),
                 // A case along the bore.
                 Transform::from_translation(chamber_at(gun, i))
                     .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
                 Visibility::Hidden,
+                ChildOf(e),
             ));
+            if let Some((mesh, mat)) = look.as_ref() {
+                c.insert((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone())));
+            }
         }
     }
 }
@@ -364,5 +362,76 @@ mod tests {
         let full = mag_mass(0.23, 30, 0.011);
         assert!((full - 0.56).abs() < 1e-4, "{full}");
         assert_eq!(mag_mass(0.23, 0, 0.011), 0.23);
+    }
+
+    /// A press check from the hand: a loaded AK's charging handle drawn
+    /// back a little way shows the round in the chamber; let go, the bolt
+    /// closes over it and it's hidden. Unloaded, the same draw shows nothing.
+    #[test]
+    fn a_press_check_shows_the_round_in_the_chamber() {
+        use crate::interact::GripRole;
+        use crate::rig::Side;
+        use crate::weapons::feel::vr_tests::{glide_side, gun_mut, hold, load};
+        use extraction_core::firearm::FireMode;
+        let check = |loaded: bool| -> (bool, bool) {
+            let mut r = hold("ak74", false, false);
+            if loaded {
+                load(&mut r, "ak545", 30, FireMode::Semi);
+            }
+            r.vr.step(5);
+            let shown = |r: &mut crate::weapons::feel::vr_tests::Range| {
+                let mut q = r.vr.app.world_mut().query::<(&ChamberShow, &Visibility)>();
+                q.iter(r.vr.app.world())
+                    .any(|(c, v)| c.gun == r.gun && *v != Visibility::Hidden)
+            };
+            let handle = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+            let back =
+                r.vr.app
+                    .world()
+                    .get::<GlobalTransform>(r.gun)
+                    .unwrap()
+                    .back()
+                    .as_vec3();
+            r.vr.hand(Side::Left, handle, Quat::IDENTITY, 0.0, 0.0);
+            r.vr.step(30);
+            r.vr.trigger(Side::Left, 1.0);
+            r.vr.step(2);
+            assert!(
+                r.vr.hand_state(Side::Left).handle.is_some(),
+                "on the handle"
+            );
+            glide_side(&mut r, Side::Left, handle, handle + back * 0.06, 15);
+            r.vr.step(3);
+            let open = shown(&mut r);
+            assert!(gun_mut(&mut r).firearm.bolt_travel > 0.3, "drawn back");
+            r.vr.trigger(Side::Left, 0.0);
+            r.vr.step(20);
+            (open, shown(&mut r))
+        };
+        assert_eq!(check(true), (true, false), "loaded: seen open, hidden shut");
+        assert_eq!(check(false), (false, false), "empty: nothing to see");
+    }
+
+    /// Hefted, a full AK magazine is heavier than an empty one by its
+    /// rounds.
+    #[test]
+    fn a_full_magazine_is_heavier_in_the_hand() {
+        use crate::rig::Side;
+        use crate::weapons::feel::vr_tests::{hold, take_in};
+        let mut r = hold("ak74", false, false);
+        let near = r.feet + Vec3::new(-0.3, 1.1, -0.3);
+        let mag = take_in(&mut r, Side::Left, "ak_mag", near);
+        r.vr.step(3);
+        let mass = |r: &mut crate::weapons::feel::vr_tests::Range| {
+            r.vr.app.world().get::<Mass>(mag).unwrap().0
+        };
+        r.vr.app.world_mut().get_mut::<Item>(mag).unwrap().rounds = 30;
+        r.vr.step(3);
+        let full = mass(&mut r);
+        r.vr.app.world_mut().get_mut::<Item>(mag).unwrap().rounds = 0;
+        r.vr.step(3);
+        let empty = mass(&mut r);
+        println!("AK magazine: full {full:.2} kg, empty {empty:.2} kg");
+        assert!(full > empty + 0.3, "{full} vs {empty}");
     }
 }
