@@ -264,10 +264,10 @@ fn reel(
             "wreck" | "shot" | "knockdown" | "damaged" | "salvage" => {
                 let at = eye
                     + flat
-                        * if matches!(what, "shot" | "salvage") {
-                            3.5
-                        } else {
-                            5.0
+                        * match what {
+                            "salvage" => 2.4,
+                            "shot" => 3.5,
+                            _ => 5.0,
                         };
                 spawn_walker(&mut commands, &zone, at, job(at))
             }

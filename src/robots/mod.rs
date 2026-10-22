@@ -304,7 +304,21 @@ impl Plugin for RobotsPlugin {
     }
 }
 
-/// Bullets damage the part they strike.
+/// A blunt blow (a crowbar, a rifle's butt) on an armour plate does this
+/// much more to it than its harm: it shakes the plate's bolts loose, so a
+/// plate beaten hangs (`armour::Hanging`) and comes off sooner than one
+/// shot. Elsewhere a blow is its harm.
+pub const BLUNT_LOOSENS: f32 = 1.8;
+
+/// What a hit of `damage` does to a part in this role.
+pub fn part_damage(role: PartRole, damage: f32, blow: Option<extraction_core::melee::Blow>) -> f32 {
+    match (role, blow) {
+        (PartRole::Armour(_), Some(extraction_core::melee::Blow::Blunt)) => damage * BLUNT_LOOSENS,
+        _ => damage,
+    }
+}
+
+/// Bullets (and blows) damage the part they strike.
 fn damage_parts(
     mut hits: MessageReader<Hit>,
     mut parts: Query<(&mut RobotPart, &GlobalTransform)>,
@@ -329,7 +343,7 @@ fn damage_parts(
             radius: 40.0,
             source: hit.shooter,
         });
-        part.hp -= hit.damage;
+        part.hp -= part_damage(part.role, hit.damage, hit.blow);
         if part.hp <= 0.0 {
             destroyed.write(PartDestroyed {
                 robot: part.robot,
@@ -666,6 +680,18 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A blunt blow beats a plate loose faster than its harm; a blade or a
+    /// round does its harm, and a blow elsewhere is its harm.
+    #[test]
+    fn blunt_blows_shake_plates_loose() {
+        use extraction_core::melee::Blow;
+        let plate = PartRole::Armour(0);
+        assert!(part_damage(plate, 10.0, Some(Blow::Blunt)) > 10.0);
+        assert_eq!(part_damage(plate, 10.0, Some(Blow::Edge)), 10.0);
+        assert_eq!(part_damage(plate, 10.0, None), 10.0);
+        assert_eq!(part_damage(PartRole::Core, 10.0, Some(Blow::Blunt)), 10.0);
     }
 
     /// A wreck's salvage is its own: other robots wrecked first, somewhere

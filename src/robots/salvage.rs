@@ -308,11 +308,13 @@ fn fit_salvage(
         }
         let bolt_look = match (meshes.as_mut(), materials.as_mut()) {
             (Some(m), Some(s)) => Some((
-                m.add(Cylinder::new(0.014, 0.02)),
+                // A bolt's head: dark, oily steel (bright metal reads as a
+                // loose die in daylight, not a bolt).
+                m.add(Cylinder::new(0.018, 0.016)),
                 s.add(StandardMaterial {
-                    base_color: Color::srgb(0.35, 0.33, 0.3),
-                    metallic: 0.8,
-                    perceptual_roughness: 0.4,
+                    base_color: Color::srgb(0.12, 0.11, 0.1),
+                    metallic: 0.6,
+                    perceptual_roughness: 0.55,
                     ..default()
                 }),
             )),
