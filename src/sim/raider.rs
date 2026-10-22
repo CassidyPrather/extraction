@@ -2895,19 +2895,30 @@ const OBJECTIVE_REACH: f32 = 120.0;
 
 /// The region a raider sets out for: any region with something to loot
 /// in it and some danger (the calm insertion is where it starts), the
-/// richer the likelier.
+/// richer the likelier; never the machines' gate, and the deadliest
+/// country less often.
 fn choose_objective(map: &MapDef, sites: &[Site], seed: u64) -> Option<Vec2> {
     let regions: Vec<_> = map
         .regions
         .iter()
         .filter(|g| g.danger > 0)
+        // Not the machines' own gate: nobody plans a raid around walking
+        // into it.
+        .filter(|g| {
+            !map.markers_of(&MarkerKind::RobotGate)
+                .any(|m| extraction_core::geom::point_in_polygon(&g.polygon, m.at))
+        })
         .filter(|g| {
             sites
                 .iter()
                 .any(|s| extraction_core::geom::point_in_polygon(&g.polygon, s.at.to_array()))
         })
         .collect();
-    let weights: Vec<f32> = regions.iter().map(|g| g.richness()).collect();
+    // The deadliest country is a raid's aim now and then, not by default.
+    let weights: Vec<f32> = regions
+        .iter()
+        .map(|g| g.richness() * if g.danger >= 3 { 0.3 } else { 1.0 })
+        .collect();
     let g = regions[Rng::new(seed ^ 0x0B1E).weighted(&weights)?];
     let n = g.polygon.len().max(1) as f32;
     Some(g.polygon.iter().map(|p| Vec2::from_array(*p)).sum::<Vec2>() / n)
