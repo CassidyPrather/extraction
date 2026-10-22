@@ -923,6 +923,40 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
 
   (Metres, in still air. Weather and walls cut these further.)
 
+### A gun's state, read in the hand
+
+(`weapons/legibility.rs`)
+
+No screen tells you a gun's state; the gun does, as its real counterpart
+would. A table of each gun's real tells, held against the models and the
+mechanism by `every_gun_shows_what_the_real_one_does`:
+
+- **Cocked**:
+  - an exposed hammer back (PM, Nagant, flare pistol);
+  - a turn-bolt's cocking piece standing 12 mm back off the bolt (Mosin,
+    TOZ-8);
+  - the double's two indicator pins standing 3 mm proud, each over its
+    cocked lock;
+  - the PPSh's bolt held back;
+  - a crossbow's string drawn.
+  - The AK, RPK and MP-133 show nothing: look in the port.
+- **Loaded**: with the action open (a press check), the round in the
+  chamber is there to see. A fired case sits a little proud on the
+  extractor. A revolver's cylinder shows its rounds, and a clip shows the
+  rounds standing in it.
+- **Empty**: the slide or carrier held open on the last round where the
+  real gun does it (PM, SKS, SVD). An empty box magazine shows its
+  follower between the lips.
+- **How full**: a magazine weighs what its rounds weigh (an AK's is 0.23 kg
+  empty, 0.56 kg full), so you heft it. The PM magazine's round-count
+  holes show brass up to how full it is.
+- **Condition**: below 0.8 the finish wears toward rust and bare steel, and
+  goes rougher. The crown nicks and the bore soots (`wear`). A worn action
+  (below 0.6), or a fouled one, drags in the hand as cold oil does
+  (`Firearm::action_drag`).
+- **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
+  scope are all on the model as they are.
+
 ### Gunsmithing at the vice
 
 (`extraction_core::gunsmith`, `weapons/gunsmith.rs`)
