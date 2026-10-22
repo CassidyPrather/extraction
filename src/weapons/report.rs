@@ -257,7 +257,7 @@ mod tests {
                 cursor
                     .read(r.vr.app.world().resource::<Messages<Noise>>())
                     .filter(|n| n.source.is_some())
-                    .copied(),
+                    .cloned(),
             );
         }
         r.vr.trigger(Side::Right, 0.0);
