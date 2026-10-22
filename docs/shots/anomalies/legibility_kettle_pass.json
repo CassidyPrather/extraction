@@ -152,30 +152,30 @@
  {
   "kind": "hush",
   "weather": "fog",
-  "changed": 0.007,
+  "changed": 0.1198,
   "noise": 0.0,
-  "over_noise": 0.007,
-  "deg2": 8.44,
+  "over_noise": 0.1198,
+  "deg2": 143.75,
   "floor": 2.0,
   "ok": true
  },
  {
   "kind": "hush",
   "weather": "downpour",
-  "changed": 0.0071,
+  "changed": 0.1204,
   "noise": 0.0,
-  "over_noise": 0.0071,
-  "deg2": 8.47,
+  "over_noise": 0.1204,
+  "deg2": 144.43,
   "floor": 2.0,
   "ok": true
  },
  {
   "kind": "hush",
   "weather": "night",
-  "changed": 0.0063,
+  "changed": 0.0718,
   "noise": 0.0,
-  "over_noise": 0.0063,
-  "deg2": 7.51,
+  "over_noise": 0.0718,
+  "deg2": 86.21,
   "floor": 2.0,
   "ok": true
  }
