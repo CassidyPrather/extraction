@@ -685,6 +685,36 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
     quarter of the wet. The cleaning kit takes the rest, fouling and all.
   - *The gauge* (core): jams per 100 rounds are 0.08 clean, 4.2 cold,
     5.9 grimy and 9.7 both, back to 1.3 after four strokes of a wipe.
+- **Stiff actions in the hand** (`weapons::drag`): in cold oil a bolt,
+  pump or charging handle drags. It follows the hand no faster than
+  3 m/s divided by (1 + 3 × stiffness), and doesn't move at all unless the
+  hand pulls at 0.35 m/s × stiffness; a timid hand slides on it. It
+  grinds in the hand as it moves (`ActionGrind` for Audio). A cold
+  bolt brought back short and pushed home has short-stroked
+  (`Malfunction::ShortStroke`): the trigger's dead until it's worked
+  fully. Gauge: a 10 cm stroke at 2 m/s takes 0.06 s warm, 0.14 s cold.
+- **Ammunition condition** (`Load::Surplus`, `Load::Damp`,
+  `Firearm::ammo_cold`): old surplus lots and rounds that got wet (ball's
+  plain primers; AP, tracers, slugs and stars are sealed) misfire and
+  hang-fire. So does a round as cold as the gun.
+  - *Wetting*: a box, magazine or gun soaked past 0.6 turns a round damp
+    every 45 s.
+  - *A hang-fire* is a click, then the shot 0.3 to 1 s later from wherever
+    the muzzle is by then. Open the action on it first and it goes off out
+    of battery: it hurts the hand and the gun.
+  - *Restoring*: the bench's "Re-pack a box's old or damp rounds" (a box
+    and powder) makes them good ball again.
+  - *The gauge*, misfires and hang-fires per 100 rounds:
+
+    | Rounds | Misfires | Hang-fires |
+    |---|---|---|
+    | fresh | 0.17 | 0 |
+    | surplus | 3.2 | 3.3 |
+    | damp | 18.8 | 7.9 |
+    | cold-soaked | 4.4 | 5.5 |
+    | scavenged re-pack | 4.75 | 0 |
+
+    The re-pack's trouble is the squib. The longest hang was 1.0 s.
 - **Signatures**: a test, `weapons/signature.rs`, records each gun's
   muzzle path. Each is held as a player would: two hands (a handgun
   cupped), shouldered where there's a stock. The trigger

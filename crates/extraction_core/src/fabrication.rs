@@ -25,6 +25,10 @@ pub enum Make {
     Items(&'static [(&'static str, u32)]),
     /// Restore a gun's condition by this much (up to 1).
     Repair(f32),
+    /// Re-pack the old (surplus) and damp rounds in an ammunition box with
+    /// fresh primers and powder: they come out good ball
+    /// (`Load::Standard`); the box stays.
+    Restore,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -149,6 +153,13 @@ pub const RECIPES: &[Recipe] = &[
         ],
         makes: Make::Items(&[("ammo_12ga_repack", 1)]),
         seconds: 10.0,
+    },
+    Recipe {
+        id: "restore_rounds",
+        name: "Re-pack a box's old or damp rounds",
+        needs: &[(Need::AmmoBox, 1), (Need::Item("powder"), 1)],
+        makes: Make::Restore,
+        seconds: 8.0,
     },
     // --- Making things -----------------------------------------------------
     Recipe {
