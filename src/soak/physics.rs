@@ -641,7 +641,8 @@ fn the_player_cant_be_pushed_through_walls() {
     let mut vr = crate::vr_harness::Vr::new("marrow_creek");
     let walls = wall_spots(&mut vr.app);
     let mut bad = Vec::new();
-    for w in walls.iter().take(24) {
+    // (Sixteen walls, three ways at each: the suite's two-minute budget.)
+    for w in walls.iter().take(16) {
         let (p, n) = (w.p, w.n);
         let g = vr.app.world().resource::<Zone>().ground(p.x, p.z);
         let start = p + n * 1.2;
@@ -684,15 +685,17 @@ fn the_player_cant_be_pushed_through_walls() {
                 i.locomotion = if run { Vec2::Y } else { Vec2::ZERO };
                 i.sprint = run;
             };
-            // Sprint at it for three seconds, then walk a metre and a half
-            // on into it in the room.
+            // Sprint at it for a second and a half (it starts 1.2 m off:
+            // against the wall in well under one, then shoving), then walk
+            // a metre and a half on into it in the room.
+            const SPRINT: usize = 135;
             set(&mut vr, true);
-            for k in 0..360 {
-                if k == 270 {
+            for k in 0..SPRINT + 90 {
+                if k == SPRINT {
                     set(&mut vr, false);
                 }
-                if k >= 270 {
-                    vr.head(Vec3::new(0.0, 1.65, -((k - 270) as f32) / 60.0));
+                if k >= SPRINT {
+                    vr.head(Vec3::new(0.0, 1.65, -((k - SPRINT) as f32) / 60.0));
                 }
                 vr.step(1);
                 let now = centre(&vr);

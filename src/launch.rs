@@ -5,6 +5,7 @@
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
+//! extraction --report [--data-dir DIR]
 //! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
 //!            [--sim-minutes M] [--sim-out DIR]
 //! ```
@@ -69,6 +70,8 @@ pub struct LaunchOptions {
     pub new_game: bool,
     /// Don't write raid recordings (`sim::playtest`).
     pub no_record: bool,
+    /// Write the playtest report (`report`) and quit.
+    pub report: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -93,6 +96,9 @@ pub struct LaunchOptions {
     /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
     /// without it, into this folder (`render::wayfind_shots`).
     pub afford: Option<PathBuf>,
+    /// Dev, with `--wayfind`: shoot only the landmarks' lamps, each from
+    /// `render::wayfind_shots::LAMP_AT` metres off (`--wayfind-lamps DIR`).
+    pub wayfind_lamps: bool,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -154,6 +160,7 @@ impl Default for LaunchOptions {
             legibility: None,
             wayfind: None,
             afford: None,
+            wayfind_lamps: false,
             camp: false,
             bot: false,
             scenario: None,
@@ -163,6 +170,7 @@ impl Default for LaunchOptions {
             save: None,
             new_game: false,
             no_record: false,
+            report: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -227,6 +235,7 @@ impl LaunchOptions {
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
+                "--report" => o.report = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
@@ -236,9 +245,30 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
-                "--weather" => o.weather = Some(val()),
+                "--weather" => {
+                    let v = val();
+                    if !crate::world::weather::WEATHERS.contains(&v.as_str()) {
+                        // Loudly: an unknown weather once quietly became
+                        // drizzle, and screenshot scripts show only errors.
+                        eprintln!(
+                            "ERROR --weather {v}: expected one of {}",
+                            crate::world::weather::WEATHERS.join(", ")
+                        );
+                        std::process::exit(2);
+                    }
+                    o.weather = Some(v);
+                }
                 "--snow" => o.snow = val().parse::<f32>().ok().map(|s| s.clamp(0.0, 1.0)),
-                "--hour" => o.hour = Some(val()),
+                "--hour" => {
+                    let v = val();
+                    if crate::world::weather::Hour::parse(&v).is_none() {
+                        eprintln!(
+                            "ERROR --hour {v}: expected dawn, day, dusk, night or a clock hour (23, 5:30)"
+                        );
+                        std::process::exit(2);
+                    }
+                    o.hour = Some(v);
+                }
                 "--moon" => {
                     o.moon = match val().as_str() {
                         "new" => Some(0.0),
@@ -309,6 +339,14 @@ impl LaunchOptions {
                 }
                 "--wayfind" => {
                     o.wayfind = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--wayfind-lamps" => {
+                    o.wayfind = Some(val().into());
+                    o.wayfind_lamps = true;
                     o.robots = false;
                     o.flat = true;
                     o.camera

@@ -142,7 +142,7 @@ fn index_hole(
     bxf: &Transform,
     hole: Vec3,
 ) {
-    let size = extraction_core::map::prefab_footprint(prefab);
+    let prefab = prefab.to_string();
     let xf = *bxf;
     let (mid, out) = way_in(bxf, hole);
     let marker = commands
@@ -159,12 +159,8 @@ fn index_hole(
             // (Only once the index is built: an early shell would stop it
             // being built at all.)
             if !e.shells.is_empty() && !e.shells.iter().any(|s| s.building == building) {
-                e.shells.push(crate::robots::doors::Shell {
-                    building,
-                    xf,
-                    half: Vec2::new(size[0], size[2]) * 0.5,
-                    height: size[1],
-                });
+                e.shells
+                    .push(crate::robots::doors::Shell::of(building, &prefab, xf));
             }
             e.doors.push(crate::robots::doors::Entrance {
                 door: marker,

@@ -83,6 +83,10 @@
     // By the vents and on the cool side: waiting where you come to vent.
     patrol: ["stair_foot", "vent_room", "stair_foot", "burner_gallery", "near_ledge", "burner_gallery"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("FURNACE CELLARS\nDANGER - HOT FLUES"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.4),
     portals: [
         (),
         // The ash hoist's stair, up from the burner gallery to the yard.

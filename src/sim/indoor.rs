@@ -19,6 +19,10 @@ pub const CELL: f32 = 0.25;
 const MARGIN: f32 = 3.0;
 /// The player capsule's radius plus a little.
 const CLEARANCE: f32 = 0.22;
+/// Down an underground site, the whole capsule's radius (`player`'s 0.28):
+/// a gap between props narrower than a body is no way, or a raider routed
+/// through it sticks there.
+pub const SITE_CLEARANCE: f32 = 0.28;
 /// Geometry in this band above the floor blocks walking (below it you step
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
@@ -28,8 +32,10 @@ const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
 pub const MAX_REACH_UP: f32 = 2.1;
 /// The most one cell's floor may stand over its neighbour's and still be
-/// walked between (a stair's riser is 0.2).
-const STEP_UP: f32 = 0.45;
+/// walked between (a stair's riser is 0.2): under the body's own step
+/// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
+/// where it stands 0.42 over the ground and the body can't.
+const STEP_UP: f32 = 0.35;
 
 #[derive(Clone, Debug)]
 pub struct DoorInfo {
@@ -68,9 +74,34 @@ pub struct BuildingPlan {
     /// An underground site's cells shut only by heat nothing crosses:
     /// (cell, heat zone, its cost once that zone's vented).
     pub hot: Vec<(usize, u16, u8)>,
+    /// Its cells in heat that hurts but can be crossed: open in the plan;
+    /// the raider shuts them like `hot` (`shut_live`), since a slow burn
+    /// over a long search kills as surely (Cinder's burner gallery).
+    pub warm: Vec<(usize, u16, u8)>,
+    /// An underground site's live room's wet cells: open in the plan, as
+    /// they are once isolated; the raider shuts them (`shut_live`), since
+    /// it can't tell live from cut and a wrong guess kills.
+    pub live: Vec<usize>,
+    /// An underground site's gas pockets' cells: open in the plan (gas
+    /// doesn't stop feet); the raider shuts them (`shut_live`), since it
+    /// carries no canary and can't tell a pocket that's gone up.
+    pub gas: Vec<usize>,
 }
 
 impl BuildingPlan {
+    /// The live room's water, the gas and the warm heat shut, for a
+    /// raider that won't wade, breathe or stand in them; the heat opens
+    /// again when vented, as `hot` does.
+    pub fn shut_live(&mut self) {
+        for &k in self.live.iter().chain(&self.gas) {
+            self.grid.cost[k] = extraction_core::nav::BLOCKED;
+        }
+        for &(k, ..) in &self.warm {
+            self.grid.cost[k] = extraction_core::nav::BLOCKED;
+        }
+        self.hot.append(&mut self.warm);
+    }
+
     /// Heat zones vented: their cells walked again.
     pub fn vent(&mut self, zones: &[usize]) {
         let grid = &mut self.grid;
@@ -81,6 +112,33 @@ impl BuildingPlan {
             }
             !open
         });
+    }
+
+    /// Standing in (or by) heat its plan shuts, caught in it in a fight
+    /// or as it rose: those zones opened again, since a plan can't start
+    /// in a shut cell and the nearest open one may be through a wall.
+    /// Whether any were.
+    pub fn open_heat_at(&mut self, local: Vec2) -> bool {
+        let Some((i, j)) = self.grid.cell_of(local.to_array()) else {
+            return false;
+        };
+        let n = self.grid.n as i64;
+        let near = |k: usize| {
+            let (a, b) = ((k as i64 % n) - i as i64, (k as i64 / n) - j as i64);
+            a.abs() <= 1 && b.abs() <= 1
+        };
+        let mut zones: Vec<usize> = self
+            .hot
+            .iter()
+            .filter(|h| near(h.0))
+            .map(|h| h.1 as usize)
+            .collect();
+        zones.dedup();
+        if zones.is_empty() {
+            return false;
+        }
+        self.vent(&zones);
+        true
     }
 
     pub fn to_local(&self, p: Vec3) -> Vec3 {
@@ -236,6 +294,24 @@ pub fn plan_buildings(
                         crate::world::fell::stepped_floor(&b.prefab, c).unwrap_or(floor)
                     })
                     .collect()
+            })
+            // A drowned building: silt inside to the sills, banked down to
+            // the ground out of its doorway. Each cell's floor is what's
+            // under it (the ground round it at 0), so the bank's flanks by
+            // the wall are a drop, not a way in.
+            .or_else(|| {
+                b.prefab.ends_with("_drowned").then(|| {
+                    (0..n * n)
+                        .map(|k| {
+                            let c = Vec2::from(grid.centre(k % n, k / n));
+                            geo.pieces
+                                .iter()
+                                .filter(|p| p.collide)
+                                .filter_map(|p| surface_under(p.shape, p.at, c, floor + 0.1))
+                                .fold(0.0f32, f32::max)
+                        })
+                        .collect()
+                })
             });
         for piece in geo.pieces.iter().filter(|p| p.collide) {
             let c = piece.at.translation;
@@ -243,6 +319,15 @@ pub fn plan_buildings(
                 .as_ref()
                 .and_then(|l| grid.cell_of([c.x, c.z]).map(|(i, j)| l[j * n + i]))
                 .unwrap_or(floor);
+            // What the floor itself is made of there (the silt, its bank,
+            // buried at its foot) is walked on, not round: the levels say
+            // where it rises.
+            if levels.is_some()
+                && surface_under(piece.shape, piece.at, c.xz(), under + 0.15)
+                    .is_some_and(|y| y <= under + 0.15)
+            {
+                continue;
+            }
             if let Some(ob) = obstacle(piece.shape, piece.at, under) {
                 grid.block(ob, CLEARANCE);
             }
@@ -346,10 +431,14 @@ pub fn plan_buildings(
             }
         }
         if infos.is_empty() {
-            // An open structure: come in from wherever is open.
+            // An open structure: come in from wherever is open, all round
+            // it 1.2 m out (on a rectangle: on an ellipse the diagonals
+            // fall inside a big building's corners).
             for k in 0..8 {
                 let a = k as f32 * std::f32::consts::TAU / 8.0;
-                let p = Vec2::new(a.cos() * (half.x + 1.2), a.sin() * (half.y + 1.2));
+                let d = Vec2::new(a.cos(), a.sin());
+                let out = half + Vec2::splat(1.2);
+                let p = d / (d.x.abs() / out.x).max(d.y.abs() / out.y);
                 if grid.walkable(p.to_array()) {
                     entries.push(p);
                 }
@@ -381,6 +470,9 @@ pub fn plan_buildings(
             half,
             levels,
             hot: Vec::new(),
+            warm: Vec::new(),
+            live: Vec::new(),
+            gas: Vec::new(),
         });
     }
     out
@@ -492,7 +584,7 @@ fn plan_site(
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
         if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
-            grid.block(ob, CLEARANCE);
+            grid.block(ob, SITE_CLEARANCE);
         }
     }
     for (_, leaf) in mine {
@@ -507,12 +599,12 @@ fn plan_site(
                 half: [def.width * 0.5, 0.04],
                 yaw: along.y.atan2(along.x),
             },
-            CLEARANCE,
+            SITE_CLEARANCE,
         );
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
     // is vented (`BuildingPlan::vent`).
-    let mut hot = Vec::new();
+    let (mut hot, mut warm) = (Vec::new(), Vec::new());
     if let Some(l) = extraction_core::underground::layout(&b.prefab) {
         for j in 0..n {
             for i in 0..n {
@@ -520,13 +612,49 @@ fn plan_site(
                 let Some(z) = r.heat_at(grid.centre(i, j)) else {
                     continue;
                 };
-                if l.heat[z as usize].level < extraction_core::underground::SCORCHING {
+                let level = l.heat[z as usize].level;
+                if level <= 0.0 || grid.cost[k] == extraction_core::nav::BLOCKED {
                     continue;
                 }
-                if grid.cost[k] != extraction_core::nav::BLOCKED {
+                if level < extraction_core::underground::SCORCHING {
+                    warm.push((k, z, grid.cost[k]));
+                } else {
                     hot.push((k, z, grid.cost[k]));
                     grid.cost[k] = extraction_core::nav::BLOCKED;
                 }
+            }
+        }
+    }
+    // Live water's cells (see `live`; the crawlers keep out of it the same
+    // way, `underground::block_works`).
+    let mut live = Vec::new();
+    if let Some(v) = extraction_core::underground::layout(&b.prefab).and_then(|l| {
+        let v = l.live.as_ref()?;
+        l.rooms.iter().position(|room| room.id == v.room)
+    }) {
+        for j in 0..n {
+            for i in 0..n {
+                let c = grid.centre(i, j);
+                let wet = r.water_at(c) > 0.05;
+                let in_room = r.cell_of(c).is_some_and(|(a, z)| {
+                    matches!(r.cells[z * r.nx + a], extraction_core::underground::Cell::Room(k) if k as usize == v)
+                });
+                if wet && in_room && grid.cost[j * n + i] != extraction_core::nav::BLOCKED {
+                    live.push(j * n + i);
+                }
+            }
+        }
+    }
+    // Gas pockets' cells (see `gas`).
+    let mut gas = Vec::new();
+    for j in 0..n {
+        for i in 0..n {
+            let k = j * n + i;
+            let foul = r
+                .cell_of(grid.centre(i, j))
+                .is_some_and(|(a, z)| r.gas[z * r.nx + a].is_some());
+            if foul && grid.cost[k] != extraction_core::nav::BLOCKED {
+                gas.push(k);
             }
         }
     }
@@ -560,6 +688,18 @@ fn plan_site(
             }
         })
         .collect();
+    // A pocket (cells a body stands in that no way in reaches: between a
+    // prop and a wall, say) is no place: shut, or a raider making for the
+    // nearest standing to its loot picks one it can't get to, and sticks.
+    // (Heat and live water count as ways through, being shut for now;
+    // what's behind the works stays as it is.)
+    let through: Vec<usize> = hot
+        .iter()
+        .chain(&warm)
+        .map(|h| h.0)
+        .chain(live.iter().copied())
+        .collect();
+    shut_pockets(&mut grid, &entries, &through, |c| site_closed(&b.prefab, c));
     let mut inner: Option<(Vec2, Vec2)> = None;
     for j in 0..n {
         for i in 0..n {
@@ -587,10 +727,107 @@ fn plan_site(
         inner,
         levels: Some(levels),
         hot,
+        warm,
+        live,
+        gas,
+    }
+}
+
+/// Whether a site-space point is behind its works (a room the stair
+/// doesn't reach till something's done: past a pit, heat, the cage; or a
+/// corridor between two such).
+pub fn site_closed(prefab: &str, c: [f32; 2]) -> bool {
+    use extraction_core::underground::{self as ug, Cell};
+    let (Some(l), Some(r)) = (ug::layout(prefab), ug::raster(prefab)) else {
+        return false;
+    };
+    let open = l.open_rooms();
+    let room = |id: &str| l.rooms.iter().position(|q| q.id == id);
+    match r.at(c) {
+        Cell::Room(k) => !open[k as usize],
+        Cell::Hall(li) => l.links.get(li as usize).is_some_and(|k| {
+            [&k.from, &k.to]
+                .iter()
+                .all(|id| room(id).is_some_and(|q| !open[q]))
+        }),
+        _ => false,
+    }
+}
+
+/// Shut the cells a body could stand in that no way in reaches (`through`
+/// cells count as passable, though shut), bar those `closed` says are
+/// behind the works.
+fn shut_pockets(
+    grid: &mut NavGrid,
+    entries: &[Vec2],
+    through: &[usize],
+    closed: impl Fn([f32; 2]) -> bool,
+) {
+    let n = grid.n;
+    let passable = |grid: &NavGrid, k: usize| grid.cost[k] != BLOCKED || through.contains(&k);
+    let mut seen = vec![false; n * n];
+    let mut stack: Vec<(usize, usize)> = entries
+        .iter()
+        .filter_map(|e| grid.nearest_walkable(e.to_array()))
+        .filter_map(|c| grid.cell_of(c))
+        .collect();
+    for &(i, j) in &stack {
+        seen[j * n + i] = true;
+    }
+    while let Some((i, j)) = stack.pop() {
+        for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+            let (a, c) = (i as i64 + di, j as i64 + dj);
+            if a < 0 || c < 0 || a >= n as i64 || c >= n as i64 {
+                continue;
+            }
+            let k = c as usize * n + a as usize;
+            if !seen[k] && passable(grid, k) {
+                seen[k] = true;
+                stack.push((a as usize, c as usize));
+            }
+        }
+    }
+    for k in 0..n * n {
+        if !seen[k] && grid.cost[k] != BLOCKED && !closed(grid.centre(k % n, k / n)) {
+            grid.cost[k] = BLOCKED;
+        }
     }
 }
 
 /// A collider piece as an obstacle on the floor, if it's in the way.
+/// The top of a piece under building-local `p` (x, z), coming down from
+/// `from`: where a ray straight down from there first meets it. None if
+/// it misses, or starts inside it.
+fn surface_under(shape: Shape, at: Transform, p: Vec2, from: f32) -> Option<f32> {
+    let half = match shape {
+        Shape::Box(s) => s * 0.5,
+        Shape::Prism(s) => Vec3::new(s.x, s.y * 0.5, s.z) * 0.5,
+        Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+    };
+    let inv = at.rotation.inverse();
+    let o = inv * (Vec3::new(p.x, from, p.y) - at.translation);
+    let d = inv * Vec3::NEG_Y;
+    let (mut t0, mut t1) = (f32::NEG_INFINITY, f32::INFINITY);
+    for k in 0..3 {
+        if d[k].abs() < 1e-6 {
+            if o[k].abs() > half[k] {
+                return None;
+            }
+            continue;
+        }
+        let (a, c) = ((-half[k] - o[k]) / d[k], (half[k] - o[k]) / d[k]);
+        t0 = t0.max(a.min(c));
+        t1 = t1.min(a.max(c));
+    }
+    if let Shape::Cylinder(r, _) = shape {
+        let q = o + d * t0.max(0.0);
+        if q.x * q.x + q.z * q.z > r * r {
+            return None;
+        }
+    }
+    (t0 <= t1 && t0 >= 0.0).then(|| from - t0)
+}
+
 fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
     let (size, circle) = match shape {
         Shape::Box(s) => (s, None),
@@ -1186,10 +1423,179 @@ mod tests {
         }
     }
 
+    /// A drowned house has no doors, only a doorway with its silt banked
+    /// down from it: from every way in its plan offers, a bot walks to
+    /// stand by its loot.
+    #[test]
+    fn every_drowned_house_lets_a_bot_in() {
+        for map in crate::test_maps() {
+            // (Only valleys with drowned houses are worth loading.)
+            if !crate::world::load_map_def(&map)
+                .placements
+                .iter()
+                .any(|p| p.prefab.ends_with("_drowned"))
+            {
+                continue;
+            }
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            let mut failed = Vec::new();
+            let mut tried = 0;
+            // One of each kind (they're the same building wherever they
+            // stand), from every way in, each to one of its loot spots in
+            // turn: in the suite's time budget.
+            let mut seen = std::collections::HashSet::new();
+            for plan in plans
+                .iter()
+                .filter(|p| p.name.ends_with("_drowned") && seen.insert(p.name.clone()))
+            {
+                let geo = prefab(&plan.name).unwrap();
+                for (k, &entry) in plan.entries.iter().enumerate() {
+                    if let Some(spot) = geo.loot.get(k % geo.loot.len().max(1)) {
+                        let Some(goal) =
+                            super::super::raider::stand_near(plan, entry, spot.at.xz())
+                        else {
+                            failed.push(format!("{map} {}: nowhere by {:?}", plan.name, spot.at));
+                            continue;
+                        };
+                        let start = plan.to_world(entry);
+                        let ground = app
+                            .world()
+                            .resource::<crate::world::Zone>()
+                            .ground(start.x, start.z);
+                        {
+                            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+                            t.translation = Vec3::new(start.x, ground + 0.05, start.z);
+                        }
+                        app.world_mut()
+                            .get_mut::<crate::player::Body>(player)
+                            .unwrap()
+                            .velocity = Vec3::ZERO;
+                        app.update();
+                        let pos = app.world().get::<Transform>(player).unwrap().translation;
+                        let Some(tasks) = super::super::raider::indoor_route(plan, pos, goal, 0.3)
+                        else {
+                            failed.push(format!(
+                                "{map} {} entry {entry:.1?}: no route to {goal:.1?}",
+                                plan.name
+                            ));
+                            continue;
+                        };
+                        tried += 1;
+                        app.world_mut().entity_mut(player).insert(Bot::new(tasks));
+                        for _ in 0..90 * 25 {
+                            app.update();
+                            if app.world().get::<Bot>(player).unwrap().done() {
+                                break;
+                            }
+                        }
+                        let t = app.world().get::<Transform>(player).unwrap().translation;
+                        let got = plan.to_local(t).xz();
+                        if got.distance(goal) > 0.9 {
+                            failed.push(format!(
+                                "{map} {} at {:.0?}: entry {entry:.2?} goal {goal:.2?}, stopped at {got:.2?} (y {:.2})",
+                                plan.name,
+                                plan.xf.translation,
+                                plan.to_local(t).y
+                            ));
+                        }
+                    }
+                }
+            }
+            println!("{map}: {tried} walks into drowned houses");
+            assert!(
+                failed.is_empty(),
+                "{} of {tried} walks failed:\n{}",
+                failed.len(),
+                failed.join("\n")
+            );
+        }
+    }
+
     /// Every loot spot in a building can be reached: some cell the body
     /// can stand in (furniture's colliders in place, the capsule's
     /// clearance round them) is within a bot's reach of it (`bot::REACH`),
     /// from a door.
+    /// Down every underground site, for a whole body (`SITE_CLEARANCE`):
+    /// every cell it can stand in, bar those behind the works (past a pit,
+    /// heat or the cage), joins up with the ways out. No pocket a raider
+    /// could be routed into or caught in.
+    #[test]
+    fn every_site_cell_reaches_a_way_out() {
+        let mut pockets = Vec::new();
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app)
+                .iter()
+                .filter(|p| extraction_core::underground::layout(&p.name).is_some())
+            {
+                let g = &plan.grid;
+                let n = g.n;
+                let mut seen = vec![false; n * n];
+                let mut stack: Vec<(usize, usize)> = plan
+                    .entries
+                    .iter()
+                    .filter_map(|e| g.nearest_walkable(e.to_array()))
+                    .filter_map(|c| g.cell_of(c))
+                    .collect();
+                for &(i, j) in &stack {
+                    seen[j * n + i] = true;
+                }
+                while let Some((i, j)) = stack.pop() {
+                    for (di, dj) in [(-1i64, 0i64), (1, 0), (0, -1), (0, 1)] {
+                        let (ni, nj) = (i as i64 + di, j as i64 + dj);
+                        if ni < 0 || nj < 0 || ni >= n as i64 || nj >= n as i64 {
+                            continue;
+                        }
+                        let k = nj as usize * n + ni as usize;
+                        let through = plan.hot.iter().chain(&plan.warm).any(|h| h.0 == k)
+                            || plan.live.contains(&k);
+                        if !seen[k] && (g.cost[k] != BLOCKED || through) {
+                            seen[k] = true;
+                            stack.push((ni as usize, nj as usize));
+                        }
+                    }
+                }
+                let cut: Vec<[f32; 2]> = (0..n * n)
+                    .filter(|k| g.cost[*k] != BLOCKED && !seen[*k])
+                    .map(|k| g.centre(k % n, k / n))
+                    .filter(|c| !site_closed(&plan.name, *c))
+                    .collect();
+                if !cut.is_empty() {
+                    pockets.push(format!(
+                        "{map} {}: {} cells cut off, e.g. {:.1?}",
+                        plan.name,
+                        cut.len(),
+                        &cut[..cut.len().min(4)]
+                    ));
+                }
+            }
+        }
+        assert!(pockets.is_empty(), "pockets:\n{}", pockets.join("\n"));
+    }
+
     #[test]
     fn every_loot_spot_is_in_reach() {
         const REACH: f32 = crate::bot::REACH;

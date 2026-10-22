@@ -10,7 +10,7 @@
 //! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
 //! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`,
-//! `--a2c 1|0` (soft or hard leaves).
+//! `--a2c 1|0` (soft or hard leaves), `--hold-rate 1|0`.
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -74,6 +74,10 @@ pub struct Comfort {
     /// off, cut hard (a test), which crawls as the head turns. Next
     /// launch.
     pub soft_leaves: bool,
+    /// The eyes render less when the GPU runs late and more when it has
+    /// room, between the legibility floor and the runtime's full size
+    /// (`render::hold_rate`); off, they keep the SHARPNESS size.
+    pub hold_rate: bool,
 }
 
 impl Default for Comfort {
@@ -98,6 +102,7 @@ impl Default for Comfort {
             body: true,
             msaa: 4,
             soft_leaves: true,
+            hold_rate: true,
         }
     }
 }
@@ -182,6 +187,14 @@ impl Comfort {
             .position(|s| *s == (self.msaa, self.soft_leaves));
         (self.msaa, self.soft_leaves) =
             Self::SMOOTHINGS[now.map_or(0, |i| (i + 1) % Self::SMOOTHINGS.len())];
+    }
+
+    pub fn hold_rate_label(&self) -> String {
+        if self.hold_rate {
+            "HOLD FRAME RATE\non".into()
+        } else {
+            "HOLD FRAME RATE\noff".into()
+        }
     }
 
     /// The camera setting for `msaa`.
@@ -406,6 +419,20 @@ impl Comfort {
                     if let Some(v) = it.next().and_then(|v| v.parse::<u32>().ok()) {
                         c.msaa = v;
                     }
+                }
+                "--hold-rate" => {
+                    // `--hold-rate 0`: keep the SHARPNESS size.
+                    c.hold_rate = match it.clone().next().map(String::as_str) {
+                        Some("0") => {
+                            it.next();
+                            false
+                        }
+                        Some("1") => {
+                            it.next();
+                            true
+                        }
+                        _ => true,
+                    };
                 }
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {

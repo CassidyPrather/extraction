@@ -33,6 +33,7 @@ pub mod rats;
 pub mod small_look;
 mod telemetry;
 pub mod visuals;
+pub mod warning;
 
 #[cfg(test)]
 mod app_tests;
@@ -181,7 +182,7 @@ impl Plugin for WildlifePlugin {
                 FixedUpdate,
                 (flock::alarm_robots, herd::bark_alarm, insects::chorus).after(WildlifeSystems),
             )
-            .add_systems(Last, telemetry::log_wildlife);
+            .add_systems(Last, (telemetry::log_wildlife, warning::log_warnings));
     }
 }
 

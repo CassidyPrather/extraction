@@ -1,7 +1,8 @@
 //! The underground signature sites, heard (`docs/AUDIO.md`, "Underground's
 //! sites"): the drowned works' drains and basins, the deep workings'
 //! firedamp, canary, cart and roof, the furnace cellars' heat, vents and
-//! crane, the winze's cage.
+//! crane, the winze's cage, the dam gallery's echo, the shelter's
+//! lockdown, the cinder tunnel's live water.
 //!
 //! Like `audio.rs`, it only listens: the sites' logic
 //! (`world::underground`, `world::workings`, `world::furnace`) knows
@@ -20,8 +21,12 @@ use crate::audio_mix as mix;
 use crate::interact::InteractEvent;
 use crate::world::buildings::Building;
 use crate::world::cage::{Cage, CageArrived, CageCrushed, CageRung};
+use crate::world::echo::Echoed;
 use crate::world::furnace::{Crane, CraneLever, Heat, InHeat, VentLever, Vented};
+use crate::world::live::{Arcing, Isolated, Live, Shocked};
+use crate::world::lockdown::{Klaxon, Sealed};
 use crate::world::underground::{BasinDrained, BasinSurface, DrainControl, Levels};
+use crate::world::underground::{PowerLocked, SEALED};
 use crate::world::workings::{CART_PUSH, Canary, GasFlash, GasIgnited, InGas, MineCart, RoofFell};
 
 pub struct UndergroundSoundsPlugin;
@@ -43,6 +48,9 @@ impl Plugin for UndergroundSoundsPlugin {
                 crane_sounds,
                 lever_sounds,
                 cage_sounds,
+                echo_sounds,
+                lockdown_sounds,
+                live_sounds,
                 ease_loops,
             ),
         );
@@ -1012,6 +1020,224 @@ fn cage_sounds(
             0.0,
             0.85,
             0.05,
+        );
+    }
+}
+
+/// The gallery's echo comes back no sooner and no later than this (s).
+const ECHO_SOONEST: f32 = 0.1;
+const ECHO_LATEST: f32 = 0.25;
+/// Its darkness: the far end's return through this low-pass (Hz).
+const ECHO_DARK: f32 = 2_500.0;
+
+/// When a step's echo comes back off a room's end `far` m away: the
+/// round trip, held to [`ECHO_SOONEST`]..[`ECHO_LATEST`].
+pub fn echo_delay(far: f32) -> f32 {
+    (2.0 * far / crate::acoustics::SOUND).clamp(ECHO_SOONEST, ECHO_LATEST)
+}
+
+/// A room that carries sound (`world::echo`, Sallow's dam gallery): your
+/// own step coming back off its far end (`Echoed` with a player), late,
+/// faint and dark, the reverb's tail on it (`ug.echo`). That's the tell:
+/// a walk is heard down the gallery; a creep sends nothing, and is quiet.
+fn echo_sounds(
+    mut commands: Commands,
+    mut echoes: MessageReader<Echoed>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut due: Local<Vec<(f32, Vec3)>>,
+) {
+    let now = time.elapsed_secs();
+    for e in echoes.read() {
+        if e.player.is_none() {
+            continue;
+        }
+        due.push((now + echo_delay(e.at.distance(e.from)), e.from + Vec3::Y));
+    }
+    due.retain(|&(t, at)| {
+        if now < t {
+            return true;
+        }
+        let speed = 0.92 + rng.0.f32() as f64 * 0.08;
+        play_filtered(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            set("ug.echo"),
+            at,
+            "ug.echo",
+            speed,
+            ECHO_DARK,
+        );
+        false
+    });
+}
+
+/// The bolts after the doors swing to (s), and between them.
+const BOLTS_AFTER: f32 = 0.45;
+const BOLT_GAP: f32 = 0.18;
+
+/// The shelter's lockdown (`world::lockdown`): each klaxon blast from the
+/// hall's ceiling (`ug.klaxon`, a Signal heard to the klaxon's 50 m); at
+/// the seal, each gas-lock door slamming to (`ug.seal_slam`) and, a
+/// moment later, its two bolts shooting home (`ug.seal_bolt`).
+fn lockdown_sounds(
+    mut commands: Commands,
+    mut klaxons: MessageReader<Klaxon>,
+    mut sealed: MessageReader<Sealed>,
+    doors: Query<(&GlobalTransform, &PowerLocked)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut bolts: Local<Vec<(f32, Vec3)>>,
+) {
+    let now = time.elapsed_secs();
+    for k in klaxons.read() {
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.klaxon",
+            k.at,
+            0.0,
+            1.0,
+            0.01,
+        );
+    }
+    for s in sealed.read() {
+        for (gt, lock) in &doors {
+            if lock.site != s.site || lock.stage != SEALED {
+                continue;
+            }
+            let at = gt.translation();
+            sound(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ug.seal_slam",
+                at,
+                0.0,
+                0.7,
+                0.05,
+            );
+            for i in 0..2 {
+                bolts.push((now + BOLTS_AFTER + i as f32 * BOLT_GAP, at));
+            }
+        }
+    }
+    bolts.retain(|&(t, at)| {
+        if now < t {
+            return true;
+        }
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.seal_bolt",
+            at,
+            0.0,
+            1.2,
+            0.05,
+        );
+        false
+    });
+}
+
+/// The cinder tunnel's live water (`world::live`): while its site is
+/// `Live`, mains hum over the water (`ug.mains`, eased in and out, so the
+/// isolator thrown lets it die away) and the arcing's snaps at random
+/// (`ug.arc`); a jolt taken (`Shocked`) is a hard crack and the body's
+/// shudder (`ug.shock`, `ug.jolt`); the isolator thrown either way, its
+/// heavy switchgear clunk (`ug.isolator`).
+#[allow(clippy::too_many_arguments)]
+fn live_sounds(
+    mut commands: Commands,
+    arcs: Query<(Entity, &Arcing, &GlobalTransform)>,
+    live: Option<Res<Live>>,
+    mut loops: Query<&mut SiteLoop>,
+    mut shocks: MessageReader<Shocked>,
+    mut isolated: MessageReader<Isolated>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut snap: Local<f32>,
+) {
+    let now = time.elapsed_secs();
+    let snap_due = now >= *snap;
+    if snap_due {
+        *snap = now + rng.0.range(0.3, 2.0);
+    }
+    for (e, arc, gt) in &arcs {
+        let on = live.as_ref().is_some_and(|l| l.0.contains(&arc.site));
+        let want = if on { 1.0 } else { 0.0 };
+        let mut found = false;
+        for mut l in &mut loops {
+            if l.cue == "ug.mains" && l.owner == e {
+                found = true;
+                l.want = want;
+            }
+        }
+        if !found && on {
+            start_loop(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ug.mains",
+                e,
+                Vec3::ZERO,
+                0.6,
+                None,
+                1.5,
+                1.0,
+            );
+        }
+        if on && snap_due {
+            let speed = rng.0.range(0.8, 1.3) as f64;
+            sound(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ug.arc",
+                gt.translation(),
+                0.0,
+                speed,
+                0.1,
+            );
+        }
+    }
+    for s in shocks.read() {
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.shock",
+            s.at,
+            0.0,
+            0.8,
+            0.05,
+        );
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.jolt",
+            s.at,
+            0.0,
+            0.9,
+            0.05,
+        );
+    }
+    for i in isolated.read() {
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.isolator",
+            i.at,
+            0.0,
+            0.6,
+            0.04,
         );
     }
 }

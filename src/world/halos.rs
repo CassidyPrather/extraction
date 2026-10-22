@@ -62,8 +62,11 @@ impl Material for HaloMaterial {
         _layout: &MeshVertexBufferLayoutRef,
         _key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
-        // The far side only: the halo still draws with the eye inside it.
-        descriptor.primitive.cull_mode = Some(Face::Front);
+        // The near side only: the far side lies behind the lamp's own bulb
+        // (a landmark's opaque sphere), which hid the whole core. With the
+        // eye inside the sphere (within a metre of the lamp) it's gone,
+        // but there the bulb itself fills the view.
+        descriptor.primitive.cull_mode = Some(Face::Back);
         Ok(())
     }
 }

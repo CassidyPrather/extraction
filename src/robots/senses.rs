@@ -12,10 +12,13 @@
 //! looks straight through you.
 //!
 //! **Hearing**: every sound has a reach in metres for ordinary ears
-//! ([`Noise::radius`]): gunshots by calibre ([`gunshot_reach`]), footsteps
+//! ([`Noise::radius`]): gunshots by calibre (`weapons::report`; robots'
+//! own by [`gunshot_reach`]), footsteps
 //! by surface, speed and crouch ([`footstep_reach`]), doors, things that
-//! land (`items::impacts`), robots at work. A wall or a hill between the
-//! sound and the robot cuts its reach to [`OCCLUDED`]. A heard sound tells
+//! land (`items::impacts`), robots at work. What's between the sound and
+//! the robot cuts its reach, by the same path the player's ears hear it
+//! by (`crate::hearing`): a timber wall to [`OCCLUDED`], each wall or shut
+//! door by what it's made of, an open doorway a little. A heard sound tells
 //! the robot *where the sound was*, not where you are: it goes there.
 //! Quiet sounds only nudge suspicion ([`HEARD_FULL`]), so one footstep
 //! behind a walker makes it turn, a few make it look.
@@ -47,6 +50,15 @@ pub const POSTURE_MIN: f32 = 0.45;
 pub const GRASS_HIDE: f32 = 0.35;
 /// ...beyond this range (closer, the robot sees into the grass).
 pub const GRASS_NEAR: f32 = 4.0;
+/// Under trees (forest ground) beyond [`CANOPY_NEAR`], standing or not,
+/// this much of you shows through the trunks and the leaves to a machine
+/// looking across, not down (one [`CANOPY_ABOVE`] or more above you sees
+/// down through them)...
+pub const CANOPY_HIDE: f32 = 0.6;
+/// ...from this far off (m).
+pub const CANOPY_NEAR: f32 = 20.0;
+/// A machine this far (m) above you looks down through the trees.
+pub const CANOPY_ABOVE: f32 = 8.0;
 /// Looked down on from steeper than this (radians), grass hides half as
 /// well: a drone overhead sees into it.
 pub const GRASS_STEEP: f32 = 0.6;
@@ -88,7 +100,7 @@ pub const GLIMPSE_SPREAD_MIN: f32 = 3.0;
 pub const SIGHT_GAIN: f32 = 1.5;
 pub const SIGHT_GAIN_NEAR: f32 = 30.0;
 /// Suspicion lost per second with nothing seen.
-pub const SUSPICION_DECAY: f32 = 0.05;
+pub const SUSPICION_DECAY: f32 = super::recall::per_second(super::recall::Memory::Suspicion);
 
 // --- Darkness --------------------------------------------------------
 
@@ -150,7 +162,7 @@ pub const HEARD_OVER: f32 = 1.2;
 /// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
 /// gave up: a lure that keeps going wears out its welcome. (Sounds you
 /// make there still count.)
-pub const BORED_FOR: f32 = 120.0;
+pub const BORED_FOR: f32 = super::recall::lasts(super::recall::Memory::Lure);
 pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
@@ -213,6 +225,8 @@ pub struct SightCase {
     /// What keeping still leaves of you to this robot ([`STILL`], or its
     /// [`MotionSight`]).
     pub still: f32,
+    /// Standing among trees (forest ground): [`CANOPY_HIDE`].
+    pub canopy: bool,
 }
 
 /// How much of you a robot makes out (see the module docs).
@@ -244,7 +258,14 @@ pub fn exposure(c: &SightCase) -> f32 {
     } else {
         c.still
     };
-    let e = range * fog * light * posture * hidden * motion;
+    // (From above, a drone or a spotter sees down through the trees.)
+    let above = c.distance * c.depression.max(0.0).sin();
+    let canopy = if c.canopy && c.distance > CANOPY_NEAR && above < CANOPY_ABOVE {
+        CANOPY_HIDE
+    } else {
+        1.0
+    };
+    let e = range * fog * light * posture * hidden * motion * canopy;
     if c.distance < POINT_BLANK {
         e.max(0.9)
     } else {
@@ -295,33 +316,6 @@ struct Sound {
     at: Vec3,
     radius: f32,
     source: Option<Entity>,
-}
-
-/// Shots are heard a long way off: how far by calibre.
-/// A suppressor fitted cuts the report to `gadgets::SUPPRESSED_REACH`; a
-/// hound's bite isn't a shot at all.
-pub(crate) fn gunshot_noise(
-    mut shots: MessageReader<crate::weapons::ballistics::Shot>,
-    mut noise: MessageWriter<Noise>,
-    suppressed: Query<(), With<crate::gadgets::Suppressed>>,
-    hounds: Query<(), With<super::hound::Hound>>,
-    reports: Query<&crate::weapons::armoury::Report>,
-) {
-    for s in shots.read() {
-        if hounds.contains(s.gun) {
-            continue;
-        }
-        let k = if suppressed.contains(s.gun) {
-            crate::gadgets::SUPPRESSED_REACH
-        } else {
-            1.0
-        } * reports.get(s.gun).map_or(1.0, |r| r.0);
-        noise.write(Noise {
-            at: s.origin,
-            radius: gunshot_reach(s.speed, s.damage, s.projectiles) * k,
-            source: s.shooter,
-        });
-    }
 }
 
 /// A door swinging open or shut is heard: whoever's next to it did it.
@@ -378,9 +372,9 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, doors, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
+    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
         Res<Lighting>,
-        Query<&crate::world::buildings::Door>,
+        Option<Res<crate::hearing::Hearing>>,
         Res<crate::gadgets::Cloaks>,
         Res<crate::world::weather::Conditions>,
         Res<Zone>,
@@ -457,6 +451,8 @@ pub(crate) fn perceive(
         height: f32,
         speed: f32,
         cover: bool,
+        /// Among trees (`SightCase::canopy`).
+        canopy: bool,
         /// The sky's light on you (`SightCase::light`).
         light: f32,
         /// In the dark: how lit (see `SightCase::dark`).
@@ -520,6 +516,7 @@ pub(crate) fn perceive(
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
+                canopy: !indoors && zone.forest_cover(p[0], p[1]) > 0.5,
                 // Your torch lights you when the sky doesn't; so does a
                 // white star overhead (`weapons::flares`).
                 light: if torch.is_some() {
@@ -537,13 +534,6 @@ pub(crate) fn perceive(
                     .reduce(f32::max),
             }
         })
-        .collect();
-    // Open doorways, for sound to come round.
-    let openings: Vec<Vec3> = entrances
-        .doors
-        .iter()
-        .filter(|e| super::doors::is_open(doors.get(e.door).ok()))
-        .map(|e| e.mid)
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
     for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant, mind_seed) in
@@ -620,6 +610,7 @@ pub(crate) fn perceive(
                     depression: (-to.y / dist).clamp(-1.0, 1.0).asin(),
                     dark: t.dark,
                     still: motion.map_or(STILL, |m| m.0),
+                    canopy: t.canopy,
                 });
                 // A load in your hands is more of you to see.
                 if t.load.is_some() && dist < reach {
@@ -702,15 +693,20 @@ pub(crate) fn perceive(
             if d >= reach * if site.is_some() { CORRIDOR } else { 1.0 } {
                 continue;
             }
-            // Through a wall or over a hill it carries less far; round an
-            // open doorway a little less far. The same rule the player's
-            // ears follow (`acoustics::occlusion`): a sound that's quieter
-            // by `db` carries `10^(db/20)` as far.
-            let occ = crate::acoustics::occlusion(&spatial, &openings, s.at, ear);
+            // Through walls and shut doors, up through floors and rock,
+            // over a hill it carries less far; round an open doorway a
+            // little less far. The same path the player's ears hear it by
+            // (`hearing`, a table read): a sound that's quieter by `db`
+            // carries `10^(db/20)` as far.
+            let blocked = |a: Vec3, b: Vec3| crate::acoustics::blocked(&spatial, a, b);
+            let (occ, through_wall) = hearing
+                .as_deref()
+                .map_or((crate::acoustics::CLEAR, false), |h| {
+                    h.heard(Some(&zone), s.at, ear, Some(&blocked))
+                });
             let occluded = occ.db < 0.0;
             let mut heard_over = d;
             if occluded {
-                let through_wall = occ.db <= crate::acoustics::wall_db() + 0.01;
                 let walk = site
                     .filter(|_| through_wall && corridor_budget > 0)
                     .and_then(|l| {
@@ -792,6 +788,44 @@ pub fn heard_guess(at: Vec3, spread: f32, seed: u64) -> Vec3 {
 mod tests {
     use super::*;
 
+    /// Among trees, far off, you show less, standing or not; close by,
+    /// trees don't hide you.
+    #[test]
+    fn trees_hide_you_from_afar() {
+        let open = exposure(&case());
+        let trees = exposure(&SightCase {
+            canopy: true,
+            ..case()
+        });
+        assert!(
+            (trees - open * CANOPY_HIDE).abs() < 1e-4,
+            "{open} -> {trees}"
+        );
+        let near = SightCase {
+            distance: CANOPY_NEAR - 2.0,
+            ..case()
+        };
+        assert_eq!(
+            exposure(&near),
+            exposure(&SightCase {
+                canopy: true,
+                ..near
+            })
+        );
+        // From above, through the leaves.
+        let above = SightCase {
+            depression: (CANOPY_ABOVE / 30.0 + 0.05).asin(),
+            ..case()
+        };
+        assert_eq!(
+            exposure(&above),
+            exposure(&SightCase {
+                canopy: true,
+                ..above
+            })
+        );
+    }
+
     fn case() -> SightCase {
         SightCase {
             distance: 30.0,
@@ -804,6 +838,7 @@ mod tests {
             depression: 0.05,
             dark: None,
             still: STILL,
+            canopy: false,
         }
     }
 

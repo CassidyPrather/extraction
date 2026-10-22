@@ -192,13 +192,32 @@ pub struct Adaptation {
     pub base: f32,
     /// The lamps' light at the eye, eased (against a day's).
     pub lamps: f32,
+    /// The grade's shadow lift (set with the weather), before `Below`
+    /// takes it away.
+    pub base_lift: f32,
     settled: bool,
 }
+
+/// How far below ground the eye is, 0 (the surface) to 1 (deep in the
+/// workings), published by `world::underground::go_dark`. Down there the
+/// dark is true black: the grade's shadow lift goes (an unlit room stays
+/// black, not grey) and the eyes open a stop less (a torch-lit wall
+/// doesn't glare); what you see is what the torch, a lamp, a flare lights.
+#[derive(Resource, Default, Debug, Clone, Copy, PartialEq)]
+pub struct Below(pub f32);
+
+/// How many stops less the eyes open at full depth (`Below`).
+const BELOW_ADAPT_CUT: f32 = 1.0;
 
 impl Adaptation {
     /// What the eyes would settle to, at this light (1 = a day outside).
     pub fn target(light: f32) -> f32 {
         (-light.max(1e-3).log2() * ADAPT_SHARE).clamp(0.0, ADAPT_MAX)
+    }
+
+    /// `target`, this far below ground (`Below`).
+    pub fn target_below(light: f32, below: f32) -> f32 {
+        Self::target(light).min(ADAPT_MAX - BELOW_ADAPT_CUT * below.clamp(0.0, 1.0))
     }
 
     /// Takes the eyes straight to their adapted state next frame, as if
@@ -227,9 +246,12 @@ pub fn adapt_eyes(
     eyes: Query<(&GlobalTransform, &Camera), (With<Camera3d>, Without<super::OffscreenCamera>)>,
     mut grades: Query<&mut ColorGrading>,
     lamps: Query<(&PointLight, &GlobalTransform)>,
+    spots: Query<(&SpotLight, &GlobalTransform)>,
+    below: Option<Res<Below>>,
     mut adapt: ResMut<Adaptation>,
     time: Res<Time>,
 ) {
+    let below = below.map_or(0.0, |b| b.0.clamp(0.0, 1.0));
     let eye = eyes
         .iter()
         .filter(|(_, c)| c.is_active)
@@ -245,10 +267,13 @@ pub fn adapt_eyes(
     adapt.indoors += (want - adapt.indoors) * (1.0 - (-dt / 0.4).exp());
     // Lamps near the eye light it too: by a lantern at night the eyes
     // don't open as far, and the dark past its pool is darker for it.
-    let at_eye = eye.map_or(0.0, |p| lamp_light(p, &lamps));
+    // A torch in your hand lights what's in front of you: the walls it
+    // finds light your eyes back (a share of its own light, near).
+    let at_eye = eye.map_or(0.0, |p| lamp_light(p, &lamps) + torch_light(p, &spots));
     adapt.lamps += (at_eye - adapt.lamps) * (1.0 - (-dt / LAMP_EASE).exp());
-    let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) + adapt.lamps;
-    let target = Adaptation::target(light);
+    let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) * (1.0 - below)
+        + adapt.lamps;
+    let target = Adaptation::target_below(light, below);
     // A new raid starts with the eyes already used to its light.
     if !adapt.settled || conditions.is_changed() {
         adapt.stops = target;
@@ -257,11 +282,36 @@ pub fn adapt_eyes(
         adapt.step(target, dt);
     }
     let want = adapt.base + adapt.stops;
+    let lift = adapt.base_lift * (1.0 - below);
     for mut g in &mut grades {
         if (g.global.exposure - want).abs() > 1e-4 {
             g.global.exposure = want;
         }
+        if (g.shadows.lift - lift).abs() > 1e-6 {
+            g.shadows.lift = lift;
+        }
     }
+}
+
+/// The light a held torch throws back at the eye, against a day's: a
+/// share of its light, if it's within arm's reach (a spot light carried
+/// by someone). The walls it finds are what you see by.
+pub fn torch_light<'a>(
+    p: Vec3,
+    spots: impl IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
+) -> f32 {
+    let mut lux = 0.0;
+    for (l, gt) in spots {
+        if l.intensity <= 0.0 || gt.translation().distance_squared(p) > 1.5 * 1.5 {
+            continue;
+        }
+        // The walls it lights, a couple of metres off: its lumens into
+        // its cone (2 pi (1 - cos angle) steradians) over 4 m^2, and the
+        // share of what you see that they fill.
+        let cone = std::f32::consts::TAU * (1.0 - l.outer_angle.cos()).max(0.05);
+        lux += l.intensity / cone / 4.0 * 0.3;
+    }
+    (lux / DAY_LUX).min(0.2)
 }
 
 /// The point lights' light at `p`, against a day's: each one's lumens
@@ -283,6 +333,23 @@ pub fn lamp_light<'a>(
     // A lamp in your face is still not the day.
     (lux / DAY_LUX).min(0.5)
 }
+
+/// What a thing indoors is seen by, with eyes used to the room, against a
+/// day outside (the sky's light on it, the eyes' adaptation on top). Flat:
+/// the renderer's sky light indoors is the one dimmed ambient
+/// (`dim_indoors`) wherever in whichever building, and a loot item, its
+/// own entity, takes none of the building's baked occlusion; only a patch
+/// of direct sun, or a lamp, adds to it. Left out: those, and a valley's
+/// grade (the training yard's is a shade brighter).
+pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
+    let sky = crate::world::sky::sky_dim(conditions) * conditions.light * INTERIOR_LIGHT;
+    sky * Adaptation::target(conditions.light * INTERIOR_LIGHT).exp2()
+}
+
+/// The least [`indoor_seen`] that lets you tell a thing you came for
+/// from the floor at arm's length without a torch: three stops under a
+/// day outside. The night is under it; the torch is for that.
+pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
 
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
 /// `undim` gives back exactly what was there (if nothing changed it since).
@@ -321,6 +388,74 @@ pub fn undim(mut ambient: ResMut<GlobalAmbientLight>, mut dimmed: ResMut<Dimmed>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// By day, dawn and dusk in any weather, a storm's included, what you
+    /// came for indoors is lit enough to see without a torch; on a night
+    /// under cloud it isn't. Flat over every room (`indoor_seen`), so this holds every
+    /// loot spot in every prefab at once.
+    #[test]
+    fn loot_indoors_is_seen_by_day_not_at_night() {
+        use crate::world::weather::{Conditions, Hour, WeatherKind};
+        let kinds = [
+            WeatherKind::Drizzle,
+            WeatherKind::PeaSouper,
+            WeatherKind::Downpour,
+            WeatherKind::Clearing,
+        ];
+        let mut worst = (f32::INFINITY, String::new());
+        for kind in kinds {
+            for hour in [Hour::Dawn, Hour::Day, Hour::Dusk] {
+                let c = Conditions::compose(kind, hour, 1);
+                for c in [c, c.stormy()] {
+                    let seen = indoor_seen(&c);
+                    println!("{kind:?} {hour:?} storm {}: {seen:.3}", c.storm);
+                    if seen < worst.0 {
+                        worst = (seen, format!("{kind:?} {hour:?} storm {}", c.storm));
+                    }
+                }
+            }
+        }
+        assert!(
+            worst.0 >= LOOT_SEEN_FLOOR,
+            "indoors, {}: seen at {:.3} of a day, under {LOOT_SEEN_FLOOR}",
+            worst.1,
+            worst.0
+        );
+        // A day indoors is darker than outside, and brighter than dusk.
+        let day = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1));
+        let dusk = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 1));
+        assert!(day < 1.0 && dusk < day, "{day} {dusk}");
+        // Under cloud the night is dark indoors. (A clear night under a
+        // full moon isn't: the eyes open all the way to it.)
+        for kind in &kinds[..3] {
+            let night = indoor_seen(&Conditions::compose_with_moon(*kind, Hour::Night, 1, 0.5));
+            assert!(night < LOOT_SEEN_FLOOR, "{kind:?} night: {night:.3}");
+        }
+    }
+
+    #[test]
+    fn below_ground_the_eyes_open_less_and_a_torch_lights_them() {
+        // Deep in the workings: the most they open is a stop short.
+        assert_eq!(
+            Adaptation::target_below(0.0, 1.0),
+            ADAPT_MAX - BELOW_ADAPT_CUT
+        );
+        assert_eq!(Adaptation::target_below(0.0, 0.0), ADAPT_MAX);
+        // A torch in hand lights the eye (off the walls it finds); one
+        // across the room doesn't.
+        let torch = SpotLight {
+            intensity: 1000.0,
+            outer_angle: 0.4,
+            ..default()
+        };
+        let near = GlobalTransform::from_translation(Vec3::new(0.3, -0.3, -0.3));
+        let far = GlobalTransform::from_translation(Vec3::new(8.0, 0.0, 0.0));
+        let lit = torch_light(Vec3::ZERO, [(&torch, &near)]);
+        assert!(lit > 0.02 && lit <= 0.2, "{lit}");
+        assert_eq!(torch_light(Vec3::ZERO, [(&torch, &far)]), 0.0);
+        // It keeps the eyes about half a stop from opening all the way.
+        assert!(Adaptation::target(lit) < Adaptation::target(0.0) - 0.4);
+    }
 
     #[test]
     fn eyes_adapt_part_way_slowly_into_the_dark_and_fast_out() {

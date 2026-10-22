@@ -60,6 +60,12 @@ pub enum First {
     Sentry,
     /// In a hush: the quiet that presses.
     Hush,
+    /// Home with a job on the card: it's paid when the card is pressed.
+    Payday,
+    /// A machine that was shooting at you lost you, and is coming to where
+    /// it last saw you: a moving shape behind low cover is glimpsed, and
+    /// each glimpse moves its guess; a still one isn't.
+    ComingToLook,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -108,6 +114,8 @@ pub const ALL: &[First] = &[
     First::Aimed,
     First::Sentry,
     First::Hush,
+    First::Payday,
+    First::ComingToLook,
 ];
 
 impl First {
@@ -134,6 +142,7 @@ impl First {
                 | First::Aimed
                 | First::Sentry
                 | First::Hush
+                | First::ComingToLook
         )
     }
 
@@ -153,9 +162,10 @@ impl First {
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
-            First::DroneLock => {
-                &["Truck: \"Run across it, to cover. That chirp is it taking aim.\""]
-            }
+            First::DroneLock => &[
+                "Truck: \"Run across it, to cover. That chirp is it taking aim.\"",
+                "Truck: \"Under a roof's best. It sees down through trees.\"",
+            ],
             First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
                 &["Truck: \"Torch on, go slow. Dark down there, and not empty.\""]
@@ -189,6 +199,10 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
+            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            First::ComingToLook => {
+                &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
+            }
         }
     }
 }
@@ -261,12 +275,14 @@ impl Plugin for FirstsPlugin {
                         deaths,
                         convoy,
                         asked,
+                        payday,
                     ),
                     speak,
                 )
                     .chain()
                     .run_if(in_the_zone),
-            );
+            )
+            .add_systems(Update, spare_radio.run_if(in_the_zone));
     }
 }
 
@@ -350,17 +366,28 @@ fn robots_heard(
     mut looking: MessageReader<crate::robots::search::Investigating>,
     mut noticed: MessageReader<crate::robots::Noticed>,
     mut lost: MessageReader<crate::robots::search::LostYou>,
-    minds: Query<&Awareness>,
+    minds: Query<(Entity, &Awareness, Option<&crate::robots::Brain>)>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    mut hunting: Local<std::collections::HashSet<Entity>>,
     mut m: Meet,
 ) {
     let Some((me, at)) = locals.iter().next() else {
         return;
     };
-    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
-    let robots: Vec<Entity> = looking
-        .read()
-        .map(|e| e.robot)
+    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|(_, a, _)| a.target == Some(me));
+    let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
+    // Gone from shooting at you to coming to look.
+    if looked.iter().any(|r| hunting.contains(r) && about_me(*r)) {
+        m.meet(First::ComingToLook);
+    }
+    hunting.retain(|r| minds.contains(*r));
+    for (e, a, brain) in &minds {
+        if a.target == Some(me) && matches!(brain, Some(crate::robots::Brain::Engage)) {
+            hunting.insert(e);
+        }
+    }
+    let robots: Vec<Entity> = looked
+        .into_iter()
         .chain(noticed.read().map(|e| e.robot))
         .collect();
     if robots.into_iter().any(about_me) {
@@ -619,6 +646,113 @@ fn convoy(
     *recovered = Some(now);
 }
 
+/// The spare: home with no radio (it went with the rest when you fell),
+/// the driver passes his through the hatch, or there'd be no calling him
+/// on the next raid.
+pub const SPARE_RADIO: &str = "Truck: \"No radio on you. Take my spare, off the ledge.\"";
+
+/// The same for what a job needs taken out (a thing to leave, the camera):
+/// lost at a fall, the job couldn't be done.
+pub fn spare_for(name: &str) -> String {
+    format!("Truck: \"Lost the {name}? Here's another, off the ledge.\"")
+}
+
+/// Seconds at the truck before the driver notices what's missing.
+const SPARE_AFTER: f32 = 2.0;
+
+#[allow(clippy::too_many_arguments)]
+fn spare_radio(
+    raid: Res<Raid>,
+    time: Res<Time>,
+    items: Query<(
+        Entity,
+        &crate::items::Item,
+        Option<&crate::anomaly::artifacts::CarriedBy>,
+        &GlobalTransform,
+    )>,
+    catalog: Res<crate::items::Catalog>,
+    progression: Option<Res<crate::progression::Progression>>,
+    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
+    trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
+    locals: Query<Entity, With<LocalPlayer>>,
+    hatch: Res<crate::raid::lev::Handovers>,
+    mut handover: MessageWriter<crate::raid::lev::HandOver>,
+    mut queue: ResMut<Queue>,
+    mut home_for: Local<f32>,
+    mut handed: Local<bool>,
+) {
+    if raid.phase != Phase::AtBase {
+        *home_for = 0.0;
+        *handed = false;
+        return;
+    }
+    *home_for += time.delta_secs();
+    // (What's on its way through the hatch already counts, once it's down.)
+    if *handed || *home_for < SPARE_AFTER || hatch.busy() {
+        return;
+    }
+    let (Some(me), Some(truck)) = (locals.iter().next(), trucks.iter().next()) else {
+        return;
+    };
+    *handed = true;
+    let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
+    // On you, in the crate, or lying in the truck (on the ledge already).
+    let have = |id: &str| {
+        items.iter().any(|(e, it, by, gt)| {
+            catalog.get(it.kind()).id == id
+                && (by.is_some_and(|b| b.0 == me)
+                    || in_crate(e)
+                    || gt.translation().distance(truck.translation()) < 3.0)
+        })
+    };
+    use extraction_core::progression::Job;
+    let job = progression.as_ref().and_then(|p| p.0.job.clone());
+    let wanted: Option<String> = match job {
+        Some(Job::Plant {
+            item,
+            planted: false,
+            ..
+        }) => Some(item),
+        Some(Job::Photograph { taken: false, .. }) => Some("camera".into()),
+        _ => None,
+    };
+    if !have("radio") {
+        handover.write(crate::raid::lev::HandOver {
+            id: "radio".into(),
+            condition: 0.8,
+        });
+        queue.lines.push_back(SPARE_RADIO.into());
+    }
+    if let Some(id) = wanted.filter(|id| !have(id)) {
+        let name = catalog
+            .kind(&id)
+            .map(|k| catalog.get(k).name.to_lowercase())
+            .unwrap_or_else(|| id.replace('_', " "));
+        handover.write(crate::raid::lev::HandOver { id, condition: 1.0 });
+        queue.lines.push_back(spare_for(&name));
+    }
+}
+
+/// Home from the Zone with a job on the card: nothing pays it but
+/// pressing the card (the first newcomers took the truck home, and the
+/// job sat unpaid into the next session).
+fn payday(
+    raid: Res<Raid>,
+    progression: Option<Res<crate::progression::Progression>>,
+    mut was_out: Local<bool>,
+    mut m: Meet,
+) {
+    let home = raid.phase == Phase::AtBase;
+    let back = *was_out && home;
+    *was_out = matches!(raid.phase, Phase::Extracting { .. });
+    if back
+        && !m.met(First::Payday)
+        && progression.is_some_and(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
+    {
+        m.meet(First::Payday);
+    }
+}
+
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
     for MeetFirst(f) in asks.read() {
         m.meet(*f);
@@ -710,6 +844,106 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home with no radio anywhere (it went with the rest at a fall): the
+    /// driver hands his spare over, and says so; with one, he doesn't.
+    #[test]
+    fn no_radio_home_gets_the_spare() {
+        let spoken_spare = |app: &App| {
+            app.world()
+                .resource::<Spoken>()
+                .0
+                .iter()
+                .filter(|l| *l == SPARE_RADIO)
+                .count()
+        };
+        let mut app = app();
+        // A radio in the stash crate: the driver says nothing.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let radio = {
+            let mut c = Commands::new(&mut queue, app.world());
+            crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("radio").unwrap(),
+                    transform: Transform::IDENTITY,
+                    condition: 1.0,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        let stash = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::raid::truck::Stash>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut()
+            .get_mut::<crate::interact::body::Backpack>(stash)
+            .unwrap()
+            .contents
+            .push(radio);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        assert_eq!(spoken_spare(&app), 0);
+        // Every radio gone: out and home, and the spare comes.
+        let radios: Vec<Entity> = app
+            .world_mut()
+            .query::<(Entity, &crate::items::Item)>()
+            .iter(app.world())
+            .filter(|(_, i)| catalog.get(i.kind()).id == "radio")
+            .map(|(e, _)| e)
+            .collect();
+        for r in radios {
+            app.world_mut().despawn(r);
+        }
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+        for _ in 0..(8 * 90) {
+            app.update();
+        }
+        assert_eq!(spoken_spare(&app), 1);
+    }
+
+    /// Home from the Zone with the job unpaid: told to press the card, once.
+    #[test]
+    fn home_with_a_job_is_told_to_press_the_card() {
+        let mut app = app();
+        if app
+            .world()
+            .resource::<crate::progression::Progression>()
+            .0
+            .job
+            .is_none()
+        {
+            app.world_mut()
+                .resource_mut::<crate::progression::Progression>()
+                .0
+                .job = Some(extraction_core::progression::Job::Letter);
+        }
+        for _ in 0..2 {
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 99.0 };
+            app.update();
+            app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+            for _ in 0..(10 * 90) {
+                app.update();
+            }
+        }
+        let line = First::Payday.lines()[0];
+        let spoken = &app.world().resource::<Spoken>().0;
+        assert_eq!(
+            spoken.iter().filter(|s| *s == line).count(),
+            1,
+            "{spoken:?}"
+        );
     }
 
     /// The moments that come from a message, met twice over through the

@@ -394,14 +394,18 @@ fn bolt_mesh(main: &[Vec3], fork: &[Vec3]) -> Mesh {
             idx.extend_from_slice(&[b, b + 1, b + 2, b, b + 2, b + 3]);
         }
     }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    // No bolt yet: one triangle that draws nothing (an empty mesh is an
+    // error on the GPU).
+    crate::render::sound_meshes::never_empty(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, axis)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_indices(Indices::U32(idx)),
     )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, axis)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_indices(Indices::U32(idx))
 }
 
 #[derive(Component)]

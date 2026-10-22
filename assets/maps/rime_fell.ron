@@ -219,6 +219,15 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The funicular's ballast-water tower by the valley station: the cars
+        // went up full and came down empty.
+        (prefab: "water_tower", at: (110.0, 268.0), rot: 0.0),
+        // Coldharbour's lime-kiln chimney.
+        (prefab: "chimney", at: (0.0, 40.0), rot: 0.0),
+        // The survey tower on the fell.
+        (prefab: "survey_tower", at: (-120.0, 200.0), rot: 0.0),
         // The south gate.
         (prefab: "quarantine_gate", at: (-10.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (0.0, 285.0), rot: 180.0, tag: "gate_booth"),
@@ -277,6 +286,13 @@
         // The col.
         (prefab: "mast_hut", at: (20.0, -245.0), rot: 200.0, tag: "col_hut"),
 
+        // A roof to wait under for the truck at each pickup, out of the
+        // survey drones' eye, on the far side from its beacon: refuges at
+        // the col and the saddle, a hut on the tip road.
+        (prefab: "shed", at: (80.6, -259.2), rot: 285.0, tag: "col_refuge"),
+        (prefab: "shed", at: (-104.9, -268.4), rot: 246.0, tag: "saddle_refuge"),
+        (prefab: "shed", at: (239.3, -17.1), rot: 353.0, tag: "tip_hut"),
+
         // The observatory on its summit.
         (prefab: "observatory", at: (-208.0, -210.0), rot: 160.0, tag: "observatory"),
 
@@ -299,6 +315,8 @@
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (160.0, -160.0), name: "Tarn mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-212.0, 150.0), name: "Gallery hush"),
+        (kind: Anomaly(kind: "Frost", radius: 3.0), at: (10.0, -270.0), name: "Col frost"),
+        (kind: Anomaly(kind: "Frost", radius: 3.0), at: (80.0, -190.0), name: "Scree frost"),
         (kind: Offering, at: (-80.0, 34.0), name: "The miners' shrine"),
         (kind: Offering, at: (30.0, -230.0), name: "The cairn on the col"),
         (kind: WorkSite, at: (60.0, -110.0), name: "Upper slopes site"),

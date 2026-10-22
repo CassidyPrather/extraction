@@ -23,6 +23,10 @@ name = "map-dump"
 path = "src/bin/map_dump.rs"
 
 [[bin]]
+name = "landmark-plan"
+path = "src/bin/landmark_plan.rs"
+
+[[bin]]
 name = "anomaly-views"
 path = "src/bin/anomaly_views.rs"
 
