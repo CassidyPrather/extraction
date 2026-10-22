@@ -30,6 +30,7 @@ impl Plugin for DevPlugin {
                     climb_for_gallery,
                     fight_for_gallery,
                     treat_for_gallery,
+                    spall_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -47,16 +48,38 @@ fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
 }
 
+/// The longest a screenshot waits on the world beyond its frames, seconds
+/// (the software renderer is slow; a material that never readies mustn't
+/// hang a shot).
+const SHOT_WAIT_MAX: f32 = 180.0;
+
+/// `--screenshot`: after `--frames` frames, and once the ground's and the
+/// buildings' materials are on the GPU and the buildings dressed
+/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
+/// had trees floating over no ground.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut count: ResMut<FrameCount>,
+    world: crate::render::timeline::WorldReady,
+    time: Res<Time<Real>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
     if count.requested || count.frames < opts.frames {
         return;
+    }
+    if !(world.materials() && world.props()) {
+        if time.elapsed_secs() < SHOT_WAIT_MAX {
+            return;
+        }
+        warn!(
+            "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
+             (materials ready: {}, buildings dressed: {})",
+            world.materials(),
+            world.props()
+        );
     }
     count.requested = true;
     if let Some(dir) = path.parent() {
@@ -132,6 +155,7 @@ fn gallery(
     mut stage: Local<u32>,
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
+    mut worked: Local<Vec<(Entity, extraction_core::gunsmith::Build)>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut jamming: Local<bool>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -313,6 +337,33 @@ fn gallery(
             }
             // `first_person_hands` and `wear_kit` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") => {}
+            // A Mosin as made, and under it one sawn down to an obrez at
+            // the vice (`weapons::gunsmith`), and an AK with and without
+            // its stock.
+            "obrez" => {
+                use extraction_core::gunsmith::Build;
+                let obrez = Build {
+                    barrel_mm: Some(250.0),
+                    stock: false,
+                    ..Default::default()
+                };
+                let bare = Build {
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.3);
+                for (id, up, build) in [
+                    ("mosin", 0.32, None),
+                    ("mosin", 0.1, Some(obrez)),
+                    ("ak74", -0.12, None),
+                    ("ak74", -0.32, Some(bare)),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -358,6 +409,13 @@ fn gallery(
     }
     // Seat magazines once their guns have wells; open actions.
     if *stage > 3 {
+        worked.retain(|(e, b)| {
+            let Ok(mut g) = guns.get_mut(*e) else {
+                return true;
+            };
+            g.firearm.build = *b;
+            false
+        });
         opening.retain(|&e| {
             let Ok(mut gun) = guns.get_mut(e) else {
                 return true;
@@ -1080,6 +1138,89 @@ fn fight_for_gallery(
     }
 }
 
+/// `--gallery spall`: a car door, a plank wall and a plaster wall side on,
+/// a couple of metres ahead, one over another, each shot through from
+/// behind and to the left by a walker's round every frame: the spall out of
+/// the face toward the camera.
+fn spall_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut state: Local<(u32, Option<Entity>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::render::materials::Mat;
+    if opts.gallery.as_deref() != Some("spall") {
+        return;
+    }
+    let (Some((cam, yaw, pitch)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y == 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    let (fwd, right) = (rot * Vec3::NEG_Z, rot * Vec3::X);
+    // The rounds come square on to each wall, across and back toward the
+    // camera, so the face they leave by is the one it sees.
+    let line = (right - fwd * 0.7).normalize();
+    let walls = [
+        (
+            Mat::PaintedMetal,
+            0.092,
+            0.45,
+            Color::srgb(0.35, 0.42, 0.38),
+        ),
+        (Mat::Planks, 0.1, 0.0, Color::srgb(0.45, 0.33, 0.2)),
+        (Mat::Plaster, 0.15, -0.45, Color::srgb(0.75, 0.72, 0.66)),
+    ];
+    state.0 += 1;
+    if state.0 == 3 {
+        for (mat, thick, up, colour) in walls {
+            let half = Vec3::new(0.45, 0.19, thick * 0.5);
+            commands.spawn((
+                Name::new("Gallery wall"),
+                crate::world::surfaces::Surfaces(vec![(half, Transform::IDENTITY, mat)]),
+                Transform::from_translation(eye + fwd * 2.2 + Vec3::Y * (up - 0.3))
+                    .looking_to(line, Vec3::Y),
+                Mesh3d(meshes.add(Cuboid::from_size(half * 2.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: colour,
+                    perceptual_roughness: 0.8,
+                    ..default()
+                })),
+                RigidBody::Static,
+                Collider::cuboid(half.x * 2.0, half.y * 2.0, half.z * 2.0),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            ));
+        }
+        state.1 = Some(commands.spawn(Name::new("Walker's gun")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    if state.0 > 5 {
+        for (i, (_, _, up, _)) in walls.iter().enumerate() {
+            shots.write(crate::weapons::ballistics::Shot {
+                gun,
+                shooter: Some(gun),
+                origin: eye + fwd * 2.2 + Vec3::Y * (up - 0.3) - line * 4.0,
+                direction: line,
+                speed: 450.0,
+                damage: 14.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: u64::from(state.0) << 4 | i as u64,
+            });
+        }
+    }
+}
+
 /// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
 /// a body hurt and treated (`interact::wounds`, drawn by
 /// `render::wounds`). An open wound on the right thigh and the left
@@ -1091,6 +1232,7 @@ fn treat_for_gallery(
     mut players: Query<
         (
             Entity,
+            &Transform,
             &mut crate::rig::RigInput,
             &mut crate::health::Health,
             Option<&mut crate::interact::wounds::Wounds>,
@@ -1105,7 +1247,7 @@ fn treat_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
         return;
     }
-    let Some((player, mut input, mut health, wounds)) = players.iter_mut().next() else {
+    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
         return;
     };
     let Some(mut wounds) = wounds else {
@@ -1119,8 +1261,14 @@ fn treat_for_gallery(
         bleed,
         dressed,
     };
+    // Round a limb hanging down, the angle that faces out to your right
+    // and a little forward (`Segment::point`'s frame).
+    let x = Vec3::NEG_Y.any_orthonormal_vector();
+    let y = Vec3::NEG_Y.cross(x);
+    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
+    let facing = out.dot(y).atan2(out.dot(x));
     wounds.0 = vec![
-        wound(Limb::Thigh(Side::Right), 0.45, 1.4, 1.0, false),
+        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
         wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
         wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
         wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
@@ -1139,10 +1287,11 @@ fn treat_for_gallery(
             }
         }
     }
-    // The left hand low and turned palm up.
+    // The left hand low and turned palm up (its palm faces +X, inward).
     let left = input.hand_mut(Side::Left);
-    left.pose = Transform::from_xyz(-0.18, 1.05, -0.32)
-        .with_rotation(Quat::from_rotation_z(std::f32::consts::PI) * Quat::from_rotation_x(0.4));
+    left.pose = Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
+        Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    );
     left.tracked = true;
 }
 

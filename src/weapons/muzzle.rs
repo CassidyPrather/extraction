@@ -27,7 +27,7 @@ pub(crate) struct Barrels(HashMap<Entity, (f32, f32)>);
 pub(crate) fn muzzle_fx(
     mut commands: Commands,
     mut events: MessageReader<GunEvent>,
-    guns: Query<(&Gun, &GlobalTransform)>,
+    guns: Query<(&Gun, &GlobalTransform, Option<&super::gunsmith::Built>)>,
     assets: Option<Res<FxAssets>>,
     pool: Option<ResMut<FxPool>>,
     time: Res<Time>,
@@ -43,7 +43,7 @@ pub(crate) fn muzzle_fx(
         let FireEvent::Fired { barrel } = ev.event else {
             continue;
         };
-        let Ok((gun, gt)) = guns.get(ev.gun) else {
+        let Ok((gun, gt, built)) = guns.get(ev.gun) else {
             continue;
         };
         let def = &gun.firearm.def;
@@ -54,8 +54,9 @@ pub(crate) fn muzzle_fx(
         let at = gt.transform_point(muzzle);
         let fwd = gt.rotation() * Vec3::NEG_Z;
         let r = def.recoil.max(0.5);
-        // The flash: a cone of fire along the bore, a frame or three.
-        let len = 0.06 + 0.035 * r;
+        // The flash: a cone of fire along the bore, a frame or three;
+        // a cut barrel's powder still burning as it leaves.
+        let len = (0.06 + 0.035 * r) * built.map_or(1.0, |b| b.flash.sqrt());
         let wide = if def.projectiles > 1 { 0.8 } else { 0.45 };
         let size = Vec3::new(len * wide, len * wide, len);
         let flash = commands
@@ -113,7 +114,7 @@ pub(crate) fn muzzle_fx(
         if *heat < WISP_HEAT || now < *next {
             return true;
         }
-        let Ok((gun, gt)) = guns.get(*gun_e) else {
+        let Ok((gun, gt, _)) = guns.get(*gun_e) else {
             return false;
         };
         let at = gt.transform_point(gun.layout.muzzle);

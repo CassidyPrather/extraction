@@ -120,80 +120,90 @@ These made a newcomer look stuck when a person wouldn't have been:
 - a hoarder taking the crate in any order, so its radio went to the
   bottom of the pack, out of reach;
 - stepping aside when lining up close to something indoors, into a
-  corner.
+  corner;
+- going into the practice house at a slant from wherever it had been (the
+  lost one, back from the wrong post), and sticking on the jamb: it now
+  goes round to the door and in square;
+- the hoarder pocketing the dressing it was carrying to the first-aid
+  post, by grabbing with the hand that held it: it now takes things with
+  a free hand and leaves alone what the station is about to use.
 
 ## Results
 
 ### Last runs
 
-The lost and hoarder rows are from this branch's head. The other three are from the round before its last two fixes: the hold that outlived its hand, and the bot's kit order.
+All five from this branch's head, yard and first raid both passing. The first job's run home is now free and short: back to the gate the newcomer went out by (the card says "Call me from the gate after"), not the long walk to the rail yard's rendezvous, where in the first fights a survey drone met every newcomer (see the first fight, below).
 
 | Newcomer | Yard | First raid |
 | - | - | - |
-| cautious | all 23 steps | home, 510 s |
-| reckless | all 23 steps; walked into the shimmer for the stone | home, 196 s |
-| lost | 22 of 23: back from its wrong turns, it couldn't reach the house's crate from the side it came in by (the bot's fault: the search step assumes the usual way in) | home, 313 s (set off the wrong way first) |
-| hoarder | all 23 steps; one bot step failed (its own dressing, pocketed earlier, wasn't found to use) | home, 286 s |
-| one-handed | all 23 steps | home, 289 s |
+| cautious | all 23 steps, 329 s, reading every board | home from the gate, 367 s |
+| reckless | all 23 steps, 108 s; walked into the shimmer for the stone | home from the gate, 136 s |
+| lost | all 23 steps, 674 s, the long way round each station | home from the gate, 246 s (set off the wrong way first) |
+| hoarder | all 23 steps, 163 s, pockets full | home from the gate, 218 s |
+| one-handed | all 23 steps, 161 s | home from the gate, 217 s |
 
-None was hurt, stuck or confused on the raid, bar the lost one's wrong turn. None met a machine: the farm is a danger-1 place, and the first job's road there is quiet. So the reckless one never got its fight, and the first raid's danger is still to be measured. A second job, or a later hour, is where that starts.
+None was hurt, stuck or confused on the raid, bar the lost one's wrong turn. None met a machine. Out through the gate, the road to the farm passes no anomaly, so the detector's and the thrown bolt's first words (which the old way out heard about 30 s in) now wait for the second job. The yard has already taught both.
 
 #### cautious
 
 | t | What | Moment |
 | - | - | - |
 | 0 s | Learned | camp: "Your kit is in the crate in the truck" |
-| 13 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. |
+| 13 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. Call me from the gate after. |
 | 18 s | Learned | on to Old farm |
-| 34 s | Learned | Detector: Truck: "Hear it ticking? Faster's nearer. Sweep it slow." |
-| 43 s | Learned | Anomaly: Truck: "Throw something in first. Air's wrong ahead." |
-| 199 s | Learned | the place, noted: "Now get it home" |
-| 510 s | Learned | in the truck and away |
+| 194 s | Learned | the place, noted: "Now get it home" |
+| 194 s | Learned | back to the gate, as the card said |
+| 352 s | Learned | the truck came back to the gate |
+| 367 s | Learned | in the truck and away |
 
 #### reckless
 
 | t | What | Moment |
 | - | - | - |
 | 0 s | Learned | camp: "Your kit is in the crate in the truck" |
-| 7 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. |
+| 7 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. Call me from the gate after. |
 | 7 s | Learned | on to Old farm |
-| 11 s | Learned | Detector: Truck: "Hear it ticking? Faster's nearer. Sweep it slow." |
-| 14 s | Learned | Anomaly: Truck: "Throw something in first. Air's wrong ahead." |
-| 69 s | Learned | the place, noted: "Now get it home" |
-| 196 s | Learned | in the truck and away |
+| 67 s | Learned | the place, noted: "Now get it home" |
+| 67 s | Learned | back to the gate, as the card said |
+| 126 s | Learned | the truck came back to the gate |
+| 136 s | Learned | in the truck and away |
 
 #### lost
 
 | t | What | Moment |
 | - | - | - |
 | 0 s | Learned | camp: "Your kit is in the crate in the truck" |
-| 9 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. |
+| 9 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. Call me from the gate after. |
 | 9 s | Confused | set off the wrong way |
 | 9 s | Learned | on to Old farm |
-| 138 s | Learned | the place, noted: "Now get it home" |
-| 313 s | Learned | in the truck and away |
+| 140 s | Learned | the place, noted: "Now get it home" |
+| 140 s | Learned | back to the gate, as the card said |
+| 231 s | Learned | the truck came back to the gate |
+| 246 s | Learned | in the truck and away |
 
 #### hoarder
 
 | t | What | Moment |
 | - | - | - |
 | 0 s | Learned | camp: "Your kit is in the crate in the truck" |
-| 10 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. |
+| 10 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. Call me from the gate after. |
 | 10 s | Learned | on to Old farm |
 | 110 s | Learned | the place, noted: "Now get it home" |
-| 286 s | Learned | in the truck and away |
+| 110 s | Learned | back to the gate, as the card said |
+| 203 s | Learned | the truck came back to the gate |
+| 218 s | Learned | in the truck and away |
 
 #### one-handed
 
 | t | What | Moment |
 | - | - | - |
 | 0 s | Learned | camp: "Your kit is in the crate in the truck" |
-| 9 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. |
+| 9 s | Learned | the job card: ODD JOBS - JOB 1 OF 3 "Go up to the old farm and look round. Tell me what's changed." From the drop: north-east, 190 m. Ringed on your map. Call me from the gate after. |
 | 9 s | Learned | on to Old farm |
-| 18 s | Learned | Detector: Truck: "Hear it ticking? Faster's nearer. Sweep it slow." |
-| 23 s | Learned | Anomaly: Truck: "Throw something in first. Air's wrong ahead." |
-| 113 s | Learned | the place, noted: "Now get it home" |
-| 289 s | Learned | in the truck and away |
+| 110 s | Learned | the place, noted: "Now get it home" |
+| 110 s | Learned | back to the gate, as the card said |
+| 202 s | Learned | the truck came back to the gate |
+| 217 s | Learned | in the truck and away |
 
 
 ### First run (before the fixes above)
@@ -327,3 +337,48 @@ Fixed since these runs, to be measured in the rerun:
 - **Audio:** the sentry chirps, and the hush's tone rises at 4 s.
 - **Here:** Lev warns of a walker's aim, a sentry's chirp and a hush, and
   a line about danger now is said 1.5 s after the last, not 5 s.
+
+## Second runs: with the fixes
+
+With Robot minds' look-before-shooting and let-go, Audio's sentry chirp and
+earlier hush tone, and the Driver's new lines:
+
+| Machine | Tell to first hit (all five) | Outcome |
+| - | - | - |
+| walker | 2.2 s at least (was 0.8 s), the Driver's "Break its line" with the aim | every newcomer down, 15–40 s later |
+| drone | 3–13 s, "Run across it, to cover" with the lock | every newcomer down, 10–35 s later |
+| sentry | 3.4 s at least, now with its chirp | every newcomer down |
+| hush | no harm: the tone (4 s) and the line come before its 8 s | |
+| night | the walker didn't see any of them | all five home |
+
+**No newcomer was hit without a tell first.** Every first hit came at
+least 2.2 s after a tell the newcomer could see or hear, and the death
+loop at the truck is gone.
+
+**Warned isn't enough on open ground.** The newcomers who do as they're
+told ran for the far side of the nearest building, or hard across the
+machine's line where there was none. They still went down to a walker or
+a drone on the Old farm road: it's open fields, with nothing within a
+sprint. That's the first machine's placement, not its tell.
+
+**The first job sent newcomers to a drone.** In the plain first hour, with
+no machine put there, the robot director's survey drones pick a named
+place to fly to. One picked the Old farm, the first job's place. On its
+first raid the cautious newcomer arrived as the drone did, and died.
+Survey drones now leave a career's first job place alone, as they already
+leave the rendezvous points (`robots::director::survey_places`, test
+`a_first_job_place_is_left_alone`). The first raid is meant to teach the
+way there and back; its first fight comes later, on the second or third
+job.
+
+**Then a drone met them on the way home.** With the farm left alone,
+the next one came on the long walk from the farm to the rail yard's
+rendezvous, 480 m of open ground, while the newcomer was carrying the
+first find home. The first job's run home is now the truck's: call from
+the gate you went out by (the job card says so, and the truck's "First
+run's on me. Get in the back." says why it's free), and it comes back
+there. Later jobs pay for the short run with a can of fuel as before
+(`raid::radio_calls`, tests `the_first_jobs_short_run_is_on_the_house`
+and `the_short_exfil_burns_a_can_of_fuel`). In the plain first hour, all
+five newcomers now go to the farm, back to the gate and home without
+meeting a machine.

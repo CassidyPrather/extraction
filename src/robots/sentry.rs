@@ -624,7 +624,7 @@ fn sentry_mind(
 
 /// What it sees it reports: a response team follows, now and then.
 fn sentry_report(
-    mut sentries: Query<(&mut Sentry, &Awareness, &Robot)>,
+    mut sentries: Query<(Entity, &mut Sentry, &Awareness, &Robot)>,
     director: Option<ResMut<super::director::Director>>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
@@ -633,7 +633,7 @@ fn sentry_report(
         return;
     };
     let dt = time.delta_secs();
-    for (mut s, aware, robot) in &mut sentries {
+    for (e, mut s, aware, robot) in &mut sentries {
         s.report -= dt;
         if robot.wrecked
             || !s.powered
@@ -645,7 +645,8 @@ fn sentry_report(
         }
         if let Some(at) = aware.target.and_then(|t| targets.get(t).ok()) {
             let delay = director.rng.range(20.0, 40.0);
-            director.queue_response(delay, at.translation());
+            // Through the network (`robots::network`).
+            director.queue_report(e, s.foot, delay, at.translation());
             s.report = rules::REPORT_EVERY;
             info!("sentry: reported someone at {:.0}", at.translation());
         }

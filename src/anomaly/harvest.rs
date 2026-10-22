@@ -173,6 +173,8 @@ pub fn stone_height(kind: AnomalyKind) -> f32 {
         AnomalyKind::Well => 0.3,
         AnomalyKind::Burner => 0.3,
         AnomalyKind::Hush => 0.3,
+        // Frozen into the ground at its heart.
+        AnomalyKind::Frost => 0.15,
     }
 }
 

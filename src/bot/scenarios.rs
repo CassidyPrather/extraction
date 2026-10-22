@@ -53,6 +53,7 @@ pub const NAMES: &[&str] = &[
     crate::anomaly::scenarios::NAMES[3],
     crate::anomaly::scenarios::NAMES[4],
     crate::anomaly::scenarios::NAMES[5],
+    crate::anomaly::scenarios::NAMES[6],
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
@@ -60,6 +61,12 @@ pub const NAMES: &[&str] = &[
     crate::robots::spotter::SCENARIO,
     crate::robots::minelayer::SCENARIO,
     crate::robots::mender::SCENARIO,
+    crate::robots::network::SCENARIO,
+    crate::robots::devices::SCENARIOS[0].0,
+    crate::robots::devices::SCENARIOS[1].0,
+    crate::robots::devices::SCENARIOS[2].0,
+    crate::robots::devices::SCENARIOS[3].0,
+    crate::robots::devices::SCENARIOS[4].0,
     crate::robots::plough::SCENARIO,
     crate::world::cage::SCENARIO,
     crate::world::echo::SCENARIO,
@@ -124,6 +131,33 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
     let t1 = target_point(zone, 1);
     use Task::*;
     let s = |x: &str| x.to_string();
+    // A device set down running by a machine: noticed, and shot if its row
+    // says so (`robots::devices`).
+    if let Some(&(_, id, _, shot)) = crate::robots::devices::SCENARIOS
+        .iter()
+        .find(|x| x.0 == name)
+    {
+        use crate::bot::Expect::Counter;
+        use crate::robots::devices as dv;
+        let mut t = vec![
+            Log(format!("device: a running {id} set down by a machine")),
+            Setup(
+                crate::robots::devices::SCENARIOS
+                    .iter()
+                    .find(|x| x.0 == name)
+                    .unwrap()
+                    .0,
+            ),
+            // (A task may take 30 s at most: two waits.)
+            Wait(15.0),
+            Wait(15.0),
+            Expect(Counter(dv::NOTICED, 1, 100)),
+        ];
+        if shot {
+            t.push(Expect(Counter(dv::WRECKED, 1, 100)));
+        }
+        return Some(t);
+    }
     Some(match name {
         "pistol_drill" => vec![
             Log(s("pistol drill: load two magazines, shoot one dry, reload")),
@@ -551,6 +585,28 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::network::SCENARIO => {
+            use crate::bot::Expect::Counter;
+            use crate::robots::network as net;
+            vec![
+                Log(s("relay cut: cut a pylon's cable, then stand in its view")),
+                Setup(net::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                WalkTo {
+                    to: net::VIEW_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(15.0),
+                Expect(Counter(net::SILENCED, 1, 1)),
+                Expect(Counter(net::BLOCKED, 1, 1000)),
+            ]
+        }
         crate::robots::sentry::SCENARIO => {
             vec![
                 Log(s(

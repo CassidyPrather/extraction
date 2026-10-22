@@ -5,7 +5,8 @@
 //! - textures: every image, by its format, size, mips and layers;
 //! - meshes: every mesh's vertex and index buffers;
 //! - shadow maps: the sun's cascades, and shadowed lights' maps;
-//! - render targets: both eyes at the auto eye size, with their MSAA.
+//! - render targets: both eyes at the runtime's full size (holding the
+//!   frame rate, they're made that big), with their MSAA.
 //!
 //! See docs/PERFORMANCE.md, "VRAM".
 
@@ -18,6 +19,10 @@ use bevy::prelude::*;
 const VRAM_CEILING: u64 = 4_500 * 1024 * 1024;
 
 const MB: f64 = 1024.0 * 1024.0;
+
+/// The eyes' width the targets are made at when holding the frame rate
+/// (`render::hold_rate`): the playtest's Beyond 2's recommended size.
+const HELD_EYE_PX: u64 = 2980;
 
 /// An image's bytes on the GPU (all its mips and layers).
 pub fn image_bytes(image: &Image) -> u64 {
@@ -165,7 +170,9 @@ fn holds(map: &str) {
     let px = std::env::var("BUDGET_EYE_PX")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(crate::rig::comfort::Comfort::AUTO_EYE_PX as u64);
+        // Holding the frame rate (the default), the eyes' targets are the
+        // runtime's full size: the playtest's Beyond 2 asks for 2980.
+        .unwrap_or(HELD_EYE_PX);
     let v = measure(app.world_mut(), px);
     println!(
         "{map}: {:.0} MB of {:.0}: textures {:.0}, meshes {:.0}, shadows {:.0}, eye targets {:.0} (2 x {px}²)",

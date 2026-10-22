@@ -40,6 +40,8 @@ Your data folder is `%APPDATA%\extraction` on Windows
 | Comfort settings | `settings.ron` |
 | This session's log (last ten kept) | `logs/session-*.log` |
 | A crash report, if it crashes | `logs/crash-*.txt` |
+| Frame times, one line a frame (last ten kept) | `logs/frames-*.txt` |
+| Reports to send back (below) | `reports/report-*.zip` |
 | Every raid you play, as telemetry | `raids/<map>/raid*.jsonl` |
 | Marks you made (below) | `marks/*.png` |
 
@@ -178,8 +180,8 @@ What changed, and worth a comment each:
   limb it hit, and each wound bleeds by itself (your health's bleeding is
   their sum). Wind a dressing round that limb (thigh, arm, shin, chest),
   not just your forearm: it binds only the wounds on that limb, so a
-  thigh and an arm wound take two dressings. A fall hard enough (about a
-  second-storey drop) breaks a shin: you limp, slowly and with no sprint,
+  thigh and an arm wound take two dressings. A fall hard enough (landing at
+  11 m/s, about a 6 m drop) breaks a shin: you limp, slowly and with no sprint,
   until a splint (new, in medical loot) is held along the broken shin,
   your other hand at the leg, for a second and a half while the straps
   pull tight. You still limp a little. The water bottle (now "Canteen")
@@ -232,6 +234,16 @@ What changed, and worth a comment each:
   frame (main_opaque_pass_3d ..., shadows ...)`) and the CPU's (`cpu:
   main ..., physics ..., render world ...`). Tell me how it looks
   and how it feels.
+- **Holding the frame rate.** The eyes now render less when the GPU runs
+  late and more when it has room. It stays between the size where text
+  still reads and the headset's full size. The **HOLD FRAME RATE** card,
+  under SMOOTHING on the truck wall, turns it off (or start with
+  `--hold-rate 0`); then the eyes keep the SHARPNESS size. Tell me:
+  - whether you ever notice the view going soft or sharp, especially when
+    the response team arrives and in the Surge, where it should drop;
+  - whether it ever pumps (soft, sharp, soft) while nothing's happening.
+
+  The report has the eyes' size frame by frame.
 - **Smoothing, 4x against 2x.** Smoothing the edges of things (4x MSAA) is
   the dearest per-eye cost the software renderer can measure; only the
   headset can say what it costs there (`docs/PERFORMANCE.md`). Play one
@@ -263,8 +275,42 @@ screenshot is saved. Afterwards you only need to remember the number.
 
 ## After a session
 
-Send me (or keep for me) the newest `logs/session-*.log`, any `crash-*`,
-the `raids/` folder and `marks/`. From the repository,
+### Sending a report
+
+**Press REPORT** on the board at the truck, under your career sheet.
+It writes one zip and the card shows its name. Send that one file back.
+If the game won't start or crashed, run `extraction --report` instead
+(no window or headset needed). It prints where the zip went.
+
+The zip lands in your data folder's `reports` folder:
+
+- Windows: `%APPDATA%\extraction\reports\report-<number>.zip` (paste
+  `%APPDATA%\extraction\reports` into Explorer's address bar)
+- Linux: `~/.local/share/extraction/reports/report-<number>.zip`
+
+It holds:
+
+- the game's build;
+- your GPU and driver;
+- the headset runtime and headset model, and the size each eye renders
+  at, as OpenXR reports them;
+- the newest session logs and any crash reports;
+- each valley's frame times (CPU and GPU, typical and worst);
+- how long loading took;
+- your comfort settings;
+- your last raid's recording.
+
+It holds nothing else from your computer. In everything in it, your home
+folder, user name and computer name are replaced with `~`, `<user>` and
+`<host>`. Open it and look if you like. `README.txt` inside says what
+each file is.
+
+Marks' screenshots (`marks/`) aren't in it. Send those too if you made
+any.
+
+### Your raids as heatmaps
+
+From the repository,
 
 ```bash
 scripts/sim-report.sh marrow_creek "%APPDATA%/extraction/raids/marrow_creek"
@@ -465,6 +511,24 @@ said you don't use?
     far side?
   - Graze a wreck's flank or a sheet wall: does the whine and the streak
     read as a ricochet?
+- The shot as a sound.
+  - Fire the AK in a valley and on open ground with a drone overhead:
+    does it come to the right place in the open and cast about in the
+    valley?
+  - Put the PBS on, load the green-tipped subsonic box, and shoot from
+    cover: does the quiet feel earned?
+  - Fire across a walker's front from far off, suppressed: does it go
+    looking downrange instead of at you?
+  - Pack a food tin into a suppressor at the vice: is the wear on it
+    (louder by the magazine) clear enough?
+- Gunsmithing at the vice (once the driver has fitted it).
+  - Let a Mosin go at the vice's jaws: does it sit as if clamped?
+  - Saw its barrel off with the hacksaw: does the stroke feel like
+    sawing, and is a minute's work right?
+  - Fire the obrez: is the flash and the noise worth what it costs in
+    accuracy, and is it handier in a room?
+  - Take an AK's stock off with the spanner and put it back on.
+  - Draw a Mosin's bolt out past its stop and put it in another Mosin.
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
@@ -619,6 +683,8 @@ pump?
 | - | - |
 | `--flat` | Monitor and keyboard instead of the headset |
 | `--data-dir DIR` | Keep the career, settings and logs in DIR instead of the usual data folder: a second player's profile, or a clean first launch |
+| `--hold-rate 0` | The eyes keep the SHARPNESS size instead of following the GPU's time |
+| `--report` | Write the report zip (above) and quit: no window or headset needed |
 | `--detail 0.5` | Less grass, fewer field stones, shorter shadows (0.25 to 1; 1 is the default). Try it if the frames log says the 1% figure is over 11 ms |
 | `--mirror` | In the headset: show the left eye's view in the desktop window, for whoever is watching (costs a third render of the scene, so not by default) |
 | `--map NAME` | `marrow_creek`, `kettle_pass`, `cinder_works`, `training_yard` |
