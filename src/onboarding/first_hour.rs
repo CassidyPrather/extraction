@@ -488,7 +488,14 @@ pub(super) fn direct_raid(
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
-            First::DroneLock | First::Aimed | First::Sentry if !p.reckless && !p.hoards => {
+            // "Down, out of its sweep": low, and away from it (a sentry
+            // doesn't come after you).
+            First::Sentry if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                state.low_until = now + 25.0;
+                run_for_cover(&world.zone, here, from, 1.0)
+            }
+            First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
                 let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
                 if let Some(f) = fight.as_mut() {
                     f.flee_until = now + 12.0;
