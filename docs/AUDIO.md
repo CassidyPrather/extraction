@@ -732,6 +732,29 @@ heavy's footfall); each break you hear about as far as robots do
   New Sallow's flooded street laps at its edge (`water_sounds`; both
   stand-ins until recordings can be fetched).
 
+## Rime Fell
+
+Nothing on Rime Fell runs. Every sound there is the wind working on the
+derelict works. `world::fell_sounds::emitters` (Fifth valley's) says
+where each one is, worked out from the map, and `audio::fell_sounds`
+voices them:
+
+- **The funicular's rope**: the slack rope creaks on its rollers at the
+  roller nearest you within 60 m, every 2-6 s (`fell.rope`).
+- **The bull wheel**: the top station's wheel, 8 m up, groans as the cut
+  rope's end tugs at it (`fell.wheel`).
+- **The mill's loose sheet**: a corrugated sheet on the headhouse,
+  about 20 m up, bangs one to three times every 4-15 s. It is heard to
+  160 m, across the settlement (`fell.sheet`).
+- **The stopped car**: a door swings (the rope's creak, quicker) and
+  bangs to about half the time (`fell.car`).
+- **Wind through the works**: a loop in each mill bay, which the
+  acoustics probe makes roomy, and along each avalanche gallery
+  (`fell.wind`). The galleries' meltwater drips within 50 m.
+- **The mill slaps back**: its front, 20 m wide and 9 m up, facing down
+  the slope, is a reflector (`acoustics::reflectors`, "ore_mill"). A
+  shot 50 m down the slope from it comes back about 0.3 s later.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,
@@ -759,6 +782,10 @@ gone.
 | A zone cooling (its `Heat` share falling) | `ug.heat_tick`: a casing's tink slowed, at random points in the room, quick at first and slowing as it cools; it stops when the room has cooled. Heard within 35 m |
 | The crane running (`Crane::dir` not 0) | `ug.crane`, the hum at 1.6 (the trolley's motor whining); `ug.chain` clinking at the hook every 0.25-0.5 s; `ug.crane_clank` as its brake lets go, and again at the end of its run |
 | A vent's or the crane's lever (`VentLever`, `CraneLever`) | `ug.lever`, a heavy thunk under the press's click |
+| A cage bell pull rung (`world::cage::CageRung`) | `ug.cage_bell`: the mine bell, three strokes 0.45 s apart, a Signal heard to the bell's 35 m (`BELL_HEARD`, the audit checks) |
+| The cage starting to ride (its `wait` out, `to` set) | `ug.cage_strain`, the groan slowed: the winding engine taking the strain at the shaft's head; then `ug.cage_rope`, the hum at 1.3, the rope singing over the sheave, from the head (not the cage) while it rides, easing out at the stop |
+| The cage at a stop (`CageArrived`) | `ug.cage_land`, a clank onto the keps, and `ug.cage_gate`, the latch |
+| The cage come down on someone (`CageCrushed`) | `ug.cage_crush`, metal slowed to half: the iron floor's thud, and `ug.cage_body` |
 
 Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
 rough voice at about 160 Hz through the throat's formants, sharp onset,
