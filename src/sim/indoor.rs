@@ -530,6 +530,26 @@ fn plan_site(
             }
         }
     }
+    // Live water: the raider doesn't wade it, live or not (it can't tell
+    // which, and a wrong guess kills); the crawlers keep out the same way
+    // (`underground::block_works`).
+    if let Some(v) = extraction_core::underground::layout(&b.prefab).and_then(|l| {
+        let v = l.live.as_ref()?;
+        l.rooms.iter().position(|room| room.id == v.room)
+    }) {
+        for j in 0..n {
+            for i in 0..n {
+                let c = grid.centre(i, j);
+                let wet = r.water_at(c) > 0.05;
+                let in_room = r.cell_of(c).is_some_and(|(a, z)| {
+                    matches!(r.cells[z * r.nx + a], extraction_core::underground::Cell::Room(k) if k as usize == v)
+                });
+                if wet && in_room {
+                    grid.cost[j * n + i] = extraction_core::nav::BLOCKED;
+                }
+            }
+        }
+    }
     let is_ground = |p: Vec2| {
         grid.cell_of(p.to_array())
             .is_some_and(|(i, j)| ground[j * n + i])
