@@ -302,6 +302,8 @@ pub struct Raider {
     /// Anomalies that have had it (it walked into one without meaning
     /// to): never again, whatever its nerve.
     burned: HashSet<Entity>,
+    /// Doors a lockdown has bolted for good: shut in its plans.
+    sealed: HashSet<Entity>,
     /// The current plan was cut short (a fight, a repath): redo, don't
     /// give up.
     interrupted: bool,
@@ -545,6 +547,7 @@ pub fn attach_raider(
                 skip: HashSet::new(),
                 known: HashSet::new(),
                 burned: HashSet::new(),
+                sealed: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
                 rv: career_rv,
@@ -917,6 +920,7 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
+            spot_sealed(&mut bot, r, &scene, &mut log);
             sneak(
                 me,
                 &mut bot,
@@ -2149,6 +2153,51 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     }
 }
 
+/// A lockdown has bolted a door for good (the shelter's programme): its
+/// doorway is a wall in the plan from now on, and a walk planned through
+/// it is planned again, the escape tunnel's way.
+fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
+    let mut new = Vec::new();
+    for plan in r.plans.iter_mut() {
+        for d in &plan.doors {
+            if r.sealed.contains(&d.entity)
+                || !scene
+                    .power_locked
+                    .get(d.entity)
+                    .is_ok_and(|l| l.stage == crate::world::underground::SEALED)
+            {
+                continue;
+            }
+            let along = d.b - d.a;
+            let dir = along.normalize_or(Vec2::X);
+            plan.grid.block(
+                Obstacle::Rect {
+                    at: ((d.a + d.b) * 0.5).to_array(),
+                    half: [along.length() * 0.5 + 0.1, 0.3],
+                    yaw: dir.y.atan2(dir.x),
+                },
+                0.0,
+            );
+            new.push((d.entity, plan.name.clone()));
+        }
+    }
+    if new.is_empty() {
+        return;
+    }
+    for (door, site) in &new {
+        r.sealed.insert(*door);
+        log.event("sealed", json!({"site": site}));
+    }
+    let through = bot
+        .tasks
+        .iter()
+        .any(|t| matches!(t, Task::OpenDoor(d) if r.sealed.contains(d)));
+    if through {
+        r.interrupted = true;
+        bot.replace([Task::Wait(0.1)]);
+    }
+}
+
 fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
     let ab = b - a;
     let t = ((p - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
@@ -2722,17 +2771,31 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         // already rises with danger (docs/MAP_DESIGN.md, "what the bots
         // value").
         // (A job is worth the walk whatever's on the shelves there.)
+        // An underground site is worth what's down there, not the
+        // surface it lies under (its kiosk's stencil says).
+        let below = matches!(s.kind, SiteKind::Building(_))
+            .then(|| extraction_core::underground::layout(&s.name))
+            .flatten();
         let rich = if s.job {
             1.0
         } else {
-            scene.zone.map.richness_at(s.at.to_array())
+            below
+                .and_then(|l| l.rich)
+                .unwrap_or_else(|| scene.zone.map.richness_at(s.at.to_array()))
+        };
+        // Its way down under cover: the danger above is skirted, not
+        // crossed, for the last of the walk.
+        let caution = if below.is_some_and(|l| l.covered_entry) {
+            ROUTE_CAUTION * 0.5
+        } else {
+            ROUTE_CAUTION
         };
         let aim = r.objective.map_or(1.0, |o| {
             1.0 + OBJECTIVE_PULL * (1.0 - s.at.distance(o) / OBJECTIVE_REACH).clamp(0.0, 1.0)
         });
         let score = pull * rich * aim
             / (1.0 + d / 80.0)
-            / (1.0 + ROUTE_CAUTION * route_exposure(&scene.zone.map, here, s.at))
+            / (1.0 + caution * route_exposure(&scene.zone.map, here, s.at))
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
