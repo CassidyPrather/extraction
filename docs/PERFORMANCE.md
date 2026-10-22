@@ -603,26 +603,32 @@ fails the run (`no_empty_meshes`, in every client test), and
 ## VRAM
 
 `render::vram` counts what a valley holds on the GPU from the assets and
-views, without a GPU: textures (format, size, mips, layers), meshes
-(vertex and index buffers), the sun's cascades (per eye) and shadowed
-lights' maps, and both eyes' targets at the auto eye size (1800², MSAA
-4x: multisampled HDR colour and depth, the resolve, the tonemapped image,
-the swapchain's). `gauge_every_valley_holds_its_vram` holds each valley
-under 4.5 GB, the 3060 laptop's 6 GB less the driver's, the compositor's
-and SteamVR's share, and prints the biggest texture folders.
+views, without a GPU:
+
+- textures (format, size, mips, layers);
+- meshes (vertex and index buffers);
+- the sun's cascades (per eye) and shadowed lights' maps;
+- both eyes' targets, with 4x MSAA: the multisampled HDR colour and
+  depth, the resolve, the tonemapped image, and the swapchain's.
+
+The eye targets are counted at the runtime's full size, 2980² for the
+playtest's Beyond 2. Holding the frame rate (`render::hold_rate`), they're
+made that big.
+
+`gauge_every_valley_holds_its_vram` holds each valley under 4.5 GB (the
+3060 laptop's 6 GB, less the driver's, the compositor's and SteamVR's
+share) and prints the biggest texture folders.
 
 | valley | total | textures | meshes | shadows | eye targets |
 |---|---|---|---|---|---|
-| Marrow Creek | 1.5 GB | 546 MB | 558 MB | 16 MB | 396 MB |
-| Kettle Pass | 1.5 GB | 541 | 585 | 16 | 396 |
-| Cinder Works | 1.4 GB | 532 | 465 | 16 | 396 |
-| Sallow Reservoir | 1.3 GB | 514 | 358 | 16 | 396 |
-| Rime Fell | 1.5 GB | 502 | 595 | 16 | 396 |
+| Marrow Creek | 2.2 GB | 546 MB | 558 MB | 16 MB | 1084 MB |
+| Kettle Pass | 2.2 GB | 542 | 585 | 16 | 1084 |
+| Cinder Works | 2.1 GB | 532 | 465 | 16 | 1084 |
+| Sallow Reservoir | 2.0 GB | 515 | 358 | 16 | 1084 |
+| Rime Fell | 2.2 GB | 501 | 603 | 16 | 1084 |
 
-A third of the ceiling: nothing to stream or cut yet. The terrain's
-texture arrays are 112 MB; each material set about 16 MB. Not counted:
-the driver's own buffers, pipelines and staging, which the 1.5 GB margin
-under the ceiling covers.
+At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
+GB. Under half the ceiling either way: nothing to stream or cut yet.
 
 ## Small things' shadows
 
