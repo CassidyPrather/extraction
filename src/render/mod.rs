@@ -36,6 +36,7 @@ pub mod spikes;
 pub mod stats;
 pub mod tells;
 pub mod terrain_material;
+pub mod textures;
 pub mod timeline;
 pub mod tools;
 pub mod upgrades;
@@ -84,6 +85,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
+        .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)

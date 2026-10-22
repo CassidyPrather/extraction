@@ -394,6 +394,9 @@ fn gauge_map_load_seconds() {
         let t = Instant::now();
         let mut app = client_threads(&map, "clearing", None);
         as_the_game_runs(&mut app);
+        app.init_resource::<Landed>()
+            .add_systems(Last, (landed::<Image>, landed::<bevy::gltf::Gltf>));
+        LANDED_FROM.get_or_init(|| t);
         let built = t.elapsed().as_secs_f64();
         let mut frames = 0;
         let mut marks: Vec<(String, f64, u32)> = Vec::new();
@@ -422,6 +425,14 @@ fn gauge_map_load_seconds() {
                 break;
             }
         }
+        let l = app.world().resource::<Landed>();
+        println!(
+            "    textures: {} files, last in at {:.2} s; models: {} files, last in at {:.2} s",
+            l.count.get("Image").copied().unwrap_or(0),
+            l.last.get("Image").copied().unwrap_or(0.0),
+            l.count.get("Gltf").copied().unwrap_or(0),
+            l.last.get("Gltf").copied().unwrap_or(0.0),
+        );
         println!(
             "{map}: built {built:.2} s; {}",
             marks
@@ -430,5 +441,34 @@ fn gauge_map_load_seconds() {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+    }
+}
+
+/// When each kind of file-loaded asset last landed, and how many did.
+#[derive(Resource, Default)]
+struct Landed {
+    count: std::collections::HashMap<&'static str, usize>,
+    last: std::collections::HashMap<&'static str, f64>,
+}
+
+static LANDED_FROM: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+fn landed<A: Asset>(
+    mut events: MessageReader<AssetEvent<A>>,
+    server: Res<AssetServer>,
+    mut l: ResMut<Landed>,
+) {
+    let kind = std::any::type_name::<A>()
+        .rsplit("::")
+        .next()
+        .unwrap_or("?");
+    for ev in events.read() {
+        if let AssetEvent::LoadedWithDependencies { id } = ev {
+            if server.get_path(*id).is_some() {
+                *l.count.entry(kind).or_default() += 1;
+                let at = LANDED_FROM.get().map_or(0.0, |t| t.elapsed().as_secs_f64());
+                l.last.insert(kind, at);
+            }
+        }
     }
 }

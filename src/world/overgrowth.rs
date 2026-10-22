@@ -657,7 +657,7 @@ pub fn setup_ivy(
     // material whose texture never loads is never drawn).
     let atlas = "textures/foliage/birch_leaves/albedo.ktx2";
     let tex: Handle<Image> = if crate::asset_root_path().join(atlas).exists() {
-        server.load(atlas)
+        server.load(crate::render::textures::ktx2(atlas))
     } else {
         images.add(leaf_image())
     };

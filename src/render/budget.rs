@@ -1148,6 +1148,11 @@ pub(crate) mod tests {
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),
         );
+        // BC formats, as the game's GPUs have: the baked textures load as
+        // they ship (`render::textures`), and never reach a GPU here.
+        app.insert_resource(bevy::image::CompressedImageFormatSupport(
+            bevy::image::CompressedImageFormats::BC,
+        ));
         app.insert_resource(crate::LaunchOptions {
             flat: true,
             map: map.into(),
