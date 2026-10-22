@@ -619,6 +619,7 @@ fn paint_marks(
     for (e, m) in &new {
         let mat = materials.add(StandardMaterial {
             base_color: paint_colour(m.paint(now)),
+            emissive: paint_glow(m.paint(now)),
             alpha_mode: AlphaMode::Blend,
             perceptual_roughness: 0.9,
             depth_bias: 50.0,
@@ -651,9 +652,16 @@ fn paint_marks(
         if let Some(mut mat) = materials.get_mut(&h.0) {
             if mat.base_color != want {
                 mat.base_color = want;
+                mat.emissive = paint_glow(m.paint(now));
             }
         }
     }
+}
+
+/// Fluorescent paint: it carries at 20-40 m in daylight by its glow, not
+/// by being more opaque.
+fn paint_glow(paint: f32) -> LinearRgba {
+    LinearRgba::rgb(0.9, 0.3, 0.03) * paint
 }
 
 fn paint_colour(paint: f32) -> Color {
