@@ -37,6 +37,7 @@ pub mod timeline;
 pub mod tools;
 pub mod upgrades;
 pub mod vr_budget;
+pub mod vram;
 pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;

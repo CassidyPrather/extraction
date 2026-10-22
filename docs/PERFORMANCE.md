@@ -492,6 +492,45 @@ startup_frames` (ignored, wall-clock) times it per valley on all cores.
   tangents) are built on the compute pool, each chunk on its own, and
   spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
   (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).
+- Every cell still asked every segment of each ridge, channel and stream
+  how near it was, and a creek across the valley is hundreds of segments.
+  `geom::NearLine` keeps a line's segments in 8 m buckets and answers as
+  `polyline_closest` does, to the bit, within the reach that matters (the
+  five heightmaps hash the same): `Heightmap::build` 1.3-2.5 s > 0.5-0.8 s.
+
+### Waiting, step by step
+
+`render::timeline` logs `load: <what> at <s> s` once for each thing the
+player waits on, from `main`'s first line: plugins building, start-up
+(zone, terrain, nav, props), the first frame rendered, the preload landed,
+the forest streamed, the buildings dressed, the warm-up shelf done, and on
+the way out, the exit asked and the world dropped (a valley change waits
+through the close too, then the next launch). Ask a playtester for those
+lines.
+
+## VRAM
+
+`render::vram` counts what a valley holds on the GPU from the assets and
+views, without a GPU: textures (format, size, mips, layers), meshes
+(vertex and index buffers), the sun's cascades (per eye) and shadowed
+lights' maps, and both eyes' targets at the auto eye size (1800², MSAA
+4x: multisampled HDR colour and depth, the resolve, the tonemapped image,
+the swapchain's). `gauge_every_valley_holds_its_vram` holds each valley
+under 4.5 GB, the 3060 laptop's 6 GB less the driver's, the compositor's
+and SteamVR's share, and prints the biggest texture folders.
+
+| valley | total | textures | meshes | shadows | eye targets |
+|---|---|---|---|---|---|
+| Marrow Creek | 1.5 GB | 546 MB | 558 MB | 16 MB | 396 MB |
+| Kettle Pass | 1.5 GB | 541 | 585 | 16 | 396 |
+| Cinder Works | 1.4 GB | 532 | 465 | 16 | 396 |
+| Sallow Reservoir | 1.3 GB | 514 | 358 | 16 | 396 |
+| Rime Fell | 1.5 GB | 502 | 595 | 16 | 396 |
+
+A third of the ceiling: nothing to stream or cut yet. The terrain's
+texture arrays are 112 MB; each material set about 16 MB. Not counted:
+the driver's own buffers, pipelines and staging, which the 1.5 GB margin
+under the ceiling covers.
 
 ## Small things' shadows
 
