@@ -1320,6 +1320,7 @@ fn surge_reset_at_base(world: &mut World) {
     let loose = loose_items(world);
     world.insert_resource(ZoneReset {
         step: 0,
+        part: 0,
         loose,
         gone: 0,
     });
@@ -1333,6 +1334,8 @@ fn surge_reset_at_base(world: &mut World) {
 #[derive(Resource)]
 struct ZoneReset {
     step: u32,
+    /// The step's part (the mending's, the loot's).
+    part: usize,
     loose: Vec<Entity>,
     gone: usize,
 }
@@ -1373,22 +1376,28 @@ fn step_zone_reset(world: &mut World) {
             r.step = 2;
         }
         2 => {
-            crate::destruction::surge(world);
-            r.step = 3;
+            // The mending a part a frame (all at once, 9 ms).
+            crate::destruction::surge_step(world, r.part);
+            r.part += 1;
+            if r.part >= crate::destruction::SURGE_STEPS {
+                r.part = 0;
+                r.step = 3;
+            }
         }
         3 => {
             crate::anomaly::spawn_cycle_anomalies(world);
             r.step = 4;
         }
         4 => {
-            // Rolled at rest, let fall a few at a time: hundreds of new
-            // bodies settling at once was the next judder (the swept
-            // collision pass 19 ms).
+            // The loot a part a frame, each part's fresh items held still
+            // and let fall a few at a time after: hundreds of new bodies
+            // settling at once was the next judder (the swept collision
+            // pass 19 ms).
             let before: std::collections::HashSet<Entity> = world
                 .query_filtered::<Entity, With<Item>>()
                 .iter(world)
                 .collect();
-            crate::items::loot::roll_zone_loot(world);
+            crate::items::loot::roll_zone_loot_step(world, r.part);
             let fresh: Vec<Entity> = world
                 .query_filtered::<(Entity, &RigidBody), With<Item>>()
                 .iter(world)
@@ -1398,8 +1407,12 @@ fn step_zone_reset(world: &mut World) {
             for e in &fresh {
                 world.entity_mut(*e).insert(RigidBody::Static);
             }
-            r.loose = fresh;
-            r.step = 5;
+            r.loose.extend(fresh);
+            r.part += 1;
+            if r.part >= crate::items::loot::ROLL_STEPS {
+                r.part = 0;
+                r.step = 5;
+            }
         }
         5 => {
             let take = r.loose.len().min(SWEEP_PER_FRAME);
