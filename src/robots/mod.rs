@@ -568,7 +568,14 @@ pub fn part_bundle(
         collider,
         CollisionLayers::new(
             Layer::Robot,
-            [Layer::World, Layer::Item, Layer::Robot, Layer::Player],
+            // (Hand: a palm stops on a robot, or shoves it: `interact::fight`.)
+            [
+                Layer::World,
+                Layer::Item,
+                Layer::Robot,
+                Layer::Player,
+                Layer::Hand,
+            ],
         ),
         at,
         Visibility::default(),

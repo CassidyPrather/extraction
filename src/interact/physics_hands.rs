@@ -144,9 +144,11 @@ fn drive_hand_bodies(
         let want = if busy {
             CollisionLayers::new(Layer::Hand, LayerMask::NONE)
         } else if hand.hover.is_none() && body.quiet <= 0.0 {
-            CollisionLayers::new(Layer::Hand, [Layer::World, Layer::Item])
+            CollisionLayers::new(Layer::Hand, [Layer::World, Layer::Item, Layer::Robot])
         } else {
-            CollisionLayers::new(Layer::Hand, [Layer::World])
+            // A robot is never passed through: a palm stops on it, or
+            // shoves it (`fight`).
+            CollisionLayers::new(Layer::Hand, [Layer::World, Layer::Robot])
         };
         if layers.get(e).is_ok_and(|l| *l != want) {
             commands.entity(e).insert(want);

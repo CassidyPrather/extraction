@@ -4834,3 +4834,243 @@ mod vault {
         assert!(heavy <= most, "laden, slow: {heavy} (at most {most})");
     }
 }
+
+/// Hand to hand (`interact::fight`): the crowbar strikes, an open palm
+/// shoves, and a hand stops on a robot.
+#[cfg(test)]
+mod fight {
+    use super::*;
+    use crate::robots::{PartRole, RobotPart};
+    use crate::world::Layer;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn open() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(4);
+        (vr, feet)
+    }
+
+    /// A robot's part of `role` standing as a box at `at` (its robot an
+    /// empty stand-in).
+    fn part(vr: &mut Vr, role: PartRole, at: Vec3) -> Entity {
+        let robot = vr.app.world_mut().spawn_empty().id();
+        let e = vr
+            .app
+            .world_mut()
+            .spawn((
+                RobotPart {
+                    robot,
+                    role,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::from_translation(at),
+                RigidBody::Static,
+                Collider::cuboid(0.25, 0.25, 0.25),
+                CollisionLayers::new(Layer::Robot, LayerMask::ALL),
+            ))
+            .id();
+        vr.step(2);
+        e
+    }
+
+    fn hp(vr: &Vr, e: Entity) -> f32 {
+        vr.app.world().get::<RobotPart>(e).unwrap().hp
+    }
+
+    /// The right hand on a crowbar's grip, the bar held still; its claw's
+    /// place and which way it points (from the hand).
+    fn with_a_bar(vr: &mut Vr, feet: Vec3) -> (Entity, Vec3, Vec3) {
+        let at = feet + Vec3::new(0.3, 1.1, -0.5);
+        let bar = vr.spawn("crowbar", Transform::from_translation(at));
+        vr.app.world_mut().entity_mut(bar).insert(RigidBody::Static);
+        let grip = vr.point(bar, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(bar)
+            .insert(RigidBody::Dynamic);
+        vr.step(20);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(bar));
+        let claw = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(bar)
+            .unwrap()
+            .transform_point(crate::interact::tools::crowbar::CLAW);
+        let hand = vr.hand_state(Side::Right).world.translation;
+        (bar, claw, (claw - hand).normalize())
+    }
+
+    /// The hand drives the bar claw-first along `dir` at `speed` m/s for
+    /// `metres`, then draws it back slowly.
+    fn drive(vr: &mut Vr, dir: Vec3, speed: f32, metres: f32) {
+        let from = vr.hand_state(Side::Right).world.translation;
+        let per = speed / 64.0;
+        let steps = (metres / per).ceil() as usize;
+        for i in 1..=steps {
+            vr.move_hand(Side::Right, from + dir * per * i as f32);
+            vr.step(1);
+        }
+        let end = from + dir * per * steps as f32;
+        for i in 1..=40 {
+            vr.move_hand(Side::Right, end.lerp(from, i as f32 / 40.0));
+            vr.step(1);
+        }
+        vr.step(10);
+    }
+
+    /// A crowbar tapped against a robot's eye does nothing; swung into it
+    /// hard, it hurts, as a blunt blow.
+    #[test]
+    fn a_crowbar_swung_hard_hurts_a_tap_doesnt() {
+        let (mut vr, feet) = open();
+        let (_, claw, dir) = with_a_bar(&mut vr, feet);
+        let eye = part(&mut vr, PartRole::Sensor, claw + dir * 0.3);
+        drive(&mut vr, dir, 1.0, 0.35);
+        assert_eq!(hp(&vr, eye), 100.0, "a tap");
+        drive(&mut vr, dir, 7.0, 0.4);
+        assert!(hp(&vr, eye) < 70.0, "a swing: {}", hp(&vr, eye));
+    }
+
+    /// A small drone (a 6 kg flying body with a part on it) shoved by an
+    /// open palm at 3 m/s goes back; a hand laid on it slowly hardly
+    /// moves it.
+    #[test]
+    fn an_open_palm_shoves_a_drone_back() {
+        let push = |speed: f32| {
+            let (mut vr, feet) = open();
+            let at = feet + Vec3::new(0.25, 1.3, -0.65);
+            let drone = vr
+                .app
+                .world_mut()
+                .spawn((
+                    RigidBody::Dynamic,
+                    Mass(6.0),
+                    NoAutoMass,
+                    GravityScale(0.0),
+                    Transform::from_translation(at),
+                ))
+                .id();
+            vr.app.world_mut().spawn((
+                RobotPart {
+                    robot: drone,
+                    role: PartRole::Core,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::IDENTITY,
+                Collider::sphere(0.2),
+                CollisionLayers::new(
+                    Layer::Robot,
+                    [
+                        Layer::World,
+                        Layer::Item,
+                        Layer::Robot,
+                        Layer::Player,
+                        Layer::Hand,
+                    ],
+                ),
+                ChildOf(drone),
+            ));
+            let from = feet + Vec3::new(0.25, 1.3, -0.2);
+            vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(20);
+            let per = speed / 64.0;
+            for i in 1..=30 {
+                vr.move_hand(Side::Right, from + Vec3::NEG_Z * per * i as f32);
+                vr.step(1);
+            }
+            vr.step(10);
+            -vr.app.world().get::<LinearVelocity>(drone).unwrap().0.z
+        };
+        let gentle = push(0.4);
+        let shove = push(3.0);
+        assert!(shove > 1.5, "shoved back: {shove} m/s");
+        assert!(gentle < shove * 0.3, "laid on, hardly: {gentle} m/s");
+    }
+
+    /// A crawler (a small walker) shoved hard by an open palm goes down.
+    #[test]
+    fn a_shove_floors_a_crawler() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.0);
+        let crawler = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut commands = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker_sized(
+                &mut commands,
+                &zone,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Watch,
+                    site: at,
+                    duration: f32::INFINITY,
+                    exit: at,
+                },
+                false,
+                crate::robots::indoor::CRAWLER_HP,
+                crate::robots::indoor::CRAWLER_SIZE,
+                Some(at.y),
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its body's nearest part, at hand height or below.
+        let target = {
+            let mut q = vr.app.world_mut().query::<(&RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(p, _)| p.robot == crawler)
+                .map(|(_, g)| g.translation())
+                .max_by(|a, b| a.y.total_cmp(&b.y))
+                .unwrap()
+        };
+        let from = target + Vec3::new(0.0, 0.0, 0.45);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(15);
+        for i in 1..=12 {
+            vr.move_hand(Side::Right, from + Vec3::NEG_Z * (3.5 / 64.0) * i as f32);
+            vr.step(1);
+        }
+        vr.step(2);
+        let gait = vr
+            .app
+            .world()
+            .get::<crate::robots::anim::Gait>(crawler)
+            .unwrap();
+        assert!(gait.down(), "on the ground");
+    }
+
+    /// A hand pushed into a robot stops on it: the glove you see stays at
+    /// its face, not inside it, and the hand feels it.
+    #[test]
+    fn a_hand_stops_on_a_robot() {
+        let (mut vr, feet) = open();
+        let box_at = feet + Vec3::new(0.25, 1.3, -0.6);
+        part(&mut vr, PartRole::Core, box_at);
+        let from = feet + Vec3::new(0.25, 1.3, -0.2);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(20);
+        for i in 1..=30 {
+            vr.move_hand(Side::Right, from.lerp(box_at, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.step(10);
+        let felt = vr.hand_state(Side::Right).felt.expect("a hand body");
+        let face = box_at.z + 0.125;
+        assert!(
+            felt.translation.z > face,
+            "stopped at its face: {} (face {face})",
+            felt.translation.z
+        );
+    }
+}
