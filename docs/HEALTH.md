@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 5955943 | 12:10 | 20/20 exit 0, 10 extracted (Marrow 0/4) | 925 passed, 0 failed, all within budget, 29 min | gauges 15/15 in 20 min: green |
 | ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 907 passed, 0 failed, all within budget, 31 min | gauges 14/14 in 17 min: the first fully green round |
 | 7f23655 | 08:00 | 10/10 exit 0, 5 extracted (lowest yet) | 900 passed, 0 failed, 33 min wall; 1 over budget (soak walls 123.5 s) | gauges 13/14 in 16 min (busy moment: fix on Performance's branch) |
 | 039a64a | 06:40 | 10/10 exit 0, 7 extracted; Sallow seed 1 timed out stuck | 879 passed, 0 failed, all within budget, 36 min wall (5630 test-s) | gauges: 13/14 in 18 min (busy moment's PostUpdate share) |
@@ -47,13 +48,13 @@ None in the suite or gauges as of ce0f10b.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| Sim: a raider wades into live water (Cinder Works seed 4, tunnel_cinder, while looting) and dies | det. (replays from the seed) | hazards the raider's plan doesn't know (crawlers avoid them via `underground::block_works`) | coordinator (src/sim), Underground's hook | routed 10:20; telemetry now names it `live_water` |
-| Sim extraction 9/20 (45%) on ce0f10b; Rime Fell 1/4 | | balance | Fifth valley FYI | watching |
+| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | a death corridor; the raider's first goal ignores route danger | Map design, coordinator (src/sim) | routed 12:10 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| the raider waded into live water (Cinder seed 4 now extracts); telemetry names live water | 5955943 / a1edafef | coordinator, Underground, Verifier |
 | the busy-moment gauge (share limits under one thread), the Sallow pocket (escalation), Soak's walls over budget | ce0f10b | Performance, coordinator, Soak |
 | `robots::mind_tests::a_crawling_walker_doesnt_flank` (a walker took the flank before its limp caught up) | 18ba914 (8b9fabb6) | Robot minds |
 | the dirigible pod (a spotter counted against the director's budget, since bb5dbaf0), `heaps_settle` (a log pile taken for a floor), Rime Fell's bats and ducks | 24d1ef0 / 4d45a5f | Robot bodies, Soak, Wildlife |
