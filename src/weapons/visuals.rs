@@ -572,6 +572,7 @@ mod tests {
                 magwell: None,
                 trigger: 0.0,
                 dice: extraction_core::noise::Rng::new(0),
+                mass: None,
             })
             .id();
         let node = |app: &mut App, name: String| {
