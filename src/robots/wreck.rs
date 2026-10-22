@@ -827,6 +827,31 @@ mod tests {
             "a crawler's carcass walls you in"
         );
         assert!(blocks(&mut app, walker), "a walker's hull isn't solid");
+        // And a player walking straight through where it lies: the
+        // player's capsule (player.rs: 0.28 m round, 1.75 m tall) swept
+        // across it, against what the player's move-and-slide meets
+        // beside the ground (Robot).
+        let walks_through = |app: &mut App, e: Entity| -> bool {
+            use bevy::ecs::system::RunSystemOnce;
+            let at = app.world().get::<GlobalTransform>(e).unwrap().translation();
+            let from = Vec3::new(at.x - 1.5, at.y + 0.3, at.z);
+            app.world_mut()
+                .run_system_once(move |spatial: SpatialQuery| {
+                    spatial
+                        .cast_shape(
+                            &Collider::capsule(0.28, 1.75 - 0.56),
+                            from,
+                            Quat::IDENTITY,
+                            Dir3::X,
+                            &ShapeCastConfig::from_max_distance(3.0),
+                            &SpatialQueryFilter::from_mask([Layer::Robot]),
+                        )
+                        .is_none()
+                })
+                .unwrap()
+        };
+        assert!(walks_through(&mut app, crawler), "walled in by a crawler");
+        assert!(!walks_through(&mut app, walker), "walked through a walker");
     }
 
     /// A walker shot through the core comes apart: its pieces fall, come to
