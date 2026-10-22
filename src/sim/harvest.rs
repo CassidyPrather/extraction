@@ -26,6 +26,16 @@ pub fn skilled(personality: &str) -> bool {
     personality != "reckless" && std::env::var("SIM_HARVEST").map_or(true, |v| v != "novice")
 }
 
+/// What a skilled raider takes from the truck to work anomalies with:
+/// bolts to throw (a novice brings none).
+pub fn kit(personality: &str) -> Vec<&'static str> {
+    if skilled(personality) {
+        vec!["bolt"; 4]
+    } else {
+        Vec::new()
+    }
+}
+
 /// What a skilled raider has to hand.
 pub struct Kit {
     /// Something worthless to throw.
