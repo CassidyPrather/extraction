@@ -27,6 +27,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use extraction_core::ammo::Load;
 use extraction_core::cold::{self, Weather};
 use extraction_core::firearm::ActionKind;
 use extraction_core::map::MarkerKind;
@@ -110,8 +111,16 @@ pub struct Weathering {
     pub fog: f32,
     /// Seconds since a wipe slows the fog's return.
     pub wiped: f32,
+    /// Seconds soaked toward the next round going damp.
+    pub soaking: f32,
+    /// Rounds gone damp in it so far (which goes next).
+    pub spoiled: u32,
     probe: f32,
 }
+
+/// Soaked past this, its rounds go damp, one each [`DAMP_EVERY`] seconds.
+pub const DAMP_WET: f32 = 0.6;
+pub const DAMP_EVERY: f32 = 45.0;
 
 pub struct WeatherPlugin;
 
@@ -119,6 +128,7 @@ impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(weather_guns_too)
             .add_observer(weather_optics_too)
+            .add_observer(weather_ammo_too)
             .add_systems(
                 FixedUpdate,
                 (weather, wipe_guns, sting)
@@ -138,6 +148,32 @@ fn weather_optics_too(add: On<Add, Optic>, mut commands: Commands) {
     commands
         .entity(add.entity)
         .try_insert(Weathering::default());
+}
+
+/// Ammunition (boxes, loose rounds, magazines) takes the weather too.
+fn weather_ammo_too(
+    add: On<Add, crate::items::Item>,
+    items: Query<&crate::items::Item>,
+    catalog: Res<crate::items::Catalog>,
+    mut commands: Commands,
+) {
+    let Ok(it) = items.get(add.entity) else {
+        return;
+    };
+    use extraction_core::items::Category;
+    if matches!(
+        catalog.get(it.kind()).category,
+        Category::Ammo | Category::Magazine
+    ) {
+        commands
+            .entity(add.entity)
+            .try_insert(Weathering::default());
+    }
+}
+
+/// The next round to go damp among `count` (from the top, turning about).
+fn next_round(spoiled: u32, count: u32) -> u32 {
+    if count == 0 { 0 } else { (spoiled * 7) % count }
 }
 
 fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
@@ -207,8 +243,12 @@ fn weather(
         &mut Weathering,
         Option<&mut Gun>,
         Has<Optic>,
+        Option<&mut crate::items::Item>,
     )>,
     held: Query<&Held>,
+    seated: Query<&crate::interact::InSocket>,
+    sockets: Query<&crate::interact::Socket>,
+    catalog: Res<crate::items::Catalog>,
     parents: Query<&ChildOf>,
     mounted: Query<&MountedOn>,
     chills: Query<&Chill>,
@@ -222,7 +262,7 @@ fn weather(
         .as_ref()
         .map_or((Weather::Ordinary, 0.0), |c| (weather_of(c), c.rain));
     let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
-    for (e, gt, mut w, gun, optic) in &mut things {
+    for (e, gt, mut w, gun, optic, item) in &mut things {
         let at = gt.translation();
         // A roof over it, looked for now and then (the carrier's own look
         // is only kept up in a cold valley).
@@ -277,9 +317,53 @@ fn weather(
             };
             w.fog += (want - w.fog) * (dt / tau).min(1.0);
         }
+        // Soaked, a round goes damp now and then.
+        let spoil = if w.wet > DAMP_WET {
+            w.soaking += dt;
+            if w.soaking >= DAMP_EVERY {
+                w.soaking = 0.0;
+                true
+            } else {
+                false
+            }
+        } else {
+            w.soaking = 0.0;
+            false
+        };
         let Some(mut gun) = gun else {
+            // A box, loose rounds, a magazine (one in a gun is the gun's).
+            let in_gun = seated
+                .get(e)
+                .ok()
+                .and_then(|s| sockets.get(s.socket).ok())
+                .is_some_and(|s| matches!(s.kind, crate::interact::SocketKind::MagWell(_)));
+            if let (true, Some(mut it), false) = (spoil, item, in_gun) {
+                let base = catalog.get(it.kind()).load;
+                let rounds = it.rounds;
+                let k = next_round(w.spoiled, rounds);
+                if it.loads.spoil(rounds, base, k) {
+                    w.spoiled += 1;
+                }
+            }
             continue;
         };
+        if spoil {
+            let k = w.spoiled;
+            let f = &mut gun.firearm;
+            let done = if let Some(m) = &mut f.magazine {
+                let n = m.rounds;
+                m.loads.spoil(n, Load::Standard, next_round(k, n))
+            } else {
+                let n = f.internal_rounds;
+                f.internal_loads.spoil(n, Load::Standard, next_round(k, n))
+            };
+            if done {
+                w.spoiled += 1;
+            }
+        }
+        if (gun.firearm.ammo_cold - w.cold).abs() > 0.01 {
+            gun.firearm.ammo_cold = w.cold;
+        }
         // Grime: soaked, dunked, or ash settling in the dry.
         let mut grime = 0.0;
         if open && w.wet > 0.3 {
@@ -456,6 +540,7 @@ pub fn weather_looks(
             With<super::wear::Crown>,
             With<super::optics::Vignette>,
             With<super::optics::PostBlur>,
+            With<crate::render::gun_rest::RestMesh>,
         )>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -516,6 +601,37 @@ pub fn weather_looks(
                     m.perceptual_roughness = (rough + 0.35 * grime - 0.55 * wet).clamp(0.08, 1.0);
                 }
             }
+        }
+    }
+}
+
+/// `--gallery <gun>+grime+wet` and `scopeview:<scope>+fog` (dev): the
+/// things shown as filthy, soaked or fogged, held so.
+pub fn gallery_weather(
+    opts: Res<crate::launch::LaunchOptions>,
+    mut things: Query<(&mut Weathering, Option<&mut Gun>)>,
+) {
+    let Some(spec) = opts.gallery.as_deref() else {
+        return;
+    };
+    let first = spec.split(',').next().unwrap_or("");
+    let (grime, wet, fog) = (
+        first.contains("+grime"),
+        first.contains("+wet"),
+        first.contains("+fog"),
+    );
+    if !(grime || wet || fog) {
+        return;
+    }
+    for (mut w, gun) in &mut things {
+        if wet {
+            w.wet = 1.0;
+        }
+        if fog {
+            w.fog = 1.0;
+        }
+        if let (true, Some(mut g)) = (grime, gun) {
+            g.firearm.grime = 1.0;
         }
     }
 }
@@ -787,5 +903,203 @@ mod tests {
         };
         assert!(stung(0.9), "deep cold stings");
         assert!(!stung(0.1), "a warm gun doesn't");
+    }
+    /// The stiff action's gauge: how long a full stroke of a 10 cm bolt
+    /// takes at a pull speed, warm and cold; a timid pull doesn't move a
+    /// cold one at all.
+    #[test]
+    fn stiff_strokes_take_longer_and_timid_ones_stall() {
+        use crate::weapons::{FIRM_PULL, drag};
+        let stroke = |stiff: f32, pull: f32| -> Option<f32> {
+            let (mut t, mut at) = (0.0, 0.0);
+            let dt = 1.0 / 90.0;
+            while at < 1.0 {
+                // The hand runs ahead at `pull`; the bolt follows as it can.
+                let want = ((t + dt) * pull / 0.1f32).min(1.0);
+                let next = drag(at, want, stiff, pull, dt, 0.1);
+                if next <= at && want > at {
+                    return None;
+                }
+                at = next;
+                t += dt;
+                if t > 5.0 {
+                    return None;
+                }
+            }
+            Some(t)
+        };
+        let warm = stroke(0.0, 2.0).unwrap();
+        let cold = stroke(1.0, 2.0).unwrap();
+        println!("10 cm stroke at 2 m/s: warm {warm:.2} s, cold {cold:.2} s");
+        assert!(cold > 1.5 * warm, "{cold} vs {warm}");
+        assert!(
+            stroke(1.0, FIRM_PULL * 0.5).is_none(),
+            "a timid pull stalls"
+        );
+        assert!(
+            stroke(0.0, FIRM_PULL * 0.5).is_some(),
+            "warm, any pull will do"
+        );
+    }
+
+    /// A cold-soaked Mosin's bolt: a timid pull slides on the handle; a
+    /// firm one moves it, but brought back short and home again it's
+    /// short-stroked and the trigger's dead; worked fully, it's right. A
+    /// warm one does the same short stroke without complaint.
+    #[test]
+    fn a_cold_bolt_drags_and_short_strokes_unless_worked_fully() {
+        use crate::weapons::feel::vr_tests::{Range, glide_side, gun_mut, hold};
+        use extraction_core::firearm::Malfunction;
+        let setup = |cold: f32| -> (Range, Vec3, Vec3, Vec3, f32) {
+            let mut r = hold("mosin", false, false);
+            set(&mut r.vr, r.gun, |w| w.cold = cold);
+            r.vr.step(3);
+            let handle = r.vr.point(r.gun, |p| *p == GripRole::Handle(0));
+            let (up, back) = {
+                let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+                (gt.up().as_vec3(), gt.back().as_vec3())
+            };
+            let travel = gun_mut(&mut r).layout.handle.as_ref().unwrap().travel;
+            r.vr.hand(Side::Left, handle, Quat::IDENTITY, 0.0, 0.0);
+            r.vr.step(30);
+            r.vr.trigger(Side::Left, 1.0);
+            r.vr.step(2);
+            assert!(r.vr.hand_state(Side::Left).handle.is_some(), "on the bolt");
+            let lifted = handle + up * 0.045;
+            glide_side(&mut r, Side::Left, handle, lifted, 15);
+            assert!(gun_mut(&mut r).firearm.handle_lift > 0.9, "lifted");
+            (r, lifted, back, up, travel)
+        };
+        let bolt = |r: &mut Range| gun_mut(r).firearm.bolt_travel;
+
+        let (mut r, lifted, back, _, travel) = setup(1.0);
+        assert!(gun_mut(&mut r).firearm.stiff > 0.9, "stiff");
+        // Timid: half the stroke over two seconds.
+        glide_side(
+            &mut r,
+            Side::Left,
+            lifted,
+            lifted + back * travel * 0.5,
+            180,
+        );
+        assert!(bolt(&mut r) < 0.1, "a timid pull slides: {}", bolt(&mut r));
+        // Firm but short: back a little way, and home again.
+        let from = r.vr.hand_state(Side::Left).world.translation;
+        glide_side(&mut r, Side::Left, from, from + back * travel * 0.6, 5);
+        r.vr.step(3);
+        let mid = bolt(&mut r);
+        assert!((0.1..0.95).contains(&mid), "partway: {mid}");
+        let at = r.vr.hand_state(Side::Left).world.translation;
+        glide_side(&mut r, Side::Left, at, at - back * travel * 0.8, 5);
+        r.vr.step(3);
+        assert_eq!(
+            gun_mut(&mut r).firearm.malfunction,
+            Some(Malfunction::ShortStroke),
+            "short-stroked"
+        );
+        // All the way, firmly: right again.
+        let at = r.vr.hand_state(Side::Left).world.translation;
+        glide_side(&mut r, Side::Left, at, at + back * travel * 1.6, 15);
+        r.vr.step(5);
+        assert!(bolt(&mut r) > 0.97, "all the way: {}", bolt(&mut r));
+        assert_eq!(gun_mut(&mut r).firearm.malfunction, None, "worked fully");
+
+        // Warm: the same short stroke is just a short stroke.
+        let (mut r, lifted, back, _, travel) = setup(0.0);
+        glide_side(&mut r, Side::Left, lifted, lifted + back * travel * 0.5, 5);
+        r.vr.step(3);
+        let at = r.vr.hand_state(Side::Left).world.translation;
+        glide_side(&mut r, Side::Left, at, at - back * travel * 0.6, 5);
+        r.vr.step(3);
+        assert_eq!(gun_mut(&mut r).firearm.malfunction, None, "warm");
+    }
+
+    /// A hang-fire in the hand: the round goes off a moment after the
+    /// click, wherever the muzzle has turned to by then; opened on before
+    /// it goes, it bursts out of battery into the hand.
+    #[test]
+    fn a_hang_fire_goes_where_the_muzzle_is_then_or_into_the_hand() {
+        use crate::weapons::ballistics::{Hit, Shot};
+        use crate::weapons::feel::vr_tests::{gun_mut, hold};
+        use extraction_core::firearm::{Hang, Round};
+        let hang = |r: &mut crate::weapons::feel::vr_tests::Range| {
+            let mut g = gun_mut(r);
+            let f = &mut g.firearm;
+            f.chambers[0] = Some(Round::Live);
+            f.hang = Some(Hang {
+                left: 0.5,
+                barrel: 0,
+                chamber: 0,
+                load: Load::Damp,
+            });
+        };
+        let mut r = hold("mosin", false, false);
+        r.vr.step(10);
+        hang(&mut r);
+        // Turned 30 degrees left before it goes.
+        let grip = r.vr.hand_state(Side::Right).world;
+        let turn = Quat::from_rotation_y(0.52);
+        r.vr.hand(
+            Side::Right,
+            grip.translation,
+            turn * grip.rotation,
+            1.0,
+            0.0,
+        );
+        let mut shots =
+            r.vr.app
+                .world()
+                .resource::<Messages<Shot>>()
+                .get_cursor_current();
+        let mut shot = None;
+        let mut ticks = 0;
+        for _ in 0..90 {
+            r.vr.step(1);
+            ticks += 1;
+            if let Some(s) = shots
+                .read(r.vr.app.world().resource::<Messages<Shot>>())
+                .next()
+            {
+                shot = Some(s.direction);
+                break;
+            }
+        }
+        let shot = shot.expect("it went off");
+        assert!(ticks as f32 / 90.0 >= 0.4, "late: {ticks} ticks");
+        let bore =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(r.gun)
+                .unwrap()
+                .rotation()
+                * Vec3::NEG_Z;
+        assert!(
+            shot.angle_between(bore) < 0.1,
+            "along the bore as it is then"
+        );
+        assert!(
+            shot.angle_between(grip.rotation * Vec3::NEG_Z) > 0.3,
+            "not where it pointed at the click"
+        );
+
+        // Hanging, the bolt lifted: out of battery, into the hand.
+        let mut r = hold("mosin", false, false);
+        r.vr.step(10);
+        hang(&mut r);
+        let mut hurt =
+            r.vr.app
+                .world()
+                .resource::<Messages<Hit>>()
+                .get_cursor_current();
+        gun_mut(&mut r).firearm.set_handle_lift(1.0);
+        let mut harmed = false;
+        for _ in 0..5 {
+            r.vr.step(1);
+            harmed |= hurt
+                .read(r.vr.app.world().resource::<Messages<Hit>>())
+                .any(|h| h.damage > 0.0 && h.shooter.is_none());
+        }
+        assert!(harmed, "the hand hurt");
+        assert!(gun_mut(&mut r).firearm.condition < 1.0, "the gun hurt");
     }
 }

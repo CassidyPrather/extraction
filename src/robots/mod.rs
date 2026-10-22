@@ -16,6 +16,7 @@ pub mod collector;
 pub mod damage;
 pub mod director;
 pub mod dirigible;
+pub mod disturbed;
 pub mod doors;
 pub mod drone;
 pub mod flee;
@@ -28,6 +29,7 @@ pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
+pub mod memory;
 pub mod mender;
 pub mod mender_look;
 #[cfg(test)]
@@ -38,6 +40,7 @@ pub mod plough;
 pub mod plough_look;
 pub mod pylon;
 pub mod reel;
+pub mod salvage;
 pub mod search;
 pub mod senses;
 pub mod sentry;
@@ -261,6 +264,8 @@ impl Plugin for RobotsPlugin {
                 sorter_mind::SorterMindPlugin,
                 tracks::TracksPlugin,
                 signs::SignsPlugin,
+                disturbed::DisturbedPlugin,
+                memory::MemoryPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
@@ -275,6 +280,7 @@ impl Plugin for RobotsPlugin {
                     anim::AnimPlugin,
                     flight::FlightPlugin,
                     wreck::WreckPlugin,
+                    salvage::SalvagePlugin,
                     armour::ArmourPlugin,
                     hound::HoundPlugin,
                     sorter::SorterPlugin,
@@ -568,7 +574,14 @@ pub fn part_bundle(
         collider,
         CollisionLayers::new(
             Layer::Robot,
-            [Layer::World, Layer::Item, Layer::Robot, Layer::Player],
+            // (Hand: a palm stops on a robot, or shoves it: `interact::fight`.)
+            [
+                Layer::World,
+                Layer::Item,
+                Layer::Robot,
+                Layer::Player,
+                Layer::Hand,
+            ],
         ),
         at,
         Visibility::default(),

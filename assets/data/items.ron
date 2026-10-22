@@ -813,6 +813,12 @@
             tags: ["steel"],
         ),
         (
+            id: "spanner", dims: Some((0.04, 0.015, 0.3)), name: "Spanner",
+            description: "A ring spanner. Head on the bolt, swing the handle round it: a turn or two and it's out. A robot's servo packs are bolted on.",
+            category: Tool, size: Small, mass: 0.5, bulk: 0.3,
+            tags: ["steel"],
+        ),
+        (
             id: "fuel_can", dims: Some((0.17, 0.35, 0.3)), name: "Fuel can",
             description: "Ten litres of diesel. The truck will take you places for this.",
             category: Tool, size: Large, mass: 9.5, bulk: 12.0,
@@ -883,6 +889,12 @@
             description: "You can carry it. You can even pull the trigger, with both hands and a prayer.",
             category: RobotPart, size: Bulky, mass: 7.5, bulk: 10.0,
             tags: ["metal", "electronics"],
+        ),
+        (
+            id: "robot_plate", dims: Some((0.3, 0.03, 0.28)), name: "Robot armour plate",
+            description: "Pried off a wreck's hull. Hardened steel, still scorched where it was hit.",
+            category: RobotPart, size: Medium, mass: 2.0, bulk: 1.5,
+            tags: ["metal"],
         ),
         // One part per class, dropped by a robot's part still alive when it
         // dies (robots/wreck.rs).
@@ -1067,6 +1079,20 @@
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",
             description: "A survey recorder in a grey-green case, stencilled QA-SURVEY 07. Its counter stopped on a Surge night. The driver wants what's on it.",
             category: Curio, size: Small, mass: 1.1, bulk: 0.6, tags: ["metal", "electronics"],
+        ),
+        // Old surplus lots (`Load::Surplus`): tired primers that misfire and
+        // hang-fire now and then. Restored at the bench they're good again.
+        (
+            id: "ammo_762r_surplus", dims: Some((0.045, 0.03, 0.09)), name: "7.62x54R surplus rounds (box)",
+            description: "Wartime ball in a tarred paper wrap, the brass gone brown. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.24, bulk: 0.15, cartridge: Some("7.62x54R"), rounds: 10, load: Surplus,
+            tags: ["brass", "powder"],
+        ),
+        (
+            id: "ammo_545_surplus", dims: Some((0.05, 0.035, 0.1)), name: "5.45x39 surplus rounds (box)",
+            description: "A crate-opened lot, the lacquer flaking. Most still go off. Some click. Some take their time: keep the muzzle where it was.",
+            category: Ammo, size: Small, mass: 0.32, bulk: 0.2, cartridge: Some("5.45x39"), rounds: 30, load: Surplus,
+            tags: ["brass", "powder"],
         ),
     ],
 )

@@ -3213,12 +3213,12 @@ mod tools {
     /// The longest the torque on the block has stayed at 100 N·m or more
     /// (seconds), as Destruction counts it toward giving.
     #[derive(Resource, Default)]
-    struct Strain {
+    pub(super) struct Strain {
         run: f32,
-        longest: f32,
+        pub(super) longest: f32,
     }
 
-    fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
+    pub(super) fn strain(mut r: MessageReader<Pried>, mut s: ResMut<Strain>, time: Res<Time>) {
         let hard = r.read().any(|p| p.torque >= 100.0);
         s.run = if hard { s.run + time.delta_secs() } else { 0.0 };
         s.longest = s.longest.max(s.run);
@@ -3228,7 +3228,7 @@ mod tools {
     /// with the bar leaning back toward `back` (level, toward you), then
     /// levered round the claw with the hands at `out` and `steady` metres up
     /// the bar from it, 0.45 rad, and held there.
-    fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
+    pub(super) fn work_bar(vr: &mut Vr, feet: Vec3, seam: Vec3, back: Vec3, out: f32, steady: f32) {
         let bar = vr.spawn(
             "crowbar",
             Transform::from_translation(
@@ -4516,6 +4516,73 @@ mod carry {
         );
     }
 
+    /// A shot deer (its carcass as `wildlife::bodies` makes one: a 50 kg
+    /// body lying on its side, settled) taken by a hind leg and drawn
+    /// back: it comes, slowly, along the ground, heard as a body dragged.
+    #[test]
+    fn a_deer_is_dragged_by_its_leg() {
+        use crate::interact::carry::{Bulky, Draggable, drag_speed};
+        use crate::wildlife::bodies::{Carcass, CarcassKind};
+        let (mut vr, feet, _) = with_a_door();
+        let (size, mass) = CarcassKind::Deer.body().unwrap();
+        let lies = feet + Vec3::new(-1.0, size.y * 0.5 + 0.02, -1.4);
+        let deer = vr
+            .app
+            .world_mut()
+            .spawn((
+                Name::new("Carcass"),
+                Carcass {
+                    kind: CarcassKind::Deer,
+                    at: lies,
+                    owner: Entity::PLACEHOLDER,
+                    index: 0,
+                },
+                Transform::from_translation(lies),
+                RigidBody::Dynamic,
+                Collider::cuboid(size.x, size.y, size.z),
+                Mass(mass),
+                LockedAxes::new().lock_rotation_x().lock_rotation_z(),
+                CollisionLayers::new(crate::world::Layer::Item, [crate::world::Layer::World]),
+                crate::interact::Grabbable {
+                    points: vec![crate::interact::GrabPoint::free()],
+                },
+                Bulky,
+                Draggable,
+                crate::robots::wreck::Settling::default(),
+            ))
+            .id();
+        vr.step(240);
+        // Its hind end is the nearer: a leg there.
+        let leg = lies + Vec3::new(0.0, 0.05, size.z * 0.45);
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(deer), "by the leg");
+        let start = at(&vr, deer);
+        let mut fastest = 0.0f32;
+        let back = feet + Vec3::new(-0.6, 0.7, 0.2);
+        for i in 0..150 {
+            vr.move_hand(Side::Right, leg.lerp(back, i as f32 / 150.0));
+            vr.step(1);
+            let v = vr.app.world().get::<LinearVelocity>(deer).unwrap().0;
+            fastest = fastest.max(Vec2::new(v.x, v.z).length());
+        }
+        vr.step(120);
+        let now = at(&vr, deer);
+        assert!(now.distance(start) > 0.5, "it came: {start} to {now}");
+        assert!(now.y - feet.y < 0.6, "along the ground: {now}");
+        assert!(fastest <= drag_speed(mass) + 0.15, "slowly: {fastest}");
+        let heard = vr.app.world().resource::<Heard>();
+        assert!(
+            heard
+                .dragged
+                .iter()
+                .any(|d| d.item == deer && d.stuff == crate::interact::touch::Stuff::Skin),
+            "heard as a body"
+        );
+    }
+
     /// Let go of a car door swung hard forward and it's a shove: it leaves
     /// slow, where a magazine thrown the same way flies.
     #[test]
@@ -4718,7 +4785,7 @@ mod vault {
             let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             grip_and_pull(&mut vr, feet.y + 2.0, 0.8, 16)
         };
-        let mut kg = 0.0;
+        let kg: f32;
         let heavy = {
             let (mut vr, feet, _) = facing_a_wall(2.0, 0.2);
             // Two heavy cells and a fuel can in the pack.
@@ -4765,5 +4832,860 @@ mod vault {
         // (What the pack actually weighs, not a round number.)
         let most = 4.0 * pull_rate(kg) + 0.05;
         assert!(heavy <= most, "laden, slow: {heavy} (at most {most})");
+    }
+}
+
+/// Hand to hand (`interact::fight`): the crowbar strikes, an open palm
+/// shoves, and a hand stops on a robot.
+#[cfg(test)]
+mod fight {
+    use super::*;
+    use crate::robots::{PartRole, RobotPart};
+    use crate::world::Layer;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn open() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.step(4);
+        (vr, feet)
+    }
+
+    /// A robot's part of `role` standing as a box at `at` (its robot an
+    /// empty stand-in).
+    fn part(vr: &mut Vr, role: PartRole, at: Vec3) -> Entity {
+        let robot = vr.app.world_mut().spawn_empty().id();
+        let e = vr
+            .app
+            .world_mut()
+            .spawn((
+                RobotPart {
+                    robot,
+                    role,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::from_translation(at),
+                RigidBody::Static,
+                Collider::cuboid(0.25, 0.25, 0.25),
+                CollisionLayers::new(Layer::Robot, LayerMask::ALL),
+            ))
+            .id();
+        vr.step(2);
+        e
+    }
+
+    fn hp(vr: &Vr, e: Entity) -> f32 {
+        vr.app.world().get::<RobotPart>(e).unwrap().hp
+    }
+
+    /// The right hand on a crowbar's grip, the bar held still; its claw's
+    /// place and which way it points (from the hand).
+    fn with_a_bar(vr: &mut Vr, feet: Vec3) -> (Entity, Vec3, Vec3) {
+        let at = feet + Vec3::new(0.3, 1.1, -0.5);
+        let bar = vr.spawn("crowbar", Transform::from_translation(at));
+        vr.app.world_mut().entity_mut(bar).insert(RigidBody::Static);
+        let grip = vr.point(bar, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(bar)
+            .insert(RigidBody::Dynamic);
+        vr.step(20);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(bar));
+        let claw = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(bar)
+            .unwrap()
+            .transform_point(crate::interact::tools::crowbar::CLAW);
+        let hand = vr.hand_state(Side::Right).world.translation;
+        (bar, claw, (claw - hand).normalize())
+    }
+
+    /// The hand drives the bar claw-first along `dir` at `speed` m/s for
+    /// `metres`, then draws it back slowly.
+    fn drive(vr: &mut Vr, dir: Vec3, speed: f32, metres: f32) {
+        let from = vr.hand_state(Side::Right).world.translation;
+        let per = speed / 64.0;
+        let steps = (metres / per).ceil() as usize;
+        for i in 1..=steps {
+            vr.move_hand(Side::Right, from + dir * per * i as f32);
+            vr.step(1);
+        }
+        let end = from + dir * per * steps as f32;
+        for i in 1..=40 {
+            vr.move_hand(Side::Right, end.lerp(from, i as f32 / 40.0));
+            vr.step(1);
+        }
+        vr.step(10);
+    }
+
+    /// A crowbar tapped against a robot's eye does nothing; swung into it
+    /// hard, it hurts, as a blunt blow.
+    #[test]
+    fn a_crowbar_swung_hard_hurts_a_tap_doesnt() {
+        let (mut vr, feet) = open();
+        let (_, claw, dir) = with_a_bar(&mut vr, feet);
+        let eye = part(&mut vr, PartRole::Sensor, claw + dir * 0.3);
+        drive(&mut vr, dir, 1.0, 0.35);
+        assert_eq!(hp(&vr, eye), 100.0, "a tap");
+        drive(&mut vr, dir, 7.0, 0.4);
+        assert!(hp(&vr, eye) < 70.0, "a swing: {}", hp(&vr, eye));
+    }
+
+    /// A small drone (a 6 kg flying body with a part on it) shoved by an
+    /// open palm at 3 m/s goes back; a hand laid on it slowly hardly
+    /// moves it.
+    #[test]
+    fn an_open_palm_shoves_a_drone_back() {
+        let push = |speed: f32| {
+            let (mut vr, feet) = open();
+            let at = feet + Vec3::new(0.25, 1.3, -0.65);
+            let drone = vr
+                .app
+                .world_mut()
+                .spawn((
+                    RigidBody::Dynamic,
+                    Mass(6.0),
+                    NoAutoMass,
+                    GravityScale(0.0),
+                    Transform::from_translation(at),
+                ))
+                .id();
+            vr.app.world_mut().spawn((
+                RobotPart {
+                    robot: drone,
+                    role: PartRole::Core,
+                    hp: 100.0,
+                    max_hp: 100.0,
+                },
+                Transform::IDENTITY,
+                Collider::sphere(0.2),
+                CollisionLayers::new(
+                    Layer::Robot,
+                    [
+                        Layer::World,
+                        Layer::Item,
+                        Layer::Robot,
+                        Layer::Player,
+                        Layer::Hand,
+                    ],
+                ),
+                ChildOf(drone),
+            ));
+            let from = feet + Vec3::new(0.25, 1.3, -0.2);
+            vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+            vr.step(20);
+            let per = speed / 64.0;
+            for i in 1..=30 {
+                vr.move_hand(Side::Right, from + Vec3::NEG_Z * per * i as f32);
+                vr.step(1);
+            }
+            vr.step(10);
+            -vr.app.world().get::<LinearVelocity>(drone).unwrap().0.z
+        };
+        let gentle = push(0.4);
+        let shove = push(3.0);
+        assert!(shove > 1.5, "shoved back: {shove} m/s");
+        assert!(gentle < shove * 0.3, "laid on, hardly: {gentle} m/s");
+    }
+
+    /// A drone held by its frame stays in the hand: it tries to fly off
+    /// (pushed away every tick), but gripped it's pulled back; moved, it
+    /// comes with the hand; let go, it's off.
+    #[test]
+    fn a_drone_held_by_its_frame_stays_in_the_hand() {
+        #[derive(Component)]
+        struct Flees;
+        let (mut vr, feet) = open();
+        vr.app.add_systems(
+            FixedUpdate,
+            |mut q: Query<&mut LinearVelocity, With<Flees>>| {
+                for mut v in &mut q {
+                    v.0 += Vec3::X * 0.12;
+                }
+            },
+        );
+        let at = feet + Vec3::new(0.25, 1.3, -0.6);
+        let drone = vr
+            .app
+            .world_mut()
+            .spawn((
+                RigidBody::Dynamic,
+                Mass(6.0),
+                NoAutoMass,
+                GravityScale(0.0),
+                // It holds station as a hovering drone does (and flees
+                // against it).
+                LinearDamping(6.0),
+                Transform::from_translation(at),
+            ))
+            .id();
+        vr.app.world_mut().spawn((
+            RobotPart {
+                robot: drone,
+                role: PartRole::Core,
+                hp: 100.0,
+                max_hp: 100.0,
+            },
+            Transform::IDENTITY,
+            Collider::sphere(0.18),
+            CollisionLayers::new(
+                Layer::Robot,
+                [
+                    Layer::World,
+                    Layer::Item,
+                    Layer::Robot,
+                    Layer::Player,
+                    Layer::Hand,
+                ],
+            ),
+            ChildOf(drone),
+        ));
+        vr.step(4);
+        // The hand reaches in to its frame (its near side), slowly, and
+        // closes.
+        let from = at + Vec3::new(0.0, 0.0, 0.45);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(10);
+        // (It hovers, holding station, while the hand reaches it: static
+        // until it's taken, as a test stands in for its rotors.)
+        vr.app
+            .world_mut()
+            .entity_mut(drone)
+            .insert(RigidBody::Static);
+        let hand = at + Vec3::new(0.0, 0.0, 0.15);
+        for i in 1..=60 {
+            vr.move_hand(Side::Right, from.lerp(hand, i as f32 / 60.0));
+            vr.step(1);
+        }
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(drone)
+            .insert(RigidBody::Dynamic);
+        vr.step(1);
+        let took = at_of(&vr, drone);
+        let gripping = vr
+            .app
+            .world_mut()
+            .query::<(&crate::rig::RigHand, &crate::interact::fight::RobotGrip)>()
+            .iter(vr.app.world())
+            .any(|(h, g)| h.side == Side::Right && g.robot == drone);
+        assert!(gripping, "the hand has hold of it");
+        vr.app.world_mut().entity_mut(drone).insert(Flees);
+        vr.step(64);
+        // Held: what was taken (0.15 from its middle) still in the hand,
+        // however it's swung round it.
+        let held = at_of(&vr, drone);
+        let in_hand = vr.hand_state(Side::Right).world.translation;
+        assert!(
+            held.distance(in_hand) < 0.2,
+            "held in the hand: {held} (hand {in_hand}, taken at {took})"
+        );
+        // Moved, it comes.
+        for i in 1..=30 {
+            vr.move_hand(Side::Right, hand + Vec3::NEG_X * 0.4 * i as f32 / 30.0);
+            vr.step(1);
+        }
+        vr.step(10);
+        let moved = at_of(&vr, drone);
+        assert!(moved.x < took.x - 0.25, "it came with the hand: {moved}");
+        // Let go: off it goes.
+        vr.grip(Side::Right, 0.0);
+        vr.step(64);
+        let free = at_of(&vr, drone);
+        assert!(free.x > moved.x + 0.5, "let go, it's off: {free}");
+    }
+
+    fn at_of(vr: &Vr, e: Entity) -> Vec3 {
+        vr.app.world().get::<Position>(e).unwrap().0
+    }
+
+    /// A crawler's leg gripped and yanked: the machine's wrenched and
+    /// dazed, and its mind is told it's held.
+    #[test]
+    fn a_crawlers_leg_wrenched() {
+        #[derive(Resource, Default)]
+        struct Held(usize);
+        let (mut vr, feet) = open();
+        vr.app.init_resource::<Held>().add_systems(
+            FixedPostUpdate,
+            |mut g: MessageReader<crate::interact::fight::Gripped>, mut h: ResMut<Held>| {
+                h.0 += g.read().count();
+            },
+        );
+        let at = feet + Vec3::new(0.0, 0.0, -1.0);
+        let crawler = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut commands = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker_sized(
+                &mut commands,
+                &zone,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Watch,
+                    site: at,
+                    duration: f32::INFINITY,
+                    exit: at,
+                },
+                false,
+                crate::robots::indoor::CRAWLER_HP,
+                crate::robots::indoor::CRAWLER_SIZE,
+                Some(at.y),
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        let leg = {
+            let mut q = vr.app.world_mut().query::<(&RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(p, _)| p.robot == crawler && matches!(p.role, PartRole::Leg(_)))
+                .map(|(_, g)| g.translation())
+                .next()
+                .expect("a leg")
+        };
+        vr.hand(Side::Right, leg, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        // Yanked back and up, hard.
+        for i in 1..=6 {
+            vr.move_hand(Side::Right, leg + Vec3::new(0.0, 0.03, 0.04) * i as f32);
+            vr.step(1);
+        }
+        vr.step(2);
+        let gait = vr
+            .app
+            .world()
+            .get::<crate::robots::anim::Gait>(crawler)
+            .unwrap();
+        assert!(
+            gait.down() || gait.dazed > 0.2,
+            "wrenched: dazed {}",
+            gait.dazed
+        );
+        assert!(
+            vr.app.world().resource::<Held>().0 > 0,
+            "its mind knows it's held"
+        );
+    }
+
+    /// A crawler (a small walker) shoved hard by an open palm goes down.
+    #[test]
+    fn a_shove_floors_a_crawler() {
+        let (mut vr, feet) = open();
+        let at = feet + Vec3::new(0.0, 0.0, -1.0);
+        let crawler = {
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let mut commands = vr.app.world_mut().commands();
+            let e = crate::robots::walker::spawn_walker_sized(
+                &mut commands,
+                &zone,
+                at,
+                crate::robots::Job {
+                    kind: crate::robots::JobKind::Watch,
+                    site: at,
+                    duration: f32::INFINITY,
+                    exit: at,
+                },
+                false,
+                crate::robots::indoor::CRAWLER_HP,
+                crate::robots::indoor::CRAWLER_SIZE,
+                Some(at.y),
+            );
+            vr.app.world_mut().flush();
+            e
+        };
+        vr.step(30);
+        // Its body's nearest part, at hand height or below.
+        let target = {
+            let mut q = vr.app.world_mut().query::<(&RobotPart, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .filter(|(p, _)| p.robot == crawler)
+                .map(|(_, g)| g.translation())
+                .max_by(|a, b| a.y.total_cmp(&b.y))
+                .unwrap()
+        };
+        let from = target + Vec3::new(0.0, 0.0, 0.45);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(15);
+        for i in 1..=12 {
+            vr.move_hand(Side::Right, from + Vec3::NEG_Z * (3.5 / 64.0) * i as f32);
+            vr.step(1);
+        }
+        vr.step(2);
+        let gait = vr
+            .app
+            .world()
+            .get::<crate::robots::anim::Gait>(crawler)
+            .unwrap();
+        assert!(gait.down(), "on the ground");
+    }
+
+    /// A hand pushed into a robot stops on it: the glove you see stays at
+    /// its face, not inside it, and the hand feels it.
+    #[test]
+    fn a_hand_stops_on_a_robot() {
+        #[derive(Resource, Default)]
+        struct Felt(usize);
+        let (mut vr, feet) = open();
+        vr.app.init_resource::<Felt>().add_systems(
+            Update,
+            |mut h: MessageReader<crate::rig::shapes::HapticShape>, mut f: ResMut<Felt>| {
+                f.0 += h.read().count();
+            },
+        );
+        let box_at = feet + Vec3::new(0.25, 1.3, -0.6);
+        part(&mut vr, PartRole::Core, box_at);
+        let from = feet + Vec3::new(0.25, 1.3, -0.2);
+        vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(20);
+        for i in 1..=30 {
+            vr.move_hand(Side::Right, from.lerp(box_at, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.step(10);
+        let felt = vr.hand_state(Side::Right).felt.expect("a hand body");
+        let face = box_at.z + 0.125;
+        assert!(
+            felt.translation.z > face,
+            "stopped at its face: {} (face {face})",
+            felt.translation.z
+        );
+        assert!(
+            vr.app.world().resource::<Felt>().0 > 0,
+            "and the hand felt it"
+        )
+    }
+}
+
+/// Salvage by hand (`robots::salvage`): a wreck taken apart with the tools
+/// and the hands.
+mod salvage {
+    use super::*;
+    use crate::interact::tools::cutters::{JAWS, LEFT};
+    use crate::interact::tools::spanner::{GRIP as SPANNER_GRIP, HEAD as SPANNER_HEAD, Spanner};
+    use crate::robots::salvage::{Arced, Bolt, Cable, Hold, Live, SalvageSeat};
+    use crate::robots::{Job, JobKind, PartRole, Robot, RobotPart};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    /// Hands thrown off live cells.
+    #[derive(Resource, Default)]
+    struct Arcs(usize);
+
+    fn count_arcs(mut r: MessageReader<Arced>, mut n: ResMut<Arcs>) {
+        n.0 += r.read().count();
+    }
+
+    /// A walker killed 1.2 m in front of you, its gun at `gun` of its
+    /// health; once it has settled and been fitted, held still. The seat
+    /// of each hold, and its item.
+    fn wreck(gun: f32) -> (Vr, Vec3, Entity, Vec<(Entity, SalvageSeat)>) {
+        let mut vr = Vr::new("training_yard");
+        vr.app
+            .init_resource::<Arcs>()
+            .add_systems(Update, count_arcs);
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(feet.x, feet.z - 1.2);
+        let walker = {
+            let mut c = vr.app.world_mut().commands();
+            crate::robots::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at + Vec3::Y,
+                Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            )
+        };
+        vr.app.world_mut().flush();
+        vr.step(30);
+        let mut parts = vr.app.world_mut().query::<&mut RobotPart>();
+        for mut p in parts.iter_mut(vr.app.world_mut()) {
+            if p.robot == walker && p.role == PartRole::Weapon {
+                p.hp = p.max_hp * gun;
+            }
+        }
+        vr.app.world_mut().get_mut::<Robot>(walker).unwrap().wrecked = true;
+        vr.step(90 * 5);
+        // Held still, so the tools don't nudge it off their mark.
+        vr.app
+            .world_mut()
+            .entity_mut(walker)
+            .insert(RigidBody::Static);
+        vr.step(2);
+        let mut q = vr.app.world_mut().query::<(Entity, &SalvageSeat)>();
+        let seats = q
+            .iter(vr.app.world())
+            .filter(|(_, s)| s.wreck == walker)
+            .map(|(e, s)| {
+                (
+                    e,
+                    SalvageSeat {
+                        wreck: s.wreck,
+                        hold: s.hold,
+                        item: s.item,
+                    },
+                )
+            })
+            .collect();
+        (vr, feet, walker, seats)
+    }
+
+    fn item_of(seats: &[(Entity, SalvageSeat)], hold: Hold) -> Entity {
+        seats
+            .iter()
+            .find(|(_, s)| s.hold == hold)
+            .map(|(_, s)| s.item)
+            .expect("a seated part")
+    }
+
+    fn grabbable(vr: &Vr, item: Entity) -> bool {
+        vr.app
+            .world()
+            .get::<crate::interact::Grabbable>(item)
+            .is_some()
+    }
+
+    /// A hand closed on `item` where it lies: does it come away in it?
+    fn take(vr: &mut Vr, side: Side, item: Entity) -> bool {
+        let at = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(item)
+            .unwrap()
+            .translation();
+        // (Seated, it's reached for by its middle: `interact` grabs a
+        // socketed thing there.)
+        vr.hand(side, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(side, 1.0);
+        vr.step(6);
+        vr.hand_state(side).holding == Some(item)
+    }
+
+    /// Bolt cutters in both hands, jaws onto `wire`, squeezed shut.
+    fn cut(vr: &mut Vr, feet: Vec3, wire: Vec3) {
+        let tool = vr.spawn(
+            "bolt_cutters",
+            Transform::from_translation(feet + Vec3::new(0.0, 0.9, -0.3)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let l = vr.point(tool, |r| *r == GripRole::Primary);
+        let r = vr.point(tool, |r| *r == GripRole::Support);
+        vr.hand(Side::Left, l, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        vr.hand(Side::Right, r, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        // (The jaws on the cable itself: a cable isn't a fence to stop
+        // short of.)
+        let reach = LEFT.z - JAWS.z;
+        let at = |s: f32| {
+            let back = wire + Vec3::Z * reach;
+            (back - Vec3::X * s * 0.5, back + Vec3::X * s * 0.5)
+        };
+        let (l1, r1) = at(0.3);
+        for i in 1..=15 {
+            let k = i as f32 / 15.0;
+            vr.move_hand(Side::Left, l.lerp(l1, k));
+            vr.move_hand(Side::Right, r.lerp(r1, k));
+            vr.step(1);
+        }
+        vr.step(8);
+        for i in 1..=12 {
+            let (l2, r2) = at(0.3 - 0.2 * i as f32 / 12.0);
+            vr.move_hand(Side::Left, l2);
+            vr.move_hand(Side::Right, r2);
+            vr.step(1);
+        }
+        vr.step(4);
+        // Put down.
+        vr.grip(Side::Left, 0.0);
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        if let Ok(e) = vr.app.world_mut().get_entity_mut(tool) {
+            e.despawn();
+        }
+        vr.step(2);
+    }
+
+    /// A spanner in the right hand, its head put to `bolt` (the handle
+    /// toward you), then swung `turns` times round it counterclockwise
+    /// (looking down on the bolt's head). Put down after.
+    fn unbolt(vr: &mut Vr, feet: Vec3, bolt: Entity, turns: f32) {
+        let bgt = *vr.app.world().get::<GlobalTransform>(bolt).unwrap();
+        let at = bgt.translation();
+        let axis = (bgt.rotation() * Vec3::Y).normalize();
+        let tool = vr.spawn(
+            "spanner",
+            Transform::from_translation(feet + Vec3::new(0.25, 0.9, -0.2)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Static);
+        let grip = vr.point(tool, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 1.0, 0.0);
+        vr.step(3);
+        vr.app
+            .world_mut()
+            .entity_mut(tool)
+            .insert(RigidBody::Dynamic);
+        // Head to the bolt: held as it was picked up, the head is this far
+        // from the hand.
+        let reach = SPANNER_HEAD - SPANNER_GRIP;
+        let to = at - reach;
+        for i in 1..=20 {
+            vr.move_hand(Side::Right, grip.lerp(to, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(4);
+        assert!(
+            vr.app.world().get::<Spanner>(tool).unwrap().on.is_some(),
+            "the spanner's head went on the bolt"
+        );
+        // Round it, the handle at its length from the bolt.
+        let flat = (to - at) - axis * (to - at).dot(axis);
+        let (r, d0) = (flat.length(), flat.normalize());
+        let side = axis.cross(d0);
+        let n = (90.0 * turns) as usize;
+        for i in 1..=n {
+            if vr.app.world().get_entity(bolt).is_err() {
+                break;
+            }
+            let a = i as f32 / n as f32 * turns * std::f32::consts::TAU;
+            let p = at + (to - at).dot(axis) * axis + (d0 * a.cos() + side * a.sin()) * r;
+            vr.move_hand(Side::Right, p);
+            vr.step(1);
+        }
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+        if let Ok(e) = vr.app.world_mut().get_entity_mut(tool) {
+            e.despawn();
+        }
+        vr.step(2);
+    }
+
+    /// A servo pack at a sound hip is bolted on: a hand can't take it;
+    /// each bolt turned out with a spanner (a turn and a bit; a half turn
+    /// isn't enough), and once all are out it lifts out, as good as the
+    /// leg was.
+    #[test]
+    fn a_servo_pack_lifts_out_once_its_bolts_are_undone() {
+        let (mut vr, feet, wreck, seats) = wreck(1.0);
+        let (seat, servo) = seats
+            .iter()
+            .filter(|(_, s)| s.hold == Hold::Bolts)
+            // The one nearest you.
+            .min_by(|a, b| {
+                let d = |e: Entity| {
+                    vr.app
+                        .world()
+                        .get::<GlobalTransform>(e)
+                        .unwrap()
+                        .translation()
+                        .z
+                };
+                d(b.1.item).total_cmp(&d(a.1.item))
+            })
+            .map(|(e, s)| (*e, s.item))
+            .expect("a servo pack bolted on");
+        let bolts = |vr: &mut Vr| -> Vec<Entity> {
+            let mut q = vr.app.world_mut().query::<(Entity, &Bolt)>();
+            q.iter(vr.app.world())
+                .filter(|(_, b)| b.seat == seat)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        let all = bolts(&mut vr);
+        assert_eq!(all.len(), crate::robots::salvage::BOLTS, "its bolts");
+        // Half a turn on the first: still in.
+        unbolt(&mut vr, feet, all[0], 0.5);
+        assert!(
+            vr.app.world().get_entity(all[0]).is_ok(),
+            "out on half a turn"
+        );
+        for b in &all {
+            unbolt(&mut vr, feet, *b, 1.2);
+        }
+        let left = bolts(&mut vr);
+        assert!(left.is_empty(), "bolts left in: {}", left.len());
+        // (Held still for the hands.)
+        vr.app
+            .world_mut()
+            .entity_mut(wreck)
+            .remove::<crate::robots::wreck::Settling>()
+            .insert(RigidBody::Static);
+        vr.step(3);
+        assert!(grabbable(&vr, servo), "unbolted, it's to be had");
+        let cond = vr
+            .app
+            .world()
+            .get::<crate::items::Item>(servo)
+            .unwrap()
+            .0
+            .condition;
+        assert!(cond > 0.9, "as good as its leg: {cond}");
+        assert!(take(&mut vr, Side::Left, servo), "it didn't lift out");
+    }
+
+    /// An armour plate on a wreck is pried off with a crowbar and comes
+    /// away as a plate to carry off, in the condition it was in when the
+    /// robot died (not as wreckage).
+    #[test]
+    fn a_plate_pried_off_a_wreck_is_a_plate_to_carry() {
+        let (mut vr, feet, wreck, _) = wreck(1.0);
+        vr.app
+            .init_resource::<super::tools::Strain>()
+            .add_systems(FixedUpdate, super::tools::strain);
+        // Its plate nearest you, a bit knocked about.
+        let (plate, at) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &mut RobotPart, &GlobalTransform)>();
+            let (e, mut p, gt) = q
+                .iter_mut(vr.app.world_mut())
+                .filter(|(_, p, _)| p.robot == wreck && matches!(p.role, PartRole::Armour(_)))
+                .max_by(|a, b| a.2.translation().z.total_cmp(&b.2.translation().z))
+                .expect("a plate on it");
+            p.hp = p.max_hp * 0.7;
+            (e, gt.translation())
+        };
+        // (Its condition was taken when it died: knocked about since, it's
+        // as good as it was then.)
+        let then = vr
+            .app
+            .world()
+            .get::<crate::robots::salvage::HealthAtDeath>(plate)
+            .expect("its health at death")
+            .0;
+        let back = (feet - at).with_y(0.0).normalize();
+        super::tools::work_bar(&mut vr, feet, at + back * 0.02, back, 0.67, 0.4);
+        vr.step(20);
+        assert!(vr.app.world().get_entity(plate).is_err(), "the plate held");
+        vr.grip(Side::Right, 0.0);
+        vr.grip(Side::Left, 0.0);
+        vr.step(20);
+        let catalog = vr.app.world().resource::<Catalog>().clone();
+        let item = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &crate::items::Item, &GlobalTransform)>();
+            q.iter(vr.app.world())
+                .find(|(_, i, g)| {
+                    catalog.get(i.0.kind).id == "robot_plate" && g.translation().distance(at) < 2.0
+                })
+                .map(|(e, i, _)| (e, i.0.condition))
+        };
+        let (item, cond) = item.expect("a plate to carry off, not wreckage");
+        assert!((cond - then).abs() < 0.01, "as it was: {cond} vs {then}");
+        assert!(
+            take(&mut vr, Side::Left, item),
+            "it didn't come up in the hand"
+        );
+    }
+
+    /// A walker's gun pod hangs on its cables: a hand can't take it until
+    /// both are cut, then it can; its condition is the gun's health.
+    #[test]
+    fn a_gun_pod_comes_away_once_its_cables_are_cut() {
+        let (mut vr, feet, wreck, seats) = wreck(0.6);
+        let (seat, pod) = seats
+            .iter()
+            .find(|(_, s)| s.hold == Hold::Cables)
+            .map(|(e, s)| (*e, s.item))
+            .expect("the gun pod seated on its cables");
+        let cond = vr
+            .app
+            .world()
+            .get::<crate::items::Item>(pod)
+            .unwrap()
+            .0
+            .condition;
+        assert!((cond - 0.6).abs() < 0.01, "as good as the gun was: {cond}");
+        assert!(!take(&mut vr, Side::Left, pod), "it came off on its cables");
+        vr.grip(Side::Left, 0.0);
+        vr.step(4);
+        // (The hand took the wreck instead, to drag it: let go, it's loose
+        // to settle again. Held still for the cutters.)
+        vr.app
+            .world_mut()
+            .entity_mut(wreck)
+            .remove::<crate::robots::wreck::Settling>()
+            .insert(RigidBody::Static);
+        vr.step(2);
+        let wires: Vec<Entity> = {
+            let mut q = vr.app.world_mut().query::<(Entity, &Cable)>();
+            q.iter(vr.app.world())
+                .filter(|(_, c)| c.seat == seat)
+                .map(|(e, _)| e)
+                .collect()
+        };
+        assert_eq!(wires.len(), 2, "two cables");
+        for w in wires {
+            // (Where it is now: the wreck may have been nudged.)
+            let at = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(w)
+                .unwrap()
+                .translation();
+            cut(&mut vr, feet, at);
+        }
+        let left = {
+            let mut q = vr.app.world_mut().query::<&Cable>();
+            q.iter(vr.app.world()).filter(|c| c.seat == seat).count()
+        };
+        assert_eq!(left, 0, "both cut");
+        vr.step(2);
+        assert!(grabbable(&vr, pod), "cut free, it's to be had");
+        assert!(take(&mut vr, Side::Left, pod), "the pod didn't come away");
+    }
+
+    /// A fresh wreck's cell is live: a hand closing on it is thrown off by
+    /// an arc. Cooled, it lifts out.
+    #[test]
+    fn a_live_cell_arcs_until_it_cools_then_lifts_out() {
+        let (mut vr, _, _, seats) = wreck(1.0);
+        let cell = item_of(&seats, Hold::Live);
+        assert!(vr.app.world().get::<Live>(cell).is_some(), "fresh: live");
+        assert!(!take(&mut vr, Side::Right, cell), "a live cell came out");
+        assert!(vr.app.world().resource::<Arcs>().0 > 0, "and no arc");
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        vr.app.world_mut().get_mut::<Live>(cell).unwrap().left = 0.0;
+        vr.step(3);
+        assert!(take(&mut vr, Side::Right, cell), "a cold cell stuck");
     }
 }

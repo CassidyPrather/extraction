@@ -142,7 +142,12 @@ What changed, and worth a comment each:
   hand. Let go with both hands and you fall. To get up onto a wall, a
   ledge or a window sill (waist to head high), press both open palms on
   its top and pull down: one pull and you're over. Through a window you
-  end up inside. If climbing makes you queasy, the **CLIMBING** card on
+  end up inside. Or grip the edge: close your hands on a wall's top (even
+  one above your head: reach up and pull yourself up), a fence's top
+  rail or the truck's tailgate, and pull; over a fence or a thin wall you
+  come down the other side. The more you carry, the slower you pull
+  yourself up; with a full pack it's hard work. The quarantine
+  perimeter fence can't be climbed, nor the machines. If climbing makes you queasy, the **CLIMBING** card on
   the comfort board takes you straight to the top instead, with a quick
   blink rather than a jump. Mark it if you ever rise when you only meant
   to lean on a table.
@@ -408,6 +413,22 @@ said you don't use?
     does the sling catch it?
   - Walk through a doorway with it raised: do the knocks feel and sound
     right, and never too often?
+- Weather.
+  - On Rime Fell, leave the Mosin outside for a few minutes, then pick it
+    up: does it bite your hand, and is the bolt frozen until you slap it?
+  - Bring the PSO in from the cold to the hut or the truck: does the
+    fog, and wiping it with your glove, read?
+  - In a Sallow downpour or Cinder's ash, does a dirty gun look it and
+    jam more?
+  - Does wiping the receiver with your glove feel like enough of a cure?
+- Cold actions and old rounds.
+  - On Rime Fell, work a cold Mosin's bolt or the MP-133's pump: does it
+    drag? Does a gentle pull slide off it, and does a short stroke you
+    then have to finish read as your own doing?
+  - Load surplus or rain-soaked rounds and fire: when one clicks, do you
+    keep the muzzle downrange for the second it takes? What happens if
+    you open the bolt on it?
+  - Is "re-pack the box at the bench" a cure you'd think of?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

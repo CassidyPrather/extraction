@@ -411,6 +411,10 @@ pub fn reflectors(placements: &[(String, Transform)]) -> Vec<Reflector> {
                 "dam_face_end" => (25.0, 22.0, 1.0, 1.5),
                 "dam_back" => (245.0, 21.0, -1.0, -1.5),
                 "dam_back_end" => (35.0, 21.0, -1.0, -1.5),
+                // Rime Fell's mill (`world::fell`): its front faces down
+                // the slope (local -Z), the lowest bay's wall with the next
+                // one's front over its roof, 20 m wide, about 9 m up.
+                "ore_mill" => (20.0, 9.0, -1.0, -20.0),
                 _ => return None,
             };
             let normal = xf.rotation * Vec3::Z * facing;
@@ -483,6 +487,24 @@ mod tests {
         // Right at it: the echo fuses with the shot.
         let near = Vec3::new(0.0, 32.0, 6.0);
         assert!(slapback(&wall, near, near).is_none());
+    }
+    /// The mill as Rime Fell places it (turned to face south, its front
+    /// at z = 40): a shot 50 m down the slope in front of it comes back
+    /// 0.29 s later; from beside it, past its end, it doesn't.
+    #[test]
+    fn the_mill_slaps_back() {
+        let at = Transform::from_xyz(140.0, 90.0, 20.0)
+            .with_rotation(Quat::from_rotation_y(180f32.to_radians()));
+        let wall = reflectors(&[("ore_mill".into(), at)])[0];
+        assert!(
+            (wall.at.z - 40.0).abs() < 0.01 && wall.normal.z > 0.99,
+            "{wall:?}"
+        );
+        let here = Vec3::new(140.0, 92.0, 90.0);
+        let (_, delay) = slapback(&wall, here, here).unwrap();
+        assert!((delay - 100.0 / SOUND).abs() < 0.01, "{delay}");
+        let beside = Vec3::new(190.0, 92.0, 60.0);
+        assert!(slapback(&wall, beside, beside).is_none());
     }
     use bevy::ecs::system::RunSystemOnce;
 

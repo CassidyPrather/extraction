@@ -40,6 +40,8 @@ pub fn kit(personality: &str) -> Vec<&'static str> {
 pub struct Kit {
     /// Something worthless to throw.
     pub junk: Option<Entity>,
+    /// And another.
+    pub spare: Option<Entity>,
     /// Its gun, slung or in hand.
     pub gun: Option<Entity>,
 }
@@ -69,12 +71,24 @@ pub fn plan(
         to: edge,
         within: 0.8,
     };
+    // A step in to just outside it (a throw falls short from further: a
+    // bolt at the edge winds nothing), out of the pack, and thrown. Clear
+    // of a snare's reach for metal in a hand (0.8 m).
+    let near = centre.xz() + (edge - centre.xz()).normalize_or(Vec2::X) * (rad + 1.2);
     let throw = |junk: Entity, up: f32| {
         [
-            Task::Grab {
+            Task::WalkTo {
+                to: near,
+                within: 0.4,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
                 item: junk,
                 side: Side::Left,
             },
+            Task::ToggleBackpack,
+            Task::Wait(0.3),
             Task::Throw {
                 side: Side::Left,
                 at: centre + Vec3::Y * up,
@@ -95,14 +109,20 @@ pub fn plan(
             t.push(back);
         }
         AnomalyKind::Lift => {
-            t.extend(throw(kit.junk?, 1.2));
+            // Something has to stay in it to wind it up: dropped in at its
+            // base (a lob at the core sails through), two to be sure.
+            t.extend(throw(kit.junk?, 0.0));
+            if let Some(second) = kit.spare {
+                t.extend(throw(second, 0.0));
+            }
             // Clear of the pop, then the stone, wherever it lands.
             let out = (edge - centre.xz()).normalize_or(Vec2::X);
             t.push(Task::WalkTo {
                 to: centre.xz() + out * (rad + 6.0),
                 within: 1.0,
             });
-            t.push(Task::Wait(9.0));
+            // It pops about four seconds after it's wound.
+            t.push(Task::Wait(7.0));
             t.extend(take);
         }
         AnomalyKind::Burner => {
@@ -116,11 +136,26 @@ pub fn plan(
                     side: Side::Right,
                 },
                 Task::Support,
-                Task::Fire { at, shots: 3 },
+                // At its top: a stone settled in the coals has its middle at
+                // the ground, and a shot from standing height at that meets
+                // the ground just short of it.
+                Task::Fire {
+                    at: at + Vec3::Y * 0.04,
+                    shots: 6,
+                },
                 Task::Release(Side::Left),
                 Task::Wait(HOT_SECS + 2.0),
+                // Out of the coals and cool, it's taken; still in them (the
+                // shots missed), it's left: never a hand into the fire.
+                Task::GrabClear {
+                    item: stone,
+                    side: Side::Left,
+                    clear_of: centre,
+                    radius: rad + 0.6,
+                },
+                Task::Stow(Side::Left),
+                Task::Wait(0.2),
             ]);
-            t.extend(take);
             t.push(back);
         }
         AnomalyKind::Well | AnomalyKind::Hush => {
@@ -135,15 +170,92 @@ pub fn plan(
 mod tests {
     use super::*;
 
+    /// The throw the ways start with: a bolt stowed in the pack, out of it
+    /// and thrown at a point, lands near it.
+    #[test]
+    fn a_packed_bolt_comes_out_and_is_thrown() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let p = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let me = app.world().get::<GlobalTransform>(p).unwrap().translation();
+        let bolt =
+            crate::anomaly::surge::grow(app.world_mut(), "bolt", me + Vec3::new(0.6, 0.3, 0.0))
+                .unwrap();
+        app.update();
+        let target = me + Vec3::new(0.0, 0.0, -4.5);
+        let mut tasks = vec![
+            Task::PickUp {
+                id: "bolt".into(),
+                side: Side::Left,
+            },
+            Task::Stow(Side::Left),
+            Task::Wait(0.5),
+        ];
+        // The throw half of a snare's way, from the edge.
+        let kit = Kit {
+            junk: Some(bolt),
+            spare: None,
+            gun: None,
+        };
+        let way = plan(
+            AnomalyKind::Snare,
+            target,
+            2.0,
+            Vec2::new(me.x, me.z),
+            Entity::PLACEHOLDER,
+            target,
+            &kit,
+        )
+        .unwrap();
+        tasks.extend(
+            way.into_iter()
+                .take_while(|t| !matches!(t, Task::Wait(w) if *w < 0.25)),
+        );
+        app.world_mut()
+            .entity_mut(p)
+            .insert(crate::bot::Bot::new(tasks));
+        // Its closest pass: a snare goes off at the touch (a lift needs it
+        // to stay, which a slope can roll it out of).
+        let mut closest = f32::INFINITY;
+        for _ in 0..90 * 8 {
+            app.update();
+            let at = app
+                .world()
+                .get::<GlobalTransform>(bolt)
+                .unwrap()
+                .translation();
+            closest = closest.min(Vec2::new(at.x - target.x, at.z - target.z).length());
+        }
+        assert!(
+            app.world()
+                .get::<crate::interact::body::InBackpack>(bolt)
+                .is_none(),
+            "out of the pack"
+        );
+        assert!(
+            closest < 2.0,
+            "passed through the snare ({closest:.1} m from its core at closest, radius 2)"
+        );
+    }
+
     #[test]
     fn every_kind_has_a_way_with_the_kit_and_none_without_it() {
         let e = Entity::from_raw_u32(7).unwrap();
         let full = Kit {
             junk: Some(e),
+            spare: Some(e),
             gun: Some(e),
         };
         let bare = Kit {
             junk: None,
+            spare: None,
             gun: None,
         };
         for kind in AnomalyKind::ALL {
@@ -158,7 +270,7 @@ mod tests {
             );
             assert!(t.is_some_and(|t| {
                 t.iter()
-                    .any(|t| matches!(t, Task::Grab { item, .. } if *item == e))
+                    .any(|t| matches!(t, Task::Grab { item, .. } | Task::GrabClear { item, .. } if *item == e))
             }));
             let needs = !matches!(kind, AnomalyKind::Well | AnomalyKind::Hush);
             let none = plan(
