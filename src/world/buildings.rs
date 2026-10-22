@@ -829,6 +829,35 @@ impl Builder {
         n as f32 * tread
     }
 
+    /// A drowned building's silt washed out of its doorway: a bank sloping
+    /// from the threshold at `y0` down to the ground and on under it,
+    /// `width` wide, out to -Z from the wall whose centre line is at `z`
+    /// (`thick` thick). A body walks up a slope at any slant; up steps at
+    /// a slant its step up met the doorway's jamb, and bots stuck there.
+    /// Returns how far out from the wall's centre line it meets the ground.
+    fn silt_bank(&mut self, z: f32, thick: f32, width: f32, y0: f32) -> f32 {
+        let run = 2.6;
+        let face = z - thick * 0.5;
+        // Its foot under the lowest the ground can be.
+        let low = -(self.drop + 0.3);
+        let (a, c) = (
+            Vec2::new(face - run * (y0 - low) / y0, low),
+            Vec2::new(face, y0),
+        );
+        let along = c - a;
+        let normal = Vec3::new(0.0, along.x, -along.y).normalize();
+        let t = 0.5;
+        let mid = Vec3::new(0.0, (a.y + c.y) * 0.5, (a.x + c.x) * 0.5);
+        self.piece(
+            Shape::Box(Vec3::new(width + 0.6, t, along.length())),
+            Transform::from_translation(mid - normal * t * 0.5)
+                .with_rotation(Quat::from_rotation_x(-along.y.atan2(along.x))),
+            Mat::Silt,
+            true,
+        );
+        run + thick * 0.5
+    }
+
     /// A pitched roof along Z (ridge runs front to back).
     pub fn gable_roof(
         &mut self,
@@ -1981,7 +2010,7 @@ pub const SILT: f32 = 0.76;
 
 /// A house that was under a reservoir (`Ruin::Drowned`): its walls, no
 /// roof, floors or partitions, no doors or glass, the timber sodden; silt
-/// inside to just under the sills, banked up to the doorway in steps (the
+/// inside to just under the sills, banked down from the doorway (the
 /// door frame rotted out, the wall over it fallen: a doorway open to the
 /// sky); a stove standing out of the silt. The tide line is
 /// `decay::stains`'s, found by the silt.
@@ -1994,7 +2023,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
     let (x, z) = (w * 0.5, d * 0.5);
     // Its footing banked in silt too (where the bed fell away from it).
     b.plinth(w, d, f, Mat::Silt, Mat::Silt);
-    let doorway = 1.1;
+    let doorway = 1.6;
     b.shell(
         w,
         d,
@@ -2031,15 +2060,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
         Vec3::new(0.0, f + SILT * 0.5, -z),
         Mat::Silt,
     );
-    let reach = b.door_steps(
-        Vec2::new(-x, -z),
-        Vec2::X,
-        Quat::IDENTITY,
-        x,
-        doorway,
-        top,
-        Mat::Silt,
-    );
+    let reach = b.silt_bank(-z, thick, doorway, top);
     let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
     b.geo.entrances.push(extraction_core::map::Entrance {
         at: [0.0, r(-z - thick * 0.5)],
@@ -2110,7 +2131,7 @@ fn chapel_drowned(b: &mut Builder) {
     };
     // Its footing banked in silt too (where the bed fell away from it).
     b.plinth(w, d, f, Mat::Silt, Mat::Silt);
-    let doorway = 1.4;
+    let doorway = 2.0;
     b.shell(
         w,
         d,
@@ -2141,15 +2162,7 @@ fn chapel_drowned(b: &mut Builder) {
         Vec3::new(0.0, f + SILT * 0.5, -z),
         Mat::Silt,
     );
-    let reach = b.door_steps(
-        Vec2::new(-x, -z),
-        Vec2::X,
-        Quat::IDENTITY,
-        x,
-        doorway,
-        top,
-        Mat::Silt,
-    );
+    let reach = b.silt_bank(-z, thick, doorway, top);
     let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
     b.geo.entrances.push(extraction_core::map::Entrance {
         at: [0.0, r(-z - thick * 0.5)],
