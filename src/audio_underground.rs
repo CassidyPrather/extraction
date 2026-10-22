@@ -1,7 +1,7 @@
 //! The underground signature sites, heard (`docs/AUDIO.md`, "Underground's
 //! sites"): the drowned works' drains and basins, the deep workings'
 //! firedamp, canary, cart and roof, the furnace cellars' heat, vents and
-//! crane.
+//! crane, the winze's cage.
 //!
 //! Like `audio.rs`, it only listens: the sites' logic
 //! (`world::underground`, `world::workings`, `world::furnace`) knows
@@ -19,6 +19,7 @@ use crate::audio::{AudioRng, SoundBank, play_at_speed, play_filtered, reverb_sen
 use crate::audio_mix as mix;
 use crate::interact::InteractEvent;
 use crate::world::buildings::Building;
+use crate::world::cage::{Cage, CageArrived, CageCrushed, CageRung};
 use crate::world::furnace::{Crane, CraneLever, Heat, InHeat, VentLever, Vented};
 use crate::world::underground::{BasinDrained, BasinSurface, DrainControl, Levels};
 use crate::world::workings::{CART_PUSH, Canary, GasFlash, GasIgnited, InGas, MineCart, RoofFell};
@@ -41,6 +42,7 @@ impl Plugin for UndergroundSoundsPlugin {
                 heat_ticks,
                 crane_sounds,
                 lever_sounds,
+                cage_sounds,
                 ease_loops,
             ),
         );
@@ -863,6 +865,154 @@ fn crane_sounds(
                 1.0,
             );
         }
+    }
+}
+
+/// Strokes of the cage's bell to a ring, and the time between them (s).
+const BELL_STROKES: usize = 3;
+const BELL_GAP: f32 = 0.45;
+
+/// The winze's cage (`world::cage`), whose warning has to be unmissable:
+///
+/// - a pull rung (`CageRung`): the mine bell, three strokes, carrying
+///   down the shaft (`ug.cage_bell`, heard to the bell's 35 m);
+/// - its wait out, the winding engine at the shaft's head taking the
+///   strain (`ug.cage_strain`), then the rope singing over the sheave as
+///   long as it rides (`ug.cage_rope`, from the head, not the cage);
+/// - at a stop (`CageArrived`): the cage landing on its keps
+///   (`ug.cage_land`) and the gate's latch (`ug.cage_gate`);
+/// - come down on someone (`CageCrushed`): the iron floor's heavy thud
+///   and the body under it (`ug.cage_crush`, `ug.cage_body`).
+#[allow(clippy::too_many_arguments)]
+fn cage_sounds(
+    mut commands: Commands,
+    mut rung: MessageReader<CageRung>,
+    mut arrived: MessageReader<CageArrived>,
+    mut crushed: MessageReader<CageCrushed>,
+    cages: Query<(Entity, &Cage, &GlobalTransform)>,
+    places: Query<&GlobalTransform>,
+    mut loops: Query<(&mut SiteLoop, &mut Transform)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut strokes: Local<Vec<(f32, Vec3)>>,
+    mut was: Local<HashMap<Entity, bool>>,
+) {
+    let now = time.elapsed_secs();
+    for r in rung.read() {
+        for i in 0..BELL_STROKES {
+            strokes.push((now + i as f32 * BELL_GAP, r.at));
+        }
+    }
+    strokes.retain(|&(t, at)| {
+        if now < t {
+            return true;
+        }
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.cage_bell",
+            at,
+            0.0,
+            0.9,
+            0.02,
+        );
+        false
+    });
+    was.retain(|e, _| cages.contains(*e));
+    for (e, cage, gt) in &cages {
+        let riding = cage.to.is_some() && cage.wait <= 0.0;
+        // The head, in the cage's own space: the rope's loop sits there.
+        let head = Vec3::Y * (cage.head - cage.y);
+        let before = was.insert(e, riding).unwrap_or(false);
+        if riding && !before {
+            sound(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ug.cage_strain",
+                gt.translation() + head,
+                0.0,
+                0.7,
+                0.05,
+            );
+        }
+        let want = if riding { 1.0 } else { 0.0 };
+        let mut found = false;
+        for (mut l, mut t) in &mut loops {
+            if l.cue == "ug.cage_rope" && l.owner == e {
+                found = true;
+                l.want = want;
+                t.translation = head;
+            }
+        }
+        if !found && riding {
+            start_loop(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "ug.cage_rope",
+                e,
+                head,
+                1.3,
+                None,
+                3.0,
+                1.0,
+            );
+        }
+    }
+    for a in arrived.read() {
+        let Some((_, _, gt)) = cages.iter().find(|(_, c, _)| c.site == a.site) else {
+            continue;
+        };
+        let at = gt.translation();
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.cage_land",
+            at,
+            0.0,
+            0.8,
+            0.05,
+        );
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.cage_gate",
+            at + Vec3::Y,
+            0.0,
+            0.9,
+            0.08,
+        );
+    }
+    for c in crushed.read() {
+        let Ok(gt) = places.get(c.player) else {
+            continue;
+        };
+        let at = gt.translation();
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.cage_crush",
+            at,
+            0.0,
+            0.5,
+            0.05,
+        );
+        sound(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "ug.cage_body",
+            at,
+            0.0,
+            0.85,
+            0.05,
+        );
     }
 }
 

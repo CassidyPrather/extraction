@@ -71,12 +71,24 @@ pub fn plan(
         to: edge,
         within: 0.8,
     };
+    // A step in to just outside it (a throw falls short from further: a
+    // bolt at the edge winds nothing), out of the pack, and thrown. Clear
+    // of a snare's reach for metal in a hand (0.8 m).
+    let near = centre.xz() + (edge - centre.xz()).normalize_or(Vec2::X) * (rad + 1.2);
     let throw = |junk: Entity, up: f32| {
         [
-            Task::Grab {
+            Task::WalkTo {
+                to: near,
+                within: 0.4,
+            },
+            Task::ToggleBackpack,
+            Task::Wait(0.6),
+            Task::GrabFromHere {
                 item: junk,
                 side: Side::Left,
             },
+            Task::ToggleBackpack,
+            Task::Wait(0.3),
             Task::Throw {
                 side: Side::Left,
                 at: centre + Vec3::Y * up,
@@ -124,7 +136,7 @@ pub fn plan(
                     side: Side::Right,
                 },
                 Task::Support,
-                Task::Fire { at, shots: 3 },
+                Task::Fire { at, shots: 6 },
                 Task::Release(Side::Left),
                 Task::Wait(HOT_SECS + 2.0),
                 // Out of the coals and cool, it's taken; still in them (the
@@ -151,6 +163,81 @@ pub fn plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The throw the ways start with: a bolt stowed in the pack, out of it
+    /// and thrown at a point, lands near it.
+    #[test]
+    fn a_packed_bolt_comes_out_and_is_thrown() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let p = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let me = app.world().get::<GlobalTransform>(p).unwrap().translation();
+        let bolt =
+            crate::anomaly::surge::grow(app.world_mut(), "bolt", me + Vec3::new(0.6, 0.3, 0.0))
+                .unwrap();
+        app.update();
+        let target = me + Vec3::new(0.0, 0.0, -4.5);
+        let mut tasks = vec![
+            Task::PickUp {
+                id: "bolt".into(),
+                side: Side::Left,
+            },
+            Task::Stow(Side::Left),
+            Task::Wait(0.5),
+        ];
+        // The throw half of a snare's way, from the edge.
+        let kit = Kit {
+            junk: Some(bolt),
+            spare: None,
+            gun: None,
+        };
+        let way = plan(
+            AnomalyKind::Snare,
+            target,
+            2.0,
+            Vec2::new(me.x, me.z),
+            Entity::PLACEHOLDER,
+            target,
+            &kit,
+        )
+        .unwrap();
+        tasks.extend(
+            way.into_iter()
+                .take_while(|t| !matches!(t, Task::Wait(w) if *w < 0.25)),
+        );
+        app.world_mut()
+            .entity_mut(p)
+            .insert(crate::bot::Bot::new(tasks));
+        // Its closest pass: a snare goes off at the touch (a lift needs it
+        // to stay, which a slope can roll it out of).
+        let mut closest = f32::INFINITY;
+        for _ in 0..90 * 8 {
+            app.update();
+            let at = app
+                .world()
+                .get::<GlobalTransform>(bolt)
+                .unwrap()
+                .translation();
+            closest = closest.min(Vec2::new(at.x - target.x, at.z - target.z).length());
+        }
+        assert!(
+            app.world()
+                .get::<crate::interact::body::InBackpack>(bolt)
+                .is_none(),
+            "out of the pack"
+        );
+        assert!(
+            closest < 2.0,
+            "passed through the snare ({closest:.1} m from its core at closest, radius 2)"
+        );
+    }
 
     #[test]
     fn every_kind_has_a_way_with_the_kit_and_none_without_it() {

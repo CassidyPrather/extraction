@@ -38,6 +38,7 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 # downpour beds (by the masking model): a threat's warning reaches about as
 # far as the threat does.
 RANGE_TARGETS = {
+    "ug.cage_bell": (35, 20),
     "drone.rotor": (120, 40), "drone.lock": (60, 40), "walker.step": (60, 30),
     "door.blow": (60, 25), "door.broken": (80, 30), "anomaly.snare": (15, 10),
     "anomaly.burner": (20, 12), "anomaly.lift": (15, 10),
@@ -481,6 +482,17 @@ def run(sets, out):
         gear[c["name"]] = dict(heard=heard, robots=gear_ref)
         if not GEAR_HEARD[0] <= heard / gear_ref <= GEAR_HEARD[1]:
             c["flags"].append(f"heard to {heard} m, robots to {gear_ref:g} m")
+    # A drag (src/interact/carry.rs) at a full haul: robots hear it to
+    # DRAG_HEARD; your ears should hear it about as far.
+    drag_ref = float(re.search(r"DRAG_HEARD: f32 = ([\d.]+)",
+                               (ROOT / "src" / "interact" / "carry.rs").read_text()).group(1))
+    for c in mix:
+        if not c["name"].startswith("drag."):
+            continue
+        heard = audible_range(c["name"], sets, mix, calm)
+        gear[c["name"]] = dict(heard=heard, robots=drag_ref)
+        if not GEAR_HEARD[0] <= heard / drag_ref <= GEAR_HEARD[1]:
+            c["flags"].append(f"heard to {heard} m, robots to {drag_ref:g} m")
     # Startle: the loudest each sudden sound gets, up close.
     def up_close(c, extra=0.0):
         loud = max(f["momentary_max"] for f in sets[c["set"]]["files"]) + filter_loss(c, sets)
