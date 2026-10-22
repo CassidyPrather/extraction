@@ -33,7 +33,7 @@ VIEWS = {
     "n_far_band": "Sallow's far tree line against the sky in drizzle",
 }
 PAIRS = {
-    "n_minefield": "The mines drew 3 m from their rings of earth, two on the road. Now each sits in its own ring.",
+    "n_minefield": "The mines drew 3 m from their rings of earth, one on the road, and the rings were black pies cut by the slope. Now each mine sits in a soft ring of turned earth that lies on the ground.",
     "n_wreck_lada": "Wrecks stood level on a slope, wheels in the air or sunk, with ivy up their sides. Now they pitch and roll onto all four wheels, and no ivy.",
     "n_wreck_uaz": "The same, on the UAZ.",
     "n_far_band": "The sky was fogged only in a fixed band near the horizon, so the far trees stood pale against clear cloud like cards. Now the sky fogs as the scene does.",
