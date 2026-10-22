@@ -95,6 +95,7 @@ fn use_items(
     lights: Query<(), With<LightOn>>,
     mut hands: Query<&mut Hand>,
     held: Query<&Held>,
+    on_limb: Query<(), With<crate::interact::first_aid::OnLimb>>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -108,7 +109,11 @@ fn use_items(
             }
             "field_dressing" => {
                 if let Ok(mut h) = healths.get_mut(u.player) {
-                    h.bleeding = 0.0;
+                    // Wound round a limb, it bound that limb's wounds
+                    // (`interact::first_aid`); by the button, every bleed.
+                    if !on_limb.contains(u.item) {
+                        h.bleeding = 0.0;
+                    }
                     h.hp = (h.hp + 8.0).min(h.max);
                 }
                 raid.say("You bind the wound. The bleeding stops.");

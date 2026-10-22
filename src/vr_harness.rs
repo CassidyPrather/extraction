@@ -3558,6 +3558,19 @@ mod first_aid {
     fn dress(turns: f32) -> (bool, f32, f32) {
         let (mut vr, feet) = setup();
         let d = take(&mut vr, feet, "field_dressing");
+        // The bleed's in the left forearm (`interact::wounds`).
+        vr.app
+            .world_mut()
+            .entity_mut(vr.player)
+            .insert(crate::interact::wounds::Wounds(vec![
+                crate::interact::wounds::Wound {
+                    limb: crate::interact::wounds::Limb::Forearm(Side::Left),
+                    along: 0.5,
+                    around: 0.0,
+                    bleed: 1.0,
+                    dressed: false,
+                },
+            ]));
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
         let centre = wrist + Vec3::Z * 0.12;
@@ -5267,5 +5280,164 @@ mod fight {
             vr.app.world().resource::<Felt>().0 > 0,
             "and the hand felt it"
         )
+    }
+}
+
+/// Wounds where you were hit (`interact::wounds`), bound one limb at a
+/// time by a dressing wound round it.
+#[cfg(test)]
+mod wounds {
+    use super::*;
+    use crate::interact::wounds::{Limb, Wounds, player_segments};
+    use crate::weapons::ballistics::Hit;
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    fn setup() -> (Vr, Vec3) {
+        let mut vr = Vr::new("training_yard");
+        let feet = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.hand_local(Side::Left, Vec3::new(-0.25, 1.0, -0.15), 0.0);
+        vr.hand_local(Side::Right, Vec3::new(0.25, 1.0, -0.15), 0.0);
+        vr.step(60);
+        (vr, feet)
+    }
+
+    /// Where on the body `limb` is now, `along` it.
+    fn on(vr: &mut Vr, limb: Limb, along: f32) -> Vec3 {
+        let segs = {
+            let mut sys = bevy::ecs::system::SystemState::<(
+                Query<
+                    (
+                        &Transform,
+                        &RigInput,
+                        &crate::rig::stance::Stance,
+                        &Children,
+                    ),
+                    With<crate::rig::LocalPlayer>,
+                >,
+                Query<(&RigHand, &Hand)>,
+            )>::new(vr.app.world_mut());
+            let (players, hands) = sys.get(vr.app.world());
+            player_segments(vr.player, &players, &hands).expect("a stance")
+        };
+        let s = segs.iter().find(|s| s.limb == limb).expect("that limb");
+        s.a.lerp(s.b, along)
+    }
+
+    /// A hit on the body at `at`.
+    fn shot(vr: &mut Vr, at: Vec3, damage: f32) {
+        let collider = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<(Entity, &ChildOf), With<crate::player::BodyCollider>>();
+            q.iter(vr.app.world())
+                .find(|(_, c)| c.parent() == vr.player)
+                .map(|(e, _)| e)
+                .expect("a body collider")
+        };
+        vr.app.world_mut().write_message(Hit {
+            entity: collider,
+            point: at,
+            normal: Vec3::Z,
+            velocity: Vec3::NEG_Z * 300.0,
+            damage,
+            shooter: None,
+            mass_g: 8.0,
+            load: Default::default(),
+            blow: None,
+        });
+        vr.step(2);
+    }
+
+    fn wounds(vr: &Vr) -> Vec<crate::interact::wounds::Wound> {
+        vr.app.world().get::<Wounds>(vr.player).unwrap().0.clone()
+    }
+
+    /// Shot in the left thigh and the right upper arm: two wounds, there,
+    /// bleeding. A dressing wound round the thigh binds the thigh; the arm
+    /// bleeds on.
+    #[test]
+    fn a_dressing_binds_the_limb_it_is_wound_round() {
+        let (mut vr, feet) = setup();
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        let arm = on(&mut vr, Limb::UpperArm(Side::Right), 0.5);
+        shot(&mut vr, arm, 30.0);
+        let w = wounds(&vr);
+        assert!(
+            w.iter()
+                .any(|w| w.limb == Limb::Thigh(Side::Left) && w.bleed > 0.0),
+            "a bleeding wound on the thigh: {w:?}"
+        );
+        assert!(
+            w.iter()
+                .any(|w| w.limb == Limb::UpperArm(Side::Right) && w.bleed > 0.0),
+            "and the arm: {w:?}"
+        );
+        // A dressing in the right hand, round the left thigh twice.
+        let dressing = vr.spawn(
+            "field_dressing",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.15)),
+        );
+        vr.app
+            .world_mut()
+            .entity_mut(dressing)
+            .insert(RigidBody::Static);
+        vr.hand(
+            Side::Right,
+            feet + Vec3::new(0.25, 1.0, -0.15),
+            Quat::IDENTITY,
+            1.0,
+            0.0,
+        );
+        vr.step(4);
+        vr.app
+            .world_mut()
+            .entity_mut(dressing)
+            .insert(RigidBody::Dynamic);
+        vr.step(6);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(dressing));
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(dressing).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        let centre = on(&mut vr, Limb::Thigh(Side::Left), 0.45);
+        for i in 0..=96 {
+            let a = i as f32 / 48.0 * std::f32::consts::TAU;
+            // Round it, in the horizontal plane (the thigh hangs down).
+            let at = centre + Vec3::new(a.cos(), 0.0, a.sin()) * 0.12;
+            vr.move_hand(Side::Right, at - off);
+            vr.step(1);
+        }
+        vr.step(4);
+        let w = wounds(&vr);
+        assert!(
+            w.iter()
+                .filter(|w| w.limb == Limb::Thigh(Side::Left))
+                .all(|w| w.dressed && w.bleed == 0.0),
+            "the thigh bound: {w:?}"
+        );
+        let arm_bleeds = w
+            .iter()
+            .filter(|w| w.limb == Limb::UpperArm(Side::Right))
+            .map(|w| w.bleed)
+            .sum::<f32>();
+        assert!(arm_bleeds > 0.0, "the arm bleeds on: {w:?}");
+        let h = vr
+            .app
+            .world()
+            .get::<crate::health::Health>(vr.player)
+            .unwrap();
+        assert!(
+            (h.bleeding - arm_bleeds).abs() < 0.05,
+            "health's bleeding is the arm's: {}",
+            h.bleeding
+        );
     }
 }

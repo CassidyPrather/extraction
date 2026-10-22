@@ -1,8 +1,9 @@
 //! First aid and food with the hands, in the headset.
 //!
-//! - **A dressing** is wound round the other forearm. Hold it against the
-//!   bare forearm of your empty hand and circle it round, one and a half
-//!   turns.
+//! - **A dressing** is wound round the wounded limb (`wounds`): hold it
+//!   against the limb (a thigh, a shin, an arm, the chest, the belly, the
+//!   head) and circle it round, one and a half turns. It binds that limb's
+//!   wounds; the others bleed on.
 //! - **An injector** goes in the thigh. Put its tip to your thigh and pull
 //!   the trigger.
 //! - **Food** goes to your mouth: hold it there a moment. A bottle has to
@@ -26,10 +27,8 @@ use extraction_core::items::Category;
 
 /// Turns round the forearm a dressing takes.
 const WRAP_TURNS: f32 = 1.5;
-/// The forearm, from the hand back (m), and how far round it a dressing
-/// held to it may be.
-const FOREARM: f32 = 0.26;
-const ROUND: f32 = 0.12;
+/// How far out from a limb's surface a dressing held to it may be (m).
+const ROUND: f32 = 0.07;
 /// An injector's tip, in its own space, and how near the thigh it must be.
 pub const NEEDLE: Vec3 = Vec3::new(0.0, 0.0, -0.065);
 const ON_THIGH: f32 = 0.12;
@@ -59,19 +58,36 @@ pub struct Winding {
     last: Option<f32>,
     pub turns: f32,
     away: f32,
+    /// The limb it's going round.
+    pub limb: Option<super::wounds::Limb>,
 }
 
 /// Seconds food has been at the mouth.
 #[derive(Component, Debug, Default)]
 pub struct Eating(pub f32);
 
-/// A dressing circled round the other forearm.
+/// The dressing a hand winds round a limb, for `items::usage`: it binds
+/// that limb's wounds (`wounds::Wounds::dress`), not every bleed.
+#[derive(Component, Debug)]
+pub struct OnLimb(pub super::wounds::Limb);
+
+/// A dressing circled round a limb: the wounded one (where the hit was),
+/// or any. One and a half turns round it binds it.
 #[allow(clippy::type_complexity)]
 fn wrap_dressings(
     mut commands: Commands,
     mut items: Query<(Entity, &Item, &Held, &GlobalTransform, Option<&mut Winding>)>,
-    players: Query<&Children, With<Player>>,
+    players: Query<
+        (
+            &Transform,
+            &RigInput,
+            &crate::rig::stance::Stance,
+            &Children,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
     hands: Query<(&RigHand, &Hand)>,
+    mut patients: Query<(&mut crate::health::Health, &mut super::wounds::Wounds)>,
     catalog: Res<Catalog>,
     driver: Res<RigDriver>,
     mut uses: MessageWriter<UseItem>,
@@ -90,35 +106,31 @@ fn wrap_dressings(
             commands.entity(e).insert(Winding::default());
             continue;
         };
-        // The other hand: empty, its forearm running back from it.
-        let Ok(children) = players.get(held.player) else {
+        let Some(segs) = super::wounds::player_segments(held.player, &players, &hands) else {
             continue;
         };
-        let arm = children.iter().find_map(|c| {
-            hands
-                .get(c)
-                .ok()
-                .filter(|(rh, h)| rh.side != held.side && h.holding.is_none())
-                .map(|(_, h)| h.world)
-        });
-        let Some(arm) = arm else {
-            continue;
-        };
-        let local = arm
-            .compute_affine()
-            .inverse()
-            .transform_point3(gt.translation());
-        let along = local.z;
-        let round = local.truncate();
-        if !(0.0..=FOREARM).contains(&along) || round.length() > ROUND || round.length() < 0.01 {
+        // Round a limb, not the arm holding it.
+        let at = gt.translation();
+        let round = segs
+            .iter()
+            .filter(|s| !matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side))
+            .map(|s| (s, s.locate(at)))
+            .filter(|(s, (t, _, d))| (-0.05..=1.05).contains(t) && *d <= s.r + ROUND)
+            .min_by(|a, b| (a.1.2 - a.0.r).total_cmp(&(b.1.2 - b.0.r)));
+        let Some((seg, (_, a, _))) = round else {
             w.away += time.delta_secs();
             if w.away > 0.6 {
                 *w = Winding::default();
             }
             continue;
+        };
+        if w.limb != Some(seg.limb) {
+            *w = Winding {
+                limb: Some(seg.limb),
+                ..default()
+            };
         }
         w.away = 0.0;
-        let a = round.y.atan2(round.x);
         if let Some(last) = w.last {
             let mut d = a - last;
             if d > std::f32::consts::PI {
@@ -136,6 +148,12 @@ fn wrap_dressings(
         }
         w.last = Some(a);
         if w.turns >= WRAP_TURNS {
+            // That limb's wounds bound; the rest bleed on.
+            if let Ok((mut h, mut wounds)) = patients.get_mut(held.player) {
+                let stopped = wounds.dress(seg.limb);
+                h.bleeding = (h.bleeding - stopped).max(0.0);
+            }
+            commands.entity(e).insert(OnLimb(seg.limb));
             uses.write(UseItem {
                 player: held.player,
                 item: e,

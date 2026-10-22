@@ -62,9 +62,16 @@ impl Plugin for HealthPlugin {
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(Health::default());
             })
-            .add_systems(FixedUpdate, (take_hits, falls, bleed).chain());
+            .add_systems(
+                FixedUpdate,
+                (take_hits, falls, bleed).chain().in_set(HealthSystems),
+            );
     }
 }
+
+/// Hits, falls and bleeding, each fixed tick (`interact::wounds` follows).
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct HealthSystems;
 
 fn take_hits(
     mut hits: MessageReader<Hit>,
