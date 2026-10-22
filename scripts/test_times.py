@@ -138,8 +138,15 @@ def main():
             "\nCut the test (fewer frames, a small arena instead of a whole "
             "valley), or list it in scripts/slow_tests.txt with a budget and why."
         )
+    else:
+        print(f"\nevery test within budget ({args.budget:.0f} s, or its own)")
+    failed = [name for _, name, event in ran if event == "failed"]
+    if failed:
+        print(f"\n{len(failed)} FAILED:")
+        for name in failed:
+            print(f"  {name}")
+    if over or failed:
         sys.exit(1)
-    print(f"\nevery test within budget ({args.budget:.0f} s, or its own)")
 
 
 if __name__ == "__main__":
