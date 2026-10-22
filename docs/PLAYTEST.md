@@ -529,6 +529,14 @@ said you don't use?
     accuracy, and is it handier in a room?
   - Take an AK's stock off with the spanner and put it back on.
   - Draw a Mosin's bolt out past its stop and put it in another Mosin.
+- Reading a gun without a screen.
+  - Pick up a Mosin: can you tell from its cocking piece whether it's
+    cocked?
+  - Press-check an AK (draw the handle back a little): do you see the
+    round?
+  - Heft a full and an empty AK magazine: can you tell them apart?
+  - Hold a worn-out gun next to a new one: does the rust read, and does
+    its action drag?
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold
