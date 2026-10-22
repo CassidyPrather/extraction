@@ -15,7 +15,7 @@ looks like. Code: `src/anomaly/`, rules in
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
-| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.12/s at its edge to 0.35/s at its heart, so three seconds in and you're frozen through and shivering for minutes after; in it you stiffen (up to 85% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (6 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
+| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
 
 Wells, mirrors, hushes and frosts don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
@@ -152,6 +152,14 @@ Last measured, 6 hunter raids a valley over all four valleys:
 |---|---|---|---|---|
 | Novice | 42 | 17 (40%) | 18 | 1 |
 | Skilled | 37 | 16 (43%) | 9 | 0 |
+
+The frosts sit high on Rime Fell (the col, the scree), and the sims'
+raiders never get up to one in a 10 or 25 minute raid (18 and 8 hunter
+raids on the seeds that grow rimestones: no dive). So the Frost's band is
+measured head on (`sim::harvest` test): the same dive in to a 3 m frost's
+stone and out costs a novice 17 hp (frozen through, bitten), and with a
+live hearth 0 (chill held at 0.3). A skilled raider without a hearth
+leaves it.
 
 Skill halves what anomalies cost and takes the deaths out, and it gets
 into wells and wins more lifts. It doesn't yet win more stones overall.

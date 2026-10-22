@@ -309,7 +309,7 @@ mod tests {
     fn a_hearth_takes_the_frost_out_of_a_frost_dive() {
         use crate::interact::body::{Backpack, InBackpack};
         use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
-        let dive = |hearth: bool| -> (f32, bool) {
+        let dive = |hearth: bool| -> (f32, bool, f32) {
             let mut app = crate::headless_app(Default::default(), false);
             app.finish();
             app.cleanup();
@@ -376,17 +376,27 @@ mod tests {
             app.world_mut()
                 .entity_mut(p)
                 .insert(crate::bot::Bot::new(tasks));
+            let mut peak: f32 = 0.0;
             for _ in 0..90 * 25 {
                 app.update();
+                peak = peak.max(
+                    app.world()
+                        .get::<crate::world::cold::Chill>(p)
+                        .map_or(0.0, |c| c.level),
+                );
             }
             let hp = app.world().get::<crate::health::Health>(p).unwrap().hp;
-            let taken = app.world().get::<InBackpack>(stone).is_some();
-            (full - hp, taken)
+            let taken = app
+                .world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(stone)
+                .is_some_and(|c| c.0 == p);
+            (full - hp, taken, peak)
         };
-        let (novice, n_took) = dive(false);
-        let (skilled, s_took) = dive(true);
+        let (novice, n_took, n_peak) = dive(false);
+        let (skilled, s_took, s_peak) = dive(true);
         println!(
-            "frost dive: novice lost {novice:.0} hp (stone {n_took}), skilled {skilled:.0} (stone {s_took})"
+            "frost dive: novice lost {novice:.0} hp, chill to {n_peak:.2}; \
+             with a hearth {skilled:.0} hp, chill to {s_peak:.2}"
         );
         assert!(n_took && s_took, "both come out with it");
         assert_eq!(skilled, 0.0, "a hearth: never bitten");
