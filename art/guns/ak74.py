@@ -10,7 +10,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, RZ, T, S, catmull, empty, export, fillet, join, main_guard,
+from common import (Part, RX, RY, RZ, T, S, catmull, empty, export, export_part, fillet, join, main_guard,
                     make, report, section_rect, section_circle)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
@@ -365,8 +365,9 @@ trig.sweep(catmull([(-0.031, 0.024), (-0.0345, 0.016), (-0.0345, 0.010), (-0.031
            section_rect(0.0048, 0.0032, 0.0012), "Blued")
 
 # --- Build --------------------------------------------------------------------------------
-join("static", recv, parts_static, grip, barrel, leaf, gas, brake, lower, upper, stock, tang, butt,
-     worn={})
+join("static", recv, parts_static, grip, barrel, leaf, gas, brake, lower, upper, tang, worn={})
+# The butt, off its tang screws at the vice (`weapons::gunsmith`).
+join("static_butt", stock, butt, worn={})
 for p in (carrier, selector, trig):
     make(p, worn={})
 
@@ -379,3 +380,4 @@ empty("pt_sling_front", (-0.0145, 0.039, -0.461))
 empty("pt_sling_rear", (-0.022, -0.06, 0.269))
 report()
 export("assets/models/guns/ak74.glb")
+export_part("static_butt", "assets/models/items/stock_ak74.glb")
