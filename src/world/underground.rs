@@ -3530,7 +3530,7 @@ mod tests {
             .collect();
         assert!(!held.is_empty(), "{id}: a door on its power");
         let dark = lamps(&vr);
-        let mut press = |vr: &mut crate::vr_harness::Vr| {
+        let press = |vr: &mut crate::vr_harness::Vr| {
             vr.app.world_mut().write_message(InteractEvent::Pressed {
                 item: switch,
                 player,
