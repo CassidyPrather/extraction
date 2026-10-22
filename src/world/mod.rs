@@ -19,6 +19,7 @@ pub mod fell_sounds;
 pub mod furnace;
 pub mod halos;
 pub mod impostors;
+pub mod live;
 pub mod lockdown;
 pub mod minefields;
 pub mod notes;

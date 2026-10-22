@@ -862,6 +862,7 @@ fn shelve_unworn(
 fn shelve_end(shelf: Res<Shelf>, mut logged: Local<bool>) {
     if shelf.frame > shelf.warm_for && !*logged {
         *logged = true;
+        super::timeline::mark("warm-up shelf done");
         info!(
             "warm-up: {} kinds of thing shelved ({} entries) over {} frames: {:?}",
             shelf.kinds.len(),

@@ -336,6 +336,7 @@ mod tests {
     pub(crate) fn load(map: &str) -> (Vec<f64>, HashMap<String, f64>) {
         let t = Instant::now();
         let mut app = client_threads(map, "downpour", Some(1));
+        super::super::budget::tests::as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ));
@@ -430,6 +431,7 @@ mod tests {
         for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let t = Instant::now();
             let mut app = client_threads(map, "clearing", None);
+            super::super::budget::tests::as_the_game_runs(&mut app);
             let built = t.elapsed().as_secs_f64() * 1000.0;
             systems();
             let t = Instant::now();

@@ -311,6 +311,10 @@ pub struct Layout {
     /// The site seals itself once its power's on.
     #[serde(default)]
     pub lockdown: Option<LockdownDef>,
+    /// A flooded room whose water goes live with its lamps' power, and the
+    /// isolator that cuts it.
+    #[serde(default)]
+    pub live: Option<LiveDef>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -482,6 +486,27 @@ impl LockdownDef {
             .filter(|(_, s)| !s)
             .map(|(r, _)| r.id.as_str())
             .collect()
+    }
+}
+
+/// Live water: `room` is flooded and lit on a power stage; once that
+/// stage is on, the lamps' feed is down in the water and it's live, till
+/// the isolator (on a room's wall, as vents are) cuts the room's circuit
+/// (and its lamps).
+#[derive(Clone, Debug, Deserialize)]
+pub struct LiveDef {
+    pub room: String,
+    pub isolator: (String, P2, f32),
+}
+
+impl LiveDef {
+    /// The power stage that makes it live: its room's lamps'.
+    pub fn stage(&self, l: &Layout) -> Option<usize> {
+        l.rooms
+            .iter()
+            .find(|r| r.id == self.room)
+            .filter(|r| r.lamp == Lamp::Powered)
+            .map(|r| r.stage)
     }
 }
 
@@ -1751,6 +1776,26 @@ pub fn check(l: &Layout) -> Vec<String> {
                 (Some(f), Some(roof)) if c.y - c.drop > f && c.y < roof => {}
                 _ => bad.push(format!("the crane's hook can't hang at {p:?}")),
             }
+        }
+    }
+    if let Some(v) = &l.live {
+        let (room, at, rot) = &v.isolator;
+        on_wall(room, *at, *rot, "isolator", &mut bad);
+        if v.stage(l).is_none_or(|k| k >= l.power.len()) {
+            bad.push(format!(
+                "live water in `{}`: no powered lamps there",
+                v.room
+            ));
+        }
+        if !l
+            .floods
+            .iter()
+            .any(|f| f.room.as_deref() == Some(v.room.as_str()))
+        {
+            bad.push(format!("live water in `{}`: it isn't flooded", v.room));
+        }
+        if room == &v.room {
+            bad.push("the isolator's in the live water's room".into());
         }
     }
     if let Some(k) = &l.lockdown {

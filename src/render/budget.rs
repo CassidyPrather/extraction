@@ -1505,8 +1505,20 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
+    /// The game's own executor again (`client_flash` gives the count
+    /// gauges one thread): the timing gauges measure the frame as it runs,
+    /// schedule shares and all (PostUpdate's culling and transforms side
+    /// by side read 79% of a one-thread frame).
+    pub(crate) fn as_the_game_runs(app: &mut App) {
+        let mut schedules = app.world_mut().resource_mut::<Schedules>();
+        for (_, schedule) in schedules.iter_mut() {
+            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+        }
+    }
+
     pub(crate) fn busy_scene(map: &str) -> App {
         let mut app = client_threads(map, "downpour", Some(1));
+        as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ));

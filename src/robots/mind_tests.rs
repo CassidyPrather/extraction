@@ -3080,3 +3080,307 @@ fn a_carcass_dragged_off_leaves_a_sign() {
     assert_eq!(dragged.len(), 1, "the body, not the door: {dragged:?}");
     assert!(dragged[0].distance(deer_at) < 0.1);
 }
+
+/// Back at the truck, then out into the Zone at `to`: a raid starts.
+fn step_out(app: &mut App, player: Entity, to: Vec3) {
+    let truck = app
+        .world_mut()
+        .query_filtered::<&Transform, With<crate::raid::truck::Truck>>()
+        .iter(app.world())
+        .next()
+        .map(|t| t.translation)
+        .expect("a truck");
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::AtBase;
+    put(app, player, truck);
+    app.update();
+    app.update();
+    put(app, player, to);
+    for _ in 0..4 {
+        app.update();
+    }
+    assert_eq!(
+        app.world().resource::<crate::raid::Raid>().phase,
+        crate::raid::Phase::Out
+    );
+}
+
+fn driver_said(app: &App) -> Vec<String> {
+    app.world()
+        .resource::<crate::raid::Raid>()
+        .log
+        .iter()
+        .map(|(t, _)| t.clone())
+        .filter(|t| t.starts_with("Driver:"))
+        .collect()
+}
+
+fn watchers_near(app: &mut App, at: Vec3) -> usize {
+    app.world_mut()
+        .query::<(&super::Job, &Robot)>()
+        .iter(app.world())
+        .filter(|(j, r)| !r.wrecked && j.kind == JobKind::Watch && flat(j.site - at) < 3.0)
+        .count()
+}
+
+/// A fresh career: stepping out, nothing the Zone does is any different
+/// (no watcher, no remark, no door shut, no sentry turned).
+#[test]
+fn a_fresh_career_is_unaffected_by_memory() {
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        robots: true,
+        ..Default::default()
+    });
+    assert!(
+        app.world()
+            .resource::<super::memory::ZoneMind>()
+            .memory
+            .is_blank()
+    );
+    let centres = |app: &mut App| {
+        app.world_mut()
+            .query::<&super::sentry::Sentry>()
+            .iter(app.world())
+            .map(|s| s.centre)
+            .collect::<Vec<f32>>()
+    };
+    let before = centres(&mut app);
+    let robots = |app: &mut App| app.world_mut().query::<&Robot>().iter(app.world()).count();
+    let count = robots(&mut app);
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    assert!(driver_said(&app).is_empty(), "{:?}", driver_said(&app));
+    assert_eq!(centres(&mut app), before, "no sentry turned");
+    assert_eq!(robots(&mut app), count, "nobody left watching");
+    assert_eq!(
+        app.world_mut()
+            .query::<&super::memory::ShutByMemory>()
+            .iter(app.world())
+            .count(),
+        0
+    );
+}
+
+/// A raid is remembered: where you walked, what you wrecked, where you
+/// got out.
+#[test]
+fn a_raid_is_remembered() {
+    let (mut app, player, zone) = app(None);
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    for k in 0..5 {
+        put(
+            &mut app,
+            player,
+            zone.on_ground(100.0 + k as f32 * 20.0, 200.0),
+        );
+        for _ in 0..100 {
+            app.update();
+        }
+    }
+    let w = walker_at(&mut app, &zone, zone.on_ground(150.0, 230.0));
+    app.world_mut().write_message(super::PartDestroyed {
+        robot: w,
+        part: w,
+        role: super::PartRole::Core,
+        at: zone.on_ground(150.0, 230.0),
+    });
+    app.update();
+    // Out at the first rendezvous.
+    let rv = zone
+        .map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .next()
+        .expect("a rendezvous")
+        .at;
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::TruckWaiting { rv: 0, left: 100.0 };
+    app.update();
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+        crate::raid::Phase::Extracting { left: 100.0 };
+    app.update();
+    let m = &app.world().resource::<super::memory::ZoneMind>().memory;
+    assert_eq!(m.raids, 1);
+    assert!(
+        m.corridor(100.0, 200.0) > 0.0 && m.corridor(180.0, 200.0) > 0.0,
+        "{:?}",
+        m.heat
+    );
+    assert_eq!(m.corridor(900.0, 900.0), 0.0);
+    assert!(
+        m.kills
+            .iter()
+            .any(|k| (k.at[0] - 150.0).abs() < 1.0 && k.kind.eq_ignore_ascii_case("walker")),
+        "{:?}",
+        m.kills
+    );
+    assert_eq!(m.rvs.first().map(|r| r.at), Some(rv));
+}
+
+/// A valley that remembers you: stepping out, one of its kind is left
+/// watching where you wrecked a walker, and the driver says so.
+#[test]
+fn a_walker_is_left_watching_where_you_killed_one() {
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        robots: true,
+        ..Default::default()
+    });
+    let spot = zone.on_ground(300.0, 120.0);
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..2 {
+            let mut t = extraction_core::zone_memory::RaidTrace::default();
+            t.kills.push(([spot.x, spot.z], "Walker".into()));
+            mind.memory.fold(&t);
+        }
+    }
+    let before = watchers_near(&mut app, spot);
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    assert_eq!(
+        watchers_near(&mut app, spot),
+        before + 1,
+        "one left watching"
+    );
+    let said = driver_said(&app);
+    // One of the watcher's lines, whatever place it names.
+    let watcher = |s: &String| {
+        crate::raid::lines::MEMORY_WATCHER
+            .iter()
+            .chain(crate::raid::lines::MEMORY_WATCHER_AWAY)
+            .any(|l| {
+                let (a, b) = l.split_once("{rv}").unwrap_or((l, ""));
+                s.starts_with(a) && s.ends_with(b)
+            })
+    };
+    assert!(said.iter().any(watcher), "{said:?}");
+    // And only once: stepping out again with the watcher still about
+    // leaves one more (the memory is the same), never a crowd at once.
+    assert_eq!(said.len(), 1, "{said:?}");
+}
+
+/// Your favourite rendezvous: the sentry nearest it turns its sweep
+/// toward it, by no more than a quarter of its arc.
+#[test]
+fn a_sentry_minds_your_favourite_rendezvous() {
+    let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        robots: true,
+        ..Default::default()
+    });
+    for _ in 0..3 {
+        app.update();
+    }
+    let sentries: Vec<(Entity, Vec3, f32, f32)> = app
+        .world_mut()
+        .query::<(Entity, &super::sentry::Sentry)>()
+        .iter(app.world())
+        .filter(|(_, s)| s.powered)
+        .map(|(e, s)| (e, s.foot, s.centre, s.arc))
+        .collect();
+    // A rendezvous with a sentry in reach, if this valley has one.
+    let Some((rv, (e, _, home, arc))) = zone
+        .map
+        .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+        .find_map(|m| {
+            sentries
+                .iter()
+                .filter(|s| {
+                    Vec2::new(s.1.x, s.1.z).distance(Vec2::from(m.at)) < super::memory::SENTRY_REACH
+                })
+                .min_by(|a, b| {
+                    let d = |s: &(Entity, Vec3, f32, f32)| {
+                        Vec2::new(s.1.x, s.1.z).distance(Vec2::from(m.at))
+                    };
+                    d(a).total_cmp(&d(b))
+                })
+                .map(|s| (m.at, *s))
+        })
+    else {
+        eprintln!("no sentry near a rendezvous in this valley: nothing to test");
+        return;
+    };
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..3 {
+            let t = extraction_core::zone_memory::RaidTrace {
+                rv: Some(rv),
+                ..default()
+            };
+            mind.memory.fold(&t);
+        }
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    let now = app.world().get::<super::sentry::Sentry>(e).unwrap().centre;
+    let foot = app.world().get::<super::sentry::Sentry>(e).unwrap().foot;
+    let toward = extraction_core::sentry::bearing([foot.x, foot.z], rv);
+    let off = |a: f32| extraction_core::sentry::wrap_deg(toward - a).abs();
+    assert!(
+        off(now) <= off(home) + 0.01,
+        "turned toward it: {home} -> {now} (rv at {toward})"
+    );
+    assert!(
+        extraction_core::sentry::wrap_deg(now - home).abs()
+            <= arc * super::memory::SENTRY_LEAN + 0.01,
+        "by no more than a quarter of its arc"
+    );
+}
+
+/// A building you cleared, remembered: stepping out, its doors are shut,
+/// and one wedged only if there's another way in.
+#[test]
+fn a_building_you_cleared_is_found_shut() {
+    let (mut app, player, zone) = app(None);
+    for _ in 0..3 {
+        app.update();
+    }
+    // A building with two or more doors, and a loot spot in it.
+    let found = {
+        let entrances = app.world().resource::<super::doors::Entrances>();
+        let loot = &app
+            .world()
+            .resource::<crate::world::buildings::BuildingLoot>()
+            .0;
+        loot.iter().find_map(|s| {
+            let b = entrances.building_at(s.at + Vec3::Y * 0.3)?;
+            let ways: Vec<Entity> = entrances
+                .doors
+                .iter()
+                .filter(|d| d.building == b)
+                .map(|d| d.door)
+                .collect();
+            (ways.len() >= 2).then_some((s.at, ways))
+        })
+    };
+    let Some((spot, ways)) = found else {
+        eprintln!("no two-door building with loot in this valley: nothing to test");
+        return;
+    };
+    for d in &ways {
+        app.world_mut()
+            .get_mut::<crate::world::buildings::Door>(*d)
+            .unwrap()
+            .open = true;
+    }
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..3 {
+            let t = extraction_core::zone_memory::RaidTrace {
+                looted: vec![[spot.x, spot.z]],
+                ..default()
+            };
+            mind.memory.fold(&t);
+        }
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 200.0));
+    let shut = ways
+        .iter()
+        .filter(|d| {
+            !app.world()
+                .get::<crate::world::buildings::Door>(**d)
+                .unwrap()
+                .open
+        })
+        .count();
+    let wedged = ways
+        .iter()
+        .filter(|d| app.world().entity(**d).contains::<super::doors::Wedged>())
+        .count();
+    assert_eq!(shut, ways.len(), "all its doors shut");
+    assert_eq!(wedged, 1, "one wedged, another still a way in");
+}

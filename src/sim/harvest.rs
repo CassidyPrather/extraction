@@ -136,7 +136,13 @@ pub fn plan(
                     side: Side::Right,
                 },
                 Task::Support,
-                Task::Fire { at, shots: 6 },
+                // At its top: a stone settled in the coals has its middle at
+                // the ground, and a shot from standing height at that meets
+                // the ground just short of it.
+                Task::Fire {
+                    at: at + Vec3::Y * 0.04,
+                    shots: 6,
+                },
                 Task::Release(Side::Left),
                 Task::Wait(HOT_SECS + 2.0),
                 // Out of the coals and cool, it's taken; still in them (the

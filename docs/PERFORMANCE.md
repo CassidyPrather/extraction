@@ -622,3 +622,60 @@ holds, `scripts/bench.sh`'s second eye):
   fails if the eyes see more than 10% apart, or if a third view draws
   the world. The fragments are overdraw × eye pixels. Marrow's worst is
   the spruce view: 45.8M a frame against 64.8M.
+
+## First sight and the raid's one-offs
+
+A single long frame is worse in a headset than a steady few milliseconds
+over budget. The hitch work hunts the frames that run long once.
+
+- **Models load at start, not at first sight.**
+  - Spawning everything a raid can bring out after Marrow Creek had
+    loaded (a robot of each mid-raid kind, one of every item) used to
+    load 117 files mid-raid: 106 item and magazine models and 8 robot
+    models.
+  - `render::first_sight::PreloadPlugin` asks for every model under
+    `models/items`, `mags`, `guns` and `robots` at start (340 paths).
+    `EXTRACTION_PRELOAD=0` turns it off.
+  - `first_sight::tests::nothing_new_is_asked_for_mid_raid` (in the
+    suite) fails on any model asked for after start; without the preload
+    it counts 114. `gauge_nothing_loads_mid_raid` (gauge tier) waits
+    for the start's loads to land, then fails on any model or texture
+    loaded from disk.
+- **The shelf builds their pipelines too.**
+  - `warmup::shelve_models` puts the preloaded models' primitives on the
+    warm-up shelf, with the materials they'll wear.
+  - On lavapipe, with everything brought out at frame 1100
+    (`EXTRACTION_EVERYTHING=1100 EXTRACTION_PIPELINES=1`), one pipeline
+    was built at first sight (a prepass, likely a skinned robot's).
+  - Neither side's worst frame was that frame: CPU p99.9 1495 ms, GPU
+    p99.9 1162 ms, against p50s of 1179 and 989.
+- **Per-frame CPU and GPU.** `EXTRACTION_FRAMELOG=<path>` writes a line a
+  frame (frame, cpu_ms, gpu_ms). `scripts/frames.py` gives each side's
+  p50, p99, p99.9 and worst frame.
+- **The hitch gauge's events** (`render::spikes`, `scripts/hitches.sh`):
+  - the grenade, the wrecks and each bloom;
+  - the Depot's residents;
+  - a response team at the gate, a dirigible lowering its pod, a supply
+    crate bursting, and the Surge's every bloom at once;
+  - the homecoming.
+
+  On Marrow Creek every event but the homecoming is within 2.2x of the
+  busy moment's median (ceiling 3x).
+- **Resting guns are merged off the main thread.** Deciding whether to
+  merge a gun had built the merge, and a declined gun was asked again
+  every half-second (a 240 ms frame). Now:
+  - the check is cheap;
+  - a declined gun is remembered;
+  - new merges build on the async pool.
+- **The Surge's reset at base goes a step a frame** (`persist::ZoneReset`).
+  At once it was 37 ms of work and more:
+  - the sweep 18 ms;
+  - the mending 9;
+  - the loot 7.
+
+  Now the sweep runs 40 items a frame, then the wrecks, the mending,
+  the anomalies, the loot, and the loot let fall 40 bodies a frame. A
+  save waits for the end, and leaving mid-reset finishes it first.
+  The homecoming went from 89-119 ms to about 60 ms (4x). The rest is
+  single steps (the mending, the loot roll's spawn) that would need
+  splitting inside `destruction::surge` and `loot::roll_zone_loot`.
