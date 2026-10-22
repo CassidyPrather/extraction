@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 947 passed, 0 failed, 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
 | 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 932 passed, 0 failed, 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
 | 5955943 | 12:10 | 20/20 exit 0, 10 extracted (Marrow 0/4) | 925 passed, 0 failed, all within budget, 29 min | gauges 15/15 in 20 min: green |
 | ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 907 passed, 0 failed, all within budget, 31 min | gauges 14/14 in 17 min: the first fully green round |
@@ -45,17 +46,19 @@ from: the container runs out of memory.
 
 ## Open failures
 
-None in the suite or gauges as of ce0f10b.
+None in the suite or gauges as of 85c9d1f.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| Sim: Marrow Creek extracts worst all day (0/4 on 5955943); seeds 2 and 4 walk 566 m to depot_marrow along the southern road into a Walker + Drone patrol (x -75…+25, z -230…-265) and die at ~370 s with no loot | det. | `choose_site` gave a building 0.35 pull per loot spot without limit, so the Depot's underground complex outscored every site and a fresh raider marched up the Gate road, the robots' commute | Map design, coordinator | 7b03261's route exposure doesn't change it under SIM_NO_JOB=1 (seeds 2, 7, 8 still go to the Depot, Marrow 0/8); Map design's per-spot cap (claude/polish-map-design-2) not merged yet |
-| `sim::indoor::tests::every_drowned_house_lets_a_bot_in` over budget (293.7 s > 120) | | a new whole-valley walk | World models | routed 13:40 |
+| `sim::indoor::tests::every_drowned_house_lets_a_bot_in` over budget (301 s > 120) | | a new whole-valley walk | World models | cut to 32 walks (82 s alone), merged in round 32: to confirm |
+| Sim: raiders stood in furnace heat until dead (Cinder seed 2, 2.7 hp/s for 36 s) | det. | the raider's plan didn't read InHeat/InGas | coordinator | 7617df18 (round 32): hurting heat and gas shut in the plan, and HP falling with no hit leaves the building; to confirm |
+| Sim: Marrow Creek, the worst valley all day (0/8 on 7b03261) | det. | `choose_site`'s unbounded pull per loot spot sent fresh raiders to the Depot up the patrolled Gate road | Map design | BIG_SITE cap on main from 85c9d1f: 3/8; seed 8 still picks the Depot |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| sim telemetry dropped every unclaimed loss under 0.05 hp a tick (gas, heat, slow bleeding: a death of "nothing"); heat and gas now named | d5c2291e (round 32), 19e8be63 (round 33) | Verifier |
 | the raider waded into live water (Cinder seed 4 now extracts); telemetry names live water | 5955943 / a1edafef | coordinator, Underground, Verifier |
 | the busy-moment gauge (share limits under one thread), the Sallow pocket (escalation), Soak's walls over budget | ce0f10b | Performance, coordinator, Soak |
 | `robots::mind_tests::a_crawling_walker_doesnt_flank` (a walker took the flank before its limp caught up) | 18ba914 (8b9fabb6) | Robot minds |
