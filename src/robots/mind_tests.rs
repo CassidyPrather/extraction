@@ -4246,3 +4246,226 @@ fn distrust_wears_off() {
     app.update();
     assert!(!distrusted(&app), "believed again");
 }
+
+#[derive(Resource, Default)]
+struct Calls(Vec<super::squad::SquadCall>);
+
+fn squad_app(n: usize, drone: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    squad_app_with(n, drone, false)
+}
+
+/// Out on a raid, carrying a radio if `radio`, with `n` walkers (and a
+/// drone) fighting you.
+fn squad_app_with(n: usize, drone: bool, radio: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    let (mut app, player, zone) = app(None);
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    // No plan while they're set down: it starts when the test does.
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    if radio {
+        // In the pack on your back.
+        let r = spawn_radio(&mut app, zone.on_ground(100.0, 200.0) + Vec3::Y);
+        let bag = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack on your back");
+        app.world_mut()
+            .entity_mut(r)
+            .insert(crate::interact::body::InBackpack { bag });
+        app.update();
+        assert!(
+            app.world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(r)
+                .is_some()
+        );
+    }
+    app.init_resource::<Calls>().add_systems(
+        Last,
+        |mut m: MessageReader<super::squad::SquadCall>, mut s: ResMut<Calls>| {
+            s.0.extend(m.read().copied())
+        },
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut fighters: Vec<Entity> = (0..n)
+        .map(|k| {
+            let x = 96.0 + k as f32 * 4.0;
+            walker_at(&mut app, &zone, zone.on_ground(x, 225.0))
+        })
+        .collect();
+    if drone {
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                me + Vec3::new(0.0, 18.0, 20.0),
+                Job {
+                    kind: JobKind::Survey,
+                    site: me,
+                    duration: 999.0,
+                    exit: me,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        fighters.push(d);
+    }
+    for w in &fighters {
+        let mut aw = app.world_mut().get_mut::<Awareness>(*w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(*w).unwrap() = Brain::Engage;
+    }
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = true;
+    app.world_mut().resource_mut::<Calls>().0.clear();
+    (app, player, zone, me, fighters)
+}
+
+fn role_of(app: &App, e: Entity) -> Option<super::squad::Role> {
+    app.world()
+        .get::<super::squad::SquadRole>(e)
+        .map(|r| r.role)
+}
+
+/// Three walkers on you: one pins, one flanks, and one makes for the way
+/// to your rendezvous and gets between you and it. Each says its part
+/// once.
+#[test]
+fn three_walkers_hold_flank_and_cut_you_off() {
+    use super::squad::Role;
+    let (mut app, player, zone, me, w) = squad_app(3, false);
+    let rv = super::squad::your_rendezvous(&zone, None, me).expect("a rendezvous");
+    let toward = Vec2::new(rv.x - me.x, rv.z - me.z).normalize();
+    let mut ahead: f32 = f32::MIN;
+    let mut cutter = None;
+    for _ in 0..90 * 30 {
+        put(&mut app, player, me);
+        app.update();
+        if cutter.is_none() {
+            cutter = w
+                .iter()
+                .copied()
+                .find(|e| role_of(&app, *e) == Some(Role::CutOff));
+        }
+        if let Some(c) = cutter {
+            let t = app.world().get::<Transform>(c).unwrap().translation;
+            ahead = ahead.max(Vec2::new(t.x - me.x, t.z - me.z).dot(toward));
+        }
+    }
+    let roles: Vec<Option<Role>> = w.iter().map(|e| role_of(&app, *e)).collect();
+    assert!(roles.contains(&Some(Role::Pin)), "{roles:?}");
+    assert!(roles.contains(&Some(Role::Flank)), "{roles:?}");
+    assert!(cutter.is_some(), "{roles:?}");
+    assert!(
+        ahead > 10.0,
+        "the cut-off got out between you and the rendezvous: {ahead:.1} m toward it"
+    );
+    let calls = &app.world().resource::<Calls>().0;
+    for role in [Role::Pin, Role::Flank, Role::CutOff] {
+        assert_eq!(
+            calls.iter().filter(|c| c.role == role).count(),
+            1,
+            "{role:?} said once: {calls:?}"
+        );
+    }
+}
+
+/// With a drone among them it spots for the flanker: over its way in,
+/// with its light down on it.
+#[test]
+fn a_drone_lights_the_flankers_way() {
+    use super::squad::Role;
+    let (mut app, player, _zone, me, w) = squad_app(2, true);
+    let drone = *w.last().unwrap();
+    let mut closest = f32::MAX;
+    for _ in 0..90 * 12 {
+        put(&mut app, player, me);
+        app.update();
+        if let Some(r) = app.world().get::<super::squad::SquadRole>(drone) {
+            let at = app.world().get::<Transform>(drone).unwrap().translation;
+            closest = closest.min(Vec2::new(at.x - r.post.x, at.z - r.post.z).length());
+        }
+    }
+    assert_eq!(role_of(&app, drone), Some(Role::Spot));
+    assert!(
+        closest < 6.0,
+        "over the flanker's way in: {closest:.1} m off"
+    );
+    let lights = app
+        .world_mut()
+        .query::<&super::squad::SpotterLight>()
+        .iter(app.world())
+        .filter(|l| l.drone == drone)
+        .count();
+    assert_eq!(lights, 1, "its light on");
+}
+
+/// A radio you carry says it: which way the flanker's coming round.
+/// Without one, nothing's said.
+#[test]
+fn your_radio_says_where_the_flanker_goes() {
+    let run = |radio: bool| {
+        let (mut app, player, _zone, me, _w) = squad_app_with(2, false, radio);
+        for _ in 0..90 * 3 {
+            put(&mut app, player, me);
+            app.update();
+        }
+        let flank = app
+            .world()
+            .resource::<Calls>()
+            .0
+            .iter()
+            .find(|c| c.role == super::squad::Role::Flank)
+            .copied()
+            .expect("a flank call");
+        let way =
+            crate::raid::lines::bearing_word(Vec2::new(flank.post.x - me.x, flank.post.z - me.z));
+        let said: Vec<String> = app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .map(|(t, _)| t.clone())
+            .collect();
+        (said, way)
+    };
+    let (said, way) = run(true);
+    assert!(
+        said.iter().any(|l| l.contains(way) && l.contains("round")),
+        "the flanker's way, {way}: {said:?}"
+    );
+    let (said, _) = run(false);
+    assert!(
+        !said.iter().any(|l| l.contains("round to")),
+        "no radio, no word: {said:?}"
+    );
+}
+
+/// With coordination off (the sims' other arm), they fight alone: no
+/// roles, no calls, nobody flanks.
+#[test]
+fn uncoordinated_they_fight_alone() {
+    let (mut app, player, _zone, me, w) = squad_app(3, false);
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    for _ in 0..90 * 5 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    assert!(w.iter().all(|e| role_of(&app, *e).is_none()));
+    assert!(app.world().resource::<Calls>().0.is_empty());
+    assert!(
+        w.iter()
+            .all(|e| !app.world().entity(*e).contains::<super::walker::Flanker>())
+    );
+}
