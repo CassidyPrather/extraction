@@ -552,15 +552,19 @@ fn print_mesh(
         }
         idx.extend_from_slice(&[b, b + 2, b + 1, b, b + 3, b + 2]);
     }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+    // No prints yet: one triangle that draws nothing (an empty mesh is an
+    // error on the GPU).
+    crate::render::sound_meshes::never_empty(
+        Mesh::new(
+            PrimitiveTopology::TriangleList,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+        .with_inserted_indices(Indices::U32(idx)),
     )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-    .with_inserted_indices(Indices::U32(idx))
 }
 
 /// For screenshots (`EXTRACTION_DEMO_TRACKS=1`, with `--snow`): a
