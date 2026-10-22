@@ -42,7 +42,7 @@ pub enum SignKind {
     Glass,
     /// Something wooden broken open: a crate, a door, a shutter.
     Splintered,
-    /// A wreck or a body dragged from where it fell.
+    /// A wreck or a carcass dragged from where it fell.
     Dragged,
     /// A loot spot cleared: a shelf, a table, a locker left bare.
     Looted,

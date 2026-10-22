@@ -3032,3 +3032,51 @@ fn what_you_disturb_is_recorded() {
     assert_eq!(doors.len(), 1, "the one you opened: {doors:?}");
     assert!(doors[0].distance(me + Vec3::Z) < 0.5);
 }
+
+/// A carcass dragged from where it fell (Wildlife's: `Draggable`) leaves
+/// a sign where it's got to; a car door dragged along (not a body)
+/// doesn't.
+#[test]
+fn a_carcass_dragged_off_leaves_a_sign() {
+    use super::disturbed::{SignKind, Signs};
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    app.update();
+    let deer = app
+        .world_mut()
+        .spawn((
+            crate::wildlife::bodies::Carcass {
+                kind: crate::wildlife::bodies::CarcassKind::Deer,
+                at: me,
+                owner: Entity::PLACEHOLDER,
+                index: 0,
+            },
+            crate::interact::carry::Bulky,
+            crate::interact::carry::Draggable,
+        ))
+        .id();
+    let door = app.world_mut().spawn(crate::interact::carry::Bulky).id();
+    let drag = |item: Entity, at: Vec3| crate::interact::carry::Dragged {
+        item,
+        at,
+        speed: 1.0,
+        stuff: crate::interact::touch::Stuff::Metal,
+        rolling: false,
+    };
+    let deer_at = me + Vec3::new(3.0, 0.0, 0.0);
+    app.world_mut().write_message(drag(deer, deer_at));
+    app.world_mut()
+        .write_message(drag(door, me + Vec3::new(-6.0, 0.0, 0.0)));
+    app.update();
+    let dragged: Vec<Vec3> = app
+        .world()
+        .resource::<Signs>()
+        .0
+        .iter()
+        .filter(|s| s.kind == SignKind::Dragged)
+        .map(|s| s.at)
+        .collect();
+    assert_eq!(dragged.len(), 1, "the body, not the door: {dragged:?}");
+    assert!(dragged[0].distance(deer_at) < 0.1);
+}
