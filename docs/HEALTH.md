@@ -22,6 +22,7 @@ from: the container runs out of memory.
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 907 passed, 0 failed, all within budget, 31 min | gauges 14/14 in 17 min: the first fully green round |
 | 7f23655 | 08:00 | 10/10 exit 0, 5 extracted (lowest yet) | 900 passed, 0 failed, 33 min wall; 1 over budget (soak walls 123.5 s) | gauges 13/14 in 16 min (busy moment: fix on Performance's branch) |
 | 039a64a | 06:40 | 10/10 exit 0, 7 extracted; Sallow seed 1 timed out stuck | 879 passed, 0 failed, all within budget, 36 min wall (5630 test-s) | gauges: 13/14 in 18 min (busy moment's PostUpdate share) |
 | 18ba914 | 04:30 | 10/10 clean, 8 extracted | 856 passed, 0 failed, all within budget; 4912 test-seconds (render gauges skipped by hand) | first round with single-threaded headless apps |
@@ -42,18 +43,18 @@ from: the container runs out of memory.
 
 ## Open failures
 
-As of 039a64a.
+None in the suite or gauges as of ce0f10b.
 
 | test / run | det. / flaky | class | owner | status |
 | - | - | - | - | - |
-| `render::budget::tests::gauge_a_busy_moment_holds_the_cpu_budget`: PostUpdate 79% of the frame > 50% (frame 23 ms, 42 units: the total is fine) | ? | share limits set for the multi-threaded executor, now measured single-threaded? | Performance | fixed on claude/polish-performance (wall-clock gauges multi-threaded again); still red on 7f23655 |
-| Sim: Sallow seed 1 times out stuck at (79-82, 148-152) on the way to the rendezvous; stuck_block fired 51 times, each moving the target 1-3 m | det.: a rerun is byte-identical (2097 events); 34 HP of real falls, so maybe a drop it can't climb back out of | a pocket: blocking one waypoint at a time never gets out | coordinator (src/sim) | routed 06:40 |
-| `soak::physics::the_player_cant_be_pushed_through_walls` over its 120 s budget (123.5 s) | | creeping test time | Soak | routed 08:00 |
+| Sim: a raider wades into live water (Cinder Works seed 4, tunnel_cinder, while looting) and dies | det. (replays from the seed) | hazards the raider's plan doesn't know (crawlers avoid them via `underground::block_works`) | coordinator (src/sim), Underground's hook | routed 10:20; telemetry now names it `live_water` |
+| Sim extraction 9/20 (45%) on ce0f10b; Rime Fell 1/4 | | balance | Fifth valley FYI | watching |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| the busy-moment gauge (share limits under one thread), the Sallow pocket (escalation), Soak's walls over budget | ce0f10b | Performance, coordinator, Soak |
 | `robots::mind_tests::a_crawling_walker_doesnt_flank` (a walker took the flank before its limp caught up) | 18ba914 (8b9fabb6) | Robot minds |
 | the dirigible pod (a spotter counted against the director's budget, since bb5dbaf0), `heaps_settle` (a log pile taken for a floor), Rime Fell's bats and ducks | 24d1ef0 / 4d45a5f | Robot bodies, Soak, Wildlife |
 | the suite took ~2 h at 4 threads | this branch (single-threaded headless apps) + Performance's gauge tier | Verifier, Performance |
