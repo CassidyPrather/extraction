@@ -195,4 +195,28 @@ mod tests {
         // Up on the ridge, it's open again.
         assert!(valley_smear(valley, 60.0, 0.0) < v);
     }
+
+    /// On a real map: inside one of its buildings a sound is smeared as
+    /// indoors; out in the open, less.
+    #[test]
+    fn indoors_smears_more_than_the_open() {
+        let mut vr = crate::vr_harness::Vr::new("training_yard");
+        vr.step(30);
+        let w = vr.app.world();
+        let reverb = w.resource::<Reverb>();
+        let shell = w
+            .resource::<Entrances>()
+            .shells
+            .first()
+            .copied()
+            .expect("a building with doors");
+        let inside = shell.xf.transform_point(Vec3::Y * 1.2);
+        let zone = w.resource::<crate::world::Zone>();
+        let open = zone.on_ground(0.0, 30.0) + Vec3::Y * 1.5;
+        let (i, o) = (reverb.smear(inside), reverb.smear(open));
+        println!("smear: indoors {i:.2}, the yard {o:.2}");
+        assert_eq!(i, INDOORS);
+        assert!(o < INDOORS, "{o}");
+        assert!(reverb.n > 0, "the ground's gridded");
+    }
 }
