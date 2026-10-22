@@ -1081,9 +1081,9 @@ fn fight_for_gallery(
 }
 
 /// `--gallery spall`: a car door, a plank wall and a plaster wall side on,
-/// 3 m ahead, one over another, each shot through from the left by a
-/// walker's round every other frame: the splash off the near face, the
-/// spall out of the far one.
+/// a couple of metres ahead, one over another, each shot through from
+/// behind and to the left by a walker's round every frame: the spall out of
+/// the face toward the camera.
 fn spall_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -1107,6 +1107,9 @@ fn spall_for_gallery(
     };
     let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
     let (fwd, right) = (rot * Vec3::NEG_Z, rot * Vec3::X);
+    // The rounds come square on to each wall, across and back toward the
+    // camera, so the face they leave by is the one it sees.
+    let line = (right - fwd * 0.7).normalize();
     let walls = [
         (
             Mat::PaintedMetal,
@@ -1120,12 +1123,12 @@ fn spall_for_gallery(
     state.0 += 1;
     if state.0 == 3 {
         for (mat, thick, up, colour) in walls {
-            let half = Vec3::new(0.3, 0.17, thick * 0.5);
+            let half = Vec3::new(0.45, 0.19, thick * 0.5);
             commands.spawn((
                 Name::new("Gallery wall"),
                 crate::world::surfaces::Surfaces(vec![(half, Transform::IDENTITY, mat)]),
-                Transform::from_translation(eye + fwd * 3.0 + Vec3::Y * up)
-                    .looking_to(right, Vec3::Y),
+                Transform::from_translation(eye + fwd * 2.2 + Vec3::Y * (up - 0.3))
+                    .looking_to(line, Vec3::Y),
                 Mesh3d(meshes.add(Cuboid::from_size(half * 2.0))),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: colour,
@@ -1142,13 +1145,13 @@ fn spall_for_gallery(
     let Some(gun) = state.1 else {
         return;
     };
-    if state.0 > 5 && state.0 % 2 == 0 {
+    if state.0 > 5 {
         for (i, (_, _, up, _)) in walls.iter().enumerate() {
             shots.write(crate::weapons::ballistics::Shot {
                 gun,
                 shooter: Some(gun),
-                origin: eye + fwd * 3.0 + Vec3::Y * up - right * 4.0,
-                direction: right,
+                origin: eye + fwd * 2.2 + Vec3::Y * (up - 0.3) - line * 4.0,
+                direction: line,
                 speed: 450.0,
                 damage: 14.0,
                 projectiles: 1,
