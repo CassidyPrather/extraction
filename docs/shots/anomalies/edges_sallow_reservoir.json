@@ -4,39 +4,39 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 7.7,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 8.3,
+    "step": 9.4,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 4.8,
+    "step": 6.8,
     "slip": null,
     "ok": false
    },
    {
-    "step": 6.9,
+    "step": 6.1,
     "slip": null,
     "ok": false
    },
    {
-    "step": 5.6,
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.5,
     "slip": null,
     "ok": false
    }
   ],
   "sides": [
    {
-    "step": 8.3,
-    "slip": 0.1,
+    "step": 9.5,
+    "slip": 0.0,
     "ok": true
    },
    {
-    "step": 7.6,
+    "step": 7.9,
     "slip": null,
     "ok": false
    }
@@ -49,39 +49,39 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 5.3,
+    "step": 5.0,
     "slip": null,
     "ok": false
    },
    {
-    "step": 7.3,
+    "step": 3.3,
     "slip": null,
     "ok": false
    },
    {
-    "step": 4.3,
+    "step": 4.1,
     "slip": null,
     "ok": false
    },
    {
-    "step": 4.5,
+    "step": 3.7,
     "slip": null,
     "ok": false
    },
    {
-    "step": 3.0,
+    "step": 3.2,
     "slip": null,
     "ok": false
    }
   ],
   "sides": [
    {
-    "step": 5.4,
+    "step": 4.5,
     "slip": null,
     "ok": false
    },
    {
-    "step": 7.6,
+    "step": 7.4,
     "slip": null,
     "ok": false
    }
@@ -94,39 +94,39 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 11.1,
+    "step": 10.4,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 11.8,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 10.5,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 10.1,
+    "step": 9.8,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 10.1,
+    "step": 10.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 10.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 11.2,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 11.0,
-    "slip": 0.1,
+    "step": 10.6,
+    "slip": 0.0,
     "ok": true
    },
    {
-    "step": 17.9,
+    "step": 18.0,
     "slip": 0.1,
     "ok": true
    }
@@ -139,41 +139,86 @@
   "condition": "night",
   "lines": [
    {
-    "step": 16.9,
-    "slip": 0.3,
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.8,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 4.9,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.0,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.2,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 5.4,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 21.1,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "passing": 0,
+  "ok": false
+ },
+ {
+  "kind": "burner",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 9.1,
+    "slip": 0.2,
     "ok": true
    },
    {
-    "step": 19.3,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 14.1,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 13.8,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 9.3,
+    "step": 9.0,
     "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 8.1,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 9.7,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 9.1,
+    "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 16.6,
-    "slip": 0.1,
-    "ok": true
+    "step": 5.9,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 22.9,
-    "slip": 0.0,
-    "ok": true
+    "step": 7.4,
+    "slip": null,
+    "ok": false
    }
   ],
   "passing": 5,
@@ -181,89 +226,44 @@
  },
  {
   "kind": "burner",
-  "condition": "clear",
-  "lines": [
-   {
-    "step": 8.7,
-    "slip": 0.2,
-    "ok": true
-   },
-   {
-    "step": 9.3,
-    "slip": 0.2,
-    "ok": true
-   },
-   {
-    "step": 7.9,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 8.8,
-    "slip": 0.1,
-    "ok": true
-   },
-   {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
-   }
-  ],
-  "sides": [
-   {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 8.3,
-    "slip": 0.0,
-    "ok": true
-   }
-  ],
-  "passing": 3,
-  "ok": true
- },
- {
-  "kind": "burner",
   "condition": "fog",
   "lines": [
    {
-    "step": 12.4,
+    "step": 13.1,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 12.4,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 11.0,
+    "step": 12.8,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 10.1,
-    "slip": 0.1,
+    "step": 11.5,
+    "slip": 0.2,
     "ok": true
    },
    {
-    "step": 9.6,
+    "step": 12.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 12.5,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 9.9,
-    "slip": 0.1,
-    "ok": true
+    "step": 6.2,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 8.9,
-    "slip": 0.1,
-    "ok": true
+    "step": 7.2,
+    "slip": null,
+    "ok": false
    }
   ],
   "passing": 5,
@@ -274,39 +274,39 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 18.9,
+    "step": 20.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 19.1,
     "slip": 0.2,
     "ok": true
    },
    {
     "step": 18.3,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 18.4,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 16.1,
-    "slip": 0.1,
+    "step": 18.8,
+    "slip": 0.2,
     "ok": true
    },
    {
-    "step": 15.8,
+    "step": 19.3,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 18.1,
+    "step": 15.5,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 18.2,
+    "step": 16.8,
     "slip": 0.0,
     "ok": true
    }
@@ -319,39 +319,39 @@
   "condition": "night",
   "lines": [
    {
-    "step": 35.7,
+    "step": 37.0,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 33.9,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 34.3,
+    "step": 36.1,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 30.7,
-    "slip": 0.1,
+    "step": 35.2,
+    "slip": 0.2,
     "ok": true
    },
    {
-    "step": 30.0,
+    "step": 35.6,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 35.9,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 31.7,
-    "slip": 0.1,
+    "step": 21.7,
+    "slip": 0.0,
     "ok": true
    },
    {
-    "step": 28.5,
+    "step": 24.4,
     "slip": 0.1,
     "ok": true
    }

@@ -553,7 +553,8 @@ fn init_assets(
     let flattened = ground_with(
         &scoured,
         Color::srgba(0.36, 0.13, 0.06, 0.97),
-        LinearRgba::rgb(0.035, 0.018, 0.008),
+        // (Its grooves darken it on the whole: the glow made up for that.)
+        LinearRgba::rgb(0.065, 0.034, 0.015),
         0.95,
     );
     let mut ground =
