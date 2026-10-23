@@ -1,7 +1,9 @@
 //! Which file a texture loads from. `scripts/bc7_textures.py` bakes a
 //! BC7 copy (`<name>.bc7.ktx2`) of the colour and data maps beside each
 //! RGBA8 original: the GPU samples it as it is (nothing decoded as it
-//! loads) at a quarter of the bytes. It's loaded wherever the GPU has BC
+//! loads) at a quarter of the bytes. Normal maps get a BC5 copy
+//! (`normal.bc5.ktx2`: X and Y, Z rebuilt in the shader; Bevy's own
+//! materials see the format and rebuild it, terrain.wgsl always does). It's loaded wherever the GPU has BC
 //! formats (every desktop GPU) and the copy exists; otherwise, and with no
 //! GPU at all (the tests), the original. See docs/PERFORMANCE.md,
 //! "Textures".
@@ -53,7 +55,8 @@ impl Plugin for TexturesPlugin {
 }
 
 /// The path to load for `path` (an asset path ending `.ktx2`): its BC7
-/// copy where the GPU takes it and the copy's there, else `path`.
+/// (or a normal map's BC5) copy where the GPU takes it and the copy's
+/// there, else `path`.
 pub fn ktx2(path: &str) -> String {
     if !BC.load(Ordering::Relaxed) {
         return path.to_string();
@@ -61,12 +64,62 @@ pub fn ktx2(path: &str) -> String {
     let Some(stem) = path.strip_suffix(".ktx2") else {
         return path.to_string();
     };
-    let bc7 = format!("{stem}.bc7.ktx2");
-    if crate::asset_root_path().join(&bc7).exists() {
-        bc7
+    let bc = if stem.ends_with("normal") {
+        format!("{stem}.bc5.ktx2")
+    } else {
+        format!("{stem}.bc7.ktx2")
+    };
+    if crate::asset_root_path().join(&bc).exists() {
+        bc
     } else {
         path.to_string()
     }
+}
+
+/// The textures under `assets/textures` with no baked copy beside them
+/// (`scripts/bc7_textures.py` makes them; it needs etcpak). The load and
+/// VRAM gauges measure what ships, the copies: without them they'd
+/// measure the RGBA8 originals (a valley's VRAM 2.2 GB, not 2.0, and its
+/// load a third slower) and blame the valley.
+#[cfg(test)]
+pub(crate) fn unbaked() -> Vec<String> {
+    let root = crate::asset_root_path();
+    let mut out = Vec::new();
+    let mut stack = vec![root.join("textures")];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                stack.push(p);
+                continue;
+            }
+            let name = p.to_string_lossy().into_owned();
+            let Some(stem) = name.strip_suffix(".ktx2") else {
+                continue;
+            };
+            if stem.ends_with(".bc7") || stem.ends_with(".bc5") {
+                continue;
+            }
+            let copy = if stem.ends_with("normal") {
+                format!("{stem}.bc5.ktx2")
+            } else {
+                format!("{stem}.bc7.ktx2")
+            };
+            if !std::path::Path::new(&copy).exists() {
+                out.push(
+                    p.strip_prefix(&root)
+                        .unwrap_or(&p)
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    out.sort();
+    out
 }
 
 #[cfg(test)]
@@ -94,7 +147,18 @@ mod tests {
                 albedo
             }
         );
-        assert_eq!(ktx2(normal), normal, "normal maps aren't baked");
+        let baked = crate::asset_root_path()
+            .join("textures/materials/boulder/normal.bc5.ktx2")
+            .exists();
+        assert_eq!(
+            ktx2(normal),
+            if baked {
+                "textures/materials/boulder/normal.bc5.ktx2"
+            } else {
+                normal
+            },
+            "a normal map's copy is BC5"
+        );
         BC.store(false, Ordering::Relaxed);
     }
 }
