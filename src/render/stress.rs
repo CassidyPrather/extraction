@@ -30,6 +30,15 @@ pub fn frames() -> u32 {
         .unwrap_or(900)
 }
 
+/// Frames of the fight before it's measured: a second (`STRESS_WARM`;
+/// fewer for a software GPU's few frames).
+pub fn warm_frames() -> u32 {
+    std::env::var("STRESS_WARM")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(90)
+}
+
 /// Stages the scene once [`StressRun::go`] (the game: once the world is
 /// in) and runs it for [`StressRun::frames`].
 pub struct StressPlugin;
@@ -95,6 +104,9 @@ pub struct StressRun {
     cpu: Vec<f64>,
     gpu: Vec<HashMap<String, f64>>,
     gpu_seen: Option<std::time::Instant>,
+    /// Views each pass is timed for: a headset's two eyes, or a flat
+    /// screen's one.
+    views: usize,
 }
 
 impl StressRun {
@@ -114,6 +126,7 @@ impl StressRun {
             cpu: Vec::new(),
             gpu: Vec::new(),
             gpu_seen: None,
+            views: 1,
         }
     }
 
@@ -127,9 +140,14 @@ impl StressRun {
 }
 
 /// The game's run starts once the world's in (everything drawn ready).
-fn go(mut run: ResMut<StressRun>, world: super::timeline::WorldReady) {
+fn go(
+    mut run: ResMut<StressRun>,
+    world: super::timeline::WorldReady,
+    eyes: Query<(), With<bevy_mod_xr::camera::XrCamera>>,
+) {
     if run.quit && !run.go && run.stage == Stage::Waiting && world.ready() {
         run.go = true;
+        run.views = eyes.iter().count().max(1);
     }
 }
 
@@ -217,25 +235,31 @@ fn drive(world: &mut World) {
         }
         Stage::Warming(n) => {
             fight(world, n);
-            world.resource_mut::<StressRun>().stage = if n + 1 >= 90 {
+            world.resource_mut::<StressRun>().stage = if n + 1 >= warm_frames() {
                 Stage::Running
             } else {
                 Stage::Warming(n + 1)
             };
         }
         Stage::Running => {
-            let f = world.resource::<StressRun>().frame;
+            let (f, frames, wall) = {
+                let run = world.resource::<StressRun>();
+                (run.frame, run.frames, run.wall)
+            };
             fight(world, f);
-            let wall = world.resource::<StressRun>().wall;
-            // A blast every 4 s; the wall breached at 5 s.
-            if f % 360 == 120 {
+            // On the 10 s minute's clock (a shorter run's, squeezed: a
+            // software GPU's few frames still see each): a blast every 4 s
+            // from 1.3 s; the wall breached at 5 s, at the front wall's
+            // middle, then (if no hole came) each other side's.
+            let at = |t: u32| f * 900 / frames <= t && t < (f + 1) * 900 / frames;
+            if [120, 480, 840].into_iter().any(at) {
                 blast(world, wall);
             }
-            // The breach: at the front wall's middle, then (if no hole
-            // came) each other side's, a few frames apart.
-            if (450..450 + 4 * 10).contains(&f) && f % 10 == 0 && holes(world) == 0 {
-                let (at, out) = side(world, (f - 450) / 10);
-                world.write_message(crate::destruction::hooks::Breach { at, out });
+            if let Some(n) = (0..4).find(|n| at(450 + 10 * n)) {
+                if holes(world) == 0 {
+                    let (at, out) = side(world, n);
+                    world.write_message(crate::destruction::hooks::Breach { at, out });
+                }
             }
             let quit = {
                 let mut run = world.resource_mut::<StressRun>();
@@ -502,11 +526,12 @@ fn pct(v: &[f64], q: f64) -> f64 {
 }
 
 /// The game's minute: the CPU's p99 and worst, the GPU's (all views
-/// together, and per eye: a headset's two eyes are two views, each pass
-/// timed for both), and what the GPU's worst frames (its slowest 1%, five
-/// at least) spend on, against every frame's mean.
+/// together, and per view: a headset's two eyes are two, each pass timed
+/// for both; a flat screen's one view is an eye's work at its size), and
+/// what the GPU's worst frames (its slowest 1%, five at least) spend on,
+/// against every frame's mean.
 fn report(run: &StressRun) -> Vec<String> {
-    let views = 2.0;
+    let views = run.views as f64;
     let total = |p: &HashMap<String, f64>| -> f64 {
         p.iter()
             .filter(|(k, _)| !k.contains('/'))
@@ -518,11 +543,12 @@ fn report(run: &StressRun) -> Vec<String> {
     let gpu: Vec<&HashMap<String, f64>> = run.gpu.iter().filter(|p| !p.is_empty()).collect();
     let totals: Vec<f64> = gpu.iter().map(|p| total(p)).collect();
     let mut out = vec![format!(
-        "{} frames; CPU (main schedule) p99 {:.1} ms, worst {:.1}; GPU ({} frames timed) p99 {:.1} ms, worst {:.1}; per eye p99 {:.1}, worst {:.1}, of 11.1",
+        "{} frames; CPU (main schedule) p99 {:.1} ms, worst {:.1}; GPU ({} frames timed, {} views) p99 {:.1} ms, worst {:.1}; per view p99 {:.1}, worst {:.1}, of 11.1",
         run.cpu.len(),
         pct(&run.cpu, 0.99),
         pct(&run.cpu, 1.0),
         totals.len(),
+        run.views,
         pct(&totals, 0.99),
         pct(&totals, 1.0),
         pct(&totals, 0.99) / views,
@@ -551,7 +577,7 @@ fn report(run: &StressRun) -> Vec<String> {
     let mut v: Vec<(&str, f64)> = worst.into_iter().collect();
     v.sort_by(|a, b| b.1.total_cmp(&a.1));
     out.push(format!(
-        "the GPU's worst 1%, ms a frame, both eyes (typically): {}",
+        "the GPU's worst 1%, ms a frame, every view (typically): {}",
         v.iter()
             .take(8)
             .map(|(k, t)| format!("{k} {t:.2} ({:.2})", typical.get(k).copied().unwrap_or(0.0)))
