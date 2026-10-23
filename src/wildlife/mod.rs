@@ -18,6 +18,7 @@
 
 use bevy::prelude::*;
 
+pub mod bait;
 pub mod bat_look;
 pub mod bats;
 pub mod bodies;
@@ -198,7 +199,10 @@ impl Plugin for WildlifePlugin {
             .init_resource::<insects::Chorus>()
             .init_resource::<LetGo>()
             .init_resource::<Landed>()
+            .init_resource::<herd::Among>()
             .add_observer(let_go)
+            .add_observer(bait::put_down)
+            .add_observer(bait::picked_up)
             .add_systems(Startup, setup)
             .add_systems(
                 FixedUpdate,
@@ -207,7 +211,7 @@ impl Plugin for WildlifePlugin {
                     (gather_threats, landings),
                     (
                         flock::flocks,
-                        herd::herds,
+                        (herd::herds, bait::lure).chain(),
                         fish::shoals,
                         rats::rats,
                         bats::bats,

@@ -372,7 +372,7 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
+    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight, among): (
         Res<Lighting>,
         Option<Res<crate::hearing::Hearing>>,
         Res<crate::gadgets::Cloaks>,
@@ -382,6 +382,7 @@ pub(crate) fn perceive(
         Option<Res<crate::anomaly::hush::Hushes>>,
         Option<Res<crate::weapons::optics::Glints>>,
         Option<Res<crate::weapons::flares::Starlight>>,
+        Option<Res<crate::wildlife::herd::Among>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     loads: Query<(&crate::interact::Held, &LinearVelocity), With<crate::interact::carry::Bulky>>,
@@ -512,7 +513,13 @@ pub(crate) fn perceive(
                 feet,
                 head,
                 height,
-                speed: Vec2::new(body.velocity.x, body.velocity.z).length(),
+                // Walking among a herd you're one more shape moving
+                // (`wildlife::herd::Among`): only running stands out.
+                speed: {
+                    let v = Vec2::new(body.velocity.x, body.velocity.z).length();
+                    let among = among.as_deref().is_some_and(|a| a.hides(feet));
+                    if among && v <= 3.0 { 0.0 } else { v }
+                },
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),

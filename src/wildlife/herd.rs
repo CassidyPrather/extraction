@@ -184,6 +184,8 @@ pub struct Herd {
     pub kind: Kind,
     pub beasts: Vec<Beast>,
     pub home: Vec2,
+    /// Food put down that it's going to, or eating (`bait`).
+    pub lure: Option<Entity>,
     rng: Rng,
     bark_cool: f32,
 }
@@ -191,6 +193,40 @@ pub struct Herd {
 impl Herd {
     pub fn leader(&self) -> Option<&Beast> {
         self.beasts.iter().find(|b| b.alive())
+    }
+
+    /// Something to eat at `to`: home is there now, and those grazing or
+    /// ambling far from it walk over (not those running or watching).
+    pub fn lure(&mut self, to: Vec2) {
+        self.home = to;
+        for b in self.beasts.iter_mut().filter(|b| b.alive()) {
+            let far = b.pos.xz().distance(to) > super::bait::EAT_NEAR * 2.0;
+            if far && matches!(b.state, State::Graze | State::Wander { .. }) {
+                b.state = State::Wander {
+                    to: to + b.slot * 0.5,
+                };
+                b.timer = 30.0;
+            }
+        }
+    }
+}
+
+/// Where the herds' animals are this tick, for the machines' eyes: you
+/// walking among them is one more shape moving (`robots::senses`).
+#[derive(Resource, Default)]
+pub struct Among(pub Vec<Vec3>);
+
+/// You're among animals here: this many within this (m).
+pub const AMONG_NEAR: f32 = 12.0;
+pub const AMONG_COUNT: usize = 2;
+
+impl Among {
+    pub fn hides(&self, p: Vec3) -> bool {
+        self.0
+            .iter()
+            .filter(|a| a.xz().distance(p.xz()) < AMONG_NEAR)
+            .count()
+            >= AMONG_COUNT
     }
 }
 
@@ -274,6 +310,7 @@ pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
         kind,
         beasts,
         home,
+        lure: None,
         rng: Rng::new(rng.next_u64()),
         bark_cool: 0.0,
     }
@@ -582,6 +619,7 @@ pub(crate) fn herds(
     >,
     mut noises: MessageReader<crate::robots::Noise>,
     landed: Res<super::Landed>,
+    mut among: ResMut<Among>,
     mut startled: MessageWriter<Startled>,
     opts: Res<crate::LaunchOptions>,
     mut spawned: Local<bool>,
@@ -631,7 +669,11 @@ pub(crate) fn herds(
         loud: &loud,
         hounds: &hounds,
     };
+    among.0.clear();
     for (e, mut herd, mut tf) in &mut herds {
+        among
+            .0
+            .extend(herd.beasts.iter().filter(|b| b.alive()).map(|b| b.pos));
         for (what, at, by, alarm) in herd.tick(&ctx, dt) {
             startled.write(Startled {
                 herd: e,
@@ -788,6 +830,43 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Food put down 120 m off: they amble over (four minutes or so, not
+    /// at a run) and graze about it; walking among them, you're one more
+    /// of them.
+    #[test]
+    fn bait_draws_them_and_hides_you_among_them() {
+        let (zone, nav, mut herd) = herd_in("marrow_creek", Kind::Deer);
+        let to = approach(&zone, &nav, herd.home) * 120.0 + herd.home;
+        assert!(open(&nav, &zone, to));
+        let ctx = Ctx {
+            zone: &zone,
+            nav: &nav,
+            threats: &[],
+            loud: &[],
+            hounds: &[],
+        };
+        let mut came = None;
+        for step in 0..(360.0 / DT) as usize {
+            herd.lure(to);
+            herd.tick(&ctx, DT);
+            if herd.leader().unwrap().pos.xz().distance(to) < super::super::bait::EAT_NEAR {
+                came = Some(step as f32 * DT);
+                break;
+            }
+        }
+        let came = came.expect("never came to the bait");
+        assert!(came > 60.0, "there in {came:.0} s: ran?");
+        // A minute grazing there, all together.
+        for _ in 0..(60.0 / DT) as usize {
+            herd.lure(to);
+            herd.tick(&ctx, DT);
+        }
+        let among = Among(herd.beasts.iter().map(|b| b.pos).collect());
+        let me = zone.on_ground(to.x, to.y);
+        assert!(among.hides(me));
+        assert!(!among.hides(me + Vec3::X * (AMONG_NEAR + 40.0)));
     }
 
     /// A stone into the thicket they're grazing in puts them to flight
