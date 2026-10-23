@@ -22,9 +22,10 @@
 //! [`Hampered`]).
 //!
 //! Machines go round what hurts them (`walker::Nav` costs round live
-//! anomalies, [`avoid_anomalies`]), unless they're chasing hard: in a
-//! fight with you in sight close by, they come straight, and that's the
-//! lure (a hound across a snare, a walker into a burner's edge).
+//! anomalies, [`avoid_anomalies`]), unless they're chasing hard: running
+//! at you, you in sight, they come straight, and that's the lure (a hound
+//! across a snare, a walker into a burner's edge). One holding a post or
+//! searching goes round.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -262,19 +263,24 @@ pub struct Wary(pub std::sync::Arc<extraction_core::nav::NavGrid>);
 pub const AVOID_COST: f32 = 30.0;
 /// ...this far past its edge (m).
 pub const AVOID_MARGIN: f32 = 1.5;
-/// In a fight with you in sight within this (m), it comes straight.
-pub const CHASE_HARD: f32 = 25.0;
+/// Running at you (in a fight, you in sight, closing on you faster than
+/// this, m/s) within this (m), it comes straight. Holding a post, or
+/// searching, it goes round.
+pub const CHASE_HARD: f32 = 40.0;
+pub const CLOSING: f32 = 0.8;
 
-/// Chasing hard: it risks what's in the way.
+/// Chasing hard: running at you, it risks what's in the way. `gap` is how
+/// far you are, `closing` how fast that's shrinking (m/s).
 pub fn chasing_hard(
     brain: &super::Brain,
     aware: &super::Awareness,
-    target: Option<Vec3>,
-    me: Vec3,
+    gap: Option<f32>,
+    closing: f32,
 ) -> bool {
     matches!(brain, super::Brain::Engage)
         && aware.can_see_target
-        && target.is_some_and(|t| t.distance(me) < CHASE_HARD)
+        && gap.is_some_and(|g| g < CHASE_HARD)
+        && closing > CLOSING
 }
 
 /// Whether walkers go round this kind of anomaly.

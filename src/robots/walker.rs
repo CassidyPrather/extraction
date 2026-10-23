@@ -114,6 +114,10 @@ pub struct Walker {
     pub gun_cooldown: f32,
     /// Pinning you for a squadmate moving up (`Suppressing`).
     pub suppressing: bool,
+    /// How far its target was last tick, and how fast it's closing on it
+    /// (m/s, smoothed): `hazards::chasing_hard`.
+    pub gap: Option<f32>,
+    pub closing: f32,
     pub turret_yaw: f32,
     /// Which diagonal pair may step next.
     pub phase: usize,
@@ -332,6 +336,8 @@ pub fn spawn_walker_sized(
                 yaw: 0.0,
                 gun_cooldown: 2.0,
                 suppressing: false,
+                gap: None,
+                closing: 0.0,
                 turret_yaw: 0.0,
                 phase: 0,
                 collapsed: false,
@@ -548,15 +554,18 @@ fn walker_brain(
         // A site's own grid, or the Zone's: the one wary of anomalies
         // (`hazards::Wary`), unless it's chasing you hard, when it comes
         // straight and risks them.
-        let hard = super::hazards::chasing_hard(
-            &brain,
-            aware,
-            aware
-                .target
-                .and_then(|p| targets.get(p).ok())
-                .map(|g| g.translation()),
-            t.translation,
-        );
+        let gap = aware
+            .target
+            .filter(|_| aware.can_see_target)
+            .and_then(|p| targets.get(p).ok())
+            .map(|g| g.translation().distance(t.translation));
+        let closing = match (w.gap, gap) {
+            (Some(was), Some(now)) if dt > 0.0 => (was - now) / dt,
+            _ => 0.0,
+        };
+        w.closing += (closing - w.closing) * (dt * 2.0).min(1.0);
+        w.gap = gap;
+        let hard = super::hazards::chasing_hard(&brain, aware, gap, w.closing);
         let zone_grid = match (&wary, hard) {
             (Some(w), false) => &w.0,
             _ => &nav.0,
