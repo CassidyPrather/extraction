@@ -258,6 +258,42 @@ fn day_glows(
 mod tests {
     use super::*;
 
+    /// With the clock stopped every lamp shows, whatever its phase: the
+    /// captures' stills stop it to shoot every lamp lit, the same each
+    /// build. Running, a lamp goes dark between flashes.
+    #[test]
+    fn a_stopped_clock_lights_every_lamp() {
+        use extraction_core::map_landmarks::MASTS;
+        let quick = MASTS[0];
+        // A moment it's dark.
+        let dark = (0..400)
+            .map(|k| k as f32 * 0.025)
+            .find(|t| !quick.lit_at(*t))
+            .unwrap();
+        for paused in [false, true] {
+            let mut app = App::new();
+            let mut time = Time::<Virtual>::default();
+            time.advance_by(std::time::Duration::from_secs_f32(dark));
+            if paused {
+                time.pause();
+            }
+            app.insert_resource(time);
+            app.add_systems(Update, flash_lamps);
+            let lamp = app
+                .world_mut()
+                .spawn((Lamp(quick), Visibility::Inherited))
+                .id();
+            app.update();
+            let v = *app.world().get::<Visibility>(lamp).unwrap();
+            let want = if paused {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            assert_eq!(v, want, "paused {paused}: at {dark} s");
+        }
+    }
+
     /// Every landmark the valleys place has a top to carry a lamp, near the
     /// height it's listed at.
     #[test]
