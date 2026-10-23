@@ -294,8 +294,10 @@ mod tests {
         assert!(!counts(Subject::Heavy, &walker, None, plain));
     }
 
-    /// Minutes in, at most, before one is findable.
+    /// Minutes in, at most, before one is findable...
     const FINDABLE_IN: f32 = 4.0;
+    /// ...and it's still there, at work, this long after (s).
+    const STILL_AFTER: f32 = 5.0;
 
     /// In every valley, with a photograph of each kind on the card, one
     /// that counts is about within REACH of the drop before FINDABLE_IN
@@ -369,19 +371,21 @@ mod tests {
                         && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
                 });
             if found {
-                // And still there a minute on: at work, not passing.
+                // And at work there, not passing: a few seconds on it's
+                // still by the drop, and working (it stays for the raid).
                 let first = k as f32 / hz;
-                for _ in 0..(60.0 * hz) as usize {
+                for _ in 0..(STILL_AFTER * hz) as usize {
                     app.update();
                 }
                 let still = app
                     .world_mut()
-                    .query::<Candidate>()
+                    .query::<(Candidate, &super::super::Brain)>()
                     .iter(app.world())
-                    .any(|c| {
+                    .any(|(c, brain)| {
                         let p = c.at.translation();
                         c.findable(subject, &zone)
                             && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
+                            && matches!(brain, super::super::Brain::Working { .. })
                     });
                 return still.then_some(first);
             }
