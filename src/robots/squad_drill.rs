@@ -323,6 +323,26 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                 },
             ));
         }
+        // With a snare out (the lure arms), one of the walkers' place is
+        // a hound's: what runs straight at you, and so what a trap takes.
+        if arm.lure.is_some() && !drone {
+            if let Some(last) = squad.pop() {
+                c.entity(last).despawn();
+            }
+            let p = start + Vec2::from_angle(side) * SPAWN.0;
+            let at = ground(p);
+            squad.push(super::hound::spawn_hound(
+                &mut c,
+                &zone,
+                at,
+                Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            ));
+        }
         if drone {
             let p = start + Vec2::from_angle(side) * SPAWN.0;
             squad.push(super::drone::spawn_drone(
@@ -622,10 +642,10 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         hp,
         heeded,
         calls,
-        squad: if drone {
-            "2 walkers + drone"
-        } else {
-            "3 walkers"
+        squad: match (drone, arm.lure.is_some()) {
+            (true, _) => "2 walkers + drone",
+            (false, true) => "2 walkers + hound",
+            (false, false) => "3 walkers",
         },
         rv: rvs[me.goal].0.clone(),
         snared: app.world().resource::<Snared>().0.len() as u32,
