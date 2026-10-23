@@ -1486,6 +1486,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // At night and in fog: lights to steer by, the landmarks' lamps and the
     // rendezvous beacons (the game's `render::landmarks`, `rv_beacons`).
+    let lamp_chars = crate::map_landmarks::assign(&marks);
     let beacons: Vec<P2> = map
         .markers_of(&MarkerKind::Rendezvous)
         .map(|m| crate::map_landmarks::beacon_at(m.at))
@@ -1500,6 +1501,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         );
         let n = crate::map_landmarks::lights_in_sight(
             &marks,
+            &lamp_chars,
             &beacons,
             hm,
             &canopy,
@@ -1515,6 +1517,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
         let f = crate::map_landmarks::lights_in_sight(
             &marks,
+            &lamp_chars,
             &beacons,
             hm,
             &canopy,
@@ -2944,29 +2947,12 @@ mod tests {
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
         );
-        // Its key's lamp characters are the game's.
-        let table = |name: &str| -> &str {
-            let from = src
-                .find(&format!("{name} = {{"))
-                .unwrap_or_else(|| panic!("no {name}"));
-            &src[from..from + src[from..].find("\n}").unwrap()]
-        };
-        let chars = table("LAMP_CHARACTERS");
-        let names = table("LANDMARK_NAMES");
-        for line in names.lines().skip(1) {
-            let Some(base) = line
-                .trim()
-                .strip_prefix('"')
-                .and_then(|l| l.split('"').next())
-            else {
-                continue;
-            };
-            let want = crate::map_landmarks::character(crate::map_landmarks::kind(base)).name;
-            assert!(
-                chars.contains(&format!("    \"{base}\": \"{want}\",")),
-                "field_map.py's LAMP_CHARACTERS has {base} other than {want}"
-            );
-        }
+        // Each landmark's lamp comes from the dump (map-dump's placements'
+        // `lamp`, the game's own assignment), the beacons' from its table.
+        assert!(
+            src.contains("p.get(\"lamp\""),
+            "field_map.py doesn't read the dump's lamps"
+        );
         for i in 0..4 {
             let want = crate::map_landmarks::beacon_character(i).name;
             assert!(
