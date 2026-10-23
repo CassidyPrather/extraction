@@ -763,17 +763,6 @@ mod tests {
     /// with its set, and a thrown drone isn't heard as a thrown walker.
     #[test]
     fn the_zone_striking_a_machine_is_heard() {
-        let hazards = [
-            Hazard::Lift,
-            Hazard::Burner,
-            Hazard::Snare,
-            Hazard::Well,
-            Hazard::Mirror,
-            Hazard::Hush,
-            Hazard::Gas,
-            Hazard::Mine,
-            Hazard::Emp,
-        ];
         let effects = [
             Effect::Hurt,
             Effect::Slowed,
@@ -782,7 +771,7 @@ mod tests {
             Effect::Deafened,
             Effect::Stunned,
         ];
-        for h in hazards {
+        for h in crate::robots::hazards::HAZARDS {
             for e in effects {
                 for flies in [false, true] {
                     for (set, cue, _) in hazard_layers(h, e, flies) {
