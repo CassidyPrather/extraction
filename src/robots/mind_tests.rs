@@ -4445,7 +4445,7 @@ fn your_radio_says_where_the_flanker_goes() {
     );
     let (said, _) = run(false);
     assert!(
-        !said.iter().any(|l| l.contains("round to")),
+        !said.iter().any(|l| l.contains("round")),
         "no radio, no word: {said:?}"
     );
 }

@@ -45,6 +45,9 @@ pub const RADIO_EVERY: f32 = 2.0;
 pub const RADIO_STALE: f32 = 8.0;
 /// Squad calls about you are on your radio within this (m).
 pub const RADIO_REACH: f32 = crate::raid::chatter::CLOSE;
+/// A flanker's or the spotter's line names a place within this of where
+/// it's going (m).
+pub const PLACE_NEAR: f32 = 40.0;
 /// Their chirps between machines carry this far (m): near enough, you
 /// hear them without a radio.
 pub const CHIRP_REACH: f32 = 40.0;
@@ -378,18 +381,22 @@ fn count_calls(
 }
 
 /// What a call says on your radio.
-pub fn call_line(call: &SquadCall, me: Vec3, rv_name: Option<&str>, n: u32) -> String {
+/// `place`: the rendezvous a cut-off makes for, or a named place by where
+/// a flanker or the spotter is going.
+pub fn call_line(call: &SquadCall, me: Vec3, place: Option<&str>, n: u32) -> String {
     use crate::raid::lines::{
-        SQUAD_CALL, SQUAD_CUT_OFF, SQUAD_CUT_OFF_AWAY, SQUAD_FLANK, SQUAD_PIN, SQUAD_SPOT,
-        bearing_word, fill, pick,
+        SQUAD_CALL, SQUAD_CUT_OFF, SQUAD_CUT_OFF_AWAY, SQUAD_FLANK, SQUAD_FLANK_BY, SQUAD_PIN,
+        SQUAD_SPOT, SQUAD_SPOT_BY, bearing_word, fill, pick,
     };
     let way = bearing_word(Vec2::new(call.post.x - me.x, call.post.z - me.z));
-    let (pool, rv) = match (call.role, rv_name) {
+    let (pool, rv) = match (call.role, place) {
         (Role::Pin, _) => (SQUAD_PIN, ""),
-        (Role::Flank, _) => (SQUAD_FLANK, ""),
+        (Role::Flank, Some(p)) => (SQUAD_FLANK_BY, p),
+        (Role::Flank, None) => (SQUAD_FLANK, ""),
         (Role::CutOff, Some(rv)) => (SQUAD_CUT_OFF, rv),
         (Role::CutOff, None) => (SQUAD_CUT_OFF_AWAY, ""),
-        (Role::Spot, _) => (SQUAD_SPOT, ""),
+        (Role::Spot, Some(p)) => (SQUAD_SPOT_BY, p),
+        (Role::Spot, None) => (SQUAD_SPOT, ""),
         (Role::Call, _) => (SQUAD_CALL, ""),
     };
     fill(pick(pool, n), rv, 0.0, way)
@@ -465,19 +472,26 @@ fn radio_calls(
         else {
             return;
         };
-        let rv_name = zone.as_deref().and_then(|z| {
-            z.map
-                .markers_of(&MarkerKind::Rendezvous)
-                .filter(|m| !m.name.is_empty())
-                .min_by(|a, b| {
-                    let d = |m: &&extraction_core::map::Marker| {
-                        Vec2::from(m.at).distance(Vec2::new(call.post.x, call.post.z))
-                    };
-                    d(a).total_cmp(&d(b))
-                })
-                .map(|m| m.name.clone())
+        // A name to go with the way: the rendezvous a cut-off makes for;
+        // for the rest, a named place by where they're going, if there is
+        // one (a compass word alone goes stale; "by the mill" doesn't).
+        let place = zone.as_deref().and_then(|z| {
+            let post = Vec2::new(call.post.x, call.post.z);
+            let d = |m: &&extraction_core::map::Marker| Vec2::from(m.at).distance(post);
+            let named = z.map.markers.iter().filter(|m| !m.name.is_empty());
+            match call.role {
+                Role::CutOff => z
+                    .map
+                    .markers_of(&MarkerKind::Rendezvous)
+                    .filter(|m| !m.name.is_empty())
+                    .min_by(|a, b| d(a).total_cmp(&d(b))),
+                _ => named
+                    .filter(|m| d(m) < PLACE_NEAR)
+                    .min_by(|a, b| d(a).total_cmp(&d(b))),
+            }
+            .map(|m| m.name.clone())
         });
-        raid.say(call_line(call, me, rv_name.as_deref(), said.1));
+        raid.say(call_line(call, me, place.as_deref(), said.1));
         aired.0.push((*call, now));
         if aired.0.len() > AIRED_KEPT {
             aired.0.remove(0);
@@ -637,5 +651,7 @@ mod tests {
             ..call
         };
         assert!(call_line(&cut, Vec3::ZERO, Some("the mill"), 0).contains("mill"));
+        let by = call_line(&call, Vec3::ZERO, Some("Rail shed"), 0);
+        assert!(by.contains("east") && by.contains("rail shed"), "{by}");
     }
 }

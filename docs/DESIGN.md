@@ -285,6 +285,22 @@ The driver remarks on the strongest of these as you set off, and a radio you car
 
 **Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
 
+**They work together, and say so** (`robots/squad.rs`). Two or more machines fighting one player within 60 m share a plan. The first walker pins you from cover, the next works round to your side, and a third makes for the way to your rendezvous (the one the valley knows you favour, else the nearest) and holds it. A drone hangs over the flanker's way in and lights it. Parts are kept as machines join, so the plan doesn't reshuffle. Each new part is announced:
+- a chirp between the machines, one pattern per role (Audio);
+- on a radio you carry, within 120 m, a line: "Radio, close: one going round to your east", "Radio: one making for the mill. They mean to cut you off." The most useful line goes out first, one every 2 s;
+- the spotting drone's light on the ground.
+
+A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
+
+**Measured** (`robots/squad_drill.rs`, 24 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears: a cut-off sends it to another way out, and flanker and cut-off posts count as threats when it picks cover.
+
+| Newcomer | Machines alone | Machines coordinating |
+|---|---|---|
+| Deaf | 17% escape | 8% |
+| Listening | 17% | 17% (median time alive 23 s, against 15 s deaf) |
+
+Coordination halves a deaf newcomer's escapes, and listening wins them back. The counts are small (2 to 4 escapes an arm), and the drill is harsh: against a drone in the open, little gets away whatever it hears.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
