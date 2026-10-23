@@ -1914,7 +1914,14 @@ fn way_to(
                 if doors.is_empty() && i % 4 != 0 && i != last {
                     continue;
                 }
-                for (door, _) in doors {
+                for (door, cross) in doors {
+                    // Up to it first (the last waypoint kept may be a few
+                    // strides back): this side of where the way crosses it.
+                    let back = (prev - cross).normalize_or_zero() * 0.8;
+                    t.push(Task::WalkTo {
+                        to: plan.world2(cross + back),
+                        within: 0.4,
+                    });
                     t.push(Task::OpenDoor(door));
                 }
                 t.push(Task::WalkTo {
