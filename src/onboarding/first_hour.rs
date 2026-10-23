@@ -412,6 +412,8 @@ pub(super) fn seed_job(
         Some(job) => {
             info!("first raid: seeded job {job:?}");
             progression.0.job = Some(job);
+            // Its card alone, not a contract's head over it.
+            progression.0.contract = None;
         }
         None => warn!("--job {kind}: not a kind I can seed"),
     }
@@ -570,6 +572,24 @@ pub(super) struct RaidView<'w, 's> {
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
     hatch: Res<'w, crate::raid::lev::Handovers>,
+    buildings: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::buildings::Building,
+            &'static Transform,
+        ),
+    >,
+    leaves: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::world::buildings::DoorLeaf,
+            &'static ChildOf,
+        ),
+    >,
     bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
     robots: Query<
@@ -612,6 +632,7 @@ pub(super) fn direct_raid(
     crates: crate::bot::crating::CrateWorld,
     mut tells: Tells,
     minds: Query<&crate::robots::Awareness>,
+    mut plans: Local<Vec<crate::sim::indoor::BuildingPlan>>,
     time: Res<Time>,
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -1022,8 +1043,13 @@ pub(super) fn direct_raid(
                     state.goal = Some((name, at));
                     state.leg = Leg::Out;
                 }
-                None if matches!(state.errand, Some(Errand::Bring { near: None, .. })) => {
-                    // A fetch: no place, things to find anywhere.
+                None if matches!(
+                    state.errand,
+                    Some(Errand::Bring { near: None, .. } | Errand::Photo(_))
+                ) =>
+                {
+                    // A fetch, a photograph: no place, things to find
+                    // anywhere.
                     state.note(
                         now,
                         Kind::Learned,
@@ -1100,7 +1126,19 @@ pub(super) fn direct_raid(
                 state.passed_over.push(e);
             }
             let skip = state.passed_over.clone();
-            match errand_tasks(&errand, &world, &view, player, here, state.tries, &skip) {
+            if plans.is_empty() && !view.buildings.is_empty() {
+                *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
+            }
+            match errand_tasks(
+                &errand,
+                &world,
+                &view,
+                &plans,
+                player,
+                here,
+                state.tries,
+                &skip,
+            ) {
                 Ok(Some((t, after))) => {
                     tasks.extend(t);
                     state.reaching = after;
@@ -1775,9 +1813,46 @@ fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
     )
 }
 
-/// To `p` from `here`: indoors, round to its building's door, open it, in.
-fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
+/// To `p` from `here`: indoors, round to its building's door, open it, in,
+/// and through the rooms to it (the building's plan, doors opened on the
+/// way: a find in a back room isn't reached through the wall).
+fn way_to(
+    world: &World2,
+    view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
+    here: Vec2,
+    p: Vec3,
+) -> Vec<Task> {
     let (mut t, here) = way_out(world, view, here);
+    if let Some(plan) = plans.iter().find(|pl| pl.contains(p, 0.3)) {
+        let goal = plan.to_local(p).xz();
+        let entry = plan
+            .doors
+            .iter()
+            .filter_map(|d| d.outside)
+            .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)));
+        if let Some((o, path)) = entry.and_then(|o| Some((o, plan.path(o, goal)?))) {
+            t.extend(route(world, view, here, plan.world2(o)));
+            let mut prev = o;
+            let last = path.len().saturating_sub(1);
+            for (i, w) in path.into_iter().enumerate() {
+                let doors = plan.doors_on(prev, w);
+                // Every few cells, and at each door and the end.
+                if doors.is_empty() && i % 4 != 0 && i != last {
+                    continue;
+                }
+                for (door, _) in doors {
+                    t.push(Task::OpenDoor(door));
+                }
+                t.push(Task::WalkTo {
+                    to: plan.world2(w),
+                    within: 0.4,
+                });
+                prev = w;
+            }
+            return t;
+        }
+    }
     let door = view.entrances.as_deref().and_then(|en| {
         let b = en.building_at(p)?;
         en.doors
@@ -1810,6 +1885,7 @@ fn errand_tasks(
     errand: &Errand,
     world: &World2,
     view: &RaidView,
+    plans: &[crate::sim::indoor::BuildingPlan],
     player: Entity,
     here: Vec2,
     tries: u32,
@@ -1845,7 +1921,7 @@ fn errand_tasks(
             else {
                 return Err(format!("no {name} anywhere I looked"));
             };
-            let mut t = way_to(world, view, here, p);
+            let mut t = way_to(world, view, plans, here, p);
             t.extend([
                 Task::Grab {
                     item: e,
