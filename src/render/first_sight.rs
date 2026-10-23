@@ -244,9 +244,6 @@ mod tests {
     fn nothing_new_is_asked_for_mid_raid() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
-        for _ in 0..60 {
-            app.update();
-        }
         let asked = |app: &App| -> Vec<String> {
             let mut v: Vec<String> = app
                 .world()
@@ -257,6 +254,34 @@ mod tests {
             v.sort();
             v
         };
+        // The valley in: every building dressed, and nothing more asked for
+        // in 60 frames (what the start asks for, however its threads run;
+        // `Loaded` never comes here: no GPU takes the impostors' pictures).
+        // A fixed 60 frames once let a slow start's last requests count as
+        // mid-raid ones.
+        let mut quiet = 0;
+        let mut seen = 0;
+        for _ in 0..5000 {
+            app.update();
+            let n = app
+                .world()
+                .resource::<crate::models::Models>()
+                .requested()
+                .count();
+            let dressed = {
+                let w = app.world_mut();
+                w.query_filtered::<(), With<crate::world::buildings::PropsPending>>()
+                    .iter(w)
+                    .next()
+                    .is_none()
+            };
+            quiet = if n == seen && dressed { quiet + 1 } else { 0 };
+            seen = n;
+            if quiet >= 60 {
+                break;
+            }
+        }
+        assert!(quiet >= 60, "the valley never settled its requests");
         let before = asked(&app);
         super::bring_everything_out(&mut app);
         for _ in 0..60 {

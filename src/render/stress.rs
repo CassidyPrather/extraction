@@ -659,6 +659,11 @@ mod tests {
         .init_resource::<Shots>()
         .insert_resource(StressRun::new(gauge_frames()))
         .add_systems(Last, count_shots);
+        // `STATIC_OFF=1`: Bevy's static transform optimisation off (what
+        // it costs: `transforms_static_on_off`).
+        if std::env::var_os("STATIC_OFF").is_some() {
+            app.insert_resource(bevy::transform::systems::StaticTransformOptimizations::Disabled);
+        }
         super::add_systems(&mut app);
         settle(&mut app);
         app.world_mut().resource_mut::<StressRun>().go = true;
@@ -829,6 +834,97 @@ mod tests {
     }
 
     use super::pct;
+
+    /// What transform propagation costs a frame, calm Marrow (after the
+    /// load and the warm-up) and in its worst minute, as the game runs it
+    /// or with `STATIC_OFF=1` (Bevy's static transform optimisation off: a
+    /// stopgap for children added under a static tree going unpropagated).
+    /// With `STRESS_PROFILE=1 --features "bevy/trace bevy/debug"`;
+    /// `CALM_ONLY=1` skips the fight.
+    #[test]
+    #[ignore = "diagnosis"]
+    fn transforms_static_on_off() {
+        let _one_at_a_time = heavy();
+        let names = [
+            "mark_dirty_trees",
+            "propagate_parent_transforms",
+            "sync_simple_transforms",
+        ];
+        let report = |what: &str, rows: &Vec<(f64, HashMap<String, f64>)>| {
+            let mut total = Vec::new();
+            for n in names {
+                let mut v: Vec<f64> = rows
+                    .iter()
+                    .map(|(_, m)| {
+                        m.iter()
+                            .filter(|(k, _)| k.contains(n))
+                            .map(|(_, t)| t)
+                            .sum()
+                    })
+                    .collect();
+                if total.is_empty() {
+                    total = vec![0.0; v.len()];
+                }
+                for (t, x) in total.iter_mut().zip(&v) {
+                    *t += x;
+                }
+                let mean = v.iter().sum::<f64>() / v.len() as f64;
+                v.sort_by(f64::total_cmp);
+                println!(
+                    "  {what} {n}: mean {mean:.3} ms, p99 {:.3}, max {:.3}",
+                    pct(&v, 0.99),
+                    pct(&v, 1.0)
+                );
+            }
+            let mean = total.iter().sum::<f64>() / total.len() as f64;
+            let frames: Vec<f64> = rows.iter().map(|r| r.0).collect();
+            println!(
+                "  {what} all three: mean {mean:.3} ms, p99 {:.3}, max {:.3}; frame p99 {:.1} ms",
+                pct(&total, 0.99),
+                pct(&total, 1.0),
+                pct(&frames, 0.99)
+            );
+        };
+        // Calm: Marrow settled, nothing happening.
+        profile();
+        let mut app = client_threads("marrow_creek", "clearing", None);
+        as_the_game_runs(&mut app);
+        if std::env::var_os("STATIC_OFF").is_some() {
+            app.insert_resource(bevy::transform::systems::StaticTransformOptimizations::Disabled);
+        }
+        // The game's clock, a frame at a time (on real time a slow
+        // harness frame runs several fixed ticks, each propagating).
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 90.0),
+        ));
+        settle(&mut app);
+        // Past the warm-up shelf (its 900 frames) and what follows a load.
+        for _ in 0..1000 {
+            app.update();
+        }
+        let mut rows = Vec::new();
+        for _ in 0..450 {
+            systems();
+            let t = Instant::now();
+            app.update();
+            rows.push((t.elapsed().as_secs_f64() * 1000.0, systems()));
+        }
+        drop(app);
+        report("calm", &rows);
+        if std::env::var_os("CALM_ONLY").is_some() {
+            return;
+        }
+        // The fight.
+        let mut app = stress_scene("marrow_creek");
+        let mut rows = Vec::new();
+        while !app.world().resource::<StressRun>().done() {
+            systems();
+            let t = Instant::now();
+            app.update();
+            rows.push((t.elapsed().as_secs_f64() * 1000.0, systems()));
+        }
+        report("fight", &rows);
+    }
 
     /// `STRESS_MAP=<map>` for one valley; every valley otherwise.
     fn maps() -> Vec<String> {
