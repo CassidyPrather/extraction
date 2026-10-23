@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 782d919 | 04:30 | cut short (main moved) | 2 FAILED (Lev k14, fixed in b131b78; warmup MarkMaterial, fixed on this branch 82c934f3), 23 min | gauges 16/16 in 1852 s with LOAD_SLACK=1.5 |
 | c495f9f | 02:30 | 32/32 exit 0, 18 extracted (Marrow 6/8, Sallow 5/8, Cinder 3/8, Kettle 2/4, Rime 2/4); Cinder seed 5 timed out 6.5 m under the ground at (64-72, -23..-30), 1000 s on to_rv | 5 FAILED (Lev k14, ducks, flock, two pane tests), 22 min | gauges 15/16 in 1898 s (first_contact load: this machine, 1.2-1.5x slower); BC7/BC5 copies baked |
 | 191e4bd | 01:30 | not run (main moved) | 10 FAILED (7 since fixed by c495f9f), 23 min | gauges cut short |
 | 536ba70 | 06:10 | 32/32 exit 0, no timeouts, 17 extracted (Marrow 7/8, Cinder 4/8, Kettle 2/4, Rime 2/4, Sallow 3/8; every death to drones) | 7 FAILED (the 6 below plus legibility's site signs), all within budget, 22 min | gauges 14/15 in 1328 s (first_contact: load and VRAM) |
@@ -55,21 +56,19 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of c495f9f (round 39).
+As of b131b78 (round 41): by name, all 7 of round 39/40's failures pass (warmup with 82c934f3); the suite, gauges and smoke are running.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `destruction::tests::a_thrown_thing_breaks_a_pane_and_a_slow_one_doesnt`, `a_walker_walking_into_a_pane_breaks_it` | `open_pane` took the first pane in query order, which moved with the layouts | Destruction | fixed on claude/polish-destruction, not merged |
-| `wildlife::ducks::...flushed_ducks_fly_off...`, `wildlife::flock::...birds_never_go_inside_walls...` (Marrow) | | Wildlife | fixed in 64423138 (tip 4e4ebb8e), not merged |
-| `raid::epilogue::tests::lev_reaches_k14_...` (Lev stops at (-216, 15, -194)) | | Story | routed |
-| `render::first_contact` gauge: load over in Marrow 6.48 > 6.0 s, Sallow 4.93 > 4.5 s | this machine (4 cores, 1.2-1.5x Performance's times, every valley alike) | Performance | gauges run with LOAD_SLACK=1.5 from round 40; budgets to be normalised |
-| the gauge tier took 1898 s (target 1500): new `stress` every_valley_worst_minute 516 s, `vr_budget` every_valley 627 s (was 123) | | Performance | routed |
-| Sim: Cinder seed 5 stuck 6.5 m under ground at (64-72, -23..-30) going to the RV | stuck_block can't get out | coordinator | routed |
+| `render::warmup::tests::every_material_is_shelved` (anomalies' MarkMaterial, b56057ef) | a new material not shelved | Verifier | fixed in 82c934f3, not merged |
+| the gauge tier took 1852 s (target 1500): the stress gauge's 900 frames | | Performance | 450 by default in e87b7c37, not merged |
+| Sim: Cinder seed 5 stuck 6.5 m under ground at (64-72, -23..-30) near the tunnel_cinder valve chamber | stuck_block can't get out | coordinator | replaying on b131b78 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| the two pane tests (`open_pane` now takes upright ground-floor panes in a fixed order), Marrow ducks and flock, Lev k14 (the fixture), first_contact load (this machine: LOAD_SLACK=1.5), the wreck.rs unused `mut` | 782d919 / b131b78 | Destruction, Wildlife, Story, Performance, Verifier |
 | legibility site signs, Cinder water_tower ledge trap, recall table, walker_loses_you, crawler_hears_round_a_corner, what_a_machine_breaks, haptics button; first_contact VRAM (it was RGBA8 without etcpak) | c495f9f | Legibility, World models, Robot minds, Hands, Performance |
 | lev gifts, walker-to-flushed-birds, double feed (failed on 4fd146c); Cinder 3 and Marrow 1 pocket timeouts; round 33's robot senses, hold_rate, DeviceNoticed, clearance, item boxes | 536ba70 | owners, coordinator |
 | cellars_cinder ×3 (warm heat shut for every plan), Cinder 7 couldn't board at Fire lookout | 77ce6f5 | coordinator |
