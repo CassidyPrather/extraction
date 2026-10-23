@@ -337,7 +337,10 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
         // a fresh magazine in and the slide drawn half way: nothing fed. On
         // a turn-bolt after the shot: the case still in.
         let mut g = Firearm::new(def.clone(), 1.0);
-        if def.action == SemiAuto {
+        if def.action == SemiAuto && !detachable {
+            // Clip-fed: loaded, and the slide drawn half way and let back.
+            g = loaded(def, Load::Standard);
+        } else if def.action == SemiAuto {
             g.insert_magazine(mag(def, 10, Load::Standard)).unwrap();
             while g.fire_mode() == FireMode::Safe {
                 g.cycle_mode();
