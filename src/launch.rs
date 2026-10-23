@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! extraction [--flat] [--mirror] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
-//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
+//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch]]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
@@ -54,6 +54,9 @@ pub struct LaunchOptions {
     pub frames: u32,
     /// Camera override: position and yaw/pitch in degrees.
     pub camera: Option<(Vec3, f32, f32)>,
+    /// The camera override carries a lit flashlight, pointing where it
+    /// looks (`--torch`: night shots as a player sees them).
+    pub torch: bool,
     /// The local player is driven by the bot brain.
     pub bot: bool,
     /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
@@ -133,6 +136,10 @@ pub struct LaunchOptions {
     /// A newcomer's first fight (`onboarding::first_hour`): the one machine
     /// put on their route (`walker`, `drone`, `hush`, `sentry`, `night`).
     pub encounter: Option<String>,
+    /// A newcomer's raid with this kind of job on the card
+    /// (`onboarding::first_hour`): `recover`, `letter`, `ledger`,
+    /// `photograph`, ... so every kind runs live.
+    pub job: Option<String>,
     /// Raid minutes a sim bot plans for before heading out (default: by
     /// personality, 9-14).
     pub sim_minutes: Option<f32>,
@@ -158,6 +165,7 @@ impl Default for LaunchOptions {
             screenshot: None,
             frames: 90,
             camera: None,
+            torch: false,
             tour: None,
             tour_only: None,
             tour_views: None,
@@ -189,6 +197,7 @@ impl Default for LaunchOptions {
             sim_run: None,
             personality: None,
             encounter: None,
+            job: None,
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
@@ -301,6 +310,7 @@ impl LaunchOptions {
                 }
                 "--personality" => o.personality = Some(val()),
                 "--encounter" => o.encounter = Some(val()),
+                "--job" => o.job = Some(val()),
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),
@@ -365,6 +375,7 @@ impl LaunchOptions {
                     o.gallery = Some(val());
                     o.robots = false;
                 }
+                "--torch" => o.torch = true,
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {

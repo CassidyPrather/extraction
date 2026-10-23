@@ -347,6 +347,16 @@ pub const FIRST_WALK: f32 = 300.0;
 /// thing between them and the machine (Onboarding's first-fight personas
 /// died in Marrow's open fields on the way to the Old farm).
 pub const FIRST_COVER_GAP: f32 = 40.0;
+/// The first job of each kind (`first_jobs`): every way there (the easy
+/// way, straight across, by any place on the way) has cover within a
+/// four-second sprint (`map_surge::SPRINT`) of every step, but for a run
+/// of this many metres: three of Onboarding's four newcomers on Marrow's
+/// mast relay died to a drone 7-17 s after its lock, in the open past the
+/// Village.
+pub const FIRST_RUN: f32 = 4.0 * crate::map_surge::SPRINT;
+pub const FIRST_OPEN: f32 = 10.0;
+/// A way by a place counts as on the way within this of the direct walk.
+pub const FIRST_DETOUR: f32 = 1.3;
 /// The first ten minutes: places a raid can reach and work by then, as a
 /// walk on comfortable ground from the insertion, metres (about four
 /// minutes' walking, the rest looking).
@@ -386,6 +396,11 @@ pub const WAIT_COVER: f32 = 15.0;
 pub const WAIT_HEIGHT: f32 = 1.2;
 /// How far off a shelter's wall its lee is, metres.
 pub const WAIT_LEE: f32 = 0.8;
+/// How far in from its door you wait under a roof, metres.
+pub const WAIT_IN: f32 = 1.2;
+/// How far settling a building in may lower ground the map declares (a
+/// plateau set to a height), metres.
+pub const TERRACE_CUT: f32 = 0.5;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -661,10 +676,15 @@ pub fn watched_by(map: &MapDef, rv: P2) -> Option<(String, f32)> {
 
 /// Something to wait for the truck behind at the rendezvous at `rv`: the
 /// nearest roof or solid cover within [`WAIT_COVER`] (a walk-in building
-/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), how
-/// far off it is, and where to crouch in its lee, away from `from` (the
-/// drones' point of interest).
+/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), a
+/// roof first, how far off it is, and where to wait: under the roof, just
+/// in at its door (a drone that has seen you circles a wall, not a roof),
+/// else crouched in the lee, away from `from` (the drones' point of
+/// interest).
 pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)> {
+    let roof = |q: &Solid| {
+        crate::map_surge::roofed(&q.prefab) && !crate::map::prefab_entrances(&q.prefab).is_empty()
+    };
     let q = solids(map)
         .into_iter()
         .filter(|q| {
@@ -674,7 +694,22 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
                     || (q.prefab != "fence_garden"
                         && crate::map::prefab_footprint(&q.prefab)[1] >= WAIT_HEIGHT))
         })
-        .min_by(|a, b| a.rect.sdf(rv).total_cmp(&b.rect.sdf(rv)))?;
+        .min_by(|a, b| {
+            (!roof(a), a.rect.sdf(rv))
+                .partial_cmp(&(!roof(b), b.rect.sdf(rv)))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })?;
+    let d = q.rect.sdf(rv).max(0.0);
+    if roof(&q) {
+        let door = crate::map::prefab_entrances(&q.prefab)
+            .iter()
+            .min_by(|a, b| dist(q.rect.world(a.at), rv).total_cmp(&dist(q.rect.world(b.at), rv)))?;
+        let inside = q.rect.world([
+            door.at[0] - door.out[0] * WAIT_IN,
+            door.at[1] - door.out[1] * WAIT_IN,
+        ]);
+        return Some((q.name, d, inside));
+    }
     let away = geom::sub(q.rect.at, from);
     let l = geom::dist(q.rect.at, from).max(1e-3);
     let away = [away[0] / l, away[1] / l];
@@ -685,7 +720,45 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
         })
         .find(|p| q.rect.sdf(*p) >= WAIT_LEE)
         .unwrap_or(q.rect.at);
-    Some((q.name, q.rect.sdf(rv).max(0.0), lee))
+    Some((q.name, d, lee))
+}
+
+/// The first job of each kind that sends you somewhere in the valley
+/// `id`: the first contract step of each (`contracts::CONTRACTS`, a scout,
+/// a thing to bring, one to leave) and the ladder's fixed ones (the
+/// letter, the ledger), as what and where.
+pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
+    use crate::contracts::Step;
+    let mut out: Vec<(String, P2)> = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for c in crate::contracts::CONTRACTS {
+        for s in c.steps {
+            let (kind, m, place, near) = match *s {
+                Step::Scout { map, place } => ("scout", map, place, None),
+                Step::Bring {
+                    map, place, near, ..
+                } => ("bring", map, place, near),
+                Step::Plant { map, place, .. } => ("plant", map, place, None),
+                _ => continue,
+            };
+            if m != id || seen.contains(&kind) {
+                continue;
+            }
+            let Some(at) = near.or_else(|| crate::contracts::place_at(map, place)) else {
+                continue;
+            };
+            seen.push(kind);
+            out.push((format!("{kind} ({}: {place})", c.id), at));
+        }
+    }
+    if id == crate::progression::LETTER_MAP {
+        out.push(("letter".into(), crate::progression::LETTER_AT));
+    }
+    if id == crate::progression::LEDGER_MAP {
+        let [x, _, z] = crate::progression::LEDGER_AT;
+        out.push(("ledger".into(), [x, z]));
+    }
+    out
 }
 
 /// Every solid thing on the surface, placements first (in order: index
@@ -1464,6 +1537,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // At night and in fog: lights to steer by, the landmarks' lamps and the
     // rendezvous beacons (the game's `render::landmarks`, `rv_beacons`).
+    let lamp_chars = crate::map_landmarks::assign(&marks);
     let beacons: Vec<P2> = map
         .markers_of(&MarkerKind::Rendezvous)
         .map(|m| crate::map_landmarks::beacon_at(m.at))
@@ -1478,6 +1552,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         );
         let n = crate::map_landmarks::lights_in_sight(
             &marks,
+            &lamp_chars,
             &beacons,
             hm,
             &canopy,
@@ -1493,6 +1568,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
         let f = crate::map_landmarks::lights_in_sight(
             &marks,
+            &lamp_chars,
             &beacons,
             hm,
             &canopy,
@@ -1970,6 +2046,118 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         // is more than a newcomer uses; Onboarding's first-fight scenario
         // is the judge of these walks.
         let _ = (FIRST_COVER_GAP, at);
+    }
+
+    // -- The first jobs: cover within a few seconds' run all the way ------------
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        // Doors you can be in at: a roofed building's or a kiosk's.
+        let roofs: Vec<P2> = crate::map_doors::doors(map)
+            .into_iter()
+            .filter(|d| crate::map_surge::roofed(&map.placements[d.placement].prefab))
+            .map(|d| d.face)
+            .chain(
+                solids
+                    .iter()
+                    .filter_map(|s| s.kiosk_door().map(|(at, _)| at)),
+            )
+            .collect();
+        let near_cover = |p: P2| {
+            rects.iter().any(|(_, rc)| rc.sdf(p) <= FIRST_RUN)
+                || boulders.count_within(p, FIRST_RUN, 1) > 0
+                || tree_b.count_within(p, FIRST_RUN, STAND) >= STAND
+        };
+        // A newcomer cuts across as often as they keep to the road, and
+        // stops at what's on the way.
+        let flat = {
+            let mut g = comfy.clone();
+            for c in g.cost.iter_mut().filter(|c| **c != BLOCKED) {
+                *c = 1;
+            }
+            g
+        };
+        let pois: Vec<P2> = map.markers_of(&MarkerKind::Poi).map(|m| m.at).collect();
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
+        for (what, at) in first_jobs(map, &id) {
+            // There, and home from there to the two nearest rendezvous
+            // (Onboarding's newcomers fell on the way home from the
+            // Village, by the pumping station): the way there is held, the
+            // way home measured against the main routes' cover (held once
+            // Sallow's bed has the two Fourth valley is placing).
+            let mut home = rvs.clone();
+            home.sort_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)));
+            let legs: Vec<(P2, P2)> = std::iter::once((ins, at))
+                .chain(home.iter().take(2).map(|rv| (at, *rv)))
+                .collect();
+            // (Home or there, the walk.)
+            let mut walks: Vec<(bool, Vec<P2>)> = Vec::new();
+            for (n, (from, to)) in legs.into_iter().enumerate() {
+                let home = n > 0;
+                let direct = dist(from, to);
+                for g in [&comfy, &flat] {
+                    walks.extend(g.path(from, to).map(|p| (home, resample(&p))));
+                    for v in pois.iter().filter(|v| {
+                        dist(from, **v) + dist(**v, to) <= direct * FIRST_DETOUR
+                            && dist(**v, to) > 1.0
+                            && dist(**v, from) > 1.0
+                    }) {
+                        if let (Some(a), Some(b)) = (g.path(from, *v), g.path(*v, to)) {
+                            walks.push((home, resample(&[a, b].concat())));
+                        }
+                    }
+                }
+            }
+            let (mut gap, mut gap_at, mut roof, mut roof_at) = (0.0f32, ins, 0.0f32, ins);
+            let (mut back, mut back_at) = (0.0f32, at);
+            for (home, pts) in &walks {
+                // Home, laden and warned, held to the main routes' cover
+                // (Fourth valley: a first job's walk home shouldn't be a
+                // 54 m dash over Sallow's bed).
+                if *home {
+                    let (g, a) = longest_gap(pts, covered);
+                    if g > back {
+                        (back, back_at) = (g, a);
+                    }
+                } else {
+                    let (g, a) = longest_gap(pts, near_cover);
+                    if g > gap {
+                        (gap, gap_at) = (g, a);
+                    }
+                }
+                for p in pts {
+                    let d = roofs
+                        .iter()
+                        .map(|q| dist(*p, *q))
+                        .fold(f32::INFINITY, f32::min);
+                    if d > roof {
+                        (roof, roof_at) = (d, *p);
+                    }
+                }
+            }
+            r.measures.push(format!(
+                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}), home with none {COVER_REACH} m off {back:.0} m at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
+                walks.len(),
+                gap_at[0],
+                gap_at[1],
+                back_at[0],
+                back_at[1],
+                roof_at[0],
+                roof_at[1]
+            ));
+            if gap > FIRST_OPEN {
+                find(
+                    &mut r,
+                    Rule::Cover,
+                    format!(
+                        "on the way to the first job {what}, {gap:.0} m with nothing within a {FIRST_RUN:.0} m run"
+                    ),
+                    gap_at,
+                );
+            }
+        }
     }
 
     // How far from cover the open ground runs, anywhere you can walk in the
@@ -2571,6 +2759,55 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         }
     }
 
+    // -- Declared ground: settle fits buildings, not into terraces -----------------
+    {
+        let bare = Heightmap::build_unsettled(map);
+        let mut deepest = 0.0f32;
+        for (poly, level) in Heightmap::terraces(map) {
+            let (lo, hi) = geom::bounds(poly);
+            // At the samples settle moves, not between them (a point by a
+            // step's edge reads the lowered ground beside it).
+            let mut worst: Option<(f32, P2)> = None;
+            let cell = |v: f32| ((v - hm.origin) / hm.cell).clamp(0.0, (hm.n - 1) as f32);
+            for j in cell(lo[1]).floor() as usize..=cell(hi[1]).ceil() as usize {
+                for i in cell(lo[0]).floor() as usize..=cell(hi[0]).ceil() as usize {
+                    let p = hm.pos(i, j);
+                    if Heightmap::on_terrace(poly, p) {
+                        let k = hm.idx(i, j);
+                        // Below its level: what a road banked on top of
+                        // it is the road's.
+                        let cut = bare.heights[k].min(level) - hm.heights[k];
+                        if worst.is_none_or(|(c, _)| cut > c) {
+                            worst = Some((cut, p));
+                        }
+                    }
+                }
+            }
+            let Some((cut, at)) = worst else { continue };
+            deepest = deepest.max(cut);
+            if cut > TERRACE_CUT {
+                let by = map
+                    .placements
+                    .iter()
+                    .filter(|p| crate::map::prefab_wants_pad(&p.prefab))
+                    .min_by(|a, b| dist(a.at, at).total_cmp(&dist(b.at, at)))
+                    .map_or("?", |p| p.prefab.as_str());
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!(
+                        "settling the {by} cuts {cut:.1} m into the terrace the map sets at {level:.1} m"
+                    ),
+                    at,
+                );
+            }
+        }
+        r.measures.push(format!(
+            "terraces: {} declared, deepest cut settling buildings in {deepest:.2} m",
+            Heightmap::terraces(map).count()
+        ));
+    }
+
     // -- Route choice ---------------------------------------------------------------
     for (name, at) in &rvs {
         if dist(*at, ins) < RV_FAR {
@@ -2922,29 +3159,12 @@ mod tests {
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
         );
-        // Its key's lamp characters are the game's.
-        let table = |name: &str| -> &str {
-            let from = src
-                .find(&format!("{name} = {{"))
-                .unwrap_or_else(|| panic!("no {name}"));
-            &src[from..from + src[from..].find("\n}").unwrap()]
-        };
-        let chars = table("LAMP_CHARACTERS");
-        let names = table("LANDMARK_NAMES");
-        for line in names.lines().skip(1) {
-            let Some(base) = line
-                .trim()
-                .strip_prefix('"')
-                .and_then(|l| l.split('"').next())
-            else {
-                continue;
-            };
-            let want = crate::map_landmarks::character(crate::map_landmarks::kind(base)).name;
-            assert!(
-                chars.contains(&format!("    \"{base}\": \"{want}\",")),
-                "field_map.py's LAMP_CHARACTERS has {base} other than {want}"
-            );
-        }
+        // Each landmark's lamp comes from the dump (map-dump's placements'
+        // `lamp`, the game's own assignment), the beacons' from its table.
+        assert!(
+            src.contains("p.get(\"lamp\""),
+            "field_map.py doesn't read the dump's lamps"
+        );
         for i in 0..4 {
             let want = crate::map_landmarks::beacon_character(i).name;
             assert!(
@@ -3005,6 +3225,25 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Spotter && f.what.contains("last")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Take away the cover by the district road south of Marrow's creek
+    /// bridge and the first job's way to the radio mast runs in the open.
+    #[test]
+    fn a_first_job_walk_in_the_open_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.placements.retain(|p| {
+            !(dist(p.at, [8.0, -25.0]) < 30.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Cover && f.what.contains("first job plant")),
             "{}",
             r.text()
         );

@@ -299,6 +299,18 @@
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).
         (prefab: "pump_station", at: (-200.0, 22.0), rot: 0.0),
+        // Roofs on the mast relay's way past the pumping station, for a newcomer
+        // a drone has locked onto: the station's tool shed where the Ranger's
+        // path leaves it, and the rangers' store on the path below the mast road.
+        (prefab: "shed", at: (-171.0, -28.0), rot: 270.0, tag: "pump_tool_shed"),
+        (prefab: "shed", at: (-184.0, -111.0), rot: 270.0, tag: "rangers_store"),
+        // And the road-menders' hut on the district road, the mast relay's
+        // other way, half way from the creek bridge to the mast road.
+        (prefab: "shed", at: (-3.0, -92.0), rot: 90.0, tag: "road_menders_hut"),
+        // And a roof on the way home from the Village to the gate, where
+        // Onboarding's newcomers fell to drones on their second and third
+        // jobs: the lengthman's hut by the district road.
+        (prefab: "shed", at: (22.0, 224.0), rot: 90.0, tag: "lengthmans_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
@@ -362,6 +374,36 @@
         (prefab: "wreck_lada", at: (19.6, 140.1), rot: 14.0),
         // The farm's own jeep, in the yard by the shed.
         (prefab: "wreck_uaz", at: (176.0, 160.0), rot: 75.0),
+
+        // Cover within a four-second sprint of every step of the first jobs
+        // (map_lint FIRST_RUN): cars abandoned on the verges in the
+        // evacuation, and log piles stacked by the ways across the open.
+        (prefab: "wreck_lada", at: (15.1, 176.9), rot: 23.0),
+        (prefab: "wreck_uaz", at: (27.0, 160.0), rot: 90.0),
+        (prefab: "wreck_lorry", at: (19.0, 120.0), rot: 157.0),
+        (prefab: "wreck_lada", at: (4.0, 171.0), rot: 224.0),
+        (prefab: "wreck_uaz", at: (-2.5, 37.3), rot: 291.0),
+        (prefab: "log_pile", at: (5.0, -0.0), rot: 358.0),
+        (prefab: "wreck_lada", at: (5.5, -13.3), rot: 65.0),
+        (prefab: "log_pile", at: (5.0, -28.0), rot: 132.0),
+        (prefab: "log_pile", at: (-1.5, -40.0), rot: 109.0),
+        (prefab: "wreck_lada", at: (-2.7, -105.5), rot: 266.0),
+        (prefab: "wreck_uaz", at: (-9.3, 170.5), rot: 333.0),
+        (prefab: "log_pile", at: (-59.1, 52.9), rot: 40.0),
+        (prefab: "log_pile", at: (-76.0, -101.0), rot: 107.0),
+        (prefab: "log_pile", at: (-169.0, -48.0), rot: 174.0),
+        (prefab: "log_pile", at: (-5.0, 212.0), rot: 241.0),
+        (prefab: "log_pile", at: (-17.3, 210.5), rot: 308.0),
+        (prefab: "log_pile", at: (23.0, -48.0), rot: 15.0),
+        (prefab: "log_pile", at: (-186.7, -49.5), rot: 82.0),
+        (prefab: "log_pile", at: (-33.0, 136.0), rot: 149.0),
+        (prefab: "log_pile", at: (-45.3, 134.5), rot: 216.0),
+        (prefab: "log_pile", at: (-93.0, 72.0), rot: 283.0),
+        (prefab: "log_pile", at: (-89.0, 20.0), rot: 57.0),
+        (prefab: "log_pile", at: (-101.0, 16.0), rot: 124.0),
+        (prefab: "log_pile", at: (-116.0, -6.0), rot: 211.0),
+        (prefab: "log_pile", at: (-105.3, 70.5), rot: 350.0),
+        (prefab: "wreck_lada", at: (-175.1, -59.1), rot: 191.0),
     ],
 
     markers: [

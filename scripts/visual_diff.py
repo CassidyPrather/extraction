@@ -89,6 +89,9 @@ def main(argv):
     ap.add_argument("--title", default="")
     ap.add_argument("--noise", default=os.path.join(os.path.dirname(__file__), "visual_diff", "noise.json"))
     ap.add_argument("--calibrate", action="store_true")
+    ap.add_argument("--maps", default="", help="only these maps (space-separated)")
+    ap.add_argument("--moods", default="", help="only these moods")
+    ap.add_argument("--views", default="", help="only these views")
     a = ap.parse_args(argv)
 
     def shots(root):
@@ -100,7 +103,17 @@ def main(argv):
                     found[rel[:-4]] = os.path.join(dirpath, f)
         return found
 
-    old, new = shots(a.old), shots(a.new)
+    def keep(key):
+        parts = key.split("/")
+        if len(parts) != 3:
+            return False
+        for want, part in zip((a.maps, a.moods, a.views), parts):
+            if want and part not in want.split():
+                return False
+        return True
+
+    old = {k: v for k, v in shots(a.old).items() if keep(k)}
+    new = {k: v for k, v in shots(a.new).items() if keep(k)}
     if a.calibrate:
         # a.out is the noise file: each shot's own difference, where any.
         noise = {}
@@ -173,8 +186,13 @@ def main(argv):
         f.write("</table>")
         for key, why in missing:
             f.write(f"<p>{html.escape(key)}: {why}</p>")
-    print(f"{len(flagged)} of {len(rows)} shots changed; "
-          f"{len(missing)} missing: {a.out}/sheet.jpg")
+    # One line for a gate: PASS, or CHANGED and where to look.
+    sheet = os.path.join(a.out, "sheet.jpg")
+    if flagged or missing:
+        print(f"CHANGED {a.title}: {len(flagged)} of {len(rows)} shots changed, "
+              f"{len(missing)} missing; sheet {sheet}")
+    else:
+        print(f"PASS {a.title}: none of {len(rows)} shots changed; sheet {sheet}")
 
 
 if __name__ == "__main__":

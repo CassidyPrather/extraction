@@ -291,7 +291,7 @@
         // the col and the saddle, a hut on the tip road.
         (prefab: "shed", at: (80.6, -259.2), rot: 285.0, tag: "col_refuge"),
         (prefab: "shed", at: (-104.9, -268.4), rot: 246.0, tag: "saddle_refuge"),
-        (prefab: "shed", at: (239.3, -17.1), rot: 353.0, tag: "tip_hut"),
+        (prefab: "shed", at: (249.5, -27.0), rot: 275.0, tag: "tip_hut"),
 
         // The observatory on its summit.
         (prefab: "observatory", at: (-208.0, -210.0), rot: 160.0, tag: "observatory"),
@@ -299,6 +299,32 @@
         // The cirque: the tarn's field, and where the robots come and go.
         (prefab: "anomaly_core", at: (195.0, -160.0), rot: 0.0),
         (prefab: "robot_gate", at: (235.0, -242.0), rot: 320.0),
+
+        // Cover within a four-second sprint of every step of the first job
+        // (map_lint FIRST_RUN), up the fell to the observatory: its winter
+        // wood, stacked along the slope by the roads and paths.
+        (prefab: "log_pile", at: (-13.2, 254.8), rot: 76.0),
+        (prefab: "log_pile", at: (69.0, 161.0), rot: 311.0),
+        (prefab: "log_pile", at: (71.0, 145.0), rot: 298.0),
+        (prefab: "log_pile", at: (8.5, -110.3), rot: 316.0),
+        (prefab: "log_pile", at: (-25.3, 269.5), rot: 90.0),
+        (prefab: "log_pile", at: (-37.3, 267.5), rot: 92.0),
+        (prefab: "log_pile", at: (-87.7, 245.5), rot: 337.0),
+        (prefab: "log_pile", at: (-117.3, 239.5), rot: 279.0),
+        (prefab: "log_pile", at: (-136.7, 236.5), rot: 261.0),
+        (prefab: "log_pile", at: (-156.7, 233.5), rot: 344.0),
+        (prefab: "log_pile", at: (-177.9, 231.1), rot: 252.0),
+        (prefab: "log_pile", at: (-194.5, 195.7), rot: 242.0),
+        (prefab: "log_pile", at: (-209.0, 181.0), rot: 257.0),
+        (prefab: "log_pile", at: (-212.7, 101.6), rot: 254.0),
+        (prefab: "log_pile", at: (-214.0, 89.0), rot: 241.0),
+        (prefab: "log_pile", at: (-10.7, -67.5), rot: 282.0),
+        (prefab: "log_pile", at: (-16.0, -112.0), rot: 278.0),
+        (prefab: "log_pile", at: (-36.0, 251.0), rot: 257.0),
+        (prefab: "log_pile", at: (-135.0, 221.0), rot: 227.0),
+        (prefab: "log_pile", at: (-10.5, -50.7), rot: 278.0),
+        (prefab: "log_pile", at: (-23.1, -68.1), rot: 291.0),
+        (prefab: "log_pile", at: (-113.0, 145.0), rot: 235.0),
     ],
 
     markers: [

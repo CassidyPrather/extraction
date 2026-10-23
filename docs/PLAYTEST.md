@@ -537,6 +537,22 @@ said you don't use?
   - Heft a full and an empty AK magazine: can you tell them apart?
   - Hold a worn-out gun next to a new one: does the rust read, and does
     its action drag?
+- Reloading without looking.
+  - Eyes shut, drop the AK's magazine, seat a fresh one and rack it. Can
+    you tell, by the sound and the feel alone, that it seated and that a
+    round went in?
+  - Ease a magazine in gently. Do you notice it isn't home before you rack,
+    and does it falling out on the rack surprise you fairly? Slap it home.
+  - Run the PM dry: can you feel the slide lock back without looking?
+  - Is a magazine you pushed in hurriedly ever caught half-seated?
+- Stoppages.
+  - Shoot a worn, dirty AK until it stops. Before you look, can you tell
+    from the sound and the trigger which stoppage it is? Then look in the
+    port: does what you see match what you felt?
+  - Clear each one the way you'd clear it on a range. Does the wrong fix
+    feel wrong, and does it show you why?
+  - On a hang-fire, do you hold on the target? Open it early once, so you
+    know the cost.
 - Zeroing. Put a PSO on the AK, take its drum with the other hand's
   trigger and turn it to 3 (300 m). Is the drum easy to find and turn,
   and are the clicks clear? Range a robot with the rangefinder and hold

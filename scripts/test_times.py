@@ -124,8 +124,9 @@ def main():
         budget, why = slow.get(name, (args.budget, ""))
         if t > budget:
             over.append((t, name, budget, why))
+    # A filtered run leaves the list's tests out on purpose.
     stale = sorted(set(slow) - {name for _, name, _ in ran})
-    if stale:
+    if stale and not args.libtest:
         print("\nlisted in slow_tests.txt but not run (renamed? gone?):")
         for name in stale:
             print(f"  {name}")

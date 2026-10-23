@@ -232,7 +232,7 @@ pub const STANDING_QUIET: Tier = Tier {
 /// The valleys a career starts with, and the ones the route card keeps back
 /// until each of those has been raided (`docs/FOURTH_VALLEY.md`).
 pub const FIRST_VALLEYS: [&str; 3] = ["marrow_creek", "kettle_pass", "cinder_works"];
-pub const LATE_VALLEYS: &[&str] = &["sallow_reservoir"];
+pub const LATE_VALLEYS: &[&str] = &["sallow_reservoir", "rime_fell"];
 
 /// The stash crate's room before any rack, litres of bulk.
 pub const STASH_BASE: f32 = 200.0;
@@ -777,7 +777,10 @@ impl Progress {
     /// has opened them (the overflow, offered once the career has raided
     /// each of the first three: `contracts`).
     pub fn opens(&self, map: &str) -> bool {
-        !LATE_VALLEYS.contains(&map) || crate::contracts::opened(self, map)
+        !LATE_VALLEYS.contains(&map)
+            || crate::contracts::opened(self, map)
+            // (The contract that opens it may send you there first.)
+            || self.job.as_ref().and_then(|j| j.map()) == Some(map)
     }
 }
 

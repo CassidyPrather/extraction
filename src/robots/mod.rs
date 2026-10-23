@@ -55,6 +55,10 @@ pub mod sorter_look;
 pub mod sorter_mind;
 pub mod spotter;
 pub mod spotter_look;
+pub mod squad;
+#[cfg(test)]
+mod squad_drill;
+pub mod subjects;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
@@ -273,6 +277,8 @@ impl Plugin for RobotsPlugin {
                 network::NetworkPlugin,
                 devices::DevicesPlugin,
                 recall::RecallPlugin,
+                squad::SquadPlugin,
+                subjects::SubjectsPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

@@ -57,6 +57,8 @@ THREATS = {
     "spotter.fix": ((("spotter.fix", 0.8), ("lock.tick", 1.8)), (10, 30, 60), True),
     "hound.crouch": ((("hound.crouch", 0.65),), (5, 10, 20), False),
     "device.hunt": ((("device.hunt", 1.0),), (5, 15, 30), False),
+    "squad.flank": ((("squad.flank", 1.0), ("lock.tick", 1.8)), (10, 25, 40), False),
+    "squad.spot": ((("squad.spot", 1.0), ("lock.tick", 1.8)), (10, 25, 40), True),
 }
 ILD_MIN = 3.0            # dB at 90 degrees, or...
 ITD_MIN = 300e-6         # ...s at 90 degrees

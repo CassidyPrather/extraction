@@ -18,6 +18,7 @@
 
 use bevy::prelude::*;
 
+pub mod bait;
 pub mod bat_look;
 pub mod bats;
 pub mod bodies;
@@ -47,6 +48,9 @@ pub enum FlushCause {
     Robot,
     /// A loud noise (a shot, a blast) close enough to scare it.
     Noise,
+    /// Something thrown landed among them (a stone into their tree): they
+    /// go up calling, and the machines come to look there, not at you.
+    Thrown,
     /// Nothing: the flock moved on of its own accord, unhurried.
     Restless,
 }
@@ -145,6 +149,39 @@ fn gather_threats(
     *last = seen;
 }
 
+/// Things a hand let go of lately (thrown, or dropped): item, when (s).
+#[derive(Resource, Default)]
+struct LetGo(std::collections::HashMap<Entity, f32>);
+
+/// A thing let go this long ago and landing now was thrown (s): a can
+/// knocked off a shelf, a crate of loot settling, scares nothing.
+pub const THROWN_FOR: f32 = 4.0;
+
+/// Where thrown things came down this tick (`flock`, `herd`: a stone into
+/// their tree or thicket puts them up).
+#[derive(Resource, Default)]
+pub struct Landed(pub Vec<Vec3>);
+
+fn let_go(remove: On<Remove, crate::interact::Held>, time: Res<Time>, mut let_go: ResMut<LetGo>) {
+    let_go.0.insert(remove.entity, time.elapsed_secs());
+}
+
+fn landings(
+    mut impacts: MessageReader<crate::items::impacts::ItemImpact>,
+    mut let_go: ResMut<LetGo>,
+    mut landed: ResMut<Landed>,
+    time: Res<Time>,
+) {
+    let now = time.elapsed_secs();
+    let_go.0.retain(|_, t| now - *t < THROWN_FOR);
+    landed.0.clear();
+    for i in impacts.read() {
+        if i.speed >= crate::items::impacts::MIN_SPEED && let_go.0.contains_key(&i.item) {
+            landed.0.push(i.at);
+        }
+    }
+}
+
 /// Ordering for animal logic: threats first, then the animals.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WildlifeSystems;
@@ -160,15 +197,21 @@ impl Plugin for WildlifePlugin {
             .add_message::<rats::Scurried>()
             .init_resource::<Threats>()
             .init_resource::<insects::Chorus>()
+            .init_resource::<LetGo>()
+            .init_resource::<Landed>()
+            .init_resource::<herd::Among>()
+            .add_observer(let_go)
+            .add_observer(bait::put_down)
+            .add_observer(bait::picked_up)
             .add_systems(Startup, setup)
             .add_systems(
                 FixedUpdate,
                 (
                     scene_perches,
-                    gather_threats,
+                    (gather_threats, landings),
                     (
                         flock::flocks,
-                        herd::herds,
+                        (herd::herds, bait::lure).chain(),
                         fish::shoals,
                         rats::rats,
                         bats::bats,

@@ -87,6 +87,10 @@ pub const SHORT_RUN: &[&str] = &[
     "Truck: \"Short run. That's a can of fuel. Get in.\"",
 ];
 
+/// On the first plant job's card: there's a roof within a sprint all the
+/// way (`map_lint`), and a drone's chirp is the reason to use one.
+pub const SHEDS_ON_THE_WAY: &str = "\nSheds on the way: in, if anything chirps.";
+
 /// The first job's way home, from the gate, on the house.
 pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
 
@@ -262,6 +266,50 @@ pub const CHATTER_CLOSE: &[&str] = &[
     "The radio stutters in their tones. They're coming here.",
 ];
 
+/// A machine on you calls its part in the plan (`robots::squad`): one
+/// working round to your `{b}`...
+pub const SQUAD_FLANK: &[&str] = &[
+    "Radio, close: one going round to your {b}.",
+    "Chirps on the radio: one working round to the {b}.",
+    "The radio clicks: one circling to your {b}.",
+];
+/// ...or, by a place it can name (`{rv}`)...
+pub const SQUAD_FLANK_BY: &[&str] = &[
+    "Radio, close: one round your {b}, by {rv}.",
+    "Chirps: one round to the {b}, by {rv}.",
+];
+/// ...one making for the way to `{rv}`, to cut you off...
+pub const SQUAD_CUT_OFF: &[&str] = &[
+    "Radio: one making for {rv}. They mean to cut you off.",
+    "Chirps: one heading for {rv}, ahead of you.",
+    "The radio clicks: one off toward {rv}, to cut you off.",
+];
+/// ...or round to the `{b}`, where it can't name...
+pub const SQUAD_CUT_OFF_AWAY: &[&str] = &[
+    "Radio: one moving round to the {b}, to cut you off.",
+    "Chirps: one off to the {b}, to get ahead of you.",
+];
+/// ...one holding you...
+pub const SQUAD_PIN: &[&str] = &[
+    "Radio, close: one holding on you.",
+    "The radio clicks: one keeping you pinned.",
+];
+/// ...the drone lighting the `{b}`...
+pub const SQUAD_SPOT: &[&str] = &[
+    "Radio: the drone's lighting the {b}.",
+    "Chirps: the drone moving to light the {b}.",
+];
+/// ...or by a place it can name...
+pub const SQUAD_SPOT_BY: &[&str] = &[
+    "Radio: the drone lights the {b}, by {rv}.",
+    "Chirps: the drone over {rv}, lighting it.",
+];
+/// ...a relay calling it in.
+pub const SQUAD_CALL: &[&str] = &[
+    "Radio: a relay calling it in. More coming.",
+    "The radio stutters: a relay's called them.",
+];
+
 /// Machines talking about something off to the `{b}` (a bearing).
 pub const CHATTER_FAR: &[&str] = &[
     "Robot chatter on the radio: something's moving, off to the {b}.",
@@ -403,7 +451,15 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 34] = [
+        let pools: [&[&str]; 42] = [
+            SQUAD_FLANK_BY,
+            SQUAD_SPOT_BY,
+            SQUAD_FLANK,
+            SQUAD_CUT_OFF,
+            SQUAD_CUT_OFF_AWAY,
+            SQUAD_PIN,
+            SQUAD_SPOT,
+            SQUAD_CALL,
             MEMORY_CONTACT,
             MEMORY_CONTACT_AWAY,
             MEMORY_WATCHER,

@@ -23,6 +23,7 @@ pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
+pub mod loot_light;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -92,6 +93,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(loot_light::LootLightPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
@@ -185,17 +187,28 @@ fn attach_flat_camera(
         } else {
             pos.y.max(ground + 0.3)
         };
-        commands.spawn((
-            Name::new("Free camera"),
-            FreeCamera,
-            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                -yaw.to_radians(),
-                pitch.to_radians(),
-                0.0,
-            )),
-            camera_bundle(&weather),
-        ));
+        commands
+            .spawn((
+                Name::new("Free camera"),
+                FreeCamera,
+                Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                    EulerRot::YXZ,
+                    -yaw.to_radians(),
+                    pitch.to_radians(),
+                    0.0,
+                )),
+                camera_bundle(&weather),
+            ))
+            .with_children(|c| {
+                // Held up by the eye and aimed where it looks, as anyone
+                // looking at something by torchlight does.
+                if opts.torch {
+                    c.spawn((
+                        crate::gadgets::visuals::torch_beam(),
+                        Transform::from_xyz(0.15, -0.1, 0.0),
+                    ));
+                }
+            });
         return;
     }
     for (head, parent) in &heads {

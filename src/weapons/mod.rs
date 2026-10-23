@@ -28,11 +28,13 @@ pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+pub mod reload;
 pub mod report;
 pub mod reverb;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
+pub mod stoppages;
 pub mod tracers;
 pub mod visuals;
 pub mod wear;
@@ -250,16 +252,20 @@ impl Plugin for WeaponsPlugin {
                 report::ReportPlugin,
             ))
             .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
+            .init_resource::<reload::MagApproach>()
             .add_systems(
                 FixedUpdate,
                 (
                     magwell_events,
+                    reload::note_approach,
                     work_handles,
                     tap_magazines,
                     feed_by_hand,
                     buttons,
                     triggers,
                     sync_mag_rounds,
+                    reload::drop_half_seated,
+                    reload::hang_mags,
                     age_casings,
                 )
                     .chain()
@@ -364,6 +370,8 @@ fn magwell_events(
     mut mags: Query<(&mut Item, &Mag, &mut Transform)>,
     mut out: MessageWriter<GunEvent>,
     gts: Query<&GlobalTransform>,
+    approach: Res<reload::MagApproach>,
+    velocities: Query<&LinearVelocity>,
 ) {
     for ev in events.read() {
         match *ev {
@@ -387,11 +395,23 @@ fn magwell_events(
                     rounds: it.rounds,
                     loads: it.loads.clone(),
                 };
-                if gun.firearm.insert_magazine(m).is_ok() {
+                // Brought up by a hand too gently, it hangs on the catch.
+                let up = gts.get(socket).map_or(Vec3::Y, |g| g.up().as_vec3());
+                let gun_v = velocities.get(owner.0).map_or(Vec3::ZERO, |v| v.0);
+                let gentle = approach
+                    .0
+                    .get(&item)
+                    .is_some_and(|v| (*v - gun_v).dot(up) < reload::SEAT_SPEED);
+                let seated = if gentle {
+                    gun.firearm.half_seat_magazine(m)
+                } else {
+                    gun.firearm.insert_magazine(m)
+                };
+                if let Ok(seated) = seated {
                     out.write(GunEvent {
                         gun: owner.0,
                         item: String::new(),
-                        event: FireEvent::MagazineInserted,
+                        event: seated[0].clone(),
                         at: gts
                             .get(owner.0)
                             .map(|g| g.translation())
