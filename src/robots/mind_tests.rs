@@ -4657,6 +4657,11 @@ fn the_pinner_suppresses_while_one_moves_up() {
                         here
                     },
                 });
+            // (It's the cadence being counted, not you going down.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+            }
             app.update();
         }
         let n = app
