@@ -11,7 +11,7 @@ use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use extraction_core::nav::{BLOCKED, NavGrid, Obstacle};
 
-use crate::world::buildings::{Building, DoorLeaf, Shape, prefab};
+use crate::world::buildings::{Building, DoorLeaf, Geo, Shape, prefab};
 
 /// Cell size of the indoor grids, metres.
 pub const CELL: f32 = 0.25;
@@ -252,6 +252,13 @@ pub fn plan_buildings(
     doors: &Query<(Entity, &DoorLeaf, &ChildOf)>,
 ) -> Vec<BuildingPlan> {
     let mut out = Vec::new();
+    // Staged scenes (`world::scenes`): furniture of their own, wherever
+    // they're left (one in a site is in its way too).
+    let scenes: Vec<(Transform, Geo)> = buildings
+        .iter()
+        .filter(|(_, b, _)| b.prefab.starts_with(crate::world::scenes::PREFIX))
+        .filter_map(|(_, b, xf)| Some((*xf, prefab(&b.prefab)?)))
+        .collect();
     for (e, b, xf) in buildings.iter() {
         let Some(geo) = prefab(&b.prefab) else {
             continue;
@@ -262,7 +269,23 @@ pub fn plan_buildings(
                 .filter(|(_, _, p)| p.parent() == e)
                 .map(|(d, leaf, _)| (d, leaf))
                 .collect();
-            out.push(plan_site(e, b, xf, &geo, r, &mine));
+            // The scenes left down here, in site space.
+            let to_site = xf.compute_affine().inverse();
+            let staged: Vec<(Transform, &Geo)> = scenes
+                .iter()
+                .map(|(sxf, g)| {
+                    (
+                        Transform::from_matrix(Mat4::from(to_site * sxf.compute_affine())),
+                        g,
+                    )
+                })
+                .filter(|(at, _)| {
+                    let p = at.translation;
+                    r.floor_at([p.x, p.z])
+                        .is_some_and(|f| (p.y - f).abs() < 1.0)
+                })
+                .collect();
+            out.push(plan_site(e, b, xf, &geo, r, &mine, &staged));
             continue;
         }
         let foot = crate::world::structures::footprint(&b.prefab);
@@ -490,9 +513,10 @@ fn plan_site(
     e: Entity,
     b: &Building,
     xf: &Transform,
-    geo: &crate::world::buildings::Geo,
+    geo: &Geo,
     r: &'static extraction_core::underground::Raster,
     mine: &[(Entity, &DoorLeaf)],
+    staged: &[(Transform, &Geo)],
 ) -> BuildingPlan {
     use extraction_core::underground::{APRON, KIOSK, WALL};
     // The ground round a kiosk, out past its apron; not where a room
@@ -605,6 +629,23 @@ fn plan_site(
             },
             SITE_CLEARANCE,
         );
+    }
+    // A scene staged down here: its crate and chair are in the way like
+    // the site's own (Cinder's "Valve three" pinned raiders in the valve
+    // chamber reaching for what's on it).
+    for (at, g) in staged {
+        for piece in g.pieces.iter().filter(|p| p.collide) {
+            let at = *at * piece.at;
+            let c = at.translation;
+            let Some((i, j)) = grid.cell_of([c.x, c.z]) else {
+                continue;
+            };
+            let floor = levels[j * n + i];
+            let floor = if floor.is_nan() { r.floor } else { floor };
+            if let Some(ob) = obstacle(piece.shape, at, floor) {
+                grid.block(ob, SITE_CLEARANCE);
+            }
+        }
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
     // is vented (`BuildingPlan::vent`).
@@ -1552,6 +1593,68 @@ mod tests {
     /// every cell it can stand in, bar those behind the works (past a pit,
     /// heat or the cage), joins up with the ways out. No pocket a raider
     /// could be routed into or caught in.
+    /// A scene staged in an underground site (`world::scenes`) is in its
+    /// plan's way like the site's own furniture: nobody's sent to stand
+    /// inside its crate for what's on it.
+    #[test]
+    fn scenes_staged_in_a_site_stand_in_its_plan() {
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let scenes: Vec<(String, Transform)> = app
+                .world_mut()
+                .query::<(&Building, &Transform)>()
+                .iter(app.world())
+                .filter(|(b, _)| b.prefab.starts_with(crate::world::scenes::PREFIX))
+                .map(|(b, t)| (b.prefab.clone(), *t))
+                .collect();
+            for plan in plans(&mut app) {
+                let Some(r) = extraction_core::underground::raster(&plan.name) else {
+                    continue;
+                };
+                for (id, sxf) in &scenes {
+                    let at = Transform::from_matrix(Mat4::from(
+                        plan.xf.compute_affine().inverse() * sxf.compute_affine(),
+                    ));
+                    let p = at.translation;
+                    if !r
+                        .floor_at([p.x, p.z])
+                        .is_some_and(|f| (p.y - f).abs() < 1.0)
+                    {
+                        continue;
+                    }
+                    for piece in prefab(id).unwrap().pieces.iter().filter(|p| p.collide) {
+                        let c = (at * piece.at).translation;
+                        // What's stepped over (a bedroll) is no one's way.
+                        let floor = r.floor_at([c.x, c.z]).unwrap_or(r.floor);
+                        if obstacle(piece.shape, at * piece.at, floor).is_none() {
+                            continue;
+                        }
+                        let k = plan
+                            .grid
+                            .cell_of([c.x, c.z])
+                            .map(|(i, j)| j * plan.grid.n + i);
+                        assert!(
+                            k.is_some_and(|k| plan.grid.cost[k] == BLOCKED),
+                            "{map} {}: {id}'s piece at {c:.2?} is open in the plan",
+                            plan.name
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "no scene staged in a site");
+    }
+
     #[test]
     fn every_site_cell_reaches_a_way_out() {
         let mut pockets = Vec::new();
