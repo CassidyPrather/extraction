@@ -349,8 +349,9 @@ pub const DOORWAY_CUTOFF: f32 = 3_000.0;
 /// it are both cut. (Robots try only the raised line, which through a
 /// doorway runs into the lintel.)
 ///
-/// And it bends round what's narrow (a tree's trunk, a post): a line is
-/// cut only if the lines `ROUND_NARROW` to either side of it are cut too.
+/// And it bends round what's narrow (a tree's trunk, a post): a cut line
+/// whose lines `ROUND_NARROW` to either side are both clear isn't cut. (A
+/// wide thing's corner leaves one side cut: still blocked.)
 /// A trunk costs a sound next to nothing; a ridge or a wall costs it
 /// `wall_db`.
 pub fn blocked(spatial: &SpatialQuery, from: Vec3, to: Vec3) -> bool {
@@ -367,7 +368,7 @@ pub fn blocked(spatial: &SpatialQuery, from: Vec3, to: Vec3) -> bool {
     [0.3, HEARD_OVER].into_iter().all(|up| {
         let src = from + Vec3::Y * up;
         cut(src, to)
-            && (side == Vec3::ZERO || (cut(src + side, to + side) && cut(src - side, to - side)))
+            && (side == Vec3::ZERO || cut(src + side, to + side) || cut(src - side, to - side))
     })
 }
 
