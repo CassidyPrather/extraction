@@ -288,6 +288,7 @@
         (prefab: "house_plank", at: (25.0, 55.0), rot: 270.0),
         (prefab: "shop", at: (-16.0, 35.0), rot: 90.0),
         (prefab: "house_plank", at: (-45.0, 75.0), rot: 0.0),
+        (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
         // The civil-defence shelter under the village (assets/underground).
         (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
         // The pumping station's drowned cellars (assets/underground).
@@ -310,11 +311,6 @@
         // Onboarding's newcomers fell to drones on their second and third
         // jobs: the lengthman's hut by the district road.
         (prefab: "shed", at: (22.0, 224.0), rot: 90.0, tag: "lengthmans_hut"),
-        // On the way home west from the Village by the pumping station to
-        // the Ranger tower, where they fell on the way home from the watch:
-        // a platelayers' hut on the station road (the Village's east garden
-        // shed gave up its place in the view for it).
-        (prefab: "shed", at: (-128.0, 20.0), rot: 180.0, tag: "station_road_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
