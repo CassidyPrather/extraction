@@ -44,20 +44,13 @@ const CELL: f32 = 0.5;
 /// At least this many cells: room for a body (0.6 m across) to stand.
 const MIN_CELLS: usize = 3;
 
-/// Known walks: (map, prefab, why). (The probe's half-metre cells are
-/// coarser than some walks: they read a narrow ring as cut off.)
-const WALKS: &[(&str, &str, &str)] = &[
-    (
-        "marrow_creek",
-        "water_tower",
-        "a 0.45 m ring round the tank, wide enough for the 0.28 m capsule, the ladder at its back",
-    ),
-    (
-        "sallow_reservoir",
-        "water_tower",
-        "a 0.45 m ring round the tank, wide enough for the 0.28 m capsule, the ladder at its back",
-    ),
-];
+/// Known walks: (prefab, why), wherever it stands: a prefab is the same
+/// building in every valley. (The probe's half-metre cells are coarser
+/// than some walks: they read a narrow ring as cut off.)
+const WALKS: &[(&str, &str)] = &[(
+    "water_tower",
+    "a 0.45 m ring round the tank, wide enough for the 0.28 m capsule, the ladder at its back",
+)];
 
 /// Perches found and with their owners: (map, prefab, who, what). Each
 /// comes off when it's fixed; a perch anywhere else fails the test.
@@ -136,7 +129,6 @@ fn column(
 
 /// The perches around one map's buildings.
 pub fn perches(app: &mut App) -> Vec<Perch> {
-    let map = app.world().resource::<crate::LaunchOptions>().map.clone();
     let zone = app.world().resource::<Zone>().clone();
     let buildings: Vec<(String, ColliderAabb)> = app
         .world_mut()
@@ -152,7 +144,7 @@ pub fn perches(app: &mut App) -> Vec<Perch> {
         .collect();
     let mut out = Vec::new();
     for (prefab, aabb) in buildings {
-        if WALKS.iter().any(|(m, p, _)| *m == map && *p == prefab) {
+        if WALKS.iter().any(|(p, _)| *p == prefab) {
             continue;
         }
         let (min, max) = (
