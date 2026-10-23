@@ -471,7 +471,7 @@ exhaustive match, so a new kind won't build without one):
 | Recover | as Bring | seeded (`--job recover`): found in the plank house's back room, crated, paid |
 | Letter | as Bring | seeded: found, crated, paid |
 | Ledger | as Bring | seeded: down under the Gate; a drone and a machine below, warned each time; down |
-| Photograph | camera off the ledge, the head kept on the walker, press | not yet: on Marrow the walkers work underground; on Cinder Works the newcomer looked round the valley 20 minutes and a walker it found shot it |
+| Photograph | camera off the ledge, out to where the card says one's working, the head kept on it, press from as far off as the camera takes, back off | the picture taken (Cinder Works, with Robot minds' surface walker); on the way home a walker heard it, aimed, warned, and shot it |
 
 `every_job_kind_has_a_way` fails when a kind has no way, or when its card
 doesn't name what the newcomer goes for: what the bot is after, a player
@@ -529,34 +529,15 @@ way, went in, came on, left the box and got home paid; the reckless one
 left it with a machine already shooting at it, as it does, and fell
 there.
 
-Still open: the photograph. At a raid's start every walker on Cinder Works
-is a crawler at work underground; the first up on the surface came 17
-minutes in, at the newcomer, gun up. The card now says where one's been
-heard working once one is ("He's heard a walker working by the chimney.
-From the drop: ..."), and the newcomer goes there; a walker kept at work
-on the surface while the job's on is Robot minds' to give.
-
-# Machines working together (Robot minds' squad drill)
-
-Robot minds' `squad_drill` (claude/polish-robot-minds 64802ac2,
-`src/robots/squad_drill.rs`, 24 seeds an arm): on Marrow's south field a
-newcomer with a radio jogs for the nearest rendezvous, cover to cover,
-crouched in cover; a squad (three walkers, or two and a drone) finds it at
-45 to 55 m. The listener acts only on what's said: a chirp within 40 m, a
-radio line 1.5 s after it shows. A cut-off sends it to another rendezvous;
-a flanker's post counts as a threat when it picks cover.
-
-| Newcomer | Machines each alone | Machines working together |
-| - | - | - |
-| deaf | 17% get away | 8% |
-| listening | 17% | 17% (alive a median 23 s, the deaf 15 s) |
-
-Three walkers alone, working together: the listener 27%, the deaf 13%.
-Working together halves a deaf newcomer's chances; listening wins them
-back. The numbers are small, and a drone in the open kills nearly everyone
-whatever they hear. The line a listener did most with was the cut-off's,
-which names a rendezvous; the flank line gives a compass way ("round to
-your east"), as the job card does ("north-east, 190 m").
+The photograph: at a raid's start every walker on Cinder Works was a
+crawler at work underground, and the first up on the surface came 17
+minutes in, at the newcomer, gun up. Now, with a photograph on the card,
+Robot minds keep one of the kind it names (a plain walker; not a crawler,
+a hound or the heavy) at work on the surface 120 to 360 m from the drop
+(`robots::subjects`), and the card says where it's been heard ("He's heard
+a walker working by the chimney. From the drop: ..."). The newcomer took
+its picture 3.5 minutes in, from as far off as the camera takes; a walker
+caught it on the way home, warned.
 
 ## Five jobs again, on the map with the roofs
 
@@ -578,3 +559,34 @@ past the pumping station and three newcomers died fetching them (Map
 design put the shed back). The lost one, by the shop, was warned every
 time (a drone's lock, 15 s ahead) and went in at the door; the bot stood
 it in the doorway's line, which the rooms' plan now puts right.
+
+# Machines working together (Robot minds' squad drill)
+
+Robot minds' `squad_drill` (claude/polish-robot-minds a6528245,
+`src/robots/squad_drill.rs`, 48 seeds an arm): on Marrow's south field a
+newcomer with a radio jogs for the nearest rendezvous, cover to cover,
+crouched in cover; a squad (three walkers, or two and a drone) finds it at
+45 to 55 m. One walker pins it (faster fire, steadier on it the stiller it
+holds, kept on where it last saw it for 4 s) while another moves up,
+holding its fire till it's there. Running across the pinner's line throws
+its aim off. The listener acts only on what's said: a chirp within 40 m, a
+radio line 1.5 s after it shows. Told one's moving up, it runs, out of the
+pinner's line; told one's making for its rendezvous, it changes to
+another, if that's no more than 30% further.
+
+The earlier tables are void: the drill moved the newcomer by setting where
+it was, so the machines read it as standing still, and running across
+their line never threw their aim off. This table replaces them.
+
+| Newcomer | Machines each alone | Machines working together |
+| - | - | - |
+| deaf | 29% get away (±13) | 17% (±11) |
+| listening | 29% (±13) | 48% (±14) |
+
+Seed for seed: working together, the machines catch a deaf newcomer that
+the same machines alone don't, 7 times to 1 (p ≈ 0.07); against them, a
+listener gets out where the deaf one doesn't, 17 to 2 (p ≈ 0.001); and a
+listener does better against machines working together than against the
+same ones alone, 14 to 5 (p ≈ 0.06): what they say to each other gives
+them away. Machines working together are harder on a newcomer who doesn't
+listen and easier on one who does.

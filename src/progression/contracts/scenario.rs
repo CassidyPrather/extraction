@@ -11,11 +11,13 @@
 //! Every contract's steps lie in one valley (a photograph can be taken in
 //! any), so each runs whole on its own map:
 //!
-//! - `contract_post_counter`, `contract_mast_relay`,
-//!   `contract_the_overflow`: `--map marrow_creek`
-//! - `contract_hajek_tin`: `--map kettle_pass`
-//! - `contract_walker_portrait`, `contract_the_heavy`: `--map cinder_works`
+//! - `contract_post_counter`, `contract_mast_relay`, `contract_annas_tape`,
+//!   `contract_the_overflow`, `contract_keepers_log`: `--map marrow_creek`
+//! - `contract_hajek_tin`, `contract_deputys_lamp`: `--map kettle_pass`
+//! - `contract_walker_portrait`, `contract_the_heavy`,
+//!   `contract_charging_manifest`: `--map cinder_works`
 //! - `contract_scour_key`: `--map sallow_reservoir`
+//! - `contract_up_the_fell`: `--map rime_fell`
 //!
 //! Shortcuts:
 //! - The career is set at the start so the contract is the one the driver
@@ -26,6 +28,9 @@
 //! - Every raid ends with the raid's phase set to extracting (no radio
 //!   call, no walk to a rendezvous); the first one too, so the bot starts
 //!   in the truck.
+//! - Down a signature site, the bot's put straight into the room its thing
+//!   lies in, a stride off (`Task::TeleportDown`): no stairs, no water let
+//!   down, no gas crossed, no crane ridden.
 //! - The walk across the valley is skipped (`Task::Teleport` to some way
 //!   short of the place, or of the door of the house a thing lies in);
 //!   the last stretch is walked, the door opened, the thing picked up.
@@ -66,6 +71,9 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_the_heavy", "the_heavy"),
     ("contract_annas_tape", "annas_tape"),
     ("contract_up_the_fell", "up_the_fell"),
+    ("contract_keepers_log", "keepers_log"),
+    ("contract_deputys_lamp", "deputys_lamp"),
+    ("contract_charging_manifest", "charging_manifest"),
 ];
 
 /// The last task while the scenario runs: the director adds each step's.
@@ -158,6 +166,14 @@ pub struct Scene<'w, 's> {
     benches: Query<'w, 's, &'static crate::raid::bench::Bench>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
     spatial: avian3d::prelude::SpatialQuery<'w, 's>,
+    sites: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Building,
+            &'static Transform,
+        ),
+    >,
 }
 
 impl Scene<'_, '_> {
@@ -640,7 +656,23 @@ pub fn direct(
                         return;
                     };
                     bot.log.push(format!("{item} lies at {:.0?}", p));
-                    t.extend(indoors(p).unwrap_or_else(|| approach(p.xz(), 1.0)));
+                    // Down a site: straight into its room, a stride off.
+                    let down = scene
+                        .sites
+                        .iter()
+                        .find_map(|(b, xf)| super::under(b, xf, p.xz()));
+                    if let Some((_, middle)) = down {
+                        let from = p.xz() + (middle.xz() - p.xz()).normalize_or(Vec2::X) * 1.5;
+                        t.extend([
+                            Task::TeleportDown(Vec3::new(from.x, middle.y, from.y)),
+                            Task::WalkTo {
+                                to: p.xz(),
+                                within: 0.8,
+                            },
+                        ]);
+                    } else {
+                        t.extend(indoors(p).unwrap_or_else(|| approach(p.xz(), 1.0)));
+                    }
                     t.extend([
                         Task::PickUp {
                             id: item.clone(),

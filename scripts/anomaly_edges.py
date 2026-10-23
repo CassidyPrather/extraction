@@ -156,6 +156,13 @@ def measure(v: dict, cond: str) -> dict:
             # that half a metre of it is a few rows, and a square window
             # straddles the edge.
             prof.append((d, float(diff[y, x - 3:x + 4].mean())))
+        # Over three neighbouring steps (10 cm apart): a blotch in a mottled
+        # mark isn't its edge.
+        prof.sort()
+        prof = [
+            (d, float(np.mean([c for _, c in prof[max(0, i - 1):i + 2]])))
+            for i, (d, _) in enumerate(prof)
+        ]
         inside = [c for d, c in prof if -1.0 <= d <= -0.3]
         outside = [c for d, c in prof if 0.3 <= d <= 1.0]
         if not inside or not outside:

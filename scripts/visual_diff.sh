@@ -22,7 +22,10 @@
 # changes under them.
 #
 # Output: target/vdiff/diff/<old>_<new>/sheet.jpg (changed shots side by
-# side, most changed first), index.html and report.json. Env: MAPS,
+# side, most changed first), index.html and report.json. Then a second
+# line, BUILDINGS PASS or BUILDINGS MISSING: every building within 60 m of
+# a camera must change its patch of the picture when hidden
+# (scripts/check_buildings.py), or it was drawn somewhere nobody can see. Env: MAPS,
 # MOODS, KEEP, STRUCTURE and PIXELS (thresholds; see scripts/visual_diff.py).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -126,7 +129,8 @@ shoot() { # sha
             WGPU_BACKEND=vulkan timeout 1800 xvfb-run -a -s "-screen 0 960x540x24" \
                 "$VD/bin/$sha/extraction" --map "$MAP" --data-dir "$data" --new-game \
                 --no-robots --seed 7 --cinematic "$ROOT/scripts/visual_diff/$MAP.stills" \
-                --capture-out "$out" --frames 60 --size 960x540 "${only[@]}" "${ARGS[@]}" 2>&1 \
+                --capture-out "$out" --frames 60 --size 960x540 --check-buildings 1 \
+                "${only[@]}" "${ARGS[@]}" 2>&1 \
                 | grep -E 'panicked' || true
             rm -rf "$data"
         done
@@ -140,6 +144,21 @@ TAG="${OLD}_$NEW"
 [ "$QUICK" = 1 ] && TAG="${TAG}_quick"
 python3 "$ROOT/scripts/visual_diff.py" "$VD/shots/$OLD" "$VD/shots/$NEW" "$VD/diff/$TAG" \
     --title "$OLD -> $NEW" --maps "${MAPS[*]}" --moods "${MOODS[*]}" --views "$VIEWS"
+# Every building near a camera really there to see, in the new build's
+# shots (--check-buildings: each one hidden in turn, shot again). A build
+# from before the check has no probes, and passes it by default.
+CHECK=()
+for MAP in "${MAPS[@]}"; do
+    for MOOD in "${MOODS[@]}"; do
+        CHECK+=("$VD/shots/$NEW/$MAP/$MOOD")
+    done
+done
+if python3 "$ROOT/scripts/check_buildings.py" "${CHECK[@]}" > "$VD/diff/$TAG/buildings.txt"; then
+    echo "BUILDINGS PASS $NEW: $(tail -1 "$VD/diff/$TAG/buildings.txt")"
+else
+    echo "BUILDINGS MISSING $NEW: $(tail -1 "$VD/diff/$TAG/buildings.txt")"
+    grep '^ERROR' "$VD/diff/$TAG/buildings.txt"
+fi
 
 # Keep the newest KEEP shot sets and builds (and the two just compared).
 prune() { # dir

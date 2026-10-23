@@ -342,6 +342,77 @@ pub const CONTRACTS: &[Contract] = &[
         unlocks: &[],
         done: "",
     },
+    // Down the signature sites (`docs/UNDERGROUND.md`): each one's thing is
+    // laid on the floor of the room its point is in (`down_site`).
+    Contract {
+        id: "keepers_log",
+        name: "The keeper's log",
+        giver: "the water board",
+        says: &[
+            "The water board wants Brabec's own log. Not the terminal: his book. It's down the pump wells, in the sump. Under the water, they think.",
+        ],
+        offered: Offered::Deep { trust: 8 },
+        raided_all: false,
+        after: &[],
+        steps: &[Step::Bring {
+            map: "marrow_creek",
+            place: "Pumping station",
+            item: "pump_log",
+            // The sump, at the pump wells' bottom.
+            near: Some([-186.0, 42.0]),
+        }],
+        kit: &[],
+        pay: &[("power_cell", 2), ("chemlight", 3)],
+        trust: 2,
+        unlocks: &[],
+        done: "Driver: \"Dry it by the stove. Slowly, or the pages go.\"",
+    },
+    Contract {
+        id: "deputys_lamp",
+        name: "The deputy's lamp",
+        giver: "Irena, from the mine office",
+        says: &[
+            "Irena, from the mine office. The inspector signed the deep workings clear. The deputy's lamp says what it read. The old heading, past the cage. Don't strike anything down there.",
+        ],
+        offered: Offered::Deep { trust: 9 },
+        raided_all: false,
+        after: &[],
+        steps: &[Step::Bring {
+            map: "kettle_pass",
+            place: "Miners' Row",
+            item: "deputy_lamp",
+            // The old heading, in the deep workings.
+            near: Some([-65.0, 135.5]),
+        }],
+        kit: &[],
+        pay: &[("regen_injector", 1), ("chemlight", 2)],
+        trust: 2,
+        unlocks: &[],
+        done: "Driver: \"She'll take it to town. Somebody there can read a flame.\"",
+    },
+    Contract {
+        id: "charging_manifest",
+        name: "The charging manifest",
+        giver: "Vlasta Kralova",
+        says: &[
+            "Kral's wife. He told them about furnace three, she says. The manifest's on the far ledge in the cellars by Cutter's farm, over the ash pit. Ride the crane.",
+        ],
+        offered: Offered::Deep { trust: 10 },
+        raided_all: false,
+        after: &[],
+        steps: &[Step::Bring {
+            map: "cinder_works",
+            place: "Cutter's farm",
+            item: "charging_manifest",
+            // The far ledge, in the furnace cellars.
+            near: Some([-207.0, 166.0]),
+        }],
+        kit: &[],
+        pay: &[("steel_plate", 1), ("ammo_762r_ap", 2)],
+        trust: 3,
+        unlocks: &[],
+        done: "Driver: \"His hand. She knew it before she read it.\"",
+    },
 ];
 
 pub fn contract(id: &str) -> Option<&'static Contract> {
@@ -399,6 +470,21 @@ pub fn place_at(map: &MapDef, place: &str) -> Option<[f32; 2]> {
     map.markers_of(&MarkerKind::Poi)
         .find(|m| m.name == place)
         .map(|m| m.at)
+}
+
+/// The site and its room a world point `at` in `map` is down in, if any
+/// (`underground`): where a Bring step's thing is laid on that room's floor.
+pub fn down_site(map: &MapDef, at: [f32; 2]) -> Option<(String, String)> {
+    crate::underground::placed(map).into_iter().find_map(|p| {
+        let l = crate::underground::layout(&p.id)?;
+        let s = p.to_site(at);
+        l.rooms
+            .iter()
+            .find(|r| {
+                (s[0] - r.at[0]).abs() < r.size[0] / 2.0 && (s[1] - r.at[1]).abs() < r.size[1] / 2.0
+            })
+            .map(|r| (p.id.clone(), r.id.clone()))
+    })
 }
 
 /// The contract step as a job on the card.
@@ -509,6 +595,37 @@ mod tests {
         }
     }
 
+    /// The deep contracts' things are down their sites, in the rooms the
+    /// sites hide them in (`docs/UNDERGROUND.md`).
+    #[test]
+    fn the_signature_sites_things_are_down_their_rooms() {
+        let v = valleys();
+        for (id, site, room) in [
+            ("keepers_log", "pump_marrow", "sump"),
+            ("deputys_lamp", "deep_kettle", "old_heading"),
+            ("charging_manifest", "cellars_cinder", "far_ledge"),
+        ] {
+            let c = contract(id).unwrap();
+            let Step::Bring {
+                map,
+                near: Some(near),
+                ..
+            } = c.steps[0]
+            else {
+                panic!("{id}: a Bring with its point");
+            };
+            let m = &v.iter().find(|(v, _)| *v == map).unwrap().1;
+            assert_eq!(
+                down_site(m, near),
+                Some((site.to_owned(), room.to_owned())),
+                "{id}"
+            );
+        }
+        // And the surface's are on it.
+        let m = &v.iter().find(|(v, _)| *v == "marrow_creek").unwrap().1;
+        assert_eq!(down_site(m, [-20.0, 65.0]), None);
+    }
+
     #[test]
     fn a_career_walks_the_arc_and_the_letter_still_comes() {
         let v = valleys();
@@ -544,7 +661,10 @@ mod tests {
                 "the_overflow",
                 "scour_key",
                 "up_the_fell",
-                "the_heavy"
+                "the_heavy",
+                "keepers_log",
+                "deputys_lamp",
+                "charging_manifest"
             ]
         );
         assert_eq!(p.contracts_done.len(), CONTRACTS.len());

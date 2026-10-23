@@ -115,6 +115,8 @@ pub fn spawn_boards(
                 at: Transform::from_scale(local.scale),
                 size,
                 range: crate::render::lod::near_range().end_margin,
+                // Flat on the casing: the wall casts it.
+                shadow: false,
             },
         ));
     }

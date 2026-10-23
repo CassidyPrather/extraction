@@ -28,6 +28,8 @@ pub struct RaidEntry {
     pub artifacts: Vec<String>,
     /// Nights slept out, in the safehouse.
     pub nights: u32,
+    /// A leg broken out there: splinted or not, at the end.
+    pub leg: Option<bool>,
 }
 
 #[derive(Resource, Default, Debug)]
@@ -130,7 +132,7 @@ fn tally_wrecks(
 fn write_entries(
     raid: Res<Raid>,
     mut book: ResMut<Logbook>,
-    players: Query<Entity, With<LocalPlayer>>,
+    players: Query<(Entity, Option<&crate::interact::wounds::Fracture>), With<LocalPlayer>>,
     carried: Query<(&Item, &CarriedBy)>,
     catalog: Res<Catalog>,
     house: Option<Res<crate::progression::safehouse::Safehouse>>,
@@ -151,7 +153,7 @@ fn write_entries(
     if !home && !matches!(raid.phase, Phase::Down { .. }) {
         return;
     }
-    let Some(player) = players.iter().next() else {
+    let Some((player, fracture)) = players.iter().next() else {
         return;
     };
     let mut items = 0;
@@ -175,6 +177,7 @@ fn write_entries(
         items,
         artifacts,
         nights: house.map_or(0, |h| h.nights_out),
+        leg: fracture.map(|f| f.splinted),
     };
     book.written = Some(entry_text(&entry));
     book.last = Some(entry);
@@ -212,6 +215,11 @@ fn entry_text(e: &RaidEntry) -> String {
         } else {
             format!("{} nights out", e.nights)
         });
+    }
+    match e.leg {
+        Some(true) => lines.push("Broke a leg, splinted".to_owned()),
+        Some(false) => lines.push("Broke a leg".to_owned()),
+        None => {}
     }
     lines.push(format!("Wrecked {}", wreck_list(&e.wrecked)));
     if e.home {
@@ -349,6 +357,19 @@ mod tests {
             at: Vec3::ZERO,
         });
         app.world_mut().resource_mut::<Raid>().clock += 600.0;
+        // And a hard landing breaks a leg; a splint goes on.
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .expect("a player");
+        app.world_mut()
+            .entity_mut(player)
+            .insert(crate::interact::wounds::Fracture {
+                leg: crate::rig::Side::Left,
+                splinted: true,
+            });
         app.update();
         app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 4.0 };
         app.update();
@@ -372,5 +393,16 @@ mod tests {
             .clone();
         assert!(text.contains("HOME, 10 MIN"), "{text}");
         assert!(text.contains("Wrecked 1 drone"), "{text}");
+        assert!(text.contains("Broke a leg, splinted"), "{text}");
+        // Home, it's set: the next raid starts on two good legs.
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 0.0 };
+        app.update();
+        assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+        assert!(
+            app.world()
+                .get::<crate::interact::wounds::Fracture>(player)
+                .is_none(),
+            "mended at home"
+        );
     }
 }

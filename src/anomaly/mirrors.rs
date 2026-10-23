@@ -16,7 +16,6 @@ use extraction_core::anomaly::{AnomalyKind, MIRROR_RECHARGE, mirror_exit};
 
 use super::artifacts::Shielded;
 use super::{Anomaly, AnomalyAct, AnomalyEvent};
-use crate::interact::Held;
 use crate::items::usage::UseItem;
 use crate::items::{Catalog, Item};
 use crate::player::{Body, Player};
@@ -69,7 +68,12 @@ pub fn mirrors(
             &ComputedMass,
             Option<&Item>,
         ),
-        (Without<RigidBodyDisabled>, Without<Held>, Without<Player>),
+        // Nothing carried blinks on its own: it goes with whoever has it.
+        (
+            Without<RigidBodyDisabled>,
+            crate::interact::NotCarried,
+            Without<Player>,
+        ),
     >,
     parts: Query<(), With<crate::robots::RobotPart>>,
     mut players: Query<(Entity, &GlobalTransform, &mut Transform), With<Player>>,

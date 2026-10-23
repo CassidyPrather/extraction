@@ -28,6 +28,9 @@ use crate::world::Zone;
 pub const REACH: f32 = 400.0;
 /// ...looked for this often (s)...
 pub const LOOK_EVERY: f32 = 5.0;
+/// ...at a site at least this far from the drop (m: not stood in plain
+/// view of the truck)...
+pub const OUT_OF_SIGHT: f32 = 120.0;
 /// ...and sent to work its site this long (s).
 pub const WORK_FOR: f32 = 1800.0;
 
@@ -130,7 +133,7 @@ pub fn site_near(zone: &Zone, nav: &extraction_core::nav::NavGrid, drop: Vec3) -
         .iter()
         .filter(|m| matches!(m.kind, MarkerKind::WorkSite | MarkerKind::Poi))
         .map(|m| Vec2::from(m.at))
-        .filter(|p| p.distance(d) < REACH * 0.9 && p.distance(d) > 60.0)
+        .filter(|p| p.distance(d) < REACH * 0.9 && p.distance(d) > OUT_OF_SIGHT)
         .filter_map(|p| nav.nearest_walkable(p.to_array()).map(Vec2::from_array))
         .min_by(|a, b| {
             (a.distance(d) - REACH * 0.5)
@@ -147,9 +150,9 @@ pub fn site_near(zone: &Zone, nav: &extraction_core::nav::NavGrid, drop: Vec3) -
     zone.on_ground(p.x, p.y)
 }
 
-/// The one sent this raid, if any.
+/// The one sent this raid, if any, and how many have been.
 #[derive(Resource, Default, Debug)]
-pub struct Sent(pub Option<Entity>);
+pub struct Sent(pub Option<Entity>, pub u32);
 
 pub struct SubjectsPlugin;
 
@@ -182,7 +185,7 @@ fn keep_one_findable(
     };
     let before = last.replace(raid.phase.clone());
     if matches!(before, Some(Phase::AtBase)) && raid.phase == Phase::Out {
-        sent.0 = None;
+        *sent = Sent::default();
     }
     let now = time.elapsed_secs();
     if now < *next || raid.phase != Phase::Out || raid.recalled {
@@ -214,6 +217,10 @@ fn keep_one_findable(
     }
     let site = site_near(&zone, &nav.0, drop);
     let exit = super::director::gate(&zone);
+    // The first of a raid is already at work there when you step out (as
+    // the valley's are); one sent after that walks in from the gate.
+    let first = sent.1 == 0;
+    let from = if first { site } else { exit };
     let job = Job {
         kind: JobKind::Watch,
         site,
@@ -221,22 +228,29 @@ fn keep_one_findable(
         exit,
     };
     let e = match subject {
-        Subject::Walker => super::walker::spawn_walker(&mut commands, &zone, exit, job),
+        Subject::Walker => super::walker::spawn_walker(&mut commands, &zone, from, job),
         Subject::Heavy => {
             let Some(catalog) = catalog else {
                 return;
             };
-            super::heavy::spawn_heavy(&mut commands, &zone, &catalog, exit, job)
+            super::heavy::spawn_heavy(&mut commands, &zone, &catalog, from, job)
         }
     };
-    commands
-        .entity(e)
-        .insert(super::Brain::Transit { to: site });
+    let brain = if first {
+        super::Brain::Working {
+            at: site,
+            left: WORK_FOR,
+        }
+    } else {
+        super::Brain::Transit { to: site }
+    };
+    commands.entity(e).insert(brain);
     info!(
         "subjects: {} sent to work by the drop, at {site:.0}",
         subject.name()
     );
     sent.0 = Some(e);
+    sent.1 += 1;
 }
 
 #[cfg(test)]
@@ -280,8 +294,10 @@ mod tests {
         assert!(!counts(Subject::Heavy, &walker, None, plain));
     }
 
-    /// Minutes in, at most, before one is findable.
+    /// Minutes in, at most, before one is findable...
     const FINDABLE_IN: f32 = 4.0;
+    /// ...and it's still there, at work, this long after (s).
+    const STILL_AFTER: f32 = 5.0;
 
     /// In every valley, with a photograph of each kind on the card, one
     /// that counts is about within REACH of the drop before FINDABLE_IN
@@ -355,7 +371,23 @@ mod tests {
                         && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
                 });
             if found {
-                return Some(k as f32 / hz);
+                // And at work there, not passing: a few seconds on it's
+                // still by the drop, and working (it stays for the raid).
+                let first = k as f32 / hz;
+                for _ in 0..(STILL_AFTER * hz) as usize {
+                    app.update();
+                }
+                let still = app
+                    .world_mut()
+                    .query::<(Candidate, &super::super::Brain)>()
+                    .iter(app.world())
+                    .any(|(c, brain)| {
+                        let p = c.at.translation();
+                        c.findable(subject, &zone)
+                            && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
+                            && matches!(brain, super::super::Brain::Working { .. })
+                    });
+                return still.then_some(first);
             }
         }
         None

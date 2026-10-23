@@ -545,6 +545,11 @@ pub struct Drawn {
     pub at: Transform,
     pub size: Vec3,
     pub range: std::ops::Range<f32>,
+    /// Casts its own sun shadow. Not for a part flush with what it's
+    /// fixed to (a car's door, a shutter): that casts it already, and a
+    /// wreck's forty parts each casting their own blew a view's shadow
+    /// budget.
+    pub shadow: bool,
 }
 
 /// A drawn model's name, and the one node of it to draw if it names one
@@ -669,6 +674,7 @@ pub fn spawn_building_crates(
                 at: model_at,
                 size: Vec3::splat(size),
                 range: 25.0..35.0,
+                shadow: true,
             },
             world,
             Visibility::default(),

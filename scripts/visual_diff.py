@@ -105,7 +105,8 @@ def main(argv):
 
     def keep(key):
         parts = key.split("/")
-        if len(parts) != 3:
+        # The building probes (`<view>__without_...`) aren't views.
+        if len(parts) != 3 or "__" in parts[2]:
             return False
         for want, part in zip((a.maps, a.moods, a.views), parts):
             if want and part not in want.split():

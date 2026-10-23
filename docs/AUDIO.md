@@ -888,6 +888,12 @@ heard as chatter. A relay reporting you (`robots::recall::Filed`) gives
 three falling notes, "noted" (`relay.filed`), quicker and fuller the
 more often it has.
 
+The walker pinning you going over to suppressing fire while another
+moves up (`robots::walker::Suppressing`) racks its feed, heavy and slow,
+with a mode's snap (`walker.suppress`, `walker.suppress_mode`): unlike its
+aim's clank and servo, and heard to 38 m in a downpour. It racks down
+when it stops (`walker.suppress_off`). Its faster fire says the rest.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,

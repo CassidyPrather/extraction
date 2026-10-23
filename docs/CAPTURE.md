@@ -60,6 +60,35 @@ Things that have bitten captures, and what now guards against them:
   next. Captures now wait at their first pose for `Loaded`, for at most
   `cinematic::LOAD_WAIT` frames, and the sweep's warm-up waits the same
   way. Three runs of one build are now bit-identical.
+- **A building drawn where nobody can see it.** On main, Cinder Works'
+  blast-furnace group sometimes drew nothing, its lamp hanging over an
+  empty field. Its meshes passed every culling test. They were children
+  that `dress_buildings` adds to a Building already placed, and Bevy's
+  static-transform optimisation never propagated to them: their
+  GlobalTransform stayed `[0,0,0]`, under the map. Whether it hit
+  depended on the build (system order) and on the roll.
+  `EXTRACTION_NO_STATIC_TRANSFORMS=1` switches the optimisation off in a
+  capture, as a diagnostic. `EXTRACTION_PROBE_DEBUG=<prefab>` prints each
+  mesh of a building with its GlobalTransform, LOD range and visibility.
+  The guard is `--check-buildings 1`: after each still, every building
+  within 60 m in view is hidden in turn and the view shot again
+  (`<still>__without_<i>_<prefab>.png`, listed in
+  `<still>.probes.json`). `scripts/check_buildings.py` fails a building
+  whose hiding moved under 3% of its on-screen box by three levels or
+  more. On one build across five valleys, dusk and night: the missing
+  furnace scored 0.1%, and every building that was there scored at least
+  5.8%, including a dark hut at night. The visual diff runs it on every
+  shot and prints `BUILDINGS PASS` or `BUILDINGS MISSING`.
+
+  The game-side fix is `transform_guard`: each frame, everything attached
+  marks every ancestor's tree, between `mark_dirty_trees` and the
+  propagation, so the optimisation stays on (turning it off globally
+  cost about 0.8 ms p99 a frame, up to 20 ms on catch-up frames, per
+  Performance). `the_game_never_leaves_children_unplaced` holds the
+  game's own app to the optimisation being off or the guard being on,
+  and places a child attached to a still parent. On one binary, seed 7,
+  `EXTRACTION_NO_TRANSFORM_GUARD=1` lost the furnace at dusk and night,
+  and the default drew all 18 buildings checked.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.

@@ -22,12 +22,6 @@ use crate::map_lint::{COMFORT_SLOPE, DOOR_REACH, DOOR_SHOULDER, DOOR_STEP, WALKE
 use crate::nav::{BLOCKED, NavGrid};
 use crate::terrain::Heightmap;
 
-/// Prefabs whose doorway is a climb on purpose: a goods wagon's floor is
-/// 1.2 m up on its bogies, its door over the rail bed's shoulder. Their
-/// strip is still kept clear; their ground isn't held to a step or a
-/// slope.
-const CLIMB_IN: &[&str] = &["boxcar"];
-
 /// An outside door of a placement, in map space.
 #[derive(Clone, Debug)]
 pub struct Door {
@@ -264,28 +258,22 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
         let base = hm.footing(&p.prefab, p.at, p.rot) + p.y;
         let low = base - prefab_lift(&p.prefab);
         let ground = d.samples(d.foot(), d.width * 0.5, 0.5);
-        let climb = CLIMB_IN.contains(&p.prefab.as_str());
-        if !climb {
-            let (mut worst, mut at) = (0.0f32, d.stand());
-            for q in &ground {
-                let h = hm.height(*q);
-                let step = (h - base).max(low - h);
-                if step > worst {
-                    (worst, at) = (step, *q);
-                }
-            }
-            worst_step = worst_step.max(worst);
-            walker_blocked += usize::from(worst > WALKER_STEP);
-            if worst > DOOR_STEP {
-                let h = hm.height(at);
-                let how = if h > base { "rises" } else { "drops" };
-                find(format!("the ground {how} {worst:.2} m from its steps"), at);
+        let (mut worst, mut at) = (0.0f32, d.stand());
+        for q in &ground {
+            let h = hm.height(*q);
+            let step = (h - base).max(low - h);
+            if step > worst {
+                (worst, at) = (step, *q);
             }
         }
-        if let Some(q) = ground
-            .iter()
-            .find(|q| !climb && hm.slope_deg(**q) > COMFORT_SLOPE)
-        {
+        worst_step = worst_step.max(worst);
+        walker_blocked += usize::from(worst > WALKER_STEP);
+        if worst > DOOR_STEP {
+            let h = hm.height(at);
+            let how = if h > base { "rises" } else { "drops" };
+            find(format!("the ground {how} {worst:.2} m from its steps"), at);
+        }
+        if let Some(q) = ground.iter().find(|q| hm.slope_deg(**q) > COMFORT_SLOPE) {
             find(
                 format!("a {:.0}° slope in front of it", hm.slope_deg(*q)),
                 *q,
@@ -343,9 +331,9 @@ mod tests {
     /// 0.3 m off and 2 degrees askew, or 30 m from any line) and where its
     /// door's steps meet the ground and the ground before them is
     /// comfortable: the two rules held together, as the doors check holds
-    /// them once boxcars leave `CLIMB_IN`.
+    /// them (a boxcar's floor is 1.26 m up on its bogies: its sleeper steps
+    /// and its lift, `map::prefab_lift`, meet the rail bed).
     #[test]
-    #[ignore = "needs World models' boxcar lift (prefab_lift 0.6); on with CLIMB_IN's end"]
     fn boxcars_on_their_rails_meet_their_steps() {
         let mut bad = Vec::new();
         for (name, text) in crate::map::VALLEYS {

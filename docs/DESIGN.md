@@ -292,14 +292,19 @@ The driver remarks on the strongest of these as you set off, and a radio you car
 
 A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
 
-**Measured** (`robots/squad_drill.rs`, 24 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears: a cut-off sends it to another way out, and flanker and cut-off posts count as threats when it picks cover.
+A machine **changing post holds its fire** until it's there: a flanker or a cut-off until it's within 4 m of its post, the spotter until it's within 6 m of its station. "One going round" is one gun fewer for as long as the move takes.
+
+**Measured** (`robots/squad_drill.rs`, 48 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears:
+- told one's moving up (flank or cut-off), it runs for it with no stops in cover;
+- told of a cut-off, it takes another way out if that's at most 30% longer;
+- flanker and cut-off posts count as threats when it picks cover.
 
 | Newcomer | Machines alone | Machines coordinating |
 |---|---|---|
-| Deaf | 17% escape | 8% |
-| Listening | 17% | 17% (median time alive 23 s, against 15 s deaf) |
+| Deaf | 17% escape (±11) | 23% (±12) |
+| Listening | 17% (±11) | 44% (±14) |
 
-Coordination halves a deaf newcomer's escapes, and listening wins them back. The counts are small (2 to 4 escapes an arm), and the drill is harsh: against a drone in the open, little gets away whatever it hears.
+Paired by seed against coordinating machines, the listener got out where the deaf one didn't 14 times, and the other way 4 (sign test p ≈ 0.03). Against three walkers it's 59% to 33%; against two and a drone, 24% to 10%. The price of a plan said aloud is that a deaf newcomer does no worse against it than against machines fighting alone. What coordination buys the machines is time: a deaf newcomer lives 23 s against 14 s.
 
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;

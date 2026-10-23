@@ -334,6 +334,23 @@ pub fn lamp_light<'a>(
     (lux / DAY_LUX).min(0.5)
 }
 
+/// What a thing indoors is seen by, with eyes used to the room, against a
+/// day outside (the sky's light on it, the eyes' adaptation on top). Flat:
+/// the renderer's sky light indoors is the one dimmed ambient
+/// (`dim_indoors`) wherever in whichever building, and a loot item, its
+/// own entity, takes none of the building's baked occlusion; only a patch
+/// of direct sun, or a lamp, adds to it. Left out: those, and a valley's
+/// grade (the training yard's is a shade brighter).
+pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
+    let sky = crate::world::sky::sky_dim(conditions) * conditions.light * INTERIOR_LIGHT;
+    sky * Adaptation::target(conditions.light * INTERIOR_LIGHT).exp2()
+}
+
+/// The least [`indoor_seen`] that lets you tell a thing you came for
+/// from the floor at arm's length without a torch: three stops under a
+/// day outside. The night is under it; the torch is for that.
+pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
+
 /// A lamp's bulb as it should reach the tonemapper: its material's
 /// emissive is set each frame to `emissive` over the grade's gain (the
 /// eyes' adaptation, up to three stops at night, multiplies an emissive
@@ -375,23 +392,6 @@ pub fn emissives_to_the_eye(
         }
     }
 }
-
-/// What a thing indoors is seen by, with eyes used to the room, against a
-/// day outside (the sky's light on it, the eyes' adaptation on top). Flat:
-/// the renderer's sky light indoors is the one dimmed ambient
-/// (`dim_indoors`) wherever in whichever building, and a loot item, its
-/// own entity, takes none of the building's baked occlusion; only a patch
-/// of direct sun, or a lamp, adds to it. Left out: those, and a valley's
-/// grade (the training yard's is a shade brighter).
-pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
-    let sky = crate::world::sky::sky_dim(conditions) * conditions.light * INTERIOR_LIGHT;
-    sky * Adaptation::target(conditions.light * INTERIOR_LIGHT).exp2()
-}
-
-/// The least [`indoor_seen`] that lets you tell a thing you came for
-/// from the floor at arm's length without a torch: three stops under a
-/// day outside. The night is under it; the torch is for that.
-pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
 
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
 /// `undim` gives back exactly what was there (if nothing changed it since);

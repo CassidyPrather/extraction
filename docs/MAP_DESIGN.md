@@ -614,6 +614,14 @@ loot, a body to crouch behind, and doors, bonnet, boot and wheels that
 come off (Destruction's breakables). They're cover, and they say what
 happened on the roads out.
 
+A wreck is light for `VIEW_MAX` (one placement) but not for the sun's
+shadows: its breakable parts are some forty shadow-casting meshes. Seven
+on the verges by Marrow's Village took the m02_village view to 945
+shadow draws over Performance's 900 (`render::budget`). Where cover is
+only cover, near a village or a lookbook view, a log pile (one mesh's
+worth) does the job; keep wrecks for the roads out, where they tell
+something, a few at a time.
+
 - **On the verge, never the road.** Just off the carriageway, angled as
   if pulled over or slewed; `Overlap` finds one on a road (they aren't
   among the prefabs a road may run into). The road stays the exposed
