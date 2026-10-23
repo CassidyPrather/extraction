@@ -416,9 +416,10 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
-    (mut gave_up, mut bored): (
+    (mut gave_up, mut bored, mut broke): (
         MessageReader<super::search::LostYou>,
         Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+        MessageReader<crate::destruction::Broke>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -436,8 +437,20 @@ pub(crate) fn perceive(
         spots.retain(|(_, until)| *until > now);
         !spots.is_empty() && robots.contains(*e)
     });
+    // What a machine breaks going through, it made: no robot turns to it
+    // (`disturbed::MACHINE_HAND`; the same rule as for the sign).
+    let own: Vec<Vec3> = broke
+        .read()
+        .map(|b| b.at)
+        .filter(|at| {
+            robots.iter().any(|(_, r, _, g, ..)| {
+                !r.wrecked && g.translation().distance(*at) < super::disturbed::MACHINE_HAND
+            })
+        })
+        .collect();
     let mut sounds: Vec<Sound> = noises
         .read()
+        .filter(|n| !(n.source.is_none() && own.iter().any(|o| o.distance(n.at) < 0.05)))
         .map(|n| Sound {
             at: n.at,
             radius: n.radius,

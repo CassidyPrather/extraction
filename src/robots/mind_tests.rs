@@ -4469,3 +4469,38 @@ fn uncoordinated_they_fight_alone() {
             .all(|e| !app.world().entity(*e).contains::<super::walker::Flanker>())
     );
 }
+
+/// A pane a machine breaks going through is its own doing: no sign, and
+/// it doesn't turn to its own crash. One broken with no machine at it is
+/// a sign.
+#[test]
+fn what_a_machine_breaks_is_no_sign_of_you() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0) + Vec3::Y;
+    let w = walker_at(&mut app, &zone, at - Vec3::Y);
+    let broke = |app: &mut App, at: Vec3| {
+        app.world_mut().write_message(crate::destruction::Broke {
+            at,
+            stuff: crate::destruction::Stuff::Glass,
+            size: 1.0,
+        });
+        app.update();
+        app.update();
+        app.world().resource::<super::disturbed::Signs>().0.len()
+    };
+    assert_eq!(broke(&mut app, at), 0, "the walker's own");
+    assert!(
+        app.world()
+            .get::<Awareness>(w)
+            .unwrap()
+            .last_known
+            .is_none(),
+        "and it didn't hear it as anyone's"
+    );
+    assert_eq!(
+        broke(&mut app, at + Vec3::new(30.0, 0.0, 0.0)),
+        1,
+        "someone's"
+    );
+}

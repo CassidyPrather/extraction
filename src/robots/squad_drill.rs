@@ -392,7 +392,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         // their eyes and guns have it.
         let nav = app.world().resource::<super::walker::Nav>().0.clone();
         let (calm, chosen) = {
-            let sq = sight.get(app.world());
+            let sq = sight.get(app.world()).expect("spatial queries");
             let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
             let los = |a: Vec2, b: Vec2| {
                 let from = ground(a) + Vec3::Y * 1.3;
