@@ -17,8 +17,11 @@ use crate::world::buildings::{Building, DoorLeaf, Geo, Shape, prefab};
 pub const CELL: f32 = 0.25;
 /// Grid extends this far past the footprint, to reach the doorsteps.
 const MARGIN: f32 = 3.0;
-/// The player capsule's radius plus a little.
-const CLEARANCE: f32 = 0.22;
+/// The whole capsule's radius (`player`'s 0.28), as down a site: with
+/// 0.22 a raider was routed through gaps between furniture it sticks in.
+/// Eight raids a valley, seed 100: stucks 14 -> 7 (Cinder), 49 -> 11
+/// (Kettle), 18 -> 11 (Marrow); loot 748 -> 803; extractions unchanged.
+const CLEARANCE: f32 = 0.28;
 /// Down an underground site, the whole capsule's radius (`player`'s 0.28):
 /// a gap between props narrower than a body is no way, or a raider routed
 /// through it sticks there.
