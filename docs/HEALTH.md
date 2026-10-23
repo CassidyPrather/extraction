@@ -94,3 +94,7 @@ As of 536ba70 (round 36).
 - A fresh container may lack the system packages: `scripts/cloud-setup.sh`
   lists them (`mold`, `libudev-dev`, `libasound2-dev`, `mesa-vulkan-drivers`
   ...). Without `mold` every build fails at the first link.
+- Without `etcpak` (pip) no BC7 copies are baked and the game loads the
+  RGBA8 textures, so `first_contact`'s load and VRAM read 2-4x high (round
+  36). `cloud-setup.sh` installs it now; in an older container run
+  `pip install etcpak && python3 scripts/bc7_textures.py`.
