@@ -249,7 +249,7 @@ pub struct WoundsPlugin;
 
 impl Plugin for WoundsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (give_wounds, bloody_hands))
+        app.add_systems(Update, (give_wounds, bloody_hands, heal_at_home))
             .add_systems(FixedUpdate, break_legs.before(crate::health::HealthSystems))
             .add_systems(
                 FixedUpdate,
@@ -380,6 +380,28 @@ fn bloody_hands(
             }
         }
     }
+}
+
+/// Home from a raid (health made whole by `raid::truck`), the wounds and
+/// the blood on the gloves go with it. (The fracture is taken off there,
+/// after the logbook has read it.)
+fn heal_at_home(
+    mut commands: Commands,
+    raid: Option<Res<crate::raid::Raid>>,
+    mut players: Query<&mut Wounds, With<LocalPlayer>>,
+    hands: Query<Entity, (With<RigHand>, With<Bloodied>)>,
+    mut was_home: Local<bool>,
+) {
+    let home = raid.is_some_and(|r| matches!(r.phase, crate::raid::Phase::AtBase));
+    if home && !*was_home {
+        for mut w in &mut players {
+            w.0.clear();
+        }
+        for h in &hands {
+            commands.entity(h).remove::<Bloodied>();
+        }
+    }
+    *was_home = home;
 }
 
 /// A broken leg slows you; splinted, less.
