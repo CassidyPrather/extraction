@@ -750,14 +750,14 @@ fn fly(
         d.pos.y = min;
         d.vel.y = d.vel.y.max(0.5);
     }
+    // Into something (an airship shelter's roof, a mast): along it or out
+    // from under it as the birds do, not stuck at its face.
     if obstacles.inside(d.pos, 0.3) {
-        d.pos = prev;
-        let mut lift = 0;
-        while obstacles.inside(d.pos, 0.3) && lift < 80 {
-            d.pos.y += 0.25;
-            lift += 1;
-        }
-        d.vel = Vec3::new(d.vel.x * 0.3, d.vel.y.max(2.0), d.vel.z * 0.3);
+        let clear = |p: Vec3| {
+            let (f, _) = floor(zone, p.xz());
+            !obstacles.inside(p, 0.3) && p.y >= f.max(zone.ground(p.x, p.z)) + 0.3 - 1e-3
+        };
+        super::flock::slide_clear(obstacles, prev, &mut d.pos, &mut d.vel, 0.3, 2.0, clear);
     }
 }
 

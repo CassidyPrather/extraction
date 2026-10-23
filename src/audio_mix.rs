@@ -147,7 +147,7 @@ pub const MIX: &[Cue] = &[
     cue!("gun.bolt_catch", "guns/safety", -6.0, 70.0, 0.5, Detail),
     cue!("gun.slide_back", "guns/bolt_open", -11.0, 75.0, 0.5, Detail),
     cue!("gun.mag_half", "guns/mag_insert", -13.0, 65.0, 0.5, Detail),
-    cue!("gun.mag_drop", "guns/mag_release", -8.0, 70.0, 0.5, Detail),
+    cue!("gun.mag_drop", "guns/mag_release", -1.1, 70.0, 0.5, Detail),
     cue!("gun.gate_open", "guns/safety", -9.0, 60.0, 0.5, Detail),
     cue!("gun.gate_shut", "guns/safety", -8.0, 60.0, 0.5, Detail),
     cue!("gun.cylinder", "guns/dry_fire", -10.0, 60.0, 0.5, Detail),

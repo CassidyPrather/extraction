@@ -829,8 +829,9 @@ fn fly(flock: &mut Flock, perches: &Perches, obstacles: &Obstacles, zone: &Zone,
                 let want = to.normalize_or_zero() * speed;
                 let mut acc = ((want - b.vel) * 4.0).clamp_length_max(ACCEL);
                 // Over anything in the way (a chimney between it and its
-                // roof), not into it: until it's nearly there.
-                if d.length() > 2.0 && obstacles.inside(b.pos + b.vel * 0.6, 0.8) {
+                // roof), not into it: until it's nearly over its spot
+                // (above it, straight down past a rail beside it).
+                if dh > 2.0 && obstacles.inside(b.pos + b.vel * 0.6, 0.8) {
                     acc.y += ACCEL * 1.5;
                 }
                 b.vel = (b.vel + acc * dt).clamp_length_max(MAX_SPEED);
@@ -911,37 +912,51 @@ fn keep_clear(b: &mut Bird, prev: Vec3, zone: &Zone, obstacles: &Obstacles, land
         return;
     }
     let clear = |p: Vec3| !obstacles.inside(p, 0.02) && p.y >= zone.ground(p.x, p.z) + off - 1e-3;
-    // Along the face, not stopped dead at it: what of the step is clear
-    // (up a dam's face with the roost beyond it, not pinned to it).
-    let step = b.pos - prev;
+    slide_clear(obstacles, prev, &mut b.pos, &mut b.vel, 0.02, 1.5, clear);
+}
+
+/// A flyer (a bird, a duck) whose step from `prev` took it to `pos`,
+/// inside something (`pad` m round it): along the face, not stopped dead
+/// at it, keeping what of the step is clear (up a dam's face with the
+/// roost beyond it, not pinned to it); hemmed in (under a lip on a wall's
+/// face), out sideways first (out from under it, not down under it again),
+/// else the nearest way; failing all that, back and up, climbing at
+/// `climb` m/s at least. `clear` says where it may be.
+pub(crate) fn slide_clear(
+    obstacles: &Obstacles,
+    prev: Vec3,
+    pos: &mut Vec3,
+    vel: &mut Vec3,
+    pad: f32,
+    climb: f32,
+    clear: impl Fn(Vec3) -> bool,
+) {
+    let step = *pos - prev;
     for keep in [Vec3::new(0.0, 1.0, 1.0), Vec3::new(1.0, 1.0, 0.0), Vec3::Y] {
         let p = prev + step * keep;
         if step.dot(keep) != 0.0 && clear(p) {
-            b.pos = p;
-            b.vel *= keep;
-            b.vel.y = b.vel.y.max(1.0);
+            *pos = p;
+            *vel *= keep;
+            vel.y = vel.y.max(1.0);
             return;
         }
     }
-    // Hemmed in (under a lip on a wall's face): out sideways first (out
-    // from under it, not down under it again), else the nearest way; no
-    // longer going into it.
     for flat in [true, false] {
-        let out = obstacles.push_out(b.pos, 0.02, flat);
+        let out = obstacles.push_out(*pos, pad, flat);
         if clear(out) {
-            let n = (out - b.pos).normalize_or_zero();
-            b.vel -= n * b.vel.dot(n).min(0.0);
-            b.pos = out;
+            let n = (out - *pos).normalize_or_zero();
+            *vel -= n * vel.dot(n).min(0.0);
+            *pos = out;
             return;
         }
     }
-    b.pos = prev;
+    *pos = prev;
     let mut lift = 0;
-    while obstacles.inside(b.pos, 0.02) && lift < 80 {
-        b.pos.y += 0.25;
+    while obstacles.inside(*pos, pad) && lift < 80 {
+        pos.y += 0.25;
         lift += 1;
     }
-    b.vel = Vec3::new(b.vel.x * 0.3, b.vel.y.max(1.5), b.vel.z * 0.3);
+    *vel = Vec3::new(vel.x * 0.3, vel.y.max(climb), vel.z * 0.3);
 }
 
 /// A flock a player flushed is heard by the machines: a noise at the
@@ -1104,6 +1119,7 @@ mod tests {
             let mut rng = Rng::new(3);
             let mut at = perches.sites[0].centre.with_y(0.0);
             let mut flushes = 0;
+            let (mut target, mut since) = (0usize, 0usize);
             let minutes = 8.0;
             let steps = (minutes * 60.0 / DT) as usize;
             for step in 0..steps + (150.0 / DT) as usize {
@@ -1115,8 +1131,15 @@ mod tests {
                         f.restless = f32::INFINITY;
                     }
                 }
-                // Off to a random flock's site, walking or running.
-                let goal = perches.sites[flocks[(step / 900) % flocks.len()].heading_for()].centre;
+                // Off to each flock in turn, walking or running, until it
+                // goes up (or a minute's gone: the valley's flocks can sit
+                // hundreds of metres apart).
+                let after = &flocks[target % flocks.len()];
+                if after.phase != Phase::Settled || step - since > (60.0 / DT) as usize {
+                    target += 1;
+                    since = step;
+                }
+                let goal = perches.sites[flocks[target % flocks.len()].heading_for()].centre;
                 let speed = if (step / 300) % 3 == 0 { 5.0 } else { 1.4 };
                 let to = (goal - at).with_y(0.0);
                 if to.length() > 1.0 {
@@ -1133,8 +1156,8 @@ mod tests {
                 } else {
                     Vec::new()
                 };
-                flushes +=
-                    tick_all(&mut flocks, (&zone, &obstacles, &perches), &threats, &loud).len();
+                let fl = tick_all(&mut flocks, (&zone, &obstacles, &perches), &threats, &loud);
+                flushes += fl.len();
                 for (k, f) in flocks.iter().enumerate() {
                     for b in &f.birds {
                         let g = zone.ground(b.pos.x, b.pos.z);

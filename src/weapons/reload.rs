@@ -215,15 +215,24 @@ mod tests {
     use crate::items::Catalog;
     use crate::rig::haptics::handling_feel;
 
-    /// Each step's sounds (mix cues) and feels.
+    /// Each step's sounds and feels.
     fn cues(
         action: extraction_core::firearm::ActionKind,
         id: &str,
         ev: &[FireEvent],
-    ) -> (Vec<&'static str>, Vec<String>) {
+    ) -> (Vec<String>, Vec<String>) {
+        // What the ear gets: the sample set and how fast it plays (two cue
+        // names on one sample at one speed are one sound).
         let mut heard: Vec<_> = ev
             .iter()
-            .filter_map(|e| crate::audio::handling_sound(e, Some(action), id).map(|(_, cue)| cue))
+            .filter_map(|e| {
+                crate::audio::handling_sound(e, Some(action), id).map(|(set, _)| {
+                    format!(
+                        "{set} x{:.2}",
+                        crate::audio::handling_speed(e, Some(action))
+                    )
+                })
+            })
             .collect();
         let mut felt: Vec<_> = ev
             .iter()

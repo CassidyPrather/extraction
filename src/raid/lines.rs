@@ -87,6 +87,10 @@ pub const SHORT_RUN: &[&str] = &[
     "Truck: \"Short run. That's a can of fuel. Get in.\"",
 ];
 
+/// On the first plant job's card: there's a roof within a sprint all the
+/// way (`map_lint`), and a drone's chirp is the reason to use one.
+pub const SHEDS_ON_THE_WAY: &str = "\nSheds on the way: in, if anything chirps.";
+
 /// The first job's way home, from the gate, on the house.
 pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
 
@@ -269,6 +273,11 @@ pub const SQUAD_FLANK: &[&str] = &[
     "Chirps on the radio: one working round to the {b}.",
     "The radio clicks: one circling to your {b}.",
 ];
+/// ...or, by a place it can name (`{rv}`)...
+pub const SQUAD_FLANK_BY: &[&str] = &[
+    "Radio, close: one round your {b}, by {rv}.",
+    "Chirps: one round to the {b}, by {rv}.",
+];
 /// ...one making for the way to `{rv}`, to cut you off...
 pub const SQUAD_CUT_OFF: &[&str] = &[
     "Radio: one making for {rv}. They mean to cut you off.",
@@ -289,6 +298,11 @@ pub const SQUAD_PIN: &[&str] = &[
 pub const SQUAD_SPOT: &[&str] = &[
     "Radio: the drone's lighting the {b}.",
     "Chirps: the drone moving to light the {b}.",
+];
+/// ...or by a place it can name...
+pub const SQUAD_SPOT_BY: &[&str] = &[
+    "Radio: the drone lights the {b}, by {rv}.",
+    "Chirps: the drone over {rv}, lighting it.",
 ];
 /// ...a relay calling it in.
 pub const SQUAD_CALL: &[&str] = &[
@@ -437,7 +451,9 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 40] = [
+        let pools: [&[&str]; 42] = [
+            SQUAD_FLANK_BY,
+            SQUAD_SPOT_BY,
             SQUAD_FLANK,
             SQUAD_CUT_OFF,
             SQUAD_CUT_OFF_AWAY,

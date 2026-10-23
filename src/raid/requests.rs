@@ -499,6 +499,53 @@ fn way_from_the_drop(
     )
 }
 
+/// "He's heard walkers by the slag road. From the drop: north-east,
+/// 300 m.": where one of a photograph's subjects is at work up here, by
+/// the place nearest it.
+fn heard_working(
+    subject: extraction_core::contracts::Subject,
+    robots: &Query<(
+        &crate::robots::Robot,
+        &GlobalTransform,
+        Option<&crate::robots::Breed>,
+    )>,
+    zone: &crate::world::Zone,
+) -> Option<String> {
+    use extraction_core::contracts::Subject;
+    use extraction_core::map::MarkerKind;
+    let drop = zone.marker(&MarkerKind::Insertion).map(|m| m.at)?;
+    let at = robots
+        .iter()
+        .filter(|(r, g, breed)| {
+            let p = g.translation();
+            let heavy = breed.is_some_and(|b| b.0 == "heavy");
+            !r.wrecked
+                && r.kind == crate::robots::RobotKind::Walker
+                && heavy == (subject == Subject::Heavy)
+                // (Not one at work underground: its floor's well under the
+                // ground's.)
+                && p.y > zone.ground(p.x, p.z) - 2.0
+        })
+        .map(|(_, g, _)| [g.translation().x, g.translation().z])
+        .min_by(|a, b| {
+            extraction_core::geom::dist(*a, drop).total_cmp(&extraction_core::geom::dist(*b, drop))
+        })?;
+    let place = zone
+        .map
+        .markers
+        .iter()
+        .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
+        .min_by(|a, b| {
+            extraction_core::geom::dist(a.at, at).total_cmp(&extraction_core::geom::dist(b.at, at))
+        })?;
+    Some(format!(
+        "\nHe's heard {} working by {}. From the drop: {}.",
+        subject.name().to_lowercase(),
+        crate::raid::lines::the(&place.name),
+        crate::raid::lines::way(drop, at)
+    ))
+}
+
 fn card_text(
     requests: Res<Requests>,
     progression: Res<Progression>,
@@ -509,6 +556,12 @@ fn card_text(
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
+    robots: Query<(
+        &crate::robots::Robot,
+        &GlobalTransform,
+        Option<&crate::robots::Breed>,
+    )>,
+    mut heard: Local<Option<String>>,
 ) {
     let p = &progression.0;
     let tier = p.tier_def();
@@ -536,6 +589,34 @@ fn card_text(
         Some(job) => {
             text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
             text += &way_from_the_drop(job, &opts.map, &zone, p.done == 0);
+            // The first thing to leave out there: a long walk, and a roof
+            // within a sprint of all of it (`map_lint`'s first jobs).
+            let planted_before = p.contracts_done.iter().any(|id| {
+                extraction_core::contracts::contract(id).is_some_and(|c| {
+                    c.steps
+                        .iter()
+                        .any(|s| matches!(s, extraction_core::contracts::Step::Plant { .. }))
+                })
+            });
+            if matches!(
+                job,
+                extraction_core::progression::Job::Plant { planted: false, .. }
+            ) && !planted_before
+            {
+                text += crate::raid::lines::SHEDS_ON_THE_WAY;
+            }
+            // A photograph names no place: where he's heard them working
+            // (once, when he has: the line doesn't follow them about).
+            if let extraction_core::progression::Job::Photograph {
+                subject,
+                taken: false,
+            } = job
+            {
+                if heard.is_none() {
+                    *heard = heard_working(*subject, &robots, &zone);
+                }
+                text += heard.as_deref().unwrap_or("");
+            }
         }
         None => text += lines::NOTHING_YET,
     }

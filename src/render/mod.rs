@@ -23,6 +23,7 @@ pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
+pub mod loot_light;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -92,6 +93,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(loot_light::LootLightPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
@@ -198,11 +200,12 @@ fn attach_flat_camera(
                 camera_bundle(&weather),
             ))
             .with_children(|c| {
-                // Held at the hip, a little right, pointing where it looks.
+                // Held up by the eye and aimed where it looks, as anyone
+                // looking at something by torchlight does.
                 if opts.torch {
                     c.spawn((
                         crate::gadgets::visuals::torch_beam(),
-                        Transform::from_xyz(0.2, -0.5, 0.0),
+                        Transform::from_xyz(0.15, -0.1, 0.0),
                     ));
                 }
             });

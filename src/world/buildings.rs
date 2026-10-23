@@ -2703,11 +2703,13 @@ fn barn(b: &mut Builder) {
         h,
         0.15,
         Mat::Planks,
+        // A window near each end of the long walls: the stalls in its
+        // corners are lit (`capture::checks::loot_sights`).
         [
             &[gap(6.0, 4.0, 3.8)],
-            &[door(4.0), window(11.0)],
+            &[window(1.6), door(4.0), window(11.0), window(14.4)],
             &[gap(6.0, 3.0, 3.0)],
-            &[window(5.0)],
+            &[window(1.6), window(5.0), window(14.4)],
         ],
     );
     b.gable_roof(
@@ -2742,7 +2744,8 @@ fn barn(b: &mut Builder) {
         std::f32::consts::FRAC_PI_2,
         Some("workshop"),
     );
-    b.crate_box(Vec3::new(4.5, f, 5.5), 0.8, Some("food_common"));
+    // By the end window, on the boards (not sunk in them).
+    b.crate_box(Vec3::new(5.1, f + 0.015, 6.3), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
     b.barrel(Vec3::new(5.2, f, 6.9));
     b.barrel(Vec3::new(4.6, f, 7.2));
@@ -4436,10 +4439,12 @@ fn chapel(b: &mut Builder) {
         h,
         0.35,
         Mat::Plaster,
+        // A chancel window either side of the bell tower at the east end:
+        // its corners are lit (`capture::checks::loot_sights`).
         [
             &[door(w * 0.5)],
             &[tall(3.0), tall(7.0), tall(11.0)],
-            &[],
+            &[tall(1.4), tall(w - 1.4)],
             &[tall(3.0), tall(7.0), tall(11.0)],
         ],
     );
@@ -5822,6 +5827,11 @@ pub enum Bake {
     Ready(std::sync::Arc<Baked>),
 }
 
+/// A dressed building's [`Baked`], its sky light read by what's put
+/// down in it (`render::loot_light`).
+#[derive(Component, Clone)]
+pub struct RoomLight(pub std::sync::Arc<Baked>);
+
 /// A prefab's baked pieces, and the sky's light through it if that was
 /// baked too (`ao::SkyField`), for the furniture dressed in later.
 pub struct Baked {
@@ -6043,6 +6053,11 @@ pub fn dress_buildings(
         }
         commands.entity(e).remove::<PropsPending>();
         built += 1;
+        // The sky's light through it, for what's put down in it later
+        // (`render::loot_light`).
+        if baked.light.is_some() {
+            commands.entity(e).insert(RoomLight(baked.clone()));
+        }
         // What shades the building's own surfaces: its solid pieces
         // (furniture's boxes too, so the floor darkens round their feet),
         // not its glass.
@@ -6176,6 +6191,23 @@ pub fn dress_buildings(
             }
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
+                // Furniture lit as the spot in the room it stands in, the
+                // piece as one (its own shading and occlusion kept).
+                let lit = baked.light.as_ref().filter(|_| d.inside).and_then(|light| {
+                    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                    for (_, m) in &prims {
+                        if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+                            m.attribute(Mesh::ATTRIBUTE_POSITION)
+                        {
+                            for q in p {
+                                let q = at.transform_point(Vec3::from(*q));
+                                lo = lo.min(q);
+                                hi = hi.max(q);
+                            }
+                        }
+                    }
+                    (lo.x <= hi.x).then(|| super::ao::piece_light(light, lo, hi))
+                });
                 for (mat, mesh) in prims {
                     if crate::destruction::glass::drawn_by_panes(name, &mat) {
                         continue;
@@ -6190,13 +6222,8 @@ pub fn dress_buildings(
                         }
                     }
                     let mut mesh = mesh.transformed_by(*at);
-                    // Furniture lit as the spot in the room it stands in
-                    // (its own shading and occlusion kept).
-                    if d.inside {
-                        if let Some(light) = &baked.light {
-                            let k = super::ao::sky_light(light.at(at.translation + Vec3::Y * 0.4));
-                            super::ao::tint(&mut mesh, k);
-                        }
+                    if let Some(k) = lit {
+                        super::ao::tint(&mut mesh, k);
                     }
                     add(
                         if below(at) {

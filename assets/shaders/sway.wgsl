@@ -103,11 +103,9 @@ fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32
     let k = i32(kind + 0.5);
     let toward = -rel / max(d, 1e-3);
     if (k == 1) {
-        // A lift: stretched up and circling, the tips round its middle.
-        let round = vec2<f32>(-toward.y, toward.x);
-        let spin = sin(t * 2.2 + phase * 6.283);
+        // A lift: torn up and carried off, the ground under it swept bare.
         r.still = 1.0;
-        r.o = vec3<f32>(round.x * spin, 0.6, round.y * spin) * 0.12 * weight;
+        r.sink = 0.5;
     } else if (k == 2) {
         // A burner: burnt to the ground.
         r.still = 1.0;
@@ -121,9 +119,16 @@ fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32
         // A well: laid flat toward its heart.
         r.still = 1.0;
         r.o = vec3<f32>(toward.x, -0.6, toward.y) * 0.3 * weight;
-    } else if (k == 6) {
-        // A hush: dead still, whatever the wind.
+    } else if (k == 5) {
+        // A mirror: wiped flat by what's blinked through it.
         r.still = 1.0;
+        r.o = vec3<f32>(toward.x, -0.7, toward.y) * 0.2 * weight;
+        r.sink = 0.06;
+    } else if (k == 6) {
+        // A hush: dead still whatever the wind, pressed down into the
+        // dust settled on it.
+        r.still = 1.0;
+        r.sink = 0.12;
     } else if (k == 7) {
         // A frost: stiff, bowed under the rime.
         r.still = 1.0;

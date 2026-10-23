@@ -290,6 +290,8 @@ pub struct Raider {
     pub combat: Option<Combat>,
     /// Deliberately walking into an anomaly (for an artifact).
     pub diving: bool,
+    /// Why it last left a stone lying in an anomaly (for the log).
+    pass_why: Option<&'static str>,
     rng: Rng,
     grid: NavGrid,
     plans: Vec<BuildingPlan>,
@@ -364,7 +366,8 @@ pub struct Raider {
     objective: Option<Vec2>,
 }
 
-/// A calm walker that could see it: did it get onto it in the next
+/// A calm walker within [`WATCH_NEAR`] with a clear line to it, that
+/// could see it: did it get onto it in the next
 /// [`WATCH_FOR`] seconds?
 #[derive(Clone, Copy, Debug)]
 struct Watch {
@@ -375,8 +378,11 @@ struct Watch {
     wild: bool,
 }
 
-/// How long a watched stretch is (s).
+/// How long a watched stretch is (s)...
 const WATCH_FOR: f32 = 30.0;
+/// ...that starts with a calm walker this near with a clear line to it
+/// (a walker's sight, m).
+const WATCH_NEAR: f32 = 75.0;
 
 /// A creep-and-throw in progress (see [`stalk`]).
 #[derive(Clone, Copy, Debug)]
@@ -601,6 +607,7 @@ pub fn attach_raider(
                 at_rv: false,
                 wait_at: None,
                 after_vent: None,
+                pass_why: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
@@ -1470,7 +1477,7 @@ fn sneak(
     swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
-    watch(me, r, scene, log);
+    watch(me, r, scene, log, eye);
     let hurrying = bot.sprint
         || r.combat.is_some()
         || r.act == Act::Board
@@ -1524,22 +1531,6 @@ fn sneak(
                 && aware.suspicion < 0.55
             {
                 calm_walker = Some(at);
-                let e = scene
-                    .robots
-                    .iter()
-                    .find(|(_, _, g, ..)| g.translation() == at)
-                    .map(|(e, ..)| e);
-                if let Some(e) = e
-                    && r.watched.get(&e).is_none_or(|t| r.clock - t > 60.0)
-                {
-                    r.watched.insert(e, r.clock);
-                    r.watches.push(Watch {
-                        walker: e,
-                        since: r.clock,
-                        spotted: false,
-                        wild: false,
-                    });
-                }
             }
         }
     }
@@ -1655,8 +1646,28 @@ fn wild_mark(scene: &Scene, eye: Vec3, walker: Vec3) -> Option<(Vec3, &'static s
 /// Each watched walker, [`WATCH_FOR`] seconds on: did it get onto the bot
 /// (`watch`: `unseen` or `spotted`, whether it was diverting, whether it
 /// threw into the wildlife meanwhile).
-fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
+fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog, eye: Vec3) {
     let clock = r.clock;
+    for (e, robot, gt, aware, brain, _) in &scene.robots {
+        let calm = robot.kind == crate::robots::RobotKind::Walker
+            && !robot.wrecked
+            && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+            && !(aware.target == Some(me) && aware.suspicion > 0.5);
+        let at = gt.translation();
+        if calm
+            && at.distance(eye) < WATCH_NEAR
+            && r.watched.get(&e).is_none_or(|t| clock - t > 60.0)
+            && scene.visible(eye, at)
+        {
+            r.watched.insert(e, clock);
+            r.watches.push(Watch {
+                walker: e,
+                since: clock,
+                spotted: false,
+                wild: false,
+            });
+        }
+    }
     let divert = r.divert;
     r.watches.retain_mut(|wt| {
         let Ok((_, robot, _, aware, brain, _)) = scene.robots.get(wt.walker) else {
@@ -2748,10 +2759,40 @@ fn raid_step(
                             }
                             return t;
                         }
+                        if let Some(why) = r.pass_why.take() {
+                            let id = scene.items.get(item).map_or("?".into(), |(_, it, ..)| {
+                                scene.catalog.get(it.kind()).id.clone()
+                            });
+                            log.event("pass", json!({"item": id, "why": why}));
+                        }
                         r.skip.insert(item);
                         r.act = Act::Search(s);
                     }
                     None => {
+                        // A stone lying in an anomaly it wouldn't take:
+                        // say which and why not (skipped already, or not
+                        // worth it).
+                        if r.sites[s].kind == SiteKind::Anomaly {
+                            let site = &r.sites[s];
+                            for (e, it, gt, h, so, b) in &scene.items {
+                                let def = scene.catalog.get(it.kind());
+                                if h.is_none()
+                                    && so.is_none()
+                                    && b.is_none()
+                                    && def.category == Category::Artifact
+                                    && at_site(r, site, gt.translation())
+                                {
+                                    let why = if r.skip.contains(&e) {
+                                        "passed on it"
+                                    } else if r.traits.value(def) < r.traits.min_value {
+                                        "not worth it"
+                                    } else {
+                                        "no room"
+                                    };
+                                    log.event("pass", json!({"item": def.id, "why": why}));
+                                }
+                            }
+                        }
                         r.sites[s].visited = true;
                         r.act = Act::Idle;
                         // Out the door it came in by.
@@ -3557,11 +3598,17 @@ fn take_item(
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
                 let skilled = super::harvest::skilled(r.traits.name);
+                // A dive that costs nothing done right (a frost, a hearth
+                // on it) is no risk however hurt it is.
+                let free = skilled
+                    && kind == AnomalyKind::Frost
+                    && hearth_kit(scene) != super::harvest::Hearth::None;
                 // Not hurt, it doesn't; and nobody careful reaches into a
                 // well's heart (unless it knows how: in and straight out).
                 if r.traits.avoid_anomalies
-                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                    && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
+                    r.pass_why = Some(if r.hp < 60.0 { "hurt" } else { "well" });
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
@@ -3583,6 +3630,7 @@ fn take_item(
                     }
                     // Into a frost without a hearth, nobody who knows does.
                     if kind == AnomalyKind::Frost {
+                        r.pass_why = Some("frost without a hearth");
                         return None;
                     }
                 }
