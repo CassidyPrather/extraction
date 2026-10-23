@@ -2443,7 +2443,7 @@ fn indoor_through_held(
 
 /// Out of the building: to the floor nearest the way out.
 fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
-    let goal = stand_near(plan, plan.to_local(from).xz(), to)?;
+    let goal = stand_near_with(plan, plan.to_local(from).xz(), to, false)?;
     indoor_to(plan, from, goal, within)
 }
 
@@ -2587,6 +2587,15 @@ fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
 /// the same side of the walls as `goal` when it's indoors: somewhere to
 /// stand, not something to reach (that's [`reach_cell`]).
 pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+    stand_near_with(plan, from, goal, true)
+}
+
+/// As [`stand_near`]; `keep_in`: a goal within the walls is reached from
+/// inside them, not from the ground outside. Not for a way out, which is
+/// outside: an underground site's kiosk lies within its walls' bounds, and
+/// keeping in left a raider no stand by it (Rime's adit, out of the
+/// magazine).
+fn stand_near_with(plan: &BuildingPlan, from: Vec2, goal: Vec2, keep_in: bool) -> Option<Vec2> {
     let g = &plan.grid;
     let start = if g.walkable(from.to_array()) {
         from
@@ -2600,7 +2609,7 @@ pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
-    let indoors = plan.indoors(goal);
+    let indoors = keep_in && plan.indoors(goal);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
         let d = c.distance(goal);
@@ -3450,11 +3459,38 @@ fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
     let plan = r
         .plans
         .iter()
-        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
-    let exit = way_out(plan, plan.to_local(pos).xz(), &|d| {
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
+    let why = |what: &dyn Fn() -> String| {
+        if std::env::var_os("SIM_DEBUG").is_some() {
+            eprintln!("leave_building at {pos:?}: {}", what());
+        }
+    };
+    let Some(plan) = plan else {
+        if r.plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
+            why(&|| "in an underground site's grid but not in it".into());
+        }
+        return None;
+    };
+    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &|d| {
         scene.power_locked.contains(d)
-    })?;
-    indoor_out(plan, pos, exit, 0.6)
+    }) else {
+        why(&|| format!("{}: no way out", plan.name));
+        return None;
+    };
+    let out = indoor_out(plan, pos, exit, 0.6);
+    if out.is_none() {
+        why(&|| {
+            let l = plan.to_local(pos).xz();
+            format!(
+                "{}: no route to {exit:?} from {l:?} (walkable {}, held {}, a path {})",
+                plan.name,
+                plan.grid.walkable(l.to_array()),
+                plan.held.len(),
+                plan.path_through_held(l, exit).is_some()
+            )
+        });
+    }
+    out
 }
 
 /// Where to walk to be out of a building from a local point: the nearest
@@ -3941,6 +3977,20 @@ fn extract_step(
             }
         } else if let Some(out) = leave_building(r, scene, pos) {
             return out;
+        } else if let Some(plan) = r
+            .plans
+            .iter()
+            .find(|p| p.levels.is_some() && p.contains(pos, 0.0))
+        {
+            // Down a site with no way out found: never the Zone's straight
+            // line, which walks into the rock. Its nearest way up, or wait
+            // for one to open.
+            return plan
+                .entries
+                .iter()
+                .filter_map(|e| indoor_to(plan, pos, *e, 0.6))
+                .min_by_key(|t| t.len())
+                .unwrap_or_else(|| vec![Task::Wait(1.0)]);
         }
         return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
