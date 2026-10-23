@@ -457,6 +457,34 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             }
         }
         put(&mut app, here);
+        if std::env::var("SIM_DRILL_TRACE").is_ok() && (t * HZ) as u32 % 45 == 0 {
+            let hp = app
+                .world()
+                .get::<crate::health::Health>(player)
+                .map_or(0.0, |h| h.hp);
+            let robots: Vec<String> = squad
+                .iter()
+                .filter_map(|e| {
+                    let tr = app.world().get::<Transform>(*e)?.translation;
+                    let b = app.world().get::<Brain>(*e)?;
+                    let r = app
+                        .world()
+                        .get::<super::squad::SquadRole>(*e)
+                        .map(|r| r.role);
+                    Some(format!(
+                        "{:.0}m {:?} {:?}",
+                        tr.xz().distance(here),
+                        r,
+                        std::mem::discriminant(b)
+                    ))
+                })
+                .collect();
+            eprintln!(
+                "TRACE t {t:.1} hp {hp:.0} at {here:.0} calm {threats_empty} cover {} goal {} {robots:?}",
+                me.bound.is_none(),
+                rvs[me.goal].0
+            );
+        }
     };
     let hp = app
         .world()
