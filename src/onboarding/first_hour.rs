@@ -493,6 +493,8 @@ pub(super) struct Newcomer {
     tell_at: f32,
     /// When it got home (the truck back at base, it in the bed).
     home_at: Option<f32>,
+    /// Hit after a warning: further hits till then are the same fight.
+    warned_fight_until: f32,
     /// What the job asks.
     errand: Option<Errand>,
     /// Getting what it brought into the crate.
@@ -806,14 +808,17 @@ pub(super) fn direct_raid(
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
         if h.hp < state.hp - 5.0 {
-            // Warned: the driver said something lately, or a machine
-            // showed its tell (`first_fight`).
-            // In a fight, warned is the machine's own tell; else something
-            // said lately.
+            // Warned: in a seeded fight, the machine's own tell; else
+            // something said or shown lately (a line, a lock, an aim); or
+            // the same fight still going (hit again within 15 s of a warned
+            // hit: a drone that locked on keeps at it without locking again).
             let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
                 Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
                 None => now - state.said_at < 30.0,
-            };
+            } || now < state.warned_fight_until;
+            if warned {
+                state.warned_fight_until = now + 15.0;
+            }
             let kind = if warned {
                 Kind::Hurt
             } else {
