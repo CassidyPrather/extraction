@@ -2082,8 +2082,8 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             // There, and home from there to the two nearest rendezvous
             // (Onboarding's newcomers fell on the way home from the
             // Village, by the pumping station): the way there is held, the
-            // way home measured (Sallow's drained bed is open by design;
-            // its owner decides).
+            // way home measured against the main routes' cover (held once
+            // Sallow's bed has the two Fourth valley is placing).
             let mut home = rvs.clone();
             home.sort_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)));
             let legs: Vec<(P2, P2)> = std::iter::once((ins, at))
@@ -2110,11 +2110,19 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             let (mut gap, mut gap_at, mut roof, mut roof_at) = (0.0f32, ins, 0.0f32, ins);
             let (mut back, mut back_at) = (0.0f32, at);
             for (home, pts) in &walks {
-                let (g, a) = longest_gap(pts, near_cover);
-                if *home && g > back {
-                    (back, back_at) = (g, a);
-                } else if !*home && g > gap {
-                    (gap, gap_at) = (g, a);
+                // Home, laden and warned, held to the main routes' cover
+                // (Fourth valley: a first job's walk home shouldn't be a
+                // 54 m dash over Sallow's bed).
+                if *home {
+                    let (g, a) = longest_gap(pts, covered);
+                    if g > back {
+                        (back, back_at) = (g, a);
+                    }
+                } else {
+                    let (g, a) = longest_gap(pts, near_cover);
+                    if g > gap {
+                        (gap, gap_at) = (g, a);
+                    }
                 }
                 for p in pts {
                     let d = roofs
@@ -2127,7 +2135,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 }
             }
             r.measures.push(format!(
-                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}), {back:.0} m on the way home at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
+                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}), home with none {COVER_REACH} m off {back:.0} m at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
                 walks.len(),
                 gap_at[0],
                 gap_at[1],
