@@ -427,7 +427,8 @@ fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let r = (u * u + v * v).sqrt();
             let a = v.atan2(u);
-            let edge = 0.87 + 0.03 * (5.0 * a + 0.7).sin() + 0.015 * (13.0 * a).sin();
+            // Its wander kept inside the anomaly's edge (0.91 of this disc).
+            let edge = 0.83 + 0.03 * (5.0 * a + 0.7).sin() + 0.015 * (13.0 * a).sin();
             let width = 0.025 + 0.025 * (0.5 + 0.5 * (7.0 * a + 1.0).sin());
             let drift = (0.2 + 0.8 * (0.5 + 0.5 * ((3.0 * a + 2.0).sin() * (11.0 * a).cos())))
                 .clamp(0.0, 1.0);
@@ -525,7 +526,7 @@ fn init_assets(
     // (A faint warmth in it, the lift's own light on it: in the dark its
     // edge still shows.)
     let flattened = ground(
-        Color::srgba(0.3, 0.11, 0.05, 0.97),
+        Color::srgba(0.36, 0.13, 0.06, 0.97),
         LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
@@ -540,7 +541,7 @@ fn init_assets(
     // It holds a little light, like still water at dusk: in the dark it's
     // the palest thing on the ground.
     let glazed = ground(
-        Color::srgba(0.45, 0.47, 0.5, 0.8),
+        Color::srgba(0.46, 0.53, 0.64, 0.82),
         LinearRgba::rgb(0.022, 0.026, 0.034),
         0.06,
     );

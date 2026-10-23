@@ -4682,3 +4682,242 @@ fn the_pinner_suppresses_while_one_moves_up() {
         "a faster cadence: {covering} rounds against {alone}"
     );
 }
+
+#[derive(Resource, Default)]
+struct Struck(Vec<super::hazards::HazardStruck>);
+
+/// One of every machine kind, each at `at(k)`.
+fn every_machine(
+    app: &mut App,
+    zone: &Zone,
+    at: impl Fn(usize) -> Vec3,
+) -> Vec<(super::hazards::Machine, Entity)> {
+    use super::hazards::{MACHINES, Machine};
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let made: Vec<(Machine, Entity)> = {
+        let mut c = Commands::new(&mut queue, app.world());
+        MACHINES
+            .iter()
+            .enumerate()
+            .map(|(k, m)| {
+                let p = at(k);
+                let job = Job {
+                    kind: JobKind::Watch,
+                    site: p,
+                    duration: 999.0,
+                    exit: p,
+                };
+                let e = match m {
+                    Machine::Drone => super::drone::spawn_drone(&mut c, p + Vec3::Y * 1.5, job),
+                    Machine::Walker => super::walker::spawn_walker(&mut c, zone, p, job),
+                    Machine::Crawler => {
+                        let e = super::walker::spawn_walker_sized(
+                            &mut c, zone, p, job, true, 60.0, 0.6, None,
+                        );
+                        c.entity(e).insert(super::indoor::Crawler::default());
+                        e
+                    }
+                    Machine::Hound => super::hound::spawn_hound(&mut c, zone, p, job),
+                    Machine::Heavy => super::heavy::spawn_heavy(&mut c, zone, &catalog, p, job),
+                    Machine::Grappler => super::grappler::spawn_grappler(&mut c, zone, p, job),
+                    Machine::Dirigible => {
+                        super::dirigible::spawn_dirigible(&mut c, p + Vec3::Y * 40.0, job)
+                    }
+                };
+                (*m, e)
+            })
+            .collect()
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    made
+}
+
+/// Every machine kind in every anomaly kind: what the table says happens
+/// does, and is told (`HazardStruck`); "unaffected" is never told.
+#[test]
+fn every_machine_in_every_anomaly_does_as_the_table_says() {
+    use super::hazards::{Effect, Hazard, effect};
+    use extraction_core::anomaly::AnomalyKind;
+    let mut wrong = vec![];
+    for kind in AnomalyKind::ALL {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Struck>().add_systems(
+            Last,
+            |mut m: MessageReader<super::hazards::HazardStruck>, mut s: ResMut<Struck>| {
+                s.0.extend(m.read().copied())
+            },
+        );
+        put(&mut app, player, zone.on_ground(100.0, 380.0));
+        let spot = |k: usize| zone.on_ground(60.0 + k as f32 * 30.0, 240.0);
+        for k in 0..super::hazards::MACHINES.len() {
+            crate::anomaly::spawn_anomaly(app.world_mut(), kind, spot(k), 4.0, None);
+        }
+        let made = every_machine(&mut app, &zone, spot);
+        for _ in 0..(90 * 8) {
+            app.update();
+        }
+        let struck = app.world().resource::<Struck>().0.clone();
+        let hazard = Hazard::of(kind);
+        for (m, e) in made {
+            let want = effect(m, hazard);
+            let told: Vec<Effect> = struck
+                .iter()
+                .filter(|s| s.robot == e && s.hazard == hazard)
+                .map(|s| s.effect)
+                .collect();
+            let ok = match want {
+                Effect::Unaffected => told.is_empty(),
+                // A lift slows while it winds, throws when it pops; a well
+                // drags, and crushes at its heart.
+                Effect::Thrown => told.contains(&Effect::Thrown) || told.contains(&Effect::Slowed),
+                Effect::Slowed => told.contains(&Effect::Slowed) || told.contains(&Effect::Hurt),
+                w => told.contains(&w),
+            };
+            if !ok {
+                wrong.push(format!(
+                    "{m:?} in a {kind:?}: wanted {want:?}, told {told:?}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A gas flash, a mine and an EMP by every machine kind: each machine the
+/// table says it touches is told; the rest aren't.
+#[test]
+fn every_machine_by_every_blast_is_told() {
+    use super::hazards::{Effect, Hazard, effect};
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Struck>().add_systems(
+        Last,
+        |mut m: MessageReader<super::hazards::HazardStruck>, mut s: ResMut<Struck>| {
+            s.0.extend(m.read().copied())
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 380.0));
+    let spot = |k: usize| zone.on_ground(60.0 + k as f32 * 30.0, 240.0);
+    let made = every_machine(&mut app, &zone, spot);
+    let mut wrong = vec![];
+    for hazard in [Hazard::Gas, Hazard::Mine, Hazard::Emp] {
+        app.world_mut().resource_mut::<Struck>().0.clear();
+        for (_, e) in &made {
+            let at = app
+                .world()
+                .get::<GlobalTransform>(*e)
+                .unwrap()
+                .translation();
+            match hazard {
+                Hazard::Gas => {
+                    app.world_mut()
+                        .write_message(crate::world::workings::GasIgnited {
+                            site: Entity::PLACEHOLDER,
+                            pocket: 0,
+                            at,
+                        });
+                }
+                Hazard::Mine => {
+                    app.world_mut().write_message(super::minelayer::MineEvent {
+                        at,
+                        what: super::minelayer::MineAct2::Blast,
+                    });
+                }
+                _ => {
+                    app.world_mut()
+                        .write_message(crate::gadgets::EmpBlast { at, radius: 3.0 });
+                }
+            }
+        }
+        for _ in 0..3 {
+            app.update();
+        }
+        let struck = app.world().resource::<Struck>().0.clone();
+        for (m, e) in &made {
+            let want = effect(*m, hazard);
+            let told = struck
+                .iter()
+                .any(|s| s.robot == *e && s.hazard == hazard && s.effect == want);
+            if told != (want != Effect::Unaffected) {
+                wrong.push(format!(
+                    "{m:?} by a {hazard:?}: wanted {want:?}, told {told}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A walker on its rounds goes round a burner in its way; chasing you
+/// hard (in sight, close), it comes straight through.
+#[test]
+fn walkers_go_round_what_hurts_them_unless_chasing_hard() {
+    let (mut app, player, zone) = app(None);
+    let a = zone.on_ground(60.0, 240.0);
+    let b = zone.on_ground(100.0, 240.0);
+    let mid = zone.on_ground(80.0, 240.0);
+    crate::anomaly::spawn_anomaly(
+        app.world_mut(),
+        extraction_core::anomaly::AnomalyKind::Burner,
+        mid,
+        4.0,
+        None,
+    );
+    app.update();
+    app.update();
+    let wary = app
+        .world()
+        .get_resource::<super::hazards::Wary>()
+        .expect("a wary grid")
+        .0
+        .clone();
+    let plain = app.world().resource::<super::walker::Nav>().0.clone();
+    let near = |path: &[[f32; 2]]| {
+        path.windows(2)
+            .map(|w| {
+                // Closest the leg comes to the burner.
+                let (p, q) = (Vec2::from(w[0]), Vec2::from(w[1]));
+                let c = Vec2::new(mid.x, mid.z);
+                let t = ((c - p).dot(q - p) / (q - p).length_squared().max(1e-6)).clamp(0.0, 1.0);
+                (p + (q - p) * t).distance(c)
+            })
+            .fold(f32::MAX, f32::min)
+    };
+    let round = wary.path([a.x, a.z], [b.x, b.z]).expect("a way round");
+    let straight = plain.path([a.x, a.z], [b.x, b.z]).expect("a way");
+    assert!(near(&round) > 4.0, "round it: {:.1} m off", near(&round));
+    assert!(near(&straight) < 4.0, "the plain way crosses it");
+    let _ = player;
+    // Chasing hard: the plain grid.
+    let aware = Awareness {
+        can_see_target: true,
+        ..default()
+    };
+    // Running at you: straight. Holding (not closing), or not in a
+    // fight: round.
+    assert!(super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(30.0),
+        0.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Transit { to: b },
+        &aware,
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(60.0),
+        2.0
+    ));
+}

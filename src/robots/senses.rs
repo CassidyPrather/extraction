@@ -361,6 +361,11 @@ pub(crate) fn perceive(
         Option<&MotionSight>,
         Has<super::indoor::Dormant>,
         Option<&MindSeed>,
+        (
+            Has<super::hazards::Dazzled>,
+            Has<super::hazards::Deafened>,
+            Has<super::hazards::Frosted>,
+        ),
     )>,
     players: Query<
         (
@@ -557,8 +562,19 @@ pub(crate) fn perceive(
         })
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
-    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant, mind_seed) in
-        &mut robots
+    for (
+        robot_e,
+        robot,
+        senses,
+        gt,
+        mut aware,
+        stunned,
+        local,
+        motion,
+        dormant,
+        mind_seed,
+        (dazzled, deaf, frosted),
+    ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
         aware.news = false;
@@ -589,10 +605,18 @@ pub(crate) fn perceive(
                 }
                 !any || alive
             })
-            .unwrap_or(true);
+            .unwrap_or(true)
+            // Dazzled by a hazard (`hazards`): it's lost you a while.
+            && !dazzled;
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
-        let reach = conditions.sight(senses.sight);
+        let reach = conditions.sight(senses.sight)
+            // Optics frosted (`hazards::Frosted`).
+            * if frosted {
+                super::hazards::FROST_SIGHT
+            } else {
+                1.0
+            };
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
@@ -696,7 +720,8 @@ pub(crate) fn perceive(
             }
         }
         let ear = gt.translation();
-        for s in &sounds {
+        // Deafened by a hazard (`hazards`): it hears nothing.
+        for s in sounds.iter().filter(|_| !deaf) {
             if s.source == Some(robot_e) {
                 continue;
             }

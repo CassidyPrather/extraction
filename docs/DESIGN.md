@@ -292,7 +292,11 @@ The driver remarks on the strongest of these as you set off, and a radio you car
 
 A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
 
-A machine **changing post holds its fire** until it's there: a flanker or a cut-off until it's within 4 m of its post, the spotter until it's within 6 m of its station. "One going round" is one gun fewer for as long as the move takes.
+A machine **changing post holds its fire** until it's there: a flanker or a cut-off until it's within 4 m of its post, the spotter until it's within 6 m of its station. "One going round" is one gun fewer for as long as the move takes. Meanwhile **the pinner suppresses** (`walker::Suppressing`):
+- it fires every 0.45 s instead of 1.1, steadier on you if you hold still;
+- running across its line throws it off as ever;
+- for 4 s after you drop from sight, it keeps its rounds on where it last saw you.
+You hear the cadence change (and the rack of its feed). Leaving the pinner's line is what beats it.
 
 **Measured** (`robots/squad_drill.rs`, 48 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears:
 - told one's moving up (flank or cut-off), it runs for it with no stops in cover;
@@ -301,10 +305,35 @@ A machine **changing post holds its fire** until it's there: a flanker or a cut-
 
 | Newcomer | Machines alone | Machines coordinating |
 |---|---|---|
-| Deaf | 17% escape (±11) | 23% (±12) |
-| Listening | 17% (±11) | 44% (±14) |
+| Deaf | 29% escape (±13) | 17% (±11) |
+| Listening | 29% (±13) | 48% (±14) |
 
-Paired by seed against coordinating machines, the listener got out where the deaf one didn't 14 times, and the other way 4 (sign test p ≈ 0.03). Against three walkers it's 59% to 33%; against two and a drone, 24% to 10%. The price of a plan said aloud is that a deaf newcomer does no worse against it than against machines fighting alone. What coordination buys the machines is time: a deaf newcomer lives 23 s against 14 s.
+Paired by seed (sign tests):
+- coordinating machines catch a deaf newcomer that machines alone don't: 7 to 1 (p ≈ 0.07);
+- against them a listener gets out where the deaf one doesn't: 17 to 2 (p ≈ 0.001);
+- a listener does better against a coordinating squad than against machines alone: 14 to 5 (p ≈ 0.06).
+
+Without the pinner's suppression, the last two hold but the first doesn't: a plan said aloud, with nobody covering the movers, is easier on the deaf too (38%).
+
+**The Zone hurts them too** (`robots/hazards.rs`). What every hazard does to every kind of machine is one table:
+
+| | Drone | Walker, crawler, hound, grappler | Heavy | Dirigible |
+|---|---|---|---|---|
+| Lift | thrown (its lock lost 2 s) | slowed winding up, staggered when it pops | — | — |
+| Burner | hurt | hurt | hurt (heats) | — |
+| Snare | hurt | hurt | stunned | — |
+| Well | dragged | dragged, crushed at its heart | dragged, held | — |
+| Mirror | dazzled (lock lost 3 s) | dazzled | dazzled | — |
+| Hush | flies blind and deaf | deafened | deafened | — |
+| Frost | rotors ice, it sinks; optics frost | stiff (0.55 pace); optics frost (sight 0.4) | stiff | — |
+| Gas flash | — | crawlers hurt | — | — |
+| Hot gallery | — | crawlers burned as you are | — | — |
+| Mine | — | hurt | hurt | — |
+| EMP | stunned | stunned | stunned | stunned |
+
+Each is told (a look and a sound, at most once a second per machine per hazard). Walkers go round lifts, burners, snares, wells and frosts: crossing one costs 30 times as much on their grid. Chasing you hard (in a fight, you in sight within 25 m), they come straight and risk it. That's the lure: lead a hound across a snare, a walker through a burner's edge, lose a drone in a hush.
+
+In the squad drill, a listening newcomer that takes its way out past a snare's far side from the squad gets out 65% of the time, against 48% for one that goes straight round (paired by seed, 13 to 5, p ≈ 0.1). The snare itself rarely catches a machine (2 runs in 48): the squad is mostly too far back to be chasing hard when the newcomer passes it. The way round, away from them, does most of the good.
 
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
