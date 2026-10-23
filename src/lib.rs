@@ -78,12 +78,6 @@ impl Plugin for GamePlugin {
             use_async_tasks: false,
             ..default()
         });
-        // Bevy's static-tree skip sometimes never propagates a child added
-        // under a tree that hasn't moved: a building's dressed meshes stayed
-        // at the origin, under the map (Cinder's blast furnace at dusk).
-        // Propagating every tree costs nothing measurable in the worst
-        // minute (Marrow, p99 within noise).
-        app.insert_resource(bevy::transform::StaticTransformOptimizations::Disabled);
         app.add_plugins((
             contacts::ContactGuardPlugin,
             world::WorldPlugin,

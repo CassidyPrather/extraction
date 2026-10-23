@@ -82,9 +82,11 @@ Things that have bitten captures, and what now guards against them:
 
   The game-side fix is `transform_guard`: each frame, everything attached
   marks every ancestor's tree, between `mark_dirty_trees` and the
-  propagation. Main also turned the optimisation off; Performance
-  measured that as free. `the_game_never_leaves_children_unplaced` holds
-  the game's own app to one or the other. On one binary, seed 7,
+  propagation, so the optimisation stays on (turning it off globally
+  cost about 0.8 ms p99 a frame, up to 20 ms on catch-up frames, per
+  Performance). `the_game_never_leaves_children_unplaced` holds the
+  game's own app to the optimisation being off or the guard being on,
+  and places a child attached to a still parent. On one binary, seed 7,
   `EXTRACTION_NO_TRANSFORM_GUARD=1` lost the furnace at dusk and night,
   and the default drew all 18 buildings checked.
 - **`--camera` places the player.** That's what a screenshot wants, but a
