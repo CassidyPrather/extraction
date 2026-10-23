@@ -141,6 +141,7 @@ pub const fn effect(machine: Machine, hazard: Hazard) -> Effect {
         (H::Mirror, _) => Dazzled,
         // A hush: nothing heard in it; a drone flies blind in it.
         (H::Hush, M::Drone) => Dazzled,
+        (H::Hush, M::Dirigible) => Unaffected,
         (H::Hush, _) => Deafened,
         // Gas: only crawlers go where it lies.
         (H::Gas, M::Crawler) => Hurt,
@@ -220,16 +221,98 @@ pub const WELL_CRUSH: f32 = 25.0;
 /// A gas flash, a mine, an EMP: a machine within this of it is told (m).
 pub const BLAST_TOLD: f32 = 6.0;
 
+/// The Zone's walking grid made wary of anomalies: what hurts a walker
+/// costs [`AVOID_COST`] times as much to cross, so it goes round. Built
+/// from `walker::Nav` when that or the anomalies change.
+#[derive(Resource, Clone)]
+pub struct Wary(pub std::sync::Arc<extraction_core::nav::NavGrid>);
+
+/// Crossing what hurts it costs this many times as much...
+pub const AVOID_COST: f32 = 30.0;
+/// ...this far past its edge (m).
+pub const AVOID_MARGIN: f32 = 1.5;
+/// In a fight with you in sight within this (m), it comes straight.
+pub const CHASE_HARD: f32 = 25.0;
+
+/// Chasing hard: it risks what's in the way.
+pub fn chasing_hard(
+    brain: &super::Brain,
+    aware: &super::Awareness,
+    target: Option<Vec3>,
+    me: Vec3,
+) -> bool {
+    matches!(brain, super::Brain::Engage)
+        && aware.can_see_target
+        && target.is_some_and(|t| t.distance(me) < CHASE_HARD)
+}
+
+/// Whether walkers go round this kind of anomaly.
+pub fn avoided(kind: AnomalyKind) -> bool {
+    matches!(
+        effect(Machine::Walker, Hazard::of(kind)),
+        Effect::Hurt | Effect::Slowed | Effect::Thrown | Effect::Stunned
+    )
+}
+
+/// The wary grid: the plain one, with what hurts a walker made dear.
+fn avoid_anomalies(
+    mut commands: Commands,
+    nav: Option<Res<super::walker::Nav>>,
+    anomalies: Query<(&Anomaly, &GlobalTransform)>,
+    mut last: Local<(usize, Vec<[i32; 4]>)>,
+) {
+    let Some(nav) = nav else {
+        return;
+    };
+    let mut sig: Vec<[i32; 4]> = anomalies
+        .iter()
+        .filter(|(a, _)| avoided(a.kind))
+        .map(|(a, g)| {
+            let p = g.translation();
+            [
+                a.kind as i32,
+                p.x.round() as i32,
+                p.z.round() as i32,
+                (a.kind.reach(a.radius) * 2.0).round() as i32,
+            ]
+        })
+        .collect();
+    sig.sort();
+    let ptr = std::sync::Arc::as_ptr(&nav.0) as usize;
+    if last.0 == ptr && last.1 == sig {
+        return;
+    }
+    let mut grid = (*nav.0).clone();
+    for (a, g) in &anomalies {
+        if !avoided(a.kind) {
+            continue;
+        }
+        let c = g.translation();
+        let r = a.kind.reach(a.radius) + AVOID_MARGIN;
+        let ring: Vec<[f32; 2]> = (0..12)
+            .map(|k| {
+                let t = k as f32 * std::f32::consts::TAU / 12.0;
+                [c.x + t.cos() * r, c.z + t.sin() * r]
+            })
+            .collect();
+        grid.scale_cost_in(&ring, AVOID_COST);
+    }
+    commands.insert_resource(Wary(std::sync::Arc::new(grid)));
+    *last = (ptr, sig);
+}
+
 pub struct HazardsPlugin;
 
 impl Plugin for HazardsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<HazardStruck>().add_systems(
-            FixedUpdate,
-            (in_anomalies, blasts, wear_off)
-                .chain()
-                .before(super::perceive),
-        );
+        app.add_message::<HazardStruck>()
+            .add_systems(
+                FixedUpdate,
+                (in_anomalies, blasts, wear_off)
+                    .chain()
+                    .before(super::perceive),
+            )
+            .add_systems(Update, avoid_anomalies);
     }
 }
 
