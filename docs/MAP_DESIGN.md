@@ -149,6 +149,26 @@ A good map makes the crossing a decision.
   `CHOICE_SHARED`). Not one corridor out of the drop. Now: Marrow 112°
   (Logging camp or Old farm), Kettle 146°, Cinder 88°, Sallow 122°,
   Rime 134°.
+- **The first jobs have cover within a four-second sprint all the way**:
+  for the first job of each kind that sends you into the valley (the
+  first contract step that scouts, brings or plants, and the ladder's
+  letter and ledger: `map_lint::first_jobs`), every way there (the easy
+  way, straight across, and by any place within 1.3 times the direct
+  walk, `FIRST_DETOUR`) has cover within 18 m of every step
+  (`FIRST_RUN`: four seconds at a sprint), but for a run of 10 m
+  (`FIRST_OPEN`). Cover is any building or prop, a boulder or three
+  trunks. The ways home from each to its two nearest rendezvous are
+  measured against the main routes' cover, `COVER_GAP` within
+  `COVER_REACH` (Onboarding's newcomers fell going home west from the
+  Village past the pumping station; laden and warned, not a sprint);
+  measured until Sallow's drained bed has its two props, then held. Three of Onboarding's four newcomers on Marrow's mast relay
+  died to a drone 7-17 s after its lock in the open past the Village.
+  Across the open, cars left on the verges and log piles by the way
+  (light props: no view load). And roofs on the way, for a drone: the
+  measure gives the farthest any first job walks from a door under a
+  roof (Marrow's mast relay: 97 m, by the gate; the pumping station's
+  tool shed, the rangers' store and the road-menders' hut past the
+  Village).
 - **The way out is a choice too**: from every rich place (a point of
   interest or artifact field in a danger-2 region or worse), at least
   two rendezvous are a sensible walk away: within 300 m of the nearest

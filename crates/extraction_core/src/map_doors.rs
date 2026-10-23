@@ -339,6 +339,50 @@ mod tests {
     use crate::map::{Marker, Placement, TRAINING_YARD};
     use crate::map_lint::{Rule, lint};
 
+    /// Every boxcar in every valley is both on its rails (`fit`: under
+    /// 0.3 m off and 2 degrees askew, or 30 m from any line) and where its
+    /// door's steps meet the ground and the ground before them is
+    /// comfortable: the two rules held together, as the doors check holds
+    /// them once boxcars leave `CLIMB_IN`.
+    #[test]
+    #[ignore = "needs World models' boxcar lift (prefab_lift 0.6); on with CLIMB_IN's end"]
+    fn boxcars_on_their_rails_meet_their_steps() {
+        let mut bad = Vec::new();
+        for (name, text) in crate::map::VALLEYS {
+            let map = crate::map::MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            for r in crate::fit::on_rails(&map, &hm) {
+                if !(r.off > 30.0 || (r.off < 0.3 && r.turn_deg < 2.0)) {
+                    bad.push(format!(
+                        "{name}: boxcar at {:?} {:.2} m off its rails",
+                        r.at, r.off
+                    ));
+                }
+            }
+            for d in doors(&map) {
+                let p = &map.placements[d.placement];
+                if p.prefab != "boxcar" {
+                    continue;
+                }
+                let base = hm.footing(&p.prefab, p.at, p.rot) + p.y;
+                let low = base - prefab_lift(&p.prefab);
+                for q in d.samples(d.foot(), d.width * 0.5, 0.5) {
+                    let h = hm.height(q);
+                    let step = (h - base).max(low - h);
+                    if step > DOOR_STEP || hm.slope_deg(q) > COMFORT_SLOPE {
+                        bad.push(format!(
+                            "{name}: boxcar at {:?}: ground {step:.2} m off its steps, {:.0} deg, at {q:?}",
+                            p.at,
+                            hm.slope_deg(q)
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{bad:#?}");
+    }
+
     /// The Training Yard and its practice house's door.
     fn yard() -> (MapDef, usize, Door) {
         let map = MapDef::from_ron(TRAINING_YARD).unwrap();
