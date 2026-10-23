@@ -61,6 +61,11 @@ pub const TOLD_FOR: f32 = 15.0;
 pub const OUT_AT: f32 = 12.0;
 /// A drill ends after this long, whatever (s).
 pub const DRILL_TIME: f32 = 200.0;
+/// The lure: a snare this far out toward the rendezvous (m), this big...
+pub const SNARE_AHEAD: f32 = 22.0;
+pub const SNARE_RADIUS: f32 = 3.0;
+/// ...and the lure's way past it, this far beyond its edge (m).
+pub const LURE_GAP: f32 = 1.5;
 /// The squad finds it from this far (m).
 pub const SPAWN: (f32, f32) = (45.0, 55.0);
 /// The updates in a second.
@@ -70,6 +75,9 @@ const HZ: f32 = 90.0;
 pub struct Arm {
     pub listen: bool,
     pub coordinate: bool,
+    /// A snare on the way out (`Some`), and whether the newcomer leads its
+    /// chasers across it (`Some(true)`, the lure) or just goes round.
+    pub lure: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -86,10 +94,25 @@ pub struct Outcome {
     pub calls: u32,
     pub squad: &'static str,
     pub rv: String,
+    /// Machines of the squad the snare struck.
+    pub snared: u32,
+    /// Machines of the squad wrecked.
+    pub wrecked: u32,
 }
 
 #[derive(Resource, Default)]
 struct Heard(Vec<(SquadCall, f32)>);
+
+#[derive(Resource, Default)]
+struct Snared(std::collections::HashSet<Entity>);
+
+fn snared(mut m: MessageReader<super::hazards::HazardStruck>, mut s: ResMut<Snared>) {
+    for h in m.read() {
+        if h.hazard == super::hazards::Hazard::Snare {
+            s.0.insert(h.robot);
+        }
+    }
+}
 
 fn hear(mut calls: MessageReader<SquadCall>, mut h: ResMut<Heard>, time: Res<Time>) {
     let now = time.elapsed_secs();
@@ -173,9 +196,13 @@ fn rendezvous(zone: &Zone) -> Vec<(String, Vec2)> {
 }
 
 fn route(app: &App, from: Vec2, to: Vec2) -> Vec<Vec2> {
-    let nav = app.world().resource::<super::walker::Nav>();
-    nav.0
-        .path(from.to_array(), to.to_array())
+    // Round what would hurt it, as the machines go (`hazards::Wary`).
+    let nav = app
+        .world()
+        .get_resource::<super::hazards::Wary>()
+        .map(|w| w.0.clone())
+        .unwrap_or_else(|| app.world().resource::<super::walker::Nav>().0.clone());
+    nav.path(from.to_array(), to.to_array())
         .map(|p| p.into_iter().map(Vec2::from_array).collect())
         .unwrap_or_else(|| vec![to])
 }
@@ -191,6 +218,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         false,
     );
     app.init_resource::<Heard>().add_systems(Last, hear);
+    app.init_resource::<Snared>().add_systems(Last, snared);
     app.finish();
     app.cleanup();
     for _ in 0..3 {
@@ -318,9 +346,36 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         aw.suspicion = 1.0;
         *app.world_mut().get_mut::<Brain>(*e).unwrap() = Brain::Engage;
     }
+    // A snare on the way out, and (the lure) the newcomer's way past it
+    // on its far side from the squad, so a machine coming straight for it
+    // comes through.
+    let mut path = route(&app, start, rvs[nearest].1);
+    if let Some(lure) = arm.lure {
+        let toward = (rvs[nearest].1 - start).normalize_or(Vec2::NEG_Y);
+        let snare = nav_near(&app, start + toward * SNARE_AHEAD);
+        crate::anomaly::spawn_anomaly(
+            app.world_mut(),
+            extraction_core::anomaly::AnomalyKind::Snare,
+            ground(snare),
+            SNARE_RADIUS,
+            None,
+        );
+        app.update();
+        app.update();
+        let squad_at = start + Vec2::from_angle(side) * SPAWN.0;
+        let far = (snare - squad_at).normalize_or(toward);
+        let past = nav_near(&app, snare + far * (SNARE_RADIUS + LURE_GAP));
+        path = if lure {
+            let mut p = route(&app, start, past);
+            p.extend(route(&app, past, rvs[nearest].1));
+            p
+        } else {
+            route(&app, start, rvs[nearest].1)
+        };
+    }
     let mut me = Newcomer {
         goal: nearest,
-        path: route(&app, start, rvs[nearest].1),
+        path,
         bound: None,
         cover_until: 0.0,
         told: vec![],
@@ -573,6 +628,15 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             "3 walkers"
         },
         rv: rvs[me.goal].0.clone(),
+        snared: app.world().resource::<Snared>().0.len() as u32,
+        wrecked: squad
+            .iter()
+            .filter(|e| {
+                app.world()
+                    .get::<super::Robot>(**e)
+                    .is_some_and(|r| r.wrecked)
+            })
+            .count() as u32,
     }
 }
 
@@ -581,6 +645,9 @@ fn line(o: &Outcome) -> String {
         "seed": o.seed,
         "listen": o.arm.listen,
         "coordinate": o.arm.coordinate,
+        "lure": o.arm.lure,
+        "snared": o.snared,
+        "wrecked": o.wrecked,
         "escaped": o.escaped,
         "down": o.down,
         "secs": (o.secs * 10.0).round() / 10.0,
@@ -619,6 +686,7 @@ fn squad_drill_listening_coordinated() {
     batch(Arm {
         listen: true,
         coordinate: true,
+        lure: None,
     });
 }
 
@@ -628,6 +696,7 @@ fn squad_drill_deaf_coordinated() {
     batch(Arm {
         listen: false,
         coordinate: true,
+        lure: None,
     });
 }
 
@@ -637,6 +706,29 @@ fn squad_drill_listening_alone() {
     batch(Arm {
         listen: true,
         coordinate: false,
+        lure: None,
+    });
+}
+
+/// A snare on the way out: the listener just goes round it...
+#[test]
+#[ignore]
+fn squad_drill_snare_plain() {
+    batch(Arm {
+        listen: true,
+        coordinate: true,
+        lure: Some(false),
+    });
+}
+
+/// ...or leads its chasers across it.
+#[test]
+#[ignore]
+fn squad_drill_snare_lure() {
+    batch(Arm {
+        listen: true,
+        coordinate: true,
+        lure: Some(true),
     });
 }
 
@@ -646,6 +738,7 @@ fn squad_drill_deaf_alone() {
     batch(Arm {
         listen: false,
         coordinate: false,
+        lure: None,
     });
 }
 
@@ -658,6 +751,7 @@ fn a_listening_newcomer_hears_the_squad() {
         Arm {
             listen: true,
             coordinate: true,
+            lure: None,
         },
     );
     eprintln!("{}", line(&o));
