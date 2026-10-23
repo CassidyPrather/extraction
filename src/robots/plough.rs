@@ -441,11 +441,7 @@ fn plough_mouth(
     parts: Query<(Entity, &super::RobotPart, &GlobalTransform)>,
     items: Query<
         (Entity, &crate::items::Item, &GlobalTransform),
-        (
-            Without<crate::interact::Held>,
-            Without<crate::interact::InSocket>,
-            Without<Buried>,
-        ),
+        (crate::interact::Loose, Without<Buried>),
     >,
     cells: Query<Entity, With<PloughCell>>,
     catalog: Res<crate::items::Catalog>,
@@ -965,6 +961,65 @@ mod tests {
                 .iter()
                 .any(|(_, j)| *j == Some(super::super::JobKind::Response)),
             "a response team: {robots:?}"
+        );
+    }
+
+    /// Nothing carried is eaten: in a hand, a socket, a pack, a crowbar in
+    /// its mouth is left alone (`interact::Loose`); a loose one jams it.
+    #[test]
+    fn it_eats_nothing_carried() {
+        let (mut vr, zone, e) = world(Vec2::new(40.0, 260.0), Vec2::new(40.0, 200.0));
+        vr.stand(zone.on_ground(60.0, 250.0), 0.0);
+        let carried: Vec<Entity> = (0..3)
+            .map(|k| {
+                let it = drop_item(
+                    &mut vr,
+                    &zone,
+                    "crowbar",
+                    Vec2::new(40.0, 252.0 - k as f32 * 1.5),
+                );
+                let mut w = vr.app.world_mut().entity_mut(it);
+                match k {
+                    0 => {
+                        w.insert(crate::interact::Held {
+                            player: it,
+                            hand: it,
+                            side: crate::rig::Side::Left,
+                            point: 0,
+                            offset: Transform::IDENTITY,
+                        });
+                    }
+                    1 => {
+                        w.insert(crate::interact::InSocket {
+                            socket: Entity::PLACEHOLDER,
+                        });
+                    }
+                    _ => {
+                        w.insert(crate::interact::body::InBackpack {
+                            bag: Entity::PLACEHOLDER,
+                        });
+                    }
+                }
+                it
+            })
+            .collect();
+        vr.step(90 * 8);
+        for (k, it) in carried.iter().enumerate() {
+            assert!(
+                vr.app.world().get_entity(*it).is_ok(),
+                "carried crowbar {k} was eaten"
+            );
+        }
+        assert!(
+            vr.app.world().get::<Plough>(e).unwrap().jammed <= 0.0,
+            "and nothing carried jammed it"
+        );
+        let loose = drop_item(&mut vr, &zone, "crowbar", Vec2::new(40.0, 225.0));
+        vr.step(90 * 8);
+        let jammed = vr.app.world().get::<Plough>(e).unwrap().jammed > 0.0;
+        assert!(
+            jammed || vr.app.world().get_entity(loose).is_err(),
+            "a loose one still is"
         );
     }
 

@@ -190,6 +190,15 @@ pub struct InSocket {
     pub socket: Entity,
 }
 
+/// An item lying loose in the world: not in a hand, not in a socket (a
+/// body slot, the belt, a vest pocket, the sling, a case, a gun) and not
+/// in a pack (anyone's, or a dead raider's). What anything but the hands
+/// may move, eat or despawn: machines, anomalies, the world.
+pub type Loose = (With<crate::items::Item>, NotCarried);
+
+/// Anything (an item or not) that isn't in a hand, a socket or a pack.
+pub type NotCarried = (Without<Held>, Without<InSocket>, Without<body::InBackpack>);
+
 /// Who a socket belongs to (a player, or a gun).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SocketOwner(pub Entity);
