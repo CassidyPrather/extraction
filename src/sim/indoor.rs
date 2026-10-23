@@ -1291,6 +1291,10 @@ mod tests {
             let mut failed = Vec::new();
             let mut tried = 0;
             for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
+                // An underground site's spots are tried too, from its own
+                // plan (each on its own side of a gallery's wall).
+                let site = extraction_core::underground::layout(&plan.name).is_some();
+                let before = tried;
                 for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
                     if !plan.reachable_height(*spot) || behind_the_works(plan, *spot) {
                         continue;
@@ -1310,6 +1314,9 @@ mod tests {
                             ))
                         }
                     }
+                }
+                if site && tried == before {
+                    failed.push(format!("{map} {}: none of its loot spots tried", plan.name));
                 }
             }
             assert!(tried > 0, "{map}: no loot spots tried");
