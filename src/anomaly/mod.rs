@@ -371,7 +371,9 @@ fn lifts(
             Forces,
             Option<&Item>,
         ),
-        Without<RigidBodyDisabled>,
+        // A lift lifts what's loose: never what's in a hand, a socket or a
+        // pack (dragging a body drags its pack along, not out of it).
+        (Without<RigidBodyDisabled>, crate::interact::NotCarried),
     >,
     mut players: Query<(&GlobalTransform, &mut Body, &mut Health), With<Player>>,
     catalog: Res<Catalog>,
@@ -570,7 +572,11 @@ fn snares(
     catalog: Res<Catalog>,
     positions: Query<&GlobalTransform>,
     mut arcs: MessageWriter<ArcStrike>,
-    mut bodies: Query<(&RigidBody, Forces), Without<RigidBodyDisabled>>,
+    // Nothing carried (in a hand, a socket, a pack) is kicked about.
+    mut bodies: Query<
+        (&RigidBody, Forces),
+        (Without<RigidBodyDisabled>, crate::interact::NotCarried),
+    >,
     parts: Query<(), With<crate::robots::RobotPart>>,
     spatial: SpatialQuery,
     time: Res<Time>,
@@ -969,6 +975,95 @@ mod tests {
             want.len(),
             "every anomaly where cycle 2 lays it"
         );
+    }
+
+    /// No anomaly takes what a player carries: a thing in a hand, a body
+    /// slot or the pack is still there after standing in each kind (it may
+    /// hurt, move or blink the player; never take a thing off them).
+    #[test]
+    fn no_anomaly_takes_what_you_carry() {
+        use crate::interact::body::{Backpack, InBackpack};
+        use crate::interact::{Held, InSocket};
+        use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
+        for kind in AnomalyKind::ALL {
+            let mut app = app(false);
+            let p = app
+                .world_mut()
+                .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            app.world_mut().resource_mut::<Raid>().phase = crate::raid::Phase::Out;
+            let me = app.world().get::<GlobalTransform>(p).unwrap().translation();
+            // In hand, and in a body slot (stowed): metal, both.
+            let bolt = drop_item(&mut app, "bolt", me + Vec3::new(0.4, 0.4, 0.0));
+            let mag = drop_item(&mut app, "pm_mag", me + Vec3::new(-0.4, 0.4, 0.0));
+            app.update();
+            app.world_mut()
+                .entity_mut(p)
+                .insert(crate::bot::Bot::new(vec![
+                    crate::bot::Task::Grab {
+                        item: mag,
+                        side: crate::rig::Side::Left,
+                    },
+                    crate::bot::Task::Stow(crate::rig::Side::Left),
+                    crate::bot::Task::Wait(0.3),
+                    crate::bot::Task::Grab {
+                        item: bolt,
+                        side: crate::rig::Side::Left,
+                    },
+                    crate::bot::Task::Wait(0.3),
+                ]));
+            for _ in 0..90 * 4 {
+                app.update();
+            }
+            // And in the pack.
+            let pack = app
+                .world_mut()
+                .query::<(Entity, &Backpack)>()
+                .iter(app.world())
+                .find(|(_, b)| b.owner == p && b.carried)
+                .map(|(e, _)| e)
+                .unwrap();
+            let packed = drop_item(&mut app, "lead_case", Vec3::ZERO);
+            app.update();
+            app.world_mut()
+                .get_mut::<Backpack>(pack)
+                .unwrap()
+                .contents
+                .push(packed);
+            app.world_mut().entity_mut(packed).insert((
+                InBackpack { bag: pack },
+                ChildOf(pack),
+                RigidBodyDisabled,
+                ColliderDisabled,
+            ));
+            let held = app.world().get::<Held>(bolt).is_some();
+            let slotted = app.world().get::<InSocket>(mag).is_some()
+                || app.world().get::<InBackpack>(mag).is_some();
+            assert!(held && slotted, "{kind:?}: kit set up ({held}, {slotted})");
+            // The anomaly where it stands (a burner's in its stone's place,
+            // no stone: just the anomaly).
+            let at = app.world().get::<GlobalTransform>(p).unwrap().translation();
+            let site = app.world().resource::<Zone>().on_ground(at.x, at.z);
+            spawn_anomaly(app.world_mut(), kind, site, 2.0, None);
+            for _ in 0..90 * 3 {
+                app.update();
+            }
+            let w = app.world();
+            assert!(
+                w.get::<Held>(bolt).is_some(),
+                "{kind:?} took the bolt from the hand"
+            );
+            assert!(
+                w.get::<InSocket>(mag).is_some() || w.get::<InBackpack>(mag).is_some(),
+                "{kind:?} took the magazine from its slot"
+            );
+            assert!(
+                w.get::<InBackpack>(packed).is_some(),
+                "{kind:?} took the case from the pack"
+            );
+        }
     }
 
     fn drop_item(app: &mut App, id: &str, at: Vec3) -> Entity {
