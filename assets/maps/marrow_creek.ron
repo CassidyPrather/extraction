@@ -307,6 +307,10 @@
         // And the road-menders' hut on the district road, the mast relay's
         // other way, half way from the creek bridge to the mast road.
         (prefab: "shed", at: (-3.0, -92.0), rot: 90.0, tag: "road_menders_hut"),
+        // And a roof on the way home from the Village to the gate, where
+        // Onboarding's newcomers fell to drones on their second and third
+        // jobs: the lengthman's hut by the district road.
+        (prefab: "shed", at: (22.0, 224.0), rot: 90.0, tag: "lengthmans_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
