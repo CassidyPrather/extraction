@@ -1146,7 +1146,7 @@ pub fn fault_layers(
         FireEvent::Malfunctioned(ShortStroke) => {
             &[("guns/bolt_open", "gun.short_stroke", 0.8, Some(2500.0))]
         }
-        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(2500.0))],
+        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(4000.0))],
         FireEvent::TriggerBlocked => &[(
             "physical/handle_metal",
             "gun.trigger_block",
