@@ -10,8 +10,8 @@ it measures what the anomaly changes at each step (the colour difference,
 CIE ΔE, between with and without: a burner's red scorch on green grass
 barely moves luminance), and asks two things of each line:
 
-- the step: what it changes just inside the edge (0.2-0.8 m in) beats
-  what it changes just outside (0.2-0.8 m out) by at least `MIN_STEP`;
+- the step: what it changes just inside the edge (0.3-1 m in) beats
+  what it changes just outside (0.3-1 m out) by at least `MIN_STEP`;
 - the place: the change crosses halfway between the two within
   `MAX_SLIP` of the true edge.
 
@@ -152,9 +152,12 @@ def measure(v: dict, cond: str) -> dict:
             if uv is None or not (2 <= uv[0] < W - 2 and 2 <= uv[1] < H - 2):
                 continue
             x, y = int(uv[0]), int(uv[1])
-            prof.append((d, float(diff[y - 2:y + 3, x - 2:x + 3].mean())))
-        inside = [c for d, c in prof if -0.8 <= d <= -0.2]
-        outside = [c for d, c in prof if 0.2 <= d <= 0.8]
+            # A strip one row tall: at 5 m the ground is so foreshortened
+            # that half a metre of it is a few rows, and a square window
+            # straddles the edge.
+            prof.append((d, float(diff[y, x - 3:x + 4].mean())))
+        inside = [c for d, c in prof if -1.0 <= d <= -0.3]
+        outside = [c for d, c in prof if 0.3 <= d <= 1.0]
         if not inside or not outside:
             lines.append({"step": 0.0, "slip": None, "ok": False})
             continue
@@ -163,7 +166,7 @@ def measure(v: dict, cond: str) -> dict:
         # Where, walking out from the inside, the change first falls below
         # halfway.
         cross = next(
-            (d for d, c in sorted(prof) if d >= -1.2 and c < half and d > -0.8),
+            (d for d, c in sorted(prof) if d > -1.0 and c < half),
             None,
         )
         slip = None if cross is None else abs(cross)

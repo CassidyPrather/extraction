@@ -4,60 +4,60 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 3.3,
+    "step": 6.4,
+    "slip": 0.6000000238418579,
+    "ok": false
+   },
+   {
+    "step": 10.4,
     "slip": 0.30000001192092896,
-    "ok": false
-   },
-   {
-    "step": 6.2,
-    "slip": 0.20000000298023224,
-    "ok": false
-   },
-   {
-    "step": 4.1,
-    "slip": 0.30000001192092896,
-    "ok": false
-   },
-   {
-    "step": 8.3,
-    "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 10.7,
-    "slip": 0.10000000149011612,
+    "step": 7.4,
+    "slip": 0.30000001192092896,
+    "ok": false
+   },
+   {
+    "step": 14.9,
+    "slip": 0.30000001192092896,
+    "ok": true
+   },
+   {
+    "step": 16.4,
+    "slip": 0.20000000298023224,
     "ok": true
    }
   ],
-  "passing": 2,
-  "ok": false
+  "passing": 3,
+  "ok": true
  },
  {
   "kind": "lift",
   "condition": "fog",
   "lines": [
    {
-    "step": 1.1,
-    "slip": 0.30000001192092896,
-    "ok": false
-   },
-   {
-    "step": 1.7,
-    "slip": 0.20000000298023224,
-    "ok": false
-   },
-   {
-    "step": 1.2,
-    "slip": 0.30000001192092896,
-    "ok": false
-   },
-   {
-    "step": 2.4,
-    "slip": 0.20000000298023224,
+    "step": 2.0,
+    "slip": 0.4000000059604645,
     "ok": false
    },
    {
     "step": 3.0,
+    "slip": 0.30000001192092896,
+    "ok": false
+   },
+   {
+    "step": 2.2,
+    "slip": 0.30000001192092896,
+    "ok": false
+   },
+   {
+    "step": 4.4,
+    "slip": 0.30000001192092896,
+    "ok": false
+   },
+   {
+    "step": 4.6,
     "slip": 0.10000000149011612,
     "ok": false
    }
@@ -70,28 +70,28 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 1.3,
+    "step": 2.7,
+    "slip": 0.4000000059604645,
+    "ok": false
+   },
+   {
+    "step": 3.9,
     "slip": 0.30000001192092896,
     "ok": false
    },
    {
-    "step": 2.1,
-    "slip": 0.20000000298023224,
-    "ok": false
-   },
-   {
-    "step": 1.5,
+    "step": 2.8,
     "slip": 0.30000001192092896,
     "ok": false
    },
    {
-    "step": 3.1,
-    "slip": 0.20000000298023224,
+    "step": 5.8,
+    "slip": 0.30000001192092896,
     "ok": false
    },
    {
-    "step": 3.8,
-    "slip": 0.10000000149011612,
+    "step": 6.3,
+    "slip": 0.20000000298023224,
     "ok": false
    }
   ],
@@ -103,13 +103,18 @@
   "condition": "night",
   "lines": [
    {
-    "step": 0.4,
+    "step": 0.3,
     "slip": 0.30000001192092896,
     "ok": false
    },
    {
-    "step": 0.9,
+    "step": 0.5,
     "slip": 0.20000000298023224,
+    "ok": false
+   },
+   {
+    "step": 0.4,
+    "slip": 0.30000001192092896,
     "ok": false
    },
    {
@@ -118,12 +123,7 @@
     "ok": false
    },
    {
-    "step": 0.8,
-    "slip": 0.20000000298023224,
-    "ok": false
-   },
-   {
-    "step": 0.8,
+    "step": 0.5,
     "slip": 0.10000000149011612,
     "ok": false
    }
@@ -136,32 +136,32 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 14.2,
+    "step": 13.0,
+    "slip": 0.9000000357627869,
+    "ok": false
+   },
+   {
+    "step": 15.1,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 11.5,
+    "step": 16.4,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 14.5,
+    "step": 18.8,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 16.6,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 12.6,
+    "step": 16.5,
     "slip": 0.20000000298023224,
     "ok": true
    }
   ],
-  "passing": 5,
+  "passing": 4,
   "ok": true
  },
  {
@@ -169,32 +169,32 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 11.6,
+    "step": 10.4,
+    "slip": 0.9000000357627869,
+    "ok": false
+   },
+   {
+    "step": 11.2,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 8.2,
+    "step": 13.5,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 11.9,
+    "step": 16.7,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 15.0,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 11.4,
+    "step": 15.1,
     "slip": 0.20000000298023224,
     "ok": true
    }
   ],
-  "passing": 5,
+  "passing": 4,
   "ok": true
  },
  {
@@ -202,27 +202,27 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 12.0,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 7.8,
-    "slip": 0.20000000298023224,
+    "step": 10.8,
+    "slip": 0.9000000357627869,
     "ok": false
    },
    {
-    "step": 12.5,
+    "step": 10.6,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 15.9,
+    "step": 13.4,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 11.2,
+    "step": 17.5,
+    "slip": 0.20000000298023224,
+    "ok": true
+   },
+   {
+    "step": 15.2,
     "slip": 0.20000000298023224,
     "ok": true
    }
@@ -235,32 +235,32 @@
   "condition": "night",
   "lines": [
    {
-    "step": 23.8,
+    "step": 21.8,
+    "slip": 0.9000000357627869,
+    "ok": false
+   },
+   {
+    "step": 22.0,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 16.2,
+    "step": 26.8,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 25.6,
+    "step": 33.8,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 30.2,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 23.3,
+    "step": 30.1,
     "slip": 0.20000000298023224,
     "ok": true
    }
   ],
-  "passing": 5,
+  "passing": 4,
   "ok": true
  },
  {
@@ -268,12 +268,17 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 10.3,
+    "step": 13.9,
+    "slip": 0.4000000059604645,
+    "ok": false
+   },
+   {
+    "step": 18.3,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 16.3,
+    "step": 18.8,
     "slip": 0.10000000149011612,
     "ok": true
    },
@@ -283,17 +288,12 @@
     "ok": true
    },
    {
-    "step": 16.1,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 15.6,
+    "step": 16.6,
     "slip": 0.10000000149011612,
     "ok": true
    }
   ],
-  "passing": 5,
+  "passing": 4,
   "ok": true
  },
  {
@@ -301,27 +301,27 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 3.1,
+    "step": 4.3,
+    "slip": 0.4000000059604645,
+    "ok": false
+   },
+   {
+    "step": 5.9,
+    "slip": 0.20000000298023224,
+    "ok": false
+   },
+   {
+    "step": 8.4,
+    "slip": 0.6000000238418579,
+    "ok": false
+   },
+   {
+    "step": 5.5,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
     "step": 5.0,
-    "slip": 0.10000000149011612,
-    "ok": false
-   },
-   {
-    "step": 7.2,
-    "slip": 0.10000000149011612,
-    "ok": false
-   },
-   {
-    "step": 4.8,
-    "slip": 0.10000000149011612,
-    "ok": false
-   },
-   {
-    "step": 4.7,
     "slip": 0.10000000149011612,
     "ok": false
    }
@@ -334,27 +334,27 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 7.4,
-    "slip": 0.10000000149011612,
+    "step": 10.5,
+    "slip": 0.4000000059604645,
     "ok": false
    },
    {
+    "step": 14.1,
+    "slip": 0.20000000298023224,
+    "ok": true
+   },
+   {
+    "step": 18.5,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 13.7,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
     "step": 12.2,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 16.7,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 11.9,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 11.3,
     "slip": 0.10000000149011612,
     "ok": true
    }
@@ -367,32 +367,32 @@
   "condition": "night",
   "lines": [
    {
-    "step": 9.2,
+    "step": 15.5,
+    "slip": 0.5,
+    "ok": false
+   },
+   {
+    "step": 21.5,
+    "slip": 0.20000000298023224,
+    "ok": true
+   },
+   {
+    "step": 31.9,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 17.1,
-    "slip": 0.10000000149011612,
+    "step": 20.1,
+    "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 29.9,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 15.6,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 13.5,
+    "step": 15.9,
     "slip": 0.10000000149011612,
     "ok": true
    }
   ],
-  "passing": 5,
+  "passing": 4,
   "ok": true
  },
  {
@@ -400,28 +400,28 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 19.6,
+    "step": 18.8,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 22.4,
+    "step": 21.8,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 17.9,
+    "step": 18.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 19.9,
+    "step": 20.0,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 18.3,
-    "slip": 0.0,
+    "step": 18.7,
+    "slip": 0.10000000149011612,
     "ok": true
    }
   ],
@@ -433,12 +433,12 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 7.9,
+    "step": 7.4,
     "slip": 0.0,
     "ok": false
    },
    {
-    "step": 9.4,
+    "step": 8.7,
     "slip": 0.0,
     "ok": true
    },
@@ -448,17 +448,17 @@
     "ok": false
    },
    {
-    "step": 8.1,
+    "step": 8.0,
     "slip": 0.10000000149011612,
-    "ok": true
+    "ok": false
    },
    {
-    "step": 7.2,
-    "slip": 0.0,
+    "step": 7.1,
+    "slip": 0.10000000149011612,
     "ok": false
    }
   ],
-  "passing": 2,
+  "passing": 1,
   "ok": false
  },
  {
@@ -466,28 +466,28 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 9.1,
+    "step": 9.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 11.4,
+    "step": 11.0,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 8.4,
+    "step": 8.8,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 9.5,
+    "step": 9.6,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 8.5,
-    "slip": 0.0,
+    "step": 8.7,
+    "slip": 0.10000000149011612,
     "ok": true
    }
   ],
@@ -499,27 +499,27 @@
   "condition": "night",
   "lines": [
    {
-    "step": 9.8,
+    "step": 10.7,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 16.0,
+    "step": 14.3,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 7.8,
+    "step": 7.4,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
-    "step": 9.6,
+    "step": 9.0,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 5.7,
+    "step": 5.9,
     "slip": 0.10000000149011612,
     "ok": false
    }
@@ -532,27 +532,27 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 23.6,
+    "step": 24.9,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 25.4,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 19.7,
+    "step": 27.5,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 25.4,
+    "step": 24.6,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 27.8,
+    "step": 27.2,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 27.4,
     "slip": 0.10000000149011612,
     "ok": true
    }
@@ -565,27 +565,27 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 19.1,
+    "step": 20.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 22.5,
-    "slip": 0.20000000298023224,
-    "ok": true
-   },
-   {
-    "step": 18.0,
+    "step": 25.0,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 22.3,
+    "step": 22.0,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 24.7,
+    "step": 24.0,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 24.4,
     "slip": 0.10000000149011612,
     "ok": true
    }
@@ -598,27 +598,27 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 15.4,
+    "step": 16.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 19.2,
+    "step": 21.1,
     "slip": 0.20000000298023224,
     "ok": true
    },
    {
-    "step": 15.3,
+    "step": 18.9,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 17.7,
+    "step": 19.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 20.3,
+    "step": 20.2,
     "slip": 0.10000000149011612,
     "ok": true
    }
@@ -631,17 +631,12 @@
   "condition": "night",
   "lines": [
    {
-    "step": 2.5,
+    "step": 2.7,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
     "step": 3.1,
-    "slip": 0.20000000298023224,
-    "ok": false
-   },
-   {
-    "step": 2.2,
     "slip": 0.10000000149011612,
     "ok": false
    },
@@ -651,7 +646,12 @@
     "ok": false
    },
    {
-    "step": 2.9,
+    "step": 2.7,
+    "slip": 0.10000000149011612,
+    "ok": false
+   },
+   {
+    "step": 3.1,
     "slip": 0.10000000149011612,
     "ok": false
    }
@@ -664,7 +664,7 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 10.9,
+    "step": 9.7,
     "slip": 0.10000000149011612,
     "ok": true
    },
@@ -674,18 +674,18 @@
     "ok": false
    },
    {
-    "step": 12.8,
+    "step": 9.9,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 11.1,
+    "step": 10.9,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 3.2,
-    "slip": 0.10000000149011612,
+    "step": 5.7,
+    "slip": 0.699999988079071,
     "ok": false
    }
   ],
@@ -697,28 +697,61 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 8.0,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 5.1,
+    "step": 7.2,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
-    "step": 9.5,
+    "step": 5.3,
+    "slip": 0.10000000149011612,
+    "ok": false
+   },
+   {
+    "step": 7.2,
+    "slip": 0.0,
+    "ok": false
+   },
+   {
+    "step": 8.2,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 4.6,
+    "slip": 0.699999988079071,
+    "ok": false
+   }
+  ],
+  "passing": 1,
+  "ok": false
+ },
+ {
+  "kind": "hush",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 12.1,
+    "slip": 0.10000000149011612,
+    "ok": true
+   },
+   {
+    "step": 8.4,
+    "slip": 0.4000000059604645,
+    "ok": false
+   },
+   {
+    "step": 12.4,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 8.5,
+    "step": 13.4,
     "slip": 0.10000000149011612,
     "ok": true
    },
    {
-    "step": 3.3,
-    "slip": 0.10000000149011612,
+    "step": 6.3,
+    "slip": 0.699999988079071,
     "ok": false
    }
   ],
@@ -727,68 +760,35 @@
  },
  {
   "kind": "hush",
-  "condition": "downpour",
-  "lines": [
-   {
-    "step": 12.9,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 8.8,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 15.5,
-    "slip": 0.0,
-    "ok": true
-   },
-   {
-    "step": 14.3,
-    "slip": 0.10000000149011612,
-    "ok": true
-   },
-   {
-    "step": 3.3,
-    "slip": 0.30000001192092896,
-    "ok": false
-   }
-  ],
-  "passing": 4,
-  "ok": true
- },
- {
-  "kind": "hush",
   "condition": "night",
   "lines": [
    {
-    "step": 6.4,
+    "step": 5.3,
+    "slip": 0.9000000357627869,
+    "ok": false
+   },
+   {
+    "step": 4.1,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
-    "step": 4.7,
-    "slip": 0.4000000059604645,
+    "step": 6.1,
+    "slip": 0.9000000357627869,
     "ok": false
    },
    {
-    "step": 9.3,
-    "slip": 0.0,
-    "ok": true
-   },
-   {
-    "step": 6.5,
+    "step": 6.0,
     "slip": 0.10000000149011612,
     "ok": false
    },
    {
-    "step": 0.8,
-    "slip": 0.5,
+    "step": 1.7,
+    "slip": 0.699999988079071,
     "ok": false
    }
   ],
-  "passing": 1,
+  "passing": 0,
   "ok": false
  }
 ]

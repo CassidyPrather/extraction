@@ -59,6 +59,7 @@ impl Plugin for AnomalyVisualsPlugin {
             MaterialPlugin::<XrayMaterial>::default(),
             MaterialPlugin::<ParticleMaterial>::default(),
             MaterialPlugin::<HazeMaterial>::default(),
+            MaterialPlugin::<MarkMaterial>::default(),
         ))
         .add_observer(claim_item_looks)
         .add_systems(Startup, init_assets)
@@ -201,6 +202,28 @@ impl Material for ParticleMaterial {
     }
 }
 
+/// What an anomaly does to the ground under it: standard PBR, fogged as if
+/// half as far off (`shaders/anomaly_mark.wgsl`), as its particles are, so
+/// in a pea-souper its edge still shows a few metres off.
+pub type MarkMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, MarkFog>;
+
+/// The marks' fog as particles have it (`FOG_REACH` in
+/// `anomaly_particles.wgsl`).
+pub const MARK_FOG_REACH: f32 = 0.5;
+
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct MarkFog {
+    /// x: the share of its distance the fog takes it at.
+    #[uniform(100)]
+    pub reach: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for MarkFog {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "shaders/anomaly_mark.wgsl".into()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, ShaderType, Reflect)]
 pub struct HazeParams {
     /// x: 0 card, 1 column, 2 the mesh as it is; y: card centre's lift;
@@ -294,13 +317,13 @@ struct AnomalyAssets {
     leaf: Handle<Image>,
     radial: Handle<Image>,
     dot: Handle<Image>,
-    scorch: Handle<StandardMaterial>,
-    flattened: Handle<StandardMaterial>,
-    glassy: Handle<StandardMaterial>,
-    glazed: Handle<StandardMaterial>,
-    crushed: Handle<StandardMaterial>,
-    hushed: Handle<StandardMaterial>,
-    frosted: Handle<StandardMaterial>,
+    scorch: Handle<MarkMaterial>,
+    flattened: Handle<MarkMaterial>,
+    glassy: Handle<MarkMaterial>,
+    glazed: Handle<MarkMaterial>,
+    crushed: Handle<MarkMaterial>,
+    hushed: Handle<MarkMaterial>,
+    frosted: Handle<MarkMaterial>,
     hush_ring: Handle<StandardMaterial>,
     dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
@@ -449,6 +472,7 @@ fn init_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut marks: ResMut<Assets<MarkMaterial>>,
     mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
 ) {
@@ -459,45 +483,58 @@ fn init_assets(
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let mark = mark_texture(&mut images);
-    let mut ground = |c: Color, emissive: LinearRgba| {
-        materials.add(StandardMaterial {
-            base_color: c,
-            base_color_texture: Some(mark.clone()),
-            emissive,
-            emissive_texture: Some(mark.clone()),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.95,
-            depth_bias: 50.0,
-            ..default()
+    // Fogged as if half as far off, as the Zone's other things are
+    // (`MarkMaterial`); the shiny ones (fused, glazed) catch the light.
+    let mut ground = |c: Color, emissive: LinearRgba, rough: f32| {
+        marks.add(MarkMaterial {
+            base: StandardMaterial {
+                base_color: c,
+                base_color_texture: Some(mark.clone()),
+                emissive,
+                emissive_texture: Some(mark.clone()),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: rough,
+                reflectance: if rough < 0.5 { 0.9 } else { 0.5 },
+                depth_bias: 50.0,
+                fog_enabled: false,
+                ..default()
+            },
+            extension: MarkFog {
+                reach: Vec4::new(MARK_FOG_REACH, 0.0, 0.0, 0.0),
+            },
         })
     };
     let scorch = ground(
         Color::srgba(0.03, 0.025, 0.02, 0.92),
         LinearRgba::rgb(0.07, 0.01, 0.0),
+        0.95,
     );
     // Scoured bare by the lift: raw brown earth, every loose thing on it
     // and the turf itself taken up. (Pale dry earth read as dry grass.)
-    let flattened = ground(Color::srgba(0.13, 0.1, 0.07, 0.9), LinearRgba::BLACK);
+    let flattened = ground(Color::srgba(0.13, 0.1, 0.07, 0.9), LinearRgba::BLACK, 0.95);
     // Fused by the arcs: dark and glassy, still charged: a faint cold blue
     // glow in it.
     let glassy = ground(
         Color::srgba(0.06, 0.07, 0.09, 0.88),
         LinearRgba::rgb(0.0, 0.015, 0.05),
+        0.2,
     );
     // Glazed like still water under a mirror, giving back the sky.
-    let glazed = ground(Color::srgba(0.45, 0.47, 0.5, 0.8), LinearRgba::BLACK);
+    let glazed = ground(Color::srgba(0.45, 0.47, 0.5, 0.8), LinearRgba::BLACK, 0.06);
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
-    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.8), LinearRgba::BLACK);
+    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.8), LinearRgba::BLACK, 0.95);
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),
         LinearRgba::rgb(0.0, 0.01, 0.03),
+        0.95,
     );
     // Pressed dark and hard, the faintest violet in it.
     let crushed = ground(
         Color::srgba(0.035, 0.03, 0.035, 0.95),
         LinearRgba::rgb(0.004, 0.0, 0.01),
+        0.95,
     );
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.
@@ -509,13 +546,6 @@ fn init_assets(
         depth_bias: 50.0,
         ..default()
     });
-    // Fused and glazed grounds shine.
-    for (m, rough) in [(&glassy, 0.2), (&glazed, 0.06)] {
-        if let Some(mut m) = materials.get_mut(m) {
-            m.perceptual_roughness = rough;
-            m.reflectance = 0.9;
-        }
-    }
     // Its edge: pale dust settled in a ragged line on the ground, which you
     // can step up to.
     let ring = ring_texture(&mut images);
