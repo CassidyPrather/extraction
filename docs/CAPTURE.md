@@ -60,6 +60,23 @@ Things that have bitten captures, and what now guards against them:
   next. Captures now wait at their first pose for `Loaded`, for at most
   `cinematic::LOAD_WAIT` frames, and the sweep's warm-up waits the same
   way. Three runs of one build are now bit-identical.
+- **A building drawn where nobody can see it.** On main, Cinder Works'
+  blast-furnace group sometimes drew nothing, its lamp hanging over an
+  empty field. Its meshes passed every culling test. They were children
+  that `dress_buildings` adds to a Building already placed, and Bevy's
+  static-transform optimisation never propagated to them: their
+  GlobalTransform stayed `[0,0,0]`, under the map. Whether it hit
+  depended on the build (system order) and on the roll.
+  `EXTRACTION_NO_STATIC_TRANSFORMS=1` switches the optimisation off in a
+  capture, as a diagnostic. `EXTRACTION_PROBE_DEBUG=<prefab>` prints each
+  mesh of a building with its GlobalTransform, LOD range and visibility.
+  The guard is `--check-buildings 1`: after each still, every building
+  within 60 m in view is hidden in turn and the view shot again
+  (`<still>__without_<i>_<prefab>.png`, listed in
+  `<still>.probes.json`). `scripts/check_buildings.py` fails a building
+  whose hiding changed under 3% of its on-screen box; the missing furnace
+  changed 0.1%. The visual diff runs it on every shot and prints
+  `BUILDINGS PASS` or `BUILDINGS MISSING`.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.

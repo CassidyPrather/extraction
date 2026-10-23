@@ -27,6 +27,10 @@ pub struct CapturePlugin;
 
 impl Plugin for CapturePlugin {
     fn build(&self, app: &mut App) {
+        // Experiment: Bevy's static-transform skip off.
+        if std::env::var_os("EXTRACTION_NO_STATIC_TRANSFORMS").is_some() {
+            app.insert_resource(bevy::transform::StaticTransformOptimizations::Disabled);
+        }
         app.add_plugins((
             cinematic::CinematicPlugin,
             sweep::SweepPlugin,
