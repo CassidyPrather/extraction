@@ -359,6 +359,14 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
+/// Grain for a texel, 0..1: a proper hash (a sum of products modulo a
+/// prime laid a regular lattice of dots over the marks).
+fn grain_at(x: u32, y: u32) -> f32 {
+    let mut h = x.wrapping_mul(374_761_393) ^ y.wrapping_mul(668_265_263);
+    h = (h ^ (h >> 13)).wrapping_mul(1_274_126_177);
+    ((h ^ (h >> 16)) & 0xffff) as f32 / 65535.0
+}
+
 /// What an anomaly does to the ground under it, out to its edge: solid to
 /// nearly the edge and gone just past it, so where the mark stops is where
 /// the anomaly starts (a mark that fades out well inside is an invisible
@@ -377,7 +385,7 @@ fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let edge = 1.0 + 0.012 * (a * 7.0).sin() + 0.008 * (a * 17.0 + 1.3).sin();
             // Full to 0.93 of it, nothing past 1.02.
             let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
-            let grain = 0.85 + 0.15 * ((x * 7919 + y * 104_729) % 613) as f32 / 613.0;
+            let grain = 0.85 + 0.15 * grain_at(x, y);
             // Blotches a few tenths of a radius across, in its colour (and
             // its glow: a burner's coals in patches, not a lit disc).
             let (px, py) = (u * 1.1, v * 1.1);
@@ -423,7 +431,7 @@ fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let width = 0.025 + 0.025 * (0.5 + 0.5 * (7.0 * a + 1.0).sin());
             let drift = (0.2 + 0.8 * (0.5 + 0.5 * ((3.0 * a + 2.0).sin() * (11.0 * a).cos())))
                 .clamp(0.0, 1.0);
-            let grain = 0.55 + 0.45 * ((x * 7919 + y * 104_729) % 977) as f32 / 977.0;
+            let grain = 0.55 + 0.45 * grain_at(x, y);
             let alpha = (-((r - edge) / width).powi(2)).exp() * drift * grain;
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
@@ -514,7 +522,7 @@ fn init_assets(
     // (A faint warmth in it, the lift's own light on it: in the dark its
     // edge still shows.)
     let flattened = ground(
-        Color::srgba(0.13, 0.1, 0.07, 0.9),
+        Color::srgba(0.1, 0.075, 0.05, 0.97),
         LinearRgba::rgb(0.035, 0.024, 0.01),
         0.95,
     );
@@ -522,7 +530,7 @@ fn init_assets(
     // glow in it.
     let glassy = ground(
         Color::srgba(0.06, 0.07, 0.09, 0.88),
-        LinearRgba::rgb(0.0, 0.03, 0.1),
+        LinearRgba::rgb(0.0, 0.05, 0.16),
         0.2,
     );
     // Glazed like still water under a mirror, giving back the sky.
@@ -537,7 +545,7 @@ fn init_assets(
     // under it.
     // Pale as ash, faintly so even in the dark.
     let hushed = ground(
-        Color::srgba(0.7, 0.7, 0.68, 0.8),
+        Color::srgba(0.74, 0.74, 0.72, 0.95),
         LinearRgba::rgb(0.03, 0.03, 0.03),
         0.95,
     );
