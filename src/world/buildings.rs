@@ -2703,11 +2703,13 @@ fn barn(b: &mut Builder) {
         h,
         0.15,
         Mat::Planks,
+        // A window near each end of the long walls: the stalls in its
+        // corners are lit (`capture::checks::loot_sights`).
         [
             &[gap(6.0, 4.0, 3.8)],
-            &[door(4.0), window(11.0)],
+            &[window(1.6), door(4.0), window(11.0), window(14.4)],
             &[gap(6.0, 3.0, 3.0)],
-            &[window(5.0)],
+            &[window(1.6), window(5.0), window(14.4)],
         ],
     );
     b.gable_roof(
@@ -5822,6 +5824,11 @@ pub enum Bake {
     Ready(std::sync::Arc<Baked>),
 }
 
+/// A dressed building's [`Baked`], its sky light read by what's put
+/// down in it (`render::loot_light`).
+#[derive(Component, Clone)]
+pub struct RoomLight(pub std::sync::Arc<Baked>);
+
 /// A prefab's baked pieces, and the sky's light through it if that was
 /// baked too (`ao::SkyField`), for the furniture dressed in later.
 pub struct Baked {
@@ -6039,6 +6046,11 @@ pub fn dress_buildings(
         }
         commands.entity(e).remove::<PropsPending>();
         built += 1;
+        // The sky's light through it, for what's put down in it later
+        // (`render::loot_light`).
+        if baked.light.is_some() {
+            commands.entity(e).insert(RoomLight(baked.clone()));
+        }
         // What shades the building's own surfaces: its solid pieces
         // (furniture's boxes too, so the floor darkens round their feet),
         // not its glass.

@@ -23,6 +23,7 @@ pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
+pub mod loot_light;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -82,6 +83,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(loot_light::LootLightPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
