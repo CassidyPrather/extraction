@@ -981,6 +981,35 @@ mechanism by `every_gun_shows_what_the_real_one_does`:
 - **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
   scope are all on the model as they are.
 
+### Reloading without looking
+
+(`weapons/reload.rs`)
+
+Under fire you reload by feel. Every step of every gun's reload is heard
+and felt as itself. No two steps of one gun's reload share a sound or a
+feel: `every_reload_step_is_heard_and_felt_as_itself` checks each catalog
+gun's reload step by step. Sounds come from `audio::handling_sound` and
+feels from `rig::haptics::handling_feel`.
+
+- **Magazine out**: the release's click and a light pulse.
+- **Magazine in**: a slide up the well and the catch's snap, felt as a soft
+  push then a hard bump.
+- **Half-seated**: pushed up the well slower than 0.3 m/s, a magazine
+  hangs on its catch. It scrapes instead of snapping and stalls with no
+  bump. It hangs 8 mm low, and it feeds nothing. The rack's jolt shakes it
+  out: it slithers free with a lurch of weight in the hand. Slap it home
+  from below (as in tap-rack) and it seats with the proper snap.
+- **Racked back**: the slide drawn over the hammer, with a small tick.
+- **Home, chambered**: the bolt's slam has brass sliding off the lips under
+  it, and a double tick for the round going in. **Home, empty**: the slam
+  alone.
+- **Held open**: the slide or bolt stopping on its catch. The sound is a
+  short hard click, not the slam, and the feel is one sharp stop with no
+  settle.
+- A Nagant's gate opens and shuts with clicks of its own, and its cylinder
+  ratchets a chamber round. A crossbow's string clicks onto its latch. A
+  single-shot's round is felt going into the chamber by hand.
+
 ### Gunsmithing at the vice
 
 (`extraction_core::gunsmith`, `weapons/gunsmith.rs`)
