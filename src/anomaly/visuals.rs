@@ -478,13 +478,14 @@ fn init_assets(
     // Swept bare by the lift: pale dry earth, every loose thing on it
     // taken up.
     let flattened = ground(Color::srgba(0.36, 0.31, 0.24, 0.85), LinearRgba::BLACK);
-    // Fused by the arcs: dark and glassy, a cold blue sheen on it.
+    // Fused by the arcs: dark and glassy, still charged: a faint cold blue
+    // glow in it.
     let glassy = ground(
         Color::srgba(0.06, 0.07, 0.09, 0.88),
-        LinearRgba::rgb(0.0, 0.006, 0.02),
+        LinearRgba::rgb(0.0, 0.015, 0.05),
     );
     // Glazed like still water under a mirror, giving back the sky.
-    let glazed = ground(Color::srgba(0.32, 0.34, 0.37, 0.75), LinearRgba::BLACK);
+    let glazed = ground(Color::srgba(0.45, 0.47, 0.5, 0.8), LinearRgba::BLACK);
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
     let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.8), LinearRgba::BLACK);
