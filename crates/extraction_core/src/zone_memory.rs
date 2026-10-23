@@ -28,6 +28,8 @@ pub const HEAT_MAX: f32 = 2.0;
 /// weakest go).
 pub const MAX_CELLS: usize = 400;
 pub const MAX_SPOTS: usize = 12;
+/// At most this many places searched are kept (the weakest go).
+pub const MAX_SEARCHED: usize = 40;
 /// A kill within this of a remembered one (of the same kind), or a loot
 /// spot within this of a remembered building's, is the same place (m).
 pub const SAME_PLACE: f32 = 15.0;
@@ -54,6 +56,10 @@ pub struct ZoneMemory {
     pub rvs: Vec<Spot>,
     pub kills: Vec<Spot>,
     pub looted: Vec<Spot>,
+    /// Where its walkers searched for you and found nothing: the paint
+    /// they leave is still there next raid, fading.
+    #[serde(default)]
+    pub searched: Vec<Spot>,
 }
 
 /// One raid, as it happened.
@@ -67,6 +73,8 @@ pub struct RaidTrace {
     pub kills: Vec<([f32; 2], String)>,
     /// Loot spots you cleared.
     pub looted: Vec<[f32; 2]>,
+    /// Where walkers searched for you.
+    pub searched: Vec<[f32; 2]>,
 }
 
 /// The grid cell `(x, z)` lies in.
@@ -97,6 +105,7 @@ impl RaidTrace {
             && self.rv.is_none()
             && self.kills.is_empty()
             && self.looted.is_empty()
+            && self.searched.is_empty()
     }
 }
 
@@ -138,6 +147,7 @@ impl ZoneMemory {
         fade(&mut self.rvs, |s| &mut s.weight);
         fade(&mut self.kills, |s| &mut s.weight);
         fade(&mut self.looted, |s| &mut s.weight);
+        fade(&mut self.searched, |s| &mut s.weight);
         for c in &trace.cells {
             match self.heat.iter_mut().find(|h| h.0 == *c) {
                 Some(h) => h.1 = (h.1 + 1.0).min(HEAT_MAX),
@@ -153,10 +163,14 @@ impl ZoneMemory {
         for at in &trace.looted {
             remember(&mut self.looted, *at, "", 1.0, HEAT_MAX);
         }
+        for at in &trace.searched {
+            remember(&mut self.searched, *at, "", 1.0, 1.0);
+        }
         keep_strongest(&mut self.heat, MAX_CELLS, |h| h.1);
         keep_strongest(&mut self.rvs, MAX_SPOTS, |s| s.weight);
         keep_strongest(&mut self.kills, MAX_SPOTS, |s| s.weight);
         keep_strongest(&mut self.looted, MAX_SPOTS, |s| s.weight);
+        keep_strongest(&mut self.searched, MAX_SEARCHED, |s| s.weight);
     }
 
     /// How habitually you pass `(x, z)`: 0 (never) to 1, times [`MEMORY`].
@@ -232,6 +246,16 @@ impl ZoneMemory {
             && self.rvs.is_empty()
             && self.kills.is_empty()
             && self.looted.is_empty()
+            && self.searched.is_empty()
+    }
+
+    /// Places its walkers searched for you, and how fresh the paint is
+    /// (0..1, times [`MEMORY`]): last raid's strongest.
+    pub fn searched(&self) -> Vec<([f32; 2], f32)> {
+        self.searched
+            .iter()
+            .map(|s| (s.at, s.weight.min(1.0) * MEMORY))
+            .collect()
     }
 
     /// Mends one read from a file: drops what's not a number or a world
@@ -257,6 +281,12 @@ impl ZoneMemory {
             }
             keep_strongest(list, MAX_SPOTS, |s| s.weight);
         }
+        self.searched.retain(|s| ok(s.at));
+        for s in &mut self.searched {
+            s.weight = w(s.weight).min(1.0);
+            s.kind.clear();
+        }
+        keep_strongest(&mut self.searched, MAX_SEARCHED, |s| s.weight);
         keep_strongest(&mut self.heat, MAX_CELLS, |h| h.1);
     }
 }
@@ -361,6 +391,35 @@ mod tests {
     }
 
     /// A mangled memory is mended, not trusted.
+    /// A place searched is remembered a raid on, faded, and again searched
+    /// it's as fresh as it gets (no more); left alone it's forgotten.
+    #[test]
+    fn searched_places_fade_raid_by_raid() {
+        let mut m = ZoneMemory::default();
+        let t = RaidTrace {
+            searched: vec![[10.0, 10.0], [12.0, 11.0], [200.0, 0.0]],
+            ..Default::default()
+        };
+        m.fold(&t);
+        assert_eq!(
+            m.searched.len(),
+            2,
+            "two spots, one place: {:?}",
+            m.searched
+        );
+        assert!(m.searched.iter().all(|s| s.weight == 1.0));
+        m.fold(&t);
+        assert!(m.searched.iter().all(|s| s.weight == 1.0), "capped");
+        let mut raids = 0;
+        while !m.searched.is_empty() {
+            m.fold(&RaidTrace::default());
+            raids += 1;
+        }
+        // 1.0 -> 0.6 -> 0.36 -> 0.22 -> 0.13 -> gone.
+        assert_eq!(raids, 5);
+        assert!(m.is_blank());
+    }
+
     #[test]
     fn a_mangled_memory_is_mended() {
         let mut m = ZoneMemory {
@@ -373,9 +432,15 @@ mod tests {
             }],
             kills: vec![],
             looted: vec![],
+            searched: vec![Spot {
+                at: [1.0, 2.0],
+                kind: String::new(),
+                weight: f32::NAN,
+            }],
         };
         m.sanitize();
         assert!(m.rvs.is_empty());
+        assert_eq!(m.searched[0].weight, 0.0);
         assert!(m.heat.iter().all(|h| h.1.is_finite() && h.1 <= HEAT_MAX));
     }
 }

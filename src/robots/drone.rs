@@ -61,7 +61,7 @@ pub const STILL_SHOWS: f32 = 0.3;
 /// 25 m, a sprint throws them about 3 m wide; a walk about 1).
 /// A drone that sees someone on its way home fights for this long (s),
 /// then goes on home.
-pub const LEAVING_FIGHT: f32 = 8.0;
+pub const LEAVING_FIGHT: f32 = super::recall::lasts(super::recall::Memory::Roofed);
 pub const CROSSING_SPREAD: f32 = 0.025;
 
 /// A drone began locking on (audio chirps; the eye flares).
@@ -240,7 +240,10 @@ fn drone_brain(
         &Transform,
         &Robot,
         &mut Intent,
-        Option<&super::flee::Fleeing>,
+        (
+            Option<&super::flee::Fleeing>,
+            Option<&super::squad::SquadRole>,
+        ),
     )>,
     zone: Res<Zone>,
     targets: Query<&GlobalTransform>,
@@ -256,7 +259,8 @@ fn drone_brain(
     let now = time.elapsed_secs();
     let sweep = time.elapsed_secs() * 0.9;
     off_duty.retain(|e, _| drones.contains(*e));
-    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent, fleeing) in &mut drones {
+    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent, (fleeing, role)) in &mut drones
+    {
         if robot.wrecked {
             *brain = Brain::Down;
             continue;
@@ -414,6 +418,13 @@ fn drone_brain(
                 };
                 if let Some(g) = peek(target) {
                     d.goal = g;
+                    continue;
+                }
+                // Spotting for a flanker (`squad`): over its way in,
+                // lighting it, still watching you.
+                if let Some(r) = role.filter(|r| r.role == super::squad::Role::Spot) {
+                    d.goal = r.post;
+                    intent.look = Some(target);
                     continue;
                 }
                 // Looked at down your sights? Slide round to your flank.
