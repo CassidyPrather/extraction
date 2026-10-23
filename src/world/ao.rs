@@ -26,22 +26,23 @@ pub fn enabled() -> bool {
     std::env::var_os("EXTRACTION_NO_AO").is_none()
 }
 
-/// Whether to bake the sky's view too (`sky_view`): `EXTRACTION_SKY_VIEW=1`.
-/// A trial, for Visual design and Performance to judge, off by default.
+/// Whether to bake the sky's light through the openings too (`SkyField`):
+/// `EXTRACTION_NO_SKY_VIEW=1` leaves it out (every indoor surface lit
+/// alike, as before), to see or measure the difference.
 pub fn sky_view_enabled() -> bool {
-    enabled() && std::env::var_os("EXTRACTION_SKY_VIEW").is_some()
+    enabled() && std::env::var_os("EXTRACTION_NO_SKY_VIEW").is_none()
 }
 
 /// What a house's room has of the sky field ([`SkyField`]) on average,
-/// and the share of its light today a surface with that much keeps (a
-/// little under: the windows' side gets more).
+/// and the share of its light before the field a surface with that much
+/// keeps (as it was: the windows' side gets more, the far side less).
 pub const SKY_ROOM: f32 = 0.08;
-pub const SKY_ROOM_LIGHT: f32 = 0.85;
+pub const SKY_ROOM_LIGHT: f32 = 1.0;
 /// How steeply the light falls off from an opening: in a 5 m room the
 /// wall facing the window comes out two and a half to three times the
 /// wall beside it, the far corners dark (a real room falls ten to one;
 /// three keeps what you came for findable).
-pub const SKY_FALLOFF: f32 = 1.6;
+pub const SKY_FALLOFF: f32 = 2.0;
 /// The least a surface keeps, deep in a shut room, and the most one by
 /// an opening gets, as shares of what it has now.
 pub const SKY_MIN: f32 = 0.15;
