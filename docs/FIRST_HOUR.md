@@ -505,8 +505,8 @@ off the ledge; the job's own thing taken out of the crate.
 | Newcomer | Job 1 (scout) | Job 2 (bring) | Job 3 (fetch) | Job 4 (plant) | Job 5 |
 | - | - | - | - | - | - |
 | cautious | paid | paid | paid | paid | down (a drone) |
-| hoarder | paid | down: a drone over the Village | down | down | down |
-| lost | paid | down: a drone on its way home | down | down | down |
+| hoarder | paid | the watch found; down before home | down | down | down |
+| lost | paid | the watch found; down before home | down | down | down |
 | one-handed | paid | paid | paid | down: a drone by the pumping station | down |
 | reckless | paid | paid | paid | the relay left; down on the way home | down |
 
