@@ -727,7 +727,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             at: [1.53, 0.0],
             out: [1.0, 0.0],
             width: 2.0,
-            clear: 2.2,
+            clear: 3.0,
         }],
         "factory_hall" => &[
             Entrance {
@@ -860,6 +860,11 @@ pub fn prefab_foundation(id: &str) -> f32 {
 /// foundation shows on the downhill side rather than the hill being dug
 /// out on the uphill one.
 pub fn prefab_lift(id: &str) -> f32 {
+    // A goods wagon stands on its bogies on the rail's grade, often up an
+    // embankment: its door's steps go down as far as the bank falls.
+    if id == "boxcar" {
+        return 0.6;
+    }
     (prefab_foundation(id) - 0.4).clamp(0.0, 0.9)
 }
 

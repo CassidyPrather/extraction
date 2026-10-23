@@ -5237,20 +5237,24 @@ fn boxcar(b: &mut Builder) {
         true,
     );
     // Old sleepers stacked into steps at the doorway, in front of its open
-    // half: a floor 1.26 m up in four risers the body steps (`map_doors`
-    // holds the ground at their foot to a step).
+    // half: a floor 1.26 m up in risers the body steps, on down as far as
+    // the bank under it can fall (`map::prefab_lift`), those under the
+    // ground buried where it's level (`map_doors` holds the ground at
+    // their foot to a step).
     let (face, tread, floor) = (w * 0.5 + 0.035, 0.4, f + 0.06);
     let rise = floor / 4.0;
-    for k in 1..4 {
-        let top = rise * (4 - k) as f32;
+    let n = ((floor + b.drop) / rise - 1e-3).ceil() as usize;
+    let sunk = b.drop + 0.3;
+    for k in 1..n {
+        let top = floor - rise * k as f32;
         let x = face + tread * (k as f32 - 0.5);
         b.bx(
-            Vec3::new(tread - 0.01, top + 0.3, 1.3),
-            Vec3::new(x, (top - 0.3) * 0.5, -0.4),
+            Vec3::new(tread - 0.01, top + sunk, 1.3),
+            Vec3::new(x, (top - sunk) * 0.5, -0.4),
             Mat::Timber,
         );
     }
-    let steps = 3.0 * tread;
+    let steps = (n - 1) as f32 * tread;
     if let Some(e) = b.geo.entrances.iter_mut().find(|e| e.out == [1.0, 0.0]) {
         e.clear = steps + 1.0;
     }
