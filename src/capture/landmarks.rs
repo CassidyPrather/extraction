@@ -69,6 +69,12 @@ pub fn check_buildings(
     children: Query<&Children>,
     meshes: Query<(&InheritedVisibility, &ViewVisibility, &Mesh3d)>,
     assets: Res<Assets<Mesh>>,
+    debug: Query<(
+        &GlobalTransform,
+        Option<&bevy::camera::visibility::VisibilityRange>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&Visibility>,
+    )>,
     mut since: Local<u32>,
     mut done: Local<bool>,
 ) {
@@ -114,6 +120,31 @@ pub fn check_buildings(
             }
             if let Ok(c) = children.get(x) {
                 stack.extend(c.iter());
+            }
+        }
+        // EXTRACTION_PROBE_DEBUG=<prefab>: every mesh of it, for chasing a
+        // building that's in the world and not on screen.
+        if std::env::var("EXTRACTION_PROBE_DEBUG").is_ok_and(|v| v == b.prefab) {
+            let mut stack = vec![e];
+            while let Some(x) = stack.pop() {
+                if let (Ok((inh, view, mesh)), Ok((gt, range, mat, vis))) =
+                    (meshes.get(x), debug.get(x))
+                {
+                    let readable = assets.get(&mesh.0).map(|m| finite(m).is_some());
+                    let (scale, _, at) = gt.to_scale_rotation_translation();
+                    info!(
+                        "probe-debug {}: {x:?} at {at:.1} scale {scale:.2} readable {readable:?} \
+                         inherited {} view {} vis {vis:?} range {:?} mat {:?}",
+                        b.prefab,
+                        inh.get(),
+                        view.get(),
+                        range.map(|r| (r.start_margin.clone(), r.end_margin.clone(), r.use_aabb)),
+                        mat.map(|m| m.0.id()),
+                    );
+                }
+                if let Ok(c) = children.get(x) {
+                    stack.extend(c.iter());
+                }
             }
         }
         if missing(count) {
