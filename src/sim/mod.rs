@@ -44,8 +44,66 @@ impl Plugin for SimPlugin {
             .add_systems(Update, armour_up)
             .add_systems(
                 Update,
-                (raider::think, telemetry::record, telemetry::finish).chain(),
+                (
+                    raider::think,
+                    telemetry::record,
+                    telemetry::finish,
+                    career_memory,
+                )
+                    .chain(),
             );
+    }
+}
+
+/// A career of sim raids (`SIM_MEMORY_FILE`): the valley's memory of the
+/// raider (`robots::memory`) is read from the file before the raid and,
+/// with this raid folded in, written back once it ends. Without the file
+/// each raid starts from a blank memory, as `zone_memory::MEMORY` at 0
+/// would leave it.
+fn career_memory(
+    log: Res<telemetry::SimLog>,
+    raid: Res<crate::raid::Raid>,
+    zone: Res<Zone>,
+    mut mind: ResMut<crate::robots::memory::ZoneMind>,
+    bots: Query<&raider::Raider>,
+    mut state: Local<(bool, bool)>,
+) {
+    let Some(path) = std::env::var_os("SIM_MEMORY_FILE").map(std::path::PathBuf::from) else {
+        return;
+    };
+    let (loaded, written) = &mut *state;
+    if !*loaded {
+        *loaded = true;
+        if let Some(m) = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|t| ron::from_str::<extraction_core::zone_memory::ZoneMemory>(&t).ok())
+        {
+            mind.memory = m;
+            mind.memory.sanitize();
+        }
+        return;
+    }
+    if !log.finished || *written {
+        return;
+    }
+    *written = true;
+    // Out (or down, or out of time) before the raid's own turn folded it.
+    if !mind.trace.is_empty() {
+        if matches!(raid.phase, crate::raid::Phase::Extracting { .. }) && mind.trace.rv.is_none() {
+            mind.trace.rv = bots
+                .iter()
+                .find_map(|r| r.rv)
+                .and_then(|i| zone.map.markers_of(&MarkerKind::Rendezvous).nth(i))
+                .map(|m| m.at);
+        }
+        let trace = std::mem::take(&mut mind.trace);
+        mind.memory.fold(&trace);
+    }
+    match ron::ser::to_string_pretty(&mind.memory, ron::ser::PrettyConfig::new()) {
+        Ok(text) => {
+            let _ = std::fs::write(&path, text);
+        }
+        Err(e) => warn!("sim: memory not written: {e}"),
     }
 }
 

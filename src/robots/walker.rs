@@ -32,6 +32,11 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Its aim is thrown off by this (rad) a m/s its target runs across its
+/// line of fire: sprinting across it, most rounds miss.
+pub const CROSSING_SPREAD: f32 = 0.02;
+/// Out of its sight this long (s), it has to aim afresh once you're back.
+pub const REACQUIRE: f32 = 0.5;
 /// Seeing you for the first time in a fight, it stops and looks this long
 /// (its eye and the Heard line have their moment) before it settles its
 /// turret on you: no first shot inside a newcomer's reaction time.
@@ -1028,7 +1033,7 @@ pub const RETREAT_AT: f32 = 0.35;
 pub const RETREAT_DIST: f32 = 14.0;
 /// Knocked down again within this long (s) of the last time, a walker
 /// breaks off as a badly hurt one does.
-pub const KNOCKED_AGAIN: f32 = 10.0;
+pub const KNOCKED_AGAIN: f32 = super::recall::lasts(super::recall::Memory::Knocked);
 
 /// A walker that's broken off, hurt (it keeps shooting from further back).
 #[derive(Component, Debug)]
@@ -1139,6 +1144,7 @@ fn walker_guns(
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
+    bodies: Query<&crate::player::Body>,
     (entrances, path, mut blind, mut fighting_since): (
         Res<super::doors::Entrances>,
         crate::destruction::through::RoundPath,
@@ -1167,8 +1173,9 @@ fn walker_guns(
             blind.remove(&e);
         }
         if !aware.can_see_target {
-            // A moment behind cover doesn't shake it; a while does.
-            if aware.unseen > 1.5 {
+            // A moment behind cover doesn't shake it; half a second does:
+            // back in sight, it has to aim afresh (`REACQUIRE`).
+            if aware.unseen > REACQUIRE {
                 w.aim = 0.0;
             }
             // Through the wall, if it's thin and you're close behind it.
@@ -1257,6 +1264,15 @@ fn walker_guns(
             continue;
         }
         let muzzle = gt.translation() + Vec3::Y * 0.05;
+        // How fast it's going across the line of fire (m/s).
+        let crossing = aware
+            .target
+            .and_then(|p| bodies.get(p).ok())
+            .map_or(0.0, |b| {
+                let line = (target - muzzle).with_y(0.0).normalize_or_zero();
+                let v = b.velocity.with_y(0.0);
+                (v - line * v.dot(line)).length()
+            });
         if muzzle.distance(target) > 70.0 {
             continue;
         }
@@ -1289,7 +1305,8 @@ fn walker_guns(
             speed: 450.0,
             damage: 14.0,
             projectiles: 1,
-            spread: 0.025,
+            // Running across its line throws it off (`CROSSING_SPREAD`).
+            spread: 0.025 + CROSSING_SPREAD * crossing,
             recoil: 0.0,
             seed: *seed,
         });

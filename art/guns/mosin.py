@@ -18,8 +18,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
-from common import (Part, RX, RY, RZ, T, catmull, empty, export, fillet, join, main_guard, make,
-                    report, section_rect, stock_surface)
+from common import (Part, RX, RY, RZ, T, catmull, empty, export, export_part, fillet, join,
+                    main_guard, make, report, section_rect, stock_surface)
 from _kit import text  # noqa: E402
 
 main_guard()
@@ -89,28 +89,50 @@ def stock_power(z):
     return 3.6 if z < -0.03 else 2.5
 
 
-stock = Part("stock")
-stock.stock(stock_prof, -0.8675, 0.3285, "Wood", stock_wt, stations=120, segs=24,
-            power=stock_power)
+# The stock is made in three, for the vice (`weapons::gunsmith`): the
+# forend goes with the barrel (cut, it's cut with it), the middle round the
+# receiver and the wrist stays, and the butt comes off at its screw.
+FORE_Z = -0.25
+BUTT_Z = 0.07
+
+
+def stock_piece(name, lo, hi):
+    piece = Part(name)
+    piece.stock(stock_prof, -0.8675, 0.3285, "Wood", stock_wt, stations=120, segs=24,
+                power=stock_power)
+    sc = Part("cut")
+    # Sling slots through the butt and the forend.
+    sc.prism(fillet([(0.15, -0.037), (0.19, -0.044), (0.19, -0.052), (0.15, -0.045)], 0.004, 2),
+             -0.04, 0.04, "Wood", axis="x")
+    sc.prism(fillet([(-0.66, -0.006), (-0.62, -0.006), (-0.62, -0.012), (-0.66, -0.012)], 0.003,
+                    2), -0.04, 0.04, "Wood", axis="x")
+    # What isn't this piece.
+    if lo is not None:
+        sc.box((0.2, 0.4, 1.0), (0.0, 0.0, lo - 0.5), "Wood")
+    if hi is not None:
+        sc.box((0.2, 0.4, 1.0), (0.0, 0.0, hi + 0.5), "Wood")
+    piece.cut(sc)
+    return piece
+
+
+stock_fore = stock_piece("stock_fore", None, FORE_Z)
+stock = stock_piece("stock", FORE_Z, BUTT_Z)
+stock_butt = stock_piece("stock_butt", BUTT_Z, None)
 surf = stock_surface(stock_prof, stock_wt, stock_power)
-sc = Part("cut")
-# Sling slots through the butt and the forend.
-sc.prism(fillet([(0.15, -0.037), (0.19, -0.044), (0.19, -0.052), (0.15, -0.045)], 0.004, 2),
-         -0.04, 0.04, "Wood", axis="x")
-sc.prism(fillet([(-0.66, -0.006), (-0.62, -0.006), (-0.62, -0.012), (-0.66, -0.012)], 0.003, 2),
-         -0.04, 0.04, "Wood", axis="x")
-stock.cut(sc)
 
 # Steel butt plate.
-furn = Part("furniture")
+butt_furn = Part("butt_furniture")
 bp = fillet([(0.322, 0.0175), (0.3335, 0.0145), (0.3335, -0.107), (0.3275, -0.1095),
              (0.322, -0.105)], [0.0, 0.002, 0.003, 0.002, 0.0], 2)
-furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
+butt_furn.prism(bp, -0.0215, 0.0215, "Blued", axis="x", bevel=0.0015, segs=1)
+furn = Part("furniture")
 screws = Part("screws")
 slots = Part("cut")
+butt_screws = Part("butt_screws")
+butt_slots = Part("cut")
 # Its two screws, into the heel and the toe.
 for y in (0.002, -0.088):
-    screw(screws, slots, 0.0036, (0.0, y, 0.3335), RX(math.pi / 2), turn=0.3 + y * 9)
+    screw(butt_screws, butt_slots, 0.0036, (0.0, y, 0.3335), RX(math.pi / 2), turn=0.3 + y * 9)
 
 # Upper handguard over the barrel.
 hg_sec = fillet([(-0.0145, 0.0365), (0.0145, 0.0365), (0.0145, 0.052), (0.0, 0.0615),
@@ -139,7 +161,9 @@ nose = fillet([(-0.0168, -0.013), (0.0168, -0.013), (0.0168, 0.039), (-0.0168, 0
 furn.prism(nose, -0.874, -0.858, "Blued", axis="z", bevel=0.0012, segs=1)
 
 # --- Barrel and sights ---------------------------------------------------------------------
-barrel = Part("barrel")
+# Its origin at the breech face, on the bore: a cut barrel is drawn as
+# this scaled back along the bore toward it.
+barrel = Part("barrel", origin=(0.0, BORE, -0.208))
 barrel.lathe([(0.0042, MUZZLE + 0.002), (0.0095, MUZZLE), (0.0105, MUZZLE + 0.003),
               (0.0105, -0.60), (0.0118, -0.45), (0.0128, -0.26), (0.0138, -0.245),
               (0.0145, -0.205), (0.0, -0.205)], "Blued", segs=28, xf=T(0, BORE, 0))
@@ -262,15 +286,18 @@ for sx in (-1, 1):
     bolt.box((0.004, 0.006, 0.016), (sx * 0.0088, BORE, -0.152), "Steel", bevel=0.001, segs=2)
 # Extractor along the right.
 bolt.box((0.0025, 0.004, 0.06), (0.0088, BORE + 0.0035, -0.13), "Steel", bevel=0.0008, segs=2)
-# Cocking piece knob at the rear: round and knurled.
+# Cocking piece knob at the rear: round and knurled. Its own node: it
+# stands back from the bolt when cocked and sits in when not, the tell
+# you look for (`weapons::visuals`, `CockingPiece`).
 # Its rear face is dished, with the firing pin's end in the middle.
-bolt.lathe([(0.0, -0.022), (0.0055, -0.022), (0.0055, -0.012), (0.0102, -0.009), (0.0108, -0.002),
+cock = Part("cocking_piece", origin=(0.0, BORE, -0.022))
+cock.lathe([(0.0, -0.022), (0.0055, -0.022), (0.0055, -0.012), (0.0102, -0.009), (0.0108, -0.002),
             (0.0108, 0.006), (0.0098, 0.0105), (0.0082, 0.0118), (0.0064, 0.0112),
             (0.0028, 0.0106), (0.0024, 0.0118), (0.0, 0.0121)], "Steel", segs=32,
            xf=T(0, BORE, 0))
 for i in range(18):
     a = 2 * math.pi * i / 18
-    bolt.box((0.0013, 0.0012, 0.012), (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002),
+    cock.box((0.0013, 0.0012, 0.012), (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002),
              "Steel", xf=RZ(a, about=(0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002)))
 # The straight handle with its ball knob.
 knob = (0.061, 0.031, HANDLE_Z)
@@ -315,8 +342,11 @@ for i in range(n + 1):
 bayonet.loft(rings, "Steel")
 
 screws.cut(slots)
-join("static", stock, furn, barrel, recv, mag, screws, worn={})
-for p in (bolt, trig, bayonet):
+butt_screws.cut(butt_slots)
+join("static", stock, recv, mag, screws, worn={})
+join("static_barrel", barrel, stock_fore, furn, worn={})
+join("static_butt", stock_butt, butt_furn, butt_screws, worn={})
+for p in (bolt, cock, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
@@ -329,3 +359,7 @@ empty("pt_sling_front", (0.0, -0.009, -0.64))
 empty("pt_sling_rear", (0.0, -0.045, 0.17))
 report()
 export("assets/models/guns/mosin.glb")
+
+
+export_part("static_butt", "assets/models/items/stock_mosin.glb")
+export_part("turnbolt", "assets/models/items/bolt_mosin.glb")

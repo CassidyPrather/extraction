@@ -68,6 +68,12 @@ pub struct Body {
     /// How much slower a bulky thing in the hands makes you (0: not at
     /// all; `interact::carry`). You can't run with one.
     pub hauling: f32,
+    /// How much slower a broken leg makes you (0: not at all;
+    /// `interact::wounds`). You can't run on one.
+    pub limping: f32,
+    /// How much slower a frost's chill makes you (0: not at all;
+    /// `anomaly::frost`). Stiff with it, you can't run.
+    pub chilled: f32,
 }
 
 /// The capsule collider entity (child of the root).
@@ -253,6 +259,8 @@ pub fn move_bodies(
         let want_sprint = input.sprint
             && enc.can_sprint
             && body.hauling <= 0.0
+            && body.limping < crate::interact::wounds::LIMP
+            && body.chilled < crate::anomaly::frost::STIFF
             && body.stamina > 0.05
             && input.locomotion.y > 0.3
             && depth < 0.5;
@@ -266,6 +274,8 @@ pub fn move_bodies(
             WALK_SPEED
         } * enc.speed
             * (1.0 - body.hauling)
+            * (1.0 - body.limping)
+            * (1.0 - body.chilled)
             * if swimming { 1.0 } else { drag };
         let target = if climbing {
             // On a rope the stick climbs (see `gadgets::climbing`).

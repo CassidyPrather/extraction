@@ -10,6 +10,7 @@
     rooms: [
         // The cage landing at the shaft's foot: the canary's bench.
         (id: "cage_landing", at: (0.0, 17.0), size: (6.0, 4.0), height: 2.8, props: [
+            (kind: SmallCrate, at: (2.2, 1.4), loot: Some("gadgets")),
             (kind: Workbench, at: (-2.2, 0.6), rot: 90.0),
             (kind: Barrel, at: (2.4, 1.3)),
         ]),
@@ -31,6 +32,7 @@
         ]),
         // The crosscut, across the foot of the haulage.
         (id: "crosscut", at: (0.0, 46.0), size: (12.0, 3.0), floor: Some(-11.0), height: 2.6, props: [
+            (kind: Crate, at: (4.5, 0.9), loot: Some("curio")),
             (kind: Barrel, at: (-3.5, 1.0)),
         ]),
         // The refuge chamber: where Kettle hid.
@@ -41,6 +43,7 @@
         ]),
         // The lower heading, down past the gassy dip.
         (id: "lower_heading", at: (16.0, 46.0), size: (6.0, 6.0), floor: Some(-13.0), height: 2.4, props: [
+            (kind: SmallCrate, at: (-1.8, 1.8), loot: Some("weapons_rare")),
             (kind: Crate, at: (1.8, 1.8), loot: Some("ammo_common")),
             (kind: Shelf, at: (2.6, -1.2), rot: 270.0, loot: Some("tools")),
         ]),
@@ -67,6 +70,10 @@
     items: [(id: "canary", room: "cage_landing", at: (-2.2, 0.6), y: 1.0)],
     patrol: ["haulage", "crosscut", "refuge", "crosscut", "haulage", "stables"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("DEEP WORKINGS - FIREDAMP\nNO NAKED LIGHTS"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.4),
     portals: [
         (),
         // The old incline, up from the crosscut.

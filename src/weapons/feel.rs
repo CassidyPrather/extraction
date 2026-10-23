@@ -506,6 +506,10 @@ fn add_handling(add: On<Add, Gun>, mut commands: Commands) {
 /// gun has a stock: the back face of its parts' bounds.
 pub fn butt(gun: &Gun) -> Option<Vec3> {
     gun.layout.support?;
+    // Its stock off at the vice: nothing to put to the shoulder.
+    if !gun.firearm.build.stock {
+        return None;
+    }
     let (lo, hi) = gun.layout.bounds();
     Some(Vec3::new((lo.x + hi.x) * 0.5, (lo.y + hi.y) * 0.5, hi.z))
 }
@@ -572,7 +576,7 @@ fn handle_guns(
             }
             continue;
         };
-        let mass = catalog.get(item.kind()).mass;
+        let mass = gun.mass(catalog.get(item.kind()).mass);
         let head = heads
             .iter()
             .find(|(c, _)| c.parent() == held.player)
@@ -777,7 +781,7 @@ pub fn kick_guns(
         let Ok((mut gun, item, mut handling)) = guns.get_mut(ev.gun) else {
             continue;
         };
-        let mass = catalog.get(item.kind()).mass;
+        let mass = gun.mass(catalog.get(item.kind()).mass);
         let worked = matches!(
             gun.firearm.def.action,
             ActionKind::Pump | ActionKind::BoltAction
@@ -2309,6 +2313,13 @@ pub(crate) mod vr_tests {
                 }
             }
             fire(&mut r, 1, true);
+        }
+        // The jam made, its wear and dirt off again: a worn, fouled action
+        // drags (`Firearm::action_drag`), and this is about the jam.
+        {
+            let mut g = gun_mut(&mut r);
+            g.firearm.condition = 1.0;
+            g.firearm.fouling = 0.0;
         }
         let ejected = |r: &mut Range| {
             let mut q = r.vr.app.world_mut().query::<&crate::weapons::Casing>();

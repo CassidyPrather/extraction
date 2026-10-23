@@ -30,6 +30,7 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
+pub mod rv_beacons;
 pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
@@ -47,6 +48,7 @@ pub mod warmup;
 pub mod water_material;
 pub mod wayfind_shots;
 pub mod world_props;
+pub mod wounds;
 
 use bevy::camera::Hdr;
 use bevy::core_pipeline::tonemapping::Tonemapping;
@@ -89,9 +91,11 @@ impl Plugin for RenderPlugin {
         .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
+        .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
@@ -100,6 +104,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(blink::BlinkPlugin)
         .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
+        .init_resource::<grade::Below>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
         // After the underground's darkening, which takes whatever ambient it

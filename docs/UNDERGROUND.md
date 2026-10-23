@@ -72,7 +72,7 @@ that the whole stairwell is open.
   ceiling slabs, doors). `no_daylight_in_the_rooms` casts rays every way
   from every room (doors shut) and none gets out.
 - **Going dark** (`go_dark`, client): below ground the global ambient
-  falls to 1.5%, the sun goes out and the fog's colour goes to black; the
+  falls to 0.2%, the sun goes out and the fog's colour goes to black; the
   eyes adapt 2.5 stops (`Exposure`). On the surface everything is as the
   sky left it. Rain and ash aren't drawn round an underground camera.
 - **Emergency lamps**: rooms with `lamp: Steady` or `Flicker` get an
@@ -455,6 +455,19 @@ layout's `live`): throw the breaker and the way in opens onto live water.
 Shot: the overflow chamber's water live, cold blue under the arcing,
 its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
 from the start, for shots).
+
+### Worth going down: the entrances
+
+Every site says from the surface what's down there: over each kiosk's
+door (bar one with a front of its own, the Depot's) a stencilled sign,
+the layout's `sign`, names the place and what to mind there ("DEEP
+WORKINGS - FIREDAMP / NO NAKED LIGHTS", "DANGER - LIVE CABLES", "CAGE TO
+LOWER LEVEL"), and a dim warm lamp (`DoorLamp`) shows the way down from
+across the valley at night. Audio's asked for the stair breathing out
+what's below. The skipped sites got a reward worth the walk: three more
+loot spots each in the pump station and the deep workings, the best
+deepest. Shots: `docs/shots/underground/sign_adit.jpg`,
+`sign_bunker.jpg`.
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron

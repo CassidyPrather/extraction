@@ -1,4 +1,4 @@
-"""Medical and maintenance supplies: field dressing, regen injector,
+"""Medical and maintenance supplies: field dressing, regen injector, splint,
 cleaning kit, gun oil, spare parts, multitool, fuel can. Writes
 assets/models/items/<id>.glb for each (item space: see _kit.py). Things
 without `dims` are a cube of side cbrt(bulk / 1000); each model rests on
@@ -213,7 +213,24 @@ def fuel_can():
     return [p]
 
 
+# --- Splint ---------------------------------------------------------------------------------------
+
+def splint():
+    """Two wooden slats lying along Z, three olive webbing straps round
+    them with steel buckles: strapped either side of a broken shin."""
+    L = 0.44
+    y = -0.015
+    p = Part("body")
+    for x in (-0.021, 0.021):
+        p.box((0.017, 0.011, L), (x, y + 0.0055, 0.0), "Wood", bevel=0.002, segs=1)
+    for z in (-0.16, 0.0, 0.16):
+        p.box((0.062, 0.015, 0.026), (0.0, y + 0.0075, z), "Olive", bevel=0.0012, segs=1)
+        p.box((0.014, 0.004, 0.02), (0.0, y + 0.0165, z), "Steel", bevel=0.0008, segs=1)
+    return centred([p])
+
+
 for item_id, fn in (("field_dressing", field_dressing), ("regen_injector", regen_injector),
+                    ("splint", splint),
                     ("cleaning_kit", cleaning_kit), ("gun_oil", gun_oil),
                     ("spare_parts", spare_parts), ("multitool", multitool),
                     ("fuel_can", fuel_can)):

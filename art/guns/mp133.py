@@ -20,7 +20,7 @@ import sys
 from mathutils import Vector
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from common import (Part, RX, RY, T, catmull, empty, export, fillet, join, main_guard, make,
+from common import (Part, RX, RY, T, catmull, empty, export, export_part, fillet, join, main_guard, make,
                     report, section_rect)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
 from _kit import text  # noqa: E402
@@ -109,7 +109,9 @@ rel = fillet([(-0.0745, -0.003), (-0.0675, -0.003), (-0.0685, -0.016), (-0.072, 
 misc.prism(rel, -0.0047, -0.0017, "Blued", axis="x", bevel=0.0006, segs=1)
 
 # --- Barrel with ventilated rib --------------------------------------------------------------
-barrel = Part("barrel")
+# Its origin at the breech: a cut barrel (and the tube under it) is
+# drawn as this scaled back along the bore toward it.
+barrel = Part("barrel", origin=(0.0, BORE, BREECH))
 barrel.lathe([(0.0093, BREECH), (0.0128, BREECH), (0.0128, -0.262), (0.0119, -0.30),
               (0.0110, -0.45), (0.0106, MUZZLE + 0.004), (0.0101, MUZZLE), (0.0093, MUZZLE)],
              "Blued", segs=24, xf=T(0, BORE, 0), closed=True)
@@ -253,7 +255,9 @@ trig.sweep(catmull([(-0.0465, 0.001), (-0.0485, -0.010), (-0.0505, -0.019), (-0.
            "Blued")
 
 # --- Build -------------------------------------------------------------------------------------
-join("static", recv, misc, barrel, tube, stock, pad, sw, worn={})
+join("static", recv, misc, worn={})
+join("static_barrel", barrel, tube, worn={})
+join("static_butt", stock, pad, sw, worn={})
 make(bolt, worn={})
 make(trig, worn={})
 
@@ -267,3 +271,4 @@ empty("pt_sling_front", (0.0, TUBE - 0.026, SW_F))
 empty("pt_sling_rear", (0.0, yb - 0.0135, SW_R))
 report()
 export("assets/models/guns/mp133.glb")
+export_part("static_butt", "assets/models/items/stock_mp133.glb")

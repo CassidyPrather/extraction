@@ -97,6 +97,19 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
             );
         }
     }
+    // Every set-back weathered: the courses' steps and the pilasters'
+    // tops sloped back, so nothing on the face is a ledge to stand on.
+    for (i, &(_, y1, t)) in courses.iter().enumerate() {
+        if let Some(&(_, _, above)) = courses.get(i + 1) {
+            weathering(b, 0.0, len, -2.0 + t, -2.0 + above, y1, Mat::DressedStone);
+        }
+    }
+    for k in 0..=n {
+        let x = -hl + 2.0 + (len - 4.0) * k as f32 / n.max(1) as f32;
+        for (_, y1, t) in courses {
+            weathering(b, x, 1.4, -2.0 + t + 0.6, -2.0 + t, y1 - 0.3, Mat::Boulder);
+        }
+    }
     // The parapet on the outer edge, the walk behind it flush with the
     // crest.
     let (ph, pt) = PARAPET;
@@ -141,54 +154,102 @@ fn face(b: &mut Builder, len: f32, turrets: bool) {
     }
 }
 
+/// How steep a set-back's weathering is, degrees: past what a body stands
+/// on (`player`'s ground is a normal over 0.65 up, under 49 degrees), so
+/// anything landing on one slides off it.
+const WEATHERING: f32 = 60.0;
+
+/// Weathering on a set-back: its top sloped back from its outer edge
+/// (local z `out`, at height `y`) up to the face behind (`inn`), `w` wide
+/// about `x`.
+fn weathering(b: &mut Builder, x: f32, w: f32, out: f32, inn: f32, y: f32, mat: Mat) {
+    let a = WEATHERING.to_radians();
+    let run = out - inn;
+    // As thick as the set-back is deep, so it fills the wedge down to the
+    // top it covers (its thickness goes into the masonry, out of sight).
+    let thick = run;
+    // Tipped about x: its +z end (the outer edge) down.
+    let rot = Quat::from_rotation_x(a);
+    let mid = Vec3::new(x, y + run * a.tan() * 0.5, (out + inn) * 0.5);
+    b.piece(
+        Shape::Box(Vec3::new(w, thick, run / a.cos())),
+        Transform::from_translation(mid - rot * Vec3::Y * (thick * 0.5)).with_rotation(rot),
+        mat,
+        true,
+    );
+}
+
 /// The face stair's run, as the map lays its terraces (from the west end
-/// at the valley floor to the landing at crest height), the line its outer
-/// wall runs along (map z), the wall's foot, and the long downstream
-/// face's placement (x, z, y): the wall is built as part of that face, so
-/// it's no placement of its own for the lint to count.
+/// at the valley floor to the landing at crest height), its walls' foot,
+/// and the long downstream face's placement (x, z, y): the walls are built
+/// as part of that face, so they're no placement of their own for the lint
+/// to count.
 const STAIR_RUN: (f32, f32) = (-30.0, 90.0);
 const STAIR_RISE: (f32, f32) = (30.0, 52.0);
-const STAIR_WALL_Z: f32 = 158.6;
 const STAIR_WALL_FOOT: f32 = 29.0;
 pub const DAM_FACE_AT: (f32, f32, f32) = (-42.5, 148.0, 30.0);
-/// Its thickness: from the stair path's outer shoulder to past the foot of
-/// the embankment's bank.
-const STAIR_WALL_T: f32 = 3.0;
+/// The stair's walls, map x0..x1, z0..z1: the outer wall along the
+/// embankment's south edge (3 m thick, from the stair path's shoulder to
+/// past the foot of the bank), on past the landing's south side to its far
+/// corner, and the landing's east side back to the face end. Nowhere off
+/// the stair or the landing but over a wall.
+const STAIR_WALLS: [(f32, f32, f32, f32); 2] =
+    [(-30.0, 103.0, 157.1, 160.1), (100.0, 103.0, 150.0, 157.1)];
 
 /// The face stair's height over the valley floor at map x, as the road on
-/// its terraces grades it.
+/// its terraces grades it (the landing's beyond its east end).
 fn stair_height(x: f32) -> f32 {
     let (x0, x1) = STAIR_RUN;
     let (h0, h1) = STAIR_RISE;
     h0 + (h1 - h0) * ((x - x0) / (x1 - x0)).clamp(0.0, 1.0)
 }
 
-/// The face stair's outer wall, in the long downstream face's space:
-/// masonry along the embankment's south edge from the valley floor to the
-/// landing, thick enough to hold the bank's whole fall to the grass, its
-/// top a metre over the steps (a parapet to lean a rifle on, and what
-/// stops you stepping off 20 m of embankment), in 4 m panels stepping up
-/// with the stair.
+/// The face stair's walls, in the long downstream face's space: masonry
+/// thick enough to hold the bank's whole fall to the grass, its top a
+/// metre over the steps or the landing (a parapet to lean a rifle on, and
+/// what stops you stepping off 20 m of embankment), in panels of about 4 m
+/// stepping up with the stair.
 fn stair_wall(b: &mut Builder) {
-    let (x0, x1) = STAIR_RUN;
     let (fx, fz, fy) = DAM_FACE_AT;
-    let panel = 4.0;
-    let n = ((x1 - x0) / panel).round() as i32;
-    for k in 0..n {
-        let a = x0 + panel * k as f32;
-        let top = stair_height(a + panel) + 1.0 - STAIR_WALL_FOOT;
-        let (lx, lz) = (a + panel * 0.5 - fx, STAIR_WALL_Z - fz);
-        let ly = STAIR_WALL_FOOT - fy;
-        b.bx(
-            Vec3::new(panel + 0.02, top, STAIR_WALL_T),
-            Vec3::new(lx, ly + top * 0.5, lz),
-            Mat::DressedStone,
-        );
-        b.deco(
-            Vec3::new(panel + 0.06, 0.1, STAIR_WALL_T + 0.1),
-            Vec3::new(lx, ly + top + 0.05, lz),
-            Mat::Boulder,
-        );
+    let ly = STAIR_WALL_FOOT - fy;
+    for (x0, x1, z0, z1) in STAIR_WALLS {
+        let along_x = x1 - x0 > z1 - z0;
+        let len = if along_x { x1 - x0 } else { z1 - z0 };
+        let n = (len / 4.0).ceil();
+        let panel = len / n;
+        for k in 0..n as i32 {
+            let a = panel * k as f32;
+            // Centre and size in plan, and the stair's highest x along it.
+            let (cx, cz, sx, sz, high) = if along_x {
+                (
+                    x0 + a + panel * 0.5,
+                    (z0 + z1) * 0.5,
+                    panel + 0.02,
+                    z1 - z0,
+                    x0 + a + panel,
+                )
+            } else {
+                (
+                    (x0 + x1) * 0.5,
+                    z0 + a + panel * 0.5,
+                    x1 - x0,
+                    panel + 0.02,
+                    x1,
+                )
+            };
+            let top = stair_height(high) + 1.0 - STAIR_WALL_FOOT;
+            let (lx, lz) = (cx - fx, cz - fz);
+            b.bx(
+                Vec3::new(sx, top, sz),
+                Vec3::new(lx, ly + top * 0.5, lz),
+                Mat::DressedStone,
+            );
+            b.deco(
+                Vec3::new(sx + 0.06, 0.1, sz + 0.1),
+                Vec3::new(lx, ly + top + 0.05, lz),
+                Mat::Boulder,
+            );
+        }
     }
 }
 
@@ -690,12 +751,14 @@ mod tests {
         }
     }
 
-    /// The face stair's wall stands where the map lays the stair: built with
-    /// the long downstream face, so that face's placement is where the
-    /// wall reckons from, and the road on the terraces is at the wall's
-    /// stair height; its foot is buried all the way.
+    /// The face stair's walls stand where the map lays the stair: built
+    /// with the long downstream face, so that face's placement is where
+    /// they reckon from; the road on the terraces is at the walls' stair
+    /// height; their feet are buried all the way; the nav grid's listing
+    /// of them is them; and the stair runs right up against the face, no
+    /// drop between them for a body to fall down onto the courses.
     #[test]
-    fn the_stair_wall_follows_the_stair() {
+    fn the_stair_walls_follow_the_stair() {
         let map =
             extraction_core::map::MapDef::from_ron(extraction_core::map::SALLOW_RESERVOIR).unwrap();
         let hm = extraction_core::terrain::Heightmap::build(&map);
@@ -705,21 +768,31 @@ mod tests {
             .find(|p| p.prefab == "dam_face")
             .expect("the downstream face is placed");
         assert_eq!((face.at[0], face.at[1], face.y), DAM_FACE_AT);
-        // The nav grid's listing of the wall is the wall.
-        let (x0, x1) = STAIR_RUN;
-        let want = (
-            [
-                (x0 + x1) * 0.5 - DAM_FACE_AT.0,
-                STAIR_WALL_Z - DAM_FACE_AT.1,
-            ],
-            [(x1 - x0) * 0.5, STAIR_WALL_T * 0.5],
-        );
         let walls = extraction_core::map::prefab_walls("dam_face");
-        assert!(
-            walls.iter().any(|(o, h)| (0..2)
-                .all(|k| (o[k] - want.0[k]).abs() < 0.05 && (h[k] - want.1[k]).abs() < 0.05)),
-            "map::prefab_walls(\"dam_face\") is {walls:?}, the wall {want:?}"
-        );
+        for (x0, x1, z0, z1) in STAIR_WALLS {
+            let want = (
+                [
+                    (x0 + x1) * 0.5 - DAM_FACE_AT.0,
+                    (z0 + z1) * 0.5 - DAM_FACE_AT.1,
+                ],
+                [(x1 - x0) * 0.5, (z1 - z0) * 0.5],
+            );
+            assert!(
+                walls.iter().any(|(o, h)| (0..2)
+                    .all(|k| (o[k] - want.0[k]).abs() < 0.05 && (h[k] - want.1[k]).abs() < 0.05)),
+                "map::prefab_walls(\"dam_face\") is {walls:?}, a wall {want:?}"
+            );
+            for fx in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+                for z in [z0, z1] {
+                    let x = x0 + (x1 - x0) * fx;
+                    let ground = hm.height([x, z]);
+                    assert!(
+                        ground > STAIR_WALL_FOOT,
+                        "a stair wall's foot shows at ({x}, {z}): ground {ground:.1}"
+                    );
+                }
+            }
+        }
         for x in [-25.0f32, 0.0, 30.0, 60.0, 85.0] {
             let road = hm.height([x, 154.0]);
             let want = stair_height(x);
@@ -727,12 +800,68 @@ mod tests {
                 (road - want).abs() < 1.2,
                 "the stair at x {x}: {road:.1} vs {want:.1}"
             );
-            for dz in [-STAIR_WALL_T * 0.5, STAIR_WALL_T * 0.5] {
-                let ground = hm.height([x, STAIR_WALL_Z + dz]);
+            for z in [149.2f32, 150.2, 151.2] {
+                let ground = hm.height([x, z]);
                 assert!(
-                    ground > STAIR_WALL_FOOT,
-                    "the wall's foot shows at ({x}, {dz})"
+                    ground > want - 0.5,
+                    "a drop between the stair and the face at ({x}, {z}): {ground:.1} under a stair at {want:.1}"
                 );
+            }
+        }
+    }
+
+    /// Nothing on the dam's downstream faces is a ledge: every top a body
+    /// could land on below the crest is under something (the next course,
+    /// the embankment's stone) or weathered past standing, but for the
+    /// stair walls' copings (a metre over the steps, stepped down off).
+    /// Sampled over each solid box's top, inset from its edges.
+    #[test]
+    fn the_faces_have_no_ledges() {
+        let solid = |g: &Geo, at: Vec3, skip: usize| {
+            g.pieces.iter().enumerate().any(|(i, p)| {
+                if i == skip || !p.collide {
+                    return false;
+                }
+                let Shape::Box(s) = p.shape else {
+                    return false;
+                };
+                let l = p.at.compute_affine().inverse().transform_point3(at);
+                (l.abs() - s * 0.5).max_element() <= 0.0
+            })
+        };
+        for id in ["dam_face", "dam_face_end"] {
+            let g = geo(id).unwrap();
+            let walls = extraction_core::map::prefab_walls(id);
+            for (i, p) in g.pieces.iter().enumerate() {
+                let Shape::Box(s) = p.shape else { continue };
+                if !p.collide || p.at.rotation.angle_between(Quat::IDENTITY) > 0.01 {
+                    continue;
+                }
+                let c = p.at.translation;
+                let top = c.y + s.y * 0.5;
+                if top >= FACE_H - 0.01 {
+                    continue;
+                }
+                let on_wall = walls.iter().any(|(o, h)| {
+                    (c.x - o[0]).abs() <= h[0] + 0.1 && (c.z - o[1]).abs() <= h[1] + 0.1
+                });
+                if on_wall {
+                    continue;
+                }
+                let inset = |half: f32| (half - 0.15).max(0.0);
+                for fx in [-1.0f32, 0.0, 1.0] {
+                    for fz in [-1.0f32, 0.0, 1.0] {
+                        let at = Vec3::new(
+                            c.x + fx * inset(s.x * 0.5),
+                            top + 0.02,
+                            c.z + fz * inset(s.z * 0.5),
+                        );
+                        assert!(
+                            solid(&g, at, i),
+                            "{id} piece {i}: its top at {at:?} is a ledge ({s:?} at {c:?})"
+                        );
+                    }
+                }
             }
         }
     }

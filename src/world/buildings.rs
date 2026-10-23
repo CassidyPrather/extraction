@@ -829,6 +829,36 @@ impl Builder {
         n as f32 * tread
     }
 
+    /// A drowned building's silt washed out of its doorway: a bank sloping
+    /// from the threshold at `y0` down to the ground and on under it,
+    /// `width` wide, out to -Z from the wall whose centre line is at `z`
+    /// (`thick` thick). A body walks up a slope at any slant; up steps at
+    /// a slant its step up met the doorway's jamb, and bots stuck there.
+    /// Its foot is at most `map::SILT_BANK_REACH` out: the map clears that.
+    /// Returns how far out from the wall's centre line it meets the ground.
+    fn silt_bank(&mut self, z: f32, thick: f32, width: f32, y0: f32) -> f32 {
+        let run = 2.6;
+        let face = z - thick * 0.5;
+        // Its foot under the lowest the ground can be.
+        let low = -(self.drop + 0.3);
+        let (a, c) = (
+            Vec2::new(face - run * (y0 - low) / y0, low),
+            Vec2::new(face, y0),
+        );
+        let along = c - a;
+        let normal = Vec3::new(0.0, along.x, -along.y).normalize();
+        let t = 0.5;
+        let mid = Vec3::new(0.0, (a.y + c.y) * 0.5, (a.x + c.x) * 0.5);
+        self.piece(
+            Shape::Box(Vec3::new(width + 0.6, t, along.length())),
+            Transform::from_translation(mid - normal * t * 0.5)
+                .with_rotation(Quat::from_rotation_x(-along.y.atan2(along.x))),
+            Mat::Silt,
+            true,
+        );
+        run + thick * 0.5
+    }
+
     /// A pitched roof along Z (ridge runs front to back).
     pub fn gable_roof(
         &mut self,
@@ -1981,7 +2011,7 @@ pub const SILT: f32 = 0.76;
 
 /// A house that was under a reservoir (`Ruin::Drowned`): its walls, no
 /// roof, floors or partitions, no doors or glass, the timber sodden; silt
-/// inside to just under the sills, banked up to the doorway in steps (the
+/// inside to just under the sills, banked down from the doorway (the
 /// door frame rotted out, the wall over it fallen: a doorway open to the
 /// sky); a stove standing out of the silt. The tide line is
 /// `decay::stains`'s, found by the silt.
@@ -1994,7 +2024,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
     let (x, z) = (w * 0.5, d * 0.5);
     // Its footing banked in silt too (where the bed fell away from it).
     b.plinth(w, d, f, Mat::Silt, Mat::Silt);
-    let doorway = 1.1;
+    let doorway = 1.6;
     b.shell(
         w,
         d,
@@ -2031,15 +2061,7 @@ fn house_drowned(b: &mut Builder, w: f32, d: f32, wall: Mat) {
         Vec3::new(0.0, f + SILT * 0.5, -z),
         Mat::Silt,
     );
-    let reach = b.door_steps(
-        Vec2::new(-x, -z),
-        Vec2::X,
-        Quat::IDENTITY,
-        x,
-        doorway,
-        top,
-        Mat::Silt,
-    );
+    let reach = b.silt_bank(-z, thick, doorway, top);
     let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
     b.geo.entrances.push(extraction_core::map::Entrance {
         at: [0.0, r(-z - thick * 0.5)],
@@ -2110,7 +2132,7 @@ fn chapel_drowned(b: &mut Builder) {
     };
     // Its footing banked in silt too (where the bed fell away from it).
     b.plinth(w, d, f, Mat::Silt, Mat::Silt);
-    let doorway = 1.4;
+    let doorway = 2.0;
     b.shell(
         w,
         d,
@@ -2141,15 +2163,7 @@ fn chapel_drowned(b: &mut Builder) {
         Vec3::new(0.0, f + SILT * 0.5, -z),
         Mat::Silt,
     );
-    let reach = b.door_steps(
-        Vec2::new(-x, -z),
-        Vec2::X,
-        Quat::IDENTITY,
-        x,
-        doorway,
-        top,
-        Mat::Silt,
-    );
+    let reach = b.silt_bank(-z, thick, doorway, top);
     let r = |v: f32| (v * 100.0).round() / 100.0 + 0.0;
     b.geo.entrances.push(extraction_core::map::Entrance {
         at: [0.0, r(-z - thick * 0.5)],
@@ -2967,6 +2981,21 @@ fn pump_station(b: &mut Builder) {
         ],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
+    // The boiler's chimney, out of the roof by the back wall: what the
+    // pit and the quarry it pumps out are found by (`map_lint`'s
+    // `REGION_MARK`).
+    // (Its foot in the roof's slab, not flush under it.)
+    let (sx, sz, foot, top) = (4.6, 3.6, f + h + 0.1, 8.0);
+    b.bx(
+        Vec3::new(1.0, top - 0.1 - foot, 1.0),
+        Vec3::new(sx, (foot + top - 0.1) * 0.5, sz),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(1.2, 0.2, 1.2),
+        Vec3::new(sx, top - 0.1, sz),
+        Mat::Brick,
+    );
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
@@ -5207,6 +5236,24 @@ fn boxcar(b: &mut Builder) {
         Mat::RustyMetal,
         true,
     );
+    // Old sleepers stacked into steps at the doorway, in front of its open
+    // half: a floor 1.26 m up in four risers the body steps (`map_doors`
+    // holds the ground at their foot to a step).
+    let (face, tread, floor) = (w * 0.5 + 0.035, 0.4, f + 0.06);
+    let rise = floor / 4.0;
+    for k in 1..4 {
+        let top = rise * (4 - k) as f32;
+        let x = face + tread * (k as f32 - 0.5);
+        b.bx(
+            Vec3::new(tread - 0.01, top + 0.3, 1.3),
+            Vec3::new(x, (top - 0.3) * 0.5, -0.4),
+            Mat::Timber,
+        );
+    }
+    let steps = 3.0 * tread;
+    if let Some(e) = b.geo.entrances.iter_mut().find(|e| e.out == [1.0, 0.0]) {
+        e.clear = steps + 1.0;
+    }
     // Ladders at diagonally opposite corners, couplers at both ends.
     for (end, x) in [(-1.0f32, -1.1f32), (1.0, 1.1)] {
         let z = end * (d * 0.5 + 0.06);
@@ -5671,6 +5718,96 @@ pub fn occluders(geo: &Geo) -> super::ao::Occluders {
         };
         (half, at)
     }))
+}
+
+/// Where a building has a roof over it, on a grid over its footprint:
+/// what "indoors" is (`robots::doors::Shell`). A burnt house is indoors
+/// under the half of its roof that's left, a damaged one not under its
+/// hole, a drowned one nowhere.
+#[derive(Debug)]
+pub struct RoofCover {
+    half: Vec2,
+    n: [usize; 2],
+    /// Per cell, the top of the roof over it (building-local y), or NaN
+    /// under the sky.
+    top: Vec<f32>,
+}
+
+/// The cover grid's cells (m).
+pub const COVER_CELL: f32 = 0.5;
+/// How high over the footing a cell's cover is looked for from: over the
+/// floors, the silt and a bed, under a ceiling.
+const COVER_FROM: f32 = 1.5;
+
+impl RoofCover {
+    fn new(geo: &Geo, foot: [f32; 3]) -> Self {
+        let occ = occluders(geo);
+        let half = Vec2::new(foot[0], foot[2]) * 0.5;
+        let n = [
+            (foot[0] / COVER_CELL).ceil().max(1.0) as usize,
+            (foot[2] / COVER_CELL).ceil().max(1.0) as usize,
+        ];
+        let mut top = Vec::with_capacity(n[0] * n[1]);
+        for j in 0..n[1] {
+            for i in 0..n[0] {
+                let x = -half.x + (i as f32 + 0.5) * COVER_CELL;
+                let z = -half.y + (j as f32 + 0.5) * COVER_CELL;
+                // Four looks up across the cell: a joist over one of them
+                // isn't a roof.
+                let tops: Vec<f32> = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+                    .iter()
+                    .filter_map(|(a, b)| {
+                        let q = COVER_CELL * 0.25;
+                        occ.cover_top(Vec3::new(x + a * q, COVER_FROM, z + b * q))
+                    })
+                    .collect();
+                top.push(if tops.len() >= 3 {
+                    tops.iter().copied().fold(f32::MIN, f32::max)
+                } else {
+                    f32::NAN
+                });
+            }
+        }
+        Self { half, n, top }
+    }
+
+    /// Whether a building-local point is under the roof: in the footprint,
+    /// over the ground, under the cover over it.
+    pub fn covers(&self, l: Vec3) -> bool {
+        if l.x.abs() >= self.half.x || l.z.abs() >= self.half.y || l.y <= -1.0 {
+            return false;
+        }
+        let i = (((l.x + self.half.x) / COVER_CELL) as usize).min(self.n[0] - 1);
+        let j = (((l.z + self.half.y) / COVER_CELL) as usize).min(self.n[1] - 1);
+        let top = self.top[j * self.n[0] + i];
+        !top.is_nan() && l.y < top
+    }
+
+    /// How many of its cells have a roof over them, and how many it has.
+    pub fn roofed(&self) -> (usize, usize) {
+        (
+            self.top.iter().filter(|t| !t.is_nan()).count(),
+            self.top.len(),
+        )
+    }
+}
+
+/// A prefab's [`RoofCover`], made once (None for a prefab with no
+/// recipe). A drowned house's has no roof anywhere.
+pub fn roof_cover(id: &str) -> Option<&'static RoofCover> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static MADE: OnceLock<Mutex<HashMap<String, Option<&'static RoofCover>>>> = OnceLock::new();
+    let made = MADE.get_or_init(Default::default);
+    if let Some(c) = made.lock().unwrap().get(id) {
+        return *c;
+    }
+    let cover = prefab(id).and_then(|geo| {
+        let c = RoofCover::new(&geo, extraction_core::map::prefab_footprint(id));
+        Some(&*Box::leak(Box::new(c)))
+    });
+    made.lock().unwrap().insert(id.to_string(), cover);
+    cover
 }
 
 /// A prefab's pieces shaded by its own solid pieces, baked once in the

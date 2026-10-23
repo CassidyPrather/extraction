@@ -53,7 +53,7 @@
             (kind: Barrel, at: (-1.6, 1.0)),
         ]),
         // The winze: twelve metres down to the deep level, and its cage.
-        (id: "winze", at: (16.0, 13.5), size: (3.0, 3.0), floor: Some(-24.5), height: 15.0, pit: true, lamp: Dead),
+        (id: "winze", at: (16.0, 13.5), size: (4.0, 3.0), floor: Some(-24.5), height: 15.0, pit: true, lamp: Dead),
         // The station at the winze's foot.
         (id: "level_station", at: (16.0, 6.0), size: (4.0, 4.0), height: 3.0, floor: Some(-24.5), lamp: Dead, props: [
             (kind: SmallCrate, at: (-1.4, -1.4), loot: Some("ammo_common")),
@@ -105,6 +105,12 @@
     )),
     patrol: ["adit_foot", "drift", "haulage", "drift"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("COLDHARBOUR ADIT No. 2\nCAGE TO LOWER LEVEL"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.6),
+    // The kiosk stands beside the adit house, out of the mill yard.
+    covered_entry: true,
     portals: [
         // Down from beside the adit house, north into the knoll.
         (),

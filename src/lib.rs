@@ -7,7 +7,9 @@
 pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
+pub mod audio_fight;
 pub mod audio_kit;
+pub mod audio_machines;
 pub mod audio_mix;
 pub mod audio_score;
 pub mod audio_underground;
@@ -21,6 +23,7 @@ pub mod dev;
 pub mod foley;
 pub mod gadgets;
 pub mod health;
+pub mod hearing;
 pub mod hud;
 pub mod interact;
 pub mod items;
@@ -98,6 +101,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                hearing::HearingPlugin,
                 radio::RadioPlugin,
             ),
         ))

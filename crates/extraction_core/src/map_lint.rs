@@ -76,6 +76,9 @@ pub enum Rule {
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
+    /// Ground the walkers' grid reaches only over a bank a body can't walk
+    /// (`map_pockets`).
+    Pocket,
     /// A door with something in front of it: a building, a trunk, a rock,
     /// a crate, water, or ground that doesn't meet its steps
     /// (`map_doors`).
@@ -286,6 +289,34 @@ pub const SERIES: &[&str] = &["ropeway_pylon"];
 /// Each region has something of its own at least this tall, or a tall
 /// landmark within [`FOG_SIGHT`] of its middle.
 pub const REGION_MARK: f32 = 6.0;
+/// From this share of the walkable valley two landmarks you can tell apart
+/// are in sight within [`CLEAR_SIGHT`], over the land and through the
+/// trees (sampled every `TWO_MARKS_STEP`; the blind cells are reported by
+/// `POCKET` square).
+pub const TWO_MARKS_SHARE: f32 = 0.9;
+pub const TWO_MARKS_STEP: f32 = 8.0;
+/// A rendezvous's beacon is in sight from this share of the last
+/// [`BEACON_APPROACH`] of the main route in to it (measured too: the ground
+/// within [`BEACON_SIGHT`]).
+pub const BEACON_SHARE: f32 = 0.7;
+/// A landmark this near a rendezvous marks it as its beacon does.
+pub const RV_MARK: f32 = 60.0;
+pub const BEACON_APPROACH: f32 = 300.0;
+pub const BEACON_SIGHT: f32 = 250.0;
+/// Further into a wood than this from its edge is deep in it.
+pub const WOOD_EDGE: f32 = 25.0;
+/// How far a landmark's lamp and a rendezvous beacon show after dark (the
+/// game's halo reaches: `render::landmarks`, `render::rv_beacons`).
+pub const LAMP_REACH: f32 = 320.0;
+pub const BEACON_REACH: f32 = 400.0;
+/// After dark, from this share of the walkable valley (out of the deep
+/// woods) a lamp is in sight, and two of different characters (lamps you
+/// can name: a fix) from this...
+pub const NIGHT_ONE: f32 = 0.95;
+pub const NIGHT_TWO: f32 = 0.9;
+/// ...and in fog a landmark or lamp within [`FOG_SIGHT`] from this.
+pub const FOG_ONE: f32 = 0.9;
+const POCKET: f32 = 40.0;
 /// From every rendezvous a landmark is in sight within this, metres, so
 /// "head for the mast" is a plan.
 pub const RV_LANDMARK: f32 = 200.0;
@@ -295,8 +326,66 @@ pub const RV_LANDMARK: f32 = 200.0;
 /// Cover counts within this distance of where you stand, metres: a dash
 /// of five seconds or so when a drone chirps its lock.
 pub const COVER_REACH: f32 = 25.0;
-/// Longest stretch of a main route with no cover within reach.
-pub const COVER_GAP: f32 = 60.0;
+/// Longest stretch of a main route with no cover within reach: a few
+/// seconds' run (the four valleys before Sallow keep theirs to 20 m).
+pub const COVER_GAP: f32 = 30.0;
+/// Open stretches this long or longer are listed by where they start.
+const COVER_NOTE: f32 = 20.0;
+/// Anywhere walkable in the valley, cover is within this, and no more than
+/// [`OPEN_SHARE`] of it is further than [`COVER_REACH`] from any: open ground
+/// is where drones kill. (Measured on a grid of `OPEN_STEP`, by the
+/// distances in `OPEN_LADDER`.)
+pub const OPEN_FAR: f32 = 70.0;
+pub const OPEN_SHARE: f32 = 0.03;
+const OPEN_STEP: f32 = 4.0;
+const OPEN_LADDER: [f32; 6] = [30.0, 35.0, 40.0, 50.0, 70.0, 100.0];
+/// The first hour's walks: from the insertion to every point of interest
+/// this near it (the first jobs' places, the village by the gate).
+pub const FIRST_WALK: f32 = 300.0;
+/// On those, the longest stretch with no cover within reach: a newcomer
+/// warned by the Driver has about four seconds, and runs for the nearest
+/// thing between them and the machine (Onboarding's first-fight personas
+/// died in Marrow's open fields on the way to the Old farm).
+pub const FIRST_COVER_GAP: f32 = 40.0;
+/// The first ten minutes: places a raid can reach and work by then, as a
+/// walk on comfortable ground from the insertion, metres (about four
+/// minutes' walking, the rest looking).
+pub const FIRST_REACH: f32 = 450.0;
+/// Two choices are distinct when they lie at least this far apart in
+/// bearing from the insertion, degrees...
+pub const CHOICE_ANGLE: f32 = 50.0;
+/// ...and their walks part: no more than this share of the shorter walk
+/// runs within [`CHOICE_APART`] of the other.
+pub const CHOICE_SHARED: f32 = 0.5;
+/// Something worth going to: a point of interest with loot or a
+/// walk-in building this near it.
+pub const CHOICE_LOOT: f32 = 40.0;
+/// The way out: from every rich place (a point of interest or artifact
+/// field in a region of danger [`FIELD_DANGER`] or worse), a second
+/// rendezvous is at most this much further than the nearest, metres
+/// (about two minutes more at a walk)...
+pub const OUT_EXTRA: f32 = 300.0;
+/// ...or within this walk of it, whichever is further (the rendezvous lie
+/// 350-450 m apart: from beside one, the next is that far)...
+pub const OUT_REACH: f32 = 500.0;
+/// ...the walks to both have cover ([`COVER_GAP`]) and part early: they
+/// are [`CHOICE_APART`] apart within this far along the shorter.
+pub const OUT_PART: f32 = 150.0;
+/// And a rendezvous's last stretch, where you wait laden for the truck:
+pub const LAST_STRETCH: f32 = 100.0;
+/// in it, no open run longer than this...
+pub const LAST_OPEN: f32 = 40.0;
+/// ...and no more than this share of it in a spotter's sight.
+pub const LAST_SPOTTED: f32 = 0.25;
+/// A rendezvous a survey drone sees while it circles a point of interest
+/// (its orbit and this much more)...
+pub const SURVEY_SIGHT: f32 = 90.0;
+/// ...has something to wait behind this near where the truck stops: a
+/// roof, or solid cover (anything 1.2 m tall but a garden fence).
+pub const WAIT_COVER: f32 = 15.0;
+pub const WAIT_HEIGHT: f32 = 1.2;
+/// How far off a shelter's wall its lee is, metres.
+pub const WAIT_LEE: f32 = 0.8;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -375,7 +464,15 @@ pub const VIEW_MAX: usize = 16;
 /// with no roof, no rooms and no loot, under two metres tall (a lorry 2.2).
 /// They stand by the roads in ones and twos; counted as buildings, every
 /// wreck on a road through a village would cost it a house.
-pub const VIEW_LIGHT: &[&str] = &["fence_garden", "wreck_lada", "wreck_uaz", "wreck_lorry"];
+///
+/// A log pile is one too: ten log cylinders, no roof, nothing inside.
+pub const VIEW_LIGHT: &[&str] = &[
+    "fence_garden",
+    "wreck_lada",
+    "wreck_uaz",
+    "wreck_lorry",
+    "log_pile",
+];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
 /// grid blocks only the cells whose middles fall within 0.7 m of a run
@@ -551,6 +648,44 @@ impl Solid {
         let out = geom::sub(shell.world([0.0, -shell.half[1] - 1.0]), at);
         Some((at, out))
     }
+}
+
+/// The point of interest whose survey drones see the rendezvous at `rv`
+/// (their orbit plus [`SURVEY_SIGHT`]), nearest first, and how far off.
+pub fn watched_by(map: &MapDef, rv: P2) -> Option<(String, f32)> {
+    map.markers_of(&MarkerKind::Poi)
+        .map(|m| (m.name.clone(), dist(m.at, rv)))
+        .filter(|(_, d)| *d <= crate::map_sentry::SURVEY_ORBIT + SURVEY_SIGHT)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// Something to wait for the truck behind at the rendezvous at `rv`: the
+/// nearest roof or solid cover within [`WAIT_COVER`] (a walk-in building
+/// or a kiosk, or anything [`WAIT_HEIGHT`] high but a garden fence), how
+/// far off it is, and where to crouch in its lee, away from `from` (the
+/// drones' point of interest).
+pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)> {
+    let q = solids(map)
+        .into_iter()
+        .filter(|q| {
+            q.rect.sdf(rv) <= WAIT_COVER
+                && (q.kiosk()
+                    || crate::map_surge::roofed(&q.prefab)
+                    || (q.prefab != "fence_garden"
+                        && crate::map::prefab_footprint(&q.prefab)[1] >= WAIT_HEIGHT))
+        })
+        .min_by(|a, b| a.rect.sdf(rv).total_cmp(&b.rect.sdf(rv)))?;
+    let away = geom::sub(q.rect.at, from);
+    let l = geom::dist(q.rect.at, from).max(1e-3);
+    let away = [away[0] / l, away[1] / l];
+    let lee = (0..120)
+        .map(|k| {
+            let s = k as f32 * 0.25;
+            [q.rect.at[0] + away[0] * s, q.rect.at[1] + away[1] * s]
+        })
+        .find(|p| q.rect.sdf(*p) >= WAIT_LEE)
+        .unwrap_or(q.rect.at);
+    Some((q.name, q.rect.sdf(rv).max(0.0), lee))
 }
 
 /// Every solid thing on the surface, placements first (in order: index
@@ -758,6 +893,32 @@ fn path_length(path: &[P2]) -> f32 {
 
 /// Longest run of consecutive route samples failing `ok`, in metres, and
 /// where it starts.
+/// Every stretch along `points` where `ok` fails for at least `min`
+/// metres: its length and where it starts.
+fn open_runs(points: &[P2], ok: impl Fn(P2) -> bool, min: f32) -> Vec<(f32, P2)> {
+    let mut out = Vec::new();
+    let (mut run, mut start) = (0.0, points[0]);
+    for (i, p) in points.iter().enumerate() {
+        if ok(*p) {
+            if run >= min {
+                out.push((run, start));
+            }
+            run = 0.0;
+        } else {
+            if run == 0.0 {
+                start = *p;
+            }
+            if i > 0 {
+                run += dist(points[i - 1], *p);
+            }
+        }
+    }
+    if run >= min {
+        out.push((run, start));
+    }
+    out
+}
+
 fn longest_gap(points: &[P2], ok: impl Fn(P2) -> bool) -> (f32, P2) {
     let (mut best, mut at, mut run, mut start) = (0.0, points[0], 0.0, points[0]);
     for (i, p) in points.iter().enumerate() {
@@ -794,7 +955,7 @@ pub(crate) fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
 }
 
 /// Height you walk at: a bridge deck's where there is one, else the ground.
-fn walk_height(hm: &Heightmap, p: P2) -> f32 {
+pub(crate) fn walk_height(hm: &Heightmap, p: P2) -> f32 {
     for rl in hm.road_lines.iter().filter(|rl| !rl.bridges.is_empty()) {
         let (d, s, _) = polyline_closest(&rl.points, p);
         if d <= rl.width * 0.5 + 1.0 && rl.on_bridge(s) {
@@ -1248,6 +1409,166 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             );
         }
     }
+    // You can always tell where you are: from nearly anywhere you can walk,
+    // two landmarks you can tell apart are in sight over the land and the
+    // trees (in VR there's no glancing at a map).
+    let canopy = crate::map_landmarks::Canopy::new(map, hm);
+    let (spots, deep) = crate::map_landmarks::gauge_cells(map, &walk, TWO_MARKS_STEP, WOOD_EDGE);
+    let gauge = spots.clone();
+    let cells = spots.len();
+    let (mut two, mut two_fog) = (0usize, 0usize);
+    let mut blind: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    for p in spots {
+        let k = crate::map_landmarks::kinds_in_sight(&marks, hm, &canopy, p, CLEAR_SIGHT, 2);
+        if k >= 2 {
+            two += 1;
+            if crate::map_landmarks::kinds_in_sight(&marks, hm, &canopy, p, FOG_SIGHT, 2) >= 2 {
+                two_fog += 1;
+            }
+        } else {
+            let key = (
+                (p[0] / POCKET).floor() as i32,
+                (p[1] / POCKET).floor() as i32,
+            );
+            let e = blind.entry(key).or_insert((0, p));
+            e.0 += 1;
+        }
+    }
+    let share = two as f32 / cells.max(1) as f32;
+    let mut pockets: Vec<(usize, P2)> = blind.into_values().collect();
+    pockets.sort_by(|a, b| b.0.cmp(&a.0));
+    let cell_area = TWO_MARKS_STEP * TWO_MARKS_STEP;
+    let worst: Vec<String> = pockets
+        .iter()
+        .take(4)
+        .map(|(n, p)| {
+            format!(
+                "{:.0} m² at ({:.0}, {:.0})",
+                *n as f32 * cell_area,
+                p[0],
+                p[1]
+            )
+        })
+        .collect();
+    r.measures.push(format!(
+        "two landmarks in sight (land and trees): {:.1}% of the walkable valley out of the deep woods ({:.0}% in fog; {:.0}% of it deep in woods){}",
+        share * 100.0,
+        two_fog as f32 * 100.0 / cells.max(1) as f32,
+        deep as f32 * 100.0 / (cells + deep).max(1) as f32,
+        if worst.is_empty() {
+            String::new()
+        } else {
+            format!("; blind pockets {}", worst.join(", "))
+        }
+    ));
+
+    // At night and in fog: lights to steer by, the landmarks' lamps and the
+    // rendezvous beacons (the game's `render::landmarks`, `rv_beacons`).
+    let beacons: Vec<P2> = map
+        .markers_of(&MarkerKind::Rendezvous)
+        .map(|m| crate::map_landmarks::beacon_at(m.at))
+        .collect();
+    let (mut night, mut night2, mut fog, mut fog2) = (0usize, 0usize, 0usize, 0usize);
+    let mut dark: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    let mut murk: std::collections::HashMap<(i32, i32), (usize, P2)> = Default::default();
+    for p in &gauge {
+        let key = (
+            (p[0] / POCKET).floor() as i32,
+            (p[1] / POCKET).floor() as i32,
+        );
+        let n = crate::map_landmarks::lights_in_sight(
+            &marks,
+            &beacons,
+            hm,
+            &canopy,
+            *p,
+            (LAMP_REACH, BEACON_REACH),
+            false,
+            2,
+        );
+        night += (n >= 1) as usize;
+        night2 += (n >= 2) as usize;
+        if n == 0 {
+            dark.entry(key).or_insert((0, *p)).0 += 1;
+        }
+        let f = crate::map_landmarks::lights_in_sight(
+            &marks,
+            &beacons,
+            hm,
+            &canopy,
+            *p,
+            (FOG_SIGHT, FOG_SIGHT),
+            true,
+            2,
+        );
+        fog += (f >= 1) as usize;
+        fog2 += (f >= 2) as usize;
+        if f == 0 {
+            murk.entry(key).or_insert((0, *p)).0 += 1;
+        }
+    }
+    let pct = |n: usize| n as f32 * 100.0 / cells.max(1) as f32;
+    let worst_of = |m: std::collections::HashMap<(i32, i32), (usize, P2)>| {
+        let mut v: Vec<(usize, P2)> = m.into_values().collect();
+        v.sort_by(|a, b| b.0.cmp(&a.0));
+        v.iter()
+            .take(3)
+            .map(|(n, p)| {
+                format!(
+                    "{:.0} m² at ({:.0}, {:.0})",
+                    *n as f32 * cell_area,
+                    p[0],
+                    p[1]
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    r.measures.push(format!(
+        "at night a lamp in sight from {:.1}% of the walkable valley, two you can name by their characters (a fix) from {:.1}% (dark pockets {}); in fog a landmark or lamp within {FOG_SIGHT:.0} m from {:.1}% (two from {:.0}%; blind {})",
+        pct(night),
+        pct(night2),
+        worst_of(dark),
+        pct(fog),
+        pct(fog2),
+        worst_of(murk),
+    ));
+
+    for (got, floor, what) in [
+        (pct(night), NIGHT_ONE * 100.0, "at night a lamp in sight"),
+        (
+            pct(night2),
+            NIGHT_TWO * 100.0,
+            "at night two lamps in sight",
+        ),
+        (
+            pct(fog),
+            FOG_ONE * 100.0,
+            "in fog a landmark or lamp in sight",
+        ),
+    ] {
+        if got < floor {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!("{what} from only {got:.0}% of the walkable valley (at least {floor:.0}%)"),
+                ins,
+            );
+        }
+    }
+    if share < TWO_MARKS_SHARE {
+        find(
+            &mut r,
+            Rule::Landmark,
+            format!(
+                "two landmarks in sight from only {:.0}% of the walkable valley (at least {:.0}%)",
+                share * 100.0,
+                TWO_MARKS_SHARE * 100.0
+            ),
+            pockets.first().map_or(ins, |p| p.1),
+        );
+    }
+
     // The rendezvous is where a landmark is: one in sight within
     // RV_LANDMARK, and (measured) one within fog range.
     for m in map.markers_of(&MarkerKind::Rendezvous) {
@@ -1260,6 +1581,58 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 .map_or("none".into(), |(n, d)| format!("{n} {d:.0} m")),
             if fog { "" } else { " (none in fog)" }
         ));
+        // Its beacon from the valley side: the ground within reach of it
+        // that has it in sight over the land and the trees, and the last
+        // stretch of the way in to it.
+        let beacon = crate::map_landmarks::beacon_at(m.at);
+        let top = hm.height(beacon) + crate::map_landmarks::BEACON_HEIGHT;
+        // A landmark standing at the rendezvous marks it as well as its
+        // beacon does (the fire lookout's tower, with its lamp).
+        let own: Vec<&crate::map_landmarks::Landmark> = marks
+            .iter()
+            .filter(|l| l.tops.iter().any(|t| dist(t.0, m.at) <= RV_MARK))
+            .collect();
+        let lit = |p: P2| {
+            (sees(hm, p, beacon, crate::map_landmarks::BEACON_HEIGHT)
+                && !canopy.hides(hm, p, beacon, top))
+                || own
+                    .iter()
+                    .any(|l| l.seen_through(hm, &canopy, p, BEACON_APPROACH).is_some())
+        };
+        let near: Vec<P2> = gauge
+            .iter()
+            .copied()
+            .filter(|p| dist(*p, beacon) <= BEACON_SIGHT)
+            .collect();
+        let around = near.iter().filter(|p| lit(**p)).count() as f32 / near.len().max(1) as f32;
+        let approach: Vec<P2> = routes
+            .iter()
+            .filter(|rt| rt.to == m.name)
+            .flat_map(|rt| rt.points.iter().copied())
+            .filter(|p| dist(*p, m.at) <= BEACON_APPROACH && dist(*p, m.at) > TRUCK_APPROACH)
+            // (Deep in a wood nothing's in sight: as for the gauge.)
+            .filter(|p| !crate::map_landmarks::deep_in_woods(map, *p, WOOD_EDGE))
+            .collect();
+        let way_in =
+            approach.iter().filter(|p| lit(**p)).count() as f32 / approach.len().max(1) as f32;
+        r.measures.push(format!(
+            "rendezvous {}: its beacon (or its own landmark) in sight from {:.0}% of the way in (the last {BEACON_APPROACH:.0} m, out of the deep woods), {:.0}% of the ground within {BEACON_SIGHT:.0} m",
+            m.name,
+            way_in * 100.0,
+            around * 100.0
+        ));
+        if !approach.is_empty() && way_in < BEACON_SHARE {
+            find(
+                &mut r,
+                Rule::Landmark,
+                format!(
+                    "{}'s beacon is in sight from only {:.0}% of the last {BEACON_APPROACH:.0} m in",
+                    m.name,
+                    way_in * 100.0
+                ),
+                beacon,
+            );
+        }
         if seen.first().is_none_or(|s| s.1 > RV_LANDMARK) {
             find(
                 &mut r,
@@ -1293,10 +1666,19 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         let (gap, at) = longest_gap(&route.points, covered);
         let share =
             route.points.iter().filter(|p| covered(**p)).count() as f32 / route.points.len() as f32;
+        let runs: Vec<String> = open_runs(&route.points, covered, COVER_NOTE)
+            .iter()
+            .map(|(l, p)| format!("{l:.0} m from ({:.0}, {:.0})", p[0], p[1]))
+            .collect();
         r.measures.push(format!(
-            "route to {}: cover within {COVER_REACH} m {:.0}% of the way, longest open {gap:.0} m",
+            "route to {}: cover within {COVER_REACH} m {:.0}% of the way, longest open {gap:.0} m{}",
             route.to,
-            share * 100.0
+            share * 100.0,
+            if runs.is_empty() {
+                String::new()
+            } else {
+                format!(" (open: {})", runs.join(", "))
+            }
         ));
         if gap > COVER_GAP {
             find(
@@ -1306,6 +1688,364 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 at,
             );
         }
+    }
+    // -- The first ten minutes: at least two ways to go ----------------------
+    {
+        // Each place worth going to early: reached, with loot, and a walk
+        // to it with cover.
+        let mut options: Vec<(String, f32, Vec<P2>)> = Vec::new();
+        // -- Waiting for the truck under a drone's eye --------------------------
+        for m in map.markers_of(&MarkerKind::Rendezvous) {
+            let Some((poi, d)) = watched_by(map, m.at) else {
+                continue;
+            };
+            let from = map
+                .markers_of(&MarkerKind::Poi)
+                .find(|p| p.name == poi)
+                .map_or(m.at, |p| p.at);
+            let shelter = wait_shelter(map, m.at, from);
+            r.measures.push(format!(
+                "rendezvous {}: {poi} {d:.0} m off (a survey drone's eye); {}",
+                m.name,
+                shelter
+                    .as_ref()
+                    .map_or("nothing to wait behind".to_string(), |(q, d, _)| format!(
+                        "waits behind the {q} {d:.0} m off"
+                    ))
+            ));
+            if shelter.is_none() {
+                find(
+                    &mut r,
+                    Rule::Cover,
+                    format!(
+                        "nothing within {WAIT_COVER} m to wait behind at {}, under the drones that survey {poi}",
+                        m.name
+                    ),
+                    m.at,
+                );
+            }
+        }
+
+        // -- The way out: two ways home from every rich place ------------------
+        {
+            // A hunted player heading home takes the short way, not the
+            // easy road: plan on comfortable ground, every cell alike.
+            let flat = {
+                let mut g = comfy.clone();
+                for c in g.cost.iter_mut().filter(|c| **c != BLOCKED) {
+                    *c = 1;
+                }
+                g
+            };
+            let rvs: Vec<(&str, P2)> = map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| (m.name.as_str(), m.at))
+                .collect();
+            let rich: Vec<(&str, P2)> = map
+                .markers
+                .iter()
+                .filter(|m| matches!(m.kind, MarkerKind::Poi | MarkerKind::ArtifactField))
+                .filter(|m| {
+                    map.region_at(m.at)
+                        .is_some_and(|g| g.danger >= FIELD_DANGER)
+                })
+                .map(|m| (m.name.as_str(), m.at))
+                .collect();
+            let mut worst: Option<(String, f32)> = None;
+            let mut fine = 0;
+            for (name, at) in &rich {
+                // Each rendezvous: its walk, and whether it has cover all the way.
+                let mut outs: Vec<(&str, f32, Vec<P2>, bool)> = rvs
+                    .iter()
+                    .filter_map(|(rv, rat)| {
+                        let path = flat.path(*at, *rat)?;
+                        let pts = resample(&path);
+                        let ok = longest_gap(&pts, covered).0 <= COVER_GAP;
+                        Some((*rv, path_length(&path), pts, ok))
+                    })
+                    .collect();
+                outs.sort_by(|a, b| a.1.total_cmp(&b.1));
+                let Some(near) = outs.first().map(|o| o.1) else {
+                    continue;
+                };
+                let good: Vec<_> = outs
+                    .iter()
+                    .filter(|o| o.3 && o.1 <= (near + OUT_EXTRA).max(OUT_REACH))
+                    .collect();
+                // How far along either walk before it's CHOICE_APART off the
+                // other (from beside one rendezvous, the walk to it is a few
+                // metres and the other walk leaves it at once).
+                let parts = |a: &[P2], b: &[P2]| {
+                    let off = |x: &[P2], y: &[P2]| {
+                        x.iter()
+                            .position(|p| polyline_closest(y, *p).0 > CHOICE_APART)
+                            .map(|k| k as f32 * STEP)
+                    };
+                    match (off(a, b), off(b, a)) {
+                        (Some(p), Some(q)) => Some(p.min(q)),
+                        (p, q) => p.or(q),
+                    }
+                };
+                let two = good.iter().enumerate().any(|(i, a)| {
+                    good[i + 1..]
+                        .iter()
+                        .any(|b| parts(&a.2, &b.2).is_some_and(|d| d <= OUT_PART))
+                });
+                if two {
+                    fine += 1;
+                } else {
+                    let why = format!(
+                        "{} way(s) home with cover in reach, parting within {OUT_PART} m ({})",
+                        good.len(),
+                        outs.iter()
+                            .map(|o| format!(
+                                "{} {:.0} m{}",
+                                o.0,
+                                o.1,
+                                if o.3 { "" } else { ", open" }
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    );
+                    if worst.is_none() {
+                        worst = Some((name.to_string(), 0.0));
+                    }
+                    find(
+                        &mut r,
+                        Rule::Choice,
+                        format!("from {name}, one way home: {why}"),
+                        *at,
+                    );
+                }
+            }
+            r.measures.push(format!(
+                "the way out: {fine} of {} rich places have two ways home that part",
+                rich.len()
+            ));
+            // The last stretch to each rendezvous on every main route.
+            let spotters = crate::map_spotter::spotters(map);
+            for route in &routes {
+                let mut back = 0.0;
+                let mut k = route.points.len().saturating_sub(1);
+                while k > 0 && back < LAST_STRETCH {
+                    back += dist(route.points[k], route.points[k - 1]);
+                    k -= 1;
+                }
+                let last = &route.points[k..];
+                let (gap, at) = longest_gap(last, covered);
+                let seen = last
+                    .iter()
+                    .filter(|p| spotters.iter().any(|s| s.sees(map, hm, **p)))
+                    .count() as f32
+                    / last.len().max(1) as f32;
+                r.measures.push(format!(
+                "last {LAST_STRETCH} m to {}: longest open {gap:.0} m, {:.0}% in a spotter's sight",
+                route.to,
+                seen * 100.0
+            ));
+                if gap > LAST_OPEN {
+                    find(
+                        &mut r,
+                        Rule::Cover,
+                        format!(
+                            "{gap:.0} m in the open in the last {LAST_STRETCH} m to {}",
+                            route.to
+                        ),
+                        at,
+                    );
+                }
+                if seen > LAST_SPOTTED {
+                    find(
+                        &mut r,
+                        Rule::Spotter,
+                        format!(
+                            "{:.0}% of the last {LAST_STRETCH} m to {} is in a spotter's sight",
+                            seen * 100.0,
+                            route.to
+                        ),
+                        *last.last().unwrap_or(&at),
+                    );
+                }
+            }
+            let _ = worst;
+        }
+
+        for poi in map.markers_of(&MarkerKind::Poi) {
+            let Some(path) = comfy.path(ins, poi.at) else {
+                continue;
+            };
+            if path_length(&path) > FIRST_REACH {
+                continue;
+            }
+            let loot = map.markers.iter().any(|m| {
+                matches!(m.kind, MarkerKind::Loot { .. }) && dist(m.at, poi.at) <= CHOICE_LOOT
+            }) || solids
+                .iter()
+                .any(|q| q.enterable() && q.rect.sdf(poi.at) <= CHOICE_LOOT);
+            let pts = resample(&path);
+            let (gap, _) = longest_gap(&pts, covered);
+            if !loot || gap > COVER_GAP {
+                continue;
+            }
+            let bearing = (poi.at[0] - ins[0])
+                .atan2(-(poi.at[1] - ins[1]))
+                .to_degrees();
+            options.push((poi.name.clone(), bearing, pts));
+        }
+        // The best pair: furthest apart in bearing, with walks that part.
+        let shared = |a: &[P2], b: &[P2]| {
+            let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+            short
+                .iter()
+                .filter(|p| polyline_closest(long, **p).0 <= CHOICE_APART)
+                .count() as f32
+                / short.len().max(1) as f32
+        };
+        let mut best: Option<(f32, usize, usize)> = None;
+        for i in 0..options.len() {
+            for j in i + 1..options.len() {
+                let mut d = (options[i].1 - options[j].1).abs() % 360.0;
+                if d > 180.0 {
+                    d = 360.0 - d;
+                }
+                if shared(&options[i].2, &options[j].2) > CHOICE_SHARED {
+                    continue;
+                }
+                if best.is_none_or(|b| d > b.0) {
+                    best = Some((d, i, j));
+                }
+            }
+        }
+        let names: Vec<&str> = options.iter().map(|o| o.0.as_str()).collect();
+        match best {
+            Some((d, i, j)) => r.measures.push(format!(
+                "first ten minutes: {} places with loot and cover ({}); widest choice {} or {}, {d:.0} degrees apart",
+                options.len(),
+                names.join(", "),
+                options[i].0,
+                options[j].0
+            )),
+            None => r.measures.push(format!(
+                "first ten minutes: {} places with loot and cover ({}); no two whose walks part",
+                options.len(),
+                names.join(", ")
+            )),
+        }
+        if best.is_none_or(|b| b.0 < CHOICE_ANGLE) {
+            find(
+                &mut r,
+                Rule::Choice,
+                format!(
+                    "the first ten minutes offer no two ways to go ({} places with loot and cover within {FIRST_REACH} m)",
+                    options.len()
+                ),
+                ins,
+            );
+        }
+    }
+
+    for poi in map.markers_of(&MarkerKind::Poi) {
+        if dist(poi.at, ins) > FIRST_WALK {
+            continue;
+        }
+        // The way a player who keeps to easy ground goes, and the straight
+        // line a newcomer takes toward a roof they can see.
+        let n = (dist(ins, poi.at) / STEP).ceil().max(1.0) as usize;
+        let straight: Vec<P2> = (0..=n)
+            .map(|i| geom::lerp(ins, poi.at, i as f32 / n as f32))
+            .collect();
+        let walks = comfy
+            .path(ins, poi.at)
+            .map(|p| resample(&p))
+            .into_iter()
+            .chain([straight]);
+        let (gap, at) = walks
+            .map(|pts| longest_gap(&pts, covered))
+            .fold((0.0f32, ins), |a, b| if b.0 > a.0 { b } else { a });
+        r.measures.push(format!(
+            "first walk to {}: longest open {gap:.0} m",
+            poi.name
+        ));
+        // Measured, not held: the lint's cover (any boulder, three trunks)
+        // is more than a newcomer uses; Onboarding's first-fight scenario
+        // is the judge of these walks.
+        let _ = (FIRST_COVER_GAP, at);
+    }
+
+    // How far from cover the open ground runs, anywhere you can walk in the
+    // valley (not only along the main routes: raids cross the open to
+    // what they're after).
+    let cover_within = |p: P2, reach: f32| {
+        rects.iter().any(|(_, rc)| rc.sdf(p) <= reach)
+            || boulders.count_within(p, reach, 1) > 0
+            || tree_b.count_within(p, reach, STAND) >= STAND
+    };
+    let (mut cells, mut open, mut worst) = (0usize, 0usize, (0.0f32, [0.0, 0.0]));
+    let step = (OPEN_STEP / walk.cell).round().max(1.0) as usize;
+    for j in (0..walk.n).step_by(step) {
+        for i in (0..walk.n).step_by(step) {
+            let p = walk.centre(i, j);
+            if walk.cost[j * walk.n + i] == BLOCKED
+                || !map
+                    .regions
+                    .iter()
+                    .any(|reg| geom::point_in_polygon(&reg.polygon, p))
+            {
+                continue;
+            }
+            cells += 1;
+            if cover_within(p, COVER_REACH) {
+                continue;
+            }
+            open += 1;
+            let far = OPEN_LADDER
+                .iter()
+                .copied()
+                .find(|&reach| cover_within(p, reach))
+                .unwrap_or(f32::INFINITY);
+            if far > worst.0 {
+                worst = (far, p);
+            }
+        }
+    }
+    r.measures.push(format!(
+        "open ground: {:.0}% of the walkable valley over {COVER_REACH} m from cover; the farthest from it {} at ({:.0}, {:.0})",
+        open as f32 * 100.0 / cells.max(1) as f32,
+        if worst.0.is_finite() {
+            format!("within {:.0} m", worst.0)
+        } else {
+            format!("over {:.0} m", OPEN_LADDER[OPEN_LADDER.len() - 1])
+        },
+        worst.1[0],
+        worst.1[1],
+    ));
+    let share = open as f32 / cells.max(1) as f32;
+    if share > OPEN_SHARE {
+        find(
+            &mut r,
+            Rule::Cover,
+            format!(
+                "{:.0}% of the walkable valley is over {COVER_REACH} m from cover (at most {:.0}%)",
+                share * 100.0,
+                OPEN_SHARE * 100.0
+            ),
+            worst.1,
+        );
+    }
+    if worst.0 > OPEN_FAR {
+        find(
+            &mut r,
+            Rule::Cover,
+            format!(
+                "ground {} m from any cover: a drone's open killing ground",
+                if worst.0.is_finite() {
+                    format!("{:.0}", worst.0)
+                } else {
+                    "over 100".into()
+                }
+            ),
+            worst.1,
+        );
     }
 
     // -- Loot against risk ---------------------------------------------------------
@@ -1615,6 +2355,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // -- Overlap: buildings in each other, on roads, squeezes -------------------------
     let solid = |id: &str| id != "anomaly_core";
+    let is_fence = |id: &str| id == "fence_garden";
     for (a, ra) in &rects {
         for (b, rb) in rects.iter().filter(|(b, _)| b > a) {
             let (pa, pb) = (&solids[*a], &solids[*b]);
@@ -1639,6 +2380,20 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     &mut r,
                     Rule::Overlap,
                     format!("{:.1} m squeeze between {} and {}", walls, pa.name, pb.name),
+                    ra.at,
+                );
+            } else if walls < SEALED && (is_fence(&pa.prefab) != is_fence(&pb.prefab)) {
+                // A fence that stops just short of a wall leaves a slit a
+                // body can't take and a planner thinks it can: the sims'
+                // raiders ground against every garden built so, behind
+                // the house. A fence meets a wall with a gate's width.
+                find(
+                    &mut r,
+                    Rule::Overlap,
+                    format!(
+                        "a {:.1} m slit between {} and {}: leave a gate ({SQUEEZE} m)",
+                        walls, pa.name, pb.name
+                    ),
                     ra.at,
                 );
             }
@@ -2019,6 +2774,37 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         find(&mut r, Rule::Door, what, at);
     }
 
+    // -- Pockets ----------------------------------------------------------------------
+    {
+        let p = crate::map_pockets::pockets(&walk, hm, ins, crate::map_nav::MAX_SLOPE, |p| {
+            inside_fence(map, p)
+        });
+        r.measures.push(format!(
+            "pockets: {} false steps on the walkers' grid; pockets {}",
+            p.false_steps,
+            p.pockets
+                .iter()
+                .take(6)
+                .map(|(a, at)| format!("{a:.0} m² at ({:.0}, {:.0})", at[0], at[1]))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        for (area, at) in p
+            .pockets
+            .iter()
+            .filter(|(a, _)| *a >= crate::map_pockets::POCKET_MIN)
+        {
+            find(
+                &mut r,
+                Rule::Pocket,
+                format!(
+                    "{area:.0} m² the walkers' grid reaches only over a bank too steep to walk"
+                ),
+                *at,
+            );
+        }
+    }
+
     // -- Render load -----------------------------------------------------------------
     let views = route_pts
         .iter()
@@ -2135,6 +2921,110 @@ mod tests {
             unnamed.is_empty(),
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
+        );
+        // Its key's lamp characters are the game's.
+        let table = |name: &str| -> &str {
+            let from = src
+                .find(&format!("{name} = {{"))
+                .unwrap_or_else(|| panic!("no {name}"));
+            &src[from..from + src[from..].find("\n}").unwrap()]
+        };
+        let chars = table("LAMP_CHARACTERS");
+        let names = table("LANDMARK_NAMES");
+        for line in names.lines().skip(1) {
+            let Some(base) = line
+                .trim()
+                .strip_prefix('"')
+                .and_then(|l| l.split('"').next())
+            else {
+                continue;
+            };
+            let want = crate::map_landmarks::character(crate::map_landmarks::kind(base)).name;
+            assert!(
+                chars.contains(&format!("    \"{base}\": \"{want}\",")),
+                "field_map.py's LAMP_CHARACTERS has {base} other than {want}"
+            );
+        }
+        for i in 0..4 {
+            let want = crate::map_landmarks::beacon_character(i).name;
+            assert!(
+                src.contains(&format!("\"{want}\"")),
+                "field_map.py's BEACON_CHARACTERS lacks {want}"
+            );
+        }
+    }
+
+    /// A valley whose early places all lie one way offers no choice: strip
+    /// Marrow's west of the drop and the first ten minutes are one walk.
+    #[test]
+    fn one_way_out_of_the_drop_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.markers
+            .retain(|m| !(matches!(m.kind, MarkerKind::Poi) && m.at[0] < 40.0));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Choice && f.what.contains("first ten minutes")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// With only one rendezvous, every rich place has one way home; and a
+    /// spotter over a rendezvous watches the last stretch to it.
+    #[test]
+    fn one_way_home_and_a_watched_rendezvous_are_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let mut seen = 0;
+        map.markers.retain(|m| {
+            if matches!(m.kind, MarkerKind::Rendezvous) {
+                seen += 1;
+                seen == 1
+            } else {
+                true
+            }
+        });
+        let rv = map.markers_of(&MarkerKind::Rendezvous).next().unwrap().at;
+        map.markers.push(crate::map::Marker {
+            kind: MarkerKind::Spotter,
+            at: [rv[0] + 30.0, rv[1] + 30.0],
+            rot: 0.0,
+            name: "Test spotter".into(),
+            y: 0.0,
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings.iter().any(|f| f.what.contains("one way home")),
+            "{}",
+            r.text()
+        );
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Spotter && f.what.contains("last")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Take away the bus shelter at Marrow's Bus depot and the wait for
+    /// the truck there, under the depot drones' orbit, has nothing to
+    /// wait behind.
+    #[test]
+    fn a_wait_under_the_drones_without_shelter_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.placements.retain(|p| p.tag != "bus_shelter");
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Cover && f.what.contains("to wait behind at Bus depot")),
+            "{}",
+            r.text()
         );
     }
 

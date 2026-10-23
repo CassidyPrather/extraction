@@ -16,10 +16,12 @@
 //!   its sweep toward it, by at most a quarter of its arc
 //!   ([`SENTRY_LEAN`]), from where it was set.
 //! - **A cleared building is found shut**: up to [`SHUT_BUILDINGS`] you
-//!   cleared lately have their doors shut, and one wedged if there's
-//!   another way in (never the only door).
-//! - **A watcher**: where you last wrecked one, one of its kind (a walker,
-//!   or a drone) is left watching for the start of the raid.
+//!   cleared lately have their doors shut, and, once it's a habit
+//!   ([`WEDGE_AT`]), one wedged if there's another way in (never the only
+//!   door).
+//! - **A watcher**: where you've wrecked them more than once lately
+//!   ([`WATCHER_AT`]), one of its kind (an unarmed walker, which calls
+//!   the others; or a drone) is left watching for the start of the raid.
 //!
 //! **Said**: the driver remarks on the strongest of these as you set off,
 //! and the radio, if you carry one, says when you're picked up on your
@@ -40,7 +42,7 @@ use crate::rig::LocalPlayer;
 use crate::world::Zone;
 
 /// A place on your usual ways is picked up to this many times as often.
-pub const PATROL_LEAN: f32 = 2.0;
+pub const PATROL_LEAN: f32 = 1.5;
 /// A sentry's sweep turns toward your rendezvous by at most this share of
 /// its arc...
 pub const SENTRY_LEAN: f32 = 0.25;
@@ -50,6 +52,12 @@ pub const SENTRY_REACH: f32 = 220.0;
 pub const SHUT_BUILDINGS: usize = 2;
 /// A remembered thing counts for this much (0..1, after the knob) or more.
 pub const NOTABLE: f32 = 0.3;
+/// A watcher is left only where you've killed lately and more than once
+/// (two raids running, about): this strong.
+pub const WATCHER_AT: f32 = 0.7;
+/// One door of a cleared building is wedged only once it's a habit (three
+/// raids running, about): this strong.
+pub const WEDGE_AT: f32 = 0.9;
 /// How long a watcher watches (s).
 pub const WATCH_FOR: f32 = 240.0;
 /// You're on your usual way where it's this habitual (0..1).
@@ -345,7 +353,7 @@ fn raid_turns(
                     door.open = false;
                 }
                 // One wedged, if there's another way in.
-                if k == 0 && ways.len() > 1 && strength >= 0.6 {
+                if k == 0 && ways.len() > 1 && strength >= WEDGE_AT {
                     commands
                         .entity(*d)
                         .insert((super::doors::Wedged(*d), ShutByMemory));
@@ -367,7 +375,7 @@ fn raid_turns(
     if let Some((at, kind, strength)) = mind
         .memory
         .kill_spot()
-        .filter(|k| k.2 >= NOTABLE && machines)
+        .filter(|k| k.2 >= WATCHER_AT && machines)
     {
         let site = zone.on_ground(at[0], at[1]);
         let exit = super::director::gate(&zone);
@@ -387,7 +395,8 @@ fn raid_turns(
                 },
             );
         } else {
-            super::walker::spawn_walker(&mut commands, &zone, site, job);
+            // It watches and calls the others; it doesn't fight you itself.
+            super::walker::spawn_walker_with(&mut commands, &zone, site, job, false, 130.0);
         }
         remarks.insert(
             0,
@@ -450,7 +459,10 @@ mod tests {
             hits[lean_pick(&mut rng, &places, Some(&mind))] += 1;
         }
         let ratio = hits[0] as f32 / hits[1] as f32;
-        assert!(ratio > 1.5, "it leans your way: {hits:?}");
+        assert!(
+            ratio > 1.0 + (PATROL_LEAN - 1.0) * 0.6,
+            "it leans your way: {hits:?}"
+        );
         assert!(ratio < PATROL_LEAN * 1.15, "but only so far: {hits:?}");
     }
 }

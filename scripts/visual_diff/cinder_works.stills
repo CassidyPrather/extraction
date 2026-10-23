@@ -1,0 +1,6 @@
+# cinder_works: scripts/visual_diff/views.cine resolved by --cine-dump; name x,~h,z,yaw,pitch.
+insertion        -110.0,~2.50,279.0,0.0,-15.7
+landmark         -185.0,~6.00,205.0,90.0,15.3
+interior         -152.2,~1.60,205.0,90.0,-15.3
+anomaly          234.0,~2.50,-120.0,0.0,-18.2
+rv               -165.0,~3.00,-165.0,0.0,-8.1
