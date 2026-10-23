@@ -88,6 +88,10 @@ pub fn top_of(id: &str) -> Option<Vec3> {
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
 
+/// The bulb's light as it reaches the tonemapper: red on screen, not white
+/// (`render::grade::ToTheEye`).
+const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.045, 0.014);
+
 fn light_landmarks(
     mut commands: Commands,
     zone: Option<Res<crate::world::Zone>>,
@@ -148,7 +152,9 @@ fn light_landmarks(
                     meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.5, 0.02, 0.01),
-                        emissive: LinearRgba::rgb(120.0, 6.0, 2.0),
+                        // Set each frame against the eyes' adaptation
+                        // (`render::grade::ToTheEye`).
+                        emissive: BULB,
                         ..default()
                     }),
                     meshes.add(Rectangle::new(DAY_R * 2.0, DAY_R * 2.0)),
@@ -166,6 +172,10 @@ fn light_landmarks(
                 )
             })
             .clone();
+        commands.entity(e).insert(crate::render::grade::ToTheEye {
+            material: lamp.clone(),
+            emissive: BULB,
+        });
         let at = top + Vec3::Y * (LAMP_R + 0.05);
         commands.entity(e).with_children(|c| {
             c.spawn((

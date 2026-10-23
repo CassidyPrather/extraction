@@ -195,7 +195,8 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 
 - **Fetch** and **Scout**, as the ladder has them;
 - **Bring**: a named thing laid by a place (a building's loot spot within
-  30 m, else on the ground), home in the stash;
+  30 m, else on the ground; down a signature site, on the floor of the
+  room its point is in), home in the stash;
 - **Plant**: the contract's kit (Lev's relay box) set down by a place,
   within 4 m; then get home;
 - **Photograph**: a walker or a heavy with the contract's camera: hold it
@@ -207,11 +208,16 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 | - | - | - | - | - | - |
 | The post counter | the Holm boy | the second odd job | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
 | The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
+| Anna's tape | Anna | the third Errand | bring Anna's practice tape from Hana's house by the well (Marrow village) | 2 tins of stew, a tea tin, trust 1 | |
 | Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |
 | A walker's portrait | the town paper | head of Far jobs | photograph a walker; look at the chimney (Cinder) | a PU scope, 2 boxes 7.62R, trust 2 | re-pack 7.62R AP |
 | The overflow | Lev | past the ladder, trust 3, all three valleys raided | plant a relay at the Depot (Marrow); 2 electronics | a fuel can, a radio, trust 2 | Sallow Reservoir |
 | The scour key | Lev | past the ladder, trust 4, after the overflow | bring the scour valve key from the Valve house; plant a relay at the Draw-off tower (Sallow) | an EMP trap, 2 boxes 5.45 AP, trust 2 | |
+| Up the fell | Lev | past the ladder, trust 6, after the scour key | plant a relay in the observatory (Rime Fell); a hearth in the kit, for the frost | 2 hand flares, 2 boxes 7.62R AP, trust 2 | Rime Fell |
 | The heavy | the town paper | past the ladder, trust 5 | photograph a heavy; plant a relay at the Fire lookout (Cinder) | 2 EMP grenades, a steel plate, trust 3 | |
+| The keeper's log | the water board | past the ladder, trust 8 | bring Brabec's pump log up from the sump of the pump wells (Marrow) | 2 power cells, 3 chemlights, trust 2 | |
+| The deputy's lamp | Irena, from the mine office | past the ladder, trust 9 | bring the deputy's flame lamp out of the old heading, in the deep workings' gas (Kettle) | an injector, 2 chemlights, trust 2 | |
+| The charging manifest | Vlasta Kralova | past the ladder, trust 10 | bring the charging manifest off the far ledge of the furnace cellars, over the ash pit (Cinder) | a steel plate, 2 boxes 7.62R AP, trust 3 | |
 
 **The ladder keeps its length.** A contract starts only at the head of its
 tier, and its steps are that tier's jobs (counted toward the fitting as
@@ -221,8 +227,9 @@ driver's patience is for errands). Its kit comes through the cab's hatch
 as it starts; its pay as the last step's handed in, with what it opens
 said on the wrist.
 
-**Trust** is earned only by contracts (8 by the overflow, 13 with the
-scour key and the heavy); past the ladder it's what the driver's bigger asks wait on. **The
+**Trust** is earned only by contracts (7 by the ladder's end, 9 by the
+overflow, 16 with the scour key, the fell and the heavy, 23 with the
+signature sites'); past the ladder it's what the driver's bigger asks wait on. **The
 fourth valley** is opened by the overflow, which the driver offers once
 the career has raided all three valleys: Sallow Reservoir is the place
 that contract's relay listens to.

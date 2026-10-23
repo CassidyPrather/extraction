@@ -471,7 +471,7 @@ exhaustive match, so a new kind won't build without one):
 | Recover | as Bring | seeded (`--job recover`): found in the plank house's back room, crated, paid |
 | Letter | as Bring | seeded: found, crated, paid |
 | Ledger | as Bring | seeded: down under the Gate; a drone and a machine below, warned each time; down |
-| Photograph | camera off the ledge, the head kept on the walker, press | not yet: on Marrow the walkers work underground; on Cinder Works the newcomer looked round the valley 20 minutes and a walker it found shot it |
+| Photograph | camera off the ledge, out to where the card says one's working, the head kept on it, press from as far off as the camera takes, back off | the picture taken (Cinder Works, with Robot minds' surface walker); on the way home a walker heard it, aimed, warned, and shot it |
 
 `every_job_kind_has_a_way` fails when a kind has no way, or when its card
 doesn't name what the newcomer goes for: what the bot is after, a player
@@ -529,12 +529,15 @@ way, went in, came on, left the box and got home paid; the reckless one
 left it with a machine already shooting at it, as it does, and fell
 there.
 
-Still open: the photograph. At a raid's start every walker on Cinder Works
-is a crawler at work underground; the first up on the surface came 17
-minutes in, at the newcomer, gun up. The card now says where one's been
-heard working once one is ("He's heard a walker working by the chimney.
-From the drop: ..."), and the newcomer goes there; a walker kept at work
-on the surface while the job's on is Robot minds' to give.
+The photograph: at a raid's start every walker on Cinder Works was a
+crawler at work underground, and the first up on the surface came 17
+minutes in, at the newcomer, gun up. Now, with a photograph on the card,
+Robot minds keep one of the kind it names (a plain walker; not a crawler,
+a hound or the heavy) at work on the surface 120 to 360 m from the drop
+(`robots::subjects`), and the card says where it's been heard ("He's heard
+a walker working by the chimney. From the drop: ..."). The newcomer took
+its picture 3.5 minutes in, from as far off as the camera takes; a walker
+caught it on the way home, warned.
 
 # Machines working together (Robot minds' squad drill)
 

@@ -1914,7 +1914,14 @@ fn way_to(
                 if doors.is_empty() && i % 4 != 0 && i != last {
                     continue;
                 }
-                for (door, _) in doors {
+                for (door, cross) in doors {
+                    // Up to it first (the last waypoint kept may be a few
+                    // strides back): this side of where the way crosses it.
+                    let back = (prev - cross).normalize_or_zero() * 0.8;
+                    t.push(Task::WalkTo {
+                        to: plan.world2(cross + back),
+                        within: 0.4,
+                    });
                     t.push(Task::OpenDoor(door));
                 }
                 t.push(Task::WalkTo {
@@ -2078,8 +2085,11 @@ fn errand_tasks(
                 t.push(Task::Wait(10.0));
                 return Ok(Some((t, None)));
             };
-            // Near enough to fill the picture, not so near it shoots.
-            let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
+            // As far off as the picture takes (the camera's 60 m), a little
+            // inside it, and nearer each time it's not in it (something in
+            // the way): not so near it notices.
+            let away = (here - p.xz()).normalize_or(Vec2::Y);
+            let stand = p.xz() + away * (48.0 - 7.0 * tries as f32).max(25.0);
             let mut t = route(&world, &view, here, stand);
             t.extend([
                 Task::Grab {
@@ -2090,6 +2100,11 @@ fn errand_tasks(
                 Task::Wait(1.0),
                 Task::Use(Side::Right),
                 Task::Wait(0.5),
+                // And back off from it, the way it came.
+                Task::WalkTo {
+                    to: stand + away * 25.0,
+                    within: 2.0,
+                },
             ]);
             Ok(Some((t, None)))
         }

@@ -449,7 +449,7 @@ fn sentry_mind(
     guns: Query<(&GlobalTransform, &super::RobotPart), With<SentryGun>>,
     targets: Query<&GlobalTransform>,
     mut noises: MessageReader<super::Noise>,
-    flying: Query<(&crate::items::Item, &GlobalTransform, &LinearVelocity)>,
+    flying: Query<(&crate::items::Item, &GlobalTransform, &LinearVelocity), crate::interact::Loose>,
     catalog: Res<crate::items::Catalog>,
     mut shots: MessageWriter<Shot>,
     mut out: MessageWriter<SentryEvent>,
