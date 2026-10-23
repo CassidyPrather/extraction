@@ -315,6 +315,26 @@ Paired by seed (sign tests):
 
 Without the pinner's suppression, the last two hold but the first doesn't: a plan said aloud, with nobody covering the movers, is easier on the deaf too (38%).
 
+**The Zone hurts them too** (`robots/hazards.rs`). What every hazard does to every kind of machine is one table:
+
+| | Drone | Walker, crawler, hound, grappler | Heavy | Dirigible |
+|---|---|---|---|---|
+| Lift | thrown (its lock lost 2 s) | slowed winding up, staggered when it pops | — | — |
+| Burner | hurt | hurt | hurt (heats) | — |
+| Snare | hurt | hurt | stunned | — |
+| Well | dragged | dragged, crushed at its heart | dragged, held | — |
+| Mirror | dazzled (lock lost 3 s) | dazzled | dazzled | — |
+| Hush | flies blind and deaf | deafened | deafened | — |
+| Frost | rotors ice, it sinks; optics frost | stiff (0.55 pace); optics frost (sight 0.4) | stiff | — |
+| Gas flash | — | crawlers hurt | — | — |
+| Hot gallery | — | crawlers burned as you are | — | — |
+| Mine | — | hurt | hurt | — |
+| EMP | stunned | stunned | stunned | stunned |
+
+Each is told (a look and a sound, at most once a second per machine per hazard). Walkers go round lifts, burners, snares, wells and frosts: crossing one costs 30 times as much on their grid. Chasing you hard (in a fight, you in sight within 25 m), they come straight and risk it. That's the lure: lead a hound across a snare, a walker through a burner's edge, lose a drone in a hush.
+
+In the squad drill, a listening newcomer that takes its way out past a snare's far side from the squad gets out 65% of the time, against 48% for one that goes straight round (paired by seed, 13 to 5, p ≈ 0.1). The snare itself rarely catches a machine (2 runs in 48): the squad is mostly too far back to be chasing hard when the newcomer passes it. The way round, away from them, does most of the good.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
