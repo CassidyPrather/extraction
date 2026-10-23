@@ -655,6 +655,14 @@ pub(super) fn direct_raid(
     let creep = (p.reads || state.low_until > now)
         && !fleeing
         && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    // A photograph: the head kept on the machine as it moves, the camera
+    // up (the card: "it in the middle").
+    if let (Leg::Place, Some(Errand::Photo(subject))) = (state.leg, &state.errand)
+        && let Some(p) =
+            photo_subject(&view, *subject, here).filter(|p| p.xz().distance(here) < 60.0)
+    {
+        bot.look = p + Vec3::Y * 1.2;
+    }
     // (Bent down to the crate: that's the crating's to say.)
     let crating = state.crating.as_ref().is_some_and(|c| !c.done());
     if input.crouch != creep && !crating {
@@ -1977,16 +1985,7 @@ fn errand_tasks(
             let Some(camera) = carried(world, view, player, "camera").first().copied() else {
                 return Err("no camera on me".into());
             };
-            let target = view
-                .robots
-                .iter()
-                .filter(|(r, _, breed)| {
-                    !r.wrecked
-                        && r.kind == crate::robots::RobotKind::Walker
-                        && (breed.is_some_and(|b| b.0 == "heavy") == (*subject == Subject::Heavy))
-                })
-                .map(|(_, gt, _)| gt.translation())
-                .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)));
+            let target = photo_subject(view, *subject, here);
             let Some(p) = target else {
                 return Err(format!("no {subject:?} to be found for the picture").to_lowercase());
             };
@@ -2006,6 +2005,19 @@ fn errand_tasks(
             Ok(Some((t, None)))
         }
     }
+}
+
+/// The nearest machine a photograph job wants.
+fn photo_subject(view: &RaidView, subject: Subject, here: Vec2) -> Option<Vec3> {
+    view.robots
+        .iter()
+        .filter(|(r, _, breed)| {
+            !r.wrecked
+                && r.kind == crate::robots::RobotKind::Walker
+                && (breed.is_some_and(|b| b.0 == "heavy") == (subject == Subject::Heavy))
+        })
+        .map(|(_, gt, _)| gt.translation())
+        .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)))
 }
 
 /// What it says once the errand's done out here.
