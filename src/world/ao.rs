@@ -60,6 +60,39 @@ pub fn sky_light(view: f32) -> f32 {
     inside + (1.0 - inside) * open
 }
 
+/// The least a piece of furniture keeps of its light today, however
+/// dark its corner: its silhouette and grain still read.
+pub const PIECE_MIN: f32 = 0.3;
+
+/// The light a piece of furniture standing in `lo..hi` (building-local)
+/// takes from the room ([`sky_light`]): the brightest of the air beside
+/// its four sides at half its height and over its top (not the inside of
+/// it, a solid cell), never darker than the floor it stands on, nor than
+/// [`PIECE_MIN`].
+pub fn piece_light(field: &SkyField, lo: Vec3, hi: Vec3) -> f32 {
+    let mid = (lo + hi) * 0.5;
+    let half = (hi - lo) * 0.5;
+    let off = field.cell * 0.75;
+    let around = [
+        Vec3::new(mid.x + half.x + off, mid.y, mid.z),
+        Vec3::new(mid.x - half.x - off, mid.y, mid.z),
+        Vec3::new(mid.x, mid.y, mid.z + half.z + off),
+        Vec3::new(mid.x, mid.y, mid.z - half.z - off),
+        Vec3::new(mid.x, hi.y + off, mid.z),
+    ];
+    let side = around.iter().map(|p| field.at(*p)).fold(0.0, f32::max);
+    let floor = [
+        Vec3::new(mid.x + half.x + off, lo.y + off, mid.z),
+        Vec3::new(mid.x - half.x - off, lo.y + off, mid.z),
+        Vec3::new(mid.x, lo.y + off, mid.z + half.z + off),
+        Vec3::new(mid.x, lo.y + off, mid.z - half.z - off),
+    ]
+    .iter()
+    .map(|p| field.at(*p))
+    .fold(0.0, f32::max);
+    sky_light(side).max(sky_light(floor)).max(PIECE_MIN)
+}
+
 /// Scales a mesh's vertex colours (not their alpha) by `k`: a piece of
 /// furniture lit as the spot in the room it stands in.
 pub fn tint(mesh: &mut Mesh, k: f32) {

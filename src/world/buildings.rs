@@ -6172,6 +6172,23 @@ pub fn dress_buildings(
             }
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
+                // Furniture lit as the spot in the room it stands in, the
+                // piece as one (its own shading and occlusion kept).
+                let lit = baked.light.as_ref().filter(|_| d.inside).and_then(|light| {
+                    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                    for (_, m) in &prims {
+                        if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+                            m.attribute(Mesh::ATTRIBUTE_POSITION)
+                        {
+                            for q in p {
+                                let q = at.transform_point(Vec3::from(*q));
+                                lo = lo.min(q);
+                                hi = hi.max(q);
+                            }
+                        }
+                    }
+                    (lo.x <= hi.x).then(|| super::ao::piece_light(light, lo, hi))
+                });
                 for (mat, mesh) in prims {
                     if crate::destruction::glass::drawn_by_panes(name, &mat) {
                         continue;
@@ -6186,13 +6203,8 @@ pub fn dress_buildings(
                         }
                     }
                     let mut mesh = mesh.transformed_by(*at);
-                    // Furniture lit as the spot in the room it stands in
-                    // (its own shading and occlusion kept).
-                    if d.inside {
-                        if let Some(light) = &baked.light {
-                            let k = super::ao::sky_light(light.at(at.translation + Vec3::Y * 0.4));
-                            super::ao::tint(&mut mesh, k);
-                        }
+                    if let Some(k) = lit {
+                        super::ao::tint(&mut mesh, k);
                     }
                     add(
                         if below(at) {
