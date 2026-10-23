@@ -209,6 +209,14 @@ trig = Part("trigger", origin=(0.0, -0.012, -0.05))
 trig.sweep(catmull([(-0.049, -0.017), (-0.0505, -0.025), (-0.048, -0.032), (-0.043, -0.036)], 3,
                    closed=False), section_rect(0.0045, 0.003, 0.0011), "Blued")
 
+# Cocking indicators: a pin each side of the top strap behind the fences,
+# its tip red; flush when its lock is down, standing proud when cocked
+# (`weapons::visuals`, `Indicator`).
+for i, sx in enumerate((-1, 1)):
+    pin = Part(f"indicator_{i}", origin=(sx * 0.0085, 0.0475, -0.086))
+    pin.cyl(0.0017, 0.0405, 0.0475, "Steel", segs=12, xf=T(sx * 0.0085, 0.0, -0.086) @ RX(-math.pi / 2))
+    pin.cyl(0.0017, 0.0475, 0.0485, "Red", segs=12, xf=T(sx * 0.0085, 0.0, -0.086) @ RX(-math.pi / 2))
+    make(pin, worn={})
 join("static", act, stock, wrist_check)
 join("static_butt", stock_butt)
 join("barrels", bar, fe_check)

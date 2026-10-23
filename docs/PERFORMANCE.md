@@ -546,7 +546,8 @@ Each contact is named with what came in round it:
 - with `FIRST_PROFILE=1` and `--features "bevy/trace bevy/debug"`, the
   systems that took the time.
 
-`gauge_no_first_sight_stutter` fails a valley over 1.2x in every run.
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter` fails a
+valley over 1.2x in every run.
 
 On all five valleys no stop was a first contact in every run. One was
 in two runs of three: Rime Fell's compressor terminal, 80 ms first
@@ -584,6 +585,92 @@ causes, both fixed:
   After the world is in, the tour now builds none (the screenshot's own
   aside). On lavapipe, "everything in" comes at frame 65, not 41: the
   compiling moved out of play and into the load.
+
+### A map change's wait
+
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter` times each valley's load on the CPU, from its
+app being built to:
+
+- the preload landed;
+- the buildings dressed;
+- the warm-up shelf's settled restock out (`WorldReady`'s GPU share
+  aside).
+
+| valley | before | after |
+| - | - | - |
+| Marrow Creek | 9.6 s to the buildings (frame 24); warm only at the shelf's end | 7.7 s, all in (frame 18) |
+| Kettle Pass | 8.5 s to the buildings | 7.2 s |
+| Cinder Works | 7.0 s | 6.6 s |
+| Sallow Reservoir | 5.9 s | 6.2 s (noise) |
+| Rime Fell | 7.7 s | 8.7 s |
+
+Rime Fell is now the slowest, and the preload decides it.
+
+- **Buildings while loading.** Buildings are dressed 3 a frame so play
+  doesn't hitch. While the valley loads no one's playing, so it's 24
+  (`timeline::Loaded` marks the end of the load).
+- **The settled restock.** The warm-up's settled restock waits on the
+  forest built and the buildings dressed, not the impostors' pictures.
+- **The IO pool.** Models and textures load on the IO pool. It's now
+  three quarters of the cores' worth (2 to 8), on top of the cores, so
+  the compute pool keeps every thread (`crate::task_pools`). On this
+  4-core container every core is busy loading anyway, so it bought little
+  here (Marrow 8.6 s > 7.7 s). A laptop with more cores should gain more.
+
+What's left is the 213 models decoding. The relaunch around it is 0.9 s
+to close and about 0.2 s to start again.
+
+## Textures
+
+What a valley loads and holds, before:
+
+- **Textures.** 75 KTX2s, all RGBA8 (4 bytes a texel, 495 MB on disk),
+  read and uploaded whole. On Rime Fell its 66 textures were in by
+  6.3 s, its 334 models by 8.3 s, all on the same IO threads. On the GPU
+  they were 501-546 MB of a valley's 2.0-2.2 GB.
+- **Meshes.** The models carry no images: their share is the glTF parsed
+  and the meshes built, 358-601 MB on the GPU.
+
+`scripts/bc7_textures.py` bakes a BC7 copy (`<name>.bc7.ktx2`) beside
+each albedo and arm map: every level and layer, sRGB kept, data maps
+weighted linearly. It's a quarter of the bytes, and the GPU samples it as
+it is. 50 maps, 330 MB > 83 MB. `fetch_assets.py` runs it after a build
+(it needs `pip install etcpak`; without it the originals load).
+
+`render::textures::ktx2` loads the copy where the GPU has BC formats
+(every desktop GPU, and lavapipe) and the copy exists, the original
+otherwise. `EXTRACTION_BC=0` forces the originals, to compare. The test
+client says it takes BC, so the gauges count what ships.
+
+Normal maps stay RGBA8. Their fine detail doesn't fit BC7's 4x4 blocks:
+26-29 dB, where the colour maps' median is 43 dB, about 5 degrees off.
+BC5 (two channels, the third rebuilt) would need the terrain's and the
+trees' shaders to rebuild it: a next step, with Visual design.
+
+The look: the same views with and without (lavapipe, 1280x720):
+
+| view | PSNR | pixels more than 16 off |
+| - | - | - |
+| Marrow Creek, the road | 43.6 dB | 0.28% |
+| Sallow Reservoir, the dam | 47.8 dB | 0.08% |
+| Rime Fell, a barn | 36.3 dB | 0.23% |
+
+Rime Fell's difference is the snow, which falls differently each run:
+the wall and the ground are the same.
+
+What it bought (CPU harness, `gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`):
+
+| valley | load, RGBA8 | load, BC7 (budget) | VRAM, RGBA8 | VRAM, BC7 |
+| - | - | - | - | - |
+| Marrow Creek | 7.7 s | 4.7 s (6.0) | 2.2 GB | 1.97 GB |
+| Kettle Pass | 7.2 s | 3.7 s (5.0) | 2.2 GB | 1.99 GB |
+| Cinder Works | 6.6 s | 4.0 s (5.5) | 2.1 GB | 1.86 GB |
+| Sallow Reservoir | 6.2 s | 3.3 s (4.5) | 2.0 GB | 1.75 GB |
+| Rime Fell | 8.7 s | 4.3 s (6.0) | 2.2 GB | 1.98 GB |
+
+The gauge loads every valley and counts its VRAM. It walks Marrow Creek
+for first contact (`FIRST_WALK=all`: every valley), about 6 minutes in
+all.
 
 ## Holding the frame rate
 
@@ -630,8 +717,8 @@ What it buys:
 The opaque pass shrinks with the viewport. Tonemapping and MSAA
 writeback still cover the whole target, but they're small.
 
-`gauge_busy_moments_drop_the_scale_and_it_comes_back` runs the hitch
-gauge's forced events (the response team, the Surge and the rest) through
+`hitches_hold_their_ceiling` (`hold_rate::follows_busy_moments`) runs the
+hitch gauge's forced events (the response team, the Surge and the rest) through
 the governor. Each frame's measured load is taken as the GPU's, with a
 modelled GPU (a fifth fixed, the rest the pixels'). Wherever frames ran
 late in a run, the scale came down within a step, and it was back within
@@ -676,17 +763,22 @@ The eye targets are counted at the runtime's full size, 2980² for the
 playtest's Beyond 2. Holding the frame rate (`render::hold_rate`), they're
 made that big.
 
-`gauge_every_valley_holds_its_vram` holds each valley under 4.5 GB (the
+The valley gauge holds each valley under 4.5 GB (the
 3060 laptop's 6 GB, less the driver's, the compositor's and SteamVR's
 share) and prints the biggest texture folders.
 
 | valley | total | textures | meshes | shadows | eye targets |
 |---|---|---|---|---|---|
-| Marrow Creek | 2.2 GB | 546 MB | 558 MB | 16 MB | 1084 MB |
-| Kettle Pass | 2.2 GB | 542 | 585 | 16 | 1084 |
-| Cinder Works | 2.1 GB | 532 | 465 | 16 | 1084 |
-| Sallow Reservoir | 2.0 GB | 515 | 358 | 16 | 1084 |
-| Rime Fell | 2.2 GB | 501 | 603 | 16 | 1084 |
+| Marrow Creek | 1.97 GB | 310 MB | 558 MB | 16 MB | 1084 MB |
+| Kettle Pass | 1.99 GB | 306 | 585 | 16 | 1084 |
+| Cinder Works | 1.86 GB | 296 | 465 | 16 | 1084 |
+| Sallow Reservoir | 1.75 GB | 287 | 358 | 16 | 1084 |
+| Rime Fell | 1.98 GB | 273 | 601 | 16 | 1084 |
+
+The textures were 501-546 MB a valley until the colour and data maps went
+to BC7 (below, "Textures"). The valleys' budget is 2 GiB
+(`vram::VRAM_BUDGET`, under the 4.5 GB ceiling), held by
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`.
 
 At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
 GB. Under half the ceiling either way: nothing to stream or cut yet.

@@ -5,7 +5,7 @@
 //! same forest.
 
 use crate::geom::{self, P2};
-use crate::map::{MapDef, TreeSpecies, prefab_clearance};
+use crate::map::{MapDef, TreeSpecies, placement_clears};
 use crate::noise::Rng;
 use crate::terrain::Heightmap;
 
@@ -35,14 +35,13 @@ pub struct TreeSpot {
 pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
     let mut out = Vec::new();
     // Keep clear of structures and markers.
-    let clear: Vec<(P2, f32)> = map
+    // (A site's kiosks are cleared after: see the end.)
+    let placed: Vec<&crate::map::Placement> = map
         .placements
         .iter()
-        // (A site's kiosks are cleared after: see the end.)
         .filter(|p| !crate::underground::is_site(&p.prefab))
-        .map(|p| (p.at, prefab_clearance(&p.prefab)))
-        .chain(map.markers.iter().map(|m| (m.at, 8.0)))
         .collect();
+    let clear: Vec<(P2, f32)> = map.markers.iter().map(|m| (m.at, 8.0)).collect();
     for forest in &map.forests {
         let spacing = (100.0 / forest.density.max(0.01)).sqrt();
         let (lo, hi) = geom::bounds(&forest.polygon);
@@ -88,7 +87,9 @@ pub fn scatter_trees(map: &MapDef, hm: &Heightmap) -> Vec<TreeSpot> {
                 {
                     continue;
                 }
-                if clear.iter().any(|(c, r)| geom::dist(*c, p) < *r) {
+                if clear.iter().any(|(c, r)| geom::dist(*c, p) < *r)
+                    || placed.iter().any(|pl| placement_clears(pl, p, 0.0))
+                {
                     continue;
                 }
                 let Some(k) = rng.weighted(&weights) else {

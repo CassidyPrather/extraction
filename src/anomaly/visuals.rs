@@ -290,17 +290,26 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
-/// A ring, soft both sides, round the outer tenth: the edge of a Hush
-/// drawn on the ground.
+/// A ragged ring of dust round the outer tenth: the edge of a Hush on the
+/// ground.
 fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
-    let n = 128u32;
+    // Settled dust, not a drawn line: its edge wanders, its width and
+    // thickness drift round it, it's grainy, and in places it's thin to
+    // nothing.
+    let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
         for x in 0..n {
             let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let r = (u * u + v * v).sqrt();
-            let alpha = (1.0 - ((r - 0.91) / 0.05).abs()).clamp(0.0, 1.0).powf(0.7);
+            let a = v.atan2(u);
+            let edge = 0.87 + 0.03 * (5.0 * a + 0.7).sin() + 0.015 * (13.0 * a).sin();
+            let width = 0.025 + 0.025 * (0.5 + 0.5 * (7.0 * a + 1.0).sin());
+            let drift = (0.2 + 0.8 * (0.5 + 0.5 * ((3.0 * a + 2.0).sin() * (11.0 * a).cos())))
+                .clamp(0.0, 1.0);
+            let grain = 0.55 + 0.45 * ((x * 7919 + y * 104_729) % 977) as f32 / 977.0;
+            let alpha = (-((r - edge) / width).powi(2)).exp() * drift * grain;
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
     }
@@ -354,7 +363,9 @@ fn init_assets(
     let leaf: Handle<Image> = server
         .load_builder()
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load("textures/foliage/birch_leaves/albedo.ktx2");
+        .load(crate::render::textures::ktx2(
+            "textures/foliage/birch_leaves/albedo.ktx2",
+        ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let mut ground = |c: Color, emissive: LinearRgba| {
@@ -389,7 +400,8 @@ fn init_assets(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
     );
-    // Its edge, pale and firm: a line on dark wet ground you can step up to.
+    // Its edge: pale dust settled in a ragged line on the ground, which you
+    // can step up to.
     let ring = ring_texture(&mut images);
     let hush_ring = materials.add(StandardMaterial {
         base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),

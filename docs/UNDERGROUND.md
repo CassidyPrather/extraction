@@ -456,6 +456,19 @@ Shot: the overflow chamber's water live, cold blue under the arcing,
 its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
 from the start, for shots).
 
+### Worth going down: the entrances
+
+Every site says from the surface what's down there: over each kiosk's
+door (bar one with a front of its own, the Depot's) a stencilled sign,
+the layout's `sign`, names the place and what to mind there ("DEEP
+WORKINGS - FIREDAMP / NO NAKED LIGHTS", "DANGER - LIVE CABLES", "CAGE TO
+LOWER LEVEL"), and a dim warm lamp (`DoorLamp`) shows the way down from
+across the valley at night. Audio's asked for the stair breathing out
+what's below. The skipped sites got a reward worth the walk: three more
+loot spots each in the pump station and the deep workings, the best
+deepest. Shots: `docs/shots/underground/sign_adit.jpg`,
+`sign_bunker.jpg`.
+
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron
 lever box on every vent and crane lever, a vent's arm swinging down as

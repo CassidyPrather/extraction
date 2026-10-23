@@ -15,9 +15,11 @@
     rooms: [
         // The dry top: the stair's foot, the control room, the valve gallery.
         (id: "upper_gallery", at: (0.0, 12.0), size: (10.0, 4.0), height: 3.0, lamp: Flicker, props: [
+            (kind: SmallCrate, at: (-3.8, 1.4), loot: Some("gadgets")),
             (kind: Rubble, at: (3.2, 1.0)),
         ]),
         (id: "control", at: (10.0, 12.0), size: (4.0, 4.0), height: 2.6, lamp: Dead, props: [
+            (kind: SmallCrate, at: (-1.4, 1.4), loot: Some("curio")),
             (kind: Table, at: (0.4, -1.2)),
             (kind: Chair, at: (0.4, -0.45), rot: 180.0),
             (kind: Shelf, at: (1.6, 1.0), rot: 270.0, loot: Some("gadgets")),
@@ -38,6 +40,7 @@
         ]),
         // The pump hall: the big dead pumps, ankle deep.
         (id: "pump_hall", at: (0.0, 38.0), size: (10.0, 6.0), floor: Some(-9.0), height: 5.0, lamp: Steady, props: [
+            (kind: Crate, at: (3.8, 2.2), loot: Some("weapons_rare")),
             (kind: Machine, at: (-3.0, 0.8)),
             (kind: Machine, at: (0.0, 0.8)),
             (kind: Barrel, at: (3.8, -2.0)),
@@ -80,6 +83,10 @@
     items: [(id: "work_boots", room: "sump", at: (-1.4, 2.4), y: 0.0)],
     patrol: ["upper_gallery", "control", "upper_gallery", "valve_gallery"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("MARROW WATER BOARD\nPUMP STATION - KEEP CLEAR"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.3),
     portals: [
         (),
         // The outfall stair, from the pump hall up to the river bank.

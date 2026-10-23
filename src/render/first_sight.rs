@@ -21,7 +21,62 @@ impl Plugin for PreloadPlugin {
         if std::env::var("EXTRACTION_PRELOAD").is_ok_and(|v| v == "0") {
             return;
         }
-        app.add_systems(Startup, preload_models);
+        app.add_systems(Startup, preload_models)
+            .add_systems(Update, preload_dressing);
+    }
+}
+
+/// Each building's dressing, asked for as the building appears, whatever
+/// will draw it and whenever: its furniture and fittings, and what the
+/// people who lived there left (`world::clutter::dress`, before the ending
+/// and after), from the same calls that place them, so a new prop can't
+/// be missed; and the boards Destruction nails over a window.
+#[allow(clippy::type_complexity)]
+fn preload_dressing(
+    added: Query<
+        (&crate::world::buildings::Building, &Transform),
+        Added<crate::world::buildings::Building>,
+    >,
+    zone: Option<Res<crate::world::Zone>>,
+    server: Res<AssetServer>,
+    mut models: ResMut<crate::models::Models>,
+    mut boards: Local<bool>,
+) {
+    use crate::render::world_props::path;
+    if !*boards {
+        *boards = true;
+        models.request(&path(crate::destruction::boards::MODEL), &server);
+    }
+    for (b, xf) in &added {
+        let mut names: Vec<&'static str> = Vec::new();
+        if let Some(geo) = crate::world::buildings::prefab(&b.prefab) {
+            for d in &geo.props {
+                names.extend(d.models.iter().map(|(n, _)| *n));
+                names.extend(d.lods.iter().flatten().copied());
+            }
+        }
+        names.push("window_sash_broken");
+        if let Some(zone) = &zone {
+            let at = Vec2::new(xf.translation.x, xf.translation.z);
+            let tag = zone
+                .map
+                .placements
+                .iter()
+                .find(|p| p.prefab == b.prefab && Vec2::from(p.at).distance(at) < 0.5)
+                .map_or("", |p| p.tag.as_str());
+            for ending in [false, true] {
+                names.extend(
+                    crate::world::clutter::dress(&zone.map, &b.prefab, tag, xf, ending)
+                        .into_iter()
+                        .map(|(n, _)| n),
+                );
+            }
+        }
+        names.sort_unstable();
+        names.dedup();
+        for n in names {
+            models.request(&path(n), &server);
+        }
     }
 }
 

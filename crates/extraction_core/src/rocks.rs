@@ -8,7 +8,7 @@
 //! on roads or paths, in water, by buildings and markers, or round a tree.
 
 use crate::geom::{self, P2};
-use crate::map::{MapDef, MarkerKind, prefab_clearance};
+use crate::map::{MapDef, MarkerKind, placement_clears};
 use crate::noise::Rng;
 use crate::terrain::Heightmap;
 
@@ -64,20 +64,23 @@ fn field(rng_seed: u64, p: P2, scale: f32) -> f32 {
 pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
     let mut out = Vec::new();
     let base = seed(map);
-    let clear: Vec<(P2, f32)> = map
+    // (A site's kiosks are cleared after: see the end.)
+    let placed: Vec<&crate::map::Placement> = map
         .placements
         .iter()
-        // (A site's kiosks are cleared after: see the end.)
         .filter(|p| !crate::underground::is_site(&p.prefab))
-        .map(|p| (p.at, prefab_clearance(&p.prefab) + 2.0))
+        .collect();
+    let clear: Vec<(P2, f32)> = map
+        .markers
+        .iter()
         // Round a rendezvous, the whole way in to the truck's tailgate.
-        .chain(map.markers.iter().map(|m| {
+        .map(|m| {
             let r = match m.kind {
                 MarkerKind::Rendezvous => crate::map_lint::TRUCK_APPROACH + 4.0,
                 _ => 7.0,
             };
             (m.at, r)
-        }))
+        })
         .collect();
     // Trees by 4 m cell, so a boulder doesn't grow round a trunk.
     let mut trees: std::collections::HashMap<(i32, i32), Vec<P2>> = Default::default();
@@ -108,6 +111,7 @@ pub fn scatter_rocks(map: &MapDef, hm: &Heightmap) -> Vec<RockSpot> {
                 .iter()
                 .any(|rl| geom::polyline_closest(&rl.points, p).0 < rl.width * 0.5 + 1.5 + r)
             && !clear.iter().any(|(c, cr)| geom::dist(*c, p) < *cr + r)
+            && !placed.iter().any(|pl| placement_clears(pl, p, 2.0 + r))
     };
     // A rock at `p`: its centre set so it rests in the ground. Its base
     // (`-0.55` of its half-height below the centre) goes below the lowest

@@ -42,6 +42,15 @@ Things that have bitten captures, and what now guards against them:
   and can show in a night shot near the lamp. Don't merge new shaders
   into the tree under a running capture either: it loads them from
   `assets/` as it goes.
+- **An hour the game didn't know.** `--hour 23` once fell through to the
+  raid's own hour, so a "night" shot came out in daylight, and the
+  screenshot scripts show only errors, so nothing said so. A clock hour
+  now parses (dawn from 5, day from 7, dusk from 18, night from 21). An
+  unknown `--hour` or `--weather` stops the game with an ERROR line.
+  `scripts/capture_check_dark.sh [map] [camera]` shoots a view at hours
+  12 and 23 and fails unless the night is dark: mean luminance under 0.2
+  and under half the day's. Marrow's gate road reads 0.38 by day and 0.13
+  at night; with the bug, it read 0.38 for both.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
