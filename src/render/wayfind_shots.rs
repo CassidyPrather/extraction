@@ -40,7 +40,7 @@ pub const NEAREST: f32 = 5.0;
 pub const FARTHEST: f32 = 320.0;
 
 /// How far off `--wayfind-lamps` shoots each landmark's lamp (m).
-pub const LAMP_AT: [f32; 2] = [150.0, 300.0];
+pub const LAMP_AT: [f32; 3] = [50.0, 150.0, 300.0];
 
 pub struct WayfindShotsPlugin;
 
@@ -67,6 +67,9 @@ struct View {
     /// A lamp's view: where the lamp lands in the picture (pixels).
     #[serde(skip_serializing_if = "Option::is_none")]
     at: Option<[f32; 2]>,
+    /// A lamp's view: its halo's colour (linear RGB).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tint: Option<[f32; 3]>,
     #[serde(skip)]
     entity: Option<Entity>,
     /// Its footprint (w, h, d) and pose, for `rect`.
@@ -164,6 +167,7 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
             without: format!("{i:03}_b.png"),
             rect: [0.0; 4],
             at: None,
+            tint: None,
             entity: Some(e),
             // Centred on the thing (its box goes round its middle).
             size,
@@ -266,15 +270,18 @@ fn vantage(
 /// way), on the first bearing on the map.
 fn plan_lamps(
     zone: &Zone,
-    lamps: &Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    lamps: &Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
     spatial: &avian3d::prelude::SpatialQuery,
 ) -> Vec<View> {
     let half = zone.map.size * 0.5 - 2.0;
-    let mut found: Vec<(Entity, Vec3)> = lamps.iter().map(|(e, g)| (e, g.translation())).collect();
-    found.sort_by_key(|(e, _)| *e);
+    let mut found: Vec<(Entity, Vec3, [f32; 3])> = lamps
+        .iter()
+        .map(|(e, g, h)| (e, g.translation(), [h.color.red, h.color.green, h.color.blue]))
+        .collect();
+    found.sort_by_key(|(e, _, _)| *e);
     let filter = avian3d::prelude::SpatialQueryFilter::default();
     let mut v = Vec::new();
-    for (e, lamp) in found {
+    for (e, lamp, tint) in found {
         for d in LAMP_AT {
             let bearings = (0..16).map(|i| {
                 let a = i as f32 * std::f32::consts::TAU / 16.0;
@@ -317,6 +324,7 @@ fn plan_lamps(
                 without: format!("{i:03}_b.png"),
                 rect: [0.0; 4],
                 at: Some([0.0; 2]),
+                tint: Some(tint),
                 entity: Some(e),
                 // A box a halo across round the lamp.
                 size: Vec3::splat(2.0),
@@ -343,7 +351,7 @@ fn shoot(
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
     weather: Res<crate::world::sky::Weather>,
-    lamps: Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    lamps: Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
     spatial: avian3d::prelude::SpatialQuery,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
@@ -409,6 +417,7 @@ fn shoot(
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
                     at: None,
+                    tint: None,
                     entity: Some(*e),
                     size: *size,
                     pose: *pose,
@@ -434,6 +443,7 @@ fn shoot(
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
                     at: None,
+                    tint: None,
                     entity: None,
                     size: Vec3::ZERO,
                     pose: Transform::IDENTITY,

@@ -19,7 +19,7 @@ pub struct LandmarkLampsPlugin;
 
 impl Plugin for LandmarkLampsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_landmarks, day_glows));
+        app.add_systems(Update, (light_landmarks, day_glows, bulb_to_the_eye));
     }
 }
 
@@ -63,6 +63,41 @@ pub fn top_of(id: &str) -> Option<Vec3> {
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
 
+/// The bulb's light as it reaches the tonemapper (after the grade): red on
+/// screen, not white. Past about 1 the tonemapper (AgX) runs a red to
+/// white, and the eyes' adaptation (the grade's exposure, up to three
+/// stops at night) multiplies an emissive like everything else.
+const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.045, 0.014);
+
+/// The landmark lamps' shared bulb material.
+#[derive(Resource)]
+struct Bulb(Handle<StandardMaterial>);
+
+/// The bulb's emissive against the grade's exposure, so it reaches the
+/// screen at `BULB` however far the eyes have opened.
+fn bulb_to_the_eye(
+    bulb: Option<Res<Bulb>>,
+    grades: Query<(&Camera, &bevy::render::view::ColorGrading)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let Some(bulb) = bulb else {
+        return;
+    };
+    let Some(stops) = grades
+        .iter()
+        .find(|(c, _)| c.is_active)
+        .map(|(_, g)| g.global.exposure)
+    else {
+        return;
+    };
+    let want = BULB * 2f32.powf(-stops);
+    if materials.get(&bulb.0).is_some_and(|m| m.emissive != want) {
+        if let Some(mut m) = materials.get_mut(&bulb.0) {
+            m.emissive = want;
+        }
+    }
+}
+
 fn light_landmarks(
     mut commands: Commands,
     buildings: Query<(Entity, &Building), Added<Building>>,
@@ -91,7 +126,9 @@ fn light_landmarks(
                     meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.5, 0.02, 0.01),
-                        emissive: LinearRgba::rgb(120.0, 6.0, 2.0),
+                        // Set each frame against the eyes' adaptation
+                        // (`bulb_to_the_eye`).
+                        emissive: BULB,
                         ..default()
                     }),
                     meshes.add(Rectangle::new(DAY_R * 2.0, DAY_R * 2.0)),
@@ -109,6 +146,7 @@ fn light_landmarks(
                 )
             })
             .clone();
+        commands.insert_resource(Bulb(lamp.clone()));
         let at = top + Vec3::Y * (LAMP_R + 0.05);
         commands.entity(e).with_children(|c| {
             c.spawn((

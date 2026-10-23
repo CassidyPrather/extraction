@@ -19,6 +19,9 @@ struct HaloParams {
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> halo: HaloParams;
 
+// The most a halo adds in its brightest channel, as the tonemapper gets it.
+const HUE_CAP: f32 = 1.0;
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let to_eye = view.world_position - in.world_position.xyz;
@@ -38,5 +41,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let far = dist / max(halo.air.y, 1.0);
     let fog = exp(-3.0 * far * far);
     let k = (core * fog + glow * sqrt(fog)) * edge;
-    return vec4<f32>(halo.color.rgb * halo.color.w * k * view.exposure, 0.0);
+    let rad = halo.color.rgb * halo.color.w * k * view.exposure;
+    // Its brightest channel eased toward HUE_CAP, the others with it: past
+    // that the tonemapper (AgX) runs a red or green core to white, and a
+    // red landmark and a green way out read the same.
+    // Eased as it will reach the tonemapper: the grade's exposure (the
+    // eyes' adaptation, up to three stops at night) comes after.
+    let gain = exp2(view.color_grading.exposure);
+    let m = max(rad.r, max(rad.g, rad.b)) * gain;
+    let eased = m / (1.0 + m / HUE_CAP);
+    return vec4<f32>(rad * (eased / max(m, 1e-6)), 0.0);
 }

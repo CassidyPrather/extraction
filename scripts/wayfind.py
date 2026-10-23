@@ -13,12 +13,15 @@ way; or, a light, at least LAMP_AREA pixels at LAMP_CONTRAST. Every vantage need
 vantages with none.
 
 With --lamps (the shots of `--wayfind-lamps`, after dark): each
-landmark's lamp from 150 m and 300 m must be measurably brighter than
+landmark's lamp from 50 m, 150 m and 300 m must be measurably brighter than
 what's round it: its brightest pixel (within LAMP_NEAR of where it lands)
 at least LAMP_LIFT times and LAMP_STEP over the brighter of the same
 spot without the lamp and the median round it. The exit status is the
-number of lamp views that fail; one with a brighter light in line (white
-round it) says nothing either way and isn't counted.
+number of lamp views that fail (dim, or a coloured lamp's colour lost
+to white: LAMP_HUE); one with another light in line (there without
+the lamp: LAMP_BLOWN) says nothing either way and isn't counted.
+A faint lamp far off may pass on its colour instead of LAMP_STEP: its own
+channel at least twice LAMP_HUE times the next.
 
 Time is frozen while a view is shot, the difference is taken only inside
 the landmark's box in the picture, and only its largest blob counts.
@@ -122,23 +125,55 @@ LAMP_NEAR = 2
 LAMP_ROUND = 12
 LAMP_LIFT = 1.4
 LAMP_STEP = 0.02
-LAMP_BLOWN = 0.9
+LAMP_BLOWN = 0.15
+# A coloured lamp keeps its colour: its own channel at least LAMP_HUE
+# times the next one at its brightest pixel (a red landmark against a
+# green way out), when its halo's colour is that far off white.
+LAMP_HUE = 1.6
+
+
+def lamp_hue(d, v):
+    """How far the lamp's own channel leads the next in the light it adds
+    (with it less without it, 8-bit sRGB) at its brightest, or None for a
+    lamp near white."""
+    t = v.get("tint")
+    if not t:
+        return None
+    order = sorted(range(3), key=lambda i: -t[i])
+    if t[order[0]] < LAMP_HUE * max(t[order[1]], 1e-6):
+        return None
+    a = np.asarray(Image.open(os.path.join(d, v["with"])).convert("RGB"), dtype=np.float32)
+    b = np.asarray(Image.open(os.path.join(d, v["without"])).convert("RGB"), dtype=np.float32)
+    x, y = (int(round(c)) for c in v["at"])
+    n = LAMP_NEAR
+    sl = (slice(max(0, y - n), y + n + 1), slice(max(0, x - n), x + n + 1))
+    win, behind = a[sl].reshape(-1, 3), b[sl].reshape(-1, 3)
+    if win.size == 0:
+        return None
+    i = np.argmax((win - behind).sum(axis=1))
+    # A white core reads white whatever was behind it; a coloured one
+    # leads in its own channel over what it added in the next.
+    p, q = win[i], np.clip(win[i] - behind[i], 0, None)
+    if p.min() >= 250:
+        return 1.0
+    return float(q[order[0]] / max(q[order[1]], 1.0))
 
 
 def lamp_shines(d, v):
-    """(peak, surroundings): the lamp's brightest pixel, and the brighter
-    of the same spot without it and the median round it (with it)."""
+    """(peak, surroundings, behind): the lamp's brightest pixel, the
+    brighter of the same spot without it and the median round it (with
+    it), and the spot without it."""
     a = lum(os.path.join(d, v["with"]))
     b = lum(os.path.join(d, v["without"]))
     h, w = a.shape
     x, y = (int(round(c)) for c in v["at"])
     if not (0 <= x < w and 0 <= y < h):
-        return 0.0, 1.0
+        return 0.0, 1.0, 1.0
     n, r = LAMP_NEAR, LAMP_ROUND
     peak = float(a[max(0, y - n):y + n + 1, max(0, x - n):x + n + 1].max())
     behind = float(b[max(0, y - n):y + n + 1, max(0, x - n):x + n + 1].max())
     win = a[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1]
-    return peak, max(behind, float(np.median(win)))
+    return peak, max(behind, float(np.median(win))), behind
 
 
 # --afford: an interactable from 1.5 m stands out from what it's on.
@@ -162,15 +197,22 @@ def main(argv):
         for v in views:
             if not v.get("at"):
                 continue
-            peak, round_ = lamp_shines(d, v)
-            ok = peak >= round_ * LAMP_LIFT and peak - round_ >= LAMP_STEP
-            # A brighter light in line with it (white where the lamp is,
-            # with it and without): this bearing says nothing of the lamp.
-            lost = round_ >= LAMP_BLOWN
-            dim += not ok and not lost
-            print(f"{'ok  ' if ok else 'n/a ' if lost else 'DIM '} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
-                  f"lamp {peak:.3f}, round it {round_:.3f} ({peak / max(round_, 1e-4):.1f}x)")
-        print(f"{dim} lamp view(s) not brighter than what's round them")
+            peak, round_, behind = lamp_shines(d, v)
+            # Another light in line with it (there without it): this
+            # bearing says nothing of the lamp.
+            lost = behind >= LAMP_BLOWN
+            hue = None if lost else lamp_hue(d, v)
+            # Brighter than what's round it by LAMP_STEP, or, far off and
+            # faint, by its colour: a deep red point on the grey reads.
+            ok = peak >= round_ * LAMP_LIFT and (
+                peak - round_ >= LAMP_STEP or (hue or 0.0) >= 2.0 * LAMP_HUE)
+            white = hue is not None and hue < LAMP_HUE
+            dim += (not ok or white) and not lost
+            tag = 'n/a ' if lost else 'WHITE' if white and ok else 'ok  ' if ok else 'DIM '
+            print(f"{tag:5} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
+                  f"lamp {peak:.3f}, round it {round_:.3f} ({peak / max(round_, 1e-4):.1f}x)"
+                  + (f", hue {hue:.1f}x" if hue is not None else ""))
+        print(f"{dim} lamp view(s) dim or washed white")
         return dim
     by_from = {}
     rows = []
