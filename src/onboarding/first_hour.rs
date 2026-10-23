@@ -491,6 +491,8 @@ pub(super) struct Newcomer {
     low_until: f32,
     /// When it last did as a machine's tell says (not more than every 15 s).
     tell_at: f32,
+    /// When it got home (the truck back at base, it in the bed).
+    home_at: Option<f32>,
     /// What the job asks.
     errand: Option<Errand>,
     /// Getting what it brought into the crate.
@@ -1372,7 +1374,15 @@ pub(super) fn direct_raid(
                 Some(Errand::Bring { want, .. }) => Some(want.clone()),
                 _ => None,
             };
-            if raid.phase == Phase::AtBase
+            if raid.phase == Phase::AtBase && state.home_at.is_none() {
+                state.home_at = Some(now);
+            }
+            // A moment in the bed first: everything's where it was out
+            // there until the drive home's settled.
+            let settled = state.home_at.is_some_and(|t| now - t > 2.0);
+            if raid.phase == Phase::AtBase && !settled {
+                tasks.push(Task::Wait(1.0));
+            } else if raid.phase == Phase::AtBase
                 && let Some(want) = bring
                 && state.crating.as_ref().is_none_or(|c| !c.done())
             {
