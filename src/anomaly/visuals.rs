@@ -523,7 +523,7 @@ fn init_assets(
     // (A faint warmth in it, the lift's own light on it: in the dark its
     // edge still shows.)
     let flattened = ground(
-        Color::srgba(0.24, 0.11, 0.06, 0.97),
+        Color::srgba(0.3, 0.11, 0.05, 0.97),
         LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
@@ -556,10 +556,11 @@ fn init_assets(
         LinearRgba::rgb(0.0, 0.01, 0.03),
         0.95,
     );
-    // Pressed dark and hard, the faintest violet in it.
+    // Pressed dark and hard, a faint violet in it (the well's own light:
+    // in shadow and at night its edge still shows).
     let crushed = ground(
         Color::srgba(0.035, 0.03, 0.035, 0.95),
-        LinearRgba::rgb(0.004, 0.0, 0.01),
+        LinearRgba::rgb(0.02, 0.004, 0.05),
         0.95,
     );
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
@@ -648,7 +649,9 @@ fn particle_mesh(n: usize, rng: &mut extraction_core::noise::Rng) -> Mesh {
 /// position): a grid whose every vertex sits just above the ground, so a
 /// slope can't bury half a flat disc and cut it off in a hard line.
 fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
-    let n = 12;
+    // Fine enough not to cut into a slope between its points (at 12 a side
+    // a burner's scorch on a hillside sank under the turf at its rim).
+    let n = 24;
     let below = crate::world::underground::floor_under(zone, centre).is_some();
     let mut pos = Vec::new();
     let mut uv = Vec::new();
@@ -662,7 +665,7 @@ fn draped_disc(zone: &crate::world::Zone, centre: Vec3, half: f32) -> Mesh {
             let y = if below {
                 0.04
             } else {
-                zone.ground(centre.x + x, centre.z + z) - centre.y + 0.04
+                zone.ground(centre.x + x, centre.z + z) - centre.y + 0.06
             };
             pos.push([x, y, z]);
             uv.push([u, v]);
