@@ -333,6 +333,17 @@ cluster of three or more merges within ten minutes.
   twice its own measured noise from `scripts/visual_diff/noise.json`.
   Remake that file with `scripts/visual_diff.py --calibrate a b
   scripts/visual_diff/noise.json` from two runs of one build.
+- **`--quick`**, for right after a gate: the landmark view of each valley
+  (its sky, lights and lamps) at dusk and night, 10 shots. It takes about
+  6 min of shooting a side, plus about 6.5 min to build a new sha
+  incrementally. It ends, as the full sweep does, with one line: `PASS`,
+  or `CHANGED` with the count and the sheet's path. Shots are kept a file
+  at a time, so quick and full runs share them. `MAPS`, `MOODS` and
+  `VIEWS` narrow a run to one shot for a bisect.
+- **Lamps with a character** (`render::landmarks`) blink. A still shows
+  the phase its frame lands on, so a change to how long a build takes to
+  reach its shot moves the lamp. Read a lamp-only change with that in
+  mind.
 - **The sheet** shows the 40 most changed shots, old | new | where it
   changed (red over the new, greyed), ranked by how many times over its
   threshold each is. `index.html` lists every shot's numbers.
@@ -341,4 +352,7 @@ The first round, `77ce6f57` to `823b12f3`, changed 21 of 100 shots
 (`docs/shots/capture/vdiff/`):
 - every anomaly view, from Anomalies taking the haze's rim ring out;
 - Marrow Creek's dusk light shafts, from a warm haze to pale beams, with
-  no change to the shafts' own code.
+  no change to the shafts' own code. `EXTRACTION_WARMUP=0` brought the
+  old look back in the new build (`marrow_dusk_warmup_on_off.jpg`): it
+  was Performance's warm-up (the proxy eye). By `4fd146cf` it was back
+  as it was.

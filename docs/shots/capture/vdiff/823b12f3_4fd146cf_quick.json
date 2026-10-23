@@ -1,0 +1,72 @@
+{
+ "title": "823b12f3 -> 4fd146cf",
+ "thresholds": {
+  "structure": 0.005,
+  "pixels": 0.0005
+ },
+ "compared": 10,
+ "changed": 5,
+ "missing": [],
+ "shots": [
+  {
+   "shot": "marrow_creek/dusk/landmark",
+   "score": 420.2623456790123,
+   "structure": 0.11678797006607056,
+   "changed": 0.21013117283950616
+  },
+  {
+   "shot": "marrow_creek/night/landmark",
+   "score": 27.438271604938272,
+   "structure": 0.043354809284210205,
+   "changed": 0.013719135802469137
+  },
+  {
+   "shot": "cinder_works/dusk/landmark",
+   "score": 2.1373510360717773,
+   "structure": 0.010686755180358887,
+   "changed": 7.716049382716049e-05
+  },
+  {
+   "shot": "cinder_works/night/landmark",
+   "score": 1.776421070098877,
+   "structure": 0.008882105350494385,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/landmark",
+   "score": 1.419389247894287,
+   "structure": 0.0070969462394714355,
+   "changed": 0.00016975308641975308
+  },
+  {
+   "shot": "rime_fell/dusk/landmark",
+   "score": 0.7562637329101562,
+   "structure": 0.0037813186645507812,
+   "changed": 0.0001080246913580247
+  },
+  {
+   "shot": "kettle_pass/night/landmark",
+   "score": 0.6018518518518519,
+   "structure": 0.001271069049835205,
+   "changed": 0.00030092592592592595
+  },
+  {
+   "shot": "kettle_pass/dusk/landmark",
+   "score": 0.5945920944213867,
+   "structure": 0.0029729604721069336,
+   "changed": 0.0001388888888888889
+  },
+  {
+   "shot": "sallow_reservoir/night/landmark",
+   "score": 0.5709876543209877,
+   "structure": 0.0022780299186706543,
+   "changed": 0.00028549382716049385
+  },
+  {
+   "shot": "rime_fell/night/landmark",
+   "score": 0.5092592592592592,
+   "structure": 0.0015674829483032227,
+   "changed": 0.0002546296296296296
+  }
+ ]
+}
