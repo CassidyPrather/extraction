@@ -33,6 +33,7 @@ pub mod report;
 pub mod reverb;
 #[cfg(test)]
 pub mod signature;
+pub mod stoppages;
 pub mod sling;
 pub mod tracers;
 pub mod visuals;
