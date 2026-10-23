@@ -343,6 +343,16 @@ fn reel(
                 }
                 first.unwrap()
             }
+            "scan" => {
+                // A walker 6 m off that notices a device in front of you
+                // (devices::DeviceNoticed): its scan beam, red, then
+                // amber (`visuals::scan_beams`).
+                let p = eye + flat * 6.0 + right * 1.5;
+                let at = zone.on_ground(p.x, p.z);
+                let w = spawn_walker(&mut commands, &zone, at, job(at));
+                commands.entity(w).remove::<Senses>().remove::<Brain>();
+                w
+            }
             "pylon" => {
                 // A relay pylon 3 m off, side on: its cable down the
                 // cabinet into the junction box (`network::PylonCable`).
@@ -616,6 +626,27 @@ fn reel(
             for e in gone {
                 world.despawn(e);
             }
+        });
+    }
+    // `scan`: the walker clocks a device on the ground in front of you,
+    // shooting it first, then coming to look.
+    if what == "scan" && (frame == WARMUP + 16 || frame == WARMUP + 52) {
+        let p = eye + flat * 3.0 - right * 0.4;
+        let at = zone.on_ground(p.x, p.z) + Vec3::Y * 0.1;
+        let reaction = if frame == WARMUP + 16 {
+            super::devices::Reaction::Hunt
+        } else {
+            super::devices::Reaction::Investigate
+        };
+        commands.queue(move |world: &mut World| {
+            let device = world.spawn(Transform::from_translation(at)).id();
+            world.write_message(super::devices::DeviceNoticed {
+                robot: subject,
+                device,
+                at,
+                placed: super::devices::TABLE[0].0,
+                reaction,
+            });
         });
     }
     // One heavy round into its side: it goes down, lies a moment, gets up.
