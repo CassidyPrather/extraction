@@ -101,6 +101,9 @@ fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
 
 /// A still's field of view (the game's own camera's), degrees.
 pub const STILL_FOV: f32 = 75.0;
+/// Frames a capture waits at most for everything to be in before its
+/// first shot, so a valley that never settles still gets shot.
+pub const LOAD_WAIT: u32 = 3000;
 /// A still's last settle frames are held with the clock stopped. Whatever
 /// keeps time (clouds, a lamp's character) holds for the picture, so one
 /// build's still is the same every run, and a lamp with a character is
@@ -518,6 +521,7 @@ fn fly(
     mut time: ResMut<Time<Virtual>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -642,6 +646,13 @@ fn fly(
     };
     if settle > 0 {
         place(&mut cam, 0);
+        // The first shot waits at its pose for everything to be in
+        // (`render::timeline`): every material and pipeline compiled.
+        // A still taken before that depended on the wall clock: one
+        // build's Marrow dusk came out warm one run and grey-green the next.
+        if settle <= STILL_HOLD + 1 && loaded.is_none() && *frames < LOAD_WAIT {
+            return;
+        }
         if shot.still && settle <= STILL_HOLD && !time.is_paused() {
             time.pause();
             cine.held = true;

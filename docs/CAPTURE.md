@@ -52,6 +52,14 @@ Things that have bitten captures, and what now guards against them:
   12 and 23 and fails unless the night is dark: mean luminance under 0.2
   and under half the day's. Marrow's gate road reads 0.38 by day and 0.13
   at night; with the bug, it read 0.38 for both.
+- **Shooting before everything was in.** A cinematic's first still came
+  at about frame 61, but "everything in" (every material and pipeline
+  compiled, `render::timeline::Loaded`) comes at about frame 65 under
+  lavapipe. Whether a pipeline was ready depended on the wall clock, so
+  one build's Marrow dusk came out warm in one run and grey-green in the
+  next. Captures now wait at their first pose for `Loaded`, for at most
+  `cinematic::LOAD_WAIT` frames, and the sweep's warm-up waits the same
+  way. Three runs of one build are now bit-identical.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
@@ -355,7 +363,8 @@ The first round, `77ce6f57` to `823b12f3`, changed 21 of 100 shots
 (`docs/shots/capture/vdiff/`):
 - every anomaly view, from Anomalies taking the haze's rim ring out;
 - Marrow Creek's dusk light shafts, from a warm haze to pale beams, with
-  no change to the shafts' own code. `EXTRACTION_WARMUP=0` brought the
-  old look back in the new build (`marrow_dusk_warmup_on_off.jpg`): it
-  was Performance's warm-up (the proxy eye). By `4fd146cf` it was back
-  as it was.
+  no change to the shafts' own code. This was the capture's fault, not the
+  game's: stills were taken before every pipeline had compiled (see
+  "Shooting before everything was in" above). The warm-up's timing only
+  decided which run lost the race. `marrow_dusk_warmup_on_off.jpg` shows
+  that race, not a warm-up bug.
