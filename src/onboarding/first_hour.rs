@@ -2086,9 +2086,10 @@ fn errand_tasks(
                 return Ok(Some((t, None)));
             };
             // As far off as the picture takes (the camera's 60 m), a little
-            // inside it: not so near it notices.
+            // inside it, and nearer each time it's not in it (something in
+            // the way): not so near it notices.
             let away = (here - p.xz()).normalize_or(Vec2::Y);
-            let stand = p.xz() + away * 48.0;
+            let stand = p.xz() + away * (48.0 - 7.0 * tries as f32).max(25.0);
             let mut t = route(&world, &view, here, stand);
             t.extend([
                 Task::Grab {
