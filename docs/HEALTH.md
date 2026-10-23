@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 844e46d | 21:00 (release check) | 40/40 exit 0 (five valleys, seeds 1-8), no timeouts, 26 extracted; stucks 135 against 130 on round 47's seeds; "plough" only on Rime seed 1 (the same raid). 12/12 contract scenarios. `--check-buildings` dusk + night in every valley: 46 checked, 3 flagged on Rime (quarantine_gate from inside the guard booth, a log pile in black fog: probe false positives). visual_diff --quick from fb959f9: 2 of 10 changed (Marrow's anomaly mark, intended), buildings 18/18 | 1056 lib tests, 0 FAILED, all within budget, 36 min; extraction_core 345 passed; bin and doc tests pass | gauges 17/17 in 1683 s |
 | fb959f9 | 17:00 | 36/36 exit 0, no timeouts, 25 extracted (Cinder 7/8, Sallow 6/8, Marrow 5/8, Rime 4/8, Kettle 3/4) | 1 FAILED (walkers_go_round_what_hurts_them, deterministic: the wary grid's smoothing cut through the burner), 39 min | gauges 17/17 in 1639 s |
 | 47c302b | 14:45 | lost (container restart mid-suite); Rime seeds 2 and 4 no longer time out | lost | robots::hazards passes; the shelf gauge 3/3 alone |
 | 0b1f837 | 13:00 | 20/20 exit 0, 14 extracted (identical to 76027ef seed for seed: nothing sim-side changed) | 0 FAILED, 27 min; every_drowned_house 125.7 s > 120 | gauges 16/17 in 1748 s (first_contact Sallow 7.13 > 6.8, its budget since raised) |
@@ -63,19 +64,20 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of fb959f9 (round 47); the wave's final merge is next.
+As of 844e46d (the wave's release candidate): nothing blocking.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `robots::mind_tests::walkers_go_round_what_hurts_them_unless_chasing_hard` ("round it: 2.8 m off") | the wary grid made a hazard's cells dear, but smoothing cut back through them | Robot minds | fixed in d4ad1904, not merged |
-| Sim: Rime seed 2 sticks taking at the ore mill (137-150, 30-32) | stepped surface buildings planned as one floor | coordinator | parked as a follow-up |
-| Sim: the Rime adit's kiosk ground counted as indoors | | Underground | fixed in 1e5cc6e8, not merged (325856c3 already stops the walk into rock) |
-| the long sim tests sit at the 120 s budget (bridges 121.6, every_drowned_house 125.7 s) | | | watching |
+| Sim: Rime ore-mill take stucks (seed 2, 137-150, 30-32) | stepped surface buildings planned as one floor | coordinator | parked as a follow-up |
+| `--check-buildings` flags on Rime: quarantine_gate in interior (dusk 0.3%, night 0.0%), log_pile in insertion at night (0.3%) | probe false positives: a frame-edge strip seen from inside the booth; black fog | Capture | follow-up |
+| Sallow's rendezvous beacons at 50 m (`scripts/lamp_check.sh`, white core) | | Visual design, Fourth valley | parked |
+| the gauge tier at 1683 s on this 4-core container (target 1500) | | Performance | open |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| walkers_go_round_what_hurts_them (the wary grid now closes hazard cells), the Rime adit kiosk counted as indoors | 844e46d | Robot minds, Underground |
 | Rime seeds 2 and 4 timing out in adit_rime (no stand at the kiosk exit, then a straight line into the rock), the warm-up shelf race (resting guns' merged meshes), Sallow's first_contact budget, the gauge tier's time (first_sight 852 → 41 s) | 47c302b / fb959f9 | coordinator, Performance |
 | Marrow m02_village shadow draws (car wrecks, ~40 shadow casters each), subjects findable_early (and its 950 s), the first_sight flake (the dog model asked for mid-raid), warmup's MarkMaterial, Cinder seed 5's pocket (the raider's indoor routes), no-shooter hits named | 58f9a7e / 76027ef / 0b1f837 | Map design, Destruction, Robot minds, Performance, coordinator, Verifier |
 | the two pane tests (`open_pane` now takes upright ground-floor panes in a fixed order), Marrow ducks and flock, Lev k14 (the fixture), first_contact load (this machine: LOAD_SLACK=1.5), the wreck.rs unused `mut` | 782d919 / b131b78 | Destruction, Wildlife, Story, Performance, Verifier |
