@@ -114,6 +114,36 @@ pub const STAND_INS: &[StandIn] = &[
         render: notice_hard,
     },
     StandIn {
+        set: "signal/squad_pin",
+        variants: 2,
+        render: squad_pin,
+    },
+    StandIn {
+        set: "signal/squad_flank",
+        variants: 2,
+        render: squad_flank,
+    },
+    StandIn {
+        set: "signal/squad_cutoff",
+        variants: 2,
+        render: squad_cutoff,
+    },
+    StandIn {
+        set: "signal/squad_spot",
+        variants: 2,
+        render: squad_spot,
+    },
+    StandIn {
+        set: "signal/squad_call",
+        variants: 2,
+        render: squad_call,
+    },
+    StandIn {
+        set: "signal/filed",
+        variants: 2,
+        render: filed,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -796,6 +826,66 @@ fn chirps(rng: &mut Rng, sr: f32, notes: &[(f32, f32, f32)]) -> Vec<f32> {
 /// up, a question (`robots::devices::DeviceNoticed`, investigating).
 fn notice(rng: &mut Rng, sr: f32) -> Vec<f32> {
     chirps(rng, sr, &[(1_400.0, 0.07, 0.05), (2_100.0, 0.09, 0.0)])
+}
+
+/// Machine to machine, a plan on you (`robots::squad::SquadCall`), one
+/// pattern a part, none of them rising like a question
+/// (`device/notice`). Holding you: two level, low, long notes.
+fn squad_pin(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(rng, sr, &[(1_000.0, 0.12, 0.06), (1_000.0, 0.16, 0.0)])
+}
+
+/// Going round to your side: up and back down, quick.
+fn squad_flank(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (1_300.0, 0.06, 0.03),
+            (1_900.0, 0.06, 0.03),
+            (1_300.0, 0.09, 0.0),
+        ],
+    )
+}
+
+/// Making for your way out: a sharp fall.
+fn squad_cutoff(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(rng, sr, &[(2_400.0, 0.06, 0.02), (1_200.0, 0.13, 0.0)])
+}
+
+/// A drone lighting the way in: a high, quick trill.
+fn squad_spot(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let notes: Vec<_> = (0..6)
+        .map(|k| (if k % 2 == 0 { 2_800.0 } else { 3_300.0 }, 0.035, 0.015))
+        .collect();
+    chirps(rng, sr, &notes)
+}
+
+/// A relay calling it in: long, short, long, like a ring.
+fn squad_call(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (1_600.0, 0.14, 0.05),
+            (1_600.0, 0.05, 0.05),
+            (1_600.0, 0.14, 0.0),
+        ],
+    )
+}
+
+/// A relay filing you (`robots::recall::Filed`): three falling notes,
+/// "noted".
+fn filed(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (2_000.0, 0.05, 0.04),
+            (1_600.0, 0.05, 0.04),
+            (1_250.0, 0.09, 0.0),
+        ],
+    )
 }
 
 /// The same, hunting it: three, quicker, harder and higher.

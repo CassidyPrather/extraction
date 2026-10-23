@@ -309,6 +309,14 @@ pub const MIX: &[Cue] = &[
     cue!("robot.wake", "machines/servo", -8.0, 80.0, 10.0, Signal, 6.0),
     cue!("device.notice", "device/notice", -14.0, 80.0, 15.0, Signal, 8.0),
     cue!("device.hunt", "device/notice_hard", -12.0, 85.0, 15.0, Signal, 8.0),
+    // The machines' plan, heard (`audio_machines::squad_sounds`): one
+    // pattern a part, to `squad::CHIRP_REACH`; a relay filing you.
+    cue!("squad.pin", "signal/squad_pin", -14.0, 80.0, 20.0, Signal, 8.0),
+    cue!("squad.flank", "signal/squad_flank", -14.0, 80.0, 20.0, Signal, 8.0),
+    cue!("squad.cutoff", "signal/squad_cutoff", -14.0, 80.0, 20.0, Signal, 8.0),
+    cue!("squad.spot", "signal/squad_spot", -12.0, 80.0, 20.0, Signal, 8.0),
+    cue!("squad.call", "signal/squad_call", -14.0, 80.0, 20.0, Signal, 8.0),
+    cue!("relay.filed", "signal/filed", -14.0, 80.0, 20.0, Signal, 8.0),
     cue!("wreck.thud", "impacts/metal", -2.0, 100.0, 20.0, Action, 10.0),
     cue!("cell.arc", "device/crackle", -9.0, 95.0, 1.0, Action),
     cue!("you.hurt", "physical/body_hit", -8.0, 85.0, 0.0, Detail),

@@ -872,6 +872,22 @@ voices them:
   the slope, is a reflector (`acoustics::reflectors`, "ore_mill"). A
   shot 50 m down the slope from it comes back about 0.3 s later.
 
+## The machines' plan, heard
+
+When machines share a plan on you (`robots::squad::SquadCall`), each
+part chirps its own pattern at the machine that takes it, with a tick
+under it to place it by (`audio_machines::squad_sounds`): holding you,
+two low, level notes (`squad.pin`); going round to your side, up and
+back down (`squad.flank`); making for your way out, a sharp fall
+(`squad.cutoff`); a drone lighting the way in, a high trill
+(`squad.spot`); a relay calling it in, long-short-long (`squad.call`).
+None rises like a question (`device.notice`). Each is heard to the
+chirp's reach, 40 m in calm and 20 in a downpour (`RANGE_TARGETS`), and
+placed by ear (`audio_localise.py`). The radio's line is Robot minds',
+heard as chatter. A relay reporting you (`robots::recall::Filed`) gives
+three falling notes, "noted" (`relay.filed`), quicker and fuller the
+more often it has.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,

@@ -46,6 +46,9 @@ RANGE_TARGETS = {
     "detector.click": (3, 2), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2), "chatter.voice": (3, 2),
     "power.generator": (40, 20), "ug.canary": (15, 8),
+    # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
+    "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
+    "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
     "truck.arrive": (60, 15), "walker.aim": (60, 30),
     "voice.idle": (20, 8), "voice.noticed": (30, 15), "voice.investigating": (30, 15),
