@@ -18,18 +18,23 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 
 # A building in view changes a good share of the box round it on screen
 # (the box holds sky and ground too). Below this it isn't really there.
 MIN_CHANGED = float(os.environ.get("MIN_CHANGED", "0.03"))
-# How far a pixel must move (0-1, after a 1 px blur) to count.
-PIXEL = 0.04
+# How far a pixel must move to count, 0-1: three levels in 255. Stills
+# are deterministic, so hiding a building nobody can see leaves its patch
+# all but bit-identical. A dark building at night moves its pixels by only
+# a few levels, so a coarser 0.04 (after a blur) once failed a hut that
+# was there. Measured: the missing furnace 0.1% of its box; every building
+# there at least 5.8% (Cinder's cellars at night).
+PIXEL = 3 / 255
 
 
 def changed_share(with_path, without_path, rect):
-    a = Image.open(with_path).convert("RGB").filter(ImageFilter.GaussianBlur(1))
-    b = Image.open(without_path).convert("RGB").filter(ImageFilter.GaussianBlur(1))
+    a = Image.open(with_path).convert("RGB")
+    b = Image.open(without_path).convert("RGB")
     w, h = a.size
     x0, y0, x1, y1 = rect
     box = (int(x0 * w), int(y0 * h), max(int(x1 * w), int(x0 * w) + 1), max(int(y1 * h), int(y0 * h) + 1))
