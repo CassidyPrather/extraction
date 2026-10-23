@@ -6,7 +6,7 @@ diverting run (`SIM_DIVERT=1`) against a plain one on the same seeds.
     scripts/wildlife_divert.py target/sim/divert/{on,off}
 
 Each argument holds a directory per valley of runs (`*.jsonl`). A watch is
-a calm walker within 45 m that could see the bot; it's `unseen` if the
+a calm walker within 75 m with a clear line to the bot; it's `unseen` if the
 walker never got onto it in the next 30 s. Per valley and arm: watches,
 the share unseen, and (diverting) how many threw into the wildlife.
 """
