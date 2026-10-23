@@ -510,6 +510,9 @@ fn watch_attention(
     }
 }
 
+/// Your ways count toward the safehouse this near it (m).
+const HABIT_REACH: f32 = 60.0;
+
 /// Home: a loud raid has led them to the safehouse. Its door's broken and
 /// its crate tipped out over the floor.
 fn homecoming(
@@ -518,6 +521,10 @@ fn homecoming(
     mut house: ResMut<Safehouse>,
     mut bags: Query<&mut Backpack, With<SafehouseCrate>>,
     places: Query<&GlobalTransform>,
+    (opts, mind): (
+        Res<crate::launch::LaunchOptions>,
+        Option<Res<crate::robots::memory::ZoneMind>>,
+    ),
     mut was_out: Local<bool>,
 ) {
     let out = raid.phase != Phase::AtBase;
@@ -531,7 +538,11 @@ fn homecoming(
     house.visits = 0;
     house.slept = 0.0;
     house.truck_waits = false;
-    if !house.state.claimed() || peak < extraction_core::safehouse::FOUND_AT {
+    // On your usual ways, they find it a raid quieter.
+    let habit = extraction_core::safehouse::safehouse(&opts.map)
+        .zip(mind.as_deref())
+        .map_or(0.0, |(at, m)| m.memory.heat_near(at, HABIT_REACH));
+    if !house.state.claimed() || peak < extraction_core::safehouse::found_at(habit) {
         return;
     }
     // Tip the crate: its contents fall loose where they were.
@@ -557,7 +568,7 @@ fn homecoming(
         }
         commands.entity(bag).despawn();
     }
-    house.state.found(peak);
+    house.state.found(peak, habit);
     raid.say(lines::SAFE_FOUND);
 }
 

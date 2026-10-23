@@ -38,6 +38,20 @@ pub const NIGHT: f32 = 15.0 * 60.0;
 /// How loud a raid has to have got (the attention feeling, 0-4) for the
 /// machines to find the safehouse.
 pub const FOUND_AT: u8 = 3;
+/// A safehouse on your usual ways (`zone_memory::ZoneMemory::heat_near`,
+/// this habitual or more) is found one feeling sooner: they walk your
+/// ways now.
+pub const HABIT_FINDS: f32 = 0.6;
+
+/// How loud a raid has to have got for them to find the safehouse, with
+/// your ways this habitual round it.
+pub fn found_at(habit: f32) -> u8 {
+    if habit >= HABIT_FINDS {
+        FOUND_AT - 1
+    } else {
+        FOUND_AT
+    }
+}
 
 /// One valley's safehouse, as saved with that valley's Zone.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -78,11 +92,12 @@ impl SafehouseSave {
         }
     }
 
-    /// Home from a raid as loud as `feeling` (0-4): if the machines came
-    /// looking, they found the safehouse. Returns what was in its crate
+    /// Home from a raid as loud as `feeling` (0-4), the safehouse's
+    /// surroundings this habitual (`found_at`): if the machines came
+    /// looking, they found it. Returns what was in its crate
     /// (to scatter about the floor).
-    pub fn found(&mut self, feeling: u8) -> Option<Vec<SavedItem>> {
-        if !self.claimed() || feeling < FOUND_AT {
+    pub fn found(&mut self, feeling: u8, habit: f32) -> Option<Vec<SavedItem>> {
+        if !self.claimed() || feeling < found_at(habit) {
             return None;
         }
         self.broken = true;
@@ -136,9 +151,9 @@ mod tests {
             loads: Default::default(),
         });
         // A quiet raid: nothing comes.
-        assert!(s.found(FOUND_AT - 1).is_none());
+        assert!(s.found(FOUND_AT - 1, 0.0).is_none());
         // A loud one: the door's broken, the crate scattered.
-        let scattered = s.found(FOUND_AT).unwrap();
+        let scattered = s.found(FOUND_AT, 0.0).unwrap();
         assert_eq!(scattered.len(), 1);
         assert!(!s.claimed() && s.broken && s.stash.is_empty());
         // The same cycle keeps the state; the next Surge wipes it.
@@ -151,5 +166,20 @@ mod tests {
         s.laid = Some(2);
         s.surge(4);
         assert_eq!(s.laid, Some(2), "leftovers lay once a cycle, by the cycle");
+    }
+
+    /// On your usual ways, a raid a feeling quieter leads them to it.
+    #[test]
+    fn a_safehouse_on_your_ways_is_found_sooner() {
+        let claimed = || SafehouseSave {
+            cleared: true,
+            barred: true,
+            lit: true,
+            ..Default::default()
+        };
+        assert!(claimed().found(FOUND_AT - 1, 0.5).is_none());
+        assert!(claimed().found(FOUND_AT - 1, HABIT_FINDS).is_some());
+        // Never a quiet raid, however habitual.
+        assert!(claimed().found(FOUND_AT - 2, 1.0).is_none());
     }
 }
