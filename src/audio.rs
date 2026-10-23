@@ -1102,7 +1102,56 @@ fn fault_sounds(
     event: &FireEvent,
     at: Vec3,
 ) -> bool {
-    let layers: &[(&str, &str, f64, Option<f32>)] = match event {
+    let layers = fault_layers(event);
+    if layers.is_empty() {
+        return false;
+    }
+    for &(set, cue, speed, cutoff) in layers {
+        match cutoff {
+            Some(hz) => play_filtered(commands, bank, rng, set, at, cue, speed, hz),
+            None => play_at_speed(commands, bank, rng, set, Some(at), cue, 0.0, speed, 0.04),
+        }
+    }
+    true
+}
+
+/// A fault's layers (set, cue, speed, low-pass): each stoppage its own, so
+/// an ear tells which it is as it happens (`weapons::stoppages`).
+///
+/// - A stovepipe: the bolt stopping short on the case, and the case's
+///   pinched clink in the port. A failure to feed: a light, hollow clack,
+///   the bolt home on nothing (no brass). A double feed: a dull jam and a
+///   grind. A short stroke: the bolt's draw, smothered.
+/// - A dud: the hammer's fall dulled on a primer that doesn't go. A
+///   hang-fire: the same fall, and the primer's faint fizz.
+/// - A blocked trigger (the safety, a Nagant's open gate): a small creak,
+///   the finger against the stop.
+pub fn fault_layers(
+    event: &FireEvent,
+) -> &'static [(&'static str, &'static str, f64, Option<f32>)] {
+    use extraction_core::firearm::Malfunction::*;
+    match event {
+        FireEvent::Malfunctioned(FailureToEject) => &[
+            ("guns/bolt_close", "gun.malfunction", 0.72, None),
+            ("guns/casing", "gun.stovepipe", 0.8, None),
+        ],
+        FireEvent::Malfunctioned(FailureToFeed) => {
+            &[("guns/bolt_close", "gun.ftf", 1.15, Some(2500.0))]
+        }
+        FireEvent::Malfunctioned(DoubleFeed) => &[
+            ("guns/bolt_close", "gun.malfunction", 0.6, Some(1200.0)),
+            ("physical/handle_metal", "gun.grind", 0.7, None),
+        ],
+        FireEvent::Malfunctioned(ShortStroke) => {
+            &[("guns/bolt_open", "gun.short_stroke", 0.8, Some(2500.0))]
+        }
+        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(2500.0))],
+        FireEvent::TriggerBlocked => &[(
+            "physical/handle_metal",
+            "gun.trigger_block",
+            1.5,
+            Some(2500.0),
+        )],
         FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
         FireEvent::Bulged { .. } => &[
             ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
@@ -1118,9 +1167,12 @@ fn fault_sounds(
             ("guns/bolt_open", "gun.bolt_open", 1.0, None),
         ],
         FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
-        // A hang-fire: the hammer's fall and nothing, a dud's click; the
-        // shot it owes comes as a `Fired` of its own.
-        FireEvent::HangFire => &[("guns/dry_fire", "gun.dry_fire", 1.0, None)],
+        // A hang-fire: the hammer's fall, and the primer fizzing; the shot
+        // it owes comes as a `Fired` of its own.
+        FireEvent::HangFire => &[
+            ("guns/dry_fire", "gun.dry_fire", 1.0, None),
+            ("physical/zip", "gun.hang_fizz", 1.8, Some(5000.0)),
+        ],
         // Out of battery: the case bursts outside the chamber. A flat,
         // harsh crack (between a squib and a shot: no barrel behind it)
         // and the brass and gas clattering out of the open action.
@@ -1128,15 +1180,8 @@ fn fault_sounds(
             ("guns/rifle_shot", "gun.out_of_battery", 1.3, Some(3000.0)),
             ("physical/drop_metal", "gun.burst_case", 1.4, None),
         ],
-        _ => return false,
-    };
-    for &(set, cue, speed, cutoff) in layers {
-        match cutoff {
-            Some(hz) => play_filtered(commands, bank, rng, set, at, cue, speed, hz),
-            None => play_at_speed(commands, bank, rng, set, Some(at), cue, 0.0, speed, 0.04),
-        }
+        _ => &[],
     }
-    true
 }
 
 /// [`play_filtered`] with a level offset (dB) against its cue.
@@ -1211,10 +1256,7 @@ pub fn handling_sound(
 ) -> Option<(&'static str, &'static str)> {
     use extraction_core::firearm::ActionKind::*;
     Some(match (event, action) {
-        (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire"),
-        // The action stopping short on a stuck case: a bolt closing,
-        // slowed and lowered into a dull, wrong clack.
-        (FireEvent::Malfunctioned(_), _) => ("guns/bolt_close", "gun.malfunction"),
+        (FireEvent::DryFire, _) => ("guns/dry_fire", "gun.dry_fire"),
         (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert"),
         (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release"),
         (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety"),
@@ -1247,6 +1289,8 @@ pub fn handling_sound(
         (FireEvent::BoltLocked, Some(Revolver)) => ("guns/safety", "gun.gate_open"),
         (FireEvent::BoltClosed, Some(Revolver)) => ("guns/safety", "gun.gate_shut"),
         (FireEvent::Cocked, Some(Revolver)) => ("guns/dry_fire", "gun.cylinder"),
+        // A crossbow's string let go short of the latch: it slaps home.
+        (FireEvent::BoltClosed, Some(Crossbow)) => ("impacts/wood", "gun.string_slap"),
         // A crossbow's string caught on the latch.
         (FireEvent::Cocked, Some(Crossbow)) => ("guns/dry_fire", "gun.latch"),
         // Brass sliding off the magazine's lips into the chamber, under
@@ -1362,7 +1406,6 @@ fn gun_sounds(
             0.07
         };
         let speed = match ev.event {
-            FireEvent::Malfunctioned(_) => 0.72,
             // Small and quick inside the receiver.
             FireEvent::CarrierHome => 1.35,
             FireEvent::OpenBoltSlam => 0.9,

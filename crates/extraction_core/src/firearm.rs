@@ -246,6 +246,9 @@ pub enum Event {
     MagazineHalfSeated,
     /// A half-seated magazine shaken out of the well by the action.
     MagazineDropped,
+    /// The trigger pressed against a block: the safety on, or a Nagant's
+    /// loading gate open (the cylinder won't turn under the hammer).
+    TriggerBlocked,
     MagazineRemoved,
     /// A round was pushed into an internal magazine or a breech.
     RoundLoaded,
@@ -598,6 +601,12 @@ impl Firearm {
         chambered + self.rounds_in_feed() + u32::from(self.in_transit == Some(Round::Live))
     }
 
+    /// A round on its way from the feed to the chamber (a double feed's
+    /// second round, jammed behind the first).
+    pub fn in_transit(&self) -> Option<Round> {
+        self.in_transit
+    }
+
     /// Advances timers. Call once per fixed tick with the trigger state;
     /// handles automatic fire. `roll` supplies uniform randoms in `0..1`.
     pub fn update(&mut self, dt: f32, trigger: bool, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
@@ -702,6 +711,13 @@ impl Firearm {
     /// One trigger stroke (or one auto-fire cycle).
     fn pull(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
         let mut events = Vec::new();
+        let blocked = self.fire_mode() == FireMode::Safe
+            || (self.def.action == ActionKind::Revolver && self.gate_open);
+        if blocked && self.trigger_reset {
+            // Felt once a press: the finger meets the block.
+            self.trigger_reset = false;
+            return vec![Event::TriggerBlocked];
+        }
         if self.fire_mode() == FireMode::Safe
             || !self.trigger_reset
             || !self.is_ready()

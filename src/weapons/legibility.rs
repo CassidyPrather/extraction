@@ -20,10 +20,14 @@
 //!   drags in the hand (`Firearm::action_drag`).
 //! - What it's been made into: a cut barrel, a stock off, a bolt out
 //!   (`gunsmith`), a suppressor or a scope on it (`gadgets`).
+//! - What's stopped it ([`look`], `stoppages`): a stovepipe's case standing
+//!   in the port, a double feed's second round jammed behind the first, a
+//!   slipped magazine hanging low, a hang-fire's thread of smoke from the
+//!   action ([`show_jams`]).
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::firearm::{ActionKind, Round};
+use extraction_core::firearm::{ActionKind, Firearm, Malfunction, Round};
 
 use super::{Gun, Mag};
 use crate::items::{Catalog, Item};
@@ -32,7 +36,10 @@ pub struct LegibilityPlugin;
 
 impl Plugin for LegibilityPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (weigh_mags, add_chambers, show_chambers).chain());
+        app.add_systems(
+            Update,
+            (weigh_mags, add_chambers, show_chambers, show_jams).chain(),
+        );
     }
 }
 
@@ -202,6 +209,7 @@ fn add_chambers(
     meshes: Option<ResMut<Assets<Mesh>>>,
     materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    mut smoke: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     // Drawn where there's drawing; kept track of headless all the same.
     if let (Some(mut meshes), Some(mut materials), None) = (meshes, materials, look.as_ref()) {
@@ -214,9 +222,41 @@ fn add_chambers(
                 ..default()
             }),
         ));
+        *smoke = Some((
+            meshes.add(Sphere::new(0.006)),
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.75, 0.75, 0.72, 0.45),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+        ));
     }
     for (e, gun) in &guns {
         let f = &gun.firearm;
+        let parts: &[Jam] = match f.def.action {
+            ActionKind::Crossbow => &[],
+            ActionKind::Revolver => &[Jam::Smoke, Jam::Bullet],
+            _ => &[Jam::Stovepipe, Jam::Transit, Jam::Smoke, Jam::Bullet],
+        };
+        for &part in parts {
+            let mut c = commands.spawn((
+                Name::new("Jam"),
+                JamShow { gun: e, part },
+                Transform::IDENTITY,
+                Visibility::Hidden,
+                ChildOf(e),
+            ));
+            if let Some((mesh, mat)) = look.as_ref() {
+                if part == Jam::Smoke {
+                    if let Some((m, mt)) = smoke.as_ref() {
+                        c.insert((Mesh3d(m.clone()), MeshMaterial3d(mt.clone())));
+                    }
+                } else {
+                    c.insert((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone())));
+                }
+            }
+        }
         if f.def.action == ActionKind::Revolver || f.def.cartridge == "bolt" {
             continue;
         }
@@ -268,6 +308,150 @@ pub fn show_chambers(
         if t.translation != at {
             t.translation = at;
         }
+    }
+}
+
+/// A stoppage's part, drawn: a stovepipe's case standing in the port, a
+/// double feed's second round behind the first, a hang-fire's smoke, a
+/// squib's bullet stuck in the bore (seen down the muzzle).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Jam {
+    Stovepipe,
+    Transit,
+    Smoke,
+    Bullet,
+}
+
+#[derive(Component, Debug)]
+pub struct JamShow {
+    pub gun: Entity,
+    pub part: Jam,
+}
+
+/// Whether `part` shows on a gun in state `f`.
+pub fn jam_shows(f: &Firearm, part: Jam) -> bool {
+    match part {
+        Jam::Stovepipe => f.malfunction == Some(Malfunction::FailureToEject),
+        Jam::Transit => f.malfunction == Some(Malfunction::DoubleFeed) && f.in_transit().is_some(),
+        Jam::Smoke => f.hang.is_some(),
+        Jam::Bullet => f.squib.is_some(),
+    }
+}
+
+pub fn show_jams(
+    guns: Query<&Gun>,
+    time: Res<Time>,
+    mut shows: Query<(&JamShow, &mut Visibility, &mut Transform)>,
+) {
+    for (j, mut vis, mut t) in &mut shows {
+        let Ok(gun) = guns.get(j.gun) else {
+            continue;
+        };
+        let want = if jam_shows(&gun.firearm, j.part) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *vis != want {
+            *vis = want;
+        }
+        if want == Visibility::Hidden {
+            continue;
+        }
+        let l = &gun.layout;
+        let at = match j.part {
+            // Caught upright in the port by the closing bolt.
+            Jam::Stovepipe => Transform::from_translation(l.port + Vec3::Y * 0.01),
+            // Nosed up behind the case still in the chamber.
+            Jam::Transit => {
+                Transform::from_translation(chamber_at(gun, 0) + Vec3::new(0.0, -0.004, 0.028))
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2 - 0.35))
+            }
+            // A hand's breadth down the bore from the muzzle.
+            Jam::Bullet => Transform::from_translation(l.muzzle + Vec3::Z * 0.1)
+                .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
+                .with_scale(Vec3::new(1.0, 0.5, 1.0)),
+            // A thread rising from the action and starting again.
+            Jam::Smoke => {
+                let rise = (time.elapsed_secs() * 0.7).fract();
+                Transform::from_translation(l.port + Vec3::Y * (0.01 + 0.04 * rise))
+                    .with_scale(Vec3::splat(1.0 + 1.5 * rise))
+            }
+        };
+        if *t != at {
+            *t = at;
+        }
+    }
+}
+
+/// What a look at a gun shows of whatever's stopped it: the bolt, the
+/// port (and, its action shut, what a press check finds in the chamber),
+/// the magazine, the hammer or cocking piece where there's one to see, a
+/// revolver's gate, a crossbow's string, smoke. All of it drawn: the bolt
+/// and hammer by `visuals::animate_parts`, the chamber by
+/// [`show_chambers`], the rest by [`show_jams`] and `reload::hang_mags`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Look {
+    pub bolt: &'static str,
+    pub port: Vec<&'static str>,
+    pub mag: &'static str,
+    pub cocked: Option<bool>,
+    pub gate_open: bool,
+    pub string_drawn: bool,
+    pub smoke: bool,
+}
+
+pub fn look(id: &str, f: &Firearm) -> Look {
+    let tells = TELLS.iter().find(|(g, _)| *g == id).map(|(_, t)| *t);
+    let t = f.bolt_travel;
+    let bolt = if f.def.action == ActionKind::BreakAction {
+        if t >= 0.5 { "broken open" } else { "shut" }
+    } else if f.locked_back || t >= 0.95 {
+        "back"
+    } else if t > 0.3 {
+        "part open"
+    } else if t > 0.05 {
+        "on a case"
+    } else {
+        "home"
+    };
+    let mut port = Vec::new();
+    if jam_shows(f, Jam::Stovepipe) {
+        port.push("a case standing in the port");
+    }
+    if jam_shows(f, Jam::Transit) {
+        port.push("a round jammed behind");
+    }
+    if jam_shows(f, Jam::Bullet) {
+        port.push("a bullet stuck in the bore");
+    }
+    let c = if f.def.action == ActionKind::Revolver {
+        f.cylinder
+    } else {
+        0
+    };
+    port.push(match f.chambers.get(c).copied().flatten() {
+        Some(Round::Live) => "a round in the chamber",
+        Some(Round::Spent) => "a case in the chamber",
+        None => "an empty chamber",
+    });
+    let mag = match &f.magazine {
+        None => "none",
+        Some(_) if f.mag_unseated => "hanging low",
+        Some(m) if m.rounds == 0 => "home, its follower up",
+        Some(_) => "home",
+    };
+    let cocked = tells
+        .filter(|t| t.hammer || t.cocking_piece || t.indicators || t.open_bolt)
+        .map(|_| f.hammers_cocked.iter().any(|h| *h));
+    Look {
+        bolt,
+        port,
+        mag,
+        cocked,
+        gate_open: f.gate_open,
+        string_drawn: f.def.action == ActionKind::Crossbow && f.locked_back,
+        smoke: jam_shows(f, Jam::Smoke),
     }
 }
 
