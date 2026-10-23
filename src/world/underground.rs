@@ -1383,6 +1383,7 @@ fn hang_signs(
             if let Some(text) = &l.sign {
                 commands.spawn((
                     Name::new("Site sign"),
+                    crate::render::legibility::TextSource::Sign,
                     crate::raid::bench::ScreenText {
                         text: text.clone(),
                         size: Vec2::new(1.1, 0.32),
