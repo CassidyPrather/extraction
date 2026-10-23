@@ -625,11 +625,19 @@ mod tests {
             .query_filtered::<Entity, With<LocalPlayer>>()
             .single(app.world())
             .unwrap();
+        // Put there and kept there: still, so the body doesn't gather a
+        // fall's speed from being set down each frame (it took the player
+        // down once the land above the Depot rose).
         let stand = |app: &mut App, at: Vec3| {
             app.world_mut()
                 .get_mut::<Transform>(player)
                 .unwrap()
                 .translation = at;
+            if let Some(mut b) = app.world_mut().get_mut::<crate::player::Body>(player) {
+                b.velocity = Vec3::ZERO;
+                b.airborne = 0.0;
+                b.impact = 0.0;
+            }
         };
         stand(&mut app, terminal - Vec3::Z * 1.0 - Vec3::Y * 0.8);
         let behind = terminal - Vec3::Z * 2.5 - Vec3::Y * 0.8;
