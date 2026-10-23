@@ -509,7 +509,10 @@ mod tests {
         app.update();
         let fog = app.world().get::<DistanceFog>(cam).unwrap();
         assert!(rgb(fog.color).abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-5));
-        assert_eq!(app.world().resource::<GlobalAmbientLight>().brightness, 100.0);
+        assert_eq!(
+            app.world().resource::<GlobalAmbientLight>().brightness,
+            100.0
+        );
     }
 
     #[test]
