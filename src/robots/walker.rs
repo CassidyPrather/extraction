@@ -1108,6 +1108,7 @@ fn walker_guns(
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
     mut commands: Commands,
+    plan: Res<super::squad::Coordination>,
     mut shots: MessageWriter<Shot>,
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
@@ -1152,9 +1153,10 @@ fn walker_guns(
             // A new loss of sight may earn a new burst.
             blind.remove(&e);
         }
-        let suppressing = roles
-            .get(e)
-            .is_ok_and(|(r, _)| r.role == super::squad::Role::Pin && covering.contains(&r.target));
+        let suppressing = plan.suppress
+            && roles.get(e).is_ok_and(|(r, _)| {
+                r.role == super::squad::Role::Pin && covering.contains(&r.target)
+            });
         if suppressing != w.suppressing {
             w.suppressing = suppressing;
             if suppressing {

@@ -112,6 +112,15 @@ struct Newcomer {
     dash_until: f32,
 }
 
+/// The newcomer's body moving at `v` across the ground (it's put where it
+/// goes, so nothing else sets it).
+fn set_velocity(app: &mut App, player: Entity, v: Vec2) {
+    if let Some(mut b) = app.world_mut().get_mut::<crate::player::Body>(player) {
+        b.velocity.x = v.x;
+        b.velocity.z = v.y;
+    }
+}
+
 /// Path length (m).
 fn length(from: Vec2, path: &[Vec2]) -> f32 {
     let mut d = 0.0;
@@ -202,6 +211,9 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     let zone = app.world().resource::<Zone>().clone();
     app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
     app.world_mut().resource_mut::<Coordination>().on = arm.coordinate;
+    // The other arm of the pinner's suppression.
+    app.world_mut().resource_mut::<Coordination>().suppress =
+        std::env::var("SIM_DRILL_NO_SUPPRESS").is_err();
     let mut rng = Rng::new(seed.wrapping_mul(0x9E37_79B9) ^ 0x5D);
     let rvs = rendezvous(&zone);
     let nav_near = |app: &App, p: Vec2| {
@@ -430,6 +442,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             rig.crouch = crouch;
         }
         if crouch {
+            set_velocity(&mut app, player, Vec2::ZERO);
             continue;
         }
         // The machines it knows of: those it can see, and (listening)
@@ -491,6 +504,9 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         let next = here + step;
         if nav.walkable(next.to_array()) {
             here = next;
+            // Moved, not put: its body goes as fast as it does (what a
+            // gunner's lead and its crossing spread read).
+            set_velocity(&mut app, player, step / dt);
         } else {
             me.path = route(&app, here, rvs[me.goal].1);
             me.bound = None;
