@@ -9,7 +9,7 @@
 //! See docs/PERFORMANCE.md, "Hitches".
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use bevy::prelude::*;
     use std::time::Instant;
 
@@ -249,6 +249,78 @@ mod tests {
             )
         }));
 
+        out.push(time(&mut app, "response team", |app| {
+            let before = count::<With<crate::robots::Robot>>(app);
+            let (_, at) = player(app);
+            {
+                let mut d = app
+                    .world_mut()
+                    .resource_mut::<crate::robots::director::Director>();
+                d.enabled = true;
+                d.max_active = 99;
+                d.heat = 3.0;
+                d.next_job = 1e9;
+                d.next_logistics = 1e9;
+                d.queue_response(0.0, at);
+            }
+            let first = vec![frame(app), frame(app), frame(app)];
+            app.world_mut()
+                .resource_mut::<crate::robots::director::Director>()
+                .enabled = false;
+            let after = count::<With<crate::robots::Robot>>(app);
+            (
+                format!("{} robots out at the gate", after.saturating_sub(before)),
+                first,
+            )
+        }));
+
+        out.push(time(&mut app, "dirigible", |app| {
+            let site = ahead(app, 30.0);
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            {
+                let mut c = Commands::new(&mut queue, app.world());
+                crate::robots::dirigible::spawn_dirigible(
+                    &mut c,
+                    site + Vec3::Y * 26.0,
+                    crate::robots::Job {
+                        kind: crate::robots::JobKind::Watch,
+                        site,
+                        duration: 200.0,
+                        exit: site + Vec3::X * 300.0,
+                    },
+                );
+            }
+            queue.apply(app.world_mut());
+            (
+                "over a site 30 m ahead, its pod coming down".into(),
+                Vec::new(),
+            )
+        }));
+
+        out.push(time(&mut app, "crate burst", |app| {
+            let (_, at) = player(app);
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<(Entity, &GlobalTransform), (
+                With<crate::items::loot::SupplyCrate>,
+                Without<crate::destruction::wood::Quiet>,
+            )>();
+            let pick = q
+                .iter(w)
+                .map(|(e, g)| (e, g.translation().distance(at)))
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            let Some((e, d)) = pick else {
+                return ("no crate".into(), Vec::new());
+            };
+            w.entity_mut(e).despawn();
+            (format!("{d:.0} m off: splinters and its loot"), Vec::new())
+        }));
+
+        out.push(time(&mut app, "the Surge", |app| {
+            let mut raid = app.world_mut().resource_mut::<crate::raid::Raid>();
+            raid.clock = crate::raid::SURGE_AFTER - 0.01;
+            ("every bloom at once, and it rages".into(), Vec::new())
+        }));
+
         out.push(time(&mut app, "homecoming", |app| {
             app.world_mut().resource_mut::<crate::raid::Raid>().phase =
                 crate::raid::Phase::Extracting { left: 1e-4 };
@@ -264,6 +336,7 @@ mod tests {
     pub(crate) fn load(map: &str) -> (Vec<f64>, HashMap<String, f64>) {
         let t = Instant::now();
         let mut app = client_threads(map, "downpour", Some(1));
+        super::super::budget::tests::as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ));
@@ -358,6 +431,7 @@ mod tests {
         for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let t = Instant::now();
             let mut app = client_threads(map, "clearing", None);
+            super::super::budget::tests::as_the_game_runs(&mut app);
             let built = t.elapsed().as_secs_f64() * 1000.0;
             systems();
             let t = Instant::now();
@@ -480,6 +554,14 @@ mod tests {
                 ));
             }
         }
+        // The eyes' scale follows the moments (`hold_rate`).
+        let moments: Vec<(String, Vec<f64>)> = spikes
+            .iter()
+            .map(|s| (s.name.clone(), s.frames.clone()))
+            .collect();
+        over.extend(super::super::hold_rate::follows_busy_moments(
+            &base, &moments,
+        ));
         if let Some((i, f)) = long.iter().find(|(i, _)| *i > 2) {
             if *f > LOAD_CEILING * p50 {
                 over.push((

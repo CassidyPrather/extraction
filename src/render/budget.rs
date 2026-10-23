@@ -145,6 +145,25 @@ impl Plugin for BudgetPlugin {
         if std::env::var("EXTRACTION_COUNTS").is_ok_and(|v| v != "0") {
             app.add_systems(Last, log_counts);
         }
+        // Every real session keeps one (for the playtest report,
+        // `crate::report`); `EXTRACTION_FRAMELOG` puts it elsewhere.
+        let opts = app
+            .world()
+            .get_resource::<crate::launch::LaunchOptions>()
+            .cloned();
+        let path = std::env::var_os("EXTRACTION_FRAMELOG")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                let o = opts.as_ref()?;
+                (!o.headless && !o.tooling() && crate::persist::owns_profile(o))
+                    .then(|| FrameLog::in_logs(&o.map))
+                    .flatten()
+            });
+        if let Some(path) = path {
+            let map = opts.map_or_else(String::new, |o| o.map);
+            app.insert_resource(FrameLog::open(path, &map))
+                .add_systems(Last, log_each_frame);
+        }
         let span = RenderSpan::default();
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             use bevy::render::{Render, RenderSystems};
@@ -1124,11 +1143,16 @@ pub(crate) mod tests {
                     Some(n) => bevy::app::TaskPoolPlugin {
                         task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
                     },
-                    None => bevy::app::TaskPoolPlugin::default(),
+                    None => crate::task_pools(),
                 })
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),
         );
+        // BC formats, as the game's GPUs have: the baked textures load as
+        // they ship (`render::textures`), and never reach a GPU here.
+        app.insert_resource(bevy::image::CompressedImageFormatSupport(
+            bevy::image::CompressedImageFormats::BC,
+        ));
         app.insert_resource(crate::LaunchOptions {
             flat: true,
             map: map.into(),
@@ -1151,6 +1175,10 @@ pub(crate) mod tests {
         .add_plugins((crate::GamePlugin, crate::ClientPlugin));
         app.finish();
         app.cleanup();
+        // One thread for the schedules: the counts are per-frame totals,
+        // and beside the rest of the suite a multi-threaded executor only
+        // contends (the Verifier measured these apps twice as fast so).
+        crate::single_threaded(&mut app);
         app
     }
 
@@ -1184,6 +1212,11 @@ pub(crate) mod tests {
     /// The view's load once its counts have held still for three checks
     /// ten frames apart (at most 600 frames).
     fn settled(app: &mut App) -> ViewLoad {
+        // Within half a percent (and two draws) three checks running: some
+        // views never hold exactly still (grass patches swapping at their
+        // edge as it sways, a chunk's streaming on its timer), and waited
+        // out the 600-frame cap for nothing.
+        let near = |a: usize, b: usize| a.abs_diff(b) <= (a.max(b) / 200).max(2);
         let mut last = (0, 0);
         let mut still = 0;
         for _ in 0..60 {
@@ -1192,12 +1225,17 @@ pub(crate) mod tests {
             }
             let load = measure(app);
             let now = (load.draws, load.tris);
-            still = if now == last { still + 1 } else { 0 };
+            still = if near(now.0, last.0) && near(now.1 / 1000, last.1 / 1000) {
+                still + 1
+            } else {
+                0
+            };
             last = now;
             if still >= 3 {
                 return load;
             }
         }
+        println!("    (not still after 600 frames: {last:?})");
         measure(app)
     }
 
@@ -1487,8 +1525,20 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
+    /// The game's own executor again (`client_flash` gives the count
+    /// gauges one thread): the timing gauges measure the frame as it runs,
+    /// schedule shares and all (PostUpdate's culling and transforms side
+    /// by side read 79% of a one-thread frame).
+    pub(crate) fn as_the_game_runs(app: &mut App) {
+        let mut schedules = app.world_mut().resource_mut::<Schedules>();
+        for (_, schedule) in schedules.iter_mut() {
+            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+        }
+    }
+
     pub(crate) fn busy_scene(map: &str) -> App {
         let mut app = client_threads(map, "downpour", Some(1));
+        as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ));
@@ -1865,7 +1915,8 @@ pub(crate) mod tests {
     /// reference units (`CPU_FRAME_UNITS`), each schedule its share
     /// (`CPU_SHARE`).
     #[test]
-    fn a_busy_moment_holds_the_cpu_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_a_busy_moment_holds_the_cpu_budget() {
         let _one_at_a_time = heavy();
         let stats = busy_moment("marrow_creek");
         let reference = REFERENCE.with(|r| {
@@ -1931,27 +1982,32 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn marrow_creek_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_marrow_creek_holds_the_budget() {
         holds("marrow_creek");
     }
 
     #[test]
-    fn kettle_pass_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_kettle_pass_holds_the_budget() {
         holds("kettle_pass");
     }
 
     #[test]
-    fn cinder_works_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_cinder_works_holds_the_budget() {
         holds("cinder_works");
     }
 
     #[test]
-    fn sallow_reservoir_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_sallow_reservoir_holds_the_budget() {
         holds("sallow_reservoir");
     }
 
     #[test]
-    fn rime_fell_holds_the_budget() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_rime_fell_holds_the_budget() {
         holds("rime_fell");
     }
 
@@ -1963,13 +2019,15 @@ pub(crate) mod tests {
     /// A thunderstorm, measured on a flash frame (its dearest: the sun's
     /// cascades on for it, the bolt, the rain sheets).
     #[test]
-    fn marrow_creek_holds_the_budget_in_a_storm() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_marrow_creek_holds_the_budget_in_a_storm() {
         holds_with("marrow_creek", Some(("storm", None)));
     }
 
     /// The first snow, lying: flakes falling, the snow on every surface.
     #[test]
-    fn kettle_pass_holds_the_budget_in_snow() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_kettle_pass_holds_the_budget_in_snow() {
         holds_with("kettle_pass", Some(("drizzle", Some(1.0))));
     }
 }
@@ -2013,4 +2071,133 @@ fn log_counts(
         meshes.iter().count(),
     );
     last.1 = names;
+}
+
+/// A line a frame, `frame cpu_ms gpu_ms eye_scale` (the eyes' width as a
+/// share of the runtime's recommended, `render::hold_rate`; -1 with no
+/// headset), after `# map <valley>`, with
+/// `# world in` once `timeline::WorldReady` (the frames before it are the
+/// load's). Every real session writes `<data dir>/logs/frames-<when>-
+/// <valley>.txt` (the newest ten kept); `EXTRACTION_FRAMELOG=<path>` writes
+/// there instead.
+/// cpu_ms is the frame's real time (in a headset, what the player feels
+/// when the CPU is the slow side); gpu_ms is the newest timed frame's
+/// top-level render passes summed (a few frames late, as timestamps read
+/// back), or -1 when none came back this frame. `scripts/frames.py`
+/// gives the worst frame and the 99.9th percentile of each, so a single
+/// long frame isn't lost in an average (`docs/PERFORMANCE.md`, "Hitches").
+#[derive(Resource)]
+struct FrameLog {
+    out: Option<std::io::BufWriter<std::fs::File>>,
+    frame: u64,
+    seen: Option<std::time::Instant>,
+    world_in: bool,
+}
+
+impl FrameLog {
+    /// This session's frame log in the logs folder, keeping the newest ten.
+    fn in_logs(map: &str) -> Option<std::path::PathBuf> {
+        let dir = crate::persist::data_dir().join("logs");
+        std::fs::create_dir_all(&dir).ok()?;
+        let mut old: Vec<_> = std::fs::read_dir(&dir)
+            .ok()?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("frames-"))
+            })
+            .collect();
+        old.sort();
+        while old.len() >= 10 {
+            let _ = std::fs::remove_file(old.remove(0));
+        }
+        let when = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        Some(dir.join(format!("frames-{when}-{map}.txt")))
+    }
+
+    fn open(path: std::path::PathBuf, map: &str) -> Self {
+        use std::io::Write;
+        let mut out = std::fs::File::create(&path)
+            .map_err(|e| warn!("frame log {}: {e}", path.display()))
+            .ok()
+            .map(std::io::BufWriter::new);
+        if let Some(out) = &mut out {
+            let _ = writeln!(out, "# map {map}");
+        }
+        Self {
+            out,
+            frame: 0,
+            seen: None,
+            world_in: false,
+        }
+    }
+}
+
+/// The GPU's milliseconds for the newest frame whose timestamps came back
+/// since `seen` (top-level render passes summed), if any did.
+pub(crate) fn newest_gpu_ms(
+    store: &bevy::diagnostic::DiagnosticsStore,
+    seen: &mut Option<std::time::Instant>,
+) -> Option<f64> {
+    let mut sum = 0.0;
+    let mut any = false;
+    let mut newest = *seen;
+    for d in store.iter() {
+        let path = d.path().as_str();
+        let Some(pass) = path
+            .strip_prefix("render/")
+            .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+        else {
+            continue;
+        };
+        // Top-level passes only (nested ones are inside them).
+        if pass.contains('/') {
+            continue;
+        }
+        if let Some(m) = d.measurement() {
+            if seen.is_none_or(|s| m.time > s) {
+                sum += m.value;
+                any = true;
+                newest = newest.max(Some(m.time));
+            }
+        }
+    }
+    *seen = newest;
+    any.then_some(sum)
+}
+
+fn log_each_frame(
+    time: Res<Time<Real>>,
+    store: Option<Res<bevy::diagnostic::DiagnosticsStore>>,
+    mut log: ResMut<FrameLog>,
+    world: crate::render::timeline::WorldReady,
+    eyes: Option<Res<crate::render::hold_rate::EyeRect>>,
+) {
+    use std::io::Write;
+    let cpu = time.delta_secs_f64() * 1000.0;
+    let mut seen = log.seen;
+    let gpu = store
+        .as_deref()
+        .and_then(|s| newest_gpu_ms(s, &mut seen))
+        .unwrap_or(-1.0);
+    log.seen = seen;
+    // The eyes' width as a share of the runtime's recommended (-1: no
+    // headset).
+    let scale = eyes.map_or(-1.0, |e| e.scale);
+    log.frame += 1;
+    let frame = log.frame;
+    let world_in = !log.world_in && world.ready();
+    log.world_in |= world_in;
+    if let Some(out) = &mut log.out {
+        if world_in {
+            let _ = writeln!(out, "# world in");
+        }
+        let _ = writeln!(out, "{frame} {cpu:.3} {gpu:.3} {scale:.3}");
+        if frame % 90 == 0 {
+            let _ = out.flush();
+        }
+    }
 }

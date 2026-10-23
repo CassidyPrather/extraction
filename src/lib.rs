@@ -7,7 +7,9 @@
 pub mod acoustics;
 pub mod anomaly;
 pub mod audio;
+pub mod audio_fight;
 pub mod audio_kit;
+pub mod audio_machines;
 pub mod audio_mix;
 pub mod audio_score;
 pub mod audio_underground;
@@ -21,6 +23,7 @@ pub mod dev;
 pub mod foley;
 pub mod gadgets;
 pub mod health;
+pub mod hearing;
 pub mod hud;
 pub mod interact;
 pub mod items;
@@ -35,6 +38,7 @@ pub mod qa;
 pub mod radio;
 pub mod raid;
 pub mod render;
+pub mod report;
 pub mod rig;
 pub mod robot_voice;
 pub mod robots;
@@ -97,6 +101,7 @@ impl Plugin for GamePlugin {
                 foley::FoleyPlugin,
                 destruction::DestructionPlugin,
                 robot_voice::VoicePlugin,
+                hearing::HearingPlugin,
                 radio::RadioPlugin,
             ),
         ))
@@ -110,6 +115,7 @@ pub struct ClientPlugin;
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(report::ReportPlugin);
         app.add_plugins((
             render::RenderPlugin,
             world::WorldVisualsPlugin,
@@ -254,6 +260,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     };
     capture_panics();
     let defaults = DefaultPlugins
+        .set(task_pools())
         .set(WindowPlugin {
             primary_window: Some(window),
             ..default()
@@ -312,6 +319,36 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
     app.run()
+}
+
+/// The task pools: Bevy's, but the IO pool (where models and textures are
+/// read and decoded as they load) three quarters of the cores' worth (2 to
+/// 8) rather than a quarter (1 to 4), on top of the cores, so the compute
+/// pool the systems run on keeps every thread it had. A valley's wait was
+/// its 213 models decoding one at a time on a 4-core machine; once they're
+/// in, the IO threads sleep.
+pub fn task_pools() -> bevy::app::TaskPoolPlugin {
+    use bevy::app::{TaskPoolOptions, TaskPoolThreadAssignmentPolicy as Policy};
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let quarter = ((cores as f32 * 0.25).round() as usize).clamp(1, 4);
+    let io = (cores * 3 / 4).clamp(2, 8);
+    let exactly = |n: usize| Policy {
+        min_threads: n,
+        max_threads: n,
+        percent: 0.0,
+        on_thread_spawn: None,
+        on_thread_destroy: None,
+    };
+    let total = cores + io.saturating_sub(quarter);
+    bevy::app::TaskPoolPlugin {
+        task_pool_options: TaskPoolOptions {
+            min_total_threads: total,
+            max_total_threads: total,
+            io: exactly(io),
+            async_compute: exactly(quarter),
+            ..Default::default()
+        },
+    }
 }
 
 /// Where this session's log goes: `<data dir>/logs/`, one file a session,
@@ -526,17 +563,18 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     .insert_resource(Time::<Fixed>::from_hz(90.0))
     .add_plugins(PhysicsPlugins::default())
     .add_plugins(GamePlugin);
-    if sim {
-        single_threaded(&mut app);
-    }
+    single_threaded(&mut app);
     app
 }
 
-/// Every schedule runs its systems one at a time, in one fixed order. On
-/// many threads, systems that touch the same things run in either order
-/// and two runs of one seed part within seconds; a sim (`--sim-run`, and
-/// so every `--sim N` raid) runs this way, on one task-pool thread, so it
-/// replays from its seed. Each sim is one process a core anyway.
+/// Every schedule runs its systems one at a time, in one fixed order. Every
+/// headless app runs this way: on many threads, systems that touch the
+/// same things run in either order and two runs of one seed part within
+/// seconds, and a one-player world gains nothing from them. Headless apps
+/// run side by side (sims a process a core, tests four at a time), and one
+/// thread each is two to three times faster than each spreading over all
+/// the cores. A sim also gets a one-thread task pool, so it replays from
+/// its seed.
 pub fn single_threaded(app: &mut App) {
     let mut schedules = app.world_mut().resource_mut::<Schedules>();
     for (_, schedule) in schedules.iter_mut() {

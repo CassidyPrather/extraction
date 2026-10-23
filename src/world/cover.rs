@@ -389,7 +389,9 @@ fn stream_cover(
             .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
                 s.is_srgb = true;
             })
-            .load("textures/foliage/fern/albedo.ktx2");
+            .load(crate::render::textures::ktx2(
+                "textures/foliage/fern/albedo.ktx2",
+            ));
         commands.insert_resource(CoverAssets {
             cover: std::sync::Arc::new(CoverMap::new(&zone.map, &zone.hm)),
             building: Default::default(),

@@ -239,7 +239,7 @@ upstream Bevy for multiview, and take it when it lands rather than fork.
 `render::cpu` splits every frame by schedule (marker schedules between
 the main and fixed schedules, so no tracing build is needed;
 `EXTRACTION_CPU=1` logs the split every ten seconds). The gauge
-`budget::tests::a_busy_moment_holds_the_cpu_budget` stages a raid's busy
+`budget::tests::gauge_a_busy_moment_holds_the_cpu_budget` stages a raid's busy
 moment in Marrow Creek: the whole client without a GPU, the player beside
 an anomaly in a downpour, ten robots (six drones, four walkers) hunting
 and shooting, one fixed tick a frame, on one thread so each system's time
@@ -391,7 +391,7 @@ not hold every kind the Surge can open. Marrow Creek shelves 64 kinds of
 thing; every pipeline the raid's firsts need is then built in the first
 200 frames, and none at first use (the same run: a shot, impacts on every
 surface, a robot struck, a grenade, each bloom, a wreck: 0 of 10).
-`warmup::tests::the_shelf_stocks_and_clears` holds the shelf's mechanics
+`warmup::tests::gauge_the_shelf_stocks_and_clears` holds the shelf's mechanics
 (it stocks, the decoys go, nothing's left after).
 
 The shelf draws nothing. Each entry wears its layout's *point twin*: the
@@ -408,7 +408,7 @@ behind, and so it never finished. In Monado's simulated headset (training
 yard, standing still) the point lights went from 7 to 61, and the opaque
 pass from about 1 s to 9-15 s a frame on llvmpipe. Fixed, the lights go
 7, 13, 7 and opaque holds at 0.4-1.3 s.
-`warmup::tests::two_eyes_one_shelf` holds that, and
+`warmup::tests::gauge_two_eyes_one_shelf` holds that, and
 `EXTRACTION_COUNTS=1` logs the world's entity, light and mesh counts every
 ten seconds, and what grew, for anything else that piles up.
 
@@ -492,6 +492,296 @@ startup_frames` (ignored, wall-clock) times it per valley on all cores.
   tangents) are built on the compute pool, each chunk on its own, and
   spawned after: the startup frame 5.4 > 4.4 s (Marrow Creek), 6.2 > 5.1
   (Kettle Pass), 5.1 > 4.1 (Cinder Works), 4.7 > 3.9 (Sallow Reservoir).
+- Every cell still asked every segment of each ridge, channel and stream
+  how near it was, and a creek across the valley is hundreds of segments.
+  `geom::NearLine` keeps a line's segments in 8 m buckets and answers as
+  `polyline_closest` does, to the bit, within the reach that matters (the
+  five heightmaps hash the same): `Heightmap::build` 1.3-2.5 s > 0.5-0.8 s.
+
+### Waiting, step by step
+
+`render::timeline` logs `load: <what> at <s> s` once for each thing the
+player waits on, from `main`'s first line: plugins building, start-up
+(zone, terrain, nav, props), the first frame rendered, the preload landed,
+the forest streamed, the buildings dressed, the warm-up shelf done, and on
+the way out, the exit asked and the world dropped (a valley change waits
+through the close too, then the next launch). Each line carries its frame
+number: a step that waits on frames takes as many anywhere, one that
+waits on work doesn't. Ask a playtester for those lines.
+
+### Ready to look at
+
+Bevy draws nothing for a thing whose material isn't prepared (its
+textures still loading) or whose pipeline is still compiling. On the
+software renderer the ground's and buildings' pipelines took 18 s, so a
+screenshot at a fixed frame 30 had trees floating over no ground.
+`timeline::WorldReady` is the one answer to "is the world in": the
+buildings dressed, the forest built with its impostors taken, and the
+render world clear of unprepared materials and compiling pipelines for 4
+frames in a row (`Unprepared`, counted once a frame's draws are queued; a
+material that just readied queues its pipelines a frame or two later).
+The headset's session waits on it (or 20 s), `--screenshot` waits on its
+materials and buildings after `--frames` (or 180 s, with a warning), and
+"everything in" includes it.
+
+## First contact
+
+A hitch the player meets only the first time: a model, material,
+effect, sound or building's inside first seen, or the first fight.
+
+### The CPU
+
+`render::first_contact` walks each valley's tour, then a fight, twice,
+in a new game per run. The tour is every placement from outside and in,
+the notes, signs and terminals, and the open ground. The second walk is
+the steady state.
+
+A stop counts as a first contact when its first-pass worst frame is over
+1.2x its steady self (and 3 ms) in every run of three. The harness's
+frames jitter by more than a small hitch, so one run decides nothing.
+Each contact is named with what came in round it:
+
+- the assets that loaded;
+- what was spawned, by name;
+- with `FIRST_PROFILE=1` and `--features "bevy/trace bevy/debug"`, the
+  systems that took the time.
+
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter` fails a
+valley over 1.2x in every run.
+
+On all five valleys no stop was a first contact in every run. One was
+in two runs of three: Rime Fell's compressor terminal, 80 ms first
+against 42 ms steady, which didn't recur in a third. No asset loads
+mid-walk (the preload's doing), and no named system over a few ms. What
+was left was the harness's own jitter.
+
+### The GPU
+
+A pipeline is built per material, mesh layout and kind of view, the
+first time something needing it is drawn. `EXTRACTION_PIPELINES=1` logs
+each, and `scripts/xr_check.sh` with it shows what a headset meets. Two
+causes, both fixed:
+
+- **The eyes' kind of view.** The headset's eyes have a custom
+  projection, a kind of view of its own. Warmed on the flat camera, every
+  pipeline was built again as the session began: 58 on Monado's yard, in
+  the player's first seconds in the headset. Now, while the session
+  waits on the load, a proxy eye carries the warm-up shelf instead
+  (`warmup::ProxyEye`): the eyes' projection, look and samples, drawing
+  into a small image under the world. After the session, 2 are built
+  where 58 were:
+  - a skinned X-ray (the shelf leaves skinned meshes alone);
+  - a terrain variant.
+
+  The `--mirror` window's are still built then. It's a view of its own
+  too, and only for whoever is watching.
+- **What streamed in last.** The shelf restocks every 45 frames. On
+  Marrow's tour, 28 pipelines were queued 8 frames after the world
+  counted as in, by the restock after it. Once the world settles, the
+  shelf now restocks at once, and `timeline::WorldReady` waits for that
+  restock's pipelines too (`warmup::Warmed`). That gate covers the
+  session, `--screenshot` and "everything in".
+
+  After the world is in, the tour now builds none (the screenshot's own
+  aside). On lavapipe, "everything in" comes at frame 65, not 41: the
+  compiling moved out of play and into the load.
+
+### A map change's wait
+
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter` times each valley's load on the CPU, from its
+app being built to:
+
+- the preload landed;
+- the buildings dressed;
+- the warm-up shelf's settled restock out (`WorldReady`'s GPU share
+  aside).
+
+| valley | before | after |
+| - | - | - |
+| Marrow Creek | 9.6 s to the buildings (frame 24); warm only at the shelf's end | 7.7 s, all in (frame 18) |
+| Kettle Pass | 8.5 s to the buildings | 7.2 s |
+| Cinder Works | 7.0 s | 6.6 s |
+| Sallow Reservoir | 5.9 s | 6.2 s (noise) |
+| Rime Fell | 7.7 s | 8.7 s |
+
+Rime Fell is now the slowest, and the preload decides it.
+
+- **Buildings while loading.** Buildings are dressed 3 a frame so play
+  doesn't hitch. While the valley loads no one's playing, so it's 24
+  (`timeline::Loaded` marks the end of the load).
+- **The settled restock.** The warm-up's settled restock waits on the
+  forest built and the buildings dressed, not the impostors' pictures.
+- **The IO pool.** Models and textures load on the IO pool. It's now
+  three quarters of the cores' worth (2 to 8), on top of the cores, so
+  the compute pool keeps every thread (`crate::task_pools`). On this
+  4-core container every core is busy loading anyway, so it bought little
+  here (Marrow 8.6 s > 7.7 s). A laptop with more cores should gain more.
+
+What's left is the 213 models decoding. The relaunch around it is 0.9 s
+to close and about 0.2 s to start again.
+
+## Textures
+
+What a valley loads and holds, before:
+
+- **Textures.** 75 KTX2s, all RGBA8 (4 bytes a texel, 495 MB on disk),
+  read and uploaded whole. On Rime Fell its 66 textures were in by
+  6.3 s, its 334 models by 8.3 s, all on the same IO threads. On the GPU
+  they were 501-546 MB of a valley's 2.0-2.2 GB.
+- **Meshes.** The models carry no images: their share is the glTF parsed
+  and the meshes built, 358-601 MB on the GPU.
+
+`scripts/bc7_textures.py` bakes a BC7 copy (`<name>.bc7.ktx2`) beside
+each albedo and arm map: every level and layer, sRGB kept, data maps
+weighted linearly. It's a quarter of the bytes, and the GPU samples it as
+it is. 50 maps, 330 MB > 83 MB. `fetch_assets.py` runs it after a build
+(it needs `pip install etcpak`; without it the originals load).
+
+`render::textures::ktx2` loads the copy where the GPU has BC formats
+(every desktop GPU, and lavapipe) and the copy exists, the original
+otherwise. `EXTRACTION_BC=0` forces the originals, to compare. The test
+client says it takes BC, so the gauges count what ships.
+
+Normal maps stay RGBA8. Their fine detail doesn't fit BC7's 4x4 blocks:
+26-29 dB, where the colour maps' median is 43 dB, about 5 degrees off.
+BC5 (two channels, the third rebuilt) would need the terrain's and the
+trees' shaders to rebuild it: a next step, with Visual design.
+
+The look: the same views with and without (lavapipe, 1280x720):
+
+| view | PSNR | pixels more than 16 off |
+| - | - | - |
+| Marrow Creek, the road | 43.6 dB | 0.28% |
+| Sallow Reservoir, the dam | 47.8 dB | 0.08% |
+| Rime Fell, a barn | 36.3 dB | 0.23% |
+
+Rime Fell's difference is the snow, which falls differently each run:
+the wall and the ground are the same.
+
+What it bought (CPU harness, `gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`):
+
+| valley | load, RGBA8 | load, BC7 (budget) | VRAM, RGBA8 | VRAM, BC7 |
+| - | - | - | - | - |
+| Marrow Creek | 7.7 s | 4.7 s (6.0) | 2.2 GB | 1.97 GB |
+| Kettle Pass | 7.2 s | 3.7 s (5.0) | 2.2 GB | 1.99 GB |
+| Cinder Works | 6.6 s | 4.0 s (5.5) | 2.1 GB | 1.86 GB |
+| Sallow Reservoir | 6.2 s | 3.3 s (4.5) | 2.0 GB | 1.75 GB |
+| Rime Fell | 8.7 s | 4.3 s (6.0) | 2.2 GB | 1.98 GB |
+
+The gauge loads every valley and counts its VRAM. It walks Marrow Creek
+for first contact (`FIRST_WALK=all`: every valley), about 6 minutes in
+all.
+
+## Holding the frame rate
+
+`render::hold_rate` keeps the headset at its refresh rate by rendering
+more or less of each eye. The swapchain is made at the runtime's
+recommended size. Each frame, the eye cameras' viewports and the
+projection layer's image rects are set to the governed size, and the
+compositor scales that part to the display. No swapchain is made again.
+`bevy_mod_openxr`'s projection layer is replaced by `RectLayer`, the same
+layer but with the rect. Both read the frame's extracted `EyeRect`, so the
+cameras and the rect always agree.
+
+The governor (`Governor`) steps every 4 frames, from the GPU's measured
+time (timestamp queries, the top-level passes summed) against the
+display's period:
+
+- **Down** when the second-worst of the last 8 frames runs past 85% of the
+  period, by the square root of the overrun (time goes with the pixels),
+  at most 20% a step. A single long frame doesn't count: a pipeline built
+  or a hitch on the CPU isn't the pixels' doing.
+- **Up** 3% a step, at most once every half second after a drop, and only
+  if the 90th percentile of the last 45 frames would still fit 80% of
+  the target at the larger size. The band between up and down is the
+  hysteresis that keeps it from pumping.
+- **Floor:** the narrowest eye that keeps must-read text at 7.5 px of
+  x-height (`floor_eye_px`, about 1735 px across, from Legibility's
+  constants).
+- **Cap:** the runtime's recommended size.
+- **Start:** the SHARPNESS size. With HOLD FRAME RATE off it stays there.
+- **No GPU times** (no timestamp queries): it holds where it is.
+
+The frame log's fourth column is the eyes' width as a share of the
+runtime's recommended width. The report's `frames-summary.txt` gives its
+least, median and most per valley. The session log says, every ten
+seconds, the size, the GPU's time and the period it was held to.
+
+What it buys:
+
+| Run | Eyes | Eyes' GPU time a frame |
+| - | - | - |
+| Monado's simulated headset, lavapipe | 640x720 | 370-400 ms |
+| Monado's simulated headset, lavapipe | 320x360 (a quarter of the pixels) | 220 ms (45% less) |
+
+The opaque pass shrinks with the viewport. Tonemapping and MSAA
+writeback still cover the whole target, but they're small.
+
+`hitches_hold_their_ceiling` (`hold_rate::follows_busy_moments`) runs the
+hitch gauge's forced events (the response team, the Surge and the rest) through
+the governor. Each frame's measured load is taken as the GPU's, with a
+modelled GPU (a fifth fixed, the rest the pixels'). Wherever frames ran
+late in a run, the scale came down within a step, and it was back within
+2.3 s:
+
+- the Surge: 0.62 > 0.57;
+- the response team: 0.58 > 0.56;
+- the Depot's residents: 0.62 > 0.55.
+
+That shows the steps on the real moments' shapes. What a headset's GPU
+spends is the frame log's to say.
+
+For a simulated runtime (whose period follows the game's own pace),
+`EXTRACTION_FRAME_BUDGET_MS` stands in for the period and
+`EXTRACTION_EYE_FLOOR_PX` for the floor.
+
+## Empty meshes
+
+Bevy skips the GPU room for a mesh with no vertex data (or no indices)
+but still copies it in, logging "Use-after-free: attempted to copy element
+data for an unallocated key" each time the mesh is built or changed. A
+mesh made from a list is empty whenever its list is: the footprints, the
+machine prints and the lightning bolt, rebuilt as they change, logged
+18 or more a shot. `render::sound_meshes::never_empty` gives such a mesh
+one zero-area triangle, which draws nothing; build any mesh from a list
+that can be empty through it. In tests, an empty mesh added or changed
+fails the run (`no_empty_meshes`, in every client test), and
+`no_empty_mesh_reaches_the_gpu` settles Marrow Creek in a storm.
+
+## VRAM
+
+`render::vram` counts what a valley holds on the GPU from the assets and
+views, without a GPU:
+
+- textures (format, size, mips, layers);
+- meshes (vertex and index buffers);
+- the sun's cascades (per eye) and shadowed lights' maps;
+- both eyes' targets, with 4x MSAA: the multisampled HDR colour and
+  depth, the resolve, the tonemapped image, and the swapchain's.
+
+The eye targets are counted at the runtime's full size, 2980² for the
+playtest's Beyond 2. Holding the frame rate (`render::hold_rate`), they're
+made that big.
+
+The valley gauge holds each valley under 4.5 GB (the
+3060 laptop's 6 GB, less the driver's, the compositor's and SteamVR's
+share) and prints the biggest texture folders.
+
+| valley | total | textures | meshes | shadows | eye targets |
+|---|---|---|---|---|---|
+| Marrow Creek | 1.97 GB | 310 MB | 558 MB | 16 MB | 1084 MB |
+| Kettle Pass | 1.99 GB | 306 | 585 | 16 | 1084 |
+| Cinder Works | 1.86 GB | 296 | 465 | 16 | 1084 |
+| Sallow Reservoir | 1.75 GB | 287 | 358 | 16 | 1084 |
+| Rime Fell | 1.98 GB | 273 | 601 | 16 | 1084 |
+
+The textures were 501-546 MB a valley until the colour and data maps went
+to BC7 (below, "Textures"). The valleys' budget is 2 GiB
+(`vram::VRAM_BUDGET`, under the 4.5 GB ceiling), held by
+`gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`.
+
+At the old fixed 1800² the eye targets were 396 MB, and each valley 1.3-1.5
+GB. Under half the ceiling either way: nothing to stream or cut yet.
 
 ## Small things' shadows
 
@@ -567,7 +857,7 @@ drawn as 125. Gate shadow draws went Marrow 391 to 361, Rime Fell 483 to
 went 954 to 919. The gate views' own draws don't move: those guns are
 behind the cameras. `docs/shots/performance/guns_at_rest.png` shows
 those guns with it off (top) and on (bottom); only the grass sway
-differs. Tests: `gun_rest::tests::guns_lying_about_rest` and
+differs. Tests: `gun_rest::tests::gauge_guns_lying_about_rest` and
 `a_resting_gun_wakes`.
 
 ## The headset's two eyes: what each costs
@@ -622,3 +912,60 @@ holds, `scripts/bench.sh`'s second eye):
   fails if the eyes see more than 10% apart, or if a third view draws
   the world. The fragments are overdraw × eye pixels. Marrow's worst is
   the spruce view: 45.8M a frame against 64.8M.
+
+## First sight and the raid's one-offs
+
+A single long frame is worse in a headset than a steady few milliseconds
+over budget. The hitch work hunts the frames that run long once.
+
+- **Models load at start, not at first sight.**
+  - Spawning everything a raid can bring out after Marrow Creek had
+    loaded (a robot of each mid-raid kind, one of every item) used to
+    load 117 files mid-raid: 106 item and magazine models and 8 robot
+    models.
+  - `render::first_sight::PreloadPlugin` asks for every model under
+    `models/items`, `mags`, `guns` and `robots` at start (340 paths).
+    `EXTRACTION_PRELOAD=0` turns it off.
+  - `first_sight::tests::nothing_new_is_asked_for_mid_raid` (in the
+    suite) fails on any model asked for after start; without the preload
+    it counts 114. `gauge_nothing_loads_mid_raid` (gauge tier) waits
+    for the start's loads to land, then fails on any model or texture
+    loaded from disk.
+- **The shelf builds their pipelines too.**
+  - `warmup::shelve_models` puts the preloaded models' primitives on the
+    warm-up shelf, with the materials they'll wear.
+  - On lavapipe, with everything brought out at frame 1100
+    (`EXTRACTION_EVERYTHING=1100 EXTRACTION_PIPELINES=1`), one pipeline
+    was built at first sight (a prepass, likely a skinned robot's).
+  - Neither side's worst frame was that frame: CPU p99.9 1495 ms, GPU
+    p99.9 1162 ms, against p50s of 1179 and 989.
+- **Per-frame CPU and GPU.** `EXTRACTION_FRAMELOG=<path>` writes a line a
+  frame (frame, cpu_ms, gpu_ms). `scripts/frames.py` gives each side's
+  p50, p99, p99.9 and worst frame.
+- **The hitch gauge's events** (`render::spikes`, `scripts/hitches.sh`):
+  - the grenade, the wrecks and each bloom;
+  - the Depot's residents;
+  - a response team at the gate, a dirigible lowering its pod, a supply
+    crate bursting, and the Surge's every bloom at once;
+  - the homecoming.
+
+  On Marrow Creek every event but the homecoming is within 2.2x of the
+  busy moment's median (ceiling 3x).
+- **Resting guns are merged off the main thread.** Deciding whether to
+  merge a gun had built the merge, and a declined gun was asked again
+  every half-second (a 240 ms frame). Now:
+  - the check is cheap;
+  - a declined gun is remembered;
+  - new merges build on the async pool.
+- **The Surge's reset at base goes a step a frame** (`persist::ZoneReset`).
+  At once it was 37 ms of work and more:
+  - the sweep 18 ms;
+  - the mending 9;
+  - the loot 7.
+
+  Now the sweep runs 40 items a frame, then the wrecks, the mending,
+  the anomalies, the loot, and the loot let fall 40 bodies a frame. A
+  save waits for the end, and leaving mid-reset finishes it first.
+  The homecoming went from 89-119 ms to about 60 ms (4x). The rest is
+  single steps (the mending, the loot roll's spawn) that would need
+  splitting inside `destruction::surge` and `loot::roll_zone_loot`.

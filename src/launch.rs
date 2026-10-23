@@ -5,6 +5,7 @@
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
+//! extraction --report [--data-dir DIR]
 //! extraction --sim N [--map NAME] [--seed N] [--jobs J] [--personality P]
 //!            [--sim-minutes M] [--sim-out DIR]
 //! ```
@@ -69,6 +70,8 @@ pub struct LaunchOptions {
     pub new_game: bool,
     /// Don't write raid recordings (`sim::playtest`).
     pub no_record: bool,
+    /// Write the playtest report (`report`) and quit.
+    pub report: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -93,6 +96,9 @@ pub struct LaunchOptions {
     /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
     /// without it, into this folder (`render::wayfind_shots`).
     pub afford: Option<PathBuf>,
+    /// Dev, with `--wayfind`: shoot only the landmarks' lamps, each from
+    /// `render::wayfind_shots::LAMP_AT` metres off (`--wayfind-lamps DIR`).
+    pub wayfind_lamps: bool,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -154,6 +160,7 @@ impl Default for LaunchOptions {
             legibility: None,
             wayfind: None,
             afford: None,
+            wayfind_lamps: false,
             camp: false,
             bot: false,
             scenario: None,
@@ -163,6 +170,7 @@ impl Default for LaunchOptions {
             save: None,
             new_game: false,
             no_record: false,
+            report: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -227,6 +235,7 @@ impl LaunchOptions {
                 "--no-robots" => o.robots = false,
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
+                "--report" => o.report = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
@@ -335,6 +344,14 @@ impl LaunchOptions {
                     o.camera
                         .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
                 }
+                "--wayfind-lamps" => {
+                    o.wayfind = Some(val().into());
+                    o.wayfind_lamps = true;
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
                 "--tour-only" => o.tour_only = Some(val()),
                 "--tour-views" => o.tour_views = Some(val().into()),
                 "--camp" => o.camp = true,
@@ -387,6 +404,21 @@ impl LaunchOptions {
         // A newcomer's first raid has the Zone's machines in it.
         if o.scenario.as_deref() == Some(crate::onboarding::first_hour::RAID) {
             o.robots = true;
+        }
+        // The live water's the service tunnel's, at Cinder Works.
+        if o.scenario.as_deref() == Some(crate::world::live::SCENARIO) && !o.map_explicit {
+            o.map = "cinder_works".into();
+            o.map_explicit = true;
+        }
+        // The carrying gallery is the dam's, on Sallow.
+        if o.scenario.as_deref() == Some(crate::world::echo::SCENARIO) && !o.map_explicit {
+            o.map = "sallow_reservoir".into();
+            o.map_explicit = true;
+        }
+        // The cage is the adit's, on Rime Fell.
+        if o.scenario.as_deref() == Some(crate::world::cage::SCENARIO) && !o.map_explicit {
+            o.map = "rime_fell".into();
+            o.map_explicit = true;
         }
         // The onboarding run is the training yard's.
         if o.scenario.as_deref() == Some(crate::onboarding::bot::SCENARIO) && !o.map_explicit {

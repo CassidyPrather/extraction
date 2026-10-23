@@ -7,6 +7,7 @@
 //! run faster than real time with no window). Map simulations build on the
 //! same tasks.
 
+pub mod crating;
 pub mod crossing;
 pub mod scenarios;
 
@@ -100,6 +101,14 @@ pub enum Task {
     /// Use the item in this hand (radio, dressing, food): what VR's primary
     /// button and flat mode's U do.
     Use(Side),
+    /// Grab `item` as `Grab` does, unless it still lies within `radius` of
+    /// `clear_of` (a stone not yet out of a burner's coals): then leave it.
+    GrabClear {
+        item: Entity,
+        side: Side,
+        clear_of: Vec3,
+        radius: f32,
+    },
     /// Throw what's in this hand at a point (a bolt into an anomaly).
     Throw {
         side: Side,
@@ -170,6 +179,17 @@ impl Task {
                 item,
                 side: side.other(),
             },
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => Task::GrabClear {
+                item,
+                side: side.other(),
+                clear_of,
+                radius,
+            },
             Task::Use(side) => Task::Use(side.other()),
             Task::Throw { side, at } => Task::Throw {
                 side: side.other(),
@@ -181,6 +201,27 @@ impl Task {
             other => other,
         }
     }
+}
+
+/// Waypoints on a circle of `r` round `centre` that take a walk from
+/// `from` to `to` round it rather than across it (none when the straight
+/// line keeps clear).
+pub fn round_about(from: Vec2, to: Vec2, centre: Vec2, r: f32) -> Vec<Vec2> {
+    let d = to - from;
+    let t = ((centre - from).dot(d) / d.length_squared().max(1e-6)).clamp(0.0, 1.0);
+    if (from + d * t).distance(centre) >= r - 0.5 {
+        return Vec::new();
+    }
+    let a0 = (from - centre).to_angle();
+    let a1 = (to - centre).to_angle();
+    let turn =
+        (a1 - a0 + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    // A waypoint every radian or less of the way round.
+    let steps = turn.abs().ceil().max(1.0) as usize;
+    (1..=steps)
+        .map(|k| centre + Vec2::from_angle(a0 + turn * k as f32 / steps as f32) * r)
+        .filter(|p| p.distance(to) > 0.8)
+        .collect()
 }
 
 /// How far a bot reaches for things, metres (horizontal, from the body).
@@ -795,6 +836,36 @@ fn run_tasks(
             continue;
         }
         match task {
+            Task::GrabClear {
+                item,
+                side,
+                clear_of,
+                radius,
+            } => {
+                let inside = ext.placed.get(item).is_ok_and(|(gt, _)| {
+                    let p = gt.translation();
+                    Vec2::new(p.x - clear_of.x, p.z - clear_of.z).length() < radius
+                });
+                if inside {
+                    bot.note(format!("left {item}: still in the anomaly"));
+                    bot.next();
+                    continue;
+                }
+                if let Some(front) = bot.tasks.front_mut() {
+                    *front = Task::Grab { item, side };
+                }
+                // Round the anomaly to it, never across.
+                if let Ok((gt, _)) = ext.placed.get(item) {
+                    let to = gt.translation().xz();
+                    for p in round_about(pos, to, clear_of.xz(), radius + 1.0)
+                        .into_iter()
+                        .rev()
+                    {
+                        bot.tasks.push_front(Task::WalkTo { to: p, within: 0.6 });
+                    }
+                }
+                continue;
+            }
             Task::Wait(s) => {
                 if bot.elapsed >= s {
                     bot.next();
@@ -1626,5 +1697,29 @@ fn run_tasks(
             }
         }
         let _ = &mags;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A walk to the far side of an anomaly goes round it; one that keeps
+    /// clear goes straight.
+    #[test]
+    fn a_walk_goes_round_an_anomaly_not_across() {
+        let c = Vec2::ZERO;
+        let way = round_about(Vec2::new(5.0, 0.0), Vec2::new(-5.0, 0.3), c, 3.0);
+        assert!(!way.is_empty());
+        let mut at = Vec2::new(5.0, 0.0);
+        for p in way.iter().chain([&Vec2::new(-5.0, 0.3)]) {
+            // Each leg keeps out of the 2 m that burns.
+            for k in 0..=10 {
+                let q = at.lerp(*p, k as f32 / 10.0);
+                assert!(q.distance(c) > 2.0, "{q} crosses it");
+            }
+            at = *p;
+        }
+        assert!(round_about(Vec2::new(5.0, 0.0), Vec2::new(5.0, 6.0), c, 3.0).is_empty());
     }
 }

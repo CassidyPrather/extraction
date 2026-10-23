@@ -16,8 +16,8 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::underground::{
-    self as ug, APRON, CEILING_RUN, Cell, KIOSK, Layout, PropKind, Raster, SLAB, STAIR_HALF,
-    STAIR_TOP, Stair, Style, TREAD, WALL,
+    self as ug, APRON, CEILING_RUN, Cell, KIOSK, KIOSK_FLOOR, Layout, PropKind, Raster, SLAB,
+    STAIR_HALF, STAIR_TOP, Stair, Style, TREAD, WALL,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -1288,6 +1288,7 @@ impl Plugin for UndergroundPlugin {
             Update,
             (
                 register_residents,
+                hang_signs,
                 wire_power,
                 throw_switches.after(wire_power),
                 generator_hum,
@@ -1303,6 +1304,12 @@ impl Plugin for UndergroundPlugin {
         .add_plugins((
             super::workings::WorkingsPlugin,
             super::furnace::FurnacePlugin,
+            super::cage::CagePlugin,
+            super::echo::EchoPlugin,
+            super::lockdown::LockdownPlugin,
+            super::live::LivePlugin,
+            super::dark::DarkPlugin,
+            super::glow::GlowPlugin,
         ))
         .init_resource::<Levels>()
         .init_resource::<ResidentGrids>()
@@ -1338,6 +1345,94 @@ impl SitePower {
     }
 }
 
+/// The lamp over a kiosk's door (client: its light).
+#[derive(Component, Debug)]
+pub struct DoorLamp;
+
+/// What's over a kiosk's door, in the portal's own frame: the sign's
+/// centre and the lamp's (its ground at 0).
+fn over_door(top: f32) -> (Vec3, Vec3) {
+    let face = -KIOSK[1] - WALL * 0.5;
+    (
+        Vec3::new(0.0, top + 2.3, face - 0.02),
+        Vec3::new(0.0, top + 2.05, face - 0.12),
+    )
+}
+
+/// As sites are built: over every kiosk's door (bar one with a front of
+/// its own) the layout's sign, stencilled, and a lamp, so a site says
+/// from the surface what's down there.
+fn hang_signs(
+    mut commands: Commands,
+    buildings: Query<(Entity, &super::buildings::Building), Added<super::buildings::Building>>,
+) {
+    for (site, b) in &buildings {
+        let (Some(l), Some(r)) = (ug::layout(&b.prefab), ug::raster(&b.prefab)) else {
+            continue;
+        };
+        for p in &r.portals {
+            if p.facade.is_some() {
+                continue;
+            }
+            let rot = Quat::from_rotation_y(-p.rot.to_radians());
+            let (sign, lamp) = over_door(KIOSK_FLOOR);
+            let place = |q: Vec3| {
+                let xz = p.to_site([q.x, q.z]);
+                Vec3::new(xz[0], p.y + q.y, xz[1])
+            };
+            if let Some(text) = &l.sign {
+                commands.spawn((
+                    Name::new("Site sign"),
+                    crate::raid::bench::ScreenText {
+                        text: text.clone(),
+                        size: Vec2::new(1.1, 0.32),
+                        style: crate::raid::bench::ScreenStyle::Card,
+                    },
+                    Transform::from_translation(place(sign))
+                        .with_rotation(rot * Quat::from_rotation_y(std::f32::consts::PI)),
+                    Visibility::default(),
+                    ChildOf(site),
+                ));
+            }
+            commands.spawn((
+                Name::new("Door lamp"),
+                DoorLamp,
+                Transform::from_translation(place(lamp)),
+                Visibility::default(),
+                ChildOf(site),
+            ));
+        }
+    }
+}
+
+/// Client: a kiosk's door lamp, a dim warm bulkhead light: the way down
+/// shows from across the valley at night.
+fn light_door_lamps(
+    mut commands: Commands,
+    lamps: Query<Entity, Added<DoorLamp>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for e in &lamps {
+        commands.entity(e).insert((
+            PointLight {
+                color: Color::srgb(1.0, 0.8, 0.55),
+                intensity: 6_000.0,
+                range: 7.0,
+                radius: 0.04,
+                shadow_maps_enabled: false,
+                ..default()
+            },
+            Mesh3d(meshes.add(Sphere::new(0.06))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::BLACK,
+                emissive: GLOW,
+                ..default()
+            })),
+        ));
+    }
+}
+
 /// The lever (a breaker's) or pull-start (a generator's) that turns a
 /// stage of a site's power on.
 #[derive(Component, Debug)]
@@ -1346,12 +1441,17 @@ pub struct PowerSwitch {
     pub stage: usize,
 }
 
-/// A door held shut until its stage of its site's power is on.
+/// A door held shut until its stage of its site's power is on; or, its
+/// stage [`SEALED`], shut by the site's lockdown for good.
 #[derive(Component, Debug)]
 pub struct PowerLocked {
     pub site: Entity,
     pub stage: usize,
 }
+
+/// A [`PowerLocked`] stage no switch frees: bolted by a lockdown
+/// (`world::lockdown`).
+pub const SEALED: usize = usize::MAX;
 
 /// Where a stage's power switch is, building space, and which way it
 /// faces.
@@ -1448,9 +1548,10 @@ fn wire_power(
     }
 }
 
-/// Throwing a switch: its stage comes on (for good), the doors it held
-/// are free, its lamps light (and the robots know it), and it clanks or
-/// roars loud enough to bring the crawlers. Out of turn, it's dead.
+/// Throwing a switch: its stage comes on, the doors it held are free (for
+/// good), its lamps light (and the robots know it), and it clanks or roars
+/// loud enough to bring the crawlers. Out of turn, it's dead. Thrown again,
+/// it's off, and the stages after it: a dead zone.
 #[allow(clippy::too_many_arguments)]
 fn throw_switches(
     mut commands: Commands,
@@ -1473,7 +1574,35 @@ fn throw_switches(
         let Ok((mut power, b, xf)) = sites.get_mut(sw.site) else {
             continue;
         };
+        // Thrown again: off, and every stage downstream with it (relays
+        // drop). Its lamps die, for the eye and the machines; the doors it
+        // freed stay free.
         if power.on(sw.stage) {
+            let off: Vec<usize> = (sw.stage..power.stages.len())
+                .filter(|k| power.on(*k))
+                .collect();
+            for k in &off {
+                power.stages[*k].on = false;
+            }
+            raid.say(match power.stages[sw.stage].kind {
+                ug::PowerKind::Generator => {
+                    "You kill the generator. It runs down to nothing, and the lamps with it."
+                }
+                ug::PowerKind::Breaker => "The breaker comes out. Relays drop, and the lamps die.",
+            });
+            noise.write(crate::robots::Noise {
+                at: at.translation(),
+                radius: 20.0,
+                source: None,
+            });
+            if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
+                let dark: Vec<Vec3> = powered_lamps(l, &off)
+                    .map(|p| xf.transform_point(p))
+                    .collect();
+                lighting
+                    .lamps
+                    .retain(|(p, _)| !dark.iter().any(|d| d.distance(*p) < 0.01));
+            }
             continue;
         }
         if power.next() != Some(sw.stage) {
@@ -1500,18 +1629,26 @@ fn throw_switches(
         });
         raid.say(line);
         if let (Some(lighting), Some(l)) = (lighting.as_mut(), ug::layout(&b.prefab)) {
-            for room in l
+            let rooms = l
                 .rooms
                 .iter()
-                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage)
-            {
-                let p = Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]);
+                .filter(|room| room.lamp == ug::Lamp::Powered && room.stage == sw.stage);
+            for (room, p) in rooms.zip(powered_lamps(l, &[sw.stage])) {
                 lighting
                     .lamps
                     .push((xf.transform_point(p), room.size[0].max(room.size[1]) + 4.0));
             }
         }
     }
+}
+
+/// Where the lamps of these power stages hang (site space): as the
+/// machines see them (`throw_switches`).
+fn powered_lamps<'a>(l: &'a Layout, stages: &'a [usize]) -> impl Iterator<Item = Vec3> + 'a {
+    l.rooms
+        .iter()
+        .filter(|room| room.lamp == ug::Lamp::Powered && stages.contains(&room.stage))
+        .map(|room| Vec3::new(room.at[0], l.floor_of(room) + room.height - 0.2, room.at[1]))
 }
 
 /// Wading underground is loud: the water slops off the walls. (Footsteps
@@ -1720,6 +1857,8 @@ pub struct Works {
     pub falls: Vec<(Vec3, f32, Vec2)>,
     /// Each gas pocket, still there.
     pub gas: Vec<bool>,
+    /// Its live water live (`world::live`).
+    pub live: bool,
 }
 
 impl Works {
@@ -1730,6 +1869,7 @@ impl Works {
             heat: l.heat.iter().map(|h| h.level).collect(),
             falls: Vec::new(),
             gas: vec![true; l.gas.len()],
+            live: false,
         }
     }
 
@@ -1743,15 +1883,16 @@ impl Works {
             && close(&self.heat, &o.heat, 0.05)
             && self.falls.len() == o.falls.len()
             && self.gas == o.gas
+            && self.live == o.live
     }
 }
 
 /// Shut a site's grid where its works make it impassable: deep water
 /// (a basin's at its level now), heat nothing crosses, a pit, a fallen
-/// roof. And make dear what its residents keep out of but can be drawn
-/// into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a noise in
-/// it still brings them, and their sparks set it off), and heat short of
-/// scorching (they keep to the cool side).
+/// roof, live water. And make dear what its residents keep out of but can
+/// be drawn into (`docs/UNDERGROUND.md`, "Each site"): live firedamp (a
+/// noise in it still brings them, and their sparks set it off), and heat
+/// short of scorching (they keep to the cool side).
 fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster, w: &Works) {
     for j in 0..grid.n {
         for i in 0..grid.n {
@@ -1777,7 +1918,13 @@ fn block_works(grid: &mut extraction_core::nav::NavGrid, l: &Layout, r: &Raster,
                 d.x.abs() <= half.x && d.z.abs() <= half.y
             });
             let k = j * grid.n + i;
-            if depth >= ug::DEEP || hot || r.pit[q] || fallen {
+            // Live water: nobody wades it.
+            let shocking = w.live
+                && depth > 0.05
+                && l.live.as_ref().is_some_and(
+                    |v| matches!(r.cells[q], ug::Cell::Room(k) if l.rooms[k as usize].id == v.room),
+                );
+            if depth >= ug::DEEP || hot || r.pit[q] || fallen || shocking {
                 grid.cost[k] = extraction_core::nav::BLOCKED;
                 continue;
             }
@@ -1816,6 +1963,7 @@ fn regrid_residents(
     heat: Option<Res<super::furnace::Heat>>,
     gas: Option<Res<super::workings::Gas>>,
     falls: Query<(&super::workings::Fall, &Transform, &ChildOf)>,
+    live: Option<Res<super::live::Live>>,
     mut out: MessageWriter<crate::robots::indoor::SiteGrid>,
     time: Res<Time>,
     mut every: Local<f32>,
@@ -1862,6 +2010,7 @@ fn regrid_residents(
                 .and_then(|g| g.live.get(site))
                 .cloned()
                 .unwrap_or_else(|| vec![true; l.gas.len()]),
+            live: live.as_ref().is_some_and(|v| v.0.contains(site)),
         };
         if now.same(&g.works) {
             continue;
@@ -1888,11 +2037,16 @@ impl Plugin for UndergroundVisualsPlugin {
         app.add_plugins((
             super::workings::WorkingsVisualsPlugin,
             super::furnace::FurnaceVisualsPlugin,
+            super::cage::CageVisualsPlugin,
+            super::lockdown::LockdownVisualsPlugin,
+            super::live::LiveVisualsPlugin,
+            super::glow::GlowVisualsPlugin,
         ))
         .add_systems(
             Update,
             (
                 light_lamps,
+                light_door_lamps,
                 flicker,
                 torch,
                 near_doors_only,
@@ -2331,7 +2485,9 @@ pub(crate) fn go_dark(
     if k < 1e-3 && day.written.is_none() {
         return;
     }
-    let dark = 1.0 - k * 0.985;
+    // Down to a fifth of a percent: with the grade's lift gone below
+    // (`render::grade::Below`), an unlit room is black, not grey.
+    let dark = 1.0 - k * 0.998;
     ambient.brightness = day.base.0 * dark;
     for mut s in &mut suns {
         s.illuminance = day.base.1 * (1.0 - k);
@@ -3427,6 +3583,72 @@ mod tests {
                 .can_see_target;
         }
         assert!(seen, "the torch gave you away");
+    }
+
+    /// A breaker thrown again comes out: its lamps die (for the machines
+    /// too: a dead zone), the doors it freed stay free; thrown once more,
+    /// the lamps are back.
+    #[test]
+    fn the_breaker_comes_out_again() {
+        use crate::interact::InteractEvent;
+        let mut vr = crate::vr_harness::Vr::new("cinder_works");
+        let player = vr.player;
+        let (site, switch, id) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &super::super::buildings::Building, &SitePower)>();
+            q.iter(vr.app.world())
+                .find(|(_, b, _)| b.prefab == "tunnel_cinder")
+                .map(|(e, b, p)| (e, p.stages[0].switch, b.prefab.clone()))
+                .expect("the service tunnel, powered")
+        };
+        let lamps = |vr: &crate::vr_harness::Vr| {
+            vr.app
+                .world()
+                .resource::<crate::robots::senses::Lighting>()
+                .lamps
+                .len()
+        };
+        let held: Vec<Entity> = vr
+            .app
+            .world_mut()
+            .query::<(Entity, &PowerLocked)>()
+            .iter(vr.app.world())
+            .filter(|(_, l)| l.site == site)
+            .map(|(e, _)| e)
+            .collect();
+        assert!(!held.is_empty(), "{id}: a door on its power");
+        let dark = lamps(&vr);
+        let press = |vr: &mut crate::vr_harness::Vr| {
+            vr.app.world_mut().write_message(InteractEvent::Pressed {
+                item: switch,
+                player,
+            });
+            vr.step(3);
+        };
+        press(&mut vr);
+        assert!(vr.app.world().get::<SitePower>(site).unwrap().on(0));
+        let lit = lamps(&vr);
+        assert!(lit > dark, "{id}: its lamps light for the machines");
+        press(&mut vr);
+        assert!(
+            !vr.app.world().get::<SitePower>(site).unwrap().on(0),
+            "off again"
+        );
+        assert_eq!(
+            lamps(&vr),
+            dark,
+            "{id}: its lamps out, for the machines too"
+        );
+        for d in &held {
+            assert!(
+                vr.app.world().get::<PowerLocked>(*d).is_none(),
+                "{id}: a door it freed stays free"
+            );
+        }
+        press(&mut vr);
+        assert_eq!(lamps(&vr), lit, "{id}: and on again");
     }
 
     /// Power, through the headset: in every site the powered doors won't

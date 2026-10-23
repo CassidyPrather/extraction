@@ -33,35 +33,39 @@ impl Plugin for WarmupPlugin {
         if std::env::var("EXTRACTION_WARMUP").map_or(true, |v| v != "0") {
             use crate::anomaly::visuals::{HazeMaterial, ParticleMaterial, XrayMaterial};
             use crate::world::{cover, impostors, rain, shafts, sky, trees};
-            app.init_resource::<Shelf>().add_systems(
-                Last,
-                (
-                    record_layouts,
-                    shelve_start,
+            app.init_resource::<Shelf>()
+                .init_resource::<Warmed>()
+                .add_systems(
+                    Last,
                     (
-                        shelve::<StandardMaterial>,
-                        shelve::<super::terrain_material::TerrainMaterial>,
-                        shelve::<super::water_material::WaterMaterial>,
-                        shelve::<trees::TreeSwayMaterial>,
-                        shelve::<trees::FarCrownMaterial>,
-                        shelve::<impostors::ImpostorMaterial>,
-                        shelve::<cover::SwayMaterial>,
-                        shelve::<rain::RainMaterial>,
-                        shelve::<shafts::ShaftMaterial>,
-                        shelve::<sky::SkyMaterial>,
-                        shelve::<HazeMaterial>,
-                        shelve::<ParticleMaterial>,
-                        shelve::<XrayMaterial>,
-                        shelve::<crate::world::halos::HaloMaterial>,
-                        shelve::<crate::world::beams::BeamMaterial>,
-                        shelve::<crate::world::storm::SheetMaterial>,
-                        shelve::<crate::world::storm::BoltMaterial>,
-                    ),
-                    shelve_unworn,
-                    shelve_end,
-                )
-                    .chain(),
-            );
+                        record_layouts,
+                        proxy_eye,
+                        shelve_start,
+                        (
+                            shelve::<StandardMaterial>,
+                            shelve::<super::terrain_material::TerrainMaterial>,
+                            shelve::<super::water_material::WaterMaterial>,
+                            shelve::<trees::TreeSwayMaterial>,
+                            shelve::<trees::FarCrownMaterial>,
+                            shelve::<impostors::ImpostorMaterial>,
+                            shelve::<cover::SwayMaterial>,
+                            shelve::<rain::RainMaterial>,
+                            shelve::<shafts::ShaftMaterial>,
+                            shelve::<sky::SkyMaterial>,
+                            shelve::<HazeMaterial>,
+                            shelve::<ParticleMaterial>,
+                            shelve::<XrayMaterial>,
+                            shelve::<crate::world::halos::HaloMaterial>,
+                            shelve::<crate::world::beams::BeamMaterial>,
+                            shelve::<crate::world::storm::SheetMaterial>,
+                            shelve::<crate::world::storm::BoltMaterial>,
+                        ),
+                        shelve_unworn,
+                        shelve_models,
+                        shelve_end,
+                    )
+                        .chain(),
+                );
         }
         if std::env::var_os("EXTRACTION_PIPELINES").is_some() {
             if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
@@ -377,6 +381,9 @@ struct Shelf {
     /// restock: a valley's cycle may hold none of a kind the Surge can
     /// open, and its looks are only built for an anomaly.
     decoys: Vec<Entity>,
+    /// The frame of the restock made once the world had settled (forest
+    /// and props in), on this camera.
+    settled_at: Option<u32>,
 }
 
 impl Default for Shelf {
@@ -398,6 +405,7 @@ impl Default for Shelf {
             shelved: 0,
             by_type: default(),
             decoys: Vec::new(),
+            settled_at: None,
         }
     }
 }
@@ -579,11 +587,83 @@ fn record_layouts(
     }
 }
 
+/// Whether the shelf has shelved the settled world on the camera it's on
+/// (the proxy eye, with a headset coming) and kept it out long enough for
+/// its pipelines to be queued: `timeline::WorldReady` waits on it, and on
+/// those pipelines being built.
+#[derive(Resource, Default)]
+pub struct Warmed(pub bool);
+
+/// Before the headset's session: an eye like the headset's (its custom
+/// projection, look and samples), drawing into a small image under the
+/// world, for the shelf to hang from. A pipeline is built per kind of
+/// view, and the eyes' custom projection is a kind of its own: warmed on
+/// the flat camera, every pipeline was built again as the session began,
+/// 58 of them, in the player's first seconds in the headset.
+#[derive(Component)]
+pub struct ProxyEye;
+
+fn proxy_eye(
+    mut commands: Commands,
+    gate: Option<Res<crate::rig::xr::SessionGate>>,
+    eyes: Query<(), With<bevy_mod_xr::camera::XrCamera>>,
+    proxies: Query<Entity, With<ProxyEye>>,
+    weather: Option<Res<crate::world::sky::Weather>>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    let want = gate.is_some_and(|g| g.waiting.is_some()) && eyes.is_empty();
+    if !want {
+        for e in &proxies {
+            commands.entity(e).try_despawn();
+        }
+        return;
+    }
+    if !proxies.is_empty() {
+        return;
+    }
+    let Some(weather) = weather else {
+        return;
+    };
+    let image = images.add(Image::new_target_texture(
+        64,
+        64,
+        bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+        None,
+    ));
+    let samples = comfort.map_or(Msaa::Sample4, |c| c.msaa_setting());
+    let proxy = commands.spawn((
+        Name::new("Proxy eye"),
+        ProxyEye,
+        Camera3d::default(),
+        Camera {
+            order: -20,
+            ..default()
+        },
+        bevy::camera::RenderTarget::Image(image.into()),
+        Projection::custom(bevy_mod_xr::camera::XrProjection {
+            near: super::NEAR_CLIP,
+            ..default()
+        }),
+        super::camera_look(&weather),
+        Transform::from_translation(DECOYS_AT + Vec3::Y * 100.0)
+            .looking_at(DECOYS_AT + Vec3::new(0.0, 0.0, 1.0), Vec3::Y),
+    ));
+    // Over the look's own samples: the eyes' (`Comfort::msaa`).
+    let id = proxy.id();
+    commands.entity(id).insert(samples);
+}
+
 fn shelve_start(
     mut shelf: ResMut<Shelf>,
     mut commands: Commands,
     eyes: Query<Entity, With<bevy_mod_xr::camera::XrCamera>>,
+    proxies: Query<Entity, With<ProxyEye>>,
     free: Query<Entity, With<super::FreeCamera>>,
+    cameras: Query<(), With<Camera>>,
+    forest: Option<Res<crate::world::trees::ForestBuilt>>,
+    props: Query<(), With<crate::world::buildings::PropsPending>>,
+    mut warmed: ResMut<Warmed>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     // The headset's eye once there is one (it comes with the session),
@@ -591,6 +671,11 @@ fn shelve_start(
     // one it took: there are two, in no set order, and starting over each
     // time the query named the other one never finished the warm-up and
     // left a set of decoys (and their lights) behind each time.
+    // Its camera gone (the proxy, as the session began): start again on
+    // whichever there is.
+    if shelf.camera.is_some_and(|c| !cameras.contains(c)) {
+        shelf.camera = None;
+    }
     let on_an_eye = shelf.camera.is_some_and(|c| eyes.contains(c));
     if let Some(eye) = eyes.iter().min().filter(|_| !on_an_eye) {
         if shelf.camera != Some(eye) {
@@ -613,11 +698,36 @@ fn shelve_start(
                 ..default()
             };
         }
+    } else if let Some(proxy) = proxies
+        .iter()
+        .next()
+        .filter(|p| !on_an_eye && shelf.camera != Some(*p))
+    {
+        // A headset's coming: warm for its eyes, from the start.
+        for (e, _) in shelf.on.drain(..) {
+            commands.entity(e).try_despawn();
+        }
+        let (layouts, twins, decoys) = (
+            std::mem::take(&mut shelf.layouts),
+            std::mem::take(&mut shelf.twins),
+            std::mem::take(&mut shelf.decoys),
+        );
+        *shelf = Shelf {
+            camera: Some(proxy),
+            layouts,
+            twins,
+            decoys,
+            ..default()
+        };
     } else if shelf.camera.is_none() {
         shelf.camera = free.iter().next();
     }
     shelf.stocking = false;
     if shelf.camera.is_none() || shelf.frame > shelf.warm_for + KEEP {
+        // Its time is up: nothing more to wait on.
+        if shelf.frame > shelf.warm_for + KEEP && !warmed.0 {
+            warmed.0 = true;
+        }
         return;
     }
     shelf.frame += 1;
@@ -653,6 +763,19 @@ fn shelve_start(
         }
     }
     shelf.stocking = now <= shelf.warm_for && now % RESTOCK == 1;
+    // Once the world has settled (the forest built, the buildings dressed;
+    // the impostors' pictures are views of their own, not the world's): a
+    // restock now (what streamed in since the last waits no longer), and
+    // warm once it's been out its frames.
+    let settled = forest.is_some() && props.is_empty();
+    if settled && shelf.settled_at.is_none() {
+        shelf.settled_at = Some(now);
+        shelf.stocking = true;
+    }
+    let warm = shelf.settled_at.is_some_and(|at| now >= at + KEEP);
+    if warmed.0 != warm {
+        warmed.0 = warm;
+    }
     // Every restock shelves everything again: a material isn't drawn
     // (nor its pipeline built) until its textures are in, which can be
     // after the restock that first saw it.
@@ -723,6 +846,91 @@ fn shelve<M: Material>(
     }
 }
 
+/// The models asked for at start (`first_sight::PreloadPlugin`) that
+/// nothing in the world wears yet: an item's, a gun's, a robot's first
+/// appearance mid-raid would build its pipelines on the frame it's first
+/// drawn. Each primitive goes on the shelf with the material it will
+/// wear (`ModelMaterials`, as items take theirs), ranged (items fade) and
+/// not.
+#[allow(clippy::too_many_arguments)]
+fn shelve_models(
+    mut shelf: ResMut<Shelf>,
+    mut commands: Commands,
+    models: Res<crate::models::Models>,
+    server: Res<AssetServer>,
+    gltfs: Res<Assets<bevy::gltf::Gltf>>,
+    gnodes: Res<Assets<bevy::gltf::GltfNode>>,
+    gmeshes: Res<Assets<bevy::gltf::GltfMesh>>,
+    mut model_mats: ResMut<crate::models::ModelMaterials>,
+    mut lib: ResMut<super::materials::MaterialLibrary>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !shelf.stocking {
+        return;
+    }
+    fn walk<'a>(
+        nodes: &'a [crate::models::ModelNode],
+        out: &mut Vec<&'a crate::models::ModelPrimitive>,
+    ) {
+        for n in nodes {
+            out.extend(n.primitives.iter());
+            walk(&n.children, out);
+        }
+    }
+    let ty = std::any::type_name::<StandardMaterial>();
+    for handle in models.handles() {
+        let Some(gltf) = gltfs.get(handle) else {
+            continue;
+        };
+        let nodes = crate::models::model_nodes(gltf, &gnodes, &gmeshes);
+        let mut prims = Vec::new();
+        walk(&nodes, &mut prims);
+        for prim in prims {
+            let mat = model_mats.get(
+                prim.material.as_deref().unwrap_or("Blued"),
+                &mut lib,
+                &server,
+                &mut materials,
+            );
+            let Some(m) = materials.get(&mat) else {
+                continue;
+            };
+            let layout = shelf
+                .layouts
+                .get(&prim.mesh.id())
+                .copied()
+                .unwrap_or_else(|| hash_of(prim.mesh.id()));
+            for ranged in [true, false] {
+                let key = hash_of((
+                    ty,
+                    m.bind_group_data(),
+                    format!("{:?}", m.alpha_mode()),
+                    m.depth_bias().to_bits(),
+                    layout,
+                    ranged,
+                    false,
+                ));
+                if !shelf.seen.insert(key) {
+                    continue;
+                }
+                if shelf.kinds.insert(key) {
+                    *shelf.by_type.entry("model".into()).or_default() += 1;
+                }
+                let shown = shelf
+                    .twins
+                    .get(&layout)
+                    .cloned()
+                    .unwrap_or(prim.mesh.clone());
+                if let Some(e) = shelf.put(&mut commands, shown, ranged, true) {
+                    commands
+                        .entity(e)
+                        .insert((MeshMaterial3d(mat.clone()), ShelfMark));
+                }
+            }
+        }
+    }
+}
+
 /// Marks a shelf entry, so restocking doesn't count it.
 #[derive(Component)]
 pub struct ShelfMark;
@@ -776,6 +984,7 @@ fn shelve_unworn(
 fn shelve_end(shelf: Res<Shelf>, mut logged: Local<bool>) {
     if shelf.frame > shelf.warm_for && !*logged {
         *logged = true;
+        super::timeline::mark("warm-up shelf done");
         info!(
             "warm-up: {} kinds of thing shelved ({} entries) over {} frames: {:?}",
             shelf.kinds.len(),
@@ -831,7 +1040,8 @@ mod tests {
     /// The shelf stocks itself in the first seconds, its decoy anomalies
     /// go after the second restock, and nothing of it is left after.
     #[test]
-    fn the_shelf_stocks_and_clears() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_the_shelf_stocks_and_clears() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let decoys = |app: &mut App| {
@@ -921,7 +1131,8 @@ mod tests {
     /// lights piled up by a dozen a restock and the eye's opaque pass grew
     /// tenfold.)
     #[test]
-    fn two_eyes_one_shelf() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_two_eyes_one_shelf() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let eye = |app: &mut App, n: u32| {

@@ -69,22 +69,23 @@
         Plateau(polygon: [(-240.0, -192.0), (-110.0, -182.0), (-110.0, -142.0), (-240.0, -146.0)], height: Some(38.6), blend: 14.0),
         // The old causeway across the arm's mouth.
         Plateau(polygon: [(-215.0, -135.0), (-110.0, -132.0), (-110.0, -122.0), (-215.0, -125.0)], height: Some(48.6), blend: 7.0),
-        // The face stair, up the downstream face: 15 terraces, 30.0 to 52.0 over 120 m.
-        Plateau(polygon: [(-30.0, 157.0), (-21.5, 157.0), (-21.5, 151.0), (-30.0, 151.0)], height: Some(31.47), blend: 2.5),
-        Plateau(polygon: [(-22.0, 157.0), (-13.5, 157.0), (-13.5, 151.0), (-22.0, 151.0)], height: Some(32.93), blend: 2.5),
-        Plateau(polygon: [(-14.0, 157.0), (-5.5, 157.0), (-5.5, 151.0), (-14.0, 151.0)], height: Some(34.40), blend: 2.5),
-        Plateau(polygon: [(-6.0, 157.0), (2.5, 157.0), (2.5, 151.0), (-6.0, 151.0)], height: Some(35.87), blend: 2.5),
-        Plateau(polygon: [(2.0, 157.0), (10.5, 157.0), (10.5, 151.0), (2.0, 151.0)], height: Some(37.33), blend: 2.5),
-        Plateau(polygon: [(10.0, 157.0), (18.5, 157.0), (18.5, 151.0), (10.0, 151.0)], height: Some(38.80), blend: 2.5),
-        Plateau(polygon: [(18.0, 157.0), (26.5, 157.0), (26.5, 151.0), (18.0, 151.0)], height: Some(40.27), blend: 2.5),
-        Plateau(polygon: [(26.0, 157.0), (34.5, 157.0), (34.5, 151.0), (26.0, 151.0)], height: Some(41.73), blend: 2.5),
-        Plateau(polygon: [(34.0, 157.0), (42.5, 157.0), (42.5, 151.0), (34.0, 151.0)], height: Some(43.20), blend: 2.5),
-        Plateau(polygon: [(42.0, 157.0), (50.5, 157.0), (50.5, 151.0), (42.0, 151.0)], height: Some(44.67), blend: 2.5),
-        Plateau(polygon: [(50.0, 157.0), (58.5, 157.0), (58.5, 151.0), (50.0, 151.0)], height: Some(46.13), blend: 2.5),
-        Plateau(polygon: [(58.0, 157.0), (66.5, 157.0), (66.5, 151.0), (58.0, 151.0)], height: Some(47.60), blend: 2.5),
-        Plateau(polygon: [(66.0, 157.0), (74.5, 157.0), (74.5, 151.0), (66.0, 151.0)], height: Some(49.07), blend: 2.5),
-        Plateau(polygon: [(74.0, 157.0), (82.5, 157.0), (82.5, 151.0), (74.0, 151.0)], height: Some(50.53), blend: 2.5),
-        Plateau(polygon: [(82.0, 157.0), (90.5, 157.0), (90.5, 151.0), (82.0, 151.0)], height: Some(52.00), blend: 2.5),
+        // The face stair, up the downstream face: 15 terraces, 30.0 to 52.0 over 120 m,
+        // banked right up against the face (z 148.8, the top course's foot): no gap to fall down.
+        Plateau(polygon: [(-30.0, 157.0), (-21.5, 157.0), (-21.5, 148.8), (-30.0, 148.8)], height: Some(31.47), blend: 2.5),
+        Plateau(polygon: [(-22.0, 157.0), (-13.5, 157.0), (-13.5, 148.8), (-22.0, 148.8)], height: Some(32.93), blend: 2.5),
+        Plateau(polygon: [(-14.0, 157.0), (-5.5, 157.0), (-5.5, 148.8), (-14.0, 148.8)], height: Some(34.40), blend: 2.5),
+        Plateau(polygon: [(-6.0, 157.0), (2.5, 157.0), (2.5, 148.8), (-6.0, 148.8)], height: Some(35.87), blend: 2.5),
+        Plateau(polygon: [(2.0, 157.0), (10.5, 157.0), (10.5, 148.8), (2.0, 148.8)], height: Some(37.33), blend: 2.5),
+        Plateau(polygon: [(10.0, 157.0), (18.5, 157.0), (18.5, 148.8), (10.0, 148.8)], height: Some(38.80), blend: 2.5),
+        Plateau(polygon: [(18.0, 157.0), (26.5, 157.0), (26.5, 148.8), (18.0, 148.8)], height: Some(40.27), blend: 2.5),
+        Plateau(polygon: [(26.0, 157.0), (34.5, 157.0), (34.5, 148.8), (26.0, 148.8)], height: Some(41.73), blend: 2.5),
+        Plateau(polygon: [(34.0, 157.0), (42.5, 157.0), (42.5, 148.8), (34.0, 148.8)], height: Some(43.20), blend: 2.5),
+        Plateau(polygon: [(42.0, 157.0), (50.5, 157.0), (50.5, 148.8), (42.0, 148.8)], height: Some(44.67), blend: 2.5),
+        Plateau(polygon: [(50.0, 157.0), (58.5, 157.0), (58.5, 148.8), (50.0, 148.8)], height: Some(46.13), blend: 2.5),
+        Plateau(polygon: [(58.0, 157.0), (66.5, 157.0), (66.5, 148.8), (58.0, 148.8)], height: Some(47.60), blend: 2.5),
+        Plateau(polygon: [(66.0, 157.0), (74.5, 157.0), (74.5, 148.8), (66.0, 148.8)], height: Some(49.07), blend: 2.5),
+        Plateau(polygon: [(74.0, 157.0), (82.5, 157.0), (82.5, 148.8), (74.0, 148.8)], height: Some(50.53), blend: 2.5),
+        Plateau(polygon: [(82.0, 157.0), (90.5, 157.0), (90.5, 148.8), (82.0, 148.8)], height: Some(52.00), blend: 2.5),
         // The slipway, down to the bed: 13 terraces, 52.0 to 34.0 over 103 m.
         Plateau(polygon: [(-126.0, 131.0), (-124.8, 126.8), (-129.9, 120.7), (-134.0, 131.0)], height: Some(50.62), blend: 2.5),
         Plateau(polygon: [(-125.2, 127.2), (-118.7, 121.7), (-123.8, 115.6), (-130.3, 121.0)], height: Some(49.23), blend: 2.5),
@@ -360,6 +361,39 @@
             polygon: [(60.0, 280.0), (282.0, 280.0), (282.0, 175.0), (170.0, 170.0), (130.0, 245.0),
                       (60.0, 250.0)],
         ),
+        // Copses on the valley floor below the dam, and scrub on the bed: the
+        // birch and willow that took the drained silt in twelve years. Cover
+        // within a dash anywhere you walk (map_lint's open-ground gauge).
+        (name: "Copse", seed: 110, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-160.0, 195.0), (-120.0, 195.0), (-120.0, 235.0), (-160.0, 235.0)]),
+        (name: "Copse", seed: 111, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-160.0, 158.0), (-120.0, 158.0), (-120.0, 198.0), (-160.0, 198.0)]),
+        (name: "Copse", seed: 112, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 180.0), (-80.0, 180.0), (-80.0, 220.0), (-120.0, 220.0)]),
+        (name: "Copse", seed: 113, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-80.0, 232.0), (-40.0, 232.0), (-40.0, 272.0), (-80.0, 272.0)]),
+        (name: "Copse", seed: 114, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-40.0, 192.0), (0.0, 192.0), (0.0, 232.0), (-40.0, 232.0)]),
+        (name: "Copse", seed: 115, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-40.0, 238.0), (0.0, 238.0), (0.0, 278.0), (-40.0, 278.0)]),
+        (name: "Copse", seed: 116, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 192.0), (40.0, 192.0), (40.0, 232.0), (0.0, 232.0)]),
+        (name: "Copse", seed: 117, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 192.0), (80.0, 192.0), (80.0, 232.0), (40.0, 232.0)]),
+        (name: "Copse", seed: 118, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 158.0), (80.0, 158.0), (80.0, 198.0), (40.0, 198.0)]),
+        (name: "Copse", seed: 119, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(80.0, 162.0), (120.0, 162.0), (120.0, 202.0), (80.0, 202.0)]),
+        (name: "Copse", seed: 120, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 242.0), (-80.0, 242.0), (-80.0, 282.0), (-120.0, 282.0)]),
+        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 238.0), (40.0, 238.0), (40.0, 278.0), (0.0, 278.0)]),
+        (name: "Copse", seed: 122, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 238.0), (80.0, 238.0), (80.0, 278.0), (40.0, 278.0)]),
+        (name: "Copse", seed: 123, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-280.0, 160.0), (-240.0, 160.0), (-240.0, 200.0), (-280.0, 200.0)]),
+        (name: "Bed scrub", seed: 124, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(0.0, 78.0), (40.0, 78.0), (40.0, 118.0), (0.0, 118.0)]),
+        (name: "Bed scrub", seed: 125, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(40.0, 78.0), (80.0, 78.0), (80.0, 118.0), (40.0, 118.0)]),
+        (name: "Bed scrub", seed: 126, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(80.0, 78.0), (120.0, 78.0), (120.0, 118.0), (80.0, 118.0)]),
+        (name: "Bed scrub", seed: 127, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, 78.0), (-40.0, 78.0), (-40.0, 118.0), (-80.0, 118.0)]),
+        (name: "Bed scrub", seed: 128, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-40.0, -2.0), (0.0, -2.0), (0.0, 38.0), (-40.0, 38.0)]),
+        (name: "Bed scrub", seed: 129, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, -2.0), (-40.0, -2.0), (-40.0, 38.0), (-80.0, 38.0)]),
+        (name: "Bed scrub", seed: 130, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-120.0, -2.0), (-80.0, -2.0), (-80.0, 38.0), (-120.0, 38.0)]),
+        (name: "Bed scrub", seed: 131, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, -120.0), (-40.0, -120.0), (-40.0, -80.0), (-80.0, -80.0)]),
+        (name: "Bed scrub", seed: 132, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-200.0, -160.0), (-160.0, -160.0), (-160.0, -120.0), (-200.0, -120.0)]),
+        (name: "Bed scrub", seed: 133, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-280.0, -200.0), (-240.0, -200.0), (-240.0, -160.0), (-280.0, -160.0)]),
+        (name: "Bed scrub", seed: 134, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-240.0, -160.0), (-200.0, -160.0), (-200.0, -120.0), (-240.0, -120.0)]),
+        (name: "Bed scrub", seed: 135, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(120.0, -240.0), (160.0, -240.0), (160.0, -200.0), (120.0, -200.0)]),
+        (name: "Bed scrub", seed: 136, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(80.0, -240.0), (120.0, -240.0), (120.0, -200.0), (80.0, -200.0)]),
+        (name: "Bed scrub", seed: 137, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-160.0, -80.0), (-120.0, -80.0), (-120.0, -40.0), (-160.0, -40.0)]),
+        (name: "Bed scrub", seed: 138, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-120.0, -80.0), (-80.0, -80.0), (-80.0, -40.0), (-120.0, -40.0)]),
+        (name: "Bed scrub", seed: 140, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(60.0, -220.0), (100.0, -220.0), (100.0, -180.0), (60.0, -180.0)]),
         // A stand by the road in from the gate.
         (
             name: "Gate birches", seed: 101, density: 1.0, undergrowth: 0.5,
@@ -370,7 +404,14 @@
         (
             name: "Arm birches", seed: 99, density: 0.9, undergrowth: 0.4,
             mix: [(Birch, 0.8), (Snag, 0.2)],
-            polygon: [(-282.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-282.0, -250.0)],
+            // Open round Sallow Head's turning place, so its beacon's in
+            // sight on the way in.
+            polygon: [(-282.0, -282.0), (-240.0, -282.0), (-240.0, -251.0), (-282.0, -250.0)],
+        ),
+        (
+            name: "Arm birches east", seed: 141, density: 0.9, undergrowth: 0.4,
+            mix: [(Birch, 0.8), (Snag, 0.2)],
+            polygon: [(-160.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-160.0, -255.0)],
         ),
         // The spruce round the Gate.
         (
@@ -381,9 +422,21 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The Authority's telemetry mast on the west abutment: the gauges' readings went out by radio.
+        (prefab: "radio_mast", at: (-200.0, 120.0), rot: 0.0),
         // South gate.
         (prefab: "quarantine_gate", at: (25.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (32.8, 285.0), rot: 90.0),
+
+        // A roof to wait under for the truck at each pickup, out of the
+        // survey drones' eye, on the far side from its beacon: the boat
+        // shed at Sallow Head, the bridge-keeper's hut at the inflow, the
+        // gauge hut by the gauge house.
+        (prefab: "shed", at: (-191.3, -264.7), rot: 232.0, tag: "boat_shed"),
+        (prefab: "shed", at: (36.0, -251.0), rot: 331.0, tag: "bridge_hut"),
+        (prefab: "shed", at: (238.1, -35.2), rot: 349.0, tag: "gauge_hut"),
 
         // The dam: its downstream and upstream faces either side of the
         // crest, and the draw-off tower in front of it on the bed, its own
@@ -407,7 +460,7 @@
         (prefab: "house_brick", at: (-58.0, 206.0), rot: 180.0, tag: "keeper"),
         (prefab: "house_plank", at: (-88.0, 206.0), rot: 180.0),
         (prefab: "pump_station", at: (100.0, 210.0), rot: 270.0, tag: "filter_house"),
-        (prefab: "shed", at: (115.0, 226.0), rot: 0.0),
+        (prefab: "shed", at: (117.0, 227.0), rot: 0.0),
         (prefab: "shed", at: (6.0, 246.0), rot: 90.0),
         // The roadman's hut on the way round.
         (prefab: "shed", at: (-182.0, 244.0), rot: 0.0),

@@ -609,9 +609,17 @@ mod tests {
         let bolt = damage(PartRole::Armour(10), Some(1.5));
         assert!(core > 0.0, "the core felt it");
         assert!(eye > core * 4.0, "eye {eye}, core {core}");
+        // A plate's bolt: the weak point's multiplier, and a blunt blow
+        // loosens a plate besides (`robots::part_damage`).
+        let want = crate::robots::part_damage(
+            PartRole::Armour(10),
+            true,
+            eye,
+            Some(extraction_core::melee::Blow::Blunt),
+        );
         assert!(
-            (bolt - eye).abs() < eye * 0.05,
-            "a weak point: {bolt} (eye {eye})"
+            (bolt - want).abs() < want * 0.05,
+            "a weak point: {bolt} (want {want}, eye {eye})"
         );
     }
 }

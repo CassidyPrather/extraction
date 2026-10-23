@@ -948,6 +948,17 @@ fn wreck_sorters(
             commands.entity(te).insert(RigidBody::Dynamic);
         }
         let v = s.hall.rotation * Vec3::new(s.vel.x, 0.0, s.vel.y);
+        // Its servo pack at the shoulder, as good as the arm was (shot
+        // off, scrap): bolted on, for salvage.
+        let arm_health = children
+            .iter()
+            .filter_map(|c| parts.get(c).ok())
+            .find(|p| p.role == PartRole::Leg(0))
+            .map_or(0.0, |p| p.hp / p.max_hp.max(1.0));
+        commands.entity(e).insert(super::salvage::ServoAt {
+            local: pose.shoulder,
+            health: arm_health,
+        });
         commands.entity(e).remove::<LegPoses>().insert((
             Broken,
             Falling::default(),
@@ -1214,5 +1225,31 @@ mod tests {
             .filter(|d| matches!(d.piece, Piece::Arm(_)))
             .count();
         assert_eq!(arm, 2);
+        // Its servo pack is still on it, bolted, to be undone by hand.
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
+        let seats: Vec<(Entity, Entity)> = app
+            .world_mut()
+            .query::<(Entity, &super::super::salvage::SalvageSeat)>()
+            .iter(app.world())
+            .filter(|(_, s)| s.wreck == sorter && s.hold == super::super::salvage::Hold::Bolts)
+            .map(|(e, s)| (e, s.item))
+            .collect();
+        assert_eq!(seats.len(), 1, "its servo pack seated");
+        let (seat, item) = seats[0];
+        let it = app.world().get::<crate::items::Item>(item).unwrap();
+        assert_eq!(catalog.get(it.0.kind).id, "sorter_servo_pack");
+        assert!(
+            app.world()
+                .get::<crate::robots::heavy::Fastened>(item)
+                .is_some(),
+            "held on"
+        );
+        let bolts = app
+            .world_mut()
+            .query::<&super::super::salvage::Bolt>()
+            .iter(app.world())
+            .filter(|b| b.seat == seat)
+            .count();
+        assert_eq!(bolts, super::super::salvage::SORTER_BOLTS);
     }
 }

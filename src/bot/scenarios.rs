@@ -53,6 +53,7 @@ pub const NAMES: &[&str] = &[
     crate::anomaly::scenarios::NAMES[3],
     crate::anomaly::scenarios::NAMES[4],
     crate::anomaly::scenarios::NAMES[5],
+    crate::anomaly::scenarios::NAMES[6],
     crate::onboarding::bot::SCENARIO,
     crate::robot_voice::SCENARIO,
     crate::robots::heavy_mind::SCENARIO,
@@ -60,7 +61,17 @@ pub const NAMES: &[&str] = &[
     crate::robots::spotter::SCENARIO,
     crate::robots::minelayer::SCENARIO,
     crate::robots::mender::SCENARIO,
+    crate::robots::network::SCENARIO,
+    crate::robots::devices::SCENARIOS[0].0,
+    crate::robots::devices::SCENARIOS[1].0,
+    crate::robots::devices::SCENARIOS[2].0,
+    crate::robots::devices::SCENARIOS[3].0,
+    crate::robots::devices::SCENARIOS[4].0,
     crate::robots::plough::SCENARIO,
+    crate::world::cage::SCENARIO,
+    crate::world::echo::SCENARIO,
+    crate::world::lockdown::SCENARIO,
+    crate::world::live::SCENARIO,
 ];
 
 /// Longer runs, not in `all`: run them by name.
@@ -120,6 +131,36 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
     let t1 = target_point(zone, 1);
     use Task::*;
     let s = |x: &str| x.to_string();
+    // A device set down running by a machine: noticed, and shot if its row
+    // says so (`robots::devices`).
+    if let Some(&(_, id, _, shot)) = crate::robots::devices::SCENARIOS
+        .iter()
+        .find(|x| x.0 == name)
+    {
+        use crate::bot::Expect::Counter;
+        use crate::robots::devices as dv;
+        let mut t = vec![
+            Log(format!("device: a running {id} set down by a machine")),
+            Setup(
+                crate::robots::devices::SCENARIOS
+                    .iter()
+                    .find(|x| x.0 == name)
+                    .unwrap()
+                    .0,
+            ),
+            // (A task may take 30 s at most: several waits; a device's draw
+            // takes `devices::EM_SETTLE` to stand out.)
+            Wait(15.0),
+            Wait(15.0),
+            Wait(15.0),
+            Wait(15.0),
+            Expect(Counter(dv::NOTICED, 1, 100)),
+        ];
+        if shot {
+            t.push(Expect(Counter(dv::WRECKED, 1, 100)));
+        }
+        return Some(t);
+    }
     Some(match name {
         "pistol_drill" => vec![
             Log(s("pistol drill: load two magazines, shoot one dry, reload")),
@@ -547,6 +588,28 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Expect(super::Expect::Wrecked(1)),
             Expect(super::Expect::Alive),
         ],
+        crate::robots::network::SCENARIO => {
+            use crate::bot::Expect::Counter;
+            use crate::robots::network as net;
+            vec![
+                Log(s("relay cut: cut a pylon's cable, then stand in its view")),
+                Setup(net::SCENARIO),
+                Wait(1.0),
+                PickUp {
+                    id: s("bolt_cutters"),
+                    side: Side::Right,
+                },
+                Cut { within: 25.0 },
+                Wait(1.0),
+                WalkTo {
+                    to: net::VIEW_PLACEHOLDER,
+                    within: 2.0,
+                },
+                Wait(15.0),
+                Expect(Counter(net::SILENCED, 1, 1)),
+                Expect(Counter(net::BLOCKED, 1, 1000)),
+            ]
+        }
         crate::robots::sentry::SCENARIO => {
             vec![
                 Log(s(
@@ -568,6 +631,119 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
                 Wait(2.0),
                 Expect(super::Expect::HealthAtLeast(99.0)),
                 Expect(super::Expect::Alive),
+            ]
+        }
+        crate::world::live::SCENARIO => {
+            // The service tunnel: the vault's breaker in (the overflow's
+            // water live), the switch room's isolator pulled, and into the
+            // overflow chamber unhurt.
+            use crate::bot::Expect::{Counter, HealthAtLeast};
+            use crate::world::live as lv;
+            vec![
+                Log(s(
+                    "live water: the breaker, the isolator, then the overflow chamber",
+                )),
+                Setup(lv::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::TO_ISOLATOR,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(1.0),
+                WalkTo {
+                    to: lv::INTO_IT,
+                    within: 1.0,
+                },
+                Wait(2.0),
+                Expect(Counter("live_isolated", 1, 1)),
+                Expect(Counter("live_jolts", 0, 0)),
+                Expect(HealthAtLeast(99.0)),
+            ]
+        }
+        crate::world::lockdown::SCENARIO => {
+            // The shelter: the generator started, the klaxon, the gas lock
+            // sealed; out by the escape tunnel.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::lockdown as lk;
+            let wait = extraction_core::underground::layout("bunker_marrow")
+                .and_then(|l| l.lockdown.as_ref())
+                .map_or(20.0, |k| k.after)
+                + 2.0;
+            vec![
+                Log(s(
+                    "shelter lockdown: start the generator, then out the escape tunnel",
+                )),
+                Setup(lk::SCENARIO),
+                Wait(1.0),
+                Press(Entity::PLACEHOLDER),
+                Wait(wait),
+                Expect(Counter("shelter_sealed", 1, 1)),
+                WalkTo {
+                    to: lk::OUT,
+                    within: 1.0,
+                },
+                Expect(Near(lk::OUT, 1.5)),
+                Expect(HealthAtLeast(50.0)),
+            ]
+        }
+        crate::world::echo::SCENARIO => {
+            // The dam's gallery: its length on foot, upright; every step
+            // comes back.
+            use crate::bot::Expect::{Counter, Near};
+            use crate::world::echo as ec;
+            vec![
+                Log(s("gallery echo: the inspection gallery's length on foot")),
+                Setup(ec::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: ec::FAR_END,
+                    within: 1.0,
+                },
+                Expect(Near(ec::FAR_END, 2.0)),
+                Expect(Counter("gallery_echoes", 10, 1000)),
+            ]
+        }
+        crate::world::cage::SCENARIO => {
+            // The adit's winze: into the cage at the shaft station and rung
+            // down; at the foot, sent up and called back; ridden up and out.
+            use crate::bot::Expect::{Counter, HealthAtLeast, Near};
+            use crate::world::cage as cg;
+            let ride = cg::BELL_WAIT + 12.0 / cg::CAGE_SPEED + 3.0;
+            vec![
+                Log(s("cage ride: down the adit's winze and back up")),
+                Setup(cg::SCENARIO),
+                Wait(1.0),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_FOOT,
+                    within: 0.8,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::IN_CAGE,
+                    within: 0.4,
+                },
+                Press(Entity::PLACEHOLDER),
+                Wait(ride),
+                WalkTo {
+                    to: cg::AT_TOP,
+                    within: 0.8,
+                },
+                Expect(Near(cg::AT_TOP, 1.5)),
+                Expect(HealthAtLeast(99.0)),
+                Expect(Counter("cage_rides", 2, 2)),
+                Expect(Counter("cage_crushed", 0, 0)),
             ]
         }
         crate::robots::plough::SCENARIO => {

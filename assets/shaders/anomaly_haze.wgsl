@@ -37,6 +37,10 @@ struct Haze {
     // with it), y: a glint sweeping across the disc now and then (a mirror),
     // z: seconds between glints, w: this one's beat (0..1, from its spot).
     glow: vec4<f32>,
+    // x: a step its rim takes away from what's behind (darker over light:
+    // snow, fog; lighter over dark: night), y: the glint too, rather than
+    // adding light.
+    edge: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> haze: Haze;
@@ -155,22 +159,16 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     var behind = textureSampleLevel(view_transmission_texture, view_transmission_sampler, st, 0.0).rgb;
     // A Hush: the colour goes out of the world seen through it.
     let grey = dot(behind, vec3<f32>(0.2126, 0.7152, 0.0722));
-    // A firm round edge, so the bubble itself shows; a lens (the mesh as it
-    // is) by how squarely it faces you.
-    var disc = 1.0 - smoothstep(0.82, 0.95, length(q));
+    // How much of the world seen through it is touched: most at the heart,
+    // fading out long before the card's edge, so no outline ever shows
+    // (a card's rim is a circle on the screen, not a thing in the world);
+    // a lens (the mesh as it is) by how squarely it faces you.
+    var disc = 1.0 - smoothstep(0.25, 0.95, length(q));
     if (mode == 2) {
         disc = smoothstep(0.15, 0.7, abs(dot(normalize(in.world_normal), v)));
     }
     behind = mix(behind, vec3<f32>(grey), haze.drain.x * disc)
         * (1.0 - haze.drain.y * disc);
-    // Its rim: a bright band about 0.06 of the card across (~20 cm on a
-    // Hush), slowly breathing. Brightness, not colour, and wide enough not
-    // to shimmer as the head moves.
-    let l = length(q);
-    let band = smoothstep(0.84, 0.88, l) * (1.0 - smoothstep(0.93, 0.97, l));
-    let breathe = 0.65 + 0.35 * sin(t * haze.drain.w);
-    behind *= 1.0 + haze.drain.z * band * breathe;
-    behind += vec3<f32>(haze.glow.x * band * breathe);
     // A glint: a bright bar crossing the disc in the first third of each
     // period, then gone (each anomaly on its own beat).
     if (haze.glow.y > 0.0) {
@@ -178,7 +176,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let at = -1.6 + 3.2 * clamp(phase * 3.0, 0.0, 1.0);
         let across = (q.x + q.y) * 0.7071 - at;
         let bar = exp(-(across * across) / 0.0225);
-        behind += vec3<f32>(haze.glow.y * bar * (1.0 - smoothstep(0.8, 0.95, length(q))));
+        let lit = bar * (1.0 - smoothstep(0.8, 0.95, length(q)));
+        if (haze.edge.y > 0.5) {
+            let away_g = select(-1.0, 1.0, grey < 0.5);
+            behind = max(behind + vec3<f32>(away_g * haze.glow.y * 0.5 * lit), vec3<f32>(0.0));
+        } else {
+            behind += vec3<f32>(haze.glow.y * lit);
+        }
     }
     // The heart's glow: a soft spot, never the card's outline.
     let glow = haze.tint.a * pow(max(0.0, 1.0 - length(q)), 3.0) * select(1.0, 0.0, mode == 2);

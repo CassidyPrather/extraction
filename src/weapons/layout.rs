@@ -49,6 +49,12 @@ pub enum Moves {
     /// A folding bipod: turns about its pivot (the origin, local X) from
     /// folded to deployed.
     Bipod,
+    /// A turn-bolt's cocking piece: rides with the bolt, and stands back
+    /// from it while the striker is cocked (the tell a bolt gun gives).
+    CockingPiece,
+    /// A cocking indicator pin over barrel N's lock: proud while it's
+    /// cocked, flush when not.
+    Indicator(u8),
     /// A crossbow's string at rest: shown until the draw starts.
     StringRest,
     /// A crossbow's string drawn into a V: its origin on the line through

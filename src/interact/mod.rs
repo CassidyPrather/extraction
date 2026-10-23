@@ -17,6 +17,7 @@
 pub mod body;
 pub mod carry;
 pub mod far;
+pub mod fight;
 pub mod first_aid;
 pub mod flat;
 pub mod gestures;
@@ -28,6 +29,7 @@ pub mod poke;
 pub mod read;
 pub mod tools;
 pub mod touch;
+pub mod wounds;
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -321,6 +323,8 @@ impl Plugin for InteractPlugin {
                 gestures::GesturesPlugin,
                 touch::TouchPlugin,
                 carry::CarryPlugin,
+                fight::FightPlugin,
+                wounds::WoundsPlugin,
                 read::ReadPlugin,
             ));
     }
@@ -501,6 +505,8 @@ type GrabTargets<'w, 's> = Query<
         Has<ColliderDisabled>,
         Option<&'static Visibility>,
         Option<&'static ReachZone>,
+        // Clamped in a vice: its moving parts are worked without holding it.
+        Has<crate::weapons::gunsmith::InVice>,
     ),
 >;
 
@@ -714,9 +720,10 @@ fn find_grab(
         }
     }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, held, disabled, vis, zone) in grabbables.iter() {
-        // Moving parts are worked on a gun already in your other hand.
-        if reach_for == Reach::Handle && held.is_none_or(|h| h.player != player) {
+    for (e, gt, g, held, disabled, vis, zone, vice) in grabbables.iter() {
+        // Moving parts are worked on a gun already in your other hand, or
+        // in a vice.
+        if reach_for == Reach::Handle && !vice && held.is_none_or(|h| h.player != player) {
             continue;
         }
         // Out of sight (in a closed bag) is out of reach.
@@ -804,6 +811,7 @@ fn apply_hand_actions(
     fixed: (
         Query<(), With<crate::raid::truck::Stash>>,
         Query<(), With<crate::anomaly::harvest::Scalded>>,
+        Query<(), With<crate::weapons::gunsmith::InVice>>,
     ),
     ropes: Query<&crate::gadgets::climbing::Rope>,
     ladders: Query<(), With<hand_climb::Ladder>>,
@@ -895,6 +903,15 @@ fn apply_hand_actions(
                             side,
                             point,
                         });
+                        events.write(InteractEvent::Grabbed { item, side });
+                    }
+                    // A gun in the vice: its bolt is worked where it is.
+                    GripRole::Handle(id) if fixed.2.contains(item) => {
+                        hand.handle = Some((item, id));
+                        hand.handle_origin = gt
+                            .affine()
+                            .inverse()
+                            .transform_point3(hand_world.translation);
                         events.write(InteractEvent::Grabbed { item, side });
                     }
                     GripRole::Support | GripRole::Handle(_)

@@ -27,7 +27,7 @@ fn main() {
         let Some((a, v)) = all
             .iter()
             .filter(|a| a.kind == kind)
-            .find_map(|a| view_of(&hm, a, &all, &blockers, dist).map(|v| (a, v)))
+            .find_map(|a| view_of(&def, &hm, a, &all, &blockers, dist).map(|v| (a, v)))
         else {
             eprintln!("{kind:?}: no clear view");
             continue;

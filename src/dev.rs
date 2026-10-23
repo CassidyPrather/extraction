@@ -24,7 +24,14 @@ impl Plugin for DevPlugin {
             )
             .add_systems(
                 PreUpdate,
-                (pose_body_for_gallery, carry_for_gallery, climb_for_gallery)
+                (
+                    pose_body_for_gallery,
+                    carry_for_gallery,
+                    climb_for_gallery,
+                    fight_for_gallery,
+                    treat_for_gallery,
+                    spall_for_gallery,
+                )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
             );
@@ -41,16 +48,38 @@ fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
 }
 
+/// The longest a screenshot waits on the world beyond its frames, seconds
+/// (the software renderer is slow; a material that never readies mustn't
+/// hang a shot).
+const SHOT_WAIT_MAX: f32 = 180.0;
+
+/// `--screenshot`: after `--frames` frames, and once the ground's and the
+/// buildings' materials are on the GPU and the buildings dressed
+/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
+/// had trees floating over no ground.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut count: ResMut<FrameCount>,
+    world: crate::render::timeline::WorldReady,
+    time: Res<Time<Real>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
     if count.requested || count.frames < opts.frames {
         return;
+    }
+    if !(world.materials() && world.props()) {
+        if time.elapsed_secs() < SHOT_WAIT_MAX {
+            return;
+        }
+        warn!(
+            "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
+             (materials ready: {}, buildings dressed: {})",
+            world.materials(),
+            world.props()
+        );
     }
     count.requested = true;
     if let Some(dir) = path.parent() {
@@ -126,6 +155,8 @@ fn gallery(
     mut stage: Local<u32>,
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
+    mut worked: Local<Vec<(Entity, extraction_core::gunsmith::Build)>>,
+    mut told: Local<Vec<(Entity, u8)>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut jamming: Local<bool>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -140,6 +171,12 @@ fn gallery(
     if *stage == 3 {
         let mut parts = spec.split(',');
         let first = parts.next().unwrap_or("ak74");
+        // `+grime`, `+wet`, `+fog`: shown weathered (`weapons::weather`).
+        let first = first
+            .replace("+grime", "")
+            .replace("+wet", "")
+            .replace("+fog", "");
+        let first = first.as_str();
         // `ak74+open`: work the action, to check the moving parts.
         // `mp133+jam`: a double feed, to see it drawn in the port.
         let (first, jam) = match first.strip_suffix("+jam") {
@@ -301,6 +338,76 @@ fn gallery(
             }
             // `first_person_hands` and `wear_kit` have these.
             s if s.starts_with("fp:") || s.starts_with("kit") => {}
+            // A Mosin as made, and under it one sawn down to an obrez at
+            // the vice (`weapons::gunsmith`), and an AK with and without
+            // its stock.
+            "obrez" => {
+                use extraction_core::gunsmith::Build;
+                let obrez = Build {
+                    barrel_mm: Some(250.0),
+                    stock: false,
+                    ..Default::default()
+                };
+                let bare = Build {
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.3);
+                for (id, up, build) in [
+                    ("mosin", 0.32, None),
+                    ("mosin", 0.1, Some(obrez)),
+                    ("ak74", -0.12, None),
+                    ("ak74", -0.32, Some(bare)),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
+            // The tells (`weapons::legibility`): a Mosin as it lies and
+            // one cocked (its cocking piece back), the double as it lies
+            // and cocked (its indicators up), an AK new and one worn out
+            // (rust through the finish).
+            "tells" => {
+                let d = dist.unwrap_or(1.2);
+                // (0 as it lies, 1 cocked, 2 worn out.)
+                for (id, up, how) in [
+                    ("mosin", 0.32, 0),
+                    ("mosin", 0.16, 1),
+                    ("toz_double", 0.0, 0),
+                    ("toz_double", -0.16, 1),
+                    ("ak74", -0.32, 0),
+                    ("ak74", -0.5, 2),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let Some(e) = spawn_static(&mut commands, id, at) {
+                        told.push((e, how));
+                    }
+                }
+            }
+            // An SKS and a TOZ double as made, each over itself cut down
+            // at the vice: barrel short and stock off.
+            "sawn" => {
+                use extraction_core::gunsmith::Build;
+                let cut = |mm: f32| Build {
+                    barrel_mm: Some(mm),
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.2);
+                for (id, up, build) in [
+                    ("sks", 0.32, None),
+                    ("sks", 0.12, Some(cut(260.0))),
+                    ("toz_double", -0.1, None),
+                    ("toz_double", -0.3, Some(cut(300.0))),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -346,6 +453,24 @@ fn gallery(
     }
     // Seat magazines once their guns have wells; open actions.
     if *stage > 3 {
+        told.retain(|(e, how)| {
+            let Ok(mut g) = guns.get_mut(*e) else {
+                return true;
+            };
+            match how {
+                1 => g.firearm.hammers_cocked.iter_mut().for_each(|h| *h = true),
+                2 => g.firearm.condition = 0.08,
+                _ => {}
+            }
+            false
+        });
+        worked.retain(|(e, b)| {
+            let Ok(mut g) = guns.get_mut(*e) else {
+                return true;
+            };
+            g.firearm.build = *b;
+            false
+        });
         opening.retain(|&e| {
             let Ok(mut gun) = guns.get_mut(e) else {
                 return true;
@@ -907,7 +1032,7 @@ fn climb_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     mut players: Query<
-        (&Transform, &mut crate::rig::RigInput, &Children),
+        (Entity, &Transform, &mut crate::rig::RigInput, &Children),
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
@@ -921,7 +1046,7 @@ fn climb_for_gallery(
     if !opts.gallery.as_deref().is_some_and(|s| s.contains("climb")) {
         return;
     }
-    let Some((root, mut input, children)) = players.iter_mut().next() else {
+    let Some((_, root, mut input, children)) = players.iter_mut().next() else {
         return;
     };
     state.0 += 1;
@@ -975,6 +1100,254 @@ fn climb_for_gallery(
             }
         }
     }
+}
+
+/// `--gallery fight` (with `side` to see it from beside you): a crawler
+/// a metre ahead (`robots::indoor`), a crowbar raised in the right hand
+/// to strike, the left palm laid on the machine (`interact::fight`).
+#[allow(clippy::too_many_arguments)]
+fn fight_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    catalog: Res<crate::items::Catalog>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut players: Query<
+        (Entity, &Transform, &mut crate::rig::RigInput),
+        With<crate::rig::LocalPlayer>,
+    >,
+    parts: Query<(&crate::robots::RobotPart, &GlobalTransform)>,
+    mut actions: MessageWriter<crate::interact::HandAction>,
+    mut state: Local<(u32, Option<Entity>, Option<Entity>)>,
+) {
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("fight")) {
+        return;
+    }
+    let (Some((player, root, mut input)), Some(zone)) = (players.iter_mut().next(), zone) else {
+        return;
+    };
+    state.0 += 1;
+    let f = state.0;
+    if f == 10 {
+        let at = root.transform_point(Vec3::new(0.0, 0.0, -1.0));
+        let at = Vec3::new(at.x, zone.ground(at.x, at.z), at.z);
+        state.1 = Some(crate::robots::walker::spawn_walker_sized(
+            &mut commands,
+            &zone,
+            at,
+            crate::robots::Job {
+                kind: crate::robots::JobKind::Watch,
+                site: at,
+                duration: f32::INFINITY,
+                exit: at,
+            },
+            false,
+            crate::robots::indoor::CRAWLER_HP,
+            crate::robots::indoor::CRAWLER_SIZE,
+            None,
+        ));
+        let bar = catalog.kind("crowbar").expect("a crowbar");
+        state.2 = Some(crate::items::spawn_item(
+            &mut commands,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: bar,
+                transform: root.mul_transform(Transform::from_xyz(0.3, 1.2, -0.35)),
+                condition: 0.7,
+            },
+        ));
+    }
+    let (Some(crawler), Some(bar)) = (state.1, state.2) else {
+        return;
+    };
+    // The right hand on the bar, raised; the left on the crawler's body.
+    let raised = Vec3::new(0.28, 1.5, -0.3);
+    let body = parts
+        .iter()
+        .filter(|(p, _)| p.robot == crawler)
+        .map(|(_, g)| g.translation())
+        .max_by(|a, b| a.y.total_cmp(&b.y));
+    let palm = body
+        .map(|b| root.compute_affine().inverse().transform_point3(b) + Vec3::new(-0.05, 0.05, 0.22))
+        .unwrap_or(Vec3::new(-0.2, 0.8, -0.7));
+    let right = if f < 30 {
+        Vec3::new(0.3, 1.2, -0.35)
+    } else {
+        raised
+    };
+    for (side, at, rot) in [
+        (Side::Right, right, Quat::from_rotation_x(0.9)),
+        (Side::Left, palm, Quat::from_rotation_x(-0.3)),
+    ] {
+        let h = input.hand_mut(side);
+        h.pose = Transform::from_translation(at).with_rotation(rot);
+        h.tracked = true;
+    }
+    if f == 20 {
+        actions.write(crate::interact::HandAction::Grab {
+            player,
+            side: Side::Right,
+            item: bar,
+            point: None,
+        });
+    }
+}
+
+/// `--gallery spall`: a car door, a plank wall and a plaster wall side on,
+/// a couple of metres ahead, one over another, each shot through from
+/// behind and to the left by a walker's round every frame: the spall out of
+/// the face toward the camera.
+fn spall_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut state: Local<(u32, Option<Entity>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use crate::render::materials::Mat;
+    if opts.gallery.as_deref() != Some("spall") {
+        return;
+    }
+    let (Some((cam, yaw, pitch)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y == 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    let (fwd, right) = (rot * Vec3::NEG_Z, rot * Vec3::X);
+    // The rounds come square on to each wall, across and back toward the
+    // camera, so the face they leave by is the one it sees.
+    let line = (right - fwd * 0.7).normalize();
+    let walls = [
+        (
+            Mat::PaintedMetal,
+            0.092,
+            0.45,
+            Color::srgb(0.35, 0.42, 0.38),
+        ),
+        (Mat::Planks, 0.1, 0.0, Color::srgb(0.45, 0.33, 0.2)),
+        (Mat::Plaster, 0.15, -0.45, Color::srgb(0.75, 0.72, 0.66)),
+    ];
+    state.0 += 1;
+    if state.0 == 3 {
+        for (mat, thick, up, colour) in walls {
+            let half = Vec3::new(0.45, 0.19, thick * 0.5);
+            commands.spawn((
+                Name::new("Gallery wall"),
+                crate::world::surfaces::Surfaces(vec![(half, Transform::IDENTITY, mat)]),
+                Transform::from_translation(eye + fwd * 2.2 + Vec3::Y * (up - 0.3))
+                    .looking_to(line, Vec3::Y),
+                Mesh3d(meshes.add(Cuboid::from_size(half * 2.0))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: colour,
+                    perceptual_roughness: 0.8,
+                    ..default()
+                })),
+                RigidBody::Static,
+                Collider::cuboid(half.x * 2.0, half.y * 2.0, half.z * 2.0),
+                CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            ));
+        }
+        state.1 = Some(commands.spawn(Name::new("Walker's gun")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    if state.0 > 5 {
+        for (i, (_, _, up, _)) in walls.iter().enumerate() {
+            shots.write(crate::weapons::ballistics::Shot {
+                gun,
+                shooter: Some(gun),
+                origin: eye + fwd * 2.2 + Vec3::Y * (up - 0.3) - line * 4.0,
+                direction: line,
+                speed: 450.0,
+                damage: 14.0,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: u64::from(state.0) << 4 | i as u64,
+            });
+        }
+    }
+}
+
+/// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
+/// a body hurt and treated (`interact::wounds`, drawn by
+/// `render::wounds`). An open wound on the right thigh and the left
+/// forearm, a dressing round the right upper arm, a splint strapped on the
+/// right shin, and the left glove, turned palm up, bloody from the wound.
+fn treat_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    mut players: Query<
+        (
+            Entity,
+            &Transform,
+            &mut crate::rig::RigInput,
+            &mut crate::health::Health,
+            Option<&mut crate::interact::wounds::Wounds>,
+        ),
+        With<crate::rig::LocalPlayer>,
+    >,
+    hands: Query<(Entity, &crate::rig::RigHand)>,
+    mut frames: Local<u32>,
+) {
+    use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
+    use crate::rig::Side;
+    if !opts.gallery.as_deref().is_some_and(|s| s.contains("treat")) {
+        return;
+    }
+    let Some((player, root, mut input, mut health, wounds)) = players.iter_mut().next() else {
+        return;
+    };
+    let Some(mut wounds) = wounds else {
+        return;
+    };
+    *frames += 1;
+    let wound = |limb, along, around, bleed, dressed| Wound {
+        limb,
+        along,
+        around,
+        bleed,
+        dressed,
+    };
+    // Round a limb hanging down, the angle that faces out to your right
+    // and a little forward (`Segment::point`'s frame).
+    let x = Vec3::NEG_Y.any_orthonormal_vector();
+    let y = Vec3::NEG_Y.cross(x);
+    let out = root.rotation * Vec3::new(1.0, 0.0, -0.5).normalize();
+    let facing = out.dot(y).atan2(out.dot(x));
+    wounds.0 = vec![
+        wound(Limb::Thigh(Side::Right), 0.45, facing, 1.0, false),
+        wound(Limb::Forearm(Side::Left), 0.5, 0.5, 0.6, false),
+        wound(Limb::UpperArm(Side::Right), 0.55, 0.0, 0.0, true),
+        wound(Limb::Shin(Side::Right), 0.5, 0.0, 0.0, false),
+    ];
+    // Bleeding as the wounds have it, and in no danger of going down.
+    health.bleeding = 1.6;
+    health.hp = health.max;
+    if *frames == 2 {
+        commands.entity(player).insert(Fracture {
+            leg: Side::Right,
+            splinted: true,
+        });
+        for (h, rh) in &hands {
+            if rh.side == Side::Left {
+                commands.entity(h).insert(Bloodied(1.0));
+            }
+        }
+    }
+    // The left hand low and turned palm up (its palm faces +X, inward).
+    let left = input.hand_mut(Side::Left);
+    left.pose = Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
+        Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+    );
+    left.tracked = true;
 }
 
 /// `--gallery kit+stoop` (or any spec with `stoop`): after a moment

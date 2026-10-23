@@ -32,7 +32,40 @@ pub enum Load {
     SignalRed,
     /// A 26 mm signal star, green.
     SignalGreen,
+    /// Old surplus ball: tired primers and powder that misfire and
+    /// hang-fire now and then.
+    Surplus,
+    /// Ball that's been wet: the primer or the powder damp. Misfires and
+    /// hang-fires far more. Restored at the bench, it's good again.
+    Damp,
+    /// A heavy bullet on a light charge, slower than sound: no crack along
+    /// its flight, a softer report, and under a suppressor next to nothing.
+    /// It drops fast and hits soft.
+    Subsonic,
 }
+
+impl Load {
+    /// A round of this load can get damp (a plain primer and a crimp; the
+    /// AP's, tracers', slugs' and stars' are sealed).
+    pub fn spoils(self) -> bool {
+        matches!(
+            self,
+            Load::Standard | Load::Surplus | Load::Repacked | Load::Subsonic
+        )
+    }
+
+    /// The muzzle speed of this load from a gun whose ball leaves at
+    /// `muzzle`.
+    pub fn speed(self, muzzle: f32) -> f32 {
+        match self {
+            Load::Subsonic => muzzle.min(SUBSONIC_SPEED),
+            _ => muzzle,
+        }
+    }
+}
+
+/// A subsonic load's muzzle speed, m/s.
+pub const SUBSONIC_SPEED: f32 = 300.0;
 
 /// AP's cost through hard plate (armour steel, sheet, a helmet), against
 /// ball's.
@@ -51,6 +84,12 @@ impl Load {
         match self {
             Load::Slug => SLUG_MASS_G,
             Load::Tracer => ball * TRACER_MASS,
+            // 7U1 and 7.62 US: a long, heavy bullet.
+            Load::Subsonic => match cartridge {
+                "5.45x39" => 5.2,
+                "7.62x39" => 12.5,
+                _ => ball,
+            },
             _ => ball,
         }
     }
@@ -70,6 +109,7 @@ impl Load {
             "12ga" => &[Load::Standard, Load::Slug],
             "7.62x38R" | "7.62x25" | "9x18" | "22lr" => &[Load::Standard],
             "26mm" => &[Load::Standard, Load::SignalRed, Load::SignalGreen],
+            "5.45x39" | "7.62x39" => &[Load::Standard, Load::Ap, Load::Tracer, Load::Subsonic],
             _ => &[Load::Standard, Load::Ap, Load::Tracer],
         }
     }
@@ -154,6 +194,32 @@ impl Loads {
         for i in 0..n {
             self.push(count + i, load);
         }
+    }
+
+    /// The `k`-th round from the top of a stack of `count` (whose unlisted
+    /// rounds are `base`) gets damp, if it can. Whether it did.
+    pub fn spoil(&mut self, count: u32, base: Load, k: u32) -> bool {
+        if k >= count {
+            return false;
+        }
+        let n = count as usize;
+        if self.0.len() > n {
+            self.0.drain(..self.0.len() - n);
+        }
+        let i = n - 1 - k as usize;
+        if self.0.len() < n {
+            let mut full = vec![base; n - self.0.len()];
+            full.append(&mut self.0);
+            self.0 = full;
+        }
+        if !self.0[i].spoils() {
+            return false;
+        }
+        self.0[i] = Load::Damp;
+        if base == Load::Standard {
+            self.trim();
+        }
+        true
     }
 
     /// A factory-loaded magazine of `n`: every `every`-th round from the

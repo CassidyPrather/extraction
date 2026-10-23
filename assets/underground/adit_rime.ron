@@ -1,9 +1,11 @@
 // Rime Fell: Coldharbour's mine in the knoll over the ore mill (format:
 // crates/extraction_core/src/underground.rs; design: docs/UNDERGROUND.md,
-// "The adit"). Placed turned 180: the layout's +z runs north. In by a stair beside the adit house, down under the knoll
-// to the drift, the stope and the magazine; south down the haulage to the
-// ore bin under the mill's back apron, and up onto it. Above freezing all
-// the way down: the one warm place on the fell.
+// "The adit"). Placed turned 180: the layout's +z runs north. In by a
+// stair beside the adit house, down under the knoll to the drift, the
+// stope and the magazine, and down the winze's cage to the deep level;
+// south down the haulage to the ore bin under the mill's back apron, and
+// up onto it. Above freezing all the way down: the one warm place on the
+// fell.
 (
     name: "The adit",
     style: Mine,
@@ -24,7 +26,7 @@
         ]),
         // The main drift west under the knoll, the tub rail down it.
         (id: "drift", at: (22.0, 21.0), size: (30.0, 3.0), height: 2.8, lamp: Powered, stage: 0, props: [
-            (kind: Cart, at: (-6.0, -0.6)),
+            (kind: Cart, at: (-10.0, -0.6)),
             (kind: Rubble, at: (9.0, 0.8)),
         ]),
         // The stope: the vein worked out overhead, timbered.
@@ -46,6 +48,27 @@
         (id: "sump", at: (26.0, -10.0), size: (6.0, 6.0), floor: Some(-13.5), height: 3.0, lamp: Dead, props: [
             (kind: Crate, at: (-2.2, 2.2), loot: Some("cargo_pod")),
         ]),
+        // The shaft station on the drift: the top of the winze.
+        (id: "plat", at: (16.0, 16.5), size: (4.0, 3.0), height: 2.6, lamp: Flicker, props: [
+            (kind: Barrel, at: (-1.6, 1.0)),
+        ]),
+        // The winze: twelve metres down to the deep level, and its cage.
+        (id: "winze", at: (16.0, 13.5), size: (4.0, 3.0), floor: Some(-24.5), height: 15.0, pit: true, lamp: Dead),
+        // The station at the winze's foot.
+        (id: "level_station", at: (16.0, 6.0), size: (4.0, 4.0), height: 3.0, floor: Some(-24.5), lamp: Dead, props: [
+            (kind: SmallCrate, at: (-1.4, -1.4), loot: Some("ammo_common")),
+        ]),
+        // The deep drive west along the vein, worked last.
+        (id: "vein_drive", at: (8.0, 1.0), size: (10.0, 3.0), height: 2.6, floor: Some(-24.5), lamp: Dead, props: [
+            (kind: Cart, at: (2.0, 0.6)),
+            (kind: Rubble, at: (-3.5, -0.8)),
+        ]),
+        // The assay store: what the deep level gave, kept under lock.
+        (id: "assay_store", at: (6.0, 7.0), size: (5.0, 4.0), height: 2.6, floor: Some(-24.5), lamp: Dead, props: [
+            (kind: Crate, at: (1.8, 1.3), loot: Some("weapons_rare")),
+            (kind: Shelf, at: (-2.1, 0.0), rot: 90.0, loot: Some("curio")),
+            (kind: SmallCrate, at: (0.2, 1.4), loot: Some("gadgets")),
+        ]),
         // The ore bin under the mill's back apron, where the tubs tipped.
         (id: "ore_bin", at: (39.0, -44.0), size: (6.0, 4.0), height: 3.0, lamp: Flicker, props: [
             (kind: Machine, at: (-2.0, 0.8)),
@@ -60,6 +83,10 @@
         (from: "drift", to: "haulage", via: [(39.0, 21.0)], width: 2.0),
         (from: "haulage", to: "ore_bin", width: 2.0),
         (from: "haulage", to: "sump", via: [(39.0, -10.0)]),
+        (from: "drift", to: "plat", via: [(16.0, 21.0)]),
+        (from: "winze", to: "level_station"),
+        (from: "level_station", to: "vein_drive", via: [(16.0, 1.0)]),
+        (from: "vein_drive", to: "assay_store", via: [(6.0, 1.0)], doors: To),
         // The drainage way from the sump back up to the lamp room.
         (from: "sump", to: "lamp_room", via: [(-10.0, -10.0)]),
     ],
@@ -69,8 +96,21 @@
     floods: [
         (link: Some(("haulage", "sump")), depth: 1.0),
     ],
+    // The winze's cage: a bell at the shaft station and at its foot (and
+    // one in the cage).
+    cage: Some((
+        shaft: "winze",
+        top: "plat",
+        bells: [("plat", (1.75, 0.6), 270.0), ("level_station", (1.75, 0.8), 270.0)],
+    )),
     patrol: ["adit_foot", "drift", "haulage", "drift"],
     crawlers: 1,
+    // Over every kiosk's door: what's down there.
+    sign: Some("COLDHARBOUR ADIT No. 2\nCAGE TO LOWER LEVEL"),
+    // What's down there, for a raider weighing the walk (its tables).
+    rich: Some(1.6),
+    // The kiosk stands beside the adit house, out of the mill yard.
+    covered_entry: true,
     portals: [
         // Down from beside the adit house, north into the knoll.
         (),

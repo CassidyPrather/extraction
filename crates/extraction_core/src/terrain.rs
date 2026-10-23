@@ -359,6 +359,19 @@ impl Heightmap {
                 _ => None,
             })
             .collect();
+        // A ridge or channel reaches half its width from its line.
+        let near: Vec<(geom::NearLine, &TerrainFeature)> = splines
+            .iter()
+            .map(|(line, f)| {
+                let reach = match f {
+                    TerrainFeature::Ridge { width, .. } | TerrainFeature::Channel { width, .. } => {
+                        *width * 0.5
+                    }
+                    _ => 0.0,
+                };
+                (geom::NearLine::new(line, reach), *f)
+            })
+            .collect();
         // A cell's rise and its share of relief: from where it is alone.
         let cell = |p: P2| -> (f32, f32) {
             let mut h = 0.0;
@@ -390,8 +403,11 @@ impl Heightmap {
                     _ => {}
                 }
             }
-            for (line, f) in &splines {
-                let (d, _, _) = geom::polyline_closest(line, p);
+            for (line, f) in &near {
+                // Beyond the reach, it adds nothing.
+                let Some((d, _, _)) = line.closest(p) else {
+                    continue;
+                };
                 match f {
                     TerrainFeature::Ridge { width, height, .. } => {
                         let t = 1.0 - geom::smoothstep(0.0, *width * 0.5, d);
@@ -484,8 +500,11 @@ impl Heightmap {
             }
             let (inner, outer) = (w.width * 0.5 + 8.0, w.width * 0.5 + 16.0);
             let (lo, hi) = geom::bounds(&line);
+            let near = geom::NearLine::new(&line, outer);
             self.for_cells_in(lo, hi, outer, |hm, k, p| {
-                let d = geom::polyline_closest(&line, p).0;
+                let Some((d, _, _)) = near.closest(p) else {
+                    return;
+                };
                 if d < outer {
                     let t = 1.0 - geom::smoothstep(inner, outer, d);
                     hm.heights[k] += (before[k] - relief[k] - hm.heights[k]) * t;
@@ -1035,8 +1054,11 @@ impl Heightmap {
                 beds[a..=b].iter().sum::<f32>() / (b - a + 1) as f32 + water.depth
             })
             .collect();
+        let near = geom::NearLine::new(&line, reach);
         self.for_cells_in(lo, hi, reach, |hm, k, p| {
-            let (d, _, seg) = geom::polyline_closest(&line, p);
+            let Some((d, _, seg)) = near.closest(p) else {
+                return;
+            };
             if d > reach {
                 return;
             }

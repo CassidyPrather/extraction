@@ -163,7 +163,23 @@ pub struct Room {
     /// The power stage its `Lamp::Powered` lamp is on.
     #[serde(default)]
     pub stage: usize,
+    /// Long, bare and hard: it carries every sound made in it its whole
+    /// length (`world::echo`).
+    #[serde(default)]
+    pub carries: bool,
 }
+
+impl Room {
+    /// How far a sound made in it carries, if it carries: its length and a
+    /// little over (metres).
+    pub fn carry(&self) -> Option<f32> {
+        self.carries
+            .then(|| self.size[0].max(self.size[1]) + CARRY_OVER)
+    }
+}
+
+/// How far past a carrying room's length its sounds reach (metres).
+pub const CARRY_OVER: f32 = 4.0;
 
 fn room_height() -> f32 {
     2.6
@@ -289,6 +305,30 @@ pub struct Layout {
     /// A travelling crane: its hook runs from `from` to `to`.
     #[serde(default)]
     pub crane: Option<CraneDef>,
+    /// A cage riding a shaft between levels.
+    #[serde(default)]
+    pub cage: Option<CageDef>,
+    /// The site seals itself once its power's on.
+    #[serde(default)]
+    pub lockdown: Option<LockdownDef>,
+    /// What's down there, as a raider reads a region's richness (0.6 a
+    /// picked-over village to 1.7 the richest): from its loot's tables, not
+    /// the surface it lies under. None: the region's.
+    #[serde(default)]
+    pub rich: Option<f32>,
+    /// Its entrance kiosk stands under cover from the danger of the region
+    /// above (beside a building, out of the yard): a raider can go down
+    /// without crossing the open.
+    #[serde(default)]
+    pub covered_entry: bool,
+    /// Stencilled over every kiosk's door (a line per `\n`): what's down
+    /// there, and what to mind. A kiosk with a `facade` has its own.
+    #[serde(default)]
+    pub sign: Option<String>,
+    /// A flooded room whose water goes live with its lamps' power, and the
+    /// isolator that cuts it.
+    #[serde(default)]
+    pub live: Option<LiveDef>,
     /// Its lamps' colour (linear RGB, full brightness 1), if not the
     /// shelters' warm tungsten: each site's own light.
     #[serde(default)]
@@ -394,6 +434,98 @@ pub struct CraneDef {
     pub drop: f32,
     pub levers: Vec<(String, P2, f32)>,
 }
+
+/// A cage in a shaft (a `pit` room, open from its floor to the floor of
+/// the `top` room beside it): it rides between the two, called and sent
+/// by its bells (on room walls, as vents are; another rides in the cage).
+#[derive(Clone, Debug, Deserialize)]
+pub struct CageDef {
+    pub shaft: String,
+    pub top: String,
+    pub bells: Vec<(String, P2, f32)>,
+}
+
+/// A shelter's lockdown: `after` seconds once its first power stage comes
+/// on (a klaxon in `room` the while), the doors opening into the `doors`
+/// rooms shut and bolt for good. From every room `out` (the room the way
+/// out that isn't the way in leaves from) must still be reached.
+#[derive(Clone, Debug, Deserialize)]
+pub struct LockdownDef {
+    pub after: f32,
+    pub room: String,
+    pub doors: Vec<String>,
+    pub out: String,
+}
+
+impl LockdownDef {
+    /// Whether it shuts this door (of the raster's).
+    pub fn holds(&self, l: &Layout, d: &DoorSpot) -> bool {
+        d.room
+            .is_some_and(|k| self.doors.iter().any(|id| l.rooms[k as usize].id == *id))
+    }
+
+    /// Whether it shuts this corridor (a door at an end opening into one
+    /// of its rooms).
+    pub fn shuts(&self, k: &Link) -> bool {
+        let at = |end: &str| self.doors.iter().any(|id| id == end);
+        (matches!(k.doors, Doors::From | Doors::Both) && at(&k.from))
+            || (matches!(k.doors, Doors::To | Doors::Both) && at(&k.to))
+    }
+
+    /// The rooms that can't reach `out` once it's shut (by name).
+    pub fn cut_off<'a>(&self, l: &'a Layout) -> Vec<&'a str> {
+        let id = |r: &str| l.rooms.iter().position(|q| q.id == r);
+        let Some(out) = id(&self.out) else {
+            return l.rooms.iter().map(|r| r.id.as_str()).collect();
+        };
+        let mut seen = vec![false; l.rooms.len()];
+        seen[out] = true;
+        let mut stack = vec![out];
+        while let Some(k) = stack.pop() {
+            for link in l.links.iter().filter(|k| !self.shuts(k)) {
+                let (Some(a), Some(b)) = (id(&link.from), id(&link.to)) else {
+                    continue;
+                };
+                for (x, y) in [(a, b), (b, a)] {
+                    if x == k && !seen[y] {
+                        seen[y] = true;
+                        stack.push(y);
+                    }
+                }
+            }
+        }
+        l.rooms
+            .iter()
+            .zip(seen)
+            .filter(|(_, s)| !s)
+            .map(|(r, _)| r.id.as_str())
+            .collect()
+    }
+}
+
+/// Live water: `room` is flooded and lit on a power stage; once that
+/// stage is on, the lamps' feed is down in the water and it's live, till
+/// the isolator (on a room's wall, as vents are) cuts the room's circuit
+/// (and its lamps).
+#[derive(Clone, Debug, Deserialize)]
+pub struct LiveDef {
+    pub room: String,
+    pub isolator: (String, P2, f32),
+}
+
+impl LiveDef {
+    /// The power stage that makes it live: its room's lamps'.
+    pub fn stage(&self, l: &Layout) -> Option<usize> {
+        l.rooms
+            .iter()
+            .find(|r| r.id == self.room)
+            .filter(|r| r.lamp == Lamp::Powered)
+            .map(|r| r.stage)
+    }
+}
+
+/// The cage's floor, inside its shaft's walls, metres.
+pub const CAGE_GAP: f32 = 0.15;
 
 /// A catalog item lying in a room, `y` over its floor (on a bench, say).
 #[derive(Clone, Debug, Deserialize)]
@@ -1660,6 +1792,100 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    if let Some(v) = &l.live {
+        let (room, at, rot) = &v.isolator;
+        on_wall(room, *at, *rot, "isolator", &mut bad);
+        if v.stage(l).is_none_or(|k| k >= l.power.len()) {
+            bad.push(format!(
+                "live water in `{}`: no powered lamps there",
+                v.room
+            ));
+        }
+        if !l
+            .floods
+            .iter()
+            .any(|f| f.room.as_deref() == Some(v.room.as_str()))
+        {
+            bad.push(format!("live water in `{}`: it isn't flooded", v.room));
+        }
+        if room == &v.room {
+            bad.push("the isolator's in the live water's room".into());
+        }
+    }
+    if let Some(k) = &l.lockdown {
+        for id in k.doors.iter().chain([&k.room, &k.out]) {
+            if !l.rooms.iter().any(|r| r.id == *id) {
+                bad.push(format!("the lockdown names no room `{id}`"));
+            }
+        }
+        if !r.doors.iter().any(|d| k.holds(l, d)) {
+            bad.push("a lockdown that shuts no door".into());
+        }
+        if l.power.is_empty() {
+            bad.push("a lockdown with no power to set it off".into());
+        }
+        let cut = k.cut_off(l);
+        if !cut.is_empty() {
+            bad.push(format!("sealed, these can't get out: {cut:?}"));
+        }
+        // The way out leaves from `out`: a portal other than the entrance
+        // nearest it.
+        let near = |p: P2| {
+            l.rooms
+                .iter()
+                .min_by(|a, b| {
+                    let d = |r: &Room| (r.at[0] - p[0]).hypot(r.at[1] - p[1]);
+                    d(a).total_cmp(&d(b))
+                })
+                .map(|r| r.id.as_str())
+        };
+        if !l
+            .portals
+            .iter()
+            .skip(1)
+            .any(|p| near(p.at) == Some(k.out.as_str()))
+        {
+            bad.push(format!("no way out leaves from `{}`", k.out));
+        }
+    }
+    if let Some(c) = &l.cage {
+        for (room, at, rot) in &c.bells {
+            on_wall(room, *at, *rot, "cage bell", &mut bad);
+        }
+        let room = |id: &str| l.rooms.iter().find(|r| r.id == id);
+        match (room(&c.shaft), room(&c.top)) {
+            (Some(s), Some(t)) => {
+                if !s.pit {
+                    bad.push(format!("the cage's shaft `{}` isn't a pit", s.id));
+                }
+                if l.floor_of(t) <= l.floor_of(s) + 2.0 {
+                    bad.push(format!("the cage's top `{}` isn't above its shaft", t.id));
+                }
+                if l.floor_of(s) + s.height < l.floor_of(t) + t.height {
+                    bad.push(format!(
+                        "the cage's shaft `{}` stops short of its top",
+                        s.id
+                    ));
+                }
+                // Side by side, sharing a wall's width.
+                let (sh, th) = (
+                    [s.size[0] * 0.5, s.size[1] * 0.5],
+                    [t.size[0] * 0.5, t.size[1] * 0.5],
+                );
+                let gap = |i: usize| (s.at[i] - t.at[i]).abs() - sh[i] - th[i];
+                let over = |i: usize| sh[i] + th[i] - (s.at[i] - t.at[i]).abs();
+                let touch = (gap(0).abs() < 0.01 && over(1) >= s.size[1] - 0.01)
+                    || (gap(1).abs() < 0.01 && over(0) >= s.size[0] - 0.01);
+                if !touch {
+                    bad.push(format!(
+                        "the cage's top `{}` isn't across the shaft's whole side",
+                        t.id
+                    ));
+                }
+            }
+            _ => bad.push("a cage in no shaft or with no top".into()),
+        }
+    }
     for it in &l.items {
         match l.rooms.iter().find(|r| r.id == it.room) {
             Some(room) if r.at(add(room.at, it.at)).open() => {}
@@ -2007,6 +2233,24 @@ pub fn plan_svg(id: &str) -> Option<String> {
             }
         }
     }
+    // The cage (a cross over its shaft), its bells (B).
+    if let Some(c) = &l.cage {
+        if let Some(s) = l.rooms.iter().find(|r| r.id == c.shaft) {
+            let h = [s.size[0] * 0.5 - CAGE_GAP, s.size[1] * 0.5 - CAGE_GAP];
+            let (x1, y1) = px([s.at[0] - h[0], s.at[1] - h[1]]);
+            let (x2, y2) = px([s.at[0] + h[0], s.at[1] + h[1]]);
+            out += &format!(
+                "<line x1='{x1:.1}' y1='{y1:.1}' x2='{x2:.1}' y2='{y2:.1}' stroke='#e67e22' stroke-width='3'/>\n\
+                 <line x1='{x1:.1}' y1='{y2:.1}' x2='{x2:.1}' y2='{y1:.1}' stroke='#e67e22' stroke-width='3'/>\n"
+            );
+        }
+        for (room, at, _) in &c.bells {
+            if let Some(rm) = l.rooms.iter().find(|r| &r.id == room) {
+                let (x, y) = px(add(rm.at, *at));
+                out += &format!("<text x='{x:.1}' y='{y:.1}' fill='#e67e22'>B</text>\n");
+            }
+        }
+    }
     for v in &l.vents {
         if let Some(rm) = l.rooms.iter().find(|r| r.id == v.room) {
             let (x, y) = px(add(rm.at, v.at));
@@ -2147,7 +2391,8 @@ mod tests {
     /// The check walks the power in its stages: a switch behind its own
     /// stage's door (or a later one's) can never be thrown.
     /// The cellars' coal store waits on the flue's vent, the far ledge on
-    /// the crane; the rest are open from the stair.
+    /// the crane; the rest are open from the stair. The adit's deep level
+    /// is behind its cage, and a cage away from its shaft is caught.
     #[test]
     fn rooms_behind_the_works() {
         let l = layout("cellars_cinder").unwrap();
@@ -2163,12 +2408,56 @@ mod tests {
             ["stair_foot", "vent_room", "burner_gallery", "near_ledge"],
             "open as the cellars stand"
         );
+        // The adit's deep level: only by the winze's cage.
+        let l = layout("adit_rime").unwrap();
+        let shut: Vec<&str> = l
+            .rooms
+            .iter()
+            .zip(l.open_rooms())
+            .filter(|(_, o)| !*o)
+            .map(|(r, _)| r.id.as_str())
+            .collect();
+        assert_eq!(
+            shut,
+            ["winze", "level_station", "vein_drive", "assay_store"],
+            "the adit's deep level is behind its cage"
+        );
+        let mut bad = l.clone();
+        let cage = bad.cage.as_mut().unwrap();
+        cage.top = "drift".into();
+        cage.bells[0].1 = [9.0, 9.0];
+        let errs = check(&bad);
+        assert!(
+            errs.iter().any(|e| e.contains("isn't across the shaft"))
+                && errs.iter().any(|e| e.contains("cage bell")),
+            "{errs:?}"
+        );
         for (id, _) in SITES {
             let l = layout(id).unwrap();
             if l.heat.is_empty() && !l.rooms.iter().any(|r| r.pit) {
                 assert!(l.open_rooms().iter().all(|o| *o), "{id}: every room open");
             }
         }
+    }
+
+    /// Sealed, the shelter can still be left: every room reaches the
+    /// escape tunnel; a lockdown that shut the tunnel's door too would be
+    /// caught.
+    #[test]
+    fn a_sealed_shelter_can_be_left() {
+        let l = layout("bunker_marrow").unwrap();
+        let k = l.lockdown.as_ref().expect("the shelter's lockdown");
+        assert!(k.cut_off(l).is_empty(), "{:?}", k.cut_off(l));
+        let r = raster("bunker_marrow").unwrap();
+        assert_eq!(
+            r.doors.iter().filter(|d| k.holds(l, d)).count(),
+            2,
+            "the gas lock's two doors"
+        );
+        let mut bad = l.clone();
+        bad.lockdown.as_mut().unwrap().doors.push("escape".into());
+        let errs = check(&bad);
+        assert!(errs.iter().any(|e| e.contains("can't get out")), "{errs:?}");
     }
 
     #[test]

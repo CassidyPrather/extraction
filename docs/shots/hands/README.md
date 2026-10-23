@@ -67,3 +67,19 @@ eye and from beside; the same door taken by its near end in one hand and
 drawn back, the far end on the ground, scraping; and the pack swung off
 the left shoulder, hanging open in front of you for the right hand to
 reach into.
+`17_climbing.jpg` (`--gallery climb+behind`, flat mode with the hands
+posed and their holds put on by the gallery; `interact::hand_climb`): a
+wall 2 m high, from behind. Reaching up to its top, gripping its edge
+(`Hold::Edge`), and pulled up until the head is over it; a moment later
+you're over and down the far side.
+`18_fight.jpg` (`--gallery fight`, `fight+side`; `interact::fight`): a
+crawler a metre ahead, the crowbar raised in the right hand to strike
+(swung fast, its claw end lands a blunt blow), and the left palm laid on
+the machine (where a shove or a grip would start).
+`19_treated.jpg` (`--gallery treat+side`, `treat+down`, flat mode;
+`interact::wounds`, drawn by `render::wounds`): a body hurt and treated.
+From beside: an open wound on the right thigh, where it was hit, and the
+splint's two slats strapped along the right shin. From the eye: the left
+glove turned palm up, bloody from touching a wound (it fades over a
+minute), an open wound on the left forearm, and a dressing wound round
+the right upper arm as a white band.

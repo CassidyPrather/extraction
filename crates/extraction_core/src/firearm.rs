@@ -191,6 +191,9 @@ pub enum Malfunction {
     /// The spent case stayed in the chamber and the next round rammed into
     /// it. The magazine holds both in place: drop it, rack, reload.
     DoubleFeed,
+    /// A stiff bolt worked timidly came back short and went home again:
+    /// the spent case still in, the action half-done. Work it fully.
+    ShortStroke,
 }
 
 impl Malfunction {
@@ -200,6 +203,7 @@ impl Malfunction {
             Self::FailureToEject => "rack",
             Self::FailureToFeed => "tap, rack",
             Self::DoubleFeed => "drop the mag, rack",
+            Self::ShortStroke => "work it fully",
         }
     }
 }
@@ -264,7 +268,38 @@ pub enum Event {
     /// The bolt slammed home and the floating pin fired the round (a
     /// `Fired` follows).
     SlamFire,
+    /// The hammer fell and the round didn't go: yet. A hang-fire: it goes
+    /// off on its own a moment later (a `Fired` follows), so keep the
+    /// muzzle where it was and the action shut.
+    HangFire,
+    /// A hang-fire went off with the action open: the case burst outside
+    /// the chamber. It hurts the hand and the gun.
+    OutOfBattery,
 }
+
+/// A round hanging fire in a chamber: it goes in `left` seconds.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Hang {
+    pub left: f32,
+    pub barrel: u32,
+    pub chamber: usize,
+    pub load: Load,
+}
+
+/// What a round's primer and powder add to the misfire chance: surplus,
+/// damp, and (per unit of cold) a cold-soaked round; and the same for a
+/// hang-fire. A hang-fire goes between [`HANG_MIN`] and [`HANG_MAX`]
+/// seconds after the hammer falls.
+pub const SURPLUS_DUD: f32 = 0.03;
+pub const DAMP_DUD: f32 = 0.15;
+pub const COLD_DUD: f32 = 0.04;
+pub const SURPLUS_HANG: f32 = 0.03;
+pub const DAMP_HANG: f32 = 0.08;
+pub const COLD_HANG: f32 = 0.05;
+pub const HANG_MIN: f32 = 0.3;
+pub const HANG_MAX: f32 = 1.0;
+/// What a round going off out of battery costs the gun.
+pub const OUT_OF_BATTERY_WEAR: f32 = 0.15;
 
 /// Bolt travel past which whatever is in the chamber is thrown out.
 const EJECT_AT: f32 = 0.85;
@@ -300,6 +335,12 @@ pub const SQUIB_CHANCE: f32 = 0.04;
 pub const REPACK_DUD: f32 = 0.02;
 /// What a bulged barrel leaves of the gun's condition.
 pub const BULGE_KEEPS: f32 = 0.3;
+
+/// Below this condition an action starts to drag ([`Firearm::action_drag`]),
+/// up to `DRY_DRAG` at none; full fouling adds `FOUL_DRAG`.
+pub const DRY_FROM: f32 = 0.6;
+pub const DRY_DRAG: f32 = 0.5;
+pub const FOUL_DRAG: f32 = 0.25;
 
 /// One gun's live state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -390,6 +431,16 @@ pub struct Firearm {
     /// and jams more. Warmth undoes it.
     #[serde(default)]
     pub stiff: f32,
+    /// 0..=1. How cold its rounds are (they're at the gun's temperature):
+    /// a cold primer is a lazy one.
+    #[serde(default)]
+    pub ammo_cold: f32,
+    /// A round hanging fire.
+    #[serde(default)]
+    pub hang: Option<Hang>,
+    /// What it's been made into at the vice (`gunsmith`).
+    #[serde(default)]
+    pub build: crate::gunsmith::Build,
     trigger_down: bool,
     /// Semi-auto needs the trigger released before the next shot.
     trigger_reset: bool,
@@ -441,6 +492,9 @@ impl Firearm {
             fouling: 0.0,
             grime: 0.0,
             stiff: 0.0,
+            ammo_cold: 0.0,
+            hang: None,
+            build: crate::gunsmith::Build::default(),
             trigger_down: false,
             trigger_reset: true,
             cooldown: 0.0,
@@ -537,6 +591,8 @@ impl Firearm {
     /// Advances timers. Call once per fixed tick with the trigger state;
     /// handles automatic fire. `roll` supplies uniform randoms in `0..1`.
     pub fn update(&mut self, dt: f32, trigger: bool, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        // With its bolt out there's nothing for the trigger to let go.
+        let trigger = trigger && !self.build.bolt_out;
         // Up to a tick of overshoot carries into the next interval, so the
         // cyclic rate holds whatever the tick.
         self.cooldown = (self.cooldown - dt).max(-dt);
@@ -557,6 +613,9 @@ impl Firearm {
                 }
             }
         }
+        if let Some(mut h) = self.hang {
+            events.extend(self.hang_on(&mut h, dt, roll));
+        }
         if trigger && !self.trigger_down {
             self.trigger_down = true;
             events.extend(self.pull(roll));
@@ -571,10 +630,73 @@ impl Firearm {
         events
     }
 
+    /// A hanging round: it goes off when its time's up, or out of battery
+    /// if the action's opened on it first.
+    fn hang_on(&mut self, h: &mut Hang, dt: f32, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
+        let mut events = Vec::new();
+        let c = h.chamber;
+        if self.chambers.get(c) != Some(&Some(Round::Live)) {
+            // Taken out of the gun some other way (a revolver's gate).
+            self.hang = None;
+            return events;
+        }
+        let open = match self.def.action {
+            ActionKind::BreakAction => self.bolt_travel >= 0.5,
+            ActionKind::Revolver => false,
+            ActionKind::BoltAction => self.handle_lift > 0.3 || self.bolt_travel > 0.05,
+            _ => self.bolt_travel > 0.05,
+        };
+        if open {
+            self.hang = None;
+            self.chambers[c] = None;
+            self.condition = (self.condition - OUT_OF_BATTERY_WEAR).max(0.0);
+            events.push(Event::OutOfBattery);
+            return events;
+        }
+        h.left -= dt;
+        if h.left > 0.0 {
+            self.hang = Some(*h);
+            return events;
+        }
+        self.hang = None;
+        self.chambers[c] = Some(Round::Spent);
+        let (ev, cycles) = self.discharge(h.barrel, h.load, roll);
+        events.extend(ev);
+        if cycles && self.def.action == ActionKind::SemiAuto {
+            events.extend(self.auto_cycle(roll));
+        }
+        events
+    }
+
+    /// What a round of `load` adds to the misfire and hang-fire chances.
+    pub fn primer(&self, load: Load) -> (f32, f32) {
+        let (d, h) = match load {
+            Load::Surplus => (SURPLUS_DUD, SURPLUS_HANG),
+            Load::Damp => (DAMP_DUD, DAMP_HANG),
+            _ => (0.0, 0.0),
+        };
+        let cold = self.ammo_cold.clamp(0.0, 1.0);
+        (d + COLD_DUD * cold, h + COLD_HANG * cold)
+    }
+
+    /// A timid stroke of a stiff bolt came back short: the action's
+    /// half-done until it's worked fully.
+    pub fn short_stroke(&mut self) -> Vec<Event> {
+        if self.malfunction.is_some() {
+            return Vec::new();
+        }
+        self.malfunction = Some(Malfunction::ShortStroke);
+        vec![Event::Malfunctioned(Malfunction::ShortStroke)]
+    }
+
     /// One trigger stroke (or one auto-fire cycle).
     fn pull(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
         let mut events = Vec::new();
-        if self.fire_mode() == FireMode::Safe || !self.trigger_reset || !self.is_ready() {
+        if self.fire_mode() == FireMode::Safe
+            || !self.trigger_reset
+            || !self.is_ready()
+            || self.hang.is_some()
+        {
             return events;
         }
         if self.def.action == ActionKind::Crossbow {
@@ -641,8 +763,19 @@ impl Firearm {
                     } else {
                         0.0
                     };
-                if roll() < dud_chance {
+                let (dud, hang) = self.primer(load);
+                if roll() < dud_chance + dud {
                     events.push(Event::Dud);
+                    return events;
+                }
+                if hang > 0.0 && roll() < hang {
+                    self.hang = Some(Hang {
+                        left: HANG_MIN + (HANG_MAX - HANG_MIN) * roll(),
+                        barrel,
+                        chamber: c,
+                        load,
+                    });
+                    events.push(Event::HangFire);
                     return events;
                 }
                 self.chambers[c] = Some(Round::Spent);
@@ -943,6 +1076,8 @@ impl Firearm {
                     }
                     self.bolt_travel = DOUBLE_FEED_AT;
                 }
+                // (Only ever a hand's doing: `short_stroke`.)
+                Malfunction::ShortStroke => {}
             }
             self.hammers_cocked[0] = true;
             self.malfunction = Some(kind);
@@ -1008,6 +1143,11 @@ impl Firearm {
         }
         if self.def.action == ActionKind::BoltAction && self.handle_lift < 0.95 {
             return events;
+        }
+        // Worked fully, a short-stroked action's put right (and goes on
+        // to throw out whatever's in the chamber).
+        if self.malfunction == Some(Malfunction::ShortStroke) && travel >= 0.98 {
+            self.malfunction = None;
         }
         if self.def.action == ActionKind::Pump {
             return self.pump_travel(travel.clamp(0.0, 1.0));
@@ -1467,6 +1607,16 @@ impl Firearm {
     }
 
     /// Spread in radians for the next shot.
+    /// How much its action drags in the hand, 0 free ..= 1: cold oil
+    /// (`stiff`), or a worn, dry, fouled action (worn past 0.6 it starts to
+    /// grind, and fouling adds to it): the feel of a gun that wants
+    /// cleaning and oil.
+    pub fn action_drag(&self) -> f32 {
+        let worn = ((DRY_FROM - self.condition) / DRY_FROM).clamp(0.0, 1.0);
+        self.stiff
+            .max(DRY_DRAG * worn + FOUL_DRAG * self.fouling.clamp(0.0, 1.0))
+    }
+
     pub fn spread_radians(&self) -> f32 {
         let moa = self.def.spread_moa * (1.0 + 3.0 * (1.0 - self.condition) + self.fouling);
         moa / 60.0 * std::f32::consts::PI / 180.0
@@ -2067,6 +2217,188 @@ mod tests {
         );
     }
 
+    /// Misfires and hang-fires per hundred rounds of `load`, as cold as
+    /// given, a trigger press each; and the longest a hang-fire took.
+    fn primer_run(load: Load, cold: f32, n: u32) -> (f32, f32, f32) {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        gun.ammo_cold = cold;
+        while gun.fire_mode() != FireMode::Semi {
+            gun.cycle_mode();
+        }
+        let mut rng = crate::noise::Rng::new(11);
+        let mut roll = || rng.f32();
+        let (mut shots, mut duds, mut hangs, mut longest) = (0u32, 0u32, 0u32, 0.0f32);
+        let mut hung_at: Option<f32> = None;
+        let mut t = 0.0;
+        let mut ticks = 0u32;
+        while shots < n {
+            ticks += 1;
+            assert!(ticks < 200 * n, "stuck: {gun:?}");
+            if gun.hang.is_none()
+                && (gun.chambers[0].is_none()
+                    || !gun.hammers_cocked[0]
+                    || gun.malfunction.is_some())
+            {
+                gun.malfunction = None;
+                gun.mag_unseated = false;
+                if gun.rounds_in_feed() == 0 {
+                    let _ = gun.remove_magazine();
+                    let mut m = mag("ak545", 30);
+                    m.capacity = 30;
+                    m.loads.fill(0, load, 30);
+                    gun.insert_magazine(m).unwrap();
+                }
+                rack(&mut gun);
+            }
+            // Press, then wait out any hang-fire.
+            let trigger = gun.hang.is_none() && ticks % 2 == 0;
+            for e in gun.update(0.01, trigger, &mut roll) {
+                match e {
+                    Event::Fired { .. } => {
+                        shots += 1;
+                        if let Some(h) = hung_at.take() {
+                            longest = longest.max(t - h);
+                        }
+                    }
+                    Event::Dud => duds += 1,
+                    Event::HangFire => {
+                        hangs += 1;
+                        hung_at = Some(t);
+                    }
+                    _ => {}
+                }
+            }
+            t += 0.01;
+        }
+        let per = 100.0 / n as f32;
+        (duds as f32 * per, hangs as f32 * per, longest)
+    }
+
+    /// The ammunition's gauge: fresh ball hardly ever misfires or hangs;
+    /// surplus does now and then, damp a lot, a cold-soaked round more
+    /// (the bench's restore makes them fresh ball again). Every hang-fire
+    /// went within its second.
+    #[test]
+    fn ammo_condition_misfires_and_hang_fires() {
+        let n = 4000;
+        let fresh = primer_run(Load::Standard, 0.0, n);
+        let surplus = primer_run(Load::Surplus, 0.0, n);
+        let damp = primer_run(Load::Damp, 0.0, n);
+        let cold = primer_run(Load::Standard, 1.0, n);
+        let repacked = primer_run(Load::Repacked, 0.0, n);
+        println!(
+            "misfires/hangs per 100: fresh {:.2}/{:.2}, surplus {:.2}/{:.2}, damp {:.2}/{:.2}, \
+             cold {:.2}/{:.2}, re-packed {:.2}/{:.2}; longest hang {:.2} s",
+            fresh.0,
+            fresh.1,
+            surplus.0,
+            surplus.1,
+            damp.0,
+            damp.1,
+            cold.0,
+            cold.1,
+            repacked.0,
+            repacked.1,
+            damp.2.max(surplus.2).max(cold.2)
+        );
+        assert!(fresh.0 < 0.5 && fresh.1 == 0.0, "fresh: {fresh:?}");
+        assert!(
+            surplus.0 > 4.0 * fresh.0.max(0.2) && surplus.1 > 1.0,
+            "surplus: {surplus:?}"
+        );
+        assert!(
+            damp.0 > 2.0 * surplus.0 && damp.1 > surplus.1,
+            "damp: {damp:?}"
+        );
+        assert!(cold.0 > fresh.0 && cold.1 > 2.0, "cold: {cold:?}");
+        // (Scavenged re-packs don't hang; their trouble is the squib.)
+        assert!(repacked.1 == 0.0, "re-packed: {repacked:?}");
+        for r in [surplus, damp, cold] {
+            assert!(r.2 <= HANG_MAX + 0.02, "a hang went {} s", r.2);
+        }
+    }
+
+    /// A hang-fire: the hammer falls, nothing, then the shot a moment later;
+    /// opened on before it goes, it goes off out of battery and costs the
+    /// gun.
+    #[test]
+    fn a_hang_fire_goes_late_or_out_of_battery() {
+        let hung = || {
+            let mut gun = Firearm::new(mosin(), 1.0);
+            gun.cycle_mode();
+            gun.set_handle_lift(1.0);
+            gun.set_bolt_travel(1.0);
+            assert!(gun.load_round_of(Load::Damp));
+            gun.set_bolt_travel(0.0);
+            gun.set_handle_lift(0.0);
+            // A roll that misses the misfire and hits the hang.
+            let mut rolls = [0.99f32, 0.0, 0.5].into_iter();
+            let ev = gun.update(0.01, true, &mut || rolls.next().unwrap_or(0.5));
+            assert_eq!(ev, vec![Event::HangFire], "{gun:?}");
+            gun
+        };
+        let mut gun = hung();
+        let mut t = 0.0;
+        let mut fired = None;
+        while t < 2.0 && fired.is_none() {
+            t += 0.01;
+            if gun
+                .update(0.01, false, &mut || 0.5)
+                .iter()
+                .any(|e| matches!(e, Event::Fired { .. }))
+            {
+                fired = Some(t);
+            }
+        }
+        let fired = fired.expect("it went off");
+        assert!(
+            (HANG_MIN..=HANG_MAX + 0.02).contains(&fired),
+            "{fired} s late"
+        );
+
+        let mut gun = hung();
+        gun.update(0.01, false, &mut || 0.5);
+        gun.set_handle_lift(1.0);
+        let ev = gun.update(0.01, false, &mut || 0.5);
+        assert_eq!(ev, vec![Event::OutOfBattery]);
+        assert!(gun.condition < 1.0 - OUT_OF_BATTERY_WEAR + 0.01);
+        assert!(gun.hang.is_none() && gun.chambers[0].is_none());
+    }
+
+    /// A short stroke holds the trigger dead until the bolt's worked
+    /// fully.
+    #[test]
+    fn a_short_stroke_wants_a_full_stroke() {
+        let mut gun = Firearm::new(mosin(), 1.0);
+        gun.cycle_mode();
+        assert_eq!(
+            gun.short_stroke(),
+            vec![Event::Malfunctioned(Malfunction::ShortStroke)]
+        );
+        assert!(shoot(&mut gun).is_empty(), "dead");
+        gun.set_handle_lift(1.0);
+        gun.set_bolt_travel(0.6);
+        assert_eq!(gun.malfunction, Some(Malfunction::ShortStroke), "not yet");
+        gun.set_bolt_travel(1.0);
+        assert_eq!(gun.malfunction, None, "worked fully");
+    }
+
+    /// Wet, a box's plain rounds go damp one at a time; sealed AP doesn't.
+    #[test]
+    fn rounds_spoil_one_at_a_time() {
+        let mut box_of = Loads::default();
+        assert!(box_of.spoil(10, Load::Surplus, 0));
+        assert_eq!(box_of.top(10), Load::Damp);
+        assert!(box_of.spoil(10, Load::Surplus, 3));
+        assert_eq!(box_of.0.iter().filter(|l| **l == Load::Damp).count(), 2);
+        assert_eq!(box_of.0.len(), 10);
+        let mut ap = Loads::default();
+        assert!(!ap.spoil(5, Load::Ap, 0), "sealed");
+        let mut mag = Loads::default();
+        assert!(mag.spoil(30, Load::Standard, 29));
+        assert_eq!(mag.pop_or(30, Load::Standard), Load::Standard);
+    }
+
     /// A grimy gun fouls faster with each shot; the cleaning kit takes the
     /// grime with the fouling, a wipe only the grime.
     #[test]
@@ -2498,5 +2830,23 @@ mod tests {
         assert!(gun.load_round());
         gun.set_break_open(false);
         assert!(fired(&shoot(&mut gun)));
+    }
+
+    /// A sound, clean action runs free; a worn one drags, a fouled worn
+    /// one more; cold oil drags whatever the wear.
+    #[test]
+    fn a_worn_dry_action_drags() {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        assert_eq!(gun.action_drag(), 0.0, "sound and clean");
+        gun.condition = 0.7;
+        assert_eq!(gun.action_drag(), 0.0, "a little worn still runs free");
+        gun.condition = 0.2;
+        let worn = gun.action_drag();
+        assert!(worn > 0.3, "{worn}");
+        gun.fouling = 1.0;
+        assert!(gun.action_drag() > worn + 0.2);
+        let mut cold = Firearm::new(rifle(), 1.0);
+        cold.stiff = 0.9;
+        assert_eq!(cold.action_drag(), 0.9);
     }
 }

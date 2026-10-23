@@ -1036,6 +1036,26 @@ def export(rel_path, colors=False):
     print(f"wrote {rel_path} ({os.path.getsize(path) / 1024:.0f} KiB)")
 
 
+def export_part(name, rel_path):
+    """One object alone, its origin at its middle, as an item's model (the
+    stock and the bolt as they come off at the vice)."""
+    obj = bpy.data.objects[name].copy()
+    obj.data = obj.data.copy()
+    bpy.context.scene.collection.objects.link(obj)
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+    obj.location = (0.0, 0.0, 0.0)
+    bpy.ops.export_scene.gltf(
+        filepath=os.path.join(REPO, rel_path), export_format="GLB", export_yup=True,
+        export_apply=True, export_texcoords=True, export_normals=True, export_tangents=True,
+        export_materials="EXPORT", export_cameras=False, export_lights=False,
+        export_animations=False, export_extras=False, use_selection=True)
+    bpy.data.objects.remove(obj)
+    print(f"wrote {rel_path}")
+
+
 def main_guard():
     """Scripts call this to reset to an empty scene."""
     reset()

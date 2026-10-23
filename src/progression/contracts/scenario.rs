@@ -41,12 +41,13 @@ use extraction_core::progression::{
 };
 
 use super::super::Progression;
+use crate::bot::crating::aim;
 use crate::bot::{Bot, Task};
 use crate::interact::body::{Backpack, InBackpack};
 use crate::interact::{Held, InSocket, Socket, SocketOwner};
 use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
-use crate::raid::truck::{FLOOR, Stash, Truck};
+use crate::raid::truck::{Stash, Truck};
 use crate::raid::{Phase, Raid};
 use crate::rig::{LocalPlayer, RigHead, RigInput, Side};
 use crate::robots::{Breed, Robot, RobotKind};
@@ -281,84 +282,6 @@ impl Scene<'_, '_> {
             .map(|(e, _, gt, _)| (e, gt.translation()))
             .next()
     }
-}
-
-/// Where to stand in the bed, and where to look, so that a thing held at
-/// `v` (in the head's frame) is in the stash crate's opening (within
-/// `inner` of its middle, crate space). From `from` only, if `fixed`.
-#[allow(clippy::too_many_arguments)]
-fn aim(
-    v: Vec3,
-    eye_h: f32,
-    floor: f32,
-    truck: &GlobalTransform,
-    stash: &GlobalTransform,
-    inner: Vec3,
-    from: Vec2,
-    fixed: bool,
-) -> Option<(Vec2, Vec3)> {
-    let roots: Vec<Vec2> = if fixed {
-        vec![from]
-    } else {
-        // The bed's left half and middle, clear of the bench's top.
-        let mut r = Vec::new();
-        for i in 0..=18 {
-            for k in 0..=60 {
-                let (x, z) = (-0.85 + i as f32 * 0.05, -1.5 + k as f32 * 0.05);
-                r.push(truck.transform_point(Vec3::new(x, FLOOR, z)).xz());
-            }
-        }
-        r
-    };
-    let to_local = stash.affine().inverse();
-    let reach = v.length();
-    let a = v.y.hypot(v.z);
-    let mut best: Option<(f32, Vec2, Vec3)> = None;
-    for r in roots {
-        let eye = Vec3::new(r.x, floor + eye_h, r.y);
-        for i in 0..5 {
-            for j in 0..5 {
-                for k in 0..5 {
-                    let s = |n: i32| (n as f32 - 2.0) * 0.5;
-                    let p = stash.transform_point(Vec3::new(s(i), s(j), s(k)) * inner);
-                    let w = (p - eye).normalize_or_zero() * reach;
-                    let t = eye + w;
-                    let local = to_local.transform_point3(t);
-                    if local.abs().cmpgt(inner).any() || a < 1e-3 || w.y.abs() > a {
-                        continue;
-                    }
-                    // The pitch that brings it to the height wanted, then
-                    // the turn that brings it round.
-                    let phi = v.z.atan2(v.y);
-                    let base = (w.y / a).clamp(-1.0, 1.0).acos();
-                    let Some(pitch) = [base - phi, -base - phi]
-                        .into_iter()
-                        .map(|p| {
-                            (p + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
-                                - std::f32::consts::PI
-                        })
-                        .filter(|p| p.abs() < 1.3)
-                        .filter(|p| ((Quat::from_rotation_x(*p) * v).y - w.y).abs() < 0.01)
-                        .min_by(|a, b| a.abs().total_cmp(&b.abs()))
-                    else {
-                        continue;
-                    };
-                    let u = Quat::from_rotation_x(pitch) * v;
-                    let yaw = (-w.z).atan2(w.x) - (-u.z).atan2(u.x);
-                    let turn = Quat::from_rotation_y(yaw);
-                    if (turn * u - w).length() > 0.02 {
-                        continue;
-                    }
-                    let score = local.length() + 0.5 * r.distance(from);
-                    if best.is_none_or(|(b, ..)| score < b) {
-                        let dir = turn * Quat::from_rotation_x(pitch) * Vec3::NEG_Z;
-                        best = Some((score, r, eye + dir * 20.0));
-                    }
-                }
-            }
-        }
-    }
-    best.map(|(_, r, look)| (r, look))
 }
 
 /// The career as it would be when the driver offers `c`.

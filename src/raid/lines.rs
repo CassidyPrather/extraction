@@ -87,6 +87,9 @@ pub const SHORT_RUN: &[&str] = &[
     "Truck: \"Short run. That's a can of fuel. Get in.\"",
 ];
 
+/// The first job's way home, from the gate, on the house.
+pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
+
 pub const NO_FUEL: &str = "Truck: \"No fuel in the stores for the short run. Head for an RV.\"";
 
 pub const PULLING_OUT: &[&str] = &[
@@ -308,6 +311,40 @@ pub const CALLED_OUT: &[&str] = &[
     "Two-tone chirps, close. More of them coming.",
 ];
 
+/// The Zone remembers you (`robots::memory`). Picked up on your usual
+/// way, near `{rv}` (a place)...
+pub const MEMORY_CONTACT: &[&str] = &[
+    "Machine talk, close. They know you by {rv} now.",
+    "The radio clicks in their tones: {rv} again.",
+    "Chirps, near. They've had you by {rv} before.",
+];
+/// ...or nowhere it can name.
+pub const MEMORY_CONTACT_AWAY: &[&str] = &[
+    "Machine talk, close. They know the way you come.",
+    "The radio clicks: your usual way. They were waiting.",
+];
+/// Stepping out: one of theirs left watching where you wrecked one, by
+/// `{rv}`...
+pub const MEMORY_WATCHER: &[&str] = &[
+    "Driver: \"Mind {rv}. They've left one there.\"",
+    "Driver: \"One stands by {rv} now. Since your last.\"",
+];
+/// ...or somewhere it can't name.
+pub const MEMORY_WATCHER_AWAY: &[&str] =
+    &["Driver: \"Where you dropped theirs, there's another stood now.\""];
+/// The rendezvous you always use, `{rv}`.
+pub const MEMORY_RV: &[&str] = &[
+    "Driver: \"{rv} again? They've noticed.\"",
+    "Driver: \"Not {rv} every time. They count.\"",
+];
+/// A building you cleared, by `{rv}`, found shut.
+pub const MEMORY_SHUT: &[&str] = &["Driver: \"Your place by {rv}? Shut again.\""];
+/// Nothing in particular, but you keep to the same ways.
+pub const MEMORY_WAYS: &[&str] = &[
+    "Driver: \"Same way in every time. Even I could find you.\"",
+    "Driver: \"Go in another way. They count, you know.\"",
+];
+
 /// Fills a line's `{rv}`, `{s}` and `{b}`; a place leading a line gets a
 /// capital.
 pub fn fill(line: &str, rv: &str, s: f32, b: &str) -> String {
@@ -366,7 +403,14 @@ mod tests {
     #[test]
     fn every_line_fits_the_wrist() {
         let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 27] = [
+        let pools: [&[&str]; 34] = [
+            MEMORY_CONTACT,
+            MEMORY_CONTACT_AWAY,
+            MEMORY_WATCHER,
+            MEMORY_WATCHER_AWAY,
+            MEMORY_RV,
+            MEMORY_SHUT,
+            MEMORY_WAYS,
             crate::raid::epilogue::FOUND,
             BEAT_ENDED,
             &[
@@ -398,7 +442,7 @@ mod tests {
             COMING_HOME_QUIET,
             CHATTER_CLOSE,
             CHATTER_FAR,
-            &[NO_FUEL],
+            &[NO_FUEL, FIRST_SHORT_RUN],
         ];
         for pool in pools {
             for line in pool {

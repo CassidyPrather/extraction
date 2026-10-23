@@ -20,12 +20,16 @@ pub mod feel;
 pub mod flares;
 pub mod flat;
 pub mod grenades;
+pub mod gunsmith;
 pub mod impacts;
 pub mod layout;
+pub mod legibility;
 pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+pub mod report;
+pub mod reverb;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
@@ -67,6 +71,16 @@ pub struct Gun {
     /// one gun never hangs on how many others are lying about, nor on the
     /// order things were spawned in, and a drill replays.
     pub dice: Rng,
+    /// Its mass as built, if it's been worked at the vice (`gunsmith`);
+    /// else the catalog's.
+    pub mass: Option<f32>,
+}
+
+impl Gun {
+    /// Its mass (kg): as built, or `catalog` as made.
+    pub fn mass(&self, catalog: f32) -> f32 {
+        self.mass.unwrap_or(catalog)
+    }
 }
 
 /// A gun's seed: its kind and where it was first put (to the centimetre).
@@ -206,6 +220,7 @@ pub struct WeaponsPlugin;
 impl Plugin for WeaponsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<GunEvent>()
+            .add_message::<ActionGrind>()
             .add_observer(setup_gun_items)
             .add_observer(|add: On<Add, Player>, mut commands: Commands| {
                 commands.entity(add.entity).insert(AimHint::default());
@@ -232,7 +247,9 @@ impl Plugin for WeaponsPlugin {
                 crossbow::CrossbowPlugin,
                 carry::CarryPlugin,
                 weather::WeatherPlugin,
+                report::ReportPlugin,
             ))
+            .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
             .add_systems(
                 FixedUpdate,
                 (
@@ -335,6 +352,7 @@ fn setup_gun_items(
         magwell,
         trigger: 0.0,
         dice: Rng::new(seed),
+        mass: None,
     });
 }
 
@@ -437,12 +455,45 @@ fn sync_mag_rounds(
 }
 
 /// A hand on a slide, charging handle, bolt or barrels works the action.
+/// A stiff action (cold oil, `Firearm::stiff`) in the hand: its part
+/// follows the hand no faster than [`STROKE_RATE`] m/s, slowed by
+/// [`STROKE_DRAG`] times the stiffness, and not at all unless the hand pulls
+/// at [`FIRM_PULL`] m/s times the stiffness (a timid pull just slides on
+/// it). A stiff bolt brought back short and pushed home again has
+/// short-stroked ([`SHORT_STIFF`] and up).
+pub const STROKE_RATE: f32 = 3.0;
+pub const STROKE_DRAG: f32 = 3.0;
+pub const FIRM_PULL: f32 = 0.35;
+pub const SHORT_STIFF: f32 = 0.3;
+
+/// Where a hand-worked part goes this tick, from `now` toward `want`
+/// (travel, 0..1, over `travel_m` metres), as stiff as the action is and as
+/// hard as the hand pulls (m/s along the stroke).
+pub fn drag(now: f32, want: f32, stiff: f32, pull: f32, dt: f32, travel_m: f32) -> f32 {
+    if stiff <= 0.01 {
+        return want;
+    }
+    if pull.abs() < FIRM_PULL * stiff {
+        return now;
+    }
+    let max = dt * STROKE_RATE / (1.0 + STROKE_DRAG * stiff) / travel_m.max(1e-3);
+    now + (want - now).clamp(-max, max)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn work_handles(
     hands: Query<(Entity, &Hand)>,
+    rig: Query<&RigHand>,
     mut guns: Query<(Entity, &mut Gun, &GlobalTransform, &Item)>,
     catalog: Res<Catalog>,
+    time: Res<Time>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
+    mut haptics: MessageWriter<crate::rig::haptics::Haptic>,
+    mut grinds: MessageWriter<ActionGrind>,
+    // Per gun: the furthest its bolt came back this stroke (for a short
+    // stroke), and when it last ground under a hand.
+    mut strokes: Local<std::collections::HashMap<Entity, (f32, f32)>>,
     // Per hand: the gun, and its bolt travel and handle lift when the hand
     // took hold. The hand moves the part from there, so taking a slide that
     // is locked back, a bolt left open or a handle left up doesn't snap it
@@ -452,11 +503,14 @@ fn work_handles(
     // hand's place along the bore when it took hold.
     mut pumping: Local<std::collections::HashMap<Entity, (Entity, f32, f32)>>,
 ) {
+    let dt = time.delta_secs();
+    let now_s = time.elapsed_secs();
     pumping.retain(|h, (g, ..)| {
         hands
             .get(*h)
             .is_ok_and(|(_, hand)| hand.supporting == Some(*g))
     });
+    strokes.retain(|g, _| guns.contains(*g));
     for (hand_e, hand) in &hands {
         let Some(gun_e) = hand.supporting else {
             continue;
@@ -480,7 +534,22 @@ fn work_handles(
         let travel = gun.firearm.bolt_travel;
         let (_, start, z0) = *pumping.entry(hand_e).or_insert((gun_e, travel, z));
         let want = start + (z - z0) / h.travel.max(1e-3);
-        let events = gun.firearm.set_bolt_travel(want.clamp(0.0, 1.0));
+        // Cold oil: it drags, and a timid hand slides on it.
+        let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);
+        let stiff = gun.firearm.action_drag();
+        let to = drag(travel, want.clamp(0.0, 1.0), stiff, pull, dt, h.travel);
+        let events = gun.firearm.set_bolt_travel(to);
+        grind(
+            &mut haptics,
+            &mut grinds,
+            gun_e,
+            hand.world.translation,
+            rig.get(hand_e).ok().map(|r| r.side),
+            stiff,
+            to != travel,
+            now_s,
+            strokes.entry(gun_e).or_default(),
+        );
         let now = gun.firearm.bolt_travel;
         if (now - want).abs() > 1e-3 {
             // At a stop, held shut by the lock or stopped on a jam: the
@@ -516,6 +585,9 @@ fn work_handles(
             .inverse()
             .transform_point3(hand.world.translation);
         let d = local - hand.handle_origin;
+        // How hard the hand pulls along the stroke, and which hand.
+        let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);
+        let side = rig.get(hand_e).ok().map(|r| r.side);
         let events = match h.kind {
             HandleKind::String => {
                 let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
@@ -525,8 +597,26 @@ fn work_handles(
                 if d.z > 0.003 {
                     gun.firearm.take_off_stop();
                 }
-                let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
-                gun.firearm.set_bolt_travel(travel)
+                let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                let was = gun.firearm.bolt_travel;
+                let stiff = gun.firearm.action_drag();
+                let to = drag(was, want, stiff, pull, dt, h.travel);
+                if to != want {
+                    // The hand slides on the handle from where it got to.
+                    taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
+                }
+                grind(
+                    &mut haptics,
+                    &mut grinds,
+                    gun_e,
+                    hand.world.translation,
+                    side,
+                    stiff,
+                    to != was,
+                    now_s,
+                    strokes.entry(gun_e).or_default(),
+                );
+                gun.firearm.set_bolt_travel(to)
             }
             HandleKind::TurnBolt => {
                 let mut ev = Vec::new();
@@ -542,8 +632,37 @@ fn work_handles(
                     ev.extend(gun.firearm.set_handle_lift(lift));
                 }
                 if gun.firearm.handle_lift >= 0.95 {
-                    let travel = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
-                    ev.extend(gun.firearm.set_bolt_travel(travel));
+                    let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
+                    let was = gun.firearm.bolt_travel;
+                    let stiff = gun.firearm.action_drag();
+                    let to = drag(was, want, stiff, pull, dt, h.travel);
+                    if to != want {
+                        taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));
+                    }
+                    let stroke = strokes.entry(gun_e).or_default();
+                    grind(
+                        &mut haptics,
+                        &mut grinds,
+                        gun_e,
+                        hand.world.translation,
+                        side,
+                        stiff,
+                        to != was,
+                        now_s,
+                        stroke,
+                    );
+                    ev.extend(gun.firearm.set_bolt_travel(to));
+                    // Came back short and going home again: a short stroke.
+                    let now = gun.firearm.bolt_travel;
+                    if now > was {
+                        stroke.0 = stroke.0.max(now);
+                    } else if now < was && stiff >= SHORT_STIFF && (0.1..0.95).contains(&stroke.0) {
+                        ev.extend(gun.firearm.short_stroke());
+                        stroke.0 = 0.0;
+                    }
+                    if now < 0.05 || now >= 0.98 {
+                        stroke.0 = 0.0;
+                    }
                 }
                 ev
             }
@@ -563,6 +682,44 @@ fn work_handles(
         let name = catalog.get(item.kind()).id.clone();
         emit(e, &name, &mut gun, gt, events, &mut out, &mut ejected);
     }
+}
+
+/// A stiff action ground under a hand (for Audio): about every 60 ms while
+/// it moves.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ActionGrind {
+    pub gun: Entity,
+    pub at: Vec3,
+    pub stiff: f32,
+}
+
+/// A stiff action grinds in the hand that works it: a tick as it moves,
+/// harder the stiffer, and heard.
+#[allow(clippy::too_many_arguments)]
+fn grind(
+    haptics: &mut MessageWriter<crate::rig::haptics::Haptic>,
+    grinds: &mut MessageWriter<ActionGrind>,
+    gun: Entity,
+    at: Vec3,
+    side: Option<crate::rig::Side>,
+    stiff: f32,
+    moved: bool,
+    now: f32,
+    stroke: &mut (f32, f32),
+) {
+    let Some(side) = side else {
+        return;
+    };
+    if stiff < 0.1 || !moved || now - stroke.1 < 0.06 {
+        return;
+    }
+    stroke.1 = now;
+    haptics.write(crate::rig::haptics::Haptic {
+        side,
+        amplitude: 0.08 + 0.3 * stiff,
+        seconds: 0.015,
+    });
+    grinds.write(ActionGrind { gun, at, stiff });
 }
 
 /// How fast a palm must come up into a seated magazine's floorplate to

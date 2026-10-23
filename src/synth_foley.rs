@@ -93,6 +93,51 @@ pub const STAND_INS: &[StandIn] = &[
         variants: 5,
         render: canary,
     },
+    StandIn {
+        set: "anomaly/frost",
+        variants: 2,
+        render: frost,
+    },
+    StandIn {
+        set: "physical/ice_crack",
+        variants: 4,
+        render: ice_crack,
+    },
+    StandIn {
+        set: "device/notice",
+        variants: 2,
+        render: notice,
+    },
+    StandIn {
+        set: "device/notice_hard",
+        variants: 2,
+        render: notice_hard,
+    },
+    StandIn {
+        set: "alarm/klaxon",
+        variants: 2,
+        render: klaxon,
+    },
+    StandIn {
+        set: "drag/metal",
+        variants: 3,
+        render: drag_metal,
+    },
+    StandIn {
+        set: "drag/wood",
+        variants: 3,
+        render: drag_wood,
+    },
+    StandIn {
+        set: "drag/roll",
+        variants: 3,
+        render: drag_roll,
+    },
+    StandIn {
+        set: "drag/body",
+        variants: 3,
+        render: drag_body,
+    },
 ];
 
 pub fn is_stand_in(set: &str) -> bool {
@@ -553,4 +598,215 @@ mod tests {
             }
         }
     }
+}
+
+/// How long a drag loop is, s, and how much of its tail is faded into
+/// its head so it loops without a seam.
+const LOOP_SECS: f32 = 2.0;
+const LOOP_FADE: f32 = 0.3;
+
+/// `LOOP_SECS` of `sample(rng, t)` that loops without a click: rendered
+/// long, its tail crossfaded (equal power) into its head.
+fn seamless(rng: &mut Rng, sr: f32, mut sample: impl FnMut(&mut Rng, f32) -> f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let fade = (LOOP_FADE * sr) as usize;
+    let long: Vec<f32> = (0..n + fade).map(|i| sample(rng, i as f32 / sr)).collect();
+    let mut out = long[..n].to_vec();
+    for i in 0..fade {
+        let a = (i as f32 + 0.5) / fade as f32 * std::f32::consts::FRAC_PI_2;
+        out[i] = out[i] * a.sin() + long[n + i] * a.cos();
+    }
+    out
+}
+
+/// Stick and slip: a rough, uneven grit, `rate` catches a second, each a
+/// quick swell that lets go, in 0.3..1.
+fn grit(rate: f32, sr: f32) -> impl FnMut(&mut Rng) -> f32 {
+    let mut level = 0.6f32;
+    let mut next = 0usize;
+    let mut i = 0usize;
+    move |rng: &mut Rng| {
+        if i >= next {
+            level = 0.3 + 0.7 * rng.f32();
+            next = i + ((sr / rate) * jitter(rng, 0.6)) as usize;
+        }
+        i += 1;
+        let k = (next - i) as f32 / (sr / rate);
+        level * (0.5 + 0.5 * k.min(1.0))
+    }
+}
+
+/// A sheet of metal (a car door, a panel, a robot's hull) dragged over
+/// ground: a hiss through the sheet's own ringing modes, catching and
+/// slipping, with the grind of what's under it, 2 s, looped.
+fn drag_metal(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut modes: Vec<(Bp, f32)> = [1100.0, 2600.0, 4200.0, 6300.0]
+        .iter()
+        .zip([1.0, 0.45, 0.2, 0.08])
+        .map(|(&f, w)| (Bp::new(f * jitter(rng, 0.15), 18.0, sr), w))
+        .collect();
+    let mut grind = Bp::new(320.0 * jitter(rng, 0.2), 0.8, sr);
+    let mut catch = grit(35.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let s = noise(rng);
+        let ring: f32 = modes.iter_mut().map(|(m, w)| m.run(s) * *w).sum();
+        (2.5 * ring + 0.6 * grind.run(s)) * catch(rng)
+    })
+}
+
+/// Wood (a crate, a plank, a door) dragged: a dry, hollow chatter, 2 s,
+/// looped.
+fn drag_wood(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut body = Bp::new(650.0 * jitter(rng, 0.2), 1.6, sr);
+    let mut edge = Bp::new(2100.0 * jitter(rng, 0.2), 2.0, sr);
+    let mut catch = grit(22.0, sr);
+    seamless(rng, sr, |rng, _| {
+        let s = noise(rng);
+        let c = catch(rng);
+        body.run(s) * c * c + 0.4 * edge.run(s) * c
+    })
+}
+
+/// A wheel rolled over ground: a low rumble with the tread's beat and
+/// the odd stone crackling under it, 2 s, looped.
+fn drag_roll(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut low = Bp::new(110.0 * jitter(rng, 0.15), 0.7, sr);
+    let mut mid = Bp::new(380.0, 1.0, sr);
+    let tread = 9.0 * jitter(rng, 0.2);
+    let mut crackle = Bp::new(3000.0, 1.5, sr);
+    seamless(rng, sr, |rng, t| {
+        let s = noise(rng);
+        // A whole number of beats per loop so the tread doesn't jump.
+        let beats = (tread * LOOP_SECS).round() / LOOP_SECS;
+        let beat = 0.7 + 0.3 * (TAU * beats * t).sin().abs();
+        let stone = if rng.f32() < 25.0 / sr { 1.0 } else { 0.0 };
+        (2.0 * low.run(s) + 0.5 * mid.run(s)) * beat + 3.0 * crackle.run(stone)
+    })
+}
+
+/// A body (a person's, a robot's soft parts) dragged: cloth and limbs
+/// scuffing the ground in uneven tugs, 2 s, looped.
+fn drag_body(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let mut cloth = Bp::new(1400.0 * jitter(rng, 0.2), 0.9, sr);
+    let mut thud = Bp::new(180.0, 0.8, sr);
+    let tugs = (1.5 * jitter(rng, 0.2) * LOOP_SECS).round() / LOOP_SECS;
+    seamless(rng, sr, |rng, t| {
+        let s = noise(rng);
+        let tug = (TAU * tugs * t).sin().max(0.0).powf(1.5);
+        (cloth.run(s) * 0.8 + 0.6 * thud.run(s)) * (0.25 + 0.75 * tug)
+    })
+}
+
+/// An electric klaxon's blast: a steel diaphragm hammered by a motor's
+/// cam, a raw buzz near 420 Hz (the cam's rate riding on it) through the
+/// horn's flare, rising a little as the motor comes up to speed, 1.1 s.
+fn klaxon(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let secs = 1.1;
+    let f0 = 420.0 * jitter(rng, 0.04);
+    let cam = 75.0 * jitter(rng, 0.1);
+    let mut horn = [
+        (Bp::new(800.0, 3.0, sr), 1.0),
+        (Bp::new(1600.0, 4.0, sr), 0.7),
+        (Bp::new(2500.0, 5.0, sr), 0.4),
+    ];
+    let n = (secs * sr) as usize;
+    let mut ph = 0.0f32;
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let f = f0 * (0.85 + 0.15 * (t / 0.15).min(1.0));
+            ph = (ph + f / sr).fract();
+            // A clipped saw: the diaphragm slapping its stop.
+            let saw = (2.0 * ph - 1.0) * 3.0;
+            let buzz = saw.clamp(-1.0, 1.0) * (0.7 + 0.3 * (TAU * cam * t).sin());
+            let src = buzz + 0.05 * noise(rng);
+            let env = (t / 0.03).min(1.0) * ((secs - t) / 0.12).clamp(0.0, 1.0);
+            let shaped: f32 = horn.iter_mut().map(|(b, w)| b.run(src) * *w).sum();
+            (shaped + 0.15 * buzz) * env
+        })
+        .collect()
+}
+
+/// A frost's still cold, heard: a thin, high crystal tinkle (sparse pings
+/// at 3.5-8 kHz, each ringing off) with the ice creaking under it now and
+/// then (a slow, low groan of filtered noise), 2 s, looped.
+fn frost(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let mut x = vec![0.0f32; n];
+    // The tinkle: a ping every 60-220 ms, wrapping round the loop.
+    let mut t = 0.0f32;
+    while t < LOOP_SECS {
+        let f = 3_500.0 + rng.f32() * 4_500.0;
+        let a = 0.3 + 0.7 * rng.f32();
+        let len = (0.25 * sr) as usize;
+        let start = (t * sr) as usize;
+        for i in 0..len {
+            let s = i as f32 / sr;
+            x[(start + i) % n] += a * (TAU * f * s).sin() * (-s * 18.0).exp();
+        }
+        t += 0.06 + rng.f32() * 0.16;
+    }
+    // The creak: once a loop, a second of a slow groan.
+    let mut groan = Bp::new(180.0 * jitter(rng, 0.2), 6.0, sr);
+    let at = (rng.f32() * LOOP_SECS * sr) as usize;
+    let len = sr as usize;
+    for i in 0..len {
+        let e = (std::f32::consts::PI * i as f32 / len as f32).sin();
+        x[(at + i) % n] += 1.5 * groan.run(noise(rng)) * e;
+    }
+    x
+}
+
+/// Ice cracking: a hard, bright snap and its short ring, 0.4 s.
+fn ice_crack(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (0.4 * sr) as usize;
+    let mut ring = Bp::new(2_400.0 * jitter(rng, 0.2), 12.0, sr);
+    let mut body = Bp::new(600.0 * jitter(rng, 0.2), 1.5, sr);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let snap = noise(rng) * (-t * 90.0).exp();
+            snap * 0.6 + ring.run(snap) * 3.0 + body.run(snap) * (-t * 25.0).exp()
+        })
+        .collect()
+}
+
+/// Bright, clipped notes (a square-ish tone, a click of onset, quick
+/// decay), one after another: (pitch Hz, length s, gap s).
+fn chirps(rng: &mut Rng, sr: f32, notes: &[(f32, f32, f32)]) -> Vec<f32> {
+    let mut out = Vec::new();
+    for &(f, len, gap) in notes {
+        let f = f * jitter(rng, 0.02);
+        let n = (len * sr) as usize;
+        let mut ph = 0.0f32;
+        for i in 0..n {
+            let t = i as f32 / sr;
+            ph = (ph + f / sr).fract();
+            let tone =
+                (TAU * ph).sin() + 0.3 * (3.0 * TAU * ph).sin() + 0.15 * (5.0 * TAU * ph).sin();
+            let env = (t / 0.004).min(1.0) * (1.0 - t / len).max(0.0).powf(0.6);
+            out.push(tone * env);
+        }
+        out.extend(std::iter::repeat_n(0.0, (gap * sr) as usize));
+    }
+    out
+}
+
+/// A machine noticing something you set down: two short notes stepping
+/// up, a question (`robots::devices::DeviceNoticed`, investigating).
+fn notice(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(rng, sr, &[(1_400.0, 0.07, 0.05), (2_100.0, 0.09, 0.0)])
+}
+
+/// The same, hunting it: three, quicker, harder and higher.
+fn notice_hard(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (1_700.0, 0.05, 0.03),
+            (2_300.0, 0.05, 0.03),
+            (3_100.0, 0.08, 0.0),
+        ],
+    )
 }

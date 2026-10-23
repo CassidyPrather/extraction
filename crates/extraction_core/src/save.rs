@@ -100,6 +100,10 @@ pub struct ZoneSave {
     /// headset battery): the raid resumes where you stood. `None` at base.
     #[serde(default)]
     pub raid: Option<RaidSave>,
+    /// What the valley remembers of your habits (`zone_memory`): none
+    /// for a fresh career, or a save from before it remembered.
+    #[serde(default)]
+    pub memory: Option<crate::zone_memory::ZoneMemory>,
 }
 
 /// A raid in progress: where you stood and how it stood.
@@ -229,6 +233,9 @@ pub struct SavedGun {
     pub internal_loads: Loads,
     #[serde(default)]
     pub chamber_loads: Vec<Load>,
+    /// What it's been made into at the vice.
+    #[serde(default)]
+    pub build: crate::gunsmith::Build,
 }
 
 /// A whole career in one file: what you own and carry, your record and
@@ -328,6 +335,9 @@ impl ZoneSave {
     /// Mends a valley's state read from a file: drops what lies nowhere
     /// (NaN or a world away), mends the rest. Says what it did.
     pub fn sanitize(&mut self, fixed: &mut Vec<String>) {
+        if let Some(m) = &mut self.memory {
+            m.sanitize();
+        }
         if let Some(r) = &mut self.raid {
             let timer = match &mut r.phase {
                 RaidPhaseSave::TruckCalled { eta: t, .. }
@@ -621,6 +631,7 @@ mod tests {
             grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
+            build: Default::default(),
         });
         let mut mag = item("ak_mag");
         mag.rounds = 29;
@@ -687,6 +698,7 @@ mod tests {
             grime: 0.3,
             internal_loads: Loads::default(),
             chamber_loads: vec![Load::Ap],
+            build: Default::default(),
         });
         let mut mag = item("ak_mag");
         mag.rounds = 29;

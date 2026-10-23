@@ -3,11 +3,29 @@
 use bevy::prelude::*;
 
 fn main() -> AppExit {
+    // Waiting is timed from here (`render::timeline`).
+    extraction::render::timeline::start();
     // `extraction soak ...`: a long headless run held to the leak gauge.
     if std::env::args().nth(1).as_deref() == Some("soak") {
         return extraction::soak::drive::cli(std::env::args().skip(2));
     }
     let mut opts = extraction::LaunchOptions::from_args();
+    // `--report`: the playtest report from the data folder, no window.
+    if opts.report {
+        if let Some(dir) = &opts.data_dir {
+            extraction::persist::set_data_dir(dir.clone());
+        }
+        return match extraction::report::write_report(&extraction::persist::data_dir()) {
+            Ok(path) => {
+                println!("Report written to {}\nSend that file back.", path.display());
+                AppExit::Success
+            }
+            Err(e) => {
+                eprintln!("couldn't write the report: {e}");
+                AppExit::from_code(1)
+            }
+        };
+    }
     // The first hour's newcomers: two sessions each, the yard then a raid.
     if let Some(chain) = opts
         .scenario
@@ -46,6 +64,7 @@ fn main() -> AppExit {
     }
     let tooling = opts.tooling();
     let exit = extraction::run(opts);
+    extraction::render::timeline::mark("closed (world dropped)");
     // The truck drove to another valley: open the game again there. A
     // tooling run ends where it is.
     if let Some(to) = extraction::take_restart().filter(|_| !tooling) {

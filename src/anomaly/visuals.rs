@@ -166,13 +166,18 @@ pub struct HazeParams {
     /// rgb: glow at the heart, a: how much.
     pub tint: Vec4,
     /// x: how much colour it drains from what's seen through it (a Hush's
-    /// dead air), y: how much it dims it, z: its rim's brightening, w: the
-    /// rim's breathing (rad/s).
+    /// dead air), y: how much it dims it, most at the heart and fading out
+    /// well inside the card (never an outline: a card's rim is a circle on
+    /// the screen, not a thing in the world); z, w: unused.
     pub drain: Vec4,
-    /// Light of its own, for the dark: x: the rim's, y: a glint sweeping
-    /// the disc, z: seconds between glints, w: this one's beat (set from
-    /// where it stands).
+    /// A glint, light of its own for the dark: y: how bright, sweeping the
+    /// disc, z: seconds between glints, w: this one's beat (set from where
+    /// it stands); x: unused.
     pub glow: Vec4,
+    /// y: 1 for a glint that steps away from what's behind instead,
+    /// darker over light and lighter over dark (it shows on snow, in fog
+    /// and at night); x, z, w: unused.
+    pub edge: Vec4,
 }
 
 #[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
@@ -249,6 +254,7 @@ struct AnomalyAssets {
     glassy: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
     hushed: Handle<StandardMaterial>,
+    frosted: Handle<StandardMaterial>,
     hush_ring: Handle<StandardMaterial>,
     dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
@@ -284,17 +290,26 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
-/// A ring, soft both sides, round the outer tenth: the edge of a Hush
-/// drawn on the ground.
+/// A ragged ring of dust round the outer tenth: the edge of a Hush on the
+/// ground.
 fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
-    let n = 128u32;
+    // Settled dust, not a drawn line: its edge wanders, its width and
+    // thickness drift round it, it's grainy, and in places it's thin to
+    // nothing.
+    let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
         for x in 0..n {
             let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let r = (u * u + v * v).sqrt();
-            let alpha = (1.0 - ((r - 0.91) / 0.05).abs()).clamp(0.0, 1.0).powf(0.7);
+            let a = v.atan2(u);
+            let edge = 0.87 + 0.03 * (5.0 * a + 0.7).sin() + 0.015 * (13.0 * a).sin();
+            let width = 0.025 + 0.025 * (0.5 + 0.5 * (7.0 * a + 1.0).sin());
+            let drift = (0.2 + 0.8 * (0.5 + 0.5 * ((3.0 * a + 2.0).sin() * (11.0 * a).cos())))
+                .clamp(0.0, 1.0);
+            let grain = 0.55 + 0.45 * ((x * 7919 + y * 104_729) % 977) as f32 / 977.0;
+            let alpha = (-((r - edge) / width).powi(2)).exp() * drift * grain;
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
     }
@@ -348,7 +363,9 @@ fn init_assets(
     let leaf: Handle<Image> = server
         .load_builder()
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load("textures/foliage/birch_leaves/albedo.ktx2");
+        .load(crate::render::textures::ktx2(
+            "textures/foliage/birch_leaves/albedo.ktx2",
+        ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
     let mut ground = |c: Color, emissive: LinearRgba| {
@@ -372,13 +389,19 @@ fn init_assets(
         LinearRgba::rgb(0.0, 0.02, 0.06),
     );
     let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
+    // Hoar on the ground, faintly blue, a little lit of itself.
+    let frosted = ground(
+        Color::srgba(0.82, 0.9, 1.0, 0.75),
+        LinearRgba::rgb(0.0, 0.01, 0.03),
+    );
     // Torn turf, the dark earth under it showing.
     let dragged = ground(Color::srgba(0.11, 0.08, 0.05, 0.8), LinearRgba::BLACK);
     let crushed = ground(
         Color::srgba(0.03, 0.025, 0.035, 0.85),
         LinearRgba::rgb(0.02, 0.0, 0.05),
     );
-    // Its edge, pale and firm: a line on dark wet ground you can step up to.
+    // Its edge: pale dust settled in a ragged line on the ground, which you
+    // can step up to.
     let ring = ring_texture(&mut images);
     let hush_ring = materials.add(StandardMaterial {
         base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),
@@ -400,6 +423,7 @@ fn init_assets(
         glassy,
         crushed,
         hushed,
+        frosted,
         hush_ring,
         dragged,
         spark: materials.add(StandardMaterial {
@@ -678,6 +702,7 @@ fn dress_anomalies(
                         // shows through fog where its leaves don't.
                         drain: Vec4::new(0.0, 0.22, 0.0, 0.0),
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 4.5, 1.0),
                     0.4,
@@ -699,6 +724,7 @@ fn dress_anomalies(
                         tint: Vec4::new(0.6, 0.15, 0.02, 0.0),
                         drain: Vec4::ZERO,
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.2, 5.0, 1.0),
                     0.0,
@@ -717,6 +743,7 @@ fn dress_anomalies(
                         tint: Vec4::new(0.1, 0.2, 0.6, 0.0),
                         drain: Vec4::ZERO,
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 1.4, r * 1.4, 1.0),
                     0.0,
@@ -743,6 +770,7 @@ fn dress_anomalies(
                         // dims, which a grey fog can't hide.
                         drain: Vec4::new(0.3, 0.4, 0.0, 0.0),
                         glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::splat(r * 0.45),
                     0.0,
@@ -761,8 +789,11 @@ fn dress_anomalies(
                         tint: Vec4::new(0.3, 0.5, 0.7, 0.0),
                         drain: Vec4::ZERO,
                         // A glint crossing it every few seconds: motion,
-                        // seen from the side of the eye, in any weather.
+                        // seen from the side of the eye, in any weather, set
+                        // off from what's behind (it shows on snow and at
+                        // night, where light added doesn't).
                         glow: Vec4::new(0.0, 0.9, 4.0, 0.0),
+                        edge: Vec4::new(0.0, 1.0, 0.0, 0.0),
                     },
                     Vec3::new(r * 2.2, r * 2.2, 1.0),
                     0.0,
@@ -774,9 +805,8 @@ fn dress_anomalies(
                 Some(&a.hushed),
                 vec![soft(7.0, 60, 0.1, Vec3::new(0.85, 0.85, 0.82), 0.9)],
                 (Color::srgb(0.8, 0.8, 0.85), 0.0, 25_000.0, 1.0),
-                // Seen through, the world inside goes dim (and greyer),
-                // inside a slow-pulsing bright rim: luminance and motion,
-                // which carry in fog and to colour-blind eyes.
+                // Seen through, the world inside goes dim and greyer:
+                // luminance, which carries in fog and to colour-blind eyes.
                 Some((
                     1.02,
                     0.2,
@@ -784,10 +814,33 @@ fn dress_anomalies(
                         shape: Vec4::new(0.0, 1.2, 0.0, 0.0),
                         wave: Vec4::new(0.02, 0.5, 0.1, 1.0),
                         tint: Vec4::ZERO,
-                        drain: Vec4::new(0.6, 0.5, 1.2, 1.1),
-                        // In the dark there's nothing to brighten: its rim
-                        // glows faintly of itself.
-                        glow: Vec4::new(0.12, 0.0, 0.0, 0.0),
+                        drain: Vec4::new(0.6, 0.5, 0.0, 0.0),
+                        glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
+                    },
+                    Vec3::new(r * 2.3, r * 2.3, 1.0),
+                    0.0,
+                )),
+            ),
+            // Still cold: ice crystals hanging and glinting, pale mist,
+            // hoar on the ground, and a faint cold light for the dark.
+            AnomalyKind::Frost => (
+                Some(&a.frosted),
+                vec![
+                    glow(7.0, 50, 0.04, Vec3::new(4.0, 6.5, 10.0)),
+                    soft(7.0, 40, 0.12, Vec3::new(0.85, 0.92, 1.0), 0.6),
+                ],
+                (Color::srgb(0.7, 0.85, 1.0), 6_000.0, 15_000.0, 1.0),
+                Some((
+                    1.02,
+                    0.2,
+                    HazeParams {
+                        shape: Vec4::new(0.0, 1.0, 0.0, 0.0),
+                        wave: Vec4::new(0.02, 0.6, 0.15, 1.0),
+                        tint: Vec4::ZERO,
+                        drain: Vec4::new(0.3, 0.0, 0.0, 0.0),
+                        glow: Vec4::ZERO,
+                        edge: Vec4::ZERO,
                     },
                     Vec3::new(r * 2.3, r * 2.3, 1.0),
                     0.0,
@@ -958,6 +1011,8 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
         AnomalyKind::Lift => 0.3 + 0.7 * charge,
         AnomalyKind::Mirror => 0.5 + 0.1 * (t * 0.7).sin(),
         AnomalyKind::Hush => 0.5,
+        // A cold steady glow, barely breathing.
+        AnomalyKind::Frost => 0.45 + 0.05 * (t * 0.5).sin(),
     };
     v.clamp(0.0, 1.0)
 }
@@ -1257,7 +1312,7 @@ fn blink_flashes(
 // --- The anomaly items' looks ------------------------------------------------
 
 /// The items whose looks are built here rather than loaded.
-const OWN_LOOKS: [&str; 8] = [
+const OWN_LOOKS: [&str; 9] = [
     "bolt",
     "detector",
     "art_lodestone",
@@ -1266,6 +1321,7 @@ const OWN_LOOKS: [&str; 8] = [
     "detector_sweep",
     "detector_bear",
     "art_hushstone",
+    "art_rimestone",
 ];
 
 /// Claims the look of an anomaly item as it's spawned, before the item
@@ -1523,6 +1579,32 @@ fn dress_items(
                     meshes.add(Sphere::new(1.0).mesh().ico(2).unwrap()),
                     felt,
                     Transform::from_scale(Vec3::new(0.025, 0.012, 0.02)),
+                ));
+            }
+            "art_rimestone" => {
+                // A pale knuckle of stone, furred white with frost: rough,
+                // a little lumpy, the faintest cold glow.
+                let rime = mat(
+                    Color::srgb(0.86, 0.92, 0.98),
+                    0.0,
+                    0.85,
+                    LinearRgba::rgb(0.01, 0.03, 0.06),
+                );
+                let mut m = Sphere::new(1.0).mesh().ico(2).unwrap();
+                if let Some(bevy::mesh::VertexAttributeValues::Float32x3(ps)) =
+                    m.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+                {
+                    for v in ps.iter_mut() {
+                        let q = Vec3::from_array(*v);
+                        let k = 1.0 + 0.1 * (q.x * 9.0).sin() * (q.z * 7.0 + q.y * 5.0).cos();
+                        *v = (q * k).to_array();
+                    }
+                }
+                m.compute_smooth_normals();
+                parts.push((
+                    meshes.add(m),
+                    rime,
+                    Transform::from_scale(Vec3::new(0.022, 0.019, 0.02)),
                 ));
             }
             "art_stormglass" => {
