@@ -642,10 +642,19 @@ it is. 50 maps, 330 MB > 83 MB. `fetch_assets.py` runs it after a build
 otherwise. `EXTRACTION_BC=0` forces the originals, to compare. The test
 client says it takes BC, so the gauges count what ships.
 
-Normal maps stay RGBA8. Their fine detail doesn't fit BC7's 4x4 blocks:
-26-29 dB, where the colour maps' median is 43 dB, about 5 degrees off.
-BC5 (two channels, the third rebuilt) would need the terrain's and the
-trees' shaders to rebuild it: a next step, with Visual design.
+Normal maps get a BC5 copy instead (`normal.bc5.ktx2`). Their fine
+detail doesn't fit BC7's 4x4 blocks: 26-29 dB, where the colour maps'
+median is 43 dB, about 5 degrees off. BC5 keeps X (red) and Y (green),
+a channel each, half RGBA8's bytes. The shaders rebuild Z: Bevy's
+StandardMaterial sees the format and turns on its two-component normal
+map, and terrain.wgsl always rebuilds it (Visual design's 2f45a198). On
+the boulder's map: 37-38 dB a channel, 1.8 degrees mean (6.5 at the
+99th percentile). 25 maps, 5 MB > 1 MB each; the terrain's array 37 MB
+> 9 MB.
+
+The gauge checks first that every texture has its copy
+(`textures::unbaked`). A machine without etcpak once measured the
+originals and blamed the valleys.
 
 The look: the same views with and without (lavapipe, 1280x720):
 

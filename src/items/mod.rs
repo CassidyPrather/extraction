@@ -95,7 +95,10 @@ pub fn physical_bundle(def: &ItemDef) -> impl Bundle {
         Restitution::new(0.15),
         LinearDamping(0.05),
         AngularDamping(0.1),
-        SweptCcd::default(),
+        // Against the world (static and kinematic), not other loose
+        // things: swept against each piece of a breach's rubble, the
+        // worst minute's items took 6 ms a frame (Rime, its doors blown in).
+        SweptCcd::default().include_dynamic(false),
         // Nothing the game does moves an item faster (a hand lets go at
         // 25 m/s at most); a thin thing (a cleaning rod) struck end-on
         // spun up to hundreds of rad/s and blew up to 2 km/s without these.
