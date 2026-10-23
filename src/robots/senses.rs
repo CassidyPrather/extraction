@@ -51,10 +51,14 @@ pub const GRASS_HIDE: f32 = 0.35;
 /// ...beyond this range (closer, the robot sees into the grass).
 pub const GRASS_NEAR: f32 = 4.0;
 /// Under trees (forest ground) beyond [`CANOPY_NEAR`], standing or not,
-/// this much of you shows through the trunks and the leaves...
+/// this much of you shows through the trunks and the leaves to a machine
+/// looking across, not down (one [`CANOPY_ABOVE`] or more above you sees
+/// down through them)...
 pub const CANOPY_HIDE: f32 = 0.6;
 /// ...from this far off (m).
 pub const CANOPY_NEAR: f32 = 20.0;
+/// A machine this far (m) above you looks down through the trees.
+pub const CANOPY_ABOVE: f32 = 8.0;
 /// Looked down on from steeper than this (radians), grass hides half as
 /// well: a drone overhead sees into it.
 pub const GRASS_STEEP: f32 = 0.6;
@@ -96,7 +100,7 @@ pub const GLIMPSE_SPREAD_MIN: f32 = 3.0;
 pub const SIGHT_GAIN: f32 = 1.5;
 pub const SIGHT_GAIN_NEAR: f32 = 30.0;
 /// Suspicion lost per second with nothing seen.
-pub const SUSPICION_DECAY: f32 = 0.05;
+pub const SUSPICION_DECAY: f32 = super::recall::per_second(super::recall::Memory::Suspicion);
 
 // --- Darkness --------------------------------------------------------
 
@@ -158,7 +162,7 @@ pub const HEARD_OVER: f32 = 1.2;
 /// long (s), to sounds nobody made within [`BORED_RADIUS`] m of where it
 /// gave up: a lure that keeps going wears out its welcome. (Sounds you
 /// make there still count.)
-pub const BORED_FOR: f32 = 120.0;
+pub const BORED_FOR: f32 = super::recall::lasts(super::recall::Memory::Lure);
 pub const BORED_RADIUS: f32 = 10.0;
 /// Sounds with at least this reach (m) raise suspicion fully; quieter ones
 /// by their share of it.
@@ -254,7 +258,9 @@ pub fn exposure(c: &SightCase) -> f32 {
     } else {
         c.still
     };
-    let canopy = if c.canopy && c.distance > CANOPY_NEAR {
+    // (From above, a drone or a spotter sees down through the trees.)
+    let above = c.distance * c.depression.max(0.0).sin();
+    let canopy = if c.canopy && c.distance > CANOPY_NEAR && above < CANOPY_ABOVE {
         CANOPY_HIDE
     } else {
         1.0
@@ -804,6 +810,18 @@ mod tests {
             exposure(&SightCase {
                 canopy: true,
                 ..near
+            })
+        );
+        // From above, through the leaves.
+        let above = SightCase {
+            depression: (CANOPY_ABOVE / 30.0 + 0.05).asin(),
+            ..case()
+        };
+        assert_eq!(
+            exposure(&above),
+            exposure(&SightCase {
+                canopy: true,
+                ..above
             })
         );
     }

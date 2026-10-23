@@ -455,27 +455,27 @@ pub fn prefab_wheels(id: &str) -> Option<[[f32; 2]; 4]> {
 }
 
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
-    match prefab_base(id) {
-        "quarantine_gate" => [12.0, 4.0, 3.0],
+    let mut f = match prefab_base(id) {
+        "quarantine_gate" => [12.0, 7.0, 3.0],
         "guard_booth" => [2.6, 2.7, 2.6],
-        "sawmill" => [24.0, 7.0, 12.0],
-        "cabin_log" => [7.0, 4.5, 6.0],
+        "sawmill" => [24.0, 6.3, 12.0],
+        "cabin_log" => [7.0, 5.2, 6.0],
         "log_pile" => [2.5, 1.6, 7.0],
         "farmhouse" => [10.0, 7.0, 8.0],
-        "barn" => [12.0, 9.0, 16.0],
+        "barn" => [12.0, 10.0, 16.0],
         "shed" => [4.0, 3.0, 3.0],
         "house_plank" => [8.0, 6.0, 7.0],
-        "house_brick" => [10.0, 7.5, 8.0],
-        "shop" => [9.0, 5.0, 7.0],
-        "pump_station" => [14.0, 7.0, 10.0],
+        "house_brick" => [10.0, 6.6, 8.0],
+        "shop" => [9.0, 3.7, 7.0],
+        "pump_station" => [14.0, 8.0, 10.0],
         "footbridge" => [1.6, 1.2, 24.0],
-        "anomaly_core" => [10.0, 4.0, 10.0],
-        "bus_depot" => [30.0, 8.0, 18.0],
+        "anomaly_core" => [10.0, 3.1, 10.0],
+        "bus_depot" => [30.0, 11.1, 18.0],
         "radio_mast" => [2.0, 45.0, 2.0],
         "mast_hut" => [5.0, 3.0, 4.0],
-        "rail_shed" => [20.0, 9.0, 12.0],
+        "rail_shed" => [20.0, 10.3, 12.0],
         "boxcar" => [3.0, 4.2, 14.0],
-        "ranger_tower" => [6.0, 12.0, 5.0],
+        "ranger_tower" => [6.0, 12.7, 5.0],
         // The ranger tower's legs and stair, open on top under its survey
         // mast and beacon.
         "survey_tower" => [6.0, 16.6, 5.0],
@@ -484,7 +484,7 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "wreck_uaz" => [1.9, 2.0, 4.1],
         "wreck_lorry" => [2.6, 2.2, 6.4],
         "robot_gate" => [17.6, 14.0, 4.0],
-        "factory_hall" => [36.0, 10.0, 20.0],
+        "factory_hall" => [36.0, 13.8, 20.0],
         "chimney" => [5.0, 38.0, 5.0],
         "target" => [2.4, 1.7, 2.0],
         // Landmarks (src/world/buildings.rs); the headframe's back struts
@@ -502,9 +502,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         "mill_race" => [7.8, 28.5, 54.6],
         // A mine's aerial ropeway: the upper station (its ropes run out
         // 34 m along -z, not counted), the line's pylons, one fallen.
-        "ropeway_station" => [12.0, 25.5, 16.2],
-        "ropeway_pylon" => [7.2, 21.2, 4.9],
-        "ropeway_pylon_down" => [7.6, 4.6, 27.0],
+        "ropeway_station" => [12.0, 26.2, 16.2],
+        "ropeway_pylon" => [7.2, 20.7, 4.9],
+        "ropeway_pylon_down" => [7.6, 4.1, 27.0],
         // A blast furnace with its stoves, chimney, dust catcher, skip
         // bridge and cast house.
         "blast_furnace" => [45.6, 38.5, 59.2],
@@ -534,7 +534,12 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // An underground site: its entrance kiosk and apron.
         id if crate::underground::is_site(id) => crate::underground::FOOTPRINT,
         _ => [4.0, 3.0, 4.0],
+    };
+    // A drowned house's roof went with the water: only its walls stand.
+    if id.ends_with("_drowned") && prefab_base(id) != "chapel" {
+        f[1] = 2.8;
     }
+    f
 }
 
 /// An outside door or doorway of a prefab, in prefab space (x, z; -Z is
@@ -722,7 +727,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             at: [1.53, 0.0],
             out: [1.0, 0.0],
             width: 2.0,
-            clear: 1.0,
+            clear: 2.2,
         }],
         "factory_hall" => &[
             Entrance {
@@ -858,10 +863,46 @@ pub fn prefab_lift(id: &str) -> f32 {
     (prefab_foundation(id) - 0.4).clamp(0.0, 0.9)
 }
 
-/// Radius around a placement kept free of trees.
+/// How far a drowned house's silt bank runs out from its front wall at
+/// most (m): sloped gently enough for a body to walk up it at a slant,
+/// from the silt at the sills down to the lowest the ground in front can
+/// be ([`prefab_lift`]). Above the ground only where the ground falls away.
+/// (The drowned chapel's sills stand higher: its bank is short.)
+pub const SILT_BANK_REACH: f32 = 6.6;
+
+/// Radius around a placement kept free of trees: a drowned house's out
+/// over its silt bank.
 pub fn prefab_clearance(id: &str) -> f32 {
     let [w, _, d] = prefab_footprint(id);
-    (w.max(d) * 0.5 + 4.0).max(6.0)
+    let r = (w.max(d) * 0.5 + 4.0).max(6.0);
+    if id.ends_with("_drowned") && prefab_base(id) != "chapel" {
+        r.max(d * 0.5 + SILT_BANK_REACH + 1.0)
+    } else {
+        r
+    }
+}
+
+/// A prefab at least this many times longer than it's wide (a dam's face,
+/// a mill race) clears a strip round itself rather than the circle on its
+/// longest side ([`prefab_clearance`]), which for a 265 m dam emptied the
+/// valley for 130 m round it of every tree and rock.
+pub const CLEAR_STRIP: f32 = 3.0;
+/// How far round its footprint a long prefab's strip reaches.
+const STRIP_MARGIN: f32 = 4.0;
+
+/// Whether `p` is in the ground a placement keeps clear of trees and
+/// rocks, `extra` metres further out: the circle of [`prefab_clearance`]
+/// round it, or a long one's strip.
+pub fn placement_clears(pl: &Placement, p: P2, extra: f32) -> bool {
+    let [w, _, d] = prefab_footprint(&pl.prefab);
+    let (dx, dz) = (p[0] - pl.at[0], p[1] - pl.at[1]);
+    if w.max(d) < CLEAR_STRIP * w.min(d).max(0.1) {
+        return (dx * dx + dz * dz).sqrt() < prefab_clearance(&pl.prefab) + extra;
+    }
+    // In its own frame, as the nav grid turns a footprint.
+    let (s, c) = pl.rot.to_radians().sin_cos();
+    let (lx, lz) = (dx * c + dz * s, -dx * s + dz * c);
+    lx.abs() < w * 0.5 + STRIP_MARGIN + extra && lz.abs() < d * 0.5 + STRIP_MARGIN + extra
 }
 
 /// Whether a prefab wants the ground levelled under it (buildings do;
@@ -969,6 +1010,42 @@ mod tests {
 
     /// Every map file but the Training Yard is a valley on [`VALLEYS`], and
     /// the list's text is the file's.
+    /// A long prefab clears a strip round itself, not the circle on its
+    /// longest side: trees and rocks grow 20 m off a dam's face, not 130.
+    #[test]
+    fn a_long_prefab_clears_a_strip() {
+        let pl = Placement {
+            prefab: "dam_face".into(),
+            at: [0.0, 0.0],
+            rot: 0.0,
+            ..MapDef::from_ron(SALLOW_RESERVOIR).unwrap().placements[0].clone()
+        };
+        assert!(placement_clears(&pl, [100.0, 3.0], 0.0), "beside the face");
+        assert!(
+            !placement_clears(&pl, [0.0, 20.0], 0.0),
+            "20 m off the face"
+        );
+        assert!(!placement_clears(&pl, [100.0, -40.0], 0.0), "40 m off it");
+        let turned = Placement {
+            rot: 90.0,
+            ..pl.clone()
+        };
+        assert!(
+            placement_clears(&turned, [3.0, 100.0], 0.0),
+            "beside it, turned"
+        );
+        assert!(
+            !placement_clears(&turned, [20.0, 0.0], 0.0),
+            "off it, turned"
+        );
+        // A house keeps its circle.
+        let house = Placement {
+            prefab: "house_brick".into(),
+            ..pl
+        };
+        assert!(placement_clears(&house, [5.0, 5.0], 0.0));
+    }
+
     #[test]
     fn every_valley_is_on_the_list() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/maps");

@@ -20,15 +20,19 @@ from: the container runs out of memory.
 
 ## Shas tested
 
+Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test_times.py` then exited non-zero only on budget, not on failed tests; the counts below are corrected from the recorded runs (cea9a92b fixed the script). 5955943 was the only clean one.
+
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
-| 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 947 passed, 0 failed, 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
-| 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 932 passed, 0 failed, 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
+| 77ce6f5 | 20:40 | 32/32 exit 0, 17 extracted (Kettle 3/4, Rime 3/4, Cinder 4/8, Marrow 4/8, Sallow 3/8); Cinder 7 boards now; Cinder 3 and Marrow 1 still time out in pockets | 6 FAILED (a_search, spotter, cloak, DeviceNoticed sound, clearance, item boxes); cellar tests pass; 31 min | gauges 16/17 (hold_rate), 51 min |
+| 98f85f0 | 17:40 | 32/32 exit 0, 3 timeouts (Cinder 7 can't board at Fire lookout; Cinder 3, Marrow 1 pockets); Kettle 4/4, Sallow 4/8, Marrow 3/8, Cinder 3/8, Rime 2/4 | 6 FAILED (cellars_cinder ×3, prefab clearance, item boxes, walker-looks-at-flock), all within budget, 30 min | gauges 16/16 in 22 min |
+| 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 1 FAILED (`prefabs_stay_inside_their_clearance`), 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
+| 7b03261 | 13:40 | 24/24 exit 0 (seeds 1-4, Marrow 1-8): 11/16 outside Marrow, Marrow 0/8 | 1 FAILED (`prefabs_stay_inside_their_clearance`), 31 min; 1 over budget (every_drowned_house 294 s) | gauges 15/15 in 20 min |
 | 5955943 | 12:10 | 20/20 exit 0, 10 extracted (Marrow 0/4) | 925 passed, 0 failed, all within budget, 29 min | gauges 15/15 in 20 min: green |
-| ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 907 passed, 0 failed, all within budget, 31 min | gauges 14/14 in 17 min: the first fully green round |
-| 7f23655 | 08:00 | 10/10 exit 0, 5 extracted (lowest yet) | 900 passed, 0 failed, 33 min wall; 1 over budget (soak walls 123.5 s) | gauges 13/14 in 16 min (busy moment: fix on Performance's branch) |
-| 039a64a | 06:40 | 10/10 exit 0, 7 extracted; Sallow seed 1 timed out stuck | 879 passed, 0 failed, all within budget, 36 min wall (5630 test-s) | gauges: 13/14 in 18 min (busy moment's PostUpdate share) |
-| 18ba914 | 04:30 | 10/10 clean, 8 extracted | 856 passed, 0 failed, all within budget; 4912 test-seconds (render gauges skipped by hand) | first round with single-threaded headless apps |
+| ce0f10b | 10:20 | 20/20 exit 0 (seeds 1-4), 9 extracted, no timeouts | 3 FAILED (wounds ×2, melee `a_butt_finds_the_weak_points`), all within budget, 31 min | gauges 14/14 in 17 min (not green after all: see note) |
+| 7f23655 | 08:00 | 10/10 exit 0, 5 extracted (lowest yet) | 2 FAILED (`no_daylight_in_the_rooms`, `entity_keyed_locals_forget_what_is_gone`), 33 min wall; 1 over budget (soak walls 123.5 s) | gauges 13/14 in 16 min (busy moment: fix on Performance's branch) |
+| 039a64a | 06:40 | 10/10 exit 0, 7 extracted; Sallow seed 1 timed out stuck | 2 FAILED (`no_daylight_in_the_rooms`, `a_drone_held_by_its_frame_stays_in_the_hand`), all within budget, 36 min wall (5630 test-s) | gauges: 13/14 in 18 min (busy moment's PostUpdate share) |
+| 18ba914 | 04:30 | 10/10 clean, 8 extracted | 1 FAILED (`no_daylight_in_the_rooms`; first reported as 0, see note), all within budget; 4912 test-seconds (render gauges skipped by hand) | first round with single-threaded headless apps |
 | 4d45a5f | 03:40 | | 846 tests minus gauges in 24 min: 1 FAILED | single-threaded headless apps |
 | 24d1ef0 | 02:00 | | 842 of 861 timed, 0 FAILED; 2 h wall | the profile: render gauges 45% |
 | 8e63945 | 22:00 | 10/10 clean, 7 extracted | rechecks: 5 of 8 pass | sims 2-3x faster single-threaded |
@@ -46,18 +50,20 @@ from: the container runs out of memory.
 
 ## Open failures
 
-None in the suite or gauges as of 85c9d1f.
+As of 77ce6f5 (round 33); 823b12f (round 34) being checked.
 
-| test / run | det. / flaky | class | owner | status |
-| - | - | - | - | - |
-| `sim::indoor::tests::every_drowned_house_lets_a_bot_in` over budget (301 s > 120) | | a new whole-valley walk | World models | cut to 32 walks (82 s alone), merged in round 32: to confirm |
-| Sim: raiders stood in furnace heat until dead (Cinder seed 2, 2.7 hp/s for 36 s) | det. | the raider's plan didn't read InHeat/InGas | coordinator | 7617df18 (round 32): hurting heat and gas shut in the plan, and HP falling with no hit leaves the building; to confirm |
-| Sim: Marrow Creek, the worst valley all day (0/8 on 7b03261) | det. | `choose_site`'s unbounded pull per loot spot sent fresh raiders to the Depot up the patrolled Gate road | Map design | BIG_SITE cap on main from 85c9d1f: 3/8; seed 8 still picks the Depot |
+| test / run | class | owner | status |
+| - | - | - | - |
+| `robots::mind_tests::a_search_takes_in_doorways_and_cover`, `robots::spotter::tests::it_sees_you_in_the_open_and_calls`, `gadgets::tests::a_running_cloak_hides_you_from_a_drone` | robot senses | Robot minds | routed by the coordinator |
+| `render::hold_rate::tests::gauge_busy_moments_drop_the_scale_and_it_comes_back` ("drone wreck: a run late and no drop"); the gauge tier took 51 min | | Performance (1500 s target) | routed |
+| `audio_machines::tests::the_dangers_are_heard` (no sound for DeviceNoticed), `prefabs_stay_inside_their_clearance`, `every_item_model_fits_its_box` (stock_mp133, stock_rpk74) | | Audio, World models, Weapon feel | pass on 823b12f per the coordinator's gate: to confirm |
+| Sim: Cinder seed 3 at (70-88, -8…-20) and Marrow seed 1 at (-1…-22, 90-96) time out in pockets | stuck_block can't get out | coordinator | after round 34 |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| cellars_cinder ×3 (warm heat shut for every plan), Cinder 7 couldn't board at Fire lookout | 77ce6f5 | coordinator |
 | sim telemetry dropped every unclaimed loss under 0.05 hp a tick (gas, heat, slow bleeding: a death of "nothing"); heat and gas now named | d5c2291e (round 32), 19e8be63 (round 33) | Verifier |
 | the raider waded into live water (Cinder seed 4 now extracts); telemetry names live water | 5955943 / a1edafef | coordinator, Underground, Verifier |
 | the busy-moment gauge (share limits under one thread), the Sallow pocket (escalation), Soak's walls over budget | ce0f10b | Performance, coordinator, Soak |

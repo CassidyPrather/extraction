@@ -851,19 +851,19 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_sks", dims: Some((0.06, 0.14, 0.36)), name: "SKS stock",
+            id: "stock_sks", dims: Some((0.043, 0.131, 0.242)), name: "SKS stock",
             description: "The SKS's butt, unscrewed at the vice.",
             category: Material, size: Medium, mass: 0.6, bulk: 0.8,
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_toz_double", dims: Some((0.05, 0.14, 0.36)), name: "TOZ double's stock",
+            id: "stock_toz_double", dims: Some((0.044, 0.141, 0.306)), name: "TOZ double's stock",
             description: "The double's butt, off its through-bolt.",
             category: Material, size: Medium, mass: 0.55, bulk: 0.8,
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_mp133", dims: Some((0.05, 0.14, 0.36)), name: "MP-133 stock",
+            id: "stock_mp133", dims: Some((0.04, 0.192, 0.358)), name: "MP-133 stock",
             description: "The pump's polymer butt, unscrewed.",
             category: Material, size: Medium, mass: 0.55, bulk: 0.8,
             tags: ["wood", "gun_part"],
@@ -875,14 +875,8 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_rpk74", dims: Some((0.045, 0.14, 0.28)), name: "RPK-74 stock",
+            id: "stock_rpk74", dims: Some((0.046, 0.193, 0.29)), name: "RPK-74 stock",
             description: "The RPK's club-footed butt, unscrewed.",
-            category: Material, size: Medium, mass: 0.4, bulk: 0.8,
-            tags: ["wood", "gun_part"],
-        ),
-        (
-            id: "stock_svd", dims: Some((0.05, 0.18, 0.3)), name: "SVD stock",
-            description: "The SVD's skeleton stock, off its screws.",
             category: Material, size: Medium, mass: 0.4, bulk: 0.8,
             tags: ["wood", "gun_part"],
         ),

@@ -242,6 +242,14 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // Kettle mine's boiler-house chimney over the spoil heap.
+        (prefab: "chimney", at: (-160.0, -120.0), rot: 0.0),
+        // The checkpoint's radio mast at the south gate.
+        (prefab: "radio_mast", at: (160.0, 280.0), rot: 0.0),
+        // The hunting lodge's lookout.
+        (prefab: "survey_tower", at: (240.0, -240.0), rot: 0.0),
         // Hero landmark, a collapsed ropeway from the mine yard south-east
         // over the beck (Map design's sightline audit: fog-blind 64% -> 29%).
         (prefab: "ropeway_station", at: (-168.0, -12.0), rot: 166.3),

@@ -1143,11 +1143,16 @@ pub(crate) mod tests {
                     Some(n) => bevy::app::TaskPoolPlugin {
                         task_pool_options: bevy::app::TaskPoolOptions::with_num_threads(n),
                     },
-                    None => bevy::app::TaskPoolPlugin::default(),
+                    None => crate::task_pools(),
                 })
                 .disable::<bevy::winit::WinitPlugin>()
                 .disable::<bevy::log::LogPlugin>(),
         );
+        // BC formats, as the game's GPUs have: the baked textures load as
+        // they ship (`render::textures`), and never reach a GPU here.
+        app.insert_resource(bevy::image::CompressedImageFormatSupport(
+            bevy::image::CompressedImageFormats::BC,
+        ));
         app.insert_resource(crate::LaunchOptions {
             flat: true,
             map: map.into(),

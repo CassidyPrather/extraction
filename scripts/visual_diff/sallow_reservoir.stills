@@ -1,0 +1,6 @@
+# sallow_reservoir: scripts/visual_diff/views.cine resolved by --cine-dump; name x,~h,z,yaw,pitch.
+insertion        25.0,~2.50,271.0,0.0,-15.2
+landmark         268.0,~6.00,104.8,0.0,28.6
+interior         30.6,~1.60,285.0,90.0,-18.3
+anomaly          227.0,~2.50,221.3,0.0,13.0
+rv               -200.0,~3.00,-248.0,0.0,-8.4

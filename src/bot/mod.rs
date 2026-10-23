@@ -7,6 +7,7 @@
 //! run faster than real time with no window). Map simulations build on the
 //! same tasks.
 
+pub mod crating;
 pub mod crossing;
 pub mod scenarios;
 

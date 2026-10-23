@@ -230,6 +230,18 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The charcoal burners' kiln chimney in Cinder wood.
+        (prefab: "chimney", at: (-220.0, -180.0), rot: 0.0),
+        // The relay mast over the mast hut.
+        (prefab: "radio_mast", at: (-170.0, -80.0), rot: 0.0),
+        // The sidings' water tower, for the engines.
+        (prefab: "water_tower", at: (120.0, -200.0), rot: 0.0),
+        // The ore shaft's headframe by the slag heap.
+        (prefab: "headframe", at: (240.0, -80.0), rot: 0.0),
+        // The chapel by Cutter's farm.
+        (prefab: "steeple", at: (-200.0, 80.0), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 51% -> 34%).
         (prefab: "blast_furnace", at: (-150.0, 205.0), rot: 90.0),
         // South gate.

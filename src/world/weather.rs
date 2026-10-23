@@ -66,16 +66,35 @@ impl Hour {
         }
     }
 
+    /// `dawn`, `day`, `dusk` or `night`, or a clock hour (`23`, `5:30`)
+    /// to the hour it falls in: dawn from 5, day from 7, dusk from 18,
+    /// night from 21. A clock hour once fell through to the raid's own
+    /// hour, so `--hour 23` shot daylight.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "dawn" => Some(Hour::Dawn),
-            "day" => Some(Hour::Day),
-            "dusk" => Some(Hour::Dusk),
-            "night" => Some(Hour::Night),
-            _ => None,
+            "dawn" => return Some(Hour::Dawn),
+            "day" => return Some(Hour::Day),
+            "dusk" => return Some(Hour::Dusk),
+            "night" => return Some(Hour::Night),
+            _ => {}
         }
+        let (h, m) = s.split_once(':').unwrap_or((s, "0"));
+        let (h, m) = (h.parse::<f32>().ok()?, m.parse::<f32>().ok()?);
+        let t = h + m / 60.0;
+        if !(0.0..=24.0).contains(&t) || !(0.0..60.0).contains(&m) {
+            return None;
+        }
+        Some(match t {
+            t if (5.0..7.0).contains(&t) => Hour::Dawn,
+            t if (7.0..18.0).contains(&t) => Hour::Day,
+            t if (18.0..21.0).contains(&t) => Hour::Dusk,
+            _ => Hour::Night,
+        })
     }
 }
+
+/// What `--weather` takes (`rain` is drizzle).
+pub const WEATHERS: &[&str] = &["clearing", "drizzle", "rain", "fog", "downpour", "storm"];
 
 /// The moon's month is this many Surge cycles: its phase is the cycle's.
 pub const MOON_CYCLES: u32 = 8;
@@ -426,6 +445,33 @@ fn follow_cycle(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `--hour 23` once fell through to the raid's own hour (daylight).
+    #[test]
+    fn clock_hours_parse_to_their_hour() {
+        for (s, h) in [
+            ("23", Hour::Night),
+            ("0", Hour::Night),
+            ("4:59", Hour::Night),
+            ("5", Hour::Dawn),
+            ("6:30", Hour::Dawn),
+            ("7", Hour::Day),
+            ("12:15", Hour::Day),
+            ("17:59", Hour::Day),
+            ("18", Hour::Dusk),
+            ("20:30", Hour::Dusk),
+            ("21", Hour::Night),
+            ("24", Hour::Night),
+            ("night", Hour::Night),
+            ("dusk", Hour::Dusk),
+        ] {
+            assert_eq!(Hour::parse(s), Some(h), "{s}");
+        }
+        for bad in ["25", "-1", "12:60", "noon", "", "23h"] {
+            assert_eq!(Hour::parse(bad), None, "{bad}");
+        }
+        assert!(Hour::Night.light() < 0.1 * Hour::Day.light());
+    }
 
     #[test]
     fn storms_come_with_some_downpours_and_soak_the_ground_fast() {

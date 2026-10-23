@@ -236,6 +236,23 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The machines' smelter stack behind the Gate: what they take, they melt.
+        (prefab: "chimney", at: (-240.0, -280.0), rot: 0.0),
+        // The pumping station's standpipe tower.
+        (prefab: "water_tower", at: (-212.0, -25.0), rot: 0.0),
+        // The quarantine checkpoint's incinerator stack, outside the gate:
+        // what came out of the Zone was burnt.
+        (prefab: "chimney", at: (85.0, 310.0), rot: 0.0),
+        // The checkpoint's watchtower over the south gate.
+        (prefab: "ranger_tower", at: (165.0, 262.0), rot: 0.0),
+        // The old farm's water tower.
+        (prefab: "water_tower", at: (175.0, 195.0), rot: 0.0),
+        // The brick kiln's chimney, all that stands of the works by the Hollow.
+        (prefab: "chimney", at: (120.0, -80.0), rot: 0.0),
+        // The checkpoint's radio mast at the south gate.
+        (prefab: "radio_mast", at: (135.0, 275.0), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
         (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
         // The Old farm's wood stores across the field from the drop: cover

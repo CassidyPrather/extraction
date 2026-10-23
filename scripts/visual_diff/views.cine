@@ -1,0 +1,8 @@
+# The visual diff's views, the same words for every valley. Resolved once
+# per valley into scripts/visual_diff/<map>.stills by --cine-dump; the
+# stills are what gets shot, so the cameras stay put round to round.
+shot insertion  gen=orbit target=kind:Insertion  radius=9   height=2.5 turns=0 look=1.2
+shot landmark   gen=orbit target=tallest         radius=35  height=6   turns=0
+shot interior   gen=orbit target=interior        radius=2.2 height=1.6 turns=0 look=1.0
+shot anomaly    gen=orbit target=kind:Anomaly    radius=9   height=2.5 turns=0 look=0.8
+shot rv         gen=orbit target=kind:Rendezvous radius=10  height=3   turns=0 look=1.5
