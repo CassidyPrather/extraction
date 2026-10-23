@@ -349,6 +349,9 @@ pub const WAIT_HEIGHT: f32 = 1.2;
 pub const WAIT_LEE: f32 = 0.8;
 /// How far in from its door you wait under a roof, metres.
 pub const WAIT_IN: f32 = 1.2;
+/// How far settling a building in may lower ground the map declares (a
+/// plateau set to a height), metres.
+pub const TERRACE_CUT: f32 = 0.5;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -2229,6 +2232,55 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 m.at,
             );
         }
+    }
+
+    // -- Declared ground: settle fits buildings, not into terraces -----------------
+    {
+        let bare = Heightmap::build_unsettled(map);
+        let mut deepest = 0.0f32;
+        for (poly, level) in Heightmap::terraces(map) {
+            let (lo, hi) = geom::bounds(poly);
+            // At the samples settle moves, not between them (a point by a
+            // step's edge reads the lowered ground beside it).
+            let mut worst: Option<(f32, P2)> = None;
+            let cell = |v: f32| ((v - hm.origin) / hm.cell).clamp(0.0, (hm.n - 1) as f32);
+            for j in cell(lo[1]).floor() as usize..=cell(hi[1]).ceil() as usize {
+                for i in cell(lo[0]).floor() as usize..=cell(hi[0]).ceil() as usize {
+                    let p = hm.pos(i, j);
+                    if Heightmap::on_terrace(poly, p) {
+                        let k = hm.idx(i, j);
+                        // Below its level: what a road banked on top of
+                        // it is the road's.
+                        let cut = bare.heights[k].min(level) - hm.heights[k];
+                        if worst.is_none_or(|(c, _)| cut > c) {
+                            worst = Some((cut, p));
+                        }
+                    }
+                }
+            }
+            let Some((cut, at)) = worst else { continue };
+            deepest = deepest.max(cut);
+            if cut > TERRACE_CUT {
+                let by = map
+                    .placements
+                    .iter()
+                    .filter(|p| crate::map::prefab_wants_pad(&p.prefab))
+                    .min_by(|a, b| dist(a.at, at).total_cmp(&dist(b.at, at)))
+                    .map_or("?", |p| p.prefab.as_str());
+                find(
+                    &mut r,
+                    Rule::Footing,
+                    format!(
+                        "settling the {by} cuts {cut:.1} m into the terrace the map sets at {level:.1} m"
+                    ),
+                    at,
+                );
+            }
+        }
+        r.measures.push(format!(
+            "terraces: {} declared, deepest cut settling buildings in {deepest:.2} m",
+            Heightmap::terraces(map).count()
+        ));
     }
 
     // -- Route choice ---------------------------------------------------------------

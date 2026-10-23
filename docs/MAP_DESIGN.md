@@ -633,6 +633,20 @@ turn and the village was the gap); Cinder's North sidings route 93% and
 30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
 route 98% and 10 m, now 99% and 4 m.
 
+## Terraces
+
+A plateau with a `height` is ground the map declares: a terrace, a
+ledge, a dam's crest, a stepped street. Fitting a building in
+(`terrain::settle`: flat under its walls, then a ramp of 0.5 m per metre
+back up to the ground, out to 8 m) never digs below a declared terrace
+the building doesn't stand on. A road's fill on top of one it may still
+trim. On its own terrace a building settles as anywhere else, so put it
+wholly on the terrace or wholly off it: one that hangs off the edge
+stands on its lowest corner and lowers the terrace to it. `map_lint`
+builds the land with and without settling and finds any declared ground
+taken more than 0.5 m below its level (`TERRACE_CUT`). Sallow's valve
+house dug the dam-face stair down to a stuck cluster before this.
+
 ## Performance: what's in view
 
 Lavapipe screenshots and a 90 Hz headset both pay for every building in
