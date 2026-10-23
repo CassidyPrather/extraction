@@ -62,6 +62,13 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
+        if app
+            .world()
+            .get_resource::<LaunchOptions>()
+            .is_some_and(|o| o.stress)
+        {
+            app.add_plugins(stress::StressPlugin);
+        }
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,

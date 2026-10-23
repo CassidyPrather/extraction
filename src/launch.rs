@@ -75,6 +75,10 @@ pub struct LaunchOptions {
     pub no_record: bool,
     /// Write the playtest report (`report`) and quit.
     pub report: bool,
+    /// Dev: once the world's in, the worst minute of a raid (a fight by a
+    /// building at a dusk downpour, `render::stress`); its CPU and GPU in
+    /// the log, then quit.
+    pub stress: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -179,6 +183,7 @@ impl Default for LaunchOptions {
             new_game: false,
             no_record: false,
             report: false,
+            stress: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -245,6 +250,7 @@ impl LaunchOptions {
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
                 "--report" => o.report = true,
+                "--stress" => o.stress = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
@@ -389,6 +395,11 @@ impl LaunchOptions {
                 flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // The worst minute's light and weather, unless asked for others.
+        if o.stress {
+            o.hour.get_or_insert_with(|| "dusk".into());
+            o.weather.get_or_insert_with(|| "downpour".into());
         }
         // A capture drives free cameras: over a quiet valley, or after a
         // sim bot, rendered (a sim run is otherwise headless).
