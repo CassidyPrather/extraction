@@ -539,27 +539,54 @@ a walker working by the chimney. From the drop: ..."). The newcomer took
 its picture 3.5 minutes in, from as far off as the camera takes; a walker
 caught it on the way home, warned.
 
+## Five jobs again, on the map with the roofs
+
+On Map design's da285bed (sheds on the ways to the mast, cover home from
+the Village, the Village's garden shed kept), my head, one seed each:
+
+| Newcomer | Job 1 (scout) | Job 2 (bring) | Job 3 (fetch) | Job 4 (the mast relay) | Job 5 |
+| - | - | - | - | - | - |
+| cautious | paid | down | the bot couldn't reach the crate | paid | the bot stuck at a door |
+| hoarder | paid | paid | paid | down | down |
+| lost | paid | down | down | down | down |
+| one-handed | paid | paid | paid | the box left, home, paid | down |
+| reckless | paid | paid | paid | the box left; down | down |
+
+Every one of the 75 hits after job 1 came after a tell. Run to run,
+with one seed each, this moves a lot: a run in between, when a Village
+shed had made way for a hut out west, sent job 3's nearest matches out
+past the pumping station and three newcomers died fetching them (Map
+design put the shed back). The lost one, by the shop, was warned every
+time (a drone's lock, 15 s ahead) and went in at the door; the bot stood
+it in the doorway's line, which the rooms' plan now puts right.
+
 # Machines working together (Robot minds' squad drill)
 
-Robot minds' `squad_drill` (claude/polish-robot-minds abf8a3ce,
+Robot minds' `squad_drill` (claude/polish-robot-minds a6528245,
 `src/robots/squad_drill.rs`, 48 seeds an arm): on Marrow's south field a
 newcomer with a radio jogs for the nearest rendezvous, cover to cover,
 crouched in cover; a squad (three walkers, or two and a drone) finds it at
-45 to 55 m. Machines changing post hold their fire till they're there. The
-listener acts only on what's said: a chirp within 40 m, a radio line 1.5 s
-after it shows. Told one's moving up, it runs while that one isn't
-shooting; told one's making for its rendezvous, it changes to another, if
-that's no more than 30% further.
+45 to 55 m. One walker pins it (faster fire, steadier on it the stiller it
+holds, kept on where it last saw it for 4 s) while another moves up,
+holding its fire till it's there. Running across the pinner's line throws
+its aim off. The listener acts only on what's said: a chirp within 40 m, a
+radio line 1.5 s after it shows. Told one's moving up, it runs, out of the
+pinner's line; told one's making for its rendezvous, it changes to
+another, if that's no more than 30% further.
+
+The earlier tables are void: the drill moved the newcomer by setting where
+it was, so the machines read it as standing still, and running across
+their line never threw their aim off. This table replaces them.
 
 | Newcomer | Machines each alone | Machines working together |
 | - | - | - |
-| deaf | 17% get away (±11) | 23% (±12) |
-| listening | 17% (±11) | 44% (±14) |
+| deaf | 29% get away (±13) | 17% (±11) |
+| listening | 29% (±13) | 48% (±14) |
 
-Seed for seed, working together, the listener got out where the deaf one
-didn't 14 times, the other way 4 (p ≈ 0.03). Three walkers: 59% against
-33%; two walkers and a drone: 24% against 10%. The lines a listener acts
-on are "one round your {way}, by {place}" and "one making for {rv}"; the
-one it does nothing with is "Radio, close: one holding on you". What the
-machines say to each other is worth listening to, and the wording gives a
-newcomer something to do: a way, a place, a rendezvous.
+Seed for seed: working together, the machines catch a deaf newcomer that
+the same machines alone don't, 7 times to 1 (p ≈ 0.07); against them, a
+listener gets out where the deaf one doesn't, 17 to 2 (p ≈ 0.001); and a
+listener does better against machines working together than against the
+same ones alone, 14 to 5 (p ≈ 0.06): what they say to each other gives
+them away. Machines working together are harder on a newcomer who doesn't
+listen and easier on one who does.
