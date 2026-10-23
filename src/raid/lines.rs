@@ -87,6 +87,10 @@ pub const SHORT_RUN: &[&str] = &[
     "Truck: \"Short run. That's a can of fuel. Get in.\"",
 ];
 
+/// On the first plant job's card: there's a roof within a sprint all the
+/// way (`map_lint`), and a drone's chirp is the reason to use one.
+pub const SHEDS_ON_THE_WAY: &str = "\nSheds on the way: in, if anything chirps.";
+
 /// The first job's way home, from the gate, on the house.
 pub const FIRST_SHORT_RUN: &str = "Truck: \"First run's on me. Get in the back.\"";
 

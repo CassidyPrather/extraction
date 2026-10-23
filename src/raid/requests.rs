@@ -589,6 +589,22 @@ fn card_text(
         Some(job) => {
             text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
             text += &way_from_the_drop(job, &opts.map, &zone, p.done == 0);
+            // The first thing to leave out there: a long walk, and a roof
+            // within a sprint of all of it (`map_lint`'s first jobs).
+            let planted_before = p.contracts_done.iter().any(|id| {
+                extraction_core::contracts::contract(id).is_some_and(|c| {
+                    c.steps
+                        .iter()
+                        .any(|s| matches!(s, extraction_core::contracts::Step::Plant { .. }))
+                })
+            });
+            if matches!(
+                job,
+                extraction_core::progression::Job::Plant { planted: false, .. }
+            ) && !planted_before
+            {
+                text += crate::raid::lines::SHEDS_ON_THE_WAY;
+            }
             // A photograph names no place: where he's heard them working
             // (once, when he has: the line doesn't follow them about).
             if let extraction_core::progression::Job::Photograph {
