@@ -369,7 +369,21 @@ mod tests {
                         && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
                 });
             if found {
-                return Some(k as f32 / hz);
+                // And still there a minute on: at work, not passing.
+                let first = k as f32 / hz;
+                for _ in 0..(60.0 * hz) as usize {
+                    app.update();
+                }
+                let still = app
+                    .world_mut()
+                    .query::<Candidate>()
+                    .iter(app.world())
+                    .any(|c| {
+                        let p = c.at.translation();
+                        c.findable(subject, &zone)
+                            && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
+                    });
+                return still.then_some(first);
             }
         }
         None
