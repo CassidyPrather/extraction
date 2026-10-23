@@ -299,6 +299,7 @@ pub fn record(
         let lost = last - hp;
         if lost > 1e-4 && hp < last {
             let mut rest = lost;
+            let mut claimed: Option<String> = None;
             let mut expect = std::mem::take(&mut tr.expect);
             for (cause, d, _) in expect.iter_mut() {
                 let take = d.min(rest);
@@ -310,8 +311,16 @@ pub fn record(
                 *tr.pending.entry(cause.clone()).or_default() += take;
                 log.recent.push((t, cause.clone(), take));
                 log.last_cause = cause.clone();
+                claimed = Some(cause.clone());
             }
             tr.expect = expect;
+            // A sliver left over from a hit claimed this tick (armour and
+            // rounding make the bar's drop differ from the hit's damage by
+            // hundredths) is that hit's, not something else's.
+            if let Some(cause) = claimed.filter(|_| rest < 0.05) {
+                *tr.pending.entry(cause.clone()).or_default() += rest;
+                rest = 0.0;
+            }
             // Every unclaimed loss counts, however small a tick of it is:
             // gas at 2 hp a second is 0.02 a tick, and once that went
             // unrecorded a raider died underground of nothing at all.

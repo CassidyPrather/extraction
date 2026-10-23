@@ -40,10 +40,12 @@ pub const FLUSH_PER_SPEED: f32 = 6.5;
 pub const FLUSH_MAX: f32 = 38.0;
 /// Crouched, you get this much closer.
 pub const FLUSH_CROUCHED: f32 = 0.6;
-/// Machines: a walker or hound, a drone (loud rotors), the airship.
-pub const FLUSH_WALKER: f32 = 22.0;
-pub const FLUSH_DRONE: f32 = 30.0;
-pub const FLUSH_DIRIGIBLE: f32 = 70.0;
+/// Machines: a walker or hound, a drone (loud rotors), the airship. The
+/// birds have learnt them, and go up well before one can see you
+/// (`warning`: the valley tells you they're coming).
+pub const FLUSH_WALKER: f32 = 55.0;
+pub const FLUSH_DRONE: f32 = 70.0;
+pub const FLUSH_DIRIGIBLE: f32 = 110.0;
 /// A loud noise (one heard at least [`LOUD`] m off: a shot, a blast)
 /// flushes every flock within this share of its reach.
 pub const FLUSH_NOISE: f32 = 0.6;
@@ -54,8 +56,10 @@ pub const WARY_FOR: f32 = 90.0;
 /// At night they roost: this much closer before they go.
 pub const ROOSTING: f32 = 0.6;
 
-/// A flock a player flushes is heard this far by robots...
-pub const ALARM_REACH: f32 = 60.0;
+/// A flock a player flushes is heard this far by robots (further than a
+/// walker flushes it itself, [`FLUSH_WALKER`], or it'd never be one of
+/// yours)...
+pub const ALARM_REACH: f32 = 100.0;
 /// ...at most once a flock in this many seconds, from this far above
 /// where it sat (they're up in a second or two).
 pub const ALARM_EVERY: f32 = 60.0;

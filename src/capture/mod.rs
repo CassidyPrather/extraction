@@ -140,6 +140,9 @@ pub struct CaptureOptions {
     pub trailer: Option<String>,
     /// `--hide-hands 1`: hide the player's gloves and sleeves.
     pub hide_hands: bool,
+    /// `--cine-dump IN.cine,OUT.stills`: write each shot's first pose as a
+    /// still and exit (`cinematic::dump`).
+    pub dump: Option<(PathBuf, PathBuf)>,
 }
 
 impl CaptureOptions {
@@ -157,6 +160,7 @@ impl CaptureOptions {
                 | "--sweep-turn"
                 | "--trailer"
                 | "--hide-hands"
+                | "--cine-dump"
         )
     }
 
@@ -172,6 +176,11 @@ impl CaptureOptions {
             "--sweep-turn" => self.sweep_turn = val.parse().ok().filter(|n| *n > 0),
             "--trailer" => self.trailer = Some(val),
             "--hide-hands" => self.hide_hands = val != "0",
+            "--cine-dump" => {
+                self.dump = val
+                    .split_once(',')
+                    .map(|(a, b)| (PathBuf::from(a), PathBuf::from(b)))
+            }
             _ => {}
         }
     }

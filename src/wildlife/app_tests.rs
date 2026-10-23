@@ -69,6 +69,13 @@ fn put(app: &mut App, player: Entity, at: Vec3) {
 /// walkable ground `away` metres off to one side: the flock, where it sits,
 /// and that ground.
 fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
+    one_flock_heard(app, zone, away, false)
+}
+
+/// [`one_flock`], and if `heard`, with nothing between the birds going up
+/// and a walker's ear at that ground for their alarm to carry over (a
+/// trunk in the way muffles it like a hill: `acoustics::blocked`).
+fn one_flock_heard(app: &mut App, zone: &Zone, away: f32, heard: bool) -> (Entity, Vec3, Vec3) {
     // The ducks too: their flushes count as birds'.
     let old: Vec<Entity> = app
         .world_mut()
@@ -84,6 +91,12 @@ fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
         .resource::<crate::robots::walker::Nav>()
         .0
         .clone();
+    let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
+    let spatial = q.get(app.world()).unwrap();
+    let open = |centre: Vec3, p: Vec3| {
+        let up = centre + Vec3::Y * super::flock::ALARM_HEIGHT;
+        !heard || !crate::acoustics::blocked(&spatial, up, p + Vec3::Y * 1.2)
+    };
     let (i, post) = perches
         .sites
         .iter()
@@ -94,7 +107,8 @@ fn one_flock(app: &mut App, zone: &Zone, away: f32) -> (Entity, Vec3, Vec3) {
                 let a = k as f32 / 16.0 * std::f32::consts::TAU;
                 let p = s.centre + Vec3::new(a.cos(), 0.0, a.sin()) * away;
                 let p = zone.on_ground(p.x, p.z);
-                (nav.walkable([p.x, p.z]) && (p.y - s.centre.y).abs() < 6.0).then_some((i, p))
+                (nav.walkable([p.x, p.z]) && (p.y - s.centre.y).abs() < 6.0 && open(s.centre, p))
+                    .then_some((i, p))
             })
         })
         .expect("a low roof with open ground beside it");
@@ -143,14 +157,15 @@ fn walker_at(app: &mut App, zone: &Zone, post: Vec3, behind: Vec3) -> Entity {
     w
 }
 
-/// Flush a flock with a walker 35 m off, its back to you and the birds:
+/// Flush a flock with a walker 75 m off (past where it'd flush them
+/// itself), its back to you and the birds:
 /// it hears the birds go up and walks over to look where they were. Stand
 /// just out of the flock's reach instead and it never stirs.
 #[test]
 fn a_walker_goes_to_look_where_you_flushed_the_birds() {
     for flush in [true, false] {
         let (mut app, player, zone) = app();
-        let (_, centre, post) = one_flock(&mut app, &zone, 35.0);
+        let (_, centre, post) = one_flock_heard(&mut app, &zone, 75.0, true);
         // Standing still 14 m off the far side of the building to start with
         // (the walker's back to you), then (or not) right beside it, under
         // the birds.
@@ -198,7 +213,13 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
                 ours.first()
                     .is_some_and(|f| f.alarm && f.by == Some(player))
             );
-            assert!(looked < 8.0, "went to look {looked:.1} m from the flock");
+            // Heard from afar, where is a guess: within HEARD_SPREAD of
+            // the distance.
+            let spread = crate::robots::senses::HEARD_SPREAD * post.distance(centre);
+            assert!(
+                looked < spread.max(8.0),
+                "went to look {looked:.1} m from the flock ({spread:.1} m allowed)"
+            );
         } else {
             assert!(ours.is_empty(), "flushed from 14 m standing still");
             assert_eq!(looked, f32::MAX, "investigated with no birds going up");

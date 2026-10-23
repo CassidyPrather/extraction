@@ -84,6 +84,18 @@ pub const PERSONAS: [Persona; 5] = [
     },
 ];
 
+/// A newcomer by name ("cautious", "reckless", "lost", "hoarder",
+/// "one-handed"), for other bots that want one's ways.
+pub fn named(name: &str) -> Option<&'static Persona> {
+    PERSONAS.iter().find(|p| p.name == name)
+}
+
+/// How `p` goes on foot: (sprinting, crouched). Out in the Zone the
+/// cautious one creeps; anyone runs when told to run for it (`fleeing`).
+pub fn gait(p: &Persona, fleeing: bool) -> (bool, bool) {
+    (p.sprint || fleeing, p.reads && !fleeing)
+}
+
 /// This session's newcomer (`--personality NAME`), in a first-hour run.
 pub fn current(opts: &LaunchOptions) -> Option<&'static Persona> {
     if !matches!(opts.scenario.as_deref(), Some(YARD | RAID)) {
@@ -104,7 +116,15 @@ pub const ENCOUNTERS: [&str; 5] = ["walker", "drone", "hush", "sentry", "night"]
 pub struct Chain {
     pub personas: Vec<&'static Persona>,
     pub encounters: Vec<&'static str>,
+    /// Raids after the yard, one a job (the first hour is one).
+    pub raids: u32,
 }
+
+/// The first five jobs, by every newcomer: the yard, then a raid a job on
+/// the one career (`first_jobs`, or `first_jobs_<name>` for one).
+pub const JOBS: &str = "first_jobs";
+/// How many raids `first_jobs` runs.
+pub const JOBS_RAIDS: u32 = 5;
 
 /// The chain a `--scenario` name asks for, if it's one of these.
 pub fn chain(scenario: &str) -> Option<Chain> {
@@ -113,12 +133,29 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         return Some(Chain {
             personas: all(),
             encounters: vec![],
+            raids: 1,
+        });
+    }
+    if scenario == JOBS {
+        return Some(Chain {
+            personas: all(),
+            encounters: vec![],
+            raids: JOBS_RAIDS,
+        });
+    }
+    if let Some(name) = scenario.strip_prefix("first_jobs_") {
+        let p = PERSONAS.iter().find(|p| p.name.replace('-', "_") == name)?;
+        return Some(Chain {
+            personas: vec![p],
+            encounters: vec![],
+            raids: JOBS_RAIDS,
         });
     }
     if scenario == FIGHT {
         return Some(Chain {
             personas: all(),
             encounters: ENCOUNTERS.to_vec(),
+            raids: 1,
         });
     }
     if let Some(kind) = scenario.strip_prefix("first_fight_") {
@@ -126,6 +163,7 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         return Some(Chain {
             personas: all(),
             encounters: vec![e],
+            raids: 1,
         });
     }
     PERSONAS
@@ -134,6 +172,7 @@ pub fn chain(scenario: &str) -> Option<Chain> {
         .map(|p| Chain {
             personas: vec![p],
             encounters: vec![],
+            raids: 1,
         })
 }
 
@@ -169,11 +208,12 @@ pub fn run_chain(chain: &Chain) -> AppExit {
         let dir_s = dir.to_string_lossy().to_string();
         let save = dir.join("career.ron").to_string_lossy().to_string();
         let mut ok = true;
-        for (stage, extra) in [
-            (YARD, vec![]),
-            // As the cord would open it: on to the next valley.
-            (RAID, vec!["--map".to_string(), "marrow_creek".to_string()]),
-        ] {
+        let stages = std::iter::once((YARD, vec![])).chain(
+            // As the cord would open it: on to the next valley; then a raid
+            // a job.
+            (0..chain.raids).map(|_| (RAID, vec!["--map".to_string(), "marrow_creek".to_string()])),
+        );
+        for (n, (stage, extra)) in stages.enumerate() {
             let mut cmd = std::process::Command::new(&exe);
             cmd.args(&passthrough)
                 .args(["--scenario", stage, "--personality", p.name])
@@ -182,7 +222,7 @@ pub fn run_chain(chain: &Chain) -> AppExit {
             if p.one_handed {
                 cmd.arg("--one-handed");
             }
-            println!("first hour: {} in {stage}", p.name);
+            println!("first hour: {} in {stage} ({n})", p.name);
             let status = cmd.status();
             if !status.is_ok_and(|s| s.success()) {
                 ok = false;
@@ -286,7 +326,9 @@ use crate::raid::requests::RequestCard;
 use crate::raid::truck::Stash;
 use crate::raid::{Phase, Raid};
 use crate::rig::{LocalPlayer, Side};
+use extraction_core::contracts::Subject;
 use extraction_core::map::MarkerKind;
+use extraction_core::progression::{Job, LEDGER_ITEM, LETTER_ITEM, RECOVER_ITEM, fetch_takes};
 
 use super::firsts::{First, FirstMet};
 use super::second_hour::World2;
@@ -325,6 +367,51 @@ enum Leg {
     Done,
 }
 
+/// What a job asks of a newcomer, the way one goes about it. Every kind of
+/// job has one (`every_job_kind_has_a_way`): the first-hour record never
+/// stops at a job the newcomer can't do.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Errand {
+    /// Go and look (a scout): the driver says when it's seen.
+    Look,
+    /// Find `n` of what `want` stands for (round `near`, where the card
+    /// says), bring them home, into the stash crate.
+    Bring {
+        want: String,
+        n: u32,
+        near: Option<Vec2>,
+    },
+    /// Take `item` there and leave it, then home.
+    Leave { item: String, at: Vec2 },
+    /// Take a photograph of a machine, then home.
+    Photo(Subject),
+}
+
+pub(super) fn errand(job: &Job) -> Errand {
+    let bring = |want: &str, near: Option<[f32; 2]>| Errand::Bring {
+        want: want.to_owned(),
+        n: 1,
+        near: near.map(Vec2::from),
+    };
+    match job {
+        Job::Scout { .. } => Errand::Look,
+        Job::Fetch { item, n } => Errand::Bring {
+            want: item.clone(),
+            n: *n,
+            near: None,
+        },
+        Job::Recover { at, .. } => bring(RECOVER_ITEM, *at),
+        Job::Letter => bring(LETTER_ITEM, None),
+        Job::Ledger => bring(LEDGER_ITEM, None),
+        Job::Bring { item, at, .. } => bring(item, Some(*at)),
+        Job::Plant { item, at, .. } => Errand::Leave {
+            item: item.clone(),
+            at: Vec2::from(*at),
+        },
+        Job::Photograph { subject, .. } => Errand::Photo(*subject),
+    }
+}
+
 #[derive(Default)]
 pub(super) struct Newcomer {
     leg: Leg,
@@ -350,6 +437,14 @@ pub(super) struct Newcomer {
     done_home: Option<u32>,
     /// Keeping low till then (backing off behind cover).
     low_until: f32,
+    /// What the job asks.
+    errand: Option<Errand>,
+    /// Getting what it brought into the crate.
+    crating: Option<crate::bot::crating::Crating>,
+    /// The find it last went for; and finds it went for and couldn't get
+    /// (out of reach, behind something): it looks for another.
+    reaching: Option<Entity>,
+    passed_over: Vec<Entity>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -422,7 +517,17 @@ pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
     card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
     progression: Option<Res<'w, crate::progression::Progression>>,
+    bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
+    robots: Query<
+        'w,
+        's,
+        (
+            &'static crate::robots::Robot,
+            &'static GlobalTransform,
+            Option<&'static crate::robots::Breed>,
+        ),
+    >,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -451,6 +556,7 @@ pub(super) fn direct_raid(
     mut met: MessageReader<FirstMet>,
     mut fight: Option<ResMut<Fight>>,
     mut state: Local<Newcomer>,
+    crates: crate::bot::crating::CrateWorld,
     time: Res<Time>,
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -470,7 +576,9 @@ pub(super) fn direct_raid(
     let creep = (p.reads || state.low_until > now)
         && !fleeing
         && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
-    if input.crouch != creep {
+    // (Bent down to the crate: that's the crating's to say.)
+    let crating = state.crating.as_ref().is_some_and(|c| !c.done());
+    if input.crouch != creep && !crating {
         input.crouch = creep;
     }
     bot.sprint = p.sprint || fleeing;
@@ -605,6 +713,11 @@ pub(super) fn direct_raid(
         );
         state.leg = Leg::Done;
     }
+    // Woken from the last one's fall (a career resumed while down): not
+    // this raid's death; wait for the truck.
+    if matches!(raid.phase, Phase::Down { .. }) && state.leg == Leg::Camp {
+        return;
+    }
     if matches!(raid.phase, Phase::Down { .. }) && state.leg != Leg::Done {
         state.note(now, Kind::Killed, "went down");
         state.leg = Leg::Done;
@@ -620,7 +733,16 @@ pub(super) fn direct_raid(
         return;
     }
     // Reckless: a machine in reach is a fight (once a minute at most).
+    // (With a gun: the last fall may have left it out there.)
+    let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
+        world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
+            && (held.is_some_and(|h| h.player == player)
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
+            && !view.stash.iter().any(|b| b.contents.contains(&e))
+    });
     if p.reckless
+        && armed
         && now - state.fought_at > 60.0
         && matches!(state.leg, Leg::Place | Leg::Rendezvous | Leg::Call)
         && world
@@ -688,6 +810,81 @@ pub(super) fn direct_raid(
                     tasks.push(Task::Stow(Side::Right));
                 }
             }
+            state.errand = view
+                .progression
+                .as_ref()
+                .and_then(|p| p.0.job.as_ref())
+                .map(errand);
+            // Off the ledge under the hatch, what the driver passes through:
+            // his spare radio (the last one went with the rest at a fall),
+            // and what the job takes out (a thing to leave, the camera).
+            let mut need = vec![];
+            let in_crate = |id: &str| {
+                view.stash
+                    .iter()
+                    .flat_map(|b| b.contents.iter())
+                    .any(|e| world.id(*e) == Some(id))
+            };
+            if carried(&world, &view, player, "radio").is_empty() && !in_crate("radio") {
+                need.push("radio".to_owned());
+            }
+            match &state.errand {
+                Some(Errand::Leave { item, .. })
+                    if carried(&world, &view, player, item).is_empty() =>
+                {
+                    need.push(item.clone())
+                }
+                Some(Errand::Photo(_)) if carried(&world, &view, player, "camera").is_empty() => {
+                    need.push("camera".to_owned())
+                }
+                _ => {}
+            }
+            let mut missing = vec![];
+            for id in need {
+                let on_ledge = world.items.iter().find(|(e, it, gt, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && world.catalog.get(it.kind()).id == id
+                        && gt.translation().xz().distance(at_truck(0.0, 0.0)) < 4.0
+                        && !view.stash.iter().any(|b| b.contents.contains(e))
+                });
+                match on_ledge {
+                    Some((e, ..)) => {
+                        if state.heard.iter().any(|l| l.contains("off the ledge")) {
+                            state.note(
+                                now,
+                                Kind::Learned,
+                                format!("{id} off the ledge, as the driver said"),
+                            );
+                        }
+                        tasks.push(Task::Grab {
+                            item: e,
+                            side: Side::Right,
+                        });
+                        tasks.push(Task::Stow(Side::Right));
+                    }
+                    None => missing.push(id),
+                }
+            }
+            if !missing.is_empty() && state.tries < 8 {
+                // Still coming through the hatch, perhaps: a moment.
+                state.tries += 1;
+                tasks.push(Task::Wait(2.0));
+                let idle = bot.tasks.pop_back();
+                bot.tasks.extend(tasks);
+                bot.tasks.extend(idle);
+                bot.restart();
+                return;
+            }
+            for id in missing {
+                state.note(
+                    now,
+                    Kind::Confused,
+                    format!("no {id}, and none handed over"),
+                );
+            }
+            state.tries = 0;
             state.leg = Leg::Card;
         }
         Leg::Card => {
@@ -717,6 +914,17 @@ pub(super) fn direct_raid(
                     }
                     state.goal = Some((name, at));
                     state.leg = Leg::Out;
+                }
+                None if matches!(state.errand, Some(Errand::Bring { near: None, .. })) => {
+                    // A fetch: no place, things to find anywhere.
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("the job card: {}", text.replace('\n', " ")),
+                    );
+                    state.goal = None;
+                    tasks.extend(world.legs(here, at_truck(0.0, 4.0)));
+                    state.leg = Leg::Place;
                 }
                 None => {
                     state.note(
@@ -772,6 +980,38 @@ pub(super) fn direct_raid(
             tasks.extend(world.legs(from, at));
             state.note(now, Kind::Learned, format!("on to {name}"));
             state.leg = Leg::Place;
+        }
+        Leg::Place if state.errand.as_ref().is_some_and(|e| *e != Errand::Look) => {
+            let errand = state.errand.clone().unwrap_or(Errand::Look);
+            // Went for it, and it's still lying there: past it, to another.
+            if let Some(e) = state.reaching.take()
+                && world
+                    .items
+                    .get(e)
+                    .is_ok_and(|(_, _, _, h, s, b)| h.is_none() && s.is_none() && b.is_none())
+            {
+                state.passed_over.push(e);
+            }
+            let skip = state.passed_over.clone();
+            match errand_tasks(&errand, &world, &view, player, here, state.tries, &skip) {
+                Ok(Some((t, after))) => {
+                    tasks.extend(t);
+                    state.reaching = after;
+                    state.tries += 1;
+                }
+                Ok(None) => {
+                    state.note(now, Kind::Learned, errand_done(&errand, &world));
+                    tasks.extend(way_out(&world, &view, here).0);
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                }
+                Err(why) => {
+                    state.note(now, Kind::Stuck, why);
+                    tasks.extend(way_out(&world, &view, here).0);
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                }
+            }
         }
         Leg::Place => {
             let noted = state.heard.iter().any(|l| l.contains("noted"));
@@ -935,7 +1175,40 @@ pub(super) fn direct_raid(
         },
         Leg::Paid => {
             let done = view.progression.as_ref().map_or(0, |p| p.0.done);
-            if raid.phase != Phase::AtBase {
+            let bring = match &state.errand {
+                Some(Errand::Bring { want, .. }) => Some(want.clone()),
+                _ => None,
+            };
+            if raid.phase == Phase::AtBase
+                && let Some(want) = bring
+                && state.crating.as_ref().is_none_or(|c| !c.done())
+            {
+                // "Stash it, press here": what it brought, into the crate.
+                let crating = state.crating.get_or_insert_with(|| {
+                    crate::bot::crating::Crating::new(carried(&world, &view, player, &want))
+                });
+                let t = crating.step(&crates, player, root, &mut input);
+                if crating.done() {
+                    let (n, missed) = (crating.stowed.len(), crating.missed.clone());
+                    for (e, why) in missed {
+                        let id = world.id(e).unwrap_or("?").to_owned();
+                        state.note(now, Kind::Stuck, format!("{id}: {why}"));
+                    }
+                    if n > 0 {
+                        state.note(now, Kind::Learned, format!("{n} into the stash crate"));
+                    } else {
+                        state.note(
+                            now,
+                            Kind::Confused,
+                            "nothing of the job's to put in the crate",
+                        );
+                    }
+                }
+                tasks.extend(t);
+                if tasks.is_empty() {
+                    tasks.push(Task::Wait(0.5));
+                }
+            } else if raid.phase != Phase::AtBase {
                 tasks.push(Task::Wait(1.0));
             } else if state.done_home.is_none() {
                 state.done_home = Some(done);
@@ -1166,6 +1439,232 @@ fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) 
     vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
 }
 
+/// What the newcomer carries that `want` stands for: in a hand, a pocket
+/// or the pack (not the stash crate).
+fn carried(world: &World2, view: &RaidView, player: Entity, want: &str) -> Vec<Entity> {
+    world
+        .items
+        .iter()
+        .filter(|(e, it, _, held, sock, bag)| {
+            // On this newcomer: in its hand, its slots or its own pack (not
+            // the pack it left where it fell, nor the stash crate).
+            fetch_takes(want, &world.catalog.get(it.kind()).id)
+                && (held.is_some_and(|h| h.player == player)
+                    || sock
+                        .is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
+                    || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
+                && !view.stash.iter().any(|b| b.contents.contains(e))
+        })
+        .map(|(e, ..)| e)
+        .collect()
+}
+
+/// A thing's name as the card has it ("field recorder").
+fn name_of(world: &World2, id: &str) -> String {
+    world
+        .catalog
+        .kind(id)
+        .map(|k| world.catalog.get(k).name.to_lowercase())
+        .unwrap_or_else(|| id.replace('_', " "))
+}
+
+/// Indoors at `here`: out by the nearest door, and where that leaves it.
+fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
+    let Some(en) = view.entrances.as_deref() else {
+        return (vec![], here);
+    };
+    let at = world.zone.on_ground(here.x, here.y) + Vec3::Y * 1.0;
+    let Some(b) = en.building_at(at) else {
+        return (vec![], here);
+    };
+    let Some(d) = en
+        .doors
+        .iter()
+        .filter(|d| d.building == b)
+        .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
+        .min_by(|a, c| {
+            a.mid
+                .xz()
+                .distance(here)
+                .total_cmp(&c.mid.xz().distance(here))
+        })
+    else {
+        return (vec![], here);
+    };
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    let outside = d.mid.xz() + out * 2.0;
+    (
+        vec![
+            Task::WalkTo {
+                to: d.mid.xz() - out * 1.2,
+                within: 0.5,
+            },
+            Task::OpenDoor(d.door),
+            Task::WalkTo {
+                to: outside,
+                within: 0.6,
+            },
+        ],
+        outside,
+    )
+}
+
+/// To `p` from `here`: indoors, round to its building's door, open it, in.
+fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
+    let (mut t, here) = way_out(world, view, here);
+    let door = view.entrances.as_deref().and_then(|en| {
+        let b = en.building_at(p)?;
+        en.doors
+            .iter()
+            .filter(|d| d.building == b)
+            .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
+            .min_by(|a, c| a.mid.distance(p).total_cmp(&c.mid.distance(p)))
+            .copied()
+    });
+    let Some(d) = door else {
+        t.extend(world.legs(here, p.xz()));
+        return t;
+    };
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    let front = d.mid.xz() + out * 1.3;
+    t.extend(world.legs(here, front));
+    t.extend([
+        Task::OpenDoor(d.door),
+        Task::WalkTo {
+            to: d.mid.xz() - out * 1.5,
+            within: 0.5,
+        },
+    ]);
+    t
+}
+
+/// The next stretch of an errand; `Ok(None)` once it's done out here,
+/// `Err` where the newcomer can't see how.
+fn errand_tasks(
+    errand: &Errand,
+    world: &World2,
+    view: &RaidView,
+    player: Entity,
+    here: Vec2,
+    tries: u32,
+    skip: &[Entity],
+) -> Result<Option<(Vec<Task>, Option<Entity>)>, String> {
+    let job = view.progression.as_ref().and_then(|p| p.0.job.clone());
+    match errand {
+        Errand::Look => Ok(None),
+        Errand::Bring { want, n, near } => {
+            let name = name_of(world, want);
+            if carried(world, view, player, want).len() as u32 >= *n {
+                return Ok(None);
+            }
+            if tries > 4 + 3 * n {
+                return Err(format!("couldn't find the {name}"));
+            }
+            let from = near.unwrap_or(here);
+            let found = world
+                .items
+                .iter()
+                .filter(|(e, it, _, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && fetch_takes(want, &world.catalog.get(it.kind()).id)
+                        && !view.stash.iter().any(|b| b.contents.contains(e))
+                        && !skip.contains(e)
+                })
+                .map(|(e, _, gt, ..)| (e, gt.translation()))
+                .min_by(|a, b| a.1.xz().distance(from).total_cmp(&b.1.xz().distance(from)));
+            let Some((e, p)) =
+                found.filter(|(_, p)| near.is_none_or(|n| p.xz().distance(n) < 80.0))
+            else {
+                return Err(format!("no {name} anywhere I looked"));
+            };
+            let mut t = way_to(world, view, here, p);
+            t.extend([
+                Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                },
+                Task::Stow(Side::Right),
+                Task::Wait(0.5),
+            ]);
+            Ok(Some((t, Some(e))))
+        }
+        Errand::Leave { item, at } => {
+            if matches!(job, Some(Job::Plant { planted: true, .. })) {
+                return Ok(None);
+            }
+            let name = name_of(world, item);
+            if tries > 4 {
+                return Err(format!("left the {name}, and nothing says it's right"));
+            }
+            let Some(e) = carried(world, view, player, item).first().copied() else {
+                return Err(format!("no {name} on me to leave"));
+            };
+            let mut t = world.legs(here, *at);
+            t.extend([
+                Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                },
+                Task::Wait(0.5),
+                Task::LookAt(world.zone.on_ground(at.x, at.y)),
+                Task::Release(Side::Right),
+                Task::Wait(2.0),
+            ]);
+            Ok(Some((t, None)))
+        }
+        Errand::Photo(subject) => {
+            if matches!(job, Some(Job::Photograph { taken: true, .. })) {
+                return Ok(None);
+            }
+            if tries > 6 {
+                return Err("took the picture, and nothing says it's in it".into());
+            }
+            let Some(camera) = carried(world, view, player, "camera").first().copied() else {
+                return Err("no camera on me".into());
+            };
+            let target = view
+                .robots
+                .iter()
+                .filter(|(r, _, breed)| {
+                    !r.wrecked
+                        && r.kind == crate::robots::RobotKind::Walker
+                        && (breed.is_some_and(|b| b.0 == "heavy") == (*subject == Subject::Heavy))
+                })
+                .map(|(_, gt, _)| gt.translation())
+                .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)));
+            let Some(p) = target else {
+                return Err(format!("no {subject:?} to be found for the picture").to_lowercase());
+            };
+            // Near enough to fill the picture, not so near it shoots.
+            let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
+            let mut t = world.legs(here, stand);
+            t.extend([
+                Task::Grab {
+                    item: camera,
+                    side: Side::Right,
+                },
+                Task::LookAt(p + Vec3::Y * 1.5),
+                Task::Wait(1.0),
+                Task::Use(Side::Right),
+                Task::Wait(0.5),
+            ]);
+            Ok(Some((t, None)))
+        }
+    }
+}
+
+/// What it says once the errand's done out here.
+fn errand_done(errand: &Errand, world: &World2) -> String {
+    match errand {
+        Errand::Look => "the place, seen".into(),
+        Errand::Bring { want, n, .. } => format!("found {n} {}, and packed", name_of(world, want)),
+        Errand::Leave { item, .. } => format!("left the {} there", name_of(world, item)),
+        Errand::Photo(s) => format!("the {s:?}'s picture taken").to_lowercase(),
+    }
+}
+
 /// Where along the way to the first job the machine is met: the drop to
 /// the Old farm, a little short of halfway.
 fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
@@ -1337,5 +1836,104 @@ pub(super) fn first_fight(
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One of every kind of job there is (the match in `errand` makes a new
+    /// kind fail to build until it has a way).
+    fn one_of_each() -> Vec<Job> {
+        let map = "marrow_creek".to_owned();
+        vec![
+            Job::Fetch {
+                item: "canned_stew".into(),
+                n: 2,
+            },
+            Job::Recover {
+                map: map.clone(),
+                region: "Village".into(),
+                at: Some([10.0, 20.0]),
+                place: Some("in the pump house by the Village.".into()),
+                overnight: false,
+            },
+            Job::Letter,
+            Job::Ledger,
+            Job::Scout {
+                map: map.clone(),
+                place: "Old farm".into(),
+                at: [100.0, 200.0],
+                seen: false,
+            },
+            Job::Bring {
+                map: map.clone(),
+                place: "the post office".into(),
+                item: "holm_watch".into(),
+                at: [-16.0, 35.0],
+            },
+            Job::Plant {
+                map,
+                place: "the mast".into(),
+                item: "relay_box".into(),
+                at: [5.0, 6.0],
+                planted: false,
+            },
+            Job::Photograph {
+                subject: Subject::Walker,
+                taken: false,
+            },
+        ]
+    }
+
+    /// Every kind of job has a way for the newcomer to do it, and the card
+    /// names what it goes for: what the bot is after, a player reads.
+    #[test]
+    fn every_job_kind_has_a_way() {
+        let catalog = crate::items::Catalog::load();
+        for job in one_of_each() {
+            let card =
+                crate::progression::job_text(&job, &catalog, "marrow_creek", false).to_lowercase();
+            let named = |id: &str| {
+                let name = catalog
+                    .kind(id)
+                    .map(|k| catalog.get(k).name.to_lowercase())
+                    .unwrap_or_else(|| panic!("{id} isn't in the catalog"));
+                name.split_whitespace()
+                    .filter(|w| w.len() > 3)
+                    .any(|w| card.contains(w.trim_end_matches('s')))
+            };
+            match errand(&job) {
+                Errand::Look => assert!(matches!(job, Job::Scout { .. }), "{job:?}"),
+                Errand::Bring { want, n, near } => {
+                    assert!(n > 0, "{job:?}");
+                    assert!(named(&want), "the card for {job:?} doesn't name it: {card}");
+                    // A fetch says nothing of where; everything else does.
+                    assert_eq!(
+                        near.is_none(),
+                        matches!(job, Job::Fetch { .. } | Job::Letter | Job::Ledger),
+                        "{job:?}"
+                    );
+                }
+                Errand::Leave { item, .. } => {
+                    assert!(named(&item), "the card for {job:?} doesn't name it: {card}")
+                }
+                Errand::Photo(s) => assert!(card.contains(&s.name().to_lowercase()), "{card}"),
+            }
+        }
+    }
+
+    /// The job's place, not the driver's cache under it.
+    #[test]
+    fn the_card_is_read_for_the_job_not_the_cache() {
+        let zone = crate::world::Zone::load("marrow_creek");
+        let card = "CONTRACT: THE POST COUNTER - 1 OF 1\n\"Post office watch. By the village, \
+or in it. Bring it home.\"\nStash it, press here.\n\nMY CACHE: in the survey tower out past \
+the Hollow.";
+        assert_eq!(
+            place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
+            Some("Village")
+        );
     }
 }

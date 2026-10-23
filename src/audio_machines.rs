@@ -11,6 +11,7 @@
 use bevy::prelude::*;
 
 use crate::audio::{AudioRng, CRACKLE_SET, SoundBank, play_at_speed};
+use crate::robots::devices::{DeviceNoticed, Reaction};
 use crate::robots::hound::HoundCrouch;
 use crate::robots::hound_mind::HoundBite;
 use crate::robots::indoor::Waking;
@@ -39,6 +40,7 @@ impl Plugin for MachineSoundsPlugin {
             .add_message::<Waking>()
             .add_message::<WreckImpact>()
             .add_message::<Arced>()
+            .add_message::<DeviceNoticed>()
             .add_message::<crate::health::Hurt>()
             .add_message::<crate::health::Downed>()
             .add_systems(
@@ -52,6 +54,7 @@ impl Plugin for MachineSoundsPlugin {
                     hound_sounds,
                     body_sounds,
                     you_sounds,
+                    notice_sounds,
                 ),
             );
     }
@@ -153,7 +156,10 @@ fn spotter_sounds(
 ) {
     for e in events.read() {
         let ls: &[Layer] = match e.what {
-            SpotterAct::Fixing => &[("machines/drone_lock", "spotter.fix", 0.8)],
+            SpotterAct::Fixing => &[
+                ("machines/drone_lock", "spotter.fix", 0.8),
+                ("physical/switch", "lock.tick", 1.8),
+            ],
             SpotterAct::Call => &[("machines/siren", "spotter.call", 1.0)],
             SpotterAct::Loose => &[("physical/whoosh", "spotter.loose", 1.0)],
             SpotterAct::Holed => &[
@@ -284,6 +290,31 @@ fn body_sounds(
                 ("physical/body_hit", "hit.body", 1.1),
             ],
         );
+    }
+}
+
+/// A machine noticing a device you set down (`robots::devices`): a
+/// bright two-note chirp at it, a question (`device.notice`), or, if it
+/// means to hunt the thing down or shoot it from afar, three quicker,
+/// harder, higher (`device.hunt`). Its voice's turn follows on its own
+/// (`search::MindShift`): this is "it's clocked my device", that is
+/// "it's heard me".
+fn notice_sounds(
+    mut commands: Commands,
+    mut noticed: MessageReader<DeviceNoticed>,
+    places: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for n in noticed.read() {
+        let at = places
+            .get(n.robot)
+            .map_or(n.at, |g| g.translation() + Vec3::Y * 0.5);
+        let (set, cue) = match n.reaction {
+            Reaction::Investigate => ("device/notice", "device.notice"),
+            Reaction::Hunt | Reaction::ShootFromAfar => ("device/notice_hard", "device.hunt"),
+        };
+        layers(&mut commands, &bank, &mut rng, at, &[(set, cue, 1.0)]);
     }
 }
 
@@ -514,7 +545,7 @@ mod tests {
         for lit in code.split('"').skip(1).step_by(2) {
             let prefixes = [
                 "mender.", "mine.", "plough.", "spotter.", "sorter.", "hound.", "robot.", "wreck.",
-                "cell.", "you.",
+                "cell.", "you.", "device.",
             ];
             if prefixes.iter().any(|p| lit.starts_with(p)) && !lit.contains(' ') {
                 assert!(

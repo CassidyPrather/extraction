@@ -590,6 +590,16 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
         1 + i.inserted.iter().map(nested).sum::<i64>()
     }
     let nowhere = nested(&z.items[0].item) + nested(&z.items[1].item);
+    // What they are (and what's in them): they go, whatever they are.
+    fn ids(i: &SavedItem, out: &mut Vec<String>) {
+        out.push(i.id.clone());
+        for c in &i.inserted {
+            ids(c, out);
+        }
+    }
+    let mut lying_nowhere = Vec::new();
+    ids(&z.items[0].item, &mut lying_nowhere);
+    ids(&z.items[1].item, &mut lying_nowhere);
     z.items[0].at = [f32::NAN, 0.0, 0.0];
     z.items[1].at = [1.0e9, 0.0, 0.0];
     z.items[2].rot = [0.0; 4];
@@ -606,6 +616,13 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
         *want.entry(id.into()).or_default() += 1;
     }
     let lost: i64 = want.values().sum::<usize>() as i64 - after.0.values().sum::<usize>() as i64;
+    // Those two go whatever they are (a pistol magazine, as the loot
+    // rolls): kind by kind, what's kept is the rest.
+    for id in &lying_nowhere {
+        if let Some(v) = want.get_mut(id) {
+            *v = v.saturating_sub(1);
+        }
+    }
     let mut gone: Vec<String> = want
         .iter()
         .filter(|(k, v)| after.0.get(*k).copied().unwrap_or(0) != **v)

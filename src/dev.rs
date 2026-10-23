@@ -156,6 +156,7 @@ fn gallery(
     mut pending_mags: Local<Vec<(Entity, Entity)>>,
     mut opening: Local<Vec<Entity>>,
     mut worked: Local<Vec<(Entity, extraction_core::gunsmith::Build)>>,
+    mut told: Local<Vec<(Entity, u8)>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut jamming: Local<bool>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -364,6 +365,49 @@ fn gallery(
                     }
                 }
             }
+            // The tells (`weapons::legibility`): a Mosin as it lies and
+            // one cocked (its cocking piece back), the double as it lies
+            // and cocked (its indicators up), an AK new and one worn out
+            // (rust through the finish).
+            "tells" => {
+                let d = dist.unwrap_or(1.2);
+                // (0 as it lies, 1 cocked, 2 worn out.)
+                for (id, up, how) in [
+                    ("mosin", 0.32, 0),
+                    ("mosin", 0.16, 1),
+                    ("toz_double", 0.0, 0),
+                    ("toz_double", -0.16, 1),
+                    ("ak74", -0.32, 0),
+                    ("ak74", -0.5, 2),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let Some(e) = spawn_static(&mut commands, id, at) {
+                        told.push((e, how));
+                    }
+                }
+            }
+            // An SKS and a TOZ double as made, each over itself cut down
+            // at the vice: barrel short and stock off.
+            "sawn" => {
+                use extraction_core::gunsmith::Build;
+                let cut = |mm: f32| Build {
+                    barrel_mm: Some(mm),
+                    stock: false,
+                    ..Default::default()
+                };
+                let d = dist.unwrap_or(1.2);
+                for (id, up, build) in [
+                    ("sks", 0.32, None),
+                    ("sks", 0.12, Some(cut(260.0))),
+                    ("toz_double", -0.1, None),
+                    ("toz_double", -0.3, Some(cut(300.0))),
+                ] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let (Some(e), Some(b)) = (spawn_static(&mut commands, id, at), build) {
+                        worked.push((e, b));
+                    }
+                }
+            }
             "guns" => {
                 for (i, id) in ["pm_pistol", "ak74", "mosin", "toz_double"]
                     .iter()
@@ -409,6 +453,17 @@ fn gallery(
     }
     // Seat magazines once their guns have wells; open actions.
     if *stage > 3 {
+        told.retain(|(e, how)| {
+            let Ok(mut g) = guns.get_mut(*e) else {
+                return true;
+            };
+            match how {
+                1 => g.firearm.hammers_cocked.iter_mut().for_each(|h| *h = true),
+                2 => g.firearm.condition = 0.08,
+                _ => {}
+            }
+            false
+        });
         worked.retain(|(e, b)| {
             let Ok(mut g) = guns.get_mut(*e) else {
                 return true;

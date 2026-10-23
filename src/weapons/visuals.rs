@@ -118,6 +118,9 @@ pub(crate) fn moves_for(name: &str) -> Option<Moves> {
     // the more specific names first anyway.
     [
         ("turnbolt", Moves::TurnBolt),
+        ("cocking_piece", Moves::CockingPiece),
+        ("indicator_0", Moves::Indicator(0)),
+        ("indicator_1", Moves::Indicator(1)),
         ("bolt", Moves::WithBolt),
         ("barrels", Moves::Barrels),
         ("trigger", Moves::Trigger),
@@ -266,6 +269,11 @@ fn finish_gun_models(
     }
 }
 
+/// How far a cocked turn-bolt's cocking piece stands back off the bolt,
+/// metres (a Mosin's, a TOZ-8's: a thumb's width you can see and feel).
+pub const COCKED_BACK: f32 = 0.012;
+/// How far a cocking indicator stands proud when its lock is cocked (m).
+pub const INDICATOR_UP: f32 = 0.003;
 /// How far back a cocked hammer tips, radians.
 const HAMMER_BACK: f32 = 0.5;
 /// How far a revolver's gate swings open, radians.
@@ -372,6 +380,20 @@ fn animate_parts(
                 Moves::Rod => {
                     let mut r = part.rest;
                     r.translation.z += f.rod * ROD_STROKE;
+                    r
+                }
+                Moves::CockingPiece => {
+                    // With the bolt, and back off it while cocked.
+                    let cocked = f.hammers_cocked.first() == Some(&true);
+                    let mut r = part.rest;
+                    r.translation.z +=
+                        f.bolt_travel * travel + if cocked { COCKED_BACK } else { 0.0 };
+                    r
+                }
+                Moves::Indicator(i) => {
+                    let up = f.hammers_cocked.get(i as usize) == Some(&true);
+                    let mut r = part.rest;
+                    r.translation.y += if up { INDICATOR_UP } else { 0.0 };
                     r
                 }
                 Moves::Hammer => {

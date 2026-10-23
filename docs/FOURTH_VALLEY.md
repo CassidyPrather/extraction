@@ -221,7 +221,7 @@ for it in the open beside the Custodian's ground.
 
 ## What the sims said, and what changed
 
-Eight batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
+Eight batches of eight, then the Verifier's single raids (`--sim 8 --map sallow_reservoir --jobs 2`):
 
 | Batch | Out | Died | What it showed | Change |
 | - | -: | -: | - | - |
@@ -233,6 +233,7 @@ Eight batches of eight (`--sim 8 --map sallow_reservoir --jobs 2`):
 | seed 41 | 3 | 5 | The gallery is the most looted place (79 items); deaths spread over the sorting ground (2 walkers), the Gate, the inflow and the crest (drones). Two traps the nav couldn't see: the face-stair wall (bots stuck at its foot) and the staged scene "Bay four" (a 0.63 m slot between its buses) | `map::prefab_walls` puts the stair wall in the nav grid; Bay four: Story put scene pieces in the nav grid |
 | seed 41 again | 4 | 4 | With the stair wall in the nav grid: nobody stuck at its foot (26 stuck events before, none now), falls 104 hp → 34. Bay four still traps (42 stuck events) until Story's fix is in | |
 | seed 41, main cbf9c3d | 2 | 6 | Both nav traps gone (one stuck event in all eight). Four deaths in the silt fans under the Gate sentry's arc. The control is the same seed on Marrow Creek: 0/8, five to drones, so round 8 made every valley harder in the sims and Sallow isn't the outlier | Flagged to the coordinator |
+| seeds 1-4 single raids (the Verifier's), round 31 | 2 of 4 | 2 | The weakest valley by drones. Sallow's routes had 86-91% cover and 36-50 m in the open against the others' 96-100% and 20 m; 8% of its walkable ground was over 25 m from cover (the others 0-2%). The dam's 265 m face had cleared trees and rocks for 136 m round it, a circle on its longest side | Long prefabs clear a strip (`map::placement_clears`); copses below the dam, birch scrub on the bed; the lint holds every valley to 30 m open on a route, 3% open ground, nothing over 70 m. After: 3 of 4 out, the one death in the danger-3 sorting ground; Sallow 1% open, routes 10/18/8 m |
 
 Traffic and the last report: `docs/shots/fourth-valley/sims/`. Never
 visited yet: the valve house and filter house, the draw-off tower (no

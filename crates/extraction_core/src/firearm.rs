@@ -336,6 +336,12 @@ pub const REPACK_DUD: f32 = 0.02;
 /// What a bulged barrel leaves of the gun's condition.
 pub const BULGE_KEEPS: f32 = 0.3;
 
+/// Below this condition an action starts to drag ([`Firearm::action_drag`]),
+/// up to `DRY_DRAG` at none; full fouling adds `FOUL_DRAG`.
+pub const DRY_FROM: f32 = 0.6;
+pub const DRY_DRAG: f32 = 0.5;
+pub const FOUL_DRAG: f32 = 0.25;
+
 /// One gun's live state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Firearm {
@@ -1601,6 +1607,16 @@ impl Firearm {
     }
 
     /// Spread in radians for the next shot.
+    /// How much its action drags in the hand, 0 free ..= 1: cold oil
+    /// (`stiff`), or a worn, dry, fouled action (worn past 0.6 it starts to
+    /// grind, and fouling adds to it): the feel of a gun that wants
+    /// cleaning and oil.
+    pub fn action_drag(&self) -> f32 {
+        let worn = ((DRY_FROM - self.condition) / DRY_FROM).clamp(0.0, 1.0);
+        self.stiff
+            .max(DRY_DRAG * worn + FOUL_DRAG * self.fouling.clamp(0.0, 1.0))
+    }
+
     pub fn spread_radians(&self) -> f32 {
         let moa = self.def.spread_moa * (1.0 + 3.0 * (1.0 - self.condition) + self.fouling);
         moa / 60.0 * std::f32::consts::PI / 180.0
@@ -2814,5 +2830,23 @@ mod tests {
         assert!(gun.load_round());
         gun.set_break_open(false);
         assert!(fired(&shoot(&mut gun)));
+    }
+
+    /// A sound, clean action runs free; a worn one drags, a fouled worn
+    /// one more; cold oil drags whatever the wear.
+    #[test]
+    fn a_worn_dry_action_drags() {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        assert_eq!(gun.action_drag(), 0.0, "sound and clean");
+        gun.condition = 0.7;
+        assert_eq!(gun.action_drag(), 0.0, "a little worn still runs free");
+        gun.condition = 0.2;
+        let worn = gun.action_drag();
+        assert!(worn > 0.3, "{worn}");
+        gun.fouling = 1.0;
+        assert!(gun.action_drag() > worn + 0.2);
+        let mut cold = Firearm::new(rifle(), 1.0);
+        cold.stiff = 0.9;
+        assert_eq!(cold.action_drag(), 0.9);
     }
 }

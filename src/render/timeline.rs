@@ -63,14 +63,16 @@ impl Unprepared {
 }
 
 /// Whether the world is in, as the player would see it: the buildings
-/// dressed, the forest built with its impostors taken, and every drawn
-/// thing's material ready on the GPU. The headset's session, a screenshot
+/// dressed, the forest built with its impostors taken, every drawn
+/// thing's material ready on the GPU, and the warm-up shelf's pipelines
+/// for the eyes it's warming (the headset's, before its session) built. The headset's session, a screenshot
 /// and "everything in" wait on it.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct WorldReady<'w, 's> {
     forest: crate::world::trees::ForestSettled<'w, 's>,
     props: Query<'w, 's, (), With<crate::world::buildings::PropsPending>>,
     unprepared: Option<Res<'w, Unprepared>>,
+    warmed: Option<Res<'w, super::warmup::Warmed>>,
 }
 
 impl WorldReady<'_, '_> {
@@ -82,14 +84,22 @@ impl WorldReady<'_, '_> {
         self.props.is_empty()
     }
 
+    /// Every drawn thing's material and pipeline ready, the warm-up
+    /// shelf's for what's still to be seen included (`warmup::Warmed`).
     pub fn materials(&self) -> bool {
-        self.unprepared.as_ref().is_none_or(|u| u.clear())
+        self.warmed.as_ref().is_none_or(|w| w.0)
+            && self.unprepared.as_ref().is_none_or(|u| u.clear())
     }
 
     pub fn ready(&self) -> bool {
         self.forest() && self.props() && self.materials()
     }
 }
+
+/// Present once everything's in ("everything in"): work paced over frames
+/// so play doesn't hitch can go faster before it, when no one's playing.
+#[derive(Resource)]
+pub struct Loaded;
 
 pub struct TimelinePlugin;
 
@@ -183,6 +193,7 @@ fn settled(
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     server: Res<AssetServer>,
     mut all: Local<bool>,
+    mut commands: Commands,
 ) {
     if *all {
         return;
@@ -214,6 +225,7 @@ fn settled(
     }
     if forest_ok && props_ok && preload_ok && materials_ok {
         *all = true;
+        commands.insert_resource(Loaded);
         mark("everything in");
     }
 }

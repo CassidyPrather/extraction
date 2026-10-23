@@ -203,13 +203,15 @@ bolt.lathe([(0.0, BREECH), (0.0074, BREECH), (0.0085, BREECH + 0.0011), (0.0085,
 bolt.box((0.0022, 0.0034, 0.034), (0.0083, BORE + 0.0022, BREECH + 0.019), "Steel",
          bevel=0.0006, segs=1)
 # Cocking piece: the sleeve and the round knurled knob you pull to cock.
-bolt.lathe([(0.0, -0.0425), (0.0068, -0.0425), (0.0068, -0.029), (0.0084, -0.027),
+# Its own node: it stands back when cocked (`weapons::visuals`).
+cock = Part("cocking_piece", origin=(0.0, BORE, -0.0425))
+cock.lathe([(0.0, -0.0425), (0.0068, -0.0425), (0.0068, -0.029), (0.0084, -0.027),
             (0.0086, -0.019), (0.0086, -0.012), (0.0075, -0.0085), (0.0, -0.0075)], "Steel",
            segs=18, xf=T(0, BORE, 0))
 for i in range(12):
     a = 2 * math.pi * i / 12
     c = (0.0086 * math.cos(a), BORE + 0.0086 * math.sin(a), -0.0175)
-    bolt.box((0.0014, 0.0012, 0.0085), c, "Steel", xf=RZ(a, about=c))
+    cock.box((0.0014, 0.0012, 0.0085), c, "Steel", xf=RZ(a, about=c))
 # The straight handle, turned down to the right, its ball knob, and the
 # lug at its root that bears in the receiver's notch.
 KNOB = (0.050, 0.035, HANDLE_Z)
@@ -229,7 +231,7 @@ trig.sweep(catmull([(-0.0515, -0.0125), (-0.0518, -0.0225), (-0.0492, -0.0310),
            section_rect(0.0048, 0.0032, 0.0011), "Blued")
 
 join("static", stock, furn, barrel, recv, trough, worn={"amount": 0.55})
-for p in (bolt, trig):
+for p in (bolt, cock, trig):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))

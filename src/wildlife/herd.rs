@@ -69,9 +69,9 @@ pub const ALERT_MAX: f32 = 80.0;
 /// Crouched, this much closer.
 pub const ALERT_CROUCHED: f32 = 0.55;
 /// Machines: a walker or hound, a drone, the airship.
-pub const ALERT_WALKER: f32 = 50.0;
-pub const ALERT_DRONE: f32 = 45.0;
-pub const ALERT_DIRIGIBLE: f32 = 90.0;
+pub const ALERT_WALKER: f32 = 90.0;
+pub const ALERT_DRONE: f32 = 80.0;
+pub const ALERT_DIRIGIBLE: f32 = 140.0;
 /// They run when it comes within this share of the alert radius...
 pub const FLEE_SHARE: f32 = 0.6;
 /// ...or when it's still coming after this long alert (s).
@@ -396,11 +396,11 @@ impl Herd {
                 Some(State::Graze)
             }
             (None, State::Alert { at, for_s }) => match alert {
-                Some((now, _)) => {
+                Some((now, who)) => {
                     let coming = now.distance(lead) < at.distance(lead) - 0.5;
                     let for_s = for_s + dt;
                     if coming && for_s > ALERT_PATIENCE {
-                        out.push((Startle::Bolt, lead, None, false));
+                        out.push((Startle::Bolt, lead, who, false));
                         if kind != Kind::Dog {
                             out.push((Startle::Bark, lead, None, false));
                         }

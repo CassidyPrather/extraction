@@ -18,7 +18,10 @@ through at that range, and measures the cues the ears use:
   already 3 dB brighter ahead, so a sound whose low band sits there (a
   drone's rotor) would hide its front/back difference in its reference.
   Only readable if the sound has a high band left at that range.
-- **Up** (what flies): brighter from above than level ahead.
+- **Up** (what flies): how differently its high bands (third octaves,
+  4-16 kHz) come from overhead than from level ahead: the pinna's notches
+  move with height. A sound with energy in too few of them (a pure tone)
+  can't be placed up or level at all.
 
 Within its binaural reach (`audio::binaural_reach`: Signals reach
 further than the rest) a placed sound in the headset goes through the
@@ -47,15 +50,19 @@ ROOT = aa.ROOT
 THREATS = {
     "drone.rotor": ((("drone.rotor", 1.0),), (10, 30, 60, 100), True),
     "walker.step": ((("walker.step", 1.0),), (10, 30, 60), False),
-    "sentry.chirp": ((("sentry.chirp", 1.0),), (10, 30, 60), False),
+    "sentry.chirp": ((("sentry.chirp", 1.3), ("lock.tick", 1.8)), (10, 30, 60), False),
     "crawler.step": ((("crawler.step", 2.2),), (5, 10, 15), False),
     "crawler.charge": ((("crawler.charge", 0.8),), (5, 10, 15), False),
+    "drone.lock": ((("drone.lock", 1.0), ("lock.tick", 1.8)), (10, 30, 60), True),
+    "spotter.fix": ((("spotter.fix", 0.8), ("lock.tick", 1.8)), (10, 30, 60), True),
+    "hound.crouch": ((("hound.crouch", 0.65),), (5, 10, 20), False),
+    "device.hunt": ((("device.hunt", 1.0),), (5, 15, 30), False),
 }
 ILD_MIN = 3.0            # dB at 90 degrees, or...
 ITD_MIN = 300e-6         # ...s at 90 degrees
 FRONT_BACK_MIN = 2.0     # dB of tilt, ahead over behind, the worse pair
 FRONT_BACK_PAIRS = (0, 30)
-UP_MIN = 2.0             # dB of tilt, above over level
+UP_MIN = 2.0             # dB: how differently its high bands come from above
 HIGH_BAND_MIN = -35.0    # dB, the 4-10 kHz band against 0.5-3 kHz: any less
                          # and there's nothing for the pinna to shade
 PAN_THRESHOLD = 0.6      # SpatialBasicNode's default
@@ -79,6 +86,35 @@ def band(x, lo, hi):
 
 def tilt(x):
     return band(x, 4000, 10000) - band(x, 500, 2000)
+
+
+# Height is heard in the pinna's notches, where they fall across the high
+# bands, not in brightness: third-octave bands, 4-16 kHz.
+UP_BANDS = [4000 * 2 ** (k / 3) for k in range(7)]
+UP_FLOOR = 30.0          # dB under its loudest band a band must be to count
+UP_BANDS_MIN = 3         # fewer than this sounding: too narrow to place
+
+
+ALL_BANDS = [125 * 2 ** (k / 3) for k in range(22)]
+
+
+def third_octaves(x, bands=UP_BANDS):
+    spec = np.abs(np.fft.rfft(x)) ** 2
+    f = np.fft.rfftfreq(len(x), 1 / aa.SR)
+    return np.array([10 * np.log10(spec[(f >= lo) & (f < lo * 2 ** (1 / 3))].mean() + 1e-30)
+                     for lo in bands])
+
+
+def contrast(above, level):
+    """How differently a sound's high bands come from above than level
+    (dB, mean over the high bands it has energy in, against its loudest
+    band anywhere); 0 if it has too few."""
+    a, b = third_octaves(above), third_octaves(level)
+    loudest = third_octaves(level, ALL_BANDS).max()
+    sounding = b >= loudest - UP_FLOOR
+    if sounding.sum() < UP_BANDS_MIN:
+        return 0.0
+    return float(np.mean(np.abs(a - b)[sounding]))
 
 
 def conv(x, h):
@@ -121,7 +157,10 @@ def binaural_cues(x, grid, flies):
     t = itd(l, r)
     both = lambda k: tilt(np.concatenate(ears(k)))
     fb = min(both(f"az{a}_el0") - both(f"az{180 - a}_el0") for a in FRONT_BACK_PAIRS)
-    up = min(both(f"az0_el{e}") for e in (60, 85)) - both("az0_el0") if flies else None
+    up = None
+    if flies:
+        level = np.concatenate(ears("az0_el0"))
+        up = min(contrast(np.concatenate(ears(f"az0_el{e}")), level) for e in (60, 85))
     return ild, t, fb, up
 
 

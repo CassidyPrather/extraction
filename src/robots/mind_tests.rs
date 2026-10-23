@@ -161,6 +161,15 @@ fn a_thrown_bolt_draws_a_walker() {
         "and looked round: {:?}",
         app.world().get::<Brain>(walker).unwrap()
     );
+    // And sprayed its mark where it stood to look.
+    app.update();
+    app.update();
+    let at = app.world().get::<Transform>(walker).unwrap().translation;
+    assert!(
+        marks(&mut app).iter().any(|m| flat(m.at - at) < 4.0),
+        "a mark where it searched: {:?}",
+        marks(&mut app)
+    );
 }
 
 /// You're seen beside a building, then walk round behind it and slip
@@ -3820,8 +3829,8 @@ fn a_set_down_light_draws_a_walker_to_look() {
     assert!(noticed(&app) >= 1, "and the tell went out");
 }
 
-/// A running jammer: a drone's sensors pick up its draw from well off; it
-/// hunts it, and shoots it to pieces.
+/// A running jammer: once it's run a while, a drone's sensors pick up its
+/// draw from well off; it hunts it, and shoots it to pieces.
 #[test]
 fn a_running_jammer_is_hunted_and_shot() {
     let (mut app, player, zone) = app(None);
@@ -3845,7 +3854,7 @@ fn a_running_jammer_is_hunted_and_shot() {
     }
     queue.apply(app.world_mut());
     let mut gone = false;
-    for _ in 0..90 * 40 {
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 40.0)) as usize {
         app.update();
         if app.world().get_entity(jam).is_err() {
             gone = true;
@@ -3927,7 +3936,7 @@ fn a_relay_reports_a_hungry_device() {
         .sight = 0.1;
     let at = zone.on_ground(site.x + 30.0, site.z) + Vec3::Y * 0.2;
     powered_device(&mut app, "cloak_generator", at);
-    for _ in 0..90 * 3 {
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 3.0)) as usize {
         app.update();
     }
     let r = responses(&app);
@@ -4031,4 +4040,209 @@ fn a_leaving_drone_spares_only_a_burst() {
     }
     assert!(engaged, "it turned on you");
     assert!(home_again, "then went on home");
+}
+
+fn marks(app: &mut App) -> Vec<super::recall::SearchMark> {
+    app.world_mut()
+        .query::<&super::recall::SearchMark>()
+        .iter(app.world())
+        .copied()
+        .collect()
+}
+
+fn searched_by(app: &mut App, robot: Entity, at: Vec3) {
+    app.world_mut()
+        .write_message(super::search::Searching { robot, at });
+    app.update();
+    app.update();
+}
+
+/// A walker that searches leaves its paint: fresh while it won't answer a
+/// lure there, dull after; searched again close by, the same mark is
+/// renewed. A drone searching leaves none.
+#[test]
+fn a_walker_that_searched_leaves_its_mark() {
+    use super::recall::{Memory, lasts};
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let spot = zone.on_ground(100.0, 200.0);
+    let walker = walker_at(&mut app, &zone, spot);
+    out_raid(&mut app);
+    searched_by(&mut app, walker, spot);
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1);
+    assert!(
+        (m[0].at.y - spot.y).abs() < 0.3,
+        "on the ground: {:?}",
+        m[0]
+    );
+    let now = app.world().resource::<Time>().elapsed_secs();
+    assert!(m[0].fresh(now));
+    assert!(
+        !m[0].fresh(now + lasts(Memory::Lure)),
+        "dull once a lure works again"
+    );
+    assert!(m[0].paint(now + lasts(Memory::Lure)) < m[0].paint(now));
+    searched_by(&mut app, walker, spot + Vec3::new(1.5, 0.0, 0.0));
+    assert_eq!(marks(&mut app).len(), 1, "renewed, not another");
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            spot + Vec3::new(30.0, 15.0, 0.0),
+            Job {
+                kind: JobKind::Survey,
+                site: spot,
+                duration: 999.0,
+                exit: spot,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    searched_by(&mut app, drone, spot + Vec3::new(30.0, 0.0, 0.0));
+    assert_eq!(marks(&mut app).len(), 1, "a drone has no paint");
+    assert!(
+        !app.world()
+            .resource::<super::memory::ZoneMind>()
+            .trace
+            .searched
+            .is_empty(),
+        "and the valley will remember"
+    );
+}
+
+/// The raid as if out (nothing else changed).
+fn out_raid(app: &mut App) {
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    app.update();
+}
+
+/// Last raid's marks are there when you next step out, faded; a few
+/// raids on, they're gone.
+#[test]
+fn last_raids_marks_are_there_next_raid_and_fade() {
+    let (mut app, player, zone) = app(None);
+    let spot = zone.on_ground(100.0, 200.0);
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        let t = extraction_core::zone_memory::RaidTrace {
+            searched: vec![[spot.x, spot.z]],
+            ..default()
+        };
+        mind.memory.fold(&t);
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert!(flat(m[0].at - spot) < 0.5 && (m[0].at.y - spot.y).abs() < 0.5);
+    let now = app.world().resource::<Time>().elapsed_secs();
+    assert!(!m[0].fresh(now), "last raid's: not fresh");
+    let first = m[0].paint(now);
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        mind.memory.fold(&default());
+        mind.trace = default();
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1, "one, not two: {m:?}");
+    assert!(m[0].paint(now) < first, "fainter a raid on");
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..4 {
+            mind.memory.fold(&default());
+        }
+        mind.trace = default();
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    assert!(marks(&mut app).is_empty(), "forgotten");
+}
+
+/// A pylon that reports you keeps a tally, one per report; it's let go
+/// once it's been quiet long enough. A false report it's fed isn't one.
+#[test]
+fn a_relay_that_reported_you_keeps_a_tally() {
+    use super::recall::{Filed, Memory, lasts};
+    let (mut app, player, _zone, pylon, site) = network_app();
+    put(&mut app, player, site + Vec3::new(25.0, 0.0, 10.0));
+    let mut filed = None;
+    for _ in 0..90 * 10 {
+        app.update();
+        filed = app.world().get::<Filed>(pylon).copied();
+        if filed.is_some() {
+            break;
+        }
+    }
+    let f = filed.expect("it reported you, and keeps the tally");
+    assert_eq!(f.count, 1);
+    // Another report (its cooldown spent).
+    app.world_mut()
+        .get_mut::<super::pylon::Pylon>(pylon)
+        .unwrap()
+        .report_cooldown = 0.0;
+    for _ in 0..30 {
+        app.update();
+    }
+    assert_eq!(app.world().get::<Filed>(pylon).unwrap().count, 2);
+    // Out of its sight, and quiet long enough: let go.
+    put(&mut app, player, site + Vec3::new(400.0, 0.0, 400.0));
+    app.world_mut().get_mut::<Filed>(pylon).unwrap().last -= lasts(Memory::Reported);
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(app.world().get::<Filed>(pylon).is_none());
+    // A spliced radio's false report: no tally.
+    let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+    app.world_mut()
+        .write_message(crate::interact::InteractEvent::Released {
+            item: radio,
+            side: crate::rig::Side::Left,
+            speed: 0.0,
+        });
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(
+        app.world().get::<Filed>(pylon).is_none(),
+        "a decoy's no tally"
+    );
+}
+
+/// A relay distrusted for a second false report is believed again once
+/// the last is old enough (`recall::Memory::Distrust`).
+#[test]
+fn distrust_wears_off() {
+    use super::recall::{Memory, lasts};
+    let (mut app, player, _zone, pylon, site) = network_app();
+    put(&mut app, player, site + Vec3::new(400.0, 0.0, 400.0));
+    for _ in 0..2 {
+        let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+        app.world_mut()
+            .write_message(crate::interact::InteractEvent::Released {
+                item: radio,
+                side: crate::rig::Side::Left,
+                speed: 0.0,
+            });
+        app.update();
+        app.update();
+    }
+    let distrusted = |app: &App| {
+        app.world()
+            .resource::<super::director::Director>()
+            .net
+            .distrusted
+            .contains(&pylon)
+    };
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(distrusted(&app), "distrusted, and still a few ticks on");
+    app.world_mut()
+        .get_mut::<super::network::Relay>(pylon)
+        .unwrap()
+        .last_false -= lasts(Memory::Distrust);
+    app.update();
+    app.update();
+    assert!(!distrusted(&app), "believed again");
 }

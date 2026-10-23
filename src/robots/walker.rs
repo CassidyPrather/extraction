@@ -1033,7 +1033,7 @@ pub const RETREAT_AT: f32 = 0.35;
 pub const RETREAT_DIST: f32 = 14.0;
 /// Knocked down again within this long (s) of the last time, a walker
 /// breaks off as a badly hurt one does.
-pub const KNOCKED_AGAIN: f32 = 10.0;
+pub const KNOCKED_AGAIN: f32 = super::recall::lasts(super::recall::Memory::Knocked);
 
 /// A walker that's broken off, hurt (it keeps shooting from further back).
 #[derive(Component, Debug)]
