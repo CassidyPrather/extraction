@@ -1095,11 +1095,12 @@ fn walker_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     bodies: Query<&crate::player::Body>,
-    (entrances, path, mut blind, mut fighting_since): (
+    (entrances, path, mut blind, mut fighting_since, roles): (
         Res<super::doors::Entrances>,
         crate::destruction::through::RoundPath,
         Local<std::collections::HashMap<Entity, Blind>>,
         Local<std::collections::HashMap<Entity, f32>>,
+        Query<(&super::squad::SquadRole, &GlobalTransform)>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -1113,7 +1114,11 @@ fn walker_guns(
         w.gun_cooldown -= dt;
         // Knocked down, or getting up, it can't shoot, and must aim afresh.
         let floored = gait.is_some_and(|g| g.down() || g.rising > 0.0);
-        if robot.wrecked || !matches!(brain, Brain::Engage) || floored {
+        // On its way to a new post (`squad`): it holds its fire.
+        let moving_up = roles
+            .get(e)
+            .is_ok_and(|(r, g)| super::squad::repositioning(Some(r), g.translation()));
+        if robot.wrecked || !matches!(brain, Brain::Engage) || floored || moving_up {
             w.aim = 0.0;
             blind.remove(&e);
             continue;

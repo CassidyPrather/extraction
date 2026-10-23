@@ -13,6 +13,10 @@
 //!
 //! And a relay that reports you while they're on you **calls** it in.
 //!
+//! A machine **changing post holds its fire** until it's there
+//! ([`repositioning`]): a flanker going round, a cut-off on its way, the
+//! spotter climbing to its station. That's the window a listener gets.
+//!
 //! Every change of role is said aloud ([`SquadCall`]): a chirp between
 //! the machines (Audio), a line on a radio you carry when it's about you
 //! and near ("one going round to your east"), and the spotter's light.
@@ -45,6 +49,25 @@ pub const RADIO_EVERY: f32 = 2.0;
 pub const RADIO_STALE: f32 = 8.0;
 /// Squad calls about you are on your radio within this (m).
 pub const RADIO_REACH: f32 = crate::raid::chatter::CLOSE;
+/// A machine changing post holds its fire until it's this near the post
+/// (m): a flanker or a cut-off on its way, the spotter climbing to its
+/// station. "One going round" is one gun fewer, for as long as it takes.
+pub const ON_POST: f32 = 4.0;
+/// The spotter's station counts as reached this near it (m: it hovers).
+pub const ON_STATION: f32 = 6.0;
+
+/// Whether a machine at `at` with `role` is on its way to its post, and so
+/// holds fire.
+pub fn repositioning(role: Option<&SquadRole>, at: Vec3) -> bool {
+    match role {
+        Some(r) if matches!(r.role, Role::Flank | Role::CutOff) => {
+            Vec2::new(r.post.x - at.x, r.post.z - at.z).length() > ON_POST
+        }
+        Some(r) if r.role == Role::Spot => r.post.distance(at) > ON_STATION,
+        _ => false,
+    }
+}
+
 /// A flanker's or the spotter's line names a place within this of where
 /// it's going (m).
 pub const PLACE_NEAR: f32 = 40.0;
@@ -626,6 +649,32 @@ mod tests {
         assert_eq!(role(a.e), Some(Role::Pin));
         assert_eq!(role(b.e), Some(Role::Flank));
         assert_eq!(role(late.e), Some(Role::CutOff));
+    }
+
+    /// On its way it holds fire; at its post (or with no part to go to) it
+    /// doesn't. The spotter's station is in the air.
+    #[test]
+    fn on_its_way_to_a_post_it_holds_fire() {
+        let r = |role, post| SquadRole {
+            role,
+            target: Entity::PLACEHOLDER,
+            post,
+        };
+        let post = Vec3::new(20.0, 0.0, 0.0);
+        assert!(repositioning(Some(&r(Role::Flank, post)), Vec3::ZERO));
+        assert!(repositioning(Some(&r(Role::CutOff, post)), Vec3::ZERO));
+        assert!(!repositioning(
+            Some(&r(Role::Flank, post)),
+            post + Vec3::X * 2.0
+        ));
+        assert!(!repositioning(Some(&r(Role::Pin, post)), Vec3::ZERO));
+        assert!(!repositioning(None, Vec3::ZERO));
+        let station = Vec3::new(0.0, 14.0, 0.0);
+        assert!(repositioning(Some(&r(Role::Spot, station)), Vec3::ZERO));
+        assert!(!repositioning(
+            Some(&r(Role::Spot, station)),
+            station + Vec3::Y
+        ));
     }
 
     /// Near your rendezvous, the cut-off stands halfway to it.

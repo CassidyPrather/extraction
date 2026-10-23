@@ -4504,3 +4504,81 @@ fn what_a_machine_breaks_is_no_sign_of_you() {
         "someone's"
     );
 }
+
+/// A walker on its way to a flank holds its fire, however well it sees
+/// you; at its post, it opens up.
+#[test]
+fn a_flanker_on_its_way_holds_its_fire() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<Entity>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, mut f: ResMut<Fired>| {
+            f.0.extend(s.read().filter_map(|s| s.shooter))
+        },
+    );
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 222.0);
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let engage = |app: &mut App| {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    };
+    engage(&mut app);
+    let run = |app: &mut App, post: Option<Vec3>, secs: f32| {
+        app.world_mut().resource_mut::<Fired>().0.clear();
+        for _ in 0..(90.0 * secs) as usize {
+            put(app, player, me);
+            let here = app.world().get::<Transform>(w).unwrap().translation;
+            app.world_mut()
+                .entity_mut(w)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Flank,
+                    target: player,
+                    post: post.unwrap_or(here),
+                });
+            app.update();
+        }
+        app.world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .filter(|e| **e == w)
+            .count()
+    };
+    // Its post far off, round your side: it goes, and holds its fire.
+    let away = zone.on_ground(140.0, 200.0);
+    assert_eq!(
+        run(&mut app, Some(away), 4.0),
+        0,
+        "held its fire on the way"
+    );
+    // There (its post where it stands): it fires.
+    engage(&mut app);
+    assert!(run(&mut app, None, 6.0) > 0, "and fires from its post");
+}
