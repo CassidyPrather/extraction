@@ -101,6 +101,16 @@ fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
 
 /// A still's field of view (the game's own camera's), degrees.
 pub const STILL_FOV: f32 = 75.0;
+/// Frames a capture waits at most for everything to be in before its
+/// first shot, so a valley that never settles still gets shot.
+pub const LOAD_WAIT: u32 = 3000;
+/// A still's last settle frames are held with the clock stopped. Whatever
+/// keeps time (clouds, a lamp's character) holds for the picture, so one
+/// build's still is the same every run, and a lamp with a character is
+/// shot lit (a paused clock lights it: `render::landmarks`). Without the
+/// hold, a still caught whatever phase its frame landed on, and a
+/// blinking mast lamp showed as a change between builds.
+pub const STILL_HOLD: u32 = 2;
 /// Frames a still settles for at its pose (streamed detail, shadows).
 pub const STILL_SETTLE: u32 = 14;
 
@@ -150,6 +160,8 @@ struct Cine {
     frame: u32,
     /// Frames left to settle before the current shot records.
     settle: Option<u32>,
+    /// A still's last frames, held with the clock stopped (`STILL_HOLD`).
+    held: bool,
     in_flight: usize,
     records: Vec<ShotRecord>,
     started: Option<std::time::Instant>,
@@ -509,6 +521,7 @@ fn fly(
     mut time: ResMut<Time<Virtual>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -559,7 +572,7 @@ fn fly(
     // Frames in flight are waited out with time stopped (see below), so
     // each saved frame is exactly one step on from the last. Unpausing
     // takes effect next frame: this one is a repeat.
-    if time.is_paused() {
+    if time.is_paused() && !cine.held {
         if cine.in_flight < IN_FLIGHT {
             time.unpause();
         }
@@ -633,6 +646,17 @@ fn fly(
     };
     if settle > 0 {
         place(&mut cam, 0);
+        // The first shot waits at its pose for everything to be in
+        // (`render::timeline`): every material and pipeline compiled.
+        // A still taken before that depended on the wall clock: one
+        // build's Marrow dusk came out warm one run and grey-green the next.
+        if settle <= STILL_HOLD + 1 && loaded.is_none() && *frames < LOAD_WAIT {
+            return;
+        }
+        if shot.still && settle <= STILL_HOLD && !time.is_paused() {
+            time.pause();
+            cine.held = true;
+        }
         cine.settle = Some(settle - 1);
         return;
     }
@@ -652,6 +676,7 @@ fn fly(
         cine.cur += 1;
         cine.frame = 0;
         cine.settle = None;
+        cine.held = false;
         return;
     }
     let frame = cine.frame;
