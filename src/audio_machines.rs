@@ -12,6 +12,7 @@ use bevy::prelude::*;
 
 use crate::audio::{AudioRng, CRACKLE_SET, SoundBank, play_at_speed};
 use crate::robots::devices::{DeviceNoticed, Reaction};
+use crate::robots::hazards::{Effect, Hazard, HazardStruck};
 use crate::robots::hound::HoundCrouch;
 use crate::robots::hound_mind::HoundBite;
 use crate::robots::indoor::Waking;
@@ -45,6 +46,7 @@ impl Plugin for MachineSoundsPlugin {
             .add_message::<Arced>()
             .add_message::<DeviceNoticed>()
             .add_message::<SquadCall>()
+            .add_message::<HazardStruck>()
             .add_message::<crate::health::Hurt>()
             .add_message::<crate::health::Downed>()
             .add_systems(
@@ -62,6 +64,7 @@ impl Plugin for MachineSoundsPlugin {
                     squad_sounds,
                     filed_sounds,
                     suppress_sounds,
+                    hazard_sounds,
                 ),
             );
     }
@@ -434,6 +437,66 @@ fn suppress_sounds(
     }
 }
 
+/// A machine the Zone does something to (`robots::hazards::HazardStruck`),
+/// at it, by what it does: a drone thrown by a lift, its rotors screaming
+/// as it tumbles; a walker thrown, a servo's lurch and its foot scraping;
+/// dragged in a well, its legs grinding; crushed at a well's heart, a
+/// metal groan; dazzled, its sensor stuttering and its lock clicking out;
+/// hurt by what makes its own sound (a burner, a snare, gas, a mine), a
+/// short distress note over it; stunned, its servos winding down.
+/// Deafened, nothing: the hush is heard already.
+fn hazard_sounds(
+    mut commands: Commands,
+    mut struck: MessageReader<HazardStruck>,
+    robots: Query<(&GlobalTransform, &crate::robots::Robot)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::robots::RobotKind;
+    for h in struck.read() {
+        let (at, flies) = robots.get(h.robot).map_or((h.at, false), |(g, r)| {
+            (
+                g.translation(),
+                matches!(r.kind, RobotKind::Drone | RobotKind::Dirigible),
+            )
+        });
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            at + Vec3::Y * 0.5,
+            hazard_layers(h.hazard, h.effect, flies),
+        );
+    }
+}
+
+/// What a machine struck by `hazard` to `effect` sounds like (`flies`: a
+/// drone or the airship).
+pub fn hazard_layers(hazard: Hazard, effect: Effect, flies: bool) -> &'static [Layer] {
+    match (effect, hazard) {
+        (Effect::Thrown, _) if flies => &[
+            ("machines/drone_rotor", "hazard.scream", 1.6),
+            ("physical/whoosh", "hazard.tumble", 0.8),
+        ],
+        (Effect::Thrown, _) => &[
+            ("machines/servo", "hazard.lurch", 0.75),
+            ("footsteps/gravel", "hazard.scrape", 0.6),
+        ],
+        (Effect::Slowed, _) => &[("machines/groan", "hazard.drag", 1.3)],
+        (Effect::Hurt, Hazard::Well) => &[
+            ("machines/groan", "hazard.crush", 0.6),
+            ("impacts/metal", "hazard.crush_hit", 0.7),
+        ],
+        (Effect::Dazzled, _) => &[
+            (CRACKLE_SET, "hazard.stutter", 1.8),
+            ("machines/detector_click", "hazard.lock_lost", 0.7),
+        ],
+        (Effect::Stunned, _) => &[("machines/servo", "hazard.powerdown", 0.5)],
+        (Effect::Hurt, _) => &[("machines/servo", "hazard.distress", 1.8)],
+        (Effect::Deafened | Effect::Unaffected, _) => &[],
+    }
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -661,7 +724,7 @@ mod tests {
         for lit in code.split('"').skip(1).step_by(2) {
             let prefixes = [
                 "mender.", "mine.", "plough.", "spotter.", "sorter.", "hound.", "robot.", "wreck.",
-                "cell.", "you.", "device.", "squad.", "relay.", "walker.",
+                "cell.", "you.", "device.", "squad.", "relay.", "walker.", "hazard.",
             ];
             if prefixes.iter().any(|p| lit.starts_with(p)) && !lit.contains(' ') {
                 assert!(
@@ -694,5 +757,46 @@ mod tests {
         assert_eq!(filed_level(5).0, 0.0);
         assert!(filed_level(3).1 > filed_level(1).1);
         assert_eq!(filed_level(50), filed_level(5));
+    }
+
+    /// Every way the Zone strikes a machine that's heard is in the mix
+    /// with its set, and a thrown drone isn't heard as a thrown walker.
+    #[test]
+    fn the_zone_striking_a_machine_is_heard() {
+        let hazards = [
+            Hazard::Lift,
+            Hazard::Burner,
+            Hazard::Snare,
+            Hazard::Well,
+            Hazard::Mirror,
+            Hazard::Hush,
+            Hazard::Gas,
+            Hazard::Mine,
+            Hazard::Emp,
+        ];
+        let effects = [
+            Effect::Hurt,
+            Effect::Slowed,
+            Effect::Thrown,
+            Effect::Dazzled,
+            Effect::Deafened,
+            Effect::Stunned,
+        ];
+        for h in hazards {
+            for e in effects {
+                for flies in [false, true] {
+                    for (set, cue, _) in hazard_layers(h, e, flies) {
+                        let c = crate::audio_mix::MIX.iter().find(|c| c.name == *cue);
+                        assert_eq!(c.map(|c| c.set), Some(*set), "{cue}");
+                    }
+                    let heard = !hazard_layers(h, e, flies).is_empty();
+                    assert_eq!(heard, e != Effect::Deafened, "{h:?} {e:?}");
+                }
+            }
+        }
+        assert_ne!(
+            hazard_layers(Hazard::Lift, Effect::Thrown, true),
+            hazard_layers(Hazard::Lift, Effect::Thrown, false)
+        );
     }
 }
