@@ -253,15 +253,13 @@ pub const FROST_THAW: f32 = 3.0;
 /// A gas flash, a mine, an EMP: a machine within this of it is told (m).
 pub const BLAST_TOLD: f32 = 6.0;
 
-/// The Zone's walking grid made wary of anomalies: what hurts a walker
-/// costs [`AVOID_COST`] times as much to cross, so it goes round. Built
-/// from `walker::Nav` when that or the anomalies change.
+/// The Zone's walking grid made wary of anomalies: what hurts a walker is
+/// closed to it (and [`AVOID_MARGIN`] past its reach), so it goes round.
+/// Built from `walker::Nav` when that or the anomalies change.
 #[derive(Resource, Clone)]
 pub struct Wary(pub std::sync::Arc<extraction_core::nav::NavGrid>);
 
-/// Crossing what hurts it costs this many times as much...
-pub const AVOID_COST: f32 = 30.0;
-/// ...this far past its edge (m).
+/// What hurts it is closed this far past its edge (m).
 pub const AVOID_MARGIN: f32 = 1.5;
 /// Running at you (in a fight, you in sight, closing on you faster than
 /// this, m/s) within this (m), it comes straight. Holding a post, or
@@ -325,14 +323,15 @@ fn avoid_anomalies(
             continue;
         }
         let c = g.translation();
-        let r = a.kind.reach(a.radius) + AVOID_MARGIN;
-        let ring: Vec<[f32; 2]> = (0..12)
-            .map(|k| {
-                let t = k as f32 * std::f32::consts::TAU / 12.0;
-                [c.x + t.cos() * r, c.z + t.sin() * r]
-            })
-            .collect();
-        grid.scale_cost_in(&ring, AVOID_COST);
+        // Closed, not just dear: a path's smoothing goes by what's
+        // walkable, and would cut a dear detour straight back through.
+        grid.block(
+            extraction_core::nav::Obstacle::Circle {
+                at: [c.x, c.z],
+                radius: a.kind.reach(a.radius),
+            },
+            AVOID_MARGIN,
+        );
     }
     commands.insert_resource(Wary(std::sync::Arc::new(grid)));
     *last = (ptr, sig);
