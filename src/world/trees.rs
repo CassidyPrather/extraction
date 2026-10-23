@@ -708,30 +708,41 @@ impl ForestSettled<'_, '_> {
 #[derive(Component)]
 struct NearDetail(Vec<Entity>);
 
-/// Spawns and drops foliage cards round the camera.
+/// An eye this far from where the streaming last looked has jumped (a
+/// teleport, a shot tool's next view): stream now, not on the timer.
+const JUMP: f32 = 8.0;
+
+/// Spawns and drops foliage cards round the camera, four times a second
+/// of real time (a shot tool that pauses the game's clock still gets its
+/// trees) and at once after a jump.
 fn stream_near_detail(
     mut commands: Commands,
     grid: Option<Res<ForestGrid>>,
     assets: Option<Res<ForestAssets>>,
     cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     detailed: Query<(Entity, &NearDetail, &GlobalTransform)>,
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     mut timer: Local<f32>,
+    mut looked: Local<Vec<Vec3>>,
 ) {
     let (Some(grid), Some(assets)) = (grid, assets) else {
         return;
     };
-    *timer -= time.delta_secs();
-    if *timer > 0.0 {
-        return;
-    }
-    *timer = 0.25;
     let eyes: Vec<Vec3> = crate::render::eyes(&cams)
         .map(|g| g.translation())
         .collect();
     if eyes.is_empty() {
         return;
     }
+    let jumped = eyes
+        .iter()
+        .any(|e| !looked.iter().any(|l| l.xz().distance(e.xz()) < JUMP));
+    *timer -= time.delta_secs();
+    if *timer > 0.0 && !jumped {
+        return;
+    }
+    *timer = 0.25;
+    *looked = eyes.clone();
     // Horizontal, as the impostors' cut is.
     let near = |p: Vec3, r: f32| eyes.iter().any(|e| e.xz().distance(p.xz()) < r);
     // Drop what's now far.

@@ -17,8 +17,8 @@ landmark's lamp from 50 m, 150 m and 300 m must be measurably brighter than
 what's round it: its brightest pixel (within LAMP_NEAR of where it lands)
 at least LAMP_LIFT times and LAMP_STEP over the brighter of the same
 spot without the lamp and the median round it. The exit status is the
-number of lamp views that fail (dim, or a coloured lamp's colour lost
-to white: LAMP_HUE); one with another light in line (there without
+number of lamp distances where no bearing (up to three) sees it pass (a
+view fails dim, or a coloured lamp's colour lost to white: LAMP_HUE); one with another light in line (there without
 the lamp: LAMP_BLOWN) says nothing either way and isn't counted.
 A faint lamp far off may pass on its colour instead of LAMP_STEP: its own
 channel at least twice LAMP_HUE times the next.
@@ -193,7 +193,9 @@ def main(argv):
     d = argv[0]
     views = json.load(open(os.path.join(d, "wayfind.json")))
     if lamps:
-        dim = 0
+        # Each lamp from each distance, on up to three bearings: it passes
+        # that distance if any bearing sees it, bright and its colour.
+        groups = {}
         for v in views:
             if not v.get("at"):
                 continue
@@ -207,12 +209,18 @@ def main(argv):
             ok = peak >= round_ * LAMP_LIFT and (
                 peak - round_ >= LAMP_STEP or (hue or 0.0) >= 2.0 * LAMP_HUE)
             white = hue is not None and hue < LAMP_HUE
-            dim += (not ok or white) and not lost
             tag = 'n/a ' if lost else 'WHITE' if white and ok else 'ok  ' if ok else 'DIM '
+            groups.setdefault((v["landmark"], v["from"]), []).append(tag.strip())
             print(f"{tag:5} {v['landmark']:14} from {v['from']:6} ({v['distance']:4.0f} m): "
                   f"lamp {peak:.3f}, round it {round_:.3f} ({peak / max(round_, 1e-4):.1f}x)"
                   + (f", hue {hue:.1f}x" if hue is not None else ""))
-        print(f"{dim} lamp view(s) dim or washed white")
+        dim = 0
+        for (lamp, frm), tags in sorted(groups.items()):
+            if "ok" in tags or all(t == "n/a" for t in tags):
+                continue
+            dim += 1
+            print(f"FAIL  {lamp} from {frm}: {', '.join(tags)}")
+        print(f"{dim} lamp distance(s) where no bearing sees the lamp bright and its colour")
         return dim
     by_from = {}
     rows = []

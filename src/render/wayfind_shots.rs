@@ -301,35 +301,45 @@ fn plan_lamps(
                 let run = eye.distance(lamp) - 3.0;
                 spatial.cast_ray(eye, dir, run, true, &filter).is_none()
             };
-            let eye = on_map
+            // Up to three bearings with the lamp in sight, spread round it:
+            // foliage has no colliders, so one may still look through a
+            // crown (the lamp passes a distance from any of them).
+            let seen_from: Vec<Vec3> = on_map
                 .iter()
                 .map(|p| standing(*p))
-                .find(|eye| seen(*eye))
-                .or_else(|| {
-                    on_map
-                        .first()
-                        .map(|p| Vec3::new(p.x, standing(*p).y.max(lamp.y), p.z))
-                });
-            let Some(eye) = eye else {
-                continue;
+                .filter(|eye| seen(*eye))
+                .collect();
+            let eyes: Vec<Vec3> = if seen_from.is_empty() {
+                on_map
+                    .first()
+                    .map(|p| Vec3::new(p.x, standing(*p).y.max(lamp.y), p.z))
+                    .into_iter()
+                    .collect()
+            } else {
+                let n = seen_from.len();
+                let mut picks: Vec<usize> = vec![0, n / 3, 2 * n / 3];
+                picks.dedup();
+                picks.into_iter().map(|i| seen_from[i]).collect()
             };
-            let i = v.len();
-            v.push(View {
-                from: format!("{d:.0} m"),
-                landmark: format!("lamp {e}"),
-                distance: eye.distance(lamp),
-                eye: eye.to_array(),
-                look: lamp.to_array(),
-                with: format!("{i:03}_a.png"),
-                without: format!("{i:03}_b.png"),
-                rect: [0.0; 4],
-                at: Some([0.0; 2]),
-                tint: Some(tint),
-                entity: Some(e),
-                // A box a halo across round the lamp.
-                size: Vec3::splat(2.0),
-                pose: Transform::from_translation(lamp - Vec3::Y * 1.75),
-            });
+            for eye in eyes {
+                let i = v.len();
+                v.push(View {
+                    from: format!("{d:.0} m"),
+                    landmark: format!("lamp {e}"),
+                    distance: eye.distance(lamp),
+                    eye: eye.to_array(),
+                    look: lamp.to_array(),
+                    with: format!("{i:03}_a.png"),
+                    without: format!("{i:03}_b.png"),
+                    rect: [0.0; 4],
+                    at: Some([0.0; 2]),
+                    tint: Some(tint),
+                    entity: Some(e),
+                    // A box a halo across round the lamp.
+                    size: Vec3::splat(2.0),
+                    pose: Transform::from_translation(lamp - Vec3::Y * 1.75),
+                });
+            }
         }
     }
     v
