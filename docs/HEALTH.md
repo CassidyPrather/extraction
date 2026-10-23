@@ -57,7 +57,7 @@ As of 536ba70 (round 36).
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::legibility::tests::every_panel_in_the_game_clears_its_floor` ("Site sign: no TextSource" x16, Marrow, Kettle, Cinder) | new in round 36, likely the signs merge | Legibility, Underground | routed |
+| `render::legibility::tests::every_panel_in_the_game_clears_its_floor` ("Site sign: no TextSource" x16, Marrow, Kettle, Cinder) | new in round 36: hang_signs (848321a3) spawn ScreenText with no TextSource | Legibility | fix on claude/polish-legibility (TextSource::Sign) |
 | `render::first_contact::gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`: load over budget in every valley (Marrow 7.31 > 6.0 s, Sallow 6.96 > 4.5 s), GPU over 2048 MB in four (Marrow 2226) | gauge | Performance | routed |
 | `raid::epilogue::tests::lev_reaches_k14_...`, `soak::ledges::tests::no_valley_has_a_ledge_trap` (water tower) | | coordinator | routed |
 | `robots::recall::tests::every_robot_keyed_local_is_in_the_table`, `robots::mind_tests::a_walker_loses_you_behind_a_building_...` | | Robot minds | fixed in ec98936b, not merged |
