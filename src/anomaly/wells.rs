@@ -22,7 +22,7 @@ use crate::health::Health;
 use crate::interact::Held;
 use crate::items::{Catalog, Item};
 use crate::player::{Body, Player};
-use crate::weapons::ballistics::{Hit, Projectile};
+use crate::weapons::ballistics::Projectile;
 use crate::world::Layer;
 
 /// A lodestone's own little well round its carrier: radius of the lens it
@@ -68,7 +68,6 @@ pub fn wells(
     mut inside: Local<Vec<(Entity, Entity)>>,
     spatial: SpatialQuery,
     time: Res<Time>,
-    mut hits: MessageWriter<Hit>,
     mut events: MessageWriter<AnomalyEvent>,
 ) {
     let dt = time.delta_secs();
@@ -86,24 +85,9 @@ pub fn wells(
             Quat::IDENTITY,
             &SpatialQueryFilter::from_mask([Layer::Item, Layer::Robot]),
         ) {
+            // Machines are `robots::hazards`' to drag and crush (a part has
+            // no body of its own here).
             if parts.contains(hit) {
-                // Robots are too heavy to drag; the heart still crushes them.
-                if let Ok((bt, ..)) = bodies.get(hit)
-                    && bt.translation().distance(core) < a.radius * WELL_HEART + 0.4
-                {
-                    crushing = true;
-                    hits.write(Hit {
-                        entity: hit,
-                        point: core,
-                        normal: Vec3::Y,
-                        velocity: Vec3::ZERO,
-                        damage: 20.0 * dt,
-                        shooter: None,
-                        mass_g: 0.0,
-                        load: Default::default(),
-                        blow: None,
-                    });
-                }
                 continue;
             }
             let Ok((bt, rb, mass, mut forces, held, item)) = bodies.get_mut(hit) else {
