@@ -658,7 +658,10 @@ pub(super) fn direct_raid(
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
     let creep = (p.reads || state.low_until > now)
         && !fleeing
-        && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+        && !matches!(
+            state.leg,
+            Leg::Camp | Leg::Kit | Leg::Card | Leg::Board | Leg::Paid | Leg::Handed
+        );
     // A photograph: the head kept on the machine as it moves, the camera
     // up (the card: "it in the middle").
     if let (Leg::Place, Some(Errand::Photo(subject))) = (state.leg, &state.errand)
