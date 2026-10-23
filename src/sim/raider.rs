@@ -3372,10 +3372,15 @@ fn take_item(
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
                 let skilled = super::harvest::skilled(r.traits.name);
+                // A dive that costs nothing done right (a frost, a hearth
+                // on it) is no risk however hurt it is.
+                let free = skilled
+                    && kind == AnomalyKind::Frost
+                    && hearth_kit(scene) != super::harvest::Hearth::None;
                 // Not hurt, it doesn't; and nobody careful reaches into a
                 // well's heart (unless it knows how: in and straight out).
                 if r.traits.avoid_anomalies
-                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                    && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
                     r.pass_why = Some(if r.hp < 60.0 { "hurt" } else { "well" });
                     return None;
