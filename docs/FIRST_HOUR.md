@@ -455,3 +455,105 @@ Still open: the bot can't do a fetch job (find the watch, put it in the
 crate), so the record stops at job 2. And the lost and the hoarder do as
 their habits say, not as they're told; a person like them would die the
 same way.
+
+# Every job, start to finish
+
+The record shouldn't stop at a job the newcomer can't do. Every kind of job
+on the board has a way for the newcomer bot (`first_hour::errand`, an
+exhaustive match, so a new kind won't build without one):
+
+| Kind | The errand | Live |
+| - | - | - |
+| Scout | go and look; the driver says when it's seen | all five, job 1 |
+| Bring (a contract's thing) | find it (indoors: the rooms' plan, doors opened), pocket it, home, into the stash crate by hand, press the card | four of five, job 2 (the post office watch) |
+| Fetch | the same, for n of a thing anywhere | four of five, job 3 (3 matches) |
+| Plant | take it out (off the hatch's ledge, or the crate), leave it there, home, press | the cautious one, job 4 (the mast relay) |
+| Recover | as Bring | seeded (`--job recover`): found in the plank house's back room, crated, paid |
+| Letter | as Bring | seeded: found, crated, paid |
+| Ledger | as Bring | seeded: down under the Gate; a drone and a machine below, warned each time; down |
+| Photograph | camera off the ledge, the head kept on the walker, press | not yet: on Marrow the walkers work underground; on Cinder Works the newcomer looked round the valley 20 minutes and a walker it found shot it |
+
+`every_job_kind_has_a_way` fails when a kind has no way, or when its card
+doesn't name what the newcomer goes for: what the bot is after, a player
+reads. `first_jobs` (or `first_jobs_<name>`) runs the yard and five jobs on
+one career; `--job KIND` seeds a raid's job, for the kinds the ladder seldom
+deals.
+
+## Found, and fixed in the game
+
+- **No radio, no way home, ever.** A newcomer who fell with the radio on
+  them lost it with the rest; on every raid after there was no calling
+  the truck. Home with no radio anywhere, the driver now passes his spare
+  through the hatch: "No radio on you. Take my spare, off the ledge."
+  (`firsts::spare_radio`, test `no_radio_home_gets_the_spare`).
+- **The same for a job's kit.** A contract's relay box (or the camera)
+  lost at a fall left the job undoable: "Lost the relay box? Here's
+  another, off the ledge."
+
+## The bot's own faults, fixed on the way
+
+Out of a building by its door; round buildings in the way, not into their
+walls; through the rooms by the building's plan, and by the door when the
+plan threads a gap the body can't; crouched for the crate; past a find it
+can't get at; "carried" meaning on it, not in the pack it left where it
+fell; the radio out of its pack; every machine tell acted on, not only the
+first one explained; what the driver passes through after the pay taken
+off the ledge; the job's own thing taken out of the crate.
+
+## Five jobs, by newcomer
+
+| Newcomer | Job 1 (scout) | Job 2 (bring) | Job 3 (fetch) | Job 4 (plant) | Job 5 |
+| - | - | - | - | - | - |
+| cautious | paid | paid | paid | paid | down (a drone) |
+| hoarder | paid | the watch found; down before home | down | down | down |
+| lost | paid | the watch found; down before home | down | down | down |
+| one-handed | paid | paid | paid | down: a drone by the pumping station | down |
+| reckless | paid | paid | paid | the relay left; down on the way home | down |
+
+Every hit after job 1 came after a tell: the drone's lock, a walker's aim.
+The lost and the hoarder do as their habits say (off on its own, carry
+on), and die as a person like them would. The rest are the drones. On
+job 4, the mast relay, three of four were caught by one between the drop
+and the mast (at the Village, the pumping station, the mast's own road),
+each 7 to 17 s after its lock; only the cautious one, creeping, got there
+and back.
+
+Then the mast relay's walk, for a first contract: a newcomer warned by
+the chirp had a roof only where the Village's houses are; past them,
+nothing for 250 m. Map design put three roofed sheds on the ways to the
+mast (the pumping station's tool shed, the rangers' store, the
+road-menders' hut: none of the walk more than 97 m from a roof), and the
+first plant job's card now ends "Sheds on the way: in, if anything
+chirps." On that map, the one-handed newcomer, locked on by a drone on the
+way, went in, came on, left the box and got home paid; the reckless one
+left it with a machine already shooting at it, as it does, and fell
+there.
+
+Still open: the photograph. At a raid's start every walker on Cinder Works
+is a crawler at work underground; the first up on the surface came 17
+minutes in, at the newcomer, gun up. The card now says where one's been
+heard working once one is ("He's heard a walker working by the chimney.
+From the drop: ..."), and the newcomer goes there; a walker kept at work
+on the surface while the job's on is Robot minds' to give.
+
+# Machines working together (Robot minds' squad drill)
+
+Robot minds' `squad_drill` (claude/polish-robot-minds 64802ac2,
+`src/robots/squad_drill.rs`, 24 seeds an arm): on Marrow's south field a
+newcomer with a radio jogs for the nearest rendezvous, cover to cover,
+crouched in cover; a squad (three walkers, or two and a drone) finds it at
+45 to 55 m. The listener acts only on what's said: a chirp within 40 m, a
+radio line 1.5 s after it shows. A cut-off sends it to another rendezvous;
+a flanker's post counts as a threat when it picks cover.
+
+| Newcomer | Machines each alone | Machines working together |
+| - | - | - |
+| deaf | 17% get away | 8% |
+| listening | 17% | 17% (alive a median 23 s, the deaf 15 s) |
+
+Three walkers alone, working together: the listener 27%, the deaf 13%.
+Working together halves a deaf newcomer's chances; listening wins them
+back. The numbers are small, and a drone in the open kills nearly everyone
+whatever they hear. The line a listener did most with was the cut-off's,
+which names a rendezvous; the flank line gives a compass way ("round to
+your east"), as the job card does ("north-east, 190 m").
