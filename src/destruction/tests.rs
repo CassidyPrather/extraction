@@ -1274,6 +1274,7 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
                 model: None,
                 model_at: Transform::IDENTITY,
                 hp: None,
+                shadow: true,
             },
         );
     }
