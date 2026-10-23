@@ -14,6 +14,7 @@ pub mod anim;
 pub mod armour;
 pub mod collector;
 pub mod damage;
+pub mod devices;
 pub mod director;
 pub mod dirigible;
 pub mod disturbed;
@@ -41,6 +42,7 @@ pub mod network;
 pub mod plough;
 pub mod plough_look;
 pub mod pylon;
+pub mod recall;
 pub mod reel;
 pub mod salvage;
 pub mod search;
@@ -53,6 +55,10 @@ pub mod sorter_look;
 pub mod sorter_mind;
 pub mod spotter;
 pub mod spotter_look;
+pub mod squad;
+#[cfg(test)]
+mod squad_drill;
+pub mod subjects;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
@@ -269,6 +275,10 @@ impl Plugin for RobotsPlugin {
                 disturbed::DisturbedPlugin,
                 memory::MemoryPlugin,
                 network::NetworkPlugin,
+                devices::DevicesPlugin,
+                recall::RecallPlugin,
+                squad::SquadPlugin,
+                subjects::SubjectsPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

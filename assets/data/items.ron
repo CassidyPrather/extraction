@@ -702,6 +702,12 @@
             tags: ["electronics", "metal"],
         ),
         (
+            id: "jammer", dims: Some((0.16, 0.24, 0.2)), name: "Relay jammer",
+            description: "Bench-made, all whip aerials. Switched on, the machines' relays nearby go deaf. Drinks a cell fast, and they notice the quiet.",
+            category: Gadget, size: Medium, mass: 1.2, bulk: 3.0,
+            tags: ["electronics", "metal"],
+        ),
+        (
             id: "deployable_cover", dims: Some((0.6, 0.12, 0.5)), name: "Deployable cover",
             description: "A folding ballistic panel on legs.",
             category: Gadget, size: Large, mass: 6.0, bulk: 8.0,

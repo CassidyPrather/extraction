@@ -242,6 +242,13 @@ A plough's fresh lane takes no prints, but a trail that stops at its
 edge says you walked it: the robot goes on along the lane the way you
 were heading (`robots/signs.rs`).
 
+**They read what you set down** (`robots/devices.rs`). Every device you place gives something off: light, a hum, power draw (a drone's or a relay's sensors pick up a hungry device, 3 m a watt), and how far it bites. That alone sets what the machines do about it, from one table:
+- what bites (an armed trap) is shot from outside its reach;
+- what's hungry (10 W or more: a jammer, a cloak, a camera drone) is hunted and shot to scrap;
+- the rest (a light, a laser) is come and looked at.
+
+A machine that can't shoot reports what it can't deal with. The tell: it chirps and throws a scan beam at the device, then turns and goes to it.
+
 **Their network, turned against them** (`robots/network.rs`). Pylons, sentries, spotters and the airship report what they see, and a team follows. Every report goes through the director's network, so it can be worked on:
 - **Cut a pylon's cable** with bolt cutters and it goes silent. The silence is the tell: after 45 s a mender is sent, and once it has welded the torn cabinet whole the pylon is back on the network.
 - **Splice a salvaged radio** into a pylon or a spotter's winch (let go of it against the cabinet): it reports contact at a named place at least 150 m from you, and the team goes there. Do it twice to the same relay and they stop believing it: none of its reports go out, and a walker comes to look it over.
@@ -260,6 +267,39 @@ It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays of
 - where you've wrecked them more than once lately, one of their kind is left watching (an unarmed walker that calls the others, or a drone).
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
+
+**You can see what they remember** (`robots/recall.rs`). Every memory a machine keeps of you is one row in a table: how it fades, and what shows it. A memory with no rule or no tell fails the tests. So does a robot-keyed map, or a field of the structs memories live in, that the table doesn't name.
+
+| Memory | Fades | Tell |
+|---|---|---|
+| How sure it is | 0.05 a second | its voice, its head turning |
+| Where it last had you | given up after 70 s of looking | it comes and looks round |
+| A place it searched for nothing | 120 s (lures there go unanswered) | its paint mark, bright while fresh |
+| A sign of you it saw | 900 s | it goes to look at it |
+| A device of yours it saw, the one it hunts | while the device runs | its scan, then its gun |
+| Knocked down lately; you went under a roof (drone) | 10 s; 8 s | it backs off; it climbs away |
+| A relay's reports of you | 600 s after the last | its tally lamp: a red blink per report, up to three |
+| A relay's false reports; distrust | 900 s | an inspector; the lamp pulses amber |
+| A relay silenced; one quiet in a jam | until mended; while in the jam | a mender; a team |
+| The valley: your ways, rendezvous, kills, clearings, searches | to 0.6 a raid, gone under 0.1 | patrols and a sentry lean, a watcher, doors shut, last raid's marks |
+
+**Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
+
+**They work together, and say so** (`robots/squad.rs`). Two or more machines fighting one player within 60 m share a plan. The first walker pins you from cover, the next works round to your side, and a third makes for the way to your rendezvous (the one the valley knows you favour, else the nearest) and holds it. A drone hangs over the flanker's way in and lights it. Parts are kept as machines join, so the plan doesn't reshuffle. Each new part is announced:
+- a chirp between the machines, one pattern per role (Audio);
+- on a radio you carry, within 120 m, a line: "Radio, close: one going round to your east", "Radio: one making for the mill. They mean to cut you off." The most useful line goes out first, one every 2 s;
+- the spotting drone's light on the ground.
+
+A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
+
+**Measured** (`robots/squad_drill.rs`, 24 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears: a cut-off sends it to another way out, and flanker and cut-off posts count as threats when it picks cover.
+
+| Newcomer | Machines alone | Machines coordinating |
+|---|---|---|
+| Deaf | 17% escape | 8% |
+| Listening | 17% | 17% (median time alive 23 s, against 15 s deaf) |
+
+Coordination halves a deaf newcomer's escapes, and listening wins them back. The counts are small (2 to 4 escapes an arm), and the drill is harsh: against a drone in the open, little gets away whatever it hears.
 
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;

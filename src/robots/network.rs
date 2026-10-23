@@ -46,7 +46,7 @@ pub const DECOY_FROM: f32 = 150.0;
 pub const DECOY_DELAY: f32 = 20.0;
 /// A second false report from one relay inside this long (s) isn't
 /// believed.
-pub const DISTRUST_WITHIN: f32 = 900.0;
+pub const DISTRUST_WITHIN: f32 = super::recall::lasts(super::recall::Memory::FalseReport);
 /// A relay in a jam this long (s) gets a team sent to find it...
 pub const JAM_NOTICED: f32 = 40.0;
 /// ...to within this of the jammer (m)...
@@ -71,6 +71,9 @@ pub struct RelayNet {
     pub distrusted: HashSet<Entity>,
     /// Reports kept from going out, so far (for a scenario's counter).
     pub blocked: u32,
+    /// Relays whose reports went out this tick (`recall::Filed` counts
+    /// them).
+    pub filed: Vec<Entity>,
 }
 
 impl RelayNet {
@@ -93,6 +96,7 @@ impl Director {
             return false;
         }
         self.queue_response(delay, at);
+        self.net.filed.push(relay);
         true
     }
 }
@@ -405,6 +409,10 @@ fn splice(
         }
         let (place, name) = decoy_place(&zone, from, you);
         let sent = director.queue_report(relay, from, DECOY_DELAY, place);
+        // A false report isn't one of you: no tally for it.
+        if sent {
+            director.net.filed.pop();
+        }
         info!(
             "network: a spliced radio reports contact at {} ({})",
             name.as_deref().unwrap_or("nowhere named"),

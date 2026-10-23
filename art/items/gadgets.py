@@ -317,6 +317,36 @@ def lead_case():
     return [p, plate]
 
 
+# --- Relay jammer ------------------------------------------------------------------------------
+
+def jammer():
+    """A bench-made grey box: an open bay where a power cell stands at
+    (0, 0, 0.02), a lamp and a toggle on the front, three whip aerials up
+    top."""
+    p = Part("body")
+    yb, yt = -0.12, 0.055
+    # Floor and lid, the bay's two cheeks between them.
+    p.box((0.16, 0.02, 0.2), (0.0, yb + 0.01, 0.0), "Paint", bevel=0.004, segs=1)
+    p.box((0.16, 0.015, 0.2), (0.0, yt - 0.0075, 0.0), "Paint", bevel=0.003, segs=1)
+    for sx in (-1, 1):
+        p.box((0.058, yt - yb - 0.035, 0.2), (sx * 0.051, (yb + 0.02 + yt - 0.015) / 2, 0.0), "Paint",
+              bevel=0.004, segs=1)
+    # The cell's seat and the contact over it.
+    p.box((0.034, 0.008, 0.034), (0.0, -0.039, 0.02), "Dark", bevel=0.002, segs=1)
+    p.box((0.034, 0.008, 0.034), (0.0, 0.039, 0.02), "Dark", bevel=0.002, segs=1)
+    # Front: a red lamp and a toggle on the right cheek.
+    p.sphere(0.006, (0.05, 0.0, -0.101), "LampRed", segs=10, rings=5)
+    p.box((0.005, 0.016, 0.006), (0.05, -0.04, -0.103), "Steel", bevel=0.001, segs=1)
+    p.box((0.03, 0.02, 0.003), (-0.05, -0.02, -0.1015), "Black", bevel=0.001, segs=1)
+    # Three whip aerials, each in a ferrule, a ball at the tip.
+    for k, x in enumerate((-0.055, 0.0, 0.055)):
+        z = 0.06 - k * 0.03
+        p.cyl(0.006, yt, yt + 0.008, "Black", segs=10, xf=T(x, 0, z) @ UP)
+        p.cyl(0.0018, yt + 0.008, 0.115, "Steel", segs=6, xf=T(x, 0, z) @ UP)
+        p.sphere(0.003, (x, 0.116, z), "Black", segs=8, rings=4)
+    return [p]
+
+
 # --- Cloak generator ---------------------------------------------------------------------------
 
 def cloak_generator():
@@ -578,7 +608,7 @@ def door_wedge():
     return centred([p])
 
 
-for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case),
+for item_id, fn in (("camera_drone", camera_drone), ("lead_case", lead_case), ("jammer", jammer),
                     ("cloak_generator", cloak_generator), ("deployable_cover", deployable_cover),
                     ("climbing_kit", climbing_kit), ("zipline_kit", zipline_kit),
                     ("matches", matches), ("door_wedge", door_wedge)):

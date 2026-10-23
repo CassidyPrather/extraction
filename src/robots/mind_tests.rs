@@ -161,6 +161,15 @@ fn a_thrown_bolt_draws_a_walker() {
         "and looked round: {:?}",
         app.world().get::<Brain>(walker).unwrap()
     );
+    // And sprayed its mark where it stood to look.
+    app.update();
+    app.update();
+    let at = app.world().get::<Transform>(walker).unwrap().translation;
+    assert!(
+        marks(&mut app).iter().any(|m| flat(m.at - at) < 4.0),
+        "a mark where it searched: {:?}",
+        marks(&mut app)
+    );
 }
 
 /// You're seen beside a building, then walk round behind it and slip
@@ -344,7 +353,17 @@ fn a_search_takes_in_doorways_and_cover() {
     let (app, _, _) = app(None);
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    let door = e.doors.first().expect("a door");
+    // A door with open ground before it (which comes first in the list
+    // depends on the valley's buildings).
+    let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
+    let door = e
+        .doors
+        .iter()
+        .find(|d| {
+            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+        })
+        .expect("a door with open ground before it");
     let at = door.mid + door.out * 6.0;
     let spots = plan_search(
         at,
@@ -2607,6 +2626,7 @@ fn a_swinging_car_door_gives_you_away() {
             depression: 0.0,
             dark: None,
             still,
+            canopy: false,
         };
         // Where it tells most: still well under seen, swinging well over.
         let margin = |d: f32| {
@@ -3676,4 +3696,889 @@ fn a_jammer_blocks_reports_but_is_noticed() {
         "roughly where it is: {} m off",
         flat(r - jam)
     );
+}
+
+/// The bench's jammer is a jammer: a device that draws hard from its cell
+/// and, switched on with power, blocks the relays round it.
+#[test]
+fn a_jammer_item_is_a_jammer() {
+    let (mut app, _player, zone) = app(None);
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind("jammer").expect("a jammer in the catalog"),
+                transform: Transform::from_translation(zone.on_ground(100.0, 200.0) + Vec3::Y),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let j = app
+        .world()
+        .get::<super::network::Jammer>(e)
+        .expect("it jams");
+    assert_eq!(j.radius, super::network::JAM_RADIUS);
+    let d = app
+        .world()
+        .get::<crate::gadgets::Device>(e)
+        .expect("a device");
+    assert_eq!(d.kind, crate::gadgets::DeviceKind::Jammer);
+    assert!(d.watts >= 15.0, "battery-hungry: {} W", d.watts);
+    assert!(
+        extraction_core::fabrication::CONTRACT_RECIPES
+            .iter()
+            .any(|r| r.makes == extraction_core::fabrication::Make::Items(&[("jammer", 1)])),
+        "a taught bench recipe makes it"
+    );
+}
+
+/// A device switched on with a charged cell in it, set down at `at`.
+fn powered_device(app: &mut App, id: &str, at: Vec3) -> Entity {
+    let dev = spawn_item_at(app, id, at);
+    let cell = spawn_item_at(app, "power_cell", at + Vec3::Y * 0.3);
+    app.update();
+    let socket = app
+        .world_mut()
+        .query::<(
+            Entity,
+            &crate::interact::Socket,
+            &crate::interact::SocketOwner,
+        )>()
+        .iter(app.world())
+        .find(|(_, s, o)| {
+            o.0 == dev
+                && s.kind == crate::interact::SocketKind::Mount(extraction_core::items::Mount::Cell)
+        })
+        .map(|(e, ..)| e)
+        .expect("a cell bay");
+    let mut q =
+        bevy::ecs::system::SystemState::<(Commands, Query<&mut crate::interact::Socket>)>::new(
+            app.world_mut(),
+        );
+    let (mut c, mut sockets) = q.get_mut(app.world_mut()).unwrap();
+    let mut s = sockets.get_mut(socket).unwrap();
+    crate::interact::seat_in_socket(&mut c, cell, socket, &mut s);
+    q.apply(app.world_mut());
+    app.world_mut()
+        .entity_mut(dev)
+        .insert(crate::items::usage::LightOn);
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(
+        app.world()
+            .entity(dev)
+            .contains::<crate::gadgets::Powered>(),
+        "{id} is running"
+    );
+    dev
+}
+
+fn spawn_item_at(app: &mut App, id: &str, at: Vec3) -> Entity {
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let e = {
+        let mut c = Commands::new(&mut queue, app.world());
+        crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind: catalog.kind(id).unwrap(),
+                transform: Transform::from_translation(at),
+                condition: 1.0,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    e
+}
+
+fn noticed(app: &App) -> u32 {
+    app.world()
+        .get_resource::<crate::bot::Counters>()
+        .and_then(|c| c.0.get(super::devices::NOTICED).copied())
+        .unwrap_or(0)
+}
+
+/// A light switched on and set down in front of a walker: it notices it
+/// (the tell) and comes to look.
+#[test]
+fn a_set_down_light_draws_a_walker_to_look() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let w = walker_at(&mut app, &zone, post);
+    let at = zone.on_ground(post.x + 2.0, post.z - 18.0) + Vec3::Y * 0.2;
+    powered_device(&mut app, "flashlight", at);
+    let mut looked = None;
+    for _ in 0..90 * 3 {
+        app.update();
+        if let Brain::Investigate { at: a, .. } = *app.world().get::<Brain>(w).unwrap() {
+            looked = Some(a);
+            break;
+        }
+    }
+    let a = looked.expect("it went to look at the light");
+    assert!(flat(a - at) < 4.0, "at the light: {a}");
+    assert!(noticed(&app) >= 1, "and the tell went out");
+}
+
+/// A running jammer: once it's run a while, a drone's sensors pick up its
+/// draw from well off; it hunts it, and shoots it to pieces.
+#[test]
+fn a_running_jammer_is_hunted_and_shot() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0) + Vec3::Y * 0.2;
+    let jam = powered_device(&mut app, "jammer", at);
+    let site = at + Vec3::new(0.0, 12.0, 40.0);
+    let mut queue = CommandQueue::default();
+    {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            site,
+            Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 999.0,
+                exit: site,
+            },
+        );
+    }
+    queue.apply(app.world_mut());
+    let mut gone = false;
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 40.0)) as usize {
+        app.update();
+        if app.world().get_entity(jam).is_err() {
+            gone = true;
+            break;
+        }
+    }
+    assert!(noticed(&app) >= 1, "the drone picked it up");
+    assert!(gone, "and shot it to pieces");
+}
+
+/// An armed EMP trap: a walker spots its lamp and shoots it from outside
+/// its reach; it goes off, and the walker isn't caught in it.
+#[test]
+fn an_armed_trap_is_shot_from_outside_its_reach() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let post = zone.on_ground(100.0, 200.0);
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            &zone,
+            post,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..60 {
+        app.update();
+    }
+    let at = zone.on_ground(post.x, post.z - 13.0) + Vec3::Y * 0.1;
+    let trap = spawn_item_at(&mut app, "emp_trap", at);
+    app.world_mut()
+        .entity_mut(trap)
+        .insert(crate::gadgets::Armed::Trap { radius: 4.0 });
+    #[derive(Resource, Default)]
+    struct Blasts(u32);
+    app.init_resource::<Blasts>().add_systems(
+        Last,
+        |mut b: MessageReader<crate::gadgets::EmpBlast>, mut n: ResMut<Blasts>| {
+            n.0 += b.read().count() as u32
+        },
+    );
+    let mut blown = false;
+    for _ in 0..90 * 20 {
+        app.update();
+        if app.world().resource::<Blasts>().0 > 0 {
+            blown = true;
+            break;
+        }
+    }
+    assert!(blown, "it shot the trap and it went off");
+    app.update();
+    assert!(
+        !app.world().entity(w).contains::<super::Stunned>(),
+        "from outside its reach"
+    );
+}
+
+/// An unarmed relay picks a running cloak's draw up, and reports it: a
+/// team is sent.
+#[test]
+fn a_relay_reports_a_hungry_device() {
+    let (mut app, player, zone, pylon, site) = network_app();
+    put(
+        &mut app,
+        player,
+        zone.on_ground(site.x + 300.0, site.z + 300.0),
+    );
+    app.world_mut()
+        .get_mut::<super::Senses>(pylon)
+        .unwrap()
+        .sight = 0.1;
+    let at = zone.on_ground(site.x + 30.0, site.z) + Vec3::Y * 0.2;
+    powered_device(&mut app, "cloak_generator", at);
+    for _ in 0..(90.0 * (super::devices::EM_SETTLE + 3.0)) as usize {
+        app.update();
+    }
+    let r = responses(&app);
+    assert!(!r.is_empty(), "it reported the cloak");
+    assert!(flat(r[0] - at) < 2.0, "where it is: {:?}", r);
+}
+
+/// Sprinting across a walker's line of fire throws its aim off: its
+/// rounds go wide (CROSSING_SPREAD), not one a second into you.
+#[test]
+fn a_sprint_across_its_line_throws_a_walker_off() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Spreads(Vec<f32>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Spreads>().add_systems(
+        FixedPostUpdate,
+        |mut s: MessageReader<Shot>, mut out: ResMut<Spreads>| {
+            out.0
+                .extend(s.read().filter(|s| s.shooter.is_some()).map(|s| s.spread));
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 400.0));
+    let me = zone.on_ground(100.0, 200.0);
+    let w = armed_walker_at(&mut app, &zone, zone.on_ground(100.0, 225.0));
+    put(&mut app, player, me);
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    for _ in 0..90 * 6 {
+        // Running across its line (it's to the north, you go east).
+        put(&mut app, player, me);
+        app.world_mut()
+            .get_mut::<crate::player::Body>(player)
+            .unwrap()
+            .velocity = Vec3::new(5.0, 0.0, 0.0);
+        app.update();
+    }
+    let s = &app.world().resource::<Spreads>().0;
+    assert!(!s.is_empty(), "it fired");
+    assert!(
+        s.iter()
+            .all(|x| *x >= 0.025 + super::walker::CROSSING_SPREAD * 4.5),
+        "wide of a sprint: {s:?}"
+    );
+}
+
+/// A drone on its way home that sees you spares a burst or two, then goes
+/// on home: it doesn't hang over you.
+#[test]
+fn a_leaving_drone_spares_only_a_burst() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let site = me + Vec3::new(0.0, 14.0, 20.0);
+    let exit = zone.on_ground(400.0, 400.0);
+    let mut queue = CommandQueue::default();
+    let d = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            site,
+            Job {
+                kind: JobKind::Survey,
+                site,
+                duration: 999.0,
+                exit,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    *app.world_mut().get_mut::<Brain>(d).unwrap() = Brain::Leave { to: exit };
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(d).unwrap();
+        a.target = Some(player);
+        a.last_known = Some(me);
+        a.suspicion = 1.0;
+        a.can_see_target = true;
+    }
+    let mut engaged = false;
+    let mut home_again = false;
+    for _ in 0..(90.0 * (super::drone::LEAVING_FIGHT + 4.0)) as usize {
+        put(&mut app, player, me);
+        app.update();
+        let Ok(b) = app.world().get_entity(d).map(|e| e.get::<Brain>().cloned()) else {
+            break;
+        };
+        match b {
+            Some(Brain::Engage) => engaged = true,
+            Some(Brain::Leave { .. }) if engaged => home_again = true,
+            _ => {}
+        }
+        if home_again {
+            break;
+        }
+    }
+    assert!(engaged, "it turned on you");
+    assert!(home_again, "then went on home");
+}
+
+fn marks(app: &mut App) -> Vec<super::recall::SearchMark> {
+    app.world_mut()
+        .query::<&super::recall::SearchMark>()
+        .iter(app.world())
+        .copied()
+        .collect()
+}
+
+fn searched_by(app: &mut App, robot: Entity, at: Vec3) {
+    app.world_mut()
+        .write_message(super::search::Searching { robot, at });
+    app.update();
+    app.update();
+}
+
+/// A walker that searches leaves its paint: fresh while it won't answer a
+/// lure there, dull after; searched again close by, the same mark is
+/// renewed. A drone searching leaves none.
+#[test]
+fn a_walker_that_searched_leaves_its_mark() {
+    use super::recall::{Memory, lasts};
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let spot = zone.on_ground(100.0, 200.0);
+    let walker = walker_at(&mut app, &zone, spot);
+    out_raid(&mut app);
+    searched_by(&mut app, walker, spot);
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1);
+    assert!(
+        (m[0].at.y - spot.y).abs() < 0.3,
+        "on the ground: {:?}",
+        m[0]
+    );
+    let now = app.world().resource::<Time>().elapsed_secs();
+    assert!(m[0].fresh(now));
+    assert!(
+        !m[0].fresh(now + lasts(Memory::Lure)),
+        "dull once a lure works again"
+    );
+    assert!(m[0].paint(now + lasts(Memory::Lure)) < m[0].paint(now));
+    searched_by(&mut app, walker, spot + Vec3::new(1.5, 0.0, 0.0));
+    assert_eq!(marks(&mut app).len(), 1, "renewed, not another");
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            spot + Vec3::new(30.0, 15.0, 0.0),
+            Job {
+                kind: JobKind::Survey,
+                site: spot,
+                duration: 999.0,
+                exit: spot,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    searched_by(&mut app, drone, spot + Vec3::new(30.0, 0.0, 0.0));
+    assert_eq!(marks(&mut app).len(), 1, "a drone has no paint");
+    assert!(
+        !app.world()
+            .resource::<super::memory::ZoneMind>()
+            .trace
+            .searched
+            .is_empty(),
+        "and the valley will remember"
+    );
+}
+
+/// The raid as if out (nothing else changed).
+fn out_raid(app: &mut App) {
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    app.update();
+}
+
+/// Last raid's marks are there when you next step out, faded; a few
+/// raids on, they're gone.
+#[test]
+fn last_raids_marks_are_there_next_raid_and_fade() {
+    let (mut app, player, zone) = app(None);
+    let spot = zone.on_ground(100.0, 200.0);
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        let t = extraction_core::zone_memory::RaidTrace {
+            searched: vec![[spot.x, spot.z]],
+            ..default()
+        };
+        mind.memory.fold(&t);
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert!(flat(m[0].at - spot) < 0.5 && (m[0].at.y - spot.y).abs() < 0.5);
+    let now = app.world().resource::<Time>().elapsed_secs();
+    assert!(!m[0].fresh(now), "last raid's: not fresh");
+    let first = m[0].paint(now);
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        mind.memory.fold(&default());
+        mind.trace = default();
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    let m = marks(&mut app);
+    assert_eq!(m.len(), 1, "one, not two: {m:?}");
+    assert!(m[0].paint(now) < first, "fainter a raid on");
+    {
+        let mut mind = app.world_mut().resource_mut::<super::memory::ZoneMind>();
+        for _ in 0..4 {
+            mind.memory.fold(&default());
+        }
+        mind.trace = default();
+    }
+    step_out(&mut app, player, zone.on_ground(100.0, 330.0));
+    assert!(marks(&mut app).is_empty(), "forgotten");
+}
+
+/// A pylon that reports you keeps a tally, one per report; it's let go
+/// once it's been quiet long enough. A false report it's fed isn't one.
+#[test]
+fn a_relay_that_reported_you_keeps_a_tally() {
+    use super::recall::{Filed, Memory, lasts};
+    let (mut app, player, _zone, pylon, site) = network_app();
+    put(&mut app, player, site + Vec3::new(25.0, 0.0, 10.0));
+    let mut filed = None;
+    for _ in 0..90 * 10 {
+        app.update();
+        filed = app.world().get::<Filed>(pylon).copied();
+        if filed.is_some() {
+            break;
+        }
+    }
+    let f = filed.expect("it reported you, and keeps the tally");
+    assert_eq!(f.count, 1);
+    // Another report (its cooldown spent).
+    app.world_mut()
+        .get_mut::<super::pylon::Pylon>(pylon)
+        .unwrap()
+        .report_cooldown = 0.0;
+    for _ in 0..30 {
+        app.update();
+    }
+    assert_eq!(app.world().get::<Filed>(pylon).unwrap().count, 2);
+    // Out of its sight, and quiet long enough: let go.
+    put(&mut app, player, site + Vec3::new(400.0, 0.0, 400.0));
+    app.world_mut().get_mut::<Filed>(pylon).unwrap().last -= lasts(Memory::Reported);
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(app.world().get::<Filed>(pylon).is_none());
+    // A spliced radio's false report: no tally.
+    let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+    app.world_mut()
+        .write_message(crate::interact::InteractEvent::Released {
+            item: radio,
+            side: crate::rig::Side::Left,
+            speed: 0.0,
+        });
+    for _ in 0..3 {
+        app.update();
+    }
+    assert!(
+        app.world().get::<Filed>(pylon).is_none(),
+        "a decoy's no tally"
+    );
+}
+
+/// A relay distrusted for a second false report is believed again once
+/// the last is old enough (`recall::Memory::Distrust`).
+#[test]
+fn distrust_wears_off() {
+    use super::recall::{Memory, lasts};
+    let (mut app, player, _zone, pylon, site) = network_app();
+    put(&mut app, player, site + Vec3::new(400.0, 0.0, 400.0));
+    for _ in 0..2 {
+        let radio = spawn_radio(&mut app, site + Vec3::new(0.7, 0.8, 0.0));
+        app.world_mut()
+            .write_message(crate::interact::InteractEvent::Released {
+                item: radio,
+                side: crate::rig::Side::Left,
+                speed: 0.0,
+            });
+        app.update();
+        app.update();
+    }
+    let distrusted = |app: &App| {
+        app.world()
+            .resource::<super::director::Director>()
+            .net
+            .distrusted
+            .contains(&pylon)
+    };
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(distrusted(&app), "distrusted, and still a few ticks on");
+    app.world_mut()
+        .get_mut::<super::network::Relay>(pylon)
+        .unwrap()
+        .last_false -= lasts(Memory::Distrust);
+    app.update();
+    app.update();
+    assert!(!distrusted(&app), "believed again");
+}
+
+#[derive(Resource, Default)]
+struct Calls(Vec<super::squad::SquadCall>);
+
+fn squad_app(n: usize, drone: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    squad_app_with(n, drone, false)
+}
+
+/// Out on a raid, carrying a radio if `radio`, with `n` walkers (and a
+/// drone) fighting you.
+fn squad_app_with(n: usize, drone: bool, radio: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    let (mut app, player, zone) = app(None);
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    // No plan while they're set down: it starts when the test does.
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    if radio {
+        // In the pack on your back.
+        let r = spawn_radio(&mut app, zone.on_ground(100.0, 200.0) + Vec3::Y);
+        let bag = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack on your back");
+        app.world_mut()
+            .entity_mut(r)
+            .insert(crate::interact::body::InBackpack { bag });
+        app.update();
+        assert!(
+            app.world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(r)
+                .is_some()
+        );
+    }
+    app.init_resource::<Calls>().add_systems(
+        Last,
+        |mut m: MessageReader<super::squad::SquadCall>, mut s: ResMut<Calls>| {
+            s.0.extend(m.read().copied())
+        },
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut fighters: Vec<Entity> = (0..n)
+        .map(|k| {
+            let x = 96.0 + k as f32 * 4.0;
+            walker_at(&mut app, &zone, zone.on_ground(x, 225.0))
+        })
+        .collect();
+    if drone {
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                me + Vec3::new(0.0, 18.0, 20.0),
+                Job {
+                    kind: JobKind::Survey,
+                    site: me,
+                    duration: 999.0,
+                    exit: me,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        fighters.push(d);
+    }
+    for w in &fighters {
+        let mut aw = app.world_mut().get_mut::<Awareness>(*w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(*w).unwrap() = Brain::Engage;
+    }
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = true;
+    app.world_mut().resource_mut::<Calls>().0.clear();
+    (app, player, zone, me, fighters)
+}
+
+fn role_of(app: &App, e: Entity) -> Option<super::squad::Role> {
+    app.world()
+        .get::<super::squad::SquadRole>(e)
+        .map(|r| r.role)
+}
+
+/// Three walkers on you: one pins, one flanks, and one makes for the way
+/// to your rendezvous and gets between you and it. Each says its part
+/// once.
+#[test]
+fn three_walkers_hold_flank_and_cut_you_off() {
+    use super::squad::Role;
+    let (mut app, player, zone, me, w) = squad_app(3, false);
+    let rv = super::squad::your_rendezvous(&zone, None, me).expect("a rendezvous");
+    let toward = Vec2::new(rv.x - me.x, rv.z - me.z).normalize();
+    let mut ahead: f32 = f32::MIN;
+    let mut cutter = None;
+    for _ in 0..90 * 30 {
+        put(&mut app, player, me);
+        app.update();
+        if cutter.is_none() {
+            cutter = w
+                .iter()
+                .copied()
+                .find(|e| role_of(&app, *e) == Some(Role::CutOff));
+        }
+        if let Some(c) = cutter {
+            let t = app.world().get::<Transform>(c).unwrap().translation;
+            ahead = ahead.max(Vec2::new(t.x - me.x, t.z - me.z).dot(toward));
+        }
+    }
+    let roles: Vec<Option<Role>> = w.iter().map(|e| role_of(&app, *e)).collect();
+    assert!(roles.contains(&Some(Role::Pin)), "{roles:?}");
+    assert!(roles.contains(&Some(Role::Flank)), "{roles:?}");
+    assert!(cutter.is_some(), "{roles:?}");
+    assert!(
+        ahead > 10.0,
+        "the cut-off got out between you and the rendezvous: {ahead:.1} m toward it"
+    );
+    let calls = &app.world().resource::<Calls>().0;
+    for role in [Role::Pin, Role::Flank, Role::CutOff] {
+        assert_eq!(
+            calls.iter().filter(|c| c.role == role).count(),
+            1,
+            "{role:?} said once: {calls:?}"
+        );
+    }
+}
+
+/// With a drone among them it spots for the flanker: over its way in,
+/// with its light down on it.
+#[test]
+fn a_drone_lights_the_flankers_way() {
+    use super::squad::Role;
+    let (mut app, player, _zone, me, w) = squad_app(2, true);
+    let drone = *w.last().unwrap();
+    let mut closest = f32::MAX;
+    for _ in 0..90 * 12 {
+        put(&mut app, player, me);
+        app.update();
+        if let Some(r) = app.world().get::<super::squad::SquadRole>(drone) {
+            let at = app.world().get::<Transform>(drone).unwrap().translation;
+            closest = closest.min(Vec2::new(at.x - r.post.x, at.z - r.post.z).length());
+        }
+    }
+    assert_eq!(role_of(&app, drone), Some(Role::Spot));
+    assert!(
+        closest < 6.0,
+        "over the flanker's way in: {closest:.1} m off"
+    );
+    let lights = app
+        .world_mut()
+        .query::<&super::squad::SpotterLight>()
+        .iter(app.world())
+        .filter(|l| l.drone == drone)
+        .count();
+    assert_eq!(lights, 1, "its light on");
+}
+
+/// A radio you carry says it: which way the flanker's coming round.
+/// Without one, nothing's said.
+#[test]
+fn your_radio_says_where_the_flanker_goes() {
+    let run = |radio: bool| {
+        let (mut app, player, _zone, me, _w) = squad_app_with(2, false, radio);
+        for _ in 0..90 * 3 {
+            put(&mut app, player, me);
+            app.update();
+        }
+        let flank = app
+            .world()
+            .resource::<Calls>()
+            .0
+            .iter()
+            .find(|c| c.role == super::squad::Role::Flank)
+            .copied()
+            .expect("a flank call");
+        let way =
+            crate::raid::lines::bearing_word(Vec2::new(flank.post.x - me.x, flank.post.z - me.z));
+        let said: Vec<String> = app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .map(|(t, _)| t.clone())
+            .collect();
+        (said, way)
+    };
+    let (said, way) = run(true);
+    assert!(
+        said.iter().any(|l| l.contains(way) && l.contains("round")),
+        "the flanker's way, {way}: {said:?}"
+    );
+    let (said, _) = run(false);
+    assert!(
+        !said.iter().any(|l| l.contains("round")),
+        "no radio, no word: {said:?}"
+    );
+}
+
+/// With coordination off (the sims' other arm), they fight alone: no
+/// roles, no calls, nobody flanks.
+#[test]
+fn uncoordinated_they_fight_alone() {
+    let (mut app, player, _zone, me, w) = squad_app(3, false);
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    for _ in 0..90 * 5 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    assert!(w.iter().all(|e| role_of(&app, *e).is_none()));
+    assert!(app.world().resource::<Calls>().0.is_empty());
+    assert!(
+        w.iter()
+            .all(|e| !app.world().entity(*e).contains::<super::walker::Flanker>())
+    );
+}
+
+/// A pane a machine breaks going through is its own doing: no sign, and
+/// it doesn't turn to its own crash. One broken with no machine at it is
+/// a sign.
+#[test]
+fn what_a_machine_breaks_is_no_sign_of_you() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0) + Vec3::Y;
+    let w = walker_at(&mut app, &zone, at - Vec3::Y);
+    let broke = |app: &mut App, at: Vec3| {
+        app.world_mut().write_message(crate::destruction::Broke {
+            at,
+            stuff: crate::destruction::Stuff::Glass,
+            size: 1.0,
+        });
+        app.update();
+        app.update();
+        app.world().resource::<super::disturbed::Signs>().0.len()
+    };
+    assert_eq!(broke(&mut app, at), 0, "the walker's own");
+    assert!(
+        app.world()
+            .get::<Awareness>(w)
+            .unwrap()
+            .last_known
+            .is_none(),
+        "and it didn't hear it as anyone's"
+    );
+    assert_eq!(
+        broke(&mut app, at + Vec3::new(30.0, 0.0, 0.0)),
+        1,
+        "someone's"
+    );
+}
+
+/// A walker on its way to a flank holds its fire, however well it sees
+/// you; at its post, it opens up.
+#[test]
+fn a_flanker_on_its_way_holds_its_fire() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<Entity>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, mut f: ResMut<Fired>| {
+            f.0.extend(s.read().filter_map(|s| s.shooter))
+        },
+    );
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 222.0);
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let engage = |app: &mut App| {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    };
+    engage(&mut app);
+    let run = |app: &mut App, post: Option<Vec3>, secs: f32| {
+        app.world_mut().resource_mut::<Fired>().0.clear();
+        for _ in 0..(90.0 * secs) as usize {
+            put(app, player, me);
+            let here = app.world().get::<Transform>(w).unwrap().translation;
+            app.world_mut()
+                .entity_mut(w)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Flank,
+                    target: player,
+                    post: post.unwrap_or(here),
+                });
+            app.update();
+        }
+        app.world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .filter(|e| **e == w)
+            .count()
+    };
+    // Its post far off, round your side: it goes, and holds its fire.
+    let away = zone.on_ground(140.0, 200.0);
+    assert_eq!(
+        run(&mut app, Some(away), 4.0),
+        0,
+        "held its fire on the way"
+    );
+    // There (its post where it stands): it fires.
+    engage(&mut app);
+    assert!(run(&mut app, None, 6.0) > 0, "and fires from its post");
 }

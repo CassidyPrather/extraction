@@ -32,6 +32,11 @@ pub const PATIENCE: f32 = 8.0;
 /// The turret settles on you this long before its first shot (and again
 /// after you've been out of sight a while): the whine that says move.
 pub const AIM_TIME: f32 = 0.7;
+/// Its aim is thrown off by this (rad) a m/s its target runs across its
+/// line of fire: sprinting across it, most rounds miss.
+pub const CROSSING_SPREAD: f32 = 0.02;
+/// Out of its sight this long (s), it has to aim afresh once you're back.
+pub const REACQUIRE: f32 = 0.5;
 /// Seeing you for the first time in a fight, it stops and looks this long
 /// (its eye and the Heard line have their moment) before it settles its
 /// turret on you: no first shot inside a newcomer's reaction time.
@@ -464,7 +469,7 @@ fn walker_brain(
         mut bites,
         mut seed,
         minds,
-        flanking,
+        (flanking, roles),
         (parts, retreating, mut floorings),
     ): (
         MessageWriter<Shot>,
@@ -472,7 +477,7 @@ fn walker_brain(
         MessageWriter<super::hound_mind::HoundBite>,
         Local<u64>,
         Query<&super::senses::MindSeed>,
-        Query<(), With<Flanker>>,
+        (Query<(), With<Flanker>>, Query<&super::squad::SquadRole>),
         (
             Query<&RobotPart>,
             Query<(), With<Retreating>>,
@@ -501,35 +506,6 @@ fn walker_brain(
                     .then_some(())
                     .and(aware.target)
                     .map(|p| (e, p, minds.get(e).map_or(e.to_bits(), |m| m.0)))
-            },
-        )
-        .collect();
-    // Walkers fighting someone, for pairing up: (who, where, whom, seed).
-    let fighting: Vec<(Entity, Vec3, Entity, u64)> = walkers
-        .iter()
-        .filter_map(
-            |(
-                e,
-                _,
-                brain,
-                _,
-                aware,
-                t,
-                robot,
-                _,
-                _,
-                grappler,
-                (_, _, crawler, gait, hound, ..),
-            )| {
-                let plain = !grappler && !crawler && hound.is_none();
-                let heavy = gait.is_some_and(|g| g.shape == super::anim::Shape::Heavy);
-                (plain && !heavy && !robot.wrecked && matches!(brain, Brain::Engage))
-                    .then_some(())
-                    .and(aware.target)
-                    .map(|p| {
-                        let seed = minds.get(e).map_or(e.to_bits(), |m| m.0);
-                        (e, t.translation, p, seed)
-                    })
             },
         )
         .collect();
@@ -850,14 +826,24 @@ fn walker_brain(
                             commands.entity(e).insert(Retreating);
                             w.rethink = 0.0;
                         }
-                        // Two on one: the first pins you, the other works
-                        // round to your side.
-                        let flank = aware
-                            .target
-                            .filter(|_| !hurt)
-                            .and_then(|p| flank_role(e, pos, p, tp, &fighting));
-                        if flank.is_some() != flanking.contains(e) {
-                            if flank.is_some() {
+                        // Its part in the squad's plan (`squad`): the
+                        // pinner holds, a flanker works round to your
+                        // side, a cut-off makes for your way out.
+                        let role = roles
+                            .get(e)
+                            .ok()
+                            .filter(|r| !hurt && Some(r.target) == aware.target);
+                        let flank = role
+                            .filter(|r| {
+                                matches!(
+                                    r.role,
+                                    super::squad::Role::Flank | super::squad::Role::CutOff
+                                )
+                            })
+                            .map(|r| r.post);
+                        let flanker = role.is_some_and(|r| r.role == super::squad::Role::Flank);
+                        if flanker != flanking.contains(e) {
+                            if flanker {
                                 commands.entity(e).insert(Flanker);
                                 w.rethink = 0.0;
                             } else {
@@ -1028,15 +1014,13 @@ pub const RETREAT_AT: f32 = 0.35;
 pub const RETREAT_DIST: f32 = 14.0;
 /// Knocked down again within this long (s) of the last time, a walker
 /// breaks off as a badly hurt one does.
-pub const KNOCKED_AGAIN: f32 = 10.0;
+pub const KNOCKED_AGAIN: f32 = super::recall::lasts(super::recall::Memory::Knocked);
 
 /// A walker that's broken off, hurt (it keeps shooting from further back).
 #[derive(Component, Debug)]
 pub struct Retreating;
 
-/// Two walkers on one target within this of each other pair up (m)...
-pub const PAIR_RADIUS: f32 = 40.0;
-/// ...and the flanker works round to this far off the pinner's line
+/// A flanker (`squad`) works round to this far off the pinner's line
 /// (radians, either side by turns)...
 pub const FLANK_ANGLE: f32 = 1.3;
 /// ...at the pinner's range, held to this band (m).
@@ -1045,35 +1029,6 @@ pub const FLANK_RANGE: (f32, f32) = (14.0, 24.0);
 /// A walker working round to its target's side (while another pins it).
 #[derive(Component, Debug)]
 pub struct Flanker;
-
-/// Where `me` (at `pos`, fighting `target` at `tp`) should go to flank, if
-/// it's not the pinner: among those on the same target within
-/// [`PAIR_RADIUS`], the lowest seed pins; the rest flank, alternating
-/// sides, [`FLANK_ANGLE`] round from the pinner's line.
-fn flank_role(
-    me: Entity,
-    pos: Vec3,
-    target: Entity,
-    tp: Vec3,
-    fighting: &[(Entity, Vec3, Entity, u64)],
-) -> Option<Vec3> {
-    let my_seed = fighting.iter().find(|f| f.0 == me)?.3;
-    let mut mates: Vec<&(Entity, Vec3, Entity, u64)> = fighting
-        .iter()
-        .filter(|f| f.2 == target && (f.0 == me || f.1.distance(pos) < PAIR_RADIUS))
-        .collect();
-    mates.sort_by_key(|f| (f.3, f.0));
-    let pinner = mates.first()?;
-    if pinner.0 == me {
-        return None;
-    }
-    let rank = mates.iter().position(|f| f.0 == me && f.3 == my_seed)?;
-    let side = if rank % 2 == 1 { 1.0 } else { -1.0 };
-    let from = Vec2::new(pinner.1.x - tp.x, pinner.1.z - tp.z);
-    let d = from.length().clamp(FLANK_RANGE.0, FLANK_RANGE.1);
-    let dir = Vec2::from_angle(FLANK_ANGLE * side).rotate(from.normalize_or(Vec2::X));
-    Some(Vec3::new(tp.x + dir.x * d, pos.y, tp.z + dir.y * d))
-}
 
 /// Somewhere to fight `target` from: walkable ground hard by an obstacle
 /// (a wall, a wreck, a trunk), within [`COVER_RANGE`] of it, with a clear
@@ -1139,11 +1094,13 @@ fn walker_guns(
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
-    (entrances, path, mut blind, mut fighting_since): (
+    bodies: Query<&crate::player::Body>,
+    (entrances, path, mut blind, mut fighting_since, roles): (
         Res<super::doors::Entrances>,
         crate::destruction::through::RoundPath,
         Local<std::collections::HashMap<Entity, Blind>>,
         Local<std::collections::HashMap<Entity, f32>>,
+        Query<(&super::squad::SquadRole, &GlobalTransform)>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -1157,7 +1114,11 @@ fn walker_guns(
         w.gun_cooldown -= dt;
         // Knocked down, or getting up, it can't shoot, and must aim afresh.
         let floored = gait.is_some_and(|g| g.down() || g.rising > 0.0);
-        if robot.wrecked || !matches!(brain, Brain::Engage) || floored {
+        // On its way to a new post (`squad`): it holds its fire.
+        let moving_up = roles
+            .get(e)
+            .is_ok_and(|(r, g)| super::squad::repositioning(Some(r), g.translation()));
+        if robot.wrecked || !matches!(brain, Brain::Engage) || floored || moving_up {
             w.aim = 0.0;
             blind.remove(&e);
             continue;
@@ -1167,8 +1128,9 @@ fn walker_guns(
             blind.remove(&e);
         }
         if !aware.can_see_target {
-            // A moment behind cover doesn't shake it; a while does.
-            if aware.unseen > 1.5 {
+            // A moment behind cover doesn't shake it; half a second does:
+            // back in sight, it has to aim afresh (`REACQUIRE`).
+            if aware.unseen > REACQUIRE {
                 w.aim = 0.0;
             }
             // Through the wall, if it's thin and you're close behind it.
@@ -1257,6 +1219,15 @@ fn walker_guns(
             continue;
         }
         let muzzle = gt.translation() + Vec3::Y * 0.05;
+        // How fast it's going across the line of fire (m/s).
+        let crossing = aware
+            .target
+            .and_then(|p| bodies.get(p).ok())
+            .map_or(0.0, |b| {
+                let line = (target - muzzle).with_y(0.0).normalize_or_zero();
+                let v = b.velocity.with_y(0.0);
+                (v - line * v.dot(line)).length()
+            });
         if muzzle.distance(target) > 70.0 {
             continue;
         }
@@ -1289,7 +1260,8 @@ fn walker_guns(
             speed: 450.0,
             damage: 14.0,
             projectiles: 1,
-            spread: 0.025,
+            // Running across its line throws it off (`CROSSING_SPREAD`).
+            spread: 0.025 + CROSSING_SPREAD * crossing,
             recoil: 0.0,
             seed: *seed,
         });

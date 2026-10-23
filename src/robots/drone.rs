@@ -59,6 +59,9 @@ pub const STILL_SHOWS: f32 = 0.3;
 /// Its rounds scatter this much more (radians) per m/s its target runs
 /// across its line: sprint across open ground and it mostly misses (at
 /// 25 m, a sprint throws them about 3 m wide; a walk about 1).
+/// A drone that sees someone on its way home fights for this long (s),
+/// then goes on home.
+pub const LEAVING_FIGHT: f32 = super::recall::lasts(super::recall::Memory::Roofed);
 pub const CROSSING_SPREAD: f32 = 0.025;
 
 /// A drone began locking on (audio chirps; the eye flares).
@@ -237,7 +240,10 @@ fn drone_brain(
         &Transform,
         &Robot,
         &mut Intent,
-        Option<&super::flee::Fleeing>,
+        (
+            Option<&super::flee::Fleeing>,
+            Option<&super::squad::SquadRole>,
+        ),
     )>,
     zone: Res<Zone>,
     targets: Query<&GlobalTransform>,
@@ -247,10 +253,14 @@ fn drone_brain(
     entrances: Res<super::doors::Entrances>,
     door_states: Query<&crate::world::buildings::Door>,
     nav: Res<super::walker::Nav>,
+    mut off_duty: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     let sweep = time.elapsed_secs() * 0.9;
-    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent, fleeing) in &mut drones {
+    off_duty.retain(|e, _| drones.contains(*e));
+    for (e, mut d, mut brain, mut job, aware, t, robot, mut intent, (fleeing, role)) in &mut drones
+    {
         if robot.wrecked {
             *brain = Brain::Down;
             continue;
@@ -278,8 +288,32 @@ fn drone_brain(
         };
         d.phase += dt * ORBIT.0;
         // Alarm overrides the job.
+        let leaving = matches!(*brain, Brain::Leave { .. });
         search::react(&mut brain, aware, ENGAGE_AT);
         search::lost_sight(&mut brain, aware, PATIENCE, pos);
+        // On its way home it spares a burst or two, no more, and none for
+        // someone under a roof (`LEAVING_FIGHT`).
+        if matches!(*brain, Brain::Engage) {
+            if leaving {
+                off_duty.insert(e, now + LEAVING_FIGHT);
+            }
+            if let Some(until) = off_duty.get(&e).copied() {
+                let indoors = aware
+                    .target
+                    .and_then(|p| targets.get(p).ok())
+                    .is_some_and(|g| {
+                        entrances
+                            .building_at(g.translation() + Vec3::Y * 0.5)
+                            .is_some()
+                    });
+                if now > until || indoors {
+                    off_duty.remove(&e);
+                    *brain = Brain::Leave { to: job.exit };
+                }
+            }
+        } else if !matches!(*brain, Brain::Leave { .. }) {
+            off_duty.remove(&e);
+        }
         match &mut *brain {
             Brain::Transit { to } => {
                 d.goal = cruise(*to, 22.0);
@@ -386,6 +420,13 @@ fn drone_brain(
                     d.goal = g;
                     continue;
                 }
+                // Spotting for a flanker (`squad`): over its way in,
+                // lighting it, still watching you.
+                if let Some(r) = role.filter(|r| r.role == super::squad::Role::Spot) {
+                    d.goal = r.post;
+                    intent.look = Some(target);
+                    continue;
+                }
                 // Looked at down your sights? Slide round to your flank.
                 let eyed = aware
                     .target
@@ -444,7 +485,7 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
-    bodies: Query<&crate::player::Body>,
+    (bodies, roles): (Query<&crate::player::Body>, Query<&super::squad::SquadRole>),
 ) {
     let dt = time.delta_secs();
     fighting_since.retain(|e, _| {
@@ -454,7 +495,10 @@ fn drone_guns(
     });
     for (e, mut d, brain, aware, robot, children, t) in &mut drones {
         d.gun_cooldown -= dt;
-        if robot.wrecked || !matches!(brain, Brain::Engage) {
+        // Climbing to its station over a flanker's way in (`squad`): it
+        // holds its fire.
+        let moving_up = super::squad::repositioning(roles.get(e).ok(), t.translation);
+        if robot.wrecked || !matches!(brain, Brain::Engage) || moving_up {
             d.lock = 0.0;
             continue;
         }

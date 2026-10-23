@@ -299,8 +299,22 @@ pub const VICE_RECIPES: &[Recipe] = &[
 ];
 
 /// What the driver's contracts teach the bench (`contracts::Unlock`):
-/// armour-piercing re-packs, each for its contract.
+/// armour-piercing re-packs, each for its contract, and the relay jammer.
 pub const CONTRACT_RECIPES: &[Recipe] = &[
+    Recipe {
+        id: "make_jammer",
+        name: "Build a relay jammer",
+        // Taught by "The mast relay" (`progression::contracts`). A
+        // salvaged radio's guts, a cell to drive it, scrap for the
+        // aerials and the box (`robots::network::Jammer`).
+        needs: &[
+            (Need::Item("radio"), 1),
+            (Need::Item("power_cell"), 1),
+            (Need::Item("scrap_metal"), 2),
+        ],
+        makes: Make::Items(&[("jammer", 1)]),
+        seconds: 20.0,
+    },
     Recipe {
         id: "pack_545_ap",
         name: "Re-pack 5.45x39 AP (box of 30)",
