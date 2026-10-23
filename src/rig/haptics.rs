@@ -146,6 +146,8 @@ pub fn handling_feel(event: &FireEvent) -> Option<HandlingFeel> {
         // The finger meeting the safety, or a Nagant's open gate: a soft
         // dead stop.
         FireEvent::TriggerBlocked => Pulse(0.15, 0.06, 0.0),
+        // The hammer already down: the trigger goes back slack, no break.
+        FireEvent::TriggerDead => Pulse(0.1, 0.012, 0.0),
         FireEvent::MagazineRemoved => Pulse(0.3, 0.03, 0.0),
         // The magazine's weight going out of the well all at once.
         FireEvent::MagazineDropped => Pulse(0.45, 0.05, 0.2),

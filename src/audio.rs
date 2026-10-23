@@ -1125,7 +1125,8 @@ fn fault_sounds(
 /// - A dud: the hammer's fall dulled on a primer that doesn't go. A
 ///   hang-fire: the same fall, and the primer's faint fizz.
 /// - A blocked trigger (the safety, a Nagant's open gate): a small creak,
-///   the finger against the stop.
+///   the finger against the stop. A dead one (the hammer already down): a
+///   faint tick, nothing falling.
 pub fn fault_layers(
     event: &FireEvent,
 ) -> &'static [(&'static str, &'static str, f64, Option<f32>)] {
@@ -1152,6 +1153,9 @@ pub fn fault_layers(
             1.5,
             Some(2500.0),
         )],
+        // The trigger back slack on a hammer already down: the faint tick
+        // of the disconnector, nothing falling.
+        FireEvent::TriggerDead => &[("guns/safety", "gun.trigger_dead", 1.8, Some(3000.0))],
         FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
         FireEvent::Bulged { .. } => &[
             ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),

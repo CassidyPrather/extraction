@@ -210,6 +210,7 @@ fn add_chambers(
     materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
     mut smoke: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
+    mut struck: Local<Option<Handle<StandardMaterial>>>,
 ) {
     // Drawn where there's drawing; kept track of headless all the same.
     if let (Some(mut meshes), Some(mut materials), None) = (meshes, materials, look.as_ref()) {
@@ -222,6 +223,13 @@ fn add_chambers(
                 ..default()
             }),
         ));
+        // A struck round: the dented primer's soot, the brass dulled.
+        *struck = Some(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.42, 0.31, 0.17),
+            metallic: 0.6,
+            perceptual_roughness: 0.7,
+            ..default()
+        }));
         *smoke = Some((
             meshes.add(Sphere::new(0.006)),
             materials.add(StandardMaterial {
@@ -270,20 +278,39 @@ fn add_chambers(
                 Visibility::Hidden,
                 ChildOf(e),
             ));
-            if let Some((mesh, mat)) = look.as_ref() {
-                c.insert((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone())));
+            if let (Some((mesh, mat)), Some(dull)) = (look.as_ref(), struck.as_ref()) {
+                c.insert((
+                    Mesh3d(mesh.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    ChamberMats {
+                        live: mat.clone(),
+                        struck: dull.clone(),
+                    },
+                ));
             }
         }
     }
+}
+
+/// A chamber's round's two looks: as it came, and struck (a dud).
+#[derive(Component)]
+pub struct ChamberMats {
+    live: Handle<StandardMaterial>,
+    struck: Handle<StandardMaterial>,
 }
 
 /// The chamber's round shows while the action's open far enough to see it;
 /// an empty case darker than a live round.
 pub fn show_chambers(
     guns: Query<&Gun>,
-    mut shows: Query<(&ChamberShow, &mut Visibility, &mut Transform)>,
+    mut shows: Query<(
+        &ChamberShow,
+        &mut Visibility,
+        &mut Transform,
+        Option<(&ChamberMats, &mut MeshMaterial3d<StandardMaterial>)>,
+    )>,
 ) {
-    for (c, mut vis, mut t) in &mut shows {
+    for (c, mut vis, mut t, mats) in &mut shows {
         let Ok(gun) = guns.get(c.gun) else {
             continue;
         };
@@ -307,6 +334,16 @@ pub fn show_chambers(
         let at = chamber_at(gun, c.chamber) + Vec3::Z * back;
         if t.translation != at {
             t.translation = at;
+        }
+        if let Some((m, mut mat)) = mats {
+            let want = if f.struck == Some(c.chamber) {
+                &m.struck
+            } else {
+                &m.live
+            };
+            if mat.0 != *want {
+                mat.0 = want.clone();
+            }
         }
     }
 }
@@ -399,6 +436,8 @@ pub struct Look {
     pub gate_open: bool,
     pub string_drawn: bool,
     pub smoke: bool,
+    /// The selector on safe (every gun with one shows where it is).
+    pub safe: bool,
 }
 
 pub fn look(id: &str, f: &Firearm) -> Look {
@@ -431,6 +470,7 @@ pub fn look(id: &str, f: &Firearm) -> Look {
         0
     };
     port.push(match f.chambers.get(c).copied().flatten() {
+        Some(Round::Live) if f.struck == Some(c) => "a dented primer in the chamber",
         Some(Round::Live) => "a round in the chamber",
         Some(Round::Spent) => "a case in the chamber",
         None => "an empty chamber",
@@ -452,6 +492,7 @@ pub fn look(id: &str, f: &Firearm) -> Look {
         gate_open: f.gate_open,
         string_drawn: f.def.action == ActionKind::Crossbow && f.locked_back,
         smoke: jam_shows(f, Jam::Smoke),
+        safe: f.fire_mode() == extraction_core::firearm::FireMode::Safe,
     }
 }
 

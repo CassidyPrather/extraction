@@ -29,6 +29,10 @@ pub struct Stoppage {
     pub look: Look,
     pub clear: (&'static str, Fix),
     pub wrong: Vec<(&'static str, Fix)>,
+    /// Whether it holds the gun until a hand clears it. A double-action
+    /// gun's dud doesn't: the next pull strikes again (or turns a
+    /// revolver's cylinder on), which is its clear.
+    pub stops: bool,
 }
 
 pub type Fix = fn(&mut Firearm) -> Vec<FireEvent>;
@@ -197,7 +201,10 @@ fn reload(g: &mut Firearm) -> Vec<FireEvent> {
         ActionKind::SemiAuto if def.magazine_family.is_some() => {
             g.remove_magazine();
             ev.push(FireEvent::MagazineRemoved);
-            ev.extend(g.insert_magazine(mag(&def, 10, Load::Standard)).unwrap_or_default());
+            ev.extend(
+                g.insert_magazine(mag(&def, 10, Load::Standard))
+                    .unwrap_or_default(),
+            );
             if g.locked_back {
                 ev.extend(g.release_slide_stop());
             } else {
@@ -224,6 +231,7 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
         out.push(Stoppage {
             name,
             look: look(id, &gun),
+            stops: !(name == "dud" && gun.def.double_action),
             gun,
             moment,
             clear,
@@ -242,6 +250,9 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
             Revolver => ("pull again: the cylinder brings the next round", |g| {
                 pull(g, &[])
             }),
+            _ if def.double_action => ("pull again: double action strikes it again", |g| {
+                pull(g, &[])
+            }),
             BreakAction => ("break it open, swap the shell, shut it", |g| {
                 let mut ev = g.set_break_open(true);
                 g.unload_chamber(0);
@@ -254,9 +265,19 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
                 back_in_action,
             ),
         };
-        let mut wrong: Vec<(&'static str, Fix)> = vec![("wait for it", wait)];
+        let mut wrong: Vec<(&'static str, Fix)> = Vec::new();
+        if !def.double_action {
+            wrong.push(("wait for it", wait));
+        }
         if !def.double_action && def.action != BreakAction {
             wrong.push(("pull again", |g| pull(g, &[])));
+        }
+        if def.action == Revolver {
+            wrong.push(("open the gate to look", |g| {
+                let mut ev = g.set_gate(true);
+                ev.extend(pull(g, &[]));
+                ev
+            }));
         }
         add("dud", g, moment, clear, wrong);
     }
@@ -322,25 +343,27 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
             moment,
             ("drop the magazine, rack, seat it, rack", |g| {
                 let def = g.def.clone();
-                let m = g.remove_magazine().unwrap_or_else(|| mag(&def, 8, Load::Standard));
+                let m = g
+                    .remove_magazine()
+                    .unwrap_or_else(|| mag(&def, 8, Load::Standard));
                 let mut ev = vec![FireEvent::MagazineRemoved];
                 ev.extend(cycle(g));
                 ev.extend(g.insert_magazine(m).unwrap_or_default());
                 ev.extend(cycle(g));
                 ev
             }),
-            vec![("rack it", cycle), ("tap the magazine", |g| g.tap_magazine())],
+            vec![
+                ("rack it", cycle),
+                ("tap the magazine", |g| g.tap_magazine()),
+            ],
         );
     }
-    if matches!(def.action, SemiAuto | BoltAction) && !def.open_bolt {
+    if (closed_self_loader && detachable) || def.action == BoltAction {
         // A short stroke: a stiff action worked timidly. On a self-loader,
         // a fresh magazine in and the slide drawn half way: nothing fed. On
         // a turn-bolt after the shot: the case still in.
         let mut g = Firearm::new(def.clone(), 1.0);
-        if def.action == SemiAuto && !detachable {
-            // Clip-fed: loaded, and the slide drawn half way and let back.
-            g = loaded(def, Load::Standard);
-        } else if def.action == SemiAuto {
+        if def.action == SemiAuto {
             g.insert_magazine(mag(def, 10, Load::Standard)).unwrap();
             while g.fire_mode() == FireMode::Safe {
                 g.cycle_mode();
@@ -367,7 +390,7 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
             "short stroke",
             g,
             moment,
-            ("work it fully, all the way back", cycle),
+            ("work it fully, all the way back", back_in_action),
             vec![("work it short again", short)],
         );
     }
@@ -428,7 +451,11 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
             .into_iter()
             .filter(|e| *e == FireEvent::BoltLocked)
             .collect();
-        if moment.is_empty() {
+        if crossbow {
+            // Spanned again, nothing on the rail: the latch's click, and
+            // the empty groove to see.
+            moment = cycle(&mut g);
+        } else if moment.is_empty() {
             if def.action != SemiAuto {
                 cycle(&mut g);
             }
@@ -478,6 +505,9 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
     if crossbow {
         // The string let go short of the latch: it slaps home, uncocked.
         let mut g = Firearm::new(def.clone(), 1.0);
+        while g.fire_mode() == FireMode::Safe {
+            g.cycle_mode();
+        }
         g.set_bolt_travel(0.6);
         let moment = g.release_bolt();
         let short: Fix = |g| {
@@ -488,12 +518,15 @@ pub fn stoppages(id: &str, def: &FirearmDef) -> Vec<Stoppage> {
             "string off the latch",
             g,
             moment,
-            ("draw it right back onto the latch, a bolt on the rail", |g| {
-                let mut ev = g.set_bolt_travel(1.0);
-                ev.extend(g.release_bolt());
-                g.load_round_of(Load::Standard);
-                ev
-            }),
+            (
+                "draw it right back onto the latch, a bolt on the rail",
+                |g| {
+                    let mut ev = g.set_bolt_travel(1.0);
+                    ev.extend(g.release_bolt());
+                    g.load_round_of(Load::Standard);
+                    ev
+                },
+            ),
             vec![("draw it short again", short), ("pull", |g| pull(g, &[]))],
         );
     }
@@ -560,7 +593,10 @@ mod tests {
             let tells: Vec<_> = all
                 .iter()
                 .map(|s| {
-                    let flash = s.moment.iter().any(|e| matches!(e, FireEvent::Fired { .. }));
+                    let flash = s
+                        .moment
+                        .iter()
+                        .any(|e| matches!(e, FireEvent::Fired { .. }));
                     (
                         heard(f.action, id, &s.moment),
                         felt(&s.moment),
@@ -576,7 +612,7 @@ mod tests {
                 if fl.is_empty() {
                     bad.push(format!("{id} {n}: unfelt ({:?})", s.moment));
                 }
-                if fires(&s.gun) {
+                if s.stops && fires(&s.gun) {
                     bad.push(format!("{id} {n}: it didn't stop the gun"));
                 }
                 let mut g = s.gun.clone();
@@ -587,7 +623,12 @@ mod tests {
                 for (w, fix) in &s.wrong {
                     let mut g = s.gun.clone();
                     let ev = fix(&mut g);
-                    if shot(&ev) || fires(&g) {
+                    // A wrong fix that wrecks the gun clearing it (a bulge,
+                    // a case burst open) is no clear.
+                    let harmed = ev
+                        .iter()
+                        .any(|e| matches!(e, FireEvent::Bulged { .. } | FireEvent::OutOfBattery));
+                    if !harmed && (shot(&ev) || fires(&g)) {
                         bad.push(format!("{id} {n}: the wrong fix \"{w}\" cleared it"));
                     }
                     let tells = !heard(f.action, id, &ev).is_empty() || !felt(&ev).is_empty();
@@ -595,7 +636,7 @@ mod tests {
                         bad.push(format!("{id} {n}: \"{w}\" doesn't show why it failed"));
                     }
                 }
-                if s.wrong.is_empty() {
+                if s.wrong.is_empty() && s.stops {
                     bad.push(format!("{id} {n}: no wrong fix to try"));
                 }
             }
@@ -630,7 +671,10 @@ mod tests {
             let mut worn = Firearm::new(def, 0.3);
             fresh.fouling = 0.0;
             worn.fouling = 0.9;
-            assert!(worn.malfunction_chance() > 20.0 * fresh.malfunction_chance(), "{id}");
+            assert!(
+                worn.malfunction_chance() > 20.0 * fresh.malfunction_chance(),
+                "{id}"
+            );
             assert!(worn.sticky_chance() > fresh.sticky_chance(), "{id}");
         }
     }

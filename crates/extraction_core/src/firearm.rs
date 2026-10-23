@@ -249,6 +249,9 @@ pub enum Event {
     /// The trigger pressed against a block: the safety on, or a Nagant's
     /// loading gate open (the cylinder won't turn under the hammer).
     TriggerBlocked,
+    /// The trigger pulled with the hammer already down (after a dud, a
+    /// squib, a short stroke): slack, no break.
+    TriggerDead,
     MagazineRemoved,
     /// A round was pushed into an internal magazine or a breech.
     RoundLoaded,
@@ -416,6 +419,10 @@ pub struct Firearm {
     /// feed, and the jolt of a rack drops it out (a tap seats it).
     #[serde(default)]
     pub mag_half: bool,
+    /// The chamber whose round's primer was struck and didn't go (a dud
+    /// still in): its dent shows on a press check.
+    #[serde(default)]
+    pub struck: Option<usize>,
     /// A revolver: the chamber under the hammer (and at the gate).
     #[serde(default)]
     pub cylinder: usize,
@@ -497,6 +504,7 @@ impl Firearm {
             malfunction: None,
             mag_unseated: false,
             mag_half: false,
+            struck: None,
             cylinder: 0,
             gate_open: false,
             rod: 0.0,
@@ -570,11 +578,17 @@ impl Firearm {
         if let Some(l) = self.chamber_loads.get_mut(c) {
             *l = load;
         }
+        if self.struck == Some(c) {
+            self.struck = None;
+        }
     }
 
     /// Takes what's in chamber `c`, noting a live round's load as thrown
     /// clear.
     fn eject_chamber(&mut self, c: usize) -> Option<Round> {
+        if self.struck == Some(c) {
+            self.struck = None;
+        }
         let r = self.chambers.get_mut(c)?.take();
         if r == Some(Round::Live) {
             self.note_ejected(self.chamber_load(c));
@@ -757,6 +771,10 @@ impl Firearm {
                 self.hammers_cocked[b] = true;
                 self.turn_cylinder();
             } else {
+                // The hammer's already down: the trigger goes back slack,
+                // no break, no click (once a press).
+                self.trigger_reset = false;
+                events.push(Event::TriggerDead);
                 return events;
             }
         }
@@ -791,8 +809,12 @@ impl Firearm {
                     };
                 let (dud, hang) = self.primer(load);
                 if roll() < dud_chance + dud {
+                    self.struck = Some(c);
                     events.push(Event::Dud);
                     return events;
+                }
+                if self.struck == Some(c) {
+                    self.struck = None;
                 }
                 if hang > 0.0 && roll() < hang {
                     self.hang = Some(Hang {
@@ -859,6 +881,7 @@ impl Firearm {
             // A dud stays chambered under a closed bolt: rack it out.
             self.chambers[0] = Some(Round::Live);
             self.set_chamber_load(0, self.fed);
+            self.struck = Some(0);
             self.bolt_travel = 0.0;
             self.stroke_cleared = false;
             events.push(Event::Chambered);
