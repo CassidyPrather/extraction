@@ -28,12 +28,31 @@ pub struct Drawn {
     pub meshes: usize,
     pub visible: usize,
     pub in_view: usize,
+    /// Meshes with a position, normal or colour that isn't a finite number:
+    /// drawn, and still not seen (lavapipe drops them).
+    pub broken: usize,
 }
 
 /// The check's verdict on one building: in view, near enough, and drawing
-/// nothing is a failure.
+/// nothing (or drawing broken meshes) is a failure.
 pub fn missing(d: Drawn) -> bool {
-    d.in_view == 0
+    d.in_view == 0 || d.broken > 0
+}
+
+/// Whether every position, normal and colour of a mesh is a finite number.
+pub fn finite(mesh: &Mesh) -> bool {
+    use bevy::mesh::VertexAttributeValues as V;
+    [
+        Mesh::ATTRIBUTE_POSITION,
+        Mesh::ATTRIBUTE_NORMAL,
+        Mesh::ATTRIBUTE_COLOR,
+    ]
+    .into_iter()
+    .all(|a| match mesh.attribute(a) {
+        Some(V::Float32x3(v)) => v.iter().flatten().all(|x| x.is_finite()),
+        Some(V::Float32x4(v)) => v.iter().flatten().all(|x| x.is_finite()),
+        _ => true,
+    })
 }
 
 #[allow(clippy::type_complexity)]
@@ -43,7 +62,8 @@ pub fn check_buildings(
     cams: Query<(&Camera, &GlobalTransform), With<crate::render::FreeCamera>>,
     buildings: Query<(Entity, &Building, &GlobalTransform)>,
     children: Query<&Children>,
-    meshes: Query<(&InheritedVisibility, &ViewVisibility), With<Mesh3d>>,
+    meshes: Query<(&InheritedVisibility, &ViewVisibility, &Mesh3d)>,
+    assets: Res<Assets<Mesh>>,
     mut since: Local<u32>,
     mut done: Local<bool>,
 ) {
@@ -77,10 +97,11 @@ pub fn check_buildings(
         let mut count = Drawn::default();
         let mut stack = vec![e];
         while let Some(x) = stack.pop() {
-            if let Ok((inherited, view)) = meshes.get(x) {
+            if let Ok((inherited, view, mesh)) = meshes.get(x) {
                 count.meshes += 1;
                 count.visible += inherited.get() as usize;
                 count.in_view += view.get() as usize;
+                count.broken += assets.get(&mesh.0).is_some_and(|m| !finite(m)) as usize;
             }
             if let Ok(c) = children.get(x) {
                 stack.extend(c.iter());
@@ -90,8 +111,8 @@ pub fn check_buildings(
             bad += 1;
             error!(
                 "check-buildings: {} at ({:.0}, {:.0}), {d:.0} m off and in view, draws nothing: \
-                 {} meshes, {} visible, {} in view",
-                b.prefab, p.x, p.z, count.meshes, count.visible, count.in_view
+                 {} meshes, {} visible, {} in view, {} with non-finite vertices",
+                b.prefab, p.x, p.z, count.meshes, count.visible, count.in_view, count.broken
             );
         } else {
             info!(
@@ -115,13 +136,28 @@ mod tests {
             meshes: 40,
             visible: 40,
             in_view: 0,
+            broken: 0,
         };
         assert!(missing(none));
         assert!(missing(Drawn::default()));
-        assert!(!missing(Drawn {
+        let fine = Drawn {
             meshes: 40,
             visible: 40,
             in_view: 3,
-        }));
+            broken: 0,
+        };
+        assert!(!missing(fine));
+        assert!(missing(Drawn { broken: 1, ..fine }));
+    }
+
+    #[test]
+    fn a_nan_vertex_is_broken() {
+        let mut m = Mesh::from(Cuboid::default());
+        assert!(finite(&m));
+        let n = m.count_vertices();
+        let mut colours = vec![[1.0f32, 1.0, 1.0, 1.0]; n];
+        colours[3][0] = f32::NAN;
+        m.insert_attribute(Mesh::ATTRIBUTE_COLOR, colours);
+        assert!(!finite(&m));
     }
 }
