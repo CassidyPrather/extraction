@@ -334,6 +334,48 @@ pub fn lamp_light<'a>(
     (lux / DAY_LUX).min(0.5)
 }
 
+/// A lamp's bulb as it should reach the tonemapper: its material's
+/// emissive is set each frame to `emissive` over the grade's gain (the
+/// eyes' adaptation, up to three stops at night, multiplies an emissive
+/// like everything else), so a red or green bulb stays its colour on
+/// screen; past about 1 in a channel AgX runs it to white. Put it on any
+/// entity; several may share a material.
+#[derive(Component, Clone)]
+pub struct ToTheEye {
+    pub material: Handle<StandardMaterial>,
+    pub emissive: LinearRgba,
+}
+
+pub fn emissives_to_the_eye(
+    bulbs: Query<&ToTheEye>,
+    grades: Query<(&Camera, &ColorGrading)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut done: Local<Vec<AssetId<StandardMaterial>>>,
+) {
+    let Some(stops) = grades
+        .iter()
+        .find(|(c, _)| c.is_active)
+        .map(|(_, g)| g.global.exposure)
+    else {
+        return;
+    };
+    let gain = 2f32.powf(-stops);
+    done.clear();
+    for b in &bulbs {
+        let id = b.material.id();
+        if done.contains(&id) {
+            continue;
+        }
+        done.push(id);
+        let want = b.emissive * gain;
+        if materials.get(id).is_some_and(|m| m.emissive != want) {
+            if let Some(mut m) = materials.get_mut(id) {
+                m.emissive = want;
+            }
+        }
+    }
+}
+
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
 /// `undim` gives back exactly what was there (if nothing changed it since);
 /// the same for each camera's fog colours (RGB: the alpha carries the
@@ -411,6 +453,30 @@ pub fn undim(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bulb_reaches_the_eye_at_its_colour_however_open_the_eyes() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, emissives_to_the_eye);
+        let red = LinearRgba::rgb(0.9, 0.045, 0.014);
+        let m = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        app.world_mut().spawn(ToTheEye {
+            material: m.clone(),
+            emissive: red,
+        });
+        let mut grading = ColorGrading::default();
+        grading.global.exposure = 3.0;
+        app.world_mut().spawn((Camera::default(), grading));
+        app.update();
+        let e = app.world().resource::<Assets<StandardMaterial>>().get(&m).unwrap().emissive;
+        // Three stops open: an eighth, to come out at `red` after the grade.
+        assert!((e.red * 8.0 - red.red).abs() < 1e-5 && (e.green * 8.0 - red.green).abs() < 1e-6);
+    }
 
     #[test]
     fn indoors_the_fog_dims_with_the_ambient_and_comes_back() {

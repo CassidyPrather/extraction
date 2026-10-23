@@ -102,6 +102,7 @@ impl Plugin for RenderPlugin {
         .init_resource::<grade::Below>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
+        .add_systems(PostUpdate, grade::emissives_to_the_eye)
         // After the underground's darkening, which takes whatever ambient it
         // finds for the sky's: run before it, the room's dimming was taken
         // for daylight and the light ran down to nothing indoors.
