@@ -336,6 +336,9 @@
         (prefab: "wreck_lada", at: (-137.0, -60.0), rot: 308.0),
         (prefab: "log_pile", at: (17.3, -25.5), rot: 15.0),
         (prefab: "log_pile", at: (-133.0, 40.0), rot: 82.0),
+        // And on the ways home from them, to the nearest rendezvous.
+        (prefab: "log_pile", at: (119.0, -15.0), rot: 31.0),
+        (prefab: "log_pile", at: (202.7, 28.5), rot: 98.0),
     ],
 
     markers: [

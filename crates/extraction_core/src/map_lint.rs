@@ -2074,23 +2074,46 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             g
         };
         let pois: Vec<P2> = map.markers_of(&MarkerKind::Poi).map(|m| m.at).collect();
+        let rvs: Vec<P2> = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .map(|m| m.at)
+            .collect();
         for (what, at) in first_jobs(map, &id) {
-            let direct = dist(ins, at);
-            let mut walks: Vec<Vec<P2>> = Vec::new();
-            for g in [&comfy, &flat] {
-                walks.extend(g.path(ins, at).map(|p| resample(&p)));
-                for v in pois.iter().filter(|v| {
-                    dist(ins, **v) + dist(**v, at) <= direct * FIRST_DETOUR && dist(**v, at) > 1.0
-                }) {
-                    if let (Some(a), Some(b)) = (g.path(ins, *v), g.path(*v, at)) {
-                        walks.push(resample(&[a, b].concat()));
+            // There, and home from there to the two nearest rendezvous
+            // (Onboarding's newcomers fell on the way home from the
+            // Village, by the pumping station): the way there is held, the
+            // way home measured (Sallow's drained bed is open by design;
+            // its owner decides).
+            let mut home = rvs.clone();
+            home.sort_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)));
+            let legs: Vec<(P2, P2)> = std::iter::once((ins, at))
+                .chain(home.iter().take(2).map(|rv| (at, *rv)))
+                .collect();
+            // (Home or there, the walk.)
+            let mut walks: Vec<(bool, Vec<P2>)> = Vec::new();
+            for (n, (from, to)) in legs.into_iter().enumerate() {
+                let home = n > 0;
+                let direct = dist(from, to);
+                for g in [&comfy, &flat] {
+                    walks.extend(g.path(from, to).map(|p| (home, resample(&p))));
+                    for v in pois.iter().filter(|v| {
+                        dist(from, **v) + dist(**v, to) <= direct * FIRST_DETOUR
+                            && dist(**v, to) > 1.0
+                            && dist(**v, from) > 1.0
+                    }) {
+                        if let (Some(a), Some(b)) = (g.path(from, *v), g.path(*v, to)) {
+                            walks.push((home, resample(&[a, b].concat())));
+                        }
                     }
                 }
             }
             let (mut gap, mut gap_at, mut roof, mut roof_at) = (0.0f32, ins, 0.0f32, ins);
-            for pts in &walks {
+            let (mut back, mut back_at) = (0.0f32, at);
+            for (home, pts) in &walks {
                 let (g, a) = longest_gap(pts, near_cover);
-                if g > gap {
+                if *home && g > back {
+                    (back, back_at) = (g, a);
+                } else if !*home && g > gap {
                     (gap, gap_at) = (g, a);
                 }
                 for p in pts {
@@ -2104,10 +2127,12 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 }
             }
             r.measures.push(format!(
-                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
+                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}), {back:.0} m on the way home at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
                 walks.len(),
                 gap_at[0],
                 gap_at[1],
+                back_at[0],
+                back_at[1],
                 roof_at[0],
                 roof_at[1]
             ));

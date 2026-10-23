@@ -157,7 +157,11 @@ A good map makes the crossing a decision.
   walk, `FIRST_DETOUR`) has cover within 18 m of every step
   (`FIRST_RUN`: four seconds at a sprint), but for a run of 10 m
   (`FIRST_OPEN`). Cover is any building or prop, a boulder or three
-  trunks. Three of Onboarding's four newcomers on Marrow's mast relay
+  trunks. The ways home from each to its two nearest rendezvous are
+  measured the same way (Onboarding's newcomers fell going home west
+  from the Village past the pumping station); held in Marrow, Kettle and
+  Cinder by their props, measured only while Sallow's drained bed, open
+  by design, is its owner's call. Three of Onboarding's four newcomers on Marrow's mast relay
   died to a drone 7-17 s after its lock in the open past the Village.
   Across the open, cars left on the verges and log piles by the way
   (light props: no view load). And roofs on the way, for a drone: the
