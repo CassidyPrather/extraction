@@ -161,7 +161,7 @@ A good map makes the crossing a decision.
   measured against the main routes' cover, `COVER_GAP` within
   `COVER_REACH` (Onboarding's newcomers fell going home west from the
   Village past the pumping station; laden and warned, not a sprint);
-  measured until Sallow's drained bed has its two props, then held. Three of Onboarding's four newcomers on Marrow's mast relay
+  held (Sallow's drained bed has its two props for it). Three of Onboarding's four newcomers on Marrow's mast relay
   died to a drone 7-17 s after its lock in the open past the Village.
   Across the open, cars left on the verges and log piles by the way
   (light props: no view load). And roofs on the way, for a drone: the
