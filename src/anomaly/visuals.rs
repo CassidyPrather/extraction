@@ -513,19 +513,36 @@ fn init_assets(
     );
     // Scoured bare by the lift: raw brown earth, every loose thing on it
     // and the turf itself taken up. (Pale dry earth read as dry grass.)
-    let flattened = ground(Color::srgba(0.13, 0.1, 0.07, 0.9), LinearRgba::BLACK, 0.95);
+    // (A faint warmth in it, the lift's own light on it: in the dark its
+    // edge still shows.)
+    let flattened = ground(
+        Color::srgba(0.13, 0.1, 0.07, 0.9),
+        LinearRgba::rgb(0.035, 0.024, 0.01),
+        0.95,
+    );
     // Fused by the arcs: dark and glassy, still charged: a faint cold blue
     // glow in it.
     let glassy = ground(
         Color::srgba(0.06, 0.07, 0.09, 0.88),
-        LinearRgba::rgb(0.0, 0.015, 0.05),
+        LinearRgba::rgb(0.0, 0.03, 0.1),
         0.2,
     );
     // Glazed like still water under a mirror, giving back the sky.
-    let glazed = ground(Color::srgba(0.45, 0.47, 0.5, 0.8), LinearRgba::BLACK, 0.06);
+    // It holds a little light, like still water at dusk: in the dark it's
+    // the palest thing on the ground.
+    let glazed = ground(
+        Color::srgba(0.45, 0.47, 0.5, 0.8),
+        LinearRgba::rgb(0.022, 0.026, 0.034),
+        0.06,
+    );
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
-    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.8), LinearRgba::BLACK, 0.95);
+    // Pale as ash, faintly so even in the dark.
+    let hushed = ground(
+        Color::srgba(0.7, 0.7, 0.68, 0.8),
+        LinearRgba::rgb(0.03, 0.03, 0.03),
+        0.95,
+    );
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),

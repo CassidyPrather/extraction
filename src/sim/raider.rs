@@ -291,7 +291,7 @@ pub struct Raider {
     /// Deliberately walking into an anomaly (for an artifact).
     pub diving: bool,
     /// Why it last left a stone lying in an anomaly (for the log).
-    pass_why: Option<&'static str>,
+    pass_why: Option<String>,
     rng: Rng,
     grid: NavGrid,
     plans: Vec<BuildingPlan>,
@@ -349,6 +349,8 @@ pub struct Raider {
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
+    /// What worth having was on it last tick (`knocked_loose`).
+    kept: Vec<Entity>,
     /// When it last froze for a searching robot, or threw a distraction.
     froze_at: f32,
     distracted_at: f32,
@@ -607,6 +609,7 @@ pub fn attach_raider(
                 at_rv: false,
                 wait_at: None,
                 after_vent: None,
+                kept: Vec::new(),
                 pass_why: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
@@ -1075,6 +1078,12 @@ pub fn think(
             r.act = Act::Idle;
             r.interrupted = true;
             bot.replace(tasks);
+        }
+
+        if let Some(tasks) = knocked_loose(me, r, &scene, &mut log, pos) {
+            r.interrupted = true;
+            bot.replace(tasks);
+            continue;
         }
 
         if !bot.done() {
@@ -3608,7 +3617,11 @@ fn take_item(
                 if r.traits.avoid_anomalies
                     && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
-                    r.pass_why = Some(if r.hp < 60.0 { "hurt" } else { "well" });
+                    r.pass_why = Some(format!(
+                        "{} ({kind:?}, skilled {skilled}, hearth {:?})",
+                        if r.hp < 60.0 { "hurt" } else { "well" },
+                        hearth_kit(scene),
+                    ));
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
@@ -3630,7 +3643,7 @@ fn take_item(
                     }
                     // Into a frost without a hearth, nobody who knows does.
                     if kind == AnomalyKind::Frost {
-                        r.pass_why = Some("frost without a hearth");
+                        r.pass_why = Some("frost without a hearth".into());
                         return None;
                     }
                 }
@@ -3856,6 +3869,58 @@ fn extract_step(
         }
         _ => vec![Task::Wait(2.0)],
     }
+}
+
+/// Its own things knocked loose (a robot's blow, a fall): anything worth
+/// more than junk that was on it last tick and now lies within 15 m, out
+/// of any anomaly, it goes back for at once. Not what it set down on
+/// purpose (`skip`), nor junk it threw, nor while it's fighting.
+fn knocked_loose(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    pos: Vec3,
+) -> Option<Vec<Task>> {
+    let worth = |e: Entity| {
+        scene
+            .items
+            .get(e)
+            .is_ok_and(|(_, it, ..)| r.traits.value(scene.catalog.get(it.kind())) > 3.0)
+    };
+    let before = std::mem::take(&mut r.kept);
+    r.kept = scene
+        .items
+        .iter()
+        .map(|(e, ..)| e)
+        .filter(|e| scene.mine(me, *e) && worth(*e))
+        .collect();
+    if r.combat.is_some() {
+        return None;
+    }
+    let lost = before.into_iter().find(|e| {
+        !r.skip.contains(e)
+            && scene.items.get(*e).is_ok_and(|(_, _, gt, h, so, b)| {
+                let at = gt.translation();
+                h.is_none()
+                    && so.is_none()
+                    && b.is_none()
+                    && at.distance(pos) < 15.0
+                    && out_of_anomaly(scene, at.xz()).is_none()
+            })
+    })?;
+    let id = scene.items.get(lost).map_or(String::new(), |(_, it, ..)| {
+        scene.catalog.get(it.kind()).id.clone()
+    });
+    log.event("fetch_kit", json!({"item": id}));
+    Some(vec![
+        Task::Grab {
+            item: lost,
+            side: Side::Left,
+        },
+        Task::Stow(Side::Left),
+        Task::Wait(0.2),
+    ])
 }
 
 /// Kit upkeep between jobs: pick up the magazines it dropped reloading,
