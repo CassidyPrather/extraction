@@ -31,9 +31,7 @@ pub struct WarmupPlugin;
 impl Plugin for WarmupPlugin {
     fn build(&self, app: &mut App) {
         if std::env::var("EXTRACTION_WARMUP").map_or(true, |v| v != "0") {
-            use crate::anomaly::visuals::{
-                HazeMaterial, MarkMaterial, ParticleMaterial, XrayMaterial,
-            };
+            use crate::anomaly::visuals::{HazeMaterial, ParticleMaterial, XrayMaterial};
             use crate::world::{cover, impostors, rain, shafts, sky, trees};
             app.init_resource::<Shelf>()
                 .init_resource::<Warmed>()
@@ -57,7 +55,6 @@ impl Plugin for WarmupPlugin {
                             shelve::<HazeMaterial>,
                             shelve::<ParticleMaterial>,
                             shelve::<XrayMaterial>,
-                            shelve::<MarkMaterial>,
                             shelve::<crate::world::halos::HaloMaterial>,
                             shelve::<crate::world::beams::BeamMaterial>,
                             shelve::<crate::world::storm::SheetMaterial>,
@@ -562,7 +559,11 @@ fn layout_of(mesh: &Mesh) -> Option<u64> {
 }
 
 /// Each mesh's layout as it arrives, before the render world takes its
-/// data.
+/// data. Every mesh not yet seen, each frame of the warm-up, and those
+/// changed: a mesh added after the frame's asset events (in `PostUpdate`
+/// past `AssetEventSystems`, as a resting gun's merged one can be) has its
+/// event a frame late, by when a render-world-only mesh's data is gone,
+/// and the shelf drew the real mesh in its place.
 fn record_layouts(
     mut shelf: ResMut<Shelf>,
     mut events: MessageReader<AssetEvent<Mesh>>,
@@ -572,20 +573,30 @@ fn record_layouts(
         events.clear();
         return;
     }
-    for ev in events.read() {
-        if let AssetEvent::Added { id } | AssetEvent::Modified { id } = ev {
-            let Some(mesh) = meshes.get(*id) else {
-                continue;
-            };
-            let Some(l) = layout_of(mesh) else {
-                continue;
-            };
-            shelf.layouts.insert(*id, l);
-            if !shelf.twins.contains_key(&l) {
-                if let Some(twin) = point_twin(mesh) {
-                    let twin = meshes.add(twin);
-                    shelf.twins.insert(l, twin);
-                }
+    let changed: Vec<AssetId<Mesh>> = events
+        .read()
+        .filter_map(|ev| match ev {
+            AssetEvent::Modified { id } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let new: Vec<AssetId<Mesh>> = meshes
+        .ids()
+        .filter(|id| !shelf.layouts.contains_key(id))
+        .chain(changed)
+        .collect();
+    for id in new {
+        let Some(mesh) = meshes.get(id) else {
+            continue;
+        };
+        let Some(l) = layout_of(mesh) else {
+            continue;
+        };
+        shelf.layouts.insert(id, l);
+        if !shelf.twins.contains_key(&l) {
+            if let Some(twin) = point_twin(mesh) {
+                let twin = meshes.add(twin);
+                shelf.twins.insert(l, twin);
             }
         }
     }
