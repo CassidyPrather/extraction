@@ -347,6 +347,16 @@ pub const FIRST_WALK: f32 = 300.0;
 /// thing between them and the machine (Onboarding's first-fight personas
 /// died in Marrow's open fields on the way to the Old farm).
 pub const FIRST_COVER_GAP: f32 = 40.0;
+/// The first job of each kind (`first_jobs`): every way there (the easy
+/// way, straight across, by any place on the way) has cover within a
+/// four-second sprint (`map_surge::SPRINT`) of every step, but for a run
+/// of this many metres: three of Onboarding's four newcomers on Marrow's
+/// mast relay died to a drone 7-17 s after its lock, in the open past the
+/// Village.
+pub const FIRST_RUN: f32 = 4.0 * crate::map_surge::SPRINT;
+pub const FIRST_OPEN: f32 = 10.0;
+/// A way by a place counts as on the way within this of the direct walk.
+pub const FIRST_DETOUR: f32 = 1.3;
 /// The first ten minutes: places a raid can reach and work by then, as a
 /// walk on comfortable ground from the insertion, metres (about four
 /// minutes' walking, the rest looking).
@@ -711,6 +721,44 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
         .find(|p| q.rect.sdf(*p) >= WAIT_LEE)
         .unwrap_or(q.rect.at);
     Some((q.name, d, lee))
+}
+
+/// The first job of each kind that sends you somewhere in the valley
+/// `id`: the first contract step of each (`contracts::CONTRACTS`, a scout,
+/// a thing to bring, one to leave) and the ladder's fixed ones (the
+/// letter, the ledger), as what and where.
+pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
+    use crate::contracts::Step;
+    let mut out: Vec<(String, P2)> = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for c in crate::contracts::CONTRACTS {
+        for s in c.steps {
+            let (kind, m, place, near) = match *s {
+                Step::Scout { map, place } => ("scout", map, place, None),
+                Step::Bring {
+                    map, place, near, ..
+                } => ("bring", map, place, near),
+                Step::Plant { map, place, .. } => ("plant", map, place, None),
+                _ => continue,
+            };
+            if m != id || seen.contains(&kind) {
+                continue;
+            }
+            let Some(at) = near.or_else(|| crate::contracts::place_at(map, place)) else {
+                continue;
+            };
+            seen.push(kind);
+            out.push((format!("{kind} ({}: {place})", c.id), at));
+        }
+    }
+    if id == crate::progression::LETTER_MAP {
+        out.push(("letter".into(), crate::progression::LETTER_AT));
+    }
+    if id == crate::progression::LEDGER_MAP {
+        let [x, _, z] = crate::progression::LEDGER_AT;
+        out.push(("ledger".into(), [x, z]));
+    }
+    out
 }
 
 /// Every solid thing on the surface, placements first (in order: index
@@ -1997,6 +2045,85 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         let _ = (FIRST_COVER_GAP, at);
     }
 
+    // -- The first jobs: cover within a few seconds' run all the way ------------
+    {
+        let id = map.name.to_lowercase().replace(' ', "_");
+        // Doors you can be in at: a roofed building's or a kiosk's.
+        let roofs: Vec<P2> = crate::map_doors::doors(map)
+            .into_iter()
+            .filter(|d| crate::map_surge::roofed(&map.placements[d.placement].prefab))
+            .map(|d| d.face)
+            .chain(
+                solids
+                    .iter()
+                    .filter_map(|s| s.kiosk_door().map(|(at, _)| at)),
+            )
+            .collect();
+        let near_cover = |p: P2| {
+            rects.iter().any(|(_, rc)| rc.sdf(p) <= FIRST_RUN)
+                || boulders.count_within(p, FIRST_RUN, 1) > 0
+                || tree_b.count_within(p, FIRST_RUN, STAND) >= STAND
+        };
+        // A newcomer cuts across as often as they keep to the road, and
+        // stops at what's on the way.
+        let flat = {
+            let mut g = comfy.clone();
+            for c in g.cost.iter_mut().filter(|c| **c != BLOCKED) {
+                *c = 1;
+            }
+            g
+        };
+        let pois: Vec<P2> = map.markers_of(&MarkerKind::Poi).map(|m| m.at).collect();
+        for (what, at) in first_jobs(map, &id) {
+            let direct = dist(ins, at);
+            let mut walks: Vec<Vec<P2>> = Vec::new();
+            for g in [&comfy, &flat] {
+                walks.extend(g.path(ins, at).map(|p| resample(&p)));
+                for v in pois.iter().filter(|v| {
+                    dist(ins, **v) + dist(**v, at) <= direct * FIRST_DETOUR && dist(**v, at) > 1.0
+                }) {
+                    if let (Some(a), Some(b)) = (g.path(ins, *v), g.path(*v, at)) {
+                        walks.push(resample(&[a, b].concat()));
+                    }
+                }
+            }
+            let (mut gap, mut gap_at, mut roof, mut roof_at) = (0.0f32, ins, 0.0f32, ins);
+            for pts in &walks {
+                let (g, a) = longest_gap(pts, near_cover);
+                if g > gap {
+                    (gap, gap_at) = (g, a);
+                }
+                for p in pts {
+                    let d = roofs
+                        .iter()
+                        .map(|q| dist(*p, *q))
+                        .fold(f32::INFINITY, f32::min);
+                    if d > roof {
+                        (roof, roof_at) = (d, *p);
+                    }
+                }
+            }
+            r.measures.push(format!(
+                "first job {what}, {} ways: longest run with no cover {FIRST_RUN} m off {gap:.0} m at ({:.0}, {:.0}); farthest from a roof {roof:.0} m at ({:.0}, {:.0})",
+                walks.len(),
+                gap_at[0],
+                gap_at[1],
+                roof_at[0],
+                roof_at[1]
+            ));
+            if gap > FIRST_OPEN {
+                find(
+                    &mut r,
+                    Rule::Cover,
+                    format!(
+                        "on the way to the first job {what}, {gap:.0} m with nothing within a {FIRST_RUN:.0} m run"
+                    ),
+                    gap_at,
+                );
+            }
+        }
+    }
+
     // How far from cover the open ground runs, anywhere you can walk in the
     // valley (not only along the main routes: raids cross the open to
     // what they're after).
@@ -3079,6 +3206,25 @@ mod tests {
             r.findings
                 .iter()
                 .any(|f| f.rule == Rule::Spotter && f.what.contains("last")),
+            "{}",
+            r.text()
+        );
+    }
+
+    /// Take away the cover by the district road south of Marrow's creek
+    /// bridge and the first job's way to the radio mast runs in the open.
+    #[test]
+    fn a_first_job_walk_in_the_open_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.placements.retain(|p| {
+            !(dist(p.at, [8.0, -25.0]) < 30.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
+        });
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Cover && f.what.contains("first job plant")),
             "{}",
             r.text()
         );
