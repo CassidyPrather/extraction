@@ -1746,3 +1746,121 @@ mod far_tree_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod after_a_jump {
+    use super::*;
+
+    /// A camera that jumps (a teleport, a shot tool's next view) has the
+    /// trees round it in full at once: the near trees' cards drawn within
+    /// 3 frames, and every near trunk the eye will see drawn on the jump's
+    /// first frame. A near spruce once drew as its dark hull for a shot's
+    /// whole settle, and a trunk beside it went missing.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_near_trees_in_full_after_a_jump() {
+        use crate::render::budget::tests::{client_threads, heavy, settle};
+        let _one_at_a_time = heavy();
+        let mut app = client_threads("marrow_creek", "clearing", None);
+        settle(&mut app);
+        // A stand of trees 250-400 m from the camera.
+        let (from, target) = {
+            let w = app.world_mut();
+            let cam = w
+                .query_filtered::<&GlobalTransform, With<crate::render::FreeCamera>>()
+                .single(w)
+                .unwrap()
+                .translation();
+            let grid = w.resource::<ForestGrid>();
+            let mut keys: Vec<_> = grid.cells.keys().copied().collect();
+            keys.sort();
+            let p = keys
+                .iter()
+                .map(|k| &grid.cells[k])
+                .filter(|trees| trees.len() >= 6)
+                .map(|trees| trees[0].2)
+                .find(|p| (250.0..400.0).contains(&p.distance(cam)))
+                .expect("a stand of trees 250-400 m off");
+            (cam, p)
+        };
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let eye = zone.on_ground(target.x + 6.0, target.z) + Vec3::Y * 1.7;
+        {
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
+            *q.single_mut(w).unwrap() =
+                Transform::from_translation(eye).looking_at(target + Vec3::Y * 3.0, Vec3::Y);
+        }
+        // Each frame: the near trees' cards (shown, of all), and which near
+        // trunk meshes are drawn.
+        let mut cards: Vec<(usize, usize)> = Vec::new();
+        let mut trunks: Vec<std::collections::HashSet<Entity>> = Vec::new();
+        for _ in 0..30 {
+            app.update();
+            let w = app.world_mut();
+            let details: Vec<(Vec3, Vec<Entity>)> = w
+                .query::<(&NearDetail, &GlobalTransform)>()
+                .iter(w)
+                .map(|(d, g)| (g.translation(), d.0.clone()))
+                .collect();
+            let (mut all, mut shown) = (0, 0);
+            for (p, kids) in details {
+                if p.xz().distance(eye.xz()) > 15.0 {
+                    continue;
+                }
+                for k in kids {
+                    all += 1;
+                    shown += usize::from(w.get::<ViewVisibility>(k).is_some_and(|v| v.get()));
+                }
+            }
+            cards.push((shown, all));
+            let mut q = w.query_filtered::<(
+                Entity,
+                &ViewVisibility,
+                &bevy::camera::primitives::Aabb,
+                &GlobalTransform,
+            ), (
+                With<MeshMaterial3d<StandardMaterial>>,
+                With<bevy::camera::visibility::VisibilityRange>,
+                Without<FarForest>,
+                With<ChildOf>,
+            )>();
+            trunks.push(
+                q.iter(w)
+                    .filter(|(_, v, aabb, g)| {
+                        v.get()
+                            && g.transform_point(Vec3::from(aabb.center))
+                                .xz()
+                                .distance(eye.xz())
+                                < 40.0
+                    })
+                    .map(|(e, ..)| e)
+                    .collect(),
+            );
+        }
+        println!(
+            "jumped {:.0} m; near cards shown each frame: {:?}",
+            from.distance(eye),
+            &cards[..6]
+        );
+        let cards_in = cards.iter().position(|(s, a)| *a > 0 && s == a);
+        assert!(
+            cards_in.is_some_and(|f| f < 3),
+            "near trees' cards drawn at frame {:?} after a jump (within 3): {:?}",
+            cards_in.map(|f| f + 1),
+            &cards[..6]
+        );
+        let settled = trunks.last().unwrap();
+        let missing: Vec<_> = settled.difference(&trunks[0]).collect();
+        println!(
+            "near trunk meshes drawn: {} on the jump's frame, {} settled",
+            trunks[0].len(),
+            settled.len()
+        );
+        assert!(
+            !settled.is_empty() && missing.is_empty(),
+            "{} near trunk meshes drawn later than the jump's frame",
+            missing.len()
+        );
+    }
+}
