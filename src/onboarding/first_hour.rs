@@ -681,6 +681,10 @@ pub(super) fn direct_raid(
         }
     }
     state.showing = showing;
+    // The buildings' plans, once they're up (in from a drone, a find indoors).
+    if plans.is_empty() && !view.buildings.is_empty() {
+        *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
+    }
     // The first time, what the driver says; after, the machine's own tell
     // (the chirp, the gun settling): a newcomer who's learned what one
     // means keeps doing as told.
@@ -743,7 +747,7 @@ pub(super) fn direct_raid(
                 }
                 let overhead = f == First::DroneLock;
                 overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), here))
+                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here))
                     .flatten()
                     .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
             }
@@ -1160,9 +1164,6 @@ pub(super) fn direct_raid(
             }
             let skip = state.passed_over.clone();
             let no_plan = state.plan_failed.clone();
-            if plans.is_empty() && !view.buildings.is_empty() {
-                *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
-            }
             match errand_tasks(
                 &errand,
                 &world,
@@ -1597,6 +1598,7 @@ pub(super) struct Tells<'w, 's> {
 /// a look).
 fn under_a_roof(
     entrances: Option<&crate::robots::doors::Entrances>,
+    plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
 ) -> Option<Vec<Task>> {
     let entrances = entrances?;
@@ -1617,11 +1619,32 @@ fn under_a_roof(
         .filter(|d| d.mid.xz().distance(here) < 60.0)?;
     let out = d.out.xz().normalize_or(Vec2::Y);
     let inside = d.mid.xz() - out * 2.5;
-    // Off to one side of the doorway: not in a look through it.
-    let aside = [out.perp(), -out.perp()]
+    // Off to one side of the doorway: not in a look through it, and
+    // somewhere the body can stand (the rooms' plan says; the shop's shelves
+    // are in the way of some).
+    let plan = plans.iter().find(|pl| pl.entity == d.building);
+    let standable = |p: Vec2| match plan {
+        Some(pl) => {
+            let from = pl.to_local(Vec3::new(inside.x, d.mid.y, inside.y)).xz();
+            let to = pl.to_local(Vec3::new(p.x, d.mid.y, p.y)).xz();
+            pl.path(from, to)
+                .and_then(|path| path.last().copied())
+                .is_some_and(|end| end.distance(to) < 0.4)
+        }
+        None => entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building),
+    };
+    let aside = [2.0, 1.4, 2.6]
         .into_iter()
-        .map(|s| inside + s * 2.0)
-        .find(|p| entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building))
+        .flat_map(|k| {
+            [
+                out.perp() * k,
+                -out.perp() * k,
+                out.perp() * k - out,
+                -out.perp() * k - out,
+            ]
+        })
+        .map(|s| inside + s)
+        .find(|p| standable(*p))
         .unwrap_or(inside);
     Some(vec![
         Task::WalkTo {
@@ -2264,7 +2287,7 @@ pub(super) fn first_fight(
         // from a drone.
         fight.flee_until = now + 12.0;
         (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), here))
+            .then(|| under_a_roof(entrances.as_deref(), &[], here))
             .flatten()
             .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
