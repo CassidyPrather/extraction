@@ -18,6 +18,7 @@ pub mod checks;
 pub mod cinematic;
 pub mod fighting;
 pub mod glb;
+pub mod landmarks;
 pub mod path;
 pub mod sweep;
 pub mod trailer;
@@ -32,6 +33,11 @@ impl Plugin for CapturePlugin {
             trailer::TrailerPlugin,
         ))
         .add_systems(PostUpdate, (keep_alive, hide_hands))
+        .add_systems(
+            PostUpdate,
+            landmarks::check_buildings
+                .after(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+        )
         .add_systems(Update, clear_air.after(crate::world::sky::WeatherLook))
         .add_systems(
             PostUpdate,
@@ -140,6 +146,9 @@ pub struct CaptureOptions {
     pub trailer: Option<String>,
     /// `--hide-hands 1`: hide the player's gloves and sleeves.
     pub hide_hands: bool,
+    /// `--check-buildings 1`: fail loudly when a building in view draws
+    /// nothing (`landmarks`).
+    pub check_buildings: bool,
     /// `--cine-dump IN.cine,OUT.stills`: write each shot's first pose as a
     /// still and exit (`cinematic::dump`).
     pub dump: Option<(PathBuf, PathBuf)>,
@@ -161,6 +170,7 @@ impl CaptureOptions {
                 | "--trailer"
                 | "--hide-hands"
                 | "--cine-dump"
+                | "--check-buildings"
         )
     }
 
@@ -176,6 +186,7 @@ impl CaptureOptions {
             "--sweep-turn" => self.sweep_turn = val.parse().ok().filter(|n| *n > 0),
             "--trailer" => self.trailer = Some(val),
             "--hide-hands" => self.hide_hands = val != "0",
+            "--check-buildings" => self.check_buildings = val != "0",
             "--cine-dump" => {
                 self.dump = val
                     .split_once(',')
