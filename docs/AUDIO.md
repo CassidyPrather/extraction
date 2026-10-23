@@ -894,6 +894,15 @@ with a mode's snap (`walker.suppress`, `walker.suppress_mode`): unlike its
 aim's clank and servo, and heard to 38 m in a downpour. It racks down
 when it stops (`walker.suppress_off`). Its faster fire says the rest.
 
+A machine the Zone does something to (`robots::hazards::HazardStruck`)
+is heard at it, by what it does (`audio_machines::hazard_layers`): a
+drone thrown by a lift, its rotors screaming as it tumbles; a walker
+thrown, a servo's lurch and its foot scraping; dragged in a well or
+stiffened by frost, its legs grinding; crushed at a well's heart, a metal
+groan and a hit; dazzled, its sensor stuttering and its lock clicking
+out; stunned, its servos winding down; hurt by what makes its own sound,
+a short distress note. Deafened by a hush, nothing: the hush is heard.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,
