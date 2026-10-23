@@ -429,3 +429,49 @@ drones are warned least (31-89%: they come fast and high, over the
 flocks), the airship and walkers most. Flocks are a few, on buildings, so
 the chorus carries most of it; birds going up are the cue you see.
 
+## Using them
+
+The wildlife isn't only to read: you can use it.
+
+- **A stone into their tree.** Anything a hand let go of in the last 4 s
+  (`wildlife::LetGo`) that comes down hard enough to be heard, within 6 m
+  of a sitting flock, puts it up (`FlushCause::Thrown`). Its alarm carries
+  100 m as from nobody, so the machines come to look where the birds were,
+  not at you. At most once a minute a flock (`ALARM_EVERY`), and a robot
+  that's looked somewhere and found nothing ignores the next "nobody made
+  that" there for two minutes (`robots::senses::BORED_FOR`): it can't be
+  worked over and over. Loot settling at the start scares nothing.
+- **A stone among the deer.** One within 10 m of a herd runs it
+  (`herd::THROWN_NEAR`). A herd bolting for anything but a machine crashes
+  off, heard 45 m as from nobody (`herd::BOLT_HEARD`): a diversion of its
+  own, and a give-away if it was you who blundered into them.
+- **Bait.** Food a hand puts down or throws (any `Food` item) is
+  `bait::Bait`. The nearest herd within 250 m that isn't running or
+  watching something ambles over (120 m in about four minutes) and eats it
+  in two, within 6 m. Scared off, they come back to it once settled.
+- **Among them.** Walking (not running) with two or more animals within
+  12 m (`herd::Among`), a machine makes you out as if you were keeping
+  still (`robots::senses`, `STILL`): one more shape moving among theirs.
+
+The gauge (`app_tests::wildlife_diversion_gauge`, ignored: it prints the
+table): in each valley, at four low roofs, a walker on watch 65 m off with
+its back to the birds and a 40 m crossing 35 m in front of it, in its
+sight; walked at a walk, plainly and with a stone onto the birds' roof 4 s
+first, each from a fresh valley:
+
+| Valley | Crossings | Seen, plain | Seen, a stone onto the birds first |
+| - | - | - | - |
+| Marrow Creek | 4 | 2 | 0 |
+| Kettle Pass | 4 | 3 | 0 |
+| Cinder Works | 4 | 4 | 0 |
+| Sallow Reservoir | 4 | 2 | 0 |
+| Rime Fell | 4 | 2 | 0 |
+
+13 of 20 seen plainly, none with the birds sent up first: the walker
+turns and goes to look at the roof, its back to the crossing. The stone
+lands without a thrower in the gauge; in play you throw it from where the
+walker can't see you. The sim raider can divert too (`SIM_DIVERT=1`: its
+distraction throw onto a flock's roof or among a herd), but in 40 raids it
+never had birds or deer within a throw when it chose to distract, so the
+gauge is the controlled one.
+
