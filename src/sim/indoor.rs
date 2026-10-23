@@ -54,6 +54,19 @@ pub struct DoorInfo {
     pub outside: Option<Vec2>,
 }
 
+impl DoorInfo {
+    /// The doorway shut, as an obstacle across its gap.
+    pub fn leaf(&self) -> Obstacle {
+        let along = self.b - self.a;
+        let dir = along.normalize_or(Vec2::X);
+        Obstacle::Rect {
+            at: ((self.a + self.b) * 0.5).to_array(),
+            half: [along.length() * 0.5 + 0.1, 0.3],
+            yaw: dir.y.atan2(dir.x),
+        }
+    }
+}
+
 /// One building as a bot sees it.
 #[derive(Clone, Debug)]
 pub struct BuildingPlan {
@@ -93,6 +106,9 @@ pub struct BuildingPlan {
     /// doesn't stop feet); the raider shuts them (`shut_live`), since it
     /// carries no canary and can't tell a pocket that's gone up.
     pub gas: Vec<usize>,
+    /// Its doors held shut on an underground site's power right now (the
+    /// raider keeps it up to date): no way through but by its switches.
+    pub held: Vec<Entity>,
 }
 
 impl BuildingPlan {
@@ -218,6 +234,20 @@ impl BuildingPlan {
     /// An indoor path between two building-local points, as local
     /// waypoints (both ends snapped to walkable cells).
     pub fn path(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+        if self.held.is_empty() {
+            return self.path_through_held(from, to);
+        }
+        let mut grid = self.grid.clone();
+        for d in self.doors.iter().filter(|d| self.held.contains(&d.entity)) {
+            grid.block(d.leaf(), 0.0);
+        }
+        grid.path(from.to_array(), to.to_array())
+            .map(|p| p.into_iter().map(Vec2::from_array).collect())
+    }
+
+    /// As [`Self::path`], through doors held shut on power too: for a
+    /// route that throws their switches on the way.
+    pub fn path_through_held(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
         self.grid
             .path(from.to_array(), to.to_array())
             .map(|p| p.into_iter().map(Vec2::from_array).collect())
@@ -503,6 +533,7 @@ pub fn plan_buildings(
             warm: Vec::new(),
             live: Vec::new(),
             gas: Vec::new(),
+            held: Vec::new(),
         });
     }
     out
@@ -778,6 +809,7 @@ fn plan_site(
         warm,
         live,
         gas,
+        held: Vec::new(),
     }
 }
 

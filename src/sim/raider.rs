@@ -969,6 +969,7 @@ pub fn think(
             }
             spot_anomalies(&mut bot, r, &scene, here);
             spot_sealed(&mut bot, r, &scene, &mut log);
+            spot_held(&mut bot, r, &scene);
             sneak(
                 me,
                 &mut bot,
@@ -2301,6 +2302,37 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
 /// A lockdown has bolted a door for good (the shelter's programme): its
 /// doorway is a wall in the plan from now on, and a walk planned through
 /// it is planned again, the escape tunnel's way.
+/// Which doors are held shut on power right now, in every plan; and a
+/// route queued through one with no switch thrown before it (a way out
+/// planned through a door the breaker still holds) is dropped, to be
+/// planned again round it.
+fn spot_held(bot: &mut Bot, r: &mut Raider, scene: &Scene) {
+    for plan in r.plans.iter_mut() {
+        if plan.doors.is_empty() {
+            continue;
+        }
+        plan.held.clear();
+        plan.held.extend(
+            plan.doors
+                .iter()
+                .map(|d| d.entity)
+                .filter(|d| scene.power_locked.contains(*d)),
+        );
+    }
+    let mut pressed = false;
+    for t in &bot.tasks {
+        match t {
+            Task::Press(_) => pressed = true,
+            Task::OpenDoor(d) if !pressed && r.plans.iter().any(|p| p.held.contains(d)) => {
+                r.interrupted = true;
+                bot.replace([Task::Wait(0.1)]);
+                return;
+            }
+            _ => {}
+        }
+    }
+}
+
 fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
     let mut new = Vec::new();
     for plan in r.plans.iter_mut() {
@@ -2313,16 +2345,7 @@ fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
             {
                 continue;
             }
-            let along = d.b - d.a;
-            let dir = along.normalize_or(Vec2::X);
-            plan.grid.block(
-                Obstacle::Rect {
-                    at: ((d.a + d.b) * 0.5).to_array(),
-                    half: [along.length() * 0.5 + 0.1, 0.3],
-                    yaw: dir.y.atan2(dir.x),
-                },
-                0.0,
-            );
+            plan.grid.block(d.leaf(), 0.0);
             new.push((d.entity, plan.name.clone()));
         }
     }
@@ -2399,6 +2422,18 @@ fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<
     indoor_to(plan, from, goal, within)
 }
 
+/// As [`indoor`], through doors held shut on power: for a route that
+/// throws their switches first.
+fn indoor_through_held(
+    plan: &BuildingPlan,
+    from: Vec3,
+    to: Vec2,
+    within: f32,
+) -> Option<Vec<Task>> {
+    let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
+    indoor_path(plan, from, goal, within, true)
+}
+
 /// Out of the building: to the floor nearest the way out.
 fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let goal = stand_near(plan, plan.to_local(from).xz(), to)?;
@@ -2409,8 +2444,22 @@ fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<
 const LEG_MAX: f32 = 10.0;
 
 fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
+    indoor_path(plan, from, goal, within, false)
+}
+
+fn indoor_path(
+    plan: &BuildingPlan,
+    from: Vec3,
+    goal: Vec2,
+    within: f32,
+    through_held: bool,
+) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
-    let path = plan.path(a, goal)?;
+    let path = if through_held {
+        plan.path_through_held(a, goal)?
+    } else {
+        plan.path(a, goal)?
+    };
     let mut tasks = Vec::new();
     // A long straight run (an underground site's long stair) in legs, each
     // well inside a walk's time.
@@ -3547,7 +3596,7 @@ fn take_item(
                 Some(CardJob::Bring { item: id, .. })
                     if scene.items.get(item).is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == *id)
             );
-            let route = match indoor(plan, pos, goal, 0.3) {
+            let route = match indoor_through_held(plan, pos, goal, 0.3) {
                 Some(route) => route,
                 None if wanted => {
                     let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
@@ -3588,12 +3637,27 @@ fn take_item(
                         .iter()
                         .find(|(_, sw, _)| sw.site == plan.entity && sw.stage == k)?;
                     let at_switch = gt.translation();
-                    tasks.extend(indoor(plan, from, plan.to_local(at_switch).xz(), 0.5)?);
+                    tasks.extend(indoor_through_held(
+                        plan,
+                        from,
+                        plan.to_local(at_switch).xz(),
+                        0.5,
+                    )?);
                     tasks.push(Task::Press(switch));
                     tasks.push(Task::Wait(1.0));
                     from = at_switch;
                 }
-                tasks.extend(indoor(plan, from, plan.to_local(at).xz(), 0.3)?);
+                tasks.extend(indoor_through_held(
+                    plan,
+                    from,
+                    plan.to_local(at).xz(),
+                    0.3,
+                )?);
+            } else if route
+                .iter()
+                .any(|t| matches!(t, Task::OpenDoor(d) if plan.held.contains(d)))
+            {
+                return None;
             } else {
                 tasks.extend(route);
             }
