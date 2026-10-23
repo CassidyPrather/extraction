@@ -7,9 +7,9 @@
 //!
 //! With `edge`, `dist` is from each anomaly's edge (not its centre), and
 //! each line also carries the eye, the radius, and ground points along
-//! lines from the eye's side across the edge (`probes`: per line, metres
-//! from the edge, positive outside, and the point), for measuring how
-//! plainly the edge shows.
+//! lines across the edge (`probes`: per line, metres from the edge,
+//! positive outside, and the point; five across the near edge, then one
+//! across each side), for measuring how plainly the edge shows and where.
 
 use extraction_core::anomaly::{AnomalyKind, layout, view_of};
 use extraction_core::map::MapDef;
@@ -48,7 +48,12 @@ fn main() {
             // projection matches the shot.
             let eye = [v.at[0], hm.height(v.at) + 1.7, v.at[1]];
             let toward = (v.at[1] - a.at[1]).atan2(v.at[0] - a.at[0]);
-            let lines: Vec<_> = [-0.35f32, -0.18, 0.0, 0.18, 0.35]
+            // Five across the near edge (what you walk up to), then two
+            // across its sides, left and right (where it is: a side's
+            // place on the screen hardly moves with the ground's height,
+            // where the near edge's does on a slope).
+            let side = std::f32::consts::FRAC_PI_2;
+            let lines: Vec<_> = [-0.35f32, -0.18, 0.0, 0.18, 0.35, -side, side]
                 .iter()
                 .map(|off| {
                     let ang = toward + off;

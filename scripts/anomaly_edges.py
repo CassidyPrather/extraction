@@ -10,12 +10,16 @@ it measures what the anomaly changes at each step (the colour difference,
 CIE ΔE, between with and without: a burner's red scorch on green grass
 barely moves luminance), and asks two things of each line:
 
-- the step: what it changes just inside the edge (0.3-1 m in) beats
-  what it changes just outside (0.3-1 m out) by at least `MIN_STEP`;
-- the place: the change crosses halfway between the two within
-  `MAX_SLIP` of the true edge.
+- the step, along five lines across its near edge (what you walk up
+  to): what it changes just inside the edge (0.3-1 m in) beats what it
+  changes just outside (0.3-1 m out) by at least `MIN_STEP`;
+- the place, along two lines across its sides, left and right: the
+  change crosses halfway within `MAX_SLIP` of the true edge. (A side's
+  place on the screen hardly moves with the ground's height; the near
+  edge's does, on a slope, and put a lift's half a metre off.)
 
-An edge reads when most of its lines pass. A kind fails when its edge
+An edge reads when most of the near lines step and the sides are where
+they should be. A kind fails when its edge
 doesn't read in any condition: an anomaly you can walk into without
 seeing where it starts is an invisible wall.
 
@@ -146,47 +150,55 @@ def measure(v: dict, cond: str) -> dict:
     )
     lines = []
     for probe in v["probes"]:
-        prof = []
-        for d, p in probe:
-            uv = project(v, p)
-            if uv is None or not (2 <= uv[0] < W - 2 and 2 <= uv[1] < H - 2):
-                continue
-            x, y = int(uv[0]), int(uv[1])
-            # A strip one row tall: at 5 m the ground is so foreshortened
-            # that half a metre of it is a few rows, and a square window
-            # straddles the edge.
-            prof.append((d, float(diff[y, x - 3:x + 4].mean())))
-        # Over three neighbouring steps (10 cm apart): a blotch in a mottled
-        # mark isn't its edge.
-        prof.sort()
-        prof = [
-            (d, float(np.mean([c for _, c in prof[max(0, i - 1):i + 2]])))
-            for i, (d, _) in enumerate(prof)
-        ]
-        inside = [c for d, c in prof if -1.0 <= d <= -0.3]
-        outside = [c for d, c in prof if 0.3 <= d <= 1.0]
-        if not inside or not outside:
-            lines.append({"step": 0.0, "slip": None, "ok": False})
-            continue
-        i, o = float(np.mean(inside)), float(np.mean(outside))
-        half = (i + o) / 2
-        # Where, walking out from the inside, the change first falls below
-        # halfway.
-        cross = next(
-            (d for d, c in sorted(prof) if d > -1.0 and c < half),
-            None,
-        )
-        slip = None if cross is None else abs(cross)
-        ok = (i - o) >= MIN_STEP and slip is not None and slip <= MAX_SLIP
-        lines.append({"step": round(i - o, 1), "slip": slip, "ok": ok})
-    passing = sum(l["ok"] for l in lines)
+        lines.append(line(probe, v, diff))
+    near, sides = lines[:5], lines[5:]
+    passing = sum(l["ok"] for l in near)
+    # Where it is, by its sides (both, when both are in the shot).
+    placed = [l for l in sides if l["slip"] is not None]
+    where = all(l["slip"] <= MAX_SLIP for l in placed) if placed else None
     return {
         "kind": name,
         "condition": cond,
-        "lines": lines,
+        "lines": near,
+        "sides": sides,
         "passing": passing,
-        "ok": passing >= MIN_LINES,
+        "ok": passing >= MIN_LINES and where is not False,
     }
+
+
+def line(probe: list, v: dict, diff) -> dict:
+    """The step across the edge along one line of probes (what it changes
+    0.3-1 m inside over 0.3-1 m outside), and where the change crosses
+    halfway (metres off the true edge)."""
+    prof = []
+    for d, p in probe:
+        uv = project(v, p)
+        if uv is None or not (4 <= uv[0] < W - 4 and 2 <= uv[1] < H - 2):
+            continue
+        x, y = int(uv[0]), int(uv[1])
+        # A strip one row tall: at 5 m the ground is so foreshortened that
+        # half a metre of it is a few rows, and a square window straddles
+        # the edge.
+        prof.append((d, float(diff[y, x - 3:x + 4].mean())))
+    # Over three neighbouring steps (10 cm apart): a blotch in a mottled
+    # mark isn't its edge.
+    prof.sort()
+    prof = [
+        (d, float(np.mean([c for _, c in prof[max(0, i - 1):i + 2]])))
+        for i, (d, _) in enumerate(prof)
+    ]
+    inside = [c for d, c in prof if -1.0 <= d <= -0.3]
+    outside = [c for d, c in prof if 0.3 <= d <= 1.0]
+    if not inside or not outside:
+        return {"step": 0.0, "slip": None, "ok": False}
+    i, o = float(np.mean(inside)), float(np.mean(outside))
+    half = (i + o) / 2
+    # Where, walking out from the inside, the change first falls below
+    # halfway.
+    cross = next((d for d, c in prof if d > -1.0 and c < half), None)
+    step = i - o
+    slip = None if cross is None or step < MIN_STEP else round(abs(cross), 1)
+    return {"step": round(step, 1), "slip": slip, "ok": step >= MIN_STEP}
 
 
 def sheet(vs: list, results: list) -> None:
@@ -259,7 +271,13 @@ def main() -> int:
             f"{l['step']:+.0f}/" + ("-" if l["slip"] is None else f"{l['slip']:.1f}")
             for l in r["lines"]
         )
-        print(f"{r['kind']:7} {r['condition']:9} {r['passing']}/5  {steps}  {'ok' if r['ok'] else 'NO EDGE'}")
+        sides = " ".join(
+            "-" if l["slip"] is None else f"{l['slip']:.1f}" for l in r.get("sides", [])
+        )
+        print(
+            f"{r['kind']:7} {r['condition']:9} {r['passing']}/5  {steps}  sides {sides}"
+            f"  {'ok' if r['ok'] else 'NO EDGE'}"
+        )
     low = [r for r in results if not r["ok"]]
     print("anomaly edges OK" if not low else f"{len(low)} edges don't read")
     return 1 if low else 0
