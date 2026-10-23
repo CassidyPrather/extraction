@@ -851,6 +851,7 @@ pub(crate) fn walk(
         &Robot,
         Option<&super::Intent>,
         Has<super::Stunned>,
+        Option<&super::hazards::Hampered>,
     )>,
     mut legs: Query<(&WalkerLeg, &RobotPart, &mut Transform), Without<Walker>>,
     targets: Query<&GlobalTransform>,
@@ -864,8 +865,19 @@ pub(crate) fn walk(
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
-    for (entity, mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in
-        &mut walkers
+    for (
+        entity,
+        mut w,
+        mut g,
+        mut t,
+        mut poses,
+        aware,
+        children,
+        robot,
+        intent,
+        stunned,
+        hampered,
+    ) in &mut walkers
     {
         let pos = t.translation - g.sway;
         // Steering along the path.
@@ -897,7 +909,8 @@ pub(crate) fn walk(
         let drive = Drive {
             desired,
             face,
-            pace: intent.pace,
+            // Slowed by a hazard (`hazards::Hampered`).
+            pace: intent.pace * hampered.map_or(1.0, |h| h.pace),
             down: w.collapsed || robot.wrecked || stunned || g.down(),
             stunned: stunned && !w.collapsed && !robot.wrecked,
             low: intent.low,

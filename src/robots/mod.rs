@@ -24,6 +24,7 @@ pub mod flee;
 pub mod flight;
 pub mod fx;
 pub mod grappler;
+pub mod hazards;
 pub mod heavy;
 pub mod heavy_look;
 pub mod heavy_mind;
@@ -277,6 +278,7 @@ impl Plugin for RobotsPlugin {
                 recall::RecallPlugin,
                 squad::SquadPlugin,
                 subjects::SubjectsPlugin,
+                hazards::HazardsPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
