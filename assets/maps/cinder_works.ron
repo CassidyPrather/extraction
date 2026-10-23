@@ -273,7 +273,7 @@
         (prefab: "rail_shed", at: (140.0, 5.0), rot: 0.0),
         (prefab: "pump_station", at: (175.0, 34.0), rot: 0.0),
         (prefab: "boxcar", at: (215.1, -1.1), rot: 82.7),
-        (prefab: "boxcar", at: (268.0, -5.5), rot: 89.4),
+        (prefab: "boxcar", at: (262.0, -8.4), rot: 89.4),
         (prefab: "shed", at: (250.0, 22.0), rot: 0.0),
         // A lone shed out on the south-east flats: the only roof in a
         // minute's run of that corner when the Surge is called.
