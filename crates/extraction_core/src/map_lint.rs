@@ -2085,8 +2085,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             // There, and home from there to the two nearest rendezvous
             // (Onboarding's newcomers fell on the way home from the
             // Village, by the pumping station): the way there is held, the
-            // way home measured against the main routes' cover (held once
-            // Sallow's bed has the two Fourth valley is placing).
+            // way home against the main routes' cover.
             let mut home = rvs.clone();
             home.sort_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)));
             let legs: Vec<(P2, P2)> = std::iter::once((ins, at))
@@ -2147,6 +2146,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 roof_at[0],
                 roof_at[1]
             ));
+            if back > COVER_GAP {
+                find(
+                    &mut r,
+                    Rule::Cover,
+                    format!(
+                        "on the way home from the first job {what}, {back:.0} m with no cover within {COVER_REACH:.0} m"
+                    ),
+                    back_at,
+                );
+            }
             if gap > FIRST_OPEN {
                 find(
                     &mut r,

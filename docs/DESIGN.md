@@ -331,7 +331,7 @@ Without the pinner's suppression, the last two hold but the first doesn't: a pla
 | Mine | — | hurt | hurt | — |
 | EMP | stunned | stunned | stunned | stunned |
 
-Each is told (a look and a sound, at most once a second per machine per hazard). Walkers go round lifts, burners, snares, wells and frosts: crossing one costs 30 times as much on their grid. Chasing you hard (in a fight, you in sight within 25 m), they come straight and risk it. That's the lure: lead a hound across a snare, a walker through a burner's edge, lose a drone in a hush.
+Each is told (a look and a sound, at most once a second per machine per hazard). Walkers go round lifts, burners, snares, wells and frosts: on their grid each is closed, and 1.5 m past its reach. Chasing you hard (running at you in a fight, you in sight within 40 m), they come straight and risk it. That's the lure: lead a hound across a snare, a walker through a burner's edge, lose a drone in a hush.
 
 In the squad drill, a listening newcomer that takes its way out past a snare's far side from the squad gets out 65% of the time, against 48% for one that goes straight round (paired by seed, 13 to 5, p ≈ 0.1). The snare itself rarely catches a machine (2 runs in 48): the squad is mostly too far back to be chasing hard when the newcomer passes it. The way round, away from them, does most of the good.
 

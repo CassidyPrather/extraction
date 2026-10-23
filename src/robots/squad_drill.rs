@@ -66,6 +66,8 @@ pub const SNARE_AHEAD: f32 = 22.0;
 pub const SNARE_RADIUS: f32 = 3.0;
 /// ...and the lure's way past it, this far beyond its edge (m).
 pub const LURE_GAP: f32 = 1.5;
+/// A hound in the squad starts this far off (m): it sees short.
+pub const HOUND_SPAWN: f32 = 20.0;
 /// The squad finds it from this far (m).
 pub const SPAWN: (f32, f32) = (45.0, 55.0);
 /// The updates in a second.
@@ -98,6 +100,9 @@ pub struct Outcome {
     pub snared: u32,
     /// Machines of the squad wrecked.
     pub wrecked: u32,
+    /// How near the squad, and the newcomer, came to the snare (m).
+    pub closest: f32,
+    pub me_closest: f32,
 }
 
 #[derive(Resource, Default)]
@@ -242,6 +247,9 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     // The other arm of the pinner's suppression.
     app.world_mut().resource_mut::<Coordination>().suppress =
         std::env::var("SIM_DRILL_NO_SUPPRESS").is_err();
+    // The experiment: walkers going after a runner.
+    app.world_mut().resource_mut::<Coordination>().pursue =
+        std::env::var("SIM_DRILL_PURSUE").is_ok();
     let mut rng = Rng::new(seed.wrapping_mul(0x9E37_79B9) ^ 0x5D);
     let rvs = rendezvous(&zone);
     let nav_near = |app: &App, p: Vec2| {
@@ -323,6 +331,27 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                 },
             ));
         }
+        // With a snare out (the lure arms), one of the walkers' place is
+        // a hound's: what runs straight at you, and so what a trap takes.
+        if arm.lure.is_some() && !drone {
+            if let Some(last) = squad.pop() {
+                c.entity(last).despawn();
+            }
+            // Within its sight (25 m: an ear more than an eye).
+            let p = nav_near(&app, start + Vec2::from_angle(side) * HOUND_SPAWN);
+            let at = ground(p);
+            squad.push(super::hound::spawn_hound(
+                &mut c,
+                &zone,
+                at,
+                Job {
+                    kind: JobKind::Watch,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            ));
+        }
         if drone {
             let p = start + Vec2::from_angle(side) * SPAWN.0;
             squad.push(super::drone::spawn_drone(
@@ -350,9 +379,11 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     // on its far side from the squad, so a machine coming straight for it
     // comes through.
     let mut path = route(&app, start, rvs[nearest].1);
+    let mut snare_at: Option<Vec2> = None;
     if let Some(lure) = arm.lure {
         let toward = (rvs[nearest].1 - start).normalize_or(Vec2::NEG_Y);
         let snare = nav_near(&app, start + toward * SNARE_AHEAD);
+        snare_at = Some(snare);
         crate::anomaly::spawn_anomaly(
             app.world_mut(),
             extraction_core::anomaly::AnomalyKind::Snare,
@@ -373,6 +404,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             route(&app, start, rvs[nearest].1)
         };
     }
+    let (mut closest, mut me_closest) = (f32::MAX, f32::MAX);
     let mut me = Newcomer {
         goal: nearest,
         path,
@@ -573,6 +605,14 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             }
         }
         put(&mut app, here);
+        if let Some(s) = snare_at {
+            for e in &squad {
+                if let Some(t) = app.world().get::<Transform>(*e) {
+                    closest = closest.min(t.translation.xz().distance(s));
+                }
+            }
+            me_closest = me_closest.min(here.distance(s));
+        }
         if std::env::var("SIM_DRILL_TRACE").is_ok() && (t * HZ) as u32 % 45 == 0 {
             let hp = app
                 .world()
@@ -622,10 +662,10 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         hp,
         heeded,
         calls,
-        squad: if drone {
-            "2 walkers + drone"
-        } else {
-            "3 walkers"
+        squad: match (drone, arm.lure.is_some()) {
+            (true, _) => "2 walkers + drone",
+            (false, true) => "2 walkers + hound",
+            (false, false) => "3 walkers",
         },
         rv: rvs[me.goal].0.clone(),
         snared: app.world().resource::<Snared>().0.len() as u32,
@@ -637,6 +677,8 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                     .is_some_and(|r| r.wrecked)
             })
             .count() as u32,
+        closest,
+        me_closest,
     }
 }
 
@@ -648,6 +690,8 @@ fn line(o: &Outcome) -> String {
         "lure": o.arm.lure,
         "snared": o.snared,
         "wrecked": o.wrecked,
+        "closest": if o.closest < 1e6 { (o.closest * 10.0).round() / 10.0 } else { -1.0 },
+        "me_closest": if o.me_closest < 1e6 { (o.me_closest * 10.0).round() / 10.0 } else { -1.0 },
         "escaped": o.escaped,
         "down": o.down,
         "secs": (o.secs * 10.0).round() / 10.0,

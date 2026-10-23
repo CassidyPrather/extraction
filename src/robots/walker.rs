@@ -84,6 +84,10 @@ struct Blind {
 pub const LAME: f32 = 0.5;
 /// It fights from cover at about this range from you (m)...
 pub const COVER_RANGE: (f32, f32) = (14.0, 34.0);
+/// A runner beyond this (m), getting away faster than this (m/s), is gone
+/// after (with `squad::Coordination::pursue`).
+pub const PURSUE_FROM: f32 = 20.0;
+pub const PURSUE_RATE: f32 = 0.5;
 /// ...and looks for better cover this often (s).
 pub const COVER_RETHINK: f32 = 4.0;
 
@@ -118,6 +122,8 @@ pub struct Walker {
     /// (m/s, smoothed): `hazards::chasing_hard`.
     pub gap: Option<f32>,
     pub closing: f32,
+    /// After a runner getting away (`squad::Coordination::pursue`).
+    pub pursuing: bool,
     pub turret_yaw: f32,
     /// Which diagonal pair may step next.
     pub phase: usize,
@@ -338,6 +344,7 @@ pub fn spawn_walker_sized(
                 suppressing: false,
                 gap: None,
                 closing: 0.0,
+                pursuing: false,
                 turret_yaw: 0.0,
                 phase: 0,
                 collapsed: false,
@@ -468,7 +475,11 @@ fn walker_brain(
         ),
     )>,
     targets: Query<&GlobalTransform>,
-    (nav, wary): (Res<Nav>, Option<Res<super::hazards::Wary>>),
+    (nav, wary, plan): (
+        Res<Nav>,
+        Option<Res<super::hazards::Wary>>,
+        Res<super::squad::Coordination>,
+    ),
     time: Res<Time>,
     mut convoy: MessageWriter<super::collector::ConvoyEvent>,
     entrances: Res<super::doors::Entrances>,
@@ -565,7 +576,8 @@ fn walker_brain(
         };
         w.closing += (closing - w.closing) * (dt * 2.0).min(1.0);
         w.gap = gap;
-        let hard = super::hazards::chasing_hard(&brain, aware, gap, w.closing);
+        // Running at you, or after you as you run.
+        let hard = super::hazards::chasing_hard(&brain, aware, gap, w.closing) || w.pursuing;
         let zone_grid = match (&wary, hard) {
             (Some(w), false) => &w.0,
             _ => &nav.0,
@@ -900,14 +912,27 @@ fn walker_brain(
                             };
                         }
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
-                        match w.cover {
-                            Some(c) if Vec2::new(c.x - pos.x, c.z - pos.z).length() > 1.2 => {
-                                intent.pace = 1.25;
-                                Some(c)
+                        // A runner getting away (`squad::Coordination::
+                        // pursue`): after you, until it's caught up.
+                        w.pursuing = plan.pursue
+                            && !hurt
+                            && flank.is_none()
+                            && aware.can_see_target
+                            && d > PURSUE_FROM
+                            && w.closing < -PURSUE_RATE;
+                        if w.pursuing {
+                            intent.pace = 1.4;
+                            Some(tp)
+                        } else {
+                            match w.cover {
+                                Some(c) if Vec2::new(c.x - pos.x, c.z - pos.z).length() > 1.2 => {
+                                    intent.pace = 1.25;
+                                    Some(c)
+                                }
+                                Some(_) => None,
+                                None if d > COVER_RANGE.1 => Some(tp),
+                                None => None,
                             }
-                            Some(_) => None,
-                            None if d > COVER_RANGE.1 => Some(tp),
-                            None => None,
                         }
                     }
                     (None, Some(lk)) => {
