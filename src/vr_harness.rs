@@ -5823,6 +5823,40 @@ mod wounds {
         }
     }
 
+    /// Home from a raid, the wounds and the glove's blood are gone.
+    #[test]
+    fn home_from_a_raid_the_wounds_are_gone() {
+        let (mut vr, _) = setup();
+        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+        vr.step(2);
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        vr.move_hand(Side::Left, thigh);
+        vr.step(30);
+        assert!(!wounds(&vr).is_empty(), "wounded");
+        let bloody = |vr: &mut Vr| {
+            vr.app
+                .world_mut()
+                .query_filtered::<(), With<crate::interact::wounds::Bloodied>>()
+                .iter(vr.app.world())
+                .count()
+        };
+        assert!(bloody(&mut vr) > 0, "a bloody glove");
+        // Home: health made whole, as the truck does.
+        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::AtBase;
+        *vr.app
+            .world_mut()
+            .get_mut::<crate::health::Health>(vr.player)
+            .unwrap() = crate::health::Health::default();
+        vr.step(4);
+        assert!(
+            wounds(&vr).is_empty(),
+            "no wounds at home: {:?}",
+            wounds(&vr)
+        );
+        assert_eq!(bloody(&mut vr), 0, "clean gloves");
+    }
+
     /// The glove of a hand laid on an open wound comes away bloody; the
     /// other stays clean.
     #[test]
