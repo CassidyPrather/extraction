@@ -392,10 +392,21 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
+        let t = std::time::Instant::now();
+        // A frame of game time a frame from here: on the real clock each slow
+        // harness frame (two hundred things just out) owed several physics
+        // ticks, and the 600 frames took 400 s. Loads land on their own
+        // clock either way.
+        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 90.0),
+        ));
         app.world_mut().resource_mut::<Loads>().recording = true;
         super::bring_everything_out(&mut app);
-        for _ in 0..600 {
+        // 600 frames, and 10 s at least for anything asked for to land.
+        let mut n = 0;
+        while n < 600 || t.elapsed().as_secs_f64() < 10.0 {
             app.update();
+            n += 1;
         }
         let mut paths = std::mem::take(&mut app.world_mut().resource_mut::<Loads>().paths);
         paths.sort();
