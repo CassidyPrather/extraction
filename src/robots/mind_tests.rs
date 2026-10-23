@@ -4921,3 +4921,51 @@ fn walkers_go_round_what_hurts_them_unless_chasing_hard() {
         2.0
     ));
 }
+
+/// An engaged hound with you in sight runs you down: it closes on you.
+#[test]
+fn an_engaged_hound_closes_on_you() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 225.0);
+    let mut queue = CommandQueue::default();
+    let h = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..3 {
+        app.update();
+    }
+    {
+        let mut aw = app.world_mut().get_mut::<Awareness>(h).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(h).unwrap() = Brain::Engage;
+    let start = flat(app.world().get::<Transform>(h).unwrap().translation - me);
+    let mut closest = start;
+    for _ in 0..(90 * 6) {
+        put(&mut app, player, me);
+        app.update();
+        let d = flat(app.world().get::<Transform>(h).unwrap().translation - me);
+        closest = closest.min(d);
+    }
+    let brain = app.world().get::<Brain>(h).unwrap().clone();
+    assert!(
+        closest < start - 10.0,
+        "it closed on you: {start:.1} m -> {closest:.1} m (brain {brain:?})"
+    );
+}
