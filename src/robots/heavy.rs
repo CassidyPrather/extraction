@@ -410,6 +410,8 @@ pub fn spawn_heavy(
                 yaw: 0.0,
                 gun_cooldown: 0.0,
                 suppressing: false,
+                gap: None,
+                closing: 0.0,
                 turret_yaw: 0.0,
                 phase: 0,
                 collapsed: false,

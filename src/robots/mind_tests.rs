@@ -4894,16 +4894,30 @@ fn walkers_go_round_what_hurts_them_unless_chasing_hard() {
         can_see_target: true,
         ..default()
     };
+    // Running at you: straight. Holding (not closing), or not in a
+    // fight: round.
     assert!(super::hazards::chasing_hard(
         &Brain::Engage,
         &aware,
-        Some(b),
-        a + Vec3::X * 20.0
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(30.0),
+        0.0
     ));
     assert!(!super::hazards::chasing_hard(
         &Brain::Transit { to: b },
         &aware,
-        Some(b),
-        a
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(60.0),
+        2.0
     ));
 }
