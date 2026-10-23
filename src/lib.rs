@@ -46,6 +46,7 @@ pub mod sim;
 pub mod soak;
 pub mod synth_foley;
 pub mod tour;
+pub mod transform_guard;
 #[cfg(test)]
 mod vr_harness;
 pub mod weapons;
@@ -77,12 +78,6 @@ impl Plugin for GamePlugin {
             use_async_tasks: false,
             ..default()
         });
-        // Bevy's static-tree skip sometimes never propagates a child added
-        // under a tree that hasn't moved: a building's dressed meshes stayed
-        // at the origin, under the map (Cinder's blast furnace at dusk).
-        // Propagating every tree costs nothing measurable in the worst
-        // minute (Marrow, p99 within noise).
-        app.insert_resource(bevy::transform::StaticTransformOptimizations::Disabled);
         app.add_plugins((
             contacts::ContactGuardPlugin,
             world::WorldPlugin,
@@ -112,7 +107,8 @@ impl Plugin for GamePlugin {
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
-        .add_plugins(wildlife::WildlifePlugin);
+        .add_plugins(wildlife::WildlifePlugin)
+        .add_plugins(transform_guard::TransformGuardPlugin);
     }
 }
 
