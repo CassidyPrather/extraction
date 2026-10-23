@@ -4582,3 +4582,103 @@ fn a_flanker_on_its_way_holds_its_fire() {
     engage(&mut app);
     assert!(run(&mut app, None, 6.0) > 0, "and fires from its post");
 }
+
+/// While a squadmate moves up, the pinner suppresses: more rounds, on
+/// where it last saw you even once you're out of sight. Its rounds count
+/// the cadence; nothing moving up, it fires at its usual rate.
+#[test]
+fn the_pinner_suppresses_while_one_moves_up() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, Vec3)>);
+    let run = |covering: bool| {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Fired>().add_systems(
+            Last,
+            |mut s: MessageReader<Shot>, mut f: ResMut<Fired>| {
+                f.0.extend(s.read().filter_map(|s| Some((s.shooter?, s.direction))))
+            },
+        );
+        app.world_mut()
+            .resource_mut::<super::squad::Coordination>()
+            .on = false;
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let at = zone.on_ground(100.0, 222.0);
+        let mut queue = CommandQueue::default();
+        let (w, mate) = {
+            let mut c = Commands::new(&mut queue, app.world());
+            let job = Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            };
+            (
+                super::walker::spawn_walker(&mut c, &zone, at, job.clone()),
+                super::walker::spawn_walker_with(
+                    &mut c,
+                    &zone,
+                    zone.on_ground(130.0, 222.0),
+                    job,
+                    false,
+                    130.0,
+                ),
+            )
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        {
+            let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            aw.target = Some(player);
+            aw.last_known = Some(me);
+            aw.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+        for _ in 0..(90 * 8) {
+            put(&mut app, player, me);
+            app.world_mut()
+                .entity_mut(w)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Pin,
+                    target: player,
+                    post: at,
+                });
+            // The mate's post far off (moving up) or where it stands.
+            let here = app.world().get::<Transform>(mate).unwrap().translation;
+            app.world_mut()
+                .entity_mut(mate)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Flank,
+                    target: player,
+                    post: if covering {
+                        zone.on_ground(140.0, 190.0)
+                    } else {
+                        here
+                    },
+                });
+            // (It's the cadence being counted, not you going down.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+            }
+            app.update();
+        }
+        let n = app
+            .world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .filter(|(e, _)| *e == w)
+            .count();
+        let marked = app.world().get::<super::walker::Suppressing>(w).is_some();
+        (n, marked)
+    };
+    let (alone, marked_alone) = run(false);
+    let (covering, marked) = run(true);
+    assert!(marked && !marked_alone, "it shows it's suppressing");
+    assert!(
+        covering as f32 >= alone as f32 * 1.8,
+        "a faster cadence: {covering} rounds against {alone}"
+    );
+}

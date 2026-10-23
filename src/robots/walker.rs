@@ -55,6 +55,14 @@ pub const BLIND_TELL: f32 = 0.4;
 pub const BLIND_ROUNDS: u8 = 3;
 /// Seconds between them, and their spread (wider than aimed fire).
 const BLIND_EVERY: f32 = 0.25;
+/// Seconds between its rounds in a fight...
+pub const FIRE_EVERY: f32 = 1.1;
+/// ...and while it pins you for a squadmate moving up (`squad`): faster,
+/// steadier, a cadence you hear change...
+pub const SUPPRESS_EVERY: f32 = 0.45;
+pub const SUPPRESS_SPREAD: f32 = 0.015;
+/// ...kept on where it last saw you this long after you drop from sight (s).
+pub const SUPPRESS_HOLD: f32 = 4.0;
 const BLIND_SPREAD: f32 = 0.06;
 /// A walker round, for the check: 8 g at the turret's 450 m/s.
 const ROUND_G: f32 = 8.0;
@@ -104,6 +112,8 @@ pub struct Walker {
     pub velocity: Vec3,
     pub yaw: f32,
     pub gun_cooldown: f32,
+    /// Pinning you for a squadmate moving up (`Suppressing`).
+    pub suppressing: bool,
     pub turret_yaw: f32,
     /// Which diagonal pair may step next.
     pub phase: usize,
@@ -321,6 +331,7 @@ pub fn spawn_walker_sized(
                 velocity: Vec3::ZERO,
                 yaw: 0.0,
                 gun_cooldown: 2.0,
+                suppressing: false,
                 turret_yaw: 0.0,
                 phase: 0,
                 collapsed: false,
@@ -1026,6 +1037,12 @@ pub const FLANK_ANGLE: f32 = 1.3;
 /// ...at the pinner's range, held to this band (m).
 pub const FLANK_RANGE: (f32, f32) = (14.0, 24.0);
 
+/// A walker pinning you while a squadmate moves up: faster, steadier fire
+/// (`SUPPRESS_EVERY`), on where it last saw you. For the look and sound
+/// (its muzzle, its cadence).
+#[derive(Component, Debug)]
+pub struct Suppressing;
+
 /// A walker working round to its target's side (while another pins it).
 #[derive(Component, Debug)]
 pub struct Flanker;
@@ -1090,6 +1107,7 @@ fn walker_guns(
     parts: Query<&RobotPart>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
+    mut commands: Commands,
     mut shots: MessageWriter<Shot>,
     mut aims: MessageWriter<WalkerAim>,
     mut seed: Local<u64>,
@@ -1110,6 +1128,13 @@ fn walker_guns(
             .get(*e)
             .is_ok_and(|(_, _, b, ..)| matches!(b, Brain::Engage))
     });
+    // Whom a squad has someone moving up on (`squad`): their pinner
+    // suppresses.
+    let covering: Vec<Entity> = roles
+        .iter()
+        .filter(|(r, g)| super::squad::repositioning(Some(r), g.translation()))
+        .map(|(r, _)| r.target)
+        .collect();
     for (e, mut w, brain, aware, robot, children, gait) in &mut walkers {
         w.gun_cooldown -= dt;
         // Knocked down, or getting up, it can't shoot, and must aim afresh.
@@ -1126,6 +1151,48 @@ fn walker_guns(
         if aware.can_see_target {
             // A new loss of sight may earn a new burst.
             blind.remove(&e);
+        }
+        let suppressing = roles
+            .get(e)
+            .is_ok_and(|(r, _)| r.role == super::squad::Role::Pin && covering.contains(&r.target));
+        if suppressing != w.suppressing {
+            w.suppressing = suppressing;
+            if suppressing {
+                commands.entity(e).try_insert(Suppressing);
+            } else {
+                commands.entity(e).try_remove::<Suppressing>();
+            }
+        }
+        // Suppressing and you've dropped from sight: it keeps its rounds
+        // on where you went down, a while. Gone from there, they miss.
+        if suppressing && !aware.can_see_target && aware.unseen < SUPPRESS_HOLD {
+            let (Some(lk), Some((gt, part))) = (
+                aware.last_known,
+                children.iter().find_map(|c| turrets.get(c).ok()),
+            ) else {
+                continue;
+            };
+            if !part.alive() || w.gun_cooldown > 0.0 {
+                continue;
+            }
+            let muzzle = gt.translation() + Vec3::Y * 0.05;
+            let at = lk + Vec3::Y * 1.0;
+            let dir = (at - muzzle).normalize_or(Vec3::NEG_Z);
+            *seed = super::senses::shot_seed(&minds, e, &time);
+            shots.write(Shot {
+                gun: e,
+                shooter: Some(e),
+                origin: muzzle + dir * 0.3,
+                direction: dir,
+                speed: ROUND_SPEED,
+                damage: 14.0,
+                projectiles: 1,
+                spread: SUPPRESS_SPREAD,
+                recoil: 0.0,
+                seed: *seed,
+            });
+            w.gun_cooldown = SUPPRESS_EVERY;
+            continue;
         }
         if !aware.can_see_target {
             // A moment behind cover doesn't shake it; half a second does:
@@ -1260,12 +1327,21 @@ fn walker_guns(
             speed: 450.0,
             damage: 14.0,
             projectiles: 1,
-            // Running across its line throws it off (`CROSSING_SPREAD`).
-            spread: 0.025 + CROSSING_SPREAD * crossing,
+            // Running across its line throws it off (`CROSSING_SPREAD`);
+            // suppressing, it's steadier.
+            spread: if suppressing {
+                SUPPRESS_SPREAD + CROSSING_SPREAD * crossing * 0.5
+            } else {
+                0.025 + CROSSING_SPREAD * crossing
+            },
             recoil: 0.0,
             seed: *seed,
         });
-        w.gun_cooldown = 1.1;
+        w.gun_cooldown = if suppressing {
+            SUPPRESS_EVERY
+        } else {
+            FIRE_EVERY
+        };
     }
 }
 

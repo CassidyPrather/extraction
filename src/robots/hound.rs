@@ -256,6 +256,7 @@ mod tests {
             velocity: Vec3::ZERO,
             yaw: 0.0,
             gun_cooldown: 0.0,
+            suppressing: false,
             turret_yaw: 0.0,
             phase: 0,
             collapsed: false,
