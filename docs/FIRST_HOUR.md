@@ -518,9 +518,23 @@ and the mast (at the Village, the pumping station, the mast's own road),
 each 7 to 17 s after its lock; only the cautious one, creeping, got there
 and back.
 
-Still open: the photograph; and the mast relay's walk, for a first
-contract. A newcomer warned by the chirp has a roof only where the
-Village's houses are; past them, nothing for 250 m.
+Then the mast relay's walk, for a first contract: a newcomer warned by
+the chirp had a roof only where the Village's houses are; past them,
+nothing for 250 m. Map design put three roofed sheds on the ways to the
+mast (the pumping station's tool shed, the rangers' store, the
+road-menders' hut: none of the walk more than 97 m from a roof), and the
+first plant job's card now ends "Sheds on the way: in, if anything
+chirps." On that map, the one-handed newcomer, locked on by a drone on the
+way, went in, came on, left the box and got home paid; the reckless one
+left it with a machine already shooting at it, as it does, and fell
+there.
+
+Still open: the photograph. At a raid's start every walker on Cinder Works
+is a crawler at work underground; the first up on the surface came 17
+minutes in, at the newcomer, gun up. The card now says where one's been
+heard working once one is ("He's heard a walker working by the chimney.
+From the drop: ..."), and the newcomer goes there; a walker kept at work
+on the surface while the job's on is Robot minds' to give.
 
 # Machines working together (Robot minds' squad drill)
 
