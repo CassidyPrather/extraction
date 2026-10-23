@@ -2085,8 +2085,10 @@ fn errand_tasks(
                 t.push(Task::Wait(10.0));
                 return Ok(Some((t, None)));
             };
-            // Near enough to fill the picture, not so near it shoots.
-            let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
+            // As far off as the picture takes (the camera's 60 m), a little
+            // inside it: not so near it notices.
+            let away = (here - p.xz()).normalize_or(Vec2::Y);
+            let stand = p.xz() + away * 48.0;
             let mut t = route(&world, &view, here, stand);
             t.extend([
                 Task::Grab {
@@ -2097,6 +2099,11 @@ fn errand_tasks(
                 Task::Wait(1.0),
                 Task::Use(Side::Right),
                 Task::Wait(0.5),
+                // And back off from it, the way it came.
+                Task::WalkTo {
+                    to: stand + away * 25.0,
+                    within: 2.0,
+                },
             ]);
             Ok(Some((t, None)))
         }
