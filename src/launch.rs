@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! extraction [--flat] [--mirror] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
-//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
+//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch]]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
@@ -54,6 +54,9 @@ pub struct LaunchOptions {
     pub frames: u32,
     /// Camera override: position and yaw/pitch in degrees.
     pub camera: Option<(Vec3, f32, f32)>,
+    /// The camera override carries a lit flashlight, pointing where it
+    /// looks (`--torch`: night shots as a player sees them).
+    pub torch: bool,
     /// The local player is driven by the bot brain.
     pub bot: bool,
     /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
@@ -158,6 +161,7 @@ impl Default for LaunchOptions {
             screenshot: None,
             frames: 90,
             camera: None,
+            torch: false,
             tour: None,
             tour_only: None,
             tour_views: None,
@@ -365,6 +369,7 @@ impl LaunchOptions {
                     o.gallery = Some(val());
                     o.robots = false;
                 }
+                "--torch" => o.torch = true,
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {

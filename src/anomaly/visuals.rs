@@ -297,6 +297,7 @@ struct AnomalyAssets {
     scorch: Handle<StandardMaterial>,
     flattened: Handle<StandardMaterial>,
     glassy: Handle<StandardMaterial>,
+    glazed: Handle<StandardMaterial>,
     crushed: Handle<StandardMaterial>,
     hushed: Handle<StandardMaterial>,
     frosted: Handle<StandardMaterial>,
@@ -476,14 +477,19 @@ fn init_assets(
         Color::srgba(0.03, 0.025, 0.02, 0.92),
         LinearRgba::rgb(0.07, 0.01, 0.0),
     );
-    let flattened = ground(Color::srgba(0.08, 0.07, 0.05, 0.6), LinearRgba::BLACK);
+    // Swept bare by the lift: pale dry earth, every loose thing on it
+    // taken up.
+    let flattened = ground(Color::srgba(0.36, 0.31, 0.24, 0.85), LinearRgba::BLACK);
+    // Fused by the arcs: dark and glassy, a cold blue sheen on it.
     let glassy = ground(
-        Color::srgba(0.22, 0.26, 0.32, 0.55),
-        LinearRgba::rgb(0.0, 0.02, 0.06),
+        Color::srgba(0.06, 0.07, 0.09, 0.88),
+        LinearRgba::rgb(0.0, 0.006, 0.02),
     );
+    // Glazed like still water under a mirror, giving back the sky.
+    let glazed = ground(Color::srgba(0.32, 0.34, 0.37, 0.75), LinearRgba::BLACK);
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
-    let hushed = ground(Color::srgba(0.68, 0.68, 0.66, 0.62), LinearRgba::BLACK);
+    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.8), LinearRgba::BLACK);
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),
@@ -491,7 +497,7 @@ fn init_assets(
     );
     // Pressed dark and hard, the faintest violet in it.
     let crushed = ground(
-        Color::srgba(0.045, 0.04, 0.045, 0.85),
+        Color::srgba(0.035, 0.03, 0.035, 0.95),
         LinearRgba::rgb(0.004, 0.0, 0.01),
     );
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
@@ -504,6 +510,13 @@ fn init_assets(
         depth_bias: 50.0,
         ..default()
     });
+    // Fused and glazed grounds shine.
+    for (m, rough) in [(&glassy, 0.2), (&glazed, 0.06)] {
+        if let Some(mut m) = materials.get_mut(m) {
+            m.perceptual_roughness = rough;
+            m.reflectance = 0.9;
+        }
+    }
     // Its edge: pale dust settled in a ragged line on the ground, which you
     // can step up to.
     let ring = ring_texture(&mut images);
@@ -525,6 +538,7 @@ fn init_assets(
         scorch,
         flattened,
         glassy,
+        glazed,
         crushed,
         hushed,
         frosted,
@@ -881,7 +895,7 @@ fn dress_anomalies(
                 )),
             ),
             AnomalyKind::Mirror => (
-                None,
+                Some(&a.glazed),
                 vec![glow(5.0, 40, 0.035, Vec3::new(6.0, 10.0, 14.0))],
                 (tell(crate::render::tells::MIRROR), 0.0, 40_000.0, 0.0),
                 Some((

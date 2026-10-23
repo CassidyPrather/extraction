@@ -4,7 +4,7 @@ you see the line you mustn't cross?
 
 For each kind, a view 5 m outside one of its anomalies (`anomaly-views
 ... edge`), shot with the anomaly dressed and without it
-(EXTRACTION_HIDE_ANOMALIES), in clear day, fog, downpour and night. Along
+(EXTRACTION_HIDE_ANOMALIES), in clear day, fog, downpour and night (by the player's torch). Along
 five lines on the ground running from the near side in across its edge,
 it measures what the anomaly changes at each step (the colour difference,
 CIE ΔE, between with and without: a burner's red scorch on green grass
@@ -55,7 +55,9 @@ CONDITIONS = {
     "clear": ["--weather", "clearing", "--hour", "day"],
     "fog": ["--weather", "fog"],
     "downpour": ["--weather", "downpour"],
-    "night": ["--weather", "drizzle", "--hour", "night", "--moon", "new"],
+    # A moonless night, as a player sees it: by their torch (every new
+    # game's stash has one).
+    "night": ["--weather", "drizzle", "--hour", "night", "--moon", "new", "--torch"],
 }
 # The edge's step, in ΔE (CIE76; about 2.3 is just noticeable): plainly
 # different, side by side.
@@ -219,6 +221,16 @@ def main() -> int:
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             for out in pool.map(lambda j: shot(*j), jobs):
                 print("shot", os.path.relpath(out, ROOT), flush=True)
+    missing = [
+        f"{v['kind'].lower()} {c}"
+        for v in kinds
+        for c in conds
+        for k in ("on", "off")
+        if not os.path.exists(os.path.join(RAW, f"{v['kind'].lower()}_{c}_{k}.png"))
+    ]
+    if missing:
+        print("FAIL shots missing (the render failed?):", sorted(set(missing)))
+        return 2
     results = [
         measure(v, c)
         for v in vs
