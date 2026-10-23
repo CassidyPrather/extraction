@@ -289,7 +289,7 @@ pub struct Raider {
     /// Deliberately walking into an anomaly (for an artifact).
     pub diving: bool,
     /// Why it last left a stone lying in an anomaly (for the log).
-    pass_why: Option<&'static str>,
+    pass_why: Option<String>,
     rng: Rng,
     grid: NavGrid,
     plans: Vec<BuildingPlan>,
@@ -3382,7 +3382,11 @@ fn take_item(
                 if r.traits.avoid_anomalies
                     && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
-                    r.pass_why = Some(if r.hp < 60.0 { "hurt" } else { "well" });
+                    r.pass_why = Some(format!(
+                        "{} ({kind:?}, skilled {skilled}, hearth {:?})",
+                        if r.hp < 60.0 { "hurt" } else { "well" },
+                        hearth_kit(scene),
+                    ));
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
@@ -3404,7 +3408,7 @@ fn take_item(
                     }
                     // Into a frost without a hearth, nobody who knows does.
                     if kind == AnomalyKind::Frost {
-                        r.pass_why = Some("frost without a hearth");
+                        r.pass_why = Some("frost without a hearth".into());
                         return None;
                     }
                 }
