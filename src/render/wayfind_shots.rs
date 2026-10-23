@@ -270,13 +270,22 @@ fn vantage(
 /// way), on the first bearing on the map.
 fn plan_lamps(
     zone: &Zone,
-    lamps: &Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
+    lamps: &Query<
+        (Entity, &GlobalTransform, &crate::world::halos::Halo),
+        With<crate::world::halos::HaloReach>,
+    >,
     spatial: &avian3d::prelude::SpatialQuery,
 ) -> Vec<View> {
     let half = zone.map.size * 0.5 - 2.0;
     let mut found: Vec<(Entity, Vec3, [f32; 3])> = lamps
         .iter()
-        .map(|(e, g, h)| (e, g.translation(), [h.color.red, h.color.green, h.color.blue]))
+        .map(|(e, g, h)| {
+            (
+                e,
+                g.translation(),
+                [h.color.red, h.color.green, h.color.blue],
+            )
+        })
         .collect();
     found.sort_by_key(|(e, _, _)| *e);
     let filter = avian3d::prelude::SpatialQueryFilter::default();
@@ -361,7 +370,10 @@ fn shoot(
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
     weather: Res<crate::world::sky::Weather>,
-    lamps: Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
+    lamps: Query<
+        (Entity, &GlobalTransform, &crate::world::halos::Halo),
+        With<crate::world::halos::HaloReach>,
+    >,
     spatial: avian3d::prelude::SpatialQuery,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
