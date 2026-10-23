@@ -485,7 +485,7 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
-    bodies: Query<&crate::player::Body>,
+    (bodies, roles): (Query<&crate::player::Body>, Query<&super::squad::SquadRole>),
 ) {
     let dt = time.delta_secs();
     fighting_since.retain(|e, _| {
@@ -495,7 +495,10 @@ fn drone_guns(
     });
     for (e, mut d, brain, aware, robot, children, t) in &mut drones {
         d.gun_cooldown -= dt;
-        if robot.wrecked || !matches!(brain, Brain::Engage) {
+        // Climbing to its station over a flanker's way in (`squad`): it
+        // holds its fire.
+        let moving_up = super::squad::repositioning(roles.get(e).ok(), t.translation);
+        if robot.wrecked || !matches!(brain, Brain::Engage) || moving_up {
             d.lock = 0.0;
             continue;
         }
