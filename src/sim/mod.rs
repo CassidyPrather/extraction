@@ -41,7 +41,7 @@ impl Plugin for SimPlugin {
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
             .add_systems(Startup, spawn_sim_kit)
             .add_systems(PostStartup, raider::attach_raider)
-            .add_systems(Update, (armour_up, seat_sim_hearth))
+            .add_systems(Update, (armour_up, seat_sim_hearth, wear_guns))
             .add_systems(
                 Update,
                 (
@@ -547,6 +547,22 @@ mod tests {
 /// game) goes out in a plate carrier with a front plate, and a helmet, as
 /// a player that far up the ladder would. Seated straight into the body
 /// slots at the start, like the sim's kit cache; once.
+/// `SIM_WORN=<condition>`: every gun in the valley worn to that and filthy,
+/// so the raiders meet its stoppages and must clear them
+/// (`weapons::stoppages`).
+fn wear_guns(mut guns: Query<&mut crate::weapons::Gun, Added<crate::weapons::Gun>>) {
+    let Some(worn) = std::env::var("SIM_WORN")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+    else {
+        return;
+    };
+    for mut gun in &mut guns {
+        gun.firearm.condition = worn.clamp(0.0, 1.0);
+        gun.firearm.fouling = 0.8;
+    }
+}
+
 fn armour_up(world: &mut World) {
     use crate::interact::body::BodySlot;
     use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
