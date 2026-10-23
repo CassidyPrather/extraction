@@ -771,7 +771,7 @@ mod tests {
         app.cleanup();
         app.update();
         let zone = app.world().resource::<crate::world::Zone>().clone();
-        let mut spawn = |app: &mut App, x: f32, size: f32| {
+        let spawn = |app: &mut App, x: f32, size: f32| {
             let at = zone.on_ground(x, 230.0);
             let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
             let mut c = q.get_mut(app.world_mut()).unwrap();
