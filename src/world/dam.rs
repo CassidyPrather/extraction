@@ -793,18 +793,20 @@ mod tests {
                 }
             }
         }
-        for x in [-25.0f32, 0.0, 30.0, 60.0, 85.0] {
+        for x in [-25.0f32, 0.0, 14.0, 22.0, 30.0, 60.0, 85.0] {
             let road = hm.height([x, 154.0]);
             let want = stair_height(x);
             assert!(
                 (road - want).abs() < 1.2,
                 "the stair at x {x}: {road:.1} vs {want:.1}"
             );
-            for z in [149.2f32, 150.2, 151.2] {
+            // Both sides: the face behind, the wall in front (a building's
+            // door apron below once cut the south strip down 7 m).
+            for z in [149.2f32, 150.2, 151.2, 155.6, 156.6] {
                 let ground = hm.height([x, z]);
                 assert!(
                     ground > want - 0.5,
-                    "a drop between the stair and the face at ({x}, {z}): {ground:.1} under a stair at {want:.1}"
+                    "a drop beside the stair at ({x}, {z}): {ground:.1} under a stair at {want:.1}"
                 );
             }
         }

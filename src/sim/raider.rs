@@ -341,7 +341,7 @@ pub struct Raider {
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
     /// Where it waits for the truck at rendezvous `.0` while the drones
-    /// survey a place nearby: in the lee of the shelter there
+    /// survey a place nearby: under the shelter's roof, or in its lee
     /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
     wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
@@ -525,9 +525,14 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
+    // On Rime Fell, the hearth the sim kit lays, sealed: the career's from
+    // "Up the fell", the way into the frost.
+    // (The case, with the hearth seated in it: `sim::seat_sim_hearth`.)
+    let hearth = (opts.map == "rime_fell").then_some("lead_case");
     for id in contract_kit()
         .into_iter()
         .chain(super::harvest::kit(traits.name))
+        .chain(hearth)
     {
         kit.push(Task::PickUp {
             id: id.to_owned(),
@@ -3453,7 +3458,7 @@ fn take_item(
                         junk: first,
                         spare: first.and_then(|j| junk_but(r, scene, j)),
                         gun: r.gun,
-                        hearth: carries(scene, "art_hearth"),
+                        hearth: hearth_kit(scene),
                     };
                     if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
                     {
@@ -3523,14 +3528,32 @@ fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
         .map(|(e, _)| e)
 }
 
-/// Whether something of kind `id` is in its pack.
-fn carries(scene: &Scene, id: &str) -> bool {
-    scene.bags.iter().find(|b| b.carried).is_some_and(|me| {
-        me.contents
+/// The hearth in its pack: loose (live), or sealed in a lead case there.
+fn hearth_kit(scene: &Scene) -> super::harvest::Hearth {
+    use super::harvest::Hearth;
+    let Some(me) = scene.bags.iter().find(|b| b.carried) else {
+        return Hearth::None;
+    };
+    let is = |e: Entity, id: &str| {
+        scene
+            .items
+            .get(e)
+            .is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
+    };
+    if me.contents.iter().any(|e| is(*e, "art_hearth")) {
+        return Hearth::Live;
+    }
+    for case in me.contents.iter().filter(|e| is(**e, "lead_case")) {
+        if let Some(stone) = scene
+            .sockets
             .iter()
-            .filter_map(|e| scene.items.get(*e).ok())
-            .any(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
-    })
+            .filter(|(_, owner)| owner.0 == *case)
+            .find_map(|(sock, _)| sock.occupant.filter(|h| is(*h, "art_hearth")))
+        {
+            return Hearth::Sealed { case: *case, stone };
+        }
+    }
+    Hearth::None
 }
 
 /// Getting out: radio, walk to the RV, board, pull the bell.
@@ -3617,10 +3640,22 @@ fn extract_step(
         Some((_, Some(lee))) if !waiting => lee,
         _ => approach,
     };
-    r.at_rv = here.distance(goal) <= 4.0;
-    if here.distance(goal) > 4.0 {
+    // Under a roof it's in at the door or it's not under it: in all the
+    // way, by the building's plan, and not walked back out of it.
+    let goal3 = Vec3::new(goal.x, pos.y, goal.y);
+    let roof = r
+        .plans
+        .iter()
+        .position(|p| goal != approach && p.indoors(p.to_local(goal3).xz()));
+    let near = if roof.is_some() { 0.8 } else { 4.0 };
+    r.at_rv = here.distance(goal) <= near;
+    if here.distance(goal) > near {
         r.act = Act::ToRv;
-        if let Some(out) = leave_building(r, scene, pos) {
+        if let Some(plan) = roof.map(|b| &r.plans[b]).filter(|p| p.in_grid(pos)) {
+            if let Some(route) = indoor(plan, pos, plan.to_local(goal3).xz(), 0.4) {
+                return route;
+            }
+        } else if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
         return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {

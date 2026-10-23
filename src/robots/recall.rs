@@ -893,6 +893,7 @@ mod tests {
         ("drone.rs", "how long it's been firing: its aim settling"),
         ("fx.rs", "an effect's count"),
         ("fx.rs", "an effect's next puff"),
+        ("grip.rs", "how long it's been held: a fight in progress"),
         ("mod.rs", "a wreck's loot timer"),
         ("search.rs", "a call's cooldown"),
         ("search.rs", "the wrist's line pacing"),
@@ -913,7 +914,7 @@ mod tests {
     fn every_robot_keyed_local_is_in_the_table() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/robots");
         let mut found: Vec<(String, usize)> = vec![];
-        for e in std::fs::read_dir(dir).unwrap().flatten() {
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
             let name = e.file_name().to_string_lossy().to_string();
             if !name.ends_with(".rs") || name == "mind_tests.rs" {
                 continue;
@@ -926,6 +927,8 @@ mod tests {
         }
         found.sort();
         let rows: Vec<Rule> = every_memory().into_iter().map(rule).collect();
+        // (An excusal for a file this tree hasn't got yet is no matter.)
+        let here = |f: &str| dir.join(f).exists();
         let mut files: Vec<&str> = rows
             .iter()
             .filter_map(|r| match r.kept {
@@ -933,6 +936,7 @@ mod tests {
                 _ => None,
             })
             .chain(NOT_MEMORY_LOCALS.iter().map(|(f, _)| *f))
+            .filter(|f| here(f))
             .collect();
         files.sort();
         let mut want: Vec<(String, usize)> = vec![];
@@ -944,7 +948,10 @@ mod tests {
         }
         assert_eq!(
             found, want,
-            "robot-keyed Locals by file (found, then the table's and the excused)"
+            "robot-keyed Locals by file (found, then the table's and the excused). A new \
+             Local<HashMap<Entity, ..>> in robots/ is either a memory of the player (a row in \
+             recall::rule, with a decay and a tell) or not (a line in NOT_MEMORY_LOCALS saying \
+             what it is)"
         );
     }
 

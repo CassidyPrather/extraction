@@ -41,7 +41,7 @@ impl Plugin for SimPlugin {
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
             .add_systems(Startup, spawn_sim_kit)
             .add_systems(PostStartup, raider::attach_raider)
-            .add_systems(Update, armour_up)
+            .add_systems(Update, (armour_up, seat_sim_hearth))
             .add_systems(
                 Update,
                 (
@@ -121,6 +121,12 @@ fn spawn_sim_kit(
     };
     let mut kit = vec!["radio", "field_dressing", "field_dressing"];
     kit.extend(raider::contract_kit());
+    // Bound for Rime Fell, a career has the hearth "Up the fell" gave it,
+    // the way into the frost (`progression::contracts`): sealed in a lead
+    // case, so it costs nothing on the way up (`seat_sim_hearth`).
+    if opts.map == "rime_fell" && !kit.contains(&"art_hearth") {
+        kit.extend(["lead_case", "art_hearth"]);
+    }
     kit.extend(harvest::kit(
         opts.personality.as_deref().unwrap_or("looter"),
     ));
@@ -639,3 +645,32 @@ fn armour_up(world: &mut World) {
 /// [`armour_up`] has looked at this bot.
 #[derive(Component)]
 struct ArmouredUp;
+
+/// The Rime kit's hearth into its lead case, once the case's cradle is up
+/// (a frame or two after the kit is laid).
+fn seat_sim_hearth(world: &mut World, mut done: Local<bool>) {
+    if *done {
+        return;
+    }
+    let catalog = world.resource::<crate::items::Catalog>().clone();
+    let mut q = world.query::<(Entity, &crate::items::Item)>();
+    let find = |world: &World, q: &mut QueryState<(Entity, &crate::items::Item)>, id: &str| {
+        q.iter(world)
+            .find(|(_, i)| catalog.get(i.kind()).id == id)
+            .map(|(e, _)| e)
+    };
+    let (Some(case), Some(hearth)) = (
+        find(world, &mut q, "lead_case"),
+        find(world, &mut q, "art_hearth"),
+    ) else {
+        return;
+    };
+    // The cradle comes with the case's first frames (`gadgets`).
+    if world.get::<Children>(case).is_none_or(|c| c.is_empty()) {
+        return;
+    }
+    crate::persist::seat_in_mount(world, case, hearth);
+    let sealed = world.get::<crate::interact::InSocket>(hearth).is_some();
+    info!("sim: the hearth sealed in its lead case: {sealed}");
+    *done = true;
+}

@@ -5814,8 +5814,15 @@ pub fn roof_cover(id: &str) -> Option<&'static RoofCover> {
 /// background: a big site's thousand pieces take half a second, a house's
 /// a few dozen milliseconds, every house alike (`render::spikes`).
 pub enum Bake {
-    Baking(bevy::tasks::Task<std::sync::Arc<Vec<Option<Mesh>>>>),
-    Ready(std::sync::Arc<Vec<Option<Mesh>>>),
+    Baking(bevy::tasks::Task<std::sync::Arc<Baked>>),
+    Ready(std::sync::Arc<Baked>),
+}
+
+/// A prefab's baked pieces, and the sky's light through it if that was
+/// baked too (`ao::SkyField`), for the furniture dressed in later.
+pub struct Baked {
+    pub meshes: Vec<Option<Mesh>>,
+    pub light: Option<super::ao::SkyField>,
 }
 
 /// A piece's mesh in building space, unshaded.
@@ -5832,9 +5839,10 @@ fn piece_mesh(piece: &Piece) -> Mesh {
 /// Each piece as `dress_buildings` draws it when it isn't furniture's
 /// stand-in: a box shaded face by face, anything else shaded at its
 /// vertices (not under the ground: a site's rooms go unshaded).
-fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
-    let occluders = occluders(geo);
-    geo.pieces
+fn bake_pieces(geo: &Geo, site: bool, walls: Vec2) -> Baked {
+    let occluders = occluders(geo).within(walls);
+    let meshes = geo
+        .pieces
         .iter()
         .map(|piece| match piece.shape {
             // Glass keeps its own alpha (the rest carries the sky).
@@ -5851,7 +5859,11 @@ fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
                 Some(mesh)
             }
         })
-        .collect()
+        .collect();
+    Baked {
+        meshes,
+        light: occluders.into_field(),
+    }
 }
 
 /// Client: a building's meshes, one per material (a house is a handful of
@@ -5970,9 +5982,11 @@ pub fn dress_buildings(
         let bake = bakes.entry(bake_key).or_insert_with(|| {
             let geo = geo.clone();
             let site = super::underground::ids().any(|id| id == b.prefab);
+            let f = extraction_core::map::prefab_footprint(&b.prefab);
+            let walls = Vec2::new(f[0], f[2]) * 0.5;
             Bake::Baking(
                 bevy::tasks::AsyncComputeTaskPool::get()
-                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site)) }),
+                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) }),
             )
         });
         if let Bake::Baking(task) = bake {
@@ -6102,7 +6116,7 @@ pub fn dress_buildings(
                     }
                 }
                 let group = if is_below { BELOW } else { OUTER };
-                if let Some(mesh) = &baked[i] {
+                if let Some(mesh) = &baked.meshes[i] {
                     add(group, mat, mesh.clone());
                 }
                 continue;
@@ -6112,7 +6126,7 @@ pub fn dress_buildings(
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
-                if let Some(shaded) = &baked[i] {
+                if let Some(shaded) = &baked.meshes[i] {
                     mesh = shaded.clone();
                 }
             } else {
@@ -6171,6 +6185,15 @@ pub fn dress_buildings(
                             );
                         }
                     }
+                    let mut mesh = mesh.transformed_by(*at);
+                    // Furniture lit as the spot in the room it stands in
+                    // (its own shading and occlusion kept).
+                    if d.inside {
+                        if let Some(light) = &baked.light {
+                            let k = super::ao::sky_light(light.at(at.translation + Vec3::Y * 0.4));
+                            super::ao::tint(&mut mesh, k);
+                        }
+                    }
                     add(
                         if below(at) {
                             BELOW
@@ -6182,7 +6205,7 @@ pub fn dress_buildings(
                             WINDOWS
                         },
                         mat,
-                        mesh.transformed_by(*at),
+                        mesh,
                     );
                 }
             }

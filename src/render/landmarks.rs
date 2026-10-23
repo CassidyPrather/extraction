@@ -43,7 +43,7 @@ const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
 const HALO_REACH: f32 = 320.0;
 const DAY_R: f32 = 1.4;
 
-/// A lamp's character (`map_landmarks::character`): when in its period
+/// A lamp's character (`map_landmarks::assign`): when in its period
 /// it's lit. Its halo and glow, its children, go out with it.
 #[derive(Component, Clone, Copy)]
 pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
@@ -75,18 +75,24 @@ pub fn top_of(id: &str) -> Option<Vec3> {
     geo.pieces
         .iter()
         .map(|p| {
-            let half_h = match p.shape {
-                Shape::Box(s) | Shape::Prism(s) => s.y * 0.5,
+            // How far up from its origin its top is: a box's and a
+            // cylinder's origin is their middle, a gable prism's its base
+            // (`materials::gable_prism`: the ridge at its full height).
+            let up = match p.shape {
+                Shape::Box(s) => s.y * 0.5,
+                Shape::Prism(s) => s.y,
                 Shape::Cylinder(_, h) => h * 0.5,
             };
-            p.at.translation + p.at.rotation * Vec3::Y * half_h
+            p.at.translation + p.at.rotation * Vec3::Y * up
         })
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
 
 fn light_landmarks(
     mut commands: Commands,
-    buildings: Query<(Entity, &Building), Added<Building>>,
+    zone: Option<Res<crate::world::Zone>>,
+    buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
+    mut lamps_of: Local<Option<Vec<(String, [f32; 2], extraction_core::map_landmarks::Character)>>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -99,10 +105,40 @@ fn light_landmarks(
         )>,
     >,
 ) {
-    for (e, b) in &buildings {
+    // Each landmark's lamp character, by its placement (a building is
+    // found by its prefab and where it stands).
+    let lamps_of = lamps_of.get_or_insert_with(|| {
+        zone.as_ref().map_or(Vec::new(), |z| {
+            extraction_core::map_landmarks::placement_lamps(&z.map, &z.hm)
+                .into_iter()
+                .map(|(i, c)| {
+                    (
+                        z.map.placements[i].prefab.clone(),
+                        z.map.placements[i].at,
+                        c,
+                    )
+                })
+                .collect()
+        })
+    });
+    for (e, b, xf) in &buildings {
         if prefab_footprint(&b.prefab)[1] < LANDMARK_HEIGHT || LIT.contains(&b.prefab.as_str()) {
             continue;
         }
+        let here = [xf.translation.x, xf.translation.z];
+        let character = lamps_of
+            .iter()
+            .filter(|(id, _, _)| *id == b.prefab)
+            .min_by(|a, b| {
+                extraction_core::geom::dist(a.1, here)
+                    .total_cmp(&extraction_core::geom::dist(b.1, here))
+            })
+            .map(|(_, _, c)| *c)
+            .unwrap_or(
+                extraction_core::map_landmarks::family(extraction_core::map_landmarks::kind(
+                    &b.prefab,
+                ))[0],
+            );
         let Some(top) = top_of(&b.prefab) else {
             continue;
         };
@@ -134,9 +170,7 @@ fn light_landmarks(
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
-                Lamp(extraction_core::map_landmarks::character(
-                    extraction_core::map_landmarks::kind(&b.prefab),
-                )),
+                Lamp(character),
                 Visibility::default(),
                 Mesh3d(lamp_mesh),
                 MeshMaterial3d(lamp),

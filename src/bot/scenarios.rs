@@ -100,6 +100,7 @@ pub const OPT_IN: &[&str] = &[
     CONTRACTS[5].0,
     CONTRACTS[6].0,
     CONTRACTS[7].0,
+    CONTRACTS[8].0,
     crate::onboarding::first_hour::SCENARIO,
     crate::onboarding::first_hour::PERSONAS[0].scenario,
     crate::onboarding::first_hour::PERSONAS[1].scenario,

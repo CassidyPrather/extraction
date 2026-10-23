@@ -39,7 +39,11 @@ impl Plugin for CoverPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SwayMaterial>::default())
             .init_resource::<RobotPushers>()
-            .add_systems(Update, (stream_cover, blow, push_by_robots));
+            .init_resource::<AnomalyGrass>()
+            .add_systems(
+                Update,
+                (stream_cover, blow, push_by_robots, hold_by_anomalies),
+            );
     }
 }
 
@@ -75,6 +79,59 @@ pub struct Sway {
     pub robot_c: Vec4,
     #[uniform(100)]
     pub robot_d: Vec4,
+    /// The nearest anomalies (`AnomalyGrass`): xyz the centre, w the
+    /// radius (0: none).
+    #[uniform(100)]
+    pub anomaly_a: Vec4,
+    #[uniform(100)]
+    pub anomaly_b: Vec4,
+    #[uniform(100)]
+    pub anomaly_c: Vec4,
+    #[uniform(100)]
+    pub anomaly_d: Vec4,
+    /// Their kinds, one a component (`AnomalyGrass::code`).
+    #[uniform(100)]
+    pub kinds: Vec4,
+}
+
+/// The anomalies nearest the eye, for the plants in them to show what they
+/// do, out to their edge (`shaders/sway.wgsl`: burnt down in a burner,
+/// laid toward a well's heart, dead still in a hush...). Written by
+/// `anomaly::visuals` when the set changes, which is rarely (each write
+/// re-extracts the plants).
+#[derive(Resource, Clone, Copy, Debug, Default, PartialEq)]
+pub struct AnomalyGrass {
+    pub spots: [Vec4; 4],
+    pub kinds: Vec4,
+}
+
+impl AnomalyGrass {
+    /// A kind as the shader numbers it.
+    pub fn code(kind: extraction_core::anomaly::AnomalyKind) -> f32 {
+        use extraction_core::anomaly::AnomalyKind::*;
+        match kind {
+            Lift => 1.0,
+            Burner => 2.0,
+            Snare => 3.0,
+            Well => 4.0,
+            Mirror => 5.0,
+            Hush => 6.0,
+            Frost => 7.0,
+        }
+    }
+}
+
+/// The anomalies' hold on the plants, when it changes.
+fn hold_by_anomalies(grass: Res<AnomalyGrass>, mut cover: ResMut<Assets<SwayMaterial>>) {
+    if !grass.is_changed() {
+        return;
+    }
+    let [a, b, c, d] = grass.spots;
+    for (_, m) in cover.iter_mut() {
+        (m.extension.anomaly_a, m.extension.anomaly_b) = (a, b);
+        (m.extension.anomaly_c, m.extension.anomaly_d) = (c, d);
+        m.extension.kinds = grass.kinds;
+    }
 }
 
 /// Up to four robots pushing through ground cover and low branches:

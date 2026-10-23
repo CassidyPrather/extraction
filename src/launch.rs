@@ -129,6 +129,10 @@ pub struct LaunchOptions {
     /// A newcomer's first fight (`onboarding::first_hour`): the one machine
     /// put on their route (`walker`, `drone`, `hush`, `sentry`, `night`).
     pub encounter: Option<String>,
+    /// A newcomer's raid with this kind of job on the card
+    /// (`onboarding::first_hour`): `recover`, `letter`, `ledger`,
+    /// `photograph`, ... so every kind runs live.
+    pub job: Option<String>,
     /// Raid minutes a sim bot plans for before heading out (default: by
     /// personality, 9-14).
     pub sim_minutes: Option<f32>,
@@ -184,6 +188,7 @@ impl Default for LaunchOptions {
             sim_run: None,
             personality: None,
             encounter: None,
+            job: None,
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
@@ -295,6 +300,7 @@ impl LaunchOptions {
                 }
                 "--personality" => o.personality = Some(val()),
                 "--encounter" => o.encounter = Some(val()),
+                "--job" => o.job = Some(val()),
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),

@@ -1,0 +1,612 @@
+{
+ "title": "77ce6f57 -> 823b12f3",
+ "thresholds": {
+  "structure": 0.005,
+  "pixels": 0.0005
+ },
+ "compared": 100,
+ "changed": 21,
+ "missing": [],
+ "shots": [
+  {
+   "shot": "marrow_creek/dusk/landmark",
+   "score": 447.0833333333333,
+   "structure": 0.11365091800689697,
+   "changed": 0.22354166666666667
+  },
+  {
+   "shot": "marrow_creek/dusk/insertion",
+   "score": 44.182098765432094,
+   "structure": 0.017376065254211426,
+   "changed": 0.022091049382716048
+  },
+  {
+   "shot": "marrow_creek/night/landmark",
+   "score": 33.163580246913575,
+   "structure": 0.041285812854766846,
+   "changed": 0.01658179012345679
+  },
+  {
+   "shot": "marrow_creek/dusk/rv",
+   "score": 21.6358024691358,
+   "structure": 0.015739023685455322,
+   "changed": 0.010817901234567901
+  },
+  {
+   "shot": "marrow_creek/night/anomaly",
+   "score": 16.18827160493827,
+   "structure": 0.04205542802810669,
+   "changed": 0.008094135802469135
+  },
+  {
+   "shot": "kettle_pass/night/anomaly",
+   "score": 15.44753086419753,
+   "structure": 0.04538905620574951,
+   "changed": 0.007723765432098765
+  },
+  {
+   "shot": "cinder_works/night/anomaly",
+   "score": 13.703703703703704,
+   "structure": 0.05399584770202637,
+   "changed": 0.006851851851851852
+  },
+  {
+   "shot": "marrow_creek/dusk/anomaly",
+   "score": 7.953751087188721,
+   "structure": 0.039768755435943604,
+   "changed": 0.0014429012345679012
+  },
+  {
+   "shot": "rime_fell/night/anomaly",
+   "score": 6.319320201873779,
+   "structure": 0.031596601009368896,
+   "changed": 0.0017669753086419753
+  },
+  {
+   "shot": "cinder_works/dusk/anomaly",
+   "score": 5.96843957901001,
+   "structure": 0.02984219789505005,
+   "changed": 0.00030864197530864197
+  },
+  {
+   "shot": "kettle_pass/dusk/anomaly",
+   "score": 5.70911169052124,
+   "structure": 0.0285455584526062,
+   "changed": 0.001412037037037037
+  },
+  {
+   "shot": "marrow_creek/day/landmark",
+   "score": 3.420746326446533,
+   "structure": 0.017103731632232666,
+   "changed": 0.000941358024691358
+  },
+  {
+   "shot": "marrow_creek/fog/landmark",
+   "score": 2.7212142944335938,
+   "structure": 0.013606071472167969,
+   "changed": 0.0006635802469135803
+  },
+  {
+   "shot": "kettle_pass/day/anomaly",
+   "score": 2.6224493980407715,
+   "structure": 0.013112246990203857,
+   "changed": 0.00030092592592592595
+  },
+  {
+   "shot": "cinder_works/fog/anomaly",
+   "score": 2.4892449378967285,
+   "structure": 0.012446224689483643,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/fog/anomaly",
+   "score": 2.45664119720459,
+   "structure": 0.01228320598602295,
+   "changed": 0.00023919753086419754
+  },
+  {
+   "shot": "sallow_reservoir/night/insertion",
+   "score": 2.2796630859375,
+   "structure": 0.0113983154296875,
+   "changed": 1.54320987654321e-05
+  },
+  {
+   "shot": "marrow_creek/day/anomaly",
+   "score": 1.2914538383483887,
+   "structure": 0.006457269191741943,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/fog/anomaly",
+   "score": 1.243126392364502,
+   "structure": 0.00621563196182251,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/day/anomaly",
+   "score": 1.21917724609375,
+   "structure": 0.00609588623046875,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/dusk/anomaly",
+   "score": 1.0141491889953613,
+   "structure": 0.005070745944976807,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/fog/anomaly",
+   "score": 0.8837103843688965,
+   "structure": 0.004418551921844482,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/dusk/interior",
+   "score": 0.43523311614990234,
+   "structure": 0.0021761655807495117,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/day/anomaly",
+   "score": 0.32897749547553445,
+   "structure": 0.004493832588195801,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/insertion",
+   "score": 0.2715587615966797,
+   "structure": 0.0013577938079833984,
+   "changed": 9.259259259259259e-05
+  },
+  {
+   "shot": "rime_fell/day/insertion",
+   "score": 0.03546476364135742,
+   "structure": 0.0001773238182067871,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/dusk/insertion",
+   "score": 0.025177001953125,
+   "structure": 0.000125885009765625,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/dusk/interior",
+   "score": 0.023627281188964844,
+   "structure": 0.00011813640594482422,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/night/insertion",
+   "score": 0.00978708267211914,
+   "structure": 4.89354133605957e-05,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/day/insertion",
+   "score": 0.0013589859008789062,
+   "structure": 6.794929504394531e-06,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/day/insertion",
+   "score": 0.0013470649719238281,
+   "structure": 6.735324859619141e-06,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/night/insertion",
+   "score": 2.384185791015625e-05,
+   "structure": 1.1920928955078125e-07,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/day/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/day/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/day/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/day/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/dusk/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/dusk/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/dusk/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/dusk/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/fog/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/fog/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/fog/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/fog/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/night/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/night/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/night/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "cinder_works/night/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/day/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/day/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/day/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/dusk/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/dusk/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/dusk/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/dusk/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/fog/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/fog/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/fog/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/fog/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/night/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/night/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/night/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "kettle_pass/night/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/day/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/day/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/fog/insertion",
+   "score": 0.0,
+   "structure": -3.0994415283203125e-06,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/fog/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/fog/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/night/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "marrow_creek/night/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/day/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/day/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/day/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/dusk/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/dusk/rv",
+   "score": 0.0,
+   "structure": -3.0279159545898438e-05,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/fog/insertion",
+   "score": 0.0,
+   "structure": -1.9550323486328125e-05,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/fog/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/fog/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/fog/rv",
+   "score": 0.0,
+   "structure": -0.00035583972930908203,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/night/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/night/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "rime_fell/night/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/day/anomaly",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/day/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/day/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/day/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/day/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/anomaly",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/dusk/rv",
+   "score": 0.0,
+   "structure": -2.0265579223632812e-06,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/fog/anomaly",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/fog/insertion",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/fog/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/fog/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/fog/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/night/anomaly",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/night/interior",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/night/landmark",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  },
+  {
+   "shot": "sallow_reservoir/night/rv",
+   "score": 0.0,
+   "structure": 0.0,
+   "changed": 0.0
+  }
+ ]
+}
