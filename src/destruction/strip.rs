@@ -409,7 +409,9 @@ fn place(commands: &mut Commands, broken: &Broken, part: &Part) {
     let s = part.size;
     let mut e = commands.spawn((
         (
-            Name::new("Wreck part"),
+            // (Not "Wreck ...": that's a robot's, and the frame gauges
+            // count by a name's first word.)
+            Name::new(format!("Fitting {}", part.model.unwrap_or("box"))),
             Strippable {
                 yields: part.yields.clone(),
             },
