@@ -408,6 +408,11 @@ pub const MIX: &[Cue] = &[
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),
     cue!("walker.servo", "machines/servo", -9.5, 70.0, 25.0, Detail, 10.0),
+    // The pinner going over to suppressing fire (`walker::Suppressing`):
+    // its feed racked heavy and a mode's snap; racked down when it stops.
+    cue!("walker.suppress", "guns/charging_handle", -11.0, 85.0, 25.0, Signal, 15.0),
+    cue!("walker.suppress_mode", "physical/switch", -1.0, 80.0, 25.0, Signal, 15.0),
+    cue!("walker.suppress_off", "guns/charging_handle", -11.0, 75.0, 25.0, Detail, 10.0),
     cue!("harpoon.fire", "machines/clank", 1.0, 100.0, 15.0, Action, 7.0),
     cue!("harpoon.hit", "impacts/metal", -6.0, 100.0, 1.0, Action),
     cue!("pylon.work", "machines/servo", -9.5, 75.0, 30.0, Detail, 15.0),

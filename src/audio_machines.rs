@@ -23,6 +23,7 @@ use crate::robots::salvage::Arced;
 use crate::robots::sorter::{SorterThrow, SorterWindup};
 use crate::robots::spotter::{SpotterAct, SpotterEvent};
 use crate::robots::squad::{Role, SquadCall};
+use crate::robots::walker::Suppressing;
 use crate::robots::wreck::WreckImpact;
 
 pub struct MachineSoundsPlugin;
@@ -60,6 +61,7 @@ impl Plugin for MachineSoundsPlugin {
                     notice_sounds,
                     squad_sounds,
                     filed_sounds,
+                    suppress_sounds,
                 ),
             );
     }
@@ -394,6 +396,44 @@ pub fn filed_level(count: u32) -> (f32, f64) {
     (-6.0 * (1.0 - k), 1.0 + 0.15 * k as f64)
 }
 
+/// The walker pinning you going over to suppressing fire while another
+/// moves up (`robots::walker::Suppressing` added): its feed racked heavy
+/// and slow (`walker.suppress`, unlike its aim's clank and servo) and a
+/// mode's snap (`walker.suppress_mode`): "it's keeping my head down, so
+/// someone's coming". Racked down when it stops (`walker.suppress_off`).
+fn suppress_sounds(
+    mut commands: Commands,
+    started: Query<&GlobalTransform, Added<Suppressing>>,
+    mut stopped: RemovedComponents<Suppressing>,
+    places: Query<&GlobalTransform>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for gt in &started {
+        layers(
+            &mut commands,
+            &bank,
+            &mut rng,
+            gt.translation() + Vec3::Y * 1.5,
+            &[
+                ("guns/charging_handle", "walker.suppress", 0.7),
+                ("physical/switch", "walker.suppress_mode", 0.9),
+            ],
+        );
+    }
+    for e in stopped.read() {
+        if let Ok(gt) = places.get(e) {
+            layers(
+                &mut commands,
+                &bank,
+                &mut rng,
+                gt.translation() + Vec3::Y * 1.5,
+                &[("guns/charging_handle", "walker.suppress_off", 0.55)],
+            );
+        }
+    }
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -621,7 +661,7 @@ mod tests {
         for lit in code.split('"').skip(1).step_by(2) {
             let prefixes = [
                 "mender.", "mine.", "plough.", "spotter.", "sorter.", "hound.", "robot.", "wreck.",
-                "cell.", "you.", "device.", "squad.", "relay.",
+                "cell.", "you.", "device.", "squad.", "relay.", "walker.",
             ];
             if prefixes.iter().any(|p| lit.starts_with(p)) && !lit.contains(' ') {
                 assert!(
