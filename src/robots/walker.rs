@@ -462,7 +462,7 @@ fn walker_brain(
         ),
     )>,
     targets: Query<&GlobalTransform>,
-    nav: Res<Nav>,
+    (nav, wary): (Res<Nav>, Option<Res<super::hazards::Wary>>),
     time: Res<Time>,
     mut convoy: MessageWriter<super::collector::ConvoyEvent>,
     entrances: Res<super::doors::Entrances>,
@@ -545,8 +545,23 @@ fn walker_brain(
         if !matches!(*brain, Brain::Engage) && flanking.contains(e) {
             commands.entity(e).remove::<Flanker>();
         }
-        // A site's own grid, or the Zone's.
-        let navr = local.map_or(NavRef::Zone(&nav.0), NavRef::Local);
+        // A site's own grid, or the Zone's: the one wary of anomalies
+        // (`hazards::Wary`), unless it's chasing you hard, when it comes
+        // straight and risks them.
+        let hard = super::hazards::chasing_hard(
+            &brain,
+            aware,
+            aware
+                .target
+                .and_then(|p| targets.get(p).ok())
+                .map(|g| g.translation()),
+            t.translation,
+        );
+        let zone_grid = match (&wary, hard) {
+            (Some(w), false) => &w.0,
+            _ => &nav.0,
+        };
+        let navr = local.map_or(NavRef::Zone(zone_grid), NavRef::Local);
         if robot.wrecked {
             *brain = Brain::Down;
             w.goal = None;
