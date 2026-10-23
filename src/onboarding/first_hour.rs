@@ -1987,8 +1987,20 @@ fn errand_tasks(
             };
             let target = photo_subject(&world.zone, view, *subject, here);
             let Some(p) = target.filter(|p| p.xz().distance(here) < 250.0) else {
-                // None about: round the valley's places to look, a while at
-                // each (machines come and go to their work).
+                // None about: where the card says he's heard them (it's
+                // read again: the line comes once one's heard), else round
+                // the valley's places to look, a while at each.
+                if let Some((_, at)) = view
+                    .card
+                    .iter()
+                    .next()
+                    .and_then(|(_, c)| place_on_card(&c.text, &world.zone))
+                    .filter(|(_, at)| at.distance(here) > 25.0)
+                {
+                    let mut t = route(world, view, here, at);
+                    t.push(Task::Wait(10.0));
+                    return Ok(Some((t, None)));
+                }
                 if tries > 8 {
                     return Err(
                         format!("no {subject:?} to be found for the picture").to_lowercase()
@@ -2041,6 +2053,8 @@ fn photo_subject(
         .filter(|(r, gt, breed)| {
             let p = gt.translation();
             !r.wrecked
+                // (Not one at work underground: its floor's well under the
+                // ground's.)
                 && p.y > zone.ground(p.x, p.z) - 2.0
                 && r.kind == crate::robots::RobotKind::Walker
                 && (breed.is_some_and(|b| b.0 == "heavy") == (subject == Subject::Heavy))
