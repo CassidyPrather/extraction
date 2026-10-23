@@ -867,13 +867,12 @@ pub(super) fn direct_raid(
         return;
     }
     // Reckless: a machine in reach is a fight (once a minute at most).
-    // (With a gun: the last fall may have left it out there.)
-    let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
+    // (With a gun to hand: in a hand or on the body, not at the bottom of
+    // the pack; the last fall may have left it out there.)
+    let armed = world.items.iter().any(|(_, it, _, held, sock, _)| {
         world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
             && (held.is_some_and(|h| h.player == player)
-                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
-                || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
-            && !view.stash.iter().any(|b| b.contents.contains(&e))
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
     });
     if p.reckless
         && armed
