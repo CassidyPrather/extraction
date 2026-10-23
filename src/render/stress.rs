@@ -692,6 +692,7 @@ mod tests {
         let (mut ms, mut units, mut loads) = (Vec::new(), Vec::new(), Vec::new());
         let mut each: Vec<(f64, HashMap<String, f64>)> = Vec::new();
         let mut fragments = 0.0f32;
+        let mut lights_each = Vec::new();
         let mut f = 0;
         while !app.world().resource::<StressRun>().done() {
             systems();
@@ -733,6 +734,11 @@ mod tests {
                     fragments,
                 ));
             }
+            if f % 90 == 0 {
+                let w = app.world_mut();
+                let n = w.query::<&PointLight>().iter(w).count();
+                lights_each.push(n);
+            }
             f += 1;
         }
         let holes = super::holes(app.world());
@@ -754,6 +760,7 @@ mod tests {
                 .map(|l| (l.illuminance, l.shadow_maps_enabled))
                 .collect::<Vec<_>>();
             let shots = w.resource::<Shots>().0;
+            println!("    point lights each second: {lights_each:?}");
             println!(
                 "    scene: {robots} machines, {shots} shots, {lights} point lights ({shadowed} shadowed), sun {sun:?}"
             );
