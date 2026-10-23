@@ -642,7 +642,7 @@ fn plan_site(
             };
             let floor = levels[j * n + i];
             let floor = if floor.is_nan() { r.floor } else { floor };
-            if let Some(ob) = obstacle(piece.shape, at, floor) {
+            if let Some(ob) = obstacle(piece.shape, at, floor, false) {
                 grid.block(ob, SITE_CLEARANCE);
             }
         }
@@ -1635,7 +1635,7 @@ mod tests {
                         let c = (at * piece.at).translation;
                         // What's stepped over (a bedroll) is no one's way.
                         let floor = r.floor_at([c.x, c.z]).unwrap_or(r.floor);
-                        if obstacle(piece.shape, at * piece.at, floor).is_none() {
+                        if obstacle(piece.shape, at * piece.at, floor, false).is_none() {
                             continue;
                         }
                         let k = plan
