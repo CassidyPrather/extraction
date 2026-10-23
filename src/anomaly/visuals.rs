@@ -372,7 +372,7 @@ fn grain_at(x: u32, y: u32) -> f32 {
 /// the anomaly starts (a mark that fades out well inside is an invisible
 /// wall). Its edge wavers a little, never more than a few centimetres on a
 /// typical one, and it's a touch grainy. On a disc of 1.1 radii.
-fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
+fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
     let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
@@ -387,16 +387,28 @@ fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
             let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
             let grain = 0.85 + 0.15 * grain_at(x, y);
             // Blotches a few tenths of a radius across, in its colour (and
-            // its glow: a burner's coals in patches, not a lit disc).
+            // its glow: a burner's coals in patches, not a lit disc): value
+            // noise, so no grid shows (sines along the axes laid a weave).
             let (px, py) = (u * 1.1, v * 1.1);
-            let blot = 0.5
-                + 0.25 * ((px * 9.0 + 0.3).sin() * (py * 7.0 + 1.1).cos())
-                + 0.15 * ((px * 17.0 + py * 13.0).sin())
-                + 0.1 * ((px * 31.0 - py * 23.0 + 2.0).sin());
-            let tone = (0.45 + 0.55 * blot.clamp(0.0, 1.0)) * grain;
-            let alpha =
-                (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot.clamp(0.0, 1.0));
-            let c = (tone * 255.0) as u8;
+            let blot = 0.65 * value_noise(px * 4.0, py * 4.0, 1)
+                + 0.35 * value_noise(px * 9.0, py * 9.0, 2);
+            let mut tone = 0.45 + 0.55 * blot;
+            // A lift's ground is scoured in a spiral by what it spins: pale
+            // grooves in it, which show on any ground (one colour can't
+            // stand out on grass, ash and silt alike; a pattern does).
+            if spiral {
+                // Broken, not drawn: the grooves come and go.
+                let wear = value_noise(px * 6.0, py * 6.0, 3);
+                let groove = (a * 3.0 + r.max(0.05).ln() * 9.0 + wear * 1.5).sin();
+                tone *= 0.55 + 0.45 * groove.max(0.0).powf(3.0) * 2.2 * (0.4 + 0.6 * wear);
+                // And at its rim the grit it flings out piles in a pale
+                // ridge, just inside its edge: a line on any ground.
+                let ridge = 1.0 - ((r - 0.94 * edge) / 0.035).abs().min(1.0);
+                tone = tone.max(0.95 * ridge * (0.75 + 0.25 * wear));
+            }
+            let tone = tone * grain;
+            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
+            let c = (tone.clamp(0.0, 1.0) * 255.0) as u8;
             data.extend_from_slice(&[c, c, c, (alpha * 255.0) as u8]);
         }
     }
@@ -411,6 +423,24 @@ fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::RENDER_WORLD,
     ))
+}
+
+/// Smooth value noise, 0..1, a lattice point a unit apart (`seed` picks
+/// the field).
+fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let at = |i: f32, j: f32| {
+        grain_at(
+            (i as i32).wrapping_add(1000) as u32 ^ seed.wrapping_mul(0x9E37),
+            (j as i32).wrapping_add(1000) as u32,
+        )
+    };
+    let s = |t: f32| t * t * (3.0 - 2.0 * t);
+    let (sx, sy) = (s(fx), s(fy));
+    let top = at(x0, y0) * (1.0 - sx) + at(x0 + 1.0, y0) * sx;
+    let bottom = at(x0, y0 + 1.0) * (1.0 - sx) + at(x0 + 1.0, y0 + 1.0) * sx;
+    top * (1.0 - sy) + bottom * sy
 }
 
 /// A ragged ring of dust round the outer tenth: the edge of a Hush on the
@@ -493,16 +523,17 @@ fn init_assets(
         ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
-    let mark = mark_texture(&mut images);
+    let mark = mark_texture(&mut images, false);
+    let scoured = mark_texture(&mut images, true);
     // Fogged as if half as far off, as the Zone's other things are
     // (`MarkMaterial`); the shiny ones (fused, glazed) catch the light.
-    let mut ground = |c: Color, emissive: LinearRgba, rough: f32| {
+    let mut ground_with = |tex: &Handle<Image>, c: Color, emissive: LinearRgba, rough: f32| {
         marks.add(MarkMaterial {
             base: StandardMaterial {
                 base_color: c,
-                base_color_texture: Some(mark.clone()),
+                base_color_texture: Some(tex.clone()),
                 emissive,
-                emissive_texture: Some(mark.clone()),
+                emissive_texture: Some(tex.clone()),
                 alpha_mode: AlphaMode::Blend,
                 perceptual_roughness: rough,
                 reflectance: if rough < 0.5 { 0.9 } else { 0.5 },
@@ -515,19 +546,24 @@ fn init_assets(
             },
         })
     };
+    // Scoured bare by the lift: raw rusty subsoil, grooved in a spiral by
+    // what it spins, every loose thing on it and the turf itself taken up.
+    // (A plain colour can't stand out on grass, ash and silt alike: pale
+    // earth read as dry grass, dark as wet grass, rust as Sallow's silt.)
+    // A faint warmth in it, the lift's own light: in the dark its edge
+    // still shows.
+    let flattened = ground_with(
+        &scoured,
+        Color::srgba(0.36, 0.13, 0.06, 0.97),
+        // (Its grooves darken it on the whole: the glow made up for that.)
+        LinearRgba::rgb(0.065, 0.034, 0.015),
+        0.95,
+    );
+    let mut ground =
+        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, c, emissive, rough);
     let scorch = ground(
         Color::srgba(0.03, 0.025, 0.02, 0.92),
         LinearRgba::rgb(0.07, 0.01, 0.0),
-        0.95,
-    );
-    // Scoured bare by the lift: raw rusty subsoil, every loose thing on it
-    // and the turf itself taken up. (Pale dry earth read as dry grass, and
-    // dark earth as wet grass in the rain.)
-    // (A faint warmth in it, the lift's own light on it: in the dark its
-    // edge still shows.)
-    let flattened = ground(
-        Color::srgba(0.36, 0.13, 0.06, 0.97),
-        LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
     // Fused by the arcs: dark and glassy, still charged: a faint cold blue
