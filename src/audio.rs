@@ -1265,7 +1265,22 @@ pub fn handling_sound(
 }
 
 /// How fast [`handling_sound`]'s sample plays for `event`.
-pub fn handling_speed(event: &FireEvent) -> f64 {
+pub fn handling_speed(
+    event: &FireEvent,
+    action: Option<extraction_core::firearm::ActionKind>,
+) -> f64 {
+    use extraction_core::firearm::ActionKind::Revolver;
+    match (event, action) {
+        // A Nagant's: the cylinder's quick small ratchet (not a dry fire),
+        // the gate flicked open higher than it's pushed shut.
+        (FireEvent::Cocked, Some(Revolver)) => 1.6,
+        (FireEvent::BoltLocked, Some(Revolver)) => 1.25,
+        (FireEvent::BoltClosed, Some(Revolver)) => 0.85,
+        _ => handling_speed_of(event),
+    }
+}
+
+fn handling_speed_of(event: &FireEvent) -> f64 {
     match event {
         FireEvent::Chambered => 1.3,
         FireEvent::BoltLocked => 0.8,
@@ -1351,7 +1366,7 @@ fn gun_sounds(
             // Small and quick inside the receiver.
             FireEvent::CarrierHome => 1.35,
             FireEvent::OpenBoltSlam => 0.9,
-            _ => handling_speed(&ev.event),
+            _ => handling_speed(&ev.event, action),
         };
         play_at_speed(
             &mut commands,
