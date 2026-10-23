@@ -70,9 +70,13 @@ pub enum Hazard {
     Mine,
     /// An EMP going off (`gadgets`).
     Emp,
+    /// A frost (Rime Fell's): still cold that stiffens.
+    Frost,
+    /// A hot gallery underground (`world::furnace`).
+    Heat,
 }
 
-pub const HAZARDS: [Hazard; 9] = [
+pub const HAZARDS: [Hazard; 11] = [
     Hazard::Lift,
     Hazard::Burner,
     Hazard::Snare,
@@ -82,6 +86,8 @@ pub const HAZARDS: [Hazard; 9] = [
     Hazard::Gas,
     Hazard::Mine,
     Hazard::Emp,
+    Hazard::Frost,
+    Hazard::Heat,
 ];
 
 impl Hazard {
@@ -93,6 +99,10 @@ impl Hazard {
             AnomalyKind::Well => Hazard::Well,
             AnomalyKind::Mirror => Hazard::Mirror,
             AnomalyKind::Hush => Hazard::Hush,
+            // The frost (newer than some trees this builds in: there it's
+            // the only kind not named above).
+            #[allow(unreachable_patterns)]
+            _ => Hazard::Frost,
         }
     }
 }
@@ -151,6 +161,12 @@ pub const fn effect(machine: Machine, hazard: Hazard) -> Effect {
         (H::Mine, _) => Hurt,
         // An EMP stops them all.
         (H::Emp, _) => Stunned,
+        // A frost stiffens joints and ices rotors; the airship's above it.
+        (H::Frost, M::Dirigible) => Unaffected,
+        (H::Frost, _) => Slowed,
+        // Hot galleries: only crawlers go down there.
+        (H::Heat, M::Crawler) => Hurt,
+        (H::Heat, _) => Unaffected,
     }
 }
 
@@ -218,6 +234,10 @@ pub const WELL_DRAG: f32 = 2.4;
 pub const WELL_SLOW: f32 = 0.45;
 /// ...and crushes at its heart (hp/s, on the core).
 pub const WELL_CRUSH: f32 = 25.0;
+/// A frost stiffens a walker to this share of its pace, and takes this
+/// share of a drone's way a second.
+pub const FROST_PACE: f32 = 0.55;
+pub const FROST_ICE: f32 = 0.8;
 /// A gas flash, a mine, an EMP: a machine within this of it is told (m).
 pub const BLAST_TOLD: f32 = 6.0;
 
@@ -308,7 +328,7 @@ impl Plugin for HazardsPlugin {
         app.add_message::<HazardStruck>()
             .add_systems(
                 FixedUpdate,
-                (in_anomalies, blasts, wear_off)
+                (in_anomalies, blasts, scald, wear_off)
                     .chain()
                     .before(super::perceive),
             )
@@ -476,6 +496,18 @@ fn in_anomalies(
                         continue;
                     }
                 }
+                (Hazard::Frost, Effect::Slowed) => {
+                    commands.entity(e).try_insert(Hampered {
+                        pace: FROST_PACE,
+                        left: 0.3,
+                    });
+                    // Rotors icing: a drone loses way.
+                    if machine == Machine::Drone {
+                        if let Some(v) = b.velocity.as_mut() {
+                            v.0 *= 1.0 - (FROST_ICE * dt).min(1.0);
+                        }
+                    }
+                }
                 (Hazard::Mirror, Effect::Dazzled) => {
                     commands.entity(e).try_insert(Dazzled(MIRROR_DAZZLE));
                 }
@@ -558,6 +590,50 @@ fn blasts(
             }
             told.tell(&mut out, b.entity, hazard, fx, p, now);
         }
+    }
+}
+
+/// A machine in a hot gallery is burned as you are (`world::furnace`):
+/// `HEAT_HARM` a second times how hot, `SCORCH_HARM` where it's
+/// scorching, on its core.
+#[allow(clippy::type_complexity)]
+fn scald(
+    heat: Option<Res<crate::world::furnace::Heat>>,
+    sites: Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+    mut bodies: Query<Body>,
+    parts: Query<&RobotPart>,
+    mut hits: MessageWriter<crate::weapons::ballistics::Hit>,
+    mut out: MessageWriter<HazardStruck>,
+    time: Res<Time>,
+    mut told: Local<Told>,
+) {
+    let Some(heat) = heat.filter(|h| !h.0.is_empty()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs();
+    for b in &mut bodies {
+        let Some(machine) = b.machine() else {
+            continue;
+        };
+        let fx = effect(machine, Hazard::Heat);
+        if fx == Effect::Unaffected {
+            continue;
+        }
+        let p = b.at.translation();
+        let h = heat.at(&sites, p + Vec3::Y * 0.2);
+        if h <= 0.0 {
+            continue;
+        }
+        let dps = if h >= extraction_core::underground::SCORCHING {
+            crate::world::furnace::SCORCH_HARM
+        } else {
+            crate::world::furnace::HEAT_HARM * h
+        };
+        if let Some(core) = core_of(b.children, &parts) {
+            hits.write(crush(core, p, dps * dt));
+        }
+        told.tell(&mut out, b.entity, Hazard::Heat, fx, p, now);
     }
 }
 
