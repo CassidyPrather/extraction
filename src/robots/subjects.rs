@@ -72,6 +72,48 @@ pub fn counts(subject: Subject, robot: &Robot, breed: Option<&Breed>, shape: Sha
     }
 }
 
+/// A machine, as the question "is it one, and can you find it" needs it:
+/// put it in a query (`Query<subjects::Candidate>`) and ask
+/// [`CandidateItem::findable`]. The card's line, the newcomer's target and
+/// the camera ask the same.
+#[derive(bevy::ecs::query::QueryData)]
+pub struct Candidate {
+    pub entity: Entity,
+    pub robot: &'static Robot,
+    pub breed: Option<&'static Breed>,
+    pub at: &'static GlobalTransform,
+    pub crawler: Has<super::indoor::Crawler>,
+    pub hound: Has<super::hound::Hound>,
+    pub grappler: Has<super::grappler::Grappler>,
+    pub dormant: Has<super::indoor::Dormant>,
+}
+
+/// Under the ground this far, it's not on the surface (m).
+pub const UNDERGROUND: f32 = 2.0;
+
+impl CandidateItem<'_, '_> {
+    pub fn shape(&self) -> Shape {
+        Shape {
+            crawler: self.crawler,
+            hound: self.hound,
+            grappler: self.grappler,
+            dormant: self.dormant,
+        }
+    }
+
+    /// The kind the card names.
+    pub fn is(&self, subject: Subject) -> bool {
+        counts(subject, self.robot, self.breed, self.shape())
+    }
+
+    /// The kind the card names, and on the surface where you could find
+    /// it (not down a working).
+    pub fn findable(&self, subject: Subject, zone: &Zone) -> bool {
+        let p = self.at.translation();
+        self.is(subject) && p.y > zone.ground(p.x, p.z) - UNDERGROUND
+    }
+}
+
 /// Where you're dropped.
 pub fn drop_at(zone: &Zone) -> Option<Vec3> {
     let at = zone.map.markers_of(&MarkerKind::Insertion).next()?.at;
@@ -129,18 +171,7 @@ fn keep_one_findable(
     zone: Res<Zone>,
     nav: Option<Res<super::walker::Nav>>,
     catalog: Option<Res<crate::items::Catalog>>,
-    robots: Query<(
-        Entity,
-        &Robot,
-        &GlobalTransform,
-        Option<&Breed>,
-        (
-            Has<super::indoor::Crawler>,
-            Has<super::hound::Hound>,
-            Has<super::grappler::Grappler>,
-            Has<super::indoor::Dormant>,
-        ),
-    )>,
+    robots: Query<Candidate>,
     mut sent: ResMut<Sent>,
     time: Res<Time>,
     mut next: Local<f32>,
@@ -167,28 +198,16 @@ fn keep_one_findable(
     let Some(drop) = drop_at(&zone) else {
         return;
     };
-    let count = |e: Entity| {
-        robots.get(e).ok().filter(|(_, r, _, b, (c, h, g, d))| {
-            counts(
-                subject,
-                r,
-                *b,
-                Shape {
-                    crawler: *c,
-                    hound: *h,
-                    grappler: *g,
-                    dormant: *d,
-                },
-            )
-        })
-    };
     // The one already sent, still going: it's on its way.
-    if sent.0.is_some_and(|e| count(e).is_some()) {
+    if sent
+        .0
+        .is_some_and(|e| robots.get(e).is_ok_and(|c| c.is(subject)))
+    {
         return;
     }
-    let near = robots.iter().any(|(e, _, g, ..)| {
-        count(e).is_some()
-            && Vec2::new(g.translation().x - drop.x, g.translation().z - drop.z).length() < REACH
+    let near = robots.iter().any(|c| {
+        let p = c.at.translation();
+        c.findable(subject, &zone) && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
     });
     if near {
         return;
@@ -328,31 +347,12 @@ mod tests {
             }
             let found = app
                 .world_mut()
-                .query::<(
-                    &Robot,
-                    &GlobalTransform,
-                    Option<&Breed>,
-                    (
-                        Has<super::super::indoor::Crawler>,
-                        Has<super::super::hound::Hound>,
-                        Has<super::super::grappler::Grappler>,
-                        Has<super::super::indoor::Dormant>,
-                    ),
-                )>()
+                .query::<Candidate>()
                 .iter(app.world())
-                .any(|(r, g, b, (c, h, gr, d))| {
-                    let p = g.translation();
-                    counts(
-                        subject,
-                        r,
-                        b,
-                        Shape {
-                            crawler: c,
-                            hound: h,
-                            grappler: gr,
-                            dormant: d,
-                        },
-                    ) && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
+                .any(|c| {
+                    let p = c.at.translation();
+                    c.findable(subject, &zone)
+                        && Vec2::new(p.x - drop.x, p.z - drop.z).length() < REACH
                 });
             if found {
                 return Some(k as f32 / hz);
