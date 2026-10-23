@@ -366,7 +366,8 @@ pub struct Raider {
     objective: Option<Vec2>,
 }
 
-/// A calm walker that could see it: did it get onto it in the next
+/// A calm walker within [`WATCH_NEAR`] with a clear line to it, that
+/// could see it: did it get onto it in the next
 /// [`WATCH_FOR`] seconds?
 #[derive(Clone, Copy, Debug)]
 struct Watch {
@@ -377,8 +378,11 @@ struct Watch {
     wild: bool,
 }
 
-/// How long a watched stretch is (s).
+/// How long a watched stretch is (s)...
 const WATCH_FOR: f32 = 30.0;
+/// ...that starts with a calm walker this near with a clear line to it
+/// (a walker's sight, m).
+const WATCH_NEAR: f32 = 75.0;
 
 /// A creep-and-throw in progress (see [`stalk`]).
 #[derive(Clone, Copy, Debug)]
@@ -1473,7 +1477,7 @@ fn sneak(
     swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
-    watch(me, r, scene, log);
+    watch(me, r, scene, log, eye);
     let hurrying = bot.sprint
         || r.combat.is_some()
         || r.act == Act::Board
@@ -1527,22 +1531,6 @@ fn sneak(
                 && aware.suspicion < 0.55
             {
                 calm_walker = Some(at);
-                let e = scene
-                    .robots
-                    .iter()
-                    .find(|(_, _, g, ..)| g.translation() == at)
-                    .map(|(e, ..)| e);
-                if let Some(e) = e
-                    && r.watched.get(&e).is_none_or(|t| r.clock - t > 60.0)
-                {
-                    r.watched.insert(e, r.clock);
-                    r.watches.push(Watch {
-                        walker: e,
-                        since: r.clock,
-                        spotted: false,
-                        wild: false,
-                    });
-                }
             }
         }
     }
@@ -1658,8 +1646,28 @@ fn wild_mark(scene: &Scene, eye: Vec3, walker: Vec3) -> Option<(Vec3, &'static s
 /// Each watched walker, [`WATCH_FOR`] seconds on: did it get onto the bot
 /// (`watch`: `unseen` or `spotted`, whether it was diverting, whether it
 /// threw into the wildlife meanwhile).
-fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
+fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog, eye: Vec3) {
     let clock = r.clock;
+    for (e, robot, gt, aware, brain, _) in &scene.robots {
+        let calm = robot.kind == crate::robots::RobotKind::Walker
+            && !robot.wrecked
+            && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+            && !(aware.target == Some(me) && aware.suspicion > 0.5);
+        let at = gt.translation();
+        if calm
+            && at.distance(eye) < WATCH_NEAR
+            && r.watched.get(&e).is_none_or(|t| clock - t > 60.0)
+            && scene.visible(eye, at)
+        {
+            r.watched.insert(e, clock);
+            r.watches.push(Watch {
+                walker: e,
+                since: clock,
+                spotted: false,
+                wild: false,
+            });
+        }
+    }
     let divert = r.divert;
     r.watches.retain_mut(|wt| {
         let Ok((_, robot, _, aware, brain, _)) = scene.robots.get(wt.walker) else {
