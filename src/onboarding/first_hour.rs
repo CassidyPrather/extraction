@@ -658,8 +658,8 @@ pub(super) fn direct_raid(
     // A photograph: the head kept on the machine as it moves, the camera
     // up (the card: "it in the middle").
     if let (Leg::Place, Some(Errand::Photo(subject))) = (state.leg, &state.errand)
-        && let Some(p) =
-            photo_subject(&view, *subject, here).filter(|p| p.xz().distance(here) < 60.0)
+        && let Some(p) = photo_subject(&world.zone, &view, *subject, here)
+            .filter(|p| p.xz().distance(here) < 60.0)
     {
         bot.look = p + Vec3::Y * 1.2;
     }
@@ -1985,7 +1985,7 @@ fn errand_tasks(
             let Some(camera) = carried(world, view, player, "camera").first().copied() else {
                 return Err("no camera on me".into());
             };
-            let target = photo_subject(view, *subject, here);
+            let target = photo_subject(&world.zone, view, *subject, here);
             let Some(p) = target else {
                 return Err(format!("no {subject:?} to be found for the picture").to_lowercase());
             };
@@ -2007,12 +2007,20 @@ fn errand_tasks(
     }
 }
 
-/// The nearest machine a photograph job wants.
-fn photo_subject(view: &RaidView, subject: Subject, here: Vec2) -> Option<Vec3> {
+/// The nearest machine a photograph job wants, up here where it can be
+/// seen (not one at work underground).
+fn photo_subject(
+    zone: &crate::world::Zone,
+    view: &RaidView,
+    subject: Subject,
+    here: Vec2,
+) -> Option<Vec3> {
     view.robots
         .iter()
-        .filter(|(r, _, breed)| {
+        .filter(|(r, gt, breed)| {
+            let p = gt.translation();
             !r.wrecked
+                && p.y > zone.ground(p.x, p.z) - 2.0
                 && r.kind == crate::robots::RobotKind::Walker
                 && (breed.is_some_and(|b| b.0 == "heavy") == (subject == Subject::Heavy))
         })
