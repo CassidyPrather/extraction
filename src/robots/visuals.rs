@@ -2249,3 +2249,20 @@ mod lamp_tests {
         assert!(!lamp_lit(0.02, 20.0, true), "not wrecked");
     }
 }
+
+#[cfg(test)]
+mod scan_tests {
+    use super::*;
+    use crate::robots::devices::Reaction;
+
+    /// Red if it means to shoot it, amber if it's coming to look: and the
+    /// two tell apart (amber has more green in it).
+    #[test]
+    fn a_scan_says_what_it_means_to_do() {
+        let hunt = scan_colour(Reaction::Hunt);
+        assert_eq!(hunt, scan_colour(Reaction::ShootFromAfar));
+        let look = scan_colour(Reaction::Investigate);
+        assert!(look.green > hunt.green * 4.0, "{look:?} vs {hunt:?}");
+        assert!(hunt.red >= 1.0 && look.red >= 1.0);
+    }
+}
