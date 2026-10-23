@@ -1067,6 +1067,13 @@ pub fn think(
                 r.act = Act::Idle;
             }
             Stage::Raid => {
+                // What it just took counts before it decides to go: a stone
+                // grabbed as the heat tips it home is still loot.
+                if settle_take(me, r, &scene, &mut log, pos) {
+                    if let Act::Take(s, _) = r.act {
+                        r.act = Act::Search(s);
+                    }
+                }
                 if let Some(why) = time_to_go(me, r, &scene, health, own_gun) {
                     log.stats.extract_reason = Some(why.to_string());
                     log.event(
@@ -2597,21 +2604,8 @@ fn raid_step(
                 }
             }
             Act::Take(s, item) => {
-                if scene.mine(me, item) {
-                    let (id, at) = scene
-                        .items
-                        .get(item)
-                        .map(|(_, it, gt, ..)| {
-                            (scene.catalog.get(it.kind()).id.clone(), gt.translation())
-                        })
-                        .unwrap_or_default();
-                    log.stats.loot.push(id.clone());
-                    log.event(
-                        "loot",
-                        json!({"item": id, "site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1),
-                               "ix": round(at.x, 1), "iz": round(at.z, 1)}),
-                    );
-                    r.skip.insert(item);
+                if settle_take(me, r, scene, log, pos) {
+                    // Taken (and counted).
                 } else if !r.interrupted || r.skip.contains(&item) {
                     r.skip.insert(item);
                 } else if let Some(t) = take_item(r, scene, s, item, pos) {
@@ -2627,6 +2621,30 @@ fn raid_step(
         }
     }
     vec![Task::Wait(0.2)]
+}
+
+/// A take that's done (the thing is on it): logged as loot, once. True if
+/// it was.
+fn settle_take(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog, pos: Vec3) -> bool {
+    let Act::Take(s, item) = r.act else {
+        return false;
+    };
+    if r.skip.contains(&item) || !scene.mine(me, item) {
+        return false;
+    }
+    let (id, at) = scene
+        .items
+        .get(item)
+        .map(|(_, it, gt, ..)| (scene.catalog.get(it.kind()).id.clone(), gt.translation()))
+        .unwrap_or_default();
+    log.stats.loot.push(id.clone());
+    log.event(
+        "loot",
+        json!({"item": id, "site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1),
+               "ix": round(at.x, 1), "iz": round(at.z, 1)}),
+    );
+    r.skip.insert(item);
+    true
 }
 
 fn kind_name(k: SiteKind) -> &'static str {
@@ -2728,6 +2746,16 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             SiteKind::Field => r.traits.fields * 3.0,
             // One stone at most, and only some cycles; but a hunter knows
             // where they are.
+            // A frost, for one who has a hearth for it: as good as a
+            // field, it's what the hearth's for.
+            SiteKind::Anomaly
+                if hearth_kit(scene) != super::harvest::Hearth::None
+                    && scene.anomalies.iter().any(|(_, a, g)| {
+                        a.kind == AnomalyKind::Frost && g.translation().xz().distance(s.at) < 3.0
+                    }) =>
+            {
+                r.traits.fields * 3.0
+            }
             SiteKind::Anomaly => r.traits.fields * 1.5,
             // Picking over a wreck is for when nothing else is coming.
             SiteKind::Wreck(_) if r.hp < 60.0 || heat > 0.0 => 0.0,
