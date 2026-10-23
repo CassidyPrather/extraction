@@ -534,7 +534,12 @@ mod tests {
         grading.global.exposure = 3.0;
         app.world_mut().spawn((Camera::default(), grading));
         app.update();
-        let e = app.world().resource::<Assets<StandardMaterial>>().get(&m).unwrap().emissive;
+        let e = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&m)
+            .unwrap()
+            .emissive;
         // Three stops open: an eighth, to come out at `red` after the grade.
         assert!((e.red * 8.0 - red.red).abs() < 1e-5 && (e.green * 8.0 - red.green).abs() < 1e-6);
     }
