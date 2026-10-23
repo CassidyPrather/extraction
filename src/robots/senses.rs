@@ -385,7 +385,11 @@ pub(crate) fn perceive(
         Option<&MotionSight>,
         Has<super::indoor::Dormant>,
         Option<&MindSeed>,
-        (Has<super::hazards::Dazzled>, Has<super::hazards::Deafened>),
+        (
+            Has<super::hazards::Dazzled>,
+            Has<super::hazards::Deafened>,
+            Has<super::hazards::Frosted>,
+        ),
     )>,
     players: Query<
         (
@@ -593,7 +597,7 @@ pub(crate) fn perceive(
         motion,
         dormant,
         mind_seed,
-        (dazzled, deaf),
+        (dazzled, deaf, frosted),
     ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
@@ -630,7 +634,13 @@ pub(crate) fn perceive(
             && !dazzled;
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
-        let reach = conditions.sight(senses.sight);
+        let reach = conditions.sight(senses.sight)
+            // Optics frosted (`hazards::Frosted`).
+            * if frosted {
+                super::hazards::FROST_SIGHT
+            } else {
+                1.0
+            };
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
