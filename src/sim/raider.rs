@@ -290,6 +290,8 @@ pub struct Raider {
     pub combat: Option<Combat>,
     /// Deliberately walking into an anomaly (for an artifact).
     pub diving: bool,
+    /// Why it last left a stone lying in an anomaly (for the log).
+    pass_why: Option<&'static str>,
     rng: Rng,
     grid: NavGrid,
     plans: Vec<BuildingPlan>,
@@ -601,6 +603,7 @@ pub fn attach_raider(
                 at_rv: false,
                 wait_at: None,
                 after_vent: None,
+                pass_why: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
@@ -2748,10 +2751,40 @@ fn raid_step(
                             }
                             return t;
                         }
+                        if let Some(why) = r.pass_why.take() {
+                            let id = scene.items.get(item).map_or("?".into(), |(_, it, ..)| {
+                                scene.catalog.get(it.kind()).id.clone()
+                            });
+                            log.event("pass", json!({"item": id, "why": why}));
+                        }
                         r.skip.insert(item);
                         r.act = Act::Search(s);
                     }
                     None => {
+                        // A stone lying in an anomaly it wouldn't take:
+                        // say which and why not (skipped already, or not
+                        // worth it).
+                        if r.sites[s].kind == SiteKind::Anomaly {
+                            let site = &r.sites[s];
+                            for (e, it, gt, h, so, b) in &scene.items {
+                                let def = scene.catalog.get(it.kind());
+                                if h.is_none()
+                                    && so.is_none()
+                                    && b.is_none()
+                                    && def.category == Category::Artifact
+                                    && at_site(r, site, gt.translation())
+                                {
+                                    let why = if r.skip.contains(&e) {
+                                        "passed on it"
+                                    } else if r.traits.value(def) < r.traits.min_value {
+                                        "not worth it"
+                                    } else {
+                                        "no room"
+                                    };
+                                    log.event("pass", json!({"item": def.id, "why": why}));
+                                }
+                            }
+                        }
                         r.sites[s].visited = true;
                         r.act = Act::Idle;
                         // Out the door it came in by.
@@ -3557,11 +3590,17 @@ fn take_item(
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
                 let skilled = super::harvest::skilled(r.traits.name);
+                // A dive that costs nothing done right (a frost, a hearth
+                // on it) is no risk however hurt it is.
+                let free = skilled
+                    && kind == AnomalyKind::Frost
+                    && hearth_kit(scene) != super::harvest::Hearth::None;
                 // Not hurt, it doesn't; and nobody careful reaches into a
                 // well's heart (unless it knows how: in and straight out).
                 if r.traits.avoid_anomalies
-                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                    && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
+                    r.pass_why = Some(if r.hp < 60.0 { "hurt" } else { "well" });
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
@@ -3583,6 +3622,7 @@ fn take_item(
                     }
                     // Into a frost without a hearth, nobody who knows does.
                     if kind == AnomalyKind::Frost {
+                        r.pass_why = Some("frost without a hearth");
                         return None;
                     }
                 }
