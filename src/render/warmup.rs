@@ -31,7 +31,9 @@ pub struct WarmupPlugin;
 impl Plugin for WarmupPlugin {
     fn build(&self, app: &mut App) {
         if std::env::var("EXTRACTION_WARMUP").map_or(true, |v| v != "0") {
-            use crate::anomaly::visuals::{HazeMaterial, ParticleMaterial, XrayMaterial};
+            use crate::anomaly::visuals::{
+                HazeMaterial, MarkMaterial, ParticleMaterial, XrayMaterial,
+            };
             use crate::world::{cover, impostors, rain, shafts, sky, trees};
             app.init_resource::<Shelf>()
                 .init_resource::<Warmed>()
@@ -55,6 +57,7 @@ impl Plugin for WarmupPlugin {
                             shelve::<HazeMaterial>,
                             shelve::<ParticleMaterial>,
                             shelve::<XrayMaterial>,
+                            shelve::<MarkMaterial>,
                             shelve::<crate::world::halos::HaloMaterial>,
                             shelve::<crate::world::beams::BeamMaterial>,
                             shelve::<crate::world::storm::SheetMaterial>,
