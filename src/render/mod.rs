@@ -170,17 +170,27 @@ fn attach_flat_camera(
         } else {
             pos.y.max(ground + 0.3)
         };
-        commands.spawn((
-            Name::new("Free camera"),
-            FreeCamera,
-            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                -yaw.to_radians(),
-                pitch.to_radians(),
-                0.0,
-            )),
-            camera_bundle(&weather),
-        ));
+        commands
+            .spawn((
+                Name::new("Free camera"),
+                FreeCamera,
+                Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                    EulerRot::YXZ,
+                    -yaw.to_radians(),
+                    pitch.to_radians(),
+                    0.0,
+                )),
+                camera_bundle(&weather),
+            ))
+            .with_children(|c| {
+                // Held at the hip, a little right, pointing where it looks.
+                if opts.torch {
+                    c.spawn((
+                        crate::gadgets::visuals::torch_beam(),
+                        Transform::from_xyz(0.2, -0.5, 0.0),
+                    ));
+                }
+            });
         return;
     }
     for (head, parent) in &heads {
