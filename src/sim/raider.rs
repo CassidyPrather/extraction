@@ -341,7 +341,7 @@ pub struct Raider {
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
     /// Where it waits for the truck at rendezvous `.0` while the drones
-    /// survey a place nearby: in the lee of the shelter there
+    /// survey a place nearby: under the shelter's roof, or in its lee
     /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
     wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
@@ -3617,10 +3617,22 @@ fn extract_step(
         Some((_, Some(lee))) if !waiting => lee,
         _ => approach,
     };
-    r.at_rv = here.distance(goal) <= 4.0;
-    if here.distance(goal) > 4.0 {
+    // Under a roof it's in at the door or it's not under it: in all the
+    // way, by the building's plan, and not walked back out of it.
+    let goal3 = Vec3::new(goal.x, pos.y, goal.y);
+    let roof = r
+        .plans
+        .iter()
+        .position(|p| goal != approach && p.indoors(p.to_local(goal3).xz()));
+    let near = if roof.is_some() { 0.8 } else { 4.0 };
+    r.at_rv = here.distance(goal) <= near;
+    if here.distance(goal) > near {
         r.act = Act::ToRv;
-        if let Some(out) = leave_building(r, scene, pos) {
+        if let Some(plan) = roof.map(|b| &r.plans[b]).filter(|p| p.in_grid(pos)) {
+            if let Some(route) = indoor(plan, pos, plan.to_local(goal3).xz(), 0.4) {
+                return route;
+            }
+        } else if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
         return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
