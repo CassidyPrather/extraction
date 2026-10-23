@@ -121,11 +121,16 @@ pub const AIRED_KEPT: usize = 32;
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct Coordination {
     pub on: bool,
+    /// The pinner suppresses while one moves up (`walker::Suppressing`).
+    pub suppress: bool,
 }
 
 impl Default for Coordination {
     fn default() -> Self {
-        Self { on: true }
+        Self {
+            on: true,
+            suppress: true,
+        }
     }
 }
 
