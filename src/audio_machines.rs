@@ -392,6 +392,10 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "SquadCall",
+            "a machine's part in a plan: its chirp is Audio's to come; the radio line is heard (squad::radio_calls)",
+        ),
+        (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
         ),
