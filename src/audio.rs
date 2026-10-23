@@ -1201,6 +1201,73 @@ pub(crate) fn play_filtered(
     ));
 }
 
+/// What a gun's handling sounds like, by event (the shot aside): the set
+/// played and its mix cue. Each step of a reload has its own
+/// (`weapons::reload`), so a hand working the gun unseen can tell them apart.
+pub fn handling_sound(
+    event: &FireEvent,
+    action: Option<extraction_core::firearm::ActionKind>,
+    item: &str,
+) -> Option<(&'static str, &'static str)> {
+    use extraction_core::firearm::ActionKind::*;
+    Some(match (event, action) {
+        (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire"),
+        // The action stopping short on a stuck case: a bolt closing,
+        // slowed and lowered into a dull, wrong clack.
+        (FireEvent::Malfunctioned(_), _) => ("guns/bolt_close", "gun.malfunction"),
+        (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert"),
+        (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release"),
+        (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety"),
+        (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
+            ("guns/shell_insert", "gun.shell_insert")
+        }
+        (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip"),
+        (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", "gun.bolt_close"),
+        (FireEvent::BoltClosed, Some(BreakAction)) => ("guns/shotgun_close", "gun.shotgun_close"),
+        // A pump run home: the fore-end slapping forward and the bolt
+        // locking up behind it.
+        (FireEvent::BoltClosed, Some(Pump)) => ("guns/shotgun_close", "gun.pump_fwd"),
+        (FireEvent::BoltClosed, Some(SemiAuto)) if item == "ak74" => {
+            ("guns/charging_handle", "gun.charging")
+        }
+        (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/slide_rack", "gun.slide_rack"),
+        (FireEvent::Cocked, Some(BoltAction)) => ("guns/bolt_open", "gun.bolt_open"),
+        (FireEvent::Cocked, Some(BreakAction)) => ("guns/shotgun_open", "gun.shotgun_open"),
+        // A pump racked back: the fore-end's slide and the bolt unlocking.
+        (FireEvent::Cocked, Some(Pump)) => ("guns/shotgun_open", "gun.pump_back"),
+        // A spent case is heard where it lands (`casing_sounds`), a beat
+        // after the shot; a live round worked out by hand, here.
+        (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing"),
+        // The carrier running home after the shot, a beat behind it,
+        // and an open bolt slamming forward just before it.
+        (FireEvent::CarrierHome, _) => ("guns/bolt_close", "gun.carrier_home"),
+        (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt"),
+        // Brass sliding off the magazine's lips into the chamber, under
+        // the bolt going home: an empty close has only the bolt.
+        (FireEvent::Chambered, _) => ("guns/stripper_clip", "gun.chamber"),
+        // The slide or bolt meeting its catch: a hard, short click.
+        (FireEvent::BoltLocked, _) => ("guns/safety", "gun.bolt_catch"),
+        // Drawn back by hand: the slide or carrier riding over the hammer.
+        (FireEvent::Cocked, Some(SemiAuto)) => ("guns/bolt_open", "gun.slide_back"),
+        // Pushed in short of its catch: a dull scrape, no snap.
+        (FireEvent::MagazineHalfSeated, _) => ("guns/mag_insert", "gun.mag_half"),
+        // Shaken out by the rack: it slithers out of the well.
+        (FireEvent::MagazineDropped, _) => ("guns/mag_release", "gun.mag_drop"),
+        _ => return None,
+    })
+}
+
+/// How fast [`handling_sound`]'s sample plays for `event`.
+pub fn handling_speed(event: &FireEvent) -> f64 {
+    match event {
+        FireEvent::Chambered => 1.3,
+        FireEvent::BoltLocked => 0.8,
+        FireEvent::MagazineHalfSeated => 0.7,
+        FireEvent::MagazineDropped => 0.85,
+        _ => 1.0,
+    }
+}
+
 fn gun_sounds(
     mut commands: Commands,
     mut events: MessageReader<GunEvent>,
@@ -1216,12 +1283,19 @@ fn gun_sounds(
         .next()
         .map(|g| g.translation())
         .unwrap_or_default();
+    let mut fired = std::collections::HashSet::new();
     for ev in events.read() {
         if fault_sounds(&mut commands, &bank, &mut rng.0, &ev.event, ev.at) {
             continue;
         }
+        // A round stripped into the chamber by the shot's own cycle is under
+        // the shot: only one worked by hand is heard.
+        if matches!(ev.event, FireEvent::Fired { .. }) {
+            fired.insert(ev.gun);
+        } else if ev.event == FireEvent::Chambered && fired.contains(&ev.gun) {
+            continue;
+        }
         let action = guns.get(ev.gun).map(|g| g.firearm.def.action).ok();
-        use extraction_core::firearm::ActionKind::*;
         let (set, cue, offset) = match (&ev.event, action) {
             (FireEvent::Fired { .. }, _) => {
                 let far = ev.at.distance(ear) > 80.0;
@@ -1254,42 +1328,10 @@ fn gun_sounds(
                     _ => (shot_set(&ev.item), "gun.shot", 0.0),
                 }
             }
-            (FireEvent::DryFire | FireEvent::Dud, _) => ("guns/dry_fire", "gun.dry_fire", 0.0),
-            // The action stopping short on a stuck case: a bolt closing,
-            // slowed and lowered into a dull, wrong clack.
-            (FireEvent::Malfunctioned(_), _) => ("guns/bolt_close", "gun.malfunction", 0.0),
-            (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert", 0.0),
-            (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release", 0.0),
-            (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety", 0.0),
-            (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
-                ("guns/shell_insert", "gun.shell_insert", 0.0)
-            }
-            (FireEvent::RoundLoaded, _) => ("guns/stripper_clip", "gun.stripper_clip", 0.0),
-            (FireEvent::BoltClosed, Some(BoltAction)) => ("guns/bolt_close", "gun.bolt_close", 0.0),
-            (FireEvent::BoltClosed, Some(BreakAction)) => {
-                ("guns/shotgun_close", "gun.shotgun_close", 0.0)
-            }
-            // A pump run home: the fore-end slapping forward and the bolt
-            // locking up behind it.
-            (FireEvent::BoltClosed, Some(Pump)) => ("guns/shotgun_close", "gun.pump_fwd", 0.0),
-            (FireEvent::BoltClosed, Some(SemiAuto)) if ev.item == "ak74" => {
-                ("guns/charging_handle", "gun.charging", 0.0)
-            }
-            (FireEvent::BoltClosed, Some(SemiAuto)) => ("guns/slide_rack", "gun.slide_rack", 0.0),
-            (FireEvent::Cocked, Some(BoltAction)) => ("guns/bolt_open", "gun.bolt_open", 0.0),
-            (FireEvent::Cocked, Some(BreakAction)) => {
-                ("guns/shotgun_open", "gun.shotgun_open", 0.0)
-            }
-            // A pump racked back: the fore-end's slide and the bolt unlocking.
-            (FireEvent::Cocked, Some(Pump)) => ("guns/shotgun_open", "gun.pump_back", 0.0),
-            // A spent case is heard where it lands (`casing_sounds`), a beat
-            // after the shot; a live round worked out by hand, here.
-            (FireEvent::Ejected(Round::Live), _) => ("guns/casing", "gun.casing", 0.0),
-            // The carrier running home after the shot, a beat behind it,
-            // and an open bolt slamming forward just before it.
-            (FireEvent::CarrierHome, _) => ("guns/bolt_close", "gun.carrier_home", 0.0),
-            (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt", 0.0),
-            _ => continue,
+            _ => match handling_sound(&ev.event, action, &ev.item) {
+                Some((set, cue)) => (set, cue, 0.0),
+                None => continue,
+            },
         };
         // Shots aren't pitch-shifted much: a gun has one voice.
         let pitch = if matches!(ev.event, FireEvent::Fired { .. }) {
@@ -1302,7 +1344,7 @@ fn gun_sounds(
             // Small and quick inside the receiver.
             FireEvent::CarrierHome => 1.35,
             FireEvent::OpenBoltSlam => 0.9,
-            _ => 1.0,
+            _ => handling_speed(&ev.event),
         };
         play_at_speed(
             &mut commands,
