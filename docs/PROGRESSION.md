@@ -55,7 +55,9 @@ kinds, each tied to the map:
 The job's place is pencilled on the field map (a blue ring; the cache keeps
 its red cross), so the map case tells you where this raid is going. The
 pay is still the cache (unchanged: a pile of ammunition, gadgets, medicine,
-now and then a gun, left out in the Zone for you to fetch). A finished job
+now and then a gun, left out in the Zone for you to fetch: 150 m or more
+from the truck, and off your usual ways if anywhere is, since the machines
+walk those now, `robots::memory`). A finished job
 is replaced by the next one straight away, so you read the next job before
 you set off.
 
@@ -287,6 +289,11 @@ they batter a wedged door down and search the cabin for up to ten minutes.
 **The truck** waits one night if you radio it from the safehouse (press
 the radio); untold, it leaves the rendezvous while you sleep.
 
+**A night doesn't mend a bone.** A leg broken out there (`interact::wounds`)
+is broken till you're home: a splint takes the worst of the limp, a night
+in the bed none of it. Home, it's set between raids, as your health comes
+back; the logbook says "Broke a leg" (", splinted" if you did).
+
 **Expeditions**: past the ladder, once you've slept out, half the recover
 jobs are expeditions to the valley's deepest place ("Two days' walk. Sleep
 at the cabin on the way."). The recorder only counts if the raid that
@@ -295,7 +302,10 @@ brought it home had a night out; the logbook records nights out.
 **The cost**: a safehouse can be found. Come home from a loud raid (the
 third feeling, "the air hums around you", or worse) and the machines have
 followed your trail to it: the door's broken, the crate tipped out over
-the floor, and you'll find it like that next time. The Surge ends a claim
+the floor, and you'll find it like that next time. If the cabin's on your
+usual ways (the Zone's memory of you, `robots::memory`: your ways within
+60 m of it habitual, 0.6 or more), a raid a feeling quieter does it (the
+second, "your teeth ache"): they walk your ways now. The Surge ends a claim
 (and empties the crate: the Zone takes what it's given).
 
 **Leftovers**: each cabin's table has a note from its last people

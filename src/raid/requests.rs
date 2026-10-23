@@ -25,6 +25,8 @@ use crate::world::{Layer, Zone};
 
 /// Caches go at least this far from the truck: worth the walk.
 const CACHE_AWAY: f32 = 150.0;
+/// ...and none of your usual ways within this of it (m).
+const CACHE_CLEAR: f32 = 30.0;
 
 /// How many jobs have been paid for, and where the last cache was left.
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
@@ -105,7 +107,10 @@ fn press_card(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut done: MessageWriter<crate::progression::JobDone>,
-    logbook: Res<crate::raid::logbook::Logbook>,
+    (logbook, mind): (
+        Res<crate::raid::logbook::Logbook>,
+        Option<Res<crate::robots::memory::ZoneMind>>,
+    ),
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -272,6 +277,7 @@ fn press_card(
                     &mut rng,
                     tier,
                     order,
+                    mind.as_deref(),
                 )
             }
             _ => None,
@@ -299,7 +305,8 @@ fn press_card(
 }
 
 /// Leaves the driver's cache at a building loot spot well away from the
-/// truck, and says where.
+/// truck, and off your usual ways (the machines walk those now:
+/// `robots::memory`), and says where.
 #[allow(clippy::too_many_arguments)]
 fn place_cache(
     commands: &mut Commands,
@@ -310,6 +317,7 @@ fn place_cache(
     rng: &mut Rng,
     tier: u32,
     order: &extraction_core::progression::Order,
+    mind: Option<&crate::robots::memory::ZoneMind>,
 ) -> Option<(String, Vec3)> {
     let base = zone
         .marker(&MarkerKind::TruckStop)
@@ -325,6 +333,7 @@ fn place_cache(
     if far.is_empty() {
         return None;
     }
+    let far = off_your_ways(far, mind);
     let at = far[rng.below(far.len())];
     // From the third tier on the driver has more to give: a second pile;
     // past the ladder, a third, of what you ordered.
@@ -353,6 +362,21 @@ fn place_cache(
         );
     }
     Some((describe_place(zone, at), at))
+}
+
+/// The spots none of your usual ways come near, if any are; else all of
+/// them (a blank memory keeps every spot, in order: the same draw).
+fn off_your_ways(spots: Vec<Vec3>, mind: Option<&crate::robots::memory::ZoneMind>) -> Vec<Vec3> {
+    let quiet: Vec<Vec3> = spots
+        .iter()
+        .copied()
+        .filter(|p| {
+            mind.is_none_or(|m| {
+                m.memory.heat_near([p.x, p.z], CACHE_CLEAR) < crate::robots::memory::USUAL_WAY
+            })
+        })
+        .collect();
+    if quiet.is_empty() { spots } else { quiet }
 }
 
 /// "in the barn by the Low farm."
@@ -646,6 +670,29 @@ fn card_text(
 pub(crate) mod tests {
     use super::*;
     use crate::progression::Progression;
+
+    /// The driver's cache keeps off your usual ways, where it can.
+    #[test]
+    fn a_cache_keeps_off_your_ways() {
+        let spots = vec![Vec3::new(0.0, 0.0, 0.0), Vec3::new(300.0, 0.0, 0.0)];
+        let mut mind = crate::robots::memory::ZoneMind::default();
+        assert_eq!(
+            off_your_ways(spots.clone(), Some(&mind)),
+            spots,
+            "blank: all"
+        );
+        // Two raids the same way, past the first spot.
+        let mut trace = extraction_core::zone_memory::RaidTrace::default();
+        trace.walked(5.0, 5.0);
+        mind.memory.fold(&trace);
+        mind.memory.fold(&trace);
+        assert_eq!(off_your_ways(spots.clone(), Some(&mind)), vec![spots[1]]);
+        // Your ways past every spot: it goes somewhere anyway.
+        trace.walked(300.0, 5.0);
+        mind.memory.fold(&trace);
+        mind.memory.fold(&trace);
+        assert_eq!(off_your_ways(spots.clone(), Some(&mind)), spots);
+    }
 
     pub(crate) fn app() -> App {
         let opts = crate::LaunchOptions {
