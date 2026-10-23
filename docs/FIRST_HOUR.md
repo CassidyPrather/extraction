@@ -557,3 +557,24 @@ back. The numbers are small, and a drone in the open kills nearly everyone
 whatever they hear. The line a listener did most with was the cut-off's,
 which names a rendezvous; the flank line gives a compass way ("round to
 your east"), as the job card does ("north-east, 190 m").
+
+## Five jobs again, on the map with the roofs
+
+On Map design's da285bed (sheds on the ways to the mast, cover home from
+the Village, the Village's garden shed kept), my head, one seed each:
+
+| Newcomer | Job 1 (scout) | Job 2 (bring) | Job 3 (fetch) | Job 4 (the mast relay) | Job 5 |
+| - | - | - | - | - | - |
+| cautious | paid | down | the bot couldn't reach the crate | paid | the bot stuck at a door |
+| hoarder | paid | paid | paid | down | down |
+| lost | paid | down | down | down | down |
+| one-handed | paid | paid | paid | the box left, home, paid | down |
+| reckless | paid | paid | paid | the box left; down | down |
+
+Every one of the 75 hits after job 1 came after a tell. Run to run,
+with one seed each, this moves a lot: a run in between, when a Village
+shed had made way for a hut out west, sent job 3's nearest matches out
+past the pumping station and three newcomers died fetching them (Map
+design put the shed back). The lost one, by the shop, was warned every
+time (a drone's lock, 15 s ahead) and went in at the door; the bot stood
+it in the doorway's line, which the rooms' plan now puts right.

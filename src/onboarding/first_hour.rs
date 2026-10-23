@@ -491,6 +491,10 @@ pub(super) struct Newcomer {
     low_until: f32,
     /// When it last did as a machine's tell says (not more than every 15 s).
     tell_at: f32,
+    /// When it got home (the truck back at base, it in the bed).
+    home_at: Option<f32>,
+    /// Hit after a warning: further hits till then are the same fight.
+    warned_fight_until: f32,
     /// What the job asks.
     errand: Option<Errand>,
     /// Getting what it brought into the crate.
@@ -654,7 +658,10 @@ pub(super) fn direct_raid(
     let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
     let creep = (p.reads || state.low_until > now)
         && !fleeing
-        && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+        && !matches!(
+            state.leg,
+            Leg::Camp | Leg::Kit | Leg::Card | Leg::Board | Leg::Paid | Leg::Handed
+        );
     // A photograph: the head kept on the machine as it moves, the camera
     // up (the card: "it in the middle").
     if let (Leg::Place, Some(Errand::Photo(subject))) = (state.leg, &state.errand)
@@ -679,6 +686,10 @@ pub(super) fn direct_raid(
         }
     }
     state.showing = showing;
+    // The buildings' plans, once they're up (in from a drone, a find indoors).
+    if plans.is_empty() && !view.buildings.is_empty() {
+        *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
+    }
     // The first time, what the driver says; after, the machine's own tell
     // (the chirp, the gun settling): a newcomer who's learned what one
     // means keeps doing as told.
@@ -741,7 +752,7 @@ pub(super) fn direct_raid(
                 }
                 let overhead = f == First::DroneLock;
                 overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), here))
+                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here))
                     .flatten()
                     .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
             }
@@ -800,14 +811,17 @@ pub(super) fn direct_raid(
     // Hurt: warned, or not.
     if let Ok(h) = view.health.single() {
         if h.hp < state.hp - 5.0 {
-            // Warned: the driver said something lately, or a machine
-            // showed its tell (`first_fight`).
-            // In a fight, warned is the machine's own tell; else something
-            // said lately.
+            // Warned: in a seeded fight, the machine's own tell; else
+            // something said or shown lately (a line, a lock, an aim); or
+            // the same fight still going (hit again within 15 s of a warned
+            // hit: a drone that locked on keeps at it without locking again).
             let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
                 Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
                 None => now - state.said_at < 30.0,
-            };
+            } || now < state.warned_fight_until;
+            if warned {
+                state.warned_fight_until = now + 15.0;
+            }
             let kind = if warned {
                 Kind::Hurt
             } else {
@@ -861,13 +875,12 @@ pub(super) fn direct_raid(
         return;
     }
     // Reckless: a machine in reach is a fight (once a minute at most).
-    // (With a gun: the last fall may have left it out there.)
-    let armed = world.items.iter().any(|(e, it, _, held, sock, bag)| {
+    // (With a gun to hand: in a hand or on the body, not at the bottom of
+    // the pack; the last fall may have left it out there.)
+    let armed = world.items.iter().any(|(_, it, _, held, sock, _)| {
         world.catalog.get(it.kind()).category == extraction_core::items::Category::Firearm
             && (held.is_some_and(|h| h.player == player)
-                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player))
-                || bag.is_some_and(|b| view.bags.get(b.bag).is_ok_and(|b| b.owner == player)))
-            && !view.stash.iter().any(|b| b.contents.contains(&e))
+                || sock.is_some_and(|s| world.owners.get(s.socket).is_ok_and(|o| o.0 == player)))
     });
     if p.reckless
         && armed
@@ -1158,9 +1171,6 @@ pub(super) fn direct_raid(
             }
             let skip = state.passed_over.clone();
             let no_plan = state.plan_failed.clone();
-            if plans.is_empty() && !view.buildings.is_empty() {
-                *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
-            }
             match errand_tasks(
                 &errand,
                 &world,
@@ -1372,7 +1382,15 @@ pub(super) fn direct_raid(
                 Some(Errand::Bring { want, .. }) => Some(want.clone()),
                 _ => None,
             };
-            if raid.phase == Phase::AtBase
+            if raid.phase == Phase::AtBase && state.home_at.is_none() {
+                state.home_at = Some(now);
+            }
+            // A moment in the bed first: everything's where it was out
+            // there until the drive home's settled.
+            let settled = state.home_at.is_some_and(|t| now - t > 2.0);
+            if raid.phase == Phase::AtBase && !settled {
+                tasks.push(Task::Wait(1.0));
+            } else if raid.phase == Phase::AtBase
                 && let Some(want) = bring
                 && state.crating.as_ref().is_none_or(|c| !c.done())
             {
@@ -1587,6 +1605,7 @@ pub(super) struct Tells<'w, 's> {
 /// a look).
 fn under_a_roof(
     entrances: Option<&crate::robots::doors::Entrances>,
+    plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
 ) -> Option<Vec<Task>> {
     let entrances = entrances?;
@@ -1607,11 +1626,32 @@ fn under_a_roof(
         .filter(|d| d.mid.xz().distance(here) < 60.0)?;
     let out = d.out.xz().normalize_or(Vec2::Y);
     let inside = d.mid.xz() - out * 2.5;
-    // Off to one side of the doorway: not in a look through it.
-    let aside = [out.perp(), -out.perp()]
+    // Off to one side of the doorway: not in a look through it, and
+    // somewhere the body can stand (the rooms' plan says; the shop's shelves
+    // are in the way of some).
+    let plan = plans.iter().find(|pl| pl.entity == d.building);
+    let standable = |p: Vec2| match plan {
+        Some(pl) => {
+            let from = pl.to_local(Vec3::new(inside.x, d.mid.y, inside.y)).xz();
+            let to = pl.to_local(Vec3::new(p.x, d.mid.y, p.y)).xz();
+            pl.path(from, to)
+                .and_then(|path| path.last().copied())
+                .is_some_and(|end| end.distance(to) < 0.4)
+        }
+        None => entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building),
+    };
+    let aside = [2.0, 1.4, 2.6]
         .into_iter()
-        .map(|s| inside + s * 2.0)
-        .find(|p| entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building))
+        .flat_map(|k| {
+            [
+                out.perp() * k,
+                -out.perp() * k,
+                out.perp() * k - out,
+                -out.perp() * k - out,
+            ]
+        })
+        .map(|s| inside + s)
+        .find(|p| standable(*p))
         .unwrap_or(inside);
     Some(vec![
         Task::WalkTo {
@@ -2254,7 +2294,7 @@ pub(super) fn first_fight(
         // from a drone.
         fight.flee_until = now + 12.0;
         (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), here))
+            .then(|| under_a_roof(entrances.as_deref(), &[], here))
             .flatten()
             .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
