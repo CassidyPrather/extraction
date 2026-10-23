@@ -412,6 +412,7 @@ pub fn spawn_heavy(
                 suppressing: false,
                 gap: None,
                 closing: 0.0,
+                pursuing: false,
                 turret_yaw: 0.0,
                 phase: 0,
                 collapsed: false,

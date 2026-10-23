@@ -66,6 +66,8 @@ pub const SNARE_AHEAD: f32 = 22.0;
 pub const SNARE_RADIUS: f32 = 3.0;
 /// ...and the lure's way past it, this far beyond its edge (m).
 pub const LURE_GAP: f32 = 1.5;
+/// A hound in the squad starts this far off (m): it sees short.
+pub const HOUND_SPAWN: f32 = 20.0;
 /// The squad finds it from this far (m).
 pub const SPAWN: (f32, f32) = (45.0, 55.0);
 /// The updates in a second.
@@ -245,6 +247,9 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     // The other arm of the pinner's suppression.
     app.world_mut().resource_mut::<Coordination>().suppress =
         std::env::var("SIM_DRILL_NO_SUPPRESS").is_err();
+    // The experiment: walkers going after a runner.
+    app.world_mut().resource_mut::<Coordination>().pursue =
+        std::env::var("SIM_DRILL_PURSUE").is_ok();
     let mut rng = Rng::new(seed.wrapping_mul(0x9E37_79B9) ^ 0x5D);
     let rvs = rendezvous(&zone);
     let nav_near = |app: &App, p: Vec2| {
@@ -332,7 +337,8 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             if let Some(last) = squad.pop() {
                 c.entity(last).despawn();
             }
-            let p = start + Vec2::from_angle(side) * SPAWN.0;
+            // Within its sight (25 m: an ear more than an eye).
+            let p = nav_near(&app, start + Vec2::from_angle(side) * HOUND_SPAWN);
             let at = ground(p);
             squad.push(super::hound::spawn_hound(
                 &mut c,

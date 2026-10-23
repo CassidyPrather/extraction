@@ -123,6 +123,9 @@ pub struct Coordination {
     pub on: bool,
     /// The pinner suppresses while one moves up (`walker::Suppressing`).
     pub suppress: bool,
+    /// Walkers go after a runner getting away (`walker::PURSUE_FROM`): an
+    /// experiment, off unless asked for.
+    pub pursue: bool,
 }
 
 impl Default for Coordination {
@@ -130,6 +133,7 @@ impl Default for Coordination {
         Self {
             on: true,
             suppress: true,
+            pursue: false,
         }
     }
 }
