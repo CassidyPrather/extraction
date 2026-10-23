@@ -341,7 +341,7 @@ pub fn loot_sights() -> Vec<LootSight> {
             let surface = bevy::math::Vec3::new(p.x, top + 0.002, p.z);
             let albedo = luminance(mat.info().2);
             let near = occ.light(surface, bevy::math::Vec3::Y);
-            let light = crate::world::ao::sky_light(occ.sky_view(surface, bevy::math::Vec3::Y));
+            let light = crate::world::ao::sky_light(occ.lying_at(p));
             let inside = cover.is_some_and(|c| c.covers(p + bevy::math::Vec3::Y * 0.3));
             let sky = if inside { indoors } else { outdoors };
             out.push(LootSight {

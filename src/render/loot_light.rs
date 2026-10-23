@@ -59,7 +59,7 @@ pub fn light_at(
         return 1.0;
     };
     let l = xf.compute_affine().inverse().transform_point3(p);
-    crate::world::ao::sky_light(field.at(l + Vec3::Y * 0.15)).max(crate::world::ao::SKY_MIN)
+    crate::world::ao::sky_light(field.open_at(l + Vec3::Y * crate::world::ao::LYING))
 }
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]

@@ -61,6 +61,9 @@ pub fn sky_light(view: f32) -> f32 {
     inside + (1.0 - inside) * open
 }
 
+/// How far over where a thing lies its light is read (m).
+pub const LYING: f32 = 0.15;
+
 /// The least a piece of furniture keeps of its light today, however
 /// dark its corner: its silhouette and grain still read.
 pub const PIECE_MIN: f32 = 0.3;
@@ -298,6 +301,31 @@ impl SkyField {
         }
     }
 
+    /// The light at `p` in the open: the cell's, or if that's solid (a
+    /// shelf's box round what lies on it, a wall), the brightest open cell
+    /// next to it.
+    pub fn open_at(&self, p: Vec3) -> f32 {
+        let here = self.at(p);
+        if here > 1e-6 {
+            return here;
+        }
+        let mut best = 0.0f32;
+        for r in 1..=2 {
+            for dx in -r..=r {
+                for dy in -r..=r {
+                    for dz in -r..=r {
+                        let d = Vec3::new(dx as f32, dy as f32, dz as f32) * self.cell;
+                        best = best.max(self.at(p + d));
+                    }
+                }
+            }
+            if best > 1e-6 {
+                break;
+            }
+        }
+        best
+    }
+
     /// The light in the cell at `p` (1 outside the field).
     pub fn at(&self, p: Vec3) -> f32 {
         let c = ((p - self.lo) / self.cell).floor();
@@ -440,6 +468,13 @@ impl Occluders {
     pub fn within(mut self, walls: Vec2) -> Self {
         self.walls = Some(walls);
         self
+    }
+
+    /// The sky field's light where a thing lies at `p` (in the open over
+    /// it: `SkyField::open_at`), as loot is tinted (`render::loot_light`).
+    pub fn lying_at(&self, p: Vec3) -> f32 {
+        let field = self.field.get_or_init(|| SkyField::new(self));
+        field.open_at(p + Vec3::Y * LYING)
     }
 
     /// The sky field, if it was made (for the furniture placed later).

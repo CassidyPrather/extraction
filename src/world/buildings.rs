@@ -2744,7 +2744,8 @@ fn barn(b: &mut Builder) {
         std::f32::consts::FRAC_PI_2,
         Some("workshop"),
     );
-    b.crate_box(Vec3::new(4.5, f, 5.5), 0.8, Some("food_common"));
+    // By the end window, on the boards (not sunk in them).
+    b.crate_box(Vec3::new(5.1, f + 0.015, 6.3), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
     b.barrel(Vec3::new(5.2, f, 6.9));
     b.barrel(Vec3::new(4.6, f, 7.2));
@@ -4438,10 +4439,12 @@ fn chapel(b: &mut Builder) {
         h,
         0.35,
         Mat::Plaster,
+        // A chancel window either side of the bell tower at the east end:
+        // its corners are lit (`capture::checks::loot_sights`).
         [
             &[door(w * 0.5)],
             &[tall(3.0), tall(7.0), tall(11.0)],
-            &[],
+            &[tall(1.4), tall(w - 1.4)],
             &[tall(3.0), tall(7.0), tall(11.0)],
         ],
     );
