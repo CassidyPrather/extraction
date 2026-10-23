@@ -23,6 +23,7 @@ pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
+pub mod loot_light;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -30,12 +31,15 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
+pub mod rv_beacons;
 pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
+pub mod stress;
 pub mod tells;
 pub mod terrain_material;
+pub mod textures;
 pub mod timeline;
 pub mod tools;
 pub mod upgrades;
@@ -59,6 +63,13 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
+        if app
+            .world()
+            .get_resource::<LaunchOptions>()
+            .is_some_and(|o| o.stress)
+        {
+            app.add_plugins(stress::StressPlugin);
+        }
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
@@ -82,15 +93,18 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(loot_light::LootLightPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
+        .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
+        .add_plugins(rv_beacons::RvBeaconsPlugin)
         .add_plugins(pry_cue::PryCuePlugin)
         .init_resource::<lod::StandInMaterial>()
         .add_plugins(arms::ArmsPlugin)
@@ -174,17 +188,28 @@ fn attach_flat_camera(
         } else {
             pos.y.max(ground + 0.3)
         };
-        commands.spawn((
-            Name::new("Free camera"),
-            FreeCamera,
-            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                -yaw.to_radians(),
-                pitch.to_radians(),
-                0.0,
-            )),
-            camera_bundle(&weather),
-        ));
+        commands
+            .spawn((
+                Name::new("Free camera"),
+                FreeCamera,
+                Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                    EulerRot::YXZ,
+                    -yaw.to_radians(),
+                    pitch.to_radians(),
+                    0.0,
+                )),
+                camera_bundle(&weather),
+            ))
+            .with_children(|c| {
+                // Held up by the eye and aimed where it looks, as anyone
+                // looking at something by torchlight does.
+                if opts.torch {
+                    c.spawn((
+                        crate::gadgets::visuals::torch_beam(),
+                        Transform::from_xyz(0.15, -0.1, 0.0),
+                    ));
+                }
+            });
         return;
     }
     for (head, parent) in &heads {

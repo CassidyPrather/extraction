@@ -49,6 +49,27 @@ impl Plugin for FaultsPlugin {
     }
 }
 
+/// A fault's feel in the hand that holds the gun (amplitude, seconds): each
+/// stoppage its own (`stoppages`).
+pub fn fault_feel_of(event: &FireEvent) -> Option<(f32, f32)> {
+    Some(match event {
+        FireEvent::Malfunctioned(Malfunction::FailureToEject) => (0.55, 0.03),
+        FireEvent::Malfunctioned(Malfunction::FailureToFeed) => (0.12, 0.015),
+        FireEvent::Malfunctioned(Malfunction::DoubleFeed) => (0.85, 0.12),
+        FireEvent::Squib { .. } => (0.2, 0.03),
+        FireEvent::Bulged { .. } => (1.0, 0.35),
+        FireEvent::BoltStuck => (0.6, 0.08),
+        FireEvent::BoltFreed => (0.4, 0.02),
+        FireEvent::Rodded => (0.3, 0.04),
+        FireEvent::Malfunctioned(Malfunction::ShortStroke) => (0.3, 0.05),
+        // The primer fizzing under the hammer: a long faint tremor, not a
+        // dud's hard stop.
+        FireEvent::HangFire => (0.18, 0.3),
+        FireEvent::OutOfBattery => (1.0, 0.3),
+        _ => return None,
+    })
+}
+
 /// Each fault's feel in the hand that holds the gun, and a bulge's harm.
 fn fault_feel(
     mut events: MessageReader<GunEvent>,
@@ -58,20 +79,8 @@ fn fault_feel(
     mut hits: MessageWriter<Hit>,
 ) {
     for ev in events.read() {
-        let feel = match ev.event {
-            FireEvent::Malfunctioned(Malfunction::FailureToEject) => (0.55, 0.03),
-            FireEvent::Malfunctioned(Malfunction::FailureToFeed) => (0.12, 0.015),
-            FireEvent::Malfunctioned(Malfunction::DoubleFeed) => (0.85, 0.12),
-            FireEvent::Squib { .. } => (0.2, 0.03),
-            FireEvent::Bulged { .. } => (1.0, 0.35),
-            FireEvent::BoltStuck => (0.6, 0.08),
-            FireEvent::BoltFreed => (0.4, 0.02),
-            FireEvent::Rodded => (0.3, 0.04),
-            FireEvent::Malfunctioned(Malfunction::ShortStroke) => (0.3, 0.05),
-            // A click like a dud's; the shot after it comes as a shot.
-            FireEvent::HangFire => (0.35, 0.02),
-            FireEvent::OutOfBattery => (1.0, 0.3),
-            _ => continue,
+        let Some(feel) = fault_feel_of(&ev.event) else {
+            continue;
         };
         let Ok((h, gt)) = held.get(ev.gun) else {
             continue;

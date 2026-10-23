@@ -37,8 +37,62 @@ pub struct CinematicPlugin;
 impl Plugin for CinematicPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Cine>()
-            .add_systems(Update, fly.run_if(cinematic_run));
+            .add_systems(Update, fly.run_if(cinematic_run))
+            .add_systems(
+                Update,
+                dump.run_if(|o: Res<LaunchOptions>| o.capture.dump.is_some()),
+            );
     }
+}
+
+/// `--cine-dump IN.cine,OUT.stills`: each shot's first pose, resolved
+/// against this valley (targets, ground, trees), written as a still
+/// (`name x,~h,z,yaw,pitch`), then exit. The visual diff's cameras are
+/// made this way once and committed, so every build after (and before)
+/// shoots from the same places: a build that predates a target kind still
+/// reads a `.stills` file.
+fn dump(
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<Zone>>,
+    mut exit: MessageWriter<AppExit>,
+    mut done: Local<bool>,
+) {
+    let (Some(zone), Some((src, dst)), false) = (zone, opts.capture.dump.as_ref(), *done) else {
+        return;
+    };
+    *done = true;
+    let lines = match load(&zone, src, 24) {
+        Ok(shots) => shots
+            .iter()
+            .map(|s| {
+                let (eye, target) = s.flight.at(0.0);
+                let d = target - eye;
+                let yaw = d.x.atan2(-d.z).to_degrees().rem_euclid(360.0);
+                let pitch = d.y.atan2(Vec2::new(d.x, d.z).length()).to_degrees();
+                let h = eye.y - zone.ground(eye.x, eye.z);
+                format!(
+                    "{:<16} {:.1},~{:.2},{:.1},{:.1},{:.1}",
+                    s.name, eye.x, h, eye.z, yaw, pitch
+                )
+            })
+            .collect::<Vec<_>>(),
+        Err(e) => {
+            error!("cine-dump: {e}");
+            exit.write(AppExit::error());
+            return;
+        }
+    };
+    let text = format!(
+        "# {}: {} resolved by --cine-dump; name x,~h,z,yaw,pitch.\n{}\n",
+        opts.map,
+        src.display(),
+        lines.join("\n")
+    );
+    match std::fs::write(dst, text) {
+        Ok(()) => info!("cine-dump: {} stills to {}", lines.len(), dst.display()),
+        Err(e) => error!("cine-dump: {}: {e}", dst.display()),
+    }
+    exit.write(AppExit::Success);
 }
 
 fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
@@ -47,6 +101,16 @@ fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
 
 /// A still's field of view (the game's own camera's), degrees.
 pub const STILL_FOV: f32 = 75.0;
+/// Frames a capture waits at most for everything to be in before its
+/// first shot, so a valley that never settles still gets shot.
+pub const LOAD_WAIT: u32 = 3000;
+/// A still's last settle frames are held with the clock stopped. Whatever
+/// keeps time (clouds, a lamp's character) holds for the picture, so one
+/// build's still is the same every run, and a lamp with a character is
+/// shot lit (a paused clock lights it: `render::landmarks`). Without the
+/// hold, a still caught whatever phase its frame landed on, and a
+/// blinking mast lamp showed as a change between builds.
+pub const STILL_HOLD: u32 = 2;
 /// Frames a still settles for at its pose (streamed detail, shadows).
 pub const STILL_SETTLE: u32 = 14;
 
@@ -96,6 +160,8 @@ struct Cine {
     frame: u32,
     /// Frames left to settle before the current shot records.
     settle: Option<u32>,
+    /// A still's last frames, held with the clock stopped (`STILL_HOLD`).
+    held: bool,
     in_flight: usize,
     records: Vec<ShotRecord>,
     started: Option<std::time::Instant>,
@@ -203,7 +269,10 @@ pub fn build(zone: &Zone, trees: &Trees, spec: &ShotSpec, fps: u32) -> Result<Sh
 }
 
 /// Where a generated shot is about: a prefab's first placement, a marker's
-/// name (any case, `_` for spaces), or `x,z`.
+/// name (any case, `_` for spaces), `x,z`, or, the same words for every
+/// valley: `kind:K` (the first marker of kind K, `kind:Anomaly`), `tallest`
+/// (the tallest placed prefab) or `interior` (the first placed building
+/// with furniture inside).
 pub fn find_target(zone: &Zone, name: &str) -> Option<(Vec2, f32, Vec3)> {
     if let Some((x, z)) = name.split_once(',') {
         return Some((
@@ -211,6 +280,40 @@ pub fn find_target(zone: &Zone, name: &str) -> Option<(Vec2, f32, Vec3)> {
             0.0,
             Vec3::splat(4.0),
         ));
+    }
+    let footprint =
+        |p: &extraction_core::map::Placement| crate::world::structures::footprint(&p.prefab);
+    if let Some(kind) = name.strip_prefix("kind:") {
+        return zone
+            .map
+            .markers
+            .iter()
+            .find(|m| {
+                // The variant's name, without its fields (`Anomaly { .. }`).
+                let k = format!("{:?}", m.kind);
+                let name = k.split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
+                name.eq_ignore_ascii_case(kind)
+            })
+            .map(|m| (Vec2::from(m.at), m.rot, Vec3::splat(4.0)));
+    }
+    if name == "tallest" {
+        return zone
+            .map
+            .placements
+            .iter()
+            .max_by(|a, b| footprint(a).y.total_cmp(&footprint(b).y))
+            .map(|p| (Vec2::from(p.at), p.rot, footprint(p)));
+    }
+    if name == "interior" {
+        return zone
+            .map
+            .placements
+            .iter()
+            .find(|p| {
+                crate::world::buildings::prefab(&p.prefab)
+                    .is_some_and(|g| g.props.iter().any(|d| d.inside))
+            })
+            .map(|p| (Vec2::from(p.at), p.rot, footprint(p)));
     }
     if let Some(p) = zone.map.placements.iter().find(|p| p.prefab == name) {
         let f = crate::world::structures::footprint(&p.prefab);
@@ -418,6 +521,7 @@ fn fly(
     mut time: ResMut<Time<Virtual>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -468,7 +572,7 @@ fn fly(
     // Frames in flight are waited out with time stopped (see below), so
     // each saved frame is exactly one step on from the last. Unpausing
     // takes effect next frame: this one is a repeat.
-    if time.is_paused() {
+    if time.is_paused() && !cine.held {
         if cine.in_flight < IN_FLIGHT {
             time.unpause();
         }
@@ -542,6 +646,17 @@ fn fly(
     };
     if settle > 0 {
         place(&mut cam, 0);
+        // The first shot waits at its pose for everything to be in
+        // (`render::timeline`): every material and pipeline compiled.
+        // A still taken before that depended on the wall clock: one
+        // build's Marrow dusk came out warm one run and grey-green the next.
+        if settle <= STILL_HOLD + 1 && loaded.is_none() && *frames < LOAD_WAIT {
+            return;
+        }
+        if shot.still && settle <= STILL_HOLD && !time.is_paused() {
+            time.pause();
+            cine.held = true;
+        }
         cine.settle = Some(settle - 1);
         return;
     }
@@ -561,6 +676,7 @@ fn fly(
         cine.cur += 1;
         cine.frame = 0;
         cine.settle = None;
+        cine.held = false;
         return;
     }
     let frame = cine.frame;
@@ -649,5 +765,32 @@ mod tests {
             let look = look.unwrap();
             assert!(Vec2::new(look.x, look.z).distance(c) < 0.01);
         }
+    }
+
+    /// The visual diff's views (`scripts/visual_diff/views.cine`) name
+    /// their targets in words every valley answers to.
+    #[test]
+    fn generic_targets_resolve_in_every_valley() {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let zone = Zone::load(map);
+            for t in [
+                "kind:Insertion",
+                "kind:Rendezvous",
+                "kind:Anomaly",
+                "tallest",
+                "interior",
+            ] {
+                assert!(find_target(&zone, t).is_some(), "{map}: no {t}");
+            }
+        }
+        let path = crate::asset_root_path().join("../scripts/visual_diff/views.cine");
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(path::parse(&text).unwrap().len(), 5);
     }
 }

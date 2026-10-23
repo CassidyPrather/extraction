@@ -361,7 +361,9 @@ Each site gets one mechanic met nowhere else. The adit's is the winze's
 cage (`world::cage`, the layout's `cage`: a `pit` room for the shaft, the
 room at its top beside it, the bells). The deep level (the station at
 the winze's foot, the vein drive, the assay store with the best of the
-adit's loot) is reached only by it.
+adit's loot) is reached by it, or the long way: the old incline, stepped
+up 12 m from the vein drive to the drift's far end, the deep level's
+second way out (see "The way out under pressure").
 
 - *Riding.* A bell pull at the shaft station, one at the foot, one in
   the cage. A landing's bell calls the cage there, or sends it from
@@ -376,8 +378,8 @@ adit's loot) is reached only by it.
   the shaft's foot as it comes down and it comes down on you (70, and a
   bleed) and stops there, its rope slack; its own bell takes it back up.
 - *Bots.* The shaft is a pit: the raiders' routes and the crawlers'
-  grid stop at its edge, top and foot (`nothing_walks_into_the_winze`),
-  and the deep level is behind the works.
+  grid stop at its edge, top and foot (`nothing_walks_into_the_winze`);
+  raiders walk to the deep level by the incline.
 
 Shots: the cage at the shaft station, its lamp green
 (`docs/shots/underground/r_cage.jpg`); up the open winze from its foot to
@@ -455,6 +457,55 @@ layout's `live`): throw the breaker and the way in opens onto live water.
 Shot: the overflow chamber's water live, cold blue under the arcing,
 its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
 from the start, for shots).
+
+### The way out under pressure
+
+From every loot spot, how long the way out takes at a walk (2.4 m/s,
+wading and stairs slower, a shaft by the cage: its ride and a wait for
+it), to whichever kiosk's nearest: calm, and *pressed*, with a crawler
+behind in the way it came (the first corridor, room or stair out of the
+spot's room on the calm way shut). `underground::ways_out`; the rule,
+`no_loot_spot_is_a_long_dead_end`: a spot with no second way lies within
+60 s (`DEAD_END_MAX`) of a way out. `--nocapture` prints every spot.
+
+| Site | Spots | Deepest (calm) | Its pressed way | Dead-end spots (longest) |
+|---|---|---|---|---|
+| `bunker_marrow` | 13 | armoury 16.8 s | none | 5 (16.8 s) |
+| `mine_kettle` | 9 | magazine 15.5 s | none | 3 (15.5 s) |
+| `tunnel_cinder` | 10 | cable vault 16.2 s | none | 1 (16.2 s) |
+| `depot_marrow` | 21 | kept stacks 29.5 s | 45.2 s | 0 |
+| `pump_marrow` | 10 | screen room 30.6 s | 30.9 s | 4 (10.8 s) |
+| `deep_kettle` | 10 | old heading 18.1 s | 20.8 s | 5 (16.7 s) |
+| `cellars_cinder` | 8 | far ledge 44.8 s | none | 4 (44.8 s) |
+| `gallery_sallow` | 10 | gauge room 22.7 s | none | 4 (22.7 s) |
+| `adit_rime` | 13 | assay store 44.8 s | none | 7 (44.8 s) |
+
+A dead-end spot is one in a room with the one door: a crawler in it and
+there's no other way. None is over the minute. The two longest:
+
+- *The adit's deep level* was out by the cage alone: a crawler waiting at
+  the shaft station and everything below was a trap 37-45 s deep. It has
+  a second way now, the old incline (`drift` to `vein_drive`, a door at
+  the drift's end), stepped 12 m up 50 m of drift from the vein drive to
+  the main drift's far end: the level station's pressed way is 45.6 s
+  where it was none. The assay store is still one door off the vein
+  drive, 45 s out.
+- *The cellars' far ledge* is out only by the crane across the pit, 45 s;
+  but nothing follows across it (the crawler's round keeps to the near
+  side), so it's a refuge, not a trap. Left as it is.
+
+### Worth going down: the entrances
+
+Every site says from the surface what's down there: over each kiosk's
+door (bar one with a front of its own, the Depot's) a stencilled sign,
+the layout's `sign`, names the place and what to mind there ("DEEP
+WORKINGS - FIREDAMP / NO NAKED LIGHTS", "DANGER - LIVE CABLES", "CAGE TO
+LOWER LEVEL"), and a dim warm lamp (`DoorLamp`) shows the way down from
+across the valley at night. Audio's asked for the stair breathing out
+what's below. The skipped sites got a reward worth the walk: three more
+loot spots each in the pump station and the deep workings, the best
+deepest. Shots: `docs/shots/underground/sign_adit.jpg`,
+`sign_bunker.jpg`.
 
 Models (Kit's): the cellars' crane bridge and hook block, the chain
 scaled to the drop (`docs/shots/underground/c_crane.jpg`); the cast-iron

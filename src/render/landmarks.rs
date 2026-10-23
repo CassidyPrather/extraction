@@ -19,7 +19,7 @@ pub struct LandmarkLampsPlugin;
 
 impl Plugin for LandmarkLampsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (light_landmarks, day_glows));
+        app.add_systems(Update, (light_landmarks, day_glows, flash_lamps));
     }
 }
 
@@ -43,9 +43,30 @@ const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
 const HALO_REACH: f32 = 320.0;
 const DAY_R: f32 = 1.4;
 
+/// A lamp's character (`map_landmarks::assign`): when in its period
+/// it's lit. Its halo and glow, its children, go out with it.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
+
+/// Every lamp lit or dark by its character on the game's clock; with the
+/// clock stopped (a frozen capture), lit.
+fn flash_lamps(time: Res<Time<Virtual>>, mut lamps: Query<(&Lamp, &mut Visibility)>) {
+    let t = time.elapsed_secs();
+    for (lamp, mut v) in &mut lamps {
+        let want = if time.is_paused() || lamp.0.lit_at(t) {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *v != want {
+            *v = want;
+        }
+    }
+}
+
 /// A lamp's daytime glow.
 #[derive(Component)]
-struct DayGlow;
+pub(crate) struct DayGlow;
 
 /// The highest point of a prefab, in its own frame: the top middle of its
 /// highest piece.
@@ -54,11 +75,15 @@ pub fn top_of(id: &str) -> Option<Vec3> {
     geo.pieces
         .iter()
         .map(|p| {
-            let half_h = match p.shape {
-                Shape::Box(s) | Shape::Prism(s) => s.y * 0.5,
+            // How far up from its origin its top is: a box's and a
+            // cylinder's origin is their middle, a gable prism's its base
+            // (`materials::gable_prism`: the ridge at its full height).
+            let up = match p.shape {
+                Shape::Box(s) => s.y * 0.5,
+                Shape::Prism(s) => s.y,
                 Shape::Cylinder(_, h) => h * 0.5,
             };
-            p.at.translation + p.at.rotation * Vec3::Y * half_h
+            p.at.translation + p.at.rotation * Vec3::Y * up
         })
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
@@ -69,7 +94,9 @@ const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.045, 0.014);
 
 fn light_landmarks(
     mut commands: Commands,
-    buildings: Query<(Entity, &Building), Added<Building>>,
+    zone: Option<Res<crate::world::Zone>>,
+    buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
+    mut lamps_of: Local<Option<Vec<(String, [f32; 2], extraction_core::map_landmarks::Character)>>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
@@ -82,10 +109,40 @@ fn light_landmarks(
         )>,
     >,
 ) {
-    for (e, b) in &buildings {
+    // Each landmark's lamp character, by its placement (a building is
+    // found by its prefab and where it stands).
+    let lamps_of = lamps_of.get_or_insert_with(|| {
+        zone.as_ref().map_or(Vec::new(), |z| {
+            extraction_core::map_landmarks::placement_lamps(&z.map, &z.hm)
+                .into_iter()
+                .map(|(i, c)| {
+                    (
+                        z.map.placements[i].prefab.clone(),
+                        z.map.placements[i].at,
+                        c,
+                    )
+                })
+                .collect()
+        })
+    });
+    for (e, b, xf) in &buildings {
         if prefab_footprint(&b.prefab)[1] < LANDMARK_HEIGHT || LIT.contains(&b.prefab.as_str()) {
             continue;
         }
+        let here = [xf.translation.x, xf.translation.z];
+        let character = lamps_of
+            .iter()
+            .filter(|(id, _, _)| *id == b.prefab)
+            .min_by(|a, b| {
+                extraction_core::geom::dist(a.1, here)
+                    .total_cmp(&extraction_core::geom::dist(b.1, here))
+            })
+            .map(|(_, _, c)| *c)
+            .unwrap_or(
+                extraction_core::map_landmarks::family(extraction_core::map_landmarks::kind(
+                    &b.prefab,
+                ))[0],
+            );
         let Some(top) = top_of(&b.prefab) else {
             continue;
         };
@@ -123,6 +180,8 @@ fn light_landmarks(
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
+                Lamp(character),
+                Visibility::default(),
                 Mesh3d(lamp_mesh),
                 MeshMaterial3d(lamp),
                 Transform::from_translation(at),
@@ -147,7 +206,7 @@ fn light_landmarks(
 
 /// A disc of light fading from the middle to nothing at its edge (white;
 /// the material tints it).
-fn falloff() -> Image {
+pub(crate) fn falloff() -> Image {
     const N: u32 = 64;
     let mut data = Vec::with_capacity((N * N * 4) as usize);
     for y in 0..N {
@@ -208,6 +267,42 @@ fn day_glows(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With the clock stopped every lamp shows, whatever its phase: the
+    /// captures' stills stop it to shoot every lamp lit, the same each
+    /// build. Running, a lamp goes dark between flashes.
+    #[test]
+    fn a_stopped_clock_lights_every_lamp() {
+        use extraction_core::map_landmarks::MASTS;
+        let quick = MASTS[0];
+        // A moment it's dark.
+        let dark = (0..400)
+            .map(|k| k as f32 * 0.025)
+            .find(|t| !quick.lit_at(*t))
+            .unwrap();
+        for paused in [false, true] {
+            let mut app = App::new();
+            let mut time = Time::<Virtual>::default();
+            time.advance_by(std::time::Duration::from_secs_f32(dark));
+            if paused {
+                time.pause();
+            }
+            app.insert_resource(time);
+            app.add_systems(Update, flash_lamps);
+            let lamp = app
+                .world_mut()
+                .spawn((Lamp(quick), Visibility::Inherited))
+                .id();
+            app.update();
+            let v = *app.world().get::<Visibility>(lamp).unwrap();
+            let want = if paused {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            assert_eq!(v, want, "paused {paused}: at {dark} s");
+        }
+    }
 
     /// Every landmark the valleys place has a top to carry a lamp, near the
     /// height it's listed at.

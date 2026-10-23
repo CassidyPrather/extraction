@@ -217,6 +217,466 @@ pub fn landmarks(map: &MapDef, hm: &Heightmap) -> Vec<Landmark> {
     out
 }
 
+/// A tree's crown, for sight lines: from this far up its trunk...
+const CROWN_BASE: f32 = 3.0;
+/// ...to this tall (times its scale; the spruce run 15-22 m)...
+const CROWN_TOP: f32 = 16.0;
+/// ...and this wide each way.
+const CROWN_RADIUS: f32 = 2.2;
+/// A line through this many crowns is hidden; through fewer it glimpses.
+const CROWNS_HIDE: usize = 2;
+
+/// The valley's tree crowns, bucketed for sight lines through them.
+pub struct Canopy {
+    cells: std::collections::HashMap<(i32, i32), Vec<(P2, f32, f32)>>,
+}
+
+impl Canopy {
+    const CELL: f32 = 8.0;
+
+    pub fn new(map: &MapDef, hm: &Heightmap) -> Self {
+        let mut cells: std::collections::HashMap<(i32, i32), Vec<(P2, f32, f32)>> =
+            Default::default();
+        for t in crate::forest::scatter_trees(map, hm) {
+            let at = [t.pos[0], t.pos[2]];
+            let foot = t.pos[1];
+            cells.entry(Self::key(at)).or_default().push((
+                at,
+                foot + CROWN_BASE,
+                foot + CROWN_TOP * t.scale,
+            ));
+        }
+        Canopy { cells }
+    }
+
+    fn key(p: P2) -> (i32, i32) {
+        (
+            (p[0] / Self::CELL).floor() as i32,
+            (p[1] / Self::CELL).floor() as i32,
+        )
+    }
+
+    /// Whether the crowns hide a line from eye height at `from` to the
+    /// point `top` metres up at `to`.
+    pub fn hides(&self, hm: &Heightmap, from: P2, to: P2, top: f32) -> bool {
+        let eye = hm.height(from) + 1.7;
+        let d = dist(from, to);
+        let n = (d / 2.0).ceil().max(1.0) as usize;
+        let mut hit: Vec<P2> = Vec::new();
+        for i in 1..n {
+            let t = i as f32 / n as f32;
+            let q = geom::lerp(from, to, t);
+            let y = eye + (top - eye) * t;
+            let (ci, cj) = Self::key(q);
+            for di in -1..=1 {
+                for dj in -1..=1 {
+                    let Some(v) = self.cells.get(&(ci + di, cj + dj)) else {
+                        continue;
+                    };
+                    for (at, lo, hi) in v {
+                        if y > *lo
+                            && y < *hi
+                            && dist(*at, q) < CROWN_RADIUS
+                            && !hit.iter().any(|h| dist(*h, *at) < 0.1)
+                        {
+                            hit.push(*at);
+                            if hit.len() >= CROWNS_HIDE {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
+/// A landmark reads from this far per metre it stands over its ground
+/// (angular size), between the ordinary range and twice it: a 12 m tower
+/// at the ordinary 200 m, a 45 m mast at 400.
+const SIGHT_PER_METRE: f32 = 10.0;
+
+impl Landmark {
+    /// How far off it reads, given the ordinary `range`: further the taller
+    /// it stands over its own ground.
+    pub fn sight(&self, hm: &Heightmap, range: f32) -> f32 {
+        let tall = self
+            .tops
+            .iter()
+            .map(|(at, top)| top - hm.height(*at))
+            .fold(0.0, f32::max);
+        (tall * SIGHT_PER_METRE).clamp(range, range * 2.0)
+    }
+
+    /// As [`Landmark::seen`], with the trees in the way too.
+    pub fn seen_through(
+        &self,
+        hm: &Heightmap,
+        canopy: &Canopy,
+        from: P2,
+        range: f32,
+    ) -> Option<f32> {
+        let mut near: Vec<(P2, f32, f32)> = self
+            .tops
+            .iter()
+            .map(|(at, top)| (*at, *top, dist(from, *at)))
+            .filter(|t| t.2 <= range)
+            .collect();
+        near.sort_by(|a, b| a.2.total_cmp(&b.2));
+        near.into_iter()
+            .find(|(at, top, _)| {
+                sees(hm, from, *at, top - hm.height(*at)) && !canopy.hides(hm, from, *at, *top)
+            })
+            .map(|t| t.2)
+    }
+}
+
+/// How many landmarks you can tell apart from eye height at `p`, through
+/// the land and the trees, each within its own [`Landmark::sight`] of the
+/// ordinary `range`: two of a kind count once.
+/// Counts up to `enough`.
+pub fn kinds_in_sight(
+    marks: &[Landmark],
+    hm: &Heightmap,
+    canopy: &Canopy,
+    p: P2,
+    range: f32,
+    enough: usize,
+) -> usize {
+    let mut kinds: Vec<&str> = Vec::new();
+    for m in marks {
+        if kinds.contains(&m.kind.as_str()) {
+            continue;
+        }
+        if m.seen_through(hm, canopy, p, m.sight(hm, range)).is_some() {
+            kinds.push(&m.kind);
+            if kinds.len() >= enough {
+                break;
+            }
+        }
+    }
+    kinds.len()
+}
+
+/// How many lights you can name are in sight from eye height at `p`
+/// through the land and the trees, counting up to `enough`: the
+/// landmarks' lamps by their characters (`chars`, [`assign`]ed; each on
+/// its highest top,
+/// within `lamp_range`), each rendezvous beacon (`beacons`: where it
+/// stands, its own character) within `beacon_range`.
+/// At night that's all there is to see; in fog, with `lamp_range` the fog's
+/// reach, a landmark's whole height (any top) counts, the structure being
+/// as visible as its lamp that near.
+pub fn lights_in_sight(
+    marks: &[Landmark],
+    chars: &[Character],
+    beacons: &[P2],
+    hm: &Heightmap,
+    canopy: &Canopy,
+    p: P2,
+    (lamp_range, beacon_range): (f32, f32),
+    any_top: bool,
+    enough: usize,
+) -> usize {
+    // Lamps you can name: one per character (two chimneys' steady lamps
+    // in sight are one thing to steer by), each beacon its own.
+    let mut seen_chars: Vec<&str> = Vec::new();
+    let mut n = 0;
+    for (m, c) in marks.iter().zip(chars) {
+        let name = c.name;
+        if seen_chars.contains(&name) {
+            continue;
+        }
+        let seen = if any_top {
+            m.seen_through(hm, canopy, p, lamp_range).is_some()
+        } else {
+            m.tops
+                .iter()
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .is_some_and(|(at, top)| {
+                    dist(p, *at) <= lamp_range
+                        && sees(hm, p, *at, top - hm.height(*at))
+                        && !canopy.hides(hm, p, *at, *top)
+                })
+        };
+        if seen {
+            seen_chars.push(name);
+            n += 1;
+            if n >= enough {
+                return n;
+            }
+        }
+    }
+    for b in beacons {
+        let top = hm.height(*b) + BEACON_HEIGHT;
+        if dist(p, *b) <= beacon_range
+            && sees(hm, p, *b, BEACON_HEIGHT)
+            && !canopy.hides(hm, p, *b, top)
+        {
+            n += 1;
+            if n >= enough {
+                return n;
+            }
+        }
+    }
+    n
+}
+
+/// Whether `p` is further than `edge` into a wood.
+pub fn deep_in_woods(map: &MapDef, p: P2, edge: f32) -> bool {
+    map.forests.iter().any(|f| {
+        geom::point_in_polygon(&f.polygon, p) && geom::polygon_edge_distance(&f.polygon, p) > edge
+    })
+}
+
+/// Where orientation is gauged: walkable ground (on `walk`, every `step`
+/// metres) inside the valley's regions, less what's deeper than `edge`
+/// into a wood (nothing's in sight there in any valley: you steer by its
+/// edge, and the wood is where you are), which is counted apart.
+pub fn gauge_cells(
+    map: &MapDef,
+    walk: &crate::nav::NavGrid,
+    step: f32,
+    edge: f32,
+) -> (Vec<P2>, usize) {
+    let (mut out, mut deep) = (Vec::new(), 0);
+    let stride = (step / walk.cell).round().max(1.0) as usize;
+    for j in (0..walk.n).step_by(stride) {
+        for i in (0..walk.n).step_by(stride) {
+            let p = walk.centre(i, j);
+            if walk.cost[j * walk.n + i] == crate::nav::BLOCKED
+                || !map
+                    .regions
+                    .iter()
+                    .any(|reg| geom::point_in_polygon(&reg.polygon, p))
+            {
+                continue;
+            }
+            if deep_in_woods(map, p, edge) {
+                deep += 1;
+                continue;
+            }
+            out.push(p);
+        }
+    }
+    (out, deep)
+}
+
+/// A lamp's character, as the lights of masts and lights at sea have
+/// them: when in each period it's lit. A landmark's kind sets its
+/// [`family`] (a mast's is quick, a water tower's occults: learnt once),
+/// and each of a family in a valley takes the next variant ([`assign`]),
+/// so no two lamps in a valley are alike and two in sight after dark are
+/// two you can name: a fix, not only a bearing. The field map's key
+/// lists them (`scripts/field_map.py`, held to these by a test).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Character {
+    /// As the light lists write it: `Fl(2) 6s`.
+    pub name: &'static str,
+    /// Seconds.
+    pub period: f32,
+    /// When in the period it's lit, seconds from its start.
+    pub lit: &'static [(f32, f32)],
+}
+
+impl Character {
+    pub fn lit_at(&self, t: f32) -> bool {
+        let u = t.rem_euclid(self.period);
+        self.lit.iter().any(|(a, b)| u >= *a && u < *b)
+    }
+}
+
+const fn ch(name: &'static str, period: f32, lit: &'static [(f32, f32)]) -> Character {
+    Character { name, period, lit }
+}
+
+/// Steady, then lit with an eclipse every so often: the chimneys'.
+pub const CHIMNEYS: &[Character] = &[
+    ch("F", 1.0, &[(0.0, 1.0)]),
+    ch("Oc 10s", 10.0, &[(0.0, 9.0)]),
+    ch("Oc(2) 14s", 14.0, &[(0.0, 11.0), (11.8, 13.2)]),
+];
+/// Quick flashes: the masts'.
+pub const MASTS: &[Character] = &[
+    ch("Q", 1.0, &[(0.0, 0.35)]),
+    ch("Q(3) 10s", 10.0, &[(0.0, 0.35), (1.0, 1.35), (2.0, 2.35)]),
+    ch(
+        "Q(6) 15s",
+        15.0,
+        &[
+            (0.0, 0.35),
+            (1.0, 1.35),
+            (2.0, 2.35),
+            (3.0, 3.35),
+            (4.0, 4.35),
+            (5.0, 5.35),
+        ],
+    ),
+];
+/// A single flash: the steeples'.
+pub const STEEPLES: &[Character] = &[
+    ch("Fl 5s", 5.0, &[(0.0, 0.6)]),
+    ch("Fl 10s", 10.0, &[(0.0, 0.8)]),
+];
+/// Two flashes: the lookouts'.
+pub const LOOKOUTS: &[Character] = &[
+    ch("Fl(2) 6s", 6.0, &[(0.0, 0.5), (1.2, 1.7)]),
+    ch("Fl(2) 10s", 10.0, &[(0.0, 0.5), (1.2, 1.7)]),
+];
+/// Three: the survey towers'.
+pub const SURVEYS: &[Character] = &[
+    ch("Fl(3) 9s", 9.0, &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)]),
+    ch("Fl(3) 15s", 15.0, &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)]),
+];
+/// Four: the machines' gates.
+pub const GATES: &[Character] = &[
+    ch(
+        "Fl(4) 12s",
+        12.0,
+        &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
+    ),
+    ch(
+        "Fl(4) 20s",
+        20.0,
+        &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
+    ),
+];
+/// Lit, put out for a moment, once or in a group: the water towers'.
+pub const WATER_TOWERS: &[Character] = &[
+    ch("Oc 4s", 4.0, &[(0.0, 3.0)]),
+    ch("Oc(2) 6s", 6.0, &[(0.0, 3.5), (4.2, 5.3)]),
+    ch("Oc(3) 8s", 8.0, &[(0.0, 4.4), (5.0, 5.6), (6.2, 7.2)]),
+];
+/// A Morse letter: the intake tower's, the mill's, the ropeway station's,
+/// the observatory's, the works hall's.
+pub const MORSE: &[Character] = &[
+    ch("Mo(A) 8s", 8.0, &[(0.0, 0.5), (1.0, 2.5)]),
+    ch("Mo(U) 10s", 10.0, &[(0.0, 0.5), (1.0, 1.5), (2.0, 3.5)]),
+];
+/// As long lit as dark: the headframes', the gantry's, the funicular's.
+pub const ISOPHASE: &[Character] = &[
+    ch("Iso 4s", 4.0, &[(0.0, 2.0)]),
+    ch("Iso 8s", 8.0, &[(0.0, 4.0)]),
+];
+/// A long flash: the dam's, the furnace's, the ropeway's pylons', the ore
+/// mill's.
+pub const LONG_FLASHES: &[Character] = &[
+    ch("LFl 8s", 8.0, &[(0.0, 2.0)]),
+    ch("LFl 12s", 12.0, &[(0.0, 2.0)]),
+];
+
+/// A landmark kind's family of lamp characters ([`kind`]): what it is
+/// sets the rhythm, and each of a family in a valley takes the next of
+/// its variants ([`assign`]).
+pub fn family(kind: &str) -> &'static [Character] {
+    match kind {
+        "chimney" => CHIMNEYS,
+        "radio_mast" => MASTS,
+        "steeple" => STEEPLES,
+        "ranger_tower" => LOOKOUTS,
+        "survey_tower" => SURVEYS,
+        "robot_gate" => GATES,
+        "water_tower" => WATER_TOWERS,
+        "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
+            MORSE
+        }
+        "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
+        "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASHES,
+        _ => CHIMNEYS,
+    }
+}
+
+/// Each landmark's lamp ([`landmarks`]' order): its family's first variant
+/// for the first of that family in the valley, the next for the next, so
+/// no two lamps in a valley are alike and two in sight are two you can
+/// name. Every one of a series (a ropeway's pylons) shares one: it reads
+/// as one thing to follow.
+pub fn assign(marks: &[Landmark]) -> Vec<Character> {
+    let mut used: Vec<(&'static str, &str, usize)> = Vec::new();
+    marks
+        .iter()
+        .map(|m| {
+            let fam = family(&m.kind);
+            let key = fam[0].name;
+            let series = crate::map_lint::SERIES.contains(&m.kind.as_str());
+            if series {
+                if let Some((_, _, i)) = used
+                    .iter()
+                    .find(|(k, kind, _)| *k == key && *kind == m.kind)
+                {
+                    return fam[*i];
+                }
+            }
+            let i = used.iter().filter(|(k, _, _)| *k == key).count();
+            used.push((key, &m.kind, i));
+            fam[i.min(fam.len() - 1)]
+        })
+        .collect()
+}
+
+/// Each placement's lamp, by index into the map's placements: every piece
+/// of a landmark carries its lamp.
+pub fn placement_lamps(map: &MapDef, hm: &Heightmap) -> Vec<(usize, Character)> {
+    let marks = landmarks(map, hm);
+    let chars = assign(&marks);
+    marks
+        .iter()
+        .zip(chars)
+        .flat_map(|(m, c)| m.pieces.iter().map(move |i| (*i, c)))
+        .collect()
+}
+
+/// The rendezvous beacons are green, each flashing its number (the map's
+/// order of them: 1, 2, 3...), so each says which way out it is.
+pub fn beacon_character(i: usize) -> Character {
+    const B: [Character; 4] = [
+        Character {
+            name: "G Fl 5s",
+            period: 5.0,
+            lit: &[(0.0, 0.8)],
+        },
+        Character {
+            name: "G Fl(2) 7s",
+            period: 7.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4)],
+        },
+        Character {
+            name: "G Fl(3) 9s",
+            period: 9.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4), (3.2, 4.0)],
+        },
+        Character {
+            name: "G Fl(4) 11s",
+            period: 11.0,
+            lit: &[(0.0, 0.8), (1.6, 2.4), (3.2, 4.0), (4.8, 5.6)],
+        },
+    ];
+    B[i.min(B.len() - 1)]
+}
+
+/// A rendezvous's beacon: a pole with a green lamp flashing its number
+/// ([`beacon_character`]; the game's `render::rv_beacons`), so the way out
+/// can be found from the valley side before the truck's there. It stands this far off the side of where the
+/// truck parks (`raid::truck::rv_pose`: its bed toward the map's middle)...
+pub const BEACON_OFF: f32 = 7.0;
+/// ...its lamp this high.
+pub const BEACON_HEIGHT: f32 = 6.5;
+
+/// Where the beacon of the rendezvous at `rv` stands.
+pub fn beacon_at(rv: P2) -> P2 {
+    let l = (rv[0] * rv[0] + rv[1] * rv[1]).sqrt();
+    let inward = if l > 1e-3 {
+        [-rv[0] / l, -rv[1] / l]
+    } else {
+        [0.0, 1.0]
+    };
+    [
+        rv[0] - inward[1] * BEACON_OFF,
+        rv[1] + inward[0] * BEACON_OFF,
+    ]
+}
+
 /// Whether any landmark's top is in sight from `p` within `range`.
 pub fn in_sight(marks: &[Landmark], hm: &Heightmap, p: P2, range: f32) -> bool {
     marks.iter().any(|m| m.seen(hm, p, range).is_some())
@@ -320,6 +780,116 @@ pub struct RouteSight {
 
 #[cfg(test)]
 mod tests {
+
+    /// After dark two lamps in sight are two you can name: in every valley
+    /// no two lamps are alike (but a series' own, read as one), every kind
+    /// has a family of its own choosing (not the chimneys' by default), and
+    /// no family runs out of variants.
+    #[test]
+    fn every_valleys_lamps_tell_apart() {
+        let named = [
+            "chimney",
+            "radio_mast",
+            "steeple",
+            "ranger_tower",
+            "survey_tower",
+            "robot_gate",
+            "water_tower",
+            "draw_off_tower",
+            "mill_race",
+            "ropeway_station",
+            "observatory",
+            "factory_hall",
+            "headframe",
+            "sorting_gantry",
+            "funicular_upper",
+            "dam",
+            "blast_furnace",
+            "ropeway_pylon",
+            "ore_mill",
+        ];
+        for (id, text) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            let marks = landmarks(&map, &hm);
+            let chars = assign(&marks);
+            let mut by: Vec<(&str, &str)> = Vec::new();
+            for (m, c) in marks.iter().zip(&chars) {
+                assert!(
+                    named.contains(&m.kind.as_str()),
+                    "{id}: {} has no lamp family of its own",
+                    m.kind
+                );
+                let fam = family(&m.kind);
+                let n = by
+                    .iter()
+                    .filter(|(_, k)| family(k)[0].name == fam[0].name)
+                    .count();
+                let series = crate::map_lint::SERIES.contains(&m.kind.as_str());
+                if !series {
+                    assert!(
+                        n < fam.len(),
+                        "{id}: {} {} of the {} family, only {} variants",
+                        n + 1,
+                        m.kind,
+                        fam[0].name,
+                        fam.len()
+                    );
+                }
+                if let Some((other, k)) = by
+                    .iter()
+                    .find(|(n, k)| *n == c.name && !(series && *k == m.kind))
+                {
+                    panic!("{id}: {} ({}) and {k} both {other}", m.name, m.kind);
+                }
+                by.push((c.name, &m.kind));
+            }
+        }
+    }
+
+    /// The characters are what they say: lit for some of the period, dark
+    /// for some (but the steady one), and the beacons all different.
+    #[test]
+    fn characters_flash_as_written() {
+        let all = [
+            CHIMNEYS,
+            MASTS,
+            STEEPLES,
+            LOOKOUTS,
+            SURVEYS,
+            GATES,
+            WATER_TOWERS,
+            MORSE,
+            ISOPHASE,
+            LONG_FLASHES,
+        ];
+        let names: Vec<&str> = all.iter().flat_map(|f| f.iter().map(|c| c.name)).collect();
+        for (i, n) in names.iter().enumerate() {
+            assert!(!names[..i].contains(n), "{n} twice");
+        }
+        for c in all.iter().flat_map(|f| f.iter().copied()) {
+            let lit = (0..1000)
+                .filter(|i| c.lit_at(*i as f32 * c.period / 1000.0))
+                .count();
+            if c.name == "F" {
+                assert_eq!(lit, 1000);
+            } else {
+                assert!(lit > 0 && lit < 1000, "{}: lit {lit} of 1000", c.name);
+            }
+            let flashes = c
+                .name
+                .split(['(', ')'])
+                .nth(1)
+                .and_then(|n| n.parse::<usize>().ok());
+            if let Some(n) = flashes {
+                assert_eq!(c.lit.len(), n, "{}", c.name);
+            }
+        }
+        let b: Vec<&str> = (0..4).map(|i| beacon_character(i).name).collect();
+        for (i, x) in b.iter().enumerate() {
+            assert!(!b[..i].contains(x));
+        }
+    }
     use super::*;
     use crate::map::{SALLOW_RESERVOIR, TRAINING_YARD, TerrainFeature};
 

@@ -313,7 +313,7 @@ fn run_director(
             exit,
         };
         // You've been loud: two walkers come to look as well (and fight as
-        // a pair: `walker::flank_role`).
+        // a pair: `squad`).
         if director.heat >= ESCALATE && active + 3 <= director.max_active {
             info!("director: walkers to {at:.0} (heat {:.1})", director.heat);
             for k in 0..2 {

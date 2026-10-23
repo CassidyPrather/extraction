@@ -23,15 +23,18 @@ pub mod grenades;
 pub mod gunsmith;
 pub mod impacts;
 pub mod layout;
+pub mod legibility;
 pub mod melee;
 pub mod muzzle;
 pub mod optics;
 pub mod range;
+pub mod reload;
 pub mod report;
 pub mod reverb;
 #[cfg(test)]
 pub mod signature;
 pub mod sling;
+pub mod stoppages;
 pub mod tracers;
 pub mod visuals;
 pub mod wear;
@@ -248,17 +251,21 @@ impl Plugin for WeaponsPlugin {
                 weather::WeatherPlugin,
                 report::ReportPlugin,
             ))
-            .add_plugins(gunsmith::GunsmithPlugin)
+            .add_plugins((gunsmith::GunsmithPlugin, legibility::LegibilityPlugin))
+            .init_resource::<reload::MagApproach>()
             .add_systems(
                 FixedUpdate,
                 (
                     magwell_events,
+                    reload::note_approach,
                     work_handles,
                     tap_magazines,
                     feed_by_hand,
                     buttons,
                     triggers,
                     sync_mag_rounds,
+                    reload::drop_half_seated,
+                    reload::hang_mags,
                     age_casings,
                 )
                     .chain()
@@ -363,6 +370,8 @@ fn magwell_events(
     mut mags: Query<(&mut Item, &Mag, &mut Transform)>,
     mut out: MessageWriter<GunEvent>,
     gts: Query<&GlobalTransform>,
+    approach: Res<reload::MagApproach>,
+    velocities: Query<&LinearVelocity>,
 ) {
     for ev in events.read() {
         match *ev {
@@ -386,11 +395,23 @@ fn magwell_events(
                     rounds: it.rounds,
                     loads: it.loads.clone(),
                 };
-                if gun.firearm.insert_magazine(m).is_ok() {
+                // Brought up by a hand too gently, it hangs on the catch.
+                let up = gts.get(socket).map_or(Vec3::Y, |g| g.up().as_vec3());
+                let gun_v = velocities.get(owner.0).map_or(Vec3::ZERO, |v| v.0);
+                let gentle = approach
+                    .0
+                    .get(&item)
+                    .is_some_and(|v| (*v - gun_v).dot(up) < reload::SEAT_SPEED);
+                let seated = if gentle {
+                    gun.firearm.half_seat_magazine(m)
+                } else {
+                    gun.firearm.insert_magazine(m)
+                };
+                if let Ok(seated) = seated {
                     out.write(GunEvent {
                         gun: owner.0,
                         item: String::new(),
-                        event: FireEvent::MagazineInserted,
+                        event: seated[0].clone(),
                         at: gts
                             .get(owner.0)
                             .map(|g| g.translation())
@@ -535,7 +556,7 @@ fn work_handles(
         let want = start + (z - z0) / h.travel.max(1e-3);
         // Cold oil: it drags, and a timid hand slides on it.
         let pull = hand.velocity.dot(gt.rotation() * Vec3::Z);
-        let stiff = gun.firearm.stiff;
+        let stiff = gun.firearm.action_drag();
         let to = drag(travel, want.clamp(0.0, 1.0), stiff, pull, dt, h.travel);
         let events = gun.firearm.set_bolt_travel(to);
         grind(
@@ -598,7 +619,7 @@ fn work_handles(
                 }
                 let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                 let was = gun.firearm.bolt_travel;
-                let stiff = gun.firearm.stiff;
+                let stiff = gun.firearm.action_drag();
                 let to = drag(was, want, stiff, pull, dt, h.travel);
                 if to != want {
                     // The hand slides on the handle from where it got to.
@@ -633,7 +654,7 @@ fn work_handles(
                 if gun.firearm.handle_lift >= 0.95 {
                     let want = (start + d.z / h.travel.max(1e-3)).clamp(0.0, 1.0);
                     let was = gun.firearm.bolt_travel;
-                    let stiff = gun.firearm.stiff;
+                    let stiff = gun.firearm.action_drag();
                     let to = drag(was, want, stiff, pull, dt, h.travel);
                     if to != want {
                         taken.insert(hand_e, (gun_e, to - d.z / h.travel.max(1e-3), start_lift));

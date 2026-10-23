@@ -9,9 +9,7 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::contracts::{
-    Contract, PHOTO_CONE, PHOTO_RANGE, PLANT_RADIUS, Subject, Unlock,
-};
+use extraction_core::contracts::{Contract, PHOTO_CONE, PHOTO_RANGE, PLANT_RADIUS, Unlock};
 use extraction_core::progression::Job;
 
 use super::{Progression, lines};
@@ -20,7 +18,7 @@ use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::{Phase, Raid};
 use crate::rig::RigHead;
-use crate::robots::{Breed, Robot, RobotKind};
+use crate::robots::{Breed, Robot};
 use crate::world::{Layer, Zone};
 
 /// A contract's thing to bring lies this close to its place (a building's
@@ -180,7 +178,18 @@ pub fn photograph(
     items: Query<&Item>,
     catalog: Res<Catalog>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
-    robots: Query<(Entity, &Robot, &GlobalTransform, Option<&Breed>)>,
+    robots: Query<(
+        Entity,
+        &Robot,
+        &GlobalTransform,
+        Option<&Breed>,
+        (
+            Has<crate::robots::indoor::Crawler>,
+            Has<crate::robots::hound::Hound>,
+            Has<crate::robots::grappler::Grappler>,
+            Has<crate::robots::indoor::Dormant>,
+        ),
+    )>,
     spatial: SpatialQuery,
 ) {
     let down = matches!(raid.phase, Phase::Down { .. });
@@ -210,34 +219,42 @@ pub fn photograph(
             _ => None,
         };
         let framed = subject.is_some_and(|subject| {
-            robots.iter().any(|(e, r, g, breed)| {
-                let is = match subject {
-                    Subject::Heavy => breed.is_some_and(|b| b.0 == "heavy"),
-                    Subject::Walker => {
-                        r.kind == RobotKind::Walker && !breed.is_some_and(|b| b.0 == "heavy")
+            robots
+                .iter()
+                .any(|(e, r, g, breed, (crawler, hound, grappler, dormant))| {
+                    // Only the kind the card names (`robots::subjects`).
+                    let is = crate::robots::subjects::counts(
+                        subject,
+                        r,
+                        breed,
+                        crate::robots::subjects::Shape {
+                            crawler,
+                            hound,
+                            grappler,
+                            dormant,
+                        },
+                    );
+                    let to = g.translation() - eye;
+                    let d = to.length();
+                    if r.wrecked || !is || d > PHOTO_RANGE || d < 0.5 {
+                        return false;
                     }
-                };
-                let to = g.translation() - eye;
-                let d = to.length();
-                if r.wrecked || !is || d > PHOTO_RANGE || d < 0.5 {
-                    return false;
-                }
-                if look.angle_between(to) > PHOTO_CONE {
-                    return false;
-                }
-                // In sight: nothing of the world's between (its own body
-                // may be what the ray meets).
-                let dir = Dir3::new(to).unwrap_or(Dir3::NEG_Z);
-                spatial
-                    .cast_ray(
-                        eye,
-                        dir,
-                        d,
-                        true,
-                        &SpatialQueryFilter::from_mask(Layer::World),
-                    )
-                    .is_none_or(|hit| hit.entity == e || hit.distance > d - 1.5)
-            })
+                    if look.angle_between(to) > PHOTO_CONE {
+                        return false;
+                    }
+                    // In sight: nothing of the world's between (its own body
+                    // may be what the ray meets).
+                    let dir = Dir3::new(to).unwrap_or(Dir3::NEG_Z);
+                    spatial
+                        .cast_ray(
+                            eye,
+                            dir,
+                            d,
+                            true,
+                            &SpatialQueryFilter::from_mask(Layer::World),
+                        )
+                        .is_none_or(|hit| hit.entity == e || hit.distance > d - 1.5)
+                })
         });
         match (&mut progression.0.job, framed) {
             (Some(Job::Photograph { subject, taken }), true) => {

@@ -286,15 +286,18 @@ for sx in (-1, 1):
     bolt.box((0.004, 0.006, 0.016), (sx * 0.0088, BORE, -0.152), "Steel", bevel=0.001, segs=2)
 # Extractor along the right.
 bolt.box((0.0025, 0.004, 0.06), (0.0088, BORE + 0.0035, -0.13), "Steel", bevel=0.0008, segs=2)
-# Cocking piece knob at the rear: round and knurled.
+# Cocking piece knob at the rear: round and knurled. Its own node: it
+# stands back from the bolt when cocked and sits in when not, the tell
+# you look for (`weapons::visuals`, `CockingPiece`).
 # Its rear face is dished, with the firing pin's end in the middle.
-bolt.lathe([(0.0, -0.022), (0.0055, -0.022), (0.0055, -0.012), (0.0102, -0.009), (0.0108, -0.002),
+cock = Part("cocking_piece", origin=(0.0, BORE, -0.022))
+cock.lathe([(0.0, -0.022), (0.0055, -0.022), (0.0055, -0.012), (0.0102, -0.009), (0.0108, -0.002),
             (0.0108, 0.006), (0.0098, 0.0105), (0.0082, 0.0118), (0.0064, 0.0112),
             (0.0028, 0.0106), (0.0024, 0.0118), (0.0, 0.0121)], "Steel", segs=32,
            xf=T(0, BORE, 0))
 for i in range(18):
     a = 2 * math.pi * i / 18
-    bolt.box((0.0013, 0.0012, 0.012), (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002),
+    cock.box((0.0013, 0.0012, 0.012), (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002),
              "Steel", xf=RZ(a, about=(0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002)))
 # The straight handle with its ball knob.
 knob = (0.061, 0.031, HANDLE_Z)
@@ -343,7 +346,7 @@ butt_screws.cut(butt_slots)
 join("static", stock, recv, mag, screws, worn={})
 join("static_barrel", barrel, stock_fore, furn, worn={})
 join("static_butt", stock_butt, butt_furn, butt_screws, worn={})
-for p in (bolt, trig, bayonet):
+for p in (bolt, cock, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))

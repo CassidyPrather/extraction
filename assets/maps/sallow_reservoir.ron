@@ -361,6 +361,39 @@
             polygon: [(60.0, 280.0), (282.0, 280.0), (282.0, 175.0), (170.0, 170.0), (130.0, 245.0),
                       (60.0, 250.0)],
         ),
+        // Copses on the valley floor below the dam, and scrub on the bed: the
+        // birch and willow that took the drained silt in twelve years. Cover
+        // within a dash anywhere you walk (map_lint's open-ground gauge).
+        (name: "Copse", seed: 110, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-160.0, 195.0), (-120.0, 195.0), (-120.0, 235.0), (-160.0, 235.0)]),
+        (name: "Copse", seed: 111, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-160.0, 158.0), (-120.0, 158.0), (-120.0, 198.0), (-160.0, 198.0)]),
+        (name: "Copse", seed: 112, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 180.0), (-80.0, 180.0), (-80.0, 220.0), (-120.0, 220.0)]),
+        (name: "Copse", seed: 113, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-80.0, 232.0), (-40.0, 232.0), (-40.0, 272.0), (-80.0, 272.0)]),
+        (name: "Copse", seed: 114, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-40.0, 192.0), (0.0, 192.0), (0.0, 232.0), (-40.0, 232.0)]),
+        (name: "Copse", seed: 115, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-40.0, 238.0), (0.0, 238.0), (0.0, 278.0), (-40.0, 278.0)]),
+        (name: "Copse", seed: 116, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 192.0), (40.0, 192.0), (40.0, 232.0), (0.0, 232.0)]),
+        (name: "Copse", seed: 117, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 192.0), (80.0, 192.0), (80.0, 232.0), (40.0, 232.0)]),
+        (name: "Copse", seed: 118, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 158.0), (80.0, 158.0), (80.0, 198.0), (40.0, 198.0)]),
+        (name: "Copse", seed: 119, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(80.0, 162.0), (120.0, 162.0), (120.0, 202.0), (80.0, 202.0)]),
+        (name: "Copse", seed: 120, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-120.0, 242.0), (-80.0, 242.0), (-80.0, 282.0), (-120.0, 282.0)]),
+        (name: "Copse", seed: 121, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(0.0, 238.0), (40.0, 238.0), (40.0, 278.0), (0.0, 278.0)]),
+        (name: "Copse", seed: 122, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(40.0, 238.0), (80.0, 238.0), (80.0, 278.0), (40.0, 278.0)]),
+        (name: "Copse", seed: 123, density: 1.5, undergrowth: 0.6, mix: [(Birch, 0.6), (Spruce, 0.4)], polygon: [(-280.0, 160.0), (-240.0, 160.0), (-240.0, 200.0), (-280.0, 200.0)]),
+        (name: "Bed scrub", seed: 124, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(0.0, 78.0), (40.0, 78.0), (40.0, 118.0), (0.0, 118.0)]),
+        (name: "Bed scrub", seed: 125, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(40.0, 78.0), (80.0, 78.0), (80.0, 118.0), (40.0, 118.0)]),
+        (name: "Bed scrub", seed: 126, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(80.0, 78.0), (120.0, 78.0), (120.0, 118.0), (80.0, 118.0)]),
+        (name: "Bed scrub", seed: 127, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, 78.0), (-40.0, 78.0), (-40.0, 118.0), (-80.0, 118.0)]),
+        (name: "Bed scrub", seed: 128, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-40.0, -2.0), (0.0, -2.0), (0.0, 38.0), (-40.0, 38.0)]),
+        (name: "Bed scrub", seed: 129, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, -2.0), (-40.0, -2.0), (-40.0, 38.0), (-80.0, 38.0)]),
+        (name: "Bed scrub", seed: 130, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-120.0, -2.0), (-80.0, -2.0), (-80.0, 38.0), (-120.0, 38.0)]),
+        (name: "Bed scrub", seed: 131, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-80.0, -120.0), (-40.0, -120.0), (-40.0, -80.0), (-80.0, -80.0)]),
+        (name: "Bed scrub", seed: 132, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-200.0, -160.0), (-160.0, -160.0), (-160.0, -120.0), (-200.0, -120.0)]),
+        (name: "Bed scrub", seed: 133, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-280.0, -200.0), (-240.0, -200.0), (-240.0, -160.0), (-280.0, -160.0)]),
+        (name: "Bed scrub", seed: 134, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-240.0, -160.0), (-200.0, -160.0), (-200.0, -120.0), (-240.0, -120.0)]),
+        (name: "Bed scrub", seed: 135, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(120.0, -240.0), (160.0, -240.0), (160.0, -200.0), (120.0, -200.0)]),
+        (name: "Bed scrub", seed: 136, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(80.0, -240.0), (120.0, -240.0), (120.0, -200.0), (80.0, -200.0)]),
+        (name: "Bed scrub", seed: 137, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-160.0, -80.0), (-120.0, -80.0), (-120.0, -40.0), (-160.0, -40.0)]),
+        (name: "Bed scrub", seed: 138, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(-120.0, -80.0), (-80.0, -80.0), (-80.0, -40.0), (-120.0, -40.0)]),
+        (name: "Bed scrub", seed: 140, density: 1.4, undergrowth: 0.7, mix: [(Birch, 0.7), (Snag, 0.3)], polygon: [(60.0, -220.0), (100.0, -220.0), (100.0, -180.0), (60.0, -180.0)]),
         // A stand by the road in from the gate.
         (
             name: "Gate birches", seed: 101, density: 1.0, undergrowth: 0.5,
@@ -371,7 +404,14 @@
         (
             name: "Arm birches", seed: 99, density: 0.9, undergrowth: 0.4,
             mix: [(Birch, 0.8), (Snag, 0.2)],
-            polygon: [(-282.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-282.0, -250.0)],
+            // Open round Sallow Head's turning place, so its beacon's in
+            // sight on the way in.
+            polygon: [(-282.0, -282.0), (-240.0, -282.0), (-240.0, -251.0), (-282.0, -250.0)],
+        ),
+        (
+            name: "Arm birches east", seed: 141, density: 0.9, undergrowth: 0.4,
+            mix: [(Birch, 0.8), (Snag, 0.2)],
+            polygon: [(-160.0, -282.0), (-120.0, -282.0), (-120.0, -255.0), (-160.0, -255.0)],
         ),
         // The spruce round the Gate.
         (
@@ -382,9 +422,21 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The Authority's telemetry mast on the west abutment: the gauges' readings went out by radio.
+        (prefab: "radio_mast", at: (-200.0, 120.0), rot: 0.0),
         // South gate.
         (prefab: "quarantine_gate", at: (25.0, 285.0), rot: 0.0),
         (prefab: "guard_booth", at: (32.8, 285.0), rot: 90.0),
+
+        // A roof to wait under for the truck at each pickup, out of the
+        // survey drones' eye, on the far side from its beacon: the boat
+        // shed at Sallow Head, the bridge-keeper's hut at the inflow, the
+        // gauge hut by the gauge house.
+        (prefab: "shed", at: (-191.3, -264.7), rot: 232.0, tag: "boat_shed"),
+        (prefab: "shed", at: (36.0, -251.0), rot: 331.0, tag: "bridge_hut"),
+        (prefab: "shed", at: (238.1, -35.2), rot: 349.0, tag: "gauge_hut"),
 
         // The dam: its downstream and upstream faces either side of the
         // crest, and the draw-off tower in front of it on the bed, its own
@@ -404,11 +456,11 @@
         (prefab: "shed", at: (184.0, 106.0), rot: 270.0),
 
         // Below the dam.
-        (prefab: "pump_station", at: (12.0, 170.0), rot: 180.0, tag: "valve_house"),
+        (prefab: "pump_station", at: (22.0, 176.0), rot: 180.0, tag: "valve_house"),
         (prefab: "house_brick", at: (-58.0, 206.0), rot: 180.0, tag: "keeper"),
         (prefab: "house_plank", at: (-88.0, 206.0), rot: 180.0),
         (prefab: "pump_station", at: (100.0, 210.0), rot: 270.0, tag: "filter_house"),
-        (prefab: "shed", at: (115.0, 226.0), rot: 0.0),
+        (prefab: "shed", at: (117.0, 227.0), rot: 0.0),
         (prefab: "shed", at: (6.0, 246.0), rot: 90.0),
         // The roadman's hut on the way round.
         (prefab: "shed", at: (-182.0, 244.0), rot: 0.0),
@@ -451,6 +503,11 @@
         (prefab: "stock_bins", at: (80.0, -12.0), rot: 0.0),
         (prefab: "stock_buses", at: (168.0, -150.0), rot: 330.0),
         (prefab: "stock_bins", at: (30.0, -140.0), rot: 90.0),
+        // Cover on the walks home over the bed from the scours: a row the
+        // Custodian's left short of the tagging shed, and a car the water
+        // took off the old road and left silted where it went down.
+        (prefab: "stock_bins", at: (-14.2, -140.7), rot: 90.0),
+        (prefab: "wreck_lada", at: (50.7, -201.5), rot: 35.0),
 
         // The causeway's toll hut.
         (prefab: "mast_hut", at: (-122.0, -112.0), rot: 175.0),
@@ -496,7 +553,7 @@
         (kind: WorkSite, at: (85.0, -125.0), name: "Sorting ground site"),
         (kind: WorkSite, at: (40.0, 40.0), name: "Bed site"),
         (kind: WorkSite, at: (-150.0, -85.0), name: "Causeway site"),
-        (kind: Poi, at: (12.0, 172.0), name: "Valve house"),
+        (kind: Poi, at: (22.0, 178.0), name: "Valve house"),
         (kind: Poi, at: (-70.0, 220.0), name: "Keeper's cottages"),
         (kind: Poi, at: (100.0, 212.0), name: "Filter house"),
         (kind: Poi, at: (-20.0, 108.0), name: "Draw-off tower"),
@@ -526,7 +583,7 @@
         // notes:begin (generated by scripts/place_notes.py)
         (kind: Note(text: "SOUTH GATE, SALLOW - DUTY LOG\n15 Oct. New Sallow out on the Marrow buses, second run. The old ones slow to board. One says they were moved for the water once already and once was enough.\n16 Oct. The keeper won't leave the works. Water board says let him, someone has to mind the dam.\n2 Nov. Something built on the north-east shore overnight. Not ours. Not the water board's."), at: (32.20, 285.30), rot: 63.4, name: "Sallow gate log"),
         (kind: Note(text: "Whoever has the cottage now -\nI was seven when the water board moved us up the hill. We watched the water come over the bridge a hand a day.\nThe second winter the machines opened the scours, and it went down a hand a day. On the twentieth day the church came out. Our house is the third from the bridge.\nDon't stand in the churchyard after rain. Things come up there that weren't buried.\n- A. Pech, keeper"), at: (-56.30, 206.80), rot: 295.2, name: "Keeper's note"),
-        (kind: Terminal(pages: ["SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED", "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n15 DEC   16.2\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING"]), at: (6.20, 173.00), rot: -117.3, name: "Valve log"),
+        (kind: Terminal(pages: ["SALLOW WORKS - VALVE HOUSE\nVALVE LOG\n\nDRAW-OFF 1   SHUT    14 OCT\nDRAW-OFF 2   SHUT    14 OCT\nSUPPLY       NO DEMAND\n\nSCOUR 1      OPEN     2 DEC\nSCOUR 2      OPEN     2 DEC\nOPERATOR     NOT RECOGNISED", "LEVEL ABOVE BED (M)\n\n 1 DEC   31.4\n15 DEC   16.2\n29 DEC    4.1\n 5 JAN    0.6\n\nUPPER ARM   NO CHANGE\nCAUSEWAY    HOLDING"]), at: (16.20, 179.00), rot: -117.3, name: "Valve log"),
         (kind: Terminal(pages: ["SALLOW FILTER HOUSE\nDISTRICT SUPPLY (M3/DAY)\n\n         13 OCT  15 OCT  17 OCT\nMARROW    1840     210       0\nKETTLE    2210    1960       0\nCINDER    3930    3880       0", "CINDER WORKS\n\nDEMAND FROM    3 NOV\nFOR   FURNACE COOLING\nCEASED        26 FEB\n\nNO OTHER DEMAND."]), at: (97.00, 204.20), rot: -27.3, name: "Supply terminal"),
         (kind: Note(text: "CATCHWATER GAUGE - read Sundays\nSun. 0.42. Sun. 0.40. Sun. 0.41.\nSun. 0.12. They've cut it at the top. They want the bed dry and it's dry.\nSun. 0. Legs bad. Not coming up the hill again. A.P."), at: (242.00, -75.80), rot: 152.7, name: "Gauge book"),
         (kind: Note(text: "SALLOW ANGLING CLUB\nSeason closed until further notice, by order of the Quarantine Authority.\n(in pencil) Pike in the upper arm are the size of dogs now. Something's feeding them. Don't trail your hand."), at: (-160.02, 112.63), rot: 1.4, name: "Club notice"),

@@ -4,9 +4,9 @@
 //!
 //! [`Chorus`] is how loud it is round the local player, 0 (dead quiet) to
 //! 1, for sound to play (Audio's night and day beds). It's the product of:
-//! - **machines near**: silent within [`HUSH_NEAR`] of a walker, hound or
-//!   the airship and [`HUSH_NEAR_DRONE`] of a drone, back to full by
-//!   [`HUSH_RAMP`] times that;
+//! - **machines near**: silent within [`HUSH_NEAR`] of a walker or hound,
+//!   [`HUSH_NEAR_DRONE`] of a drone and [`HUSH_NEAR_DIRIGIBLE`] of the
+//!   airship, back to full by [`HUSH_RAMP`] times that;
 //! - **a fright** (a shot or a blast heard, a flock going up or a herd
 //!   bolting near you): it drops to [`STARTLED`] at once and comes back
 //!   over [`RECOVER`] seconds;
@@ -19,15 +19,18 @@ use bevy::prelude::*;
 
 use super::{Flushed, ThreatKind, Threats};
 
-/// A walker, hound or the airship this near and the chorus is silent...
+/// A walker or hound this near and the chorus is silent...
 /// (Audio's masking audit, `scripts/audio_voices.py`: over the cricket
 /// bed a walker's step is heard to ~46 m against a 60 m warning target,
 /// so the hush must reach that far; it reads these.)
 pub const HUSH_NEAR: f32 = 60.0;
 /// ...a drone this near (its rotor heard to ~71 m, the target 120 m)...
 pub const HUSH_NEAR_DRONE: f32 = 120.0;
-/// ...and each hushes it less out to this many times as far.
-pub const HUSH_RAMP: f32 = 1.6;
+/// ...the airship's engines this near (it sees you from 170 m)...
+pub const HUSH_NEAR_DIRIGIBLE: f32 = 150.0;
+/// ...and each hushes it less out to this many times as far (far enough
+/// that it's thinning well before the machine can see you: `warning`).
+pub const HUSH_RAMP: f32 = 2.0;
 /// A fright drops it to this...
 pub const STARTLED: f32 = 0.05;
 /// ...and it takes this long to come back (s).
@@ -69,10 +72,19 @@ pub fn hush(distance: f32, near: f32) -> f32 {
     ((distance - near) / (near * (HUSH_RAMP - 1.0))).clamp(0.0, 1.0)
 }
 
-/// How much of the chorus the weather leaves: rain and wind thin it, a
-/// downpour stops it.
+/// How much of the chorus the weather leaves: wind thins it, a drizzle
+/// barely, a downpour stops it.
 pub fn weather(c: &crate::world::weather::Conditions) -> f32 {
-    (1.0 - c.rain).max(0.0) * (1.0 - 0.6 * c.wind())
+    (1.0 - c.rain * c.rain).max(0.0) * (1.0 - 0.6 * c.wind())
+}
+
+/// A machine of this kind hushes the chorus within this.
+pub fn hush_near(kind: ThreatKind) -> f32 {
+    match kind {
+        ThreatKind::Drone => HUSH_NEAR_DRONE,
+        ThreatKind::Dirigible => HUSH_NEAR_DIRIGIBLE,
+        _ => HUSH_NEAR,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -110,8 +122,7 @@ pub(crate) fn chorus(
         .iter()
         .filter_map(|t| match t.kind {
             ThreatKind::Player { .. } => None,
-            ThreatKind::Drone => Some(hush(t.at.distance(at), HUSH_NEAR_DRONE)),
-            _ => Some(hush(t.at.distance(at), HUSH_NEAR)),
+            kind => Some(hush(t.at.distance(at), hush_near(kind))),
         })
         .fold(1.0f32, f32::min);
     let (weather, kind) = conditions.as_ref().map_or((1.0, Singers::Day), |c| {

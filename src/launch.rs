@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! extraction [--flat] [--mirror] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
-//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH]]
+//!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch]]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
 //! extraction --report [--data-dir DIR]
@@ -54,6 +54,9 @@ pub struct LaunchOptions {
     pub frames: u32,
     /// Camera override: position and yaw/pitch in degrees.
     pub camera: Option<(Vec3, f32, f32)>,
+    /// The camera override carries a lit flashlight, pointing where it
+    /// looks (`--torch`: night shots as a player sees them).
+    pub torch: bool,
     /// The local player is driven by the bot brain.
     pub bot: bool,
     /// Run a scripted bot scenario (see `bot::scenarios`); exits when done.
@@ -72,6 +75,10 @@ pub struct LaunchOptions {
     pub no_record: bool,
     /// Write the playtest report (`report`) and quit.
     pub report: bool,
+    /// Dev: once the world's in, the worst minute of a raid (a fight by a
+    /// building at a dusk downpour, `render::stress`); its CPU and GPU in
+    /// the log, then quit.
+    pub stress: bool,
     /// Dev: start with the Surge this many seconds away (negative: raging).
     pub surge_in: Option<f32>,
     /// Dev: put a gun, magazine or robot in front of the camera to look at
@@ -129,6 +136,10 @@ pub struct LaunchOptions {
     /// A newcomer's first fight (`onboarding::first_hour`): the one machine
     /// put on their route (`walker`, `drone`, `hush`, `sentry`, `night`).
     pub encounter: Option<String>,
+    /// A newcomer's raid with this kind of job on the card
+    /// (`onboarding::first_hour`): `recover`, `letter`, `ledger`,
+    /// `photograph`, ... so every kind runs live.
+    pub job: Option<String>,
     /// Raid minutes a sim bot plans for before heading out (default: by
     /// personality, 9-14).
     pub sim_minutes: Option<f32>,
@@ -154,6 +165,7 @@ impl Default for LaunchOptions {
             screenshot: None,
             frames: 90,
             camera: None,
+            torch: false,
             tour: None,
             tour_only: None,
             tour_views: None,
@@ -171,6 +183,7 @@ impl Default for LaunchOptions {
             new_game: false,
             no_record: false,
             report: false,
+            stress: false,
             surge_in: None,
             gallery: None,
             weather: None,
@@ -184,6 +197,7 @@ impl Default for LaunchOptions {
             sim_run: None,
             personality: None,
             encounter: None,
+            job: None,
             sim_minutes: None,
             sim_out: None,
             jobs: 2,
@@ -236,6 +250,7 @@ impl LaunchOptions {
                 "--new-game" => o.new_game = true,
                 "--no-record" => o.no_record = true,
                 "--report" => o.report = true,
+                "--stress" => o.stress = true,
                 // Comfort settings; read by `rig::comfort`.
                 "--smooth-turn" | "--snap-turn" | "--narrow-dynamics" | "--finger-grab"
                 | "--no-binaural" | "--no-score" | "--left-handed" | "--seated"
@@ -245,9 +260,30 @@ impl LaunchOptions {
                     let _ = val();
                 }
                 "--surge-in" => o.surge_in = val().parse().ok(),
-                "--weather" => o.weather = Some(val()),
+                "--weather" => {
+                    let v = val();
+                    if !crate::world::weather::WEATHERS.contains(&v.as_str()) {
+                        // Loudly: an unknown weather once quietly became
+                        // drizzle, and screenshot scripts show only errors.
+                        eprintln!(
+                            "ERROR --weather {v}: expected one of {}",
+                            crate::world::weather::WEATHERS.join(", ")
+                        );
+                        std::process::exit(2);
+                    }
+                    o.weather = Some(v);
+                }
                 "--snow" => o.snow = val().parse::<f32>().ok().map(|s| s.clamp(0.0, 1.0)),
-                "--hour" => o.hour = Some(val()),
+                "--hour" => {
+                    let v = val();
+                    if crate::world::weather::Hour::parse(&v).is_none() {
+                        eprintln!(
+                            "ERROR --hour {v}: expected dawn, day, dusk, night or a clock hour (23, 5:30)"
+                        );
+                        std::process::exit(2);
+                    }
+                    o.hour = Some(v);
+                }
                 "--moon" => {
                     o.moon = match val().as_str() {
                         "new" => Some(0.0),
@@ -274,6 +310,7 @@ impl LaunchOptions {
                 }
                 "--personality" => o.personality = Some(val()),
                 "--encounter" => o.encounter = Some(val()),
+                "--job" => o.job = Some(val()),
                 "--sim-minutes" => o.sim_minutes = val().parse().ok(),
                 "--sim-out" => o.sim_out = Some(PathBuf::from(val())),
                 "--jobs" => o.jobs = val().parse().unwrap_or(2).max(1),
@@ -338,6 +375,7 @@ impl LaunchOptions {
                     o.gallery = Some(val());
                     o.robots = false;
                 }
+                "--torch" => o.torch = true,
                 "--camera" => {
                     let v: Vec<f32> = val().split(',').filter_map(|s| s.parse().ok()).collect();
                     if v.len() >= 3 {
@@ -357,6 +395,11 @@ impl LaunchOptions {
                 flag if crate::capture::CaptureOptions::takes(flag) => o.capture.set(flag, val()),
                 other => eprintln!("ignoring unknown argument {other}"),
             }
+        }
+        // The worst minute's light and weather, unless asked for others.
+        if o.stress {
+            o.hour.get_or_insert_with(|| "dusk".into());
+            o.weather.get_or_insert_with(|| "downpour".into());
         }
         // A capture drives free cameras: over a quiet valley, or after a
         // sim bot, rendered (a sim run is otherwise headless).

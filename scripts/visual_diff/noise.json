@@ -1,0 +1,22 @@
+{
+ "cinder_works/fog/anomaly": {
+  "pixels": 0.0,
+  "structure": 0.0
+ },
+ "rime_fell/day/anomaly": {
+  "pixels": 0.00015,
+  "structure": 0.00683
+ },
+ "rime_fell/day/insertion": {
+  "pixels": 0.0,
+  "structure": 0.00026
+ },
+ "rime_fell/day/landmark": {
+  "pixels": 0.00151,
+  "structure": 0.00851
+ },
+ "rime_fell/day/rv": {
+  "pixels": 0.0,
+  "structure": 0.02704
+ }
+}

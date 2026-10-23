@@ -268,6 +268,39 @@ It fades each raid to 0.6 and forgets under 0.1, so changing your habits pays of
 
 The driver remarks on the strongest of these as you set off, and a radio you carry says when you're picked up on your usual way. One knob (`zone_memory::MEMORY`) scales all of it; a fresh career is untouched, the director's random draws included.
 
+**You can see what they remember** (`robots/recall.rs`). Every memory a machine keeps of you is one row in a table: how it fades, and what shows it. A memory with no rule or no tell fails the tests. So does a robot-keyed map, or a field of the structs memories live in, that the table doesn't name.
+
+| Memory | Fades | Tell |
+|---|---|---|
+| How sure it is | 0.05 a second | its voice, its head turning |
+| Where it last had you | given up after 70 s of looking | it comes and looks round |
+| A place it searched for nothing | 120 s (lures there go unanswered) | its paint mark, bright while fresh |
+| A sign of you it saw | 900 s | it goes to look at it |
+| A device of yours it saw, the one it hunts | while the device runs | its scan, then its gun |
+| Knocked down lately; you went under a roof (drone) | 10 s; 8 s | it backs off; it climbs away |
+| A relay's reports of you | 600 s after the last | its tally lamp: a red blink per report, up to three |
+| A relay's false reports; distrust | 900 s | an inspector; the lamp pulses amber |
+| A relay silenced; one quiet in a jam | until mended; while in the jam | a mender; a team |
+| The valley: your ways, rendezvous, kills, clearings, searches | to 0.6 a raid, gone under 0.1 | patrols and a sentry lean, a watcher, doors shut, last raid's marks |
+
+**Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
+
+**They work together, and say so** (`robots/squad.rs`). Two or more machines fighting one player within 60 m share a plan. The first walker pins you from cover, the next works round to your side, and a third makes for the way to your rendezvous (the one the valley knows you favour, else the nearest) and holds it. A drone hangs over the flanker's way in and lights it. Parts are kept as machines join, so the plan doesn't reshuffle. Each new part is announced:
+- a chirp between the machines, one pattern per role (Audio);
+- on a radio you carry, within 120 m, a line: "Radio, close: one going round to your east", "Radio: one making for the mill. They mean to cut you off." The most useful line goes out first, one every 2 s;
+- the spotting drone's light on the ground.
+
+A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
+
+**Measured** (`robots/squad_drill.rs`, 24 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears: a cut-off sends it to another way out, and flanker and cut-off posts count as threats when it picks cover.
+
+| Newcomer | Machines alone | Machines coordinating |
+|---|---|---|
+| Deaf | 17% escape | 8% |
+| Listening | 17% | 17% (median time alive 23 s, against 15 s deaf) |
+
+Coordination halves a deaf newcomer's escapes, and listening wins them back. The counts are small (2 to 4 escapes an arm), and the drill is harsh: against a drone in the open, little gets away whatever it hears.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
@@ -929,6 +962,104 @@ and it moves the gun, never the head (`src/weapons/feel.rs`).
   | Mosin      | 241 | - | 85 | 173 | 107 | 186 |
 
   (Metres, in still air. Weather and walls cut these further.)
+
+### A gun's state, read in the hand
+
+(`weapons/legibility.rs`)
+
+No screen tells you a gun's state; the gun does, as its real counterpart
+would. A table of each gun's real tells, held against the models and the
+mechanism by `every_gun_shows_what_the_real_one_does`:
+
+- **Cocked**:
+  - an exposed hammer back (PM, Nagant, flare pistol);
+  - a turn-bolt's cocking piece standing 12 mm back off the bolt (Mosin,
+    TOZ-8);
+  - the double's two indicator pins standing 3 mm proud, each over its
+    cocked lock;
+  - the PPSh's bolt held back;
+  - a crossbow's string drawn.
+  - The AK, RPK and MP-133 show nothing: look in the port.
+- **Loaded**: with the action open (a press check), the round in the
+  chamber is there to see. A fired case sits a little proud on the
+  extractor. A revolver's cylinder shows its rounds, and a clip shows the
+  rounds standing in it.
+- **Empty**: the slide or carrier held open on the last round where the
+  real gun does it (PM, SKS, SVD). An empty box magazine shows its
+  follower between the lips.
+- **How full**: a magazine weighs what its rounds weigh (an AK's is 0.23 kg
+  empty, 0.56 kg full), so you heft it. The PM magazine's round-count
+  holes show brass up to how full it is.
+- **Condition**: below 0.8 the finish wears toward rust and bare steel, and
+  goes rougher. The crown nicks and the bore soots (`wear`). A worn action
+  (below 0.6), or a fouled one, drags in the hand as cold oil does
+  (`Firearm::action_drag`).
+- **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
+  scope are all on the model as they are.
+
+### Reloading without looking
+
+(`weapons/reload.rs`)
+
+Under fire you reload by feel. Every step of every gun's reload is heard
+and felt as itself. No two steps of one gun's reload share a sound or a
+feel: `every_reload_step_is_heard_and_felt_as_itself` checks each catalog
+gun's reload step by step. Sounds come from `audio::handling_sound` and
+feels from `rig::haptics::handling_feel`.
+
+- **Magazine out**: the release's click and a light pulse.
+- **Magazine in**: a slide up the well and the catch's snap, felt as a soft
+  push then a hard bump.
+- **Half-seated**: pushed up the well slower than 0.3 m/s, a magazine
+  hangs on its catch. It scrapes instead of snapping and stalls with no
+  bump. It hangs 8 mm low, and it feeds nothing. The rack's jolt shakes it
+  out: it slithers free with a lurch of weight in the hand. Slap it home
+  from below (as in tap-rack) and it seats with the proper snap.
+- **Racked back**: the slide drawn over the hammer, with a small tick.
+- **Home, chambered**: the bolt's slam has brass sliding off the lips under
+  it, and a double tick for the round going in. **Home, empty**: the slam
+  alone.
+- **Held open**: the slide or bolt stopping on its catch. The sound is a
+  short hard click, not the slam, and the feel is one sharp stop with no
+  settle.
+- A Nagant's gate opens and shuts with clicks of its own, and its cylinder
+  ratchets a chamber round. A crossbow's string clicks onto its latch. A
+  single-shot's round is felt going into the chamber by hand.
+
+### Every stoppage tells you its fix
+
+(`weapons/stoppages.rs`)
+
+A gun that stops tells you why, at the moment it happens. You hear it,
+you feel it in the trigger hand, and you see it at the port or on the
+gun. It takes the one clear a shooter would use. A wrong fix leaves it
+stopped and shows why. `every_stoppage_tells_you_its_fix` walks every
+catalog gun through every stoppage it can have, on the mechanism, and
+checks that each one:
+
+- stops the gun;
+- is heard, felt and seen unlike that gun's other stoppages;
+- is cleared by its own fix;
+- is not cleared by each wrong fix.
+
+| Stoppage | Heard | Felt | Seen | Clear | Wrong (and why) |
+|---|---|---|---|---|---|
+| Dud | the hammer's fall, dulled | a hard stop | a dented primer on a press check | work the action (on double action, pull again) | wait (nothing comes); pull again (the trigger's dead) |
+| Hang-fire | the fall and a primer's fizz | a long faint tremor | a thread of smoke from the action | keep it on the target and wait | open the action (the case bursts out of battery, hurting the hand) |
+| Stovepipe | the bolt stopping short, a pinched case | a sharp jolt | the case standing in the port, the bolt on it | rack | pull, tap (the case stays) |
+| Failure to feed | a light hollow clack, no brass | a dead little tick | the magazine hanging low, an empty chamber | tap, rack | rack alone (nothing feeds) |
+| Double feed | a dull jam and a grind | a long heavy grind | two rounds in the port, the bolt part open | drop the magazine, rack, seat, rack | rack, tap (they stay jammed) |
+| Short stroke | a smothered draw | a soft check | the action home on nothing, or on the case | work it fully | short again |
+| Squib | a weak pop, no crack | no kick | no flash; the bullet seen down the bore | rod the bore, then work it | fire on it (the barrel bulges) |
+| Stuck bolt | a dull clack | a hard stop at the handle | the handle down and unmoved | slap it up | lift gently (it grinds) |
+| Empty | a click, or the catch | a click, or the stop | held open, or the follower up | reload | work the action (nothing feeds) |
+| On safe | a creak | a soft dead stop | the selector on safe | selector off safe | pull harder |
+| Nagant gate open | a creak | a soft dead stop | the gate open | shut the gate | pull harder |
+| Crossbow string short | the string's slap | a slam | the string at rest, uncocked | draw it right onto the latch | draw short again |
+
+How often each stoppage happens depends on the gun's condition and dirt:
+`malfunction_chance`, the dud chance, `sticky_chance` and slam fire. So
+upkeep at the fabricator bench and cleaning decide it.
 
 ### Gunsmithing at the vice
 

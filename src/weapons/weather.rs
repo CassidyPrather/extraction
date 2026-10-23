@@ -519,9 +519,17 @@ fn sting(
 /// darkened and dulled by grime, and glossed by the wet.
 #[derive(Component)]
 pub struct WeatheredLook {
-    shown: (u8, u8),
+    shown: (u8, u8, u8),
     mats: Vec<(Handle<StandardMaterial>, Color, f32)>,
 }
+
+/// Rust's colour, and how far a worn-out gun's finish goes toward it (the
+/// bluing worn through and the steel gone to rust): a gun's condition read
+/// at a glance.
+const RUST_COLOUR: Vec3 = Vec3::new(0.32, 0.15, 0.07);
+const RUST_TINT: f32 = 0.45;
+/// Above this condition it shows no wear.
+const WEAR_FROM: f32 = 0.8;
 
 /// The grime's colour, and how far it darkens toward it at the worst.
 const GRIME_COLOUR: Vec3 = Vec3::new(0.16, 0.13, 0.1);
@@ -548,10 +556,15 @@ pub fn weather_looks(
     for (e, gun, w, look) in &mut guns {
         let grime = gun.firearm.grime.clamp(0.0, 1.0);
         let wet = w.wet.clamp(0.0, 1.0);
-        let shown = ((grime * 20.0) as u8, (wet * 20.0) as u8);
+        let worn = ((WEAR_FROM - gun.firearm.condition) / WEAR_FROM).clamp(0.0, 1.0);
+        let shown = (
+            (grime * 20.0) as u8,
+            (wet * 20.0) as u8,
+            (worn * 20.0) as u8,
+        );
         match look {
             None => {
-                if shown == (0, 0) {
+                if shown == (0, 0, 0) {
                     continue;
                 }
                 // Its own copies of its materials, to weather.
@@ -580,7 +593,7 @@ pub fn weather_looks(
                     continue;
                 }
                 commands.entity(e).insert(WeatheredLook {
-                    shown: (u8::MAX, u8::MAX),
+                    shown: (u8::MAX, u8::MAX, u8::MAX),
                     mats,
                 });
             }
@@ -595,10 +608,12 @@ pub fn weather_looks(
                     };
                     let b = base.to_linear();
                     let c = Vec3::new(b.red, b.green, b.blue)
+                        .lerp(RUST_COLOUR, RUST_TINT * worn)
                         .lerp(GRIME_COLOUR, GRIME_TINT * grime)
                         * (1.0 - 0.15 * wet);
                     m.base_color = Color::LinearRgba(LinearRgba::new(c.x, c.y, c.z, b.alpha));
-                    m.perceptual_roughness = (rough + 0.35 * grime - 0.55 * wet).clamp(0.08, 1.0);
+                    m.perceptual_roughness =
+                        (rough + 0.35 * grime + 0.3 * worn - 0.55 * wet).clamp(0.08, 1.0);
                 }
             }
         }

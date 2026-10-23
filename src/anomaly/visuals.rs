@@ -59,13 +59,14 @@ impl Plugin for AnomalyVisualsPlugin {
             MaterialPlugin::<XrayMaterial>::default(),
             MaterialPlugin::<ParticleMaterial>::default(),
             MaterialPlugin::<HazeMaterial>::default(),
+            MaterialPlugin::<MarkMaterial>::default(),
         ))
         .add_observer(claim_item_looks)
         .add_systems(Startup, init_assets)
         .add_systems(
             Update,
             (
-                (dress_anomalies, dress_scars).run_if(|| !hidden()),
+                (dress_anomalies, dress_scars, grass_anomalies).run_if(|| !hidden()),
                 (react_to_events, pulse, snare_arcs).chain(),
                 blink_flashes,
                 dress_items,
@@ -82,6 +83,51 @@ impl Plugin for AnomalyVisualsPlugin {
 /// `EXTRACTION_HIDE_ANOMALIES` set: the anomalies keep working but aren't
 /// dressed, so a shot of the same view with and without them measures what
 /// their looks add (`scripts/anomaly_legibility.py`).
+/// The four anomalies nearest the eye (within 80 m), for the plants in
+/// them (`world::cover::AnomalyGrass`): written only when that set, or
+/// one of them, changes.
+fn grass_anomalies(
+    grass: Option<ResMut<crate::world::cover::AnomalyGrass>>,
+    anomalies: Query<(&super::Anomaly, &GlobalTransform)>,
+    cams: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+) {
+    let Some(mut grass) = grass else {
+        return;
+    };
+    let Some(eye) = cams.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let mut near: Vec<(f32, Vec4, f32)> = anomalies
+        .iter()
+        .map(|(a, g)| {
+            let c = g.translation();
+            (
+                c.distance(eye),
+                c.extend(a.radius),
+                crate::world::cover::AnomalyGrass::code(a.kind),
+            )
+        })
+        .filter(|(d, ..)| *d < 80.0)
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut want = crate::world::cover::AnomalyGrass::default();
+    for (i, (_, at, kind)) in near.into_iter().take(4).enumerate() {
+        want.spots[i] = at;
+        want.kinds[i] = kind;
+    }
+    // Moved less than a few centimetres (a Surge-born one creeping): as
+    // it was.
+    let same = grass.kinds == want.kinds
+        && grass
+            .spots
+            .iter()
+            .zip(want.spots)
+            .all(|(a, b)| a.distance_squared(b) < 0.05 * 0.05);
+    if !same {
+        *grass = want;
+    }
+}
+
 fn hidden() -> bool {
     static HIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *HIDE.get_or_init(|| std::env::var_os("EXTRACTION_HIDE_ANOMALIES").is_some())
@@ -153,6 +199,28 @@ impl Material for ParticleMaterial {
             ds.depth_write_enabled = Some(false);
         }
         Ok(())
+    }
+}
+
+/// What an anomaly does to the ground under it: standard PBR, fogged as if
+/// half as far off (`shaders/anomaly_mark.wgsl`), as its particles are, so
+/// in a pea-souper its edge still shows a few metres off.
+pub type MarkMaterial = bevy::pbr::ExtendedMaterial<StandardMaterial, MarkFog>;
+
+/// The marks' fog as particles have it (`FOG_REACH` in
+/// `anomaly_particles.wgsl`).
+pub const MARK_FOG_REACH: f32 = 0.5;
+
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub struct MarkFog {
+    /// x: the share of its distance the fog takes it at.
+    #[uniform(100)]
+    pub reach: Vec4,
+}
+
+impl bevy::pbr::MaterialExtension for MarkFog {
+    fn fragment_shader() -> bevy::shader::ShaderRef {
+        "shaders/anomaly_mark.wgsl".into()
     }
 }
 
@@ -249,12 +317,13 @@ struct AnomalyAssets {
     leaf: Handle<Image>,
     radial: Handle<Image>,
     dot: Handle<Image>,
-    scorch: Handle<StandardMaterial>,
-    flattened: Handle<StandardMaterial>,
-    glassy: Handle<StandardMaterial>,
-    crushed: Handle<StandardMaterial>,
-    hushed: Handle<StandardMaterial>,
-    frosted: Handle<StandardMaterial>,
+    scorch: Handle<MarkMaterial>,
+    flattened: Handle<MarkMaterial>,
+    glassy: Handle<MarkMaterial>,
+    glazed: Handle<MarkMaterial>,
+    crushed: Handle<MarkMaterial>,
+    hushed: Handle<MarkMaterial>,
+    frosted: Handle<MarkMaterial>,
     hush_ring: Handle<StandardMaterial>,
     dragged: Handle<StandardMaterial>,
     spark: Handle<StandardMaterial>,
@@ -290,17 +359,72 @@ fn radial_texture(images: &mut Assets<Image>) -> Handle<Image> {
     ))
 }
 
-/// A ring, soft both sides, round the outer tenth: the edge of a Hush
-/// drawn on the ground.
+/// What an anomaly does to the ground under it, out to its edge: solid to
+/// nearly the edge and gone just past it, so where the mark stops is where
+/// the anomaly starts (a mark that fades out well inside is an invisible
+/// wall). Its edge wavers a little, never more than a few centimetres on a
+/// typical one, and it's a touch grainy. On a disc of 1.1 radii.
+fn mark_texture(images: &mut Assets<Image>) -> Handle<Image> {
+    let n = 256u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            // In the anomaly's radii.
+            let r = (u * u + v * v).sqrt() * 1.1;
+            let a = v.atan2(u);
+            let edge = 1.0 + 0.012 * (a * 7.0).sin() + 0.008 * (a * 17.0 + 1.3).sin();
+            // Full to 0.93 of it, nothing past 1.02.
+            let fall = ((r - 0.93 * edge) / (0.09 * edge)).clamp(0.0, 1.0);
+            let grain = 0.85 + 0.15 * ((x * 7919 + y * 104_729) % 613) as f32 / 613.0;
+            // Blotches a few tenths of a radius across, in its colour (and
+            // its glow: a burner's coals in patches, not a lit disc).
+            let (px, py) = (u * 1.1, v * 1.1);
+            let blot = 0.5
+                + 0.25 * ((px * 9.0 + 0.3).sin() * (py * 7.0 + 1.1).cos())
+                + 0.15 * ((px * 17.0 + py * 13.0).sin())
+                + 0.1 * ((px * 31.0 - py * 23.0 + 2.0).sin());
+            let tone = (0.45 + 0.55 * blot.clamp(0.0, 1.0)) * grain;
+            let alpha =
+                (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot.clamp(0.0, 1.0));
+            let c = (tone * 255.0) as u8;
+            data.extend_from_slice(&[c, c, c, (alpha * 255.0) as u8]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
+}
+
+/// A ragged ring of dust round the outer tenth: the edge of a Hush on the
+/// ground.
 fn ring_texture(images: &mut Assets<Image>) -> Handle<Image> {
-    let n = 128u32;
+    // Settled dust, not a drawn line: its edge wanders, its width and
+    // thickness drift round it, it's grainy, and in places it's thin to
+    // nothing.
+    let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
         for x in 0..n {
             let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
             let r = (u * u + v * v).sqrt();
-            let alpha = (1.0 - ((r - 0.91) / 0.05).abs()).clamp(0.0, 1.0).powf(0.7);
+            let a = v.atan2(u);
+            let edge = 0.87 + 0.03 * (5.0 * a + 0.7).sin() + 0.015 * (13.0 * a).sin();
+            let width = 0.025 + 0.025 * (0.5 + 0.5 * (7.0 * a + 1.0).sin());
+            let drift = (0.2 + 0.8 * (0.5 + 0.5 * ((3.0 * a + 2.0).sin() * (11.0 * a).cos())))
+                .clamp(0.0, 1.0);
+            let grain = 0.55 + 0.45 * ((x * 7919 + y * 104_729) % 977) as f32 / 977.0;
+            let alpha = (-((r - edge) / width).powi(2)).exp() * drift * grain;
             data.extend_from_slice(&[255, 255, 255, (alpha * 255.0) as u8]);
         }
     }
@@ -348,48 +472,101 @@ fn init_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut marks: ResMut<Assets<MarkMaterial>>,
     mut images: ResMut<Assets<Image>>,
     server: Res<AssetServer>,
 ) {
     let leaf: Handle<Image> = server
         .load_builder()
         .with_settings(|s: &mut bevy::image::ImageLoaderSettings| s.is_srgb = true)
-        .load("textures/foliage/birch_leaves/albedo.ktx2");
+        .load(crate::render::textures::ktx2(
+            "textures/foliage/birch_leaves/albedo.ktx2",
+        ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
-    let mut ground = |c: Color, emissive: LinearRgba| {
-        materials.add(StandardMaterial {
-            base_color: c,
-            base_color_texture: Some(radial.clone()),
-            emissive,
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 0.95,
-            depth_bias: 50.0,
-            ..default()
+    let mark = mark_texture(&mut images);
+    // Fogged as if half as far off, as the Zone's other things are
+    // (`MarkMaterial`); the shiny ones (fused, glazed) catch the light.
+    let mut ground = |c: Color, emissive: LinearRgba, rough: f32| {
+        marks.add(MarkMaterial {
+            base: StandardMaterial {
+                base_color: c,
+                base_color_texture: Some(mark.clone()),
+                emissive,
+                emissive_texture: Some(mark.clone()),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: rough,
+                reflectance: if rough < 0.5 { 0.9 } else { 0.5 },
+                depth_bias: 50.0,
+                fog_enabled: false,
+                ..default()
+            },
+            extension: MarkFog {
+                reach: Vec4::new(MARK_FOG_REACH, 0.0, 0.0, 0.0),
+            },
         })
     };
     let scorch = ground(
-        Color::srgba(0.02, 0.018, 0.015, 0.92),
-        LinearRgba::rgb(0.14, 0.02, 0.0),
+        Color::srgba(0.03, 0.025, 0.02, 0.92),
+        LinearRgba::rgb(0.07, 0.01, 0.0),
+        0.95,
     );
-    let flattened = ground(Color::srgba(0.08, 0.07, 0.05, 0.6), LinearRgba::BLACK);
+    // Scoured bare by the lift: raw brown earth, every loose thing on it
+    // and the turf itself taken up. (Pale dry earth read as dry grass.)
+    // (A faint warmth in it, the lift's own light on it: in the dark its
+    // edge still shows.)
+    let flattened = ground(
+        Color::srgba(0.13, 0.1, 0.07, 0.9),
+        LinearRgba::rgb(0.035, 0.024, 0.01),
+        0.95,
+    );
+    // Fused by the arcs: dark and glassy, still charged: a faint cold blue
+    // glow in it.
     let glassy = ground(
-        Color::srgba(0.22, 0.26, 0.32, 0.55),
-        LinearRgba::rgb(0.0, 0.02, 0.06),
+        Color::srgba(0.06, 0.07, 0.09, 0.88),
+        LinearRgba::rgb(0.0, 0.03, 0.1),
+        0.2,
     );
-    let hushed = ground(Color::srgba(0.7, 0.7, 0.68, 0.6), LinearRgba::BLACK);
+    // Glazed like still water under a mirror, giving back the sky.
+    // It holds a little light, like still water at dusk: in the dark it's
+    // the palest thing on the ground.
+    let glazed = ground(
+        Color::srgba(0.45, 0.47, 0.5, 0.8),
+        LinearRgba::rgb(0.022, 0.026, 0.034),
+        0.06,
+    );
+    // Pale dust settled out of the dead air, the ground's colour gone
+    // under it.
+    // Pale as ash, faintly so even in the dark.
+    let hushed = ground(
+        Color::srgba(0.7, 0.7, 0.68, 0.8),
+        LinearRgba::rgb(0.03, 0.03, 0.03),
+        0.95,
+    );
     // Hoar on the ground, faintly blue, a little lit of itself.
     let frosted = ground(
         Color::srgba(0.82, 0.9, 1.0, 0.75),
         LinearRgba::rgb(0.0, 0.01, 0.03),
+        0.95,
     );
-    // Torn turf, the dark earth under it showing.
-    let dragged = ground(Color::srgba(0.11, 0.08, 0.05, 0.8), LinearRgba::BLACK);
+    // Pressed dark and hard, the faintest violet in it.
     let crushed = ground(
-        Color::srgba(0.03, 0.025, 0.035, 0.85),
-        LinearRgba::rgb(0.02, 0.0, 0.05),
+        Color::srgba(0.035, 0.03, 0.035, 0.95),
+        LinearRgba::rgb(0.004, 0.0, 0.01),
+        0.95,
     );
-    // Its edge, pale and firm: a line on dark wet ground you can step up to.
+    // Torn turf, the dark earth under it showing: a drag scar is a smear,
+    // soft at its edges, not an anomaly's own mark.
+    let dragged = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.11, 0.08, 0.05, 0.8),
+        base_color_texture: Some(radial.clone()),
+        alpha_mode: AlphaMode::Blend,
+        perceptual_roughness: 0.95,
+        depth_bias: 50.0,
+        ..default()
+    });
+    // Its edge: pale dust settled in a ragged line on the ground, which you
+    // can step up to.
     let ring = ring_texture(&mut images);
     let hush_ring = materials.add(StandardMaterial {
         base_color: Color::srgba(0.85, 0.85, 0.82, 0.85),
@@ -409,6 +586,7 @@ fn init_assets(
         scorch,
         flattened,
         glassy,
+        glazed,
         crushed,
         hushed,
         frosted,
@@ -765,7 +943,7 @@ fn dress_anomalies(
                 )),
             ),
             AnomalyKind::Mirror => (
-                None,
+                Some(&a.glazed),
                 vec![glow(5.0, 40, 0.035, Vec3::new(6.0, 10.0, 14.0))],
                 (tell(crate::render::tells::MIRROR), 0.0, 40_000.0, 0.0),
                 Some((

@@ -35,7 +35,10 @@ fn run(app: &mut App, ticks: usize) {
 }
 
 /// A pane with clear air a couple of metres out from it, and that way
-/// (out of the sash's face).
+/// (out of the sash's face): upright, on the ground floor (a walker can
+/// shoulder it, a lobbed bolt meets its face), with clear air in front of
+/// it down to a body's height. Taken in order of where it stands, so a
+/// valley's layout changing elsewhere doesn't change which.
 fn open_pane(app: &mut App) -> (Entity, Vec3, Vec3) {
     let spatial_ok = |app: &mut App, from: Vec3, to: Vec3| {
         let world = app.world_mut();
@@ -52,22 +55,36 @@ fn open_pane(app: &mut App) -> (Entity, Vec3, Vec3) {
             )
             .is_none()
     };
-    let panes: Vec<(Entity, Pane)> = app
+    let mut panes: Vec<(Entity, Pane)> = app
         .world_mut()
         .query::<(Entity, &Pane)>()
         .iter(app.world())
         .map(|(e, p)| (e, p.clone()))
         .collect();
+    panes.sort_by_key(|(_, p)| key(p.centre()));
+    let zone = app.world().resource::<crate::world::Zone>().clone();
     assert!(
         panes.len() > 50,
         "the valley's windows are glazed ({})",
         panes.len()
     );
     for (e, p) in panes {
+        let c = p.centre();
+        let ground = zone.ground(c.x, c.z);
+        if p.broken.is_some() || c.y - ground > 2.2 {
+            continue;
+        }
         for out in [p.world.rotation * Vec3::NEG_Z, p.world.rotation * Vec3::Z] {
-            let from = p.centre() + out * 2.0;
-            if spatial_ok(app, from, p.centre()) {
-                return (e, p.centre(), out);
+            if out.y.abs() > 0.3 {
+                continue;
+            }
+            let from = c + out * 2.0;
+            // Clear to the pane, and at a walker's chest beside it.
+            let low = Vec3::new(from.x, ground + 1.0, from.z);
+            if spatial_ok(app, from, c) && spatial_ok(app, low, c.with_y(ground + 1.0) + out * 0.3)
+            {
+                println!("open_pane: {c:.2} facing {out:.2}");
+                return (e, c, out);
             }
         }
     }

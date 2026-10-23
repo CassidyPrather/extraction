@@ -215,7 +215,9 @@ impl MaterialLibrary {
                         s.is_srgb = srgb;
                         s.sampler = ImageSampler::Descriptor(repeat_sampler());
                     })
-                    .load(format!("textures/materials/{d}/{name}.ktx2"))
+                    .load(super::textures::ktx2(&format!(
+                        "textures/materials/{d}/{name}.ktx2"
+                    )))
             };
             // A few scans want grading to sit in the same gloom.
             m.base_color = match mat {

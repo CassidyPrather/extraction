@@ -486,7 +486,12 @@ impl Plugin for OnboardingPlugin {
             .init_resource::<first_hour::Fight>()
             .add_systems(
                 Update,
-                (first_hour::first_fight, first_hour::direct_raid).chain(),
+                (
+                    first_hour::seed_job,
+                    first_hour::first_fight,
+                    first_hour::direct_raid,
+                )
+                    .chain(),
             )
             .add_systems(
                 PostStartup,

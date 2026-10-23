@@ -294,6 +294,7 @@ fn run_macros(
     >,
     mut bags: Query<&mut Backpack>,
     mut bipods: Query<&mut super::armoury::Bipod>,
+    mut approach: ResMut<super::reload::MagApproach>,
 ) {
     for (player_e, mut mac) in &mut players {
         let player = Some(player_e);
@@ -383,6 +384,8 @@ fn run_macros(
                     commands.entity(mag_e).remove::<(InSocket, InBackpack)>();
                     if let Ok(mut socket) = sockets.get_mut(well) {
                         if socket.occupant.is_none() {
+                            // The macro seats it home: no hand to ease it.
+                            approach.0.remove(&mag_e);
                             seat_in_socket(&mut commands, mag_e, well, &mut socket);
                             events.write(InteractEvent::Socketed {
                                 item: mag_e,

@@ -14,6 +14,7 @@ sweep's studio.
 | Press-kit stills | `scripts/capture_presskit.sh [maps]` | `target/presskit/index.html` to choose from; `--publish` to `docs/shots/showcase/` |
 | Trailer from a bot's raid | `scripts/capture_trailer.sh <map>` | `target/trailer/<map>/trailer.mp4`, `trailer_sheet.jpg` |
 | Looks-wrong sweep | `scripts/capture_sweep.sh [filter]` | `target/sweep/report.md`, `index.html` |
+| Visual diff of a merge round | `scripts/visual_diff.sh [old new]` | `target/vdiff/diff/<old>_<new>/sheet.jpg`, `index.html`, `report.json` |
 | What's new gallery | `scripts/capture_new.sh` | `docs/shots/capture/new/index.html` |
 | Turntables | `TURN=36 scripts/capture_sweep.sh <filter> <out>` | `<out>/<light>/<subject>.mp4`, `_strip.jpg` |
 | The cheap checks (sizes, furniture, z-fighting, camera paths) | `cargo test --lib capture -- --nocapture` | test failures and tallies |
@@ -42,6 +43,23 @@ Things that have bitten captures, and what now guards against them:
   and can show in a night shot near the lamp. Don't merge new shaders
   into the tree under a running capture either: it loads them from
   `assets/` as it goes.
+- **An hour the game didn't know.** `--hour 23` once fell through to the
+  raid's own hour, so a "night" shot came out in daylight, and the
+  screenshot scripts show only errors, so nothing said so. A clock hour
+  now parses (dawn from 5, day from 7, dusk from 18, night from 21). An
+  unknown `--hour` or `--weather` stops the game with an ERROR line.
+  `scripts/capture_check_dark.sh [map] [camera]` shoots a view at hours
+  12 and 23 and fails unless the night is dark: mean luminance under 0.2
+  and under half the day's. Marrow's gate road reads 0.38 by day and 0.13
+  at night; with the bug, it read 0.38 for both.
+- **Shooting before everything was in.** A cinematic's first still came
+  at about frame 61, but "everything in" (every material and pipeline
+  compiled, `render::timeline::Loaded`) comes at about frame 65 under
+  lavapipe. Whether a pipeline was ready depended on the wall clock, so
+  one build's Marrow dusk came out warm in one run and grey-green in the
+  next. Captures now wait at their first pose for `Loaded`, for at most
+  `cinematic::LOAD_WAIT` frames, and the sweep's warm-up waits the same
+  way. Three runs of one build are now bit-identical.
 - **`--camera` places the player.** That's what a screenshot wants, but a
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
@@ -288,3 +306,65 @@ cd - && BEFORE_BIN=/tmp/before/target/fast/extraction scripts/capture_new.sh
 
 Edit the subject lists in `scripts/capture_new.sh` and the captions in
 `scripts/capture_new.py` for the next pass.
+
+## Visual diff: `scripts/visual_diff.sh [old_sha new_sha]`
+
+The same cameras in every valley, shot by two builds at day, dusk, night
+and fog, compared for what changed. It's meant to catch the change nobody
+meant: the anomaly ring, a material breaking, a light going dark, a prop
+vanishing. Run it after each merge round. With no shas it compares main's
+tip with the end of the round before: the commit under main's latest
+cluster of three or more merges within ten minutes.
+
+- **Cameras.** `scripts/visual_diff/<map>.stills`, committed: an
+  insertion, the tallest landmark, a furnished interior, an anomaly and an
+  RV, in each of the five valleys. They're resolved from
+  `scripts/visual_diff/views.cine`, which names its targets in words every
+  valley answers to (`kind:Insertion`, `tallest`, `interior`). The
+  `--cine-dump` flag resolves them; `scripts/visual_diff_cameras.sh`
+  remakes them when a valley changes under them. Because they're written
+  out, a build from before the target words still shoots from the same
+  places.
+- **Builds.** Each sha is built once, in a worktree at
+  `target/vdiff/wt` with a shared `target/vdiff/build`. The first build
+  took 17 min and the next 6. Each is kept as `target/vdiff/bin/<sha>/`
+  next to a copy of its assets, which links in the generated textures
+  (gitignored, so a worktree lacks them). Shots go to
+  `target/vdiff/shots/<sha>/` at 960×540 with seed 7. Both are reused
+  next round and pruned to the newest three, about 250 MB a sha.
+- **The measure** (`scripts/visual_diff.py`) is 1 − SSIM on luminance, and
+  the share of pixels whose colour moved after a light blur. A shot
+  changed if structure passes 0.005 or more than 0.05% of pixels moved.
+  That catches a small lamp going dark, about 0.08% of the frame. The
+  same build shot twice gave identical pictures for 96 of the 100 shots.
+  The other four are Rime Fell by day, its falling snow, and each gets
+  twice its own measured noise from `scripts/visual_diff/noise.json`.
+  Remake that file with `scripts/visual_diff.py --calibrate a b
+  scripts/visual_diff/noise.json` from two runs of one build.
+- **`--quick`**, for right after a gate: the landmark view of each valley
+  (its sky, lights and lamps) at dusk and night, 10 shots. It takes about
+  6 min of shooting a side, plus about 6.5 min to build a new sha
+  incrementally. It ends, as the full sweep does, with one line: `PASS`,
+  or `CHANGED` with the count and the sheet's path. Shots are kept a file
+  at a time, so quick and full runs share them. `MAPS`, `MOODS` and
+  `VIEWS` narrow a run to one shot for a bisect.
+- **Lamps with a character** (`render::landmarks`) blink. A still's last
+  two settle frames are held with the clock stopped
+  (`cinematic::STILL_HOLD`), and a paused clock lights every lamp, as
+  Fourth valley set it up. So a still always shows its lamps lit, and one
+  build shoots the same picture every run. Builds from before this (round
+  37 and earlier) still catch whatever phase their frame lands on, so a
+  lamp-only change against one of them is noise.
+- **The sheet** shows the 40 most changed shots, old | new | where it
+  changed (red over the new, greyed), ranked by how many times over its
+  threshold each is. `index.html` lists every shot's numbers.
+
+The first round, `77ce6f57` to `823b12f3`, changed 21 of 100 shots
+(`docs/shots/capture/vdiff/`):
+- every anomaly view, from Anomalies taking the haze's rim ring out;
+- Marrow Creek's dusk light shafts, from a warm haze to pale beams, with
+  no change to the shafts' own code. This was the capture's fault, not the
+  game's: stills were taken before every pipeline had compiled (see
+  "Shooting before everything was in" above). The warm-up's timing only
+  decided which run lost the race. `marrow_dusk_warmup_on_off.jpg` shows
+  that race, not a warm-up bug.

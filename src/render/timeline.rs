@@ -49,7 +49,12 @@ pub fn mark(what: &'static str) {
 /// just readied queues its pipelines a frame or two later); read in the
 /// main world. Without a render world, always clear.
 #[derive(Resource, Clone)]
-pub struct Unprepared(std::sync::Arc<std::sync::atomic::AtomicU32>);
+pub struct Unprepared(
+    std::sync::Arc<std::sync::atomic::AtomicU32>,
+    /// The last frame's counts, for saying what's still waiting:
+    /// pipelines compiling (high half) and materials unprepared (low).
+    std::sync::Arc<std::sync::atomic::AtomicU32>,
+);
 
 /// Render frames in a row with nothing waiting before the GPU counts as
 /// ready.
@@ -94,7 +99,35 @@ impl WorldReady<'_, '_> {
     pub fn ready(&self) -> bool {
         self.forest() && self.props() && self.materials()
     }
+
+    /// What it's still waiting on, in words (for the log).
+    pub fn why(&self) -> String {
+        let mut out = Vec::new();
+        if !self.forest() {
+            out.push("the forest".to_string());
+        }
+        if !self.props() {
+            out.push(format!("{} buildings' props", self.props.iter().count()));
+        }
+        if self.warmed.as_ref().is_some_and(|w| !w.0) {
+            out.push("the warm-up shelf".to_string());
+        }
+        if let Some(u) = self.unprepared.as_ref().filter(|u| !u.clear()) {
+            let n = u.1.load(std::sync::atomic::Ordering::Relaxed);
+            out.push(format!(
+                "the GPU ({} pipelines compiling, {} materials unprepared)",
+                n >> 16,
+                n & 0xffff
+            ));
+        }
+        out.join(", ")
+    }
 }
+
+/// Present once everything's in ("everything in"): work paced over frames
+/// so play doesn't hitch can go faster before it, when no one's playing.
+#[derive(Resource)]
+pub struct Loaded;
 
 pub struct TimelinePlugin;
 
@@ -108,7 +141,10 @@ impl Plugin for TimelinePlugin {
             })
             .add_systems(First, first_frame)
             .add_systems(Last, (settled, leaving));
-        let unprepared = Unprepared(std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)));
+        let unprepared = Unprepared(
+            std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
+        );
         if let Some(render) = app.get_sub_app_mut(bevy::render::RenderApp) {
             render
                 .insert_resource(unprepared.clone())
@@ -162,6 +198,10 @@ fn count_unprepared(
             .count(),
         _ => 0,
     };
+    out.1.store(
+        ((compiling.min(0xffff) as u32) << 16) | waiting.min(0xffff) as u32,
+        std::sync::atomic::Ordering::Relaxed,
+    );
     let streak = if compiling + waiting == 0 {
         out.0
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -188,9 +228,21 @@ fn settled(
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     server: Res<AssetServer>,
     mut all: Local<bool>,
+    mut next_word: Local<f64>,
+    mut commands: Commands,
 ) {
     if *all {
         return;
+    }
+    // A load that doesn't finish says what it's waiting on, every 10 s
+    // from 30 s in.
+    let now = since_start();
+    if now >= next_word.max(30.0) {
+        *next_word = now + 10.0;
+        let why = world.why();
+        if !why.is_empty() {
+            info!("load: at {now:.0} s, still waiting on {why}");
+        }
     }
     if !eyes.is_empty() {
         mark("a 3D view drawing");
@@ -219,6 +271,7 @@ fn settled(
     }
     if forest_ok && props_ok && preload_ok && materials_ok {
         *all = true;
+        commands.insert_resource(Loaded);
         mark("everything in");
     }
 }

@@ -134,6 +134,12 @@
         // Footpath from the logging camp up through the trees, over the
         // creek on the pumping station's footbridge, and on up through the
         // pines to the mast road.
+        // On from the forest path's end to the district road under the
+        // mast: the pumping station's second way home, to the Bus depot.
+        (
+            name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
+            points: [(-110.0, -108.0), (-85.0, -122.0), (-60.0, -134.0), (-35.0, -146.0), (-12.0, -158.0), (8.0, -168.0)],
+        ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(-160.0, 140.0), (-166.0, 122.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
@@ -230,6 +236,23 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // The machines' smelter stack behind the Gate: what they take, they melt.
+        (prefab: "chimney", at: (-240.0, -280.0), rot: 0.0),
+        // The pumping station's standpipe tower.
+        (prefab: "water_tower", at: (-212.0, -25.0), rot: 0.0),
+        // The quarantine checkpoint's incinerator stack, outside the gate:
+        // what came out of the Zone was burnt.
+        (prefab: "chimney", at: (85.0, 310.0), rot: 0.0),
+        // The checkpoint's watchtower over the south gate.
+        (prefab: "ranger_tower", at: (165.0, 262.0), rot: 0.0),
+        // The old farm's water tower.
+        (prefab: "water_tower", at: (175.0, 195.0), rot: 0.0),
+        // The brick kiln's chimney, all that stands of the works by the Hollow.
+        (prefab: "chimney", at: (120.0, -80.0), rot: 0.0),
+        // The checkpoint's radio mast at the south gate.
+        (prefab: "radio_mast", at: (135.0, 275.0), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
         (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
         // The Old farm's wood stores across the field from the drop: cover
@@ -276,6 +299,18 @@
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).
         (prefab: "pump_station", at: (-200.0, 22.0), rot: 0.0),
+        // Roofs on the mast relay's way past the pumping station, for a newcomer
+        // a drone has locked onto: the station's tool shed where the Ranger's
+        // path leaves it, and the rangers' store on the path below the mast road.
+        (prefab: "shed", at: (-171.0, -28.0), rot: 270.0, tag: "pump_tool_shed"),
+        (prefab: "shed", at: (-184.0, -111.0), rot: 270.0, tag: "rangers_store"),
+        // And the road-menders' hut on the district road, the mast relay's
+        // other way, half way from the creek bridge to the mast road.
+        (prefab: "shed", at: (-3.0, -92.0), rot: 90.0, tag: "road_menders_hut"),
+        // And a roof on the way home from the Village to the gate, where
+        // Onboarding's newcomers fell to drones on their second and third
+        // jobs: the lengthman's hut by the district road.
+        (prefab: "shed", at: (22.0, 224.0), rot: 90.0, tag: "lengthmans_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
@@ -287,9 +322,14 @@
         // A shed by the depot rendezvous: a roof to wait under, out of the
         // drones' sight, while the truck comes.
         (prefab: "shed", at: (6.0, -247.0), rot: 90.0),
+        // Somewhere to wait for the truck out of the depot drones' eye: the
+        // old bus shelter by the yard gate, and the platelayers' hut by the
+        // rail-yard pickup.
+        (prefab: "shed", at: (36.0, -247.0), rot: 306.0, tag: "bus_shelter"),
         (prefab: "radio_mast", at: (-120.0, -175.0), rot: 0.0),
         (prefab: "mast_hut", at: (-112.0, -160.0), rot: 30.0),
         (prefab: "rail_shed", at: (185.0, -210.0), rot: 10.0),
+        (prefab: "shed", at: (223.5, -227.0), rot: 313.0, tag: "platelayers_hut"),
         // The yard's water tower: the landmark you see the yard by.
         (prefab: "water_tower", at: (232.0, -196.0), rot: 0.0),
         (prefab: "boxcar", at: (148.7, -235.3), rot: 114.6),
@@ -302,25 +342,25 @@
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // Behind the north house, open to the south.
-        (prefab: "fence_garden", at: (-25.85, 91.10), rot: 180.0),
-        (prefab: "fence_garden", at: (-30.20, 95.25), rot: 90.0),
+        (prefab: "fence_garden", at: (-27.35, 91.10), rot: 180.0),
+        (prefab: "fence_garden", at: (-31.70, 95.25), rot: 90.0),
         // Behind the house over the road, open to the south.
-        (prefab: "fence_garden", at: (29.85, 81.10), rot: 0.0),
-        (prefab: "fence_garden", at: (34.20, 85.25), rot: 270.0),
+        (prefab: "fence_garden", at: (31.35, 81.10), rot: 0.0),
+        (prefab: "fence_garden", at: (35.70, 85.25), rot: 270.0),
         // Beside the south house, open to the west and the road.
-        (prefab: "fence_garden", at: (28.40, 63.35), rot: 270.0),
-        (prefab: "fence_garden", at: (24.25, 67.70), rot: 0.0),
+        (prefab: "fence_garden", at: (28.40, 64.85), rot: 270.0),
+        (prefab: "fence_garden", at: (24.25, 69.20), rot: 0.0),
         // Beside the house up the lane, open to the south.
-        (prefab: "fence_garden", at: (-53.35, 71.60), rot: 0.0),
-        (prefab: "fence_garden", at: (-57.70, 75.75), rot: 90.0),
+        (prefab: "fence_garden", at: (-54.85, 71.60), rot: 0.0),
+        (prefab: "fence_garden", at: (-59.20, 75.75), rot: 90.0),
         // Behind the foreman's cabin, open to the east.
-        (prefab: "fence_garden", at: (-188.40, 197.35), rot: 90.0),
-        (prefab: "fence_garden", at: (-184.25, 201.70), rot: 0.0),
+        (prefab: "fence_garden", at: (-188.40, 198.85), rot: 90.0),
+        (prefab: "fence_garden", at: (-184.25, 203.20), rot: 0.0),
         // The farm's paddock behind the house, open to the south and the shed.
-        (prefab: "fence_garden", at: (198.35, 140.10), rot: 0.0),
-        (prefab: "fence_garden", at: (206.85, 140.10), rot: 0.0),
-        (prefab: "fence_garden", at: (211.20, 144.25), rot: 270.0),
-        (prefab: "fence_garden", at: (211.20, 152.75), rot: 270.0),
+        (prefab: "fence_garden", at: (199.85, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (208.35, 140.10), rot: 0.0),
+        (prefab: "fence_garden", at: (212.70, 144.25), rot: 270.0),
+        (prefab: "fence_garden", at: (212.70, 152.75), rot: 270.0),
 
         // Car wrecks (Destruction strips their doors, bonnets, boots and
         // wheels): cover on the verges, never on the road.
@@ -334,6 +374,36 @@
         (prefab: "wreck_lada", at: (19.6, 140.1), rot: 14.0),
         // The farm's own jeep, in the yard by the shed.
         (prefab: "wreck_uaz", at: (176.0, 160.0), rot: 75.0),
+
+        // Cover within a four-second sprint of every step of the first jobs
+        // (map_lint FIRST_RUN): cars abandoned on the verges in the
+        // evacuation, and log piles stacked by the ways across the open.
+        (prefab: "wreck_lada", at: (15.1, 176.9), rot: 23.0),
+        (prefab: "wreck_uaz", at: (27.0, 160.0), rot: 90.0),
+        (prefab: "wreck_lorry", at: (19.0, 120.0), rot: 157.0),
+        (prefab: "wreck_lada", at: (4.0, 171.0), rot: 224.0),
+        (prefab: "wreck_uaz", at: (-2.5, 37.3), rot: 291.0),
+        (prefab: "log_pile", at: (5.0, -0.0), rot: 358.0),
+        (prefab: "wreck_lada", at: (5.5, -13.3), rot: 65.0),
+        (prefab: "log_pile", at: (5.0, -28.0), rot: 132.0),
+        (prefab: "log_pile", at: (-1.5, -40.0), rot: 109.0),
+        (prefab: "wreck_lada", at: (-2.7, -105.5), rot: 266.0),
+        (prefab: "wreck_uaz", at: (-9.3, 170.5), rot: 333.0),
+        (prefab: "log_pile", at: (-59.1, 52.9), rot: 40.0),
+        (prefab: "log_pile", at: (-76.0, -101.0), rot: 107.0),
+        (prefab: "log_pile", at: (-169.0, -48.0), rot: 174.0),
+        (prefab: "log_pile", at: (-5.0, 212.0), rot: 241.0),
+        (prefab: "log_pile", at: (-17.3, 210.5), rot: 308.0),
+        (prefab: "log_pile", at: (23.0, -48.0), rot: 15.0),
+        (prefab: "log_pile", at: (-186.7, -49.5), rot: 82.0),
+        (prefab: "log_pile", at: (-33.0, 136.0), rot: 149.0),
+        (prefab: "log_pile", at: (-45.3, 134.5), rot: 216.0),
+        (prefab: "log_pile", at: (-93.0, 72.0), rot: 283.0),
+        (prefab: "log_pile", at: (-89.0, 20.0), rot: 57.0),
+        (prefab: "log_pile", at: (-101.0, 16.0), rot: 124.0),
+        (prefab: "log_pile", at: (-116.0, -6.0), rot: 211.0),
+        (prefab: "log_pile", at: (-105.3, 70.5), rot: 350.0),
+        (prefab: "wreck_lada", at: (-175.1, -59.1), rot: 191.0),
     ],
 
     markers: [
@@ -352,7 +422,7 @@
         // depot and the yard: an alarm, not a gun, where nothing else
         // watches (map_spotter). Cut its tether at the winch, timing its
         // turn.
-        (kind: Spotter, at: (30.0, -150.0), name: "Bank spotter"),
+        (kind: Spotter, at: (40.0, -85.0), name: "Bank spotter"),
         (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).

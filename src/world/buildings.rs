@@ -2703,11 +2703,13 @@ fn barn(b: &mut Builder) {
         h,
         0.15,
         Mat::Planks,
+        // A window near each end of the long walls: the stalls in its
+        // corners are lit (`capture::checks::loot_sights`).
         [
             &[gap(6.0, 4.0, 3.8)],
-            &[door(4.0), window(11.0)],
+            &[window(1.6), door(4.0), window(11.0), window(14.4)],
             &[gap(6.0, 3.0, 3.0)],
-            &[window(5.0)],
+            &[window(1.6), window(5.0), window(14.4)],
         ],
     );
     b.gable_roof(
@@ -2742,7 +2744,8 @@ fn barn(b: &mut Builder) {
         std::f32::consts::FRAC_PI_2,
         Some("workshop"),
     );
-    b.crate_box(Vec3::new(4.5, f, 5.5), 0.8, Some("food_common"));
+    // By the end window, on the boards (not sunk in them).
+    b.crate_box(Vec3::new(5.1, f + 0.015, 6.3), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
     b.barrel(Vec3::new(5.2, f, 6.9));
     b.barrel(Vec3::new(4.6, f, 7.2));
@@ -2981,6 +2984,21 @@ fn pump_station(b: &mut Builder) {
         ],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
+    // The boiler's chimney, out of the roof by the back wall: what the
+    // pit and the quarry it pumps out are found by (`map_lint`'s
+    // `REGION_MARK`).
+    // (Its foot in the roof's slab, not flush under it.)
+    let (sx, sz, foot, top) = (4.6, 3.6, f + h + 0.1, 8.0);
+    b.bx(
+        Vec3::new(1.0, top - 0.1 - foot, 1.0),
+        Vec3::new(sx, (foot + top - 0.1) * 0.5, sz),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(1.2, 0.2, 1.2),
+        Vec3::new(sx, top - 0.1, sz),
+        Mat::Brick,
+    );
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
@@ -4421,10 +4439,12 @@ fn chapel(b: &mut Builder) {
         h,
         0.35,
         Mat::Plaster,
+        // A chancel window either side of the bell tower at the east end:
+        // its corners are lit (`capture::checks::loot_sights`).
         [
             &[door(w * 0.5)],
             &[tall(3.0), tall(7.0), tall(11.0)],
-            &[],
+            &[tall(1.4), tall(w - 1.4)],
             &[tall(3.0), tall(7.0), tall(11.0)],
         ],
     );
@@ -5221,6 +5241,28 @@ fn boxcar(b: &mut Builder) {
         Mat::RustyMetal,
         true,
     );
+    // Old sleepers stacked into steps at the doorway, in front of its open
+    // half: a floor 1.26 m up in risers the body steps, on down as far as
+    // the bank under it can fall (`map::prefab_lift`), those under the
+    // ground buried where it's level (`map_doors` holds the ground at
+    // their foot to a step).
+    let (face, tread, floor) = (w * 0.5 + 0.035, 0.4, f + 0.06);
+    let rise = floor / 4.0;
+    let n = ((floor + b.drop) / rise - 1e-3).ceil() as usize;
+    let sunk = b.drop + 0.3;
+    for k in 1..n {
+        let top = floor - rise * k as f32;
+        let x = face + tread * (k as f32 - 0.5);
+        b.bx(
+            Vec3::new(tread - 0.01, top + sunk, 1.3),
+            Vec3::new(x, (top - sunk) * 0.5, -0.4),
+            Mat::Timber,
+        );
+    }
+    let steps = (n - 1) as f32 * tread;
+    if let Some(e) = b.geo.entrances.iter_mut().find(|e| e.out == [1.0, 0.0]) {
+        e.clear = steps + 1.0;
+    }
     // Ladders at diagonally opposite corners, couplers at both ends.
     for (end, x) in [(-1.0f32, -1.1f32), (1.0, 1.1)] {
         let z = end * (d * 0.5 + 0.06);
@@ -5687,12 +5729,114 @@ pub fn occluders(geo: &Geo) -> super::ao::Occluders {
     }))
 }
 
+/// Where a building has a roof over it, on a grid over its footprint:
+/// what "indoors" is (`robots::doors::Shell`). A burnt house is indoors
+/// under the half of its roof that's left, a damaged one not under its
+/// hole, a drowned one nowhere.
+#[derive(Debug)]
+pub struct RoofCover {
+    half: Vec2,
+    n: [usize; 2],
+    /// Per cell, the top of the roof over it (building-local y), or NaN
+    /// under the sky.
+    top: Vec<f32>,
+}
+
+/// The cover grid's cells (m).
+pub const COVER_CELL: f32 = 0.5;
+/// How high over the footing a cell's cover is looked for from: over the
+/// floors, the silt and a bed, under a ceiling.
+const COVER_FROM: f32 = 1.5;
+
+impl RoofCover {
+    fn new(geo: &Geo, foot: [f32; 3]) -> Self {
+        let occ = occluders(geo);
+        let half = Vec2::new(foot[0], foot[2]) * 0.5;
+        let n = [
+            (foot[0] / COVER_CELL).ceil().max(1.0) as usize,
+            (foot[2] / COVER_CELL).ceil().max(1.0) as usize,
+        ];
+        let mut top = Vec::with_capacity(n[0] * n[1]);
+        for j in 0..n[1] {
+            for i in 0..n[0] {
+                let x = -half.x + (i as f32 + 0.5) * COVER_CELL;
+                let z = -half.y + (j as f32 + 0.5) * COVER_CELL;
+                // Four looks up across the cell: a joist over one of them
+                // isn't a roof.
+                let tops: Vec<f32> = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+                    .iter()
+                    .filter_map(|(a, b)| {
+                        let q = COVER_CELL * 0.25;
+                        occ.cover_top(Vec3::new(x + a * q, COVER_FROM, z + b * q))
+                    })
+                    .collect();
+                top.push(if tops.len() >= 3 {
+                    tops.iter().copied().fold(f32::MIN, f32::max)
+                } else {
+                    f32::NAN
+                });
+            }
+        }
+        Self { half, n, top }
+    }
+
+    /// Whether a building-local point is under the roof: in the footprint,
+    /// over the ground, under the cover over it.
+    pub fn covers(&self, l: Vec3) -> bool {
+        if l.x.abs() >= self.half.x || l.z.abs() >= self.half.y || l.y <= -1.0 {
+            return false;
+        }
+        let i = (((l.x + self.half.x) / COVER_CELL) as usize).min(self.n[0] - 1);
+        let j = (((l.z + self.half.y) / COVER_CELL) as usize).min(self.n[1] - 1);
+        let top = self.top[j * self.n[0] + i];
+        !top.is_nan() && l.y < top
+    }
+
+    /// How many of its cells have a roof over them, and how many it has.
+    pub fn roofed(&self) -> (usize, usize) {
+        (
+            self.top.iter().filter(|t| !t.is_nan()).count(),
+            self.top.len(),
+        )
+    }
+}
+
+/// A prefab's [`RoofCover`], made once (None for a prefab with no
+/// recipe). A drowned house's has no roof anywhere.
+pub fn roof_cover(id: &str) -> Option<&'static RoofCover> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static MADE: OnceLock<Mutex<HashMap<String, Option<&'static RoofCover>>>> = OnceLock::new();
+    let made = MADE.get_or_init(Default::default);
+    if let Some(c) = made.lock().unwrap().get(id) {
+        return *c;
+    }
+    let cover = prefab(id).and_then(|geo| {
+        let c = RoofCover::new(&geo, extraction_core::map::prefab_footprint(id));
+        Some(&*Box::leak(Box::new(c)))
+    });
+    made.lock().unwrap().insert(id.to_string(), cover);
+    cover
+}
+
 /// A prefab's pieces shaded by its own solid pieces, baked once in the
 /// background: a big site's thousand pieces take half a second, a house's
 /// a few dozen milliseconds, every house alike (`render::spikes`).
 pub enum Bake {
-    Baking(bevy::tasks::Task<std::sync::Arc<Vec<Option<Mesh>>>>),
-    Ready(std::sync::Arc<Vec<Option<Mesh>>>),
+    Baking(bevy::tasks::Task<std::sync::Arc<Baked>>),
+    Ready(std::sync::Arc<Baked>),
+}
+
+/// A dressed building's [`Baked`], its sky light read by what's put
+/// down in it (`render::loot_light`).
+#[derive(Component, Clone)]
+pub struct RoomLight(pub std::sync::Arc<Baked>);
+
+/// A prefab's baked pieces, and the sky's light through it if that was
+/// baked too (`ao::SkyField`), for the furniture dressed in later.
+pub struct Baked {
+    pub meshes: Vec<Option<Mesh>>,
+    pub light: Option<super::ao::SkyField>,
 }
 
 /// A piece's mesh in building space, unshaded.
@@ -5709,9 +5853,10 @@ fn piece_mesh(piece: &Piece) -> Mesh {
 /// Each piece as `dress_buildings` draws it when it isn't furniture's
 /// stand-in: a box shaded face by face, anything else shaded at its
 /// vertices (not under the ground: a site's rooms go unshaded).
-fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
-    let occluders = occluders(geo);
-    geo.pieces
+fn bake_pieces(geo: &Geo, site: bool, walls: Vec2) -> Baked {
+    let occluders = occluders(geo).within(walls);
+    let meshes = geo
+        .pieces
         .iter()
         .map(|piece| match piece.shape {
             // Glass keeps its own alpha (the rest carries the sky).
@@ -5728,7 +5873,11 @@ fn bake_pieces(geo: &Geo, site: bool) -> Vec<Option<Mesh>> {
                 Some(mesh)
             }
         })
-        .collect()
+        .collect();
+    Baked {
+        meshes,
+        light: occluders.into_field(),
+    }
 }
 
 /// Client: a building's meshes, one per material (a house is a handful of
@@ -5748,13 +5897,17 @@ pub fn dress_buildings(
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
     mut bakes: Local<std::collections::HashMap<String, Bake>>,
     breaches: Option<Res<crate::destruction::breach::Breaches>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     use crate::render::world_props::Resolved;
     // A few buildings a frame, each once its prefab's shading is baked
     // (in the background, `Bake`), so a valley's arrival doesn't hitch.
+    // While the valley loads no one's playing: eight times as many (the
+    // buildings were most of Marrow Creek's wait, 3 a frame).
+    let most = if loaded.is_some() { 3 } else { 24 };
     let mut built = 0;
     for (e, b, xf, mut wait) in &mut pending {
-        if built >= 3 {
+        if built >= most {
             break;
         }
         let Some(mut geo) = prefab(&b.prefab) else {
@@ -5843,9 +5996,11 @@ pub fn dress_buildings(
         let bake = bakes.entry(bake_key).or_insert_with(|| {
             let geo = geo.clone();
             let site = super::underground::ids().any(|id| id == b.prefab);
+            let f = extraction_core::map::prefab_footprint(&b.prefab);
+            let walls = Vec2::new(f[0], f[2]) * 0.5;
             Bake::Baking(
                 bevy::tasks::AsyncComputeTaskPool::get()
-                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site)) }),
+                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) }),
             )
         });
         if let Bake::Baking(task) = bake {
@@ -5898,6 +6053,11 @@ pub fn dress_buildings(
         }
         commands.entity(e).remove::<PropsPending>();
         built += 1;
+        // The sky's light through it, for what's put down in it later
+        // (`render::loot_light`).
+        if baked.light.is_some() {
+            commands.entity(e).insert(RoomLight(baked.clone()));
+        }
         // What shades the building's own surfaces: its solid pieces
         // (furniture's boxes too, so the floor darkens round their feet),
         // not its glass.
@@ -5975,7 +6135,7 @@ pub fn dress_buildings(
                     }
                 }
                 let group = if is_below { BELOW } else { OUTER };
-                if let Some(mesh) = &baked[i] {
+                if let Some(mesh) = &baked.meshes[i] {
                     add(group, mat, mesh.clone());
                 }
                 continue;
@@ -5985,7 +6145,7 @@ pub fn dress_buildings(
                 if let Some(m) = materials.get(&mat) {
                     stand_in.add(&mesh, crate::render::lod::far_colour(m));
                 }
-                if let Some(shaded) = &baked[i] {
+                if let Some(shaded) = &baked.meshes[i] {
                     mesh = shaded.clone();
                 }
             } else {
@@ -6031,6 +6191,23 @@ pub fn dress_buildings(
             }
             for (name, at) in &d.models {
                 let prims = cache.get(name, &mut props, &meshes).to_vec();
+                // Furniture lit as the spot in the room it stands in, the
+                // piece as one (its own shading and occlusion kept).
+                let lit = baked.light.as_ref().filter(|_| d.inside).and_then(|light| {
+                    let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+                    for (_, m) in &prims {
+                        if let Some(bevy::mesh::VertexAttributeValues::Float32x3(p)) =
+                            m.attribute(Mesh::ATTRIBUTE_POSITION)
+                        {
+                            for q in p {
+                                let q = at.transform_point(Vec3::from(*q));
+                                lo = lo.min(q);
+                                hi = hi.max(q);
+                            }
+                        }
+                    }
+                    (lo.x <= hi.x).then(|| super::ao::piece_light(light, lo, hi))
+                });
                 for (mat, mesh) in prims {
                     if crate::destruction::glass::drawn_by_panes(name, &mat) {
                         continue;
@@ -6044,6 +6221,10 @@ pub fn dress_buildings(
                             );
                         }
                     }
+                    let mut mesh = mesh.transformed_by(*at);
+                    if let Some(k) = lit {
+                        super::ao::tint(&mut mesh, k);
+                    }
                     add(
                         if below(at) {
                             BELOW
@@ -6055,7 +6236,7 @@ pub fn dress_buildings(
                             WINDOWS
                         },
                         mat,
-                        mesh.transformed_by(*at),
+                        mesh,
                     );
                 }
             }
