@@ -214,9 +214,62 @@ fn reload(g: &mut Firearm) -> Vec<FireEvent> {
                 ev.extend(cycle(g));
             }
         }
-        _ => {
-            *g = loaded(&def, Load::Standard);
+        // The same gun, not a fresh one: whatever's wrong with it stays.
+        ActionKind::SemiAuto => {
+            ev.extend(g.set_bolt_travel(1.0));
+            ev.extend(g.release_bolt());
+            let mut loads = Default::default();
+            g.strip_clip_of(def.internal_capacity, &mut loads);
             ev.push(FireEvent::RoundLoaded);
+            ev.extend(g.release_slide_stop());
+        }
+        ActionKind::BoltAction => {
+            ev.extend(g.set_handle_lift(1.0));
+            ev.extend(g.set_bolt_travel(1.0));
+            for _ in 0..def.internal_capacity.max(1) {
+                if g.load_round_of(Load::Standard) {
+                    ev.push(FireEvent::RoundLoaded);
+                }
+            }
+            ev.extend(g.set_bolt_travel(0.0));
+            ev.extend(g.set_handle_lift(0.0));
+        }
+        ActionKind::Pump => {
+            for _ in 0..4 {
+                if g.load_round_of(Load::Standard) {
+                    ev.push(FireEvent::RoundLoaded);
+                }
+            }
+            ev.extend(cycle(g));
+        }
+        ActionKind::BreakAction => {
+            ev.extend(g.set_break_open(true));
+            for b in 0..def.barrels {
+                g.unload_chamber(b);
+            }
+            if g.load_round_of(Load::Standard) {
+                ev.push(FireEvent::RoundLoaded);
+            }
+            ev.extend(g.set_break_open(false));
+        }
+        ActionKind::Revolver => {
+            ev.extend(g.set_gate(true));
+            for _ in 0..g.chambers.len() {
+                ev.extend(g.eject_at_gate());
+                if g.load_round_of(Load::Standard) {
+                    ev.push(FireEvent::RoundLoaded);
+                }
+                ev.extend(g.rotate_cylinder());
+            }
+            ev.extend(g.set_gate(false));
+        }
+        ActionKind::Crossbow => {
+            if !g.locked_back {
+                ev.extend(cycle(g));
+            }
+            if g.load_round_of(Load::Standard) {
+                ev.push(FireEvent::RoundLoaded);
+            }
         }
     }
     ev

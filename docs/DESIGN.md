@@ -1010,6 +1010,41 @@ feels from `rig::haptics::handling_feel`.
   ratchets a chamber round. A crossbow's string clicks onto its latch. A
   single-shot's round is felt going into the chamber by hand.
 
+### Every stoppage tells you its fix
+
+(`weapons/stoppages.rs`)
+
+A gun that stops tells you why, at the moment it happens. You hear it,
+you feel it in the trigger hand, and you see it at the port or on the
+gun. It takes the one clear a shooter would use. A wrong fix leaves it
+stopped and shows why. `every_stoppage_tells_you_its_fix` walks every
+catalog gun through every stoppage it can have, on the mechanism, and
+checks that each one:
+
+- stops the gun;
+- is heard, felt and seen unlike that gun's other stoppages;
+- is cleared by its own fix;
+- is not cleared by each wrong fix.
+
+| Stoppage | Heard | Felt | Seen | Clear | Wrong (and why) |
+|---|---|---|---|---|---|
+| Dud | the hammer's fall, dulled | a hard stop | a dented primer on a press check | work the action (on double action, pull again) | wait (nothing comes); pull again (the trigger's dead) |
+| Hang-fire | the fall and a primer's fizz | a long faint tremor | a thread of smoke from the action | keep it on the target and wait | open the action (the case bursts out of battery, hurting the hand) |
+| Stovepipe | the bolt stopping short, a pinched case | a sharp jolt | the case standing in the port, the bolt on it | rack | pull, tap (the case stays) |
+| Failure to feed | a light hollow clack, no brass | a dead little tick | the magazine hanging low, an empty chamber | tap, rack | rack alone (nothing feeds) |
+| Double feed | a dull jam and a grind | a long heavy grind | two rounds in the port, the bolt part open | drop the magazine, rack, seat, rack | rack, tap (they stay jammed) |
+| Short stroke | a smothered draw | a soft check | the action home on nothing, or on the case | work it fully | short again |
+| Squib | a weak pop, no crack | no kick | no flash; the bullet seen down the bore | rod the bore, then work it | fire on it (the barrel bulges) |
+| Stuck bolt | a dull clack | a hard stop at the handle | the handle down and unmoved | slap it up | lift gently (it grinds) |
+| Empty | a click, or the catch | a click, or the stop | held open, or the follower up | reload | work the action (nothing feeds) |
+| On safe | a creak | a soft dead stop | the selector on safe | selector off safe | pull harder |
+| Nagant gate open | a creak | a soft dead stop | the gate open | shut the gate | pull harder |
+| Crossbow string short | the string's slap | a slam | the string at rest, uncocked | draw it right onto the latch | draw short again |
+
+How often each stoppage happens depends on the gun's condition and dirt:
+`malfunction_chance`, the dud chance, `sticky_chance` and slam fire. So
+upkeep at the fabricator bench and cleaning decide it.
+
 ### Gunsmithing at the vice
 
 (`extraction_core::gunsmith`, `weapons/gunsmith.rs`)
