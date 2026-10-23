@@ -241,6 +241,11 @@ pub enum Event {
     /// The bolt or slide closed (went fully forward).
     BoltClosed,
     MagazineInserted,
+    /// A magazine pushed in too gently: it hangs on the catch, in sight
+    /// but not seated ([`Firearm::half_seat_magazine`]).
+    MagazineHalfSeated,
+    /// A half-seated magazine shaken out of the well by the action.
+    MagazineDropped,
     MagazineRemoved,
     /// A round was pushed into an internal magazine or a breech.
     RoundLoaded,
@@ -404,6 +409,10 @@ pub struct Firearm {
     /// bolt can't strip from it until it's tapped home.
     #[serde(default)]
     pub mag_unseated: bool,
+    /// The magazine went in too gently and hangs on its catch: it doesn't
+    /// feed, and the jolt of a rack drops it out (a tap seats it).
+    #[serde(default)]
+    pub mag_half: bool,
     /// A revolver: the chamber under the hammer (and at the gate).
     #[serde(default)]
     pub cylinder: usize,
@@ -484,6 +493,7 @@ impl Firearm {
             mode: 0,
             malfunction: None,
             mag_unseated: false,
+            mag_half: false,
             cylinder: 0,
             gate_open: false,
             rod: 0.0,
@@ -1180,6 +1190,13 @@ impl Firearm {
             self.stroke_cleared = !self.def.open_bolt;
         }
         if to > from {
+            // A half-seated magazine doesn't ride out the rack.
+            if self.mag_half && from < STRIP_AT && to >= STRIP_AT {
+                self.mag_half = false;
+                self.mag_unseated = false;
+                self.magazine = None;
+                events.push(Event::MagazineDropped);
+            }
             if from < COCK_AT && to >= COCK_AT {
                 for h in &mut self.hammers_cocked {
                     if !*h {
@@ -1420,12 +1437,23 @@ impl Firearm {
         }
         self.magazine = Some(mag);
         self.mag_unseated = false;
+        self.mag_half = false;
         Ok(vec![Event::MagazineInserted])
+    }
+
+    /// A magazine pushed in short of its catch: it's in the well, it won't
+    /// feed, and the action's jolt drops it; a tap seats it.
+    pub fn half_seat_magazine(&mut self, mag: Magazine) -> Result<Vec<Event>, Magazine> {
+        self.insert_magazine(mag)?;
+        self.mag_unseated = true;
+        self.mag_half = true;
+        Ok(vec![Event::MagazineHalfSeated])
     }
 
     /// Presses the mag release.
     pub fn remove_magazine(&mut self) -> Option<Magazine> {
         self.mag_unseated = false;
+        self.mag_half = false;
         self.magazine.take()
     }
 
@@ -1434,6 +1462,7 @@ impl Firearm {
     pub fn tap_magazine(&mut self) -> Vec<Event> {
         if self.magazine.is_some() && self.mag_unseated {
             self.mag_unseated = false;
+            self.mag_half = false;
             vec![Event::MagazineInserted]
         } else {
             Vec::new()
@@ -2028,6 +2057,31 @@ mod tests {
         let mut ev = gun.update(0.016, true, &mut r);
         ev.extend(gun.update(0.016, false, &mut r));
         (gun, ev)
+    }
+
+    #[test]
+    fn a_half_seated_magazine_feeds_nothing_and_drops_on_the_rack() {
+        let mag = || Magazine {
+            family: "ak545".into(),
+            capacity: 30,
+            rounds: 10,
+            ..Default::default()
+        };
+        let mut gun = Firearm::new(rifle(), 1.0);
+        assert_eq!(
+            gun.half_seat_magazine(mag()).unwrap(),
+            vec![Event::MagazineHalfSeated]
+        );
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::MagazineDropped), "{ev:?}");
+        assert!(!ev.contains(&Event::Chambered), "it fed nothing");
+        assert!(gun.magazine.is_none(), "it fell out");
+        // Tapped home before the rack, it feeds.
+        gun.half_seat_magazine(mag()).unwrap();
+        assert_eq!(gun.tap_magazine(), vec![Event::MagazineInserted]);
+        let ev = rack(&mut gun);
+        assert!(ev.contains(&Event::Chambered), "{ev:?}");
+        assert!(gun.magazine.is_some());
     }
 
     #[test]

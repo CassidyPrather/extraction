@@ -24,6 +24,9 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 536ba70 | 06:10 | 32/32 exit 0, no timeouts, 17 extracted (Marrow 7/8, Cinder 4/8, Kettle 2/4, Rime 2/4, Sallow 3/8; every death to drones) | 7 FAILED (the 6 below plus legibility's site signs), all within budget, 22 min | gauges 14/15 in 1328 s (first_contact: load and VRAM) |
+| 4fd146c | 03:30 | | 9 FAILED (lev k14, walker_loses_you, lev gifts, ledge trap, walker-to-flushed-birds, ducks, flock, double feed, recall table), 30 min | |
+| 823b12f | 01:00 | lost (container restart) | round 33's 6 by name: green | |
 | 77ce6f5 | 20:40 | 32/32 exit 0, 17 extracted (Kettle 3/4, Rime 3/4, Cinder 4/8, Marrow 4/8, Sallow 3/8); Cinder 7 boards now; Cinder 3 and Marrow 1 still time out in pockets | 6 FAILED (a_search, spotter, cloak, DeviceNoticed sound, clearance, item boxes); cellar tests pass; 31 min | gauges 16/17 (hold_rate), 51 min |
 | 98f85f0 | 17:40 | 32/32 exit 0, 3 timeouts (Cinder 7 can't board at Fire lookout; Cinder 3, Marrow 1 pockets); Kettle 4/4, Sallow 4/8, Marrow 3/8, Cinder 3/8, Rime 2/4 | 6 FAILED (cellars_cinder ×3, prefab clearance, item boxes, walker-looks-at-flock), all within budget, 30 min | gauges 16/16 in 22 min |
 | 85c9d1f | 15:20 | 24/24 exit 0: Marrow 3/8 with the BIG_SITE cap (was 0/8); Cinder seed 2 died underground with damage {} | 1 FAILED (`prefabs_stay_inside_their_clearance`), 36 min; 1 over budget (every_drowned_house 301 s, its cut not yet merged) | gauges 15/15 in 21 min |
@@ -50,19 +53,22 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 77ce6f5 (round 33); 823b12f (round 34) being checked.
+As of 536ba70 (round 36).
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `robots::mind_tests::a_search_takes_in_doorways_and_cover`, `robots::spotter::tests::it_sees_you_in_the_open_and_calls`, `gadgets::tests::a_running_cloak_hides_you_from_a_drone` | robot senses | Robot minds | routed by the coordinator |
-| `render::hold_rate::tests::gauge_busy_moments_drop_the_scale_and_it_comes_back` ("drone wreck: a run late and no drop"); the gauge tier took 51 min | | Performance (1500 s target) | routed |
-| `audio_machines::tests::the_dangers_are_heard` (no sound for DeviceNoticed), `prefabs_stay_inside_their_clearance`, `every_item_model_fits_its_box` (stock_mp133, stock_rpk74) | | Audio, World models, Weapon feel | pass on 823b12f per the coordinator's gate: to confirm |
-| Sim: Cinder seed 3 at (70-88, -8…-20) and Marrow seed 1 at (-1…-22, 90-96) time out in pockets | stuck_block can't get out | coordinator | after round 34 |
+| `render::legibility::tests::every_panel_in_the_game_clears_its_floor` ("Site sign: no TextSource" x16, Marrow, Kettle, Cinder) | new in round 36: hang_signs (848321a3) spawn ScreenText with no TextSource | Legibility | fix on claude/polish-legibility (TextSource::Sign) |
+| `render::first_contact::gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`: load over budget in every valley (Marrow 7.31 > 6.0 s, Sallow 6.96 > 4.5 s), GPU over 2048 MB in four (Marrow 2226) | gauge | Performance | routed |
+| `raid::epilogue::tests::lev_reaches_k14_...`, `soak::ledges::tests::no_valley_has_a_ledge_trap` (water tower) | | coordinator | routed |
+| `robots::recall::tests::every_robot_keyed_local_is_in_the_table`, `robots::mind_tests::a_walker_loses_you_behind_a_building_...` | | Robot minds | fixed in ec98936b, not merged |
+| `wildlife::ducks::...flushed_ducks_fly_off...`, `wildlife::flock::...birds_never_go_inside_walls...` (Marrow) | | Wildlife | routed |
+| Sim: Sallow 3/8, every death to drones | balance | Fourth valley | noted |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| lev gifts, walker-to-flushed-birds, double feed (failed on 4fd146c); Cinder 3 and Marrow 1 pocket timeouts; round 33's robot senses, hold_rate, DeviceNoticed, clearance, item boxes | 536ba70 | owners, coordinator |
 | cellars_cinder ×3 (warm heat shut for every plan), Cinder 7 couldn't board at Fire lookout | 77ce6f5 | coordinator |
 | sim telemetry dropped every unclaimed loss under 0.05 hp a tick (gas, heat, slow bleeding: a death of "nothing"); heat and gas now named | d5c2291e (round 32), 19e8be63 (round 33) | Verifier |
 | the raider waded into live water (Cinder seed 4 now extracts); telemetry names live water | 5955943 / a1edafef | coordinator, Underground, Verifier |
@@ -88,3 +94,7 @@ As of 77ce6f5 (round 33); 823b12f (round 34) being checked.
 - A fresh container may lack the system packages: `scripts/cloud-setup.sh`
   lists them (`mold`, `libudev-dev`, `libasound2-dev`, `mesa-vulkan-drivers`
   ...). Without `mold` every build fails at the first link.
+- Without `etcpak` (pip) no BC7 copies are baked and the game loads the
+  RGBA8 textures, so `first_contact`'s load and VRAM read 2-4x high (round
+  36). `cloud-setup.sh` installs it now; in an older container run
+  `pip install etcpak && python3 scripts/bc7_textures.py`.

@@ -46,6 +46,8 @@ pub const FLUSH_CROUCHED: f32 = 0.6;
 pub const FLUSH_WALKER: f32 = 55.0;
 pub const FLUSH_DRONE: f32 = 70.0;
 pub const FLUSH_DIRIGIBLE: f32 = 110.0;
+/// Something thrown that lands this near a sitting flock puts it up (m).
+pub const THROWN_NEAR: f32 = 6.0;
 /// A loud noise (one heard at least [`LOUD`] m off: a shot, a blast)
 /// flushes every flock within this share of its reach.
 pub const FLUSH_NOISE: f32 = 0.6;
@@ -408,6 +410,8 @@ pub struct Ctx<'a> {
     pub threats: &'a [Threat],
     /// Loud noises this tick: where, and how near scares a flock.
     pub loud: &'a [(Vec3, f32)],
+    /// Where thrown things came down this tick.
+    pub thrown: &'a [Vec3],
     /// Sites flocks are on or headed for.
     pub occupied: &'a [usize],
     pub night: bool,
@@ -460,6 +464,12 @@ impl Flock {
                     FlushCause::Noise,
                     Some((p, Entity::PLACEHOLDER)),
                 ));
+            } else if let Some(&p) = ctx.thrown.iter().find(|p| p.distance(at) < THROWN_NEAR) {
+                flushed = Some(self.flush(
+                    ctx.perches,
+                    FlushCause::Thrown,
+                    Some((p, Entity::PLACEHOLDER)),
+                ));
             }
         }
         if self.phase == Phase::Settled && !ctx.night {
@@ -484,9 +494,11 @@ pub(crate) fn flocks(
     zone: Res<Zone>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     mut noises: MessageReader<crate::robots::Noise>,
+    landed: Res<super::Landed>,
     mut flushed: MessageWriter<Flushed>,
     time: Res<Time>,
 ) {
+    let thrown = &landed.0;
     let (Some(perches), Some(obstacles)) = (perches, obstacles) else {
         return;
     };
@@ -506,6 +518,7 @@ pub(crate) fn flocks(
         zone: &zone,
         threats: &threats.0,
         loud: &loud,
+        thrown,
         occupied: &occupied,
         night: conditions
             .as_ref()
@@ -584,7 +597,8 @@ impl Flock {
                 };
             }
         }
-        let alarm = cause == FlushCause::Player && self.alarm_cool <= 0.0;
+        let alarm =
+            matches!(cause, FlushCause::Player | FlushCause::Thrown) && self.alarm_cool <= 0.0;
         if alarm {
             self.alarm_cool = ALARM_EVERY;
         }
@@ -996,6 +1010,7 @@ mod tests {
             zone,
             threats,
             loud,
+            thrown: &[],
             occupied: &occupied,
             night: false,
         };
@@ -1234,6 +1249,7 @@ mod heron_tests {
                 zone: &zone,
                 threats: &threats,
                 loud: &[],
+                thrown: &[],
                 occupied: &[],
                 night: false,
             };

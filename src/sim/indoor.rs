@@ -27,6 +27,10 @@ pub const SITE_CLEARANCE: f32 = 0.28;
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
 const BAND: (f32, f32) = (0.42, 1.75);
+/// A wall this thin whose top stands this far over the ground it stands
+/// on is a sill nobody climbs from outside, whatever the floor inside.
+const SILL_THIN: f32 = 0.5;
+const SILL_STEP: f32 = 0.45;
 /// How far an open door has swung, radians (`swing_doors`: 1.75 per unit).
 const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
@@ -328,7 +332,7 @@ pub fn plan_buildings(
             {
                 continue;
             }
-            if let Some(ob) = obstacle(piece.shape, piece.at, under) {
+            if let Some(ob) = obstacle(piece.shape, piece.at, under, geo.floor.is_some()) {
                 grid.block(ob, CLEARANCE);
             }
         }
@@ -583,7 +587,7 @@ fn plan_site(
         };
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
-        if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
+        if let Some(ob) = obstacle(piece.shape, piece.at, floor, false) {
             grid.block(ob, SITE_CLEARANCE);
         }
     }
@@ -828,7 +832,7 @@ fn surface_under(shape: Shape, at: Transform, p: Vec2, from: f32) -> Option<f32>
     (t0 <= t1 && t0 >= 0.0).then(|| from - t0)
 }
 
-fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
+fn obstacle(shape: Shape, at: Transform, floor: f32, sills: bool) -> Option<Obstacle> {
     let (size, circle) = match shape {
         Shape::Box(s) => (s, None),
         Shape::Prism(s) => (Vec3::new(s.x, s.y * 0.5, s.z), None),
@@ -845,7 +849,14 @@ fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
             }
         }
     }
-    if hi.y < floor + BAND.0 || lo.y > floor + BAND.1 {
+    // A floor raised over the ground (`sills`: a drowned house's silt, its
+    // `Geo::floor`) puts a window's sill at its knee: from inside a step
+    // out, from outside a climb no walker makes. A thin wall standing more
+    // than a step over the ground outside blocks, however low it is over
+    // the floor.
+    let thin = (hi.x - lo.x).min(hi.z - lo.z) < SILL_THIN;
+    let sill = sills && thin && hi.y > SILL_STEP && hi.y < floor + BAND.0;
+    if !sill && (hi.y < floor + BAND.0 || lo.y > floor + BAND.1) {
         return None;
     }
     let c = at.translation;
@@ -1291,6 +1302,10 @@ mod tests {
             let mut failed = Vec::new();
             let mut tried = 0;
             for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
+                // An underground site's spots are tried too, from its own
+                // plan (each on its own side of a gallery's wall).
+                let site = extraction_core::underground::layout(&plan.name).is_some();
+                let before = tried;
                 for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
                     if !plan.reachable_height(*spot) || behind_the_works(plan, *spot) {
                         continue;
@@ -1310,6 +1325,9 @@ mod tests {
                             ))
                         }
                     }
+                }
+                if site && tried == before {
+                    failed.push(format!("{map} {}: none of its loot spots tried", plan.name));
                 }
             }
             assert!(tried > 0, "{map}: no loot spots tried");
