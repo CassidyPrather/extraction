@@ -55,7 +55,7 @@ struct Tour {
 const SETTLE: u32 = 6;
 
 /// Prefabs you walk into.
-fn has_inside(prefab: &str) -> bool {
+pub(crate) fn has_inside(prefab: &str) -> bool {
     !matches!(
         prefab,
         "radio_mast"
