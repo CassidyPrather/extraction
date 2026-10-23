@@ -24,6 +24,8 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| c495f9f | 02:30 | 32/32 exit 0, 18 extracted (Marrow 6/8, Sallow 5/8, Cinder 3/8, Kettle 2/4, Rime 2/4); Cinder seed 5 timed out 6.5 m under the ground at (64-72, -23..-30), 1000 s on to_rv | 5 FAILED (Lev k14, ducks, flock, two pane tests), 22 min | gauges 15/16 in 1898 s (first_contact load: this machine, 1.2-1.5x slower); BC7/BC5 copies baked |
+| 191e4bd | 01:30 | not run (main moved) | 10 FAILED (7 since fixed by c495f9f), 23 min | gauges cut short |
 | 536ba70 | 06:10 | 32/32 exit 0, no timeouts, 17 extracted (Marrow 7/8, Cinder 4/8, Kettle 2/4, Rime 2/4, Sallow 3/8; every death to drones) | 7 FAILED (the 6 below plus legibility's site signs), all within budget, 22 min | gauges 14/15 in 1328 s (first_contact: load and VRAM) |
 | 4fd146c | 03:30 | | 9 FAILED (lev k14, walker_loses_you, lev gifts, ledge trap, walker-to-flushed-birds, ducks, flock, double feed, recall table), 30 min | |
 | 823b12f | 01:00 | lost (container restart) | round 33's 6 by name: green | |
@@ -53,21 +55,22 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 536ba70 (round 36).
+As of c495f9f (round 39).
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::legibility::tests::every_panel_in_the_game_clears_its_floor` ("Site sign: no TextSource" x16, Marrow, Kettle, Cinder) | new in round 36: hang_signs (848321a3) spawn ScreenText with no TextSource | Legibility | fix on claude/polish-legibility (TextSource::Sign) |
-| `render::first_contact::gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter`: load over budget in every valley (Marrow 7.31 > 6.0 s, Sallow 6.96 > 4.5 s), GPU over 2048 MB in four (Marrow 2226) | gauge | Performance | routed |
-| `raid::epilogue::tests::lev_reaches_k14_...`, `soak::ledges::tests::no_valley_has_a_ledge_trap` (water tower) | | coordinator | routed |
-| `robots::recall::tests::every_robot_keyed_local_is_in_the_table`, `robots::mind_tests::a_walker_loses_you_behind_a_building_...` | | Robot minds | fixed in ec98936b, not merged |
-| `wildlife::ducks::...flushed_ducks_fly_off...`, `wildlife::flock::...birds_never_go_inside_walls...` (Marrow) | | Wildlife | routed |
-| Sim: Sallow 3/8, every death to drones | balance | Fourth valley | noted |
+| `destruction::tests::a_thrown_thing_breaks_a_pane_and_a_slow_one_doesnt`, `a_walker_walking_into_a_pane_breaks_it` | `open_pane` took the first pane in query order, which moved with the layouts | Destruction | fixed on claude/polish-destruction, not merged |
+| `wildlife::ducks::...flushed_ducks_fly_off...`, `wildlife::flock::...birds_never_go_inside_walls...` (Marrow) | | Wildlife | fixed in 64423138 (tip 4e4ebb8e), not merged |
+| `raid::epilogue::tests::lev_reaches_k14_...` (Lev stops at (-216, 15, -194)) | | Story | routed |
+| `render::first_contact` gauge: load over in Marrow 6.48 > 6.0 s, Sallow 4.93 > 4.5 s | this machine (4 cores, 1.2-1.5x Performance's times, every valley alike) | Performance | gauges run with LOAD_SLACK=1.5 from round 40; budgets to be normalised |
+| the gauge tier took 1898 s (target 1500): new `stress` every_valley_worst_minute 516 s, `vr_budget` every_valley 627 s (was 123) | | Performance | routed |
+| Sim: Cinder seed 5 stuck 6.5 m under ground at (64-72, -23..-30) going to the RV | stuck_block can't get out | coordinator | routed |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| legibility site signs, Cinder water_tower ledge trap, recall table, walker_loses_you, crawler_hears_round_a_corner, what_a_machine_breaks, haptics button; first_contact VRAM (it was RGBA8 without etcpak) | c495f9f | Legibility, World models, Robot minds, Hands, Performance |
 | lev gifts, walker-to-flushed-birds, double feed (failed on 4fd146c); Cinder 3 and Marrow 1 pocket timeouts; round 33's robot senses, hold_rate, DeviceNoticed, clearance, item boxes | 536ba70 | owners, coordinator |
 | cellars_cinder ×3 (warm heat shut for every plan), Cinder 7 couldn't board at Fire lookout | 77ce6f5 | coordinator |
 | sim telemetry dropped every unclaimed loss under 0.05 hp a tick (gas, heat, slow bleeding: a death of "nothing"); heat and gas now named | d5c2291e (round 32), 19e8be63 (round 33) | Verifier |
