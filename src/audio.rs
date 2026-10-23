@@ -322,6 +322,8 @@ impl Plugin for AudioPlugin {
             .init_resource::<HushNow>()
             .add_plugins(crate::audio_kit::KitSoundsPlugin)
             .add_plugins(crate::audio_fight::FightSoundsPlugin)
+            .add_plugins(crate::audio_machines::MachineSoundsPlugin)
+            .init_resource::<crate::hearing::Hearing>()
             .init_resource::<Binaural>()
             .add_observer(place)
             .add_systems(Startup, (load_bank, load_hrir))
@@ -526,8 +528,40 @@ pub const HRTF_VOICES: usize = 24;
 
 /// Past this distance (m) a placed sound is panned: far off, its muffle
 /// and reverb tell where it is more than the ears' filter does, and the
-/// voices are kept for what's near.
+/// voices are kept for what's near...
 pub const BINAURAL_REACH: f32 = 40.0;
+/// ...except a Signal (a threat: a drone, a walker's gait, a sentry's
+/// chirp), which keeps the ears' filter as far as it matters: panned, a
+/// drone at 60 m is no more ahead than behind, nor above
+/// (`scripts/audio_localise.py`).
+pub const SIGNAL_BINAURAL_REACH: f32 = 150.0;
+
+/// How far a placed sound playing `cue` keeps the head-related filter.
+pub fn binaural_reach(cue: &str) -> f32 {
+    if mix::MIX
+        .iter()
+        .any(|c| c.name == cue && c.role == mix::Role::Signal)
+    {
+        SIGNAL_BINAURAL_REACH
+    } else {
+        BINAURAL_REACH
+    }
+}
+
+/// Panned (flat mode, or past its binaural reach), a sound straight
+/// behind you is muffled to this (Hz), easing in from your side: the
+/// pinna's shade, so front and back still differ without the ears'
+/// filter.
+pub const BEHIND_CUTOFF: f32 = 5_000.0;
+
+/// The panner's muffle (Hz) for a sound in direction `to` (from you) with
+/// you facing `facing`: none ahead or beside, [`BEHIND_CUTOFF`] straight
+/// behind, eased between in octaves.
+pub fn behind_cutoff(facing: Vec3, to: Vec3) -> f32 {
+    let (f, t) = (facing.xz().normalize_or_zero(), to.xz().normalize_or_zero());
+    let behind = (-f.dot(t)).clamp(0.0, 1.0);
+    (20_480f32.log2() + (BEHIND_CUTOFF.log2() - 20_480f32.log2()) * behind).exp2()
+}
 
 /// The head-related filter's FFT slices: 128-sample slices of a 385-tap
 /// sphere make 512-point FFTs (`scripts/audio_hrir.py`, TAPS).
@@ -570,9 +604,10 @@ fn binaural_switch(
 }
 
 /// Whether a placed sound `distance` m off, with `voices` already
-/// binaural, is heard through the head-related filter.
-pub fn binaural_voice(on: bool, voices: usize, distance: f32) -> bool {
-    on && voices < HRTF_VOICES && distance < BINAURAL_REACH
+/// binaural, is heard through the head-related filter, out to `reach`
+/// ([`binaural_reach`]).
+pub fn binaural_voice(on: bool, voices: usize, distance: f32, reach: f32) -> bool {
+    on && voices < HRTF_VOICES && distance < reach
 }
 
 fn place(
@@ -596,7 +631,14 @@ fn place(
     };
     let mut e = commands.entity(add.entity);
     match binaural.sphere.as_ref() {
-        Some(sphere) if binaural_voice(binaural.on, voices.iter().count(), distance) => {
+        Some(sphere)
+            if binaural_voice(
+                binaural.on,
+                voices.iter().count(),
+                distance,
+                binaural_reach(cue),
+            ) =>
+        {
             e.insert((
                 BinauralVoice,
                 sample_effects![
@@ -1372,8 +1414,8 @@ fn hit_sounds(
             }
             continue;
         }
-        // Out of the far side: the surface faces along the round.
-        let exit = i.entity.is_some() && i.normal.dot(i.velocity) > 0.0;
+        // Out of the far side (a door, a drone's shell, a plank).
+        let exit = crate::weapons::impacts::is_exit(i);
         let trim = if exit { -6.0 } else { 0.0 };
         let (set, cue, speed) = match i.kind {
             K::Masonry => ("impacts/concrete", "hit.impact", 1.0),
@@ -1414,6 +1456,28 @@ fn hit_sounds(
             if exit { speed * 0.9 } else { speed },
             0.08,
         );
+        // Out through steel, a plank or a wall, it throws spall out of
+        // the far side: a spray of bits clattering just past the hole
+        // (`hit.spall`).
+        let spall = match i.kind {
+            K::Metal | K::Robot => Some(("physical/drop_metal", 1.7)),
+            K::Wood => Some(("impacts/wood", 1.4)),
+            K::Masonry => Some(("impacts/concrete", 1.5)),
+            _ => None,
+        };
+        if let Some((set, speed)) = spall.filter(|_| exit) {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(i.point + i.velocity.normalize_or_zero() * 0.4),
+                "hit.spall",
+                trim + 6.0,
+                speed,
+                0.12,
+            );
+        }
     }
     // A round glancing off at a graze (`ballistics::Ricochet`): the whine,
     // a little along the way it left.
@@ -2119,6 +2183,11 @@ fn anomaly_loops(
                     }
                     // Dead air: nothing to hear (Anomalies).
                     extraction_core::anomaly::AnomalyKind::Hush => continue,
+                    // A frost's thin crystal tinkle over the ice's creak
+                    // (a stand-in, `synth_foley`): a tell at a few metres.
+                    extraction_core::anomaly::AnomalyKind::Frost => {
+                        ("anomaly/frost", "anomaly.frost")
+                    }
                 };
                 if let Some(sample) = bank.pick(set, &mut rng.0) {
                     commands.entity(e).with_child((
@@ -4964,8 +5033,8 @@ fn room_acoustics(
 }
 
 /// A placed sound heard round or through what's between it and you
-/// (`acoustics::occlusion`, the robots' rule): checked as it starts, and
-/// every quarter second for loops, a few rays a frame.
+/// (`hearing::Hearing::path`, the robots' rule): checked as it starts,
+/// and every quarter second for loops.
 #[derive(Component)]
 struct Occluded {
     next: f32,
@@ -4989,25 +5058,19 @@ fn occlude(
     mut volumes: Query<&mut VolumeNode>,
     listener: Query<&GlobalTransform, With<SpatialListener3D>>,
     hush: Res<HushNow>,
+    hearing: Res<crate::hearing::Hearing>,
+    zone: Option<Res<Zone>>,
     spatial: SpatialQuery,
-    doors: Query<&crate::world::buildings::Door>,
-    entrances: Option<Res<crate::robots::doors::Entrances>>,
     time: Res<Time>,
 ) {
-    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+    let blocked = |a: Vec3, b: Vec3| crate::acoustics::blocked(&spatial, a, b);
+    let Some(head) = listener.iter().next() else {
         return;
     };
+    let (ear, facing) = (head.translation(), head.forward().as_vec3());
     let now = time.elapsed_secs();
-    let openings: Vec<Vec3> = entrances
-        .map(|e| {
-            e.doors
-                .iter()
-                .filter(|d| crate::robots::doors::is_open(doors.get(d.door).ok()))
-                .map(|d| d.mid)
-                .collect()
-        })
-        .unwrap_or_default();
-    let mut budget = 24;
+    // Each a table read (`hearing`), but a frame needn't redo them all.
+    let mut budget = 128;
     for (e, gt, effects, player, occluded) in &players {
         let due = match occluded {
             None => true,
@@ -5018,14 +5081,18 @@ fn occlude(
         if !due || budget == 0 {
             continue;
         }
+        // The way the robots hear it too (`hearing`): round doors, through
+        // walls by what they're built of, up through floors and rock.
         let o = || {
-            let mut o = crate::acoustics::occlusion(&spatial, &openings, gt.translation(), ear);
+            let mut o = hearing.path(zone.as_deref(), gt.translation(), ear, Some(&blocked));
             o.cutoff = o.cutoff.min(hush.cutoff);
             o
         };
         if let Ok(mut node) = nodes.get_effect_mut(effects) {
             budget -= 1;
-            let o = o();
+            let mut o = o();
+            // Panned: what's behind you, shaded as the pinna would.
+            o.cutoff = o.cutoff.min(behind_cutoff(facing, gt.translation() - ear));
             let v = Volume::Decibels(o.db);
             if node.volume != v {
                 node.volume = v;
@@ -5638,10 +5705,31 @@ mod tests {
     /// far ones, or past the cap, or in flat mode, pan.
     #[test]
     fn binaural_is_for_what_is_near() {
-        assert!(binaural_voice(true, 0, 3.0));
-        assert!(!binaural_voice(false, 0, 3.0));
-        assert!(!binaural_voice(true, HRTF_VOICES, 3.0));
-        assert!(!binaural_voice(true, 0, BINAURAL_REACH + 1.0));
+        let near = BINAURAL_REACH;
+        assert!(binaural_voice(true, 0, 3.0, near));
+        assert!(!binaural_voice(false, 0, 3.0, near));
+        assert!(!binaural_voice(true, HRTF_VOICES, 3.0, near));
+        assert!(!binaural_voice(true, 0, BINAURAL_REACH + 1.0, near));
+        // A threat keeps the ears' filter further; a detail doesn't.
+        assert_eq!(binaural_reach("drone.rotor"), SIGNAL_BINAURAL_REACH);
+        assert_eq!(binaural_reach("gear.plate"), BINAURAL_REACH);
+        assert!(binaural_voice(
+            true,
+            0,
+            100.0,
+            binaural_reach("drone.rotor")
+        ));
+    }
+
+    /// Panned, a sound behind you is muffled, one ahead or beside isn't.
+    #[test]
+    fn the_panner_darkens_what_is_behind() {
+        let ahead = Vec3::NEG_Z;
+        assert!(behind_cutoff(ahead, Vec3::NEG_Z) > 20_000.0);
+        assert!(behind_cutoff(ahead, Vec3::X) > 20_000.0);
+        assert!((behind_cutoff(ahead, Vec3::Z) - BEHIND_CUTOFF).abs() < 1.0);
+        let half = behind_cutoff(ahead, Vec3::new(1.0, 0.0, 1.0));
+        assert!(BEHIND_CUTOFF < half && half < 20_000.0);
     }
 
     /// Heavier sounds louder and lower, within bounds.

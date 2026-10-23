@@ -96,6 +96,9 @@ pub struct LaunchOptions {
     /// Dev: shoot up to three of each interactable kind from 1.5 m, with and
     /// without it, into this folder (`render::wayfind_shots`).
     pub afford: Option<PathBuf>,
+    /// Dev, with `--wayfind`: shoot only the landmarks' lamps, each from
+    /// `render::wayfind_shots::LAMP_AT` metres off (`--wayfind-lamps DIR`).
+    pub wayfind_lamps: bool,
     /// The map was named on the command line (otherwise a saved career
     /// picks it: wherever the truck was headed).
     pub map_explicit: bool,
@@ -157,6 +160,7 @@ impl Default for LaunchOptions {
             legibility: None,
             wayfind: None,
             afford: None,
+            wayfind_lamps: false,
             camp: false,
             bot: false,
             scenario: None,
@@ -314,6 +318,14 @@ impl LaunchOptions {
                 }
                 "--wayfind" => {
                     o.wayfind = Some(val().into());
+                    o.robots = false;
+                    o.flat = true;
+                    o.camera
+                        .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
+                }
+                "--wayfind-lamps" => {
+                    o.wayfind = Some(val().into());
+                    o.wayfind_lamps = true;
                     o.robots = false;
                     o.flat = true;
                     o.camera

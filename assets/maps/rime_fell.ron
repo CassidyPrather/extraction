@@ -299,6 +299,8 @@
         (kind: Anomaly(kind: "Well", radius: 2.0), at: (-70.0, -125.0), name: "Crown hole well"),
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (160.0, -160.0), name: "Tarn mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (-212.0, 150.0), name: "Gallery hush"),
+        (kind: Anomaly(kind: "Frost", radius: 3.0), at: (10.0, -270.0), name: "Col frost"),
+        (kind: Anomaly(kind: "Frost", radius: 3.0), at: (80.0, -190.0), name: "Scree frost"),
         (kind: Offering, at: (-80.0, 34.0), name: "The miners' shrine"),
         (kind: Offering, at: (30.0, -230.0), name: "The cairn on the col"),
         (kind: WorkSite, at: (60.0, -110.0), name: "Upper slopes site"),

@@ -120,7 +120,7 @@ pub fn spring_hounds(
 }
 
 /// The bite: a short, heavy round from its jaws at whoever it reached.
-/// (Shots from a hound make no gunshot noise: `senses::gunshot_noise`.)
+/// (Shots from a hound make no gunshot noise: `weapons::report`.)
 pub fn bite(e: Entity, from: Vec3, target: Vec3, seed: u64, shots: &mut MessageWriter<Shot>) {
     let to = (target - from).normalize_or(Vec3::NEG_Z);
     shots.write(Shot {

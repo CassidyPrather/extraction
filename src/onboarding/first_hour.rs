@@ -286,7 +286,9 @@ use crate::raid::requests::RequestCard;
 use crate::raid::truck::Stash;
 use crate::raid::{Phase, Raid};
 use crate::rig::{LocalPlayer, Side};
+use extraction_core::contracts::Subject;
 use extraction_core::map::MarkerKind;
+use extraction_core::progression::{Job, LEDGER_ITEM, LETTER_ITEM, RECOVER_ITEM, fetch_takes};
 
 use super::firsts::{First, FirstMet};
 use super::second_hour::World2;
@@ -320,7 +322,54 @@ enum Leg {
     Call,
     Rendezvous,
     Board,
+    /// Home: the card pressed, for the job's pay.
+    Paid,
     Done,
+}
+
+/// What a job asks of a newcomer, the way one goes about it. Every kind of
+/// job has one (`every_job_kind_has_a_way`): the first-hour record never
+/// stops at a job the newcomer can't do.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Errand {
+    /// Go and look (a scout): the driver says when it's seen.
+    Look,
+    /// Find `n` of what `want` stands for (round `near`, where the card
+    /// says), bring them home, into the stash crate.
+    Bring {
+        want: String,
+        n: u32,
+        near: Option<Vec2>,
+    },
+    /// Take `item` there and leave it, then home.
+    Leave { item: String, at: Vec2 },
+    /// Take a photograph of a machine, then home.
+    Photo(Subject),
+}
+
+pub(super) fn errand(job: &Job) -> Errand {
+    let bring = |want: &str, near: Option<[f32; 2]>| Errand::Bring {
+        want: want.to_owned(),
+        n: 1,
+        near: near.map(Vec2::from),
+    };
+    match job {
+        Job::Scout { .. } => Errand::Look,
+        Job::Fetch { item, n } => Errand::Bring {
+            want: item.clone(),
+            n: *n,
+            near: None,
+        },
+        Job::Recover { at, .. } => bring(RECOVER_ITEM, *at),
+        Job::Letter => bring(LETTER_ITEM, None),
+        Job::Ledger => bring(LEDGER_ITEM, None),
+        Job::Bring { item, at, .. } => bring(item, Some(*at)),
+        Job::Plant { item, at, .. } => Errand::Leave {
+            item: item.clone(),
+            at: Vec2::from(*at),
+        },
+        Job::Photograph { subject, .. } => Errand::Photo(*subject),
+    }
 }
 
 #[derive(Default)]
@@ -340,6 +389,18 @@ pub(super) struct Newcomer {
     heard: Vec<String>,
     /// What the log held last frame.
     showing: Vec<String>,
+    /// The job card, as read.
+    card: String,
+    /// Back at the gate to call (the card said so).
+    at_gate: bool,
+    /// Jobs done when it got home (pressing the card adds one).
+    done_home: Option<u32>,
+    /// Keeping low till then (backing off behind cover).
+    low_until: f32,
+    /// What the job asks.
+    errand: Option<Errand>,
+    /// Getting what it brought into the crate.
+    crating: Option<crate::bot::crating::Crating>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -367,13 +428,16 @@ fn place_on_card(text: &str, zone: &crate::world::Zone) -> Option<(String, Vec2)
             .to_lowercase()
     };
     let text = flat(text);
+    // The job, not the driver's cache under it; and the place it names
+    // first (the longest name where two start there: "the old farm road").
+    let job = text.split("my cache").next().unwrap_or(&text);
     zone.map
         .markers
         .iter()
         .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
-        .filter(|m| text.contains(&flat(&m.name)))
-        .max_by_key(|m| m.name.len())
-        .map(|m| (m.name.clone(), Vec2::from(m.at)))
+        .filter_map(|m| job.find(&flat(&m.name)).map(|i| (i, m)))
+        .min_by_key(|(i, m)| (*i, std::cmp::Reverse(m.name.len())))
+        .map(|(_, m)| (m.name.clone(), Vec2::from(m.at)))
 }
 
 /// What a line gives of a place's way and distance ("north-east, 200 m"),
@@ -407,7 +471,18 @@ fn heading_in(line: &str) -> Option<(Vec2, f32)> {
 #[derive(bevy::ecs::system::SystemParam)]
 pub(super) struct RaidView<'w, 's> {
     stash: Query<'w, 's, &'static Backpack, With<Stash>>,
-    card: Query<'w, 's, &'static ScreenText, With<RequestCard>>,
+    card: Query<'w, 's, (Entity, &'static ScreenText), With<RequestCard>>,
+    progression: Option<Res<'w, crate::progression::Progression>>,
+    entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
+    robots: Query<
+        'w,
+        's,
+        (
+            &'static crate::robots::Robot,
+            &'static GlobalTransform,
+            Option<&'static crate::robots::Breed>,
+        ),
+    >,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -434,8 +509,9 @@ pub(super) fn direct_raid(
     view: RaidView,
     raid: Res<Raid>,
     mut met: MessageReader<FirstMet>,
-    fight: Option<Res<Fight>>,
+    mut fight: Option<ResMut<Fight>>,
     mut state: Local<Newcomer>,
+    crates: crate::bot::crating::CrateWorld,
     time: Res<Time>,
 ) {
     if opts.scenario.as_deref() != Some(RAID) {
@@ -450,11 +526,15 @@ pub(super) fn direct_raid(
     let now = time.elapsed_secs();
     let here = root.translation.xz();
     // A cautious newcomer creeps once it's out.
-    let creep = p.reads && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
+    // Running for it, as told: upright and fast.
+    let fleeing = fight.as_ref().is_some_and(|f| f.flee_until > now);
+    let creep = (p.reads || state.low_until > now)
+        && !fleeing
+        && !matches!(state.leg, Leg::Camp | Leg::Kit | Leg::Card | Leg::Board);
     if input.crouch != creep {
         input.crouch = creep;
     }
-    bot.sprint = p.sprint;
+    bot.sprint = p.sprint || fleeing;
 
     // Heard: what the driver says is what it knows.
     let showing: Vec<String> = raid.log.iter().map(|(l, _)| l.clone()).collect();
@@ -469,8 +549,35 @@ pub(super) fn direct_raid(
         state.note(now, Kind::Learned, format!("{f:?}: {}", f.lines()[0]));
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
-            First::Heard | First::DroneLock if !p.reckless => {
-                vec![Task::Wait(15.0)]
+            First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Run across it, to cover", "Break its line", "Down, out of
+            // its sweep": for it, as told.
+            // "Down, out of its sweep": low, and away from it (a sentry
+            // doesn't come after you).
+            First::Sentry if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                state.low_until = now + 25.0;
+                run_for_cover(&world.zone, here, from, 1.0)
+            }
+            First::DroneLock | First::Aimed if !p.reckless && !p.hoards => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y * 20.0);
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = now + 12.0;
+                }
+                let overhead = *f == First::DroneLock;
+                overhead
+                    .then(|| under_a_roof(view.entrances.as_deref(), here))
+                    .flatten()
+                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
+            }
+            // "Low behind it, and keep still": a still shape behind cover
+            // isn't glimpsed; a moving one is, and found.
+            First::ComingToLook if !p.reckless && !p.hoards => {
+                if let Some(f) = fight.as_mut() {
+                    f.flee_until = 0.0;
+                }
+                state.low_until = now + 30.0;
+                vec![Task::Wait(30.0)]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -642,6 +749,41 @@ pub(super) fn direct_raid(
                     tasks.push(Task::Stow(Side::Right));
                 }
             }
+            state.errand = view
+                .progression
+                .as_ref()
+                .and_then(|p| p.0.job.as_ref())
+                .map(errand);
+            // What the driver hands through the hatch for it (a thing to
+            // leave, a camera): off the ledge, into a pocket.
+            let handed = match &state.errand {
+                Some(Errand::Leave { item, .. }) => Some(item.clone()),
+                Some(Errand::Photo(_)) => Some("camera".to_owned()),
+                _ => None,
+            };
+            if let Some(id) = handed {
+                let near_truck = |p: Vec3| p.xz().distance(at_truck(0.0, 0.0)) < 6.0;
+                if let Some((e, ..)) = world.items.iter().find(|(e, it, gt, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && near_truck(gt.translation())
+                        && world.catalog.get(it.kind()).id.starts_with(id.as_str())
+                        && !view.stash.iter().any(|b| b.contents.contains(e))
+                }) {
+                    tasks.push(Task::Grab {
+                        item: e,
+                        side: Side::Right,
+                    });
+                    tasks.push(Task::Stow(Side::Right));
+                } else {
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        format!("no {id} handed over for the job"),
+                    );
+                }
+            }
             state.leg = Leg::Card;
         }
         Leg::Card => {
@@ -649,11 +791,12 @@ pub(super) fn direct_raid(
                 .card
                 .iter()
                 .next()
-                .map(|c| c.text.clone())
+                .map(|(_, c)| c.text.clone())
                 .unwrap_or_default();
             if p.reads {
                 tasks.push(Task::Wait(4.0));
             }
+            state.card = text.split_whitespace().collect::<Vec<_>>().join(" ");
             match place_on_card(&text, &world.zone) {
                 Some((name, at)) => {
                     state.note(
@@ -670,6 +813,17 @@ pub(super) fn direct_raid(
                     }
                     state.goal = Some((name, at));
                     state.leg = Leg::Out;
+                }
+                None if matches!(state.errand, Some(Errand::Bring { near: None, .. })) => {
+                    // A fetch: no place, things to find anywhere.
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("the job card: {}", text.replace('\n', " ")),
+                    );
+                    state.goal = None;
+                    tasks.extend(world.legs(here, at_truck(0.0, 4.0)));
+                    state.leg = Leg::Place;
                 }
                 None => {
                     state.note(
@@ -726,6 +880,25 @@ pub(super) fn direct_raid(
             state.note(now, Kind::Learned, format!("on to {name}"));
             state.leg = Leg::Place;
         }
+        Leg::Place if state.errand.as_ref().is_some_and(|e| *e != Errand::Look) => {
+            let errand = state.errand.clone().unwrap_or(Errand::Look);
+            match errand_tasks(&errand, &world, &view, player, here, state.tries) {
+                Ok(Some(t)) => {
+                    tasks.extend(t);
+                    state.tries += 1;
+                }
+                Ok(None) => {
+                    state.note(now, Kind::Learned, errand_done(&errand, &world));
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                }
+                Err(why) => {
+                    state.note(now, Kind::Stuck, why);
+                    state.leg = Leg::Call;
+                    state.tries = 0;
+                }
+            }
+        }
         Leg::Place => {
             let noted = state.heard.iter().any(|l| l.contains("noted"));
             let close = state
@@ -753,7 +926,38 @@ pub(super) fn direct_raid(
             }
         }
         Leg::Call => {
-            if raid.phase == Phase::AtBase {
+            // "Call me from the gate after": back the way it came first.
+            let drop = world
+                .zone
+                .map
+                .markers
+                .iter()
+                .find(|m| m.kind == MarkerKind::Insertion)
+                .map(|m| Vec2::from(m.at));
+            if state.card.contains("from the gate")
+                && !state.at_gate
+                && raid.phase == Phase::Out
+                && let Some(drop) = drop
+            {
+                state.at_gate = true;
+                if drop.distance(here) > 20.0 {
+                    state.note(now, Kind::Learned, "back to the gate, as the card said");
+                    tasks.extend(world.legs(here, drop));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+            }
+            if let Phase::TruckWaiting { rv, .. } = raid.phase
+                && rv == crate::raid::SHORT_EXFIL
+            {
+                // It came back for us at the gate: in.
+                state.note(now, Kind::Learned, "the truck came back to the gate");
+                tasks.extend(world.go_home(here, &raid, 0));
+                state.leg = Leg::Board;
+            } else if raid.phase == Phase::AtBase {
                 // Still by the truck: out first (the radio's for the Zone).
                 let away = here + (here - at_truck(0.0, 0.0)).normalize_or(Vec2::Y) * 20.0;
                 tasks.extend(world.legs(here, away));
@@ -844,7 +1048,8 @@ pub(super) fn direct_raid(
         Leg::Board => match raid.phase {
             Phase::Extracting { .. } | Phase::AtBase => {
                 state.note(now, Kind::Learned, "in the truck and away");
-                state.leg = Leg::Done;
+                state.leg = Leg::Paid;
+                state.tries = 0;
             }
             Phase::TruckWaiting { .. } => {
                 tasks.extend(world.go_home(here, &raid, state.tries));
@@ -854,6 +1059,73 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Call;
             }
         },
+        Leg::Paid => {
+            let done = view.progression.as_ref().map_or(0, |p| p.0.done);
+            let bring = match &state.errand {
+                Some(Errand::Bring { want, .. }) => Some(want.clone()),
+                _ => None,
+            };
+            if raid.phase == Phase::AtBase
+                && let Some(want) = bring
+                && state.crating.as_ref().is_none_or(|c| !c.done())
+            {
+                // "Stash it, press here": what it brought, into the crate.
+                let crating = state.crating.get_or_insert_with(|| {
+                    crate::bot::crating::Crating::new(carried(&world, &view, player, &want))
+                });
+                let t = crating.step(&crates, player, root, &mut input);
+                if crating.done() {
+                    let (n, missed) = (crating.stowed.len(), crating.missed.clone());
+                    for (e, why) in missed {
+                        let id = world.id(e).unwrap_or("?").to_owned();
+                        state.note(now, Kind::Stuck, format!("{id}: {why}"));
+                    }
+                    if n > 0 {
+                        state.note(now, Kind::Learned, format!("{n} into the stash crate"));
+                    } else {
+                        state.note(
+                            now,
+                            Kind::Confused,
+                            "nothing of the job's to put in the crate",
+                        );
+                    }
+                }
+                tasks.extend(t);
+                if tasks.is_empty() {
+                    tasks.push(Task::Wait(0.5));
+                }
+            } else if raid.phase != Phase::AtBase {
+                tasks.push(Task::Wait(1.0));
+            } else if state.done_home.is_none() {
+                state.done_home = Some(done);
+                // Told to, by the driver, or read on the card.
+                let told = state.heard.iter().any(|l| l.contains("press the card"));
+                let read = view
+                    .card
+                    .iter()
+                    .any(|(_, c)| c.text.to_lowercase().contains("press here"));
+                if !told && !read {
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        "home, and nothing says how the job is paid",
+                    );
+                }
+                tasks.push(Task::Wait(if p.reads { 4.0 } else { 1.0 }));
+            } else if state.done_home.is_some_and(|d| done > d) {
+                state.note(now, Kind::Learned, "pressed the card: the job paid");
+                state.leg = Leg::Done;
+            } else if state.tries >= 3 {
+                state.note(now, Kind::Stuck, "home, and the card won't take the job");
+                state.leg = Leg::Done;
+            } else if let Some((card, _)) = view.card.iter().next() {
+                tasks.push(Task::Press(card));
+                tasks.push(Task::Wait(2.0));
+                state.tries += 1;
+            } else {
+                state.leg = Leg::Done;
+            }
+        }
         Leg::Done => {
             if !state.reported {
                 state.reported = true;
@@ -932,6 +1204,8 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
 #[derive(Resource, Default, Debug)]
 pub struct Fight {
     seeded: bool,
+    /// Running for cover until then.
+    pub flee_until: f32,
     pub tells: Vec<(f32, String)>,
     pub first_hit: Option<f32>,
     reacted: bool,
@@ -965,6 +1239,268 @@ pub(super) struct Tells<'w, 's> {
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
+/// Into cover from a machine at `from`: round the far side of the nearest
+/// building within a sprint, or, in the open, hard across its line.
+/// Something above you: in under a roof, through the nearest door, if one's
+/// within a sprint (trees hide nobody from overhead: only their trunks stop
+/// a look).
+fn under_a_roof(
+    entrances: Option<&crate::robots::doors::Entrances>,
+    here: Vec2,
+) -> Option<Vec<Task>> {
+    let entrances = entrances?;
+    let d = entrances
+        .doors
+        .iter()
+        .filter(|d| {
+            // A way in from outside: its far side is under that roof.
+            let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
+            entrances.building_at(inside) == Some(d.building)
+        })
+        .min_by(|a, b| {
+            a.mid
+                .xz()
+                .distance(here)
+                .total_cmp(&b.mid.xz().distance(here))
+        })
+        .filter(|d| d.mid.xz().distance(here) < 60.0)?;
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    let inside = d.mid.xz() - out * 2.5;
+    // Off to one side of the doorway: not in a look through it.
+    let aside = [out.perp(), -out.perp()]
+        .into_iter()
+        .map(|s| inside + s * 2.0)
+        .find(|p| entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building))
+        .unwrap_or(inside);
+    Some(vec![
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.3,
+            within: 0.6,
+        },
+        Task::OpenDoor(d.door),
+        Task::WalkTo {
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: aside,
+            within: 0.6,
+        },
+        Task::Wait(20.0),
+        // And out the way it came in, not through a wall.
+        Task::WalkTo {
+            to: inside,
+            within: 0.6,
+        },
+        Task::WalkTo {
+            to: d.mid.xz() + out * 1.5,
+            within: 0.8,
+        },
+    ])
+}
+
+/// `leave` > 0: it saw you here, and is coming to look. Back off from it,
+/// keeping this cover between you: to the next cover that way, or straight
+/// back.
+fn run_for_cover(zone: &crate::world::Zone, here: Vec2, from: Vec2, leave: f32) -> Vec<Task> {
+    let away = (here - from).normalize_or(Vec2::Y);
+    // Round the far side of something solid (not into trees: a look goes
+    // between the trunks).
+    let cover = zone
+        .map
+        .placements
+        .iter()
+        .map(|b| Vec2::from(b.at))
+        .filter(|b| b.distance(here) < 60.0)
+        .filter(|b| {
+            leave <= 0.0
+                || (b.distance(here) > leave && (*b - here).normalize_or_zero().dot(away) > 0.8)
+        })
+        .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+    let to = match cover {
+        Some(b) => b + (b - from).normalize_or(Vec2::Y) * 6.0,
+        None if leave > 0.0 => here + away * 30.0,
+        None => here + away.perp() * 25.0,
+    };
+    vec![Task::WalkTo { to, within: 2.0 }, Task::Wait(10.0)]
+}
+
+/// What the newcomer carries that `want` stands for: in a hand, a pocket
+/// or the pack (not the stash crate).
+fn carried(world: &World2, view: &RaidView, player: Entity, want: &str) -> Vec<Entity> {
+    world
+        .items
+        .iter()
+        .filter(|(e, it, _, held, sock, bag)| {
+            fetch_takes(want, &world.catalog.get(it.kind()).id)
+                && (held.is_some_and(|h| h.player == player) || sock.is_some() || bag.is_some())
+                && !view.stash.iter().any(|b| b.contents.contains(e))
+        })
+        .map(|(e, ..)| e)
+        .collect()
+}
+
+/// A thing's name as the card has it ("field recorder").
+fn name_of(world: &World2, id: &str) -> String {
+    world
+        .catalog
+        .kind(id)
+        .map(|k| world.catalog.get(k).name.to_lowercase())
+        .unwrap_or_else(|| id.replace('_', " "))
+}
+
+/// To `p` from `here`: indoors, round to its building's door, open it, in.
+fn way_to(world: &World2, view: &RaidView, here: Vec2, p: Vec3) -> Vec<Task> {
+    let door = view.entrances.as_deref().and_then(|en| {
+        let b = en.building_at(p)?;
+        en.doors
+            .iter()
+            .filter(|d| d.building == b)
+            .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
+            .min_by(|a, c| a.mid.distance(p).total_cmp(&c.mid.distance(p)))
+            .copied()
+    });
+    let Some(d) = door else {
+        return world.legs(here, p.xz());
+    };
+    let out = d.out.xz().normalize_or(Vec2::Y);
+    let front = d.mid.xz() + out * 1.3;
+    let mut t = world.legs(here, front);
+    t.extend([
+        Task::OpenDoor(d.door),
+        Task::WalkTo {
+            to: d.mid.xz() - out * 1.5,
+            within: 0.5,
+        },
+    ]);
+    t
+}
+
+/// The next stretch of an errand; `Ok(None)` once it's done out here,
+/// `Err` where the newcomer can't see how.
+fn errand_tasks(
+    errand: &Errand,
+    world: &World2,
+    view: &RaidView,
+    player: Entity,
+    here: Vec2,
+    tries: u32,
+) -> Result<Option<Vec<Task>>, String> {
+    let job = view.progression.as_ref().and_then(|p| p.0.job.clone());
+    match errand {
+        Errand::Look => Ok(None),
+        Errand::Bring { want, n, near } => {
+            let name = name_of(world, want);
+            if carried(world, view, player, want).len() as u32 >= *n {
+                return Ok(None);
+            }
+            if tries > 4 + 3 * n {
+                return Err(format!("couldn't find the {name}"));
+            }
+            let from = near.unwrap_or(here);
+            let found = world
+                .items
+                .iter()
+                .filter(|(e, it, _, held, sock, bag)| {
+                    held.is_none()
+                        && sock.is_none()
+                        && bag.is_none()
+                        && fetch_takes(want, &world.catalog.get(it.kind()).id)
+                        && !view.stash.iter().any(|b| b.contents.contains(e))
+                })
+                .map(|(e, _, gt, ..)| (e, gt.translation()))
+                .min_by(|a, b| a.1.xz().distance(from).total_cmp(&b.1.xz().distance(from)));
+            let Some((e, p)) =
+                found.filter(|(_, p)| near.is_none_or(|n| p.xz().distance(n) < 80.0))
+            else {
+                return Err(format!("no {name} anywhere I looked"));
+            };
+            let mut t = way_to(world, view, here, p);
+            t.extend([
+                Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                },
+                Task::Stow(Side::Right),
+                Task::Wait(0.5),
+            ]);
+            Ok(Some(t))
+        }
+        Errand::Leave { item, at } => {
+            if matches!(job, Some(Job::Plant { planted: true, .. })) {
+                return Ok(None);
+            }
+            let name = name_of(world, item);
+            if tries > 4 {
+                return Err(format!("left the {name}, and nothing says it's right"));
+            }
+            let Some(e) = carried(world, view, player, item).first().copied() else {
+                return Err(format!("no {name} on me to leave"));
+            };
+            let mut t = world.legs(here, *at);
+            t.extend([
+                Task::Grab {
+                    item: e,
+                    side: Side::Right,
+                },
+                Task::Wait(0.5),
+                Task::LookAt(world.zone.on_ground(at.x, at.y)),
+                Task::Release(Side::Right),
+                Task::Wait(2.0),
+            ]);
+            Ok(Some(t))
+        }
+        Errand::Photo(subject) => {
+            if matches!(job, Some(Job::Photograph { taken: true, .. })) {
+                return Ok(None);
+            }
+            if tries > 6 {
+                return Err("took the picture, and nothing says it's in it".into());
+            }
+            let Some(camera) = carried(world, view, player, "camera").first().copied() else {
+                return Err("no camera on me".into());
+            };
+            let target = view
+                .robots
+                .iter()
+                .filter(|(r, _, breed)| {
+                    !r.wrecked
+                        && r.kind == crate::robots::RobotKind::Walker
+                        && (breed.is_some_and(|b| b.0 == "heavy") == (*subject == Subject::Heavy))
+                })
+                .map(|(_, gt, _)| gt.translation())
+                .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)));
+            let Some(p) = target else {
+                return Err(format!("no {subject:?} to be found for the picture").to_lowercase());
+            };
+            // Near enough to fill the picture, not so near it shoots.
+            let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
+            let mut t = world.legs(here, stand);
+            t.extend([
+                Task::Grab {
+                    item: camera,
+                    side: Side::Right,
+                },
+                Task::LookAt(p + Vec3::Y * 1.5),
+                Task::Wait(1.0),
+                Task::Use(Side::Right),
+                Task::Wait(0.5),
+            ]);
+            Ok(Some(t))
+        }
+    }
+}
+
+/// What it says once the errand's done out here.
+fn errand_done(errand: &Errand, world: &World2) -> String {
+    match errand {
+        Errand::Look => "the place, seen".into(),
+        Errand::Bring { want, n, .. } => format!("found {n} {}, and packed", name_of(world, want)),
+        Errand::Leave { item, .. } => format!("left the {} there", name_of(world, item)),
+        Errand::Photo(s) => format!("the {s:?}'s picture taken").to_lowercase(),
+    }
+}
+
 /// Where along the way to the first job the machine is met: the drop to
 /// the Old farm, a little short of halfway.
 fn on_the_way(zone: &crate::world::Zone) -> (Vec2, Vec2) {
@@ -994,6 +1530,7 @@ pub(super) fn first_fight(
     mut tells: Tells,
     mut bots: Query<(&mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -1099,7 +1636,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((mut bot, root, mut input)) = bots.single_mut() else {
+    let Ok((mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -1118,18 +1655,121 @@ pub(super) fn first_fight(
     } else if p.hoards && !hush {
         // Carries on.
         vec![]
+    } else if hush {
+        // Back out the way it came.
+        vec![Task::WalkTo {
+            to: here + away * 10.0,
+            within: 1.5,
+        }]
     } else {
-        // Down, out of its line, and still a while.
-        input.crouch = true;
-        vec![
-            Task::WalkTo {
-                to: here + away.perp() * 12.0 + away * 6.0,
-                within: 1.5,
-            },
-            Task::Wait(12.0),
-        ]
+        // For cover, as the driver says, upright and fast: under a roof
+        // from a drone.
+        fight.flee_until = now + 12.0;
+        (kind == "drone")
+            .then(|| under_a_roof(entrances.as_deref(), here))
+            .flatten()
+            .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
     if !answer.is_empty() {
         super::second_hour::cut_in(&mut bot, answer);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One of every kind of job there is (the match in `errand` makes a new
+    /// kind fail to build until it has a way).
+    fn one_of_each() -> Vec<Job> {
+        let map = "marrow_creek".to_owned();
+        vec![
+            Job::Fetch {
+                item: "canned_stew".into(),
+                n: 2,
+            },
+            Job::Recover {
+                map: map.clone(),
+                region: "Village".into(),
+                at: Some([10.0, 20.0]),
+                place: Some("in the pump house by the Village.".into()),
+                overnight: false,
+            },
+            Job::Letter,
+            Job::Ledger,
+            Job::Scout {
+                map: map.clone(),
+                place: "Old farm".into(),
+                at: [100.0, 200.0],
+                seen: false,
+            },
+            Job::Bring {
+                map: map.clone(),
+                place: "the post office".into(),
+                item: "holm_watch".into(),
+                at: [-16.0, 35.0],
+            },
+            Job::Plant {
+                map,
+                place: "the mast".into(),
+                item: "relay_box".into(),
+                at: [5.0, 6.0],
+                planted: false,
+            },
+            Job::Photograph {
+                subject: Subject::Walker,
+                taken: false,
+            },
+        ]
+    }
+
+    /// Every kind of job has a way for the newcomer to do it, and the card
+    /// names what it goes for: what the bot is after, a player reads.
+    #[test]
+    fn every_job_kind_has_a_way() {
+        let catalog = crate::items::Catalog::load();
+        for job in one_of_each() {
+            let card =
+                crate::progression::job_text(&job, &catalog, "marrow_creek", false).to_lowercase();
+            let named = |id: &str| {
+                let name = catalog
+                    .kind(id)
+                    .map(|k| catalog.get(k).name.to_lowercase())
+                    .unwrap_or_else(|| panic!("{id} isn't in the catalog"));
+                name.split_whitespace()
+                    .filter(|w| w.len() > 3)
+                    .any(|w| card.contains(w.trim_end_matches('s')))
+            };
+            match errand(&job) {
+                Errand::Look => assert!(matches!(job, Job::Scout { .. }), "{job:?}"),
+                Errand::Bring { want, n, near } => {
+                    assert!(n > 0, "{job:?}");
+                    assert!(named(&want), "the card for {job:?} doesn't name it: {card}");
+                    // A fetch says nothing of where; everything else does.
+                    assert_eq!(
+                        near.is_none(),
+                        matches!(job, Job::Fetch { .. } | Job::Letter | Job::Ledger),
+                        "{job:?}"
+                    );
+                }
+                Errand::Leave { item, .. } => {
+                    assert!(named(&item), "the card for {job:?} doesn't name it: {card}")
+                }
+                Errand::Photo(s) => assert!(card.contains(&s.name().to_lowercase()), "{card}"),
+            }
+        }
+    }
+
+    /// The job's place, not the driver's cache under it.
+    #[test]
+    fn the_card_is_read_for_the_job_not_the_cache() {
+        let zone = crate::world::Zone::load("marrow_creek");
+        let card = "CONTRACT: THE POST COUNTER - 1 OF 1\n\"Post office watch. By the village, \
+or in it. Bring it home.\"\nStash it, press here.\n\nMY CACHE: in the survey tower out past \
+the Hollow.";
+        assert_eq!(
+            place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
+            Some("Village")
+        );
     }
 }

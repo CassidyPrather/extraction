@@ -94,6 +94,26 @@ pub const STAND_INS: &[StandIn] = &[
         render: canary,
     },
     StandIn {
+        set: "anomaly/frost",
+        variants: 2,
+        render: frost,
+    },
+    StandIn {
+        set: "physical/ice_crack",
+        variants: 4,
+        render: ice_crack,
+    },
+    StandIn {
+        set: "device/notice",
+        variants: 2,
+        render: notice,
+    },
+    StandIn {
+        set: "device/notice_hard",
+        variants: 2,
+        render: notice_hard,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -705,4 +725,88 @@ fn klaxon(rng: &mut Rng, sr: f32) -> Vec<f32> {
             (shaped + 0.15 * buzz) * env
         })
         .collect()
+}
+
+/// A frost's still cold, heard: a thin, high crystal tinkle (sparse pings
+/// at 3.5-8 kHz, each ringing off) with the ice creaking under it now and
+/// then (a slow, low groan of filtered noise), 2 s, looped.
+fn frost(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (LOOP_SECS * sr) as usize;
+    let mut x = vec![0.0f32; n];
+    // The tinkle: a ping every 60-220 ms, wrapping round the loop.
+    let mut t = 0.0f32;
+    while t < LOOP_SECS {
+        let f = 3_500.0 + rng.f32() * 4_500.0;
+        let a = 0.3 + 0.7 * rng.f32();
+        let len = (0.25 * sr) as usize;
+        let start = (t * sr) as usize;
+        for i in 0..len {
+            let s = i as f32 / sr;
+            x[(start + i) % n] += a * (TAU * f * s).sin() * (-s * 18.0).exp();
+        }
+        t += 0.06 + rng.f32() * 0.16;
+    }
+    // The creak: once a loop, a second of a slow groan.
+    let mut groan = Bp::new(180.0 * jitter(rng, 0.2), 6.0, sr);
+    let at = (rng.f32() * LOOP_SECS * sr) as usize;
+    let len = sr as usize;
+    for i in 0..len {
+        let e = (std::f32::consts::PI * i as f32 / len as f32).sin();
+        x[(at + i) % n] += 1.5 * groan.run(noise(rng)) * e;
+    }
+    x
+}
+
+/// Ice cracking: a hard, bright snap and its short ring, 0.4 s.
+fn ice_crack(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let n = (0.4 * sr) as usize;
+    let mut ring = Bp::new(2_400.0 * jitter(rng, 0.2), 12.0, sr);
+    let mut body = Bp::new(600.0 * jitter(rng, 0.2), 1.5, sr);
+    (0..n)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let snap = noise(rng) * (-t * 90.0).exp();
+            snap * 0.6 + ring.run(snap) * 3.0 + body.run(snap) * (-t * 25.0).exp()
+        })
+        .collect()
+}
+
+/// Bright, clipped notes (a square-ish tone, a click of onset, quick
+/// decay), one after another: (pitch Hz, length s, gap s).
+fn chirps(rng: &mut Rng, sr: f32, notes: &[(f32, f32, f32)]) -> Vec<f32> {
+    let mut out = Vec::new();
+    for &(f, len, gap) in notes {
+        let f = f * jitter(rng, 0.02);
+        let n = (len * sr) as usize;
+        let mut ph = 0.0f32;
+        for i in 0..n {
+            let t = i as f32 / sr;
+            ph = (ph + f / sr).fract();
+            let tone =
+                (TAU * ph).sin() + 0.3 * (3.0 * TAU * ph).sin() + 0.15 * (5.0 * TAU * ph).sin();
+            let env = (t / 0.004).min(1.0) * (1.0 - t / len).max(0.0).powf(0.6);
+            out.push(tone * env);
+        }
+        out.extend(std::iter::repeat_n(0.0, (gap * sr) as usize));
+    }
+    out
+}
+
+/// A machine noticing something you set down: two short notes stepping
+/// up, a question (`robots::devices::DeviceNoticed`, investigating).
+fn notice(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(rng, sr, &[(1_400.0, 0.07, 0.05), (2_100.0, 0.09, 0.0)])
+}
+
+/// The same, hunting it: three, quicker, harder and higher.
+fn notice_hard(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    chirps(
+        rng,
+        sr,
+        &[
+            (1_700.0, 0.05, 0.03),
+            (2_300.0, 0.05, 0.03),
+            (3_100.0, 0.08, 0.0),
+        ],
+    )
 }

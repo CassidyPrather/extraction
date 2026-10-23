@@ -76,6 +76,9 @@ pub enum Rule {
     /// Caught out by the Surge: no roof in reach once it's called, or one
     /// of its anomalies against a wall or a door (`map_surge`).
     Surge,
+    /// Ground the walkers' grid reaches only over a bank a body can't walk
+    /// (`map_pockets`).
+    Pocket,
     /// A door with something in front of it: a building, a trunk, a rock,
     /// a crate, water, or ground that doesn't meet its steps
     /// (`map_doors`).
@@ -297,6 +300,27 @@ pub const RV_LANDMARK: f32 = 200.0;
 pub const COVER_REACH: f32 = 25.0;
 /// Longest stretch of a main route with no cover within reach.
 pub const COVER_GAP: f32 = 60.0;
+/// The first hour's walks: from the insertion to every point of interest
+/// this near it (the first jobs' places, the village by the gate).
+pub const FIRST_WALK: f32 = 300.0;
+/// On those, the longest stretch with no cover within reach: a newcomer
+/// warned by the Driver has about four seconds, and runs for the nearest
+/// thing between them and the machine (Onboarding's first-fight personas
+/// died in Marrow's open fields on the way to the Old farm).
+pub const FIRST_COVER_GAP: f32 = 40.0;
+/// The first ten minutes: places a raid can reach and work by then, as a
+/// walk on comfortable ground from the insertion, metres (about four
+/// minutes' walking, the rest looking).
+pub const FIRST_REACH: f32 = 450.0;
+/// Two choices are distinct when they lie at least this far apart in
+/// bearing from the insertion, degrees...
+pub const CHOICE_ANGLE: f32 = 50.0;
+/// ...and their walks part: no more than this share of the shorter walk
+/// runs within [`CHOICE_APART`] of the other.
+pub const CHOICE_SHARED: f32 = 0.5;
+/// Something worth going to: a point of interest with loot or a
+/// walk-in building this near it.
+pub const CHOICE_LOOT: f32 = 40.0;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -375,7 +399,15 @@ pub const VIEW_MAX: usize = 16;
 /// with no roof, no rooms and no loot, under two metres tall (a lorry 2.2).
 /// They stand by the roads in ones and twos; counted as buildings, every
 /// wreck on a road through a village would cost it a house.
-pub const VIEW_LIGHT: &[&str] = &["fence_garden", "wreck_lada", "wreck_uaz", "wreck_lorry"];
+///
+/// A log pile is one too: ten log cylinders, no roof, nothing inside.
+pub const VIEW_LIGHT: &[&str] = &[
+    "fence_garden",
+    "wreck_lada",
+    "wreck_uaz",
+    "wreck_lorry",
+    "log_pile",
+];
 
 /// Fences, 0.2 m deep: a main route keeps this far off one. The 2 m nav
 /// grid blocks only the cells whose middles fall within 0.7 m of a run
@@ -794,7 +826,7 @@ pub(crate) fn sees(hm: &Heightmap, from: P2, to: P2, height: f32) -> bool {
 }
 
 /// Height you walk at: a bridge deck's where there is one, else the ground.
-fn walk_height(hm: &Heightmap, p: P2) -> f32 {
+pub(crate) fn walk_height(hm: &Heightmap, p: P2) -> f32 {
     for rl in hm.road_lines.iter().filter(|rl| !rl.bridges.is_empty()) {
         let (d, s, _) = polyline_closest(&rl.points, p);
         if d <= rl.width * 0.5 + 1.0 && rl.on_bridge(s) {
@@ -1306,6 +1338,112 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 at,
             );
         }
+    }
+    // -- The first ten minutes: at least two ways to go ----------------------
+    {
+        // Each place worth going to early: reached, with loot, and a walk
+        // to it with cover.
+        let mut options: Vec<(String, f32, Vec<P2>)> = Vec::new();
+        for poi in map.markers_of(&MarkerKind::Poi) {
+            let Some(path) = comfy.path(ins, poi.at) else {
+                continue;
+            };
+            if path_length(&path) > FIRST_REACH {
+                continue;
+            }
+            let loot = map.markers.iter().any(|m| {
+                matches!(m.kind, MarkerKind::Loot { .. }) && dist(m.at, poi.at) <= CHOICE_LOOT
+            }) || solids
+                .iter()
+                .any(|q| q.enterable() && q.rect.sdf(poi.at) <= CHOICE_LOOT);
+            let pts = resample(&path);
+            let (gap, _) = longest_gap(&pts, covered);
+            if !loot || gap > COVER_GAP {
+                continue;
+            }
+            let bearing = (poi.at[0] - ins[0])
+                .atan2(-(poi.at[1] - ins[1]))
+                .to_degrees();
+            options.push((poi.name.clone(), bearing, pts));
+        }
+        // The best pair: furthest apart in bearing, with walks that part.
+        let shared = |a: &[P2], b: &[P2]| {
+            let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+            short
+                .iter()
+                .filter(|p| polyline_closest(long, **p).0 <= CHOICE_APART)
+                .count() as f32
+                / short.len().max(1) as f32
+        };
+        let mut best: Option<(f32, usize, usize)> = None;
+        for i in 0..options.len() {
+            for j in i + 1..options.len() {
+                let mut d = (options[i].1 - options[j].1).abs() % 360.0;
+                if d > 180.0 {
+                    d = 360.0 - d;
+                }
+                if shared(&options[i].2, &options[j].2) > CHOICE_SHARED {
+                    continue;
+                }
+                if best.is_none_or(|b| d > b.0) {
+                    best = Some((d, i, j));
+                }
+            }
+        }
+        let names: Vec<&str> = options.iter().map(|o| o.0.as_str()).collect();
+        match best {
+            Some((d, i, j)) => r.measures.push(format!(
+                "first ten minutes: {} places with loot and cover ({}); widest choice {} or {}, {d:.0} degrees apart",
+                options.len(),
+                names.join(", "),
+                options[i].0,
+                options[j].0
+            )),
+            None => r.measures.push(format!(
+                "first ten minutes: {} places with loot and cover ({}); no two whose walks part",
+                options.len(),
+                names.join(", ")
+            )),
+        }
+        if best.is_none_or(|b| b.0 < CHOICE_ANGLE) {
+            find(
+                &mut r,
+                Rule::Choice,
+                format!(
+                    "the first ten minutes offer no two ways to go ({} places with loot and cover within {FIRST_REACH} m)",
+                    options.len()
+                ),
+                ins,
+            );
+        }
+    }
+
+    for poi in map.markers_of(&MarkerKind::Poi) {
+        if dist(poi.at, ins) > FIRST_WALK {
+            continue;
+        }
+        // The way a player who keeps to easy ground goes, and the straight
+        // line a newcomer takes toward a roof they can see.
+        let n = (dist(ins, poi.at) / STEP).ceil().max(1.0) as usize;
+        let straight: Vec<P2> = (0..=n)
+            .map(|i| geom::lerp(ins, poi.at, i as f32 / n as f32))
+            .collect();
+        let walks = comfy
+            .path(ins, poi.at)
+            .map(|p| resample(&p))
+            .into_iter()
+            .chain([straight]);
+        let (gap, at) = walks
+            .map(|pts| longest_gap(&pts, covered))
+            .fold((0.0f32, ins), |a, b| if b.0 > a.0 { b } else { a });
+        r.measures.push(format!(
+            "first walk to {}: longest open {gap:.0} m",
+            poi.name
+        ));
+        // Measured, not held: the lint's cover (any boulder, three trunks)
+        // is more than a newcomer uses; Onboarding's first-fight scenario
+        // is the judge of these walks.
+        let _ = (FIRST_COVER_GAP, at);
     }
 
     // -- Loot against risk ---------------------------------------------------------
@@ -2019,6 +2157,37 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         find(&mut r, Rule::Door, what, at);
     }
 
+    // -- Pockets ----------------------------------------------------------------------
+    {
+        let p = crate::map_pockets::pockets(&walk, hm, ins, crate::map_nav::MAX_SLOPE, |p| {
+            inside_fence(map, p)
+        });
+        r.measures.push(format!(
+            "pockets: {} false steps on the walkers' grid; pockets {}",
+            p.false_steps,
+            p.pockets
+                .iter()
+                .take(6)
+                .map(|(a, at)| format!("{a:.0} m² at ({:.0}, {:.0})", at[0], at[1]))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        for (area, at) in p
+            .pockets
+            .iter()
+            .filter(|(a, _)| *a >= crate::map_pockets::POCKET_MIN)
+        {
+            find(
+                &mut r,
+                Rule::Pocket,
+                format!(
+                    "{area:.0} m² the walkers' grid reaches only over a bank too steep to walk"
+                ),
+                *at,
+            );
+        }
+    }
+
     // -- Render load -----------------------------------------------------------------
     let views = route_pts
         .iter()
@@ -2135,6 +2304,24 @@ mod tests {
             unnamed.is_empty(),
             "landmarks with no name in field_map.py's LANDMARK_NAMES:\n{}",
             unnamed.join("\n")
+        );
+    }
+
+    /// A valley whose early places all lie one way offers no choice: strip
+    /// Marrow's west of the drop and the first ten minutes are one walk.
+    #[test]
+    fn one_way_out_of_the_drop_is_found() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.markers
+            .retain(|m| !(matches!(m.kind, MarkerKind::Poi) && m.at[0] < 40.0));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        assert!(
+            r.findings
+                .iter()
+                .any(|f| f.rule == Rule::Choice && f.what.contains("first ten minutes")),
+            "{}",
+            r.text()
         );
     }
 

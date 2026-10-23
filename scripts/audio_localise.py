@@ -10,9 +10,14 @@ through at that range, and measures the cues the ears use:
   0.5-10 kHz) or first (interaural time, by cross-correlation). Either
   will do: a low thud has little level difference but a clear delay.
 - **Front/back:** the pinna shades sound from behind, so ahead is
-  brighter: the 4-10 kHz band over 0.5-3 kHz, ahead against the mirror
-  bearing behind (0/180, 30/150, 60/120), the worst pair. Only readable if
-  the sound has a high band left at that range.
+  brighter: the 4-10 kHz band over 0.5-2 kHz, ahead against the mirror
+  bearing behind (0/180 and 30/150), the worse pair. (Not 60/120: so near
+  the ears' axis the responses themselves barely differ, -0.9 dB for
+  white noise, and listeners confuse them too.) The reference stops at
+  2 kHz, below the pinna's own work: from 2 kHz on our responses are
+  already 3 dB brighter ahead, so a sound whose low band sits there (a
+  drone's rotor) would hide its front/back difference in its reference.
+  Only readable if the sound has a high band left at that range.
 - **Up** (what flies): brighter from above than level ahead.
 
 Within its binaural reach (`audio::binaural_reach`: Signals reach
@@ -22,7 +27,9 @@ head-related filter, measured here with the responses on a grid
 target/audio_audit/hrir_grid.json). Past it, and with binaural off, it is
 panned (firewheel's SpatialBasicNode): a level difference only, and
 behind you darkened (`audio::BEHIND_CUTOFF`, set by `occlude`) so that
-front and back still differ; nothing tells above from level.
+front and back still differ; nothing tells above from level. Each threat
+is measured in the headset at each range, then flat (binaural off) at the
+nearest, where only side and front/back are asked of it.
 """
 import json
 import math
@@ -35,17 +42,19 @@ import audio_mix as am
 
 ROOT = aa.ROOT
 
-# Threat cue -> (ranges measured, m; flies).
+# Threat -> (its layers as (cue, playback speed), as the game plays them
+# together; ranges measured, m; flies).
 THREATS = {
-    "drone.rotor": ((10, 30, 60, 100), True),
-    "walker.step": ((10, 30, 60), False),
-    "sentry.chirp": ((10, 30, 60), False),
-    "crawler.step": ((5, 10, 15), False),
-    "crawler.charge": ((5, 10, 15), False),
+    "drone.rotor": ((("drone.rotor", 1.0),), (10, 30, 60, 100), True),
+    "walker.step": ((("walker.step", 1.0),), (10, 30, 60), False),
+    "sentry.chirp": ((("sentry.chirp", 1.0),), (10, 30, 60), False),
+    "crawler.step": ((("crawler.step", 2.2),), (5, 10, 15), False),
+    "crawler.charge": ((("crawler.charge", 0.8),), (5, 10, 15), False),
 }
 ILD_MIN = 3.0            # dB at 90 degrees, or...
 ITD_MIN = 300e-6         # ...s at 90 degrees
-FRONT_BACK_MIN = 2.0     # dB of tilt, ahead over behind, the worst pair
+FRONT_BACK_MIN = 2.0     # dB of tilt, ahead over behind, the worse pair
+FRONT_BACK_PAIRS = (0, 30)
 UP_MIN = 2.0             # dB of tilt, above over level
 HIGH_BAND_MIN = -35.0    # dB, the 4-10 kHz band against 0.5-3 kHz: any less
                          # and there's nothing for the pinna to shade
@@ -69,7 +78,7 @@ def band(x, lo, hi):
 
 
 def tilt(x):
-    return band(x, 4000, 10000) - band(x, 500, 3000)
+    return band(x, 4000, 10000) - band(x, 500, 2000)
 
 
 def conv(x, h):
@@ -88,10 +97,21 @@ def itd(l, r):
     return (np.argmax(lags) - m) / aa.SR
 
 
-def source(c, d, sets):
-    x = am.samples(c["set"], sets)[: aa.SR, 0].astype(np.float64)
+def layer(c, speed, d, sets):
+    """One cue's sound at `d` m: a second of it at its playback speed,
+    muffled by distance and its own filter, at its level and falloff."""
+    x = am.samples(c["set"], sets)[:, 0].astype(np.float64)
+    n = min(aa.SR, int(len(x) / speed))
+    x = np.interp(np.arange(n) * speed, np.arange(len(x)), x)
     fc = min(am.cutoff(d, c["reach"], c["muffle_full"]), am.CUE_LOWPASS.get(c["name"], 20480.0))
-    return am.lowpass(x[:, None], fc)[:, 0]
+    g = 10 ** ((c["db"] + am.falloff(d, c["reach"])) / 20)
+    return am.lowpass(x[:, None], fc)[:, 0] * g
+
+
+def source(layers, d, sets):
+    parts = [layer(c, speed, d, sets) for c, speed in layers]
+    n = max(len(p) for p in parts)
+    return sum(np.pad(p, (0, n - len(p))) for p in parts)
 
 
 def binaural_cues(x, grid, flies):
@@ -100,17 +120,18 @@ def binaural_cues(x, grid, flies):
     ild = band(r, 500, 10000) - band(l, 500, 10000)
     t = itd(l, r)
     both = lambda k: tilt(np.concatenate(ears(k)))
-    fb = min(both(f"az{a}_el0") - both(f"az{180 - a}_el0") for a in (0, 30, 60))
+    fb = min(both(f"az{a}_el0") - both(f"az{180 - a}_el0") for a in FRONT_BACK_PAIRS)
     up = min(both(f"az0_el{e}") for e in (60, 85)) - both("az0_el0") if flies else None
     return ild, t, fb, up
 
 
-def panned_cues(x, behind):
-    # Equal-power pan, held to the threshold, for a source at 90 degrees.
+def panned_cues(x, behind, flies):
+    # Equal-power pan, held to the threshold, for a source at 90 degrees;
+    # behind, the panner's shade (`audio::behind_cutoff`); nothing for up.
     pan = 0.5 + 0.5 * PAN_THRESHOLD
     ild = 20 * math.log10(math.sin(pan * math.pi / 2) / math.cos(pan * math.pi / 2))
     fb = tilt(x) - tilt(am.lowpass(x[:, None], behind)[:, 0]) if behind < 20000 else 0.0
-    return ild, 0.0, fb, 0.0
+    return ild, 0.0, fb, 0.0 if flies else None
 
 
 def run(sets, out):
@@ -128,18 +149,22 @@ def run(sets, out):
              f"{'front/back':>10s} {'up':>5s}  flags"]
     flagged = 0
     results = []
-    for name, (ranges, flies) in THREATS.items():
-        c = next((c for c in mix if c["name"] == name), None)
-        if c is None or c["set"] not in sets:
+    for name, (cues, ranges, flies) in THREATS.items():
+        layers = [(next((c for c in mix if c["name"] == n), None), sp) for n, sp in cues]
+        if any(c is None or c["set"] not in sets for c, _ in layers):
             lines.append(f"    {name:15s} (not in the mix or the bank)")
             continue
+        c = layers[0][0]
         reach = k["signal_reach"] if c["role"] == "Signal" else k["reach"]
         bad = False
-        for d in ranges:
-            x = source(c, d, sets)
+        # In the headset at each range; then flat (binaural off: the
+        # panner at every range), at the nearest.
+        for d, flat in [(d, False) for d in ranges] + [(ranges[0], True)]:
+            x = source(layers, d, sets)
             high = tilt(x)
-            binaural = d < reach
-            ild, t, fb, up = binaural_cues(x, grid, flies) if binaural else panned_cues(x, k["behind"])
+            binaural = d < reach and not flat
+            ild, t, fb, up = (binaural_cues(x, grid, flies) if binaural
+                              else panned_cues(x, k["behind"], flies))
             f = []
             if ild < ILD_MIN and t < ITD_MIN:
                 f.append("side unclear")
@@ -147,14 +172,17 @@ def run(sets, out):
                 f.append(f"no high band ({high:.0f} dB)")
             elif fb < FRONT_BACK_MIN:
                 f.append(f"front/back {fb:.1f} dB")
-            if flies and (up or 0.0) < UP_MIN:
-                f.append("above unclear" if binaural else "panned: no above")
+            if flies and binaural and up < UP_MIN:
+                f.append("above unclear")
+            if flies and not binaural and not flat:
+                f.append("panned in the headset: no above")
             bad |= bool(f)
-            results.append(dict(cue=name, range=d, path="binaural" if binaural else "panned",
+            path = "binaural" if binaural else ("flat" if flat else "panned")
+            results.append(dict(cue=name, range=d, path=path,
                                 ild=round(ild, 1), itd_us=round(t * 1e6), front_back=round(fb, 1),
                                 up=None if up is None else round(up, 1), high=round(high, 1),
                                 flags=f))
-            lines.append(f"    {name:15s} {d:4d} {'binaural' if binaural else 'panned':9s} "
+            lines.append(f"    {name:15s} {d:4d} {path:9s} "
                          f"{ild:5.1f} {t * 1e6:6.0f} {fb:10.1f} "
                          f"{'' if up is None else f'{up:5.1f}':>5s}  " + "; ".join(f))
         flagged += bad

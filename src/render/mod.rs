@@ -9,11 +9,13 @@ pub mod budget;
 pub mod cards;
 pub mod comfort;
 pub mod cpu;
+pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
+pub mod hold_rate;
 pub mod kit;
 pub mod kitchen;
 pub mod landmarks;
@@ -82,6 +84,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::PreloadPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
+        .add_plugins(hold_rate::HoldRatePlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)

@@ -226,7 +226,10 @@ fn hex_tap(i: u32, uv: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>, vertex: vec2<f32
     let ddy = rot * dy;
     var t: Tap;
     t.albedo = textureSampleGrad(albedo_tex, albedo_smp, u, i32(i), ddx, ddy).rgb;
-    var n = textureSampleGrad(normal_tex, normal_smp, u, i32(i), ddx, ddy).xyz * 2.0 - 1.0;
+    // X and Y only, Z rebuilt: the same for an RGBA8 map, and a two-channel
+    // (BC5) one has no Z to read.
+    let xy = textureSampleGrad(normal_tex, normal_smp, u, i32(i), ddx, ddy).xy * 2.0 - 1.0;
+    var n = vec3<f32>(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
     // Undo the rotation on the normal's tangent-plane part.
     n = vec3<f32>(cs * n.x - sn * n.y, sn * n.x + cs * n.y, n.z);
     t.normal = n;

@@ -343,6 +343,13 @@ fn reel(
                 }
                 first.unwrap()
             }
+            "pylon" => {
+                // A relay pylon 3 m off, side on: its cable down the
+                // cabinet into the junction box (`network::PylonCable`).
+                let p = eye + flat * 3.0 - right * 0.6;
+                let at = zone.on_ground(p.x, p.z);
+                super::pylon::spawn_pylon(&mut commands, at, 1.0e6, at)
+            }
             "rubble" => {
                 // A heap of broken blocks across its way (Destruction's
                 // debris layer): do its feet stand on them?

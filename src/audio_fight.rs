@@ -12,7 +12,7 @@ use bevy::prelude::*;
 use std::collections::HashMap;
 
 use crate::audio::{AudioRng, SoundBank, play_at_speed};
-use crate::interact::fight::{Gripped, Shoved};
+use crate::interact::fight::{Gripped, Shoved, TornFree};
 use crate::robots::grip::KickedFree;
 use crate::robots::indoor::{Crawler, CrawlerCharge, CrawlerZap};
 
@@ -25,6 +25,7 @@ impl Plugin for FightSoundsPlugin {
         app.add_message::<Shoved>()
             .add_message::<Gripped>()
             .add_message::<KickedFree>()
+            .add_message::<TornFree>()
             .add_message::<CrawlerCharge>()
             .add_message::<CrawlerZap>()
             .add_systems(
@@ -33,6 +34,7 @@ impl Plugin for FightSoundsPlugin {
                     shove_sounds,
                     strain_sounds,
                     kick_sounds,
+                    torn_sounds,
                     crawler_feet,
                     crawler_gun,
                 ),
@@ -161,6 +163,41 @@ fn kick_sounds(
     }
 }
 
+/// A held robot torn out of the hand (`interact::fight::TornFree`: a
+/// drone thrusting free): metal wrenched (`fight.torn`, a creak at speed)
+/// and the machine lurching away (`fight.lurch`).
+fn torn_sounds(
+    mut commands: Commands,
+    mut torn: MessageReader<TornFree>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for t in torn.read() {
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/door_creak",
+            Some(t.at),
+            "fight.torn",
+            0.0,
+            1.9,
+            0.08,
+        );
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/whoosh",
+            Some(t.at),
+            "fight.lurch",
+            0.0,
+            1.3,
+            0.1,
+        );
+    }
+}
+
 /// A crawler is heard moving faster than this (m/s); its feet patter
 /// every [`CRAWLER_PATTER`] s at a run, slower at a creep.
 const CRAWLER_MOVING: f32 = 0.3;
@@ -258,6 +295,8 @@ mod tests {
             ("machines/servo", "fight.stagger"),
             ("machines/servo", "fight.strain"),
             ("machines/clank", "fight.kick"),
+            ("physical/door_creak", "fight.torn"),
+            ("physical/whoosh", "fight.lurch"),
             ("footsteps/metal", "crawler.step"),
             (crate::audio::CRACKLE_SET, "crawler.charge"),
             (crate::audio::CRACKLE_SET, "crawler.zap"),

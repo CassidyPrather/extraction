@@ -224,7 +224,12 @@ fn radio_calls(
     mut stashes: Query<&mut crate::interact::body::Backpack, With<truck::Stash>>,
     items: Query<&crate::items::Item>,
     catalog: Res<crate::items::Catalog>,
+    progression: Option<Res<crate::progression::Progression>>,
 ) {
+    // A career's first job comes home from the gate it went out by, free:
+    // the way back is the way it came, not across the valley to a
+    // rendezvous (`docs/FIRST_HOUR.md`).
+    let first_job = progression.is_some_and(|p| p.0.done == 0);
     for call in calls.read() {
         match raid.phase {
             Phase::Out => {
@@ -239,14 +244,14 @@ fn radio_calls(
                     .markers_of(&MarkerKind::ShortExfil)
                     .any(|m| extraction_core::geom::dist(m.at, here) < 40.0);
                 if at_short {
-                    let mut paid = false;
+                    let mut paid = first_job;
                     for mut stash in &mut stashes {
                         let can = stash.contents.iter().copied().find(|e| {
                             items
                                 .get(*e)
                                 .is_ok_and(|i| catalog.get(i.kind()).has_tag("fuel"))
                         });
-                        if let Some(can) = can {
+                        if let Some(can) = can.filter(|_| !paid) {
                             stash.contents.retain(|e| *e != can);
                             commands.entity(can).despawn();
                             paid = true;
@@ -255,7 +260,11 @@ fn radio_calls(
                     }
                     if paid {
                         let n = raid.clock as u32;
-                        raid.say(lines::pick(lines::SHORT_RUN, n));
+                        raid.say(if first_job {
+                            lines::FIRST_SHORT_RUN
+                        } else {
+                            lines::pick(lines::SHORT_RUN, n)
+                        });
                         raid.phase = Phase::TruckWaiting {
                             rv: SHORT_EXFIL,
                             left: TRUCK_WAIT,
@@ -551,6 +560,17 @@ mod tests {
 
     #[test]
     fn the_short_exfil_burns_a_can_of_fuel() {
+        assert!(short_exfil_burns_the_can(1), "the can was burnt");
+    }
+
+    #[test]
+    fn the_first_jobs_short_run_is_on_the_house() {
+        assert!(!short_exfil_burns_the_can(0), "the can was kept");
+    }
+
+    /// Calls the truck to the short exfil with a can in the stash, `done` jobs
+    /// into the career; true when the can went.
+    fn short_exfil_burns_the_can(done: u32) -> bool {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -600,6 +620,10 @@ mod tests {
             .translation = zone.on_ground(m[0], m[1] - 20.0);
         app.update();
         app.update();
+        app.world_mut()
+            .resource_mut::<crate::progression::Progression>()
+            .0
+            .done = done;
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
         app.world_mut().write_message(RadioCall { player });
         app.update();
@@ -610,6 +634,6 @@ mod tests {
                 ..
             }
         ));
-        assert!(app.world().get_entity(can).is_err(), "the can was burnt");
+        app.world().get_entity(can).is_err()
     }
 }

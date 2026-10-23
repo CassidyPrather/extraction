@@ -60,6 +60,12 @@ pub enum First {
     Sentry,
     /// In a hush: the quiet that presses.
     Hush,
+    /// Home with a job on the card: it's paid when the card is pressed.
+    Payday,
+    /// A machine that was shooting at you lost you, and is coming to where
+    /// it last saw you: a moving shape behind low cover is glimpsed, and
+    /// each glimpse moves its guess; a still one isn't.
+    ComingToLook,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -108,6 +114,8 @@ pub const ALL: &[First] = &[
     First::Aimed,
     First::Sentry,
     First::Hush,
+    First::Payday,
+    First::ComingToLook,
 ];
 
 impl First {
@@ -134,6 +142,7 @@ impl First {
                 | First::Aimed
                 | First::Sentry
                 | First::Hush
+                | First::ComingToLook
         )
     }
 
@@ -153,9 +162,10 @@ impl First {
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
-            First::DroneLock => {
-                &["Truck: \"Run across it, to cover. That chirp is it taking aim.\""]
-            }
+            First::DroneLock => &[
+                "Truck: \"Run across it, to cover. That chirp is it taking aim.\"",
+                "Truck: \"Under a roof's best. It sees down through trees.\"",
+            ],
             First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
                 &["Truck: \"Torch on, go slow. Dark down there, and not empty.\""]
@@ -189,6 +199,10 @@ impl First {
             First::Aimed => &["Truck: \"Break its line, now. It's aiming at you.\""],
             First::Sentry => &["Truck: \"Down, out of its sweep. A sentry has you.\""],
             First::Hush => &["Truck: \"Out of there, now. That dead quiet hurts.\""],
+            First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
+            First::ComingToLook => {
+                &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
+            }
         }
     }
 }
@@ -261,6 +275,7 @@ impl Plugin for FirstsPlugin {
                         deaths,
                         convoy,
                         asked,
+                        payday,
                     ),
                     speak,
                 )
@@ -350,17 +365,28 @@ fn robots_heard(
     mut looking: MessageReader<crate::robots::search::Investigating>,
     mut noticed: MessageReader<crate::robots::Noticed>,
     mut lost: MessageReader<crate::robots::search::LostYou>,
-    minds: Query<&Awareness>,
+    minds: Query<(Entity, &Awareness, Option<&crate::robots::Brain>)>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    mut hunting: Local<std::collections::HashSet<Entity>>,
     mut m: Meet,
 ) {
     let Some((me, at)) = locals.iter().next() else {
         return;
     };
-    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
-    let robots: Vec<Entity> = looking
-        .read()
-        .map(|e| e.robot)
+    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|(_, a, _)| a.target == Some(me));
+    let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
+    // Gone from shooting at you to coming to look.
+    if looked.iter().any(|r| hunting.contains(r) && about_me(*r)) {
+        m.meet(First::ComingToLook);
+    }
+    hunting.retain(|r| minds.contains(*r));
+    for (e, a, brain) in &minds {
+        if a.target == Some(me) && matches!(brain, Some(crate::robots::Brain::Engage)) {
+            hunting.insert(e);
+        }
+    }
+    let robots: Vec<Entity> = looked
+        .into_iter()
         .chain(noticed.read().map(|e| e.robot))
         .collect();
     if robots.into_iter().any(about_me) {
@@ -619,6 +645,26 @@ fn convoy(
     *recovered = Some(now);
 }
 
+/// Home from the Zone with a job on the card: nothing pays it but
+/// pressing the card (the first newcomers took the truck home, and the
+/// job sat unpaid into the next session).
+fn payday(
+    raid: Res<Raid>,
+    progression: Option<Res<crate::progression::Progression>>,
+    mut was_out: Local<bool>,
+    mut m: Meet,
+) {
+    let home = raid.phase == Phase::AtBase;
+    let back = *was_out && home;
+    *was_out = matches!(raid.phase, Phase::Extracting { .. });
+    if back
+        && !m.met(First::Payday)
+        && progression.is_some_and(|p| p.0.job.is_some() && p.0.last_raid != Some(raid.raids))
+    {
+        m.meet(First::Payday);
+    }
+}
+
 fn asked(mut asks: MessageReader<MeetFirst>, mut m: Meet) {
     for MeetFirst(f) in asks.read() {
         m.meet(*f);
@@ -710,6 +756,39 @@ mod tests {
             app.update();
         }
         app
+    }
+
+    /// Home from the Zone with the job unpaid: told to press the card, once.
+    #[test]
+    fn home_with_a_job_is_told_to_press_the_card() {
+        let mut app = app();
+        if app
+            .world()
+            .resource::<crate::progression::Progression>()
+            .0
+            .job
+            .is_none()
+        {
+            app.world_mut()
+                .resource_mut::<crate::progression::Progression>()
+                .0
+                .job = Some(extraction_core::progression::Job::Letter);
+        }
+        for _ in 0..2 {
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 99.0 };
+            app.update();
+            app.world_mut().resource_mut::<Raid>().phase = Phase::AtBase;
+            for _ in 0..(10 * 90) {
+                app.update();
+            }
+        }
+        let line = First::Payday.lines()[0];
+        let spoken = &app.world().resource::<Spoken>().0;
+        assert_eq!(
+            spoken.iter().filter(|s| *s == line).count(),
+            1,
+            "{spoken:?}"
+        );
     }
 
     /// The moments that come from a message, met twice over through the
