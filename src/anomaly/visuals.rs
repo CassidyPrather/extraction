@@ -517,13 +517,14 @@ fn init_assets(
         LinearRgba::rgb(0.07, 0.01, 0.0),
         0.95,
     );
-    // Scoured bare by the lift: raw brown earth, every loose thing on it
-    // and the turf itself taken up. (Pale dry earth read as dry grass.)
+    // Scoured bare by the lift: raw rusty subsoil, every loose thing on it
+    // and the turf itself taken up. (Pale dry earth read as dry grass, and
+    // dark earth as wet grass in the rain.)
     // (A faint warmth in it, the lift's own light on it: in the dark its
     // edge still shows.)
     let flattened = ground(
-        Color::srgba(0.1, 0.075, 0.05, 0.97),
-        LinearRgba::rgb(0.035, 0.024, 0.01),
+        Color::srgba(0.17, 0.08, 0.045, 0.97),
+        LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
     // Fused by the arcs: dark and glassy, still charged: a faint cold blue
@@ -545,8 +546,8 @@ fn init_assets(
     // under it.
     // Pale as ash, faintly so even in the dark.
     let hushed = ground(
-        Color::srgba(0.74, 0.74, 0.72, 0.95),
-        LinearRgba::rgb(0.03, 0.03, 0.03),
+        Color::srgba(0.76, 0.76, 0.74, 0.95),
+        LinearRgba::rgb(0.06, 0.06, 0.058),
         0.95,
     );
     // Hoar on the ground, faintly blue, a little lit of itself.
