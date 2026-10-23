@@ -521,3 +521,25 @@ and back.
 Still open: the photograph; and the mast relay's walk, for a first
 contract. A newcomer warned by the chirp has a roof only where the
 Village's houses are; past them, nothing for 250 m.
+
+# Machines working together (Robot minds' squad drill)
+
+Robot minds' `squad_drill` (claude/polish-robot-minds 64802ac2,
+`src/robots/squad_drill.rs`, 24 seeds an arm): on Marrow's south field a
+newcomer with a radio jogs for the nearest rendezvous, cover to cover,
+crouched in cover; a squad (three walkers, or two and a drone) finds it at
+45 to 55 m. The listener acts only on what's said: a chirp within 40 m, a
+radio line 1.5 s after it shows. A cut-off sends it to another rendezvous;
+a flanker's post counts as a threat when it picks cover.
+
+| Newcomer | Machines each alone | Machines working together |
+| - | - | - |
+| deaf | 17% get away | 8% |
+| listening | 17% | 17% (alive a median 23 s, the deaf 15 s) |
+
+Three walkers alone, working together: the listener 27%, the deaf 13%.
+Working together halves a deaf newcomer's chances; listening wins them
+back. The numbers are small, and a drone in the open kills nearly everyone
+whatever they hear. The line a listener did most with was the cut-off's,
+which names a rendezvous; the flank line gives a compass way ("round to
+your east"), as the job card does ("north-east, 190 m").
