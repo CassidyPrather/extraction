@@ -1,7 +1,7 @@
-// A lamp's halo (`world::halos`): drawn on the far side of a sphere round
-// the lamp, so it shows from anywhere, the eye inside it too. How close
-// the view ray passes to the lamp, as a share of the sphere's radius,
-// falls out of the far face's normal: t = sin(angle(normal, view)). A
+// A lamp's halo (`world::halos`): drawn on the near side of a sphere round
+// the lamp, in front of the lamp's own bulb. How close the view ray
+// passes to the lamp, as a share of the sphere's radius, falls out of the
+// face's normal: t = sin(angle(normal, view)). A
 // tight bright core, a soft wide halo that spreads more in damp air, and
 // the fog takes it with distance.
 
@@ -32,8 +32,11 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let glow = exp(-t2 * mix(9.0, 4.0, clamp(air, 0.0, 1.0))) * (0.08 + 0.15 * air);
     // The edge of the sphere: nothing left.
     let edge = 1.0 - smoothstep(0.75, 1.0, t2);
-    // Through fog, the core goes first and the halo stays longest.
-    let fog = exp(-dist / max(halo.air.y * 0.35, 1.0));
+    // Through fog, the core goes first and the halo stays longest. The
+    // scene's own fog (`FogFalloff::from_visibility_squared`: 5% left at
+    // the visibility), so a lamp carries as far as what it stands on.
+    let far = dist / max(halo.air.y, 1.0);
+    let fog = exp(-3.0 * far * far);
     let k = (core * fog + glow * sqrt(fog)) * edge;
     return vec4<f32>(halo.color.rgb * halo.color.w * k * view.exposure, 0.0);
 }

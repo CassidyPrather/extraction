@@ -185,7 +185,9 @@ fn spawn_forests(
                 .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
                     s.is_srgb = true;
                 })
-                .load(format!("textures/foliage/{name}/albedo.ktx2"));
+                .load(crate::render::textures::ktx2(&format!(
+                    "textures/foliage/{name}/albedo.ktx2"
+                )));
             materials.add(StandardMaterial {
                 base_color: tint,
                 base_color_texture: Some(tex),

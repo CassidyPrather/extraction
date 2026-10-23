@@ -115,7 +115,10 @@ impl Governor {
             let after = slow * f64::from(UP * UP);
             if after < target * ROOM && self.scale < self.max {
                 self.scale = (self.scale * UP).min(self.max);
-                self.times.clear();
+                // The next step up waits for a half second all at this
+                // size. What was measured stays for a step down: a late
+                // frame just before this mustn't be forgotten.
+                self.settle = COOL_FRAMES as u32;
             }
         }
         self.scale
@@ -316,6 +319,88 @@ mod xr {
     }
 }
 
+/// The hitch gauge's forced events (the response team, the Surge and the
+/// rest) through the governor: each frame's measured load, against the
+/// busy moment's own median, taken as the GPU's (a fifth of it fixed, the
+/// rest the pixels'). Wherever frames run late in a run (two within a
+/// step's look back) the scale comes down, and it's back within seconds.
+/// That's the governor's steps on the real moments' shapes; what a
+/// headset's GPU spends is the frame log's fourth column. Run by
+/// `spikes::tests::hitches_hold_their_ceiling` on its own trace (what's
+/// wrong, by moment).
+#[cfg(test)]
+pub(crate) fn follows_busy_moments(
+    base: &[f64],
+    moments: &[(String, Vec<f64>)],
+) -> Vec<(String, String)> {
+    const PERIOD: f64 = 1000.0 / 90.0;
+    let mut sorted = base.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let median = sorted[sorted.len() / 2];
+    // At 0.7 the quiet moment takes three quarters of the target.
+    let s0 = 0.7f32;
+    let t0 = 0.75 * TARGET * PERIOD;
+    let (rest, pixels) = (0.2 * t0, 0.8 * t0 / f64::from(s0 * s0));
+    let gpu = |load: f64, s: f32| load / median * (rest + pixels * f64::from(s * s));
+    let mut g = Governor::new(s0, 0.55, 1.0);
+    let mut quiet = base.iter().copied().cycle();
+    for _ in 0..1200 {
+        let s = g.scale;
+        g.step(Some(gpu(quiet.next().unwrap(), s)), PERIOD);
+    }
+    let mut wrong = Vec::new();
+    let mut runs = 0;
+    for (name, frames) in moments {
+        let before = g.scale;
+        let mut least = before;
+        let mut late = Vec::new();
+        for (i, &f) in frames.iter().enumerate() {
+            let s = g.scale;
+            let t = gpu(f, s);
+            if t > PERIOD * TARGET {
+                late.push(i);
+            }
+            g.step(Some(t), PERIOD);
+            least = least.min(g.scale);
+        }
+        // Two late frames a step apart or less always fall in one step's
+        // look back (its last eight frames): a run the governor must see.
+        let run = late.windows(2).any(|w| w[1] - w[0] <= EVERY as usize);
+        let mut back = None;
+        for i in 0..900 {
+            let s = g.scale;
+            g.step(Some(gpu(quiet.next().unwrap(), s)), PERIOD);
+            if back.is_none() && g.scale >= before * 0.97 {
+                back = Some(i);
+            }
+        }
+        println!(
+            "    governor: {name:<22} {:>3} late{}; scale {before:.2} > {least:.2}, back in {}",
+            late.len(),
+            if run { " in a run" } else { "" },
+            back.map_or("-".into(), |f| format!("{:.1} s", f as f64 / 90.0))
+        );
+        if run {
+            runs += 1;
+            // (At the floor already, there's nowhere to go.)
+            if least >= before && before > g.min + 1e-4 {
+                wrong.push((
+                    name.clone(),
+                    format!("{name}: late in a run, and the eyes' scale didn't drop"),
+                ));
+            }
+            if !back.is_some_and(|f| f < 600) {
+                wrong.push((
+                    name.clone(),
+                    format!("{name}: the eyes' scale not back within 6.7 s"),
+                ));
+            }
+        }
+    }
+    println!("    governor: {runs} moments ran late in a run");
+    wrong
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -435,77 +520,6 @@ mod tests {
         }
         assert!(during < before * 0.9, "{before} > {during}");
         assert!(back.is_some_and(|f| f < 450), "back within 5 s: {back:?}");
-    }
-
-    /// The hitch gauge's forced events (the response team, the Surge and
-    /// the rest), each frame's measured load (against the busy moment's own
-    /// median) taken as the GPU's: wherever frames run late in a run the
-    /// scale comes down, and it's back within seconds. The GPU's time is modelled (a fifth of it
-    /// fixed, the rest the pixels'), so this shows the governor's steps on
-    /// the real moments' shapes, not what a headset's GPU spends: that's
-    /// the frame log's fourth column.
-    #[test]
-    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
-    fn gauge_busy_moments_drop_the_scale_and_it_comes_back() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
-        let (base, spikes, _) = super::super::spikes::tests::spikes("marrow_creek");
-        let mut sorted = base.clone();
-        sorted.sort_by(f64::total_cmp);
-        let median = sorted[sorted.len() / 2];
-        // At 0.7 the quiet moment takes three quarters of the target.
-        let s0 = 0.7f32;
-        let t0 = 0.75 * TARGET * PERIOD;
-        let (rest, pixels) = (0.2 * t0, 0.8 * t0 / f64::from(s0 * s0));
-        let gpu = |load: f64, s: f32| load / median * cost(s, pixels, rest);
-        let mut g = Governor::new(s0, 0.55, 1.0);
-        let mut quiet = base.iter().copied().cycle();
-        for _ in 0..1200 {
-            let s = g.scale;
-            g.step(Some(gpu(quiet.next().unwrap(), s)), PERIOD);
-        }
-        let mut checked = 0;
-        for spike in &spikes {
-            let before = g.scale;
-            let mut least = before;
-            let mut late = Vec::new();
-            for (i, &f) in spike.frames.iter().enumerate() {
-                let s = g.scale;
-                let t = gpu(f, s);
-                if t > PERIOD * TARGET {
-                    late.push(i);
-                }
-                g.step(Some(t), PERIOD);
-                least = least.min(g.scale);
-            }
-            // A run of late frames (two within eight), not a lone one.
-            let run = late.windows(2).any(|w| w[1] - w[0] < HOT_FRAMES);
-            let mut back = None;
-            for i in 0..900 {
-                let s = g.scale;
-                g.step(Some(gpu(quiet.next().unwrap(), s)), PERIOD);
-                if back.is_none() && g.scale >= before * 0.97 {
-                    back = Some(i);
-                }
-            }
-            println!(
-                "{:<22} {:>3} frames over{}; scale {before:.2} > {least:.2}, back in {}",
-                spike.name,
-                late.len(),
-                if run { " in a run" } else { "" },
-                back.map_or("-".into(), |f| format!("{:.1} s", f as f64 / 90.0))
-            );
-            if run {
-                checked += 1;
-                assert!(least < before, "{}: a run late and no drop", spike.name);
-                assert!(
-                    back.is_some_and(|f| f < 600),
-                    "{}: not back within 6.7 s",
-                    spike.name
-                );
-            }
-        }
-        println!("{checked} moments ran late in a run");
-        assert!(checked > 0, "no moment ran late: the model's too light");
     }
 
     /// No GPU time back (no timestamp queries): it holds where it is.

@@ -32,6 +32,37 @@ pub struct Shell {
     pub xf: Transform,
     pub half: Vec2,
     pub height: f32,
+    /// Where it has a roof (`buildings::roof_cover`): indoors is under it.
+    /// None: the whole box, as high as its footprint.
+    pub cover: Option<&'static crate::world::buildings::RoofCover>,
+}
+
+impl Shell {
+    /// The shell of `building`, a `prefab` placed at `xf`.
+    pub fn of(building: Entity, prefab: &str, xf: Transform) -> Self {
+        let size = extraction_core::map::prefab_footprint(prefab);
+        Self {
+            building,
+            xf,
+            half: Vec2::new(size[0], size[2]) * 0.5,
+            height: size[1],
+            cover: crate::world::buildings::roof_cover(prefab),
+        }
+    }
+
+    /// Whether a world point is inside, under its roof.
+    pub fn contains(&self, p: Vec3) -> bool {
+        let l = self.xf.compute_affine().inverse().transform_point3(p);
+        match self.cover {
+            Some(c) => c.covers(l),
+            None => {
+                l.x.abs() < self.half.x
+                    && l.z.abs() < self.half.y
+                    && l.y > -1.0
+                    && l.y < self.height - 0.6
+            }
+        }
+    }
 }
 
 /// Every building that has doors, and its doors.
@@ -44,11 +75,9 @@ pub struct Entrances {
 impl Entrances {
     /// The building `p` is inside (under its roof), if any.
     pub fn building_at(&self, p: Vec3) -> Option<Entity> {
-        self.shells.iter().find_map(|s| {
-            let l = s.xf.compute_affine().inverse().transform_point3(p);
-            (l.x.abs() < s.half.x && l.z.abs() < s.half.y && l.y > -1.0 && l.y < s.height - 0.6)
-                .then_some(s.building)
-        })
+        self.shells
+            .iter()
+            .find_map(|s| s.contains(p).then_some(s.building))
     }
 
     /// Where a robot outside should stand to deal with `building`: the
@@ -115,7 +144,9 @@ impl Plugin for DoorsPlugin {
     }
 }
 
-/// Once the buildings exist, note every doorway and building box.
+/// Once the buildings exist, note every doorway and building box: a box
+/// for every building with a way in, a door or a bare doorway (a burnt
+/// house's, a drowned one's), indoors under its roof.
 fn index_entrances(
     mut entrances: ResMut<Entrances>,
     buildings: Query<(Entity, &Building, &Transform)>,
@@ -126,16 +157,16 @@ fn index_entrances(
     }
     for (b, building, xf) in &buildings {
         let mine: Vec<_> = doors.iter().filter(|(_, _, p)| p.parent() == b).collect();
-        if mine.is_empty() {
+        // A way in: a door, or a doorway with none (`map::prefab_entrances`)
+        // into somewhere with a roof (not a drowned house's walls).
+        let roofed =
+            crate::world::buildings::roof_cover(&building.prefab).is_some_and(|c| c.roofed().0 > 0);
+        let way_in = !mine.is_empty()
+            || (roofed && !extraction_core::map::prefab_entrances(&building.prefab).is_empty());
+        if !way_in {
             continue;
         }
-        let size = extraction_core::map::prefab_footprint(&building.prefab);
-        entrances.shells.push(Shell {
-            building: b,
-            xf: *xf,
-            half: Vec2::new(size[0], size[2]) * 0.5,
-            height: size[1],
-        });
+        entrances.shells.push(Shell::of(b, &building.prefab, *xf));
         for (door, leaf, _) in mine {
             let d = leaf.0;
             let rot = Quat::from_rotation_y(d.yaw);
@@ -223,6 +254,128 @@ fn wedges(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Whatever doors it has, a point under a prefab's roof is indoors
+    /// and one under the sky isn't (a burnt house under the half of its
+    /// roof that's left, not its open back; a damaged one not under its
+    /// hole; a drowned one nowhere). Prints which have a box now that had
+    /// none (`-- --nocapture`).
+    #[test]
+    fn indoors_is_under_the_roof_whatever_the_doors() {
+        use crate::world::buildings::{self, Shape};
+        // The truth, the plain way: a ray straight up from the point
+        // meets a piece.
+        fn roofed(geo: &buildings::Geo, p: Vec3) -> bool {
+            geo.pieces.iter().any(|piece| {
+                let half = match piece.shape {
+                    Shape::Box(s) => s * 0.5,
+                    Shape::Prism(s) => Vec3::new(s.x * 0.5, s.y * 0.25, s.z * 0.5),
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                if half.min_element() <= 0.005 || piece.mat == crate::render::materials::Mat::Glass
+                {
+                    return false;
+                }
+                let at = match piece.shape {
+                    Shape::Prism(s) => piece.at * Transform::from_xyz(0.0, s.y * 0.25, 0.0),
+                    _ => piece.at,
+                };
+                let inv = at.rotation.inverse();
+                let o = inv * (p - at.translation);
+                let d = inv * Vec3::Y;
+                let (mut t0, mut t1) = (0.0f32, 100.0f32);
+                for k in 0..3 {
+                    if d[k].abs() < 1e-6 {
+                        if o[k].abs() > half[k] {
+                            return false;
+                        }
+                        continue;
+                    }
+                    let (a, b) = ((-half[k] - o[k]) / d[k], (half[k] - o[k]) / d[k]);
+                    t0 = t0.max(a.min(b));
+                    t1 = t1.min(a.max(b));
+                }
+                t0 <= t1 && t0 > 0.0
+            })
+        }
+        let mut bad = Vec::new();
+        let mut gained = Vec::new();
+        let mut changed = Vec::new();
+        let mut checked = 0;
+        for id in buildings::PREFABS {
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            let way_in =
+                !geo.doors.is_empty() || !extraction_core::map::prefab_entrances(id).is_empty();
+            if !way_in {
+                continue;
+            }
+            if geo.doors.is_empty() {
+                let (r, n) = buildings::roof_cover(id).map_or((0, 1), |c| c.roofed());
+                if r > 0 {
+                    gained.push(format!("{id} ({:.0}% roofed)", 100.0 * r as f32 / n as f32));
+                }
+            }
+            let shell = Shell::of(Entity::PLACEHOLDER, id, Transform::IDENTITY);
+            // What it was: a box, and only with a door.
+            let was = Shell {
+                cover: None,
+                ..shell
+            };
+            let had = !geo.doors.is_empty();
+            let (mut flips, mut all) = (0, 0);
+            let f = extraction_core::map::prefab_footprint(id);
+            let (hx, hz) = (f[0] * 0.5 - 0.3, f[2] * 0.5 - 0.3);
+            let y = 1.8;
+            let mut x = -hx;
+            while x <= hx {
+                let mut z = -hz;
+                while z <= hz {
+                    let p = Vec3::new(x, y, z);
+                    all += 1;
+                    if (had && was.contains(p)) != shell.contains(p) {
+                        flips += 1;
+                    }
+                    // Clear of a roof's edge: the same all round.
+                    let truth = roofed(&geo, p);
+                    let steady = [(0.6, 0.0), (-0.6, 0.0), (0.0, 0.6), (0.0, -0.6)]
+                        .iter()
+                        .all(|(a, b)| roofed(&geo, p + Vec3::new(*a, 0.0, *b)) == truth);
+                    // (Not inside a wall or a piece of furniture.)
+                    let solid = !roofed(&geo, p - Vec3::Y * 0.05) && truth;
+                    if steady && !solid {
+                        checked += 1;
+                        if shell.contains(p) != truth {
+                            bad.push(format!(
+                                "{id} at ({x:.1}, {z:.1}): {} but {}",
+                                if truth {
+                                    "under a roof"
+                                } else {
+                                    "under the sky"
+                                },
+                                if truth { "not indoors" } else { "indoors" }
+                            ));
+                        }
+                    }
+                    z += 1.0;
+                }
+                x += 1.0;
+            }
+            if flips > 0 {
+                changed.push(format!("{id} {:.0}%", 100.0 * flips as f32 / all as f32));
+            }
+        }
+        println!("indoors now, with no door: {}", gained.join(", "));
+        println!("points whose indoors changed: {}", changed.join(", "));
+        assert!(checked > 500, "only {checked} points checked");
+        assert!(
+            bad.is_empty(),
+            "{} of {checked} wrong:\n{}",
+            bad.len(),
+            bad.join("\n")
+        );
+    }
     use crate::robots::{Brain, Job, JobKind};
 
     /// A player hiding in a house; a walker sent to look for them.

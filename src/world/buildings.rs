@@ -2981,6 +2981,21 @@ fn pump_station(b: &mut Builder) {
         ],
     );
     b.flat_roof(w, d, f + h, Mat::Concrete);
+    // The boiler's chimney, out of the roof by the back wall: what the
+    // pit and the quarry it pumps out are found by (`map_lint`'s
+    // `REGION_MARK`).
+    // (Its foot in the roof's slab, not flush under it.)
+    let (sx, sz, foot, top) = (4.6, 3.6, f + h + 0.1, 8.0);
+    b.bx(
+        Vec3::new(1.0, top - 0.1 - foot, 1.0),
+        Vec3::new(sx, (foot + top - 0.1) * 0.5, sz),
+        Mat::Brick,
+    );
+    b.bx(
+        Vec3::new(1.2, 0.2, 1.2),
+        Vec3::new(sx, top - 0.1, sz),
+        Mat::Brick,
+    );
     // Two big pumps with pipes, and an office corner.
     for x in [-3.5, 1.5] {
         b.piece(
@@ -5221,6 +5236,24 @@ fn boxcar(b: &mut Builder) {
         Mat::RustyMetal,
         true,
     );
+    // Old sleepers stacked into steps at the doorway, in front of its open
+    // half: a floor 1.26 m up in four risers the body steps (`map_doors`
+    // holds the ground at their foot to a step).
+    let (face, tread, floor) = (w * 0.5 + 0.035, 0.4, f + 0.06);
+    let rise = floor / 4.0;
+    for k in 1..4 {
+        let top = rise * (4 - k) as f32;
+        let x = face + tread * (k as f32 - 0.5);
+        b.bx(
+            Vec3::new(tread - 0.01, top + 0.3, 1.3),
+            Vec3::new(x, (top - 0.3) * 0.5, -0.4),
+            Mat::Timber,
+        );
+    }
+    let steps = 3.0 * tread;
+    if let Some(e) = b.geo.entrances.iter_mut().find(|e| e.out == [1.0, 0.0]) {
+        e.clear = steps + 1.0;
+    }
     // Ladders at diagonally opposite corners, couplers at both ends.
     for (end, x) in [(-1.0f32, -1.1f32), (1.0, 1.1)] {
         let z = end * (d * 0.5 + 0.06);
@@ -5687,6 +5720,96 @@ pub fn occluders(geo: &Geo) -> super::ao::Occluders {
     }))
 }
 
+/// Where a building has a roof over it, on a grid over its footprint:
+/// what "indoors" is (`robots::doors::Shell`). A burnt house is indoors
+/// under the half of its roof that's left, a damaged one not under its
+/// hole, a drowned one nowhere.
+#[derive(Debug)]
+pub struct RoofCover {
+    half: Vec2,
+    n: [usize; 2],
+    /// Per cell, the top of the roof over it (building-local y), or NaN
+    /// under the sky.
+    top: Vec<f32>,
+}
+
+/// The cover grid's cells (m).
+pub const COVER_CELL: f32 = 0.5;
+/// How high over the footing a cell's cover is looked for from: over the
+/// floors, the silt and a bed, under a ceiling.
+const COVER_FROM: f32 = 1.5;
+
+impl RoofCover {
+    fn new(geo: &Geo, foot: [f32; 3]) -> Self {
+        let occ = occluders(geo);
+        let half = Vec2::new(foot[0], foot[2]) * 0.5;
+        let n = [
+            (foot[0] / COVER_CELL).ceil().max(1.0) as usize,
+            (foot[2] / COVER_CELL).ceil().max(1.0) as usize,
+        ];
+        let mut top = Vec::with_capacity(n[0] * n[1]);
+        for j in 0..n[1] {
+            for i in 0..n[0] {
+                let x = -half.x + (i as f32 + 0.5) * COVER_CELL;
+                let z = -half.y + (j as f32 + 0.5) * COVER_CELL;
+                // Four looks up across the cell: a joist over one of them
+                // isn't a roof.
+                let tops: Vec<f32> = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+                    .iter()
+                    .filter_map(|(a, b)| {
+                        let q = COVER_CELL * 0.25;
+                        occ.cover_top(Vec3::new(x + a * q, COVER_FROM, z + b * q))
+                    })
+                    .collect();
+                top.push(if tops.len() >= 3 {
+                    tops.iter().copied().fold(f32::MIN, f32::max)
+                } else {
+                    f32::NAN
+                });
+            }
+        }
+        Self { half, n, top }
+    }
+
+    /// Whether a building-local point is under the roof: in the footprint,
+    /// over the ground, under the cover over it.
+    pub fn covers(&self, l: Vec3) -> bool {
+        if l.x.abs() >= self.half.x || l.z.abs() >= self.half.y || l.y <= -1.0 {
+            return false;
+        }
+        let i = (((l.x + self.half.x) / COVER_CELL) as usize).min(self.n[0] - 1);
+        let j = (((l.z + self.half.y) / COVER_CELL) as usize).min(self.n[1] - 1);
+        let top = self.top[j * self.n[0] + i];
+        !top.is_nan() && l.y < top
+    }
+
+    /// How many of its cells have a roof over them, and how many it has.
+    pub fn roofed(&self) -> (usize, usize) {
+        (
+            self.top.iter().filter(|t| !t.is_nan()).count(),
+            self.top.len(),
+        )
+    }
+}
+
+/// A prefab's [`RoofCover`], made once (None for a prefab with no
+/// recipe). A drowned house's has no roof anywhere.
+pub fn roof_cover(id: &str) -> Option<&'static RoofCover> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static MADE: OnceLock<Mutex<HashMap<String, Option<&'static RoofCover>>>> = OnceLock::new();
+    let made = MADE.get_or_init(Default::default);
+    if let Some(c) = made.lock().unwrap().get(id) {
+        return *c;
+    }
+    let cover = prefab(id).and_then(|geo| {
+        let c = RoofCover::new(&geo, extraction_core::map::prefab_footprint(id));
+        Some(&*Box::leak(Box::new(c)))
+    });
+    made.lock().unwrap().insert(id.to_string(), cover);
+    cover
+}
+
 /// A prefab's pieces shaded by its own solid pieces, baked once in the
 /// background: a big site's thousand pieces take half a second, a house's
 /// a few dozen milliseconds, every house alike (`render::spikes`).
@@ -5748,13 +5871,17 @@ pub fn dress_buildings(
     stand_in_mat: Res<crate::render::lod::StandInMaterial>,
     mut bakes: Local<std::collections::HashMap<String, Bake>>,
     breaches: Option<Res<crate::destruction::breach::Breaches>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     use crate::render::world_props::Resolved;
     // A few buildings a frame, each once its prefab's shading is baked
     // (in the background, `Bake`), so a valley's arrival doesn't hitch.
+    // While the valley loads no one's playing: eight times as many (the
+    // buildings were most of Marrow Creek's wait, 3 a frame).
+    let most = if loaded.is_some() { 3 } else { 24 };
     let mut built = 0;
     for (e, b, xf, mut wait) in &mut pending {
-        if built >= 3 {
+        if built >= most {
             break;
         }
         let Some(mut geo) = prefab(&b.prefab) else {

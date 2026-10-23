@@ -61,7 +61,7 @@ pub const STILL_SHOWS: f32 = 0.3;
 /// 25 m, a sprint throws them about 3 m wide; a walk about 1).
 /// A drone that sees someone on its way home fights for this long (s),
 /// then goes on home.
-pub const LEAVING_FIGHT: f32 = 8.0;
+pub const LEAVING_FIGHT: f32 = super::recall::lasts(super::recall::Memory::Roofed);
 pub const CROSSING_SPREAD: f32 = 0.025;
 
 /// A drone began locking on (audio chirps; the eye flares).

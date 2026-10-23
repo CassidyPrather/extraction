@@ -3733,7 +3733,10 @@ fn sentry_sounds(
     for e in events.read() {
         let at = Some(e.at);
         let layers: &[(&str, &str, f64)] = match e.what {
-            A::Chirp => &[("machines/drone_lock", "sentry.chirp", 1.3)],
+            A::Chirp => &[
+                ("machines/drone_lock", "sentry.chirp", 1.3),
+                ("physical/switch", "lock.tick", 1.8),
+            ],
             A::Fire => &[("guns/pistol_shot", "robot.shot", 0.95)],
             A::Drawn => &[("machines/servo", "sentry.turn", 1.2)],
             A::PowerLost => &[
@@ -4211,7 +4214,9 @@ fn chatter_sounds(
     }
 }
 
-/// A drone settling its gun on you: the chirp that means move.
+/// A drone settling its gun on you: the chirp that means move, with a
+/// hard tick on its onset (`lock.tick`): a tone alone is too narrow for
+/// the ears to place above from level (`scripts/audio_localise.py`).
 fn lock_sounds(
     mut commands: Commands,
     mut locks: MessageReader<crate::robots::drone::DroneLock>,
@@ -4227,6 +4232,17 @@ fn lock_sounds(
             Some(l.at),
             "drone.lock",
             0.0,
+            0.03,
+        );
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "physical/switch",
+            Some(l.at),
+            "lock.tick",
+            0.0,
+            1.8,
             0.03,
         );
     }

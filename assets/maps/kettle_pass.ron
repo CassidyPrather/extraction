@@ -242,6 +242,14 @@
     ],
 
     placements: [
+        // Landmarks to steer by: two you can tell apart in sight from nearly
+        // anywhere you walk (map_lint, "two landmarks in sight").
+        // Kettle mine's boiler-house chimney over the spoil heap.
+        (prefab: "chimney", at: (-160.0, -120.0), rot: 0.0),
+        // The checkpoint's radio mast at the south gate.
+        (prefab: "radio_mast", at: (160.0, 280.0), rot: 0.0),
+        // The hunting lodge's lookout.
+        (prefab: "survey_tower", at: (240.0, -240.0), rot: 0.0),
         // Hero landmark, a collapsed ropeway from the mine yard south-east
         // over the beck (Map design's sightline audit: fog-blind 64% -> 29%).
         (prefab: "ropeway_station", at: (-168.0, -12.0), rot: 166.3),
@@ -295,6 +303,10 @@
         // Kettle mine: the head-frame shed, wagons, pump house and hut.
         (prefab: "rail_shed", at: (-210.0, -65.0), rot: 75.0),
         (prefab: "boxcar", at: (-175.7, -42.3), rot: 103.8),
+        // The yard's lamp hut by the pickup, and the road-menders' hut at the
+        // pass: each a roof to wait under for the truck.
+        (prefab: "shed", at: (-203.5, -41.0), rot: 188.0, tag: "lamp_hut"),
+        (prefab: "shed", at: (21.5, -261.5), rot: 272.0, tag: "road_hut"),
         (prefab: "boxcar", at: (-152.8, -35.5), rot: 110.3),
         (prefab: "pump_station", at: (-200.0, -100.0), rot: 90.0),
         (prefab: "mast_hut", at: (-232.0, -95.0), rot: 15.0),
@@ -307,6 +319,9 @@
         // The hunting lodge on the east shoulder.
         (prefab: "cabin_log", at: (205.0, -205.0), rot: 0.0, tag: "lodge"),
         (prefab: "cabin_log", at: (232.0, -188.0), rot: 90.0),
+        // The lodge's woodshed down by the pickup: a roof to wait under while
+        // the drones circle the lodge.
+        (prefab: "shed", at: (240.0, -214.0), rot: 315.0, tag: "woodshed"),
         (prefab: "shed", at: (178.0, -190.0), rot: 40.0),
 
         // The pass: the weather mast and its hut, the ranger tower.
@@ -322,22 +337,22 @@
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // The gatekeeper's garden, open to the north.
-        (prefab: "fence_garden", at: (68.15, 225.90), rot: 180.0),
-        (prefab: "fence_garden", at: (63.80, 221.75), rot: 90.0),
+        (prefab: "fence_garden", at: (66.65, 225.90), rot: 180.0),
+        (prefab: "fence_garden", at: (62.30, 221.75), rot: 90.0),
         // The weir cottage's side garden (the lane runs behind it), open to the north.
-        (prefab: "fence_garden", at: (-107.35, 157.40), rot: 0.0),
-        (prefab: "fence_garden", at: (-111.70, 153.25), rot: 90.0),
+        (prefab: "fence_garden", at: (-108.85, 157.40), rot: 0.0),
+        (prefab: "fence_garden", at: (-113.20, 153.25), rot: 90.0),
         // Behind the camp cabin, open to the south.
-        (prefab: "fence_garden", at: (245.35, 224.60), rot: 0.0),
-        (prefab: "fence_garden", at: (249.70, 228.75), rot: 270.0),
+        (prefab: "fence_garden", at: (246.85, 224.60), rot: 0.0),
+        (prefab: "fence_garden", at: (251.20, 228.75), rot: 270.0),
         // Beside the lodge's second cabin, open to the east.
-        (prefab: "fence_garden", at: (229.10, -180.15), rot: 90.0),
-        (prefab: "fence_garden", at: (233.25, -175.80), rot: 180.0),
+        (prefab: "fence_garden", at: (229.10, -178.65), rot: 90.0),
+        (prefab: "fence_garden", at: (233.25, -174.30), rot: 180.0),
         // The low farm's paddock behind the house, open to the east.
-        (prefab: "fence_garden", at: (-189.90, 203.35), rot: 90.0),
-        (prefab: "fence_garden", at: (-189.90, 211.85), rot: 90.0),
-        (prefab: "fence_garden", at: (-185.75, 216.20), rot: 0.0),
-        (prefab: "fence_garden", at: (-177.25, 216.20), rot: 0.0),
+        (prefab: "fence_garden", at: (-189.90, 204.85), rot: 90.0),
+        (prefab: "fence_garden", at: (-189.90, 213.35), rot: 90.0),
+        (prefab: "fence_garden", at: (-185.75, 217.70), rot: 0.0),
+        (prefab: "fence_garden", at: (-177.25, 217.70), rot: 0.0),
 
         // Car wrecks (Destruction strips their doors, bonnets, boots and
         // wheels): cover on the verges, never on the road.

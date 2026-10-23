@@ -96,6 +96,11 @@ impl WorldReady<'_, '_> {
     }
 }
 
+/// Present once everything's in ("everything in"): work paced over frames
+/// so play doesn't hitch can go faster before it, when no one's playing.
+#[derive(Resource)]
+pub struct Loaded;
+
 pub struct TimelinePlugin;
 
 impl Plugin for TimelinePlugin {
@@ -188,6 +193,7 @@ fn settled(
     gltfs: Res<Assets<bevy::gltf::Gltf>>,
     server: Res<AssetServer>,
     mut all: Local<bool>,
+    mut commands: Commands,
 ) {
     if *all {
         return;
@@ -219,6 +225,7 @@ fn settled(
     }
     if forest_ok && props_ok && preload_ok && materials_ok {
         *all = true;
+        commands.insert_resource(Loaded);
         mark("everything in");
     }
 }

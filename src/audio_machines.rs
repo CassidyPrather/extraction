@@ -156,7 +156,10 @@ fn spotter_sounds(
 ) {
     for e in events.read() {
         let ls: &[Layer] = match e.what {
-            SpotterAct::Fixing => &[("machines/drone_lock", "spotter.fix", 0.8)],
+            SpotterAct::Fixing => &[
+                ("machines/drone_lock", "spotter.fix", 0.8),
+                ("physical/switch", "lock.tick", 1.8),
+            ],
             SpotterAct::Call => &[("machines/siren", "spotter.call", 1.0)],
             SpotterAct::Loose => &[("physical/whoosh", "spotter.loose", 1.0)],
             SpotterAct::Holed => &[

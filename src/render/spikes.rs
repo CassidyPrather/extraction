@@ -554,6 +554,14 @@ pub(crate) mod tests {
                 ));
             }
         }
+        // The eyes' scale follows the moments (`hold_rate`).
+        let moments: Vec<(String, Vec<f64>)> = spikes
+            .iter()
+            .map(|s| (s.name.clone(), s.frames.clone()))
+            .collect();
+        over.extend(super::super::hold_rate::follows_busy_moments(
+            &base, &moments,
+        ));
         if let Some((i, f)) = long.iter().find(|(i, _)| *i > 2) {
             if *f > LOAD_CEILING * p50 {
                 over.push((

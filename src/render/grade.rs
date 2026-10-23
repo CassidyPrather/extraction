@@ -334,6 +334,23 @@ pub fn lamp_light<'a>(
     (lux / DAY_LUX).min(0.5)
 }
 
+/// What a thing indoors is seen by, with eyes used to the room, against a
+/// day outside (the sky's light on it, the eyes' adaptation on top). Flat:
+/// the renderer's sky light indoors is the one dimmed ambient
+/// (`dim_indoors`) wherever in whichever building, and a loot item, its
+/// own entity, takes none of the building's baked occlusion; only a patch
+/// of direct sun, or a lamp, adds to it. Left out: those, and a valley's
+/// grade (the training yard's is a shade brighter).
+pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
+    let sky = crate::world::sky::sky_dim(conditions) * conditions.light * INTERIOR_LIGHT;
+    sky * Adaptation::target(conditions.light * INTERIOR_LIGHT).exp2()
+}
+
+/// The least [`indoor_seen`] that lets you tell a thing you came for
+/// from the floor at arm's length without a torch: three stops under a
+/// day outside. The night is under it; the torch is for that.
+pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
+
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
 /// `undim` gives back exactly what was there (if nothing changed it since).
 #[derive(Resource, Default)]
@@ -371,6 +388,50 @@ pub fn undim(mut ambient: ResMut<GlobalAmbientLight>, mut dimmed: ResMut<Dimmed>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// By day, dawn and dusk in any weather, a storm's included, what you
+    /// came for indoors is lit enough to see without a torch; on a night
+    /// under cloud it isn't. Flat over every room (`indoor_seen`), so this holds every
+    /// loot spot in every prefab at once.
+    #[test]
+    fn loot_indoors_is_seen_by_day_not_at_night() {
+        use crate::world::weather::{Conditions, Hour, WeatherKind};
+        let kinds = [
+            WeatherKind::Drizzle,
+            WeatherKind::PeaSouper,
+            WeatherKind::Downpour,
+            WeatherKind::Clearing,
+        ];
+        let mut worst = (f32::INFINITY, String::new());
+        for kind in kinds {
+            for hour in [Hour::Dawn, Hour::Day, Hour::Dusk] {
+                let c = Conditions::compose(kind, hour, 1);
+                for c in [c, c.stormy()] {
+                    let seen = indoor_seen(&c);
+                    println!("{kind:?} {hour:?} storm {}: {seen:.3}", c.storm);
+                    if seen < worst.0 {
+                        worst = (seen, format!("{kind:?} {hour:?} storm {}", c.storm));
+                    }
+                }
+            }
+        }
+        assert!(
+            worst.0 >= LOOT_SEEN_FLOOR,
+            "indoors, {}: seen at {:.3} of a day, under {LOOT_SEEN_FLOOR}",
+            worst.1,
+            worst.0
+        );
+        // A day indoors is darker than outside, and brighter than dusk.
+        let day = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1));
+        let dusk = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 1));
+        assert!(day < 1.0 && dusk < day, "{day} {dusk}");
+        // Under cloud the night is dark indoors. (A clear night under a
+        // full moon isn't: the eyes open all the way to it.)
+        for kind in &kinds[..3] {
+            let night = indoor_seen(&Conditions::compose_with_moon(*kind, Hour::Night, 1, 0.5));
+            assert!(night < LOOT_SEEN_FLOOR, "{kind:?} night: {night:.3}");
+        }
+    }
 
     #[test]
     fn below_ground_the_eyes_open_less_and_a_torch_lights_them() {

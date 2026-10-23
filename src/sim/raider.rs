@@ -302,6 +302,8 @@ pub struct Raider {
     /// Anomalies that have had it (it walked into one without meaning
     /// to): never again, whatever its nerve.
     burned: HashSet<Entity>,
+    /// Doors a lockdown has bolted for good: shut in its plans.
+    sealed: HashSet<Entity>,
     /// The current plan was cut short (a fight, a repath): redo, don't
     /// give up.
     interrupted: bool,
@@ -338,6 +340,10 @@ pub struct Raider {
     crouched_since: Option<f32>,
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
+    /// Where it waits for the truck at rendezvous `.0` while the drones
+    /// survey a place nearby: in the lee of the shelter there
+    /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
+    wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
@@ -566,6 +572,7 @@ pub fn attach_raider(
                 skip: HashSet::new(),
                 known: HashSet::new(),
                 burned: HashSet::new(),
+                sealed: HashSet::new(),
                 interrupted: false,
                 pack_full: false,
                 rv: career_rv,
@@ -587,6 +594,7 @@ pub fn attach_raider(
                 heat: 0.0,
                 crouched_since: None,
                 at_rv: false,
+                wait_at: None,
                 after_vent: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
@@ -945,6 +953,7 @@ pub fn think(
                 continue;
             }
             spot_anomalies(&mut bot, r, &scene, here);
+            spot_sealed(&mut bot, r, &scene, &mut log);
             sneak(
                 me,
                 &mut bot,
@@ -2264,6 +2273,51 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     }
 }
 
+/// A lockdown has bolted a door for good (the shelter's programme): its
+/// doorway is a wall in the plan from now on, and a walk planned through
+/// it is planned again, the escape tunnel's way.
+fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
+    let mut new = Vec::new();
+    for plan in r.plans.iter_mut() {
+        for d in &plan.doors {
+            if r.sealed.contains(&d.entity)
+                || !scene
+                    .power_locked
+                    .get(d.entity)
+                    .is_ok_and(|l| l.stage == crate::world::underground::SEALED)
+            {
+                continue;
+            }
+            let along = d.b - d.a;
+            let dir = along.normalize_or(Vec2::X);
+            plan.grid.block(
+                Obstacle::Rect {
+                    at: ((d.a + d.b) * 0.5).to_array(),
+                    half: [along.length() * 0.5 + 0.1, 0.3],
+                    yaw: dir.y.atan2(dir.x),
+                },
+                0.0,
+            );
+            new.push((d.entity, plan.name.clone()));
+        }
+    }
+    if new.is_empty() {
+        return;
+    }
+    for (door, site) in &new {
+        r.sealed.insert(*door);
+        log.event("sealed", json!({"site": site}));
+    }
+    let through = bot
+        .tasks
+        .iter()
+        .any(|t| matches!(t, Task::OpenDoor(d) if r.sealed.contains(d)));
+    if through {
+        r.interrupted = true;
+        bot.replace([Task::Wait(0.1)]);
+    }
+}
+
 fn seg_dist(a: Vec2, b: Vec2, p: Vec2) -> f32 {
     let ab = b - a;
     let t = ((p - a).dot(ab) / ab.length_squared().max(1e-6)).clamp(0.0, 1.0);
@@ -2837,17 +2891,31 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
         // already rises with danger (docs/MAP_DESIGN.md, "what the bots
         // value").
         // (A job is worth the walk whatever's on the shelves there.)
+        // An underground site is worth what's down there, not the
+        // surface it lies under (its kiosk's stencil says).
+        let below = matches!(s.kind, SiteKind::Building(_))
+            .then(|| extraction_core::underground::layout(&s.name))
+            .flatten();
         let rich = if s.job {
             1.0
         } else {
-            scene.zone.map.richness_at(s.at.to_array())
+            below
+                .and_then(|l| l.rich)
+                .unwrap_or_else(|| scene.zone.map.richness_at(s.at.to_array()))
+        };
+        // Its way down under cover: the danger above is skirted, not
+        // crossed, for the last of the walk.
+        let caution = if below.is_some_and(|l| l.covered_entry) {
+            ROUTE_CAUTION * 0.5
+        } else {
+            ROUTE_CAUTION
         };
         let aim = r.objective.map_or(1.0, |o| {
             1.0 + OBJECTIVE_PULL * (1.0 - s.at.distance(o) / OBJECTIVE_REACH).clamp(0.0, 1.0)
         });
         let score = pull * rich * aim
             / (1.0 + d / 80.0)
-            / (1.0 + ROUTE_CAUTION * route_exposure(&scene.zone.map, here, s.at))
+            / (1.0 + caution * route_exposure(&scene.zone.map, here, s.at))
             * (1.0 + late * toward.clamp(-0.8, 1.0))
             * r.rng.range(0.75, 1.25);
         if best.is_none_or(|b| score > b.0) {
@@ -3145,8 +3213,24 @@ fn site_target(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Vec2 {
                 .map(|e| plan.world2(*e))
                 .unwrap_or(site.at)
         }
+        // Its edge on this side: its middle is no place to walk to (the
+        // grid keeps out of it).
+        SiteKind::Anomaly => {
+            let rad = anomaly_radius(scene, site.at);
+            site.at + (pos.xz() - site.at).normalize_or(Vec2::X) * (rad + 2.5)
+        }
         _ => site.at,
     }
+}
+
+/// The radius of the anomaly standing at `at` (a standing one's marker),
+/// or a typical one's if none is there.
+fn anomaly_radius(scene: &Scene, at: Vec2) -> f32 {
+    scene
+        .anomalies
+        .iter()
+        .find(|(_, _, gt)| gt.translation().xz().distance(at) < 3.0)
+        .map_or(3.0, |(_, a, _)| a.radius)
 }
 
 /// Vents opened (site, vent): their zones' cells walked again in those
@@ -3312,8 +3396,7 @@ fn go_to_site(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> Option<Vec<Task
     let within = match r.sites[s].kind {
         SiteKind::Building(_) => 0.6,
         SiteKind::Field => 8.0,
-        // Its edge, from where the stone is seen (or isn't).
-        SiteKind::Anomaly => 5.0,
+        SiteKind::Anomaly => 1.5,
         _ => 2.0,
     };
     travel(&r.grid, pos.xz(), to, within)
@@ -3326,7 +3409,8 @@ fn arrived(r: &Raider, scene: &Scene, s: usize, pos: Vec3) -> bool {
             r.plans[b].in_grid(pos) && site_target(r, scene, s, pos).distance(pos.xz()) < 3.0
         }
         SiteKind::Field => site.at.distance(pos.xz()) < 15.0,
-        SiteKind::Anomaly => site.at.distance(pos.xz()) < 8.0,
+        // At its edge, from where the stone is seen (or isn't).
+        SiteKind::Anomaly => site.at.distance(pos.xz()) < anomaly_radius(scene, site.at) + 4.0,
         _ => site.at.distance(pos.xz()) < 6.0,
     }
 }
@@ -3628,15 +3712,35 @@ fn extract_step(
             ];
         }
     }
-    r.at_rv = here.distance(approach) <= 4.0;
-    if here.distance(approach) > 4.0 {
+    // Till the truck's stopped, wait in a shelter's lee if drones watch
+    // the place; then walk out to the tailgate.
+    let waiting = matches!(phase, Phase::TruckWaiting { .. });
+    if r.wait_at.is_none_or(|(at, _)| at != rv) {
+        let at = rvs[rv].1.to_array();
+        let lee = extraction_core::map_lint::watched_by(&zone.map, at).and_then(|(poi, _)| {
+            let from = zone
+                .map
+                .markers_of(&MarkerKind::Poi)
+                .find(|m| m.name == poi)?
+                .at;
+            extraction_core::map_lint::wait_shelter(&zone.map, at, from)
+                .map(|(_, _, lee)| Vec2::from_array(lee))
+        });
+        r.wait_at = Some((rv, lee));
+    }
+    let goal = match r.wait_at {
+        Some((_, Some(lee))) if !waiting => lee,
+        _ => approach,
+    };
+    r.at_rv = here.distance(goal) <= 4.0;
+    if here.distance(goal) > 4.0 {
         r.act = Act::ToRv;
         if let Some(out) = leave_building(r, scene, pos) {
             return out;
         }
-        return travel(&r.grid, here, approach, 2.0).unwrap_or_else(|| {
+        return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
-                to: approach,
+                to: goal,
                 within: 2.0,
             }]
         });
@@ -3804,7 +3908,7 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         }
         SiteKind::Spot => at.xz().distance(site.at) < 5.0,
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
-        SiteKind::Anomaly => at.xz().distance(site.at) < 6.0,
+        SiteKind::Anomaly => at.xz().distance(site.at) < 4.5,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
     }
 }

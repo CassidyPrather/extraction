@@ -324,6 +324,21 @@ struct SurgeFx {
     applied_calm: bool,
 }
 
+/// How much the weather darkens the sky's light (the ambient, the sky's
+/// colours) against a drizzle's: rain and murk darken it, clearing lifts
+/// it.
+pub fn sky_dim(conditions: &super::weather::Conditions) -> f32 {
+    use super::weather::WeatherKind;
+    let storm = if conditions.storm { 0.88 } else { 1.0 };
+    storm
+        * match conditions.kind {
+            WeatherKind::Downpour => 0.72,
+            WeatherKind::PeaSouper => 0.95,
+            WeatherKind::Clearing => 1.12,
+            WeatherKind::Drizzle => 1.0,
+        }
+}
+
 /// The cycle's weather sets the calm look: how far you see, how much ground
 /// fog, how strong the sun, how dark the sky.
 fn apply_weather(
@@ -349,14 +364,7 @@ fn apply_weather(
         return;
     }
     let base = Weather::default();
-    // Rain and murk darken the sky; clearing lifts it.
-    let k = if conditions.storm { 0.88 } else { 1.0 }
-        * match conditions.kind {
-            super::weather::WeatherKind::Downpour => 0.72,
-            super::weather::WeatherKind::PeaSouper => 0.95,
-            super::weather::WeatherKind::Clearing => 1.12,
-            super::weather::WeatherKind::Drizzle => 1.0,
-        };
+    let k = sky_dim(&conditions);
     let haze = zone.map.haze.unwrap_or([1.0; 3]);
     let moon = super::weather::moon_position(conditions.moon_phase);
     let hour = HourLook::of(conditions.hour, opts.sun_elevation, moon);
