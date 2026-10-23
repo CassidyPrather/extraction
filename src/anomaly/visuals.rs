@@ -523,7 +523,7 @@ fn init_assets(
     // (A faint warmth in it, the lift's own light on it: in the dark its
     // edge still shows.)
     let flattened = ground(
-        Color::srgba(0.17, 0.08, 0.045, 0.97),
+        Color::srgba(0.24, 0.11, 0.06, 0.97),
         LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
