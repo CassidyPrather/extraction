@@ -100,7 +100,8 @@ const MID_RAID: [&str; 8] = [
 ];
 
 /// The one folder not asked for whole: a valley's props, with its
-/// buildings' dressing.
+/// buildings' dressing (`world_props::path`). Named for the test.
+#[cfg(test)]
 const DRESSING: &str = "models/props";
 
 fn preload_models(server: Res<AssetServer>, mut models: ResMut<crate::models::Models>) {
