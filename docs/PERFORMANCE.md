@@ -993,8 +993,8 @@ It's one plugin (`StressPlugin`), staged the same in the gauge and in the
 game. In the game it starts once the world is in (`--stress`), logs its
 CPU and GPU, and quits.
 
-`gauge_every_valley_holds_its_worst_minute` (10 s a valley,
-`STRESS_FRAMES`) holds two things:
+`gauge_every_valley_holds_its_worst_minute` (5 s a valley in the gauge
+tier; `STRESS_FRAMES=900` for the 10 s measured below) holds two things:
 - the CPU's p99 frame within the busy frame's budget
   (`budget::CPU_FRAME_UNITS`, reference units);
 - both eyes' p99 draws, shadow draws and fragments at 1800² within the

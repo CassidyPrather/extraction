@@ -599,6 +599,17 @@ mod tests {
     use super::StressRun;
     use crate::perf::fight::reference_ms;
 
+    /// The gauge's frames: 5 s a valley at 90 Hz, so the gauge tier keeps
+    /// to its time (`STRESS_FRAMES=900`, or 5400 for the whole minute, for
+    /// performance work). The minute's blasts and breach come in the
+    /// frames there are.
+    fn gauge_frames() -> u32 {
+        std::env::var("STRESS_FRAMES")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(450)
+    }
+
     /// The CPU's p99 frame, in reference units (the busy moment's own
     /// budget for its mean, `budget::CPU_FRAME_UNITS`): the worst
     /// minute's slow frames within what an average busy frame may take.
@@ -646,7 +657,7 @@ mod tests {
             std::time::Duration::from_secs_f64(1.0 / 90.0),
         ))
         .init_resource::<Shots>()
-        .insert_resource(StressRun::new(super::frames()))
+        .insert_resource(StressRun::new(gauge_frames()))
         .add_systems(Last, count_shots);
         super::add_systems(&mut app);
         settle(&mut app);
