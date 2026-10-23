@@ -98,6 +98,9 @@ pub struct Outcome {
     pub snared: u32,
     /// Machines of the squad wrecked.
     pub wrecked: u32,
+    /// How near the squad, and the newcomer, came to the snare (m).
+    pub closest: f32,
+    pub me_closest: f32,
 }
 
 #[derive(Resource, Default)]
@@ -370,9 +373,11 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     // on its far side from the squad, so a machine coming straight for it
     // comes through.
     let mut path = route(&app, start, rvs[nearest].1);
+    let mut snare_at: Option<Vec2> = None;
     if let Some(lure) = arm.lure {
         let toward = (rvs[nearest].1 - start).normalize_or(Vec2::NEG_Y);
         let snare = nav_near(&app, start + toward * SNARE_AHEAD);
+        snare_at = Some(snare);
         crate::anomaly::spawn_anomaly(
             app.world_mut(),
             extraction_core::anomaly::AnomalyKind::Snare,
@@ -393,6 +398,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             route(&app, start, rvs[nearest].1)
         };
     }
+    let (mut closest, mut me_closest) = (f32::MAX, f32::MAX);
     let mut me = Newcomer {
         goal: nearest,
         path,
@@ -593,6 +599,14 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             }
         }
         put(&mut app, here);
+        if let Some(s) = snare_at {
+            for e in &squad {
+                if let Some(t) = app.world().get::<Transform>(*e) {
+                    closest = closest.min(t.translation.xz().distance(s));
+                }
+            }
+            me_closest = me_closest.min(here.distance(s));
+        }
         if std::env::var("SIM_DRILL_TRACE").is_ok() && (t * HZ) as u32 % 45 == 0 {
             let hp = app
                 .world()
@@ -657,6 +671,8 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                     .is_some_and(|r| r.wrecked)
             })
             .count() as u32,
+        closest,
+        me_closest,
     }
 }
 
@@ -668,6 +684,8 @@ fn line(o: &Outcome) -> String {
         "lure": o.arm.lure,
         "snared": o.snared,
         "wrecked": o.wrecked,
+        "closest": if o.closest < 1e6 { (o.closest * 10.0).round() / 10.0 } else { -1.0 },
+        "me_closest": if o.me_closest < 1e6 { (o.me_closest * 10.0).round() / 10.0 } else { -1.0 },
         "escaped": o.escaped,
         "down": o.down,
         "secs": (o.secs * 10.0).round() / 10.0,
