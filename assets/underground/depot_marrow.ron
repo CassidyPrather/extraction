@@ -21,6 +21,9 @@
             (kind: Chair, at: (-0.6, -0.15), rot: 180.0),
             (kind: Locker, at: (0.6, 1.65), rot: 180.0),
         ]),
+        // The staff stair's head: a landing round the corner from the
+        // guard post (the stair climbs straight, turns on the flat).
+        (id: "stair_head", at: (18.0, 13.0), size: (3.0, 3.0), height: 2.6, lamp: Dead),
         // Level 2, sorting: the hall, rows of bins by kind.
         (id: "sorting_hall", at: (0.0, 40.0), size: (24.0, 16.0), floor: Some(-11.0), height: 6.0, lamp: Powered, stage: 0, props: [
             (kind: Shelf, at: (-8.0, -3.5), loot: Some("house")),
@@ -89,7 +92,8 @@
         (from: "sorting_hall", to: "tag_office", doors: Both),
         // The staff stair from the guard post to the office: round the
         // hall's door, but the hall's still shut from that side too.
-        (from: "guard_post", to: "tag_office", via: [(18.0, 13.0)], doors: From),
+        (from: "guard_post", to: "stair_head", doors: From),
+        (from: "stair_head", to: "tag_office"),
         (from: "sorting_hall", to: "kept_stacks", width: 2.0, doors: To),
         (from: "kept_stacks", to: "bay_k14"),
         (from: "bay_k14", to: "pump_gallery", doors: From),

@@ -6101,6 +6101,7 @@
 <text x='200.5' y='367.0' fill='#e0c9a6'>C</text>
 <rect x='53.0' y='534.0' width='14' height='6' fill='#c8a26a' stroke='#1d1c1a'/>
 <text x='69.0' y='541.0' fill='#c8a26a'>S</text>
+<circle cx='230.4' cy='295.8' r='4' fill='#d4a017'/>
 <circle cx='177.6' cy='286.2' r='4' fill='#5a5650'/>
 <circle cx='232.8' cy='294.6' r='4' fill='#5a5650'/>
 <text x='204.0' y='273.0' fill='#1d1c1a' text-anchor='middle'>cage_landing</text>
@@ -6114,12 +6115,14 @@
 <circle cx='79.2' cy='475.8' r='4' fill='#5a5650'/>
 <circle cx='40.8' cy='473.4' r='4' fill='#5a5650'/>
 <text x='60.0' y='441.0' fill='#1d1c1a' text-anchor='middle'>old_heading</text>
+<circle cx='258.0' cy='637.8' r='4' fill='#d4a017'/>
 <circle cx='162.0' cy='639.0' r='4' fill='#5a5650'/>
 <text x='204.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>crosscut</text>
 <circle cx='36.6' cy='630.6' r='4' fill='#5a5650'/>
 <circle cx='79.2' cy='646.8' r='4' fill='#d4a017'/>
 <circle cx='60.0' cy='646.2' r='4' fill='#d4a017'/>
 <text x='60.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>refuge</text>
+<circle cx='374.4' cy='648.6' r='4' fill='#d4a017'/>
 <circle cx='417.6' cy='648.6' r='4' fill='#d4a017'/>
 <circle cx='427.2' cy='612.6' r='4' fill='#d4a017'/>
 <text x='396.0' y='621.0' fill='#1d1c1a' text-anchor='middle'>lower_heading</text>

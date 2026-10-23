@@ -30,8 +30,12 @@ edit, rebuild, and the tests below tell you what broke.
 `underground::check` holds every layout to: rooms reached from the
 entrance, every stair landing in a room or corridor within 4 m of its
 foot, no stair over a room (the bots' indoor grid is one level), no prop
-in the rock, corridors along the axes. Each site needs a loop (more joins
-than rooms) and a second portal.
+in the rock, corridors along the axes, and a corridor between levels
+climbs only on the straight: it turns on a landing (a small room), never
+outside one, since a stair stepped round a corner outside the rooms steps
+diagonally, a riser every cell, a sawtooth a body jams on (a tread one
+cell deep is refused). Each site needs a loop (more joins than rooms) and
+a second portal.
 
 The layout is rasterised on a 0.25 m grid (`Raster`): the game builds its
 walls on the rock side of every edge between open cells and rock (so a
@@ -485,9 +489,10 @@ there's no other way. None is over the minute. The two longest:
 
 - *The adit's deep level* was out by the cage alone: a crawler waiting at
   the shaft station and everything below was a trap 37-45 s deep. It has
-  a second way now, the old incline (`drift` to `vein_drive`, a door at
-  the drift's end), stepped 12 m up 50 m of drift from the vein drive to
-  the main drift's far end: the level station's pressed way is 45.6 s
+  a second way now, the old incline (a door at the drift's end), stepped
+  12 m up 50 m of drift from the vein drive to the main drift's far end,
+  turning on two landings (`incline_turn` half way, `incline_foot` on the
+  deep level): the level station's pressed way is 45.6 s
   where it was none. The assay store is still one door off the vein
   drive, 45 s out. Shot: up the incline's steps from its foot, by
   torchlight (`docs/shots/underground/r_incline.jpg`).
