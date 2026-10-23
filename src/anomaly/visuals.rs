@@ -397,8 +397,14 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
             // grooves in it, which show on any ground (one colour can't
             // stand out on grass, ash and silt alike; a pattern does).
             if spiral {
-                let groove = (a * 3.0 + r.max(0.05).ln() * 9.0).sin();
-                tone *= 0.55 + 0.45 * groove.max(0.0).powf(3.0) * 2.2;
+                // Broken, not drawn: the grooves come and go.
+                let wear = value_noise(px * 6.0, py * 6.0, 3);
+                let groove = (a * 3.0 + r.max(0.05).ln() * 9.0 + wear * 1.5).sin();
+                tone *= 0.55 + 0.45 * groove.max(0.0).powf(3.0) * 2.2 * (0.4 + 0.6 * wear);
+                // And at its rim the grit it flings out piles in a pale
+                // ridge, just inside its edge: a line on any ground.
+                let ridge = 1.0 - ((r - 0.94 * edge) / 0.035).abs().min(1.0);
+                tone = tone.max(0.95 * ridge * (0.75 + 0.25 * wear));
             }
             let tone = tone * grain;
             let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
