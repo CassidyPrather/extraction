@@ -1986,8 +1986,29 @@ fn errand_tasks(
                 return Err("no camera on me".into());
             };
             let target = photo_subject(&world.zone, view, *subject, here);
-            let Some(p) = target else {
-                return Err(format!("no {subject:?} to be found for the picture").to_lowercase());
+            let Some(p) = target.filter(|p| p.xz().distance(here) < 250.0) else {
+                // None about: round the valley's places to look, a while at
+                // each (machines come and go to their work).
+                if tries > 8 {
+                    return Err(
+                        format!("no {subject:?} to be found for the picture").to_lowercase()
+                    );
+                }
+                let mut places: Vec<Vec2> = world
+                    .zone
+                    .map
+                    .markers
+                    .iter()
+                    .filter(|m| m.kind == MarkerKind::Poi)
+                    .map(|m| Vec2::from(m.at))
+                    .collect();
+                places.sort_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+                let Some(&to) = places.get(tries as usize % places.len().max(1)) else {
+                    return Err("nowhere to look for one".into());
+                };
+                let mut t = route(world, view, here, to);
+                t.push(Task::Wait(10.0));
+                return Ok(Some((t, None)));
             };
             // Near enough to fill the picture, not so near it shoots.
             let stand = p.xz() + (here - p.xz()).normalize_or(Vec2::Y) * 30.0;
