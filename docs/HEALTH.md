@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| b131b78 | 05:45 | 32/32 exit 0, 17 extracted (Marrow 6/8, Sallow 6/8, Kettle 3/4, Rime 2/4, Cinder 1/8); Cinder seed 5 timed out again, under ground at (82-87, -11..-29) (the same without 82c934f3); Cinder seed 8 died to a 50 hp blast | 1 FAILED (robots::subjects, Marrow's heavy never findable, 950 s), 29 min | gauges 12/16 in 2006 s: Marrow m02_village shadow draws 934 > 900 (×4) |
 | 782d919 | 04:30 | cut short (main moved) | 2 FAILED (Lev k14, fixed in b131b78; warmup MarkMaterial, fixed on this branch 82c934f3), 23 min | gauges 16/16 in 1852 s with LOAD_SLACK=1.5 |
 | c495f9f | 02:30 | 32/32 exit 0, 18 extracted (Marrow 6/8, Sallow 5/8, Cinder 3/8, Kettle 2/4, Rime 2/4); Cinder seed 5 timed out 6.5 m under the ground at (64-72, -23..-30), 1000 s on to_rv | 5 FAILED (Lev k14, ducks, flock, two pane tests), 22 min | gauges 15/16 in 1898 s (first_contact load: this machine, 1.2-1.5x slower); BC7/BC5 copies baked |
 | 191e4bd | 01:30 | not run (main moved) | 10 FAILED (7 since fixed by c495f9f), 23 min | gauges cut short |
@@ -56,13 +57,16 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of b131b78 (round 41): by name, all 7 of round 39/40's failures pass (warmup with 82c934f3); the suite, gauges and smoke are running.
+As of b131b78 (round 41).
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::warmup::tests::every_material_is_shelved` (anomalies' MarkMaterial, b56057ef) | a new material not shelved | Verifier | fixed in 82c934f3, not merged |
-| the gauge tier took 1852 s (target 1500): the stress gauge's 900 frames | | Performance | 450 by default in e87b7c37, not merged |
-| Sim: Cinder seed 5 stuck 6.5 m under ground at (64-72, -23..-30) near the tunnel_cinder valve chamber | stuck_block can't get out | coordinator | replaying on b131b78 |
+| `robots::subjects::tests::in_every_valley_the_subject_is_findable_early`: Marrow's heavy never findable; 950 s, over budget | likely 5a172241 | Robot minds | routed |
+| render budget marrow, marrow storm, vr_budget marrow, vr_budget every_valley: m02_village shadow draws 934 > 900 (VR 1869 > 1800) | likely the Village shed and roof, da285bed / b0f21b3b | Map design (cc Performance) | routed |
+| `render::warmup::tests::every_material_is_shelved` (anomalies' MarkMaterial) | a new material not shelved | Verifier | fixed in 82c934f3, not merged |
+| the gauge tier took 2006 s (target 1500) | the stress gauge at 900 frames | Performance | 450 by default in e87b7c37, not merged |
+| Sim: Cinder seed 5 stuck 6.5 m under ground near the tunnel_cinder valve chamber; extracts in the coordinator's run | stuck_block can't get out | coordinator | comparing command lines |
+| Sim telemetry called a hit with no shooter "unknown" | | Verifier | 0da74e42 (blast, blow, stray round), not merged |
 
 ## Closed
 
