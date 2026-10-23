@@ -525,9 +525,14 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
+    // On Rime Fell, the hearth the sim kit lays, sealed: the career's from
+    // "Up the fell", the way into the frost.
+    // (The case, with the hearth seated in it: `sim::seat_sim_hearth`.)
+    let hearth = (opts.map == "rime_fell").then_some("lead_case");
     for id in contract_kit()
         .into_iter()
         .chain(super::harvest::kit(traits.name))
+        .chain(hearth)
     {
         kit.push(Task::PickUp {
             id: id.to_owned(),
