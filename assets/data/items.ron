@@ -1159,6 +1159,23 @@
             description: "A tobacco tin, scratched M.H. on the lid. Inside: a photograph, a ring on a string, a stub of pencil.",
             category: Curio, size: Tiny, mass: 0.12, bulk: 0.03, tags: ["metal"],
         ),
+        // Down the signature sites (`docs/UNDERGROUND.md`), for the
+        // driver's deep contracts.
+        (
+            id: "pump_log", dims: Some((0.15, 0.03, 0.21)), name: "Brabec's pump log",
+            description: "A board-backed ledger, swollen with water. Levels, rain and the well, a line a day in pencil, O. BRABEC inside the cover.",
+            category: Curio, size: Small, mass: 0.5, bulk: 0.25, tags: ["paper"],
+        ),
+        (
+            id: "deputy_lamp", dims: Some((0.1, 0.25, 0.1)), name: "Deputy's flame lamp",
+            description: "A brass safety lamp behind a gauze. The flame's cap shows the gas. A deputy's tally hangs off the hook, no name.",
+            category: Curio, size: Small, mass: 0.9, bulk: 0.35, tags: ["metal"],
+        ),
+        (
+            id: "charging_manifest", dims: Some((0.21, 0.01, 0.3)), name: "Charging manifest",
+            description: "A clipboard of the furnace's charges, shift by shift, in R. KRAL's hand. Furnace three's column runs hot for a week, and nobody's signed it.",
+            category: Curio, size: Small, mass: 0.3, bulk: 0.15, tags: ["paper"],
+        ),
         // What the driver's Recover jobs send you for (`progression`).
         (
             id: "field_recorder", dims: Some((0.16, 0.06, 0.11)), name: "Field recorder",

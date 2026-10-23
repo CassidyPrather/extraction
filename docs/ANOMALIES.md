@@ -311,3 +311,63 @@ What it taught us:
   is its pale dust, and only just (3-6 deg² in three valleys).
 - **Motion reads from the corner of the eye.** The mirror carries a
   glint that crosses it every 4 s, each mirror on its own beat.
+
+### First contact: what it is and where it starts, at 5 m
+
+A first-time player meets an anomaly on foot in VR, with nothing on the
+field map. What tells them it's there is the 20 m gauge above; what it
+does, and where it starts, has to be in the world too, never an invisible
+wall. So:
+
+- **Each kind does something you can see to the ground and the grass
+  in it, out to its edge and no further** (`shaders/sway.wgsl` takes the
+  four anomalies nearest the eye, `world::cover::AnomalyGrass`):
+
+  | Kind | The grass | The ground |
+  |---|---|---|
+  | Lift | torn up and gone | scoured to raw rusty subsoil |
+  | Burner | burnt to the ground | scorched, coals glowing in patches |
+  | Snare | standing on end, quivering | fused dark and glassy, still faintly charged (blue) |
+  | Well | laid flat toward its heart | pressed dark and hard |
+  | Mirror | wiped flat | glazed like still water, giving back the sky |
+  | Hush | dead still, whatever the wind; pressed into its dust | pale settled dust, and its edge a ragged line of it |
+  | Frost | stiff, bowed under the rime | hoar, faintly blue |
+
+  What it does to you comes on top of that: leaves circling, embers and
+  heat shimmer, arcs, grit spiralling in, a glint, dust hanging dead still,
+  glinting crystals and your own breath.
+
+- **The mark runs to the edge.** Every mark used to share the particles'
+  soft falloff, solid to half its radius and gone by 0.8: a burner's
+  scorch ended 0.9 m inside where it burns. Marks have their own texture
+  now, solid to 0.93 of the edge and gone by 1.02, its edge wavering a
+  few centimetres, mottled in colour and glow so it reads as ground, not
+  a painted disc.
+
+- **It holds in murk and dark.** Marks are fogged as if half as far off,
+  as particles are (`MarkMaterial`, `shaders/anomaly_mark.wgsl`), and the
+  lift's, mirror's and hush's hold a faint light of their own, too faint
+  to see by day.
+
+**The edge gauge** (`scripts/anomaly_edges.py [--map=NAME]`): for each
+kind, a view from 5 m off its edge at eye height, in clear day, fog,
+downpour and a moonless night (by the player's torch: every stash has
+one; `--torch` hangs its beam on the shot's camera). Along five lines on
+the ground across the edge it measures the colour difference (CIE ΔE)
+the anomaly makes, smoothed over three 10 cm steps, and asks that what it
+changes 0.3-1 m inside beats what it changes 0.3-1 m outside by 8 ΔE,
+and that the change crosses halfway within 35 cm of the true edge. Three
+lines of five must pass. (It samples a strip one row tall: at 5 m half a
+metre of ground is a few rows, and a square window straddled the edge.)
+
+Marrow Creek, before and after:
+
+| | Edges that read (of 28) |
+|---|---|
+| First run | 17 |
+| Marks to the edge, grass, half-reach fog, torch at eye, faint light | 27 |
+
+The one that doesn't, the lift in a downpour, is plain to the eye (a
+rusty patch against wet grass) but the standing grass just outside it
+hides the strip inside its edge from 5 m, and both are dark. Sheets:
+`docs/shots/anomalies/edges*.png`.

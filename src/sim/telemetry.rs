@@ -239,7 +239,18 @@ pub fn record(
                 .shooter
                 .and_then(|s| robots.get(s).ok())
                 .map(|(r, b)| crate::robots::robot_name(r.kind, b))
-                .unwrap_or_else(|| "unknown".into());
+                // Nobody's: a mine, a grenade or an anomaly's blast, a
+                // falling beam, a stray round. Named by what it was.
+                .unwrap_or_else(|| {
+                    if h.blow.is_some() {
+                        "blow"
+                    } else if h.mass_g == 0.0 {
+                        "blast"
+                    } else {
+                        "stray round"
+                    }
+                    .into()
+                });
             tr.expect.push((cause, h.damage, 0.3));
         }
     }

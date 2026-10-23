@@ -471,7 +471,7 @@ exhaustive match, so a new kind won't build without one):
 | Recover | as Bring | seeded (`--job recover`): found in the plank house's back room, crated, paid |
 | Letter | as Bring | seeded: found, crated, paid |
 | Ledger | as Bring | seeded: down under the Gate; a drone and a machine below, warned each time; down |
-| Photograph | camera off the ledge, the head kept on the walker, press | not yet: on Marrow the walkers work underground; on Cinder Works the newcomer looked round the valley 20 minutes and a walker it found shot it |
+| Photograph | camera off the ledge, out to where the card says one's working, the head kept on it, press from as far off as the camera takes, back off | the picture taken (Cinder Works, with Robot minds' surface walker); on the way home a walker heard it, aimed, warned, and shot it |
 
 `every_job_kind_has_a_way` fails when a kind has no way, or when its card
 doesn't name what the newcomer goes for: what the bot is after, a player
@@ -529,52 +529,37 @@ way, went in, came on, left the box and got home paid; the reckless one
 left it with a machine already shooting at it, as it does, and fell
 there.
 
-Still open: the photograph. At a raid's start every walker on Cinder Works
-is a crawler at work underground; the first up on the surface came 17
-minutes in, at the newcomer, gun up. The card now says where one's been
-heard working once one is ("He's heard a walker working by the chimney.
-From the drop: ..."), and the newcomer goes there; a walker kept at work
-on the surface while the job's on is Robot minds' to give.
+The photograph: at a raid's start every walker on Cinder Works was a
+crawler at work underground, and the first up on the surface came 17
+minutes in, at the newcomer, gun up. Now, with a photograph on the card,
+Robot minds keep one of the kind it names (a plain walker; not a crawler,
+a hound or the heavy) at work on the surface 120 to 360 m from the drop
+(`robots::subjects`), and the card says where it's been heard ("He's heard
+a walker working by the chimney. From the drop: ..."). The newcomer took
+its picture 3.5 minutes in, from as far off as the camera takes; a walker
+caught it on the way home, warned.
 
 # Machines working together (Robot minds' squad drill)
 
-Robot minds' `squad_drill` (claude/polish-robot-minds 64802ac2,
-`src/robots/squad_drill.rs`, 24 seeds an arm): on Marrow's south field a
+Robot minds' `squad_drill` (claude/polish-robot-minds abf8a3ce,
+`src/robots/squad_drill.rs`, 48 seeds an arm): on Marrow's south field a
 newcomer with a radio jogs for the nearest rendezvous, cover to cover,
 crouched in cover; a squad (three walkers, or two and a drone) finds it at
-45 to 55 m. The listener acts only on what's said: a chirp within 40 m, a
-radio line 1.5 s after it shows. A cut-off sends it to another rendezvous;
-a flanker's post counts as a threat when it picks cover.
+45 to 55 m. Machines changing post hold their fire till they're there. The
+listener acts only on what's said: a chirp within 40 m, a radio line 1.5 s
+after it shows. Told one's moving up, it runs while that one isn't
+shooting; told one's making for its rendezvous, it changes to another, if
+that's no more than 30% further.
 
 | Newcomer | Machines each alone | Machines working together |
 | - | - | - |
-| deaf | 17% get away | 8% |
-| listening | 17% | 17% (alive a median 23 s, the deaf 15 s) |
+| deaf | 17% get away (±11) | 23% (±12) |
+| listening | 17% (±11) | 44% (±14) |
 
-Three walkers alone, working together: the listener 27%, the deaf 13%.
-Working together halves a deaf newcomer's chances; listening wins them
-back. The numbers are small, and a drone in the open kills nearly everyone
-whatever they hear. The line a listener did most with was the cut-off's,
-which names a rendezvous; the flank line gives a compass way ("round to
-your east"), as the job card does ("north-east, 190 m").
-
-## Five jobs again, on the map with the roofs
-
-On Map design's da285bed (sheds on the ways to the mast, cover home from
-the Village, the Village's garden shed kept), my head, one seed each:
-
-| Newcomer | Job 1 (scout) | Job 2 (bring) | Job 3 (fetch) | Job 4 (the mast relay) | Job 5 |
-| - | - | - | - | - | - |
-| cautious | paid | down | the bot couldn't reach the crate | paid | the bot stuck at a door |
-| hoarder | paid | paid | paid | down | down |
-| lost | paid | down | down | down | down |
-| one-handed | paid | paid | paid | the box left, home, paid | down |
-| reckless | paid | paid | paid | the box left; down | down |
-
-Every one of the 75 hits after job 1 came after a tell. Run to run,
-with one seed each, this moves a lot: a run in between, when a Village
-shed had made way for a hut out west, sent job 3's nearest matches out
-past the pumping station and three newcomers died fetching them (Map
-design put the shed back). The lost one, by the shop, was warned every
-time (a drone's lock, 15 s ahead) and went in at the door; the bot stood
-it in the doorway's line, which the rooms' plan now puts right.
+Seed for seed, working together, the listener got out where the deaf one
+didn't 14 times, the other way 4 (p ≈ 0.03). Three walkers: 59% against
+33%; two walkers and a drone: 24% against 10%. The lines a listener acts
+on are "one round your {way}, by {place}" and "one making for {rv}"; the
+one it does nothing with is "Radio, close: one holding on you". What the
+machines say to each other is worth listening to, and the wording gives a
+newcomer something to do: a way, a place, a rendezvous.

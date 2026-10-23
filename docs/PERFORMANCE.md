@@ -978,3 +978,105 @@ over budget. The hitch work hunts the frames that run long once.
   The homecoming went from 89-119 ms to about 60 ms (4x). The rest is
   single steps (the mending, the loot roll's spawn) that would need
   splitting inside `destruction::surge` and `loot::roll_zone_loot`.
+
+## The worst minute
+
+A headset player remembers the one dropped frame in a firefight, not the
+average. `render::stress` stages each valley's worst minute:
+- a dusk downpour, by the building with an inside nearest the middle;
+- two walkers and a drone on the player, a dirigible overhead;
+- the player's AK on auto in bursts (muzzle flash, a hot barrel's smoke);
+- a grenade every 4 s (blast, fragments, smoke);
+- the building's wall breached at 5 s.
+
+It's one plugin (`StressPlugin`), staged the same in the gauge and in the
+game. In the game it starts once the world is in (`--stress`), logs its
+CPU and GPU, and quits.
+
+`gauge_every_valley_holds_its_worst_minute` (5 s a valley in the gauge
+tier; `STRESS_FRAMES=900` for the 10 s measured below) holds two things:
+- the CPU's p99 frame within the busy frame's budget
+  (`budget::CPU_FRAME_UNITS`, reference units);
+- both eyes' p99 draws, shadow draws and fragments at 1800² within the
+  stereo budget (`vr_budget`): what 11.1 ms comes to at the default
+  render scale.
+
+With `STRESS_PROFILE=1` and `--features "bevy/trace bevy/debug"` it names
+what the worst 1% of frames spend more on, system by system, against
+every frame's mean.
+
+### CPU
+
+The CPU harness (no GPU), profiled build, 900 frames a valley:
+
+| valley | p99 (units of 160) | worst | eyes' draws p99 (of 2400) | fragments p99 (of 64.8 M) |
+| - | - | - | - | - |
+| Marrow Creek | 34.0 ms (73) | 49.2 ms | 1519 | 19.1 M |
+| Kettle Pass | 36.1 ms (73) | 87.9 ms | 1363 | 11.1 M |
+| Cinder Works | 38.2 ms (80) | 137.8 ms | 1021 | 16.9 M |
+| Sallow Reservoir | 33.2 ms (70) | 50.9 ms | 1243 | 19.2 M |
+| Rime Fell | 31.3 ms (67) | 44.1 ms | 1372 | 11.5 M |
+
+No shadow draws: at dusk in a downpour the sun casts none, and no point
+light does. The scene's point lights hold steady through the minute
+(33-55 by valley); the muzzle flashes and blasts come and go.
+
+The worst 1% of frames (35-53 ms) spend no system more than about 2 ms
+over its usual. The traced systems add up to 14-22 ms of them; the rest
+is the schedule and the render world's own work. Every valley's top
+three costs in its worst frames:
+
+1. `check_visibility_cpu_culling`, 1.3-2.3 ms (typically 1.2-1.6).
+2. The colliders' transform sync and `propagate_parent_transforms`,
+   0.6-1.2 ms each.
+3. `mark_dirty_trees` and `check_visibility_ranges`, about 0.5 ms each.
+
+The one cost the fight added was Rime Fell's `solve_swept_ccd`: 6.0 ms
+in its worst frames, 0.87 typically. Each loose item's swept CCD ran a
+non-linear time of impact against every dynamic body its bounds touched,
+including the breach's rubble. Items now sweep against static and
+kinematic bodies only. That is what CCD was for: a thin, fast thing
+through a wall. Rime's worst frame went from 111 to 44 ms, its worst 1%
+from 50 to 35 ms, its p99 from 76 to 67 units.
+
+### GPU
+
+`scripts/stress.sh` runs the minute in the game, valley by valley, and
+logs the GPU's passes from the render diagnostics' timestamps.
+
+There's no headset here, so the GPU is lavapipe, a software rasteriser on
+the CPU. Its milliseconds aren't a GPU's: read them for where the time
+goes and how the worst frames differ from the rest, never against
+11.1 ms. Monado's simulated headset offers 640x720 at most, so a Beyond
+2's eyes can't be had there. One eye's work at that headset's size is a
+flat 1800x1800 view: its 2980 recommended, at the default render scale.
+
+One eye at 1800², 30 frames of the minute, the worst 1% against every
+frame (ms a frame on lavapipe):
+
+| valley | opaque | transparent | tonemapping | clustering |
+| - | - | - | - | - |
+| Marrow Creek | 7758 (6300) | 21 (18) | 38 (43) | 3.0 (2.1) |
+| Kettle Pass | 6143 (5762) | 18 (49) | 32 (32) | 2.0 (3.1) |
+| Cinder Works | 5811 (5194) | 134 (44) | 34 (33) | 2.7 (2.5) |
+| Sallow Reservoir | 6243 (5815) | 243 (111) | 33 (32) | 2.8 (2.4) |
+| Rime Fell | 5132 (3683) | 238 (137) | 32 (29) | 1.9 (2.0) |
+
+- The opaque pass is about 93% of an eye. Its worst frames are 5-40%
+  over typical (Rime the most): the blasts and the breach bring more
+  into view.
+- The fight's smoke, rain and particles double or triple the
+  transparent pass in three valleys. It stays under 4% of the eye.
+- Clustering (lights into froxels) holds at 2-3 ms with 33-55 point
+  lights.
+
+The minute's top three GPU costs, every valley alike: the opaque pass,
+the transparent pass, tonemapping.
+
+Against the budget the counts are what hold, and they're vendor-neutral.
+At p99 both eyes draw 1021-1519 of 2400 draws, 0 of 1800 shadow draws,
+and 11-19 M of 64.8 M fragments. That's what the gauge fails on.
+
+`XR=1 scripts/stress.sh` runs it in Monado, both eyes at 640x720. In
+Marrow Creek the opaque pass was 96% of the GPU, and its worst frames
+4% over typical.

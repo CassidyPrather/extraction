@@ -17,8 +17,11 @@ use crate::world::buildings::{Building, DoorLeaf, Geo, Shape, prefab};
 pub const CELL: f32 = 0.25;
 /// Grid extends this far past the footprint, to reach the doorsteps.
 const MARGIN: f32 = 3.0;
-/// The player capsule's radius plus a little.
-const CLEARANCE: f32 = 0.22;
+/// The whole capsule's radius (`player`'s 0.28), as down a site: with
+/// 0.22 a raider was routed through gaps between furniture it sticks in.
+/// Eight raids a valley, seed 100: stucks 14 -> 7 (Cinder), 49 -> 11
+/// (Kettle), 18 -> 11 (Marrow); loot 748 -> 803; extractions unchanged.
+const CLEARANCE: f32 = 0.28;
 /// Down an underground site, the whole capsule's radius (`player`'s 0.28):
 /// a gap between props narrower than a body is no way, or a raider routed
 /// through it sticks there.
@@ -49,6 +52,19 @@ pub struct DoorInfo {
     pub b: Vec2,
     /// Where to stand outside it, building-local, if it's an outside door.
     pub outside: Option<Vec2>,
+}
+
+impl DoorInfo {
+    /// The doorway shut, as an obstacle across its gap.
+    pub fn leaf(&self) -> Obstacle {
+        let along = self.b - self.a;
+        let dir = along.normalize_or(Vec2::X);
+        Obstacle::Rect {
+            at: ((self.a + self.b) * 0.5).to_array(),
+            half: [along.length() * 0.5 + 0.1, 0.3],
+            yaw: dir.y.atan2(dir.x),
+        }
+    }
 }
 
 /// One building as a bot sees it.
@@ -90,6 +106,9 @@ pub struct BuildingPlan {
     /// doesn't stop feet); the raider shuts them (`shut_live`), since it
     /// carries no canary and can't tell a pocket that's gone up.
     pub gas: Vec<usize>,
+    /// Its doors held shut on an underground site's power right now (the
+    /// raider keeps it up to date): no way through but by its switches.
+    pub held: Vec<Entity>,
 }
 
 impl BuildingPlan {
@@ -215,6 +234,20 @@ impl BuildingPlan {
     /// An indoor path between two building-local points, as local
     /// waypoints (both ends snapped to walkable cells).
     pub fn path(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+        if self.held.is_empty() {
+            return self.path_through_held(from, to);
+        }
+        let mut grid = self.grid.clone();
+        for d in self.doors.iter().filter(|d| self.held.contains(&d.entity)) {
+            grid.block(d.leaf(), 0.0);
+        }
+        grid.path(from.to_array(), to.to_array())
+            .map(|p| p.into_iter().map(Vec2::from_array).collect())
+    }
+
+    /// As [`Self::path`], through doors held shut on power too: for a
+    /// route that throws their switches on the way.
+    pub fn path_through_held(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
         self.grid
             .path(from.to_array(), to.to_array())
             .map(|p| p.into_iter().map(Vec2::from_array).collect())
@@ -500,6 +533,7 @@ pub fn plan_buildings(
             warm: Vec::new(),
             live: Vec::new(),
             gas: Vec::new(),
+            held: Vec::new(),
         });
     }
     out
@@ -775,6 +809,7 @@ fn plan_site(
         warm,
         live,
         gas,
+        held: Vec::new(),
     }
 }
 
@@ -901,7 +936,11 @@ fn obstacle(shape: Shape, at: Transform, floor: f32, sills: bool) -> Option<Obst
         return None;
     }
     let c = at.translation;
-    if let Some(r) = circle {
+    // Round from above only standing up: a wheel or a pipe on its side is
+    // its box (below), not a disc its radius round its middle.
+    if let Some(r) = circle
+        && (at.rotation * Vec3::Y).y.abs() > 0.99
+    {
         return Some(Obstacle::Circle {
             at: [c.x, c.z],
             radius: r,
@@ -1322,6 +1361,29 @@ mod tests {
     /// bot can stand, along a clear line: a barn's open gaps join its floor
     /// to the outside, which once left nothing in a barn reachable, and a
     /// thing just outside a window was reached for through the wall.
+    #[test]
+    fn a_cylinder_on_its_side_blocks_its_own_box() {
+        // Marrow's mill wheel: 2.4 m round, 1.2 m wide, its axle along X.
+        let wheel = Transform::from_xyz(-0.5, 2.55, 0.0)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
+        let Some(Obstacle::Rect { at, half, .. }) =
+            obstacle(Shape::Cylinder(2.4, 1.2), wheel, 0.0, false)
+        else {
+            panic!("a wheel on its side should block as a box");
+        };
+        assert!(
+            (half[0] - 0.6).abs() < 0.01 && (half[1] - 2.4).abs() < 0.01,
+            "{half:?}"
+        );
+        assert!((at[0] + 0.5).abs() < 0.01, "{at:?}");
+        // Standing up it's a disc.
+        let post = Transform::from_xyz(0.0, 1.0, 0.0);
+        assert!(matches!(
+            obstacle(Shape::Cylinder(0.3, 2.0), post, 0.0, false),
+            Some(Obstacle::Circle { .. })
+        ));
+    }
+
     #[test]
     fn every_loot_spot_is_reached_from_its_own_side() {
         for map in crate::test_maps() {

@@ -221,6 +221,11 @@ pub fn plan(
             }
             t.extend(take);
             t.push(back);
+            // A hearth taken out of its case is in the right hand: into the
+            // pack with it, out of the way of the gun.
+            if matches!(kit.hearth, Hearth::Sealed { .. }) {
+                t.push(Task::Stow(Side::Right));
+            }
         }
         AnomalyKind::Well | AnomalyKind::Hush => {
             t.extend(take);

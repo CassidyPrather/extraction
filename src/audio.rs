@@ -1140,13 +1140,13 @@ pub fn fault_layers(
             &[("guns/bolt_close", "gun.ftf", 1.15, Some(2500.0))]
         }
         FireEvent::Malfunctioned(DoubleFeed) => &[
-            ("guns/bolt_close", "gun.malfunction", 0.6, Some(1200.0)),
+            ("guns/bolt_close", "gun.double_feed", 0.6, Some(1200.0)),
             ("physical/handle_metal", "gun.grind", 0.7, None),
         ],
         FireEvent::Malfunctioned(ShortStroke) => {
             &[("guns/bolt_open", "gun.short_stroke", 0.8, Some(2500.0))]
         }
-        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(2500.0))],
+        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(4000.0))],
         FireEvent::TriggerBlocked => &[(
             "physical/handle_metal",
             "gun.trigger_block",

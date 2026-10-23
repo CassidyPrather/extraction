@@ -82,6 +82,9 @@ pub enum Task {
     Log(String),
     /// Stand somewhere else at once (scenario setup: skip the walk).
     Teleport(Vec3),
+    /// Stand exactly here at once: down a site, under the ground
+    /// `Teleport` would put it on.
+    TeleportDown(Vec3),
     /// Walk within reach of this item and grab it (for bots that choose
     /// what they want, rather than "the nearest of an id").
     Grab {
@@ -878,6 +881,13 @@ fn run_tasks(
             Task::Teleport(to) => {
                 let mut t = *root;
                 t.translation = zone.on_ground(to.x, to.z);
+                commands.entity(player).insert(t);
+                bot.walk = None;
+                bot.next();
+            }
+            Task::TeleportDown(to) => {
+                let mut t = *root;
+                t.translation = to;
                 commands.entity(player).insert(t);
                 bot.walk = None;
                 bot.next();
