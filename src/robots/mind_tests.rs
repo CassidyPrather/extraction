@@ -4741,14 +4741,7 @@ fn every_machine_in_every_anomaly_does_as_the_table_says() {
     use super::hazards::{Effect, Hazard, effect};
     use extraction_core::anomaly::AnomalyKind;
     let mut wrong = vec![];
-    for kind in [
-        AnomalyKind::Lift,
-        AnomalyKind::Burner,
-        AnomalyKind::Snare,
-        AnomalyKind::Well,
-        AnomalyKind::Mirror,
-        AnomalyKind::Hush,
-    ] {
+    for kind in AnomalyKind::ALL {
         let (mut app, player, zone) = app(None);
         app.init_resource::<Struck>().add_systems(
             Last,
