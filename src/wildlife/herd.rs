@@ -72,6 +72,10 @@ pub const ALERT_CROUCHED: f32 = 0.55;
 pub const ALERT_WALKER: f32 = 90.0;
 pub const ALERT_DRONE: f32 = 80.0;
 pub const ALERT_DIRIGIBLE: f32 = 140.0;
+/// Something thrown that lands this near puts them to flight (m).
+pub const THROWN_NEAR: f32 = 10.0;
+/// A herd bolting is heard by the machines this far (m).
+pub const BOLT_HEARD: f32 = 45.0;
 /// They run when it comes within this share of the alert radius...
 pub const FLEE_SHARE: f32 = 0.6;
 /// ...or when it's still coming after this long alert (s).
@@ -577,6 +581,7 @@ pub(crate) fn herds(
         With<crate::robots::hound::Hound>,
     >,
     mut noises: MessageReader<crate::robots::Noise>,
+    landed: Res<super::Landed>,
     mut startled: MessageWriter<Startled>,
     opts: Res<crate::LaunchOptions>,
     mut spawned: Local<bool>,
@@ -605,10 +610,14 @@ pub(crate) fn herds(
     if dt <= 0.0 {
         return;
     }
+    // Loud noises, and things thrown among them (a stone into the
+    // thicket they're in): `tick` puts them to flight within
+    // FLEE_NOISE of the radius.
     let loud: Vec<(Vec3, f32)> = noises
         .read()
         .filter(|n| n.radius >= super::flock::LOUD)
         .map(|n| (n.at, n.radius))
+        .chain(landed.0.iter().map(|&p| (p, THROWN_NEAR / FLEE_NOISE)))
         .collect();
     let hounds: Vec<(Entity, Vec3)> = hounds
         .iter()
@@ -640,17 +649,29 @@ pub(crate) fn herds(
 }
 
 /// A dog barking is heard by the machines: at you, as from you, at the dog;
-/// at a hound, as from nobody (the hound comes to the dogs).
+/// at a hound, as from nobody (the hound comes to the dogs). A herd
+/// bolting crashes off through whatever's there, heard [`BOLT_HEARD`] as
+/// from nobody (they come to look where it went, as for a thrown can), but
+/// not when a machine put it up: they know their own.
 pub(crate) fn bark_alarm(
     mut startled: MessageReader<Startled>,
+    robots: Query<(), With<crate::robots::Robot>>,
     mut noise: MessageWriter<crate::robots::Noise>,
 ) {
-    for s in startled.read().filter(|s| s.alarm) {
-        noise.write(crate::robots::Noise {
-            at: s.at + Vec3::Y * 0.6,
-            radius: DOG_BARK_REACH,
-            source: s.by,
-        });
+    for s in startled.read() {
+        if s.alarm {
+            noise.write(crate::robots::Noise {
+                at: s.at + Vec3::Y * 0.6,
+                radius: DOG_BARK_REACH,
+                source: s.by,
+            });
+        } else if s.what == Startle::Bolt && !s.by.is_some_and(|b| robots.contains(b)) {
+            noise.write(crate::robots::Noise {
+                at: s.at + Vec3::Y * 0.6,
+                radius: BOLT_HEARD,
+                source: None,
+            });
+        }
     }
 }
 
@@ -766,6 +787,27 @@ mod tests {
                     assert!(b > 25.0, "{map}: walking, they go from {b:.1} m");
                 }
             }
+        }
+    }
+
+    /// A stone into the thicket they're grazing in puts them to flight
+    /// (who threw it, from where, they don't know); one well off doesn't.
+    #[test]
+    fn a_stone_among_them_puts_them_to_flight() {
+        for (d, runs) in [(5.0, true), (THROWN_NEAR * 2.0, false)] {
+            let (zone, nav, mut herd) = herd_in("marrow_creek", Kind::Deer);
+            let lead = herd.leader().unwrap().pos;
+            let loud = [(lead + Vec3::X * d, THROWN_NEAR / FLEE_NOISE)];
+            let ctx = Ctx {
+                zone: &zone,
+                nav: &nav,
+                threats: &[],
+                loud: &loud,
+                hounds: &[],
+            };
+            let out = herd.tick(&ctx, DT);
+            let bolted = out.iter().any(|o| o.0 == Startle::Bolt && o.2.is_none());
+            assert_eq!(bolted, runs, "a stone {d} m off");
         }
     }
 

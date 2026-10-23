@@ -227,6 +227,86 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
     }
 }
 
+/// A stone onto the birds' roof: they go up calling, and a walker 75 m
+/// off goes to look where they were. It's a diversion, not a give-away:
+/// the alarm is from nobody, so the walker isn't onto you.
+#[test]
+fn a_stone_onto_their_roof_sends_a_walker_to_look_there() {
+    let (mut app, player, zone) = app();
+    let (_, centre, post) = one_flock_heard(&mut app, &zone, 75.0, true);
+    // You, well away: the far side of the building, standing still.
+    let side = (centre - post).with_y(0.0).normalize();
+    let off = centre + side * 30.0;
+    put(&mut app, player, zone.on_ground(off.x, off.z));
+    let walker = walker_at(&mut app, &zone, post, centre);
+    // A fresh flock on that roof, sitting (getting the walker to its post
+    // may have put the first one up).
+    let roof = app.world().resource::<Perches>().clone();
+    let i = roof
+        .sites
+        .iter()
+        .position(|s| s.centre.distance(centre) < 0.1)
+        .unwrap();
+    let old: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<Flock>>()
+        .iter(app.world())
+        .collect();
+    for e in old {
+        app.world_mut().despawn(e);
+    }
+    let mut rng = extraction_core::noise::Rng::new(2);
+    let flock = new_flock(Species::Rook, i, &roof.sites[i], &mut rng);
+    app.world_mut()
+        .spawn((Transform::from_translation(centre), flock));
+    {
+        let mut log = app.world_mut().resource_mut::<Log>();
+        log.investigating.clear();
+        log.flushed.clear();
+    }
+    let site = &roof.sites[i];
+    // Thrown: just out of a hand.
+    let stone = app.world_mut().spawn_empty().id();
+    let now = app.world().resource::<Time>().elapsed_secs();
+    app.world_mut()
+        .resource_mut::<super::LetGo>()
+        .0
+        .insert(stone, now);
+    for _ in 0..3 {
+        app.world_mut()
+            .write_message(crate::items::impacts::ItemImpact {
+                item: stone,
+                at: centre.with_y(site.top()),
+                speed: 6.0,
+                mass: 0.3,
+                material: crate::items::impacts::Material::Wood,
+                ground: None,
+            });
+        app.update();
+    }
+    for _ in 0..90 * 6 {
+        app.update();
+    }
+    let log = app.world().resource::<Log>();
+    let up = log.flushed.first().expect("the flock went up");
+    assert_eq!(up.cause, FlushCause::Thrown);
+    assert!(up.alarm && up.by.is_none());
+    // Gone to look (or looking round) near where the birds were.
+    let looked = match app.world().get::<Brain>(walker) {
+        Some(Brain::Investigate { at, .. } | Brain::Search { at, .. }) => {
+            Vec2::new(at.x - centre.x, at.z - centre.z).length()
+        }
+        _ => f32::MAX,
+    };
+    let spread = crate::robots::senses::HEARD_SPREAD * post.distance(centre);
+    assert!(
+        looked < spread.max(8.0),
+        "went to look {looked:.1} m from the flock ({spread:.1} m allowed)"
+    );
+    let aware = app.world().get::<crate::robots::Awareness>(walker).unwrap();
+    assert_ne!(aware.target, Some(player), "it's onto you");
+}
+
 /// Sitting and flying, no bird is ever inside any collider in the valley
 /// (buildings, bridges, trees, rocks, fences, the ground), by the physics'
 /// own point queries, while you chase a flock round for a minute and a half.
