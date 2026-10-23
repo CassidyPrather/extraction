@@ -23,7 +23,7 @@ use extraction_core::map::{MapDef, MarkerKind};
 use extraction_core::nav::{NavGrid, Obstacle};
 use extraction_core::noise::Rng;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::indoor::{BuildingPlan, plan_buildings};
 use super::telemetry::{SimLog, round};
@@ -346,10 +346,31 @@ pub struct Raider {
     distracted_at: f32,
     /// Creeping up on a walker to throw a distraction past it.
     stalking: Option<Stalk>,
+    /// `SIM_DIVERT=1`: its distractions go into the wildlife (a stone onto
+    /// a flock's roof, among a herd) where it can (see [`wild_mark`]).
+    divert: bool,
+    /// Calm walkers that could see it, being watched for whether they get
+    /// onto it (see [`watch`]); and when each was last watched.
+    watches: Vec<Watch>,
+    watched: HashMap<Entity, f32>,
     /// The region it set out for, read off the field map like a player
     /// planning a raid: sites there look better than their distance says.
     objective: Option<Vec2>,
 }
+
+/// A calm walker that could see it: did it get onto it in the next
+/// [`WATCH_FOR`] seconds?
+#[derive(Clone, Copy, Debug)]
+struct Watch {
+    walker: Entity,
+    since: f32,
+    spotted: bool,
+    /// It threw into the wildlife meanwhile.
+    wild: bool,
+}
+
+/// How long a watched stretch is (s).
+const WATCH_FOR: f32 = 30.0;
 
 /// A creep-and-throw in progress (see [`stalk`]).
 #[derive(Clone, Copy, Debug)]
@@ -570,6 +591,9 @@ pub fn attach_raider(
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
+                divert: std::env::var("SIM_DIVERT").is_ok_and(|v| v == "1"),
+                watches: Vec::new(),
+                watched: HashMap::new(),
                 objective,
             },
         ));
@@ -710,6 +734,10 @@ pub struct Scene<'w, 's> {
     /// The bots' sockets by entity (`Task::Draw` counts them in entity
     /// order).
     owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
+    /// The wildlife, for throwing into ([`wild_mark`]).
+    flocks: Query<'w, 's, &'static crate::wildlife::flock::Flock>,
+    herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
+    perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
 }
 
 impl Scene<'_, '_> {
@@ -1428,6 +1456,7 @@ fn sneak(
     swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
+    watch(me, r, scene, log);
     let hurrying = bot.sprint
         || r.combat.is_some()
         || r.act == Act::Board
@@ -1481,6 +1510,22 @@ fn sneak(
                 && aware.suspicion < 0.55
             {
                 calm_walker = Some(at);
+                let e = scene
+                    .robots
+                    .iter()
+                    .find(|(_, _, g, ..)| g.translation() == at)
+                    .map(|(e, ..)| e);
+                if let Some(e) = e
+                    && r.watched.get(&e).is_none_or(|t| r.clock - t > 60.0)
+                {
+                    r.watched.insert(e, r.clock);
+                    r.watches.push(Watch {
+                        walker: e,
+                        since: r.clock,
+                        spotted: false,
+                        wild: false,
+                    });
+                }
             }
         }
     }
@@ -1518,22 +1563,35 @@ fn sneak(
         };
         // A thrown bolt carries 15 m or so: well off to one side of the
         // line to it, so it turns and walks off that way, whichever side
-        // there's ground to land on.
+        // there's ground to land on. Diverting, onto birds or among deer
+        // there, if there are any.
         let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
-        let Some(to) = [1.1f32, -1.1]
+        let wild = if r.divert {
+            wild_mark(scene, eye, w)
+        } else {
+            None
+        };
+        let side = [1.1f32, -1.1]
             .into_iter()
             .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * 15.0)
             .find(|p| r.grid.walkable([p.x, p.y]))
-        else {
+            .map(|p| scene.zone.on_ground(p.x, p.y));
+        let Some(to) = wild.map(|(p, _)| p).or(side) else {
             if r.debug {
                 log.event("distract_skip", json!({"why": "no ground"}));
             }
             return;
         };
         r.distracted_at = r.clock;
+        if wild.is_some() {
+            for wt in &mut r.watches {
+                wt.wild = true;
+            }
+        }
         log.event(
             "distract",
-            json!({"x": round(to.x, 1), "z": round(to.y, 1), "walker_dist": round(w.distance(eye), 0)}),
+            json!({"x": round(to.x, 1), "z": round(to.z, 1), "walker_dist": round(w.distance(eye), 0),
+                   "wild": wild.map(|(_, k)| k)}),
         );
         r.interrupted = true;
         bot.replace([
@@ -1543,11 +1601,68 @@ fn sneak(
             },
             Task::Throw {
                 side: Side::Left,
-                at: scene.zone.on_ground(to.x, to.y),
+                at: to,
             },
             Task::Wait(2.0),
         ]);
     }
+}
+
+/// Somewhere in the wildlife to throw at, a throw off and well to one
+/// side of the walker at `walker`: a sitting flock's roof, or among a
+/// herd. What it is, for the log.
+fn wild_mark(scene: &Scene, eye: Vec3, walker: Vec3) -> Option<(Vec3, &'static str)> {
+    let toward = (walker - eye).xz().normalize_or(Vec2::X);
+    let ok = |p: Vec3| {
+        let d = (p - eye).xz();
+        let l = d.length();
+        (8.0..20.0).contains(&l) && toward.angle_to(d / l).abs() > 0.8
+    };
+    if let Some(perches) = &scene.perches {
+        for f in &scene.flocks {
+            if f.phase != crate::wildlife::flock::Phase::Settled {
+                continue;
+            }
+            let s = &perches.sites[f.site];
+            let p = s.centre.with_y(s.top());
+            if ok(p) {
+                return Some((p, "flock"));
+            }
+        }
+    }
+    scene
+        .herds
+        .iter()
+        .filter_map(|h| h.leader().map(|b| b.pos))
+        .find(|p| ok(*p))
+        .map(|p| (p, "herd"))
+}
+
+/// Each watched walker, [`WATCH_FOR`] seconds on: did it get onto the bot
+/// (`watch`: `unseen` or `spotted`, whether it was diverting, whether it
+/// threw into the wildlife meanwhile).
+fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
+    let clock = r.clock;
+    let divert = r.divert;
+    r.watches.retain_mut(|wt| {
+        let Ok((_, robot, _, aware, brain, _)) = scene.robots.get(wt.walker) else {
+            return false;
+        };
+        if robot.wrecked {
+            return false;
+        }
+        wt.spotted |=
+            aware.target == Some(me) && (matches!(brain, Brain::Engage) || aware.suspicion > 0.5);
+        if clock - wt.since < WATCH_FOR {
+            return true;
+        }
+        log.event(
+            "watch",
+            json!({"outcome": if wt.spotted { "spotted" } else { "unseen" },
+                   "divert": divert, "wild": wt.wild}),
+        );
+        false
+    });
 }
 
 /// Unaware walkers this far off are worth creeping up on (m)...
