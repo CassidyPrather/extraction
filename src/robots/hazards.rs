@@ -210,6 +210,11 @@ pub struct Dazzled(pub f32);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Deafened(pub f32);
 
+/// Its optics frosted (it sees [`FROST_SIGHT`] as far), this many seconds
+/// more: in a frost, and a while after.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Frosted(pub f32);
+
 /// Slowed to this share of its pace, this many seconds more.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Hampered {
@@ -238,6 +243,12 @@ pub const WELL_CRUSH: f32 = 25.0;
 /// share of a drone's way a second.
 pub const FROST_PACE: f32 = 0.55;
 pub const FROST_ICE: f32 = 0.8;
+/// A drone in one sinks at this (m/s²)...
+pub const FROST_SINK: f32 = 3.0;
+/// ...and any machine's optics frost: it sees this share as far, until
+/// this long after it's out (s).
+pub const FROST_SIGHT: f32 = 0.4;
+pub const FROST_THAW: f32 = 3.0;
 /// A gas flash, a mine, an EMP: a machine within this of it is told (m).
 pub const BLAST_TOLD: f32 = 6.0;
 
@@ -497,14 +508,19 @@ fn in_anomalies(
                     }
                 }
                 (Hazard::Frost, Effect::Slowed) => {
-                    commands.entity(e).try_insert(Hampered {
-                        pace: FROST_PACE,
-                        left: 0.3,
-                    });
-                    // Rotors icing: a drone loses way.
+                    // Joints stiff, and its eyes frosting over (`Frosted`).
+                    commands.entity(e).try_insert((
+                        Hampered {
+                            pace: FROST_PACE,
+                            left: 0.3,
+                        },
+                        Frosted(FROST_THAW),
+                    ));
+                    // Rotors icing: a drone loses way, and lift.
                     if machine == Machine::Drone {
                         if let Some(v) = b.velocity.as_mut() {
                             v.0 *= 1.0 - (FROST_ICE * dt).min(1.0);
+                            v.0.y -= FROST_SINK * dt;
                         }
                     }
                 }
@@ -643,9 +659,16 @@ fn wear_off(
     mut dazzled: Query<(Entity, &mut Dazzled)>,
     mut deaf: Query<(Entity, &mut Deafened)>,
     mut slow: Query<(Entity, &mut Hampered)>,
+    mut frosted: Query<(Entity, &mut Frosted)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
+    for (e, mut f) in &mut frosted {
+        f.0 -= dt;
+        if f.0 <= 0.0 {
+            commands.entity(e).try_remove::<Frosted>();
+        }
+    }
     for (e, mut d) in &mut dazzled {
         d.0 -= dt;
         if d.0 <= 0.0 {
