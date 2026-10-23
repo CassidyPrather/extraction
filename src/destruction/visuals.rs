@@ -548,7 +548,7 @@ fn dress_crates(
         let mut boxed = |props: &mut crate::render::world_props::PropModels| {
             if !has_box {
                 let material = props.lib.get(c.mat, &props.server, &mut materials);
-                commands.spawn((
+                let mut b = commands.spawn((
                     CrateBox,
                     Mesh3d(meshes.add(crate::render::materials::metric_box(c.size))),
                     MeshMaterial3d(material),
@@ -556,6 +556,9 @@ fn dress_crates(
                     range(),
                     ChildOf(e),
                 ));
+                if !c.shadow {
+                    b.insert(bevy::light::NotShadowCaster);
+                }
             }
         };
         let Some(model) = c.model else {
@@ -600,13 +603,16 @@ fn dress_crates(
                 }
                 for (mesh, t, mat) in prims {
                     let material = props.material(&mat, &mut materials);
-                    commands.spawn((
+                    let mut m = commands.spawn((
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
                         c.at * t,
                         range(),
                         ChildOf(e),
                     ));
+                    if !c.shadow {
+                        m.insert(bevy::light::NotShadowCaster);
+                    }
                 }
                 commands.entity(e).insert(CrateDressed);
             }

@@ -57,6 +57,9 @@ pub struct Part {
     /// What it takes to break; `None` for metal, which only comes off to
     /// a crowbar (rounds hole sheet, they don't tear a door off).
     pub hp: Option<f32>,
+    /// Casts its own shadow (`Drawn::shadow`): only what stands clear of
+    /// anything behind it, a garden fence's panel.
+    pub shadow: bool,
 }
 
 impl Part {
@@ -88,6 +91,7 @@ impl Part {
             model: b.model,
             model_at,
             hp,
+            shadow: b.kind == BreakKind::FencePanel,
         }
     }
 }
@@ -435,6 +439,7 @@ fn place(commands: &mut Commands, broken: &Broken, part: &Part) {
         at: part.model_at,
         size: s,
         range: crate::render::lod::near_range().end_margin,
+        shadow: part.shadow,
     });
     if part.hp.is_some() {
         e.insert(Splinters(part.mat));
