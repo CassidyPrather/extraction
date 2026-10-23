@@ -225,10 +225,21 @@ impl BuildingPlan {
         l.y - self.level(l).unwrap_or(self.floor) <= MAX_REACH_UP
     }
 
-    /// Whether a building-local point is within the walls.
+    /// Whether a building-local point is within the walls. (An
+    /// underground site's bounds can take in a kiosk, the adit's its
+    /// entrance between the drift and the haulage: the ground round a
+    /// kiosk isn't in, as for [`Self::contains`]; it was, and a raider's
+    /// way out by that kiosk found nowhere outside it to stand.)
     pub fn indoors(&self, p: Vec2) -> bool {
-        self.inner
-            .is_some_and(|(lo, hi)| p.cmpge(lo - 0.4).all() && p.cmple(hi + 0.4).all())
+        let boxed = self
+            .inner
+            .is_some_and(|(lo, hi)| p.cmpge(lo - 0.4).all() && p.cmple(hi + 0.4).all());
+        boxed
+            && (self.levels.is_none()
+                || !self
+                    .grid
+                    .cell_of(p.to_array())
+                    .is_some_and(|(i, j)| self.outside[j * self.grid.n + i]))
     }
 
     /// An indoor path between two building-local points, as local
@@ -1715,6 +1726,59 @@ mod tests {
             }
         }
         assert!(checked > 0, "no scene staged in a site");
+    }
+
+    /// From every room of every underground site, a raider finds where to
+    /// stand out of each of its ways out: the adit's entrance lies inside
+    /// its bounds (the haulage runs south past it), and from its deep level
+    /// and its magazine `stand_near` found nowhere by that kiosk to stand,
+    /// so raiders walked at the rock toward the RV (Rime seeds 2 and 4).
+    #[test]
+    fn every_site_room_can_stand_out_each_way() {
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app) {
+                let Some(l) = extraction_core::underground::layout(&plan.name) else {
+                    continue;
+                };
+                let open = l.open_rooms();
+                for (room, _) in l.rooms.iter().zip(open).filter(|(r, o)| *o && !r.pit) {
+                    let from = Vec2::from(room.at);
+                    let Some(from) = plan.grid.nearest_walkable(from.to_array()).map(Vec2::from)
+                    else {
+                        continue;
+                    };
+                    for &e in &plan.entries {
+                        checked += 1;
+                        if plan.indoors(e) {
+                            bad.push(format!(
+                                "{map} {}: way out {e} counts as indoors",
+                                plan.name
+                            ));
+                        }
+                        if super::super::raider::stand_near(&plan, from, e).is_none() {
+                            bad.push(format!(
+                                "{map} {} from {}: nowhere to stand out at {e}",
+                                plan.name, room.id
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 0);
+        bad.dedup();
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     #[test]
