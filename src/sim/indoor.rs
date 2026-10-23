@@ -904,7 +904,11 @@ fn obstacle(shape: Shape, at: Transform, floor: f32, sills: bool) -> Option<Obst
         return None;
     }
     let c = at.translation;
-    if let Some(r) = circle {
+    // Round from above only standing up: a wheel or a pipe on its side is
+    // its box (below), not a disc its radius round its middle.
+    if let Some(r) = circle
+        && (at.rotation * Vec3::Y).y.abs() > 0.99
+    {
         return Some(Obstacle::Circle {
             at: [c.x, c.z],
             radius: r,
@@ -1325,6 +1329,29 @@ mod tests {
     /// bot can stand, along a clear line: a barn's open gaps join its floor
     /// to the outside, which once left nothing in a barn reachable, and a
     /// thing just outside a window was reached for through the wall.
+    #[test]
+    fn a_cylinder_on_its_side_blocks_its_own_box() {
+        // Marrow's mill wheel: 2.4 m round, 1.2 m wide, its axle along X.
+        let wheel = Transform::from_xyz(-0.5, 2.55, 0.0)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
+        let Some(Obstacle::Rect { at, half, .. }) =
+            obstacle(Shape::Cylinder(2.4, 1.2), wheel, 0.0, false)
+        else {
+            panic!("a wheel on its side should block as a box");
+        };
+        assert!(
+            (half[0] - 0.6).abs() < 0.01 && (half[1] - 2.4).abs() < 0.01,
+            "{half:?}"
+        );
+        assert!((at[0] + 0.5).abs() < 0.01, "{at:?}");
+        // Standing up it's a disc.
+        let post = Transform::from_xyz(0.0, 1.0, 0.0);
+        assert!(matches!(
+            obstacle(Shape::Cylinder(0.3, 2.0), post, 0.0, false),
+            Some(Obstacle::Circle { .. })
+        ));
+    }
+
     #[test]
     fn every_loot_spot_is_reached_from_its_own_side() {
         for map in crate::test_maps() {
