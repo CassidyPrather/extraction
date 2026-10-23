@@ -51,6 +51,10 @@ pub const COVER_WAIT: f32 = 2.0;
 pub const SIGHT: f32 = 80.0;
 /// It keeps this far off lit ground (m).
 pub const LIT_RADIUS: f32 = 10.0;
+/// Told one's moving up, it runs this long without stopping in cover (s)...
+pub const DASH_FOR: f32 = 5.0;
+/// ...and takes another way out only if it's at most this much longer.
+pub const SWITCH_LONGER: f32 = 1.3;
 /// What it's told it keeps in mind this long (s).
 pub const TOLD_FOR: f32 = 15.0;
 /// Within this of a rendezvous it's out (m).
@@ -103,6 +107,20 @@ struct Newcomer {
     told: Vec<(SquadCall, f32)>,
     /// Lit ground to keep off.
     lit: Option<Vec2>,
+    /// Told one's moving up (so not shooting): it runs for it until then,
+    /// no stops in cover.
+    dash_until: f32,
+}
+
+/// Path length (m).
+fn length(from: Vec2, path: &[Vec2]) -> f32 {
+    let mut d = 0.0;
+    let mut last = from;
+    for p in path {
+        d += last.distance(*p);
+        last = *p;
+    }
+    d
 }
 
 /// The next cover toward the way out: a walkable point a bound ahead,
@@ -295,6 +313,7 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
         cover_until: 0.0,
         told: vec![],
         lit: None,
+        dash_until: 0.0,
     };
     let mut sight: SystemState<SpatialQuery> = SystemState::new(app.world_mut());
     let mut here = start;
@@ -372,14 +391,27 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                         .min_by(|&a, &b| {
                             rvs[a].1.distance(here).total_cmp(&rvs[b].1.distance(here))
                         });
+                    // Only if it's not much further: a long way round
+                    // under their guns is worse than the one being shut.
+                    let now_len = length(here, &me.path);
                     if let Some(i) = other {
-                        me.goal = i;
-                        me.path = route(&app, here, rvs[i].1);
-                        me.bound = None;
-                        heeded += 1;
+                        let path = route(&app, here, rvs[i].1);
+                        if length(here, &path) < now_len * SWITCH_LONGER {
+                            me.goal = i;
+                            me.path = path;
+                            me.bound = None;
+                        }
                     }
+                    // The cut-off's on its way, not shooting: go now.
+                    me.dash_until = t + DASH_FOR;
+                    heeded += 1;
                 }
-                Role::Flank | Role::Pin => heeded += 1,
+                Role::Flank => {
+                    // One going round, one gun fewer: go now.
+                    me.dash_until = t + DASH_FOR;
+                    heeded += 1;
+                }
+                Role::Pin => heeded += 1,
                 Role::Spot => {
                     me.lit = Some(post);
                     heeded += 1;
@@ -392,7 +424,8 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             me.path.remove(0);
         }
         // In cover: crouched, a breath, then the next bound.
-        let crouch = me.bound.is_none() && t < me.cover_until;
+        let dashing = t < me.dash_until;
+        let crouch = !dashing && me.bound.is_none() && t < me.cover_until;
         if let Some(mut rig) = app.world_mut().get_mut::<RigInput>(player) {
             rig.crouch = crouch;
         }
@@ -439,8 +472,8 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
                     .count()
             };
             let chosen = me.bound.is_none().then(|| {
-                if threats.is_empty() {
-                    // Nobody in sight: straight on.
+                if threats.is_empty() || dashing {
+                    // Nobody in sight, or running for it: straight on.
                     me.path.first().copied().unwrap_or(rvs[me.goal].1)
                 } else {
                     next_cover(&nav, here, &me.path, rvs[me.goal].1, &exposed, me.lit)
