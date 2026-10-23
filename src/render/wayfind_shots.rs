@@ -40,7 +40,7 @@ pub const NEAREST: f32 = 5.0;
 pub const FARTHEST: f32 = 320.0;
 
 /// How far off `--wayfind-lamps` shoots each landmark's lamp (m).
-pub const LAMP_AT: [f32; 2] = [150.0, 300.0];
+pub const LAMP_AT: [f32; 3] = [50.0, 150.0, 300.0];
 
 pub struct WayfindShotsPlugin;
 
@@ -67,6 +67,9 @@ struct View {
     /// A lamp's view: where the lamp lands in the picture (pixels).
     #[serde(skip_serializing_if = "Option::is_none")]
     at: Option<[f32; 2]>,
+    /// A lamp's view: its halo's colour (linear RGB).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tint: Option<[f32; 3]>,
     #[serde(skip)]
     entity: Option<Entity>,
     /// Its footprint (w, h, d) and pose, for `rect`.
@@ -164,6 +167,7 @@ fn plan_afford(world: &mut World, mut frames: Local<u32>) {
             without: format!("{i:03}_b.png"),
             rect: [0.0; 4],
             at: None,
+            tint: None,
             entity: Some(e),
             // Centred on the thing (its box goes round its middle).
             size,
@@ -266,15 +270,18 @@ fn vantage(
 /// way), on the first bearing on the map.
 fn plan_lamps(
     zone: &Zone,
-    lamps: &Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    lamps: &Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
     spatial: &avian3d::prelude::SpatialQuery,
 ) -> Vec<View> {
     let half = zone.map.size * 0.5 - 2.0;
-    let mut found: Vec<(Entity, Vec3)> = lamps.iter().map(|(e, g)| (e, g.translation())).collect();
-    found.sort_by_key(|(e, _)| *e);
+    let mut found: Vec<(Entity, Vec3, [f32; 3])> = lamps
+        .iter()
+        .map(|(e, g, h)| (e, g.translation(), [h.color.red, h.color.green, h.color.blue]))
+        .collect();
+    found.sort_by_key(|(e, _, _)| *e);
     let filter = avian3d::prelude::SpatialQueryFilter::default();
     let mut v = Vec::new();
-    for (e, lamp) in found {
+    for (e, lamp, tint) in found {
         for d in LAMP_AT {
             let bearings = (0..16).map(|i| {
                 let a = i as f32 * std::f32::consts::TAU / 16.0;
@@ -294,34 +301,45 @@ fn plan_lamps(
                 let run = eye.distance(lamp) - 3.0;
                 spatial.cast_ray(eye, dir, run, true, &filter).is_none()
             };
-            let eye = on_map
+            // Up to three bearings with the lamp in sight, spread round it:
+            // foliage has no colliders, so one may still look through a
+            // crown (the lamp passes a distance from any of them).
+            let seen_from: Vec<Vec3> = on_map
                 .iter()
                 .map(|p| standing(*p))
-                .find(|eye| seen(*eye))
-                .or_else(|| {
-                    on_map
-                        .first()
-                        .map(|p| Vec3::new(p.x, standing(*p).y.max(lamp.y), p.z))
-                });
-            let Some(eye) = eye else {
-                continue;
+                .filter(|eye| seen(*eye))
+                .collect();
+            let eyes: Vec<Vec3> = if seen_from.is_empty() {
+                on_map
+                    .first()
+                    .map(|p| Vec3::new(p.x, standing(*p).y.max(lamp.y), p.z))
+                    .into_iter()
+                    .collect()
+            } else {
+                let n = seen_from.len();
+                let mut picks: Vec<usize> = vec![0, n / 3, 2 * n / 3];
+                picks.dedup();
+                picks.into_iter().map(|i| seen_from[i]).collect()
             };
-            let i = v.len();
-            v.push(View {
-                from: format!("{d:.0} m"),
-                landmark: format!("lamp {e}"),
-                distance: eye.distance(lamp),
-                eye: eye.to_array(),
-                look: lamp.to_array(),
-                with: format!("{i:03}_a.png"),
-                without: format!("{i:03}_b.png"),
-                rect: [0.0; 4],
-                at: Some([0.0; 2]),
-                entity: Some(e),
-                // A box a halo across round the lamp.
-                size: Vec3::splat(2.0),
-                pose: Transform::from_translation(lamp - Vec3::Y * 1.75),
-            });
+            for eye in eyes {
+                let i = v.len();
+                v.push(View {
+                    from: format!("{d:.0} m"),
+                    landmark: format!("lamp {e}"),
+                    distance: eye.distance(lamp),
+                    eye: eye.to_array(),
+                    look: lamp.to_array(),
+                    with: format!("{i:03}_a.png"),
+                    without: format!("{i:03}_b.png"),
+                    rect: [0.0; 4],
+                    at: Some([0.0; 2]),
+                    tint: Some(tint),
+                    entity: Some(e),
+                    // A box a halo across round the lamp.
+                    size: Vec3::splat(2.0),
+                    pose: Transform::from_translation(lamp - Vec3::Y * 1.75),
+                });
+            }
         }
     }
     v
@@ -343,7 +361,7 @@ fn shoot(
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
     weather: Res<crate::world::sky::Weather>,
-    lamps: Query<(Entity, &GlobalTransform), With<crate::world::halos::HaloReach>>,
+    lamps: Query<(Entity, &GlobalTransform, &crate::world::halos::Halo), With<crate::world::halos::HaloReach>>,
     spatial: avian3d::prelude::SpatialQuery,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
@@ -409,6 +427,7 @@ fn shoot(
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
                     at: None,
+                    tint: None,
                     entity: Some(*e),
                     size: *size,
                     pose: *pose,
@@ -434,6 +453,7 @@ fn shoot(
                     without: format!("{i:03}_b.png"),
                     rect: [0.0; 4],
                     at: None,
+                    tint: None,
                     entity: None,
                     size: Vec3::ZERO,
                     pose: Transform::IDENTITY,
