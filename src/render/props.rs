@@ -850,7 +850,7 @@ fn ghost_through_walls(
                 let m = xray.add(crate::anomaly::visuals::XrayMaterial {
                     color: LinearRgba::BLACK,
                 });
-                commands.entity(e).insert(GhostLook(m.clone()));
+                commands.entity(e).try_insert(GhostLook(m.clone()));
                 m
             }
         };
@@ -858,10 +858,12 @@ fn ghost_through_walls(
             if !plain.contains(d) {
                 continue;
             }
+            // `try_`: a glove's boxes go the frame its model comes in,
+            // which can be this one.
             commands
                 .entity(d)
-                .remove::<MeshMaterial3d<StandardMaterial>>()
-                .insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
+                .try_remove::<MeshMaterial3d<StandardMaterial>>()
+                .try_insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
         }
     }
 }

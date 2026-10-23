@@ -80,15 +80,28 @@ fn preload_dressing(
     }
 }
 
-/// The folders whose models come out mid-raid: items and magazines
-/// (loot, a wreck's salvage, a crate's spill, a pod's cargo), guns, and
-/// robots (each kind's body and its own looks, the pod and harpoon).
-const MID_RAID: [&str; 4] = [
+/// The folders whose models come out mid-raid, asked for whole at start:
+/// items and magazines (loot, a wreck's salvage, a crate's spill, a pod's
+/// cargo), guns, robots (each kind's body and its own looks, the pod and
+/// harpoon), animals (a herd's kind comes when the herd does: a dog pack
+/// mid-raid once asked for its model then, now and then), vehicles, the
+/// kit and the hands. Every folder under `assets/models` is here but
+/// `props`, which come with a building's dressing (`preload_dressing`):
+/// `every_model_folder_is_preloaded` holds it.
+const MID_RAID: [&str; 8] = [
     "models/items",
     "models/mags",
     "models/guns",
     "models/robots",
+    "models/animals",
+    "models/vehicles",
+    "models/kit",
+    "models/hands",
 ];
+
+/// The one folder not asked for whole: a valley's props, with its
+/// buildings' dressing.
+const DRESSING: &str = "models/props";
 
 fn preload_models(server: Res<AssetServer>, mut models: ResMut<crate::models::Models>) {
     let root = crate::asset_root_path();
@@ -235,6 +248,59 @@ mod tests {
         }
         let _ = loads.recording;
         loads.paths.extend(got.into_iter().flatten());
+    }
+
+    /// Every model folder is asked for at start: whole (`MID_RAID`), or
+    /// with the buildings it dresses (`DRESSING`). A folder that's neither
+    /// (a new one) would load mid-raid whatever first used it, and only
+    /// when that came out: a test that brings things out catches it only
+    /// sometimes. The source's model paths are in those folders too.
+    #[test]
+    fn every_model_folder_is_preloaded() {
+        let root = crate::asset_root_path();
+        let mut wrong = Vec::new();
+        for d in std::fs::read_dir(root.join("models")).unwrap().flatten() {
+            if !d.path().is_dir() {
+                continue;
+            }
+            let dir = format!("models/{}", d.file_name().to_string_lossy());
+            if !super::MID_RAID.contains(&dir.as_str()) && dir != super::DRESSING {
+                wrong.push(format!("{dir}/ (on disk)"));
+            }
+        }
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&p) else {
+                    continue;
+                };
+                for part in text.split("\"models/").skip(1) {
+                    // `"models/<folder>/...`: a name, then a slash.
+                    let folder: String = part
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                        .collect();
+                    if folder.is_empty() || !part[folder.len()..].starts_with('/') {
+                        continue;
+                    }
+                    let dir = format!("models/{folder}");
+                    if !super::MID_RAID.contains(&dir.as_str()) && dir != super::DRESSING {
+                        wrong.push(format!("{dir}/ ({})", p.display()));
+                    }
+                }
+            }
+        }
+        wrong.sort();
+        wrong.dedup();
+        assert!(
+            wrong.is_empty(),
+            "model folders neither preloaded whole (first_sight::MID_RAID) nor dressing: {wrong:?}"
+        );
     }
 
     /// Everything a raid can bring out comes out, and none of it asks for
