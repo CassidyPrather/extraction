@@ -353,10 +353,22 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
             let post = call.post.xz();
             match call.role {
                 Role::CutOff => {
-                    // Another way out: one the cut-off isn't on the way to.
+                    // Another way out: one the cut-off isn't on the way
+                    // to, and not back through the rest of them (where
+                    // it's heard them call from). None such: on as it was.
                     let shut = (post - here).normalize_or(Vec2::X);
+                    let them = me
+                        .told
+                        .iter()
+                        .map(|(c, _)| c.at.xz())
+                        .fold(Vec2::ZERO, |a, p| a + p);
+                    let them = (them / me.told.len().max(1) as f32 - here).normalize_or_zero();
                     let other = (0..rvs.len())
-                        .filter(|&i| (rvs[i].1 - here).normalize_or(Vec2::X).dot(shut) < 0.5)
+                        .filter(|&i| i != me.goal)
+                        .filter(|&i| {
+                            let to = (rvs[i].1 - here).normalize_or(Vec2::X);
+                            to.dot(shut) < 0.5 && to.dot(them) < 0.3
+                        })
                         .min_by(|&a, &b| {
                             rvs[a].1.distance(here).total_cmp(&rvs[b].1.distance(here))
                         });
