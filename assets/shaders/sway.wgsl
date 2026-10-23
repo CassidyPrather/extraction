@@ -95,16 +95,8 @@ fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32
     }
     let rel = world.xz - a.xz;
     let d = length(rel);
-    if (abs(world.y - a.y) > 3.0) {
-        return r;
-    }
     let inside = 1.0 - smoothstep(a.w - 0.15, a.w, d);
-    // A fringe just outside it bows low: from a few metres off, standing
-    // grass at its rim hid the first half-metre inside, so what you saw
-    // start was half a metre past where it starts.
-    let fringe = (1.0 - smoothstep(a.w, a.w + 0.3, d)) * (1.0 - inside);
-    r.sink = 0.25 * fringe;
-    if (inside <= 0.0) {
+    if (inside <= 0.0 || abs(world.y - a.y) > 3.0) {
         return r;
     }
     let t = globals.time;
@@ -145,7 +137,7 @@ fn in_anomaly(world: vec3<f32>, a: vec4<f32>, kind: f32, weight: f32, phase: f32
     }
     r.still *= inside;
     r.o *= inside;
-    r.sink = max(r.sink * inside, 0.25 * fringe);
+    r.sink *= inside;
     return r;
 }
 
