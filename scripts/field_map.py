@@ -58,35 +58,11 @@ LANDMARK_NAMES = {
     "observatory": "observatory",
     "funicular_upper": "top station",
 }
-# Each landmark's lamp has a character, as lights on masts and at sea do
-# (extraction_core::map_landmarks::character; a test holds these to it), and
-# the key lists the ones on the sheet, so the lamps in sight after dark can
+# Each landmark's lamp has a character, as lights on masts and at sea do:
+# its kind's family, and the next of it for each of a family in the valley
+# (extraction_core::map_landmarks::assign; map-dump writes each placement's
+# as `lamp`). Written after its name, so the lamps in sight after dark can
 # be named: two named are a fix.
-LAMP_CHARACTERS = {
-    "chimney": "F",
-    "radio_mast": "Q",
-    "steeple": "Fl 5s",
-    "chapel": "Fl 5s",
-    "ranger_tower": "Fl(2) 6s",
-    "survey_tower": "Fl(3) 9s",
-    "robot_gate": "Fl(4) 12s",
-    "water_tower": "Oc 4s",
-    "draw_off_tower": "Oc(2) 8s",
-    "mill_race": "Oc(2) 8s",
-    "ropeway_station": "Oc(2) 8s",
-    "observatory": "Oc(2) 8s",
-    "factory_hall": "Oc(2) 8s",
-    "headframe": "Iso 4s",
-    "sorting_gantry": "Iso 4s",
-    "funicular_upper": "Iso 4s",
-    "dam_face": "LFl 8s",
-    "dam_face_end": "LFl 8s",
-    "dam_back": "LFl 8s",
-    "dam_back_end": "LFl 8s",
-    "blast_furnace": "LFl 8s",
-    "ropeway_pylon": "LFl 8s",
-    "ore_mill": "LFl 8s",
-}
 # The rendezvous beacons, green, in the map's order of them
 # (map_landmarks::beacon_character).
 BEACON_CHARACTERS = ["G Fl 5s", "G Fl(2) 7s", "G Fl(3) 9s", "G Fl(4) 11s"]
@@ -358,7 +334,7 @@ def main():
         x, y = px(p["at"])
         y -= gh * 0.25
         # Its lamp's character after its name: the lamp in sight, found.
-        name = name + " " + LAMP_CHARACTERS.get(prefab_base(p["prefab"]), "F")
+        name = name + " " + p.get("lamp", "F")
         w = d.textlength(name, font=f_small)
         labels.append((place(name, f_small, around(x, y, w, LABEL_MM * mm, gh * 0.55)), name, f_small, pencil))
 

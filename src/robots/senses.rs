@@ -372,7 +372,7 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
+    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight, among): (
         Res<Lighting>,
         Option<Res<crate::hearing::Hearing>>,
         Res<crate::gadgets::Cloaks>,
@@ -382,6 +382,7 @@ pub(crate) fn perceive(
         Option<Res<crate::anomaly::hush::Hushes>>,
         Option<Res<crate::weapons::optics::Glints>>,
         Option<Res<crate::weapons::flares::Starlight>>,
+        Option<Res<crate::wildlife::herd::Among>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     loads: Query<(&crate::interact::Held, &LinearVelocity), With<crate::interact::carry::Bulky>>,
@@ -392,9 +393,11 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
-    (mut gave_up, mut bored): (
+    (mut gave_up, mut bored, mut broke, mut own): (
         MessageReader<super::search::LostYou>,
         Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+        MessageReader<crate::destruction::Broke>,
+        Local<Vec<(Vec3, f32)>>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -412,8 +415,20 @@ pub(crate) fn perceive(
         spots.retain(|(_, until)| *until > now);
         !spots.is_empty() && robots.contains(*e)
     });
+    // What a machine breaks going through, it made: no robot turns to it
+    // (`disturbed::MACHINE_HAND`; the same rule as for the sign).
+    // (Its noise may come a tick after the break: kept a moment.)
+    own.retain(|(_, t)| now - t < 1.0);
+    for b in broke.read() {
+        if robots.iter().any(|(_, r, _, g, ..)| {
+            !r.wrecked && g.translation().distance(b.at) < super::disturbed::MACHINE_HAND
+        }) {
+            own.push((b.at, now));
+        }
+    }
     let mut sounds: Vec<Sound> = noises
         .read()
+        .filter(|n| !(n.source.is_none() && own.iter().any(|(o, _)| o.distance(n.at) < 0.05)))
         .map(|n| Sound {
             at: n.at,
             radius: n.radius,
@@ -512,7 +527,13 @@ pub(crate) fn perceive(
                 feet,
                 head,
                 height,
-                speed: Vec2::new(body.velocity.x, body.velocity.z).length(),
+                // Walking among a herd you're one more shape moving
+                // (`wildlife::herd::Among`): only running stands out.
+                speed: {
+                    let v = Vec2::new(body.velocity.x, body.velocity.z).length();
+                    let among = among.as_deref().is_some_and(|a| a.hides(feet));
+                    if among && v <= 3.0 { 0.0 } else { v }
+                },
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),

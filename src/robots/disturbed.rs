@@ -126,6 +126,8 @@ pub const ROUTE_APART: f32 = 4.0;
 pub const ROUTE_LEAD: f32 = 20.0;
 /// ...this unsure (m).
 pub const ROUTE_UNCERTAINTY: f32 = 6.0;
+/// A machine within this of what broke (m) broke it itself.
+pub const MACHINE_HAND: f32 = 2.5;
 /// A player opening a door is within this of it (m).
 pub const DOOR_HAND: f32 = 2.5;
 /// A thing picked up within this of a loot spot (m) cleared it.
@@ -169,6 +171,7 @@ fn feed(
     places: Query<&GlobalTransform>,
     loot: Option<Res<crate::world::buildings::BuildingLoot>>,
     time: Res<Time>,
+    machines: Query<(&Robot, &GlobalTransform)>,
 ) {
     let now = time.elapsed_secs();
     let by_player = |e: Entity| players.contains(e);
@@ -185,13 +188,24 @@ fn feed(
             .filter(|p| by_player(p.by))
             .filter_map(|p| Some((at(p.target)?, SignKind::Pried))),
     );
-    left.extend(broke.read().map(|b| {
-        let kind = match b.stuff {
-            crate::destruction::Stuff::Glass => SignKind::Glass,
-            crate::destruction::Stuff::Wood => SignKind::Splintered,
-        };
-        (b.at, kind)
-    }));
+    // What a machine breaks going through is its own doing, not a sign
+    // of you.
+    left.extend(
+        broke
+            .read()
+            .filter(|b| {
+                !machines
+                    .iter()
+                    .any(|(r, g)| !r.wrecked && g.translation().distance(b.at) < MACHINE_HAND)
+            })
+            .map(|b| {
+                let kind = match b.stuff {
+                    crate::destruction::Stuff::Glass => SignKind::Glass,
+                    crate::destruction::Stuff::Wood => SignKind::Splintered,
+                };
+                (b.at, kind)
+            }),
+    );
     left.extend(
         drags
             .read()

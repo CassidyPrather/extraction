@@ -361,7 +361,8 @@ pub fn kinds_in_sight(
 
 /// How many lights you can name are in sight from eye height at `p`
 /// through the land and the trees, counting up to `enough`: the
-/// landmarks' lamps by their [`character`]s (each on its highest top,
+/// landmarks' lamps by their characters (`chars`, [`assign`]ed; each on
+/// its highest top,
 /// within `lamp_range`), each rendezvous beacon (`beacons`: where it
 /// stands, its own character) within `beacon_range`.
 /// At night that's all there is to see; in fog, with `lamp_range` the fog's
@@ -369,6 +370,7 @@ pub fn kinds_in_sight(
 /// as visible as its lamp that near.
 pub fn lights_in_sight(
     marks: &[Landmark],
+    chars: &[Character],
     beacons: &[P2],
     hm: &Heightmap,
     canopy: &Canopy,
@@ -381,8 +383,8 @@ pub fn lights_in_sight(
     // in sight are one thing to steer by), each beacon its own.
     let mut seen_chars: Vec<&str> = Vec::new();
     let mut n = 0;
-    for m in marks {
-        let name = character(&m.kind).name;
+    for (m, c) in marks.iter().zip(chars) {
+        let name = c.name;
         if seen_chars.contains(&name) {
             continue;
         }
@@ -462,10 +464,11 @@ pub fn gauge_cells(
 }
 
 /// A lamp's character, as the lights of masts and lights at sea have
-/// them: when in each period it's lit. A landmark's is its kind's
-/// ([`character`]), the same in every valley so it's learnt once, and no
-/// two kinds in one valley share one, so two lamps in sight after dark
-/// are two you can name: a fix, not only a bearing. The field map's key
+/// them: when in each period it's lit. A landmark's kind sets its
+/// [`family`] (a mast's is quick, a water tower's occults: learnt once),
+/// and each of a family in a valley takes the next variant ([`assign`]),
+/// so no two lamps in a valley are alike and two in sight after dark are
+/// two you can name: a fix, not only a bearing. The field map's key
 /// lists them (`scripts/field_map.py`, held to these by a test).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Character {
@@ -484,78 +487,144 @@ impl Character {
     }
 }
 
-/// Steady: the chimneys' (an obstruction light).
-pub const STEADY: Character = Character {
-    name: "F",
-    period: 1.0,
-    lit: &[(0.0, 1.0)],
-};
-/// A quick flash, every second: the masts'.
-pub const QUICK: Character = Character {
-    name: "Q",
-    period: 1.0,
-    lit: &[(0.0, 0.35)],
-};
-pub const FLASH: Character = Character {
-    name: "Fl 5s",
-    period: 5.0,
-    lit: &[(0.0, 0.6)],
-};
-pub const FLASH_2: Character = Character {
-    name: "Fl(2) 6s",
-    period: 6.0,
-    lit: &[(0.0, 0.5), (1.2, 1.7)],
-};
-pub const FLASH_3: Character = Character {
-    name: "Fl(3) 9s",
-    period: 9.0,
-    lit: &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)],
-};
-pub const FLASH_4: Character = Character {
-    name: "Fl(4) 12s",
-    period: 12.0,
-    lit: &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
-};
-/// Lit, put out for a moment.
-pub const OCCULTING: Character = Character {
-    name: "Oc 4s",
-    period: 4.0,
-    lit: &[(0.0, 3.0)],
-};
-pub const OCCULTING_2: Character = Character {
-    name: "Oc(2) 8s",
-    period: 8.0,
-    lit: &[(0.0, 5.0), (5.8, 7.2)],
-};
-/// As long lit as dark.
-pub const ISOPHASE: Character = Character {
-    name: "Iso 4s",
-    period: 4.0,
-    lit: &[(0.0, 2.0)],
-};
-pub const LONG_FLASH: Character = Character {
-    name: "LFl 8s",
-    period: 8.0,
-    lit: &[(0.0, 2.0)],
-};
+const fn ch(name: &'static str, period: f32, lit: &'static [(f32, f32)]) -> Character {
+    Character { name, period, lit }
+}
 
-/// A landmark kind's lamp ([`kind`]).
-pub fn character(kind: &str) -> Character {
+/// Steady, then lit with an eclipse every so often: the chimneys'.
+pub const CHIMNEYS: &[Character] = &[
+    ch("F", 1.0, &[(0.0, 1.0)]),
+    ch("Oc 10s", 10.0, &[(0.0, 9.0)]),
+    ch("Oc(2) 14s", 14.0, &[(0.0, 11.0), (11.8, 13.2)]),
+];
+/// Quick flashes: the masts'.
+pub const MASTS: &[Character] = &[
+    ch("Q", 1.0, &[(0.0, 0.35)]),
+    ch("Q(3) 10s", 10.0, &[(0.0, 0.35), (1.0, 1.35), (2.0, 2.35)]),
+    ch(
+        "Q(6) 15s",
+        15.0,
+        &[
+            (0.0, 0.35),
+            (1.0, 1.35),
+            (2.0, 2.35),
+            (3.0, 3.35),
+            (4.0, 4.35),
+            (5.0, 5.35),
+        ],
+    ),
+];
+/// A single flash: the steeples'.
+pub const STEEPLES: &[Character] = &[
+    ch("Fl 5s", 5.0, &[(0.0, 0.6)]),
+    ch("Fl 10s", 10.0, &[(0.0, 0.8)]),
+];
+/// Two flashes: the lookouts'.
+pub const LOOKOUTS: &[Character] = &[
+    ch("Fl(2) 6s", 6.0, &[(0.0, 0.5), (1.2, 1.7)]),
+    ch("Fl(2) 10s", 10.0, &[(0.0, 0.5), (1.2, 1.7)]),
+];
+/// Three: the survey towers'.
+pub const SURVEYS: &[Character] = &[
+    ch("Fl(3) 9s", 9.0, &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)]),
+    ch("Fl(3) 15s", 15.0, &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9)]),
+];
+/// Four: the machines' gates.
+pub const GATES: &[Character] = &[
+    ch(
+        "Fl(4) 12s",
+        12.0,
+        &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
+    ),
+    ch(
+        "Fl(4) 20s",
+        20.0,
+        &[(0.0, 0.5), (1.2, 1.7), (2.4, 2.9), (3.6, 4.1)],
+    ),
+];
+/// Lit, put out for a moment, once or in a group: the water towers'.
+pub const WATER_TOWERS: &[Character] = &[
+    ch("Oc 4s", 4.0, &[(0.0, 3.0)]),
+    ch("Oc(2) 6s", 6.0, &[(0.0, 3.5), (4.2, 5.3)]),
+    ch("Oc(3) 8s", 8.0, &[(0.0, 4.4), (5.0, 5.6), (6.2, 7.2)]),
+];
+/// A Morse letter: the intake tower's, the mill's, the ropeway station's,
+/// the observatory's, the works hall's.
+pub const MORSE: &[Character] = &[
+    ch("Mo(A) 8s", 8.0, &[(0.0, 0.5), (1.0, 2.5)]),
+    ch("Mo(U) 10s", 10.0, &[(0.0, 0.5), (1.0, 1.5), (2.0, 3.5)]),
+];
+/// As long lit as dark: the headframes', the gantry's, the funicular's.
+pub const ISOPHASE: &[Character] = &[
+    ch("Iso 4s", 4.0, &[(0.0, 2.0)]),
+    ch("Iso 8s", 8.0, &[(0.0, 4.0)]),
+];
+/// A long flash: the dam's, the furnace's, the ropeway's pylons', the ore
+/// mill's.
+pub const LONG_FLASHES: &[Character] = &[
+    ch("LFl 8s", 8.0, &[(0.0, 2.0)]),
+    ch("LFl 12s", 12.0, &[(0.0, 2.0)]),
+];
+
+/// A landmark kind's family of lamp characters ([`kind`]): what it is
+/// sets the rhythm, and each of a family in a valley takes the next of
+/// its variants ([`assign`]).
+pub fn family(kind: &str) -> &'static [Character] {
     match kind {
-        "chimney" => STEADY,
-        "radio_mast" => QUICK,
-        "steeple" => FLASH,
-        "ranger_tower" => FLASH_2,
-        "survey_tower" => FLASH_3,
-        "robot_gate" => FLASH_4,
-        "water_tower" => OCCULTING,
+        "chimney" => CHIMNEYS,
+        "radio_mast" => MASTS,
+        "steeple" => STEEPLES,
+        "ranger_tower" => LOOKOUTS,
+        "survey_tower" => SURVEYS,
+        "robot_gate" => GATES,
+        "water_tower" => WATER_TOWERS,
         "draw_off_tower" | "mill_race" | "ropeway_station" | "observatory" | "factory_hall" => {
-            OCCULTING_2
+            MORSE
         }
         "headframe" | "sorting_gantry" | "funicular_upper" => ISOPHASE,
-        "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASH,
-        _ => STEADY,
+        "dam" | "blast_furnace" | "ropeway_pylon" | "ore_mill" => LONG_FLASHES,
+        _ => CHIMNEYS,
     }
+}
+
+/// Each landmark's lamp ([`landmarks`]' order): its family's first variant
+/// for the first of that family in the valley, the next for the next, so
+/// no two lamps in a valley are alike and two in sight are two you can
+/// name. Every one of a series (a ropeway's pylons) shares one: it reads
+/// as one thing to follow.
+pub fn assign(marks: &[Landmark]) -> Vec<Character> {
+    let mut used: Vec<(&'static str, &str, usize)> = Vec::new();
+    marks
+        .iter()
+        .map(|m| {
+            let fam = family(&m.kind);
+            let key = fam[0].name;
+            let series = crate::map_lint::SERIES.contains(&m.kind.as_str());
+            if series {
+                if let Some((_, _, i)) = used
+                    .iter()
+                    .find(|(k, kind, _)| *k == key && *kind == m.kind)
+                {
+                    return fam[*i];
+                }
+            }
+            let i = used.iter().filter(|(k, _, _)| *k == key).count();
+            used.push((key, &m.kind, i));
+            fam[i.min(fam.len() - 1)]
+        })
+        .collect()
+}
+
+/// Each placement's lamp, by index into the map's placements: every piece
+/// of a landmark carries its lamp.
+pub fn placement_lamps(map: &MapDef, hm: &Heightmap) -> Vec<(usize, Character)> {
+    let marks = landmarks(map, hm);
+    let chars = assign(&marks);
+    marks
+        .iter()
+        .zip(chars)
+        .flat_map(|(m, c)| m.pieces.iter().map(move |i| (*i, c)))
+        .collect()
 }
 
 /// The rendezvous beacons are green, each flashing its number (the map's
@@ -713,8 +782,9 @@ pub struct RouteSight {
 mod tests {
 
     /// After dark two lamps in sight are two you can name: in every valley
-    /// no two kinds of landmark share a lamp's character, and every kind
-    /// has one of its own choosing (not the steady lamp by default).
+    /// no two lamps are alike (but a series' own, read as one), every kind
+    /// has a family of its own choosing (not the chimneys' by default), and
+    /// no family runs out of variants.
     #[test]
     fn every_valleys_lamps_tell_apart() {
         let named = [
@@ -741,18 +811,38 @@ mod tests {
         for (id, text) in crate::map::VALLEYS {
             let map = MapDef::from_ron(text).unwrap();
             let hm = Heightmap::build(&map);
-            let mut by: Vec<(String, &str)> = Vec::new();
-            for m in landmarks(&map, &hm) {
+            let marks = landmarks(&map, &hm);
+            let chars = assign(&marks);
+            let mut by: Vec<(&str, &str)> = Vec::new();
+            for (m, c) in marks.iter().zip(&chars) {
                 assert!(
                     named.contains(&m.kind.as_str()),
-                    "{id}: {} has no lamp character of its own",
+                    "{id}: {} has no lamp family of its own",
                     m.kind
                 );
-                let c = character(&m.kind).name;
-                if let Some((k, _)) = by.iter().find(|(k, n)| *n == c && *k != m.kind) {
-                    panic!("{id}: {} and {k} both {c}", m.kind);
+                let fam = family(&m.kind);
+                let n = by
+                    .iter()
+                    .filter(|(_, k)| family(k)[0].name == fam[0].name)
+                    .count();
+                let series = crate::map_lint::SERIES.contains(&m.kind.as_str());
+                if !series {
+                    assert!(
+                        n < fam.len(),
+                        "{id}: {} {} of the {} family, only {} variants",
+                        n + 1,
+                        m.kind,
+                        fam[0].name,
+                        fam.len()
+                    );
                 }
-                by.push((m.kind.clone(), c));
+                if let Some((other, k)) = by
+                    .iter()
+                    .find(|(n, k)| *n == c.name && !(series && *k == m.kind))
+                {
+                    panic!("{id}: {} ({}) and {k} both {other}", m.name, m.kind);
+                }
+                by.push((c.name, &m.kind));
             }
         }
     }
@@ -761,18 +851,23 @@ mod tests {
     /// for some (but the steady one), and the beacons all different.
     #[test]
     fn characters_flash_as_written() {
-        for c in [
-            STEADY,
-            QUICK,
-            FLASH,
-            FLASH_2,
-            FLASH_3,
-            FLASH_4,
-            OCCULTING,
-            OCCULTING_2,
+        let all = [
+            CHIMNEYS,
+            MASTS,
+            STEEPLES,
+            LOOKOUTS,
+            SURVEYS,
+            GATES,
+            WATER_TOWERS,
+            MORSE,
             ISOPHASE,
-            LONG_FLASH,
-        ] {
+            LONG_FLASHES,
+        ];
+        let names: Vec<&str> = all.iter().flat_map(|f| f.iter().map(|c| c.name)).collect();
+        for (i, n) in names.iter().enumerate() {
+            assert!(!names[..i].contains(n), "{n} twice");
+        }
+        for c in all.iter().flat_map(|f| f.iter().copied()) {
             let lit = (0..1000)
                 .filter(|i| c.lit_at(*i as f32 * c.period / 1000.0))
                 .count();

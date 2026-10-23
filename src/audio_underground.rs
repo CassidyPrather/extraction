@@ -51,6 +51,7 @@ impl Plugin for UndergroundSoundsPlugin {
                 echo_sounds,
                 lockdown_sounds,
                 live_sounds,
+                stair_breath,
                 ease_loops,
             ),
         );
@@ -118,10 +119,8 @@ fn start_loop(
     lowpass: Option<f32>,
     rate: f32,
     want: f32,
-) {
-    let Some(sample) = bank.pick(set(cue), rng) else {
-        return;
-    };
+) -> Option<Entity> {
+    let sample = bank.pick(set(cue), rng)?;
     let silent = VolumeNode {
         volume: Volume::SILENT,
         ..default()
@@ -153,6 +152,7 @@ fn start_loop(
         ]),
         None => e.insert(sample_effects![silent, mix::spatial(cue), reverb_send(cue)]),
     };
+    Some(e.id())
 }
 
 /// Every site loop eased toward what's wanted of it; one wanted off is
@@ -1242,6 +1242,266 @@ fn live_sounds(
     }
 }
 
+/// What a site's stair breathes out at its kiosk door: a layer of what's
+/// below, looped (`Bed`) or now and then (`Spot`).
+#[derive(Clone, Copy, Debug)]
+pub enum Breath {
+    /// A loop at `speed`, through a low-pass at `lowpass` Hz.
+    Bed {
+        cue: &'static str,
+        speed: f64,
+        lowpass: Option<f32>,
+    },
+    /// A one-shot every `every` seconds (a range), at a speed in `speed`;
+    /// `echo`, repeated late and faint, as down a long gallery.
+    Spot {
+        cue: &'static str,
+        every: (f32, f32),
+        speed: (f32, f32),
+        echo: bool,
+    },
+}
+
+const fn bed(cue: &'static str, speed: f64, lowpass: Option<f32>) -> Breath {
+    Breath::Bed {
+        cue,
+        speed,
+        lowpass,
+    }
+}
+
+const fn spot(cue: &'static str, every: (f32, f32), speed: (f32, f32)) -> Breath {
+    Breath::Spot {
+        cue,
+        every,
+        speed,
+        echo: false,
+    }
+}
+
+/// The breath of each site's stair, by its building's prefab (none for a
+/// site that has nothing to say).
+pub fn breath(prefab: &str) -> &'static [Breath] {
+    BREATHS
+        .iter()
+        .find(|(id, _)| *id == prefab)
+        .map_or(&[], |(_, b)| b)
+}
+
+const DRIP: Breath = spot("ug.breath_drip", (0.8, 3.5), (0.8, 1.2));
+
+const BREATHS: &[(&str, &[Breath])] = &[
+    // The shelter: a slow drip, the air handling's dead hum, a far
+    // ventilator's blade ticking round.
+    (
+        "bunker_marrow",
+        &[
+            bed("ug.breath_hum", 0.5, Some(400.0)),
+            spot("ug.breath_drip", (2.5, 6.0), (0.7, 0.9)),
+            spot("ug.breath_tick", (0.9, 1.1), (0.45, 0.5)),
+        ],
+    ),
+    // The drowned works: water running, a pump's distant thud.
+    (
+        "pump_marrow",
+        &[
+            bed("ug.breath_water", 0.8, Some(1_000.0)),
+            spot("ug.breath_thud", (2.2, 2.8), (0.4, 0.45)),
+        ],
+    ),
+    // The workings: drips, the timbers creaking, a draught's moan.
+    (
+        "mine_kettle",
+        &[
+            bed("ug.breath_draught", 0.6, Some(650.0)),
+            DRIP,
+            spot("ug.breath_creak", (4.0, 11.0), (0.5, 0.8)),
+        ],
+    ),
+    // The deep workings: the same, and the firedamp's faint hiss.
+    (
+        "deep_kettle",
+        &[
+            bed("ug.breath_draught", 0.55, Some(650.0)),
+            bed("ug.breath_hiss", 0.7, Some(3_500.0)),
+            DRIP,
+            spot("ug.breath_creak", (4.0, 11.0), (0.45, 0.7)),
+        ],
+    ),
+    // The cinder tunnel: the mains' hum, a cable's buzz.
+    (
+        "tunnel_cinder",
+        &[
+            bed("ug.breath_mains", 0.6, None),
+            bed("ug.breath_buzz", 1.0, Some(2_500.0)),
+        ],
+    ),
+    // The furnace cellars: a warm roar, metal ticking.
+    (
+        "cellars_cinder",
+        &[
+            bed("ug.breath_roar", 0.6, Some(500.0)),
+            spot("ug.breath_metal", (0.6, 2.5), (0.55, 0.85)),
+        ],
+    ),
+    // The dam gallery: water seeping, every drop answered down its
+    // length.
+    (
+        "gallery_sallow",
+        &[
+            bed("ug.breath_water", 0.6, Some(1_000.0)),
+            Breath::Spot {
+                cue: "ug.breath_drip",
+                every: (1.5, 4.5),
+                speed: (0.8, 1.1),
+                echo: true,
+            },
+        ],
+    ),
+    // The robots' depot: the sorting halls, occupied: a conveyor's
+    // distant rattle, a gantry's hum, now and then a servo.
+    (
+        "depot_marrow",
+        &[
+            bed("ug.breath_mains", 0.8, None),
+            spot("ug.breath_rattle", (0.15, 0.4), (0.9, 1.3)),
+            spot("ug.breath_servo", (3.0, 9.0), (0.7, 0.9)),
+        ],
+    ),
+    // The winze: wind down the drift, the cage's rope creaking.
+    (
+        "adit_rime",
+        &[
+            bed("ug.breath_wind", 0.7, Some(1_000.0)),
+            spot("ug.breath_rope", (3.0, 8.0), (0.5, 0.7)),
+        ],
+    ),
+];
+
+/// The breath is full within `BREATH_FULL` m of the door and gone by
+/// `BREATH_GONE`: a tell for whoever's at the door, not across the yard.
+pub const BREATH_FULL: f32 = 5.0;
+pub const BREATH_GONE: f32 = 9.0;
+
+/// It goes as you go down (the site's own sounds take over): gone once
+/// your head's this far under where it was standing at the door.
+pub const BREATH_DOWN: f32 = 2.5;
+
+/// How much of a door's breath is heard from `ear`, its mouth at `mouth`
+/// and its kiosk's floor at `top` (world y): 0..1.
+pub fn breath_heard(ear: Vec3, mouth: Vec3, top: f32) -> f32 {
+    let near = 1.0 - (ear.distance(mouth) - BREATH_FULL) / (BREATH_GONE - BREATH_FULL);
+    let down = (top + 1.6 - ear.y) / BREATH_DOWN;
+    (near.clamp(0.0, 1.0) * (1.0 - down).clamp(0.0, 1.0)).powi(2)
+}
+
+/// A breath's loop, which door (site, portal) it's at.
+#[derive(Component)]
+struct BreathAt(Entity, usize);
+
+/// Each kiosk door breathes out what's below (`breath`): faint, heard
+/// within a few metres (`breath_heard`), from just inside its door,
+/// stopping as you go down. Loops come and go as you near and leave; a
+/// spot's echo waits its turn in `late`.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn stair_breath(
+    mut commands: Commands,
+    sites: Query<(Entity, &Building, &GlobalTransform)>,
+    listener: Query<&GlobalTransform, With<SpatialListener3D>>,
+    mut loops: Query<(&mut SiteLoop, &BreathAt)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut due: Local<HashMap<(Entity, usize, usize), f32>>,
+    mut late: Local<Vec<(f32, &'static str, Vec3, f32, f64)>>,
+) {
+    let Some(ear) = listener.iter().next().map(|g| g.translation()) else {
+        return;
+    };
+    let now = time.elapsed_secs();
+    due.retain(|(site, _, _), _| sites.contains(*site));
+    late.retain(|&(at, cue, pos, db, speed)| {
+        if now < at {
+            return true;
+        }
+        sound(&mut commands, &bank, &mut rng.0, cue, pos, db, speed, 0.0);
+        false
+    });
+    let mut wanted: HashMap<(Entity, usize), f32> = HashMap::new();
+    for (site, b, gt) in &sites {
+        let layers = breath(&b.prefab);
+        let Some(r) = (!layers.is_empty())
+            .then(|| ug::raster(&b.prefab))
+            .flatten()
+        else {
+            continue;
+        };
+        for (i, p) in r.portals.iter().enumerate() {
+            let xz = p.to_site([0.0, -ug::KIOSK[1] + 0.4]);
+            let local = Vec3::new(xz[0], p.top() + 1.2, xz[1]);
+            let mouth = gt.transform_point(local);
+            let top = gt.transform_point(Vec3::new(xz[0], p.top(), xz[1])).y;
+            let heard = breath_heard(ear, mouth, top);
+            wanted.insert((site, i), heard);
+            for (k, layer) in layers.iter().enumerate() {
+                match *layer {
+                    Breath::Bed {
+                        cue,
+                        speed,
+                        lowpass,
+                    } => {
+                        let on = loops
+                            .iter()
+                            .any(|(l, at)| l.cue == cue && at.0 == site && at.1 == i);
+                        if !on && heard > 0.0 {
+                            let e = start_loop(
+                                &mut commands,
+                                &bank,
+                                &mut rng.0,
+                                cue,
+                                site,
+                                local,
+                                speed,
+                                lowpass,
+                                2.0,
+                                heard,
+                            );
+                            if let Some(e) = e {
+                                commands.entity(e).insert(BreathAt(site, i));
+                            }
+                        }
+                    }
+                    Breath::Spot {
+                        cue,
+                        every,
+                        speed,
+                        echo,
+                    } => {
+                        let next = due.entry((site, i, k)).or_insert(0.0);
+                        if now < *next {
+                            continue;
+                        }
+                        *next = now + rng.0.range(every.0, every.1);
+                        if heard < 0.02 {
+                            continue;
+                        }
+                        let db = 20.0 * heard.log10() - 4.0 * rng.0.f32();
+                        let s = rng.0.range(speed.0, speed.1) as f64;
+                        sound(&mut commands, &bank, &mut rng.0, cue, mouth, db, s, 0.0);
+                        if echo {
+                            let back = rng.0.range(0.3, 0.45);
+                            late.push((now + back, cue, mouth, db - 10.0, s * 0.92));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (mut l, at) in &mut loops {
+        l.want = wanted.get(&(at.0, at.1)).copied().unwrap_or(0.0);
+    }
+}
+
 /// The cellars' iron levers (a vent's, the crane's): a heavy thunk under
 /// the press's click (`ug.lever`).
 fn lever_sounds(
@@ -1291,5 +1551,40 @@ mod tests {
             }
         }
         assert!(n > 20, "{n} cues found");
+    }
+
+    /// Every site Underground named breathes at its doors, and every
+    /// breath is a site that has doors.
+    #[test]
+    fn every_site_breathes() {
+        for id in [
+            "bunker_marrow",
+            "pump_marrow",
+            "mine_kettle",
+            "deep_kettle",
+            "tunnel_cinder",
+            "cellars_cinder",
+            "gallery_sallow",
+            "adit_rime",
+            "depot_marrow",
+        ] {
+            assert!(!breath(id).is_empty(), "{id} has no breath");
+        }
+        for (id, _) in BREATHS {
+            let r = ug::raster(id).unwrap_or_else(|| panic!("{id} is no site"));
+            assert!(!r.portals.is_empty(), "{id} has no door");
+        }
+    }
+
+    /// Full at the door, faint by 8 m, gone by 9; gone a few steps down.
+    #[test]
+    fn breath_is_for_the_door() {
+        let mouth = Vec3::new(0.0, 1.2, 0.0);
+        let at = |x: f32, y: f32| breath_heard(Vec3::new(x, y, 0.0), mouth, 0.0);
+        assert_eq!(at(1.0, 1.7), 1.0);
+        assert!(at(8.0, 1.7) > 0.0 && at(8.0, 1.7) < 0.1);
+        assert_eq!(at(9.5, 1.7), 0.0);
+        assert!(at(0.5, 0.6) < at(0.5, 1.7), "fades going down");
+        assert_eq!(at(0.5, -1.0), 0.0, "gone down the stair");
     }
 }

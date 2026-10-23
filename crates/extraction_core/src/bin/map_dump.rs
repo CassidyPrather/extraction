@@ -123,14 +123,22 @@ fn main() {
         })
         .collect::<Vec<_>>()
         .join(",");
+    // Each landmark piece's lamp, as the game flashes it (for the field
+    // map's labels).
+    let lamps = extraction_core::map_landmarks::placement_lamps(&map, &hm);
     j += "],\"placements\":[";
     j += &map
         .placements
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(i, p)| {
             let f = extraction_core::map::prefab_footprint(&p.prefab);
+            let lamp = lamps
+                .iter()
+                .find(|(k, _)| *k == i)
+                .map_or(String::new(), |(_, c)| format!(",\"lamp\":\"{}\"", c.name));
             format!(
-                "{{\"prefab\":\"{}\",\"at\":[{},{}],\"rot\":{},\"size\":[{},{},{}]}}",
+                "{{\"prefab\":\"{}\",\"at\":[{},{}],\"rot\":{},\"size\":[{},{},{}]{lamp}}}",
                 esc(&p.prefab),
                 p.at[0],
                 p.at[1],

@@ -97,6 +97,14 @@ install_system_packages() {
     # mastering; Pillow draws the --inspect plots.
     apt_install ffmpeg python3-numpy python3-pil ||
         warn "apt-get install of the audio tools (ffmpeg, numpy, pillow) failed"
+    # BC7 textures (scripts/bc7_textures.py, run by fetch_assets.py): without
+    # etcpak the RGBA8 originals load, and every load-time and VRAM gauge
+    # reads 2-4x what ships.
+    if ! python3 -c "import etcpak" 2>/dev/null; then
+        pip install --quiet etcpak 2>/dev/null ||
+            pip install --quiet --break-system-packages etcpak 2>/dev/null ||
+            warn "pip install etcpak failed: textures stay RGBA8, so load and VRAM gauges will read high"
+    fi
 }
 
 install_rust() {

@@ -415,6 +415,16 @@ const LOAD_BUDGET: [(&str, f64); 5] = [
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
     let _one_at_a_time = heavy();
+    // What ships, or nothing: the originals' loads and memory aren't the
+    // game's.
+    let unbaked = super::textures::unbaked();
+    assert!(
+        unbaked.is_empty(),
+        "{} textures have no baked copy (e.g. {}): the gauge measures what ships. \
+         pip install etcpak && python3 scripts/bc7_textures.py",
+        unbaked.len(),
+        unbaked.first().map_or("", String::as_str)
+    );
     let runs: usize = std::env::var("FIRST_RUNS")
         .ok()
         .and_then(|v| v.parse().ok())

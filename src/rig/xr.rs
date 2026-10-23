@@ -187,10 +187,18 @@ fn size_swapchain(
     let Some(v) = views.first() else {
         return;
     };
-    let rec = UVec2::new(
-        v.recommended_image_rect_width,
-        v.recommended_image_rect_height,
-    );
+    // Dev: a headset's size on a runtime that isn't it (a Beyond 2's 2980
+    // on Monado's simulated one: `EXTRACTION_RUNTIME_EYE_PX=2980`).
+    let rec = std::env::var("EXTRACTION_RUNTIME_EYE_PX")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .map_or(
+            UVec2::new(
+                v.recommended_image_rect_width,
+                v.recommended_image_rect_height,
+            ),
+            UVec2::splat,
+        );
     let scale = comfort.render_scale_for(rec.x);
     let size = (rec.as_vec2() * scale)
         .round()

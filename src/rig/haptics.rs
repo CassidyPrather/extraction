@@ -666,15 +666,20 @@ mod tests {
         use crate::vr_harness::Vr;
         let mut vr = Vr::new("marrow_creek");
         vr.app.init_resource::<Felt>().add_systems(Last, feel);
-        vr.step(5);
+        // Loose things (a cassette player on a tower's floor) are still
+        // settling for the first frames: aim at the world at rest.
+        vr.step(90);
+        // A card's button (fixed in place, not on a loose radio), the same
+        // one every time: which a query meets first follows spawn order.
         let button = *vr
             .app
             .world_mut()
-            .query::<(&PokeButton, &GlobalTransform)>()
+            .query::<(&PokeButton, &GlobalTransform, &Name)>()
             .iter(vr.app.world())
-            .next()
-            .map(|(_, gt)| gt)
-            .expect("a button");
+            .filter(|(_, _, n)| n.as_str() == "Button")
+            .map(|(_, gt, _)| gt)
+            .min_by(|a, b| a.translation().x.total_cmp(&b.translation().x))
+            .expect("a card's button");
         let normal = button.rotation() * Vec3::Z;
         let rot = Quat::from_rotation_arc(Vec3::NEG_Z, -normal);
         let tip_at = |d: f32| button.translation() + normal * d - rot * FINGERTIP;
