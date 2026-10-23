@@ -340,10 +340,13 @@ cluster of three or more merges within ten minutes.
   or `CHANGED` with the count and the sheet's path. Shots are kept a file
   at a time, so quick and full runs share them. `MAPS`, `MOODS` and
   `VIEWS` narrow a run to one shot for a bisect.
-- **Lamps with a character** (`render::landmarks`) blink. A still shows
-  the phase its frame lands on, so a change to how long a build takes to
-  reach its shot moves the lamp. Read a lamp-only change with that in
-  mind.
+- **Lamps with a character** (`render::landmarks`) blink. A still's last
+  two settle frames are held with the clock stopped
+  (`cinematic::STILL_HOLD`), and a paused clock lights every lamp, as
+  Fourth valley set it up. So a still always shows its lamps lit, and one
+  build shoots the same picture every run. Builds from before this (round
+  37 and earlier) still catch whatever phase their frame lands on, so a
+  lamp-only change against one of them is noise.
 - **The sheet** shows the 40 most changed shots, old | new | where it
   changed (red over the new, greyed), ranked by how many times over its
   threshold each is. `index.html` lists every shot's numbers.
