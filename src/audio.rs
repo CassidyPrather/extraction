@@ -1242,6 +1242,13 @@ pub fn handling_sound(
         // and an open bolt slamming forward just before it.
         (FireEvent::CarrierHome, _) => ("guns/bolt_close", "gun.carrier_home"),
         (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt"),
+        // A Nagant's loading gate flicked open and shut, its cylinder
+        // clicking round a chamber under the thumb.
+        (FireEvent::BoltLocked, Some(Revolver)) => ("guns/safety", "gun.gate_open"),
+        (FireEvent::BoltClosed, Some(Revolver)) => ("guns/safety", "gun.gate_shut"),
+        (FireEvent::Cocked, Some(Revolver)) => ("guns/dry_fire", "gun.cylinder"),
+        // A crossbow's string caught on the latch.
+        (FireEvent::Cocked, Some(Crossbow)) => ("guns/dry_fire", "gun.latch"),
         // Brass sliding off the magazine's lips into the chamber, under
         // the bolt going home: an empty close has only the bolt.
         (FireEvent::Chambered, _) => ("guns/stripper_clip", "gun.chamber"),

@@ -159,12 +159,20 @@ pub fn reload_steps(
             steps.push(("lifted", g.set_handle_lift(1.0)));
             g.set_bolt_travel(1.0);
             g.load_round();
-            steps.push(("round in", vec![FireEvent::RoundLoaded]));
-            steps.push(("home, chambered", g.set_bolt_travel(0.0)));
-            let mut g = new();
-            g.set_handle_lift(1.0);
-            g.set_bolt_travel(1.0);
-            steps.push(("home, empty", g.set_bolt_travel(0.0)));
+            let home = g.set_bolt_travel(0.0);
+            if home.contains(&FireEvent::Chambered) {
+                steps.push(("round in", vec![FireEvent::RoundLoaded]));
+                steps.push(("home, chambered", home));
+                let mut g = new();
+                g.set_handle_lift(1.0);
+                g.set_bolt_travel(1.0);
+                steps.push(("home, empty", g.set_bolt_travel(0.0)));
+            } else {
+                // A single-shot (a TOZ-8): the round goes into the chamber
+                // by hand, felt there, and the bolt only closes on it.
+                steps.push(("chambered by hand", vec![FireEvent::RoundLoaded]));
+                steps.push(("home", home));
+            }
         }
         Pump => {
             let mut g = new();
