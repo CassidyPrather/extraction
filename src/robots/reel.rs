@@ -630,10 +630,10 @@ fn reel(
     }
     // `scan`: the walker clocks a device on the ground in front of you,
     // shooting it first, then coming to look.
-    if what == "scan" && (frame == WARMUP + 4 || frame == WARMUP + 40) {
+    if what == "scan" && (frame == WARMUP + 16 || frame == WARMUP + 52) {
         let p = eye + flat * 3.0 - right * 0.4;
         let at = zone.on_ground(p.x, p.z) + Vec3::Y * 0.1;
-        let reaction = if frame == WARMUP + 4 {
+        let reaction = if frame == WARMUP + 16 {
             super::devices::Reaction::Hunt
         } else {
             super::devices::Reaction::Investigate

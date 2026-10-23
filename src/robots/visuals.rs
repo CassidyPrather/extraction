@@ -1131,6 +1131,8 @@ struct ScanBeam {
 /// the device (m).
 pub const SCAN_FOR: f32 = 0.6;
 const SCAN_SWEEP: f32 = 0.35;
+/// How bright the fan is at its height (added onto the scene).
+const SCAN_BRIGHT: f32 = 0.7;
 
 /// A scan beam's colour for what the machine means to do.
 pub fn scan_colour(reaction: super::devices::Reaction) -> LinearRgba {
@@ -1170,12 +1172,13 @@ fn scan_beams(
         let mesh = cone
             .get_or_insert_with(|| meshes.add(Cone::new(0.22, 1.0)))
             .clone();
+        // (Unlit, it shows its base colour, added onto what's behind.)
         let mat = materials.add(StandardMaterial {
             base_color: Color::BLACK,
-            emissive: color * 4.0,
             alpha_mode: AlphaMode::Add,
             unlit: true,
             fog_enabled: false,
+            cull_mode: None,
             ..default()
         });
         commands.spawn((
@@ -1213,7 +1216,7 @@ fn scan_beams(
         // Up fast, fading over the rest.
         let fade = (k / 0.15).min(1.0) * (1.0 - k).powf(0.5);
         if let Some(mut m) = materials.get_mut(&b.mat) {
-            m.emissive = b.color * 4.0 * fade;
+            m.base_color = (b.color * SCAN_BRIGHT * fade).into();
         }
     }
 }
