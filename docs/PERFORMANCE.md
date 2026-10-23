@@ -1038,3 +1038,45 @@ including the breach's rubble. Items now sweep against static and
 kinematic bodies only. That is what CCD was for: a thin, fast thing
 through a wall. Rime's worst frame went from 111 to 44 ms, its worst 1%
 from 50 to 35 ms, its p99 from 76 to 67 units.
+
+### GPU
+
+`scripts/stress.sh` runs the minute in the game, valley by valley, and
+logs the GPU's passes from the render diagnostics' timestamps.
+
+There's no headset here, so the GPU is lavapipe, a software rasteriser on
+the CPU. Its milliseconds aren't a GPU's: read them for where the time
+goes and how the worst frames differ from the rest, never against
+11.1 ms. Monado's simulated headset offers 640x720 at most, so a Beyond
+2's eyes can't be had there. One eye's work at that headset's size is a
+flat 1800x1800 view: its 2980 recommended, at the default render scale.
+
+One eye at 1800², 30 frames of the minute, the worst 1% against every
+frame (ms a frame on lavapipe):
+
+| valley | opaque | transparent | tonemapping | clustering |
+| - | - | - | - | - |
+| Marrow Creek | 7758 (6300) | 21 (18) | 38 (43) | 3.0 (2.1) |
+| Kettle Pass | 6143 (5762) | 18 (49) | 32 (32) | 2.0 (3.1) |
+| Cinder Works | 5811 (5194) | 134 (44) | 34 (33) | 2.7 (2.5) |
+| Sallow Reservoir | 6243 (5815) | 243 (111) | 33 (32) | 2.8 (2.4) |
+| Rime Fell | 5132 (3683) | 238 (137) | 32 (29) | 1.9 (2.0) |
+
+- The opaque pass is about 93% of an eye. Its worst frames are 5-40%
+  over typical (Rime the most): the blasts and the breach bring more
+  into view.
+- The fight's smoke, rain and particles double or triple the
+  transparent pass in three valleys. It stays under 4% of the eye.
+- Clustering (lights into froxels) holds at 2-3 ms with 33-55 point
+  lights.
+
+The minute's top three GPU costs, every valley alike: the opaque pass,
+the transparent pass, tonemapping.
+
+Against the budget the counts are what hold, and they're vendor-neutral.
+At p99 both eyes draw 1021-1519 of 2400 draws, 0 of 1800 shadow draws,
+and 11-19 M of 64.8 M fragments. That's what the gauge fails on.
+
+`XR=1 scripts/stress.sh` runs it in Monado, both eyes at 640x720. In
+Marrow Creek the opaque pass was 96% of the GPU, and its worst frames
+4% over typical.
