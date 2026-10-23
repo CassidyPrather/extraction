@@ -3425,7 +3425,8 @@ fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
         .map(|(e, _)| e)
 }
 
-/// The hearth in its pack: loose (live), or sealed in a lead case there.
+/// The hearth on it: loose (live), or sealed in a lead case, in its pack
+/// or a body slot (a stowed case goes to a free belt slot before the pack).
 fn hearth_kit(scene: &Scene) -> super::harvest::Hearth {
     use super::harvest::Hearth;
     let Some(me) = scene.bags.iter().find(|b| b.carried) else {
@@ -3437,20 +3438,35 @@ fn hearth_kit(scene: &Scene) -> super::harvest::Hearth {
             .get(e)
             .is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
     };
-    if me.contents.iter().any(|e| is(*e, "art_hearth")) {
-        return Hearth::Live;
-    }
-    for case in me.contents.iter().filter(|e| is(**e, "lead_case")) {
-        if let Some(stone) = scene
+    let in_case = |case: Entity| {
+        scene
             .sockets
             .iter()
-            .filter(|(_, owner)| owner.0 == *case)
+            .filter(|(_, owner)| owner.0 == case)
             .find_map(|(sock, _)| sock.occupant.filter(|h| is(*h, "art_hearth")))
-        {
-            return Hearth::Sealed { case: *case, stone };
-        }
+    };
+    // In the pack, then on the body.
+    let packed = me.contents.iter().map(|e| (*e, true));
+    let worn = scene
+        .sockets
+        .iter()
+        .filter(|(_, owner)| owner.0 == me.owner)
+        .filter_map(|(sock, _)| sock.occupant)
+        .map(|e| (e, false));
+    let on: Vec<(Entity, bool)> = packed.chain(worn).collect();
+    if on.iter().any(|(e, _)| is(*e, "art_hearth")) {
+        return Hearth::Live;
     }
-    Hearth::None
+    on.into_iter()
+        .filter(|(e, _)| is(*e, "lead_case"))
+        .find_map(|(case, packed)| {
+            in_case(case).map(|stone| Hearth::Sealed {
+                case,
+                stone,
+                packed,
+            })
+        })
+        .unwrap_or(Hearth::None)
 }
 
 /// Getting out: radio, walk to the RV, board, pull the bell.

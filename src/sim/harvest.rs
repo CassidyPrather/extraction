@@ -57,10 +57,12 @@ pub enum Hearth {
     None,
     /// Live: in the pack or a hand.
     Live,
-    /// Sealed in a lead case in the pack: `case`, and the stone in it.
+    /// Sealed in a lead case: `case`, and the stone in it; the case in the
+    /// pack, or in a body slot (a stowed case goes to a free one first).
     Sealed {
         case: Entity,
         stone: Entity,
+        packed: bool,
     },
 }
 
@@ -187,23 +189,35 @@ pub fn plan(
                 Hearth::Sealed {
                     case,
                     stone: hearth,
-                } => t.extend([
-                    Task::ToggleBackpack,
-                    Task::Wait(0.6),
-                    Task::GrabFromHere {
-                        item: case,
-                        side: Side::Left,
-                    },
-                    Task::ToggleBackpack,
-                    Task::Wait(0.3),
-                    Task::Grab {
-                        item: hearth,
-                        side: Side::Right,
-                    },
-                    Task::Wait(0.3),
-                    Task::Stow(Side::Left),
-                    Task::Wait(0.3),
-                ]),
+                    packed,
+                } => {
+                    if packed {
+                        t.extend([
+                            Task::ToggleBackpack,
+                            Task::Wait(0.6),
+                            Task::GrabFromHere {
+                                item: case,
+                                side: Side::Left,
+                            },
+                            Task::ToggleBackpack,
+                        ]);
+                    } else {
+                        t.push(Task::Grab {
+                            item: case,
+                            side: Side::Left,
+                        });
+                    }
+                    t.extend([
+                        Task::Wait(0.3),
+                        Task::Grab {
+                            item: hearth,
+                            side: Side::Right,
+                        },
+                        Task::Wait(0.3),
+                        Task::Stow(Side::Left),
+                        Task::Wait(0.3),
+                    ]);
+                }
             }
             t.extend(take);
             t.push(back);
@@ -347,7 +361,8 @@ mod tests {
     fn a_hearth_takes_the_frost_out_of_a_frost_dive() {
         use crate::interact::body::{Backpack, InBackpack};
         use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
-        // 0: none, 1: live, 2: sealed.
+        // 0: none, 1: live, 2: sealed in the pack, 3: sealed, picked up
+        // and stowed (wherever stowing puts it: a belt slot first).
         let dive = |how: u8| -> (f32, bool, f32) {
             let mut app = crate::headless_app(Default::default(), false);
             app.finish();
@@ -368,7 +383,37 @@ mod tests {
             let stone =
                 crate::anomaly::surge::grow(w, "art_rimestone", centre + Vec3::Y * 0.15).unwrap();
             let mut hearth = Hearth::None;
-            if how > 0 {
+            if how == 3 {
+                let case =
+                    crate::anomaly::surge::grow(w, "lead_case", me + Vec3::new(0.5, 0.3, 0.0))
+                        .unwrap();
+                let h = crate::anomaly::surge::grow(w, "art_hearth", Vec3::ZERO).unwrap();
+                app.update();
+                crate::persist::seat_in_mount(app.world_mut(), case, h);
+                app.world_mut()
+                    .entity_mut(p)
+                    .insert(crate::bot::Bot::new(vec![
+                        Task::Grab {
+                            item: case,
+                            side: Side::Left,
+                        },
+                        Task::Stow(Side::Left),
+                        Task::Wait(0.5),
+                    ]));
+                for _ in 0..90 * 6 {
+                    app.update();
+                }
+                let packed = app.world().get::<InBackpack>(case).is_some();
+                assert!(
+                    packed || app.world().get::<crate::interact::InSocket>(case).is_some(),
+                    "stowed somewhere"
+                );
+                hearth = Hearth::Sealed {
+                    case,
+                    stone: h,
+                    packed,
+                };
+            } else if how > 0 {
                 let pack = w
                     .query::<(Entity, &Backpack)>()
                     .iter(w)
@@ -389,13 +434,14 @@ mod tests {
                     ColliderDisabled,
                 ));
                 hearth = Hearth::Live;
-                if how == 2 {
+                if how >= 2 {
                     app.update();
                     crate::persist::seat_in_mount(app.world_mut(), packed, h);
                     app.update();
                     hearth = Hearth::Sealed {
                         case: packed,
                         stone: h,
+                        packed: true,
                     };
                 }
             }
@@ -450,12 +496,17 @@ mod tests {
         let (novice, n_took, n_peak) = dive(0);
         let (skilled, s_took, s_peak) = dive(1);
         let (sealed, c_took, c_peak) = dive(2);
+        let (worn, w_took, _) = dive(3);
         println!(
             "frost dive: novice lost {novice:.0} hp, chill to {n_peak:.2}; \
              with a hearth {skilled:.0} hp, chill to {s_peak:.2}; \
              with one sealed {sealed:.0} hp, chill to {c_peak:.2}"
         );
-        assert!(n_took && s_took && c_took, "all come out with it");
+        assert!(n_took && s_took && c_took && w_took, "all come out with it");
+        assert_eq!(
+            worn, 0.0,
+            "a case stowed on the belt: its hearth out, never bitten"
+        );
         assert_eq!(skilled, 0.0, "a hearth: never bitten");
         assert_eq!(sealed, 0.0, "a hearth out of its case: never bitten");
         assert!(
