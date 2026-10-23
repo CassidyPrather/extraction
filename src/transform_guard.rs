@@ -24,13 +24,18 @@ use bevy::transform::systems::{mark_dirty_trees, propagate_parent_transforms};
 
 pub struct TransformGuardPlugin;
 
+/// Present while the guard runs (`the_game_never_leaves_children_unplaced`
+/// reads it).
+#[derive(Resource)]
+pub struct TransformGuarded;
+
 impl Plugin for TransformGuardPlugin {
     fn build(&self, app: &mut App) {
         // For showing what it guards against: off, the bug's back.
         if std::env::var_os("EXTRACTION_NO_TRANSFORM_GUARD").is_some() {
             return;
         }
-        app.add_systems(
+        app.insert_resource(TransformGuarded).add_systems(
             PostUpdate,
             mark_attached_trees
                 .after(mark_dirty_trees)
@@ -153,6 +158,58 @@ mod tests {
             bad.is_empty(),
             "children left unplaced:\n{}",
             bad.join("\n")
+        );
+    }
+
+    /// The game as it's put together: either the static-scene optimisation
+    /// is off, or the guard is on. Turning the optimisation back on without
+    /// the guard brings back the buildings drawn under the map.
+    #[test]
+    fn the_game_never_leaves_children_unplaced() {
+        let mut opts = crate::LaunchOptions {
+            map: "training_yard".into(),
+            ..Default::default()
+        };
+        opts.capture = Default::default();
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let off = w
+            .get_resource::<bevy::transform::StaticTransformOptimizations>()
+            .is_none_or(|s| !s.is_enabled());
+        assert!(
+            off || w.contains_resource::<TransformGuarded>(),
+            "the static-transform optimisation is on with no guard: children \
+             attached to a still tree can keep [0,0,0]"
+        );
+        // And in the game's own schedule: a still parent, a child attached
+        // later, placed by its parent.
+        let parent = w
+            .spawn(
+                Transform::from_xyz(-150.0, 18.4, 205.0).with_rotation(Quat::from_rotation_y(0.7)),
+            )
+            .id();
+        for _ in 0..3 {
+            app.update();
+        }
+        let local = Transform::from_xyz(3.0, 12.0, -4.0);
+        let child = app.world_mut().spawn((local, ChildOf(parent))).id();
+        app.update();
+        let w = app.world();
+        let want = w
+            .get::<GlobalTransform>(parent)
+            .unwrap()
+            .mul_transform(local);
+        let got = w.get::<GlobalTransform>(child).unwrap();
+        assert!(
+            got.translation().distance(want.translation()) < 1e-3,
+            "child at {} not {}",
+            got.translation(),
+            want.translation()
         );
     }
 }
