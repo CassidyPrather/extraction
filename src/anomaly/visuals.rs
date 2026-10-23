@@ -475,9 +475,9 @@ fn init_assets(
         Color::srgba(0.03, 0.025, 0.02, 0.92),
         LinearRgba::rgb(0.07, 0.01, 0.0),
     );
-    // Swept bare by the lift: pale dry earth, every loose thing on it
-    // taken up.
-    let flattened = ground(Color::srgba(0.36, 0.31, 0.24, 0.85), LinearRgba::BLACK);
+    // Scoured bare by the lift: raw brown earth, every loose thing on it
+    // and the turf itself taken up. (Pale dry earth read as dry grass.)
+    let flattened = ground(Color::srgba(0.13, 0.1, 0.07, 0.9), LinearRgba::BLACK);
     // Fused by the arcs: dark and glassy, still charged: a faint cold blue
     // glow in it.
     let glassy = ground(

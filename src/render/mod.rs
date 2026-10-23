@@ -183,11 +183,12 @@ fn attach_flat_camera(
                 camera_bundle(&weather),
             ))
             .with_children(|c| {
-                // Held at the hip, a little right, pointing where it looks.
+                // Held up by the eye and aimed where it looks, as anyone
+                // looking at something by torchlight does.
                 if opts.torch {
                     c.spawn((
                         crate::gadgets::visuals::torch_beam(),
-                        Transform::from_xyz(0.2, -0.5, 0.0),
+                        Transform::from_xyz(0.15, -0.1, 0.0),
                     ));
                 }
             });
