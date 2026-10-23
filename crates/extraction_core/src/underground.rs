@@ -1973,6 +1973,30 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    // Every tread a full [`STEP_CELLS`] deep along a row or a column: a
+    // corridor between levels that turns a corner outside the rooms steps
+    // across it diagonally, a riser every cell, a sawtooth a body jams on
+    // (the adit's incline, once). Climb on the straight; turn on a landing.
+    'treads: for j in 0..r.nz {
+        for i in 0..r.nx {
+            for [p, q] in [[(i + 1, j), (i + 2, j)], [(i, j + 1), (i, j + 2)]] {
+                let cells = [(i, j), p, q];
+                if cells.iter().any(|&(a, b)| {
+                    a >= r.nx || b >= r.nz || !r.get(a, b).flat() || r.pit[b * r.nx + a]
+                }) {
+                    continue;
+                }
+                let [f0, f1, f2] = cells.map(|(a, b)| r.floors[b * r.nx + a]);
+                if (f0 - f1).abs() > 0.01 && (f1 - f2).abs() > 0.01 {
+                    bad.push(format!(
+                        "a tread one cell deep at {:?} (a corridor between levels turning outside a room)",
+                        r.centre(p.0, p.1)
+                    ));
+                    break 'treads;
+                }
+            }
+        }
+    }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {
         let reached = (0..r.cells.len()).any(|c| seen[c] && r.cells[c] == Cell::Room(k as u16));
@@ -2601,7 +2625,8 @@ mod tests {
             assert!(bad.is_empty(), "{id}:\n{}", bad.join("\n"));
             let r = raster(id).unwrap();
             let rooms = l.rooms.len();
-            assert!((6..=14).contains(&rooms), "{id}: {rooms} rooms");
+            // (A landing where a stair between levels turns counts.)
+            assert!((6..=16).contains(&rooms), "{id}: {rooms} rooms");
             assert!(r.cells.iter().filter(|c| c.open()).count() > 100);
         }
     }

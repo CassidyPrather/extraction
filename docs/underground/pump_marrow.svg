@@ -6594,8 +6594,10 @@
 <text x='272.0' y='412.0' fill='#5dade2'>V screens to -9.0</text>
 <circle cx='60.0' cy='330.0' r='6' fill='#5dade2' stroke='#1d1c1a'/>
 <text x='68.0' y='334.0' fill='#5dade2'>P sump to -11.0</text>
+<circle cx='182.4' cy='235.8' r='4' fill='#d4a017'/>
 <circle cx='266.4' cy='231.0' r='4' fill='#5a5650'/>
 <text x='228.0' y='213.0' fill='#1d1c1a' text-anchor='middle'>upper_gallery ~</text>
+<circle cx='331.2' cy='235.8' r='4' fill='#d4a017'/>
 <circle cx='352.8' cy='204.6' r='4' fill='#5a5650'/>
 <circle cx='352.8' cy='213.6' r='4' fill='#5a5650'/>
 <circle cx='367.2' cy='231.0' r='4' fill='#d4a017'/>
@@ -6609,6 +6611,7 @@
 <circle cx='28.8' cy='375.0' r='4' fill='#d4a017'/>
 <circle cx='72.0' cy='382.2' r='4' fill='#5a5650'/>
 <text x='60.0' y='357.0' fill='#1d1c1a' text-anchor='middle'>screen_room x</text>
+<circle cx='273.6' cy='557.4' r='4' fill='#d4a017'/>
 <circle cx='192.0' cy='540.6' r='4' fill='#5a5650'/>
 <circle cx='228.0' cy='540.6' r='4' fill='#5a5650'/>
 <circle cx='273.6' cy='507.0' r='4' fill='#5a5650'/>
