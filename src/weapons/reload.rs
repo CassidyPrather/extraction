@@ -42,7 +42,8 @@ pub(crate) fn note_approach(
     }
 }
 
-/// A seated magazine at home in its well, a half-seated one hanging short.
+/// A seated magazine at home in its well, a half-seated or slipped one
+/// hanging short.
 pub(crate) fn hang_mags(
     guns: Query<&Gun>,
     sockets: Query<&Socket>,
@@ -59,7 +60,12 @@ pub(crate) fn hang_mags(
         let Ok((mag, mut t)) = mags.get_mut(m) else {
             continue;
         };
-        let short = if gun.firearm.mag_half { HALF_DROP } else { 0.0 };
+        // Half-seated, or slipped down the well (a failure to feed).
+        let short = if gun.firearm.mag_unseated {
+            HALF_DROP
+        } else {
+            0.0
+        };
         let want = -mag.height * 0.5 - short;
         if (t.translation.y - want).abs() > 1e-5 {
             t.translation.y = want;
