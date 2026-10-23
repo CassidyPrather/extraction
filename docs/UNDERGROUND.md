@@ -489,7 +489,8 @@ there's no other way. None is over the minute. The two longest:
   the drift's end), stepped 12 m up 50 m of drift from the vein drive to
   the main drift's far end: the level station's pressed way is 45.6 s
   where it was none. The assay store is still one door off the vein
-  drive, 45 s out.
+  drive, 45 s out. Shot: up the incline's steps from its foot, by
+  torchlight (`docs/shots/underground/r_incline.jpg`).
 - *The cellars' far ledge* is out only by the crane across the pit, 45 s;
   but nothing follows across it (the crawler's round keeps to the near
   side), so it's a refuge, not a trap. Left as it is.
