@@ -499,6 +499,9 @@ pub(super) struct Newcomer {
     /// (out of reach, behind something): it looks for another.
     reaching: Option<Entity>,
     passed_over: Vec<Entity>,
+    /// Finds the rooms' plan didn't get it to (a gap the plan allows and
+    /// the body doesn't pass): the plain way in, at the door, next.
+    plan_failed: Vec<Entity>,
     hp: f32,
     failed_seen: usize,
     reported: bool,
@@ -1123,9 +1126,14 @@ pub(super) fn direct_raid(
                     .get(e)
                     .is_ok_and(|(_, _, _, h, s, b)| h.is_none() && s.is_none() && b.is_none())
             {
-                state.passed_over.push(e);
+                if state.plan_failed.contains(&e) {
+                    state.passed_over.push(e);
+                } else {
+                    state.plan_failed.push(e);
+                }
             }
             let skip = state.passed_over.clone();
+            let no_plan = state.plan_failed.clone();
             if plans.is_empty() && !view.buildings.is_empty() {
                 *plans = crate::sim::indoor::plan_buildings(&view.buildings, &view.leaves);
             }
@@ -1138,6 +1146,7 @@ pub(super) fn direct_raid(
                 here,
                 state.tries,
                 &skip,
+                &no_plan,
             ) {
                 Ok(Some((t, after))) => {
                     tasks.extend(t);
@@ -1890,6 +1899,7 @@ fn errand_tasks(
     here: Vec2,
     tries: u32,
     skip: &[Entity],
+    no_plan: &[Entity],
 ) -> Result<Option<(Vec<Task>, Option<Entity>)>, String> {
     let job = view.progression.as_ref().and_then(|p| p.0.job.clone());
     match errand {
@@ -1921,6 +1931,7 @@ fn errand_tasks(
             else {
                 return Err(format!("no {name} anywhere I looked"));
             };
+            let plans = if no_plan.contains(&e) { &[][..] } else { plans };
             let mut t = way_to(world, view, plans, here, p);
             t.extend([
                 Task::Grab {
