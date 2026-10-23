@@ -1067,7 +1067,23 @@ pub(super) fn direct_raid(
                         format!("the job card: {}", text.replace('\n', " ")),
                     );
                     state.goal = None;
-                    tasks.extend(route(&world, &view, here, at_truck(0.0, 4.0)));
+                    // Down over the tailgate, and out through the gate.
+                    for (x, z) in [(0.05, 1.2), (0.0, 4.0)] {
+                        tasks.push(Task::WalkTo {
+                            to: at_truck(x, z),
+                            within: 0.5,
+                        });
+                    }
+                    if let Some(drop) = world
+                        .zone
+                        .map
+                        .markers
+                        .iter()
+                        .find(|m| m.kind == MarkerKind::Insertion)
+                        .map(|m| Vec2::from(m.at))
+                    {
+                        tasks.extend(route(&world, &view, at_truck(0.0, 4.0), drop));
+                    }
                     state.leg = Leg::Place;
                 }
                 None => {
@@ -1995,7 +2011,7 @@ fn errand_tasks(
                     .iter()
                     .next()
                     .and_then(|(_, c)| place_on_card(&c.text, &world.zone))
-                    .filter(|(_, at)| at.distance(here) > 25.0)
+                    .filter(|(_, at)| at.distance(here) > 25.0 && tries < 6)
                 {
                     let mut t = route(world, view, here, at);
                     t.push(Task::Wait(10.0));
