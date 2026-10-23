@@ -180,7 +180,16 @@ fn turn_lock(
     mut commands: Commands,
     locks: Query<(Entity, &Lock)>,
     mut screens: Query<(&ChildOf, &mut ScreenText), With<LockScreen>>,
-    items: Query<(Entity, &Item, &GlobalTransform), Without<crate::interact::Held>>,
+    // Set down on the plate: not in a hand, a socket or a pack (a key
+    // carried past the cradle doesn't turn it).
+    items: Query<
+        (Entity, &Item, &GlobalTransform),
+        (
+            Without<crate::interact::Held>,
+            Without<crate::interact::InSocket>,
+            Without<crate::interact::body::InBackpack>,
+        ),
+    >,
     catalog: Res<Catalog>,
     mut raid: ResMut<Raid>,
     time: Res<Time>,
@@ -352,6 +361,70 @@ mod tests {
             .filter(|i| KEYS.iter().any(|(k, _)| catalog.get(i.kind()).id == *k))
             .count();
         assert_eq!(keys_left, 0, "the depot keeps the keys");
+    }
+
+    /// A key that's still carried (in a pack) at the cradle doesn't count:
+    /// the three are set down on the plate, or nothing happens.
+    #[test]
+    fn a_carried_key_doesnt_turn_the_lock() {
+        let mut app = crate::headless_app(Default::default(), false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        let cradle = {
+            let w = app.world_mut();
+            w.query::<&Lock>().iter(w).next().expect("a lock").cradle
+        };
+        let bag = {
+            let w = app.world_mut();
+            w.query::<(Entity, &crate::interact::body::Backpack)>()
+                .iter(w)
+                .next()
+                .map(|(e, _)| e)
+                .expect("a pack")
+        };
+        let keys: Vec<Entity> = {
+            let w = app.world_mut();
+            let catalog = w.resource::<Catalog>().clone();
+            let mut q = bevy::ecs::world::CommandQueue::default();
+            let mut c = Commands::new(&mut q, w);
+            let keys = KEYS
+                .iter()
+                .enumerate()
+                .map(|(i, (id, _))| {
+                    spawn_item(
+                        &mut c,
+                        &catalog,
+                        SpawnItem {
+                            kind: catalog.kind(id).unwrap(),
+                            transform: Transform::from_translation(
+                                cradle + Vec3::new(-0.2 + 0.2 * i as f32, 0.05, 0.0),
+                            ),
+                            condition: 1.0,
+                        },
+                    )
+                })
+                .collect();
+            q.apply(w);
+            keys
+        };
+        // One of the three still in a pack, there at the cradle.
+        app.world_mut()
+            .entity_mut(keys[1])
+            .insert(crate::interact::body::InBackpack { bag });
+        for _ in 0..60 {
+            app.update();
+            // Kept at the cradle whatever the pack does with it.
+            if let Some(mut t) = app.world_mut().get_mut::<Transform>(keys[1]) {
+                t.translation = cradle + Vec3::new(0.0, 0.05, 0.0);
+            }
+        }
+        assert!(
+            !app.world().resource::<Raid>().recalled,
+            "not with one carried"
+        );
     }
 
     /// Every valley's map places its key, and each key is a real item.
