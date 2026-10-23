@@ -503,6 +503,11 @@
         (prefab: "stock_bins", at: (80.0, -12.0), rot: 0.0),
         (prefab: "stock_buses", at: (168.0, -150.0), rot: 330.0),
         (prefab: "stock_bins", at: (30.0, -140.0), rot: 90.0),
+        // Cover on the walks home over the bed from the scours: a row the
+        // Custodian's left short of the tagging shed, and a car the water
+        // took off the old road and left silted where it went down.
+        (prefab: "stock_bins", at: (-14.2, -140.7), rot: 90.0),
+        (prefab: "wreck_lada", at: (50.7, -201.5), rot: 35.0),
 
         // The causeway's toll hut.
         (prefab: "mast_hut", at: (-122.0, -112.0), rot: 175.0),
