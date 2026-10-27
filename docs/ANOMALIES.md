@@ -325,7 +325,7 @@ wall. So:
 
   | Kind | The grass | The ground |
   |---|---|---|
-  | Lift | torn up and gone | scoured to raw rusty subsoil |
+  | Lift | torn up and gone | scoured to raw rusty subsoil, grooved in a spiral, and a broad pale bank of the grit it flings out just inside its rim |
   | Burner | burnt to the ground | scorched, coals glowing in patches |
   | Snare | standing on end, quivering | fused dark and glassy, still faintly charged (blue) |
   | Well | laid flat toward its heart | pressed dark and hard |
@@ -356,8 +356,10 @@ one; `--torch` hangs its beam on the shot's camera). Along five lines on
 the ground across the edge it measures the colour difference (CIE ΔE)
 the anomaly makes, smoothed over three 10 cm steps, and asks that what it
 changes 0.3-1 m inside beats what it changes 0.3-1 m outside by 8 ΔE,
-and that the change crosses halfway within 35 cm of the true edge. Three
-lines of five must pass. (It samples a strip one row tall: at 5 m half a
+and that, along two lines across its sides, the change reaches halfway,
+walking in from outside, within 35 cm of the true edge (a side's place on
+the screen hardly moves with the ground's height; the near edge's does,
+on a slope). Three near lines of five must pass. (It samples a strip one row tall: at 5 m half a
 metre of ground is a few rows, and a square window straddled the edge.)
 
 Marrow Creek, before and after:
