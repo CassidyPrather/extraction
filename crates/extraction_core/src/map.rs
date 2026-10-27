@@ -925,7 +925,10 @@ pub fn stepped_floor_level(id: &str, local: P2) -> Option<f32> {
         return None;
     }
     let [w, _, d] = prefab_footprint(id);
-    if local[0].abs() > w * 0.5 || local[1].abs() > d * 0.5 {
+    // A centimetre's grace: a terrain sample on the wall's line, turned
+    // into the building's frame, lands either side of it by rounding.
+    const ON_THE_LINE: f32 = 0.01;
+    if local[0].abs() > w * 0.5 + ON_THE_LINE || local[1].abs() > d * 0.5 + ON_THE_LINE {
         return None;
     }
     let k = ((local[1] + d * 0.5) / MILL_BAY).floor() as i32;
