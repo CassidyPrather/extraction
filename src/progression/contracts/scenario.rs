@@ -13,7 +13,8 @@
 //!
 //! - `contract_post_counter`, `contract_mast_relay`, `contract_annas_tape`,
 //!   `contract_the_overflow`, `contract_keepers_log`: `--map marrow_creek`
-//! - `contract_hajek_tin`, `contract_deputys_lamp`: `--map kettle_pass`
+//! - `contract_hajek_tin`, `contract_the_canary`, `contract_deputys_lamp`:
+//!   `--map kettle_pass`
 //! - `contract_walker_portrait`, `contract_the_heavy`,
 //!   `contract_charging_manifest`: `--map cinder_works`
 //! - `contract_scour_key`: `--map sallow_reservoir`
@@ -72,6 +73,7 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_annas_tape", "annas_tape"),
     ("contract_up_the_fell", "up_the_fell"),
     ("contract_keepers_log", "keepers_log"),
+    ("contract_the_canary", "the_canary"),
     ("contract_deputys_lamp", "deputys_lamp"),
     ("contract_charging_manifest", "charging_manifest"),
 ];

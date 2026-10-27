@@ -96,6 +96,9 @@ pub const NO_LETTER: &str = "Driver: \"Not in the stash. The house by the well. 
 
 pub const FETCH_WORN: &str = "Driver: \"That one's shot through. I want them whole.\"";
 
+/// A contract's living thing, home dead (the canary, in the gas).
+pub const BROUGHT_DEAD: &str = "Driver: \"It's not singing. He wanted it alive.\"";
+
 pub fn fetch_short(have: usize, n: u32, name: &str) -> String {
     format!("Driver: \"That's {have} of {n} {name}. In the stash, mind.\"")
 }
@@ -345,6 +348,7 @@ mod tests {
             NO_LETTER.into(),
             fetch_short(2, 3, name),
             FETCH_WORN.into(),
+            BROUGHT_DEAD.into(),
             scout_not_seen(place),
             paid_nothing(&thanks(Some(place))),
             LETTER_HOME.into(),

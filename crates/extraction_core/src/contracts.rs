@@ -368,15 +368,39 @@ pub const CONTRACTS: &[Contract] = &[
         done: "Driver: \"Dry it by the stove. Slowly, or the pages go.\"",
     },
     Contract {
+        id: "the_canary",
+        name: "The canary",
+        giver: "Old Fiala, at the lodge",
+        says: &[
+            "Old Fiala, at the lodge. There's a canary in a cage down the deep workings, on the landing by the cage. He wants it up alive. If it goes quiet, you're in the gas: back out.",
+        ],
+        offered: Offered::Deep { trust: 9 },
+        raided_all: false,
+        after: &[],
+        steps: &[Step::Bring {
+            map: "kettle_pass",
+            place: "Miners' Row",
+            item: "canary",
+            // The cage landing, at the deep workings' shaft foot (the
+            // layout keeps a canary on its bench every cycle).
+            near: Some([-56.2, 123.6]),
+        }],
+        kit: &[],
+        pay: &[("tea_tin", 1), ("regen_injector", 1)],
+        trust: 2,
+        unlocks: &[],
+        done: "Driver: \"He'll talk to it all night. Better it than me.\"",
+    },
+    Contract {
         id: "deputys_lamp",
         name: "The deputy's lamp",
         giver: "Irena, from the mine office",
         says: &[
             "Irena, from the mine office. The inspector signed the deep workings clear. The deputy's lamp says what it read. The old heading, past the cage. Don't strike anything down there.",
         ],
-        offered: Offered::Deep { trust: 9 },
+        offered: Offered::Deep { trust: 10 },
         raided_all: false,
-        after: &[],
+        after: &["the_canary"],
         steps: &[Step::Bring {
             map: "kettle_pass",
             place: "Miners' Row",
@@ -397,7 +421,7 @@ pub const CONTRACTS: &[Contract] = &[
         says: &[
             "Kral's wife. He told them about furnace three, she says. The manifest's on the far ledge in the cellars by Cutter's farm, over the ash pit. Ride the crane.",
         ],
-        offered: Offered::Deep { trust: 10 },
+        offered: Offered::Deep { trust: 11 },
         raided_all: false,
         after: &[],
         steps: &[Step::Bring {
@@ -602,6 +626,7 @@ mod tests {
         let v = valleys();
         for (id, site, room) in [
             ("keepers_log", "pump_marrow", "sump"),
+            ("the_canary", "deep_kettle", "cage_landing"),
             ("deputys_lamp", "deep_kettle", "old_heading"),
             ("charging_manifest", "cellars_cinder", "far_ledge"),
         ] {
@@ -663,6 +688,7 @@ mod tests {
                 "up_the_fell",
                 "the_heavy",
                 "keepers_log",
+                "the_canary",
                 "deputys_lamp",
                 "charging_manifest"
             ]
