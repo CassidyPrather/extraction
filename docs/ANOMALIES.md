@@ -369,7 +369,27 @@ Marrow Creek, before and after:
 | First run | 17 |
 | Marks to the edge, grass, half-reach fog, torch at eye, faint light | 27 |
 
-The one that doesn't, the lift in a downpour, is plain to the eye (a
-rusty patch against wet grass) but the standing grass just outside it
-hides the strip inside its edge from 5 m, and both are dark. Sheets:
-`docs/shots/anomalies/edges*.png`.
+Every valley, at the end (each kind in clear, fog, downpour, night: 28
+edges a valley; a kind passes when its edge reads in some condition, and
+every kind passes in every valley):
+
+| Valley | Edges that read | The ones that don't |
+|---|---|---|
+| Marrow Creek | 26 | the lift in clear and fog: from that spot its first 0.7 m inside is behind a rise in the ground (its sides place it 0.0 m off; its grit bank shows plainly beyond the rise) |
+| Kettle Pass | 26 | the well in clear and night: one side places it 0.4 m off (0.35 allowed) |
+| Cinder Works | 27 | the hush at night: one side 0.4 m off |
+| Sallow Reservoir | 28 | |
+| Rime Fell | 26 | the mirror in fog and downpour: its glaze gives back a sky the grey of the snow (it reads by day and by torch) |
+
+Two marks were changed for it. A lift's scoured ground was a dark rust
+under any light: on Sallow's silt and on uphill grass its near edge
+didn't read (2 lines of 5 at best). Its texture is coloured now, not
+tinted, so the grit it flings out can be paler than the soil: a broad
+bank of it, thickest just inside the rim, pale on dark ground with the
+rust and grooves through it on pale. A frost's pale hoar was no mark on
+Rime Fell's snow (0 of 4); it's a glaze of dark blue ice now (4 of 4).
+Before and after, each kind at 5 m by day:
+`docs/shots/anomalies/contact_before_after.png`. Sheets:
+`docs/shots/anomalies/edges*.png` (Marrow Creek, Kettle Pass, Cinder Works and Sallow
+Reservoir's other kinds on shots from before the last merge of main; their
+marks didn't change).
