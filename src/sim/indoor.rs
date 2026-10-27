@@ -26,6 +26,10 @@ const CLEARANCE: f32 = 0.28;
 /// a gap between props narrower than a body is no way, or a raider routed
 /// through it sticks there.
 pub const SITE_CLEARANCE: f32 = 0.28;
+/// The body's slack round its capsule (the move's skin, a hand's sway):
+/// a way to loot must be this much wider than the capsule as well, or a
+/// raider routed to the very edge of it pins there (`tight_plans`).
+pub const CAPSULE_SKIN: f32 = 0.06;
 /// Geometry in this band above the floor blocks walking (below it you step
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
@@ -295,6 +299,16 @@ pub fn plan_buildings(
     buildings: &Query<(Entity, &Building, &Transform)>,
     doors: &Query<(Entity, &DoorLeaf, &ChildOf)>,
 ) -> Vec<BuildingPlan> {
+    plan_buildings_with(buildings, doors, SITE_CLEARANCE)
+}
+
+/// The same, the underground sites' furniture given `site_clearance`
+/// round it (the tests' tighter plans, `tight_plans`).
+pub(crate) fn plan_buildings_with(
+    buildings: &Query<(Entity, &Building, &Transform)>,
+    doors: &Query<(Entity, &DoorLeaf, &ChildOf)>,
+    site_clearance: f32,
+) -> Vec<BuildingPlan> {
     let mut out = Vec::new();
     // Staged scenes (`world::scenes`): furniture of their own, wherever
     // they're left (one in a site is in its way too).
@@ -329,7 +343,7 @@ pub fn plan_buildings(
                         .is_some_and(|f| (p.y - f).abs() < 1.0)
                 })
                 .collect();
-            out.push(plan_site(e, b, xf, &geo, r, &mine, &staged));
+            out.push(plan_site(e, b, xf, &geo, r, &mine, &staged, site_clearance));
             continue;
         }
         let foot = crate::world::structures::footprint(&b.prefab);
@@ -562,6 +576,7 @@ fn plan_site(
     r: &'static extraction_core::underground::Raster,
     mine: &[(Entity, &DoorLeaf)],
     staged: &[(Transform, &Geo)],
+    clearance: f32,
 ) -> BuildingPlan {
     use extraction_core::underground::{APRON, KIOSK, WALL};
     // The ground round a kiosk, out past its apron; not where a room
@@ -657,7 +672,7 @@ fn plan_site(
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
         if let Some(ob) = obstacle(piece.shape, piece.at, floor, false) {
-            grid.block(ob, SITE_CLEARANCE);
+            grid.block(ob, clearance);
         }
     }
     for (_, leaf) in mine {
@@ -672,7 +687,7 @@ fn plan_site(
                 half: [def.width * 0.5, 0.04],
                 yaw: along.y.atan2(along.x),
             },
-            SITE_CLEARANCE,
+            clearance,
         );
     }
     // A scene staged down here: its crate and chair are in the way like
@@ -688,7 +703,7 @@ fn plan_site(
             let floor = levels[j * n + i];
             let floor = if floor.is_nan() { r.floor } else { floor };
             if let Some(ob) = obstacle(piece.shape, at, floor, false) {
-                grid.block(ob, SITE_CLEARANCE);
+                grid.block(ob, clearance);
             }
         }
     }
@@ -1069,6 +1084,23 @@ mod tests {
             .unwrap()
     }
 
+    /// The underground sites' plans with a body's slack round their
+    /// furniture too (`CAPSULE_SKIN`): what a way only just wide enough
+    /// for the capsule loses.
+    fn tight_plans(app: &mut App) -> Vec<BuildingPlan> {
+        app.world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                    plan_buildings_with(&b, &d, SITE_CLEARANCE + CAPSULE_SKIN)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .filter(|p| extraction_core::underground::layout(&p.name).is_some())
+            .collect()
+    }
+
     /// The ore mill's plan stands each bay at its own floor, and from the
     /// front door there's a way up the stairs to every bay and to every
     /// loot spot within reach of a floor (the top bay's included).
@@ -1408,6 +1440,7 @@ mod tests {
             app.cleanup();
             app.update();
             let plans = plans(&mut app);
+            let tight = tight_plans(&mut app);
             let spots: Vec<Vec3> = app
                 .world()
                 .get_resource::<crate::world::buildings::BuildingLoot>()
@@ -1426,6 +1459,18 @@ mod tests {
                     }
                     tried += 1;
                     let goal = plan.to_local(*spot).xz();
+                    // Down a site, reached with a body's slack to spare: a
+                    // spot only reached through a gap narrower than the
+                    // capsule and its skin pins whoever goes for it (the
+                    // gallery's ammo crate, once).
+                    if let Some(t) = tight.iter().find(|t| t.entity == plan.entity) {
+                        if super::super::raider::reach_cell(t, t.entries[0], goal).is_none() {
+                            failed.push(format!(
+                                "{map} {}: spot {goal:.2?} only through a gap narrower than a body",
+                                plan.name
+                            ));
+                        }
+                    }
                     match super::super::raider::reach_cell(plan, plan.entries[0], goal) {
                         Some(c) if super::super::raider::reaches(plan, c, goal) => {}
                         Some(c) => failed.push(format!(
