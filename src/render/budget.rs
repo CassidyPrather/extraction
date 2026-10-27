@@ -638,6 +638,14 @@ pub fn count_triangles(
     mut tris: ResMut<Triangles>,
 ) {
     for e in events.read() {
+        // A mesh dropped is forgotten: one replaced every few frames (the
+        // far-off flocks' merged mesh) once counted up for ever, and no
+        // valley's `settle` ever saw its meshes hold still (each ran its
+        // whole 3000 frames).
+        if let AssetEvent::Removed { id } | AssetEvent::Unused { id } = e {
+            tris.0.remove(id);
+            continue;
+        }
         if let AssetEvent::Added { id } | AssetEvent::Modified { id } = e {
             if let Some(mesh) = meshes.get(*id) {
                 let n = match mesh.try_indices_option() {
