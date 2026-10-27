@@ -910,6 +910,28 @@ pub fn placement_clears(pl: &Placement, p: P2, extra: f32) -> bool {
     lx.abs() < w * 0.5 + STRIP_MARGIN + extra && lz.abs() < d * 0.5 + STRIP_MARGIN + extra
 }
 
+/// The ore mill's bays, stepped up its slope from the front (local -z):
+/// each bay's floor over the placement's origin, and how deep a bay is.
+/// `world::fell` builds the mill on them.
+pub const MILL_FLOORS: [f32; 4] = [0.15, 4.15, 8.15, 12.15];
+pub const MILL_BAY: f32 = 10.0;
+
+/// The floor of the bay over a prefab-local point of a building stepped
+/// down its slope (the ore mill), inside its footprint; `None` for every
+/// other prefab and outside the walls. The stairs between bays rise off
+/// these floors, never below them.
+pub fn stepped_floor_level(id: &str, local: P2) -> Option<f32> {
+    if id != "ore_mill" {
+        return None;
+    }
+    let [w, _, d] = prefab_footprint(id);
+    if local[0].abs() > w * 0.5 || local[1].abs() > d * 0.5 {
+        return None;
+    }
+    let k = ((local[1] + d * 0.5) / MILL_BAY).floor() as i32;
+    Some(MILL_FLOORS[k.clamp(0, MILL_FLOORS.len() as i32 - 1) as usize])
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a

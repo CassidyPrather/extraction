@@ -899,6 +899,42 @@ impl Heightmap {
                 }
             }
         }
+        // A building stepped down its slope (the ore mill) stands where the
+        // map put it, on terraces the map cut for it, and isn't padded; but
+        // each terrace's blend ran out over the bay below it and up through
+        // that bay's floor, a metre high at the footing (bots pinned against
+        // it, short of the loot along the back wall). Under each bay the
+        // ground goes no higher than its floor; a cell either side of the
+        // footing between two bays, no higher than the lower one's, so the
+        // slope between samples doesn't rise through it either.
+        for p in &map.placements {
+            if crate::map::stepped_floor_level(&p.prefab, [0.0, 0.0]).is_none() {
+                continue;
+            }
+            let base = if p.absolute {
+                p.y
+            } else {
+                self.height(p.at) + p.y
+            };
+            let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+            let (s, c) = (-p.rot.to_radians()).sin_cos();
+            let reach = (w * 0.5).hypot(d * 0.5) + self.cell;
+            let lo = [p.at[0] - reach, p.at[1] - reach];
+            let hi = [p.at[0] + reach, p.at[1] + reach];
+            let cell = self.cell;
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+                let l = [dx * c - dz * s, dx * s + dz * c];
+                let level = [-cell, 0.0, cell]
+                    .iter()
+                    .flat_map(|ox| [-cell, 0.0, cell].map(|oz| [l[0] + ox, l[1] + oz]))
+                    .filter_map(|q| crate::map::stepped_floor_level(&p.prefab, q))
+                    .fold(f32::INFINITY, f32::min);
+                if level.is_finite() {
+                    hm.heights[k] = hm.heights[k].min(base + level);
+                }
+            });
+        }
     }
 
     fn rim(&mut self, map: &MapDef) {
