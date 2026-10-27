@@ -605,11 +605,12 @@ fn init_assets(
         LinearRgba::rgb(0.06, 0.06, 0.058),
         0.95,
     );
-    // Hoar on the ground, faintly blue, a little lit of itself.
+    // Glazed in blue ice, a little lit of itself. (Its own valley is under
+    // snow: pale hoar on snow was no mark at all.)
     let frosted = ground(
-        Color::srgba(0.82, 0.9, 1.0, 0.75),
-        LinearRgba::rgb(0.0, 0.01, 0.03),
-        0.95,
+        Color::srgba(0.42, 0.58, 0.82, 0.92),
+        LinearRgba::rgb(0.0, 0.012, 0.045),
+        0.4,
     );
     // Pressed dark and hard, a faint violet in it (the well's own light:
     // in shadow and at night its edge still shows).

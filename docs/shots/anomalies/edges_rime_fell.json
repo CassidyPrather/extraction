@@ -403,5 +403,860 @@
   ],
   "passing": 5,
   "ok": true
+ },
+ {
+  "kind": "snare",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 14.0,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 12.8,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 12.0,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 11.4,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 10.8,
+    "slip": 0.5,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 14.2,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 14.6,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 14.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 13.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 12.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 11.8,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 10.9,
+    "slip": 0.5,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 14.5,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 15.0,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 29.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 28.2,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 26.6,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.4,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 24.2,
+    "slip": 0.5,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 31.2,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 31.9,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 23.3,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 22.4,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 23.1,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 26.7,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 25.8,
+    "slip": 0.4,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 34.5,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 33.1,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 22.3,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 21.4,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 21.9,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 24.9,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 24.5,
+    "slip": 0.4,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 31.5,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 30.7,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 21.7,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 20.9,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 21.3,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 24.3,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 23.8,
+    "slip": 0.4,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 30.8,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 29.9,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 19.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 17.7,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 19.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 22.8,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 21.1,
+    "slip": 0.4,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 27.8,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 27.5,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 11.9,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 11.6,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 11.9,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 11.8,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 11.6,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 10.8,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 9.7,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 8.1,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 7.8,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 8.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 8.0,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.9,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 6.6,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.4,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "passing": 2,
+  "ok": false
+ },
+ {
+  "kind": "mirror",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 7.9,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.6,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.9,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.9,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.8,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 6.7,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.5,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "passing": 0,
+  "ok": false
+ },
+ {
+  "kind": "mirror",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 10.9,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 10.6,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 10.9,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 11.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 10.8,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 8.3,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 8.0,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 23.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 21.4,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 27.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 27.5,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 27.1,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 26.2,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 28.4,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 21.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 19.7,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 25.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 24.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.6,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 23.7,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 26.0,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 21.5,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 19.6,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 25.2,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 22.4,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.6,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 23.8,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 26.7,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 18.1,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 17.3,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 19.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 22.0,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 19.6,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 22.3,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 8.5,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 7.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.5,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "passing": 1,
+  "ok": false
+ },
+ {
+  "kind": "frost",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 8.3,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.0,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.0,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 7.1,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.4,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "passing": 1,
+  "ok": false
+ },
+ {
+  "kind": "frost",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 7.8,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.8,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.7,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.7,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.6,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 6.7,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 5.4,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "passing": 0,
+  "ok": false
+ },
+ {
+  "kind": "frost",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 6.6,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.0,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.9,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.0,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   }
+  ],
+  "sides": [
+   {
+    "step": 10.8,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 13.8,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "passing": 0,
+  "ok": false
  }
 ]

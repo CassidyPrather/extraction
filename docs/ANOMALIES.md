@@ -15,7 +15,7 @@ looks like. Code: `src/anomaly/`, rules in
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
-| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
+| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a glaze of blue ice on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
 
 Wells, mirrors, hushes and frosts don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
@@ -331,7 +331,7 @@ wall. So:
   | Well | laid flat toward its heart | pressed dark and hard |
   | Mirror | wiped flat | glazed like still water, giving back the sky |
   | Hush | dead still, whatever the wind; pressed into its dust | pale settled dust, and its edge a ragged line of it |
-  | Frost | stiff, bowed under the rime | hoar, faintly blue |
+  | Frost | stiff, bowed under the rime | glazed in blue ice (pale hoar was lost on snow) |
 
   What it does to you comes on top of that: leaves circling, embers and
   heat shimmer, arcs, grit spiralling in, a glint, dust hanging dead still,
