@@ -1759,8 +1759,9 @@ mod after_a_jump {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_near_trees_in_full_after_a_jump() {
-        use crate::render::budget::tests::{client_threads, heavy, settle};
-        let _one_at_a_time = heavy();
+        use crate::render::budget::tests::{client_threads, counted, settle};
+        // Counts: frames to the cards and trunks.
+        let _counting = counted();
         let mut app = client_threads("marrow_creek", "clearing", None);
         settle(&mut app);
         // A stand of trees 250-400 m from the camera.
