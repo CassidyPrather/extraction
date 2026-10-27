@@ -2446,6 +2446,8 @@ pub(crate) struct Daylight {
     written: Option<(f32, f32)>,
     base: (f32, f32),
     fog: Option<Color>,
+    /// The fog's sun glow (its directional light colour) on the surface.
+    glow: Option<Color>,
 }
 
 /// How far below ground the eye is, 0 (on the surface) to 1 (a few
@@ -2458,6 +2460,7 @@ pub(crate) fn go_dark(
     mut suns: Query<&mut DirectionalLight, With<super::sky::Sun>>,
     mut fogs: Query<&mut DistanceFog>,
     mut exposures: Query<&mut bevy::camera::Exposure>,
+    below: Option<ResMut<crate::render::grade::Below>>,
     mut day: Local<Daylight>,
     mut depth: Local<f32>,
 ) {
@@ -2478,6 +2481,11 @@ pub(crate) fn go_dark(
     };
     *depth += (want - *depth) * 0.15;
     let k = *depth;
+    // The grade's shadow lift goes, and the eyes open a stop less: an
+    // unlit tunnel is black, not grey (`render::grade::Below`).
+    if let Some(mut b) = below {
+        b.set_if_neq(crate::render::grade::Below(if k < 1e-3 { 0.0 } else { k }));
+    }
     let sun = suns.iter().next().map_or(0.0, |s| s.illuminance);
     // What the sky systems last set (anything other than what this wrote).
     if day.written != Some((ambient.brightness, sun)) {
@@ -2486,9 +2494,10 @@ pub(crate) fn go_dark(
     if k < 1e-3 && day.written.is_none() {
         return;
     }
-    // Down to a fifth of a percent: with the grade's lift gone below
-    // (`render::grade::Below`), an unlit room is black, not grey.
-    let dark = 1.0 - k * 0.998;
+    // None of the sky's light gets down here: an unlit room is black, and
+    // what you see by is a lamp, a torch, a flare (the grade's lift goes
+    // with it, `Below`, above).
+    let dark = 1.0 - k;
     ambient.brightness = day.base.0 * dark;
     for mut s in &mut suns {
         s.illuminance = day.base.1 * (1.0 - k);
@@ -2503,13 +2512,24 @@ pub(crate) fn go_dark(
     }
     for mut fog in &mut fogs {
         let surface = *day.fog.get_or_insert(fog.color);
+        // The sun's glow in the fog (no sun reaches the air down here).
+        let glow = *day.glow.get_or_insert(fog.directional_light_color);
         if k < 1e-3 {
             fog.color = surface;
+            fog.directional_light_color = glow;
             day.fog = None;
+            day.glow = None;
         } else {
             let a = surface.to_linear().to_vec3();
             let c = a.lerp(Vec3::new(0.004, 0.004, 0.005), k);
             fog.color = Color::linear_rgb(c.x, c.y, c.z);
+            let g = glow.to_linear();
+            fog.directional_light_color = Color::linear_rgba(
+                g.red * (1.0 - k),
+                g.green * (1.0 - k),
+                g.blue * (1.0 - k),
+                g.alpha,
+            );
         }
     }
     if k < 1e-3 {
