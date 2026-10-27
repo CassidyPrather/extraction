@@ -85,7 +85,7 @@ pub const LAME: f32 = 0.5;
 /// It fights from cover at about this range from you (m)...
 pub const COVER_RANGE: (f32, f32) = (14.0, 34.0);
 /// A runner beyond this (m), getting away faster than this (m/s), is gone
-/// after (with `squad::Coordination::pursue`).
+/// after: it leaves cover and closes until it's caught up.
 pub const PURSUE_FROM: f32 = 20.0;
 pub const PURSUE_RATE: f32 = 0.5;
 /// ...and looks for better cover this often (s).
@@ -122,7 +122,7 @@ pub struct Walker {
     /// (m/s, smoothed): `hazards::chasing_hard`.
     pub gap: Option<f32>,
     pub closing: f32,
-    /// After a runner getting away (`squad::Coordination::pursue`).
+    /// After a runner getting away (`PURSUE_FROM`).
     pub pursuing: bool,
     pub turret_yaw: f32,
     /// Which diagonal pair may step next.
@@ -475,11 +475,7 @@ fn walker_brain(
         ),
     )>,
     targets: Query<&GlobalTransform>,
-    (nav, wary, plan): (
-        Res<Nav>,
-        Option<Res<super::hazards::Wary>>,
-        Res<super::squad::Coordination>,
-    ),
+    (nav, wary): (Res<Nav>, Option<Res<super::hazards::Wary>>),
     time: Res<Time>,
     mut convoy: MessageWriter<super::collector::ConvoyEvent>,
     entrances: Res<super::doors::Entrances>,
@@ -912,10 +908,9 @@ fn walker_brain(
                             };
                         }
                         let d = Vec2::new(tp.x - pos.x, tp.z - pos.z).length();
-                        // A runner getting away (`squad::Coordination::
-                        // pursue`): after you, until it's caught up.
-                        w.pursuing = plan.pursue
-                            && !hurt
+                        // A runner getting away: after you, until it's
+                        // caught up.
+                        w.pursuing = !hurt
                             && flank.is_none()
                             && aware.can_see_target
                             && d > PURSUE_FROM

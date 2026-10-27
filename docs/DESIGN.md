@@ -315,6 +315,24 @@ Paired by seed (sign tests):
 
 Without the pinner's suppression, the last two hold but the first doesn't: a plan said aloud, with nobody covering the movers, is easier on the deaf too (38%).
 
+**A walker goes after a runner.** Say a walker can see you, you're past 20 m, and you're pulling away at over 0.5 m/s. Then it leaves cover and closes at a jog until it's caught up (`walker::PURSUE_FROM`). There are exceptions:
+- a flanker or cut-off keeps to its post;
+- a hurt walker keeps its cover.
+
+While it chases, it goes straight through what would hurt it, as any hard chase does. Breaking contact means getting out of sight, not just out of range.
+
+This was tried as a switch first and measured on against off. The smoke was 5 valleys, seeds 1–8:
+- extractions: 26 of 40 with it off, 28 of 40 with it on;
+- no valley did worse with it on;
+- stucks were the same, and nothing timed out.
+
+The drills were 48 seeds, paired by seed:
+- listening newcomer against a coordinating squad: 21 escape vs 22;
+- the hound squad: 17 vs 16;
+- the hound squad with a snare lure: 14 vs 13.
+
+Pursuit changed few runs, and none significantly. The bots and the drill's newcomer seldom run in the open from a walker in sight, so most raids never call it up. It didn't make raids deadlier, so it stays on, for the player who sprints off across open ground.
+
 **The Zone hurts them too** (`robots/hazards.rs`). What every hazard does to every kind of machine is one table:
 
 | | Drone | Walker, crawler, hound, grappler | Heavy | Dirigible |

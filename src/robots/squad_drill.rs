@@ -247,9 +247,6 @@ pub fn drill(seed: u64, arm: Arm) -> Outcome {
     // The other arm of the pinner's suppression.
     app.world_mut().resource_mut::<Coordination>().suppress =
         std::env::var("SIM_DRILL_NO_SUPPRESS").is_err();
-    // The experiment: walkers going after a runner.
-    app.world_mut().resource_mut::<Coordination>().pursue =
-        std::env::var("SIM_DRILL_PURSUE").is_ok();
     let mut rng = Rng::new(seed.wrapping_mul(0x9E37_79B9) ^ 0x5D);
     let rvs = rendezvous(&zone);
     let nav_near = |app: &App, p: Vec2| {

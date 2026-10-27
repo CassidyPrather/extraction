@@ -4969,3 +4969,33 @@ fn an_engaged_hound_closes_on_you() {
         "it closed on you: {start:.1} m -> {closest:.1} m (brain {brain:?})"
     );
 }
+
+/// A walker that has you in sight and watches you pull away past
+/// `walker::PURSUE_FROM` leaves its cover and comes after you.
+#[test]
+fn a_walker_goes_after_a_runner_getting_away() {
+    let (mut app, player, zone) = app(None);
+    let mut me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 222.0));
+    {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let mut chased = false;
+    for _ in 0..(90 * 8) {
+        me = zone.on_ground(me.x, me.z - 3.0 / 90.0);
+        put(&mut app, player, me);
+        app.update();
+        chased |= app
+            .world()
+            .get::<super::walker::Walker>(w)
+            .unwrap()
+            .pursuing;
+    }
+    let d = flat(app.world().get::<Transform>(w).unwrap().translation - me);
+    assert!(chased, "it went after you ({d:.1} m off at the end)");
+}
