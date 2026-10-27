@@ -1,0 +1,407 @@
+[
+ {
+  "kind": "lift",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 17.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 18.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 19.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 17.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.7,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 24.4,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 21.6,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 16.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 17.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 18.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 15.6,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 22.0,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 19.4,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 16.4,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 15.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 18.3,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 15.9,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 22.0,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 19.4,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 17.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 15.4,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 15.4,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 16.7,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 26.6,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 26.7,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 24.4,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 24.6,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.2,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.2,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 25.1,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 27.4,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "condition": "fog",
+  "lines": [
+   {
+    "step": 24.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 24.7,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.4,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.3,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 25.3,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 27.0,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "condition": "downpour",
+  "lines": [
+   {
+    "step": 24.9,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 24.9,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.4,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 25.8,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 25.3,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 25.6,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 26.9,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "condition": "night",
+  "lines": [
+   {
+    "step": 23.8,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 24.5,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 24.1,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 23.4,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 21.9,
+    "slip": 0.2,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 20.5,
+    "slip": 0.1,
+    "ok": true
+   },
+   {
+    "step": 22.5,
+    "slip": 0.1,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "condition": "clear",
+  "lines": [
+   {
+    "step": 18.5,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 17.1,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 15.8,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 15.1,
+    "slip": 0.5,
+    "ok": true
+   },
+   {
+    "step": 13.9,
+    "slip": 0.5,
+    "ok": true
+   }
+  ],
+  "sides": [
+   {
+    "step": 19.0,
+    "slip": 0.0,
+    "ok": true
+   },
+   {
+    "step": 19.7,
+    "slip": 0.0,
+    "ok": true
+   }
+  ],
+  "passing": 5,
+  "ok": true
+ }
+]
