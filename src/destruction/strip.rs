@@ -29,6 +29,11 @@ pub const BUS_PRY: f32 = 200.0;
 pub const CAR_DOOR_PRY: f32 = 180.0;
 pub const CAR_LID_PRY: f32 = 140.0;
 pub const CAR_WHEEL_PRY: f32 = 160.0;
+/// A wheel's nuts: how many, how far round the hub (m), and how far a
+/// spanner turns each to take it out (radians: a turn).
+pub const WHEEL_NUTS: usize = 4;
+pub const NUT_RING: f32 = 0.07;
+pub const NUT_TURNS: f32 = std::f32::consts::TAU;
 /// A wooden part's hit points when nothing says otherwise.
 pub const PART_HP: f32 = 80.0;
 
@@ -60,6 +65,9 @@ pub struct Part {
     /// Casts its own shadow (`Drawn::shadow`): only what stands clear of
     /// anything behind it, a garden fence's panel.
     pub shadow: bool,
+    /// Held on by wheel nuts ([`WheelNut`]) a spanner undoes: a car's
+    /// wheel.
+    pub nuts: bool,
 }
 
 impl Part {
@@ -92,6 +100,7 @@ impl Part {
             model_at,
             hp,
             shadow: b.kind == BreakKind::FencePanel,
+            nuts: b.kind == BreakKind::CarWheel,
         }
     }
 }
@@ -108,8 +117,47 @@ impl Plugin for StripPlugin {
             .add_observer(part_gone)
             .add_systems(
                 FixedUpdate,
-                fit_breakables.in_set(super::DestructionSystems),
+                (fit_breakables, undo_nuts).in_set(super::DestructionSystems),
             );
+    }
+}
+
+/// One of a wheel's nuts (`hooks::Unboltable`, for a spanner). Out, it's
+/// gone; the wheel's last one out, the wheel comes off.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct WheelNut {
+    pub wheel: Entity,
+}
+
+/// A wheel's nuts still on, to go with it however it comes off.
+#[derive(Component, Clone, Debug, Default)]
+pub struct Nuts(pub Vec<Entity>);
+
+/// A spanner turning a wheel's nuts (`hooks::Turned`): each out after
+/// [`NUT_TURNS`]; the last one out, the wheel comes off as it would to a
+/// crowbar (what it yields, `Broken` till the Surge).
+fn undo_nuts(
+    mut commands: Commands,
+    mut turned: MessageReader<super::hooks::Turned>,
+    mut nuts: Query<(&WheelNut, &mut super::hooks::Unboltable)>,
+    mut wheels: Query<&mut Nuts>,
+) {
+    for t in turned.read() {
+        let Ok((nut, mut bolt)) = nuts.get_mut(t.target) else {
+            continue;
+        };
+        bolt.turned += t.angle.max(0.0);
+        if bolt.turned < bolt.needs {
+            continue;
+        }
+        commands.entity(t.target).try_despawn();
+        let Ok(mut on) = wheels.get_mut(nut.wheel) else {
+            continue;
+        };
+        on.0.retain(|e| *e != t.target);
+        if on.0.is_empty() {
+            commands.entity(nut.wheel).try_despawn();
+        }
     }
 }
 
@@ -407,7 +455,32 @@ fn place(commands: &mut Commands, broken: &Broken, part: &Part) {
     }
     let hp = part.hp.unwrap_or(f32::MAX);
     let s = part.size;
-    let mut e = commands.spawn((
+    let this = commands.spawn_empty().id();
+    if part.nuts {
+        // Round the hub on its outer face (-Z), each undone along it.
+        let nuts: Vec<Entity> = (0..WHEEL_NUTS)
+            .map(|i| {
+                let a = i as f32 / WHEEL_NUTS as f32 * std::f32::consts::TAU;
+                let local = Vec3::new(a.cos() * NUT_RING, a.sin() * NUT_RING, -s.z * 0.5);
+                commands
+                    .spawn((
+                        Name::new("Wheel nut"),
+                        WheelNut { wheel: this },
+                        super::hooks::Unboltable {
+                            needs: NUT_TURNS,
+                            axis: Vec3::NEG_Z,
+                            turned: 0.0,
+                        },
+                        Transform::from_translation(part.at.transform_point(local))
+                            .with_rotation(part.at.rotation),
+                    ))
+                    .id()
+            })
+            .collect();
+        commands.entity(this).insert(Nuts(nuts));
+    }
+    let mut e = commands.entity(this);
+    e.insert((
         (
             // (Not "Wreck ...": that's a robot's, and the frame gauges
             // count by a name's first word.)
@@ -462,6 +535,7 @@ fn part_gone(
         &Collider,
         Option<&Timber>,
         Option<&Splinters>,
+        Option<&Nuts>,
         Has<Quiet>,
     )>,
     mut commands: Commands,
@@ -469,9 +543,14 @@ fn part_gone(
     mut pool: ResMut<super::debris::DebrisPool>,
     catalog: Res<crate::items::Catalog>,
 ) {
-    let Ok((s, gt, collider, timber, splinters, quiet)) = parts.get(remove.entity) else {
+    let Ok((s, gt, collider, timber, splinters, nuts, quiet)) = parts.get(remove.entity) else {
         return;
     };
+    // Its nuts go with it, however it went (pried, the last nut out, the
+    // Surge): none left turning in the air.
+    for n in nuts.into_iter().flat_map(|n| &n.0) {
+        commands.entity(*n).try_despawn();
+    }
     if quiet {
         return;
     }
