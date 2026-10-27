@@ -1084,86 +1084,86 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 8.5,
-    "slip": 0.2,
+    "step": 8.9,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 7.3,
-    "slip": null,
-    "ok": false
+    "step": 9.6,
+    "slip": 0.3,
+    "ok": true
    },
    {
-    "step": 7.3,
-    "slip": null,
-    "ok": false
+    "step": 9.1,
+    "slip": 0.3,
+    "ok": true
    },
    {
-    "step": 7.3,
-    "slip": null,
-    "ok": false
+    "step": 10.2,
+    "slip": 0.4,
+    "ok": true
    },
    {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
+    "step": 11.1,
+    "slip": 0.3,
+    "ok": true
    }
   ],
   "sides": [
    {
-    "step": 7.2,
+    "step": 6.8,
     "slip": null,
     "ok": false
    },
    {
-    "step": 5.5,
-    "slip": null,
-    "ok": false
+    "step": 11.9,
+    "slip": 0.0,
+    "ok": true
    }
   ],
-  "passing": 1,
-  "ok": false
+  "passing": 5,
+  "ok": true
  },
  {
   "kind": "frost",
   "condition": "fog",
   "lines": [
    {
-    "step": 8.3,
-    "slip": 0.2,
+    "step": 6.7,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.2,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.6,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 8.4,
+    "slip": 0.3,
     "ok": true
-   },
-   {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 7.0,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 7.0,
-    "slip": null,
-    "ok": false
    }
   ],
   "sides": [
    {
-    "step": 7.1,
+    "step": 5.5,
     "slip": null,
     "ok": false
    },
    {
-    "step": 5.4,
-    "slip": null,
-    "ok": false
+    "step": 8.6,
+    "slip": 0.0,
+    "ok": true
    }
   ],
   "passing": 1,
@@ -1174,44 +1174,44 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 7.8,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 6.8,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 6.7,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 6.7,
-    "slip": null,
-    "ok": false
-   },
-   {
     "step": 6.6,
     "slip": null,
     "ok": false
+   },
+   {
+    "step": 7.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 6.3,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 7.5,
+    "slip": null,
+    "ok": false
+   },
+   {
+    "step": 8.2,
+    "slip": 0.3,
+    "ok": true
    }
   ],
   "sides": [
    {
-    "step": 6.7,
+    "step": 5.7,
     "slip": null,
     "ok": false
    },
    {
-    "step": 5.4,
-    "slip": null,
-    "ok": false
+    "step": 9.3,
+    "slip": 0.1,
+    "ok": true
    }
   ],
-  "passing": 0,
+  "passing": 1,
   "ok": false
  },
  {
@@ -1219,44 +1219,44 @@
   "condition": "night",
   "lines": [
    {
-    "step": 6.6,
-    "slip": null,
-    "ok": false
+    "step": 15.5,
+    "slip": 0.3,
+    "ok": true
    },
    {
-    "step": 7.0,
-    "slip": null,
-    "ok": false
+    "step": 16.9,
+    "slip": 0.3,
+    "ok": true
    },
    {
-    "step": 6.9,
-    "slip": null,
-    "ok": false
+    "step": 18.0,
+    "slip": 0.3,
+    "ok": true
    },
    {
-    "step": 6.0,
-    "slip": null,
-    "ok": false
+    "step": 14.2,
+    "slip": 0.4,
+    "ok": true
    },
    {
-    "step": 7.2,
-    "slip": null,
-    "ok": false
+    "step": 15.7,
+    "slip": 0.3,
+    "ok": true
    }
   ],
   "sides": [
    {
-    "step": 10.8,
-    "slip": 0.1,
+    "step": 18.4,
+    "slip": 0.0,
     "ok": true
    },
    {
-    "step": 13.8,
-    "slip": 0.2,
+    "step": 23.5,
+    "slip": 0.1,
     "ok": true
    }
   ],
-  "passing": 0,
-  "ok": false
+  "passing": 5,
+  "ok": true
  }
 ]

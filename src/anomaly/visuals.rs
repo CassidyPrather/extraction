@@ -608,7 +608,7 @@ fn init_assets(
     // Glazed in blue ice, a little lit of itself. (Its own valley is under
     // snow: pale hoar on snow was no mark at all.)
     let frosted = ground(
-        Color::srgba(0.42, 0.58, 0.82, 0.92),
+        Color::srgba(0.22, 0.36, 0.62, 0.94),
         LinearRgba::rgb(0.0, 0.012, 0.045),
         0.4,
     );
