@@ -991,6 +991,52 @@ mod tests {
         );
     }
 
+    /// Every note and terminal lies on something at a reader's height (a
+    /// table, a desk, a counter) in its building: not on the floor, not up
+    /// on a roof or shelf top. Measured against the floor round it.
+    #[test]
+    fn every_note_lies_where_it_can_be_read() {
+        let mut bad = Vec::new();
+        for name in valleys() {
+            let zone = crate::world::Zone::load(name);
+            for m in &zone.map.markers {
+                if !matches!(
+                    m.kind,
+                    MarkerKind::Note { .. } | MarkerKind::Terminal { .. }
+                ) {
+                    continue;
+                }
+                let reach = 2.2 + m.y;
+                let rest = crate::world::notes::rest_height(&zone, m.at[0], m.at[1], reach);
+                // The floor: what most of the ground round it is, below the
+                // note (a raised booth's floor, not the ground outside it;
+                // the floor, not a chair's seat).
+                let below: Vec<f32> = (0..16)
+                    .map(|k| {
+                        let a = k as f32 * std::f32::consts::TAU / 16.0;
+                        crate::world::notes::rest_height(
+                            &zone,
+                            m.at[0] + 0.9 * a.cos(),
+                            m.at[1] + 0.9 * a.sin(),
+                            reach,
+                        )
+                    })
+                    .filter(|f| *f < rest - 0.3)
+                    .collect();
+                let floor = below
+                    .iter()
+                    .map(|f| (below.iter().filter(|g| (*g - f).abs() < 0.05).count(), -f))
+                    .max_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)))
+                    .map_or(f32::MIN, |(_, f)| -f);
+                let up = rest - floor;
+                if !(0.5..=1.4).contains(&up) {
+                    bad.push(format!("{name}: {} lies {up:.2} m above its floor", m.name));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// Each valley key is named by at least two notes, at least one of them
     /// in another valley: finding the words is how you find the keys.
     #[test]
