@@ -25,6 +25,7 @@ pub mod flight;
 pub mod fx;
 pub mod grappler;
 pub mod grip;
+pub mod hazard_look;
 pub mod hazards;
 pub mod heavy;
 pub mod heavy_look;
@@ -311,6 +312,7 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
+            .add_plugins(hazard_look::HazardLookPlugin)
             .add_systems(
                 FixedUpdate,
                 (damage_parts, senses::door_noise, perceive, wreck_loot)

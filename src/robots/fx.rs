@@ -35,6 +35,7 @@ impl Plugin for RobotFxPlugin {
                 scuff_dust,
                 eye_out,
                 cell_arcs,
+                hazard_bursts,
                 shell_marks,
                 sputter,
                 light_wrecks,
@@ -66,6 +67,17 @@ struct FxAssets {
     /// Dirt and snow kicked up by a dragged foot.
     dust: Handle<StandardMaterial>,
     snow_dust: Handle<StandardMaterial>,
+    /// A hazard's marks (`hazard_look`): orange embers, ice glinting, a
+    /// gas cloud, a frost's breath, a shimmer in the air, a hush's haze.
+    embers: Handle<StandardMaterial>,
+    /// A snare's or an EMP's arcs: electric blue (a crawler's own are
+    /// paler: `arc`), to read on a white shell.
+    bolt: Handle<StandardMaterial>,
+    crystals: Handle<StandardMaterial>,
+    gas: Handle<StandardMaterial>,
+    frost: Handle<StandardMaterial>,
+    shimmer: Handle<StandardMaterial>,
+    still: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -121,6 +133,47 @@ fn assets(
             perceptual_roughness: 1.0,
             ..default()
         }),
+        // (Unlit: these show their base colour, bright.)
+        embers: materials.add(StandardMaterial {
+            base_color: Color::srgb(1.0, 0.42, 0.08),
+            unlit: true,
+            ..default()
+        }),
+        bolt: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.3, 0.55, 1.0),
+            unlit: true,
+            ..default()
+        }),
+        // (Cyan, not white: it reads on a white shell.)
+        crystals: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.35, 0.85, 1.0),
+            unlit: true,
+            ..default()
+        }),
+        gas: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.72, 0.8, 0.25, 0.3),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        frost: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.7, 0.9, 1.0, 0.45),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        shimmer: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.55, 0.75, 0.85, 0.35),
+            alpha_mode: AlphaMode::Add,
+            unlit: true,
+            ..default()
+        }),
+        still: materials.add(StandardMaterial {
+            base_color: Color::srgba(0.12, 0.1, 0.18, 0.35),
+            alpha_mode: AlphaMode::Blend,
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
         water: materials.add(StandardMaterial {
             base_color: Color::srgba(0.72, 0.78, 0.82, 0.55),
             alpha_mode: AlphaMode::Blend,
@@ -138,6 +191,16 @@ struct Spark {
     vel: Vec3,
     life: f32,
 }
+
+/// A spark drawn this many times as wide (and as long, in its square root):
+/// a hazard's mark, to read at 10 m (`hazard_bursts`).
+#[derive(Component)]
+struct Bold(f32);
+
+/// How bold a hazard's streaks and how big its clouds are, against a
+/// wound's.
+const HAZARD_BOLD: f32 = 4.0;
+const HAZARD_CLOUD: f32 = 2.0;
 
 #[derive(Component)]
 struct Puff {
@@ -402,13 +465,13 @@ fn at_range(eye: Option<Vec3>, at: Vec3) -> f32 {
 
 fn fly_sparks(
     mut commands: Commands,
-    mut sparks: Query<(Entity, &mut Spark, &mut Transform)>,
+    mut sparks: Query<(Entity, &mut Spark, &mut Transform, Option<&Bold>)>,
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
     let eye = cameras.iter().next().map(|g| g.translation());
-    for (e, mut s, mut t) in &mut sparks {
+    for (e, mut s, mut t, bold) in &mut sparks {
         s.life -= dt;
         if s.life <= 0.0 {
             commands.entity(e).despawn();
@@ -420,8 +483,9 @@ fn fly_sparks(
         let speed = s.vel.length();
         // A streak along its path.
         t.rotation = Quat::from_rotation_arc(Vec3::Y, s.vel / speed.max(1e-3));
-        let w = at_range(eye, t.translation);
-        t.scale = Vec3::new(w, (speed * 0.02).clamp(0.01, 0.12) * w.sqrt(), w);
+        let b = bold.map_or(1.0, |b| b.0);
+        let w = at_range(eye, t.translation) * b;
+        t.scale = Vec3::new(w, (speed * 0.02).clamp(0.01, 0.12) * w.sqrt() * b.sqrt(), w);
     }
 }
 
@@ -764,6 +828,101 @@ fn cell_arcs(
             ));
         }
         n += 12;
+    }
+}
+
+/// A hazard striking a machine (`hazards::HazardStruck`) marks it its own
+/// way (`hazard_look::mark`): streaks off it and a cloud round it, sized
+/// to read at range (`at_range`), again each time it's struck.
+#[allow(clippy::too_many_arguments)]
+fn hazard_bursts(
+    mut commands: Commands,
+    mut struck: MessageReader<super::hazards::HazardStruck>,
+    bodies: Query<(&GlobalTransform, Option<&super::anim::Gait>)>,
+    sparks: Query<(), With<Spark>>,
+    puffs: Query<(), With<Puff>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut dice: Local<Dice>,
+) {
+    use super::hazard_look::{Bits, Cloud, mark};
+    let eye = cameras.iter().next().map(|g| g.translation());
+    let (mut n_sparks, mut n_puffs) = (sparks.iter().len(), puffs.iter().len());
+    let mut a = None;
+    for s in struck.read() {
+        let m = mark(s.hazard, s.effect);
+        if !m.visible() {
+            continue;
+        }
+        // On its body (a hazard's `at` is where it is, roughly).
+        let (at, size) = bodies
+            .get(s.robot)
+            .map(|(g, gait)| (g.translation(), gait.map_or(1.0, |g| g.size)))
+            .unwrap_or((s.at, 1.0));
+        let a =
+            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let range = at_range(eye, at);
+        if let Some((bits, n)) = m.bits {
+            let (mat, speed, up, life) = match bits {
+                Bits::Sparks => (&a.spark_mat, 3.5, 0.6, 0.35),
+                // (Arcs cling: slow, and longer-lived, crawling over it.)
+                Bits::Arcs => (&a.bolt, 1.2, 0.3, 0.45),
+                Bits::Embers => (&a.embers, 1.4, 1.2, 0.8),
+                Bits::Crystals => (&a.crystals, 1.0, 0.4, 0.9),
+            };
+            for _ in 0..n {
+                if n_sparks >= MAX_SPARKS {
+                    break;
+                }
+                let out = dice.signed().normalize_or(Vec3::X);
+                let from = at + out * 0.4 * size;
+                commands.spawn((
+                    Spark {
+                        vel: (out + Vec3::Y * up).normalize_or(Vec3::Y) * speed * (0.6 + dice.f()),
+                        life: life * (0.6 + 0.8 * dice.f()),
+                    },
+                    Bold(HAZARD_BOLD),
+                    Mesh3d(a.spark.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    Transform::from_translation(from).with_scale(Vec3::splat(0.0)),
+                    NotShadowCaster,
+                ));
+                n_sparks += 1;
+            }
+        }
+        if let Some((cloud, n)) = m.cloud {
+            let (mat, rise, out) = match cloud {
+                Cloud::Smoke => (&a.smoke, 0.5, 0.2),
+                Cloud::Soot => (&a.soot, 0.4, 0.3),
+                Cloud::Dust => (&a.dust, 0.3, 1.0),
+                Cloud::Gas => (&a.gas, 0.15, 0.4),
+                Cloud::Frost => (&a.frost, 0.2, 0.5),
+                Cloud::Shimmer => (&a.shimmer, 0.3, 0.3),
+                Cloud::Still => (&a.still, 0.02, 0.05),
+            };
+            for _ in 0..n {
+                if n_puffs >= MAX_PUFFS {
+                    break;
+                }
+                let dir = Vec3::new(dice.f() - 0.5, 0.0, dice.f() - 0.5).normalize_or(Vec3::X);
+                let max = 1.0 + dice.f() * 0.8;
+                commands.spawn((
+                    Puff {
+                        vel: Vec3::Y * rise + dir * out,
+                        life: max,
+                        max,
+                        size: 0.35 * HAZARD_CLOUD * size * range.sqrt(),
+                    },
+                    Mesh3d(a.puff.clone()),
+                    MeshMaterial3d(mat.clone()),
+                    Transform::from_translation(at + dir * 0.3 * size).with_scale(Vec3::splat(0.0)),
+                    NotShadowCaster,
+                ));
+                n_puffs += 1;
+            }
+        }
     }
 }
 

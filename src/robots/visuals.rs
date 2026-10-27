@@ -1817,6 +1817,9 @@ fn guttering(bad: f32, now: f32, k: u32) -> f32 {
     if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
 }
 
+/// How badly a dazzled machine's eye gutters (0..1: `guttering`).
+pub const DAZZLED_GUTTER: f32 = 0.85;
+
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
@@ -1832,7 +1835,13 @@ fn alert_eyes(
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     places: Query<&GlobalTransform, With<Robot>>,
     parts: Query<&RobotPart>,
-    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
+    robots: Query<(
+        Entity,
+        &super::Awareness,
+        Option<&AlertEye>,
+        &Robot,
+        Has<super::hazards::Dazzled>,
+    )>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mats: Option<Res<RobotMats>>,
@@ -1941,9 +1950,17 @@ fn alert_eyes(
             *b = b.max(bad);
         }
     }
-    for (robot, aware, own, _) in &robots {
+    for (robot, aware, own, _, dazzled) in &robots {
         let Some(own) = own else {
             continue;
+        };
+        // Dazzled (a mirror's fold, a hush, thrown: `hazards`), its eye
+        // stutters as a failing one does, hard.
+        let bad = cores.get(&robot).copied().unwrap_or(0.0);
+        let bad = if dazzled {
+            bad.max(DAZZLED_GUTTER)
+        } else {
+            bad
         };
         let stutter = if flicker.contains_key(&robot) {
             if (now * 37.0 + robot.index_u32() as f32).sin() > 0.1 {
@@ -1953,11 +1970,7 @@ fn alert_eyes(
             }
         } else {
             1.0
-        } * guttering(
-            cores.get(&robot).copied().unwrap_or(0.0),
-            now,
-            robot.index_u32(),
-        );
+        } * guttering(bad, now, robot.index_u32());
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
             aware.exposure.clamp(0.0, 1.0)
@@ -2008,7 +2021,7 @@ fn alert_eyes(
         };
         let alive = part.alive();
         let want = match (alive, moods.get(&part.robot), robots.get(part.robot)) {
-            (true, Some(&(color, on)), Ok((_, _, _, r))) if !r.wrecked && on > 0.0 => {
+            (true, Some(&(color, on)), Ok((_, _, _, r, _))) if !r.wrecked && on > 0.0 => {
                 // Wide enough to read as a point at 60-80 m on a clear
                 // night, when there's no haze to spread it.
                 let radius = if r.kind == RobotKind::Drone {
