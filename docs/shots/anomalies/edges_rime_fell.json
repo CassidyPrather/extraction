@@ -1084,39 +1084,39 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 8.9,
+    "step": 10.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 9.6,
+    "step": 11.7,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 9.1,
+    "step": 10.9,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 10.2,
+    "step": 12.3,
     "slip": 0.4,
     "ok": true
    },
    {
-    "step": 11.1,
+    "step": 13.7,
     "slip": 0.3,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 6.8,
-    "slip": null,
-    "ok": false
+    "step": 8.2,
+    "slip": 0.0,
+    "ok": true
    },
    {
-    "step": 11.9,
+    "step": 15.0,
     "slip": 0.0,
     "ok": true
    }
@@ -1129,129 +1129,129 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 6.7,
+    "step": 7.8,
     "slip": null,
     "ok": false
    },
    {
-    "step": 7.2,
+    "step": 8.6,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 7.1,
     "slip": null,
     "ok": false
    },
    {
-    "step": 6.3,
-    "slip": null,
-    "ok": false
+    "step": 9.0,
+    "slip": 0.4,
+    "ok": true
    },
    {
-    "step": 7.6,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 8.4,
+    "step": 10.1,
     "slip": 0.3,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 5.5,
+    "step": 6.2,
     "slip": null,
     "ok": false
    },
    {
-    "step": 8.6,
+    "step": 10.3,
     "slip": 0.0,
     "ok": true
    }
   ],
-  "passing": 1,
-  "ok": false
+  "passing": 3,
+  "ok": true
  },
  {
   "kind": "frost",
   "condition": "downpour",
   "lines": [
    {
-    "step": 6.6,
+    "step": 7.6,
     "slip": null,
     "ok": false
    },
    {
-    "step": 7.3,
+    "step": 8.5,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 7.0,
     "slip": null,
     "ok": false
    },
+   {
+    "step": 9.0,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 9.9,
+    "slip": 0.3,
+    "ok": true
+   }
+  ],
+  "sides": [
    {
     "step": 6.3,
     "slip": null,
     "ok": false
    },
    {
-    "step": 7.5,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 8.2,
-    "slip": 0.3,
+    "step": 10.4,
+    "slip": 0.0,
     "ok": true
    }
   ],
-  "sides": [
-   {
-    "step": 5.7,
-    "slip": null,
-    "ok": false
-   },
-   {
-    "step": 9.3,
-    "slip": 0.1,
-    "ok": true
-   }
-  ],
-  "passing": 1,
-  "ok": false
+  "passing": 3,
+  "ok": true
  },
  {
   "kind": "frost",
   "condition": "night",
   "lines": [
    {
-    "step": 15.5,
+    "step": 16.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 16.9,
+    "step": 17.8,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 18.0,
+    "step": 18.1,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 14.2,
+    "step": 14.8,
     "slip": 0.4,
     "ok": true
    },
    {
-    "step": 15.7,
+    "step": 16.3,
     "slip": 0.3,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 18.4,
+    "step": 18.6,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 23.5,
+    "step": 23.7,
     "slip": 0.1,
     "ok": true
    }
