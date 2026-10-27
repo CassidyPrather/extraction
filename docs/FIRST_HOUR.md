@@ -539,6 +539,19 @@ a walker working by the chimney. From the drop: ..."). The newcomer took
 its picture 3.5 minutes in, from as far off as the camera takes; a walker
 caught it on the way home, warned.
 
+Both the card and the bot now ask Robot minds' `subjects::Candidate`
+(`findable`: the kind the card names, on the surface) which machine counts,
+so the card can't name one the picture won't take. Rerun on main 844e46d8
+with that change (`--scenario first_raid --map cinder_works --job
+photograph`): the cautious newcomer went to the place on the card and took
+the picture at 218 s, then died on the way home, every hit after "It's
+aiming at you". Left: the reckless newcomer fights the first walker it
+meets, and after that fight the camera's no longer on it ("no camera on
+me" at 67 s), so it comes home without the picture. Same with or without
+the change, so it came with main; next step is to see where the camera
+goes when the gun comes up (`first_hour.rs`, the `armed` and `carried`
+checks), in a later wave.
+
 ## Five jobs again, on the map with the roofs
 
 On Map design's da285bed (sheds on the ways to the mast, cover home from
