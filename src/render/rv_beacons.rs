@@ -33,6 +33,9 @@ const DAY_R: f32 = 1.4;
 /// than a landmark's, the way out being the thing you look for.
 const HALO: LinearRgba = LinearRgba::rgb(0.1, 1.7, 0.35);
 const HALO_REACH: f32 = 400.0;
+/// The bulb's light as the tonemapper gets it (`render::grade::ToTheEye`):
+/// green on screen up close, not white.
+const BULB: LinearRgba = LinearRgba::rgb(0.03, 0.9, 0.16);
 /// The pole's radius (m).
 const POLE_R: f32 = 0.08;
 
@@ -65,7 +68,8 @@ fn spawn_beacons(
     let lamp_mesh = meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8));
     let lamp = materials.add(StandardMaterial {
         base_color: Color::srgb(0.02, 0.5, 0.1),
-        emissive: LinearRgba::rgb(4.0, 110.0, 20.0),
+        // Set each frame against the eyes' adaptation (`ToTheEye`).
+        emissive: BULB,
         ..default()
     });
     let glow_mesh = meshes.add(Rectangle::new(DAY_R * 2.0, DAY_R * 2.0));
@@ -87,6 +91,10 @@ fn spawn_beacons(
             .spawn((
                 Name::new(format!("Rendezvous beacon: {}", rv.name)),
                 RvBeacon,
+                crate::render::grade::ToTheEye {
+                    material: lamp.clone(),
+                    emissive: BULB,
+                },
                 Transform::from_translation(foot).with_rotation(Quat::from_rotation_y(yaw)),
                 Visibility::default(),
             ))
