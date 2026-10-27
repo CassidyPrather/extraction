@@ -599,15 +599,7 @@ pub(super) struct RaidView<'w, 's> {
     >,
     bags: Query<'w, 's, &'static Backpack>,
     entrances: Option<Res<'w, crate::robots::doors::Entrances>>,
-    robots: Query<
-        'w,
-        's,
-        (
-            &'static crate::robots::Robot,
-            &'static GlobalTransform,
-            Option<&'static crate::robots::Breed>,
-        ),
-    >,
+    robots: Query<'w, 's, crate::robots::subjects::Candidate>,
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
@@ -2121,16 +2113,8 @@ fn photo_subject(
 ) -> Option<Vec3> {
     view.robots
         .iter()
-        .filter(|(r, gt, breed)| {
-            let p = gt.translation();
-            !r.wrecked
-                // (Not one at work underground: its floor's well under the
-                // ground's.)
-                && p.y > zone.ground(p.x, p.z) - 2.0
-                && r.kind == crate::robots::RobotKind::Walker
-                && (breed.is_some_and(|b| b.0 == "heavy") == (subject == Subject::Heavy))
-        })
-        .map(|(_, gt, _)| gt.translation())
+        .filter(|c| c.findable(subject, zone))
+        .map(|c| c.at.translation())
         .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)))
 }
 
