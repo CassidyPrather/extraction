@@ -40,6 +40,9 @@ impl Plugin for SimPlugin {
             .unwrap_or_else(|| std::path::PathBuf::from("target/sim").join(&opts.map));
         app.insert_resource(telemetry::SimLog::open(dir.join(format!("{run}.jsonl"))))
             .add_systems(Startup, spawn_sim_kit)
+            .add_systems(Startup, |mut c: ResMut<crate::robots::squad::Coordination>| {
+                c.pursue = std::env::var_os("SIM_PURSUE").is_some();
+            })
             .add_systems(PostStartup, raider::attach_raider)
             .add_systems(Update, (armour_up, seat_sim_hearth, wear_guns))
             .add_systems(
