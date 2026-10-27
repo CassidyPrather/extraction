@@ -932,6 +932,15 @@ pub fn stepped_floor_level(id: &str, local: P2) -> Option<f32> {
     Some(MILL_FLOORS[k.clamp(0, MILL_FLOORS.len() as i32 - 1) as usize])
 }
 
+/// Whether a world point is under a building stepped down its slope.
+pub fn under_stepped(map: &MapDef, q: P2) -> bool {
+    map.placements.iter().any(|p| {
+        let (s, c) = p.rot.to_radians().sin_cos();
+        let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+        stepped_floor_level(&p.prefab, [dx * c + dz * s, -dx * s + dz * c]).is_some()
+    })
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a

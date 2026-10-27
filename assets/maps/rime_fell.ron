@@ -100,10 +100,11 @@
         Plateau(polygon: [(218.0, -70.0), (256.0, -70.0), (256.0, -14.0), (218.0, -14.0)], height: Some(103.0), blend: 24.0),
         // The mill's terraces: one per level (4 m apart), falling south
         // down the knoll's face, each running out west past the mill's
-        // side door to the mill steps.
+        // side door onto the mill steps (the middle two stopped 10 m short
+        // of them, over a 4 m bank: dead ends off their doors).
         Plateau(polygon: [(114.0, 30.0), (156.0, 30.0), (156.0, 52.0), (114.0, 52.0)], height: Some(90.0), blend: 5.0),
-        Plateau(polygon: [(114.0, 20.0), (156.0, 20.0), (156.0, 30.0), (114.0, 30.0)], height: Some(94.0), blend: 3.0),
-        Plateau(polygon: [(114.0, 10.0), (156.0, 10.0), (156.0, 20.0), (114.0, 20.0)], height: Some(98.0), blend: 3.0),
+        Plateau(polygon: [(103.0, 20.0), (156.0, 20.0), (156.0, 30.0), (103.0, 30.0)], height: Some(94.0), blend: 3.0),
+        Plateau(polygon: [(103.0, 10.0), (156.0, 10.0), (156.0, 20.0), (103.0, 20.0)], height: Some(98.0), blend: 3.0),
         Plateau(polygon: [(114.0, -12.0), (160.0, -12.0), (160.0, 10.0), (114.0, 10.0)], height: Some(102.0), blend: 5.0),
     ],
 

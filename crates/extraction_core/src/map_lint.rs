@@ -2781,7 +2781,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             for j in cell(lo[1]).floor() as usize..=cell(hi[1]).ceil() as usize {
                 for i in cell(lo[0]).floor() as usize..=cell(hi[0]).ceil() as usize {
                     let p = hm.pos(i, j);
-                    if Heightmap::on_terrace(poly, p) {
+                    // Under a building stepped down the terraces, the
+                    // ground is its bays' (`terrain::settle` keeps it under
+                    // their floors), not the terrace's.
+                    if Heightmap::on_terrace(poly, p) && !crate::map::under_stepped(map, p) {
                         let k = hm.idx(i, j);
                         // Below its level: what a road banked on top of
                         // it is the road's.

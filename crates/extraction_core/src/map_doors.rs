@@ -100,10 +100,9 @@ impl Door {
 /// `absolute` ones, which stand on whatever was built for them).
 pub fn doors(map: &MapDef) -> Vec<Door> {
     let mut out = Vec::new();
+    // Placed at an absolute height or not: the ore mill's doors onto its
+    // terraces were skipped, and two of them opened onto dead ends.
     for (i, p) in map.placements.iter().enumerate() {
-        if p.absolute {
-            continue;
-        }
         let (s, c) = p.rot.to_radians().sin_cos();
         let turn = |v: [f32; 2]| [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
         for e in prefab_entrances(&p.prefab) {
@@ -117,6 +116,19 @@ pub fn doors(map: &MapDef) -> Vec<Door> {
         }
     }
     out
+}
+
+/// The floor just inside a door of a building stepped down its slope (the
+/// ore mill), over its placement; `None` for every other building.
+fn door_floor(p: &crate::map::Placement, d: &Door) -> Option<f32> {
+    let (s, c) = p.rot.to_radians().sin_cos();
+    let w = geom::sub(d.face, p.at);
+    let inside = geom::sub(w, geom::scale(d.out, 0.5));
+    let local = [
+        inside[0] * c + inside[1] * s,
+        -inside[0] * s + inside[1] * c,
+    ];
+    crate::map::stepped_floor_level(&p.prefab, local)
 }
 
 /// Whether `p` is within `r` of a door: of its strip.
@@ -255,7 +267,12 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
         // The ground past the steps meets them: the steps reach from the
         // floor down to the building's footing less its lift (the lowest
         // the ground under it may be).
-        let base = hm.footing(&p.prefab, p.at, p.rot) + p.y;
+        let base = match door_floor(p, d) {
+            // A building stepped down its slope stands each bay a sill over
+            // its own terrace (`MILL_FLOORS`): its ground is the bay's.
+            Some(level) => p.y + level - crate::map::MILL_FLOORS[0],
+            None => hm.footing(&p.prefab, p.at, p.rot) + p.y,
+        };
         let low = base - prefab_lift(&p.prefab);
         let ground = d.samples(d.foot(), d.width * 0.5, 0.5);
         let (mut worst, mut at) = (0.0f32, d.stand());

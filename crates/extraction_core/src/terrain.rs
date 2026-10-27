@@ -925,6 +925,11 @@ impl Heightmap {
             self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
                 let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
                 let l = [dx * c - dz * s, dx * s + dz * c];
+                // Inside the walls only: past them is the map's own
+                // terrace, at its own level.
+                if crate::map::stepped_floor_level(&p.prefab, l).is_none() {
+                    return;
+                }
                 let level = [-cell, 0.0, cell]
                     .iter()
                     .flat_map(|ox| [-cell, 0.0, cell].map(|oz| [l[0] + ox, l[1] + oz]))
@@ -934,6 +939,37 @@ impl Heightmap {
                     hm.heights[k] = hm.heights[k].min(base + level);
                 }
             });
+            // Each door opens onto its bay's terrace, a sill below the
+            // floor, as far as its strip runs (the roads meeting in the yard
+            // were graded 0.9 m under the front door), easing back to the
+            // land beyond.
+            const BLEND: f32 = 3.0;
+            let (ws, wc) = p.rot.to_radians().sin_cos();
+            let world = |v: P2| [v[0] * wc - v[1] * ws, v[0] * ws + v[1] * wc];
+            for e in crate::map::prefab_entrances(&p.prefab) {
+                let inside = [e.at[0] - e.out[0] * 0.5, e.at[1] - e.out[1] * 0.5];
+                let Some(level) = crate::map::stepped_floor_level(&p.prefab, inside) else {
+                    continue;
+                };
+                let target = base + level - crate::map::MILL_FLOORS[0];
+                let face = geom::add(p.at, world(e.at));
+                let out = world(e.out);
+                let side = [-out[1], out[0]];
+                let len = e.clear.max(crate::map_lint::DOOR_REACH);
+                let half = e.width * 0.5 + crate::map_lint::DOOR_SHOULDER;
+                let r = len + half + BLEND;
+                let (lo, hi) = ([face[0] - r, face[1] - r], [face[0] + r, face[1] + r]);
+                self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                    let v = geom::sub(q, face);
+                    let (s, t) = (geom::dot(v, out), geom::dot(v, side).abs());
+                    if s < 0.0 {
+                        return;
+                    }
+                    let d = (s - len).max(0.0).hypot((t - half).max(0.0));
+                    let w = 1.0 - geom::smoothstep(0.0, BLEND, d);
+                    hm.heights[k] += (target - hm.heights[k]) * w;
+                });
+            }
         }
     }
 
