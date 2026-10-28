@@ -406,7 +406,10 @@ Found, and fixed in the game:
   over low cover is glimpsed, and each glimpse moves the machine's guess
   (Robot minds). New, once a career, when a machine that was shooting at
   you goes to look: "Low behind it, and keep still. It only finds what
-  moves." (`First::ComingToLook`).
+  moves." (`First::ComingToLook`). It's said, too, when one that gave up
+  on you walks back past you (`robots::search::ComingBack`). It's also said
+  when one lost you in the fight and searched straight from there; before
+  the 28 October fix that case never fired.
 - **The driver's cache line read "out past the The Hollow".**
 
 With Robot minds and Map design, on their branches:
