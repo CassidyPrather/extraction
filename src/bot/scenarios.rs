@@ -111,6 +111,8 @@ pub const OPT_IN: &[&str] = &[
     crate::onboarding::first_hour::PERSONAS[2].scenario,
     crate::onboarding::first_hour::PERSONAS[3].scenario,
     crate::onboarding::first_hour::PERSONAS[4].scenario,
+    crate::onboarding::first_hour::PERSONAS[5].scenario,
+    crate::onboarding::first_hour::PERSONAS[6].scenario,
 ];
 
 /// Targets sit north of the insertion point at these distances.

@@ -789,7 +789,8 @@ fn nudge(
     if raid.phase == Phase::AtBase || drift.1.as_ref() != job {
         *drift = (Default::default(), job.cloned());
     }
-    if raid.phase != Phase::Out {
+    // (`SIM_NO_NUDGE=1`: as before it was said, to compare runs.)
+    if raid.phase != Phase::Out || std::env::var_os("SIM_NO_NUDGE").is_some() {
         return;
     }
     let (Some(job), Some((player, at))) = (job, players.iter().next()) else {
@@ -886,7 +887,11 @@ fn tailgate(
         *said = false;
         return;
     }
-    if *said || opts.map == crate::camp::TRAINING_YARD {
+    // (`SIM_NO_TAILGATE=1`: as before it was said, to compare runs.)
+    if *said
+        || opts.map == crate::camp::TRAINING_YARD
+        || std::env::var_os("SIM_NO_TAILGATE").is_some()
+    {
         return;
     }
     let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {

@@ -45,6 +45,12 @@ pub struct Persona {
     pub reckless: bool,
     /// Plays with one hand (`Comfort::one_handed`).
     pub one_handed: bool,
+    /// Near the job, goes off elsewhere (the playtest's first raid: in to
+    /// 137 m, then west); comes back only if told which way it is.
+    pub wanders: bool,
+    /// Takes nothing from the crate (the playtest's second raid); goes back
+    /// for its kit only if told it has none.
+    pub empty_handed: bool,
 }
 
 const fn persona(name: &'static str, scenario: &'static str) -> Persona {
@@ -57,10 +63,12 @@ const fn persona(name: &'static str, scenario: &'static str) -> Persona {
         hoards: false,
         reckless: false,
         one_handed: false,
+        wanders: false,
+        empty_handed: false,
     }
 }
 
-pub const PERSONAS: [Persona; 5] = [
+pub const PERSONAS: [Persona; 7] = [
     Persona {
         reads: true,
         ..persona("cautious", "first_hour_cautious")
@@ -82,7 +90,23 @@ pub const PERSONAS: [Persona; 5] = [
         one_handed: true,
         ..persona("one-handed", "first_hour_one_handed")
     },
+    // By name only (not in `first_hour`'s five): the playtest's two misses
+    // (`docs/playtests/2026-10-28`), for what the game says to put them
+    // right (`progression::nudge`, `progression::tailgate`).
+    Persona {
+        wanders: true,
+        ..persona("wanderer", "first_hour_wanderer")
+    },
+    Persona {
+        empty_handed: true,
+        ..persona("empty-handed", "first_hour_empty_handed")
+    },
 ];
+
+/// The newcomers the full runs take: the five, not the by-name two.
+fn everyday(p: &&Persona) -> bool {
+    !p.wanders && !p.empty_handed
+}
 
 /// A newcomer by name ("cautious", "reckless", "lost", "hoarder",
 /// "one-handed"), for other bots that want one's ways.
@@ -128,7 +152,7 @@ pub const JOBS_RAIDS: u32 = 5;
 
 /// The chain a `--scenario` name asks for, if it's one of these.
 pub fn chain(scenario: &str) -> Option<Chain> {
-    let all = || PERSONAS.iter().collect::<Vec<_>>();
+    let all = || PERSONAS.iter().filter(everyday).collect::<Vec<_>>();
     if scenario == SCENARIO {
         return Some(Chain {
             personas: all(),
@@ -510,6 +534,14 @@ pub(super) struct Newcomer {
     failed_seen: usize,
     reported: bool,
     wrong_way_done: bool,
+    /// The empty-handed one: stepped off the truck to see what's said, and
+    /// went back for its kit.
+    stepped_off: bool,
+    went_back: bool,
+    /// The wanderer: when it went off from near the job, and whether it was
+    /// told the way back.
+    wandered_at: Option<f32>,
+    told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
 }
@@ -603,6 +635,12 @@ pub(super) struct RaidView<'w, 's> {
     trucks: Query<'w, 's, &'static GlobalTransform, With<crate::raid::truck::Truck>>,
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
+
+/// The wanderer goes this near the job (m), then this far off (m), and
+/// waits this long (s) to be told the way back before giving it up.
+const WANDER_SHORT: f32 = 130.0;
+const WANDER_OFF: f32 = 260.0;
+const WANDER_WAIT: f32 = 240.0;
 
 /// Kit a newcomer takes from the crate: what the yard used, and the map
 /// and compass (a hoarder takes the lot).
@@ -945,7 +983,9 @@ pub(super) fn direct_raid(
                     Errand::Photo(_) => Some("camera".to_owned()),
                     _ => None,
                 });
-            for (e, id) in in_crate {
+            // Empty-handed: nothing, the first time (it goes back if told).
+            let takes = !p.empty_handed || state.went_back;
+            for (e, id) in in_crate.into_iter().filter(|_| takes) {
                 if p.hoards || KIT.contains(&id.as_str()) || out.as_deref() == Some(id.as_str()) {
                     tasks.push(Task::Grab {
                         item: e,
@@ -969,7 +1009,7 @@ pub(super) fn direct_raid(
                     .flat_map(|b| b.contents.iter())
                     .any(|e| world.id(*e) == Some(id))
             };
-            if carried(&world, &view, player, "radio").is_empty() && !in_crate("radio") {
+            if takes && carried(&world, &view, player, "radio").is_empty() && !in_crate("radio") {
                 need.push("radio".to_owned());
             }
             match &state.errand {
@@ -1106,6 +1146,87 @@ pub(super) fn direct_raid(
                 state.leg = Leg::Call;
                 return;
             };
+            // Empty-handed: off the steps, and what's said there.
+            if p.empty_handed && !state.went_back {
+                if !state.stepped_off {
+                    state.stepped_off = true;
+                    for (x, z) in [(0.05, 1.2), (0.0, 4.0)] {
+                        tasks.push(Task::WalkTo {
+                            to: at_truck(x, z),
+                            within: 0.5,
+                        });
+                    }
+                    tasks.push(Task::Wait(1.5));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+                if state.heard.iter().any(|l| l.contains(" on you.")) {
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        "off the truck with nothing: the driver said so, went back for the kit",
+                    );
+                    state.went_back = true;
+                    for (x, z) in [(0.0, 4.0), (0.05, 1.2), (0.3, 0.3)] {
+                        tasks.push(Task::WalkTo {
+                            to: at_truck(x, z),
+                            within: 0.4,
+                        });
+                    }
+                    state.leg = Leg::Kit;
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+                state.note(
+                    now,
+                    Kind::Confused,
+                    "set off with nothing on me, and nothing said",
+                );
+                state.went_back = true;
+            }
+            // The wanderer, gone off: back only once it's told the way.
+            if let Some(off) = state.wandered_at
+                && !state.told_back
+            {
+                let told = state
+                    .heard
+                    .iter()
+                    .any(|l| l.contains("That's the job") || l.starts_with("The job: "));
+                if told {
+                    state.told_back = true;
+                    state.note(
+                        now,
+                        Kind::Learned,
+                        format!("wandered off; told which way {name} was, and went back"),
+                    );
+                } else if now - off > WANDER_WAIT {
+                    state.note(
+                        now,
+                        Kind::Confused,
+                        format!("wandered off from {name}, and nothing said which way it was"),
+                    );
+                    tasks.extend(way_out(&world, &view, here).0);
+                    state.leg = Leg::Call;
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                } else {
+                    tasks.push(Task::Wait(3.0));
+                    let idle = bot.tasks.pop_back();
+                    bot.tasks.extend(tasks);
+                    bot.tasks.extend(idle);
+                    bot.restart();
+                    return;
+                }
+            }
             // Down over the tailgate, not into the side of the bed.
             let mut from = here;
             if truck.is_some_and(|t| t.translation.xz().distance(here) < 3.5) {
@@ -1141,6 +1262,28 @@ pub(super) fn direct_raid(
                 state.note(now, Kind::Confused, "set off the wrong way");
                 tasks.extend(route(&world, &view, from, wrong));
                 from = wrong;
+            }
+            // The wanderer: most of the way, then off elsewhere, away from
+            // it (the playtest: in to 137 m, then west).
+            if p.wanders && state.wandered_at.is_none() {
+                let toward = (at - from).normalize_or(Vec2::Y);
+                let short = at - toward * WANDER_SHORT;
+                let side = toward.perp();
+                let side = if side.dot(-short) >= 0.0 { side } else { -side };
+                let off = short + (side - toward).normalize_or(side) * WANDER_OFF;
+                tasks.extend(route(&world, &view, from, short));
+                tasks.extend(route(&world, &view, short, off));
+                state.wandered_at = Some(now);
+                state.note(
+                    now,
+                    Kind::Confused,
+                    format!("near {name}, then off elsewhere"),
+                );
+                let idle = bot.tasks.pop_back();
+                bot.tasks.extend(tasks);
+                bot.tasks.extend(idle);
+                bot.restart();
+                return;
             }
             tasks.extend(route(&world, &view, from, at));
             state.note(now, Kind::Learned, format!("on to {name}"));
