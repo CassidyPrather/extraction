@@ -48,7 +48,7 @@ pistol_slide_lock | Weapon feel | A PM run dry: the slide held back, and the cue
 pistol_safety | Weapon feel | The PM's left side: whether the safety is on, read on the gun | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol,180,0.35 --frames 40 --hour day --weather clearing --no-robots
 
 # Hands (#12): "The bleeding stops." while it hadn't.
-bleeding_dressed | Hands | A limb dressed and still bleeding, and the line that goes with it | --map training_yard --camera 0,0,40,0,0 --gallery treat,down --frames 60 --hour day --weather clearing --no-robots
+bleeding_dressed | Hands | Right upper arm dressed (white band), thigh and forearm still bleeding: the wrist says BLEED and the dressing's line, "That one's bound. You're still bleeding: the right thigh." (paged), where the old build said "The bleeding stops." | --map training_yard --camera 0,0,40,0,0 --gallery treat+down+wrist --frames 60 --hour day --weather clearing --no-robots | --map training_yard --camera 0,0,40,0,0 --gallery treat,down --frames 60 --hour day --weather clearing --no-robots
 
 # Robot bodies (#13): a hit on the walker's core next to one on a weak
 # spot, at 15 m.
