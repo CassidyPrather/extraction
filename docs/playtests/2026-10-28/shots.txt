@@ -38,7 +38,7 @@ yard_first_wrist | Onboarding | The truck at the yard's start: the kit board and
 
 # Onboarding and Weapon feel (#4): the range now practises reloading from
 # slide-lock.
-range_board | Onboarding, Weapon feel | The range's board at station 5: the slide-lock reload is a step, not a tip afterwards | EXTRACTION_YARD_AT=5 --map training_yard --camera -4.2,0,49.3,315,-6 --frames 90 --hour day --weather clearing --no-robots
+range_board | Onboarding, Weapon feel | The range's board at station 5: the slide-lock reload is a step, not a tip afterwards | EXTRACTION_YARD_AT=5 --map training_yard --camera -4.9,0,48.6,315,-4 --frames 90 --hour day --weather clearing --no-robots
 
 # Weapon feel (#4): a pistol run dry, its slide locked back.
 pistol_slide_lock | Weapon feel | A PM run dry: the slide held back, and the cue that says so | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol+open,0,0.45 --frames 40 --hour day --weather clearing --no-robots
