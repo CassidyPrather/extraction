@@ -18,7 +18,9 @@ fresh `--data-dir` and `--new-game`, and `--seed 7` unless the arguments
 give one. Arguments may start with NAME=value words, set in the game's
 environment (`EXTRACTION_YARD_AT=5`). A fifth field, if there, is used by
 the before build instead: for a shot whose staging only exists since the
-fix. Shots are kept in target/before_after/<sha>/ and taken again only
+fix. `--picture FILE` (a path in the repo) instead of game arguments puts
+a picture taken elsewhere in that half, for a fix the rig can't stage;
+say so in what to look for. Shots are kept in target/before_after/<sha>/ and taken again only
 when their arguments change. `--try BINARY` shoots the list with your
 own build only, into target/before_after/try/, to stage a line.
 
@@ -127,6 +129,10 @@ def command(binary, args, png, size):
 
 def shoot(binary, sha, shot, args, size):
     """The shot's picture, or None and why not."""
+    if args and args[0] == "--picture":
+        # Taken elsewhere (a fix the rig can't stage): the file, as given.
+        png = os.path.join(ROOT, args[1]) if len(args) > 1 else ""
+        return (png, "") if os.path.exists(png) else (None, f"no such picture: {png}")
     folder = os.path.join(BASE, sha)
     os.makedirs(folder, exist_ok=True)
     png = os.path.join(folder, shot.name + ".png")

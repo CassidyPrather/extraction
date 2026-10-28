@@ -23,6 +23,9 @@
 #   `<gun>`, `<gun>+open`, `fp:<item>`, `treat`, `walker`, ...).
 # - The fifth field is only for a shot whose staging is new with the fix:
 #   the before build gets those arguments instead.
+# - A fix the rig can't stage (it needs a knob the old build hasn't got):
+#   `--picture docs/shots/...png` in place of the arguments, in each
+#   half, shows a pair you took yourself. Say how in what to look for.
 # - Pick a still moment that shows the fix. Use --hour day --weather
 #   clearing unless the fix is about the light, and --no-robots unless
 #   it's about them.
@@ -54,9 +57,12 @@ bleeding_dressed | Hands | Right upper arm dressed (white band), thigh and forea
 # spot, at 15 m.
 walker_hits | Robot bodies | A walker at 15 m: a core hit against a weak-spot hit, how each shows | --map training_yard --camera 0,0,40,0,0 --gallery walker,0,15 --frames 60 --hour day --weather clearing
 
-# Visual design, performance (#8): the far trees after a slow load. The
-# software renderer loads slowly anyway.
-marrow_far_forest | Visual design | Marrow Creek's far forest after a slow load: impostors drawn, not missing | --map marrow_creek --camera 40,0,279,300,-2 --frames 150 --hour day --weather clearing --no-robots
+# Visual design (#8): the far trees after a slow load. The software
+# renderer is too slow a frame to reproduce it (2798e450 captured all 9
+# here), so Visual design takes this pair with scripts/impostor_check.sh
+# (EXTRACTION_GPU_HOLD_S fakes late readiness) and sends the files; until
+# then the line stays commented out.
+# marrow_far_forest | Visual design | Marrow Creek's far forest after a load as slow as the headset's (taken with scripts/impostor_check.sh, not this rig): impostors drawn, not missing | --picture docs/shots/FILL_IN_after.png | --picture docs/shots/FILL_IN_before.png
 
 # Map design and Onboarding (#5): the first job's walk from the gate,
 # toward the Old farm (190, 145).
