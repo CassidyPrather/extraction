@@ -1155,7 +1155,7 @@ pub fn fault_layers(
         )],
         // The trigger back slack on a hammer already down: the faint tick
         // of the disconnector, nothing falling.
-        FireEvent::TriggerDead => &[("guns/dry_fire", "gun.trigger_dead", 1.6, Some(6000.0))],
+        FireEvent::TriggerDead => &[("guns/dry_fire", "gun.trigger_dead", 1.6, Some(10000.0))],
         FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
         FireEvent::Bulged { .. } => &[
             ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),

@@ -15,7 +15,10 @@ import audio_mix as am
 
 # Cue -> what it tells you.
 STATE = {
+    # The slide locking back lands with your own last shot, so it can't be
+    # heard over it: the press after is the tell (`gun.action_open`).
     "gun.bolt_catch": "slide or bolt locked back: empty, reload",
+    "gun.action_open": "the trigger pressed with the action open (slide locked back)",
     "gun.dry_fire": "the hammer on an empty chamber",
     "gun.trigger_dead": "the trigger on a hammer already down",
     "gun.trigger_block": "the trigger blocked (safe, or a gate open)",
