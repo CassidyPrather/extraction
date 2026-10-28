@@ -248,6 +248,36 @@ pub fn ordered(order: &str) -> String {
 
 // --- Out there ----------------------------------------------------------------
 
+/// Heading away from the job (`progression::nudge`): where it is, once.
+/// Over the radio if you carry one; else your own note on the wrist.
+pub fn job_this_way(place: &str, way: &str, radio: bool) -> String {
+    if radio {
+        format!("Truck: \"{}'s {way}. That's the job.\"", cap_the(place))
+    } else {
+        format!("The job: {}, {way}.", the(place))
+    }
+}
+
+/// Back after going down (`progression::restate_after_fall`): the job's
+/// still there, and which way from the truck (or which valley).
+pub fn job_waiting(place: &str, where_: Option<&str>) -> String {
+    match where_ {
+        Some(w) => format!(
+            "Driver: \"{}'s still waiting. {}.\"",
+            cap_the(place),
+            cap_first(w)
+        ),
+        None => format!("Driver: \"{}'s still waiting.\"", cap_the(place)),
+    }
+}
+
+fn cap_first(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 pub fn scout_noticed(place: &str) -> String {
     format!("{}: noted. Now get it home.", cap_the(place))
 }
@@ -358,6 +388,10 @@ mod tests {
             GIFT_SMG.into(),
             fetch_swapped(name),
             scout_noticed(place),
+            job_this_way(place, "north-west, 1480 m", true),
+            job_waiting(place, Some("north-west, 1480 m")),
+            job_waiting(place, Some("Sallow Reservoir")),
+            job_this_way(place, "north-west, 1480 m", false),
             scout_forgotten(place),
             AERIAL_SURGE.into(),
             upkeep_paid("cabinet", "1 field dressing"),
