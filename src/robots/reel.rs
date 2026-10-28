@@ -18,7 +18,9 @@
 //! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
 //! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
 //! `knockdown` (a heavy round into a walker's
-//! side: down, and up again), `rubble` (a walker over a heap of broken
+//! side: down, and up again), `strikes` (four walkers at 15 m shot in the
+//! front plate, the core, the eye and a knee: a shrug, a wound and two
+//! hits that tell, `damage::strike`), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
@@ -79,6 +81,14 @@ const HAZARD_ROW: [(
 /// Which damage a `tells` robot takes.
 #[derive(Component)]
 struct TellCase(u8);
+
+/// The `strikes` reel's walkers, left to right: where each is shot.
+const STRIKE_ROW: [PartRole; 4] = [
+    PartRole::Armour(0),
+    PartRole::Core,
+    PartRole::Sensor,
+    PartRole::Leg(0),
+];
 
 #[derive(Default)]
 struct Reel {
@@ -414,6 +424,25 @@ fn reel(
                 }
                 first.unwrap()
             }
+            "strikes" => {
+                // The playtest's fight at 15 m: four walkers facing you,
+                // each shot in one place (`STRIKE_ROW`, left to right): the
+                // front plate shrugs, the core is wounded, the eye and a
+                // knee tell (`damage::strike`).
+                let mut first = None;
+                for k in 0..STRIKE_ROW.len() {
+                    let p = eye + flat * 15.0 + right * ((k as f32 - 1.5) * 3.0);
+                    let at = zone.on_ground(p.x, p.z);
+                    let w = spawn_walker(&mut commands, &zone, at, job(at));
+                    commands
+                        .entity(w)
+                        .remove::<Senses>()
+                        .remove::<Brain>()
+                        .insert(TellCase(k as u8));
+                    first.get_or_insert(w);
+                }
+                first.unwrap()
+            }
             "scan" => {
                 // A walker 6 m off that notices a device in front of you
                 // (devices::DeviceNoticed): its scan beam, red, then
@@ -509,7 +538,7 @@ fn reel(
         aware.can_see_target = sees;
         aware.exposure = if sees { 1.0 } else { 0.0 };
     }
-    if (what == "eyes" || what == "eyesfar" || what == "dying") && frame == 5 {
+    if (what == "eyes" || what == "eyesfar" || what == "dying" || what == "strikes") && frame == 5 {
         // Turned to face you.
         for mut w in &mut walkers {
             w.yaw = flat.x.atan2(flat.z);
@@ -527,7 +556,7 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" => vec![],
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" => vec![],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
                 // The lame one walks across, so it limps.
@@ -734,6 +763,59 @@ fn reel(
             }
         });
     }
+    // `strikes`: each walker shot where its case says, a pistol round
+    // every half second, the part made whole first so each reads as the
+    // first hit there would.
+    if what == "strikes" && frame >= WARMUP && (frame - WARMUP) % 15 == 2 {
+        commands.queue(move |world: &mut World| {
+            let mut cases = world.query::<(Entity, &TellCase)>();
+            let row: Vec<(Entity, u8)> = cases.iter(world).map(|(e, c)| (e, c.0)).collect();
+            let mut q = world.query::<(Entity, &mut RobotPart, &GlobalTransform)>();
+            let mut hits = Vec::new();
+            for (robot, k) in row {
+                let Some(&role) = STRIKE_ROW.get(k as usize) else {
+                    continue;
+                };
+                // (A knee: the one nearest you, so it's in sight.)
+                let leg = matches!(role, PartRole::Leg(_));
+                let best = q
+                    .iter(world)
+                    .filter(|(_, p, _)| {
+                        p.robot == robot
+                            && (p.role == role || leg && matches!(p.role, PartRole::Leg(_)))
+                    })
+                    .min_by(|a, b| {
+                        a.2.translation()
+                            .distance(eye)
+                            .total_cmp(&b.2.translation().distance(eye))
+                    })
+                    .map(|(e, _, g)| (e, g.translation()));
+                let Some((e, at)) = best else {
+                    continue;
+                };
+                if let Ok((_, mut p, _)) = q.get_mut(world, e) {
+                    p.hp = p.max_hp;
+                }
+                // On its face toward you (the orb's is 0.4 m out).
+                let toward = (eye - at).normalize_or(Vec3::Y);
+                let out = if role == PartRole::Core { 0.42 } else { 0.05 };
+                hits.push((e, at + toward * out, toward));
+            }
+            for (entity, point, toward) in hits {
+                world.write_message(crate::weapons::ballistics::Hit {
+                    entity,
+                    point,
+                    normal: toward,
+                    velocity: -toward * 315.0,
+                    damage: 34.0,
+                    shooter: None,
+                    mass_g: 6.1,
+                    load: Default::default(),
+                    blow: None,
+                });
+            }
+        });
+    }
     // `scan`: the walker clocks a device on the ground in front of you,
     // shooting it first, then coming to look.
     if what == "scan" && (frame == WARMUP + 16 || frame == WARMUP + 52) {
@@ -763,7 +845,6 @@ fn reel(
             .find(|(_, p, _)| p.robot == subject && p.role == PartRole::Core);
         if let Some((_, mut p, gt)) = core {
             p.hp = 1.0e6;
-            p.max_hp = 1.0e6;
             let target = gt.translation();
             let origin = target - right * 3.0;
             shots.write(crate::weapons::ballistics::Shot {
