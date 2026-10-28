@@ -257,7 +257,7 @@ impl Goal {
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
             (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "In one hand, 1.5 turns\nround the other forearm.",
+            (Goal::Dressing, false) => "One hand: circle it round\nthe other forearm 1.5x.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
