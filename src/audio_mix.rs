@@ -368,12 +368,12 @@ pub const MIX: &[Cue] = &[
     // A robot struck, by what the hit did (`audio_machines::struck_sounds`):
     // shrugged off, a thin tink under any hit that hurt; a wound, the impact
     // and a thud; telling, a crunch and a crack, the loudest.
-    cue!("hit.shrug", "impacts/ricochet", -12.0, 80.0, 20.0, Action, 8.0),
-    cue!("hit.wound", "impacts/metal", -2.0, 95.0, 20.0, Action, 8.0),
-    cue!("hit.wound_thud", "physical/body_hit", -6.0, 90.0, 20.0, Action, 8.0),
-    cue!("hit.telling", "impacts/metal", 1.0, 105.0, 20.0, Signal, 12.0),
-    cue!("hit.telling_glass", "physical/glass_break", 1.0, 100.0, 20.0, Signal, 12.0),
-    cue!("hit.telling_fizz", "device/crackle", -4.0, 95.0, 20.0, Signal, 12.0),
+    cue!("hit.shrug", "impacts/ricochet", -7.0, 45.0, 20.0, Action, 8.0),
+    cue!("hit.wound", "impacts/metal", -5.0, 85.0, 20.0, Action, 8.0),
+    cue!("hit.wound_thud", "physical/body_hit", -9.0, 70.0, 20.0, Action, 8.0),
+    cue!("hit.telling", "impacts/metal", -7.0, 105.0, 20.0, Signal, 12.0),
+    cue!("hit.telling_glass", "physical/glass_break", -7.0, 100.0, 20.0, Signal, 12.0),
+    cue!("hit.telling_fizz", "device/crackle", -8.0, 95.0, 20.0, Signal, 12.0),
     // Machines.
     cue!("robot.shot", "guns/pistol_shot", -3.0, 120.0, 30.0, Action, 20.0),
     cue!("drone.rotor", "machines/drone_rotor", -4.0, 75.0, 20.0, Signal),
