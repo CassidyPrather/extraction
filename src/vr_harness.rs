@@ -3647,7 +3647,11 @@ mod first_aid {
             let axis = (s.b - s.a).normalize();
             let x = axis.cross(Vec3::Y).normalize_or(Vec3::Z);
             let y = axis.cross(x);
-            let a = std::f32::consts::TAU * pace * time;
+            let a = if rock {
+                std::f32::consts::FRAC_PI_2 * (std::f32::consts::TAU * pace * time).sin()
+            } else {
+                std::f32::consts::TAU * pace * time
+            };
             // Wider under the arm, where the wrist turns awkwardly; and
             // never quite the same twice.
             let rr = r
@@ -3690,6 +3694,34 @@ mod first_aid {
             ));
         }
         eprintln!("time to bind:\n{}", rows.join("\n"));
+    }
+
+    /// Wound round the forearm as a hand in a headset does it (a circle
+    /// 12-17 cm out, wobbling, half a turn a second), it's on in about the
+    /// time one and a half turns take; in the yard it once took minutes.
+    #[test]
+    fn a_dressing_wound_by_hand_goes_on_in_one_try() {
+        for &(r, along, pace, wobble) in &[
+            (0.12, 0.5, 0.5, 0.2),
+            (0.15, 0.5, 0.5, 0.25),
+            (0.14, 0.95, 0.4, 0.3),
+            (0.17, 0.6, 0.5, 0.3),
+        ] {
+            let t = human_wind(r, along, pace, wobble, 10.0);
+            let turns = 1.5 / pace;
+            assert!(
+                t.is_some_and(|t| t < turns + 1.5),
+                "r {r} along {along} pace {pace}: {t:?} (1.5 turns take {turns} s)"
+            );
+        }
+    }
+
+    /// Rocked back and forth on the arm, or circled well clear of it, it
+    /// doesn't go on: it's wound, not waved.
+    #[test]
+    fn a_dressing_rocked_or_waved_clear_does_not_go_on() {
+        assert_eq!(wind_by_hand(0.12, 0.5, 0.6, 0.2, 8.0, true), None, "rocked");
+        assert_eq!(human_wind(0.32, 0.5, 0.5, 0.1, 8.0), None, "waved clear");
     }
 
     /// Circled round the forearm, the dressing goes on and the bleeding

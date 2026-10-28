@@ -45,8 +45,14 @@ pub struct Capped {
 /// How long a splint takes to strap on, s.
 pub const STRAP: f32 = 1.5;
 
-/// How far out from a limb's surface a dressing held to it may be (m).
-const ROUND: f32 = 0.07;
+/// How far out from a limb's surface a dressing going round it may be
+/// (m): a hand circling the other forearm can't come closer than its
+/// controller lets it, and a circle by hand is never round.
+const ROUND: f32 = 0.12;
+/// How long a dressing drifted off its limb keeps what's wound (s), and
+/// how fast it unwinds after (turns a second).
+const KEEP: f32 = 1.5;
+const UNWIND: f32 = 1.0;
 /// An injector's tip, in its own space, and how near the thigh it must be.
 pub const NEEDLE: Vec3 = Vec3::new(0.0, 0.0, -0.065);
 const ON_THIGH: f32 = 0.12;
@@ -76,15 +82,28 @@ impl Plugin for FirstAidPlugin {
     }
 }
 
-/// Where a dressing is in its winding: the angle it was last at round the
-/// forearm, and how far round it's gone.
+/// Where a dressing is in its winding: for each limb it's near, how far
+/// round that limb it's gone (net: back and forth doesn't wind), and the
+/// one furthest round.
 #[derive(Component, Debug, Default)]
 pub struct Winding {
-    last: Option<f32>,
+    rounds: Vec<Round>,
+    /// The furthest round any limb, turns.
     pub turns: f32,
-    away: f32,
-    /// The limb it's going round.
+    /// That limb.
     pub limb: Option<super::wounds::Limb>,
+}
+
+/// A dressing's way round one limb.
+#[derive(Debug)]
+struct Round {
+    limb: super::wounds::Limb,
+    /// The angle it was last at round the limb, while it's near it.
+    last: Option<f32>,
+    /// Signed turns.
+    net: f32,
+    /// Seconds since it was last near.
+    away: f32,
 }
 
 /// Seconds food has been at the mouth.
@@ -134,56 +153,77 @@ fn wrap_dressings(
         let Some(segs) = super::wounds::player_segments(held.player, &players, &hands) else {
             continue;
         };
-        // Round a limb, not the arm holding it.
+        // Round a limb, not the arm holding it. Every limb it's near
+        // keeps its own count, so a forearm held across the chest winds the
+        // forearm (a circle round it doesn't go round the chest), and the
+        // first wound round far enough is the one dressed.
         let at = gt.translation();
-        // The limb it's already going round while it still is (a wrap
-        // round a thigh passes near the other), else the nearest.
-        let near = segs
-            .iter()
-            .filter(|s| !matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side))
-            .map(|s| (s, s.locate(at)))
-            .filter(|(s, (t, _, d))| (-0.05..=1.05).contains(t) && *d <= s.r + ROUND);
-        let round = match near.clone().find(|(s, _)| Some(s.limb) == w.limb) {
-            Some(kept) => Some(kept),
-            None => near.min_by(|a, b| (a.1.2 - a.0.r).total_cmp(&(b.1.2 - b.0.r))),
-        };
-        let Some((seg, (_, a, _))) = round else {
-            w.away += time.delta_secs();
-            if w.away > 0.6 {
-                *w = Winding::default();
+        let dt = time.delta_secs();
+        let before = (w.turns * 4.0).floor();
+        for s in &segs {
+            if matches!(s.limb, super::wounds::Limb::Forearm(side) if side == held.side) {
+                continue;
             }
+            let (t, a, d) = s.locate(at);
+            let near = (-0.1..=1.1).contains(&t) && d <= s.r + ROUND;
+            let i = match w.rounds.iter().position(|r| r.limb == s.limb) {
+                Some(i) => i,
+                None if near => {
+                    w.rounds.push(Round {
+                        limb: s.limb,
+                        last: None,
+                        net: 0.0,
+                        away: 0.0,
+                    });
+                    w.rounds.len() - 1
+                }
+                None => continue,
+            };
+            let r = &mut w.rounds[i];
+            if !near {
+                // Drifted off: what's wound stays a while, then unwinds.
+                r.last = None;
+                r.away += dt;
+                if r.away > KEEP {
+                    r.net -= r.net.signum() * (dt * UNWIND).min(r.net.abs());
+                }
+                continue;
+            }
+            r.away = 0.0;
+            if let Some(last) = r.last {
+                let mut d = a - last;
+                if d > std::f32::consts::PI {
+                    d -= std::f32::consts::TAU;
+                } else if d < -std::f32::consts::PI {
+                    d += std::f32::consts::TAU;
+                }
+                r.net += d / std::f32::consts::TAU;
+            }
+            r.last = Some(a);
+        }
+        w.rounds.retain(|r| r.last.is_some() || r.net.abs() > 1e-3);
+        let lead = w
+            .rounds
+            .iter()
+            .max_by(|a, b| a.net.abs().total_cmp(&b.net.abs()))
+            .map(|r| (r.limb, r.net.abs()));
+        w.turns = lead.map_or(0.0, |l| l.1);
+        w.limb = lead.map(|l| l.0);
+        if (w.turns * 4.0).floor() > before {
+            // A tick each quarter turn, in both hands: it's going on.
+            pulse(&mut haptics, held.side, TICK);
+            pulse(&mut haptics, held.side.other(), TICK);
+        }
+        let Some(limb) = w.limb else {
             continue;
         };
-        if w.limb != Some(seg.limb) {
-            *w = Winding {
-                limb: Some(seg.limb),
-                ..default()
-            };
-        }
-        w.away = 0.0;
-        if let Some(last) = w.last {
-            let mut d = a - last;
-            if d > std::f32::consts::PI {
-                d -= std::f32::consts::TAU;
-            } else if d < -std::f32::consts::PI {
-                d += std::f32::consts::TAU;
-            }
-            let before = (w.turns * 4.0).floor();
-            w.turns += d.abs() / std::f32::consts::TAU;
-            if (w.turns * 4.0).floor() > before {
-                // A tick each quarter turn, in both hands.
-                pulse(&mut haptics, held.side, TICK);
-                pulse(&mut haptics, held.side.other(), TICK);
-            }
-        }
-        w.last = Some(a);
         if w.turns >= WRAP_TURNS {
             // That limb's wounds bound; the rest bleed on.
             if let Ok((mut h, mut wounds)) = patients.get_mut(held.player) {
-                let stopped = wounds.dress(seg.limb);
+                let stopped = wounds.dress(limb);
                 h.bleeding = (h.bleeding - stopped).max(0.0);
             }
-            commands.entity(e).insert(OnLimb(seg.limb));
+            commands.entity(e).insert(OnLimb(limb));
             uses.write(UseItem {
                 player: held.player,
                 item: e,
