@@ -1,0 +1,259 @@
+2026-10-28T06:23:22.249281Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Windows 10 Home", kernel: "19045", cpu: "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz", core_count: "6", memory: "63.9 GiB" }
+2026-10-28T06:23:22.376667Z  INFO bevy_mod_openxr::openxr::init: Loaded OpenXR runtime: SteamVR/OpenXR 2.18.4
+2026-10-28T06:23:22.376878Z  INFO bevy_mod_openxr::openxr::init: Using system: SteamVR/OpenXR : lighthouse
+2026-10-28T06:23:22.872828Z  INFO extraction::render::timeline: load: plugins building at 0.91 s (frame 0)
+2026-10-28T06:23:22.902273Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-10-28T06:23:22.902668Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-10-28T06:23:22.904082Z  INFO extraction::report: report: textures: BC7 where baked
+2026-10-28T06:23:22.904963Z  INFO bevy_winit::system: Creating new window Extraction (65v0)
+2026-10-28T06:23:23.009519Z  INFO extraction::render::timeline: load: startup begins (window, GPU) at 1.05 s (frame 0)
+2026-10-28T06:23:23.058748Z  INFO extraction::world: zone `Training Yard` built in 49 ms (241x241 heightmap)
+2026-10-28T06:23:23.061699Z  INFO extraction::player: spawning local player at [0, 12.03214, 80] (ground 12.03)
+2026-10-28T06:23:23.061746Z  INFO extraction::report: report: runtime: SteamVR/OpenXR 2.18.4
+2026-10-28T06:23:23.062069Z  INFO extraction::report: report: headset: SteamVR/OpenXR : lighthouse
+2026-10-28T06:23:23.062198Z  INFO extraction::rig::xr: eyes: 1800x1800 (60% of the runtime's 2980x2980)
+2026-10-28T06:23:23.062279Z  INFO extraction::report: report: eye targets: about 1084 MB (2 x 2980x2980, MSAA 4x)
+2026-10-28T06:23:23.062364Z  INFO extraction::rig::xr: eyes: holding the frame rate, from 1800x1800 up to 2980x2980
+2026-10-28T06:23:23.065846Z  INFO extraction::world::trees: 18 trunk colliders
+2026-10-28T06:23:23.066853Z  INFO extraction::audio: sound bank: 105 sets
+2026-10-28T06:23:23.068844Z  INFO extraction::world::trees: 88 trees scattered in 4 ms
+2026-10-28T06:23:23.101136Z  INFO extraction::render::first_sight: preload: 244 models asked for at start (render::first_sight)
+2026-10-28T06:23:23.109076Z  INFO extraction::world::rocks: 513 rocks scattered in 47 ms
+2026-10-28T06:23:23.160003Z  INFO extraction::world::buildings: 10 building loot spots
+2026-10-28T06:23:23.160650Z  INFO extraction::wildlife::flock: a flock of 16 Rooks on the shed at [24, 15, -12]
+2026-10-28T06:23:23.166113Z  INFO extraction::wildlife: wildlife: 2 perch sites (96 perches), 1 flocks, in 104 ms
+2026-10-28T06:23:23.194184Z  INFO extraction::robots::walker: navigation grid built in 8 ms
+2026-10-28T06:23:23.196609Z  INFO extraction::items::loot: 18 items rolled into 10 building loot spots
+2026-10-28T06:23:23.197472Z  INFO extraction::world::scenes: 0 staged scenes
+2026-10-28T06:23:23.198670Z  INFO extraction::render::timeline: load: startup done (zone, terrain, nav, props) at 1.24 s (frame 0)
+2026-10-28T06:23:23.198723Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-10-28T06:23:23.246930Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{f356c204-4173-4e3a-8088-9987f6ff2a57}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-10-28T06:23:23.266449Z  INFO extraction::persist: restored 14 items
+2026-10-28T06:23:23.282954Z  INFO extraction::render::timeline: load: first frame at 1.32 s (frame 1)
+2026-10-28T06:23:23.576267Z  INFO extraction::report: report: build: 0.1.0+g2798e450
+2026-10-28T06:23:23.576268Z  INFO extraction::rig::xr: OpenXR runtime from XR_RUNTIME_JSON: C:\Program Files (x86)\Steam\steamapps/common/SteamVR\steamxr_win64.json
+2026-10-28T06:23:23.580223Z  INFO extraction::report: report: valley: training_yard
+2026-10-28T06:23:23.580333Z  INFO extraction::report: report: gpu: NVIDIA GeForce RTX 3080 (Vulkan, driver NVIDIA 610.88)
+2026-10-28T06:23:23.782060Z  INFO extraction::progression: job 1: Scout { map: "marrow_creek", place: "Old farm", at: [180.0, 145.0], seen: false }
+2026-10-28T06:23:23.915672Z  INFO extraction::world::trees: forest: foliage fetched (cards, impostors)
+2026-10-28T06:23:23.917773Z  INFO extraction::world::trees: forest: 88 trees in 18 chunks
+2026-10-28T06:23:23.975734Z  WARN bevy_light: Point lights and/or spot lights are present, but no entity has `ShadowLodOrigin`, and no camera that renders to the window has been found. Consider using the `ShadowLodOrigin` component to set a LOD origin.
+2026-10-28T06:23:23.988040Z  INFO extraction::render::timeline: load: a 3D view drawing at 2.03 s (frame 1)
+2026-10-28T06:23:24.156870Z  INFO extraction::render::timeline: load: first frame rendered at 2.20 s (frame 2)
+2026-10-28T06:23:24.208910Z  INFO extraction::robots::doors: 2 doorways in 2 buildings
+2026-10-28T06:23:24.480488Z  INFO extraction::render::timeline: load: buildings dressed (props in) at 2.52 s (frame 2)
+2026-10-28T06:23:25.672638Z  INFO extraction::render::timeline: load: every model loaded (preload landed) at 3.71 s (frame 4)
+2026-10-28T06:23:26.140416Z  INFO extraction::world::impostors: impostor captured (256x640)
+2026-10-28T06:23:26.169639Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-10-28T06:23:26.200596Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-10-28T06:23:26.229078Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:23:26.241683Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:23:26.254721Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:23:26.269373Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:23:26.292943Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:23:26.312847Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:23:26.363338Z  INFO extraction::render::timeline: load: forest streamed, impostors captured at 4.40 s (frame 14)
+2026-10-28T06:23:26.439248Z  INFO extraction::raid: raid: Driver: "Kit's in the crate, front left. Look at it, press E."
+2026-10-28T06:23:26.570271Z  INFO extraction::rig::xr: headset: starting the session after 3.3 s (the load has settled)
+2026-10-28T06:23:26.570440Z  INFO extraction::render::timeline: load: headset session asked for at 4.61 s (frame 20)
+2026-10-28T06:23:26.585682Z  INFO extraction::render::timeline: load: every material and pipeline ready (ground and buildings drawn) at 4.63 s (frame 20)
+2026-10-28T06:23:26.585809Z  INFO extraction::render::timeline: load: everything in at 4.63 s (frame 20)
+2026-10-28T06:23:26.664026Z  INFO extraction::rig::xr: XR session created: driving the rig from the headset
+2026-10-28T06:23:26.664051Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-10-28T06:23:26.664310Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-10-28T06:23:26.691132Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attaching 1 sessions
+2026-10-28T06:23:26.814669Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attached sessions!
+2026-10-28T06:23:26.829066Z  INFO bevy_mod_openxr::openxr::init: entered XR state IDLE
+2026-10-28T06:23:26.829286Z  INFO bevy_mod_openxr::openxr::init: entered XR state READY
+2026-10-28T06:23:26.830102Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(65v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-10-28T06:23:27.095334Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-10-28T06:23:27.096671Z  INFO extraction::rig::xr: input: fingers tracked (Left hand first)
+2026-10-28T06:23:27.141370Z  INFO extraction::rig::xr: input: left hand profile none
+2026-10-28T06:23:27.141700Z  INFO extraction::rig::xr: input: right hand profile none
+2026-10-28T06:23:28.052243Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1958v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.052511Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1956v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.052701Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1954v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.052946Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1952v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053143Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1950v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053297Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1948v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053418Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1946v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053529Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1944v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053669Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1942v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053800Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1939v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.053969Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1937v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.054078Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1935v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.054203Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1933v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.054443Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1931v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.054605Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1929v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.054870Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1927v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055127Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1925v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055336Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1923v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055470Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1920v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055571Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1918v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055714Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1916v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.055823Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1914v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056090Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1912v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056248Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1910v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056449Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1908v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056545Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1906v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056707Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1904v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056809Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1901v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:28.056920Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1899v1 is invalid; its index now has generation 2.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:23:33.321077Z  INFO extraction: frames: 399 in 10 s, mean 25.1 ms, 1% 588.6 ms, worst 863.5 ms (AtBase)
+2026-10-28T06:23:33.321102Z  INFO extraction::render::budget: cpu: main 11.4 ms a frame (1% 29.9), physics 1.4 (1% 3.0), render world 7.1 (1% 26.6)
+2026-10-28T06:23:33.321240Z  INFO extraction: gpu: 1.4 ms a frame (main_opaque_pass_3d 0.7, clustering 0.3, bin_unpacking 0.2, msaa_writeback 0.1, tonemapping 0.1, upscaling 0.1)
+2026-10-28T06:23:36.622230Z  INFO extraction::render::hold_rate::xr: eyes: 2566x2566 (86% of the runtime's width), holding the frame rate, gpu 0.8 ms of a 13.3 ms frame
+2026-10-28T06:23:42.006265Z  INFO extraction::render::timeline: load: warm-up shelf done at 20.05 s (frame 921)
+2026-10-28T06:23:42.006398Z  INFO extraction::render::warmup: warm-up: 73 kinds of thing shelved (1441 entries) over 900 frames: {"BoltMaterial": 1, "HaloMaterial": 1, "HazeExt>": 1, "ImpostorCut>": 1, "MarkFog>": 1, "ParticleMaterial": 2, "RainMaterial": 1, "ShaftMaterial": 1, "SheetMaterial": 1, "SkyMaterial": 1, "StandardMaterial": 41, "Sway>": 2, "TerrainExt>": 1, "TreeSway>": 1, "model": 7, "unworn": 10}
+2026-10-28T06:23:43.337653Z  INFO extraction: frames: 601 in 10 s, mean 16.7 ms, 1% 23.2 ms, worst 26.4 ms (AtBase)
+2026-10-28T06:23:43.337727Z  INFO extraction::render::budget: cpu: main 7.6 ms a frame (1% 9.5), physics 1.1 (1% 1.6), render world 3.4 (1% 4.8)
+2026-10-28T06:23:43.337824Z  INFO extraction: gpu: 1.5 ms a frame (main_opaque_pass_3d 0.8, clustering 0.3, bin_unpacking 0.2, msaa_writeback 0.1, tonemapping 0.1, early_mesh_preprocessing 0.0)
+2026-10-28T06:23:45.737802Z  INFO bevy_window::system: No windows are open, exiting
+2026-10-28T06:23:45.737957Z  INFO bevy_winit::system: Closing window 65v0
+2026-10-28T06:23:45.978691Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer
+2026-10-28T06:23:46.392827Z  INFO extraction::render::timeline: load: closed (world dropped) at 24.43 s (frame 1148)
