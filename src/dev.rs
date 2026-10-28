@@ -1281,6 +1281,10 @@ fn spall_for_gallery(
 /// `render::wounds`). An open wound on the right thigh and the left
 /// forearm, a dressing round the right upper arm, a splint strapped on the
 /// right shin, and the left glove, turned palm up, bloody from the wound.
+/// What a dressing round that arm says is said (the upper arm's bound, the
+/// thigh still bleeds); with `wrist` the left wrist is raised to the eye
+/// instead, its screen showing it, and BLEED.
+#[allow(clippy::too_many_arguments)]
 fn treat_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -1295,6 +1299,7 @@ fn treat_for_gallery(
         With<crate::rig::LocalPlayer>,
     >,
     hands: Query<(Entity, &crate::rig::RigHand)>,
+    raid: Option<ResMut<crate::raid::Raid>>,
     mut frames: Local<u32>,
 ) {
     use crate::interact::wounds::{Bloodied, Fracture, Limb, Wound};
@@ -1341,12 +1346,29 @@ fn treat_for_gallery(
                 commands.entity(h).insert(Bloodied(1.0));
             }
         }
+        if let Some(mut raid) = raid {
+            raid.say(crate::interact::wounds::dressed_line(
+                Some(Limb::UpperArm(Side::Right)),
+                Some(&wounds),
+                health.bleeding,
+            ));
+        }
     }
-    // The left hand low and turned palm up (its palm faces +X, inward).
     let left = input.hand_mut(Side::Left);
-    left.pose = Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
-        Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
-    );
+    left.pose = if opts.gallery.as_deref().is_some_and(|s| s.contains("wrist")) {
+        // Across the chest, fingers to the right, the back of the wrist
+        // (its screen) turned up to the eye.
+        Transform::from_xyz(-0.08, 1.2, -0.32).with_rotation(
+            Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
+                * Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2)
+                * Quat::from_rotation_y(0.4),
+        )
+    } else {
+        // Low and turned palm up (its palm faces +X, inward).
+        Transform::from_xyz(-0.16, 1.1, -0.36).with_rotation(
+            Quat::from_rotation_x(-0.5) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+        )
+    };
     left.tracked = true;
 }
 
