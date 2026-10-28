@@ -14,6 +14,21 @@ Verifier runs the rest on every main push (`docs/HEALTH.md`).
 Run the suite and sims apart, never at once, and never rebuild a binary
 sims are running from: the container runs out of memory.
 
+Some checks need real rendering (lavapipe under Xvfb), which the
+GPU-less gauges can't do:
+
+- `scripts/impostor_check.sh [map]`: far trees after a slow load. The
+  frames are held 90 ms longer, and the GPU is held "not ready" for 120 s
+  from the first capture (`EXTRACTION_FRAME_PAD_MS`,
+  `EXTRACTION_GPU_HOLD_S`), as on the headset whose pipelines were ready
+  only at frame 432. Every far-tree impostor must be captured; the exit
+  status is the number left empty. It takes about 8 minutes.
+- `scripts/lamp_check.sh [map]`: every landmark lamp and beacon at night
+  from 50, 150 and 300 m, bright and in its own colour. It takes about
+  25 minutes a valley.
+
+Run one at a time: two at once, with a build, run out of memory.
+
 ## The gauge tier's time
 
 Each gauge builds whole valleys through the GPU-less client. Those whose

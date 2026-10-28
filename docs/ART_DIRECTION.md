@@ -235,3 +235,38 @@ interior 850 vs 840 ms a software frame). Geometry is from
 | Fuller pine crowns | pine near LOD | Densest pine view: tris drawn 321k to 332k, shadow 261k to 287k, draw calls unchanged |
 | Weather wetness, sky weight | uniforms | None |
 | Charred trees, tuft spread | vertex colour, geometry layout | None |
+
+### Marrow Creek's forest (2026-10-28)
+
+The playtest's walk to the logging camp ran at p50 37.9 ms a frame. Its
+`gpu:` lines (both eyes and the mirror, on an RTX 3080) put the opaque
+pass at 10-22 ms, roughly 5-7 ms an eye. That session's far trees were
+missing (their impostor captures gave up), so with them back the forest
+costs more than this.
+
+Layers a pixel by kind, from `gauge_marrow_creek_holds_the_budget`
+(1800 px an eye, the governor's settling point):
+
+| View | Mean | Near tree cards | Far impostors |
+| - | - | - | - |
+| m05 spruce (inside the forest) | 7.2 | 4.4 | 1.0 |
+| m13 pump hall | 5.7 | 3.7 | 1.4 |
+| m06 forest edge | 4.8 | 1.9 | 1.7 |
+| m08 pines | 3.7 | 1.4 | 1.1 |
+| open views (gate, meadow, creek, rail) | 1.0-1.8 | 0.4 or less | 0.5 or less |
+
+In the forest, the cost is the near, alpha-tested cards, not the far
+forest: the impostors stay under 1.7 layers even at the edge.
+
+Open, next steps:
+
+- Time the near cards on the headset machine with and without the
+  spruce's dark core drawn first: an opaque core in front should let
+  early depth reject the cards behind it.
+- Thin the inner cards of the near crowns past about 30 m, where the
+  core already reads as dense.
+- Check whether the impostors' far LOD can take the band from 68 m in
+  to about 50 m without a visible swap.
+
+Each needs a before/after on the headset (lavapipe times aren't a GPU's)
+and Performance's governor numbers alongside.

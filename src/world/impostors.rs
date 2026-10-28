@@ -29,7 +29,65 @@ pub struct ImpostorPlugin;
 impl Plugin for ImpostorPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<ImpostorMaterial>::default())
-            .add_systems(Update, read_back);
+            .add_systems(Update, (hold_gpu, read_back).chain())
+            .add_systems(Last, pad_frames);
+    }
+}
+
+/// Dev: `EXTRACTION_GPU_HOLD_S=120` acts out a slow GPU's load for that
+/// long (real seconds from the first rig laid out): the capture rigs draw
+/// nothing, from a rig's first frame, and the GPU counts as not ready, as
+/// when Marrow Creek's pipelines took 21.5 s on a headset
+/// (`scripts/impostor_check.sh`). Whether it's holding now.
+fn gpu_held() -> bool {
+    static HOLD: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    let secs = *HOLD.get_or_init(|| {
+        std::env::var("EXTRACTION_GPU_HOLD_S")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0.0)
+    });
+    static FROM: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    secs > 0.0
+        && FROM
+            .get_or_init(std::time::Instant::now)
+            .elapsed()
+            .as_secs_f64()
+            < secs
+}
+
+fn hold_gpu(captures: Query<&Capture>, mut cams: Query<&mut Camera>, mut was: Local<bool>) {
+    if captures.is_empty() {
+        return;
+    }
+    let held = gpu_held();
+    if !held && !*was {
+        return;
+    }
+    *was = held;
+    for c in &captures {
+        for r in &c.rig {
+            if let Ok(mut cam) = cams.get_mut(*r) {
+                if cam.is_active == held {
+                    cam.is_active = !held;
+                }
+            }
+        }
+    }
+}
+
+/// Dev: `EXTRACTION_FRAME_PAD_MS=90` holds every frame that long longer,
+/// so a fast machine loads a valley the way a slow one does
+/// (`scripts/impostor_check.sh`).
+fn pad_frames(mut pad: Local<Option<u64>>) {
+    let ms = *pad.get_or_insert_with(|| {
+        std::env::var("EXTRACTION_FRAME_PAD_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0)
+    });
+    if ms > 0 {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
     }
 }
 
@@ -52,6 +110,8 @@ pub(crate) struct Capture {
     rig: Vec<Entity>,
     reading: bool,
     tries: u32,
+    /// Seconds (real) spent waiting on the GPU, for the last resort.
+    waited: f32,
     /// Textures the rig needs loaded before its picture is worth taking.
     needs: Vec<Handle<Image>>,
 }
@@ -123,6 +183,7 @@ pub fn capture(
             .spawn((
                 Camera3d::default(),
                 Camera {
+                    is_active: !gpu_held(),
                     order: -30 - slot as isize,
                     clear_color: ClearColorConfig::Custom(Color::NONE),
                     ..default()
@@ -153,6 +214,7 @@ pub fn capture(
         rig,
         reading: false,
         tries: 0,
+        waited: 0.0,
         needs,
     });
     Impostor {
@@ -195,13 +257,27 @@ fn placeholder() -> Image {
     )
 }
 
-/// A few frames after a rig is laid out, read its picture back; when it
-/// arrives, build the mips, fill the impostor's texture and pack up.
+/// The longest a capture waits on the GPU (real seconds) before it's
+/// taken anyway: a pipeline that never readies mustn't hold the forest.
+const GPU_WAIT: f32 = 120.0;
+
+/// Once the GPU has everything ready (`render::timeline::Unprepared`: no
+/// pipeline compiling, no material unprepared), and a few frames after a
+/// rig is laid out, read its picture back; when it arrives, build the
+/// mips, fill the impostor's texture and pack up. Waiting on readiness,
+/// not a count of frames: a slow machine's load once outlasted the
+/// retries and a valley's far trees were missing all session.
 fn read_back(
     mut commands: Commands,
     mut captures: Query<(Entity, &mut Capture)>,
     server: Res<AssetServer>,
+    unprepared: Option<Res<crate::render::timeline::Unprepared>>,
+    time: Res<Time<Real>>,
 ) {
+    if captures.is_empty() {
+        return;
+    }
+    let gpu_ready = unprepared.as_ref().is_none_or(|u| u.clear()) && !gpu_held();
     for (e, mut c) in &mut captures {
         // Nothing is drawn with a texture still loading.
         if !c
@@ -209,6 +285,11 @@ fn read_back(
             .iter()
             .all(|h| server.is_loaded_with_dependencies(h))
         {
+            continue;
+        }
+        // Nor with its pipeline still compiling.
+        if !gpu_ready && c.waited < GPU_WAIT {
+            c.waited += time.delta_secs();
             continue;
         }
         c.frames += 1;
@@ -271,9 +352,9 @@ fn read_back(
                     }
                 }
                 for r in &rig {
-                    commands.entity(*r).despawn();
+                    commands.entity(*r).try_despawn();
                 }
-                commands.entity(e).despawn();
+                commands.entity(e).try_despawn();
             },
         );
     }
