@@ -2546,7 +2546,8 @@ mod tests {
             gun.short_stroke(),
             vec![Event::Malfunctioned(Malfunction::ShortStroke)]
         );
-        assert!(shoot(&mut gun).is_empty(), "dead");
+        // Dead, and saying so: the trigger goes back on nothing.
+        assert_eq!(shoot(&mut gun), vec![Event::TriggerDead], "dead");
         gun.set_handle_lift(1.0);
         gun.set_bolt_travel(0.6);
         assert_eq!(gun.malfunction, Some(Malfunction::ShortStroke), "not yet");
