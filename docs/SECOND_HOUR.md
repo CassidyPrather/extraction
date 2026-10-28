@@ -17,7 +17,7 @@ runner's hard to hit.").
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
 | Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
-| Drone lock | the chirp before it fires | run across it, to cover (sprinting across its line scatters its rounds; standing still in the open doesn't) |
+| Drone lock | the chirp before it fires | don't stop: sprint across it (a runner's hard to hit; standing still in the open isn't); only a roof stops it |
 | Anomaly | within 4 m of one's edge | throw something in first |
 | Underground | below ground in a site | torch on, go slow |
 | Surge | the sky turns (5 min warning) | come home |
