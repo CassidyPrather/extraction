@@ -83,3 +83,11 @@ splint's two slats strapped along the right shin. From the eye: the left
 glove turned palm up, bloody from touching a wound (it fades over a
 minute), an open wound on the left forearm, and a dressing wound round
 the right upper arm as a white band.
+`20_bleeding.jpg` (28 October playtest, item 12; `--gallery treat+side`,
+then `treat+down+wrist`): before and after a bound limb that still
+bleeds. Left, before: every open wound drawn alike. Middle, after: the
+bleeding thigh wound wet and brighter (a stopped one draws dark and dry).
+Right, after: the right upper arm bound, the wrist raised; it reads BLEED
+and pages through the line said when the dressing went on, "That one's
+bound. You're still bleeding: the right thigh." (the old line was "The
+bleeding stops.").
