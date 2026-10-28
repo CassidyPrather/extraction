@@ -41,6 +41,9 @@ struct Looks {
     band: Handle<Mesh>,
     slat: Handle<Mesh>,
     blood: Handle<StandardMaterial>,
+    /// A wound that's stopped bleeding: dark and dry, so a glance tells a
+    /// bleed from a scab.
+    dried: Handle<StandardMaterial>,
     bandage: Handle<StandardMaterial>,
     wood: Handle<StandardMaterial>,
 }
@@ -55,9 +58,16 @@ fn looks(meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>) ->
                 .minor_resolution(6),
         ),
         slat: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+        // Bleeding: bright and wet.
         blood: materials.add(StandardMaterial {
-            base_color: Color::srgb(0.24, 0.02, 0.02),
-            perceptual_roughness: 0.35,
+            base_color: Color::srgb(0.42, 0.02, 0.02),
+            perceptual_roughness: 0.12,
+            reflectance: 0.6,
+            ..default()
+        }),
+        dried: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.16, 0.06, 0.04),
+            perceptual_roughness: 0.9,
             ..default()
         }),
         bandage: materials.add(StandardMaterial {
@@ -149,7 +159,11 @@ fn mark_wounds(
                 .with_rotation(Quat::from_rotation_arc(Vec3::Y, out))
                 .with_scale(Vec3::new(size, 0.004, size * 1.4));
             mesh.0 = look.patch.clone();
-            mat.0 = look.blood.clone();
+            mat.0 = if w.bleed >= crate::interact::wounds::STILL {
+                look.blood.clone()
+            } else {
+                look.dried.clone()
+            };
         }
         // The head and the trunk's marks would sit in the view: only the
         // limbs' show.

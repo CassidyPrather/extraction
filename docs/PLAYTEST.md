@@ -366,7 +366,7 @@ If any of this fails, stop and send the log: everything else depends on it.
   | 4 | Out of reach | a box on a crate in a fenced pen: point, squeeze, flick back |
   | 5 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate, drop the magazine (**A** on the gun hand) |
   | 6 | The house | open the door by its edge; take the dressing off the crate inside |
-  | 7 | First aid | raise your left hand and look at the back of it (the **wrist** screen: health, load, the clock, the driver's last words); use a dressing: hold it, press A (or X) |
+  | 7 | First aid | raise your left hand and look at the back of it (the **wrist** screen: health, load, the clock, the driver's last words); use a dressing: wind it round your other forearm, a turn and a half (a tick in both hands each quarter turn; with the one-handed setting, hold it and press A or X) |
   | 8 | The shimmer | throw a spare part (crate by the post) at the patch ahead: a hidden snare crackles; then a burner with a stone on a burnt stump at its heart: don't step in (the driver shouts if you get close); far-grab the stone from the edge |
   | 9 | Buttons | push the amber button with a fingertip |
   | 10 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, pull the cord |
