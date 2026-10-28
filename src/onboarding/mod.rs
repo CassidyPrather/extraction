@@ -145,6 +145,73 @@ impl Goal {
         }
     }
 
+    /// What the step's code accepts, in the words its board uses (lower
+    /// case): each must be on the board, and for the headset in
+    /// PLAYTEST.md's table too. The playtest found them apart: the crouch
+    /// board said squat only while the code took the stick, and PLAYTEST
+    /// said a dressing was "press A" while the board said wind it.
+    /// Where a watcher takes something new, it goes here first.
+    pub fn accepts(self, flat: bool) -> &'static [&'static str] {
+        match (self, flat) {
+            // `watch_hands`: a grab from the stash crate.
+            (Goal::TakePistol | Goal::TakeRadio, false) => &["grip"],
+            (Goal::TakePistol | Goal::TakeRadio, true) => &["e"],
+            // `watch_moves`: the gun hand's stick sideways; the view swung.
+            (Goal::Turn, false) => &["right stick"],
+            (Goal::Turn, true) => &["mouse"],
+            // `watch_moves`: the head low, or the stick down (it toggles
+            // the crouch); flat, the toggle.
+            (Goal::Crouch, false) => &["squat", "right stick down"],
+            (Goal::Crouch, true) => &["c"],
+            // `watch_moves`: sprint (the off stick clicked while pushed,
+            // `rig::xr`) and forward.
+            (Goal::Run, false) => &["left stick", "forward", "click"],
+            (Goal::Run, true) => &["shift", "w"],
+            // `watch_hands`: let go at a body socket; let go over the
+            // shoulder (the pack).
+            (Goal::PutAway, false) => &["hip or", "open your hand"],
+            (Goal::PutAway, true) => &["g"],
+            (Goal::Pack, false) => &["shoulder", "open your hand"],
+            (Goal::Pack, true) => &["g"],
+            (Goal::FarGrab, false) => &["point", "grip", "flick"],
+            (Goal::FarGrab, true) => &["e"],
+            // `watch_guns`: a magazine in hand gaining rounds.
+            (Goal::FillMag, false) => &["box", "touch"],
+            (Goal::FillMag, true) => &["t"],
+            (Goal::SeatMag | Goal::Reload, false) => &["up into the grip"],
+            (Goal::SeatMag | Goal::Reload, true) => &["r"],
+            (Goal::Rack, false) => &["trigger", "pull back"],
+            (Goal::Rack, true) => &["v"],
+            (Goal::Safety, false) => &["click the stick"],
+            (Goal::Safety, true) => &["x"],
+            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, false) => &["trigger"],
+            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, true) => &["mouse"],
+            (Goal::DropMag, false) => &["a on the gun hand"],
+            (Goal::DropMag, true) => &["b"],
+            // The slide stop (B), or a rack.
+            (Goal::SlideRelease, false) => &["b on the gun hand", "rack"],
+            (Goal::SlideRelease, true) => &["v"],
+            (Goal::OpenDoor | Goal::Search, false) => &["grip"],
+            (Goal::OpenDoor | Goal::Search, true) => &["e"],
+            (Goal::Wrist, false) => &["look at the back"],
+            (Goal::Wrist, true) => &["h"],
+            // `interact::first_aid`: circled round a limb, not the holding
+            // arm; one-handed, the button (`how_for`).
+            (Goal::Dressing, false) => &["circle it", "other forearm"],
+            (Goal::Dressing, true) => &["u"],
+            (Goal::Probe, false) => &["grip", "open your hand"],
+            (Goal::Probe, true) => &["q"],
+            (Goal::Artifact, false) => &["point", "grip", "flick"],
+            (Goal::Artifact, true) => &["e"],
+            (Goal::Button, false) => &["finger"],
+            (Goal::Button, true) => &["e"],
+            (Goal::CallTruck, false) => &["a or x"],
+            (Goal::CallTruck, true) => &["u"],
+            (Goal::PullCord, false) => &["grip", "cord"],
+            (Goal::PullCord, true) => &["e"],
+        }
+    }
+
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
@@ -154,9 +221,9 @@ impl Goal {
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
-            (Goal::Crouch, false) => "Squat down for real (the\nstick only slows you).",
+            (Goal::Crouch, false) => "Squat down, or pull the\nright stick down.",
             (Goal::Crouch, true) => "Press C (again to stand).",
-            (Goal::Run, false) => "Click the left stick and\npush it forward.",
+            (Goal::Run, false) => "Push the left stick\nforward and click it.",
             (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
@@ -190,7 +257,7 @@ impl Goal {
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
             (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "In one hand, wind it\nround the other forearm.",
+            (Goal::Dressing, false) => "In one hand, circle it\nround the other forearm.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
@@ -1951,6 +2018,44 @@ mod tests {
             let wrapped = crate::render::screen::wrap(&l, 26, usize::MAX);
             assert!(wrapped.len() <= 3, "{} lines: {l}", wrapped.len());
         }
+    }
+
+    /// Every board names what its step's code accepts, and so does
+    /// PLAYTEST.md's table of the stations, for the headset.
+    #[test]
+    fn boards_code_and_playtest_agree() {
+        let words = |t: &str| {
+            format!(
+                " {} ",
+                t.to_lowercase()
+                    .replace(['\n', '(', ')', ',', '.', ':', ';'], " ")
+            )
+        };
+        let has = |text: &str, k: &str| words(text).contains(&format!(" {k} "));
+        let doc = include_str!("../../docs/PLAYTEST.md");
+        let mut bad = Vec::new();
+        for (i, st) in STATIONS.iter().enumerate() {
+            let row = doc
+                .lines()
+                .find(|l| l.starts_with(&format!("  | {} |", i + 1)))
+                .unwrap_or_else(|| panic!("PLAYTEST.md has no row {} ({})", i + 1, st.title));
+            for g in st.goals {
+                for flat in [false, true] {
+                    for k in g.accepts(flat) {
+                        if !has(g.how(flat), k) {
+                            bad.push(format!(
+                                "{g:?} board ({flat}): no \"{k}\" in {:?}",
+                                g.how(flat)
+                            ));
+                        }
+                        if !flat && !has(row, k) {
+                            bad.push(format!("{g:?} PLAYTEST row {}: no \"{k}\"", i + 1));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Every station asks for something, and every instruction is short:

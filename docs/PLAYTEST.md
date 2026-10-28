@@ -355,21 +355,24 @@ If any of this fails, stop and send the log: everything else depends on it.
   lit lantern beside it, saying what to do first ("Reach into the crate.
   Squeeze GRIP."). The driver says the same on your wrist. That's the
   whole start: there is nothing to read on the way.
-- The yard is **ten stations** up the gravel track. Each is a post
-  with a lantern and a board, and asks for one or two things:
+- The yard is **eleven stations** up the gravel track. Each is a post
+  with a lantern and a board, and asks for a few things. A step counts
+  only at its station (done earlier, it's asked for again there), and at
+  the range, running it dry and the shimmer, only in the order asked:
 
   | # | Station | Do |
   | - | - | - |
-  | 1 | Your kit (in the truck) | take the pistol and the radio out of the crate |
-  | 2 | Getting about | turn (right stick sideways) and crouch (right stick down, or squat) |
-  | 3 | Put it away | holster or pocket something; let go of something over your shoulder (the pack) |
-  | 4 | Out of reach | a box on a crate in a fenced pen: point, squeeze, flick back |
-  | 5 | The range | rounds into the empty magazine (box in one hand, magazine in the other, touch them), magazine up into the pistol, rack the slide (other hand's trigger), safety off (**click the thumbstick** of the gun hand), hit a plate, drop the magazine (**A** on the gun hand) |
-  | 6 | The house | open the door by its edge; take the dressing off the crate inside |
-  | 7 | First aid | raise your left hand and look at the back of it (the **wrist** screen: health, load, the clock, the driver's last words); use a dressing: hold it, press A (or X) |
-  | 8 | The shimmer | throw a spare part (crate by the post) at the patch ahead: a hidden snare crackles; then a burner with a stone on a burnt stump at its heart: don't step in (the driver shouts if you get close); far-grab the stone from the edge |
-  | 9 | Buttons | push the amber button with a fingertip |
-  | 10 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, pull the cord |
+  | 1 | Your kit (in the truck) | reach into the crate and squeeze GRIP: the pistol, then the radio |
+  | 2 | Getting about | turn (push the right stick sideways); crouch (squat, or pull the right stick down; again to stand); run (push the left stick forward and click it) |
+  | 3 | Put it away | hold the pistol at your hip or chest and open your hand (holster or pocket); hold something over your shoulder and open your hand (the pack) |
+  | 4 | Out of reach | a box on a crate in a fenced pen: point at it, squeeze GRIP, flick your hand back |
+  | 5 | The range | rounds into the empty magazine (magazine in one hand, the box in the other: touch them); push the magazine up into the grip; rack the slide (the other hand's TRIGGER on it, pull back, let go); safety off (click the stick on the gun hand); hit a plate (TRIGGER) |
+  | 6 | Run it dry | TRIGGER at the plates till the slide stays back; drop the empty magazine (A on the gun hand); the full magazine off the table, up into the grip; let the slide go (B on the gun hand, or rack it): a magazine in doesn't load it; fire again (TRIGGER) |
+  | 7 | The house | open the door: GRIP it anywhere and pull it round; GRIP the dressing on the crate inside |
+  | 8 | First aid | look at the back of your left wrist (the **wrist** screen: health, load, the clock, the driver's last words); a dressing in one hand, circle it round the other forearm (a tick in both hands each quarter turn, a turn and a half in all; one-handed, A or X) |
+  | 9 | The shimmer | GRIP a spare part (crate by the post), swing and open your hand at the patch ahead: a hidden snare crackles; then a burner with a stone at its heart: don't step in (the driver shouts if you get close); from the edge point at the stone, GRIP, flick back |
+  | 10 | Buttons | push the amber button with a fingertip (a finger pointed, TRIGGER off) |
+  | 11 | Going home | radio the truck (A or X with the radio in hand); it's there in ten seconds; climb in, GRIP the cord by the cab |
 
   The lantern is lit (warm yellow) on the station you're on, green on
   the ones done, dark ahead. Each step ticks off on its board with a
