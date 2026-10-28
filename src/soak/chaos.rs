@@ -276,27 +276,32 @@ impl Monkey {
                 );
             }
             if e.index_u32() == index {
+                // (Component names need Bevy's `debug` feature: the markers
+                // that matter, by type.)
                 let r = w.entity(e);
-                let names: Vec<String> = r
-                    .archetype()
-                    .components()
-                    .iter()
-                    .filter_map(|c| w.components().get_name(*c))
-                    .map(|n| n.shortname().to_string())
-                    .filter(|n| {
-                        [
-                            "Held",
-                            "InSocket",
-                            "InBackpack",
-                            "ChildOf",
-                            "RigidBodyDisabled",
-                            "ColliderDisabled",
-                            "Sleeping",
-                            "Supported",
-                        ]
-                        .contains(&n.as_str())
-                    })
-                    .collect();
+                let mut names: Vec<String> = Vec::new();
+                let mut mark = |on: bool, n: &str| {
+                    if on {
+                        names.push(n.to_owned());
+                    }
+                };
+                mark(r.contains::<crate::interact::Held>(), "Held");
+                mark(r.contains::<crate::interact::InSocket>(), "InSocket");
+                mark(
+                    r.contains::<crate::interact::body::InBackpack>(),
+                    "InBackpack",
+                );
+                mark(r.contains::<ChildOf>(), "ChildOf");
+                mark(r.contains::<RigidBodyDisabled>(), "RigidBodyDisabled");
+                mark(r.contains::<ColliderDisabled>(), "ColliderDisabled");
+                mark(r.contains::<Sleeping>(), "Sleeping");
+                mark(r.contains::<Collider>(), "Collider");
+                if let Some(b) = r.get::<RigidBody>() {
+                    names.push(format!("{b:?}"));
+                }
+                if let Some(l) = r.get::<CollisionLayers>() {
+                    names.push(format!("{l:?}"));
+                }
                 eprintln!(
                     "trace f{} {e}: at {:.2} v {:?} {names:?}",
                     self.frame,
