@@ -1948,6 +1948,15 @@ mod onboarding {
         ob(vr).is_done(g)
     }
 
+    /// Every step before station `i` done, as if walked through (a step
+    /// only counts at the station teaching it), and `also`.
+    fn at_station(vr: &mut Vr, i: usize, also: &[Goal]) {
+        let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+        o.done = crate::onboarding::all_goals()
+            .filter(|g| crate::onboarding::station_of(*g) < i || also.contains(g))
+            .collect();
+    }
+
     fn placed(vr: &mut Vr, which: Placed) -> Entity {
         vr.app
             .world_mut()
@@ -2147,6 +2156,7 @@ mod onboarding {
     #[test]
     fn station_put_it_away() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 2, &[]);
         let feet = ground(&vr, [3.0, 70.0]);
         vr.stand(feet, 0.0);
         vr.head(Vec3::new(0.0, 1.7, 0.0));
@@ -2215,6 +2225,7 @@ mod onboarding {
     #[test]
     fn station_out_of_reach() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 3, &[]);
         let pen = crate::onboarding::FAR_STAND_AT;
         let feet = ground(&vr, [pen[0], pen[1] + crate::onboarding::PEN_HALF + 0.35]);
         vr.stand(feet, 0.0);
@@ -2256,6 +2267,7 @@ mod onboarding {
     #[test]
     fn station_the_range() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 4, &[]);
         let table = crate::onboarding::RANGE_TABLE_AT;
         let feet = ground(&vr, [table[0], table[1] + 0.75]);
         vr.stand(feet, 0.0);
@@ -2395,6 +2407,7 @@ mod onboarding {
     #[test]
     fn station_the_house() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 5, &[]);
         let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
         let find = placed(&mut vr, Placed::HouseFind);
         let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
@@ -2443,6 +2456,7 @@ mod onboarding {
     #[test]
     fn station_first_aid() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 6, &[]);
         let feet = ground(&vr, [2.0, 8.0]);
         vr.stand(feet, 0.0);
         vr.step(20);
@@ -2555,7 +2569,8 @@ mod onboarding {
             .map(|s| s.socket);
         assert_eq!(seated, Some(holster.0), "holstered on the left");
 
-        // The left wrist, looked at: nothing.
+        // At First aid, the left wrist, looked at: nothing.
+        at_station(&mut vr, 6, &[]);
         let look_at = |vr: &mut Vr, side: Side, x: f32| {
             let hand_at = feet + Vec3::new(x, 1.35, -0.3);
             let hand_rot = Quat::from_rotation_z(0.95 * side.sign());
@@ -2586,6 +2601,7 @@ mod onboarding {
     #[test]
     fn station_shimmer_throw_a_part_first() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 7, &[]);
         vr.step(30);
         let snare = crate::onboarding::SNARE_AT;
         let r = crate::onboarding::SNARE_R;
@@ -2627,6 +2643,7 @@ mod onboarding {
     #[test]
     fn station_the_shimmer() {
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 7, &[Goal::Probe]);
         let heart = crate::onboarding::SHIMMER_AT;
         let r = crate::onboarding::SHIMMER_R;
         vr.step(30);
@@ -2649,11 +2666,78 @@ mod onboarding {
         assert!(done(&vr, Goal::Artifact));
     }
 
+    /// A step done before its station's turn doesn't count, and at a
+    /// station that goes in order, nor before the step ahead of it: the
+    /// playtest's wrist ticked from a glance in the truck 27 minutes before
+    /// First aid asked, and its stone was taken before the part thrown.
+    #[test]
+    fn a_step_counts_only_when_its_station_asks() {
+        fn look_at_the_wrist(vr: &mut Vr, feet: Vec3) {
+            let hand_at = feet + Vec3::new(-0.05, 1.35, -0.3);
+            let hand_rot = Quat::from_rotation_z(-0.95);
+            vr.hand(Side::Left, hand_at, hand_rot, 0.0, 0.0);
+            vr.step(2);
+            let panel = Transform::from_translation(hand_at)
+                .with_rotation(hand_rot)
+                .transform_point(crate::onboarding::WRIST_PANEL);
+            let eye = feet + Vec3::new(0.0, 1.65, 0.0);
+            vr.app
+                .world_mut()
+                .get_mut::<RigInput>(vr.player)
+                .unwrap()
+                .head = Transform::from_translation(Vec3::new(0.0, 1.65, 0.0))
+                .looking_to(panel - eye, Vec3::Y);
+            vr.step(60);
+            vr.head(Vec3::new(0.0, 1.65, 0.0));
+            vr.hand(
+                Side::Left,
+                feet + Vec3::new(-0.25, 0.9, 0.0),
+                Quat::IDENTITY,
+                0.0,
+                0.0,
+            );
+            vr.step(5);
+        }
+        let mut vr = Vr::first_run();
+        vr.step(20);
+        // A glance at the wrist in the truck, before the kit's taken (facing
+        // the way the look is worked out in).
+        let feet = vr.root().translation;
+        vr.stand(feet, 0.0);
+        look_at_the_wrist(&mut vr, feet);
+        assert!(!done(&vr, Goal::Wrist), "the wrist ticked at the truck");
+        // At First aid, the same look counts.
+        at_station(&mut vr, 6, &[]);
+        let feet = ground(&vr, [2.0, 8.0]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        look_at_the_wrist(&mut vr, feet);
+        assert!(done(&vr, Goal::Wrist), "the wrist at First aid");
+        // At the shimmer, the stone before the part thrown.
+        at_station(&mut vr, 7, &[]);
+        let heart = crate::onboarding::SHIMMER_AT;
+        let r = crate::onboarding::SHIMMER_R;
+        let stone = placed(&mut vr, Placed::Stone);
+        let feet = ground(&vr, [heart[0] - r - 0.8, heart[1]]);
+        vr.stand(feet, -std::f32::consts::FRAC_PI_2);
+        vr.step(60);
+        flick(
+            &mut vr,
+            Side::Right,
+            feet + Vec3::new(0.25, 1.2, 0.2),
+            stone,
+        );
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(stone), "caught");
+        vr.step(5);
+        assert!(!done(&vr, Goal::Artifact), "the stone before the part");
+    }
+
     /// Station 8: a fingertip on the PUSH ME card's button.
     #[test]
     fn station_buttons() {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         let mut vr = Vr::first_run();
+        at_station(&mut vr, 8, &[]);
         let st = &crate::onboarding::STATIONS[crate::onboarding::station_of(Goal::Button)];
         vr.stand(
             ground(&vr, [st.at[0] + 0.8, st.at[1]]),

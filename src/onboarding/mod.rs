@@ -202,6 +202,10 @@ pub struct Station {
     /// What's worth knowing, shown once it's done (you have time to read
     /// then): what the old yard's signs said.
     pub tip: &'static str,
+    /// Its steps count only in the order asked: each builds on the one
+    /// before (a magazine filled before it's seated; a part thrown before
+    /// the stone's taken).
+    pub in_order: bool,
 }
 
 /// The stations, in order, from the truck north up the track.
@@ -213,6 +217,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::TakePistol, Goal::TakeRadio],
         where_: "the crate in the truck",
         tip: "Everything you own rides\nin that crate between raids.",
+        in_order: false,
     },
     Station {
         title: "GETTING ABOUT",
@@ -221,6 +226,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
         where_: "the lamp off the back of the truck",
         tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
+        in_order: false,
     },
     Station {
         title: "PUT IT AWAY",
@@ -229,6 +235,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::PutAway, Goal::Pack],
         where_: "the next lamp, right of the track",
         tip: "Weight slows you.\nCarry what you'll use.",
+        in_order: false,
     },
     Station {
         title: "OUT OF REACH",
@@ -237,6 +244,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::FarGrab],
         where_: "the lamp by the pen",
         tip: "Works on anything loose\nup to five metres off.",
+        in_order: false,
     },
     Station {
         title: "THE RANGE",
@@ -252,6 +260,7 @@ pub const STATIONS: &[Station] = &[
         ],
         where_: "the range, left past the gate",
         tip: "Empty, the slide stays\nback: a new mag, then B\n(flat: V) lets it go.",
+        in_order: true,
     },
     Station {
         title: "THE HOUSE",
@@ -260,6 +269,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::OpenDoor, Goal::Search],
         where_: "the house on the right",
         tip: "Scrap and parts go to the\nbench in the truck.",
+        in_order: false,
     },
     Station {
         title: "FIRST AID",
@@ -268,6 +278,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Wrist, Goal::Dressing],
         where_: "the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
+        in_order: false,
     },
     Station {
         title: "THE SHIMMER",
@@ -276,6 +287,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Probe, Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
+        in_order: true,
     },
     Station {
         title: "BUTTONS",
@@ -284,6 +296,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Button],
         where_: "the lamp on the left",
         tip: "Any card with a button\ndoes something: settings,\nthe route, terminals.",
+        in_order: false,
     },
     Station {
         title: "GOING HOME",
@@ -292,6 +305,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::CallTruck, Goal::PullCord],
         where_: "the north post, end of the track",
         tip: "Truck: 2 min to come, waits\n5. No more. My card in the\ntruck has your first job.",
+        in_order: false,
     },
 ];
 
@@ -369,6 +383,25 @@ impl Onboarding {
     /// The station you're on: the first with something left to do.
     pub fn current(&self) -> Option<usize> {
         self.next_goal().map(station_of)
+    }
+
+    /// Whether the yard is teaching this step now: its station is the one
+    /// you're on, and at a station that goes in order, every step before it
+    /// is done. Only then does doing it count; done before, it's asked
+    /// for again in its turn (the playtest's wrist ticked from a glance in
+    /// the truck, 27 minutes before First aid asked for it).
+    pub fn asks(&self, g: Goal) -> bool {
+        let i = station_of(g);
+        if self.current() != Some(i) {
+            return false;
+        }
+        let st = &STATIONS[i];
+        !st.in_order
+            || st
+                .goals
+                .iter()
+                .take_while(|x| **x != g)
+                .all(|x| self.is_done(*x))
     }
 
     pub fn station_done(&self, i: usize) -> bool {
@@ -1022,8 +1055,16 @@ fn bot_in_the_bed(
     }
 }
 
-/// Marks a goal done (once), and says so.
+/// Marks a goal done (once, and only while it's being taught:
+/// [`Onboarding::asks`]), and says so.
 fn complete(ob: &mut Onboarding, goal: Goal, out: &mut MessageWriter<GoalDone>) {
+    if ob.asks(goal) {
+        tick(ob, goal, out);
+    }
+}
+
+/// Marks a goal done (once), whatever's being taught: a SKIP card's.
+fn tick(ob: &mut Onboarding, goal: Goal, out: &mut MessageWriter<GoalDone>) {
     if ob.is_done(goal) {
         return;
     }
@@ -1232,7 +1273,7 @@ fn watch_moves(
     } else {
         stick.x.abs() > 0.7
     };
-    if ob.current().is_some_and(|i| i >= station_of(Goal::Turn)) {
+    if ob.current() == Some(station_of(Goal::Turn)) {
         if turned {
             complete(&mut ob, Goal::Turn, &mut out);
         }
@@ -1399,7 +1440,7 @@ fn press_cards(
                 for g in STATIONS[*i].goals {
                     if !ob.is_done(*g) {
                         ob.skipped.push(*g);
-                        complete(&mut ob, *g, &mut out);
+                        tick(&mut ob, *g, &mut out);
                     }
                 }
             }
