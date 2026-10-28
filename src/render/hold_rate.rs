@@ -191,6 +191,25 @@ impl Display {
     }
 }
 
+/// What a frame tells the governor: its GPU time and whether it was late
+/// (the runtime reprojecting, or the frame itself over one and a half
+/// periods). Nothing while the headset isn't showing the world: before
+/// the session's focused and the world's drawn, the GPU's 1 ms readings
+/// were of an empty view, and the playtest's eyes went from 60% to 100%
+/// on them in 12 s.
+pub fn reading(
+    live: bool,
+    gpu: Option<f64>,
+    runtime_late: bool,
+    frame_ms: f64,
+    period_ms: f64,
+) -> (Option<f64>, bool) {
+    if !live {
+        return (None, false);
+    }
+    (gpu, runtime_late || frame_ms > period_ms * 1.5)
+}
+
 /// The eyes' size this frame, pixels, for the cameras' viewports and the
 /// projection layer's image rects (extracted, so both are the same
 /// frame's). `scale` is the share of the runtime's recommended width.
@@ -266,6 +285,7 @@ mod xr {
         mut seen: Local<Option<std::time::Instant>>,
         mut said: Local<f32>,
         mut eyes: Query<&mut Camera, With<XrCamera>>,
+        world: crate::render::timeline::WorldReady,
     ) {
         let (Some(config), Some(sizes)) = (config, sizes) else {
             return;
@@ -290,13 +310,22 @@ mod xr {
             .and_then(|s| super::super::budget::newest_gpu_ms(s, &mut seen));
         // `EXTRACTION_FRAME_BUDGET_MS` stands in for the display's period (a
         // simulated runtime's follows the game's own pace).
-        let predicted = frame.map(|f| f.predicted_display_period.as_nanos() as f64 / 1e6);
-        let (period, late) = match std::env::var("EXTRACTION_FRAME_BUDGET_MS")
+        let predicted = frame
+            .as_ref()
+            .map(|f| f.predicted_display_period.as_nanos() as f64 / 1e6);
+        let (period, gpu, late) = match std::env::var("EXTRACTION_FRAME_BUDGET_MS")
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
         {
-            Some(p) => (p, false),
-            None => predicted.map_or((1000.0 / 90.0, false), |p| hold.display.see(p)),
+            Some(p) => (p, gpu, false),
+            None => {
+                let (period, late) =
+                    predicted.map_or((1000.0 / 90.0, false), |p| hold.display.see(p));
+                let live = frame.as_ref().is_some_and(|f| f.should_render) && world.ready();
+                let (gpu, late) =
+                    super::reading(live, gpu, late, time.delta_secs_f64() * 1000.0, period);
+                (period, gpu, late)
+            }
         };
         let scale = if comfort.hold_rate {
             hold.governor.step_seen(gpu, period.max(1.0), late)
@@ -640,6 +669,23 @@ mod tests {
         assert!(period <= 1000.0 / 60.0 + 1e-9);
         let (period, late) = d.see(1000.0 / 90.0);
         assert!(!late && (period - 1000.0 / 90.0).abs() < 1e-9);
+    }
+
+    /// Before the world shows in the headset, an empty view's 1 ms readings
+    /// don't move it; once it shows, a frame that takes two periods is
+    /// late whatever the runtime predicts.
+    #[test]
+    fn it_holds_until_the_world_shows_and_counts_long_frames_late() {
+        let mut g = Governor::new(0.6, 0.45, 1.0);
+        for _ in 0..2000 {
+            let (gpu, late) = reading(false, Some(0.9), false, 11.0, PERIOD);
+            g.step_seen(gpu, PERIOD, late);
+        }
+        assert_eq!(g.scale, 0.6, "held before the world showed");
+        let (_, late) = reading(true, Some(3.0), false, 2.0 * PERIOD, PERIOD);
+        assert!(late);
+        let (_, late) = reading(true, Some(3.0), false, PERIOD, PERIOD);
+        assert!(!late);
     }
 
     /// No GPU time back (no timestamp queries): it holds where it is.
