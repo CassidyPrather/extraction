@@ -881,14 +881,16 @@ fn tailgate(
     items: Query<(Entity, &Item, Option<&CarriedBy>, &GlobalTransform)>,
     stash: Query<&Backpack, With<Stash>>,
     catalog: Res<Catalog>,
-    mut said: Local<bool>,
+    // Said this time home; and been on the truck first (you wake in its
+    // bed: a fresh session's first frames have you elsewhere).
+    mut said: Local<(bool, bool)>,
 ) {
     if raid.phase != Phase::AtBase {
-        *said = false;
+        *said = (false, false);
         return;
     }
     // (`SIM_NO_TAILGATE=1`: as before it was said, to compare runs.)
-    if *said
+    if said.0
         || opts.map == crate::camp::TRAINING_YARD
         || std::env::var_os("SIM_NO_TAILGATE").is_some()
     {
@@ -898,9 +900,13 @@ fn tailgate(
         return;
     };
     if at.translation().xz().distance(truck.translation().xz()) < OFF_THE_TRUCK {
+        said.1 = true;
         return;
     }
-    *said = true;
+    if !said.1 {
+        return;
+    }
+    said.0 = true;
     let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
     let near_truck = |g: &GlobalTransform| g.translation().distance(truck.translation()) < 3.0;
     let is = |it: &Item, want: &str| {
