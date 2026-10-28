@@ -147,7 +147,9 @@ impl Governor {
             all.sort_by(f64::total_cmp);
             let slow = all[all.len() * 9 / 10];
             let after = slow * f64::from(UP * UP);
-            let most = self.ceiling.map_or(self.max, |(c, _)| (c / UP).min(self.max));
+            let most = self
+                .ceiling
+                .map_or(self.max, |(c, _)| (c / UP).min(self.max));
             if after < target * ROOM && self.scale < most {
                 self.scale = (self.scale * UP).min(most);
                 // The next step up waits for a half second all at this
