@@ -9,9 +9,11 @@ pub mod budget;
 pub mod cards;
 pub mod comfort;
 pub mod cpu;
+pub mod eye_projection;
 pub mod first_contact;
 pub mod first_sight;
 pub mod fog;
+pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
@@ -97,6 +99,8 @@ impl Plugin for RenderPlugin {
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
+        .add_plugins(gpu_lost::GpuLostPlugin)
+        .add_plugins(eye_projection::EyeProjectionPlugin)
         .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
