@@ -528,29 +528,15 @@ fn way_from_the_drop(
 /// the place nearest it.
 fn heard_working(
     subject: extraction_core::contracts::Subject,
-    robots: &Query<(
-        &crate::robots::Robot,
-        &GlobalTransform,
-        Option<&crate::robots::Breed>,
-    )>,
+    robots: &Query<crate::robots::subjects::Candidate>,
     zone: &crate::world::Zone,
 ) -> Option<String> {
-    use extraction_core::contracts::Subject;
     use extraction_core::map::MarkerKind;
     let drop = zone.marker(&MarkerKind::Insertion).map(|m| m.at)?;
     let at = robots
         .iter()
-        .filter(|(r, g, breed)| {
-            let p = g.translation();
-            let heavy = breed.is_some_and(|b| b.0 == "heavy");
-            !r.wrecked
-                && r.kind == crate::robots::RobotKind::Walker
-                && heavy == (subject == Subject::Heavy)
-                // (Not one at work underground: its floor's well under the
-                // ground's.)
-                && p.y > zone.ground(p.x, p.z) - 2.0
-        })
-        .map(|(_, g, _)| [g.translation().x, g.translation().z])
+        .filter(|c| c.findable(subject, zone))
+        .map(|c| [c.at.translation().x, c.at.translation().z])
         .min_by(|a, b| {
             extraction_core::geom::dist(*a, drop).total_cmp(&extraction_core::geom::dist(*b, drop))
         })?;
@@ -580,11 +566,7 @@ fn card_text(
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
-    robots: Query<(
-        &crate::robots::Robot,
-        &GlobalTransform,
-        Option<&crate::robots::Breed>,
-    )>,
+    robots: Query<crate::robots::subjects::Candidate>,
     mut heard: Local<Option<String>>,
 ) {
     let p = &progression.0;
