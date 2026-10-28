@@ -2156,7 +2156,7 @@ mod onboarding {
     #[test]
     fn station_put_it_away() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 2, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::PutAway), &[]);
         let feet = ground(&vr, [3.0, 70.0]);
         vr.stand(feet, 0.0);
         vr.head(Vec3::new(0.0, 1.7, 0.0));
@@ -2225,7 +2225,7 @@ mod onboarding {
     #[test]
     fn station_out_of_reach() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 3, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::FarGrab), &[]);
         let pen = crate::onboarding::FAR_STAND_AT;
         let feet = ground(&vr, [pen[0], pen[1] + crate::onboarding::PEN_HALF + 0.35]);
         vr.stand(feet, 0.0);
@@ -2267,7 +2267,7 @@ mod onboarding {
     #[test]
     fn station_the_range() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 4, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::FillMag), &[]);
         let table = crate::onboarding::RANGE_TABLE_AT;
         let feet = ground(&vr, [table[0], table[1] + 0.75]);
         vr.stand(feet, 0.0);
@@ -2282,6 +2282,9 @@ mod onboarding {
             q.iter(vr.app.world())
                 .filter(|(_, it, gt)| {
                     catalog.get(it.kind()).id == id
+                        // (The empty magazine: the full one is for running
+                        // it dry.)
+                        && (id != "pm_mag" || it.rounds == 0)
                         && gt.translation().xz().distance(Vec2::from(table)) < 1.0
                 })
                 .map(|(e, ..)| e)
@@ -2394,12 +2397,54 @@ mod onboarding {
         vr.trigger(Side::Right, 0.0);
         vr.step(30);
         assert!(done(&vr, Goal::HitPlate), "hit the plate at 15 m");
+        // Running it dry: fire till the slide stays back.
+        for _ in 0..12 {
+            vr.trigger(Side::Right, 1.0);
+            vr.step(6);
+            vr.trigger(Side::Right, 0.0);
+            vr.step(10);
+        }
+        assert!(vr.app.world().get::<Gun>(gun).unwrap().firearm.locked_back);
+        assert!(done(&vr, Goal::RunDry), "ran it dry");
         // A on the gun hand: the magazine drops out.
         vr.primary(Side::Right, true);
         vr.step(3);
         vr.primary(Side::Right, false);
         vr.step(10);
         assert!(done(&vr, Goal::DropMag), "the mag dropped");
+        // The full one off the table, up into the grip.
+        let spare = placed(&mut vr, Placed::SpareMag);
+        take(&mut vr, Side::Left, spare);
+        let well = {
+            let w = vr.app.world().get::<Gun>(gun).unwrap().magwell.unwrap();
+            at(&vr, w)
+        };
+        let from = at(&vr, spare);
+        let start = well - Vec3::Y * 0.25;
+        for i in 0..=10 {
+            vr.move_hand(Side::Left, from.lerp(start, i as f32 / 10.0));
+            vr.step(1);
+        }
+        for i in 0..=30 {
+            vr.move_hand(Side::Left, start.lerp(well, i as f32 / 30.0));
+            vr.step(1);
+        }
+        vr.step(5);
+        vr.grip(Side::Left, 0.0);
+        vr.step(5);
+        assert!(done(&vr, Goal::Reload), "a full mag in");
+        assert!(!done(&vr, Goal::SlideRelease), "a mag in doesn't load it");
+        // B on the gun hand lets the slide go; then it fires.
+        vr.secondary(Side::Right, true);
+        vr.step(3);
+        vr.secondary(Side::Right, false);
+        vr.step(10);
+        assert!(done(&vr, Goal::SlideRelease), "the slide let go");
+        vr.trigger(Side::Right, 1.0);
+        vr.step(6);
+        vr.trigger(Side::Right, 0.0);
+        vr.step(10);
+        assert!(done(&vr, Goal::FireAgain), "fired again");
     }
 
     /// Station 5: a hand swings the house's door open; the find on the
@@ -2407,7 +2452,7 @@ mod onboarding {
     #[test]
     fn station_the_house() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 5, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::OpenDoor), &[]);
         let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
         let find = placed(&mut vr, Placed::HouseFind);
         let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
@@ -2456,7 +2501,7 @@ mod onboarding {
     #[test]
     fn station_first_aid() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 6, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Wrist), &[]);
         let feet = ground(&vr, [2.0, 8.0]);
         vr.stand(feet, 0.0);
         vr.step(20);
@@ -2570,7 +2615,7 @@ mod onboarding {
         assert_eq!(seated, Some(holster.0), "holstered on the left");
 
         // At First aid, the left wrist, looked at: nothing.
-        at_station(&mut vr, 6, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Wrist), &[]);
         let look_at = |vr: &mut Vr, side: Side, x: f32| {
             let hand_at = feet + Vec3::new(x, 1.35, -0.3);
             let hand_rot = Quat::from_rotation_z(0.95 * side.sign());
@@ -2601,7 +2646,7 @@ mod onboarding {
     #[test]
     fn station_shimmer_throw_a_part_first() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 7, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Probe), &[]);
         vr.step(30);
         let snare = crate::onboarding::SNARE_AT;
         let r = crate::onboarding::SNARE_R;
@@ -2643,7 +2688,11 @@ mod onboarding {
     #[test]
     fn station_the_shimmer() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 7, &[Goal::Probe]);
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Probe),
+            &[Goal::Probe],
+        );
         let heart = crate::onboarding::SHIMMER_AT;
         let r = crate::onboarding::SHIMMER_R;
         vr.step(30);
@@ -2707,14 +2756,14 @@ mod onboarding {
         look_at_the_wrist(&mut vr, feet);
         assert!(!done(&vr, Goal::Wrist), "the wrist ticked at the truck");
         // At First aid, the same look counts.
-        at_station(&mut vr, 6, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Wrist), &[]);
         let feet = ground(&vr, [2.0, 8.0]);
         vr.stand(feet, 0.0);
         vr.step(20);
         look_at_the_wrist(&mut vr, feet);
         assert!(done(&vr, Goal::Wrist), "the wrist at First aid");
         // At the shimmer, the stone before the part thrown.
-        at_station(&mut vr, 7, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Probe), &[]);
         let heart = crate::onboarding::SHIMMER_AT;
         let r = crate::onboarding::SHIMMER_R;
         let stone = placed(&mut vr, Placed::Stone);
@@ -2737,7 +2786,7 @@ mod onboarding {
     fn station_buttons() {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         let mut vr = Vr::first_run();
-        at_station(&mut vr, 8, &[]);
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Button), &[]);
         let st = &crate::onboarding::STATIONS[crate::onboarding::station_of(Goal::Button)];
         vr.stand(
             ground(&vr, [st.at[0] + 0.8, st.at[1]]),

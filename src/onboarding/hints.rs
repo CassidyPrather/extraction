@@ -3,7 +3,9 @@
 //! in the truck does nothing; an empty chamber clicks. Someone new can't
 //! tell those from a broken control (the first headset session found most
 //! controls "dead" and couldn't tell why), so the wrist says what to do,
-//! a few times, then trusts you.
+//! a few times, then trusts you; and not at all once you've shown you
+//! know (the playtest heard "Safety's on" three minutes after it had
+//! taken the range's pistol off safe itself).
 
 use bevy::prelude::*;
 use extraction_core::firearm::{Event as FireEvent, FireMode};
@@ -46,14 +48,21 @@ impl Hint {
     }
 }
 
-/// Hints given: how many times, and when last.
+/// Hints given: how many times, and when last; and what you've shown you
+/// know (done what the hint would tell you).
 #[derive(Resource, Default, Debug)]
-pub struct Hints(std::collections::HashMap<Hint, (u32, f32)>);
+pub struct Hints {
+    given: std::collections::HashMap<Hint, (u32, f32)>,
+    known: std::collections::HashSet<Hint>,
+}
 
 impl Hints {
-    /// Say it, unless it's been said enough or just now.
+    /// Say it, unless it's been said enough or just now, or you know.
     pub fn give(&mut self, hint: Hint, now: f32, flat: bool, raid: &mut Raid) -> bool {
-        let e = self.0.entry(hint).or_insert((0, f32::NEG_INFINITY));
+        if self.known.contains(&hint) {
+            return false;
+        }
+        let e = self.given.entry(hint).or_insert((0, f32::NEG_INFINITY));
         if e.0 >= TIMES || now - e.1 < QUIET {
             return false;
         }
@@ -64,7 +73,12 @@ impl Hints {
     }
 
     pub fn given(&self, hint: Hint) -> u32 {
-        self.0.get(&hint).map_or(0, |e| e.0)
+        self.given.get(&hint).map_or(0, |e| e.0)
+    }
+
+    /// You've done what it tells you: it's not said again.
+    pub fn known(&mut self, hint: Hint) {
+        self.known.insert(hint);
     }
 }
 
@@ -105,6 +119,12 @@ fn dry_click(
 ) {
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
+        // Taken off safe, or a round chambered, by your own hand.
+        match ev.event {
+            FireEvent::ModeChanged(m) if mine && m != FireMode::Safe => hints.known(Hint::Safety),
+            FireEvent::Chambered if mine => hints.known(Hint::Empty),
+            _ => {}
+        }
         if let (true, Some(flat)) = (mine && ev.event == FireEvent::DryFire, driver.flat()) {
             hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
         }
@@ -120,8 +140,13 @@ fn radio_at_base(
     time: Res<Time>,
 ) {
     for c in calls.read() {
-        if locals.contains(c.player) && raid.phase == Phase::AtBase {
+        if !locals.contains(c.player) {
+            continue;
+        }
+        if raid.phase == Phase::AtBase {
             hints.give(Hint::RadioAtBase, time.elapsed_secs(), false, &mut raid);
+        } else {
+            hints.known(Hint::RadioAtBase);
         }
     }
 }

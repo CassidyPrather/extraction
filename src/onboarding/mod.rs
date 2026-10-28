@@ -68,7 +68,11 @@ pub enum Goal {
     Rack,
     Safety,
     HitPlate,
+    RunDry,
     DropMag,
+    Reload,
+    SlideRelease,
+    FireAgain,
     OpenDoor,
     Search,
     Wrist,
@@ -97,7 +101,11 @@ impl Goal {
             Goal::Rack => "Rack the slide",
             Goal::Safety => "Safety off",
             Goal::HitPlate => "Hit a plate",
-            Goal::DropMag => "Drop the mag",
+            Goal::RunDry => "Shoot it empty",
+            Goal::DropMag => "Drop the empty mag",
+            Goal::Reload => "A full mag in",
+            Goal::SlideRelease => "Let the slide go",
+            Goal::FireAgain => "Fire again",
             Goal::OpenDoor => "Open the door",
             Goal::Search => "Take what's inside",
             Goal::Wrist => "Read your wrist",
@@ -116,7 +124,9 @@ impl Goal {
         if !flat && comfort.one_handed {
             let one = match self {
                 Goal::FillMag => Some("Mag in hand. Touch it to\nthe box on the table."),
-                Goal::SeatMag => Some("Mag in a pouch. Bring the\npistol in hand down on it."),
+                Goal::SeatMag | Goal::Reload => {
+                    Some("Mag in a pouch. Bring the\npistol in hand down on it.")
+                }
                 Goal::Rack => Some("Press B or Y on the gun\nhand: it racks."),
                 Goal::Dressing => Some("Hold it. Press A or X\non that hand."),
                 _ => None,
@@ -164,8 +174,16 @@ impl Goal {
             (Goal::Safety, true) => "Pistol in hand. Press X.",
             (Goal::HitPlate, false) => "Line up the sights.\nSqueeze TRIGGER.",
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
+            (Goal::RunDry, false) => "Squeeze TRIGGER at the\nplates till it stays back.",
+            (Goal::RunDry, true) => "Left mouse at the plates\ntill the slide stays back.",
             (Goal::DropMag, false) => "Press A on the gun hand.",
             (Goal::DropMag, true) => "Pistol in hand. Press B.",
+            (Goal::Reload, false) => "The full mag in one hand:\npush it up into the grip.",
+            (Goal::Reload, true) => "Full mag in a pouch.\nPress R.",
+            (Goal::SlideRelease, false) => "Press B on the gun hand\n(or rack it).",
+            (Goal::SlideRelease, true) => "Press V.",
+            (Goal::FireAgain, false) => "Line up the sights.\nSqueeze TRIGGER.",
+            (Goal::FireAgain, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
@@ -256,10 +274,26 @@ pub const STATIONS: &[Station] = &[
             Goal::Rack,
             Goal::Safety,
             Goal::HitPlate,
-            Goal::DropMag,
         ],
         where_: "the range, left past the gate",
-        tip: "Empty, the slide stays\nback: a new mag, then B\n(flat: V) lets it go.",
+        tip: "Eight rounds in a PM's\nmag. Count them.",
+        in_order: true,
+    },
+    // The playtest's first death: a fresh magazine seated after the last
+    // shot, and the slide never let go (`docs/playtests/2026-10-28`).
+    Station {
+        title: "RUN IT DRY",
+        at: [-9.5, 46.5],
+        rot: 315.0,
+        goals: &[
+            Goal::RunDry,
+            Goal::DropMag,
+            Goal::Reload,
+            Goal::SlideRelease,
+            Goal::FireAgain,
+        ],
+        where_: "the next lamp, by the range table",
+        tip: "Empty, the slide stays\nback. A new mag doesn't\nload it: let the slide go.",
         in_order: true,
     },
     Station {
@@ -368,6 +402,8 @@ pub struct Onboarding {
     pub greeted_flat: bool,
     /// Ducked under the low beam on the track (noticed, not asked for).
     pub ducked: bool,
+    /// The station the driver last sent you on to (it's said once).
+    pub sent_to: Option<usize>,
 }
 
 impl Onboarding {
@@ -484,6 +520,8 @@ pub enum Placed {
     FarBox,
     HouseFind,
     Stone,
+    /// The full magazine on the range table.
+    SpareMag,
 }
 
 /// The practice house's doorway (its middle, on the floor), once found.
@@ -834,6 +872,16 @@ fn setup(
         Transform::from_translation(top + Vec3::new(0.05, 0.0, 0.05)),
     );
     set_rounds(&mut commands, mag, 0);
+    // A full one for running it dry.
+    let spare = spawn(
+        &mut commands,
+        "pm_mag",
+        Transform::from_translation(top + Vec3::new(0.05, 0.0, -0.18)),
+    );
+    set_rounds(&mut commands, spare, 8);
+    if let Some(e) = spare {
+        commands.entity(e).insert(Placed::SpareMag);
+    }
     let ammo = spawn(
         &mut commands,
         "ammo_9x18",
@@ -1171,10 +1219,22 @@ fn watch_guns(
             continue;
         }
         match ev.event {
+            // The same motions at the range and running it dry: whichever
+            // the yard is teaching counts (`complete`).
             extraction_core::firearm::Event::MagazineInserted => {
-                complete(&mut ob, Goal::SeatMag, &mut out)
+                complete(&mut ob, Goal::SeatMag, &mut out);
+                complete(&mut ob, Goal::Reload, &mut out);
             }
-            extraction_core::firearm::Event::Chambered => complete(&mut ob, Goal::Rack, &mut out),
+            extraction_core::firearm::Event::Chambered => {
+                complete(&mut ob, Goal::Rack, &mut out);
+                complete(&mut ob, Goal::SlideRelease, &mut out);
+            }
+            extraction_core::firearm::Event::BoltLocked => {
+                complete(&mut ob, Goal::RunDry, &mut out)
+            }
+            extraction_core::firearm::Event::Fired { .. } => {
+                complete(&mut ob, Goal::FireAgain, &mut out)
+            }
             extraction_core::firearm::Event::MagazineRemoved => {
                 complete(&mut ob, Goal::DropMag, &mut out)
             }
@@ -1447,6 +1507,7 @@ fn press_cards(
             Ok(OnboardCard::StartOver) => {
                 ob.done.clear();
                 ob.skipped.clear();
+                ob.sent_to = None;
                 raid.say(START_OVER_LINE);
             }
             _ => {}
@@ -1505,7 +1566,10 @@ fn announce(
             continue;
         }
         let line = match ob.current() {
-            Some(next) if next > station_of(d.goal) => next_line(next),
+            Some(next) if next > station_of(d.goal) && ob.sent_to != Some(next) => {
+                ob.sent_to = Some(next);
+                next_line(next)
+            }
             Some(_) => continue,
             None => ALL_DONE_LINE.to_string(),
         };
@@ -1659,7 +1723,7 @@ fn hurry_the_truck(mut raid: ResMut<Raid>) {
 /// Stepping out of the truck says when the Surge is due: nothing to do
 /// with the yard, and it pushes the driver's directions off the wrist. Here
 /// the driver says where to go instead.
-fn out_of_the_truck(mut raid: ResMut<Raid>, ob: Res<Onboarding>) {
+fn out_of_the_truck(mut raid: ResMut<Raid>, mut ob: ResMut<Onboarding>) {
     let Some(i) = raid
         .log
         .iter()
@@ -1668,7 +1732,10 @@ fn out_of_the_truck(mut raid: ResMut<Raid>, ob: Res<Onboarding>) {
         return;
     };
     raid.log.remove(i);
-    if let Some(next) = ob.current() {
+    // Where to, if the driver hasn't said (once is enough: the playtest
+    // heard "Next: the lamp by the pen." twice in 28 s).
+    if let Some(next) = ob.current().filter(|n| ob.sent_to != Some(*n)) {
+        ob.sent_to = Some(next);
         raid.say(format!(
             "Driver: \"Off you go. Next: {}.\"",
             STATIONS[next].where_
