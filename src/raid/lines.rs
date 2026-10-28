@@ -352,6 +352,14 @@ pub const LOST_YOU: &[&str] = &[
     "Its eye swings away. It's given up.",
 ];
 
+/// A machine that lost you is coming back your way
+/// (`robots::search::ComingBack`).
+pub const COMING_BACK: &[&str] = &[
+    "Steps again, coming your way. It's back to look.",
+    "Its whirr turns back toward you. Keep still.",
+    "It's coming back. Slow steps, nearer.",
+];
+
 /// A machine close by calls the others (`robots::search::CalledOut`).
 pub const CALLED_OUT: &[&str] = &[
     "Chirps answer each other nearby. They're calling.",

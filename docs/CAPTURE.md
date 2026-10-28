@@ -348,6 +348,38 @@ cd - && BEFORE_BIN=/tmp/before/target/fast/extraction scripts/capture_new.sh
 Edit the subject lists in `scripts/capture_new.sh` and the captions in
 `scripts/capture_new.py` for the next pass.
 
+## Before and after: `scripts/before_after.py LIST`
+
+A contact sheet of fixes you can see, each shot by the build before the
+fix and the build after it, side by side. The list file names the two
+builds and the shots:
+`docs/playtests/2026-10-28/shots.txt` is the playtest's. Its header says
+how to write a line: name, owner, what to look for, and the game's own
+arguments. A fifth field gives the before build different arguments.
+The owners keep their lines up to date as their fixes land.
+
+```
+scripts/before_after.py docs/playtests/2026-10-28/shots.txt      # the sheet
+scripts/before_after.py LIST --only range_board                  # one shot
+scripts/before_after.py LIST --try target/fast/extraction        # stage your line on your build
+scripts/before_after.py LIST --check                             # read the list only
+```
+
+- **Builds:** `scripts/build_at.sh`, the same builds the visual diff uses
+  (`target/vdiff/bin/<sha>/`).
+- **Shots:** each is `--screenshot` after `--frames`, under Xvfb on the
+  software renderer, with a fresh `--data-dir` and `--new-game`. They are
+  kept in `target/before_after/<sha>/` with their logs, and shot again
+  only when their arguments change.
+- **Output:** `target/before_after/<before>_<after>/sheet.jpg` and
+  `index.html`. A shot that didn't come out is a grey tile with why
+  (timed out, killed, the panic), never left off.
+- **One at a time** (`--jobs 1`) by default: three games and a build at
+  once ran out of memory.
+- **Slow on purpose:** the software renderer loads a valley slowly, so a
+  fix to a slow load (Marrow Creek's impostors) shows in its shot. Give a
+  big valley 150 frames or so; a run has 30 minutes.
+
 ## Visual diff: `scripts/visual_diff.sh [old_sha new_sha]`
 
 The same cameras in every valley, shot by two builds at day, dusk, night
