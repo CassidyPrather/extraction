@@ -20,7 +20,9 @@ environment (`EXTRACTION_YARD_AT=5`). A fifth field, if there, is used by
 the before build instead: for a shot whose staging only exists since the
 fix. `--picture FILE` (a path in the repo) instead of game arguments puts
 a picture taken elsewhere in that half, for a fix the rig can't stage;
-say so in what to look for. Shots are kept in target/before_after/<sha>/ and taken again only
+say so in what to look for. `--crop x0,y0,x1,y1` (pixels) crops both
+halves on the sheet, for something small in frame; the game never sees
+it. Shots are kept in target/before_after/<sha>/ and taken again only
 when their arguments change. `--try BINARY` shoots the list with your
 own build only, into target/before_after/try/, to stage a line.
 
@@ -52,7 +54,19 @@ BASE = os.path.join(ROOT, "target", "before_after")
 class Shot:
     def __init__(self, name, owner, caption, args, before_args):
         self.name, self.owner, self.caption = name, owner, caption
-        self.args, self.before_args = args, before_args
+        self.args, self.crop = take_crop(args)
+        self.before_args, before_crop = take_crop(before_args)
+        self.crop = self.crop or before_crop
+
+
+def take_crop(args):
+    """(args without `--crop x0,y0,x1,y1`, the box or None): the sheet's,
+    not the game's."""
+    if "--crop" not in args:
+        return args, None
+    i = args.index("--crop")
+    box = tuple(int(v) for v in args[i + 1].split(","))
+    return args[:i] + args[i + 2:], box
 
 
 def parse(path):
@@ -85,7 +99,11 @@ def parse(path):
         try:
             args = shlex.split(fields[3])
             before = shlex.split(fields[4]) if len(fields) == 5 and fields[4] else args
-        except ValueError as e:
+            for a in (args, before):
+                box = take_crop(a)[1]
+                if box is not None and (len(box) != 4 or box[0] >= box[2] or box[1] >= box[3]):
+                    raise ValueError("--crop wants x0,y0,x1,y1 in pixels")
+        except (ValueError, IndexError) as e:
             errors.append(f"{path}:{n}: {e}")
             continue
         shots.append(Shot(name, fields[1], fields[2], args, before))
@@ -169,9 +187,11 @@ def font(size):
     return ImageFont.load_default()
 
 
-def tile(png, why, w, h):
+def tile(png, why, w, h, crop=None):
     if png:
         img = Image.open(png).convert("RGB")
+        if crop:
+            img = img.crop(crop)
         return img.resize((w, int(img.height * w / img.width)))
     img = Image.new("RGB", (w, h), (70, 70, 70))
     d = ImageDraw.Draw(img)
@@ -185,7 +205,7 @@ def sheet(rows, title, out):
     W, GAP, HEAD = 960, 12, 74
     H = W * 9 // 16
     big, small = font(26), font(17)
-    tiles = [(s, tile(*b, W, H), tile(*a, W, H)) for s, b, a in rows]
+    tiles = [(s, tile(*b, W, H, s.crop), tile(*a, W, H, s.crop)) for s, b, a in rows]
     height = 70 + sum(HEAD + max(b.height, a.height) + 2 * GAP for _, b, a in tiles)
     img = Image.new("RGB", (2 * W + 3 * GAP, height), (24, 24, 24))
     d = ImageDraw.Draw(img)
