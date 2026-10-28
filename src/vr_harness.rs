@@ -3602,6 +3602,19 @@ mod first_aid {
         wobble: f32,
         limit: f32,
     ) -> Option<f32> {
+        wind_by_hand(r, along, pace, wobble, limit, false)
+    }
+
+    /// As [`human_wind`], or, `rock`ing, only rocked half a turn back and
+    /// forth on the arm (fidgeting, not winding).
+    fn wind_by_hand(
+        r: f32,
+        along: f32,
+        pace: f32,
+        wobble: f32,
+        limit: f32,
+        rock: bool,
+    ) -> Option<f32> {
         let (mut vr, feet) = setup();
         let d = take(&mut vr, feet, "field_dressing");
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
