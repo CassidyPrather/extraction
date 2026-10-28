@@ -388,7 +388,7 @@ pub fn emissives_to_the_eye(
     bulbs: Query<&ToTheEye>,
     grades: Query<(&Camera, &ColorGrading)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut done: Local<Vec<AssetId<StandardMaterial>>>,
+    mut done: Local<std::collections::HashSet<AssetId<StandardMaterial>>>,
 ) {
     let Some(stops) = grades
         .iter()
@@ -401,17 +401,32 @@ pub fn emissives_to_the_eye(
     done.clear();
     for b in &bulbs {
         let id = b.material.id();
-        if done.contains(&id) {
+        if !done.insert(id) {
             continue;
         }
-        done.push(id);
         let want = hue_safe(b.emissive) * gain;
-        if materials.get(id).is_some_and(|m| m.emissive != want) {
+        // The eyes drift nearly every frame, and every write re-prepares
+        // the material for the GPU: only a step you could see.
+        if materials
+            .get(id)
+            .is_some_and(|m| differs(m.emissive, want, BULB_STEP))
+        {
             if let Some(mut m) = materials.get_mut(id) {
                 m.emissive = want;
             }
         }
     }
+}
+
+/// How far a bulb's light moves (a fraction) before its material is
+/// rewritten: 1%, under what the eye tells apart.
+const BULB_STEP: f32 = 0.01;
+
+/// Whether `a` and `b` differ in any channel by more than `step` of the
+/// brighter.
+fn differs(a: LinearRgba, b: LinearRgba, step: f32) -> bool {
+    let (a, b) = (a.to_vec3(), b.to_vec3());
+    (a - b).abs().max_element() > step * a.max_element().max(b.max_element()).max(1e-6)
 }
 
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
@@ -491,6 +506,65 @@ pub fn undim(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The eyes adapt a little nearly every frame; a bulb's material is
+    /// rewritten (and re-prepared for the GPU) only when its light moves
+    /// enough to see, not on every drift.
+    #[test]
+    fn bulbs_follow_the_eyes_only_by_steps_you_can_see() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, emissives_to_the_eye);
+        let world = app.world_mut();
+        let red = LinearRgba::rgb(4.0, 0.1, 0.05);
+        let mats: Vec<_> = (0..40)
+            .map(|_| {
+                world
+                    .resource_mut::<Assets<StandardMaterial>>()
+                    .add(StandardMaterial::default())
+            })
+            .collect();
+        for m in &mats {
+            world.spawn(ToTheEye {
+                material: m.clone(),
+                emissive: red,
+            });
+        }
+        let eye = world
+            .spawn((Camera::default(), ColorGrading::default()))
+            .id();
+        let shown = |app: &App| {
+            let a = app.world().resource::<Assets<StandardMaterial>>();
+            mats.iter()
+                .map(|m| a.get(m).unwrap().emissive)
+                .collect::<Vec<_>>()
+        };
+        app.update();
+        let first = shown(&app);
+        // A drift: a fifth of a thousandth of a stop a frame, for half a
+        // second (under 1% in all).
+        for i in 1..=45 {
+            app.world_mut()
+                .get_mut::<ColorGrading>(eye)
+                .unwrap()
+                .global
+                .exposure = i as f32 * 0.0002;
+            app.update();
+        }
+        assert_eq!(shown(&app), first, "rewritten on a drift you can't see");
+        // A stop: every bulb follows.
+        app.world_mut()
+            .get_mut::<ColorGrading>(eye)
+            .unwrap()
+            .global
+            .exposure = 1.0;
+        app.update();
+        assert!(
+            shown(&app).iter().zip(&first).all(|(a, b)| a != b),
+            "a stop's change didn't reach the bulbs"
+        );
+    }
 
     /// By day, dawn and dusk in any weather, a storm's included, what you
     /// came for indoors is lit enough to see without a torch; on a night
