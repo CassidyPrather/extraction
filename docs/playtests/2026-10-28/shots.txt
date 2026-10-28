@@ -55,7 +55,7 @@ bleeding_dressed | Hands | Right upper arm dressed (white band), thigh and forea
 
 # Robot bodies (#13): a hit on the walker's core next to one on a weak
 # spot, at 15 m.
-walker_hits | Robot bodies | Four walkers at 15 m, each shot once with a pistol round: the front plate shrugs (nothing to see), the core is wounded (an orange spit), the eye and a knee tell (a white-hot flash). Before: the same four walkers on main with only the new reel (docs/shots/robot-bodies/strikes_before.png, Robot bodies'), as 2798e450 can't stage them | --camera 40,0,262,0,-4 --no-robots --hour day --weather clearing --gallery reel:strikes,0,1 --frames 48 --crop 440,290,840,400 | --picture docs/shots/robot-bodies/strikes_before.png --crop 440,290,840,400
+walker_hits | Robot bodies | Four walkers at 15 m, each shot once with a pistol round: the front plate shrugs (nothing to see), the core is wounded (an orange spit), the eye and a knee tell (a white-hot flash). Before: the same four walkers on main with only the new reel (docs/shots/robot-bodies/strikes_before_frame.png, Robot bodies'), as 2798e450 can't stage them | --camera 40,0,262,0,-4 --no-robots --hour day --weather clearing --gallery reel:strikes,0,1 --frames 48 --crop 440,290,840,400 | --picture docs/shots/robot-bodies/strikes_before_frame.png --crop 440,290,840,400
 
 # Visual design (#8): the far trees after a slow load. The software
 # renderer is too slow a frame to reproduce it (2798e450 captured all 9
