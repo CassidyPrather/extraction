@@ -117,14 +117,19 @@ the building is placed:
 | Bus panel | its four side skirts | crowbar only | 200 | drops a `bus_panel` |
 | Car door | a car wreck's doors (Kit's `wreck_lada`, `wreck_uaz`, `wreck_lorry`) | crowbar only | 180 | drops a `car_door` |
 | Car bonnet, boot | its bonnet, boot lid, tailgate | crowbar only | 140 | drops a `car_bonnet` |
-| Car wheel | its wheels | crowbar only | 160 | drops a `car_wheel` |
+| Car wheel | its wheels, each on four nuts | crowbar (160), or a spanner nut by nut | 160 | drops a `car_wheel` |
 
 Metal comes off only to a crowbar (`Pryable`): rounds hole sheet, they
 don't tear a door off. Wood breaks to rounds and blows as a board does.
 A part with no model is drawn as a box of its size in its material. A
 model can name one node of a file, `wreck_lada#door_fl`: a car's parts
 are nodes of the car's model, in the car's space, and each is drawn on
-its own part where the car put it (`Part::model_at`). A car's body
+its own part where the car put it (`Part::model_at`). A car's wheel
+stands on four wheel nuts (`strip::WheelNut`, each `hooks::Unboltable`, a
+full turn): a spanner (`interact::tools::spanner`, Robot bodies') turns
+each out, and when the last is out the wheel comes off as it would to a
+crowbar. However a wheel goes its nuts go with it, and the Surge bolts it
+back on. A car's body
 collides as a few boxes (`strip::car_body`: chassis, hull inside the
 doors, cab, a lorry's bed), none over a part, so what reaches for a door
 meets the door.
@@ -250,7 +255,10 @@ door's crash).
   splinters, the bus's door prised off for scrap (landing outside the
   bus), and both back after the Surge; a garden fence's panel shot out
   between its posts, the gap clear, and back after the Surge; and that
-  nothing we spawn is drawn without its model or its texture on disk.
+  nothing we spawn is drawn without its model or its texture on disk; a
+  Lada's wheel's nuts turned out (a half turn holds; the crowbar takes
+  the nuts with the wheel; the Surge bolts it back), and the same through
+  a spanner in a tracked hand (`vr_harness` `wheel_nuts`).
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.
@@ -284,7 +292,9 @@ shutters open either side of the window), `shutter_off.png` (one shot
 off, its splinters at the wall's foot) and `bus.png` (the depot's bus,
 its skirt panels to prise off) and `bus_stripped.png` (one prised off,
 the rusted core behind), `lada.png` (a Lada wreck on Marrow, whole) and
-`lada_stripped.png` (its front door off, lying beside it). `EXTRACTION_STRIP=1` takes off the part in view
+`lada_stripped.png` (its front door off, lying beside it), `wheel_on.png`
+and `wheel_off.png` (its rear wheel on its nuts, then off and lying by
+the empty arch). `EXTRACTION_STRIP=1` takes off the part in view
 twenty frames before the capture.
 
 ## Next

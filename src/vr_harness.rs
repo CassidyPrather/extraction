@@ -6254,3 +6254,66 @@ mod grips {
         assert_eq!(aware.target, Some(player), "it knows who held it");
     }
 }
+
+/// A car wreck's wheel taken off with a spanner (`destruction::strip`):
+/// each nut turned out in the hand, the last one out and the wheel comes
+/// away.
+mod wheel_nuts {
+    use super::*;
+    use crate::destruction::strip::{Nuts, WHEEL_NUTS};
+
+    const OPEN: Vec3 = Vec3::new(0.0, 0.0, 30.0);
+
+    #[test]
+    fn a_spanner_takes_a_ladas_wheel_off_nut_by_nut() {
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let car = zone.on_ground(OPEN.x, OPEN.z - 2.5);
+        vr.app.world_mut().spawn((
+            crate::world::buildings::Building {
+                prefab: "wreck_lada".into(),
+            },
+            Transform::from_translation(car),
+        ));
+        vr.step(6);
+        // The wheel nearest where you'd stand, and you just outside it,
+        // facing it.
+        let (wheel, at, out, nuts) = {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query::<(Entity, &GlobalTransform, &Nuts)>();
+            q.iter(vr.app.world())
+                .filter(|(_, g, _)| g.translation().distance(car) < 4.0)
+                .map(|(e, g, n)| (e, g.translation(), g.rotation() * Vec3::NEG_Z, n.0.clone()))
+                .min_by(|a, b| a.1.z.total_cmp(&b.1.z).reverse())
+                .expect("the Lada's wheels")
+        };
+        assert_eq!(nuts.len(), WHEEL_NUTS, "on its nuts");
+        let feet = zone.on_ground(at.x + out.x * 0.7, at.z + out.z * 0.7);
+        vr.stand(feet, out.x.atan2(out.z));
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let id = catalog.kind("car_wheel").expect("Kit's car_wheel");
+        let wheels = |vr: &mut Vr| {
+            let mut q = vr.app.world_mut().query::<&crate::items::Item>();
+            q.iter(vr.app.world()).filter(|i| i.kind() == id).count()
+        };
+        let before = wheels(&mut vr);
+        // Half a turn on the first: still in.
+        super::salvage::unbolt(&mut vr, feet, nuts[0], 0.5);
+        assert!(
+            vr.app.world().get_entity(nuts[0]).is_ok(),
+            "out on half a turn"
+        );
+        for (i, n) in nuts.iter().enumerate() {
+            super::salvage::unbolt(&mut vr, feet, *n, 1.2);
+            assert!(vr.app.world().get_entity(*n).is_err(), "nut {i} turned out");
+            if i + 1 < nuts.len() {
+                assert!(vr.app.world().get_entity(wheel).is_ok(), "held by the rest");
+            }
+        }
+        vr.step(10);
+        assert!(vr.app.world().get_entity(wheel).is_err(), "the wheel's off");
+        assert_eq!(wheels(&mut vr), before + 1, "a wheel to carry");
+    }
+}
