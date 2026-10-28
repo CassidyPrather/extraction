@@ -193,9 +193,10 @@ def line(probe: list, v: dict, diff) -> dict:
         return {"step": 0.0, "slip": None, "ok": False}
     i, o = float(np.mean(inside)), float(np.mean(outside))
     half = (i + o) / 2
-    # Where, walking out from the inside, the change first falls below
-    # halfway.
-    cross = next((d for d, c in prof if d > -1.0 and c < half), None)
+    # Where, walking in from outside, the change first reaches halfway: the
+    # edge you walk up to (a mark may vary further in: a lift's grit bank
+    # is paler than its scoured middle).
+    cross = next((d for d, c in reversed(prof) if d < 1.0 and c >= half), None)
     step = i - o
     slip = None if cross is None or step < MIN_STEP else round(abs(cross), 1)
     return {"step": round(step, 1), "slip": slip, "ok": step >= MIN_STEP}

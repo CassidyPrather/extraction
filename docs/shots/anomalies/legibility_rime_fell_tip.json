@@ -1,0 +1,200 @@
+[
+ {
+  "kind": "lift",
+  "weather": "fog",
+  "changed": 0.0399,
+  "noise": 0.0,
+  "over_noise": 0.0399,
+  "deg2": 47.89,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "weather": "downpour",
+  "changed": 0.0355,
+  "noise": 0.0,
+  "over_noise": 0.0355,
+  "deg2": 42.65,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "weather": "night",
+  "changed": 0.0457,
+  "noise": 0.0,
+  "over_noise": 0.0457,
+  "deg2": 54.88,
+  "floor": 2.0,
+  "outline": 0.25,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "fog",
+  "changed": 0.0473,
+  "noise": 0.0,
+  "over_noise": 0.0473,
+  "deg2": 56.76,
+  "floor": 2.0,
+  "outline": 0.22,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "downpour",
+  "changed": 0.0435,
+  "noise": 0.0,
+  "over_noise": 0.0435,
+  "deg2": 52.15,
+  "floor": 2.0,
+  "outline": 0.25,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "night",
+  "changed": 0.0619,
+  "noise": 0.0,
+  "over_noise": 0.0619,
+  "deg2": 74.29,
+  "floor": 2.0,
+  "outline": 0.18,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "weather": "fog",
+  "changed": 0.0261,
+  "noise": 0.0,
+  "over_noise": 0.0261,
+  "deg2": 31.38,
+  "floor": 2.0,
+  "outline": 0.31,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "weather": "downpour",
+  "changed": 0.0254,
+  "noise": 0.0,
+  "over_noise": 0.0254,
+  "deg2": 30.51,
+  "floor": 2.0,
+  "outline": 0.33,
+  "ok": true
+ },
+ {
+  "kind": "snare",
+  "weather": "night",
+  "changed": 0.0316,
+  "noise": 0.0,
+  "over_noise": 0.0316,
+  "deg2": 37.87,
+  "floor": 2.0,
+  "outline": 0.17,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "fog",
+  "changed": 0.0202,
+  "noise": 0.0,
+  "over_noise": 0.0202,
+  "deg2": 24.22,
+  "floor": 2.0,
+  "outline": 0.15,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "downpour",
+  "changed": 0.0157,
+  "noise": 0.0,
+  "over_noise": 0.0157,
+  "deg2": 18.81,
+  "floor": 2.0,
+  "outline": 0.19,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "night",
+  "changed": 0.0342,
+  "noise": 0.0,
+  "over_noise": 0.0342,
+  "deg2": 41.06,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "fog",
+  "changed": 0.0018,
+  "noise": 0.0,
+  "over_noise": 0.0018,
+  "deg2": 2.19,
+  "floor": 1.0,
+  "outline": 0.1,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "downpour",
+  "changed": 0.0056,
+  "noise": 0.0,
+  "over_noise": 0.0056,
+  "deg2": 6.78,
+  "floor": 1.0,
+  "outline": 0.12,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "night",
+  "changed": 0.0032,
+  "noise": 0.0,
+  "over_noise": 0.0032,
+  "deg2": 3.9,
+  "floor": 1.0,
+  "outline": 0.12,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "fog",
+  "changed": 0.0172,
+  "noise": 0.0,
+  "over_noise": 0.0172,
+  "deg2": 20.6,
+  "floor": 2.0,
+  "outline": 0.22,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "downpour",
+  "changed": 0.0175,
+  "noise": 0.0,
+  "over_noise": 0.0175,
+  "deg2": 20.99,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "frost",
+  "weather": "night",
+  "changed": 0.0198,
+  "noise": 0.0,
+  "over_noise": 0.0198,
+  "deg2": 23.79,
+  "floor": 2.0,
+  "outline": 0.29,
+  "ok": true
+ }
+]

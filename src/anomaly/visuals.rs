@@ -392,24 +392,35 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
             let (px, py) = (u * 1.1, v * 1.1);
             let blot = 0.65 * value_noise(px * 4.0, py * 4.0, 1)
                 + 0.35 * value_noise(px * 9.0, py * 9.0, 2);
-            let mut tone = 0.45 + 0.55 * blot;
-            // A lift's ground is scoured in a spiral by what it spins: pale
-            // grooves in it, which show on any ground (one colour can't
-            // stand out on grass, ash and silt alike; a pattern does).
-            if spiral {
+            let tone = 0.45 + 0.55 * blot;
+            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
+            // A lift's ground is scoured in a spiral by what it spins:
+            // rusty subsoil, grooved (a plain colour can't stand out on
+            // grass, ash and silt alike; a pattern does). Coloured here,
+            // not by the material: a tint can only darken, and the grit
+            // it flings out is pale.
+            let rgb = if spiral {
                 // Broken, not drawn: the grooves come and go.
                 let wear = value_noise(px * 6.0, py * 6.0, 3);
                 let groove = (a * 3.0 + r.max(0.05).ln() * 9.0 + wear * 1.5).sin();
-                tone *= 0.55 + 0.45 * groove.max(0.0).powf(3.0) * 2.2 * (0.4 + 0.6 * wear);
-                // And at its rim the grit it flings out piles in a pale
-                // ridge, just inside its edge: a line on any ground.
-                let ridge = 1.0 - ((r - 0.94 * edge) / 0.035).abs().min(1.0);
-                tone = tone.max(0.95 * ridge * (0.75 + 0.25 * wear));
-            }
-            let tone = tone * grain;
-            let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
-            let c = (tone.clamp(0.0, 1.0) * 255.0) as u8;
-            data.extend_from_slice(&[c, c, c, (alpha * 255.0) as u8]);
+                let t = tone * (0.55 + 0.45 * groove.max(0.0).powf(3.0) * 2.2 * (0.4 + 0.6 * wear));
+                let rust = [0.36, 0.13, 0.06].map(|c| c * t);
+                // Round its rim the grit it flings out lies in a broad pale
+                // bank, thickest in a ridge just inside its edge: pale sand
+                // on dark ground, its rust and grooves through it on pale,
+                // so the line you mustn't cross shows on any ground.
+                let at = r / edge;
+                let bank = smooth(0.64, 0.76, at) * (1.0 - smooth(0.95, 0.99, at));
+                let ridge = 1.0 - ((at - 0.93) / 0.04).abs().min(1.0);
+                let lumps = value_noise(px * 14.0, py * 14.0, 4);
+                let grit = (bank * (0.45 + 0.4 * lumps + 0.15 * wear) + 0.4 * ridge).min(0.95);
+                let sand = [0.86, 0.74, 0.58].map(|c| c * grain);
+                std::array::from_fn(|i| rust[i] * grain * (1.0 - grit) + sand[i] * grit)
+            } else {
+                [tone * grain; 3]
+            };
+            let [r, g, b] = rgb.map(|c: f32| (c.clamp(0.0, 1.0) * 255.0) as u8);
+            data.extend_from_slice(&[r, g, b, (alpha * 255.0) as u8]);
         }
     }
     images.add(Image::new(
@@ -423,6 +434,12 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::RENDER_WORLD,
     ))
+}
+
+/// Hermite step from `a` to `b`.
+fn smooth(a: f32, b: f32, x: f32) -> f32 {
+    let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// Smooth value noise, 0..1, a lattice point a unit apart (`seed` picks
@@ -554,9 +571,8 @@ fn init_assets(
     // still shows.
     let flattened = ground_with(
         &scoured,
-        Color::srgba(0.36, 0.13, 0.06, 0.97),
-        // (Its grooves darken it on the whole: the glow made up for that.)
-        LinearRgba::rgb(0.065, 0.034, 0.015),
+        Color::srgba(1.0, 1.0, 1.0, 0.97),
+        LinearRgba::rgb(0.035, 0.018, 0.008),
         0.95,
     );
     let mut ground =
@@ -589,11 +605,12 @@ fn init_assets(
         LinearRgba::rgb(0.06, 0.06, 0.058),
         0.95,
     );
-    // Hoar on the ground, faintly blue, a little lit of itself.
+    // Glazed in blue ice, a little lit of itself. (Its own valley is under
+    // snow: pale hoar on snow was no mark at all.)
     let frosted = ground(
-        Color::srgba(0.82, 0.9, 1.0, 0.75),
-        LinearRgba::rgb(0.0, 0.01, 0.03),
-        0.95,
+        Color::srgba(0.22, 0.36, 0.62, 0.94),
+        LinearRgba::rgb(0.0, 0.012, 0.045),
+        0.4,
     );
     // Pressed dark and hard, a faint violet in it (the well's own light:
     // in shadow and at night its edge still shows).
@@ -602,6 +619,11 @@ fn init_assets(
         LinearRgba::rgb(0.02, 0.004, 0.05),
         0.95,
     );
+    // (A lift's texture's colour is its own: lit by it, its pale grit
+    // would glow too. An even warmth, faded with the mark.)
+    if let Some(mut m) = marks.get_mut(&flattened) {
+        m.base.emissive_texture = None;
+    }
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.
     let dragged = materials.add(StandardMaterial {
