@@ -9,15 +9,15 @@ spaced five seconds apart, because the wrist only shows the newest one.
 Each line fits the radio (3 lines of 26 characters) and uses no game words.
 The wrist pages a long line (3 lines of 18 a page, 2 under a caption's
 speaker), so where there's danger now, what to do comes first: it's on
-the first page, and the reason follows ("Run across it, to cover. That chirp
-is it taking aim.").
+the first page, and the reason follows ("Don't stop. Sprint across it. A
+runner's hard to hit.").
 
 | Moment | When | He says |
 | - | - | - |
 | Jam (each kind) | a malfunction in your gun | its remedy: rack / slap the mag home, rack / mag out, rack, mag in |
 | Heard | a machine turns to look for you | move off quiet, then go still |
 | Lost you | it gives up | stay low a while |
-| Drone lock | the chirp before it fires | run across it, to cover (sprinting across its line scatters its rounds; standing still in the open doesn't) |
+| Drone lock | the chirp before it fires | don't stop: sprint across it (a runner's hard to hit; standing still in the open isn't); only a roof stops it |
 | Anomaly | within 4 m of one's edge | throw something in first |
 | Underground | below ground in a site | torch on, go slow |
 | Surge | the sky turns (5 min warning) | come home |

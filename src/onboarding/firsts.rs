@@ -163,9 +163,13 @@ impl First {
             }
             First::Heard => &["Truck: \"Move off quiet, then go still. Something heard you.\""],
             First::LostYou => &["Truck: \"Lost you, has it? Good. Stay low a while.\""],
+            // Not "to cover": out in the open a roof is most often 60 m off,
+            // and a wall or a tree hides no one from above. Stood still a
+            // drone has you down in 11-20 s; sprinting across its line it
+            // hardly hits (`robots::drone_drill`).
             First::DroneLock => &[
-                "Truck: \"Run across it, to cover. That chirp is it taking aim.\"",
-                "Truck: \"Under a roof's best. It sees down through trees.\"",
+                "Truck: \"Don't stop. Sprint across it. A runner's hard to hit.\"",
+                "Truck: \"Only a roof stops it. Walls and trees don't. Keep going.\"",
             ],
             First::Anomaly => &["Truck: \"Throw something in first. Air's wrong ahead.\""],
             First::Underground => {
