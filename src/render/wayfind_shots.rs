@@ -39,6 +39,11 @@ pub const NEAREST: f32 = 5.0;
 /// (`map_lint`'s uniqueness range), to see how far they really carry.
 pub const FARTHEST: f32 = 320.0;
 
+/// How many bearings round a lamp `--wayfind-lamps` shoots from, at most,
+/// at each distance: a forest's crowns have no colliders, so a line a
+/// raycast calls clear can run through spruce.
+const BEARINGS: usize = 6;
+
 /// How far off `--wayfind-lamps` shoots each landmark's lamp (m).
 pub const LAMP_AT: [f32; 3] = [50.0, 150.0, 300.0];
 
@@ -265,8 +270,8 @@ fn vantage(
 }
 
 /// Every landmark lamp (a `Halo` that carries far), from each of
-/// [`LAMP_AT`] off: standing, from the first of 16 bearings with the lamp
-/// in sight and on the map; else level with the lamp (over what's in the
+/// [`LAMP_AT`] off: standing, from the BEARINGS of 32 bearings through the
+/// fewest crowns with the lamp in sight and on the map; else level with the lamp (over what's in the
 /// way), on the first bearing on the map.
 fn plan_lamps(
     zone: &Zone,
@@ -275,6 +280,7 @@ fn plan_lamps(
         With<crate::world::halos::HaloReach>,
     >,
     spatial: &avian3d::prelude::SpatialQuery,
+    forest: Option<&crate::world::trees::ForestGrid>,
 ) -> Vec<View> {
     let half = zone.map.size * 0.5 - 2.0;
     let mut found: Vec<(Entity, Vec3, [f32; 3])> = lamps
@@ -292,8 +298,8 @@ fn plan_lamps(
     let mut v = Vec::new();
     for (e, lamp, tint) in found {
         for d in LAMP_AT {
-            let bearings = (0..16).map(|i| {
-                let a = i as f32 * std::f32::consts::TAU / 16.0;
+            let bearings = (0..32).map(|i| {
+                let a = i as f32 * std::f32::consts::TAU / 32.0;
                 Vec3::new(a.cos(), 0.0, a.sin())
             });
             let on_map: Vec<Vec3> = bearings
@@ -310,13 +316,21 @@ fn plan_lamps(
                 let run = eye.distance(lamp) - 3.0;
                 spatial.cast_ray(eye, dir, run, true, &filter).is_none()
             };
-            // Up to three bearings with the lamp in sight, spread round it:
-            // foliage has no colliders, so one may still look through a
-            // crown (the lamp passes a distance from any of them).
-            let seen_from: Vec<Vec3> = on_map
+            // Up to BEARINGS bearings with the lamp in sight: clear of
+            // anything solid, and through the fewest crowns first (crowns
+            // have no colliders), the forest's clearings. The lamp passes a
+            // distance from any of them.
+            let mut seen_from: Vec<(usize, Vec3)> = on_map
                 .iter()
                 .map(|p| standing(*p))
                 .filter(|eye| seen(*eye))
+                .map(|eye| (forest.map_or(0, |f| f.crowns_on(eye, lamp, 3.0)), eye))
+                .collect();
+            seen_from.sort_by_key(|(n, _)| *n);
+            let seen_from: Vec<Vec3> = seen_from
+                .into_iter()
+                .take(BEARINGS)
+                .map(|(_, e)| e)
                 .collect();
             let eyes: Vec<Vec3> = if seen_from.is_empty() {
                 on_map
@@ -325,10 +339,7 @@ fn plan_lamps(
                     .into_iter()
                     .collect()
             } else {
-                let n = seen_from.len();
-                let mut picks: Vec<usize> = vec![0, n / 3, 2 * n / 3];
-                picks.dedup();
-                picks.into_iter().map(|i| seen_from[i]).collect()
+                seen_from
             };
             for eye in eyes {
                 let i = v.len();
@@ -375,6 +386,7 @@ fn shoot(
         With<crate::world::halos::HaloReach>,
     >,
     spatial: avian3d::prelude::SpatialQuery,
+    forest: Option<Res<crate::world::trees::ForestGrid>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
 ) {
@@ -396,7 +408,7 @@ fn shoot(
     let state = &mut *state;
     let views = state.views.get_or_insert_with(|| {
         if opts.wayfind_lamps {
-            let v = plan_lamps(&zone, &lamps, &spatial);
+            let v = plan_lamps(&zone, &lamps, &spatial, forest.as_deref());
             let _ = std::fs::create_dir_all(dir);
             time.pause();
             info!("wayfind: {} lamp views", v.len());
@@ -492,6 +504,17 @@ fn shoot(
     let Ok(window) = windows.single() else {
         return;
     };
+    // A lamp where it is now, not where it was planned: its building may
+    // have settled onto the ground since.
+    let mut view = view;
+    if view.at.is_some() {
+        if let Some(Ok((_, g, _))) = view.entity.map(|e| lamps.get(e)) {
+            let lamp = g.translation();
+            view.look = lamp.to_array();
+            view.pose = Transform::from_translation(lamp - Vec3::Y * 1.75);
+            views[state.next].look = view.look;
+        }
+    }
     let want = Transform::from_translation(Vec3::from_array(view.eye))
         .looking_at(Vec3::from_array(view.look), Vec3::Y);
     let fov = (window.height() / eye_px_per_deg()).to_radians();
