@@ -136,6 +136,16 @@
         // pines to the mast road.
         // On from the forest path's end to the district road under the
         // mast: the pumping station's second way home, to the Bus depot.
+        // The Old farm's track to the checkpoint, across the field past its
+        // wood stores and field shed: the first job's walk, where its cover
+        // stands, the farm's water tower ahead from the first step (the
+        // road north hid the farm lane's turn, and the designer's first
+        // raid walked on past it to the Village).
+        (
+            name: "Farm track", kind: Dirt, width: 3.0, smoothing: 8.0,
+            points: [(49.0, 259.0), (70.0, 262.0), (100.0, 256.0), (120.0, 240.0), (128.0, 222.0),
+                     (133.0, 200.0), (142.0, 182.0), (155.0, 166.0), (166.0, 152.0)],
+        ),
         (
             name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
             points: [(-110.0, -108.0), (-85.0, -122.0), (-60.0, -134.0), (-35.0, -146.0), (-12.0, -158.0), (8.0, -168.0)],
@@ -307,10 +317,6 @@
         // And the road-menders' hut on the district road, the mast relay's
         // other way, half way from the creek bridge to the mast road.
         (prefab: "shed", at: (-3.0, -92.0), rot: 90.0, tag: "road_menders_hut"),
-        // And a roof on the way home from the Village to the gate, where
-        // Onboarding's newcomers fell to drones on their second and third
-        // jobs: the lengthman's hut by the district road.
-        (prefab: "shed", at: (22.0, 224.0), rot: 90.0, tag: "lengthmans_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
