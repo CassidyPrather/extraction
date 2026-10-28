@@ -63,8 +63,9 @@ pub enum First {
     /// Home with a job on the card: it's paid when the card is pressed.
     Payday,
     /// A machine that was shooting at you lost you, and is coming to where
-    /// it last saw you: a moving shape behind low cover is glimpsed, and
-    /// each glimpse moves its guess; a still one isn't.
+    /// it last saw you, or back past you once it's given up
+    /// (`robots::search::ComingBack`): a moving shape behind low cover is
+    /// glimpsed, and each glimpse moves its guess; a still one isn't.
     ComingToLook,
 }
 
@@ -366,25 +367,19 @@ fn robots_heard(
     mut looking: MessageReader<crate::robots::search::Investigating>,
     mut noticed: MessageReader<crate::robots::Noticed>,
     mut lost: MessageReader<crate::robots::search::LostYou>,
-    minds: Query<(Entity, &Awareness, Option<&crate::robots::Brain>)>,
+    mut back: MessageReader<crate::robots::search::ComingBack>,
+    minds: Query<&Awareness>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
-    mut hunting: Local<std::collections::HashSet<Entity>>,
     mut m: Meet,
 ) {
     let Some((me, at)) = locals.iter().next() else {
         return;
     };
-    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|(_, a, _)| a.target == Some(me));
+    let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
     let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
-    // Gone from shooting at you to coming to look.
-    if looked.iter().any(|r| hunting.contains(r) && about_me(*r)) {
+    // One that was shooting at you, coming to look (or back past you).
+    if back.read().any(|b| b.about == me) {
         m.meet(First::ComingToLook);
-    }
-    hunting.retain(|r| minds.contains(*r));
-    for (e, a, brain) in &minds {
-        if a.target == Some(me) && matches!(brain, Some(crate::robots::Brain::Engage)) {
-            hunting.insert(e);
-        }
     }
     let robots: Vec<Entity> = looked
         .into_iter()
