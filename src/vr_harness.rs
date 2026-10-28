@@ -2947,6 +2947,8 @@ mod onboarding {
             .count();
         assert_eq!(named, 1, "{log:?}");
         assert!(!log.iter().any(|(t, _)| t.starts_with("Out of the truck")));
+        // In its place, once, how to mark a moment.
+        assert!(said(&vr, crate::onboarding::MARK_LINE_VR), "{log:?}");
     }
 
     /// A station's SKIP card (squeezed) passes it and lights the next; the

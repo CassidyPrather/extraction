@@ -471,6 +471,8 @@ pub struct Onboarding {
     pub ducked: bool,
     /// The station the driver last sent you on to (it's said once).
     pub sent_to: Option<usize>,
+    /// The driver's said how to mark a moment.
+    pub told_mark: bool,
 }
 
 impl Onboarding {
@@ -1712,7 +1714,7 @@ pub fn checklist_text(ob: &Onboarding) -> String {
         };
         t += &format!("{mark}{} {}\n", i + 1, st.title);
     }
-    t += "\nFollow the lit lamps.";
+    t += "\nFollow the lit lamps.\nAnything odd: both sticks\nclicked (F9) marks it.";
     t
 }
 
@@ -1798,7 +1800,11 @@ fn hurry_the_truck(mut raid: ResMut<Raid>, mut run: ResMut<crate::raid::TruckRun
 /// Stepping out of the truck says when the Surge is due: nothing to do
 /// with the yard, and it pushes the driver's directions off the wrist. Here
 /// the driver says where to go instead.
-fn out_of_the_truck(mut raid: ResMut<Raid>, mut ob: ResMut<Onboarding>) {
+fn out_of_the_truck(
+    mut raid: ResMut<Raid>,
+    mut ob: ResMut<Onboarding>,
+    driver: crate::rig::KnownDriver,
+) {
     let Some(i) = raid
         .log
         .iter()
@@ -1808,15 +1814,24 @@ fn out_of_the_truck(mut raid: ResMut<Raid>, mut ob: ResMut<Onboarding>) {
     };
     raid.log.remove(i);
     // Where to, if the driver hasn't said (once is enough: the playtest
-    // heard "Next: the lamp by the pen." twice in 28 s).
+    // heard "Next: the lamp by the pen." twice in 28 s); else how to mark
+    // something, said once (nobody in the playtest found it).
     if let Some(next) = ob.current().filter(|n| ob.sent_to != Some(*n)) {
         ob.sent_to = Some(next);
         raid.say(format!(
             "Driver: \"Off you go. Next: {}.\"",
             STATIONS[next].where_
         ));
+    } else if !ob.told_mark {
+        ob.told_mark = true;
+        let flat = driver.flat().unwrap_or(false);
+        raid.say(if flat { MARK_LINE_FLAT } else { MARK_LINE_VR });
     }
 }
+
+/// How to mark a moment for the playtest report (`sim::playtest`).
+pub const MARK_LINE_VR: &str = "Driver: \"Anything odd, stand still, click both sticks: noted.\"";
+pub const MARK_LINE_FLAT: &str = "Driver: \"Anything odd, press F9. I'll note it.\"";
 
 /// Seconds the yard's truck takes to come round.
 pub const HURRY: f32 = 10.0;
@@ -2004,6 +2019,8 @@ mod tests {
             TOO_CLOSE_LINE,
             START_OVER_LINE,
             DUCK_LINE,
+            MARK_LINE_VR,
+            MARK_LINE_FLAT,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)

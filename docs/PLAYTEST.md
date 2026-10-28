@@ -270,8 +270,11 @@ What changed, and worth a comment each:
 
 **Something wrong, odd or great? Mark it.** Press **F9** on the keyboard,
 or **click both thumbsticks together** (standing still) in VR. Your wrist
-says "Mark 3 noted.", the log and the raid recording get the spot, and a
+says "Mark 3 noted." with a chime and a buzz in both hands (it doesn't
+flip the safety), the log and the raid recording get the spot, and a
 screenshot is saved. Afterwards you only need to remember the number.
+The yard's driver says how as you step off the truck, and the list by
+the tailgate says it too.
 
 ## After a session
 

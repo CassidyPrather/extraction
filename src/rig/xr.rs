@@ -908,6 +908,8 @@ fn drive_xr_rig(
             .map(|s| Vec2::new(s.current_state.x, s.current_state.y))
             .unwrap_or(Vec2::ZERO)
     };
+    // Both sticks clicked is a playtest mark, not the fire selector too.
+    let both_clicked = read_b(&a.stick_click, a.left) && read_b(&a.stick_click, a.right);
     for (side, path) in [(Side::Left, a.left), (Side::Right, a.right)] {
         let grip = read_f(&a.grip, path);
         let trigger = read_f(&a.trigger, path);
@@ -924,7 +926,7 @@ fn drive_xr_rig(
         hand.stick = stick;
         // The click is the gun hand's (its fire selector); the other
         // stick's click is the sprint.
-        hand.stick_click = click && side == comfort.gun_side();
+        hand.stick_click = click && side == comfort.gun_side() && !both_clicked;
         hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.
