@@ -446,25 +446,30 @@ fn bloody_hands(
 }
 
 /// Home from a raid (health made whole by `raid::truck`), the wounds and
-/// the blood on the gloves go with it. (The fracture is taken off there,
-/// after the logbook has read it.)
+/// the blood on the gloves go with it. Read from the state, not from the
+/// moment the phase changes (anything may set the phase in between): at
+/// base, whole and not bleeding, there's nothing to show. (The fracture is
+/// taken off by the truck, after the logbook has read it.)
 fn heal_at_home(
     mut commands: Commands,
     raid: Option<Res<crate::raid::Raid>>,
-    mut players: Query<&mut Wounds, With<LocalPlayer>>,
+    mut players: Query<(&mut Wounds, &Health), With<LocalPlayer>>,
     hands: Query<Entity, (With<RigHand>, With<Bloodied>)>,
-    mut was_home: Local<bool>,
 ) {
-    let home = raid.is_some_and(|r| matches!(r.phase, crate::raid::Phase::AtBase));
-    if home && !*was_home {
-        for mut w in &mut players {
+    if !raid.is_some_and(|r| matches!(r.phase, crate::raid::Phase::AtBase)) {
+        return;
+    }
+    for (mut w, h) in &mut players {
+        if h.hp < h.max || h.bleeding >= STILL || h.down {
+            continue;
+        }
+        if !w.0.is_empty() {
             w.0.clear();
         }
-        for h in &hands {
-            commands.entity(h).remove::<Bloodied>();
+        for hand in &hands {
+            commands.entity(hand).remove::<Bloodied>();
         }
     }
-    *was_home = home;
 }
 
 /// A broken leg slows you; splinted, less.
