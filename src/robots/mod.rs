@@ -264,6 +264,7 @@ pub struct RobotsPlugin;
 impl Plugin for RobotsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<PartDestroyed>()
+            .add_message::<damage::RobotStruck>()
             .add_observer(seed_robot)
             .add_message::<Noticed>()
             .add_message::<Noise>()
@@ -355,6 +356,7 @@ fn damage_parts(
     )>,
     mut robots: Query<&mut Robot>,
     mut destroyed: MessageWriter<PartDestroyed>,
+    mut struck: MessageWriter<damage::RobotStruck>,
     mut noise: MessageWriter<Noise>,
     mut minds: MessageWriter<search::MindShift>,
     mut log: ResMut<search::MindLog>,
@@ -365,6 +367,19 @@ fn damage_parts(
         let Ok((mut part, gt, weak)) = parts.get_mut(hit.entity) else {
             continue;
         };
+        let dealt = part_damage(part.role, weak, hit.damage, hit.blow);
+        // What it did, for the flash, the flinch and the sound: a dead
+        // part only shrugs.
+        struck.write(damage::RobotStruck {
+            robot: part.robot,
+            part: hit.entity,
+            role: part.role,
+            at: hit.point,
+            normal: hit.normal,
+            dir: hit.velocity.normalize_or_zero(),
+            dealt,
+            strike: damage::strike(part.role, part.hp, part.max_hp, dealt),
+        });
         if !part.alive() {
             continue;
         }
@@ -374,7 +389,7 @@ fn damage_parts(
             radius: 40.0,
             source: hit.shooter,
         });
-        part.hp -= part_damage(part.role, weak, hit.damage, hit.blow);
+        part.hp -= dealt;
         if part.hp <= 0.0 {
             destroyed.write(PartDestroyed {
                 robot: part.robot,

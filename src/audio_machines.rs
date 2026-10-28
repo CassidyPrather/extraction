@@ -571,6 +571,10 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "RobotStruck",
+            "Robot bodies' read of a hit (shrug, wound, telling); Audio's sounds for it are coming, and the hit itself is heard (Impact) until then",
+        ),
+        (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
         ),
