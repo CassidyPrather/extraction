@@ -76,9 +76,19 @@ that the whole stairwell is open.
   ceiling slabs, doors). `no_daylight_in_the_rooms` casts rays every way
   from every room (doors shut) and none gets out.
 - **Going dark** (`go_dark`, client): below ground the global ambient
-  falls to 0.2%, the sun goes out and the fog's colour goes to black; the
-  eyes adapt 2.5 stops (`Exposure`). On the surface everything is as the
-  sky left it. Rain and ash aren't drawn round an underground camera.
+  falls to nothing, the sun goes out, the fog's colour goes to black and
+  its sun glow (`directional_light_color`) with it, and `go_dark` writes
+  the depth to `render::grade::Below`, which takes the colour grade's
+  shadow lift away (it laid a grey floor over every unlit tunnel) and
+  opens the eyes a stop less; the eyes adapt 2.5 stops (`Exposure`). An
+  unlit tunnel is true black: you see by a lamp, a torch, a flare. On the
+  surface everything is as the sky left it (`scripts/visual_diff.sh
+  --quick` unchanged). Rain and ash aren't drawn round an underground
+  camera. Shots, torch off and on, before and after: the adit's incline
+  and the service tunnel's valve chamber
+  (`docs/shots/underground/dark_before_after.jpg`; top row before, bottom
+  after, each torch off then on; `dark_before_after_boost.jpg` is the same
+  brightened about sixteen times, to show the grey floor that was there).
 - **Emergency lamps**: rooms with `lamp: Steady` or `Flicker` get an
   unshadowed point light (range room size + 4 m) and a glowing lens;
   failing ones stutter every 7-10 s. Budget: at most `LAMP_BUDGET` (6) a
@@ -170,6 +180,11 @@ not the shelter's). The entries are the stands outside every kiosk door, so
 a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
+A site's furniture gets the whole capsule's radius round it in the plan
+(`SITE_CLEARANCE`, 0.28 m), and every loot spot must be reached with a
+body's slack to spare as well (`CAPSULE_SKIN`, 0.06 m more:
+`every_loot_spot_is_reached_from_its_own_side`): a spot reached only
+through a gap narrower than that pins whoever goes for it.
 
 ## The Depot
 
