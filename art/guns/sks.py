@@ -193,10 +193,12 @@ for z in (-0.06, -0.034, -0.014):
 # turned back about its pin to fire (`selector`).
 SAFETY_PIN = (0.0, -0.017, -0.012)
 safety = Part("selector", origin=SAFETY_PIN)
-safety.box((0.006, 0.012, 0.005), (0, -0.022, -0.012), "Blued", bevel=0.0012,
+# Long enough to stand down into the guard behind the trigger on safe, where
+# a finger meets it, and to swing up out of the way to fire.
+safety.box((0.0062, 0.021, 0.005), (0, -0.0265, -0.012), "Blued", bevel=0.0012,
            xf=RX(0.4, about=SAFETY_PIN))
-for k in range(3):
-    safety.box((0.0064, 0.0008, 0.0011), (0, -0.0185 - k * 0.0028, -0.0145), "Blued",
+for k in range(4):
+    safety.box((0.0066, 0.0008, 0.0011), (0, -0.0215 - k * 0.0028, -0.0145), "Steel",
                bevel=0.0003, segs=1, xf=RX(0.4, about=SAFETY_PIN))
 
 # --- Barrel, gas system, sights, bayonet ----------------------------------------------
