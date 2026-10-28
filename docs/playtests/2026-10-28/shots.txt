@@ -60,4 +60,5 @@ marrow_far_forest | Visual design | Marrow Creek's far forest after a slow load:
 
 # Map design and Onboarding (#5): the first job's walk from the gate,
 # toward the Old farm (190, 145).
-first_job_walk | Map design, Onboarding | From the south gate toward the Old farm: the first job's way reads from where you start | --map marrow_creek --camera 40,0,270,50,-2 --frames 120 --hour day --weather clearing --no-robots
+first_job_walk | Map design, Onboarding | From the drop toward the Old farm: the new dirt farm track leaves the road at the drop and curves east round the knoll, past the field shed, to the farm | --map marrow_creek --camera 40,20.5,266,48,-2 --frames 120 --hour day --weather clearing --no-robots
+first_job_road_north | Map design | North up the road from the gate: the lengthman's hut at (22, 224) is gone | --map marrow_creek --camera 40,0,270,345,-2 --frames 120 --hour day --weather clearing --no-robots
