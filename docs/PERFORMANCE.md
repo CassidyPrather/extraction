@@ -693,8 +693,22 @@ layer but with the rect. Both read the frame's extracted `EyeRect`, so the
 cameras and the rect always agree.
 
 The governor (`Governor`) steps every 4 frames, from the GPU's measured
-time (timestamp queries, the top-level passes summed) against the
-display's period:
+time against the display's period:
+
+- **The GPU's time** is the newest frame's timestamp queries, the
+  top-level passes summed over every view (both eyes, and the mirror when
+  it's on). All of a frame's spans land at one instant, a measurement
+  each. Until 28 October it took each pass's newest measurement, which is
+  one view's. On the playtest's 3080 that was about a third of the
+  frame.
+- **The display's period** is the shortest the runtime has predicted,
+  and never over 60 Hz's. A reprojecting runtime predicts a multiple of
+  it: SteamVR said 26.7 ms for a 75 Hz Beyond 2. Judged against that,
+  the eyes sat at 100% with every frame at half rate.
+- **Late:** a predicted period over 1.5 times the display's means the
+  runtime is reprojecting. Two late frames in a step's look-back step
+  the eyes down a tenth, whatever the measured time says. The scale
+  that ran late stays out of reach for a minute.
 
 - **Down** when the second-worst of the last 8 frames runs past 85% of the
   period, by the square root of the overrun (time goes with the pixels),
