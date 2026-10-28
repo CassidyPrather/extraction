@@ -790,6 +790,41 @@ mod vr {
             .any(|(t, _)| t.contains(text))
     }
 
+    fn mark(r: &mut Range, down: bool) {
+        let p = r.vr.player;
+        r.vr.app
+            .world_mut()
+            .get_mut::<crate::rig::RigInput>(p)
+            .unwrap()
+            .mark = down;
+    }
+
+    /// The selector on the gun hand's stick click acts as the click lets
+    /// go; both sticks clicked for a playtest mark (the gun hand's landing
+    /// a frame first) leaves the safety alone.
+    #[test]
+    fn a_mark_with_both_sticks_leaves_the_safety_alone() {
+        let mut r = hold("pm_pistol", false, false);
+        let safe = |r: &mut Range| gun_mut(r).firearm.fire_mode() == FireMode::Safe;
+        assert!(safe(&mut r), "it comes on safe");
+        // The gun hand's stick a frame early, then both: a mark.
+        r.vr.stick_click(Side::Right, true);
+        r.vr.step(1);
+        mark(&mut r, true);
+        r.vr.step(3);
+        r.vr.stick_click(Side::Right, false);
+        mark(&mut r, false);
+        r.vr.step(3);
+        assert!(safe(&mut r), "a mark doesn't flip the safety");
+        // A click on its own: off safe as it lets go.
+        r.vr.stick_click(Side::Right, true);
+        r.vr.step(2);
+        assert!(safe(&mut r), "not yet: on the release");
+        r.vr.stick_click(Side::Right, false);
+        r.vr.step(2);
+        assert!(!safe(&mut r), "clicked off safe");
+    }
+
     /// The first playtest's first death, played through: the PM run dry
     /// at a walker, the empty magazine dropped and a full one seated, the
     /// slide still back. The trigger fires nothing, and says so: the open
