@@ -586,7 +586,8 @@ mod tests {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_guns_lying_about_rest() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
+        // Counts: guns at rest, their meshes.
+        let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         for _ in 0..(SETTLE as usize * 3 + 60) {
             app.update();

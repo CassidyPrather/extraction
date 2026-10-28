@@ -1061,7 +1061,8 @@ mod tests {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_the_shelf_stocks_and_clears() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
+        // Counts: what's shelved, the decoys.
+        let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let decoys = |app: &mut App| {
             let w = app.world_mut();
@@ -1152,7 +1153,8 @@ mod tests {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_two_eyes_one_shelf() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
+        // Counts: the shelves, their lights.
+        let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let eye = |app: &mut App, n: u32| {
             app.world_mut()

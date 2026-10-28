@@ -638,6 +638,14 @@ pub fn count_triangles(
     mut tris: ResMut<Triangles>,
 ) {
     for e in events.read() {
+        // A mesh dropped is forgotten: one replaced every few frames (the
+        // far-off flocks' merged mesh) once counted up for ever, and no
+        // valley's `settle` ever saw its meshes hold still (each ran its
+        // whole 3000 frames).
+        if let AssetEvent::Removed { id } | AssetEvent::Unused { id } = e {
+            tris.0.remove(id);
+            continue;
+        }
         if let AssetEvent::Added { id } | AssetEvent::Modified { id } = e {
             if let Some(mesh) = meshes.get(*id) {
                 let n = match mesh.try_indices_option() {
@@ -1076,12 +1084,23 @@ pub(crate) mod tests {
     /// `client_systems_initialise`): visibility, LOD ranges and the
     /// cascades' culling all run on the CPU, so a view's load can be
     /// counted without rendering it.
-    /// The client-based gauges run one at a time: each builds a whole
-    /// valley, and side by side they skew each other's timings and memory.
-    static HEAVY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// The client-based gauges and tests each build a whole valley. Those
+    /// whose verdict is a time (a CPU frame, a load) run alone: side by
+    /// side they'd skew each other's timings ([`heavy`]). Those that count
+    /// (draws, triangles, overdraw, meshes, shelf entries, frames) run
+    /// beside each other, never beside a timed one ([`counted`]): each app
+    /// runs its schedules on one thread, and the counts don't depend on
+    /// how fast the frames come. About 1.5 GB a valley.
+    static HEAVY: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
-    pub(crate) fn heavy() -> std::sync::MutexGuard<'static, ()> {
-        HEAVY.lock().unwrap_or_else(|e| e.into_inner())
+    /// Alone: for what measures a time.
+    pub(crate) fn heavy() -> std::sync::RwLockWriteGuard<'static, ()> {
+        HEAVY.write().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Beside other counting gauges, never a timed one: for what counts.
+    pub(crate) fn counted() -> std::sync::RwLockReadGuard<'static, ()> {
+        HEAVY.read().unwrap_or_else(|e| e.into_inner())
     }
 
     fn client(map: &str) -> App {
@@ -1303,7 +1322,8 @@ pub(crate) mod tests {
 
     /// `holds`, under a given weather (and snow), instead of the clearing.
     fn holds_with(map: &str, weather: Option<(&str, Option<f32>)>) {
-        let _one_at_a_time = heavy();
+        // Counts: draws, triangles, overdraw.
+        let _counting = counted();
         // Two different scenes: the forest with its fetched textures (cards
         // and impostors, what ships) or without (a lighter fallback). Each
         // is held to the budget; every message says which was measured.

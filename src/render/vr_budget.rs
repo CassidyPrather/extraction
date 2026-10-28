@@ -114,7 +114,8 @@ pub(super) fn measure(app: &mut App, eyes: (Entity, Entity)) -> (ViewLoad, ViewL
 }
 
 fn holds(map: &str) {
-    let _one_at_a_time = super::budget::tests::heavy();
+    // Counts: draws, shadow draws, fragments.
+    let _counting = super::budget::tests::counted();
     let mut app = super::budget::tests::client_threads(map, "clearing", None);
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {
