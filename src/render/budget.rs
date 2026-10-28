@@ -2157,36 +2157,73 @@ impl FrameLog {
 }
 
 /// The GPU's milliseconds for the newest frame whose timestamps came back
-/// since `seen` (top-level render passes summed), if any did.
+/// since `seen` (top-level render passes summed, every view's), if any did.
+///
+/// A frame's spans all land at one instant, a measurement each: the two
+/// eyes' and the mirror's `main_opaque_pass_3d` are three measurements of
+/// one diagnostic. Its newest measurement alone was one view's, and the
+/// headset's governor saw a third of the frame (the playtest's 3080: "gpu
+/// 4-8 ms" of frames that ran at half rate).
 pub(crate) fn newest_gpu_ms(
     store: &bevy::diagnostic::DiagnosticsStore,
     seen: &mut Option<std::time::Instant>,
 ) -> Option<f64> {
-    let mut sum = 0.0;
-    let mut any = false;
-    let mut newest = *seen;
-    for d in store.iter() {
-        let path = d.path().as_str();
-        let Some(pass) = path
-            .strip_prefix("render/")
-            .and_then(|p| p.strip_suffix("/elapsed_gpu"))
-        else {
-            continue;
-        };
-        // Top-level passes only (nested ones are inside them).
-        if pass.contains('/') {
-            continue;
-        }
-        if let Some(m) = d.measurement() {
-            if seen.is_none_or(|s| m.time > s) {
-                sum += m.value;
-                any = true;
-                newest = newest.max(Some(m.time));
-            }
-        }
+    let passes = || {
+        store.iter().filter(|d| {
+            d.path()
+                .as_str()
+                .strip_prefix("render/")
+                .and_then(|p| p.strip_suffix("/elapsed_gpu"))
+                // Top-level passes only (nested ones are inside them).
+                .is_some_and(|pass| !pass.contains('/'))
+        })
+    };
+    let newest = passes()
+        .filter_map(|d| d.measurement().map(|m| m.time))
+        .max()?;
+    if seen.is_some_and(|s| newest <= s) {
+        return None;
     }
-    *seen = newest;
-    any.then_some(sum)
+    *seen = Some(newest);
+    Some(
+        passes()
+            .flat_map(|d| d.measurements())
+            .filter(|m| m.time == newest)
+            .map(|m| m.value)
+            .sum(),
+    )
+}
+
+/// Both eyes' passes (and a mirror's) are the frame's GPU time, not the
+/// last view's alone.
+#[cfg(test)]
+#[test]
+fn every_views_passes_are_the_frames_gpu_time() {
+    use bevy::diagnostic::{Diagnostic, DiagnosticMeasurement, DiagnosticPath, DiagnosticsStore};
+    let mut store = DiagnosticsStore::default();
+    let opaque = DiagnosticPath::new("render/main_opaque_pass_3d/elapsed_gpu");
+    let nested = DiagnosticPath::new("render/main_opaque_pass_3d/inner/elapsed_gpu");
+    store.add(Diagnostic::new(opaque.clone()));
+    store.add(Diagnostic::new(nested.clone()));
+    let at = std::time::Instant::now();
+    let add = |store: &mut DiagnosticsStore, p: &DiagnosticPath, time, value| {
+        store
+            .get_mut(p)
+            .unwrap()
+            .add_measurement(DiagnosticMeasurement { time, value });
+    };
+    // A frame before, already seen.
+    add(&mut store, &opaque, at, 1.0);
+    let mut seen = None;
+    assert_eq!(newest_gpu_ms(&store, &mut seen), Some(1.0));
+    let next = at + std::time::Duration::from_millis(11);
+    // Left eye, right eye, mirror.
+    for v in [4.0, 4.5, 1.5] {
+        add(&mut store, &opaque, next, v);
+    }
+    add(&mut store, &nested, next, 2.0);
+    assert_eq!(newest_gpu_ms(&store, &mut seen), Some(10.0));
+    assert_eq!(newest_gpu_ms(&store, &mut seen), None, "nothing new");
 }
 
 fn log_each_frame(

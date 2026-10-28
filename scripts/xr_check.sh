@@ -2,9 +2,13 @@
 # Runs the game's headset path against Monado's simulated headset, headless:
 #   scripts/xr_check.sh [map] [out.png] [extra game args...]
 # It starts monado-service (simulated HMD and WMR controllers, null
-# compositor), launches the game with --mirror, screenshots the left eye's
-# view after a while, and fails if the OpenXR session never got focus or
-# the runtime rejected a binding.
+# compositor), launches the game, screenshots the window after a while,
+# and fails if the OpenXR session never got focus, the runtime rejected a
+# binding, or the game didn't end cleanly. It runs twice: with --mirror
+# (the window shows the left eye: out.png) and without (the window gets
+# its card: out-window.png), the way players launch it. A window left
+# with no camera once the session began hung the GPU on a playtest.
+# MIRROR=1 or MIRROR=0 runs the one.
 #
 # Needs a recent Monado (Ubuntu 24.04's 21.0 overflows on llvmpipe's
 # format list). Build one once and point MONADO at its prefix:
@@ -32,10 +36,12 @@ BIN="${EXTRACTION_BIN:-./target/debug/extraction}"
 LOADER=$(ls /usr/lib/*/libopenxr_loader.so.1* 2>/dev/null | head -1)
 [ -n "$LOADER" ] || { echo "no OpenXR loader: apt install libopenxr-loader1"; exit 2; }
 
+run_one() {
+local MIR="$1" SHOT="$2"
 WORK=$(mktemp -d)
 # Unix socket paths are short: the runtime dir can't live somewhere deep.
 RUN=$(mktemp -d /tmp/xr.XXXX)
-mkdir -p "$(dirname "$OUT")" "$WORK/lib"
+mkdir -p "$(dirname "$SHOT")" "$WORK/lib"
 ln -s "$LOADER" "$WORK/lib/libopenxr_loader.so"
 cat > "$WORK/inner.sh" <<EOF
 #!/usr/bin/env bash
@@ -50,7 +56,7 @@ $MONADO/bin/monado-service < $WORK/stdin > $WORK/monado.log 2>&1 &
 MPID=\$!
 exec 9> $WORK/stdin
 sleep 4
-WGPU_BACKEND=vulkan timeout 900 $BIN --map $MAP --new-game --mirror --screenshot $OUT --frames \${FRAMES:-150} $* > $WORK/game.log 2>&1
+WGPU_BACKEND=vulkan timeout 900 $BIN --map $MAP --new-game $MIR --screenshot $SHOT --frames \${FRAMES:-150} $ARGS > $WORK/game.log 2>&1
 echo "exit \$?" >> $WORK/game.log
 kill \$MPID 2>/dev/null
 EOF
@@ -58,16 +64,28 @@ chmod +x "$WORK/inner.sh"
 xvfb-run -a -s "-screen 0 1600x900x24" "$WORK/inner.sh"
 
 LOG="$WORK/game.log"
-fail=0
+echo "== ${MIR:-no mirror}"
 grep -q "entered XR state FOCUSED" "$LOG" || { echo "FAIL: the session never got focus"; fail=1; }
-if grep -E "Suggested Path Unsupported|PATH_UNSUPPORTED|Failed to initialize openxr|panicked" "$LOG"; then
+if grep -E "Suggested Path Unsupported|PATH_UNSUPPORTED|Failed to initialize openxr|panicked|Couldn't get swap chain texture|GPU stopped responding" "$LOG"; then
     echo "FAIL: see above"; fail=1
 fi
-[ -f "$OUT" ] || { echo "FAIL: no screenshot"; fail=1; }
+[ -f "$SHOT" ] || { echo "FAIL: no screenshot"; fail=1; }
+grep -q "^exit 0" "$LOG" || { echo "FAIL: the game didn't end cleanly ($(grep '^exit' "$LOG"))"; fail=1; }
+if [ -z "$MIR" ]; then
+    grep -q "window: a card" "$LOG" || { echo "FAIL: no card on the window"; fail=1; }
+fi
 if [ "${SIMULATED_HANDS:-0}" = 1 ]; then
     grep -q "fingers tracked" "$LOG" || { echo "FAIL: no tracked fingers"; fail=1; }
 fi
 grep -E "Loaded OpenXR runtime|Using system|XrCamera resolution|entered XR state|fingers tracked|Handtracking|hand_tracking" "$LOG" | sed 's/^.*INFO[^ ]* //' | sort -u
-echo "logs: $WORK (game.log, monado.log); eye: $OUT"
-rm -rf "$RUN"
+echo "logs: $WORK (game.log, monado.log); window: $SHOT"
+rm -rf "${RUN:?}"
+}
+ARGS="$*"
+fail=0
+case "${MIRROR:-both}" in
+    1) run_one --mirror "$OUT" ;;
+    0) run_one "" "${OUT%.png}-window.png" ;;
+    *) run_one --mirror "$OUT"; run_one "" "${OUT%.png}-window.png" ;;
+esac
 exit $fail
