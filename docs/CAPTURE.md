@@ -377,9 +377,9 @@ scripts/before_after.py LIST --check                             # read the list
 - **One at a time** (`--jobs 1`) by default: three games and a build at
   once ran out of memory.
 - **Pictures taken elsewhere:** `--picture FILE` in place of the arguments, for a fix the rig cannot stage. Marrow Creek's impostors were one: the software renderer's frames are too slow for the old build to give up on them.
-- **Slow on purpose:** the software renderer loads a valley slowly, so a
-  fix to a slow load (Marrow Creek's impostors) shows in its shot. Give a
-  big valley 150 frames or so; a run has 30 minutes.
+- **Slow frames:** the software renderer takes seconds a frame. Give a
+  big valley 150 frames or so; a run has 30 minutes. A bug that needs many
+  fast frames (a give-up counted in frames) won't show here.
 
 ## Visual diff: `scripts/visual_diff.sh [old_sha new_sha]`
 
