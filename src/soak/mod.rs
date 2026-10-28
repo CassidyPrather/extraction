@@ -14,6 +14,7 @@ pub mod census;
 #[cfg(test)]
 mod chaos;
 pub mod drive;
+pub mod floors;
 pub mod ledges;
 #[cfg(test)]
 mod physics;
