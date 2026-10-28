@@ -368,7 +368,7 @@ mod tests {
             .next()
             .unwrap();
         let catalog = app.world().resource::<Catalog>().clone();
-        let mut raid = |app: &mut App, secs: usize| {
+        let raid = |app: &mut App, secs: usize| {
             app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
             for _ in 0..90 * secs / 2 {
                 app.update();
@@ -433,5 +433,114 @@ mod tests {
             assert_eq!(end["heals"], 1);
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A player's kill counts, credited to the hit that wrecked it: the
+    /// first night's "no kill" rested on kills being counted for bots only.
+    #[test]
+    fn a_players_kill_is_counted() {
+        use crate::robots::{Job, JobKind, PartRole, RobotPart};
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join("kill");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let opts = LaunchOptions {
+            robots: false,
+            save: Some(dir.join("career.ron")),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let me = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        for _ in 0..30 {
+            app.update();
+        }
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let feet = app.world().get::<Transform>(me).unwrap().translation;
+        let at = zone.on_ground(feet.x + 12.0, feet.z);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let job = Job {
+                kind: JobKind::Survey,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            };
+            let w = crate::robots::walker::spawn_walker(&mut c, &zone, at, job);
+            q.apply(app.world_mut());
+            w
+        };
+        for _ in 0..10 {
+            app.update();
+        }
+        let core = app
+            .world_mut()
+            .query::<(Entity, &RobotPart)>()
+            .iter(app.world())
+            .find(|(_, p)| p.robot == walker && p.role == PartRole::Core)
+            .map(|(e, _)| e)
+            .expect("the walker's core");
+        let point = app
+            .world()
+            .get::<GlobalTransform>(core)
+            .unwrap()
+            .translation();
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Hit {
+                entity: core,
+                point,
+                normal: Vec3::Y,
+                velocity: Vec3::X * 300.0,
+                damage: 10_000.0,
+                shooter: Some(me),
+                mass_g: 6.0,
+                load: Default::default(),
+                blow: None,
+            });
+        for _ in 0..60 {
+            app.update();
+        }
+        assert!(
+            app.world()
+                .get::<crate::robots::Robot>(walker)
+                .unwrap()
+                .wrecked,
+            "the hit wrecked it"
+        );
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 4.0 };
+        app.update();
+        app.update();
+        let raids = dir.join("raids").join("marrow_creek");
+        let file = std::fs::read_dir(&raids)
+            .unwrap()
+            .flatten()
+            .next()
+            .unwrap()
+            .path();
+        let text = std::fs::read_to_string(file).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let evs: Vec<serde_json::Value> = text
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        assert!(evs.iter().any(|v| v["ev"] == "kill"), "a kill: {text}");
+        let end = evs.iter().find(|v| v["ev"] == "end").unwrap();
+        assert_eq!(end["kills"]["Walker"], 1, "{text}");
+        assert!(
+            evs.iter().any(|v| v["ev"] == "engage"),
+            "and the fight: {text}"
+        );
     }
 }
