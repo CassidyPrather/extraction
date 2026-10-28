@@ -10,11 +10,13 @@ use bevy::camera::RenderTarget;
 use bevy::image::{ImageSampler, ImageSamplerDescriptor};
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
-use bevy::render::gpu_readback::{Readback, ReadbackComplete};
+use bevy::render::gpu_readback::ReadbackComplete;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+use bevy::tasks::{AsyncComputeTaskPool, Task, futures::check_ready};
 
 use crate::raid::bench::{ScreenStyle, ScreenText};
 use crate::render::legibility::TextSource;
+use crate::render::readback::{ReadOnce, read_texture, taken};
 
 pub struct ScreenPlugin;
 
@@ -22,7 +24,14 @@ impl Plugin for ScreenPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Drawings>().add_systems(
             Update,
-            (build_screens, update_screens, idle_screens, drop_screens).chain(),
+            (
+                build_screens,
+                update_screens,
+                idle_screens,
+                drop_screens,
+                show_mipped,
+            )
+                .chain(),
         );
     }
 }
@@ -406,51 +415,97 @@ fn idle_screens(
 /// chain and anisotropic filtering instead of the bare render target: a
 /// texture with more texels than the eye has pixels for it (a sign seen
 /// from up the track, a note at a slant) otherwise sparkles as the head
-/// moves.
+/// moves. The mips are built off the main thread ([`Mipping`]): built on
+/// it, a goal tick's few panels finishing together cost a 50-67 ms frame
+/// (`docs/playtests/2026-10-28`).
 fn read_back(commands: &mut Commands, panel: Entity, view: &ScreenView) {
     let (w, h) = (view.px.x as u32, view.px.y as u32);
     let (material, emissive, target) = (view.material.clone(), view.emissive, view.image.clone());
     let generation = view.generation;
-    commands
-        .spawn(Readback::texture(view.image.clone()))
-        .observe(
-            move |done: On<ReadbackComplete>,
-                  mut images: ResMut<Assets<Image>>,
-                  mut materials: ResMut<Assets<StandardMaterial>>,
-                  views: Query<&ScreenView>,
-                  mut commands: Commands| {
-                commands.entity(done.entity).despawn();
-                let current = views
-                    .get(panel)
-                    .is_ok_and(|v| v.generation == generation && v.drawing.is_none());
-                if !current {
-                    return;
-                }
-                // Rows come padded to 256 bytes.
-                let stride = (w as usize * 4).div_ceil(256) * 256;
-                if done.data.len() < stride * (h as usize - 1) + w as usize * 4 {
-                    return;
-                }
-                let shown = images.add(mipped(&done.data, w, h, stride));
-                // A new texture, pointed to by the material (swapping an
-                // image's contents under a material doesn't reach its bind
-                // group); the one it showed before goes, unless it's the
-                // render target.
-                let Some(mut m) = materials.get_mut(&material) else {
-                    return;
-                };
-                let slot = if emissive {
-                    &mut m.emissive_texture
-                } else {
-                    &mut m.base_color_texture
-                };
-                if let Some(old) = slot.replace(shown) {
-                    if old != target {
-                        images.remove(&old);
-                    }
-                }
-            },
-        );
+    read_texture(commands, view.image.clone()).observe(
+        move |mut done: On<ReadbackComplete>,
+              once: Query<&ReadOnce>,
+              views: Query<&ScreenView>,
+              mut commands: Commands| {
+            if !taken(&done, &once, &mut commands) {
+                return;
+            }
+            if !current(&views, panel, generation) {
+                return;
+            }
+            // Rows come padded to 256 bytes.
+            let stride = (w as usize * 4).div_ceil(256) * 256;
+            if done.data.len() < stride * (h as usize - 1) + w as usize * 4 {
+                return;
+            }
+            // Taken once (above), so its bytes can be moved, not copied.
+            let data = std::mem::take(&mut done.event_mut().data);
+            let task =
+                AsyncComputeTaskPool::get().spawn(async move { mipped(&data, w, h, stride) });
+            commands.spawn(Mipping {
+                task,
+                panel,
+                generation,
+                material: material.clone(),
+                emissive,
+                target: target.clone(),
+            });
+        },
+    );
+}
+
+/// Whether `panel` is still showing redraw `generation`, finished.
+fn current(views: &Query<&ScreenView>, panel: Entity, generation: u32) -> bool {
+    views
+        .get(panel)
+        .is_ok_and(|v| v.generation == generation && v.drawing.is_none())
+}
+
+/// A panel's mips being built, to be shown when they're done.
+#[derive(Component)]
+struct Mipping {
+    task: Task<Image>,
+    panel: Entity,
+    generation: u32,
+    material: Handle<StandardMaterial>,
+    emissive: bool,
+    target: Handle<Image>,
+}
+
+/// Panels whose mips are built show them: a new texture, pointed to by
+/// the material (swapping an image's contents under a material doesn't
+/// reach its bind group); the one it showed before goes, unless it's the
+/// render target. A picture from an older redraw is dropped.
+fn show_mipped(
+    mut commands: Commands,
+    mut mipping: Query<(Entity, &mut Mipping)>,
+    views: Query<&ScreenView>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for (e, mut m) in &mut mipping {
+        let Some(image) = check_ready(&mut m.task) else {
+            continue;
+        };
+        commands.entity(e).despawn();
+        if !current(&views, m.panel, m.generation) {
+            continue;
+        }
+        let shown = images.add(image);
+        let Some(mut mat) = materials.get_mut(&m.material) else {
+            continue;
+        };
+        let slot = if m.emissive {
+            &mut mat.emissive_texture
+        } else {
+            &mut mat.base_color_texture
+        };
+        if let Some(old) = slot.replace(shown) {
+            if old != m.target {
+                images.remove(&old);
+            }
+        }
+    }
 }
 
 /// A panel's picture (`Bgra8UnormSrgb`, rows `stride` bytes apart) with a
@@ -461,7 +516,7 @@ pub fn mipped(data: &[u8], w: u32, h: u32, stride: usize) -> Image {
     let lin: Vec<f32> = (0..=255u8)
         .map(|v| LinearRgba::from(Srgba::rgb_u8(v, 0, 0)).red)
         .collect();
-    let srgb = |l: f32| (Srgba::from(LinearRgba::rgb(l, 0.0, 0.0)).red * 255.0 + 0.5) as u8;
+    let srgb = |l: f32| SRGB[(l.clamp(0.0, 1.0) * (SRGB_STEPS - 1) as f32 + 0.5) as usize];
     let (w, h) = (w as usize, h as usize);
     let mut out = Vec::with_capacity(w * h * 6);
     let mut level: Vec<f32> = Vec::with_capacity(w * h * 4);
@@ -523,6 +578,18 @@ pub fn mipped(data: &[u8], w: u32, h: u32, stride: usize) -> Image {
     image
 }
 
+/// Linear light to sRGB bytes, in steps fine enough that every byte is
+/// reached (the darkest sRGB steps are 1/3300 apart in linear light).
+const SRGB_STEPS: usize = 8192;
+static SRGB: std::sync::LazyLock<Vec<u8>> = std::sync::LazyLock::new(|| {
+    (0..SRGB_STEPS)
+        .map(|i| {
+            let l = i as f32 / (SRGB_STEPS - 1) as f32;
+            (Srgba::from(LinearRgba::rgb(l, 0.0, 0.0)).red * 255.0 + 0.5) as u8
+        })
+        .collect()
+});
+
 /// A panel that went away (despawned, or its text taken off) takes its
 /// drawing along.
 fn drop_screens(
@@ -533,6 +600,160 @@ fn drop_screens(
     for e in removed.read() {
         if let Some(d) = drawings.0.remove(&e) {
             stop_drawing(&mut commands, d);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::render::gpu_readback::Readback;
+
+    /// A panel waiting for its picture, `w` by `h`, and its readback.
+    fn waiting(app: &mut App, w: u32, h: u32) -> (Entity, Entity, Handle<StandardMaterial>) {
+        let world = app.world_mut();
+        let image = world.resource_mut::<Assets<Image>>().add(Image::default());
+        let material = world
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial {
+                base_color_texture: Some(image.clone()),
+                ..default()
+            });
+        let view = ScreenView {
+            drawing: None,
+            image,
+            refresh: 0,
+            px: Vec2::new(w as f32, h as f32),
+            font: 20.0,
+            bg: Color::BLACK,
+            fg: Color::WHITE,
+            material: material.clone(),
+            emissive: false,
+            generation: 0,
+        };
+        let before: Vec<Entity> = world
+            .query_filtered::<Entity, With<Readback>>()
+            .iter(world)
+            .collect();
+        let mut commands = world.commands();
+        let panel = commands.spawn_empty().id();
+        read_back(&mut commands, panel, &view);
+        world.flush();
+        world.entity_mut(panel).insert(view);
+        let readback = world
+            .query_filtered::<Entity, With<Readback>>()
+            .iter(world)
+            .find(|e| !before.contains(e))
+            .expect("a readback");
+        (panel, readback, material)
+    }
+
+    /// What a panel's readback hands back: rows padded to 256 bytes.
+    fn picture(w: u32, h: u32) -> Vec<u8> {
+        let stride = (w as usize * 4).div_ceil(256) * 256;
+        (0..stride * h as usize)
+            .map(|i| (i * 31 % 251) as u8)
+            .collect()
+    }
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<Assets<Image>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, show_mipped);
+        app
+    }
+
+    /// A readback repeats every frame until it's packed up, and triggers in
+    /// one frame aren't flushed between: its picture arriving twice is
+    /// taken once (no second despawn, no second picture).
+    #[test]
+    fn a_picture_that_arrives_twice_is_taken_once() {
+        let mut app = app();
+        // A command on an entity that's gone fails the test, as it warns in
+        // the game.
+        app.set_error_handler(bevy::ecs::error::panic);
+        let (_, readback, _) = waiting(&mut app, 64, 32);
+        let before = app.world().resource::<Assets<Image>>().len();
+        let warned = crate::render::readback::warnings(|| {
+            let world = app.world_mut();
+            for _ in 0..2 {
+                world.trigger(ReadbackComplete {
+                    entity: readback,
+                    data: picture(64, 32),
+                });
+            }
+            world.flush();
+            let t = std::time::Instant::now();
+            while app.world().resource::<Assets<Image>>().len() < before + 1 {
+                assert!(t.elapsed().as_secs() < 10, "the picture never showed");
+                app.update();
+            }
+            for _ in 0..20 {
+                app.update();
+            }
+        });
+        assert_eq!(warned, 0, "warnings (a second despawn warns)");
+        let world = app.world_mut();
+        assert!(world.get_entity(readback).is_err(), "packed up");
+        assert_eq!(
+            world.resource::<Assets<Image>>().len(),
+            before + 1,
+            "one picture made"
+        );
+    }
+
+    /// The panels a goal tick redraws (signs, the tailgate's checklist, the
+    /// wrist) finishing in the same frame cost that frame next to nothing:
+    /// their mips are built off the main thread.
+    #[test]
+    fn a_burst_of_redraws_costs_no_frame() {
+        let mut app = app();
+        let sizes = [
+            (1100, 320),
+            (1100, 320),
+            (420, 258),
+            (420, 581),
+            (600, 400),
+            (1100, 320),
+        ];
+        let waiting: Vec<_> = sizes
+            .iter()
+            .map(|&(w, h)| (waiting(&mut app, w, h), picture(w, h)))
+            .collect();
+        let world = app.world_mut();
+        let done: Vec<_> = waiting
+            .iter()
+            .map(|((_, readback, _), data)| ReadbackComplete {
+                entity: *readback,
+                data: data.clone(),
+            })
+            .collect();
+        let t = std::time::Instant::now();
+        for d in done {
+            world.trigger(d);
+        }
+        world.flush();
+        let ms = t.elapsed().as_secs_f32() * 1000.0;
+        eprintln!("{} panels' pictures took the frame {ms:.1} ms", sizes.len());
+        assert!(ms < 4.0, "{ms:.1} ms on the main thread");
+        // And they all show, mipped, a few frames on.
+        let shows = |app: &mut App| {
+            let world = app.world();
+            waiting.iter().all(|((_, _, material), _)| {
+                let m = world.resource::<Assets<StandardMaterial>>();
+                let images = world.resource::<Assets<Image>>();
+                m.get(material)
+                    .and_then(|m| m.base_color_texture.as_ref())
+                    .and_then(|h| images.get(h))
+                    .is_some_and(|i| i.texture_descriptor.mip_level_count > 1)
+            })
+        };
+        let t = std::time::Instant::now();
+        while !shows(&mut app) {
+            assert!(t.elapsed().as_secs() < 10, "the pictures never showed");
+            app.update();
         }
     }
 }

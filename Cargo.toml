@@ -100,3 +100,5 @@ codegen-units = 16
 # The audio graph tests run on seedling's mock backend (no device).
 bevy_seedling = { version = "0.8", features = ["effects", "hrtf", "profiling"] }
 hrtf = "0.8"
+# Counting what a test logs: Bevy's command errors warn through `log`.
+log = "0.4"

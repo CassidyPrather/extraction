@@ -31,6 +31,7 @@ pub mod offering;
 pub mod overdraw;
 pub mod props;
 pub mod pry_cue;
+pub mod readback;
 pub mod rv_beacons;
 pub mod screen;
 pub mod sound_meshes;
