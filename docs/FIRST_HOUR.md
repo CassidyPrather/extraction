@@ -619,7 +619,7 @@ The designer took 32 min 19 s over the yard (`docs/playtests/2026-10-28/ANALYSIS
 - Every board names what its step's code accepts (`Goal::accepts`), and so
   does PLAYTEST.md's table (test `boards_code_and_playtest_agree`).
 - Lines say what's true, once: the next station named once; the yard's
-  truck call says 10 seconds, not "Two minutes. Keep low."; a hint stops
+  truck call says 10 seconds, not "Two minutes. Keep low." (from Story's branch, which times every truck line); a hint stops
   once you've done what it says.
 - The mark is said once in the yard and listed on the tailgate board. It
   chimes and buzzes both hands, and it no longer flips the safety.
