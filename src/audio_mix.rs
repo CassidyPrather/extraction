@@ -408,6 +408,9 @@ pub const MIX: &[Cue] = &[
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),
     cue!("walker.servo", "machines/servo", -9.5, 70.0, 25.0, Detail, 10.0),
+    // A walker hunting you, standing to look: its head swept round
+    // (`audio_machines::scan_sounds`), heard to 30 m.
+    cue!("walker.scan", "machines/servo", -6.0, 80.0, 25.0, Signal, 15.0),
     // The pinner going over to suppressing fire (`walker::Suppressing`):
     // its feed racked heavy and a mode's snap; racked down when it stops.
     cue!("walker.suppress", "guns/charging_handle", -11.0, 85.0, 25.0, Signal, 15.0),
