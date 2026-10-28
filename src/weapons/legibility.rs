@@ -515,7 +515,8 @@ mod tests {
     }
 
     /// Every gun in the catalog is in the table, and shows what its real
-    /// counterpart shows: its model has the moving part for each tell, and
+    /// counterpart shows: its model has the moving part for each tell (the
+    /// safety's among them, wherever there's one), and
     /// its mechanism holds open or fires from an open bolt as the real one
     /// does. Every detachable box magazine shows its follower when empty,
     /// and the PM's its brass through its round-count holes.
@@ -556,6 +557,14 @@ mod tests {
                 "holds open where the real one doesn't, or not where it does",
             );
             need(f.open_bolt == t.open_bolt, "open bolt");
+            // A safety shows where it is: a lever, a crossbolt, a bolt.
+            need(
+                !f.modes.contains(&extraction_core::firearm::FireMode::Safe)
+                    || has("selector")
+                    || has("crossbolt")
+                    || has("safety_bolt"),
+                "a safety with nothing on the gun to see it by",
+            );
         }
         for (_, def) in catalog.iter() {
             let Some(m) = def.magazine.as_ref() else {

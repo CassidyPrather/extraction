@@ -152,7 +152,11 @@ pub fn handling_feel(event: &FireEvent) -> Option<HandlingFeel> {
         // The magazine's weight going out of the well all at once.
         FireEvent::MagazineDropped => Pulse(0.45, 0.05, 0.2),
         FireEvent::Cocked => Pulse(0.25, 0.02, 0.0),
+        // The safety on: a firm click; off: a lighter one.
+        FireEvent::ModeChanged(extraction_core::firearm::FireMode::Safe) => Pulse(0.35, 0.02, 0.0),
         FireEvent::ModeChanged(_) => Pulse(0.2, 0.015, 0.0),
+        // The trigger back on an open action: a hollow give and stop.
+        FireEvent::ActionOpen => Pulse(0.25, 0.04, 0.0),
         _ => return None,
     })
 }
