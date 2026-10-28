@@ -36,11 +36,13 @@ impl Plugin for RobotFxPlugin {
                 eye_out,
                 cell_arcs,
                 hazard_bursts,
+                strike_flashes,
                 shell_marks,
                 sputter,
                 light_wrecks,
                 smoulder,
                 fly_sparks,
+                fade_flares,
                 drift_puffs,
                 charge_emitters,
                 zap_arcs,
@@ -78,6 +80,10 @@ struct FxAssets {
     frost: Handle<StandardMaterial>,
     shimmer: Handle<StandardMaterial>,
     still: Handle<StandardMaterial>,
+    /// A hit that tells: a white-hot flash (`strike_flashes`).
+    star: Handle<StandardMaterial>,
+    /// A round armour shrugged off: dull grey streaks skittering away.
+    scuff: Handle<StandardMaterial>,
 }
 
 fn assets(
@@ -174,6 +180,17 @@ fn assets(
             perceptual_roughness: 1.0,
             ..default()
         }),
+        star: materials.add(StandardMaterial {
+            base_color: Color::srgba(1.0, 0.93, 0.75, 0.9),
+            alpha_mode: AlphaMode::Add,
+            unlit: true,
+            ..default()
+        }),
+        scuff: materials.add(StandardMaterial {
+            base_color: Color::srgb(0.5, 0.52, 0.55),
+            unlit: true,
+            ..default()
+        }),
         water: materials.add(StandardMaterial {
             base_color: Color::srgba(0.72, 0.78, 0.82, 0.55),
             alpha_mode: AlphaMode::Blend,
@@ -201,6 +218,14 @@ struct Bold(f32);
 /// wound's.
 const HAZARD_BOLD: f32 = 4.0;
 const HAZARD_CLOUD: f32 = 2.0;
+
+/// A flash at a hit: it swells to `size` and is gone in `max` seconds.
+#[derive(Component)]
+struct Flare {
+    life: f32,
+    max: f32,
+    size: f32,
+}
 
 #[derive(Component)]
 struct Puff {
@@ -926,6 +951,154 @@ fn hazard_bursts(
     }
 }
 
+/// How each kind of hit shows where it lands (`damage::strike`), drawn on
+/// top of the round's own impact (`weapons::impacts`): the flash's size
+/// (m, at 10 m: it grows with range as a wound's sparks do), its streaks
+/// (how many, how bold) and the molten drops that fall from a wound.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StrikeLook {
+    pub flare: f32,
+    pub streaks: usize,
+    pub bold: f32,
+    pub drips: usize,
+}
+
+pub fn strike_look(strike: super::damage::Strike) -> StrikeLook {
+    use super::damage::Strike;
+    match strike {
+        // A dull scuff, skittering off: nothing gave.
+        Strike::Shrug => StrikeLook {
+            flare: 0.0,
+            streaks: 3,
+            bold: 1.5,
+            drips: 0,
+        },
+        // A hot orange spit and drops of it falling: it's hurting.
+        Strike::Wound => StrikeLook {
+            flare: 0.26,
+            streaks: 0,
+            bold: 2.5,
+            drips: 6,
+        },
+        // White-hot, and a spray of bold sparks: that got it.
+        Strike::Telling => StrikeLook {
+            flare: 0.55,
+            streaks: 14,
+            bold: 3.5,
+            drips: 4,
+        },
+    }
+}
+
+/// A hit's own look where it lands: a shrug skitters off dull, a wound
+/// spits orange, a hit that tells flashes white-hot (`strike_look`).
+#[allow(clippy::too_many_arguments)]
+fn strike_flashes(
+    mut commands: Commands,
+    mut struck: MessageReader<super::damage::RobotStruck>,
+    sparks: Query<(), With<Spark>>,
+    existing: Option<Res<FxAssets>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
+    mut dice: Local<Dice>,
+) {
+    use super::damage::Strike;
+    let eye = cameras.iter().next().map(|g| g.translation());
+    let mut n_sparks = sparks.iter().len();
+    let mut a = None;
+    for s in struck.read() {
+        let look = strike_look(s.strike);
+        let a =
+            a.get_or_insert_with(|| assets(&mut commands, &existing, &mut meshes, &mut materials));
+        let n = s.normal.normalize_or(-s.dir);
+        let range = at_range(eye, s.at);
+        if look.flare > 0.0 {
+            let max = if s.strike == Strike::Telling {
+                0.16
+            } else {
+                0.1
+            };
+            commands.spawn((
+                Flare {
+                    life: max,
+                    max,
+                    size: look.flare * range,
+                },
+                Mesh3d(a.puff.clone()),
+                MeshMaterial3d(if s.strike == Strike::Telling {
+                    a.star.clone()
+                } else {
+                    a.embers.clone()
+                }),
+                Transform::from_translation(s.at + n * 0.03).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+        }
+        // Off a plate a round goes on, turned: the streaks skitter along it.
+        let off = (s.dir - 2.0 * s.dir.dot(n) * n).normalize_or(n);
+        let (mat, about, speed, life) = match s.strike {
+            Strike::Shrug => (&a.scuff, off, 4.0, 0.14),
+            _ => (&a.spark_mat, n, 5.0, 0.3),
+        };
+        for _ in 0..look.streaks {
+            if n_sparks >= MAX_SPARKS {
+                break;
+            }
+            commands.spawn((
+                Spark {
+                    vel: (about + dice.signed() * 0.45).normalize_or(n) * speed * (0.6 + dice.f()),
+                    life: life * (0.6 + 0.8 * dice.f()),
+                },
+                Bold(look.bold),
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::from_translation(s.at).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+            n_sparks += 1;
+        }
+        // Molten drops off a wound, falling.
+        for _ in 0..look.drips {
+            if n_sparks >= MAX_SPARKS {
+                break;
+            }
+            commands.spawn((
+                Spark {
+                    vel: (n * 0.6 + dice.signed() * 0.5) * 1.6,
+                    life: 0.5 + 0.4 * dice.f(),
+                },
+                Bold(look.bold),
+                Mesh3d(a.spark.clone()),
+                MeshMaterial3d(a.embers.clone()),
+                Transform::from_translation(s.at).with_scale(Vec3::splat(0.0)),
+                NotShadowCaster,
+            ));
+            n_sparks += 1;
+        }
+    }
+}
+
+/// A hit's flash swells fast and goes.
+fn fade_flares(
+    mut commands: Commands,
+    mut flares: Query<(Entity, &mut Flare, &mut Transform)>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (e, mut f, mut t) in &mut flares {
+        f.life -= dt;
+        if f.life <= 0.0 {
+            commands.entity(e).despawn();
+            continue;
+        }
+        // Up in its first third, then shrinking away.
+        let k = 1.0 - f.life / f.max;
+        let grow = if k < 0.33 { k / 0.33 } else { (1.0 - k) / 0.67 };
+        t.scale = Vec3::splat(f.size * (0.35 + 0.65 * grow));
+    }
+}
+
 /// A foot dragged along the ground kicks up dirt (snow where it lies):
 /// a dead leg trailing, or a bad one scuffing through its swing
 /// (`anim::SCUFF_UNTIL`). Low, quick puffs behind the foot, so a limp
@@ -1144,6 +1317,32 @@ fn splash_steps(
             ));
             n += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod strike_tests {
+    use super::*;
+
+    /// Each kind of hit has its own look, and the more it mattered the
+    /// louder it is: a shrug has no flash and dull streaks; a wound a small
+    /// orange spit; a telling hit the big white flash and the most streaks.
+    #[test]
+    fn each_strike_has_its_own_look() {
+        use super::super::damage::Strike;
+        let (shrug, wound, tells) = (
+            strike_look(Strike::Shrug),
+            strike_look(Strike::Wound),
+            strike_look(Strike::Telling),
+        );
+        assert_eq!(shrug.flare, 0.0);
+        assert!(shrug.drips == 0 && shrug.streaks > 0, "it skitters off");
+        assert!(wound.flare > 0.0 && wound.drips > 0);
+        assert!(
+            tells.flare >= 2.0 * wound.flare,
+            "the flash that tells is the big one"
+        );
+        assert!(tells.streaks > shrug.streaks && tells.bold > shrug.bold);
     }
 }
 

@@ -899,6 +899,11 @@ mod tests {
         ("search.rs", "the wrist's line pacing"),
         ("search.rs", "the brain it had last tick"),
         ("search.rs", "where it was last looking, for LostYou"),
+        // Changes nothing it does: only whether its return is told.
+        (
+            "search.rs",
+            "whether it fought you and has said it's coming back, for ComingBack",
+        ),
         ("senses.rs", "a door's last state, to see it open"),
         ("tracks.rs", "how often it looks for prints"),
         ("visuals.rs", "a material made"),

@@ -32,6 +32,12 @@ pub enum Moves {
     Trigger,
     /// Rotates through the selector positions.
     Selector,
+    /// A crossbolt safety (the MP-133's): pushed through to the right on
+    /// safe, slid left along -X to fire, baring its red band.
+    Crossbolt,
+    /// A door-bolt safety (the crossbow's): shot forward on safe, drawn back
+    /// along +Z to fire.
+    SafetyBolt,
     /// An exposed hammer: tips back about its pin (the origin, local X)
     /// when cocked.
     Hammer,

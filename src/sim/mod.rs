@@ -14,6 +14,7 @@
 
 pub mod harvest;
 pub mod indoor;
+pub mod observe;
 pub mod playtest;
 pub mod raider;
 pub mod telemetry;

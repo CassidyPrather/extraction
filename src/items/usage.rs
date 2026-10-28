@@ -21,6 +21,14 @@ pub struct UseItem {
     pub item: Entity,
 }
 
+/// A dressing or an injector used on `player` (recordings count heals
+/// from this: the item is gone by the time anything else looks).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Treated {
+    pub player: Entity,
+    pub item: &'static str,
+}
+
 /// A light that's on.
 #[derive(Component)]
 pub struct LightOn;
@@ -33,10 +41,12 @@ pub struct UsagePlugin;
 
 impl Plugin for UsagePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<UseItem>().add_systems(
-            Update,
-            (vr_use_button, use_items.in_set(UsageSystems)).chain(),
-        );
+        app.add_message::<UseItem>()
+            .add_message::<Treated>()
+            .add_systems(
+                Update,
+                (vr_use_button, use_items.in_set(UsageSystems)).chain(),
+            );
     }
 }
 
@@ -96,6 +106,7 @@ fn use_items(
     mut hands: Query<&mut Hand>,
     held: Query<&Held>,
     on_limb: Query<(), With<crate::interact::first_aid::OnLimb>>,
+    mut treated: MessageWriter<Treated>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -117,6 +128,10 @@ fn use_items(
                     h.hp = (h.hp + 8.0).min(h.max);
                 }
                 raid.say("You bind the wound. The bleeding stops.");
+                treated.write(Treated {
+                    player: u.player,
+                    item: "field_dressing",
+                });
                 consume = true;
             }
             "regen_injector" => {
@@ -125,6 +140,10 @@ fn use_items(
                     h.bleeding *= 0.3;
                 }
                 raid.say("Cold, then warm. Something knits.");
+                treated.write(Treated {
+                    player: u.player,
+                    item: "regen_injector",
+                });
                 consume = true;
             }
             "flashlight" | "weapon_light" => {

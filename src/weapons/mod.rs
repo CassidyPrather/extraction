@@ -905,7 +905,9 @@ fn buttons(
     mut macros: Query<&mut flat::GunMacro>,
     mut guns: Query<(Entity, &mut Gun, &Held, &GlobalTransform, &Item)>,
     mut hands: Query<&mut Hand>,
-    mut last: Local<std::collections::HashMap<Entity, (bool, bool, bool)>>,
+    // Per gun: last tick's primary, secondary and stick click, and whether
+    // this click has become a playtest mark (both sticks down).
+    mut last: Local<std::collections::HashMap<Entity, (bool, bool, bool, bool)>>,
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut drop_mag: MessageWriter<DropMagazine>,
@@ -922,9 +924,14 @@ fn buttons(
             continue;
         };
         let hand = input.hand(held.side);
-        let (p0, s0, c0) = last.get(&e).copied().unwrap_or_default();
+        let (p0, s0, c0, marked0) = last.get(&e).copied().unwrap_or_default();
         let (p, s, c) = (hand.primary, hand.secondary, hand.stick_click);
-        last.insert(e, (p, s, c));
+        // The stick click acts on its release, and not at all if the other
+        // stick went down while it was held: both clicked is a mark, not a
+        // safety flipped by whichever landed a frame first.
+        let marked = c && ((c0 && marked0) || input.mark);
+        last.insert(e, (p, s, c, marked));
+        let clicked = c0 && !c && !marked0;
         let name = catalog.get(item.kind()).id.clone();
         let mut events = Vec::new();
         let revolver = gun.firearm.def.action == ActionKind::Revolver;
@@ -968,7 +975,7 @@ fn buttons(
                 events.extend(gun.firearm.release_slide_stop());
             }
         }
-        if c && !c0 {
+        if clicked {
             if revolver {
                 // The ejector rod, at the gate.
                 events.extend(gun.firearm.eject_at_gate());
