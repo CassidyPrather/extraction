@@ -151,6 +151,9 @@ pub struct Fight {
     pub hits_at_start: u32,
 }
 
+/// A robot wrecked this soon after a player's hit is the player's kill, s.
+pub const KILL_CREDIT: f32 = 1.0;
+
 /// A player's fight ends this long after the last shot or hit either way.
 pub const FIGHT_LULL: f32 = 20.0;
 
@@ -159,6 +162,13 @@ pub const FIGHT_LULL: f32 = 20.0;
 pub struct Tracker {
     /// A player's fights, by robot.
     fights: Vec<(Entity, Fight)>,
+    /// A player's latest hit on each robot still standing: (robot, its
+    /// name, when). The robot wrecked within [`KILL_CREDIT`] of it is the
+    /// player's kill.
+    struck: Vec<(Entity, String, f32)>,
+    /// Robots already wrecked as of last frame (a hit that wrecks one
+    /// lands before the recorder looks, so "standing" means "not in here").
+    down: Vec<Entity>,
     last_pos: Option<Vec3>,
     next_sample: f32,
     last_hp: Option<f32>,
@@ -210,6 +220,7 @@ pub fn record(
         &Robot,
         Option<&crate::robots::Breed>,
         Option<&GlobalTransform>,
+        Entity,
     )>,
     parts: Query<&RobotPart>,
     anomalies: Query<(Entity, &Anomaly, &GlobalTransform)>,
@@ -274,6 +285,7 @@ fn record_frame(
         &Robot,
         Option<&crate::robots::Breed>,
         Option<&GlobalTransform>,
+        Entity,
     )>,
     parts: &Query<&RobotPart>,
     anomalies: &Query<(Entity, &Anomaly, &GlobalTransform)>,
@@ -326,10 +338,15 @@ fn record_frame(
                 log.stats.hits += 1;
                 let kind = robots
                     .get(part.robot)
-                    .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
+                    .map(|(r, b, ..)| crate::robots::robot_name(r.kind, b))
                     .unwrap_or_default();
                 if player {
                     fight_with(log, tr, t, part.robot, &kind, robots, pos);
+                    let standing = !tr.down.contains(&part.robot);
+                    if standing {
+                        tr.struck.retain(|(e, ..)| *e != part.robot);
+                        tr.struck.push((part.robot, kind.clone(), t));
+                    }
                 }
                 log.event(
                     "hit",
@@ -366,7 +383,7 @@ fn record_frame(
                 if let Some(s) = h.shooter.filter(|s| robots.contains(*s)) {
                     let kind = robots
                         .get(s)
-                        .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
+                        .map(|(r, b, ..)| crate::robots::robot_name(r.kind, b))
                         .unwrap_or_default();
                     fight_with(log, tr, t, s, &kind, robots, pos);
                 }
@@ -374,7 +391,7 @@ fn record_frame(
             let cause = h
                 .shooter
                 .and_then(|s| robots.get(s).ok())
-                .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
+                .map(|(r, b, ..)| crate::robots::robot_name(r.kind, b))
                 // Nobody's: a mine, a grenade or an anomaly's blast, a
                 // falling beam, a stray round. Named by what it was.
                 .unwrap_or_else(|| {
@@ -418,6 +435,29 @@ fn record_frame(
             );
         }
     }
+    // A player's kills: a robot they'd just hit, wrecked. (Bots count
+    // their own, with their fights.)
+    let struck = std::mem::take(&mut tr.struck);
+    for (robot, kind, at) in struck {
+        match robots.get(robot) {
+            Ok((r, ..)) if r.wrecked => {
+                if t - at <= KILL_CREDIT {
+                    *log.stats.kills.entry(kind.clone()).or_default() += 1;
+                    log.event(
+                        "kill",
+                        json!({"robot": kind, "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+                    );
+                }
+            }
+            Ok(_) if t - at <= 10.0 => tr.struck.push((robot, kind, at)),
+            _ => {}
+        }
+    }
+    tr.down = robots
+        .iter()
+        .filter(|(r, ..)| r.wrecked)
+        .map(|(.., e)| e)
+        .collect();
     // A player's fights end with the robot wrecked or gone, a lull, or
     // the player down.
     let fights = std::mem::take(&mut tr.fights);
@@ -432,9 +472,6 @@ fn record_frame(
         };
         match outcome {
             Some(o) => {
-                if o == "wrecked" {
-                    *log.stats.kills.entry(f.robot.clone()).or_default() += 1;
-                }
                 log.event(
                     "engage_end",
                     json!({"robot": f.robot, "outcome": o,
@@ -579,6 +616,7 @@ fn fight_with(
         &Robot,
         Option<&crate::robots::Breed>,
         Option<&GlobalTransform>,
+        Entity,
     )>,
     pos: Vec3,
 ) {
@@ -589,7 +627,7 @@ fn fight_with(
     let at = robots
         .get(robot)
         .ok()
-        .and_then(|(.., g)| g.map(|g| g.translation()))
+        .and_then(|(_, _, g, _)| g.map(|g| g.translation()))
         .unwrap_or(pos);
     log.stats.engagements += 1;
     log.event(
