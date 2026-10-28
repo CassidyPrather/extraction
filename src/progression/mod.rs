@@ -881,12 +881,12 @@ fn tailgate(
     items: Query<(Entity, &Item, Option<&CarriedBy>, &GlobalTransform)>,
     stash: Query<&Backpack, With<Stash>>,
     catalog: Res<Catalog>,
-    // Said this time home; and been on the truck first (you wake in its
-    // bed: a fresh session's first frames have you elsewhere).
-    mut said: Local<(bool, bool)>,
+    // Said this time home; and how far off the truck you were last frame
+    // (a step off it counts, not a session putting you at camp).
+    mut said: Local<(bool, Option<f32>)>,
 ) {
     if raid.phase != Phase::AtBase {
-        *said = (false, false);
+        *said = (false, None);
         return;
     }
     // (`SIM_NO_TAILGATE=1`: as before it was said, to compare runs.)
@@ -899,11 +899,11 @@ fn tailgate(
     let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {
         return;
     };
-    if at.translation().xz().distance(truck.translation().xz()) < OFF_THE_TRUCK {
-        said.1 = true;
-        return;
-    }
-    if !said.1 {
+    let d = at.translation().xz().distance(truck.translation().xz());
+    let was = said.1.replace(d);
+    // Walked off the steps: from on the truck to off it, a step at a time.
+    let stepped = was.is_some_and(|w| w < OFF_THE_TRUCK && d - w < 1.0);
+    if d < OFF_THE_TRUCK || !stepped {
         return;
     }
     said.0 = true;
