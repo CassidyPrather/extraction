@@ -3791,19 +3791,176 @@ mod first_aid {
             ]));
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        // The dressing goes round, so the hand goes where it must be less
+        // where the dressing sits on it.
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
         let centre = wrist + Vec3::Z * 0.12;
-        let steps = (turns * 24.0) as usize;
+        // A turn in two thirds of a second, as quick as a hand goes round.
+        let steps = (turns * 60.0) as usize;
         for i in 0..=steps.max(30) {
-            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 24.0);
+            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 60.0);
             vr.move_hand(
                 Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.08 - off,
             );
             vr.step(1);
         }
         vr.step(3);
         let h = vr.app.world().get::<Health>(vr.player).unwrap();
         (gone(&vr, d), h.bleeding, h.hp)
+    }
+
+    /// A person winding a dressing round their own left forearm, as a
+    /// hand in a headset does it: the forearm held out across the chest and
+    /// swaying a little, the right hand circling it `r` from its axis (a
+    /// controller can't pass through the other), `along` it from the elbow
+    /// (1 is the middle of the fist), at `pace` turns a second, the circle
+    /// wobbling by `wobble` of its radius and drifting. Seconds from the
+    /// first circle until it's on, or `None` within `limit`.
+    pub(super) fn human_wind(
+        r: f32,
+        along: f32,
+        pace: f32,
+        wobble: f32,
+        limit: f32,
+    ) -> Option<f32> {
+        wind_by_hand(r, along, pace, wobble, limit, false)
+    }
+
+    /// As [`human_wind`], or, `rock`ing, only rocked half a turn back and
+    /// forth on the arm (fidgeting, not winding).
+    fn wind_by_hand(
+        r: f32,
+        along: f32,
+        pace: f32,
+        wobble: f32,
+        limit: f32,
+        rock: bool,
+    ) -> Option<f32> {
+        let (mut vr, feet) = setup();
+        let d = take(&mut vr, feet, "field_dressing");
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(4);
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        let forearm = |vr: &mut Vr| {
+            let mut sys = bevy::ecs::system::SystemState::<(
+                Query<
+                    (
+                        &Transform,
+                        &RigInput,
+                        &crate::rig::stance::Stance,
+                        &Children,
+                    ),
+                    With<crate::rig::LocalPlayer>,
+                >,
+                Query<(&RigHand, &Hand)>,
+            )>::new(vr.app.world_mut());
+            let (players, hands) = sys.get(vr.app.world()).unwrap();
+            crate::interact::wounds::player_segments(vr.player, &players, &hands)
+                .unwrap()
+                .into_iter()
+                .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+                .unwrap()
+        };
+        let dt = 1.0 / 90.0;
+        let ticks = (limit / dt) as usize;
+        let start = vr.hand_state(Side::Right).world.translation;
+        for i in 0..ticks {
+            let time = i as f32 * dt;
+            // The forearm sways as the other hand works round it.
+            let sway = Vec3::new(
+                (time * 1.3).sin() * 0.02,
+                (time * 0.9).sin() * 0.015,
+                (time * 1.7).cos() * 0.015,
+            );
+            vr.move_hand(Side::Left, wrist + sway);
+            let s = forearm(&mut vr);
+            let axis = (s.b - s.a).normalize();
+            let x = axis.cross(Vec3::Y).normalize_or(Vec3::Z);
+            let y = axis.cross(x);
+            let a = if rock {
+                std::f32::consts::FRAC_PI_2 * (std::f32::consts::TAU * pace * time).sin()
+            } else {
+                std::f32::consts::TAU * pace * time
+            };
+            // Wider under the arm, where the wrist turns awkwardly; and
+            // never quite the same twice.
+            let rr = r
+                * (1.0 + wobble * ((time * 2.3).sin() * 0.6 + (time * 5.1).cos() * 0.4))
+                * if a.sin() < 0.0 { 1.0 + wobble } else { 1.0 };
+            let drift = axis * (time * 0.7).sin() * 0.03;
+            let at = s.a.lerp(s.b, along) + drift + (x * a.cos() + y * a.sin()) * rr;
+            // Half a second to bring it in to the arm.
+            let at = if time < 0.5 {
+                start.lerp(at, time / 0.5)
+            } else {
+                at
+            };
+            vr.move_hand(Side::Right, at - off);
+            vr.step(1);
+            if gone(&vr, d) {
+                return Some((time - 0.5).max(0.0));
+            }
+        }
+        None
+    }
+
+    /// How long a wind takes, across the ways people do it (run with
+    /// `--nocapture` to see the table).
+    #[test]
+    fn how_long_a_dressing_takes() {
+        let mut rows = Vec::new();
+        for &(r, along, pace, wobble) in &[
+            (0.09, 0.5, 0.5, 0.15),
+            (0.12, 0.5, 0.5, 0.2),
+            (0.15, 0.5, 0.5, 0.25),
+            (0.12, 0.8, 0.5, 0.2),
+            (0.14, 0.95, 0.4, 0.3),
+            (0.12, 0.5, 0.8, 0.2),
+            (0.17, 0.6, 0.5, 0.3),
+        ] {
+            let t = human_wind(r, along, pace, wobble, 12.0);
+            rows.push(format!(
+                "r {r:.2} along {along:.2} pace {pace:.1}/s wobble {wobble:.2}: {t:?}"
+            ));
+        }
+        eprintln!("time to bind:\n{}", rows.join("\n"));
+    }
+
+    /// Wound round the forearm as a hand in a headset does it (a circle
+    /// 12-17 cm out, wobbling, half a turn a second), it's on in about the
+    /// time one and a half turns take; in the yard it once took minutes.
+    #[test]
+    fn a_dressing_wound_by_hand_goes_on_in_one_try() {
+        for &(r, along, pace, wobble) in &[
+            (0.15, 0.5, 0.5, 0.25),
+            (0.12, 0.5, 0.5, 0.2),
+            (0.14, 0.95, 0.4, 0.3),
+            (0.17, 0.6, 0.5, 0.3),
+        ] {
+            let t = human_wind(r, along, pace, wobble, 10.0);
+            let turns = 1.5 / pace;
+            assert!(
+                t.is_some_and(|t| t < turns + 1.5),
+                "r {r} along {along} pace {pace}: {t:?} (1.5 turns take {turns} s)"
+            );
+        }
+    }
+
+    /// Rocked back and forth on the arm, or circled well clear of it, it
+    /// doesn't go on: it's wound, not waved.
+    #[test]
+    fn a_dressing_rocked_or_waved_clear_does_not_go_on() {
+        assert_eq!(wind_by_hand(0.12, 0.5, 0.6, 0.2, 8.0, true), None, "rocked");
+        assert_eq!(human_wind(0.32, 0.5, 0.5, 0.1, 8.0), None, "waved clear");
     }
 
     /// Circled round the forearm, the dressing goes on and the bleeding
@@ -6060,19 +6217,37 @@ mod wounds {
                 .count()
         };
         assert!(bloody(&mut vr) > 0, "a bloody glove");
-        // Home: health made whole, as the truck does.
-        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::AtBase;
-        *vr.app
-            .world_mut()
-            .get_mut::<crate::health::Health>(vr.player)
-            .unwrap() = crate::health::Health::default();
+        // Home the way a raid ends: extracted, the truck drives you back
+        // (`raid::truck::finish_raid` makes you whole and sets the phase).
+        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+            crate::raid::Phase::Extracting { left: 0.0 };
         vr.step(4);
+        assert!(
+            matches!(
+                vr.app.world().resource::<crate::raid::Raid>().phase,
+                crate::raid::Phase::AtBase
+            ),
+            "home"
+        );
         assert!(
             wounds(&vr).is_empty(),
             "no wounds at home: {:?}",
             wounds(&vr)
         );
         assert_eq!(bloody(&mut vr), 0, "clean gloves");
+        // Hurt at base, the phase never changing (in a full run something
+        // else can set it first): the wounds stay while you're hurt, and go
+        // once you're whole.
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        vr.step(4);
+        assert!(!wounds(&vr).is_empty(), "hurt at base, the wounds show");
+        *vr.app
+            .world_mut()
+            .get_mut::<crate::health::Health>(vr.player)
+            .unwrap() = crate::health::Health::default();
+        vr.step(4);
+        assert!(wounds(&vr).is_empty(), "whole again: {:?}", wounds(&vr));
     }
 
     /// The glove of a hand laid on an open wound comes away bloody; the
@@ -6216,6 +6391,22 @@ mod wounds {
             (h.bleeding - arm_bleeds).abs() < 0.05,
             "health's bleeding is the arm's: {}",
             h.bleeding
+        );
+        // And what's said is what's true: the arm still bleeds, and it's
+        // named.
+        let said = vr
+            .app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .rev()
+            .find(|(t, _)| t.contains("bind") || t.contains("bound"))
+            .map(|(t, _)| t.clone())
+            .expect("a line for the dressing");
+        assert!(
+            said.contains("still bleeding") && said.contains("right upper arm"),
+            "{said}"
         );
     }
 
