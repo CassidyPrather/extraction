@@ -1,0 +1,68 @@
+panicked at C:\Users\<user>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\wgpu-hal-29.0.4\src\vulkan\swapchain\native.rs:359:58:
+Trying to destroy a SwapchainAcquireSemaphore that is still in use by a SurfaceTexture
+
+   0: std::backtrace_rs::backtrace::win64::trace
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\win64.rs:85
+   1: std::backtrace_rs::backtrace::trace_unsynchronized
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2: std::backtrace::Backtrace::create
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:331
+   3: std::backtrace::Backtrace::force_capture
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:312
+   4: core::iter::traits::iterator::Iterator::for_each::call::<&mut bevy_app::sub_app::SubApp, <bevy_app::app::App>::plugins_state::{closure#0}>::{closure#0}
+   5: std::panicking::panic_with_hook
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:823
+   6: std::panicking::panic_handler::closure$0
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:688
+   7: std::sys::backtrace::__rust_end_short_backtrace<std::panicking::panic_handler::closure_env$0,never$>
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\sys\backtrace.rs:182
+   8: std::panicking::panic_handler
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:679
+   9: core::panicking::panic_fmt
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\panicking.rs:80
+  10: core::panicking::panic_display
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\panicking.rs:259
+  11: core::option::expect_failed
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\option.rs:2257
+  12: <wgpu_hal::vulkan::swapchain::native::NativeSwapchain as wgpu_hal::vulkan::swapchain::Swapchain>::release_resources
+  13: <wgpu_hal::vulkan::Device as wgpu_hal::dynamic::device::DynDevice>::wait
+  14: <wgpu_core::instance::Surface as core::ops::drop::Drop>::drop
+  15: <alloc::sync::Arc<wgpu_core::instance::Surface>>::drop_slow
+  16: <alloc::sync::Arc<wgpu::backend::wgpu_core::CoreSurface>>::drop_slow
+  17: core::ptr::drop_glue::<wgpu::api::device::ErrorScopeGuard>
+  18: <hashbrown::raw::RawTableInner>::drop_inner_table::<(bevy_ecs::entity::Entity, bevy_render::view::window::SurfaceData), allocator_api2::stable::alloc::global::Global>
+  19: core::ptr::drop_glue::<bevy_render::view::window::WindowSurfaces>
+  20: <bevy_ecs::storage::table::column::Column>::drop
+  21: <alloc::vec::Vec<bevy_ecs::storage::sparse_set::ComponentSparseSet> as core::ops::drop::Drop>::drop
+  22: core::ptr::drop_glue::<bevy_ecs::storage::Storages>
+  23: core::ptr::drop_glue::<bevy_ecs::world::World>
+  24: core::ptr::drop_glue::<bevy_app::sub_app::SubApp>
+  25: core::ptr::drop_glue::<bevy_render::pipelined_rendering::RenderAppChannels>
+  26: <bevy_ecs::world::World>::clear_all
+  27: <winit::platform_impl::windows::event_loop::EventLoop<bevy_winit::WinitUserEvent>>::run_on_demand::<<winit::event_loop::EventLoop<bevy_winit::WinitUserEvent>>::run_app<bevy_winit::state::WinitAppRunnerState>::{closure#0}>::{closure#0}
+  28: <bevy_window::raw_handle::RawHandleWrapper>::new::<winit::window::Window>
+  29: <winit::platform_impl::windows::event_loop::runner::EventLoopRunner<winit::platform_impl::windows::event_loop::UserEventPlaceholder>>::move_state_to
+  30: <winit::platform_impl::windows::event_loop::EventLoop<bevy_winit::WinitUserEvent>>::run::<<winit::event_loop::EventLoop<bevy_winit::WinitUserEvent>>::run_app<bevy_winit::state::WinitAppRunnerState>::{closure#0}>
+  31: <<bevy_winit::WinitPlugin as bevy_app::plugin::Plugin>::build::{closure#0} as core::ops::function::FnOnce<(bevy_app::app::App,)>>::call_once::{shim:vtable#0}
+  32: <bevy_app::app::App>::run
+  33: extraction::run
+  34: extraction::main
+  35: <alloc::vec::Vec<&str> as core::fmt::Debug>::fmt
+  36: <alloc::vec::Vec<&str> as core::fmt::Debug>::fmt
+  37: std::rt::lang_start_internal::closure$0
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\rt.rs:175
+  38: std::panicking::catch_unwind::do_call
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:576
+  39: std::panicking::catch_unwind
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:544
+  40: std::panic::catch_unwind
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panic.rs:359
+  41: std::rt::lang_start_internal
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\rt.rs:171
+  42: main
+  43: invoke_main
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:78
+  44: __scrt_common_main_seh
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:288
+  45: BaseThreadInitThunk
+  46: RtlUserThreadStart
