@@ -95,7 +95,8 @@ fn use_items(
     lights: Query<(), With<LightOn>>,
     mut hands: Query<&mut Hand>,
     held: Query<&Held>,
-    on_limb: Query<(), With<crate::interact::first_aid::OnLimb>>,
+    on_limb: Query<&crate::interact::first_aid::OnLimb>,
+    wounds: Query<&crate::interact::wounds::Wounds>,
 ) {
     for u in uses.read() {
         let Ok(item) = items.get(u.item) else {
@@ -108,23 +109,41 @@ fn use_items(
                 radio.write(RadioCall { player: u.player });
             }
             "field_dressing" => {
+                // Wound round a limb, it bound that limb's wounds
+                // (`interact::first_aid`); by the button, every bleed.
+                let limb = on_limb.get(u.item).ok().map(|l| l.0);
                 if let Ok(mut h) = healths.get_mut(u.player) {
-                    // Wound round a limb, it bound that limb's wounds
-                    // (`interact::first_aid`); by the button, every bleed.
-                    if !on_limb.contains(u.item) {
+                    if limb.is_none() {
                         h.bleeding = 0.0;
                     }
                     h.hp = (h.hp + 8.0).min(h.max);
+                    // What's true now, not what a dressing usually does.
+                    raid.say(crate::interact::wounds::dressed_line(
+                        limb,
+                        wounds.get(u.player).ok(),
+                        h.bleeding,
+                    ));
                 }
-                raid.say("You bind the wound. The bleeding stops.");
                 consume = true;
             }
             "regen_injector" => {
                 if let Ok(mut h) = healths.get_mut(u.player) {
+                    let was = h.bleeding;
                     h.hp = (h.hp + 45.0).min(h.max);
                     h.bleeding *= 0.3;
+                    raid.say(if was < crate::interact::wounds::STILL {
+                        "Cold, then warm. Something knits.".to_string()
+                    } else {
+                        // It slows a bleed; it doesn't stop one.
+                        format!(
+                            "Cold, then warm. Something knits. {}",
+                            crate::interact::wounds::bleeding_now(
+                                wounds.get(u.player).ok(),
+                                h.bleeding
+                            )
+                        )
+                    });
                 }
-                raid.say("Cold, then warm. Something knits.");
                 consume = true;
             }
             "flashlight" | "weapon_light" => {

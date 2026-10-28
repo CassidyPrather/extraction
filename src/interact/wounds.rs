@@ -34,6 +34,69 @@ pub enum Limb {
     Shin(Side),
 }
 
+impl Limb {
+    /// As it's said: "the left thigh".
+    pub fn name(self) -> String {
+        let side = |s: Side| match s {
+            Side::Left => "left",
+            Side::Right => "right",
+        };
+        match self {
+            Limb::Head => "head".into(),
+            Limb::Chest => "chest".into(),
+            Limb::Belly => "belly".into(),
+            Limb::UpperArm(s) => format!("{} upper arm", side(s)),
+            Limb::Forearm(s) => format!("{} forearm", side(s)),
+            Limb::Thigh(s) => format!("{} thigh", side(s)),
+            Limb::Shin(s) => format!("{} shin", side(s)),
+        }
+    }
+}
+
+/// Below this (hp/s) you aren't bleeding.
+pub const STILL: f32 = 0.01;
+
+/// What's true of the bleeding now, said after a treatment: stopped, or
+/// still going and where (the worst open wound).
+pub fn bleeding_now(wounds: Option<&Wounds>, bleeding: f32) -> String {
+    if bleeding < STILL {
+        return "The bleeding's stopped.".into();
+    }
+    let worst = wounds.and_then(|w| {
+        w.0.iter()
+            .filter(|w| !w.dressed && w.bleed >= STILL)
+            .max_by(|a, b| a.bleed.total_cmp(&b.bleed))
+    });
+    match worst {
+        Some(w) => format!("You're still bleeding: the {}.", w.limb.name()),
+        None => "You're still bleeding.".into(),
+    }
+}
+
+/// Said when a dressing goes on: the limb it bound (wound round one) or
+/// none (the button), and what's true after.
+pub fn dressed_line(limb: Option<Limb>, wounds: Option<&Wounds>, bleeding: f32) -> String {
+    let after = bleeding_now(wounds, bleeding);
+    let Some(limb) = limb else {
+        return format!("You bind the wound. {after}");
+    };
+    let hit = wounds.is_some_and(|w| w.0.iter().any(|w| w.limb == limb));
+    if hit {
+        if bleeding < STILL {
+            format!("You bind the {}. {after}", limb.name())
+        } else {
+            format!("That one's bound. {after}")
+        }
+    } else if bleeding < STILL {
+        format!("You bind the {}. Nothing was bleeding.", limb.name())
+    } else {
+        format!(
+            "You bind the {}, but that isn't where you're hit. {after}",
+            limb.name()
+        )
+    }
+}
+
 /// A wound: on `limb`, `along` it (0 at its upper end, 1 at its lower),
 /// `around` it (radians), bleeding this much (hp/s, its share of
 /// `Health::bleeding`); dressed once a dressing's round it.
@@ -439,6 +502,55 @@ mod tests {
             bleed,
             dressed: false,
         }
+    }
+
+    /// What's said after a dressing is what's true: binding one of two
+    /// wounds says you're still bleeding, and where; binding a limb that
+    /// isn't hit says so.
+    #[test]
+    fn a_dressing_says_what_is_true_after() {
+        let wound = |limb, bleed| Wound {
+            limb,
+            along: 0.5,
+            around: 0.0,
+            bleed,
+            dressed: false,
+        };
+        let mut w = Wounds(vec![
+            wound(Limb::Thigh(Side::Left), 1.0),
+            wound(Limb::Forearm(Side::Right), 0.6),
+        ]);
+        let left = 1.6 - w.dress(Limb::Forearm(Side::Right));
+        let line = dressed_line(Some(Limb::Forearm(Side::Right)), Some(&w), left);
+        assert_eq!(
+            line,
+            "That one's bound. You're still bleeding: the left thigh."
+        );
+        assert!(
+            !line.contains("stops") && !line.contains("stopped"),
+            "{line}"
+        );
+        let left = left - w.dress(Limb::Thigh(Side::Left));
+        assert_eq!(
+            dressed_line(Some(Limb::Thigh(Side::Left)), Some(&w), left),
+            "You bind the left thigh. The bleeding's stopped."
+        );
+        // Bound where it isn't hit.
+        let w = Wounds(vec![wound(Limb::Chest, 0.8)]);
+        assert_eq!(
+            dressed_line(Some(Limb::Forearm(Side::Left)), Some(&w), 0.8),
+            "You bind the left forearm, but that isn't where you're hit. \
+             You're still bleeding: the chest."
+        );
+        // Nothing was bleeding (the yard).
+        assert_eq!(
+            dressed_line(
+                Some(Limb::Forearm(Side::Left)),
+                Some(&Wounds::default()),
+                0.0
+            ),
+            "You bind the left forearm. Nothing was bleeding."
+        );
     }
 
     /// New bleeding goes to the newest open wound; stopped bleeding comes

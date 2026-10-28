@@ -3588,6 +3588,110 @@ mod first_aid {
         (gone(&vr, d), h.bleeding, h.hp)
     }
 
+    /// A person winding a dressing round their own left forearm, as a
+    /// hand in a headset does it: the forearm held out across the chest and
+    /// swaying a little, the right hand circling it `r` from its axis (a
+    /// controller can't pass through the other), `along` it from the elbow
+    /// (1 is the middle of the fist), at `pace` turns a second, the circle
+    /// wobbling by `wobble` of its radius and drifting. Seconds from the
+    /// first circle until it's on, or `None` within `limit`.
+    pub(super) fn human_wind(
+        r: f32,
+        along: f32,
+        pace: f32,
+        wobble: f32,
+        limit: f32,
+    ) -> Option<f32> {
+        let (mut vr, feet) = setup();
+        let d = take(&mut vr, feet, "field_dressing");
+        let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
+        vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(4);
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
+        let forearm = |vr: &mut Vr| {
+            let mut sys = bevy::ecs::system::SystemState::<(
+                Query<
+                    (
+                        &Transform,
+                        &RigInput,
+                        &crate::rig::stance::Stance,
+                        &Children,
+                    ),
+                    With<crate::rig::LocalPlayer>,
+                >,
+                Query<(&RigHand, &Hand)>,
+            )>::new(vr.app.world_mut());
+            let (players, hands) = sys.get(vr.app.world()).unwrap();
+            crate::interact::wounds::player_segments(vr.player, &players, &hands)
+                .unwrap()
+                .into_iter()
+                .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+                .unwrap()
+        };
+        let dt = 1.0 / 90.0;
+        let ticks = (limit / dt) as usize;
+        let start = vr.hand_state(Side::Right).world.translation;
+        for i in 0..ticks {
+            let time = i as f32 * dt;
+            // The forearm sways as the other hand works round it.
+            let sway = Vec3::new(
+                (time * 1.3).sin() * 0.02,
+                (time * 0.9).sin() * 0.015,
+                (time * 1.7).cos() * 0.015,
+            );
+            vr.move_hand(Side::Left, wrist + sway);
+            let s = forearm(&mut vr);
+            let axis = (s.b - s.a).normalize();
+            let x = axis.cross(Vec3::Y).normalize_or(Vec3::Z);
+            let y = axis.cross(x);
+            let a = std::f32::consts::TAU * pace * time;
+            // Wider under the arm, where the wrist turns awkwardly; and
+            // never quite the same twice.
+            let rr = r
+                * (1.0 + wobble * ((time * 2.3).sin() * 0.6 + (time * 5.1).cos() * 0.4))
+                * if a.sin() < 0.0 { 1.0 + wobble } else { 1.0 };
+            let drift = axis * (time * 0.7).sin() * 0.03;
+            let at = s.a.lerp(s.b, along) + drift + (x * a.cos() + y * a.sin()) * rr;
+            // Half a second to bring it in to the arm.
+            let at = if time < 0.5 {
+                start.lerp(at, time / 0.5)
+            } else {
+                at
+            };
+            vr.move_hand(Side::Right, at - off);
+            vr.step(1);
+            if gone(&vr, d) {
+                return Some((time - 0.5).max(0.0));
+            }
+        }
+        None
+    }
+
+    /// How long a wind takes, across the ways people do it (run with
+    /// `--nocapture` to see the table).
+    #[test]
+    fn how_long_a_dressing_takes() {
+        let mut rows = Vec::new();
+        for &(r, along, pace, wobble) in &[
+            (0.09, 0.5, 0.5, 0.15),
+            (0.12, 0.5, 0.5, 0.2),
+            (0.15, 0.5, 0.5, 0.25),
+            (0.12, 0.8, 0.5, 0.2),
+            (0.14, 0.95, 0.4, 0.3),
+            (0.12, 0.5, 0.8, 0.2),
+            (0.17, 0.6, 0.5, 0.3),
+        ] {
+            let t = human_wind(r, along, pace, wobble, 12.0);
+            rows.push(format!(
+                "r {r:.2} along {along:.2} pace {pace:.1}/s wobble {wobble:.2}: {t:?}"
+            ));
+        }
+        eprintln!("time to bind:\n{}", rows.join("\n"));
+    }
+
     /// Circled round the forearm, the dressing goes on and the bleeding
     /// stops.
     #[test]
