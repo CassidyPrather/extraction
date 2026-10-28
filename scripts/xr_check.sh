@@ -64,14 +64,14 @@ chmod +x "$WORK/inner.sh"
 xvfb-run -a -s "-screen 0 1600x900x24" "$WORK/inner.sh"
 
 LOG="$WORK/game.log"
-echo "== ${MIR:-no mirror}"
+echo "== $MIR"
 grep -q "entered XR state FOCUSED" "$LOG" || { echo "FAIL: the session never got focus"; fail=1; }
 if grep -E "Suggested Path Unsupported|PATH_UNSUPPORTED|Failed to initialize openxr|panicked|Couldn't get swap chain texture|GPU stopped responding" "$LOG"; then
     echo "FAIL: see above"; fail=1
 fi
 [ -f "$SHOT" ] || { echo "FAIL: no screenshot"; fail=1; }
 grep -q "^exit 0" "$LOG" || { echo "FAIL: the game didn't end cleanly ($(grep '^exit' "$LOG"))"; fail=1; }
-if [ -z "$MIR" ]; then
+if [ "$MIR" = --headset ]; then
     grep -q "window: a card" "$LOG" || { echo "FAIL: no card on the window"; fail=1; }
 fi
 if [ "${SIMULATED_HANDS:-0}" = 1 ]; then
@@ -85,7 +85,7 @@ ARGS="$*"
 fail=0
 case "${MIRROR:-both}" in
     1) run_one --mirror "$OUT" ;;
-    0) run_one "" "${OUT%.png}-window.png" ;;
-    *) run_one --mirror "$OUT"; run_one "" "${OUT%.png}-window.png" ;;
+    0) run_one --headset "${OUT%.png}-window.png" ;;
+    *) run_one --mirror "$OUT"; run_one --headset "${OUT%.png}-window.png" ;;
 esac
 exit $fail
