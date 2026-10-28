@@ -603,3 +603,63 @@ listener does better against machines working together than against the
 same ones alone, 14 to 5 (p ≈ 0.06): what they say to each other gives
 them away. Machines working together are harder on a newcomer who doesn't
 listen and easier on one who does.
+
+# The yard after the 28 October playtest
+
+The designer took 32 min 19 s over the yard (`docs/playtests/2026-10-28/ANALYSIS.md`
+§2). What changed, as classes:
+
+- No line or board picks headset or window words till the driver is known
+  (`rig::KnownDriver`, `DriverPending`): the headset no longer hears
+  "Look at it, press E."
+- A step counts only at the station teaching it, and at the range, running
+  it dry and the shimmer only in order (`Onboarding::asks`).
+- A new station after the range, RUN IT DRY: shoot it empty, drop the mag,
+  a full one in, let the slide go (B), fire again.
+- Every board names what its step's code accepts (`Goal::accepts`), and so
+  does PLAYTEST.md's table (test `boards_code_and_playtest_agree`).
+- Lines say what's true, once: the next station named once; the yard's
+  truck call says 10 seconds, not "Two minutes. Keep low."; a hint stops
+  once you've done what it says.
+- The mark is said once in the yard and listed on the tailgate board. It
+  chimes and buzzes both hands, and it no longer flips the safety.
+
+The playtest's order, under the new rules: of its 23 ticks, these would
+not have counted and would have been asked for again in their turn:
+- the wrist (a glance in the truck);
+- holster (during Getting about);
+- DropMag and SeatMag (the kit pistol, at the truck);
+- Rack, Safety and the plate, all before the mag was filled;
+- the stone, before the part was thrown.
+
+The yard bots (flat, one seed each; seconds per station, before → after):
+
+| Newcomer | Kit | Getting about | Put away | Out of reach | Range | Run it dry | House | First aid | Shimmer | Buttons | Going home | Total |
+| - | - | - | - | - | - | - | - | - | - | - | - | - |
+| plain | 1 → 1 | 4 → 4 | 3 → 3 | 5 → 5 | 20 → 20 | new: 6 | 16 → 17 | 10 → 9 | 19 → 20 | 8 → 7 | 20 → 20 | 107 → 113 |
+| cautious | 1 → 1 | 11 → 11 | 13 → 13 | 22 → 22 | 64 → 64 | new: 29 | 48 → 47 | 37 → 38 | 66 → 66 | 25 → 25 | 41 → 41 | 329 → 358 |
+| lost | 1 → 1 | 15 → 15 | 44 → 44 | 70 → 53 | 100 → 85 | new: 48 | 100 → 99 | 94 → 94 | 91 → 91 | 12 → 12 | 146 → 145 | 674 → 688 |
+
+The reckless, hoarder and one-handed newcomers: 108 → 114 s, 163 → 170 s
+and 159 → 166 s. All six notice every step: 23 before, 27 after.
+
+The bots play flat and in order, so they never reproduce the player's
+order or the slow stretches. The changes against those come from the log:
+- **Station 1 (8.5 min):** "press E" on the wrist, plus hardware checks.
+  The log shows grips working from the first second and the pistol taken
+  only after 7 min. Why isn't logged; the transcript should say.
+- **Station 2 (5.1 min):** the crouch board said squat only. The run board
+  said to click and then push, but the click only counts while the stick
+  is pushed. Both are fixed.
+- **Station 5 (5.6 min):** a loaded kit pistol let the steps tick out of
+  order. Fixed by the rule above.
+- **Station 7 (3.9 min):** PLAYTEST said "press A", and the board said to
+  wind it. Both now say "circle it round the other forearm".
+
+Left for whoever owns them:
+- The dressing still needs 1.5 turns within 7 cm of the forearm
+  (`interact::first_aid`, `ROUND`). The owner should check that a real
+  hand can keep it that close.
+- If the right stick goes down a frame before the left, a mark can still
+  flip the safety. The fire selector acts on the press, so fully
+  separating the two needs a change in `weapons`.
