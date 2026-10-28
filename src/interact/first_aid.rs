@@ -52,6 +52,8 @@ const ROUND: f32 = 0.12;
 /// How long a dressing drifted off its limb keeps what's wound (s), and
 /// how fast it unwinds after (turns a second).
 const KEEP: f32 = 1.5;
+/// How far out a dressing already going round a limb is still followed (m).
+const FOLLOW: f32 = 0.25;
 const UNWIND: f32 = 1.0;
 /// An injector's tip, in its own space, and how near the thigh it must be.
 pub const NEEDLE: Vec3 = Vec3::new(0.0, 0.0, -0.065);
@@ -165,7 +167,12 @@ fn wrap_dressings(
                 continue;
             }
             let (t, a, d) = s.locate(at);
-            let near = (-0.1..=1.1).contains(&t) && d <= s.r + ROUND;
+            let along = (-0.1..=1.1).contains(&t);
+            // Close to start; once going, followed further out (a circle by
+            // hand dips wide under the arm, and an arc lost there can't be
+            // told from one gone back).
+            let near = along && d <= s.r + ROUND;
+            let round = along && d <= s.r + FOLLOW;
             let i = match w.rounds.iter().position(|r| r.limb == s.limb) {
                 Some(i) => i,
                 None if near => {
@@ -180,7 +187,7 @@ fn wrap_dressings(
                 None => continue,
             };
             let r = &mut w.rounds[i];
-            if !near {
+            if !round {
                 // Drifted off (a circle by hand dips out under the arm):
                 // what's wound stays a while, and the way back in counts
                 // the arc it went round outside; then it unwinds.

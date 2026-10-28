@@ -3573,6 +3573,13 @@ mod first_aid {
             ]));
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        // The dressing goes round, so the hand goes where it must be less
+        // where the dressing sits on it.
+        let off = {
+            let gt = vr.app.world().get::<GlobalTransform>(d).unwrap();
+            gt.translation() - vr.hand_state(Side::Right).world.translation
+        };
         let centre = wrist + Vec3::Z * 0.12;
         // A turn in two thirds of a second, as quick as a hand goes round.
         let steps = (turns * 60.0) as usize;
@@ -3580,7 +3587,7 @@ mod first_aid {
             let a = std::f32::consts::TAU * (i.min(steps) as f32 / 60.0);
             vr.move_hand(
                 Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
+                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.08 - off,
             );
             vr.step(1);
         }
@@ -3716,8 +3723,8 @@ mod first_aid {
     #[test]
     fn a_dressing_wound_by_hand_goes_on_in_one_try() {
         for &(r, along, pace, wobble) in &[
-            (0.12, 0.5, 0.5, 0.2),
             (0.15, 0.5, 0.5, 0.25),
+            (0.12, 0.5, 0.5, 0.2),
             (0.14, 0.95, 0.4, 0.3),
             (0.17, 0.6, 0.5, 0.3),
         ] {
@@ -6148,6 +6155,22 @@ mod wounds {
             (h.bleeding - arm_bleeds).abs() < 0.05,
             "health's bleeding is the arm's: {}",
             h.bleeding
+        );
+        // And what's said is what's true: the arm still bleeds, and it's
+        // named.
+        let said = vr
+            .app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .rev()
+            .find(|(t, _)| t.contains("bind") || t.contains("bound"))
+            .map(|(t, _)| t.clone())
+            .expect("a line for the dressing");
+        assert!(
+            said.contains("still bleeding") && said.contains("right upper arm"),
+            "{said}"
         );
     }
 
