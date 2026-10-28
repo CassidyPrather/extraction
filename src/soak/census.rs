@@ -31,6 +31,9 @@ pub struct Census {
     pub robots: usize,
     /// Sounds playing (client runs only).
     pub voices: usize,
+    /// GPU readbacks waiting (client runs only; with no GPU they never
+    /// finish, so they pile up: the harness, not the game).
+    pub readbacks: usize,
     pub meshes: usize,
     pub images: usize,
     pub materials: usize,
@@ -142,6 +145,11 @@ pub fn take(world: &mut World, t: f32) -> Census {
         );
         *robot_kinds.entry(key).or_default() += 1;
     }
+    let readbacks = count(world, |w| {
+        w.query::<&bevy::render::gpu_readback::Readback>()
+            .iter(w)
+            .count()
+    });
     let contacts = world
         .get_resource::<ContactGraph>()
         .map_or(0, |g| g.edges.edge_count());
@@ -168,6 +176,7 @@ pub fn take(world: &mut World, t: f32) -> Census {
         items,
         robots,
         voices,
+        readbacks,
         meshes: assets::<Mesh>(world),
         images: assets::<Image>(world),
         materials: assets::<StandardMaterial>(world),

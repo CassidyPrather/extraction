@@ -78,6 +78,23 @@ such cycles and holds each reset to the size of the one before.
   of the raider's career (with the wreck and map fixes): no leaks, memory
   flat at 185-210 MB, frame time flat.
 
+### The second night's long runs (28 October, main after round 8)
+
+- **Career, Marrow Creek, 30 minutes, 5 raids:** no leaks. Memory went
+  from 237 to 274 MB, with frame time and the save flat. What piles up
+  within a Surge cycle (wrecks, debris capped at 72, salvage bolts that
+  follow their wreck) is swept at the Surge.
+- **Client, Kettle Pass, 10 minutes:** no leaks by the gauge. The one
+  steady growth, about a pair of entities a second, is GPU readbacks that
+  never finish without a GPU. The census now counts them (`readbacks`),
+  and they rise in step with that pair: the harness, not the game. With
+  `SOAK_NO_AUDIO=1` the same growth shows, so it isn't sound.
+- **Wildlife's carcass map** kept every animal ever killed. It's fixed,
+  and the entity-map lint now reads tuple keys (`HashMap<(Entity, ..)>`)
+  too.
+- **Underground floors:** `soak::floors` probes every open raster cell of
+  every site, and finds the colliders' floor wherever the raster has one.
+
 ## A quiet log
 
 `soak::quiet::tests::no_session_logs_a_warning` plays four sessions, each
