@@ -3,16 +3,14 @@
 //! in the truck does nothing; an empty chamber clicks. Someone new can't
 //! tell those from a broken control (the first headset session found most
 //! controls "dead" and couldn't tell why), so the wrist says what to do,
-//! a few times, then trusts you; and not at all once you've shown you
-//! know (the playtest heard "Safety's on" three minutes after it had
-//! taken the range's pistol off safe itself).
+//! a few times, then trusts you.
 
 use bevy::prelude::*;
 use extraction_core::firearm::{Event as FireEvent, FireMode};
 
 use crate::interact::Held;
 use crate::raid::{Phase, RadioCall, Raid};
-use crate::rig::{LocalPlayer, RigInput};
+use crate::rig::{LocalPlayer, RigDriver, RigInput};
 use crate::weapons::{Gun, GunEvent};
 
 /// How many times each hint is given in a session.
@@ -22,9 +20,17 @@ const QUIET: f32 = 20.0;
 
 pub struct HintsPlugin;
 
+/// What you've shown you know: done what the hint would tell you (off safe
+/// by your own hand, a round chambered after a click, a call from out in
+/// the Zone). It isn't said again (the playtest heard "Safety's on" three
+/// minutes after it had taken the range's pistol off safe itself).
+#[derive(Resource, Default, Debug)]
+pub struct Known(pub std::collections::HashSet<Hint>);
+
 impl Plugin for HintsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Hints>()
+            .init_resource::<Known>()
             .add_systems(Update, (on_safe, dry_click, radio_at_base));
     }
 }
@@ -48,21 +54,14 @@ impl Hint {
     }
 }
 
-/// Hints given: how many times, and when last; and what you've shown you
-/// know (done what the hint would tell you).
+/// Hints given: how many times, and when last.
 #[derive(Resource, Default, Debug)]
-pub struct Hints {
-    given: std::collections::HashMap<Hint, (u32, f32)>,
-    known: std::collections::HashSet<Hint>,
-}
+pub struct Hints(std::collections::HashMap<Hint, (u32, f32)>);
 
 impl Hints {
-    /// Say it, unless it's been said enough or just now, or you know.
+    /// Say it, unless it's been said enough or just now.
     pub fn give(&mut self, hint: Hint, now: f32, flat: bool, raid: &mut Raid) -> bool {
-        if self.known.contains(&hint) {
-            return false;
-        }
-        let e = self.given.entry(hint).or_insert((0, f32::NEG_INFINITY));
+        let e = self.0.entry(hint).or_insert((0, f32::NEG_INFINITY));
         if e.0 >= TIMES || now - e.1 < QUIET {
             return false;
         }
@@ -73,12 +72,7 @@ impl Hints {
     }
 
     pub fn given(&self, hint: Hint) -> u32 {
-        self.given.get(&hint).map_or(0, |e| e.0)
-    }
-
-    /// You've done what it tells you: it's not said again.
-    pub fn known(&mut self, hint: Hint) {
-        self.known.insert(hint);
+        self.0.get(&hint).map_or(0, |e| e.0)
     }
 }
 
@@ -89,6 +83,7 @@ fn on_safe(
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
     driver: crate::rig::KnownDriver,
+    known: Res<Known>,
     time: Res<Time>,
     mut was: Local<bool>,
 ) {
@@ -101,8 +96,11 @@ fn on_safe(
             squeezed = true;
         }
     }
+    // (Not till it's known which words, nor once you know.)
     if let (true, false, Some(flat)) = (squeezed, *was, driver.flat()) {
-        hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+        if !known.0.contains(&Hint::Safety) {
+            hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+        }
     }
     *was = squeezed;
 }
@@ -115,18 +113,30 @@ fn dry_click(
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
     driver: crate::rig::KnownDriver,
+    mut known: ResMut<Known>,
+    mut clicked: Local<Vec<Entity>>,
     time: Res<Time>,
 ) {
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
-        // Taken off safe, or a round chambered, by your own hand.
-        match ev.event {
-            FireEvent::ModeChanged(m) if mine && m != FireMode::Safe => hints.known(Hint::Safety),
-            FireEvent::Chambered if mine => hints.known(Hint::Empty),
-            _ => {}
+        if !mine {
+            continue;
         }
-        if let (true, Some(flat)) = (mine && ev.event == FireEvent::DryFire, driver.flat()) {
-            hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+        match ev.event {
+            FireEvent::ModeChanged(m) if m != FireMode::Safe => {
+                known.0.insert(Hint::Safety);
+            }
+            // Racked after it clicked: you know what the click means.
+            FireEvent::Chambered if clicked.contains(&ev.gun) => {
+                known.0.insert(Hint::Empty);
+            }
+            FireEvent::DryFire => {
+                clicked.push(ev.gun);
+                if let (Some(flat), false) = (driver.flat(), known.0.contains(&Hint::Empty)) {
+                    hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -137,16 +147,17 @@ fn radio_at_base(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
+    mut known: ResMut<Known>,
     time: Res<Time>,
 ) {
     for c in calls.read() {
         if !locals.contains(c.player) {
             continue;
         }
-        if raid.phase == Phase::AtBase {
+        if raid.phase != Phase::AtBase {
+            known.0.insert(Hint::RadioAtBase);
+        } else if !known.0.contains(&Hint::RadioAtBase) {
             hints.give(Hint::RadioAtBase, time.elapsed_secs(), false, &mut raid);
-        } else {
-            hints.known(Hint::RadioAtBase);
         }
     }
 }
@@ -154,28 +165,6 @@ fn radio_at_base(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Once you've done what a hint says, it isn't said again (the
-    /// playtest heard "Safety's on" three minutes after it had taken the
-    /// range's pistol off safe itself).
-    #[test]
-    fn a_hint_stops_once_you_know() {
-        let mut raid = Raid {
-            phase: Phase::AtBase,
-            clock: 0.0,
-            raids: 0,
-            recalled: false,
-            cycle: 0,
-            extractions: 0,
-            deaths: 0,
-            log: Vec::new(),
-        };
-        let mut hints = Hints::default();
-        assert!(hints.give(Hint::Safety, 0.0, false, &mut raid));
-        hints.known(Hint::Safety);
-        assert!(!hints.give(Hint::Safety, 100.0, false, &mut raid));
-        assert!(hints.give(Hint::Empty, 100.0, false, &mut raid));
-    }
 
     /// Every hint fits the wrist whole.
     #[test]

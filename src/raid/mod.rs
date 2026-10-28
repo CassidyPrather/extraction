@@ -45,24 +45,6 @@ pub const TRUCK_TRANSIT: f32 = 120.0;
 /// Seconds the truck waits at a rendezvous before giving up.
 pub const TRUCK_WAIT: f32 = 300.0;
 
-/// How the truck runs here: how long it takes to come, and whether
-/// anything's hunting you while it does (the training yard: ten seconds,
-/// nothing). What the driver says when you call follows it.
-#[derive(Resource, Clone, Debug)]
-pub struct TruckRun {
-    pub transit: f32,
-    pub hunted: bool,
-}
-
-impl Default for TruckRun {
-    fn default() -> Self {
-        Self {
-            transit: TRUCK_TRANSIT,
-            hunted: true,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Phase {
     /// In or by the truck at base; the clock isn't running.
@@ -161,7 +143,6 @@ impl Plugin for RaidPlugin {
             deaths: 0,
             log: Vec::new(),
         })
-        .init_resource::<TruckRun>()
         .add_message::<RadioCall>()
         .add_message::<DepartRequest>()
         .add_message::<truck::DropEverything>()
@@ -244,9 +225,7 @@ fn radio_calls(
     items: Query<&crate::items::Item>,
     catalog: Res<crate::items::Catalog>,
     progression: Option<Res<crate::progression::Progression>>,
-    run: Option<Res<TruckRun>>,
 ) {
-    let run = run.map(|r| r.clone()).unwrap_or_default();
     // A career's first job comes home from the gate it went out by, free:
     // the way back is the way it came, not across the valley to a
     // rendezvous (`docs/FIRST_HOUR.md`).
@@ -303,13 +282,10 @@ fn radio_calls(
                 };
                 let n = raid.clock as u32;
                 let b = lines::way(here, rvs[i].1);
-                raid.say(lines::called_for(
-                    lines::fill(lines::pick(lines::CALLED, n), name, 0.0, &b),
-                    &run,
-                ));
+                raid.say(lines::fill(lines::pick(lines::CALLED, n), name, 0.0, &b));
                 raid.phase = Phase::TruckCalled {
                     rv: i,
-                    eta: run.transit,
+                    eta: TRUCK_TRANSIT,
                 };
             }
             Phase::TruckCalled { eta, .. } => {

@@ -2919,6 +2919,59 @@ mod onboarding {
         assert!(crate::take_restart().is_some(), "the second goes");
     }
 
+    /// "Safety's on" is said when a squeeze meets the safety, and not
+    /// again once you've taken a gun off safe yourself (the playtest heard
+    /// it three minutes after the step).
+    #[test]
+    fn the_safety_hint_stops_once_you_know() {
+        let mut vr = Vr::first_run();
+        let feet = ground(&vr, [-13.5, 46.0]);
+        vr.stand(feet, 0.0);
+        vr.step(20);
+        let gun = vr.spawn(
+            "pm_pistol",
+            Transform::from_translation(feet + Vec3::new(0.25, 1.0, -0.4)),
+        );
+        vr.app.world_mut().entity_mut(gun).insert(RigidBody::Static);
+        let grip_at = vr.point(gun, |r| *r == GripRole::Primary);
+        vr.hand(Side::Right, grip_at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(gun));
+        let mode = |vr: &Vr| vr.app.world().get::<Gun>(gun).unwrap().firearm.fire_mode();
+        let squeeze = |vr: &mut Vr| {
+            vr.trigger(Side::Right, 1.0);
+            vr.step(4);
+            vr.trigger(Side::Right, 0.0);
+            vr.step(4);
+        };
+        let click = |vr: &mut Vr| {
+            vr.stick_click(Side::Right, true);
+            vr.step(2);
+            vr.stick_click(Side::Right, false);
+            vr.step(2);
+        };
+        let safety_said = |vr: &Vr| said(vr, "Safety's on");
+        // Put it on safe, if it isn't.
+        while mode(&vr) != extraction_core::firearm::FireMode::Safe {
+            click(&mut vr);
+        }
+        squeeze(&mut vr);
+        assert!(safety_said(&vr), "told the first time");
+        // Off safe by hand, then back on.
+        click(&mut vr);
+        assert_ne!(mode(&vr), extraction_core::firearm::FireMode::Safe);
+        while mode(&vr) != extraction_core::firearm::FireMode::Safe {
+            click(&mut vr);
+        }
+        // Past the hint's quiet spell and the wrist's 8 s.
+        vr.step(90 * 25);
+        assert!(!safety_said(&vr));
+        squeeze(&mut vr);
+        assert!(!safety_said(&vr), "not told again once you know");
+    }
+
     /// The driver names the next station once: stepping out of the truck
     /// doesn't say it again (the playtest heard "Next: the lamp by the
     /// pen." twice in 28 s).

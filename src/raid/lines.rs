@@ -56,31 +56,6 @@ pub const CALLED: &[&str] = &[
     "Truck: \"Heard you. {rv}, {b}. Two minutes.\"",
 ];
 
-/// A called line as it is on this run: the truck's time as it is (the
-/// lines say two minutes, [`super::TRUCK_TRANSIT`]; the training yard's
-/// comes in ten seconds), and "keep low" only where something hunts.
-pub fn called_for(line: String, run: &super::TruckRun) -> String {
-    let mut out = line;
-    if run.transit != super::TRUCK_TRANSIT {
-        let s = run.transit.round().max(1.0);
-        let words = if s >= 60.0 {
-            let m = (s / 60.0).round();
-            if m == 1.0 {
-                "A minute".to_string()
-            } else {
-                format!("{m:.0} minutes")
-            }
-        } else {
-            format!("{s:.0} seconds")
-        };
-        out = out.replace("Two minutes", &words);
-    }
-    if !run.hunted {
-        out = out.replace(" Keep low.", "");
-    }
-    out
-}
-
 /// Called again while on the way: `{s}` is seconds left.
 pub const ON_THE_WAY: &[&str] = &[
     "Truck: \"Still on my way. {s} seconds.\"",
@@ -630,26 +605,6 @@ mod tests {
         assert_eq!(
             fill(CALLED[0], "Hunting lodge", 0.0, "north-west, 480 m"),
             "Truck: \"Copy. The hunting lodge, north-west, 480 m. Two minutes.\""
-        );
-    }
-
-    /// A call says when the truck will be there, and "keep low" only
-    /// where something hunts (the playtest's yard: "Two minutes. Keep
-    /// low." for a truck there in ten seconds, with no machines).
-    #[test]
-    fn a_call_says_the_truck_as_it_is() {
-        let line = fill(CALLED[2], "North post", 0.0, "north, 10 m");
-        let yard = super::super::TruckRun {
-            transit: 10.0,
-            hunted: false,
-        };
-        assert_eq!(
-            called_for(line.clone(), &yard),
-            "Truck: \"The north post, north, 10 m. 10 seconds.\""
-        );
-        assert_eq!(
-            called_for(line.clone(), &super::super::TruckRun::default()),
-            line
         );
     }
 
