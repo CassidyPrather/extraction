@@ -107,7 +107,7 @@
         // Along the beck to the logging camp.
         (
             name: "Camp road", kind: Gravel, width: 5.0,
-            points: [(112.0, 240.0), (150.0, 242.0), (195.0, 238.0)],
+            points: [(124.0, 264.0), (140.0, 252.0), (160.0, 244.0), (195.0, 238.0)],
         ),
         // Off the switchbacks, across the slope to the lodge.
         (

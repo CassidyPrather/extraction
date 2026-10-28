@@ -35,6 +35,9 @@ const UP: f32 = 1.03;
 const DOWN_MOST: f32 = 0.80;
 /// After a step down, frames before the next step up may come.
 const SETTLE: u32 = 45;
+/// Frames a scale that ran late stays out of reach (a minute at 90 Hz):
+/// whatever made those frames late, the GPU's time didn't show it.
+const CEILING_FRAMES: u32 = 5400;
 
 /// The narrowest eye, pixels across, that keeps must-read text at its
 /// floor (7.5 px of x-height at `legibility::MUST_READ_DEG`).
@@ -61,8 +64,12 @@ pub struct Governor {
     pub max: f32,
     /// GPU milliseconds a frame, newest last.
     times: std::collections::VecDeque<f64>,
+    /// Whether the runtime was reprojecting, the last `HOT_FRAMES` frames.
+    late: std::collections::VecDeque<bool>,
     frame: u32,
     settle: u32,
+    /// A scale the runtime reprojected at, and frames it stays a ceiling.
+    ceiling: Option<(f32, u32)>,
 }
 
 impl Governor {
@@ -73,23 +80,38 @@ impl Governor {
             min,
             max,
             times: Default::default(),
+            late: Default::default(),
             frame: 0,
             settle: 0,
+            ceiling: None,
         }
     }
 
     /// One frame: the GPU's time for it (None: none came back), and the
     /// display's period (ms). Gives the scale to render the next at.
     pub fn step(&mut self, gpu_ms: Option<f64>, period_ms: f64) -> f32 {
+        self.step_seen(gpu_ms, period_ms, false)
+    }
+
+    /// As `step`, and whether the runtime is reprojecting (frames landing
+    /// at a multiple of the display's period, `Display::see`): late frames
+    /// are over the budget whatever the GPU's measured time says, which
+    /// may not be all the frame's work.
+    pub fn step_seen(&mut self, gpu_ms: Option<f64>, period_ms: f64, late: bool) -> f32 {
         if let Some(t) = gpu_ms {
             self.times.push_back(t);
             while self.times.len() > COOL_FRAMES {
                 self.times.pop_front();
             }
         }
+        self.late.push_back(late);
+        while self.late.len() > HOT_FRAMES {
+            self.late.pop_front();
+        }
         self.frame += 1;
         self.settle = self.settle.saturating_sub(1);
-        if self.frame % EVERY != 0 || self.times.is_empty() {
+        let lates = self.late.iter().filter(|l| **l).count();
+        if self.frame % EVERY != 0 || (self.times.is_empty() && lates == 0) {
             return self.scale;
         }
         let target = period_ms * TARGET;
@@ -98,7 +120,18 @@ impl Governor {
         // fewer pixels wouldn't have saved it.
         let mut recent: Vec<f64> = self.times.iter().rev().take(HOT_FRAMES).copied().collect();
         recent.sort_by(|a, b| b.total_cmp(a));
-        let hot = recent.get(1).copied().unwrap_or(0.0);
+        let mut hot = recent.get(1).copied().unwrap_or(0.0);
+        if lates >= 2 {
+            // Reprojecting: a tenth off each axis a step.
+            hot = hot.max(target / 0.81);
+            self.ceiling = Some((self.scale, CEILING_FRAMES));
+        }
+        if let Some((_, left)) = &mut self.ceiling {
+            *left = left.saturating_sub(EVERY);
+            if *left == 0 {
+                self.ceiling = None;
+            }
+        }
         if hot > target {
             // Time goes with the pixels: the square of the scale.
             let k = ((target / hot).sqrt() as f32).clamp(DOWN_MOST, 0.98);
@@ -106,15 +139,19 @@ impl Governor {
             self.settle = SETTLE;
             // What was measured was at the old size.
             self.times.clear();
-        } else if self.settle == 0 && self.times.len() >= COOL_FRAMES {
+            self.late.clear();
+        } else if self.settle == 0 && lates == 0 && self.times.len() >= COOL_FRAMES {
             // Up on the slow end of the last half second (its 90th
             // percentile): room for that at the larger size.
             let mut all: Vec<f64> = self.times.iter().copied().collect();
             all.sort_by(f64::total_cmp);
             let slow = all[all.len() * 9 / 10];
             let after = slow * f64::from(UP * UP);
-            if after < target * ROOM && self.scale < self.max {
-                self.scale = (self.scale * UP).min(self.max);
+            let most = self
+                .ceiling
+                .map_or(self.max, |(c, _)| (c / UP).min(self.max));
+            if after < target * ROOM && self.scale < most {
+                self.scale = (self.scale * UP).min(most);
                 // The next step up waits for a half second all at this
                 // size. What was measured stays for a step down: a late
                 // frame just before this mustn't be forgotten.
@@ -123,6 +160,54 @@ impl Governor {
         }
         self.scale
     }
+}
+
+/// The display's own frame period, from the runtime's predicted one. A
+/// runtime that's reprojecting (SteamVR, frames late) predicts a multiple
+/// of it: the playtest's Beyond 2 at 75 Hz said 26.7 ms, and the eyes,
+/// judged against that, sat at 100% with every frame at half rate. So the
+/// period is the shortest predicted (no PC headset refreshes under 60 Hz),
+/// and a longer one says the frames are late.
+#[derive(Clone, Copy, Debug)]
+pub struct Display {
+    pub period_ms: f64,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self {
+            period_ms: 1000.0 / 60.0,
+        }
+    }
+}
+
+impl Display {
+    /// This frame's predicted period: the display's, and whether it's late.
+    pub fn see(&mut self, predicted_ms: f64) -> (f64, bool) {
+        if predicted_ms > 0.0 {
+            self.period_ms = self.period_ms.min(predicted_ms);
+        }
+        (self.period_ms, predicted_ms > self.period_ms * 1.5)
+    }
+}
+
+/// What a frame tells the governor: its GPU time and whether it was late
+/// (the runtime reprojecting, or the frame itself over one and a half
+/// periods). Nothing while the headset isn't showing the world: before
+/// the session's focused and the world's drawn, the GPU's 1 ms readings
+/// were of an empty view, and the playtest's eyes went from 60% to 100%
+/// on them in 12 s.
+pub fn reading(
+    live: bool,
+    gpu: Option<f64>,
+    runtime_late: bool,
+    frame_ms: f64,
+    period_ms: f64,
+) -> (Option<f64>, bool) {
+    if !live {
+        return (None, false);
+    }
+    (gpu, runtime_late || frame_ms > period_ms * 1.5)
 }
 
 /// The eyes' size this frame, pixels, for the cameras' viewports and the
@@ -144,6 +229,7 @@ pub struct HoldRate {
     pub full: UVec2,
     /// The runtime's recommended width (for the logged scale).
     pub recommended: u32,
+    pub display: Display,
 }
 
 pub struct HoldRatePlugin;
@@ -199,6 +285,7 @@ mod xr {
         mut seen: Local<Option<std::time::Instant>>,
         mut said: Local<f32>,
         mut eyes: Query<&mut Camera, With<XrCamera>>,
+        world: crate::render::timeline::WorldReady,
     ) {
         let (Some(config), Some(sizes)) = (config, sizes) else {
             return;
@@ -214,6 +301,7 @@ mod xr {
                 ),
                 full,
                 recommended: sizes.recommended.x,
+                display: Display::default(),
             });
             return;
         };
@@ -222,13 +310,25 @@ mod xr {
             .and_then(|s| super::super::budget::newest_gpu_ms(s, &mut seen));
         // `EXTRACTION_FRAME_BUDGET_MS` stands in for the display's period (a
         // simulated runtime's follows the game's own pace).
-        let period = std::env::var("EXTRACTION_FRAME_BUDGET_MS")
+        let predicted = frame
+            .as_ref()
+            .map(|f| f.predicted_display_period.as_nanos() as f64 / 1e6);
+        let (period, gpu, late) = match std::env::var("EXTRACTION_FRAME_BUDGET_MS")
             .ok()
             .and_then(|v| v.parse::<f64>().ok())
-            .or_else(|| frame.map(|f| f.predicted_display_period.as_nanos() as f64 / 1e6))
-            .unwrap_or(1000.0 / 90.0);
+        {
+            Some(p) => (p, gpu, false),
+            None => {
+                let (period, late) =
+                    predicted.map_or((1000.0 / 90.0, false), |p| hold.display.see(p));
+                let live = frame.as_ref().is_some_and(|f| f.should_render) && world.ready();
+                let (gpu, late) =
+                    super::reading(live, gpu, late, time.delta_secs_f64() * 1000.0, period);
+                (period, gpu, late)
+            }
+        };
         let scale = if comfort.hold_rate {
-            hold.governor.step(gpu, period.max(1.0))
+            hold.governor.step_seen(gpu, period.max(1.0), late)
         } else {
             // Off: the SHARPNESS size, as launched.
             hold.governor.scale = sizes.start.x as f32 / hold.full.x.max(1) as f32;
@@ -247,7 +347,7 @@ mod xr {
         if *said >= 10.0 {
             *said = 0.0;
             info!(
-                "eyes: {}x{} ({:.0}% of the runtime's width){}, gpu {} of a {period:.1} ms frame",
+                "eyes: {}x{} ({:.0}% of the runtime's width){}, gpu {} of a {period:.1} ms frame{}",
                 size.x,
                 size.y,
                 rect.scale * 100.0,
@@ -257,6 +357,11 @@ mod xr {
                     ""
                 },
                 gpu.map_or("not measured".into(), |g| format!("{g:.1} ms")),
+                predicted
+                    .filter(|_| late)
+                    .map_or(String::new(), |p| format!(
+                        " (late: the runtime says {p:.1})"
+                    )),
             );
         }
         commands.insert_resource(rect);
@@ -520,6 +625,67 @@ mod tests {
         }
         assert!(during < before * 0.9, "{before} > {during}");
         assert!(back.is_some_and(|f| f < 450), "back within 5 s: {back:?}");
+    }
+
+    /// The playtest's frame: a Beyond 2 at 75 Hz, the eyes' work more than
+    /// the period at 100%, and the GPU's measured time only part of it (a
+    /// third: one view's). Every late frame the runtime reprojects, and
+    /// says so with a period twice the display's (26.7 ms). The eyes come
+    /// down until frames land at the display's rate, and stay there.
+    #[test]
+    fn half_rate_frames_step_the_eyes_down() {
+        let display = 1000.0 / 75.0;
+        // At 100%: 22 ms of work, the frames at half rate.
+        let truth = |s: f32| cost(s, 19.0, 3.0);
+        let mut g = Governor::new(0.6, 0.45, 1.0);
+        let mut d = Display::default();
+        let mut late_at_end = 0;
+        // As the session starts, a frame or two on time.
+        d.see(display);
+        for f in 0..3000 {
+            let s = g.scale;
+            let work = truth(s);
+            let late = work > display;
+            let predicted = if late { 2.0 * display } else { display };
+            let (period, reprojecting) = d.see(predicted);
+            g.step_seen(Some(work / 3.0), period, reprojecting);
+            if f >= 2500 && late {
+                late_at_end += 1;
+            }
+        }
+        assert!((d.period_ms - display).abs() < 1e-6, "{}", d.period_ms);
+        assert_eq!(late_at_end, 0, "frames still late at {:.2}", g.scale);
+        assert!(g.scale < 0.85, "{}", g.scale);
+        assert!(truth(g.scale) > display * 0.5, "not far under: {}", g.scale);
+    }
+
+    /// Reprojecting from the start (no on-time frame seen): no PC headset
+    /// refreshes under 60 Hz, so 26.7 ms is a late one all the same.
+    #[test]
+    fn a_session_late_from_the_start_is_still_late() {
+        let mut d = Display::default();
+        let (period, late) = d.see(2000.0 / 75.0);
+        assert!(late, "{period}");
+        assert!(period <= 1000.0 / 60.0 + 1e-9);
+        let (period, late) = d.see(1000.0 / 90.0);
+        assert!(!late && (period - 1000.0 / 90.0).abs() < 1e-9);
+    }
+
+    /// Before the world shows in the headset, an empty view's 1 ms readings
+    /// don't move it; once it shows, a frame that takes two periods is
+    /// late whatever the runtime predicts.
+    #[test]
+    fn it_holds_until_the_world_shows_and_counts_long_frames_late() {
+        let mut g = Governor::new(0.6, 0.45, 1.0);
+        for _ in 0..2000 {
+            let (gpu, late) = reading(false, Some(0.9), false, 11.0, PERIOD);
+            g.step_seen(gpu, PERIOD, late);
+        }
+        assert_eq!(g.scale, 0.6, "held before the world showed");
+        let (_, late) = reading(true, Some(3.0), false, 2.0 * PERIOD, PERIOD);
+        assert!(late);
+        let (_, late) = reading(true, Some(3.0), false, PERIOD, PERIOD);
+        assert!(!late);
     }
 
     /// No GPU time back (no timestamp queries): it holds where it is.
