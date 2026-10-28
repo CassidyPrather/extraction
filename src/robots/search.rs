@@ -79,6 +79,28 @@ pub struct LostYou {
     pub searched: Vec3,
 }
 
+/// A robot that was fighting `about` has lost them and is coming their
+/// way, out of their sight: to where it lost them, or back past them to
+/// its post ([`coming_back`]).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct ComingBack {
+    pub robot: Entity,
+    pub at: Vec3,
+    pub about: Entity,
+}
+
+/// One that was fighting you, out of your sight, coming within this of
+/// you is coming back (m): about as far as its "investigating" call
+/// carries (`robot_voice`), so it's heard as it says it.
+pub const COME_BACK_NEAR: f32 = 55.0;
+/// ...closing at least this fast (m/s, smoothed)...
+pub const COME_BACK_CLOSING: f32 = 0.3;
+/// ...and once it's said so, it says so again only after it's gone this
+/// much further off than the nearest it came (m), and a minute on (a
+/// search sweeping to and fro is one return).
+pub const COME_BACK_REARM: f32 = 15.0;
+pub const COME_BACK_AGAIN: f32 = 60.0;
+
 /// A robot that noticed someone called the robots near it.
 #[derive(Message, Clone, Copy, Debug)]
 pub struct CalledOut {
@@ -181,13 +203,14 @@ impl Plugin for SearchPlugin {
             .add_message::<Searching>()
             .add_message::<LostYou>()
             .add_message::<CalledOut>()
+            .add_message::<ComingBack>()
             .add_message::<MindShift>()
             .init_resource::<MindLog>()
             .add_systems(
                 FixedUpdate,
                 (call_out, forget_the_downed).after(super::perceive),
             )
-            .add_systems(FixedPostUpdate, announce)
+            .add_systems(FixedPostUpdate, (announce, coming_back).chain())
             .add_systems(Update, wrist_lines);
     }
 }
@@ -497,11 +520,13 @@ fn line(lost: bool, n: u32) -> &'static str {
 }
 
 /// Says, rarely, when a robot close by that was after you gives up, or
-/// calls the others about you.
+/// calls the others about you; and always when one that gave up (or lost
+/// you) is coming back your way.
 #[allow(clippy::too_many_arguments)]
 fn wrist_lines(
     mut lost: MessageReader<LostYou>,
     mut called: MessageReader<CalledOut>,
+    mut back: MessageReader<ComingBack>,
     players: Query<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>,
     aware: Query<&Awareness>,
     raid: Option<ResMut<crate::raid::Raid>>,
@@ -528,6 +553,19 @@ fn wrist_lines(
     }
     let now = time.elapsed_secs();
     let (per_robot, last, n) = &mut *said;
+    // Danger coming, and it may undo "it's stopped looking": said
+    // whatever was said lately (it's once a return already).
+    for b in back.read() {
+        if b.about == me {
+            raid.say(crate::raid::lines::pick(
+                crate::raid::lines::COMING_BACK,
+                *n,
+            ));
+            *n += 1;
+            *last = now;
+            per_robot.insert(b.robot, now);
+        }
+    }
     per_robot.retain(|_, t| now - *t < LINE_PER_ROBOT);
     for (is_lost, robot, at, about) in events {
         if about != Some(me)
@@ -613,7 +651,17 @@ fn announce(
                     toward: *toward,
                 });
             }
-            (Some(b), Brain::Search { .. }) if b != 3 => {
+            (Some(b), Brain::Search { at: spot, .. }) if b != 3 => {
+                // Straight into a search: it went to look, inside one tick
+                // (lost you within a step of where it last saw you). It
+                // still went to look.
+                if b != 2 {
+                    investigating.write(Investigating {
+                        robot: e,
+                        at,
+                        toward: *spot,
+                    });
+                }
                 searching.write(Searching { robot: e, at });
             }
             (Some(2 | 3), Brain::Transit { .. } | Brain::Leave { .. }) => {
@@ -659,6 +707,85 @@ fn announce(
     looked.retain(|e, _| seen.contains(e));
     log.last.retain(|e, _| seen.contains(e));
     log.hurt.retain(|e, _| seen.contains(e));
+}
+
+/// How each robot stands with the local player, for [`coming_back`].
+#[derive(Default)]
+struct Back {
+    /// It's fought them (since it last forgot them).
+    fought: bool,
+    dist: f32,
+    closing: f32,
+    /// Said it's coming back: when, and the nearest it's come since.
+    said: Option<(f32, f32)>,
+}
+
+/// A robot that was fighting you, out of your sight now and not fighting,
+/// coming your way: looking where it lost you, or walking back past you to
+/// its post once it's given up. It says so ([`ComingBack`], and its
+/// "investigating" call, unless it's just said that), once a return.
+fn coming_back(
+    robots: Query<(Entity, &Brain, &Awareness, &GlobalTransform)>,
+    players: Query<(Entity, &GlobalTransform), With<crate::rig::LocalPlayer>>,
+    time: Res<Time>,
+    mut out: MessageWriter<ComingBack>,
+    (mut minds, mut log): (MessageWriter<MindShift>, ResMut<MindLog>),
+    mut backs: Local<std::collections::HashMap<Entity, Back>>,
+) {
+    let Ok((me, gt)) = players.single() else {
+        return;
+    };
+    let (dt, now) = (time.delta_secs().max(1e-4), time.elapsed_secs());
+    let mine = gt.translation();
+    let mut seen = std::collections::HashSet::new();
+    for (e, brain, aware, rt) in &robots {
+        seen.insert(e);
+        let at = rt.translation();
+        let d = flat(at - mine);
+        let b = backs.entry(e).or_insert(Back {
+            dist: d,
+            ..default()
+        });
+        b.closing += ((b.dist - d) / dt - b.closing) * (dt / 1.5).min(1.0);
+        b.dist = d;
+        if aware.target != Some(me) || matches!(brain, Brain::Down) {
+            *b = Back {
+                dist: d,
+                ..default()
+            };
+            continue;
+        }
+        if matches!(brain, Brain::Engage) {
+            b.fought = true;
+            // Fighting again: the next return is told, once a minute is
+            // up (sight flickering in a fight isn't a return each time).
+            if let Some((_, nearest)) = &mut b.said {
+                *nearest = 0.0;
+            }
+            continue;
+        }
+        if let Some((when, nearest)) = &mut b.said {
+            *nearest = nearest.min(d);
+            if d > *nearest + COME_BACK_REARM && now - *when > COME_BACK_AGAIN {
+                b.said = None;
+            }
+            continue;
+        }
+        let looking = matches!(brain, Brain::Investigate { .. } | Brain::Search { .. });
+        let coming = b.closing > COME_BACK_CLOSING || looking;
+        if b.fought && !aware.can_see_target && d < COME_BACK_NEAR && coming {
+            b.said = Some((now, d));
+            out.write(ComingBack {
+                robot: e,
+                at,
+                about: me,
+            });
+            if !looking {
+                log.shift(&mut minds, e, Mind::Investigating, at, now);
+            }
+        }
+    }
+    backs.retain(|e, _| seen.contains(e));
 }
 
 #[cfg(test)]

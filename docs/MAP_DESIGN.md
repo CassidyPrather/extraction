@@ -169,6 +169,18 @@ A good map makes the crossing a decision.
   roof (Marrow's mast relay: 97 m, by the gate; the pumping station's
   tool shed, the rangers' store and the road-menders' hut past the
   Village).
+- **The career's first job is the obvious way from the drop**: in a
+  valley a career can start in (`progression::FIRST_VALLEYS`), the easy
+  walk to its first job (`progression::first_job`) heads for it from the
+  first step, within 40 degrees of its bearing over the first 120 m
+  (`FIRST_TURN`, `FIRST_HEAD`), and nothing with loot within 60 m of the
+  drop (`LURE_REACH`) lies more than 25 m off that walk (`LURE_OFF`).
+  The designer's first raid in Marrow took the road north, whose turn
+  to the Old farm a spruce stand hid, by way of a shed and the cars by
+  it, and walked on into the Village's walkers. Give the first job its
+  own track from the drop, with its cover and roofs along it, and keep
+  what's worth looking at near the drop on that track. (Marrow's farm
+  track; Kettle's camp road from the gate.)
 - **The way out is a choice too**: from every rich place (a point of
   interest or artifact field in a danger-2 region or worse), at least
   two rendezvous are a sensible walk away: within 300 m of the nearest

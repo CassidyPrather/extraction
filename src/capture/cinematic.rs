@@ -987,6 +987,39 @@ mod tests {
         );
     }
 
+    /// Every before/after shot list reads (`scripts/before_after.py
+    /// --check`): an owner's line written wrong fails here, not on the
+    /// morning the sheet is due.
+    #[test]
+    fn before_after_lists_read() {
+        let root = crate::asset_root_path().join("..");
+        let Ok(days) = std::fs::read_dir(root.join("docs/playtests")) else {
+            return;
+        };
+        for day in days.flatten() {
+            let list = day.path().join("shots.txt");
+            if !list.exists() {
+                continue;
+            }
+            let Ok(out) = std::process::Command::new("python3")
+                .arg(root.join("scripts/before_after.py"))
+                .arg(&list)
+                .arg("--check")
+                .output()
+            else {
+                eprintln!("no python3: skipped");
+                return;
+            };
+            assert!(
+                out.status.success(),
+                "{}: {}{}",
+                list.display(),
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
+
     /// The visual diff's views (`scripts/visual_diff/views.cine`) name
     /// their targets in words every valley answers to.
     #[test]

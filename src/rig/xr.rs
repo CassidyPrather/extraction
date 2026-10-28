@@ -51,7 +51,7 @@ impl Plugin for XrDriverPlugin {
         app.init_resource::<SessionGate>()
             .add_systems(PreUpdate, handle_session)
             .add_systems(Startup, create_actions.run_if(session_available))
-            .add_systems(Update, headset_missing)
+            .add_systems(Update, (headset_missing, give_up_on_the_session))
             .add_systems(Startup, size_swapchain)
             .add_systems(Update, report_input.run_if(openxr_session_running))
             .add_systems(OxrSendActionBindings, suggest_bindings)
@@ -59,7 +59,10 @@ impl Plugin for XrDriverPlugin {
                 XrSessionCreated,
                 (attach_actions, spawn_controller_spaces, make_tracking_root),
             )
-            .add_systems(Update, (ride_player, dress_eyes, follow_mirror))
+            .add_systems(
+                Update,
+                (ride_player, dress_eyes, follow_mirror, window_card).chain(),
+            )
             .add_systems(
                 PreUpdate,
                 sync_actions
@@ -307,6 +310,22 @@ fn report_input(
     }
 }
 
+/// Longest the words wait on a headset that was asked for (the load's
+/// own wait, [`SESSION_WAIT_MAX`], and some): after it, a window it is
+/// (the yard says its opening again if a headset does start later).
+pub const DRIVER_WAIT_MAX: f32 = SESSION_WAIT_MAX + 40.0;
+
+fn give_up_on_the_session(
+    mut commands: Commands,
+    pending: Option<Res<super::DriverPending>>,
+    time: Res<Time<Real>>,
+) {
+    if pending.is_some() && time.elapsed_secs() > DRIVER_WAIT_MAX {
+        warn!("headset: no session after {DRIVER_WAIT_MAX:.0} s; the words are the window's");
+        commands.remove_resource::<super::DriverPending>();
+    }
+}
+
 /// The headset was asked for and the runtime had none (not connected, or
 /// the machine's active OpenXR runtime isn't the one driving it: a Meta
 /// runtime left active on a SteamVR machine says "not available"). Reopen
@@ -332,6 +351,8 @@ fn headset_missing(
     if *state != bevy_mod_xr::session::XrState::Unavailable {
         return;
     }
+    // No headset coming: the window's the player's.
+    commands.remove_resource::<super::DriverPending>();
     let tooling = opts.tooling();
     let tried = opts.steamvr || std::env::var_os("XR_RUNTIME_JSON").is_some();
     if !tooling && !tried {
@@ -771,6 +792,65 @@ fn follow_mirror(
     }
 }
 
+/// The window during a headset session, unless it mirrors the eye: a
+/// cheap camera that clears it and says where the game is, and carries
+/// the flat UI. Without one, nothing drew to the window once the flat
+/// camera went: it still presented, its images never cleared (blown-out
+/// garbage and old frames on the monitor), and on the playtest's RTX 3080
+/// the frames grew to seconds until the driver reset the GPU, and the
+/// window's swapchain panicked on the way out.
+#[derive(Component)]
+pub struct WindowCard;
+
+fn window_card(
+    mut commands: Commands,
+    driver: Res<super::RigDriver>,
+    mirrors: Query<(), With<Mirror>>,
+    cards: Query<Entity, With<WindowCard>>,
+) {
+    let want = *driver == super::RigDriver::Xr && mirrors.is_empty();
+    if !want {
+        for e in &cards {
+            commands.entity(e).try_despawn();
+        }
+        return;
+    }
+    if !cards.is_empty() {
+        return;
+    }
+    info!("window: a card (\"In the headset\"); the eyes draw to the headset alone");
+    let camera = commands
+        .spawn((
+            Name::new("Window card"),
+            WindowCard,
+            Camera2d,
+            Camera {
+                // Under the mirror, the frame it's on as it goes.
+                order: -50,
+                clear_color: ClearColorConfig::Custom(Color::srgb(0.04, 0.045, 0.05)),
+                ..default()
+            },
+        ))
+        .id();
+    commands.spawn((
+        WindowCard,
+        Text::new("In the headset"),
+        TextFont {
+            font_size: bevy::text::FontSize::Px(28.0),
+            ..default()
+        },
+        TextColor(Color::srgba(0.85, 0.87, 0.85, 0.85)),
+        Node {
+            position_type: PositionType::Absolute,
+            left: percent(50.0),
+            top: percent(50.0),
+            margin: UiRect::left(px(-90.0)),
+            ..default()
+        },
+        UiTargetCamera(camera),
+    ));
+}
+
 /// The local player's root is the playspace; the flat camera goes away.
 ///
 /// `bevy_mod_xr` makes its own tracking root at startup and parents the
@@ -780,12 +860,11 @@ fn follow_mirror(
 fn make_tracking_root(
     mut commands: Commands,
     flat_cams: Query<Entity, (With<super::RigHead>, With<Camera3d>)>,
-    mut driver: ResMut<super::RigDriver>,
 ) {
     for c in &flat_cams {
         commands.entity(c).remove::<Camera3d>().remove::<Camera>();
     }
-    *driver = super::RigDriver::Xr;
+    commands.queue(super::headset_started);
     info!("XR session created: driving the rig from the headset");
 }
 
@@ -891,6 +970,8 @@ fn drive_xr_rig(
             .map(|s| Vec2::new(s.current_state.x, s.current_state.y))
             .unwrap_or(Vec2::ZERO)
     };
+    // Both sticks clicked is a playtest mark, not the fire selector too.
+    let both_clicked = read_b(&a.stick_click, a.left) && read_b(&a.stick_click, a.right);
     for (side, path) in [(Side::Left, a.left), (Side::Right, a.right)] {
         let grip = read_f(&a.grip, path);
         let trigger = read_f(&a.trigger, path);
@@ -907,7 +988,7 @@ fn drive_xr_rig(
         hand.stick = stick;
         // The click is the gun hand's (its fire selector); the other
         // stick's click is the sprint.
-        hand.stick_click = click && side == comfort.gun_side();
+        hand.stick_click = click && side == comfort.gun_side() && !both_clicked;
         hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.
@@ -1084,5 +1165,53 @@ mod tests {
         }
         let at = at.expect("the session started in the end");
         assert!(at >= 19, "not before {SESSION_WAIT_MAX} s (frame {at})");
+    }
+    /// Cameras drawing to the window (the eyes draw to the swapchain).
+    fn on_window(app: &mut App) -> usize {
+        let w = app.world_mut();
+        w.query::<(&Camera, Option<&bevy::camera::RenderTarget>)>()
+            .iter(w)
+            .filter(|(c, t)| {
+                c.is_active && t.is_none_or(|t| matches!(t, bevy::camera::RenderTarget::Window(_)))
+            })
+            .count()
+    }
+
+    /// A headset session leaves the window exactly one camera, mirror or
+    /// not: the flat camera goes, and the card (or the mirror) takes the
+    /// window. With none, the window presented images nothing cleared,
+    /// until the playtest's GPU was reset.
+    #[test]
+    fn a_session_leaves_one_camera_on_the_window() {
+        for mirror in [false, true] {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins)
+                .insert_resource(crate::launch::LaunchOptions {
+                    mirror,
+                    ..default()
+                })
+                .insert_resource(crate::world::sky::Weather::default())
+                .insert_resource(super::super::RigDriver::Flat)
+                .add_systems(XrSessionCreated, make_tracking_root)
+                .add_systems(Update, (follow_mirror, window_card).chain());
+            app.world_mut()
+                .spawn((super::super::RigHead, Camera3d::default()));
+            app.update();
+            assert_eq!(on_window(&mut app), 1, "flat, mirror {mirror}");
+            // The session: the eyes come, the flat camera goes.
+            for i in 0..2 {
+                app.world_mut().spawn((
+                    XrCamera(i),
+                    bevy::camera::RenderTarget::None {
+                        size: UVec2::splat(64),
+                    },
+                ));
+            }
+            app.world_mut().run_schedule(XrSessionCreated);
+            for _ in 0..3 {
+                app.update();
+                assert_eq!(on_window(&mut app), 1, "in the headset, mirror {mirror}");
+            }
+        }
     }
 }

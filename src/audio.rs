@@ -1155,7 +1155,10 @@ pub fn fault_layers(
         )],
         // The trigger back slack on a hammer already down: the faint tick
         // of the disconnector, nothing falling.
-        FireEvent::TriggerDead => &[("guns/safety", "gun.trigger_dead", 1.8, Some(3000.0))],
+        FireEvent::TriggerDead => &[("guns/dry_fire", "gun.trigger_dead", 1.6, Some(10000.0))],
+        // The trigger back on an open action (a slide locked back): the
+        // slide's hollow rattle on its catch, nothing falling.
+        FireEvent::ActionOpen => &[("guns/bolt_open", "gun.action_open", 1.4, Some(3000.0))],
         FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
         FireEvent::Bulged { .. } => &[
             ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
@@ -1263,7 +1266,9 @@ pub fn handling_sound(
         (FireEvent::DryFire, _) => ("guns/dry_fire", "gun.dry_fire"),
         (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert"),
         (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release"),
-        (FireEvent::ModeChanged(_), _) => ("guns/safety", "gun.safety"),
+        // A detent snapping over: a switch, not a tick, so it's heard in a
+        // fight (`scripts/audio_gunstate.py`).
+        (FireEvent::ModeChanged(_), _) => ("physical/switch", "gun.safety"),
         (FireEvent::RoundLoaded, Some(BreakAction | Pump)) => {
             ("guns/shell_insert", "gun.shell_insert")
         }
@@ -1301,7 +1306,10 @@ pub fn handling_sound(
         // the bolt going home: an empty close has only the bolt.
         (FireEvent::Chambered, _) => ("guns/stripper_clip", "gun.chamber"),
         // The slide or bolt meeting its catch: a hard, short click.
-        (FireEvent::BoltLocked, _) => ("guns/safety", "gun.bolt_catch"),
+        // Locked back on an empty magazine: the slide's half of a rack, short
+        // and hard, heard over a fight (`scripts/audio_gunstate.py`). The
+        // player who died on 28 October never heard it.
+        (FireEvent::BoltLocked, _) => ("guns/slide_rack", "gun.bolt_catch"),
         // Drawn back by hand: the slide or carrier riding over the hammer.
         (FireEvent::Cocked, Some(SemiAuto)) => ("guns/bolt_open", "gun.slide_back"),
         // Pushed in short of its catch: a dull scrape, no snap.
@@ -1331,9 +1339,12 @@ pub fn handling_speed(
 fn handling_speed_of(event: &FireEvent) -> f64 {
     match event {
         FireEvent::Chambered => 1.3,
-        FireEvent::BoltLocked => 0.8,
+        FireEvent::BoltLocked => 1.5,
         FireEvent::MagazineHalfSeated => 0.7,
         FireEvent::MagazineDropped => 0.85,
+        // The safety thumbed on low and firm, off high and light.
+        FireEvent::ModeChanged(extraction_core::firearm::FireMode::Safe) => 0.85,
+        FireEvent::ModeChanged(_) => 1.15,
         _ => 1.0,
     }
 }

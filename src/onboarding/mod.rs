@@ -68,7 +68,11 @@ pub enum Goal {
     Rack,
     Safety,
     HitPlate,
+    RunDry,
     DropMag,
+    Reload,
+    SlideRelease,
+    FireAgain,
     OpenDoor,
     Search,
     Wrist,
@@ -97,7 +101,11 @@ impl Goal {
             Goal::Rack => "Rack the slide",
             Goal::Safety => "Safety off",
             Goal::HitPlate => "Hit a plate",
-            Goal::DropMag => "Drop the mag",
+            Goal::RunDry => "Shoot it empty",
+            Goal::DropMag => "Drop the empty mag",
+            Goal::Reload => "A full mag in",
+            Goal::SlideRelease => "Let the slide go",
+            Goal::FireAgain => "Fire again",
             Goal::OpenDoor => "Open the door",
             Goal::Search => "Take what's inside",
             Goal::Wrist => "Read your wrist",
@@ -116,7 +124,9 @@ impl Goal {
         if !flat && comfort.one_handed {
             let one = match self {
                 Goal::FillMag => Some("Mag in hand. Touch it to\nthe box on the table."),
-                Goal::SeatMag => Some("Mag in a pouch. Bring the\npistol in hand down on it."),
+                Goal::SeatMag | Goal::Reload => {
+                    Some("Mag in a pouch. Bring the\npistol in hand down on it.")
+                }
                 Goal::Rack => Some("Press B or Y on the gun\nhand: it racks."),
                 Goal::Dressing => Some("Hold it. Press A or X\non that hand."),
                 _ => None,
@@ -135,6 +145,73 @@ impl Goal {
         }
     }
 
+    /// What the step's code accepts, in the words its board uses (lower
+    /// case): each must be on the board, and for the headset in
+    /// PLAYTEST.md's table too. The playtest found them apart: the crouch
+    /// board said squat only while the code took the stick, and PLAYTEST
+    /// said a dressing was "press A" while the board said wind it.
+    /// Where a watcher takes something new, it goes here first.
+    pub fn accepts(self, flat: bool) -> &'static [&'static str] {
+        match (self, flat) {
+            // `watch_hands`: a grab from the stash crate.
+            (Goal::TakePistol | Goal::TakeRadio, false) => &["grip"],
+            (Goal::TakePistol | Goal::TakeRadio, true) => &["e"],
+            // `watch_moves`: the gun hand's stick sideways; the view swung.
+            (Goal::Turn, false) => &["right stick"],
+            (Goal::Turn, true) => &["mouse"],
+            // `watch_moves`: the head low, or the stick down (it toggles
+            // the crouch); flat, the toggle.
+            (Goal::Crouch, false) => &["squat", "right stick down"],
+            (Goal::Crouch, true) => &["c"],
+            // `watch_moves`: sprint (the off stick clicked while pushed,
+            // `rig::xr`) and forward.
+            (Goal::Run, false) => &["left stick", "forward", "click"],
+            (Goal::Run, true) => &["shift", "w"],
+            // `watch_hands`: let go at a body socket; let go over the
+            // shoulder (the pack).
+            (Goal::PutAway, false) => &["hip or", "open your hand"],
+            (Goal::PutAway, true) => &["g"],
+            (Goal::Pack, false) => &["shoulder", "open your hand"],
+            (Goal::Pack, true) => &["g"],
+            (Goal::FarGrab, false) => &["point", "grip", "flick"],
+            (Goal::FarGrab, true) => &["e"],
+            // `watch_guns`: a magazine in hand gaining rounds.
+            (Goal::FillMag, false) => &["box", "touch"],
+            (Goal::FillMag, true) => &["t"],
+            (Goal::SeatMag | Goal::Reload, false) => &["up into the grip"],
+            (Goal::SeatMag | Goal::Reload, true) => &["r"],
+            (Goal::Rack, false) => &["trigger", "pull back"],
+            (Goal::Rack, true) => &["v"],
+            (Goal::Safety, false) => &["click the stick"],
+            (Goal::Safety, true) => &["x"],
+            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, false) => &["trigger"],
+            (Goal::HitPlate | Goal::RunDry | Goal::FireAgain, true) => &["mouse"],
+            (Goal::DropMag, false) => &["a on the gun hand"],
+            (Goal::DropMag, true) => &["b"],
+            // The slide stop (B), or a rack.
+            (Goal::SlideRelease, false) => &["b on the gun hand", "rack"],
+            (Goal::SlideRelease, true) => &["v"],
+            (Goal::OpenDoor | Goal::Search, false) => &["grip"],
+            (Goal::OpenDoor | Goal::Search, true) => &["e"],
+            (Goal::Wrist, false) => &["look at the back"],
+            (Goal::Wrist, true) => &["h"],
+            // `interact::first_aid`: circled round a limb, not the holding
+            // arm; one-handed, the button (`how_for`).
+            (Goal::Dressing, false) => &["circle it", "other forearm"],
+            (Goal::Dressing, true) => &["u"],
+            (Goal::Probe, false) => &["grip", "open your hand"],
+            (Goal::Probe, true) => &["q"],
+            (Goal::Artifact, false) => &["point", "grip", "flick"],
+            (Goal::Artifact, true) => &["e"],
+            (Goal::Button, false) => &["finger"],
+            (Goal::Button, true) => &["e"],
+            (Goal::CallTruck, false) => &["a or x"],
+            (Goal::CallTruck, true) => &["u"],
+            (Goal::PullCord, false) => &["grip", "cord"],
+            (Goal::PullCord, true) => &["e"],
+        }
+    }
+
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
@@ -144,9 +221,9 @@ impl Goal {
             (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
-            (Goal::Crouch, false) => "Squat down for real (the\nstick only slows you).",
+            (Goal::Crouch, false) => "Squat down, or pull the\nright stick down.",
             (Goal::Crouch, true) => "Press C (again to stand).",
-            (Goal::Run, false) => "Click the left stick and\npush it forward.",
+            (Goal::Run, false) => "Push the left stick\nforward and click it.",
             (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
@@ -164,15 +241,23 @@ impl Goal {
             (Goal::Safety, true) => "Pistol in hand. Press X.",
             (Goal::HitPlate, false) => "Line up the sights.\nSqueeze TRIGGER.",
             (Goal::HitPlate, true) => "Right mouse aims.\nLeft mouse fires.",
+            (Goal::RunDry, false) => "Squeeze TRIGGER at the\nplates till it stays back.",
+            (Goal::RunDry, true) => "Left mouse at the plates\ntill the slide stays back.",
             (Goal::DropMag, false) => "Press A on the gun hand.",
             (Goal::DropMag, true) => "Pistol in hand. Press B.",
+            (Goal::Reload, false) => "The full mag in one hand:\npush it up into the grip.",
+            (Goal::Reload, true) => "Full mag in a pouch.\nPress R.",
+            (Goal::SlideRelease, false) => "Press B on the gun hand\n(or rack it).",
+            (Goal::SlideRelease, true) => "Press V.",
+            (Goal::FireAgain, false) => "Line up the sights.\nSqueeze TRIGGER.",
+            (Goal::FireAgain, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
             (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
             (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
             (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
-            (Goal::Dressing, false) => "In one hand, wind it\nround the other forearm.",
+            (Goal::Dressing, false) => "In one hand, circle it\nround the other forearm.",
             (Goal::Dressing, true) => "Hold it. Press U.",
             (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
             (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
@@ -202,6 +287,10 @@ pub struct Station {
     /// What's worth knowing, shown once it's done (you have time to read
     /// then): what the old yard's signs said.
     pub tip: &'static str,
+    /// Its steps count only in the order asked: each builds on the one
+    /// before (a magazine filled before it's seated; a part thrown before
+    /// the stone's taken).
+    pub in_order: bool,
 }
 
 /// The stations, in order, from the truck north up the track.
@@ -213,6 +302,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::TakePistol, Goal::TakeRadio],
         where_: "the crate in the truck",
         tip: "Everything you own rides\nin that crate between raids.",
+        in_order: false,
     },
     Station {
         title: "GETTING ABOUT",
@@ -221,6 +311,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
         where_: "the lamp off the back of the truck",
         tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
+        in_order: false,
     },
     Station {
         title: "PUT IT AWAY",
@@ -229,6 +320,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::PutAway, Goal::Pack],
         where_: "the next lamp, right of the track",
         tip: "Weight slows you.\nCarry what you'll use.",
+        in_order: false,
     },
     Station {
         title: "OUT OF REACH",
@@ -237,6 +329,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::FarGrab],
         where_: "the lamp by the pen",
         tip: "Works on anything loose\nup to five metres off.",
+        in_order: false,
     },
     Station {
         title: "THE RANGE",
@@ -248,10 +341,27 @@ pub const STATIONS: &[Station] = &[
             Goal::Rack,
             Goal::Safety,
             Goal::HitPlate,
-            Goal::DropMag,
         ],
         where_: "the range, left past the gate",
-        tip: "Empty, the slide stays\nback: a new mag, then B\n(flat: V) lets it go.",
+        tip: "Eight rounds in a PM's\nmag. Count them.",
+        in_order: true,
+    },
+    // The playtest's first death: a fresh magazine seated after the last
+    // shot, and the slide never let go (`docs/playtests/2026-10-28`).
+    Station {
+        title: "RUN IT DRY",
+        at: [-9.5, 46.5],
+        rot: 315.0,
+        goals: &[
+            Goal::RunDry,
+            Goal::DropMag,
+            Goal::Reload,
+            Goal::SlideRelease,
+            Goal::FireAgain,
+        ],
+        where_: "the next lamp, by the range table",
+        tip: "Empty, the slide stays\nback. A new mag doesn't\nload it: let the slide go.",
+        in_order: true,
     },
     Station {
         title: "THE HOUSE",
@@ -260,6 +370,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::OpenDoor, Goal::Search],
         where_: "the house on the right",
         tip: "Scrap and parts go to the\nbench in the truck.",
+        in_order: false,
     },
     Station {
         title: "FIRST AID",
@@ -268,6 +379,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Wrist, Goal::Dressing],
         where_: "the lamp on the right",
         tip: "Eat when you're slow. Go\ndown and the collector\ncomes for you and your kit.",
+        in_order: false,
     },
     Station {
         title: "THE SHIMMER",
@@ -276,6 +388,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Probe, Goal::Artifact],
         where_: "the lamp on the right. Mind the shimmer",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
+        in_order: true,
     },
     Station {
         title: "BUTTONS",
@@ -284,6 +397,7 @@ pub const STATIONS: &[Station] = &[
         goals: &[Goal::Button],
         where_: "the lamp on the left",
         tip: "Any card with a button\ndoes something: settings,\nthe route, terminals.",
+        in_order: false,
     },
     Station {
         title: "GOING HOME",
@@ -291,7 +405,8 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::CallTruck, Goal::PullCord],
         where_: "the north post, end of the track",
-        tip: "Truck: 2 min to come, waits\n5. No more. My card in the\ntruck has your first job.",
+        tip: "Here it's quick. Out there:\n2 min to come, waits 5.\nMy card has your first job.",
+        in_order: false,
     },
 ];
 
@@ -349,10 +464,15 @@ pub struct Onboarding {
     pub skipped: Vec<Goal>,
     /// Seconds the yard has been open (for the opening line).
     pub age: f32,
-    /// The opening line has been said.
+    /// The opening line has been said (for flat play, or not).
     pub greeted: bool,
+    pub greeted_flat: bool,
     /// Ducked under the low beam on the track (noticed, not asked for).
     pub ducked: bool,
+    /// The station the driver last sent you on to (it's said once).
+    pub sent_to: Option<usize>,
+    /// The driver's said how to mark a moment.
+    pub told_mark: bool,
 }
 
 impl Onboarding {
@@ -368,6 +488,25 @@ impl Onboarding {
     /// The station you're on: the first with something left to do.
     pub fn current(&self) -> Option<usize> {
         self.next_goal().map(station_of)
+    }
+
+    /// Whether the yard is teaching this step now: its station is the one
+    /// you're on, and at a station that goes in order, every step before it
+    /// is done. Only then does doing it count; done before, it's asked
+    /// for again in its turn (the playtest's wrist ticked from a glance in
+    /// the truck, 27 minutes before First aid asked for it).
+    pub fn asks(&self, g: Goal) -> bool {
+        let i = station_of(g);
+        if self.current() != Some(i) {
+            return false;
+        }
+        let st = &STATIONS[i];
+        !st.in_order
+            || st
+                .goals
+                .iter()
+                .take_while(|x| **x != g)
+                .all(|x| self.is_done(*x))
     }
 
     pub fn station_done(&self, i: usize) -> bool {
@@ -450,6 +589,8 @@ pub enum Placed {
     FarBox,
     HouseFind,
     Stone,
+    /// The full magazine on the range table.
+    SpareMag,
 }
 
 /// The practice house's doorway (its middle, on the floor), once found.
@@ -482,6 +623,7 @@ impl Plugin for OnboardingPlugin {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
+            .init_resource::<hints::Known>()
             .add_systems(Update, second_hour::direct)
             .init_resource::<first_hour::Fight>()
             .add_systems(
@@ -800,6 +942,16 @@ fn setup(
         Transform::from_translation(top + Vec3::new(0.05, 0.0, 0.05)),
     );
     set_rounds(&mut commands, mag, 0);
+    // A full one for running it dry.
+    let spare = spawn(
+        &mut commands,
+        "pm_mag",
+        Transform::from_translation(top + Vec3::new(0.05, 0.0, -0.18)),
+    );
+    set_rounds(&mut commands, spare, 8);
+    if let Some(e) = spare {
+        commands.entity(e).insert(Placed::SpareMag);
+    }
     let ammo = spawn(
         &mut commands,
         "ammo_9x18",
@@ -1021,8 +1173,16 @@ fn bot_in_the_bed(
     }
 }
 
-/// Marks a goal done (once), and says so.
+/// Marks a goal done (once, and only while it's being taught:
+/// [`Onboarding::asks`]), and says so.
 fn complete(ob: &mut Onboarding, goal: Goal, out: &mut MessageWriter<GoalDone>) {
+    if ob.asks(goal) {
+        tick(ob, goal, out);
+    }
+}
+
+/// Marks a goal done (once), whatever's being taught: a SKIP card's.
+fn tick(ob: &mut Onboarding, goal: Goal, out: &mut MessageWriter<GoalDone>) {
     if ob.is_done(goal) {
         return;
     }
@@ -1129,10 +1289,22 @@ fn watch_guns(
             continue;
         }
         match ev.event {
+            // The same motions at the range and running it dry: whichever
+            // the yard is teaching counts (`complete`).
             extraction_core::firearm::Event::MagazineInserted => {
-                complete(&mut ob, Goal::SeatMag, &mut out)
+                complete(&mut ob, Goal::SeatMag, &mut out);
+                complete(&mut ob, Goal::Reload, &mut out);
             }
-            extraction_core::firearm::Event::Chambered => complete(&mut ob, Goal::Rack, &mut out),
+            extraction_core::firearm::Event::Chambered => {
+                complete(&mut ob, Goal::Rack, &mut out);
+                complete(&mut ob, Goal::SlideRelease, &mut out);
+            }
+            extraction_core::firearm::Event::BoltLocked => {
+                complete(&mut ob, Goal::RunDry, &mut out)
+            }
+            extraction_core::firearm::Event::Fired { .. } => {
+                complete(&mut ob, Goal::FireAgain, &mut out)
+            }
             extraction_core::firearm::Event::MagazineRemoved => {
                 complete(&mut ob, Goal::DropMag, &mut out)
             }
@@ -1231,7 +1403,7 @@ fn watch_moves(
     } else {
         stick.x.abs() > 0.7
     };
-    if ob.current().is_some_and(|i| i >= station_of(Goal::Turn)) {
+    if ob.current() == Some(station_of(Goal::Turn)) {
         if turned {
             complete(&mut ob, Goal::Turn, &mut out);
         }
@@ -1398,13 +1570,14 @@ fn press_cards(
                 for g in STATIONS[*i].goals {
                     if !ob.is_done(*g) {
                         ob.skipped.push(*g);
-                        complete(&mut ob, *g, &mut out);
+                        tick(&mut ob, *g, &mut out);
                     }
                 }
             }
             Ok(OnboardCard::StartOver) => {
                 ob.done.clear();
                 ob.skipped.clear();
+                ob.sent_to = None;
                 raid.say(START_OVER_LINE);
             }
             _ => {}
@@ -1433,16 +1606,25 @@ fn announce(
     mut raid: ResMut<Raid>,
     mut steps: MessageWriter<StepDone>,
     time: Res<Time>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     players: Query<(), With<LocalPlayer>>,
 ) {
-    let flat = *driver == RigDriver::Flat;
     if players.is_empty() {
         return;
     }
     ob.age += time.delta_secs();
-    if !ob.greeted && ob.age > 1.5 {
+    // Nothing's said till it's known whether you're in a headset or at the
+    // window (a headset's session starts 3 to 20 s in).
+    let Some(flat) = driver.flat() else {
+        return;
+    };
+    // Said once, for how you play; again if that changed before you'd
+    // started (a headset that came up after the window had been given the
+    // words).
+    let unstarted = ob.done.is_empty();
+    if ob.age > 1.5 && (!ob.greeted || (unstarted && ob.greeted_flat != flat)) {
         ob.greeted = true;
+        ob.greeted_flat = flat;
         raid.say(if flat { GREET_FLAT } else { GREET_VR });
     }
     for d in done.read() {
@@ -1454,7 +1636,10 @@ fn announce(
             continue;
         }
         let line = match ob.current() {
-            Some(next) if next > station_of(d.goal) => next_line(next),
+            Some(next) if next > station_of(d.goal) && ob.sent_to != Some(next) => {
+                ob.sent_to = Some(next);
+                next_line(next)
+            }
             Some(_) => continue,
             None => ALL_DONE_LINE.to_string(),
         };
@@ -1530,17 +1715,20 @@ pub fn checklist_text(ob: &Onboarding) -> String {
         };
         t += &format!("{mark}{} {}\n", i + 1, st.title);
     }
-    t += "\nFollow the lit lamps.";
+    t += "\nFollow the lit lamps.\nOdd? Both sticks (F9): a mark.";
     t
 }
 
 fn signs(
     ob: Res<Onboarding>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut signs: Query<(&StationSign, &mut ScreenText)>,
 ) {
-    let flat = *driver == RigDriver::Flat;
+    // Blank till it's known which controls to name.
+    let Some(flat) = driver.flat() else {
+        return;
+    };
     let comfort = comfort.map(|c| c.clone()).unwrap_or_default();
     for (s, mut screen) in &mut signs {
         let t = sign_text(&ob, s.0, flat, &comfort);
@@ -1605,7 +1793,11 @@ fn hurry_the_truck(mut raid: ResMut<Raid>) {
 /// Stepping out of the truck says when the Surge is due: nothing to do
 /// with the yard, and it pushes the driver's directions off the wrist. Here
 /// the driver says where to go instead.
-fn out_of_the_truck(mut raid: ResMut<Raid>, ob: Res<Onboarding>) {
+fn out_of_the_truck(
+    mut raid: ResMut<Raid>,
+    mut ob: ResMut<Onboarding>,
+    driver: crate::rig::KnownDriver,
+) {
     let Some(i) = raid
         .log
         .iter()
@@ -1614,13 +1806,25 @@ fn out_of_the_truck(mut raid: ResMut<Raid>, ob: Res<Onboarding>) {
         return;
     };
     raid.log.remove(i);
-    if let Some(next) = ob.current() {
+    // Where to, if the driver hasn't said (once is enough: the playtest
+    // heard "Next: the lamp by the pen." twice in 28 s); else how to mark
+    // something, said once (nobody in the playtest found it).
+    if let Some(next) = ob.current().filter(|n| ob.sent_to != Some(*n)) {
+        ob.sent_to = Some(next);
         raid.say(format!(
             "Driver: \"Off you go. Next: {}.\"",
             STATIONS[next].where_
         ));
+    } else if !ob.told_mark {
+        ob.told_mark = true;
+        let flat = driver.flat().unwrap_or(false);
+        raid.say(if flat { MARK_LINE_FLAT } else { MARK_LINE_VR });
     }
 }
+
+/// How to mark a moment for the playtest report (`sim::playtest`).
+pub const MARK_LINE_VR: &str = "Driver: \"Anything odd, stand still, click both sticks: noted.\"";
+pub const MARK_LINE_FLAT: &str = "Driver: \"Anything odd, press F9. I'll note it.\"";
 
 /// Seconds the yard's truck takes to come round.
 pub const HURRY: f32 = 10.0;
@@ -1631,6 +1835,76 @@ pub mod bot;
 mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
+
+    /// A headset whose session starts 10 s in (the playtest's took 3 to
+    /// 19) hears only headset words: no line is said and no board names a
+    /// control till it's known which, and "press E" never reaches the
+    /// wrist.
+    #[test]
+    fn a_headset_that_starts_late_hears_only_headset_words() {
+        let dir = std::env::temp_dir().join(format!("extraction-late-xr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        // As `lib.rs` does when the headset's plugins are in.
+        app.insert_resource(crate::rig::DriverPending);
+        app.finish();
+        app.cleanup();
+        let comfort = crate::rig::comfort::Comfort::default();
+        let mut heard: Vec<String> = Vec::new();
+        let mut started = false;
+        let mut boards = 0;
+        loop {
+            let t = app.world().resource::<Time>().elapsed_secs();
+            if t > 16.0 {
+                break;
+            }
+            if t >= 10.0 && !started {
+                started = true;
+                crate::rig::headset_started(app.world_mut());
+            }
+            app.update();
+            for (line, _) in &app.world().resource::<Raid>().log {
+                if !heard.contains(line) {
+                    heard.push(line.clone());
+                }
+            }
+            let ob = app.world().resource::<Onboarding>().clone();
+            let mut q = app.world_mut().query::<(&StationSign, &ScreenText)>();
+            for (sign, screen) in q.iter(app.world()) {
+                if screen.text.is_empty() {
+                    continue;
+                }
+                boards += 1;
+                assert!(
+                    started,
+                    "board {} written before the driver was known",
+                    sign.0
+                );
+                assert_eq!(
+                    screen.text,
+                    sign_text(&ob, sign.0, false, &comfort),
+                    "board {} in flat words",
+                    sign.0
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(boards > 0, "the boards were written once it was known");
+        assert!(
+            heard.iter().any(|l| l == GREET_VR),
+            "greeted for a headset: {heard:?}"
+        );
+        assert!(
+            !heard.iter().any(|l| l == GREET_FLAT),
+            "greeted for the window: {heard:?}"
+        );
+    }
 
     // The first playtest's first complaint was signs it couldn't read, and
     // these are what someone new reads first: they hold to the must-read
@@ -1738,6 +2012,8 @@ mod tests {
             TOO_CLOSE_LINE,
             START_OVER_LINE,
             DUCK_LINE,
+            MARK_LINE_VR,
+            MARK_LINE_FLAT,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)
@@ -1752,6 +2028,44 @@ mod tests {
             let wrapped = crate::render::screen::wrap(&l, 26, usize::MAX);
             assert!(wrapped.len() <= 3, "{} lines: {l}", wrapped.len());
         }
+    }
+
+    /// Every board names what its step's code accepts, and so does
+    /// PLAYTEST.md's table of the stations, for the headset.
+    #[test]
+    fn boards_code_and_playtest_agree() {
+        let words = |t: &str| {
+            format!(
+                " {} ",
+                t.to_lowercase()
+                    .replace(['\n', '(', ')', ',', '.', ':', ';'], " ")
+            )
+        };
+        let has = |text: &str, k: &str| words(text).contains(&format!(" {k} "));
+        let doc = include_str!("../../docs/PLAYTEST.md");
+        let mut bad = Vec::new();
+        for (i, st) in STATIONS.iter().enumerate() {
+            let row = doc
+                .lines()
+                .find(|l| l.starts_with(&format!("  | {} |", i + 1)))
+                .unwrap_or_else(|| panic!("PLAYTEST.md has no row {} ({})", i + 1, st.title));
+            for g in st.goals {
+                for flat in [false, true] {
+                    for k in g.accepts(flat) {
+                        if !has(g.how(flat), k) {
+                            bad.push(format!(
+                                "{g:?} board ({flat}): no \"{k}\" in {:?}",
+                                g.how(flat)
+                            ));
+                        }
+                        if !flat && !has(row, k) {
+                            bad.push(format!("{g:?} PLAYTEST row {}: no \"{k}\"", i + 1));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Every station asks for something, and every instruction is short:

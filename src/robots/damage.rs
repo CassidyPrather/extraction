@@ -5,15 +5,22 @@
 //! how the body carries it (a limp, a wobble, a sag). The bodies (`anim`,
 //! `flight`, `armour`, `dirigible`), the effects (`fx`) and the eyes
 //! (`visuals`) all take their cues from here.
+//!
+//! And what each hit is, the moment it lands ([`strike`]): armour shrugging
+//! it off, a wound, or a hit that tells (a weak spot, a part breaking). A
+//! fight reads by it: the flash at the hit (`fx`), how the body takes it
+//! (`anim`), and its sound (Audio's, from [`RobotStruck`]).
+
+use bevy::prelude::*;
 
 use super::PartRole;
 
 /// How hurt a part is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Band {
-    /// Over 70%: nothing to see.
+    /// Over 80%: nothing to see (a graze).
     Whole,
-    /// Over 34%: it's been hit.
+    /// Over 34%: it's been hit (one real wound is enough).
     Hurt,
     /// Over 0: about to go.
     Failing,
@@ -21,13 +28,16 @@ pub enum Band {
     Gone,
 }
 
+/// Health over this is whole: a part one real wound in already shows it.
+pub const WHOLE_ABOVE: f32 = 0.8;
+
 impl Band {
     pub fn of(health: f32) -> Self {
         if health <= 0.0 {
             Band::Gone
         } else if health <= 0.34 {
             Band::Failing
-        } else if health <= 0.7 {
+        } else if health <= WHOLE_ABOVE {
             Band::Hurt
         } else {
             Band::Whole
@@ -143,7 +153,12 @@ pub fn tell(role: PartRole, health: f32) -> Tell {
             dark: true,
             ..t
         },
-        (PartRole::Core, Band::Hurt) => Tell { sparks: 0.8, ..t },
+        // A thread of smoke from the wound, to read at 30 m.
+        (PartRole::Core, Band::Hurt) => Tell {
+            sparks: 0.8,
+            smoke: 0.7,
+            ..t
+        },
         (PartRole::Core, Band::Failing) => Tell {
             sparks: 1.5,
             smoke: 2.0,
@@ -186,6 +201,61 @@ pub fn tell(role: PartRole, health: f32) -> Tell {
         // Fallen off: what was under it shows (and it's lying there).
         (PartRole::Armour(_), Band::Gone) => Tell { sparks: 0.4, ..t },
     }
+}
+
+/// What a hit on a robot part did, as the fight should read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Strike {
+    /// Nothing gave: armour took it, the part was already dead, or the
+    /// round only glanced. A dull scuff, a ping; it hardly notices.
+    Shrug,
+    /// Real harm, but not where it counts: it's hurting.
+    Wound,
+    /// A weak spot or a part breaking: a white-hot flash, a crack; it
+    /// flinches.
+    Telling,
+}
+
+/// A hit taking at least this much of a part's health tells: a weak spot
+/// (an eye, a knee, a rotor) goes in a round or two.
+pub const TELLING_SHARE: f32 = 0.5;
+/// A hit taking less than this much of a part's health only glances.
+pub const GLANCE_SHARE: f32 = 0.08;
+
+/// What a hit dealing `dealt` did to a part of `role` that had `hp` of
+/// `max_hp` (`hp <= 0`: already dead).
+pub fn strike(role: PartRole, hp: f32, max_hp: f32, dealt: f32) -> Strike {
+    if hp <= 0.0 || dealt <= 0.0 {
+        return Strike::Shrug;
+    }
+    if dealt >= hp {
+        // Whatever it was, it broke: that tells, a plate coming off too.
+        return Strike::Telling;
+    }
+    let share = dealt / max_hp.max(1e-3);
+    match role {
+        // A plate is there to take it.
+        PartRole::Armour(_) => Strike::Shrug,
+        _ if share >= TELLING_SHARE => Strike::Telling,
+        _ if share < GLANCE_SHARE => Strike::Shrug,
+        _ => Strike::Wound,
+    }
+}
+
+/// A hit landed on a robot's part, and what it did (`strike`): for the
+/// flash (`fx`), the flinch (`anim`) and the sound (Audio).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct RobotStruck {
+    pub robot: Entity,
+    pub part: Entity,
+    pub role: PartRole,
+    pub at: Vec3,
+    pub normal: Vec3,
+    /// The way the round was going.
+    pub dir: Vec3,
+    /// What it took off the part.
+    pub dealt: f32,
+    pub strike: Strike,
 }
 
 #[cfg(test)]
@@ -233,5 +303,38 @@ mod tests {
         assert!(eye.dark && eye.sparks > 0.0, "a dead eye's socket sparks");
         let core = tell(PartRole::Core, 0.2);
         assert!(core.sparks > 0.0 && core.coolant > 0.0);
+    }
+
+    /// The playtest's fight (a pistol at a walker, 34 a round): the front
+    /// plate shrugs, the core is wounded, the eye and a knee tell, and a
+    /// part a round breaks tells; a dead part, or a graze, shrugs.
+    #[test]
+    fn each_hit_reads_for_what_it_did() {
+        let pm = 34.0;
+        assert_eq!(strike(PartRole::Armour(0), 40.0, 40.0, pm), Strike::Shrug);
+        assert_eq!(strike(PartRole::Armour(0), 6.0, 40.0, pm), Strike::Telling);
+        assert_eq!(strike(PartRole::Core, 130.0, 130.0, pm), Strike::Wound);
+        assert_eq!(strike(PartRole::Core, 28.0, 130.0, pm), Strike::Telling);
+        assert_eq!(strike(PartRole::Sensor, 25.0, 25.0, pm), Strike::Telling);
+        assert_eq!(strike(PartRole::Leg(1), 35.0, 35.0, pm), Strike::Telling);
+        assert_eq!(strike(PartRole::Weapon, 45.0, 45.0, pm), Strike::Telling);
+        assert_eq!(strike(PartRole::Leg(1), 0.0, 35.0, pm), Strike::Shrug);
+        assert_eq!(
+            strike(PartRole::Core, 130.0, 130.0, 0.3 * 5.0),
+            Strike::Shrug
+        );
+    }
+
+    /// A wound shows from the first one: a walker's core one pistol round
+    /// in (34 of 130) already has a tell, and goes on showing it.
+    #[test]
+    fn one_wound_shows() {
+        for role in [PartRole::Core, PartRole::Weapon, PartRole::Leg(0)] {
+            assert!(tell(role, 96.0 / 130.0).visible(), "{role:?} one round in");
+        }
+        assert!(
+            tell(PartRole::Core, 96.0 / 130.0).smoke > 0.0,
+            "a thread of smoke"
+        );
     }
 }

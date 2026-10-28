@@ -70,7 +70,8 @@ impl Plugin for ProgressionPlugin {
                     place_recorder,
                     place_letter,
                     place_ledger,
-                    scout,
+                    // The job out there: its place seen, which way it is.
+                    (scout, nudge, restate_after_fall, tailgate),
                     contracts::place_bring,
                     contracts::watch_plant,
                     contracts::photograph,
@@ -767,6 +768,181 @@ fn scout(
         *seen = true;
         raid.say(lines::scout_noticed(place));
         crate::rig::haptics::step_done(&mut commands, None);
+    }
+}
+
+/// Heading away from the job on the card, you're told once where it is
+/// (`extraction_core::progression::Drift`): over the radio if you carry
+/// one, else on the wrist. Not once its part out there is done, or you
+/// have the thing it wants home.
+fn nudge(
+    progression: Res<Progression>,
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    carried: Query<(&Item, &CarriedBy)>,
+    catalog: Res<Catalog>,
+    mut drift: Local<(extraction_core::progression::Drift, Option<Job>)>,
+) {
+    let job = progression.0.job.as_ref();
+    // Fresh each raid, and for each job.
+    if raid.phase == Phase::AtBase || drift.1.as_ref() != job {
+        *drift = (Default::default(), job.cloned());
+    }
+    if raid.phase != Phase::Out {
+        return;
+    }
+    let (Some(job), Some((player, at))) = (job, players.iter().next()) else {
+        return;
+    };
+    let Some((map, mark)) = job.still_at() else {
+        return;
+    };
+    if map != opts.map {
+        return;
+    }
+    let wants = match job {
+        Job::Bring { item, .. } => Some(item.as_str()),
+        Job::Recover { .. } => Some(RECOVER_ITEM),
+        Job::Letter => Some(extraction_core::progression::LETTER_ITEM),
+        Job::Ledger => Some(extraction_core::progression::LEDGER_ITEM),
+        _ => None,
+    };
+    let has = |id: &str| {
+        carried
+            .iter()
+            .any(|(i, by)| by.0 == player && catalog.get(i.kind()).id == id)
+    };
+    if wants.is_some_and(has) {
+        return;
+    }
+    let here = at.translation().xz();
+    let d = here.distance(Vec2::from_array(mark));
+    if drift.0.update(d, raid.clock) {
+        let way = crate::raid::lines::way(here.to_array(), mark);
+        raid.say(lines::job_this_way(&job_place(job), &way, has("radio")));
+    }
+}
+
+/// Woken in the truck after going down, with the job's part out there not
+/// done: the driver says it's still waiting, and where (from the drop, as
+/// the card has it, in this valley; or which valley).
+fn restate_after_fall(
+    progression: Res<Progression>,
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    zone: Res<Zone>,
+    // The falls counted so far, and one not yet answered.
+    mut seen: Local<Option<(u32, bool)>>,
+) {
+    let (deaths, owed) = seen.get_or_insert((raid.deaths, false));
+    if raid.deaths > *deaths {
+        *deaths = raid.deaths;
+        *owed = true;
+    }
+    if !*owed || raid.phase != Phase::AtBase {
+        return;
+    }
+    *owed = false;
+    let Some(job) = progression.0.job.as_ref() else {
+        return;
+    };
+    let Some((map, mark)) = job.still_at() else {
+        return;
+    };
+    let place = job_place(job);
+    if map == opts.map {
+        // From the drop, as the card says it.
+        let drop = zone
+            .marker(&extraction_core::map::MarkerKind::Insertion)
+            .map_or([0.0, 0.0], |m| m.at);
+        let way = crate::raid::lines::way(drop, mark);
+        raid.say(lines::job_waiting(&place, Some(&way)));
+    } else {
+        raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
+    }
+}
+
+/// Off the truck's steps at base, the raid not yet begun (that's 14 m
+/// off, `raid::leave_base`).
+const OFF_THE_TRUCK: f32 = 3.0;
+
+/// Stepping off the truck at base without a gun, a radio or the map:
+/// the driver says what's missing and where it is, once each time you're
+/// home. You can still go. (Playtest 28 October: the second raid left with
+/// nothing, the first without the map.) Not in the training yard.
+#[allow(clippy::type_complexity)]
+fn tailgate(
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    trucks: Query<&GlobalTransform, With<Truck>>,
+    items: Query<(Entity, &Item, Option<&CarriedBy>, &GlobalTransform)>,
+    stash: Query<&Backpack, With<Stash>>,
+    catalog: Res<Catalog>,
+    mut said: Local<bool>,
+) {
+    if raid.phase != Phase::AtBase {
+        *said = false;
+        return;
+    }
+    if *said || opts.map == crate::camp::TRAINING_YARD {
+        return;
+    }
+    let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {
+        return;
+    };
+    if at.translation().xz().distance(truck.translation().xz()) < OFF_THE_TRUCK {
+        return;
+    }
+    *said = true;
+    let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
+    let near_truck = |g: &GlobalTransform| g.translation().distance(truck.translation()) < 3.0;
+    let is = |it: &Item, want: &str| {
+        let def = catalog.get(it.kind());
+        match want {
+            "gun" => def.category == extraction_core::items::Category::Firearm,
+            id => def.id == id,
+        }
+    };
+    let mut missing = Vec::new();
+    for (want, name) in [("gun", "gun"), ("radio", "radio"), ("map_case", "map")] {
+        if items
+            .iter()
+            .any(|(_, it, by, _)| is(it, want) && by.is_some_and(|b| b.0 == me))
+        {
+            continue;
+        }
+        let place = if items
+            .iter()
+            .any(|(e, it, _, _)| is(it, want) && in_crate(e))
+        {
+            Some("crate")
+        } else if items
+            .iter()
+            .any(|(_, it, by, g)| is(it, want) && by.is_none() && near_truck(g))
+        {
+            Some("ledge")
+        } else {
+            None
+        };
+        missing.push((name, place));
+    }
+    if !missing.is_empty() {
+        raid.say(lines::not_carrying(&missing));
+    }
+}
+
+/// The job's place, by name: "Old farm", "house by the well".
+fn job_place(job: &Job) -> String {
+    match job {
+        Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
+            place.clone()
+        }
+        Job::Recover { region, .. } => region.clone(),
+        Job::Letter => "house by the well".into(),
+        Job::Ledger => "Depot".into(),
+        Job::Fetch { .. } | Job::Photograph { .. } => String::new(),
     }
 }
 

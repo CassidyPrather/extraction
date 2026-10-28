@@ -99,6 +99,11 @@ fn marks(
         *count, p.x, p.y, p.z, raid.clock
     );
     raid.say(format!("Mark {} noted.", *count));
+    // Heard and felt as well as read: a mark is made mid-raid, eyes up.
+    commands.write_message(crate::rig::haptics::StepDone {
+        at: None,
+        station: true,
+    });
     if let Some(mut log) = log {
         log.event(
             "mark",

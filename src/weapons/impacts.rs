@@ -438,7 +438,9 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
         align: true,
         ..SPRAY
     };
-    if !hurt {
+    // Off a dead part, or a plate taking it for what's behind: it only
+    // glances (Robot bodies' `damage::strike` reads it as a shrug).
+    if !hurt || matches!(part, Some(PartRole::Armour(_))) {
         return vec![Spray {
             carry: 6.0,
             out: 1.0,
@@ -1016,6 +1018,8 @@ mod tests {
         assert_ne!(mats(PartRole::Sensor), mats(PartRole::Core));
         assert_ne!(mats(PartRole::Leg(0)), mats(PartRole::Core));
         assert_ne!(mats(PartRole::GasCell(0)), mats(PartRole::Leg(0)));
+        // A plate taking a round only glances: it's the shell's job.
+        assert_eq!(n(robot_recipe(Some(PartRole::Armour(0)), true)), glance);
     }
 
     /// However long the firefight, the pools never hold more than their

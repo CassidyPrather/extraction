@@ -250,6 +250,101 @@ fn going_down_forgets_what_you_scouted() {
     assert_eq!(progress(&app).done, 0, "not until you get it home");
 }
 
+/// The designer's first raid (playtest 28 October): close to the first
+/// job, then away. Told once which way it is; going down, told again at
+/// the truck that it's still waiting.
+#[test]
+fn wandering_off_the_job_is_told_once_and_a_fall_restates_it() {
+    let mut app = crate::raid::requests::tests::app();
+    let Some(Job::Scout { at, .. }) = progress(&app).job else {
+        panic!("the first job's a scout");
+    };
+    let said = |app: &App, what: &str| {
+        app.world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .filter(|(l, _)| l.contains(what))
+            .count()
+    };
+    let nudged = |app: &App| said(app, "That's the job") + said(app, "The job: ");
+    // Toward it, then not far off it: nothing.
+    go(&mut app, [at[0] - 120.0, at[1]]);
+    go(&mut app, [at[0] - 180.0, at[1]]);
+    assert_eq!(nudged(&app), 0, "not yet");
+    // Well off: once.
+    go(&mut app, [at[0] - 260.0, at[1]]);
+    assert_eq!(
+        nudged(&app),
+        1,
+        "told: {:?}",
+        app.world().resource::<Raid>().log
+    );
+    go(&mut app, [at[0] - 300.0, at[1] + 20.0]);
+    assert_eq!(nudged(&app), 1, "not nagged");
+    // Down: woken in the truck, it's still waiting.
+    let player = one::<With<LocalPlayer>>(&mut app);
+    app.world_mut().write_message(crate::health::Downed {
+        player,
+        at: Vec3::ZERO,
+    });
+    app.update();
+    if let Phase::Down { left } = &mut app.world_mut().resource_mut::<Raid>().phase {
+        *left = 0.0;
+    }
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+    assert_eq!(
+        said(&app, "still waiting"),
+        1,
+        "{:?}",
+        app.world().resource::<Raid>().log
+    );
+}
+
+/// The designer's second raid (playtest 28 October) left with nothing; the
+/// first, without the map. Off the truck's steps without them, the driver
+/// says what's missing and where, once; you can still go.
+#[test]
+fn stepping_off_the_truck_without_kit_is_told_once() {
+    let mut app = crate::raid::requests::tests::app();
+    let said = |app: &App| {
+        app.world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .filter(|(l, _)| l.contains("on you."))
+            .map(|(l, _)| l.clone())
+            .collect::<Vec<_>>()
+    };
+    let truck = app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<Truck>>()
+        .iter(app.world())
+        .next()
+        .unwrap()
+        .translation();
+    // Off the steps with the kit all in the crate.
+    for id in ["pm_pistol", "radio", "map_case"] {
+        stash(&mut app, id, 1);
+    }
+    go(&mut app, [truck.x, truck.z + 6.0]);
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+    let lines = said(&app);
+    assert_eq!(lines.len(), 1, "{:?}", app.world().resource::<Raid>().log);
+    assert!(
+        lines[0].contains("No gun, radio or map on you. In the crate."),
+        "{lines:?}"
+    );
+    // Once: about on the gravel, nothing more; and you can still go.
+    go(&mut app, [truck.x + 2.0, truck.z + 8.0]);
+    assert_eq!(said(&app).len(), 1);
+    go(&mut app, [truck.x, truck.z + 20.0]);
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::Out);
+}
+
 #[test]
 fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
     let mut app = crate::raid::requests::tests::app();

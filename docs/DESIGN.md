@@ -411,6 +411,18 @@ themselves; a radio you carry hears the chatter. Each step is a
 message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
 for sound and the wrist.
 
+**One that lost you, coming back, is heard and told** (`search::ComingBack`). Say a machine that was fighting you is now out of your sight, and coming your way within 55 m. That covers two cases:
+- it's looking where it lost you;
+- it's walking back past you to its post, having given up.
+
+It gives its "investigating" call, which carries about that far. The wrist says it's coming back, and the driver's first-time line says to keep low and still. That's once a return, and at most once a minute per machine.
+
+Before this, in the 28 October playtest:
+- The "keep still" line never fired. A walker that loses sight in a fight pushes to where it last saw you, still fighting, then searches. It never passes through "going to look", which is what the line waited for. A search begun straight from a fight now also counts as going to look (`Investigating`).
+- The walker that gave up then walked back to its post. The post was where the player was. It was silent until it saw them, about 3 s before its first hit.
+
+In the replay of that return (`a_walker_walking_back_past_you_is_told_well_before`), it's told 26.5 s before it's there. The valley warned of that walker 16.8 s ahead on first contact.
+
 **Every attack has a tell.** Drones chirp and settle 0.9 s; walkers'
 turrets settle 0.7 s (`WalkerAim`); grapplers rear back 0.6 s before a
 throw (`HarpoonWindup`). Tactics differ by kind: drones stand off at 20 m
