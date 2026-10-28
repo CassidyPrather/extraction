@@ -872,6 +872,37 @@ voices them:
   the slope, is a reflector (`acoustics::reflectors`, "ore_mill"). A
   shot 50 m down the slope from it comes back about 0.3 s later.
 
+## The machines' plan, heard
+
+When machines share a plan on you (`robots::squad::SquadCall`), each
+part chirps its own pattern at the machine that takes it, with a tick
+under it to place it by (`audio_machines::squad_sounds`): holding you,
+two low, level notes (`squad.pin`); going round to your side, up and
+back down (`squad.flank`); making for your way out, a sharp fall
+(`squad.cutoff`); a drone lighting the way in, a high trill
+(`squad.spot`); a relay calling it in, long-short-long (`squad.call`).
+None rises like a question (`device.notice`). Each is heard to the
+chirp's reach, 40 m in calm and 20 in a downpour (`RANGE_TARGETS`), and
+placed by ear (`audio_localise.py`). The radio's line is Robot minds',
+heard as chatter. A relay reporting you (`robots::recall::Filed`) gives
+three falling notes, "noted" (`relay.filed`), quicker and fuller the
+more often it has.
+
+The walker pinning you going over to suppressing fire while another
+moves up (`robots::walker::Suppressing`) racks its feed, heavy and slow,
+with a mode's snap (`walker.suppress`, `walker.suppress_mode`): unlike its
+aim's clank and servo, and heard to 38 m in a downpour. It racks down
+when it stops (`walker.suppress_off`). Its faster fire says the rest.
+
+A machine the Zone does something to (`robots::hazards::HazardStruck`)
+is heard at it, by what it does (`audio_machines::hazard_layers`): a
+drone thrown by a lift, its rotors screaming as it tumbles; a walker
+thrown, a servo's lurch and its foot scraping; dragged in a well or
+stiffened by frost, its legs grinding; crushed at a well's heart, a metal
+groan and a hit; dazzled, its sensor stuttering and its lock clicking
+out; stunned, its servos winding down; hurt by what makes its own sound,
+a short distress note. Deafened by a hush, nothing: the hush is heard.
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,
@@ -913,6 +944,21 @@ gone.
 Two stand-ins were added (`synth_foley`): `body/cough` (noise and a
 rough voice at about 160 Hz through the throat's formants, sharp onset,
 each cough weaker than the last) and `wildlife/canary`.
+
+**The stair breathing out.** Each kiosk door is a tell for what's below
+(`stair_breath`, by the site's prefab, `breath`): faint, from just
+inside the door, full within 5 m, gone by 9 (`breath_heard`), and gone
+again once your head is 2.5 m down the stair, where the site's own
+sounds take over. The shelter: a slow drip, the air handling's dead hum
+(`ug.breath_hum`), a far ventilator's blade ticking round. The drowned
+works: running water, a pump's distant thud. The workings: a draught's
+moan, drips, the timbers creaking; the deep workings add the firedamp's
+faint hiss. The cinder tunnel: the mains' hum and a cable's buzz. The
+furnace cellars: a warm roar and metal ticking. The dam gallery: water
+seeping, every drop answered late and faint down its length. The winze:
+wind down the drift and the cage's rope creaking. The robots' depot, occupied:
+a gantry's hum, a conveyor's distant rattle, now and then a servo. Every layer is a
+`ug.breath_*` line, its low-pass in `CUE_LOWPASS`.
 
 **Audited** (`scripts/audio_audit.py`; `ug.gurgle`, `ug.whump` and
 `ug.cart` are judged through their low-passes, `CUE_LOWPASS`). Every

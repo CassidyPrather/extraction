@@ -22,12 +22,6 @@ use crate::map_lint::{COMFORT_SLOPE, DOOR_REACH, DOOR_SHOULDER, DOOR_STEP, WALKE
 use crate::nav::{BLOCKED, NavGrid};
 use crate::terrain::Heightmap;
 
-/// Prefabs whose doorway is a climb on purpose: a goods wagon's floor is
-/// 1.2 m up on its bogies, its door over the rail bed's shoulder. Their
-/// strip is still kept clear; their ground isn't held to a step or a
-/// slope.
-const CLIMB_IN: &[&str] = &["boxcar"];
-
 /// An outside door of a placement, in map space.
 #[derive(Clone, Debug)]
 pub struct Door {
@@ -106,10 +100,9 @@ impl Door {
 /// `absolute` ones, which stand on whatever was built for them).
 pub fn doors(map: &MapDef) -> Vec<Door> {
     let mut out = Vec::new();
+    // Placed at an absolute height or not: the ore mill's doors onto its
+    // terraces were skipped, and two of them opened onto dead ends.
     for (i, p) in map.placements.iter().enumerate() {
-        if p.absolute {
-            continue;
-        }
         let (s, c) = p.rot.to_radians().sin_cos();
         let turn = |v: [f32; 2]| [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
         for e in prefab_entrances(&p.prefab) {
@@ -123,6 +116,19 @@ pub fn doors(map: &MapDef) -> Vec<Door> {
         }
     }
     out
+}
+
+/// The floor just inside a door of a building stepped down its slope (the
+/// ore mill), over its placement; `None` for every other building.
+fn door_floor(p: &crate::map::Placement, d: &Door) -> Option<f32> {
+    let (s, c) = p.rot.to_radians().sin_cos();
+    let w = geom::sub(d.face, p.at);
+    let inside = geom::sub(w, geom::scale(d.out, 0.5));
+    let local = [
+        inside[0] * c + inside[1] * s,
+        -inside[0] * s + inside[1] * c,
+    ];
+    crate::map::stepped_floor_level(&p.prefab, local)
 }
 
 /// Whether `p` is within `r` of a door: of its strip.
@@ -261,31 +267,30 @@ pub fn check(map: &MapDef, hm: &Heightmap, walk: &NavGrid, seen: &[bool]) -> Doo
         // The ground past the steps meets them: the steps reach from the
         // floor down to the building's footing less its lift (the lowest
         // the ground under it may be).
-        let base = hm.footing(&p.prefab, p.at, p.rot) + p.y;
+        let base = match door_floor(p, d) {
+            // A building stepped down its slope stands each bay a sill over
+            // its own terrace (`MILL_FLOORS`): its ground is the bay's.
+            Some(level) => p.y + level - crate::map::MILL_FLOORS[0],
+            None => hm.footing(&p.prefab, p.at, p.rot) + p.y,
+        };
         let low = base - prefab_lift(&p.prefab);
         let ground = d.samples(d.foot(), d.width * 0.5, 0.5);
-        let climb = CLIMB_IN.contains(&p.prefab.as_str());
-        if !climb {
-            let (mut worst, mut at) = (0.0f32, d.stand());
-            for q in &ground {
-                let h = hm.height(*q);
-                let step = (h - base).max(low - h);
-                if step > worst {
-                    (worst, at) = (step, *q);
-                }
-            }
-            worst_step = worst_step.max(worst);
-            walker_blocked += usize::from(worst > WALKER_STEP);
-            if worst > DOOR_STEP {
-                let h = hm.height(at);
-                let how = if h > base { "rises" } else { "drops" };
-                find(format!("the ground {how} {worst:.2} m from its steps"), at);
+        let (mut worst, mut at) = (0.0f32, d.stand());
+        for q in &ground {
+            let h = hm.height(*q);
+            let step = (h - base).max(low - h);
+            if step > worst {
+                (worst, at) = (step, *q);
             }
         }
-        if let Some(q) = ground
-            .iter()
-            .find(|q| !climb && hm.slope_deg(**q) > COMFORT_SLOPE)
-        {
+        worst_step = worst_step.max(worst);
+        walker_blocked += usize::from(worst > WALKER_STEP);
+        if worst > DOOR_STEP {
+            let h = hm.height(at);
+            let how = if h > base { "rises" } else { "drops" };
+            find(format!("the ground {how} {worst:.2} m from its steps"), at);
+        }
+        if let Some(q) = ground.iter().find(|q| hm.slope_deg(**q) > COMFORT_SLOPE) {
             find(
                 format!("a {:.0}° slope in front of it", hm.slope_deg(*q)),
                 *q,
@@ -338,6 +343,50 @@ mod tests {
     use super::*;
     use crate::map::{Marker, Placement, TRAINING_YARD};
     use crate::map_lint::{Rule, lint};
+
+    /// Every boxcar in every valley is both on its rails (`fit`: under
+    /// 0.3 m off and 2 degrees askew, or 30 m from any line) and where its
+    /// door's steps meet the ground and the ground before them is
+    /// comfortable: the two rules held together, as the doors check holds
+    /// them (a boxcar's floor is 1.26 m up on its bogies: its sleeper steps
+    /// and its lift, `map::prefab_lift`, meet the rail bed).
+    #[test]
+    fn boxcars_on_their_rails_meet_their_steps() {
+        let mut bad = Vec::new();
+        for (name, text) in crate::map::VALLEYS {
+            let map = crate::map::MapDef::from_ron(text).unwrap();
+            let hm = Heightmap::build(&map);
+            for r in crate::fit::on_rails(&map, &hm) {
+                if !(r.off > 30.0 || (r.off < 0.3 && r.turn_deg < 2.0)) {
+                    bad.push(format!(
+                        "{name}: boxcar at {:?} {:.2} m off its rails",
+                        r.at, r.off
+                    ));
+                }
+            }
+            for d in doors(&map) {
+                let p = &map.placements[d.placement];
+                if p.prefab != "boxcar" {
+                    continue;
+                }
+                let base = hm.footing(&p.prefab, p.at, p.rot) + p.y;
+                let low = base - prefab_lift(&p.prefab);
+                for q in d.samples(d.foot(), d.width * 0.5, 0.5) {
+                    let h = hm.height(q);
+                    let step = (h - base).max(low - h);
+                    if step > DOOR_STEP || hm.slope_deg(q) > COMFORT_SLOPE {
+                        bad.push(format!(
+                            "{name}: boxcar at {:?}: ground {step:.2} m off its steps, {:.0} deg, at {q:?}",
+                            p.at,
+                            hm.slope_deg(q)
+                        ));
+                        break;
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{bad:#?}");
+    }
 
     /// The Training Yard and its practice house's door.
     fn yard() -> (MapDef, usize, Door) {

@@ -30,8 +30,12 @@ edit, rebuild, and the tests below tell you what broke.
 `underground::check` holds every layout to: rooms reached from the
 entrance, every stair landing in a room or corridor within 4 m of its
 foot, no stair over a room (the bots' indoor grid is one level), no prop
-in the rock, corridors along the axes. Each site needs a loop (more joins
-than rooms) and a second portal.
+in the rock, corridors along the axes, and a corridor between levels
+climbs only on the straight: it turns on a landing (a small room), never
+outside one, since a stair stepped round a corner outside the rooms steps
+diagonally, a riser every cell, a sawtooth a body jams on (a tread one
+cell deep is refused). Each site needs a loop (more joins than rooms) and
+a second portal.
 
 The layout is rasterised on a 0.25 m grid (`Raster`): the game builds its
 walls on the rock side of every edge between open cells and rock (so a
@@ -72,9 +76,19 @@ that the whole stairwell is open.
   ceiling slabs, doors). `no_daylight_in_the_rooms` casts rays every way
   from every room (doors shut) and none gets out.
 - **Going dark** (`go_dark`, client): below ground the global ambient
-  falls to 0.2%, the sun goes out and the fog's colour goes to black; the
-  eyes adapt 2.5 stops (`Exposure`). On the surface everything is as the
-  sky left it. Rain and ash aren't drawn round an underground camera.
+  falls to nothing, the sun goes out, the fog's colour goes to black and
+  its sun glow (`directional_light_color`) with it, and `go_dark` writes
+  the depth to `render::grade::Below`, which takes the colour grade's
+  shadow lift away (it laid a grey floor over every unlit tunnel) and
+  opens the eyes a stop less; the eyes adapt 2.5 stops (`Exposure`). An
+  unlit tunnel is true black: you see by a lamp, a torch, a flare. On the
+  surface everything is as the sky left it (`scripts/visual_diff.sh
+  --quick` unchanged). Rain and ash aren't drawn round an underground
+  camera. Shots, torch off and on, before and after: the adit's incline
+  and the service tunnel's valve chamber
+  (`docs/shots/underground/dark_before_after.jpg`; top row before, bottom
+  after, each torch off then on; `dark_before_after_boost.jpg` is the same
+  brightened about sixteen times, to show the grey floor that was there).
 - **Emergency lamps**: rooms with `lamp: Steady` or `Flicker` get an
   unshadowed point light (range room size + 4 m) and a glowing lens;
   failing ones stutter every 7-10 s. Budget: at most `LAMP_BUDGET` (6) a
@@ -166,6 +180,11 @@ not the shelter's). The entries are the stands outside every kiosk door, so
 a raider can leave by the exit. The generic reach and door tests cover the
 sites; `a_bot_goes_down_and_out_the_other_way` walks a bot from the
 entrance to the furthest loot and out by the other kiosk on every valley.
+A site's furniture gets the whole capsule's radius round it in the plan
+(`SITE_CLEARANCE`, 0.28 m), and every loot spot must be reached with a
+body's slack to spare as well (`CAPSULE_SKIN`, 0.06 m more:
+`every_loot_spot_is_reached_from_its_own_side`): a spot reached only
+through a gap narrower than that pins whoever goes for it.
 
 ## The Depot
 
@@ -361,7 +380,9 @@ Each site gets one mechanic met nowhere else. The adit's is the winze's
 cage (`world::cage`, the layout's `cage`: a `pit` room for the shaft, the
 room at its top beside it, the bells). The deep level (the station at
 the winze's foot, the vein drive, the assay store with the best of the
-adit's loot) is reached only by it.
+adit's loot) is reached by it, or the long way: the old incline, stepped
+up 12 m from the vein drive to the drift's far end, the deep level's
+second way out (see "The way out under pressure").
 
 - *Riding.* A bell pull at the shaft station, one at the foot, one in
   the cage. A landing's bell calls the cage there, or sends it from
@@ -376,8 +397,8 @@ adit's loot) is reached only by it.
   the shaft's foot as it comes down and it comes down on you (70, and a
   bleed) and stops there, its rope slack; its own bell takes it back up.
 - *Bots.* The shaft is a pit: the raiders' routes and the crawlers'
-  grid stop at its edge, top and foot (`nothing_walks_into_the_winze`),
-  and the deep level is behind the works.
+  grid stop at its edge, top and foot (`nothing_walks_into_the_winze`);
+  raiders walk to the deep level by the incline.
 
 Shots: the cage at the shaft station, its lamp green
 (`docs/shots/underground/r_cage.jpg`); up the open winze from its foot to
@@ -455,6 +476,44 @@ layout's `live`): throw the breaker and the way in opens onto live water.
 Shot: the overflow chamber's water live, cold blue under the arcing,
 its Snare over it (`docs/shots/underground/c_live.jpg`; `EXTRACTION_LIVE=1` makes it live
 from the start, for shots).
+
+### The way out under pressure
+
+From every loot spot, how long the way out takes at a walk (2.4 m/s,
+wading and stairs slower, a shaft by the cage: its ride and a wait for
+it), to whichever kiosk's nearest: calm, and *pressed*, with a crawler
+behind in the way it came (the first corridor, room or stair out of the
+spot's room on the calm way shut). `underground::ways_out`; the rule,
+`no_loot_spot_is_a_long_dead_end`: a spot with no second way lies within
+60 s (`DEAD_END_MAX`) of a way out. `--nocapture` prints every spot.
+
+| Site | Spots | Deepest (calm) | Its pressed way | Dead-end spots (longest) |
+|---|---|---|---|---|
+| `bunker_marrow` | 13 | armoury 16.8 s | none | 5 (16.8 s) |
+| `mine_kettle` | 9 | magazine 15.5 s | none | 3 (15.5 s) |
+| `tunnel_cinder` | 10 | cable vault 16.2 s | none | 1 (16.2 s) |
+| `depot_marrow` | 21 | kept stacks 29.5 s | 45.2 s | 0 |
+| `pump_marrow` | 10 | screen room 30.6 s | 30.9 s | 4 (10.8 s) |
+| `deep_kettle` | 10 | old heading 18.1 s | 20.8 s | 5 (16.7 s) |
+| `cellars_cinder` | 8 | far ledge 44.8 s | none | 4 (44.8 s) |
+| `gallery_sallow` | 10 | gauge room 22.7 s | none | 4 (22.7 s) |
+| `adit_rime` | 13 | assay store 44.8 s | none | 7 (44.8 s) |
+
+A dead-end spot is one in a room with the one door: a crawler in it and
+there's no other way. None is over the minute. The two longest:
+
+- *The adit's deep level* was out by the cage alone: a crawler waiting at
+  the shaft station and everything below was a trap 37-45 s deep. It has
+  a second way now, the old incline (a door at the drift's end), stepped
+  12 m up 50 m of drift from the vein drive to the main drift's far end,
+  turning on two landings (`incline_turn` half way, `incline_foot` on the
+  deep level): the level station's pressed way is 45.6 s
+  where it was none. The assay store is still one door off the vein
+  drive, 45 s out. Shot: up the incline's steps from its foot, by
+  torchlight (`docs/shots/underground/r_incline.jpg`).
+- *The cellars' far ledge* is out only by the crane across the pit, 45 s;
+  but nothing follows across it (the crawler's round keeps to the near
+  side), so it's a refuge, not a trap. Left as it is.
 
 ### Worth going down: the entrances
 

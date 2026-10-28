@@ -395,12 +395,14 @@ fn maps() -> Vec<String> {
 /// Works 7.0, Sallow Reservoir 5.9, Rime Fell 8.7). `LOAD_SLACK` scales
 /// them for a slower machine.
 /// With BC7 textures they took 4.7, 3.7, 4.0, 3.3 and 4.3 s: these leave
-/// about a third over that.
+/// about a third over that. Sallow's grew with its content (a pump
+/// station, sheds for cover, a mast: 4.4 s by round 45), to Cinder's,
+/// which carries as much.
 const LOAD_BUDGET: [(&str, f64); 5] = [
     ("marrow_creek", 6.0),
     ("kettle_pass", 5.0),
     ("cinder_works", 5.5),
-    ("sallow_reservoir", 4.5),
+    ("sallow_reservoir", 5.5),
     ("rime_fell", 6.0),
 ];
 
@@ -415,6 +417,16 @@ const LOAD_BUDGET: [(&str, f64); 5] = [
 #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
 fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
     let _one_at_a_time = heavy();
+    // What ships, or nothing: the originals' loads and memory aren't the
+    // game's.
+    let unbaked = super::textures::unbaked();
+    assert!(
+        unbaked.is_empty(),
+        "{} textures have no baked copy (e.g. {}): the gauge measures what ships. \
+         pip install etcpak && python3 scripts/bc7_textures.py",
+        unbaked.len(),
+        unbaked.first().map_or("", String::as_str)
+    );
     let runs: usize = std::env::var("FIRST_RUNS")
         .ok()
         .and_then(|v| v.parse().ok())

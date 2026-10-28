@@ -23,6 +23,7 @@
 //! Keys that would put the camera under the ground are lifted to
 //! `CLEARANCE` above it, all along the path.
 
+use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
 use std::time::Duration;
@@ -41,8 +42,168 @@ impl Plugin for CinematicPlugin {
             .add_systems(
                 Update,
                 dump.run_if(|o: Res<LaunchOptions>| o.capture.dump.is_some()),
-            );
+            )
+            .add_systems(Update, probe_buildings.after(fly).run_if(cinematic_run));
     }
+}
+
+/// Shoots a still again with each of its near buildings hidden in turn
+/// (`Probe`), and writes `<name>.probes.json` for
+/// `scripts/check_buildings.py`, which fails the capture where hiding one
+/// changed nothing.
+#[allow(clippy::type_complexity)]
+fn probe_buildings(
+    mut commands: Commands,
+    mut cine: ResMut<Cine>,
+    cams: Query<(&Camera, &GlobalTransform), With<FreeCamera>>,
+    spatial: SpatialQuery,
+    parents: Query<&ChildOf>,
+    mut buildings: Query<(
+        Entity,
+        &crate::world::buildings::Building,
+        &GlobalTransform,
+        &mut Visibility,
+    )>,
+) {
+    let Some(p) = cine.probe.as_mut() else {
+        return;
+    };
+    let Ok((cam, cam_at)) = cams.single() else {
+        return;
+    };
+    if !p.listed {
+        p.listed = true;
+        let eye = cam_at.translation();
+        for (e, b, at, _) in &buildings {
+            let pos = at.translation();
+            if pos.distance(eye) > PROBE_REACH {
+                continue;
+            }
+            // Its footprint's box, turned with it, onto the screen.
+            let f = crate::world::structures::footprint(&b.prefab);
+            let (mut lo, mut hi) = (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN));
+            let mut ahead = false;
+            for k in 0..8 {
+                let c = Vec3::new(
+                    if k & 1 == 0 { -0.5 } else { 0.5 } * f.x,
+                    if k & 2 == 0 { 0.0 } else { f.y },
+                    if k & 4 == 0 { -0.5 } else { 0.5 } * f.z,
+                );
+                if let Some(n) = cam.world_to_ndc(cam_at, at.transform_point(c)) {
+                    if n.z > 0.0 {
+                        ahead = true;
+                        let q = Vec2::new(n.x * 0.5 + 0.5, 0.5 - n.y * 0.5);
+                        lo = lo.min(q);
+                        hi = hi.max(q);
+                    }
+                }
+            }
+            let (lo, hi) = (lo.max(Vec2::ZERO), hi.min(Vec2::ONE));
+            // In view, and big enough on screen to judge (1% of it).
+            if ahead && lo.x < hi.x && lo.y < hi.y && (hi - lo).element_product() > 0.01 {
+                // How much of it the eye can reach: check_buildings.py
+                // only judges what it could see.
+                let seen = line_of_sight(&spatial, &parents, cam, cam_at, e, at, f);
+                p.todo
+                    .push((e, b.prefab.clone(), [lo.x, lo.y, hi.x, hi.y], seen));
+            }
+        }
+        p.wait = 4;
+        return;
+    }
+    // Put back the last one hidden, once its picture is asked for.
+    if let Some(e) = p.hidden.take() {
+        if let Ok((_, _, _, mut v)) = buildings.get_mut(e) {
+            *v = Visibility::Inherited;
+        }
+        p.wait = 4;
+        return;
+    }
+    let Some((e, prefab, rect, seen)) = p.todo.first().cloned() else {
+        let json = serde_json::Value::Array(std::mem::take(&mut p.done));
+        let _ = std::fs::write(
+            p.out.join(format!("{}.probes.json", p.name)),
+            serde_json::to_string_pretty(&json).unwrap_or_default(),
+        );
+        cine.probe = None;
+        return;
+    };
+    if p.wait > 0 {
+        if p.wait == 4 {
+            if let Ok((_, _, _, mut v)) = buildings.get_mut(e) {
+                *v = Visibility::Hidden;
+            }
+        }
+        p.wait -= 1;
+        return;
+    }
+    let i = p.done.len();
+    let file = format!("{}__without_{i}_{prefab}.png", p.name);
+    p.done.push(serde_json::json!({
+        "prefab": prefab, "file": file, "rect": rect, "seen": seen,
+    }));
+    commands
+        .spawn(Screenshot::primary_window())
+        .observe(save_to_disk(p.out.join(&file)));
+    p.todo.remove(0);
+    p.hidden = Some(e);
+}
+
+/// The share of points through a building's footprint box, in the frame,
+/// that a ray from the eye reaches before anything else stands in the way
+/// (a wall the camera's up against, a hill, another building). Hitting the
+/// building itself counts as reaching it. Its collider is on the placed
+/// root, so a building whose meshes never left the origin (the Cinder
+/// furnace's transform bug) still counts as seen, and still fails. None
+/// where no point is in the frame (the eye inside it, or only its edge
+/// showing): nothing to say.
+fn line_of_sight(
+    spatial: &SpatialQuery,
+    parents: &Query<&ChildOf>,
+    cam: &Camera,
+    cam_at: &GlobalTransform,
+    building: Entity,
+    at: &GlobalTransform,
+    f: Vec3,
+) -> Option<f32> {
+    let eye = cam_at.translation();
+    let filter = SpatialQueryFilter::from_mask(crate::world::Layer::World);
+    let mine = |mut e: Entity| loop {
+        if e == building {
+            return true;
+        }
+        match parents.get(e) {
+            Ok(p) => e = p.parent(),
+            Err(_) => return false,
+        }
+    };
+    let (mut framed, mut reached) = (0, 0);
+    const T: [f32; 3] = [0.2, 0.5, 0.8];
+    for x in T {
+        for y in T {
+            for z in T {
+                let local = Vec3::new((x - 0.5) * f.x, y * f.y, (z - 0.5) * f.z);
+                let point = at.transform_point(local);
+                let in_frame = cam
+                    .world_to_ndc(cam_at, point)
+                    .is_some_and(|n| n.z > 0.0 && n.x.abs() <= 1.0 && n.y.abs() <= 1.0);
+                if !in_frame {
+                    continue;
+                }
+                framed += 1;
+                let Ok(dir) = Dir3::new(point - eye) else {
+                    reached += 1;
+                    continue;
+                };
+                let far = point.distance(eye);
+                match spatial.cast_ray(eye, dir, far, false, &filter) {
+                    Some(hit) if hit.distance < far - 0.3 && !mine(hit.entity) => {}
+                    _ => reached += 1,
+                }
+            }
+        }
+    }
+    (framed > 0).then(|| reached as f32 / framed as f32)
 }
 
 /// `--cine-dump IN.cine,OUT.stills`: each shot's first pose, resolved
@@ -101,6 +262,16 @@ fn cinematic_run(opts: Res<LaunchOptions>) -> bool {
 
 /// A still's field of view (the game's own camera's), degrees.
 pub const STILL_FOV: f32 = 75.0;
+/// Frames a capture waits at most for everything to be in before its
+/// first shot, so a valley that never settles still gets shot.
+pub const LOAD_WAIT: u32 = 3000;
+/// A still's last settle frames are held with the clock stopped. Whatever
+/// keeps time (clouds, a lamp's character) holds for the picture, so one
+/// build's still is the same every run, and a lamp with a character is
+/// shot lit (a paused clock lights it: `render::landmarks`). Without the
+/// hold, a still caught whatever phase its frame landed on, and a
+/// blinking mast lamp showed as a change between builds.
+pub const STILL_HOLD: u32 = 2;
 /// Frames a still settles for at its pose (streamed detail, shadows).
 pub const STILL_SETTLE: u32 = 14;
 
@@ -150,12 +321,40 @@ struct Cine {
     frame: u32,
     /// Frames left to settle before the current shot records.
     settle: Option<u32>,
+    /// A still's last frames, held with the clock stopped (`STILL_HOLD`).
+    held: bool,
     in_flight: usize,
     records: Vec<ShotRecord>,
     started: Option<std::time::Instant>,
     /// The launch's `--hour` and `--weather`, for shots that set neither.
     launch: Option<(Option<String>, Option<String>)>,
+    /// `--check-buildings`: the still just taken, its buildings to be shot
+    /// again one at a time without them (`probe_buildings`).
+    probe: Option<Probe>,
 }
+
+/// A still's buildings, each hidden in turn and the view shot again: if
+/// hiding one changes next to nothing where it stands on screen, it wasn't
+/// really there to see (drawn but invisible, as Cinder's blast furnace
+/// once was at dusk, its meshes passing every culling test).
+#[derive(Default)]
+struct Probe {
+    /// The still's name and folder.
+    name: String,
+    out: std::path::PathBuf,
+    /// Found yet (the first frame after the still).
+    listed: bool,
+    /// (building, its prefab, its screen rectangle in 0..1 x/y).
+    /// And the share of it in line of sight (`line_of_sight`).
+    todo: Vec<(Entity, String, [f32; 4], Option<f32>)>,
+    done: Vec<serde_json::Value>,
+    /// Frames left before the hidden view is shot; then restored.
+    wait: u32,
+    hidden: Option<Entity>,
+}
+
+/// How near a building must be for a still to probe it, metres.
+pub const PROBE_REACH: f32 = 60.0;
 
 /// Reads the shots of a `.cine` file and makes them flyable in `zone`.
 /// A `.stills` file (the `--tour-views` format, `name x,y,z,yaw,pitch`)
@@ -509,6 +708,7 @@ fn fly(
     mut time: ResMut<Time<Virtual>>,
     mut frames: Local<u32>,
     mut exit: MessageWriter<AppExit>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(zone) = zone else {
         return;
@@ -559,7 +759,10 @@ fn fly(
     // Frames in flight are waited out with time stopped (see below), so
     // each saved frame is exactly one step on from the last. Unpausing
     // takes effect next frame: this one is a repeat.
-    if time.is_paused() {
+    if cine.probe.is_some() {
+        return;
+    }
+    if time.is_paused() && !cine.held {
         if cine.in_flight < IN_FLIGHT {
             time.unpause();
         }
@@ -633,6 +836,17 @@ fn fly(
     };
     if settle > 0 {
         place(&mut cam, 0);
+        // The first shot waits at its pose for everything to be in
+        // (`render::timeline`): every material and pipeline compiled.
+        // A still taken before that depended on the wall clock: one
+        // build's Marrow dusk came out warm one run and grey-green the next.
+        if settle <= STILL_HOLD + 1 && loaded.is_none() && *frames < LOAD_WAIT {
+            return;
+        }
+        if shot.still && settle <= STILL_HOLD && !time.is_paused() {
+            time.pause();
+            cine.held = true;
+        }
         cine.settle = Some(settle - 1);
         return;
     }
@@ -652,6 +866,7 @@ fn fly(
         cine.cur += 1;
         cine.frame = 0;
         cine.settle = None;
+        cine.held = false;
         return;
     }
     let frame = cine.frame;
@@ -670,6 +885,13 @@ fn fly(
     } else {
         out.join(&shot.name).join(format!("f{frame:05}.png"))
     };
+    if shot.still && opts.capture.check_buildings {
+        cine.probe = Some(Probe {
+            name: shot.name.clone(),
+            out: out.clone(),
+            ..default()
+        });
+    }
     let mut save = save_to_disk(file);
     commands.spawn(Screenshot::primary_window()).observe(
         move |shot: On<ScreenshotCaptured>, mut cine: ResMut<Cine>| {
@@ -740,6 +962,29 @@ mod tests {
             let look = look.unwrap();
             assert!(Vec2::new(look.x, look.z).distance(c) < 0.01);
         }
+    }
+
+    /// `--check-buildings` skips only what it couldn't see (a sliver at
+    /// the edge, behind something nearer, black fog), and the furnace whose
+    /// meshes were left at the origin still fails
+    /// (`scripts/check_buildings.py --self-test`).
+    #[test]
+    fn building_check_skips_only_what_it_cannot_see() {
+        let script = crate::asset_root_path().join("../scripts/check_buildings.py");
+        let Ok(out) = std::process::Command::new("python3")
+            .arg(&script)
+            .arg("--self-test")
+            .output()
+        else {
+            eprintln!("no python3: skipped");
+            return;
+        };
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     /// The visual diff's views (`scripts/visual_diff/views.cine`) name

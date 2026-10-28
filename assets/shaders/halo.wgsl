@@ -19,6 +19,13 @@ struct HaloParams {
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> halo: HaloParams;
 
+// The most a halo adds as the tonemapper gets it and keeps its colour: in
+// its brightest channel, and to the eye (a green, nearly all luminance,
+// whitens at a third of a red's level). `render::grade::LAMP_CHANNEL_CAP`
+// and `LAMP_LUMA_CAP` hold the same two.
+const HUE_CAP: f32 = 1.0;
+const LUMA_CAP: f32 = 0.3;
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let to_eye = view.world_position - in.world_position.xyz;
@@ -38,5 +45,17 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let far = dist / max(halo.air.y, 1.0);
     let fog = exp(-3.0 * far * far);
     let k = (core * fog + glow * sqrt(fog)) * edge;
-    return vec4<f32>(halo.color.rgb * halo.color.w * k * view.exposure, 0.0);
+    let rad = halo.color.rgb * halo.color.w * k * view.exposure;
+    // Its brightest channel eased toward HUE_CAP and its luminance toward
+    // LUMA_CAP, all channels together (hue kept): past those the
+    // tonemapper (AgX) runs a red or green core to white, and a red
+    // landmark and a green way out read the same. Eased as it will reach
+    // the tonemapper: the grade's exposure (the eyes' adaptation, up to
+    // three stops at night) comes after.
+    let gain = exp2(view.color_grading.exposure);
+    let m = max(rad.r, max(rad.g, rad.b)) * gain;
+    let y = dot(rad, vec3<f32>(0.2126, 0.7152, 0.0722)) * gain;
+    let by_m = (m / (1.0 + m / HUE_CAP)) / max(m, 1e-6);
+    let by_y = (y / (1.0 + y / LUMA_CAP)) / max(y, 1e-6);
+    return vec4<f32>(rad * min(by_m, by_y), 0.0);
 }

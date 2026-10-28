@@ -23,6 +23,7 @@ pub mod legibility;
 pub mod legibility_shots;
 pub mod lod;
 pub mod logistics;
+pub mod loot_light;
 pub mod materials;
 pub mod memorial;
 pub mod offering;
@@ -35,6 +36,7 @@ pub mod screen;
 pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
+pub mod stress;
 pub mod tells;
 pub mod terrain_material;
 pub mod textures;
@@ -61,6 +63,13 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
+        if app
+            .world()
+            .get_resource::<LaunchOptions>()
+            .is_some_and(|o| o.stress)
+        {
+            app.add_plugins(stress::StressPlugin);
+        }
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
@@ -84,6 +93,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(cpu::CpuSplitPlugin)
         .add_plugins(warmup::WarmupPlugin)
         .add_plugins(first_sight::PreloadPlugin)
+        .add_plugins(loot_light::LootLightPlugin)
         .add_plugins(timeline::TimelinePlugin)
         .add_plugins(sound_meshes::SoundMeshesPlugin)
         .add_plugins(hold_rate::HoldRatePlugin)
@@ -106,6 +116,7 @@ impl Plugin for RenderPlugin {
         .init_resource::<grade::Below>()
         .init_resource::<grade::Dimmed>()
         .add_systems(First, grade::undim)
+        .add_systems(PostUpdate, grade::emissives_to_the_eye)
         // After the underground's darkening, which takes whatever ambient it
         // finds for the sky's: run before it, the room's dimming was taken
         // for daylight and the light ran down to nothing indoors.
@@ -177,17 +188,28 @@ fn attach_flat_camera(
         } else {
             pos.y.max(ground + 0.3)
         };
-        commands.spawn((
-            Name::new("Free camera"),
-            FreeCamera,
-            Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
-                EulerRot::YXZ,
-                -yaw.to_radians(),
-                pitch.to_radians(),
-                0.0,
-            )),
-            camera_bundle(&weather),
-        ));
+        commands
+            .spawn((
+                Name::new("Free camera"),
+                FreeCamera,
+                Transform::from_xyz(pos.x, y, pos.z).with_rotation(Quat::from_euler(
+                    EulerRot::YXZ,
+                    -yaw.to_radians(),
+                    pitch.to_radians(),
+                    0.0,
+                )),
+                camera_bundle(&weather),
+            ))
+            .with_children(|c| {
+                // Held up by the eye and aimed where it looks, as anyone
+                // looking at something by torchlight does.
+                if opts.torch {
+                    c.spawn((
+                        crate::gadgets::visuals::torch_beam(),
+                        Transform::from_xyz(0.15, -0.1, 0.0),
+                    ));
+                }
+            });
         return;
     }
     for (head, parent) in &heads {

@@ -46,6 +46,7 @@ pub mod sim;
 pub mod soak;
 pub mod synth_foley;
 pub mod tour;
+pub mod transform_guard;
 #[cfg(test)]
 mod vr_harness;
 pub mod weapons;
@@ -106,7 +107,8 @@ impl Plugin for GamePlugin {
             ),
         ))
         .add_plugins((sim::SimPlugin, sim::playtest::PlaytestPlugin))
-        .add_plugins(wildlife::WildlifePlugin);
+        .add_plugins(wildlife::WildlifePlugin)
+        .add_plugins(transform_guard::TransformGuardPlugin);
     }
 }
 

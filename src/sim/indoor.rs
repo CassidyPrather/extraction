@@ -11,22 +11,33 @@ use bevy::math::Vec3Swizzles;
 use bevy::prelude::*;
 use extraction_core::nav::{BLOCKED, NavGrid, Obstacle};
 
-use crate::world::buildings::{Building, DoorLeaf, Shape, prefab};
+use crate::world::buildings::{Building, DoorLeaf, Geo, Shape, prefab};
 
 /// Cell size of the indoor grids, metres.
 pub const CELL: f32 = 0.25;
 /// Grid extends this far past the footprint, to reach the doorsteps.
 const MARGIN: f32 = 3.0;
-/// The player capsule's radius plus a little.
-const CLEARANCE: f32 = 0.22;
+/// The whole capsule's radius (`player`'s 0.28), as down a site: with
+/// 0.22 a raider was routed through gaps between furniture it sticks in.
+/// Eight raids a valley, seed 100: stucks 14 -> 7 (Cinder), 49 -> 11
+/// (Kettle), 18 -> 11 (Marrow); loot 748 -> 803; extractions unchanged.
+const CLEARANCE: f32 = 0.28;
 /// Down an underground site, the whole capsule's radius (`player`'s 0.28):
 /// a gap between props narrower than a body is no way, or a raider routed
 /// through it sticks there.
 pub const SITE_CLEARANCE: f32 = 0.28;
+/// The body's slack round its capsule (the move's skin, a hand's sway):
+/// a way to loot must be this much wider than the capsule as well, or a
+/// raider routed to the very edge of it pins there (`tight_plans`).
+pub const CAPSULE_SKIN: f32 = 0.06;
 /// Geometry in this band above the floor blocks walking (below it you step
 /// up; above it you duck under — well, you'd hit your head, but nothing
 /// that low is above floor level indoors).
 const BAND: (f32, f32) = (0.42, 1.75);
+/// A wall this thin whose top stands this far over the ground it stands
+/// on is a sill nobody climbs from outside, whatever the floor inside.
+const SILL_THIN: f32 = 0.5;
+const SILL_STEP: f32 = 0.45;
 /// How far an open door has swung, radians (`swing_doors`: 1.75 per unit).
 const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
@@ -45,6 +56,19 @@ pub struct DoorInfo {
     pub b: Vec2,
     /// Where to stand outside it, building-local, if it's an outside door.
     pub outside: Option<Vec2>,
+}
+
+impl DoorInfo {
+    /// The doorway shut, as an obstacle across its gap.
+    pub fn leaf(&self) -> Obstacle {
+        let along = self.b - self.a;
+        let dir = along.normalize_or(Vec2::X);
+        Obstacle::Rect {
+            at: ((self.a + self.b) * 0.5).to_array(),
+            half: [along.length() * 0.5 + 0.1, 0.3],
+            yaw: dir.y.atan2(dir.x),
+        }
+    }
 }
 
 /// One building as a bot sees it.
@@ -86,6 +110,9 @@ pub struct BuildingPlan {
     /// doesn't stop feet); the raider shuts them (`shut_live`), since it
     /// carries no canary and can't tell a pocket that's gone up.
     pub gas: Vec<usize>,
+    /// Its doors held shut on an underground site's power right now (the
+    /// raider keeps it up to date): no way through but by its switches.
+    pub held: Vec<Entity>,
 }
 
 impl BuildingPlan {
@@ -202,15 +229,40 @@ impl BuildingPlan {
         l.y - self.level(l).unwrap_or(self.floor) <= MAX_REACH_UP
     }
 
-    /// Whether a building-local point is within the walls.
+    /// Whether a building-local point is within the walls. (An
+    /// underground site's bounds can take in a kiosk, the adit's its
+    /// entrance between the drift and the haulage: the ground round a
+    /// kiosk isn't in, as for [`Self::contains`]; it was, and a raider's
+    /// way out by that kiosk found nowhere outside it to stand.)
     pub fn indoors(&self, p: Vec2) -> bool {
-        self.inner
-            .is_some_and(|(lo, hi)| p.cmpge(lo - 0.4).all() && p.cmple(hi + 0.4).all())
+        let boxed = self
+            .inner
+            .is_some_and(|(lo, hi)| p.cmpge(lo - 0.4).all() && p.cmple(hi + 0.4).all());
+        boxed
+            && (self.levels.is_none()
+                || !self
+                    .grid
+                    .cell_of(p.to_array())
+                    .is_some_and(|(i, j)| self.outside[j * self.grid.n + i]))
     }
 
     /// An indoor path between two building-local points, as local
     /// waypoints (both ends snapped to walkable cells).
     pub fn path(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
+        if self.held.is_empty() {
+            return self.path_through_held(from, to);
+        }
+        let mut grid = self.grid.clone();
+        for d in self.doors.iter().filter(|d| self.held.contains(&d.entity)) {
+            grid.block(d.leaf(), 0.0);
+        }
+        grid.path(from.to_array(), to.to_array())
+            .map(|p| p.into_iter().map(Vec2::from_array).collect())
+    }
+
+    /// As [`Self::path`], through doors held shut on power too: for a
+    /// route that throws their switches on the way.
+    pub fn path_through_held(&self, from: Vec2, to: Vec2) -> Option<Vec<Vec2>> {
         self.grid
             .path(from.to_array(), to.to_array())
             .map(|p| p.into_iter().map(Vec2::from_array).collect())
@@ -247,7 +299,24 @@ pub fn plan_buildings(
     buildings: &Query<(Entity, &Building, &Transform)>,
     doors: &Query<(Entity, &DoorLeaf, &ChildOf)>,
 ) -> Vec<BuildingPlan> {
+    plan_buildings_with(buildings, doors, SITE_CLEARANCE)
+}
+
+/// The same, the underground sites' furniture given `site_clearance`
+/// round it (the tests' tighter plans, `tight_plans`).
+pub(crate) fn plan_buildings_with(
+    buildings: &Query<(Entity, &Building, &Transform)>,
+    doors: &Query<(Entity, &DoorLeaf, &ChildOf)>,
+    site_clearance: f32,
+) -> Vec<BuildingPlan> {
     let mut out = Vec::new();
+    // Staged scenes (`world::scenes`): furniture of their own, wherever
+    // they're left (one in a site is in its way too).
+    let scenes: Vec<(Transform, Geo)> = buildings
+        .iter()
+        .filter(|(_, b, _)| b.prefab.starts_with(crate::world::scenes::PREFIX))
+        .filter_map(|(_, b, xf)| Some((*xf, prefab(&b.prefab)?)))
+        .collect();
     for (e, b, xf) in buildings.iter() {
         let Some(geo) = prefab(&b.prefab) else {
             continue;
@@ -258,7 +327,23 @@ pub fn plan_buildings(
                 .filter(|(_, _, p)| p.parent() == e)
                 .map(|(d, leaf, _)| (d, leaf))
                 .collect();
-            out.push(plan_site(e, b, xf, &geo, r, &mine));
+            // The scenes left down here, in site space.
+            let to_site = xf.compute_affine().inverse();
+            let staged: Vec<(Transform, &Geo)> = scenes
+                .iter()
+                .map(|(sxf, g)| {
+                    (
+                        Transform::from_matrix(Mat4::from(to_site * sxf.compute_affine())),
+                        g,
+                    )
+                })
+                .filter(|(at, _)| {
+                    let p = at.translation;
+                    r.floor_at([p.x, p.z])
+                        .is_some_and(|f| (p.y - f).abs() < 1.0)
+                })
+                .collect();
+            out.push(plan_site(e, b, xf, &geo, r, &mine, &staged, site_clearance));
             continue;
         }
         let foot = crate::world::structures::footprint(&b.prefab);
@@ -328,7 +413,7 @@ pub fn plan_buildings(
             {
                 continue;
             }
-            if let Some(ob) = obstacle(piece.shape, piece.at, under) {
+            if let Some(ob) = obstacle(piece.shape, piece.at, under, geo.floor.is_some()) {
                 grid.block(ob, CLEARANCE);
             }
         }
@@ -473,6 +558,7 @@ pub fn plan_buildings(
             warm: Vec::new(),
             live: Vec::new(),
             gas: Vec::new(),
+            held: Vec::new(),
         });
     }
     out
@@ -486,9 +572,11 @@ fn plan_site(
     e: Entity,
     b: &Building,
     xf: &Transform,
-    geo: &crate::world::buildings::Geo,
+    geo: &Geo,
     r: &'static extraction_core::underground::Raster,
     mine: &[(Entity, &DoorLeaf)],
+    staged: &[(Transform, &Geo)],
+    clearance: f32,
 ) -> BuildingPlan {
     use extraction_core::underground::{APRON, KIOSK, WALL};
     // The ground round a kiosk, out past its apron; not where a room
@@ -583,8 +671,8 @@ fn plan_site(
         };
         let floor = levels[j * n + i];
         let floor = if floor.is_nan() { r.floor } else { floor };
-        if let Some(ob) = obstacle(piece.shape, piece.at, floor) {
-            grid.block(ob, SITE_CLEARANCE);
+        if let Some(ob) = obstacle(piece.shape, piece.at, floor, false) {
+            grid.block(ob, clearance);
         }
     }
     for (_, leaf) in mine {
@@ -599,8 +687,25 @@ fn plan_site(
                 half: [def.width * 0.5, 0.04],
                 yaw: along.y.atan2(along.x),
             },
-            SITE_CLEARANCE,
+            clearance,
         );
+    }
+    // A scene staged down here: its crate and chair are in the way like
+    // the site's own (Cinder's "Valve three" pinned raiders in the valve
+    // chamber reaching for what's on it).
+    for (at, g) in staged {
+        for piece in g.pieces.iter().filter(|p| p.collide) {
+            let at = *at * piece.at;
+            let c = at.translation;
+            let Some((i, j)) = grid.cell_of([c.x, c.z]) else {
+                continue;
+            };
+            let floor = levels[j * n + i];
+            let floor = if floor.is_nan() { r.floor } else { floor };
+            if let Some(ob) = obstacle(piece.shape, at, floor, false) {
+                grid.block(ob, clearance);
+            }
+        }
     }
     // Heat nothing crosses: shut, each cell's cost kept for when its zone
     // is vented (`BuildingPlan::vent`).
@@ -730,6 +835,7 @@ fn plan_site(
         warm,
         live,
         gas,
+        held: Vec::new(),
     }
 }
 
@@ -828,7 +934,7 @@ fn surface_under(shape: Shape, at: Transform, p: Vec2, from: f32) -> Option<f32>
     (t0 <= t1 && t0 >= 0.0).then(|| from - t0)
 }
 
-fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
+fn obstacle(shape: Shape, at: Transform, floor: f32, sills: bool) -> Option<Obstacle> {
     let (size, circle) = match shape {
         Shape::Box(s) => (s, None),
         Shape::Prism(s) => (Vec3::new(s.x, s.y * 0.5, s.z), None),
@@ -845,11 +951,22 @@ fn obstacle(shape: Shape, at: Transform, floor: f32) -> Option<Obstacle> {
             }
         }
     }
-    if hi.y < floor + BAND.0 || lo.y > floor + BAND.1 {
+    // A floor raised over the ground (`sills`: a drowned house's silt, its
+    // `Geo::floor`) puts a window's sill at its knee: from inside a step
+    // out, from outside a climb no walker makes. A thin wall standing more
+    // than a step over the ground outside blocks, however low it is over
+    // the floor.
+    let thin = (hi.x - lo.x).min(hi.z - lo.z) < SILL_THIN;
+    let sill = sills && thin && hi.y > SILL_STEP && hi.y < floor + BAND.0;
+    if !sill && (hi.y < floor + BAND.0 || lo.y > floor + BAND.1) {
         return None;
     }
     let c = at.translation;
-    if let Some(r) = circle {
+    // Round from above only standing up: a wheel or a pipe on its side is
+    // its box (below), not a disc its radius round its middle.
+    if let Some(r) = circle
+        && (at.rotation * Vec3::Y).y.abs() > 0.99
+    {
         return Some(Obstacle::Circle {
             at: [c.x, c.z],
             radius: r,
@@ -965,6 +1082,23 @@ mod tests {
                  d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
             )
             .unwrap()
+    }
+
+    /// The underground sites' plans with a body's slack round their
+    /// furniture too (`CAPSULE_SKIN`): what a way only just wide enough
+    /// for the capsule loses.
+    fn tight_plans(app: &mut App) -> Vec<BuildingPlan> {
+        app.world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                    plan_buildings_with(&b, &d, SITE_CLEARANCE + CAPSULE_SKIN)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .filter(|p| extraction_core::underground::layout(&p.name).is_some())
+            .collect()
     }
 
     /// The ore mill's plan stands each bay at its own floor, and from the
@@ -1271,6 +1405,29 @@ mod tests {
     /// to the outside, which once left nothing in a barn reachable, and a
     /// thing just outside a window was reached for through the wall.
     #[test]
+    fn a_cylinder_on_its_side_blocks_its_own_box() {
+        // Marrow's mill wheel: 2.4 m round, 1.2 m wide, its axle along X.
+        let wheel = Transform::from_xyz(-0.5, 2.55, 0.0)
+            .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
+        let Some(Obstacle::Rect { at, half, .. }) =
+            obstacle(Shape::Cylinder(2.4, 1.2), wheel, 0.0, false)
+        else {
+            panic!("a wheel on its side should block as a box");
+        };
+        assert!(
+            (half[0] - 0.6).abs() < 0.01 && (half[1] - 2.4).abs() < 0.01,
+            "{half:?}"
+        );
+        assert!((at[0] + 0.5).abs() < 0.01, "{at:?}");
+        // Standing up it's a disc.
+        let post = Transform::from_xyz(0.0, 1.0, 0.0);
+        assert!(matches!(
+            obstacle(Shape::Cylinder(0.3, 2.0), post, 0.0, false),
+            Some(Obstacle::Circle { .. })
+        ));
+    }
+
+    #[test]
     fn every_loot_spot_is_reached_from_its_own_side() {
         for map in crate::test_maps() {
             let opts = LaunchOptions {
@@ -1283,6 +1440,7 @@ mod tests {
             app.cleanup();
             app.update();
             let plans = plans(&mut app);
+            let tight = tight_plans(&mut app);
             let spots: Vec<Vec3> = app
                 .world()
                 .get_resource::<crate::world::buildings::BuildingLoot>()
@@ -1291,12 +1449,28 @@ mod tests {
             let mut failed = Vec::new();
             let mut tried = 0;
             for plan in plans.iter().filter(|p| !p.entries.is_empty()) {
+                // An underground site's spots are tried too, from its own
+                // plan (each on its own side of a gallery's wall).
+                let site = extraction_core::underground::layout(&plan.name).is_some();
+                let before = tried;
                 for spot in spots.iter().filter(|s| plan.contains(**s, 0.5)) {
                     if !plan.reachable_height(*spot) || behind_the_works(plan, *spot) {
                         continue;
                     }
                     tried += 1;
                     let goal = plan.to_local(*spot).xz();
+                    // Down a site, reached with a body's slack to spare: a
+                    // spot only reached through a gap narrower than the
+                    // capsule and its skin pins whoever goes for it (the
+                    // gallery's ammo crate, once).
+                    if let Some(t) = tight.iter().find(|t| t.entity == plan.entity) {
+                        if super::super::raider::reach_cell(t, t.entries[0], goal).is_none() {
+                            failed.push(format!(
+                                "{map} {}: spot {goal:.2?} only through a gap narrower than a body",
+                                plan.name
+                            ));
+                        }
+                    }
                     match super::super::raider::reach_cell(plan, plan.entries[0], goal) {
                         Some(c) if super::super::raider::reaches(plan, c, goal) => {}
                         Some(c) => failed.push(format!(
@@ -1310,6 +1484,9 @@ mod tests {
                             ))
                         }
                     }
+                }
+                if site && tried == before {
+                    failed.push(format!("{map} {}: none of its loot spots tried", plan.name));
                 }
             }
             assert!(tried > 0, "{map}: no loot spots tried");
@@ -1534,6 +1711,121 @@ mod tests {
     /// every cell it can stand in, bar those behind the works (past a pit,
     /// heat or the cage), joins up with the ways out. No pocket a raider
     /// could be routed into or caught in.
+    /// A scene staged in an underground site (`world::scenes`) is in its
+    /// plan's way like the site's own furniture: nobody's sent to stand
+    /// inside its crate for what's on it.
+    #[test]
+    fn scenes_staged_in_a_site_stand_in_its_plan() {
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let scenes: Vec<(String, Transform)> = app
+                .world_mut()
+                .query::<(&Building, &Transform)>()
+                .iter(app.world())
+                .filter(|(b, _)| b.prefab.starts_with(crate::world::scenes::PREFIX))
+                .map(|(b, t)| (b.prefab.clone(), *t))
+                .collect();
+            for plan in plans(&mut app) {
+                let Some(r) = extraction_core::underground::raster(&plan.name) else {
+                    continue;
+                };
+                for (id, sxf) in &scenes {
+                    let at = Transform::from_matrix(Mat4::from(
+                        plan.xf.compute_affine().inverse() * sxf.compute_affine(),
+                    ));
+                    let p = at.translation;
+                    if !r
+                        .floor_at([p.x, p.z])
+                        .is_some_and(|f| (p.y - f).abs() < 1.0)
+                    {
+                        continue;
+                    }
+                    for piece in prefab(id).unwrap().pieces.iter().filter(|p| p.collide) {
+                        let c = (at * piece.at).translation;
+                        // What's stepped over (a bedroll) is no one's way.
+                        let floor = r.floor_at([c.x, c.z]).unwrap_or(r.floor);
+                        if obstacle(piece.shape, at * piece.at, floor, false).is_none() {
+                            continue;
+                        }
+                        let k = plan
+                            .grid
+                            .cell_of([c.x, c.z])
+                            .map(|(i, j)| j * plan.grid.n + i);
+                        assert!(
+                            k.is_some_and(|k| plan.grid.cost[k] == BLOCKED),
+                            "{map} {}: {id}'s piece at {c:.2?} is open in the plan",
+                            plan.name
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "no scene staged in a site");
+    }
+
+    /// From every room of every underground site, a raider finds where to
+    /// stand out of each of its ways out: the adit's entrance lies inside
+    /// its bounds (the haulage runs south past it), and from its deep level
+    /// and its magazine `stand_near` found nowhere by that kiosk to stand,
+    /// so raiders walked at the rock toward the RV (Rime seeds 2 and 4).
+    #[test]
+    fn every_site_room_can_stand_out_each_way() {
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app) {
+                let Some(l) = extraction_core::underground::layout(&plan.name) else {
+                    continue;
+                };
+                let open = l.open_rooms();
+                for (room, _) in l.rooms.iter().zip(open).filter(|(r, o)| *o && !r.pit) {
+                    let from = Vec2::from(room.at);
+                    let Some(from) = plan.grid.nearest_walkable(from.to_array()).map(Vec2::from)
+                    else {
+                        continue;
+                    };
+                    for &e in &plan.entries {
+                        checked += 1;
+                        if plan.indoors(e) {
+                            bad.push(format!(
+                                "{map} {}: way out {e} counts as indoors",
+                                plan.name
+                            ));
+                        }
+                        if super::super::raider::stand_near(&plan, from, e).is_none() {
+                            bad.push(format!(
+                                "{map} {} from {}: nowhere to stand out at {e}",
+                                plan.name, room.id
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 0);
+        bad.dedup();
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     #[test]
     fn every_site_cell_reaches_a_way_out() {
         let mut pockets = Vec::new();

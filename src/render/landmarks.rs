@@ -43,7 +43,7 @@ const HALO: LinearRgba = LinearRgba::rgb(1.6, 0.1, 0.03);
 const HALO_REACH: f32 = 320.0;
 const DAY_R: f32 = 1.4;
 
-/// A lamp's character (`map_landmarks::character`): when in its period
+/// A lamp's character (`map_landmarks::assign`): when in its period
 /// it's lit. Its halo and glow, its children, go out with it.
 #[derive(Component, Clone, Copy)]
 pub(crate) struct Lamp(pub extraction_core::map_landmarks::Character);
@@ -75,21 +75,66 @@ pub fn top_of(id: &str) -> Option<Vec3> {
     geo.pieces
         .iter()
         .map(|p| {
-            let half_h = match p.shape {
-                Shape::Box(s) | Shape::Prism(s) => s.y * 0.5,
+            // How far up from its origin its top is: a box's and a
+            // cylinder's origin is their middle, a gable prism's its base
+            // (`materials::gable_prism`: the ridge at its full height).
+            let up = match p.shape {
+                Shape::Box(s) => s.y * 0.5,
+                Shape::Prism(s) => s.y,
                 Shape::Cylinder(_, h) => h * 0.5,
             };
-            p.at.translation + p.at.rotation * Vec3::Y * half_h
+            p.at.translation + p.at.rotation * Vec3::Y * up
         })
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
 
+/// How far a landmark's lamp stands up off its top, on a pole: half the
+/// top's width times 0.75, so a wide flat top (a chimney's mouth, a
+/// tower's roof) doesn't hide it from below: it shows looking up at
+/// anything under 53 degrees (from 50 m off a 30 m chimney is 31). A
+/// pitched roof's lamp sits on the ridge; no pole is over `POLE_MAX`.
+pub fn lamp_lift(id: &str) -> f32 {
+    let Some(geo) = prefab(id) else {
+        return 0.0;
+    };
+    let top = |p: &&crate::world::buildings::Piece| {
+        let up = match p.shape {
+            Shape::Box(s) => s.y * 0.5,
+            Shape::Prism(s) => s.y,
+            Shape::Cylinder(_, h) => h * 0.5,
+        };
+        (p.at.translation + p.at.rotation * Vec3::Y * up).y
+    };
+    geo.pieces
+        .iter()
+        .max_by(|a, b| top(a).total_cmp(&top(b)))
+        .map_or(0.0, |p| match p.shape {
+            Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
+            Shape::Cylinder(r, _) => 0.75 * r,
+            Shape::Prism(_) => 0.0,
+        })
+        .min(POLE_MAX)
+}
+
+/// The tallest a lamp's pole gets (m).
+const POLE_MAX: f32 = 1.5;
+
+/// The lamp's pole (m).
+const POLE_R: f32 = 0.05;
+
+/// The bulb's light as it reaches the tonemapper: red on screen, not white
+/// (`render::grade::ToTheEye`).
+const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.045, 0.014);
+
 fn light_landmarks(
     mut commands: Commands,
-    buildings: Query<(Entity, &Building), Added<Building>>,
+    zone: Option<Res<crate::world::Zone>>,
+    buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
+    mut lamps_of: Local<Option<Vec<(String, [f32; 2], extraction_core::map_landmarks::Character)>>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut pole_mat: Local<Option<Handle<StandardMaterial>>>,
     mut made: Local<
         Option<(
             Handle<Mesh>,
@@ -99,10 +144,40 @@ fn light_landmarks(
         )>,
     >,
 ) {
-    for (e, b) in &buildings {
+    // Each landmark's lamp character, by its placement (a building is
+    // found by its prefab and where it stands).
+    let lamps_of = lamps_of.get_or_insert_with(|| {
+        zone.as_ref().map_or(Vec::new(), |z| {
+            extraction_core::map_landmarks::placement_lamps(&z.map, &z.hm)
+                .into_iter()
+                .map(|(i, c)| {
+                    (
+                        z.map.placements[i].prefab.clone(),
+                        z.map.placements[i].at,
+                        c,
+                    )
+                })
+                .collect()
+        })
+    });
+    for (e, b, xf) in &buildings {
         if prefab_footprint(&b.prefab)[1] < LANDMARK_HEIGHT || LIT.contains(&b.prefab.as_str()) {
             continue;
         }
+        let here = [xf.translation.x, xf.translation.z];
+        let character = lamps_of
+            .iter()
+            .filter(|(id, _, _)| *id == b.prefab)
+            .min_by(|a, b| {
+                extraction_core::geom::dist(a.1, here)
+                    .total_cmp(&extraction_core::geom::dist(b.1, here))
+            })
+            .map(|(_, _, c)| *c)
+            .unwrap_or(
+                extraction_core::map_landmarks::family(extraction_core::map_landmarks::kind(
+                    &b.prefab,
+                ))[0],
+            );
         let Some(top) = top_of(&b.prefab) else {
             continue;
         };
@@ -112,7 +187,9 @@ fn light_landmarks(
                     meshes.add(Sphere::new(LAMP_R).mesh().uv(12, 8)),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.5, 0.02, 0.01),
-                        emissive: LinearRgba::rgb(120.0, 6.0, 2.0),
+                        // Set each frame against the eyes' adaptation
+                        // (`render::grade::ToTheEye`).
+                        emissive: BULB,
                         ..default()
                     }),
                     meshes.add(Rectangle::new(DAY_R * 2.0, DAY_R * 2.0)),
@@ -130,13 +207,35 @@ fn light_landmarks(
                 )
             })
             .clone();
-        let at = top + Vec3::Y * (LAMP_R + 0.05);
+        commands.entity(e).insert(crate::render::grade::ToTheEye {
+            material: lamp.clone(),
+            emissive: BULB,
+        });
+        let lift = lamp_lift(&b.prefab);
+        let at = top + Vec3::Y * (lift + LAMP_R + 0.05);
+        if lift > 0.05 {
+            let mat = pole_mat
+                .get_or_insert_with(|| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.08, 0.08, 0.08),
+                        perceptual_roughness: 0.7,
+                        metallic: 0.6,
+                        ..default()
+                    })
+                })
+                .clone();
+            let pole = meshes.add(Cylinder::new(POLE_R, lift).mesh().resolution(6));
+            commands.entity(e).with_child((
+                Name::new("Landmark lamp pole"),
+                Mesh3d(pole),
+                MeshMaterial3d(mat),
+                Transform::from_translation(top + Vec3::Y * lift * 0.5),
+            ));
+        }
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
-                Lamp(extraction_core::map_landmarks::character(
-                    extraction_core::map_landmarks::kind(&b.prefab),
-                )),
+                Lamp(character),
                 Visibility::default(),
                 Mesh3d(lamp_mesh),
                 MeshMaterial3d(lamp),
@@ -223,6 +322,70 @@ fn day_glows(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With the clock stopped every lamp shows, whatever its phase: the
+    /// captures' stills stop it to shoot every lamp lit, the same each
+    /// build. Running, a lamp goes dark between flashes.
+    #[test]
+    fn a_stopped_clock_lights_every_lamp() {
+        use extraction_core::map_landmarks::MASTS;
+        let quick = MASTS[0];
+        // A moment it's dark.
+        let dark = (0..400)
+            .map(|k| k as f32 * 0.025)
+            .find(|t| !quick.lit_at(*t))
+            .unwrap();
+        for paused in [false, true] {
+            let mut app = App::new();
+            let mut time = Time::<Virtual>::default();
+            time.advance_by(std::time::Duration::from_secs_f32(dark));
+            if paused {
+                time.pause();
+            }
+            app.insert_resource(time);
+            app.add_systems(Update, flash_lamps);
+            let lamp = app
+                .world_mut()
+                .spawn((Lamp(quick), Visibility::Inherited))
+                .id();
+            app.update();
+            let v = *app.world().get::<Visibility>(lamp).unwrap();
+            let want = if paused {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+            assert_eq!(v, want, "paused {paused}: at {dark} s");
+        }
+    }
+
+    /// A chimney's lamp stands clear of its mouth: seen from 50 m off and
+    /// a whole chimney below (the lamp gauge's nearest view), the line to
+    /// the bulb's top clears the rim.
+    #[test]
+    fn a_chimney_lamp_shows_over_its_rim_from_below() {
+        let top = top_of("chimney").expect("a chimney has a top");
+        let lift = lamp_lift("chimney");
+        assert!(lift > 0.5, "{lift}");
+        let geo = prefab("chimney").unwrap();
+        let r = geo
+            .pieces
+            .iter()
+            .filter_map(|p| match p.shape {
+                Shape::Cylinder(r, _) => Some(r),
+                _ => None,
+            })
+            .fold(0.0f32, f32::max);
+        // Looking up from 50 m off at the chimney's foot: over the rim
+        // (r out from the axis) the line has risen r * tan by the axis.
+        let tan = top.y / 50.0;
+        assert!(
+            lift + 2.0 * LAMP_R > r * tan,
+            "lift {lift}, rim {r}, tan {tan}"
+        );
+        // No pole past POLE_MAX, whatever the top.
+        assert!(lamp_lift("house_plank") <= POLE_MAX);
+    }
 
     /// Every landmark the valleys place has a top to carry a lamp, near the
     /// height it's listed at.

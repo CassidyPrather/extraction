@@ -26,31 +26,88 @@ pub fn enabled() -> bool {
     std::env::var_os("EXTRACTION_NO_AO").is_none()
 }
 
-/// Whether to bake the sky's view too (`sky_view`): `EXTRACTION_SKY_VIEW=1`.
-/// A trial, for Visual design and Performance to judge, off by default.
+/// Whether to bake the sky's light through the openings too (`SkyField`):
+/// `EXTRACTION_NO_SKY_VIEW=1` leaves it out (every indoor surface lit
+/// alike, as before), to see or measure the difference.
 pub fn sky_view_enabled() -> bool {
-    enabled() && std::env::var_os("EXTRACTION_SKY_VIEW").is_some()
+    enabled() && std::env::var_os("EXTRACTION_NO_SKY_VIEW").is_none()
 }
 
-/// What a house's room has of the sky field ([`SkyField`]) on average:
-/// a surface with that much is lit as the renderer lights every indoor
-/// surface now.
-pub const SKY_ROOM: f32 = 0.1;
+/// What a house's room has of the sky field ([`SkyField`]) on average,
+/// and the share of its light before the field a surface with that much
+/// keeps (as it was: the windows' side gets more, the far side less).
+pub const SKY_ROOM: f32 = 0.08;
+pub const SKY_ROOM_LIGHT: f32 = 1.0;
+/// How steeply the light falls off from an opening: in a 5 m room the
+/// wall facing the window comes out two and a half to three times the
+/// wall beside it, the far corners dark (a real room falls ten to one;
+/// three keeps what you came for findable).
+pub const SKY_FALLOFF: f32 = 2.0;
 /// The least a surface keeps, deep in a shut room, and the most one by
 /// an opening gets, as shares of what it has now.
-pub const SKY_MIN: f32 = 0.3;
-pub const SKY_MAX: f32 = 1.5;
+pub const SKY_MIN: f32 = 0.15;
+pub const SKY_MAX: f32 = 2.0;
 
 /// The sky's light on a surface with `view` of the sky field, as a share
-/// of what the renderer gives it now: the ambient is already dimmed to
-/// `weather::INTERIOR_LIGHT` everywhere while the eye is inside, so an
-/// average room's surface keeps it, a deep corner gets less and one by a
-/// window more; out in the open air (and so outside walls), as now.
+/// of what the renderer gives it now. The ambient stays dimmed to
+/// `weather::INTERIOR_LIGHT` while the eye is inside (so the eyes' tuning
+/// holds); this shares it out over the room. Out in the open air (and so
+/// outside walls), as now. Colour only: the vertex alpha is the sky over
+/// it, for the wet and the snow.
 pub fn sky_light(view: f32) -> f32 {
-    let inside = (view / SKY_ROOM).clamp(SKY_MIN, SKY_MAX);
+    let inside = (SKY_ROOM_LIGHT * (view / SKY_ROOM).powf(SKY_FALLOFF)).clamp(SKY_MIN, SKY_MAX);
     let open = ((view - 0.6) / 0.35).clamp(0.0, 1.0);
     let open = open * open * (3.0 - 2.0 * open);
     inside + (1.0 - inside) * open
+}
+
+/// How far over where a thing lies its light is read (m).
+pub const LYING: f32 = 0.15;
+
+/// The least a piece of furniture keeps of its light today, however
+/// dark its corner: its silhouette and grain still read.
+pub const PIECE_MIN: f32 = 0.3;
+
+/// The light a piece of furniture standing in `lo..hi` (building-local)
+/// takes from the room ([`sky_light`]): the brightest of the air beside
+/// its four sides at half its height and over its top (not the inside of
+/// it, a solid cell), never darker than the floor it stands on, nor than
+/// [`PIECE_MIN`].
+pub fn piece_light(field: &SkyField, lo: Vec3, hi: Vec3) -> f32 {
+    let mid = (lo + hi) * 0.5;
+    let half = (hi - lo) * 0.5;
+    let off = field.cell * 0.75;
+    let around = [
+        Vec3::new(mid.x + half.x + off, mid.y, mid.z),
+        Vec3::new(mid.x - half.x - off, mid.y, mid.z),
+        Vec3::new(mid.x, mid.y, mid.z + half.z + off),
+        Vec3::new(mid.x, mid.y, mid.z - half.z - off),
+        Vec3::new(mid.x, hi.y + off, mid.z),
+    ];
+    let side = around.iter().map(|p| field.at(*p)).fold(0.0, f32::max);
+    let floor = [
+        Vec3::new(mid.x + half.x + off, lo.y + off, mid.z),
+        Vec3::new(mid.x - half.x - off, lo.y + off, mid.z),
+        Vec3::new(mid.x, lo.y + off, mid.z + half.z + off),
+        Vec3::new(mid.x, lo.y + off, mid.z - half.z - off),
+    ]
+    .iter()
+    .map(|p| field.at(*p))
+    .fold(0.0, f32::max);
+    sky_light(side).max(sky_light(floor)).max(PIECE_MIN)
+}
+
+/// Scales a mesh's vertex colours (not their alpha) by `k`: a piece of
+/// furniture lit as the spot in the room it stands in.
+pub fn tint(mesh: &mut Mesh, k: f32) {
+    ensure_colours(mesh);
+    if let Some(VertexAttributeValues::Float32x4(c)) = mesh.attribute_mut(Mesh::ATTRIBUTE_COLOR) {
+        for c in c.iter_mut() {
+            c[0] *= k;
+            c[1] *= k;
+            c[2] *= k;
+        }
+    }
 }
 
 /// How far a vertex looks for what shades it.
@@ -115,8 +172,13 @@ impl Obb {
     }
 }
 
-/// The sky field's cells (m).
+/// The sky field's cells (m), twice that in a hall of more than
+/// `SKY_CELLS_MAX` of them.
 pub const SKY_CELL: f32 = 0.5;
+const SKY_CELLS_MAX: f32 = 60_000.0;
+/// The field has settled when no cell moves more than this in a pass.
+const SKY_SETTLED: f32 = 1e-3;
+const SKY_PASSES_MAX: usize = 400;
 /// How much of a cell's light a solid face beside it gives back (a wall's,
 /// a floor's: the light that comes round corners).
 pub const SKY_BOUNCE: f32 = 0.55;
@@ -130,26 +192,34 @@ pub const SKY_BOUNCE: f32 = 0.55;
 /// the sun lights (the shadow maps do).
 pub struct SkyField {
     lo: Vec3,
+    cell: f32,
     dims: [usize; 3],
     light: Vec<f32>,
 }
 
 impl SkyField {
     fn new(occ: &Occluders) -> Self {
-        // The building's bounds and a cell of open air round them.
-        let lo = occ.lo + Vec3::splat(REACH) - Vec3::splat(SKY_CELL);
-        let hi = occ.lo
+        // The building's bounds and a cell of open air round them; a big
+        // hall's in coarser cells.
+        let inner = occ.lo + Vec3::splat(REACH);
+        let outer = occ.lo
             + Vec3::new(occ.dims[0] as f32, occ.dims[1] as f32, occ.dims[2] as f32) * occ.cell
-            - Vec3::splat(REACH)
-            + Vec3::splat(SKY_CELL);
-        let size = hi - lo;
+            - Vec3::splat(REACH);
+        let span = outer - inner;
+        let cell = if span.x * span.y * span.z / SKY_CELL.powi(3) > SKY_CELLS_MAX {
+            SKY_CELL * 2.0
+        } else {
+            SKY_CELL
+        };
+        let lo = inner - Vec3::splat(cell);
+        let size = outer + Vec3::splat(cell) - lo;
         let dims = [
-            (size.x / SKY_CELL).ceil().max(3.0) as usize,
-            (size.y / SKY_CELL).ceil().max(3.0) as usize,
-            (size.z / SKY_CELL).ceil().max(3.0) as usize,
+            (size.x / cell).ceil().max(3.0) as usize,
+            (size.y / cell).ceil().max(3.0) as usize,
+            (size.z / cell).ceil().max(3.0) as usize,
         ];
         let at = |x: usize, y: usize, z: usize| {
-            lo + (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * SKY_CELL
+            lo + (Vec3::new(x as f32, y as f32, z as f32) + 0.5) * cell
         };
         let idx = |x: usize, y: usize, z: usize| (z * dims[1] + y) * dims[0] + x;
         let n = dims[0] * dims[1] * dims[2];
@@ -167,8 +237,12 @@ impl SkyField {
                         || y + 1 == dims[1]
                         || x + 1 == dims[0]
                         || z + 1 == dims[2];
-                    // The open air round it, and under open sky.
-                    if !solid[i] && (edge || occ.sky(p, Vec3::Y) > 0.5) {
+                    // The open air round it, under open sky, and out of
+                    // its walls (under the eaves, on a porch).
+                    let out = occ
+                        .walls
+                        .is_some_and(|h| p.x.abs() > h.x + 0.1 || p.z.abs() > h.y + 0.1);
+                    if !solid[i] && (edge || out || occ.sky(p, Vec3::Y) > 0.5) {
                         fixed[i] = true;
                         light[i] = 1.0;
                     }
@@ -176,7 +250,9 @@ impl SkyField {
             }
         }
         let mut next = light.clone();
-        for _ in 0..120 {
+        // Until it settles: no cell moving more than `SKY_SETTLED` a pass.
+        for _ in 0..SKY_PASSES_MAX {
+            let mut moved = 0.0f32;
             for z in 0..dims[2] {
                 for y in 0..dims[1] {
                     for x in 0..dims[0] {
@@ -201,10 +277,14 @@ impl SkyField {
                         each((z > 0).then(|| idx(x, y, z - 1)));
                         each((z + 1 < dims[2]).then(|| idx(x, y, z + 1)));
                         next[i] = sum / k;
+                        moved = moved.max((next[i] - light[i]).abs());
                     }
                 }
             }
             std::mem::swap(&mut light, &mut next);
+            if moved < SKY_SETTLED {
+                break;
+            }
         }
         // A solid cell takes its open neighbours' best (a face's light is
         // the air in front of it).
@@ -213,12 +293,42 @@ impl SkyField {
                 light[i] = 0.0;
             }
         }
-        Self { lo, dims, light }
+        Self {
+            lo,
+            cell,
+            dims,
+            light,
+        }
+    }
+
+    /// The light at `p` in the open: the cell's, or if that's solid (a
+    /// shelf's box round what lies on it, a wall), the brightest open cell
+    /// next to it.
+    pub fn open_at(&self, p: Vec3) -> f32 {
+        let here = self.at(p);
+        if here > 1e-6 {
+            return here;
+        }
+        let mut best = 0.0f32;
+        for r in 1..=2 {
+            for dx in -r..=r {
+                for dy in -r..=r {
+                    for dz in -r..=r {
+                        let d = Vec3::new(dx as f32, dy as f32, dz as f32) * self.cell;
+                        best = best.max(self.at(p + d));
+                    }
+                }
+            }
+            if best > 1e-6 {
+                break;
+            }
+        }
+        best
     }
 
     /// The light in the cell at `p` (1 outside the field).
     pub fn at(&self, p: Vec3) -> f32 {
-        let c = ((p - self.lo) / SKY_CELL).floor();
+        let c = ((p - self.lo) / self.cell).floor();
         if c.min_element() < 0.0 {
             return 1.0;
         }
@@ -243,6 +353,8 @@ pub struct Occluders {
     /// The sky's light through the building, made the first time it's
     /// asked for.
     field: std::sync::OnceLock<SkyField>,
+    /// Its walls' half extents (x, z), if known (`within`).
+    walls: Option<Vec2>,
 }
 
 impl Occluders {
@@ -321,6 +433,7 @@ impl Occluders {
             dirs,
             columns,
             field: std::sync::OnceLock::new(),
+            walls: None,
         }
     }
 
@@ -346,7 +459,27 @@ impl Occluders {
     /// ([`SkyField`]), 0..=1: 1 out in the open.
     pub fn sky_view(&self, p: Vec3, n: Vec3) -> f32 {
         let field = self.field.get_or_init(|| SkyField::new(self));
-        field.at(p + n * (SKY_CELL * 0.6))
+        field.at(p + n * (field.cell * 0.6))
+    }
+
+    /// The same, knowing the building's walls stand round its footprint
+    /// (`map::prefab_footprint`, half extents x, z): past them is the open
+    /// air, eaves and porches included.
+    pub fn within(mut self, walls: Vec2) -> Self {
+        self.walls = Some(walls);
+        self
+    }
+
+    /// The sky field's light where a thing lies at `p` (in the open over
+    /// it: `SkyField::open_at`), as loot is tinted (`render::loot_light`).
+    pub fn lying_at(&self, p: Vec3) -> f32 {
+        let field = self.field.get_or_init(|| SkyField::new(self));
+        field.open_at(p + Vec3::Y * LYING)
+    }
+
+    /// The sky field, if it was made (for the furniture placed later).
+    pub fn into_field(self) -> Option<SkyField> {
+        self.field.into_inner()
     }
 
     /// The light at a point from its occlusion near to and, with the sky
@@ -626,7 +759,9 @@ mod tests {
             "house_plank_drowned",
         ] {
             let geo = buildings::prefab(id).unwrap();
-            let occ = buildings::occluders(&geo);
+            let f = extraction_core::map::prefab_footprint(id);
+            let walls = Vec2::new(f[0], f[2]) * 0.5;
+            let occ = buildings::occluders(&geo).within(walls);
             let y = geo.floor.unwrap_or(0.35) + 0.02;
             let mut row = String::new();
             for z in [-3.0f32, -1.5, 0.0, 1.5, 3.0] {
@@ -637,7 +772,7 @@ mod tests {
             }
             let n = geo.pieces.len();
             // (A fresh one: the field above is made already.)
-            let occ = buildings::occluders(&geo);
+            let occ = buildings::occluders(&geo).within(walls);
             let t = std::time::Instant::now();
             let mut verts = 0;
             for p in &geo.pieces {

@@ -285,6 +285,74 @@ The driver remarks on the strongest of these as you set off, and a radio you car
 
 **Search marks.** A walker that searches sprays a ring and a cross where it stood. The paint is bright while that place is spent as a lure, and duller after. The valley keeps where they were, so last raid's marks are there when you next step out: fainter each raid, gone in five.
 
+**They work together, and say so** (`robots/squad.rs`). Two or more machines fighting one player within 60 m share a plan. The first walker pins you from cover, the next works round to your side, and a third makes for the way to your rendezvous (the one the valley knows you favour, else the nearest) and holds it. A drone hangs over the flanker's way in and lights it. Parts are kept as machines join, so the plan doesn't reshuffle. Each new part is announced:
+- a chirp between the machines, one pattern per role (Audio);
+- on a radio you carry, within 120 m, a line: "Radio, close: one going round to your east", "Radio: one making for the mill. They mean to cut you off." The most useful line goes out first, one every 2 s;
+- the spotting drone's light on the ground.
+
+A relay that reports someone they're already on calls it in. One switch (`squad::Coordination`) turns it all off.
+
+A machine **changing post holds its fire** until it's there: a flanker or a cut-off until it's within 4 m of its post, the spotter until it's within 6 m of its station. "One going round" is one gun fewer for as long as the move takes. Meanwhile **the pinner suppresses** (`walker::Suppressing`):
+- it fires every 0.45 s instead of 1.1, steadier on you if you hold still;
+- running across its line throws it off as ever;
+- for 4 s after you drop from sight, it keeps its rounds on where it last saw you.
+You hear the cadence change (and the rack of its feed). Leaving the pinner's line is what beats it.
+
+**Measured** (`robots/squad_drill.rs`, 48 seeds an arm). A newcomer with a radio in its pack jogs for a rendezvous in the south of Marrow Creek, cover to cover, crouched in cover. A squad finds it at 45–55 m: three armed walkers, or two and a drone. A listener acts only on what it hears:
+- told one's moving up (flank or cut-off), it runs for it with no stops in cover;
+- told of a cut-off, it takes another way out if that's at most 30% longer;
+- flanker and cut-off posts count as threats when it picks cover.
+
+| Newcomer | Machines alone | Machines coordinating |
+|---|---|---|
+| Deaf | 29% escape (±13) | 17% (±11) |
+| Listening | 29% (±13) | 48% (±14) |
+
+Paired by seed (sign tests):
+- coordinating machines catch a deaf newcomer that machines alone don't: 7 to 1 (p ≈ 0.07);
+- against them a listener gets out where the deaf one doesn't: 17 to 2 (p ≈ 0.001);
+- a listener does better against a coordinating squad than against machines alone: 14 to 5 (p ≈ 0.06).
+
+Without the pinner's suppression, the last two hold but the first doesn't: a plan said aloud, with nobody covering the movers, is easier on the deaf too (38%).
+
+**A walker goes after a runner.** Say a walker can see you, you're past 20 m, and you're pulling away at over 0.5 m/s. Then it leaves cover and closes at a jog until it's caught up (`walker::PURSUE_FROM`). There are exceptions:
+- a flanker or cut-off keeps to its post;
+- a hurt walker keeps its cover.
+
+While it chases, it goes straight through what would hurt it, as any hard chase does. Breaking contact means getting out of sight, not just out of range.
+
+This was tried as a switch first and measured on against off. The smoke was 5 valleys, seeds 1–8:
+- extractions: 26 of 40 with it off, 28 of 40 with it on;
+- no valley did worse with it on;
+- stucks were the same, and nothing timed out.
+
+The drills were 48 seeds, paired by seed:
+- listening newcomer against a coordinating squad: 21 escape vs 22;
+- the hound squad: 17 vs 16;
+- the hound squad with a snare lure: 14 vs 13.
+
+Pursuit changed few runs, and none significantly. The bots and the drill's newcomer seldom run in the open from a walker in sight, so most raids never call it up. It didn't make raids deadlier, so it stays on, for the player who sprints off across open ground.
+
+**The Zone hurts them too** (`robots/hazards.rs`). What every hazard does to every kind of machine is one table:
+
+| | Drone | Walker, crawler, hound, grappler | Heavy | Dirigible |
+|---|---|---|---|---|
+| Lift | thrown (its lock lost 2 s) | slowed winding up, staggered when it pops | — | — |
+| Burner | hurt | hurt | hurt (heats) | — |
+| Snare | hurt | hurt | stunned | — |
+| Well | dragged | dragged, crushed at its heart | dragged, held | — |
+| Mirror | dazzled (lock lost 3 s) | dazzled | dazzled | — |
+| Hush | flies blind and deaf | deafened | deafened | — |
+| Frost | rotors ice, it sinks; optics frost | stiff (0.55 pace); optics frost (sight 0.4) | stiff | — |
+| Gas flash | — | crawlers hurt | — | — |
+| Hot gallery | — | crawlers burned as you are | — | — |
+| Mine | — | hurt | hurt | — |
+| EMP | stunned | stunned | stunned | stunned |
+
+Each is told (a look and a sound, at most once a second per machine per hazard). Walkers go round lifts, burners, snares, wells and frosts: on their grid each is closed, and 1.5 m past its reach. Chasing you hard (running at you in a fight, you in sight within 40 m), they come straight and risk it. That's the lure: lead a hound across a snare, a walker through a burner's edge, lose a drone in a hush.
+
+In the squad drill, a listening newcomer that takes its way out past a snare's far side from the squad gets out 65% of the time, against 48% for one that goes straight round (paired by seed, 13 to 5, p ≈ 0.1). The snare itself rarely catches a machine (2 runs in 48): the squad is mostly too far back to be chasing hard when the newcomer passes it. The way round, away from them, does most of the good.
+
 **The disturbed world is evidence** (`robots/disturbed.rs`). What you leave changed tells a patrol someone was here:
 - a door you opened;
 - wire or a padlock cut;
@@ -980,6 +1048,70 @@ mechanism by `every_gun_shows_what_the_real_one_does`:
   (`Firearm::action_drag`).
 - **Made into**: a cut barrel, a stock off, a bolt out, a suppressor or a
   scope are all on the model as they are.
+
+### Reloading without looking
+
+(`weapons/reload.rs`)
+
+Under fire you reload by feel. Every step of every gun's reload is heard
+and felt as itself. No two steps of one gun's reload share a sound or a
+feel: `every_reload_step_is_heard_and_felt_as_itself` checks each catalog
+gun's reload step by step. Sounds come from `audio::handling_sound` and
+feels from `rig::haptics::handling_feel`.
+
+- **Magazine out**: the release's click and a light pulse.
+- **Magazine in**: a slide up the well and the catch's snap, felt as a soft
+  push then a hard bump.
+- **Half-seated**: pushed up the well slower than 0.3 m/s, a magazine
+  hangs on its catch. It scrapes instead of snapping and stalls with no
+  bump. It hangs 8 mm low, and it feeds nothing. The rack's jolt shakes it
+  out: it slithers free with a lurch of weight in the hand. Slap it home
+  from below (as in tap-rack) and it seats with the proper snap.
+- **Racked back**: the slide drawn over the hammer, with a small tick.
+- **Home, chambered**: the bolt's slam has brass sliding off the lips under
+  it, and a double tick for the round going in. **Home, empty**: the slam
+  alone.
+- **Held open**: the slide or bolt stopping on its catch. The sound is a
+  short hard click, not the slam, and the feel is one sharp stop with no
+  settle.
+- A Nagant's gate opens and shuts with clicks of its own, and its cylinder
+  ratchets a chamber round. A crossbow's string clicks onto its latch. A
+  single-shot's round is felt going into the chamber by hand.
+
+### Every stoppage tells you its fix
+
+(`weapons/stoppages.rs`)
+
+A gun that stops tells you why, at the moment it happens. You hear it,
+you feel it in the trigger hand, and you see it at the port or on the
+gun. It takes the one clear a shooter would use. A wrong fix leaves it
+stopped and shows why. `every_stoppage_tells_you_its_fix` walks every
+catalog gun through every stoppage it can have, on the mechanism, and
+checks that each one:
+
+- stops the gun;
+- is heard, felt and seen unlike that gun's other stoppages;
+- is cleared by its own fix;
+- is not cleared by each wrong fix.
+
+| Stoppage | Heard | Felt | Seen | Clear | Wrong (and why) |
+|---|---|---|---|---|---|
+| Dud | the hammer's fall, dulled | a hard stop | a dented primer on a press check | work the action (on double action, pull again) | wait (nothing comes); pull again (the trigger's dead) |
+| Hang-fire | the fall and a primer's fizz | a long faint tremor | a thread of smoke from the action | keep it on the target and wait | open the action (the case bursts out of battery, hurting the hand) |
+| Stovepipe | the bolt stopping short, a pinched case | a sharp jolt | the case standing in the port, the bolt on it | rack | pull, tap (the case stays) |
+| Failure to feed | a light hollow clack, no brass | a dead little tick | the magazine hanging low, an empty chamber | tap, rack | rack alone (nothing feeds) |
+| Double feed | a dull jam and a grind | a long heavy grind | two rounds in the port, the bolt part open | drop the magazine, rack, seat, rack | rack, tap (they stay jammed) |
+| Short stroke | a smothered draw | a soft check | the action home on nothing, or on the case | work it fully | short again |
+| Squib | a weak pop, no crack | no kick | no flash; the bullet seen down the bore | rod the bore, then work it | fire on it (the barrel bulges) |
+| Stuck bolt | a dull clack | a hard stop at the handle | the handle down and unmoved | slap it up | lift gently (it grinds) |
+| Empty | a click, or the catch | a click, or the stop | held open, or the follower up | reload | work the action (nothing feeds) |
+| On safe | a creak | a soft dead stop | the selector on safe | selector off safe | pull harder |
+| Nagant gate open | a creak | a soft dead stop | the gate open | shut the gate | pull harder |
+| Crossbow string short | the string's slap | a slam | the string at rest, uncocked | draw it right onto the latch | draw short again |
+
+How often each stoppage happens depends on the gun's condition and dirt:
+`malfunction_chance`, the dud chance, `sticky_chance` and slam fire. So
+upkeep at the fabricator bench and cleaning decide it.
 
 ### Gunsmithing at the vice
 

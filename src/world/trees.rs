@@ -681,8 +681,41 @@ fn chunk_of(p: Vec3) -> (i32, i32) {
 
 /// Trees by chunk, for streaming near detail.
 #[derive(Resource, Default)]
-struct ForestGrid {
+pub struct ForestGrid {
     cells: std::collections::HashMap<(i32, i32), Vec<(Entity, Tree, Vec3)>>,
+}
+
+/// A crown as a sight line meets it, roughly (m): this far round the trunk,
+/// from this high over its foot to that. Crowns have no colliders, so a
+/// raycast sees through a forest; this doesn't.
+const CROWN_R: f32 = 2.2;
+const CROWN_FROM: f32 = 2.5;
+const CROWN_TO: f32 = 16.0;
+
+impl ForestGrid {
+    /// How many tree crowns the line from `a` to `b` runs through
+    /// (sampled every metre; the last `spare` metres before `b` don't
+    /// count: what's there is what you're looking at).
+    pub fn crowns_on(&self, a: Vec3, b: Vec3, spare: f32) -> usize {
+        let len = a.distance(b);
+        let steps = (len - spare).max(0.0) as i32;
+        let mut hit: Vec<Entity> = Vec::new();
+        for k in 1..steps {
+            let p = a.lerp(b, k as f32 / len.max(1e-3));
+            let Some(cell) = self.cells.get(&chunk_of(p)) else {
+                continue;
+            };
+            for (e, _, t) in cell {
+                if t.xz().distance(p.xz()) < CROWN_R
+                    && (CROWN_FROM..CROWN_TO).contains(&(p.y - t.y))
+                    && !hit.contains(e)
+                {
+                    hit.push(*e);
+                }
+            }
+        }
+        hit.len()
+    }
 }
 
 #[derive(Resource)]
@@ -710,30 +743,41 @@ impl ForestSettled<'_, '_> {
 #[derive(Component)]
 struct NearDetail(Vec<Entity>);
 
-/// Spawns and drops foliage cards round the camera.
+/// An eye this far from where the streaming last looked has jumped (a
+/// teleport, a shot tool's next view): stream now, not on the timer.
+const JUMP: f32 = 8.0;
+
+/// Spawns and drops foliage cards round the camera, four times a second
+/// of real time (a shot tool that pauses the game's clock still gets its
+/// trees) and at once after a jump.
 fn stream_near_detail(
     mut commands: Commands,
     grid: Option<Res<ForestGrid>>,
     assets: Option<Res<ForestAssets>>,
     cams: Query<(&GlobalTransform, Option<&bevy::camera::RenderTarget>), crate::render::EyeCamera>,
     detailed: Query<(Entity, &NearDetail, &GlobalTransform)>,
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     mut timer: Local<f32>,
+    mut looked: Local<Vec<Vec3>>,
 ) {
     let (Some(grid), Some(assets)) = (grid, assets) else {
         return;
     };
-    *timer -= time.delta_secs();
-    if *timer > 0.0 {
-        return;
-    }
-    *timer = 0.25;
     let eyes: Vec<Vec3> = crate::render::eyes(&cams)
         .map(|g| g.translation())
         .collect();
     if eyes.is_empty() {
         return;
     }
+    let jumped = eyes
+        .iter()
+        .any(|e| !looked.iter().any(|l| l.xz().distance(e.xz()) < JUMP));
+    *timer -= time.delta_secs();
+    if *timer > 0.0 && !jumped {
+        return;
+    }
+    *timer = 0.25;
+    *looked = eyes.clone();
     // Horizontal, as the impostors' cut is.
     let near = |p: Vec3, r: f32| eyes.iter().any(|e| e.xz().distance(p.xz()) < r);
     // Drop what's now far.
@@ -1733,5 +1777,124 @@ mod far_tree_tests {
                 trees.len()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod after_a_jump {
+    use super::*;
+
+    /// A camera that jumps (a teleport, a shot tool's next view) has the
+    /// trees round it in full at once: the near trees' cards drawn within
+    /// 3 frames, and every near trunk the eye will see drawn on the jump's
+    /// first frame. A near spruce once drew as its dark hull for a shot's
+    /// whole settle, and a trunk beside it went missing.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_near_trees_in_full_after_a_jump() {
+        use crate::render::budget::tests::{client_threads, counted, settle};
+        // Counts: frames to the cards and trunks.
+        let _counting = counted();
+        let mut app = client_threads("marrow_creek", "clearing", None);
+        settle(&mut app);
+        // A stand of trees 250-400 m from the camera.
+        let (from, target) = {
+            let w = app.world_mut();
+            let cam = w
+                .query_filtered::<&GlobalTransform, With<crate::render::FreeCamera>>()
+                .single(w)
+                .unwrap()
+                .translation();
+            let grid = w.resource::<ForestGrid>();
+            let mut keys: Vec<_> = grid.cells.keys().copied().collect();
+            keys.sort();
+            let p = keys
+                .iter()
+                .map(|k| &grid.cells[k])
+                .filter(|trees| trees.len() >= 6)
+                .map(|trees| trees[0].2)
+                .find(|p| (250.0..400.0).contains(&p.distance(cam)))
+                .expect("a stand of trees 250-400 m off");
+            (cam, p)
+        };
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let eye = zone.on_ground(target.x + 6.0, target.z) + Vec3::Y * 1.7;
+        {
+            let w = app.world_mut();
+            let mut q = w.query_filtered::<&mut Transform, With<crate::render::FreeCamera>>();
+            *q.single_mut(w).unwrap() =
+                Transform::from_translation(eye).looking_at(target + Vec3::Y * 3.0, Vec3::Y);
+        }
+        // Each frame: the near trees' cards (shown, of all), and which near
+        // trunk meshes are drawn.
+        let mut cards: Vec<(usize, usize)> = Vec::new();
+        let mut trunks: Vec<std::collections::HashSet<Entity>> = Vec::new();
+        for _ in 0..30 {
+            app.update();
+            let w = app.world_mut();
+            let details: Vec<(Vec3, Vec<Entity>)> = w
+                .query::<(&NearDetail, &GlobalTransform)>()
+                .iter(w)
+                .map(|(d, g)| (g.translation(), d.0.clone()))
+                .collect();
+            let (mut all, mut shown) = (0, 0);
+            for (p, kids) in details {
+                if p.xz().distance(eye.xz()) > 15.0 {
+                    continue;
+                }
+                for k in kids {
+                    all += 1;
+                    shown += usize::from(w.get::<ViewVisibility>(k).is_some_and(|v| v.get()));
+                }
+            }
+            cards.push((shown, all));
+            let mut q = w.query_filtered::<(
+                Entity,
+                &ViewVisibility,
+                &bevy::camera::primitives::Aabb,
+                &GlobalTransform,
+            ), (
+                With<MeshMaterial3d<StandardMaterial>>,
+                With<bevy::camera::visibility::VisibilityRange>,
+                Without<FarForest>,
+                With<ChildOf>,
+            )>();
+            trunks.push(
+                q.iter(w)
+                    .filter(|(_, v, aabb, g)| {
+                        v.get()
+                            && g.transform_point(Vec3::from(aabb.center))
+                                .xz()
+                                .distance(eye.xz())
+                                < 40.0
+                    })
+                    .map(|(e, ..)| e)
+                    .collect(),
+            );
+        }
+        println!(
+            "jumped {:.0} m; near cards shown each frame: {:?}",
+            from.distance(eye),
+            &cards[..6]
+        );
+        let cards_in = cards.iter().position(|(s, a)| *a > 0 && s == a);
+        assert!(
+            cards_in.is_some_and(|f| f < 3),
+            "near trees' cards drawn at frame {:?} after a jump (within 3): {:?}",
+            cards_in.map(|f| f + 1),
+            &cards[..6]
+        );
+        let settled = trunks.last().unwrap();
+        let missing: Vec<_> = settled.difference(&trunks[0]).collect();
+        println!(
+            "near trunk meshes drawn: {} on the jump's frame, {} settled",
+            trunks[0].len(),
+            settled.len()
+        );
+        assert!(
+            !settled.is_empty() && missing.is_empty(),
+            "{} near trunk meshes drawn later than the jump's frame",
+            missing.len()
+        );
     }
 }

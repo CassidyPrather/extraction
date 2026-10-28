@@ -4246,3 +4246,756 @@ fn distrust_wears_off() {
     app.update();
     assert!(!distrusted(&app), "believed again");
 }
+
+#[derive(Resource, Default)]
+struct Calls(Vec<super::squad::SquadCall>);
+
+fn squad_app(n: usize, drone: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    squad_app_with(n, drone, false)
+}
+
+/// Out on a raid, carrying a radio if `radio`, with `n` walkers (and a
+/// drone) fighting you.
+fn squad_app_with(n: usize, drone: bool, radio: bool) -> (App, Entity, Zone, Vec3, Vec<Entity>) {
+    let (mut app, player, zone) = app(None);
+    app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::Out;
+    // No plan while they're set down: it starts when the test does.
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    if radio {
+        // In the pack on your back.
+        let r = spawn_radio(&mut app, zone.on_ground(100.0, 200.0) + Vec3::Y);
+        let bag = app
+            .world_mut()
+            .query::<(Entity, &crate::interact::body::Backpack)>()
+            .iter(app.world())
+            .find(|(_, b)| b.owner == player && b.carried)
+            .map(|(e, _)| e)
+            .expect("a pack on your back");
+        app.world_mut()
+            .entity_mut(r)
+            .insert(crate::interact::body::InBackpack { bag });
+        app.update();
+        assert!(
+            app.world()
+                .get::<crate::anomaly::artifacts::CarriedBy>(r)
+                .is_some()
+        );
+    }
+    app.init_resource::<Calls>().add_systems(
+        Last,
+        |mut m: MessageReader<super::squad::SquadCall>, mut s: ResMut<Calls>| {
+            s.0.extend(m.read().copied())
+        },
+    );
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let mut fighters: Vec<Entity> = (0..n)
+        .map(|k| {
+            let x = 96.0 + k as f32 * 4.0;
+            walker_at(&mut app, &zone, zone.on_ground(x, 225.0))
+        })
+        .collect();
+    if drone {
+        let mut queue = CommandQueue::default();
+        let d = {
+            let mut c = Commands::new(&mut queue, app.world());
+            super::drone::spawn_drone(
+                &mut c,
+                me + Vec3::new(0.0, 18.0, 20.0),
+                Job {
+                    kind: JobKind::Survey,
+                    site: me,
+                    duration: 999.0,
+                    exit: me,
+                },
+            )
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        fighters.push(d);
+    }
+    for w in &fighters {
+        let mut aw = app.world_mut().get_mut::<Awareness>(*w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(*w).unwrap() = Brain::Engage;
+    }
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = true;
+    app.world_mut().resource_mut::<Calls>().0.clear();
+    (app, player, zone, me, fighters)
+}
+
+fn role_of(app: &App, e: Entity) -> Option<super::squad::Role> {
+    app.world()
+        .get::<super::squad::SquadRole>(e)
+        .map(|r| r.role)
+}
+
+/// Three walkers on you: one pins, one flanks, and one makes for the way
+/// to your rendezvous and gets between you and it. Each says its part
+/// once.
+#[test]
+fn three_walkers_hold_flank_and_cut_you_off() {
+    use super::squad::Role;
+    let (mut app, player, zone, me, w) = squad_app(3, false);
+    let rv = super::squad::your_rendezvous(&zone, None, me).expect("a rendezvous");
+    let toward = Vec2::new(rv.x - me.x, rv.z - me.z).normalize();
+    let mut ahead: f32 = f32::MIN;
+    let mut cutter = None;
+    for _ in 0..90 * 30 {
+        put(&mut app, player, me);
+        app.update();
+        if cutter.is_none() {
+            cutter = w
+                .iter()
+                .copied()
+                .find(|e| role_of(&app, *e) == Some(Role::CutOff));
+        }
+        if let Some(c) = cutter {
+            let t = app.world().get::<Transform>(c).unwrap().translation;
+            ahead = ahead.max(Vec2::new(t.x - me.x, t.z - me.z).dot(toward));
+        }
+    }
+    let roles: Vec<Option<Role>> = w.iter().map(|e| role_of(&app, *e)).collect();
+    assert!(roles.contains(&Some(Role::Pin)), "{roles:?}");
+    assert!(roles.contains(&Some(Role::Flank)), "{roles:?}");
+    assert!(cutter.is_some(), "{roles:?}");
+    assert!(
+        ahead > 10.0,
+        "the cut-off got out between you and the rendezvous: {ahead:.1} m toward it"
+    );
+    let calls = &app.world().resource::<Calls>().0;
+    for role in [Role::Pin, Role::Flank, Role::CutOff] {
+        assert_eq!(
+            calls.iter().filter(|c| c.role == role).count(),
+            1,
+            "{role:?} said once: {calls:?}"
+        );
+    }
+}
+
+/// With a drone among them it spots for the flanker: over its way in,
+/// with its light down on it.
+#[test]
+fn a_drone_lights_the_flankers_way() {
+    use super::squad::Role;
+    let (mut app, player, _zone, me, w) = squad_app(2, true);
+    let drone = *w.last().unwrap();
+    let mut closest = f32::MAX;
+    for _ in 0..90 * 12 {
+        put(&mut app, player, me);
+        app.update();
+        if let Some(r) = app.world().get::<super::squad::SquadRole>(drone) {
+            let at = app.world().get::<Transform>(drone).unwrap().translation;
+            closest = closest.min(Vec2::new(at.x - r.post.x, at.z - r.post.z).length());
+        }
+    }
+    assert_eq!(role_of(&app, drone), Some(Role::Spot));
+    assert!(
+        closest < 6.0,
+        "over the flanker's way in: {closest:.1} m off"
+    );
+    let lights = app
+        .world_mut()
+        .query::<&super::squad::SpotterLight>()
+        .iter(app.world())
+        .filter(|l| l.drone == drone)
+        .count();
+    assert_eq!(lights, 1, "its light on");
+}
+
+/// A radio you carry says it: which way the flanker's coming round.
+/// Without one, nothing's said.
+#[test]
+fn your_radio_says_where_the_flanker_goes() {
+    let run = |radio: bool| {
+        let (mut app, player, _zone, me, _w) = squad_app_with(2, false, radio);
+        for _ in 0..90 * 3 {
+            put(&mut app, player, me);
+            app.update();
+        }
+        let flank = app
+            .world()
+            .resource::<Calls>()
+            .0
+            .iter()
+            .find(|c| c.role == super::squad::Role::Flank)
+            .copied()
+            .expect("a flank call");
+        let way =
+            crate::raid::lines::bearing_word(Vec2::new(flank.post.x - me.x, flank.post.z - me.z));
+        let said: Vec<String> = app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .map(|(t, _)| t.clone())
+            .collect();
+        (said, way)
+    };
+    let (said, way) = run(true);
+    assert!(
+        said.iter().any(|l| l.contains(way) && l.contains("round")),
+        "the flanker's way, {way}: {said:?}"
+    );
+    let (said, _) = run(false);
+    assert!(
+        !said.iter().any(|l| l.contains("round")),
+        "no radio, no word: {said:?}"
+    );
+}
+
+/// With coordination off (the sims' other arm), they fight alone: no
+/// roles, no calls, nobody flanks.
+#[test]
+fn uncoordinated_they_fight_alone() {
+    let (mut app, player, _zone, me, w) = squad_app(3, false);
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    for _ in 0..90 * 5 {
+        put(&mut app, player, me);
+        app.update();
+    }
+    assert!(w.iter().all(|e| role_of(&app, *e).is_none()));
+    assert!(app.world().resource::<Calls>().0.is_empty());
+    assert!(
+        w.iter()
+            .all(|e| !app.world().entity(*e).contains::<super::walker::Flanker>())
+    );
+}
+
+/// A pane a machine breaks going through is its own doing: no sign, and
+/// it doesn't turn to its own crash. One broken with no machine at it is
+/// a sign.
+#[test]
+fn what_a_machine_breaks_is_no_sign_of_you() {
+    let (mut app, player, zone) = app(None);
+    put(&mut app, player, zone.on_ground(100.0, 330.0));
+    let at = zone.on_ground(100.0, 200.0) + Vec3::Y;
+    let w = walker_at(&mut app, &zone, at - Vec3::Y);
+    let broke = |app: &mut App, at: Vec3| {
+        app.world_mut().write_message(crate::destruction::Broke {
+            at,
+            stuff: crate::destruction::Stuff::Glass,
+            size: 1.0,
+        });
+        app.update();
+        app.update();
+        app.world().resource::<super::disturbed::Signs>().0.len()
+    };
+    assert_eq!(broke(&mut app, at), 0, "the walker's own");
+    assert!(
+        app.world()
+            .get::<Awareness>(w)
+            .unwrap()
+            .last_known
+            .is_none(),
+        "and it didn't hear it as anyone's"
+    );
+    assert_eq!(
+        broke(&mut app, at + Vec3::new(30.0, 0.0, 0.0)),
+        1,
+        "someone's"
+    );
+}
+
+/// A walker on its way to a flank holds its fire, however well it sees
+/// you; at its post, it opens up.
+#[test]
+fn a_flanker_on_its_way_holds_its_fire() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<Entity>);
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Fired>().add_systems(
+        Last,
+        |mut s: MessageReader<Shot>, mut f: ResMut<Fired>| {
+            f.0.extend(s.read().filter_map(|s| s.shooter))
+        },
+    );
+    app.world_mut()
+        .resource_mut::<super::squad::Coordination>()
+        .on = false;
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 222.0);
+    let mut queue = CommandQueue::default();
+    let w = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    let engage = |app: &mut App| {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    };
+    engage(&mut app);
+    let run = |app: &mut App, post: Option<Vec3>, secs: f32| {
+        app.world_mut().resource_mut::<Fired>().0.clear();
+        for _ in 0..(90.0 * secs) as usize {
+            put(app, player, me);
+            let here = app.world().get::<Transform>(w).unwrap().translation;
+            app.world_mut()
+                .entity_mut(w)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Flank,
+                    target: player,
+                    post: post.unwrap_or(here),
+                });
+            app.update();
+        }
+        app.world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .filter(|e| **e == w)
+            .count()
+    };
+    // Its post far off, round your side: it goes, and holds its fire.
+    let away = zone.on_ground(140.0, 200.0);
+    assert_eq!(
+        run(&mut app, Some(away), 4.0),
+        0,
+        "held its fire on the way"
+    );
+    // There (its post where it stands): it fires.
+    engage(&mut app);
+    assert!(run(&mut app, None, 6.0) > 0, "and fires from its post");
+}
+
+/// While a squadmate moves up, the pinner suppresses: more rounds, on
+/// where it last saw you even once you're out of sight. Its rounds count
+/// the cadence; nothing moving up, it fires at its usual rate.
+#[test]
+fn the_pinner_suppresses_while_one_moves_up() {
+    use crate::weapons::ballistics::Shot;
+    #[derive(Resource, Default)]
+    struct Fired(Vec<(Entity, Vec3)>);
+    let run = |covering: bool| {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Fired>().add_systems(
+            Last,
+            |mut s: MessageReader<Shot>, mut f: ResMut<Fired>| {
+                f.0.extend(s.read().filter_map(|s| Some((s.shooter?, s.direction))))
+            },
+        );
+        app.world_mut()
+            .resource_mut::<super::squad::Coordination>()
+            .on = false;
+        let me = zone.on_ground(100.0, 200.0);
+        put(&mut app, player, me);
+        let at = zone.on_ground(100.0, 222.0);
+        let mut queue = CommandQueue::default();
+        let (w, mate) = {
+            let mut c = Commands::new(&mut queue, app.world());
+            let job = Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            };
+            (
+                super::walker::spawn_walker(&mut c, &zone, at, job.clone()),
+                super::walker::spawn_walker_with(
+                    &mut c,
+                    &zone,
+                    zone.on_ground(130.0, 222.0),
+                    job,
+                    false,
+                    130.0,
+                ),
+            )
+        };
+        queue.apply(app.world_mut());
+        app.update();
+        {
+            let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+            aw.target = Some(player);
+            aw.last_known = Some(me);
+            aw.suspicion = 1.0;
+        }
+        *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+        for _ in 0..(90 * 8) {
+            put(&mut app, player, me);
+            app.world_mut()
+                .entity_mut(w)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Pin,
+                    target: player,
+                    post: at,
+                });
+            // The mate's post far off (moving up) or where it stands.
+            let here = app.world().get::<Transform>(mate).unwrap().translation;
+            app.world_mut()
+                .entity_mut(mate)
+                .insert(super::squad::SquadRole {
+                    role: super::squad::Role::Flank,
+                    target: player,
+                    post: if covering {
+                        zone.on_ground(140.0, 190.0)
+                    } else {
+                        here
+                    },
+                });
+            // (It's the cadence being counted, not you going down.)
+            if let Some(mut h) = app.world_mut().get_mut::<crate::health::Health>(player) {
+                h.hp = h.max;
+                h.bleeding = 0.0;
+            }
+            app.update();
+        }
+        let n = app
+            .world()
+            .resource::<Fired>()
+            .0
+            .iter()
+            .filter(|(e, _)| *e == w)
+            .count();
+        let marked = app.world().get::<super::walker::Suppressing>(w).is_some();
+        (n, marked)
+    };
+    let (alone, marked_alone) = run(false);
+    let (covering, marked) = run(true);
+    assert!(marked && !marked_alone, "it shows it's suppressing");
+    assert!(
+        covering as f32 >= alone as f32 * 1.8,
+        "a faster cadence: {covering} rounds against {alone}"
+    );
+}
+
+#[derive(Resource, Default)]
+struct Struck(Vec<super::hazards::HazardStruck>);
+
+/// One of every machine kind, each at `at(k)`.
+fn every_machine(
+    app: &mut App,
+    zone: &Zone,
+    at: impl Fn(usize) -> Vec3,
+) -> Vec<(super::hazards::Machine, Entity)> {
+    use super::hazards::{MACHINES, Machine};
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let mut queue = CommandQueue::default();
+    let made: Vec<(Machine, Entity)> = {
+        let mut c = Commands::new(&mut queue, app.world());
+        MACHINES
+            .iter()
+            .enumerate()
+            .map(|(k, m)| {
+                let p = at(k);
+                let job = Job {
+                    kind: JobKind::Watch,
+                    site: p,
+                    duration: 999.0,
+                    exit: p,
+                };
+                let e = match m {
+                    Machine::Drone => super::drone::spawn_drone(&mut c, p + Vec3::Y * 1.5, job),
+                    Machine::Walker => super::walker::spawn_walker(&mut c, zone, p, job),
+                    Machine::Crawler => {
+                        let e = super::walker::spawn_walker_sized(
+                            &mut c, zone, p, job, true, 60.0, 0.6, None,
+                        );
+                        c.entity(e).insert(super::indoor::Crawler::default());
+                        e
+                    }
+                    Machine::Hound => super::hound::spawn_hound(&mut c, zone, p, job),
+                    Machine::Heavy => super::heavy::spawn_heavy(&mut c, zone, &catalog, p, job),
+                    Machine::Grappler => super::grappler::spawn_grappler(&mut c, zone, p, job),
+                    Machine::Dirigible => {
+                        super::dirigible::spawn_dirigible(&mut c, p + Vec3::Y * 40.0, job)
+                    }
+                };
+                (*m, e)
+            })
+            .collect()
+    };
+    queue.apply(app.world_mut());
+    app.update();
+    made
+}
+
+/// Every machine kind in every anomaly kind: what the table says happens
+/// does, and is told (`HazardStruck`); "unaffected" is never told.
+#[test]
+fn every_machine_in_every_anomaly_does_as_the_table_says() {
+    use super::hazards::{Effect, Hazard, effect};
+    use extraction_core::anomaly::AnomalyKind;
+    let mut wrong = vec![];
+    for kind in AnomalyKind::ALL {
+        let (mut app, player, zone) = app(None);
+        app.init_resource::<Struck>().add_systems(
+            Last,
+            |mut m: MessageReader<super::hazards::HazardStruck>, mut s: ResMut<Struck>| {
+                s.0.extend(m.read().copied())
+            },
+        );
+        put(&mut app, player, zone.on_ground(100.0, 380.0));
+        let spot = |k: usize| zone.on_ground(60.0 + k as f32 * 30.0, 240.0);
+        for k in 0..super::hazards::MACHINES.len() {
+            crate::anomaly::spawn_anomaly(app.world_mut(), kind, spot(k), 4.0, None);
+        }
+        let made = every_machine(&mut app, &zone, spot);
+        for _ in 0..(90 * 8) {
+            app.update();
+        }
+        let struck = app.world().resource::<Struck>().0.clone();
+        let hazard = Hazard::of(kind);
+        for (m, e) in made {
+            let want = effect(m, hazard);
+            let told: Vec<Effect> = struck
+                .iter()
+                .filter(|s| s.robot == e && s.hazard == hazard)
+                .map(|s| s.effect)
+                .collect();
+            let ok = match want {
+                Effect::Unaffected => told.is_empty(),
+                // A lift slows while it winds, throws when it pops; a well
+                // drags, and crushes at its heart.
+                Effect::Thrown => told.contains(&Effect::Thrown) || told.contains(&Effect::Slowed),
+                Effect::Slowed => told.contains(&Effect::Slowed) || told.contains(&Effect::Hurt),
+                w => told.contains(&w),
+            };
+            if !ok {
+                wrong.push(format!(
+                    "{m:?} in a {kind:?}: wanted {want:?}, told {told:?}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A gas flash, a mine and an EMP by every machine kind: each machine the
+/// table says it touches is told; the rest aren't.
+#[test]
+fn every_machine_by_every_blast_is_told() {
+    use super::hazards::{Effect, Hazard, effect};
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Struck>().add_systems(
+        Last,
+        |mut m: MessageReader<super::hazards::HazardStruck>, mut s: ResMut<Struck>| {
+            s.0.extend(m.read().copied())
+        },
+    );
+    put(&mut app, player, zone.on_ground(100.0, 380.0));
+    let spot = |k: usize| zone.on_ground(60.0 + k as f32 * 30.0, 240.0);
+    let made = every_machine(&mut app, &zone, spot);
+    let mut wrong = vec![];
+    for hazard in [Hazard::Gas, Hazard::Mine, Hazard::Emp] {
+        app.world_mut().resource_mut::<Struck>().0.clear();
+        for (_, e) in &made {
+            let at = app
+                .world()
+                .get::<GlobalTransform>(*e)
+                .unwrap()
+                .translation();
+            match hazard {
+                Hazard::Gas => {
+                    app.world_mut()
+                        .write_message(crate::world::workings::GasIgnited {
+                            site: Entity::PLACEHOLDER,
+                            pocket: 0,
+                            at,
+                        });
+                }
+                Hazard::Mine => {
+                    app.world_mut().write_message(super::minelayer::MineEvent {
+                        at,
+                        what: super::minelayer::MineAct2::Blast,
+                    });
+                }
+                _ => {
+                    app.world_mut()
+                        .write_message(crate::gadgets::EmpBlast { at, radius: 3.0 });
+                }
+            }
+        }
+        for _ in 0..3 {
+            app.update();
+        }
+        let struck = app.world().resource::<Struck>().0.clone();
+        for (m, e) in &made {
+            let want = effect(*m, hazard);
+            let told = struck
+                .iter()
+                .any(|s| s.robot == *e && s.hazard == hazard && s.effect == want);
+            if told != (want != Effect::Unaffected) {
+                wrong.push(format!(
+                    "{m:?} by a {hazard:?}: wanted {want:?}, told {told}"
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A walker on its rounds goes round a burner in its way; chasing you
+/// hard (in sight, close), it comes straight through.
+#[test]
+fn walkers_go_round_what_hurts_them_unless_chasing_hard() {
+    let (mut app, player, zone) = app(None);
+    let a = zone.on_ground(60.0, 240.0);
+    let b = zone.on_ground(100.0, 240.0);
+    let mid = zone.on_ground(80.0, 240.0);
+    crate::anomaly::spawn_anomaly(
+        app.world_mut(),
+        extraction_core::anomaly::AnomalyKind::Burner,
+        mid,
+        4.0,
+        None,
+    );
+    app.update();
+    app.update();
+    let wary = app
+        .world()
+        .get_resource::<super::hazards::Wary>()
+        .expect("a wary grid")
+        .0
+        .clone();
+    let plain = app.world().resource::<super::walker::Nav>().0.clone();
+    let near = |path: &[[f32; 2]]| {
+        path.windows(2)
+            .map(|w| {
+                // Closest the leg comes to the burner.
+                let (p, q) = (Vec2::from(w[0]), Vec2::from(w[1]));
+                let c = Vec2::new(mid.x, mid.z);
+                let t = ((c - p).dot(q - p) / (q - p).length_squared().max(1e-6)).clamp(0.0, 1.0);
+                (p + (q - p) * t).distance(c)
+            })
+            .fold(f32::MAX, f32::min)
+    };
+    let round = wary.path([a.x, a.z], [b.x, b.z]).expect("a way round");
+    let straight = plain.path([a.x, a.z], [b.x, b.z]).expect("a way");
+    assert!(near(&round) > 4.0, "round it: {:.1} m off", near(&round));
+    assert!(near(&straight) < 4.0, "the plain way crosses it");
+    let _ = player;
+    // Chasing hard: the plain grid.
+    let aware = Awareness {
+        can_see_target: true,
+        ..default()
+    };
+    // Running at you: straight. Holding (not closing), or not in a
+    // fight: round.
+    assert!(super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(30.0),
+        0.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Transit { to: b },
+        &aware,
+        Some(30.0),
+        2.0
+    ));
+    assert!(!super::hazards::chasing_hard(
+        &Brain::Engage,
+        &aware,
+        Some(60.0),
+        2.0
+    ));
+}
+
+/// An engaged hound with you in sight runs you down: it closes on you.
+#[test]
+fn an_engaged_hound_closes_on_you() {
+    let (mut app, player, zone) = app(None);
+    let me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let at = zone.on_ground(100.0, 225.0);
+    let mut queue = CommandQueue::default();
+    let h = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::hound::spawn_hound(
+            &mut c,
+            &zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: at,
+                duration: 999.0,
+                exit: at,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..3 {
+        app.update();
+    }
+    {
+        let mut aw = app.world_mut().get_mut::<Awareness>(h).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(h).unwrap() = Brain::Engage;
+    let start = flat(app.world().get::<Transform>(h).unwrap().translation - me);
+    let mut closest = start;
+    for _ in 0..(90 * 6) {
+        put(&mut app, player, me);
+        app.update();
+        let d = flat(app.world().get::<Transform>(h).unwrap().translation - me);
+        closest = closest.min(d);
+    }
+    let brain = app.world().get::<Brain>(h).unwrap().clone();
+    assert!(
+        closest < start - 10.0,
+        "it closed on you: {start:.1} m -> {closest:.1} m (brain {brain:?})"
+    );
+}
+
+/// A walker that has you in sight and watches you pull away past
+/// `walker::PURSUE_FROM` leaves its cover and comes after you.
+#[test]
+fn a_walker_goes_after_a_runner_getting_away() {
+    let (mut app, player, zone) = app(None);
+    let mut me = zone.on_ground(100.0, 200.0);
+    put(&mut app, player, me);
+    let w = walker_at(&mut app, &zone, zone.on_ground(100.0, 222.0));
+    {
+        let mut aw = app.world_mut().get_mut::<Awareness>(w).unwrap();
+        aw.target = Some(player);
+        aw.last_known = Some(me);
+        aw.suspicion = 1.0;
+    }
+    *app.world_mut().get_mut::<Brain>(w).unwrap() = Brain::Engage;
+    let mut chased = false;
+    for _ in 0..(90 * 8) {
+        me = zone.on_ground(me.x, me.z - 3.0 / 90.0);
+        put(&mut app, player, me);
+        app.update();
+        chased |= app
+            .world()
+            .get::<super::walker::Walker>(w)
+            .unwrap()
+            .pursuing;
+    }
+    let d = flat(app.world().get::<Transform>(w).unwrap().translation - me);
+    assert!(chased, "it went after you ({d:.1} m off at the end)");
+}

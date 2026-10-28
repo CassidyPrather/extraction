@@ -44,6 +44,20 @@ impl Plugin for GadgetVisualsPlugin {
 #[derive(Component)]
 struct Beam;
 
+/// A lit torch's beam, down its -Z.
+pub fn torch_beam() -> SpotLight {
+    SpotLight {
+        color: Color::srgb(1.0, 0.95, 0.85),
+        intensity: 250_000.0,
+        range: 45.0,
+        radius: 0.01,
+        inner_angle: 0.12,
+        outer_angle: 0.38,
+        shadow_maps_enabled: true,
+        ..default()
+    }
+}
+
 /// Powered lights get a spotlight, pointing down the item's -Z.
 fn beams(
     mut commands: Commands,
@@ -59,16 +73,7 @@ fn beams(
             (true, None) => {
                 commands.entity(e).with_child((
                     Beam,
-                    SpotLight {
-                        color: Color::srgb(1.0, 0.95, 0.85),
-                        intensity: 250_000.0,
-                        range: 45.0,
-                        radius: 0.01,
-                        inner_angle: 0.12,
-                        outer_angle: 0.38,
-                        shadow_maps_enabled: true,
-                        ..default()
-                    },
+                    torch_beam(),
                     Transform::from_xyz(0.0, 0.0, -0.06),
                 ));
             }

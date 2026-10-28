@@ -149,6 +149,26 @@ A good map makes the crossing a decision.
   `CHOICE_SHARED`). Not one corridor out of the drop. Now: Marrow 112°
   (Logging camp or Old farm), Kettle 146°, Cinder 88°, Sallow 122°,
   Rime 134°.
+- **The first jobs have cover within a four-second sprint all the way**:
+  for the first job of each kind that sends you into the valley (the
+  first contract step that scouts, brings or plants, and the ladder's
+  letter and ledger: `map_lint::first_jobs`), every way there (the easy
+  way, straight across, and by any place within 1.3 times the direct
+  walk, `FIRST_DETOUR`) has cover within 18 m of every step
+  (`FIRST_RUN`: four seconds at a sprint), but for a run of 10 m
+  (`FIRST_OPEN`). Cover is any building or prop, a boulder or three
+  trunks. The ways home from each to its two nearest rendezvous are
+  measured against the main routes' cover, `COVER_GAP` within
+  `COVER_REACH` (Onboarding's newcomers fell going home west from the
+  Village past the pumping station; laden and warned, not a sprint);
+  held (Sallow's drained bed has its two props for it). Three of Onboarding's four newcomers on Marrow's mast relay
+  died to a drone 7-17 s after its lock in the open past the Village.
+  Across the open, cars left on the verges and log piles by the way
+  (light props: no view load). And roofs on the way, for a drone: the
+  measure gives the farthest any first job walks from a door under a
+  roof (Marrow's mast relay: 97 m, by the gate; the pumping station's
+  tool shed, the rangers' store and the road-menders' hut past the
+  Village).
 - **The way out is a choice too**: from every rich place (a point of
   interest or artifact field in a danger-2 region or worse), at least
   two rendezvous are a sensible walk away: within 300 m of the nearest
@@ -594,6 +614,14 @@ loot, a body to crouch behind, and doors, bonnet, boot and wheels that
 come off (Destruction's breakables). They're cover, and they say what
 happened on the roads out.
 
+A wreck is light for `VIEW_MAX` (one placement) but not for the sun's
+shadows: its breakable parts are some forty shadow-casting meshes. Seven
+on the verges by Marrow's Village took the m02_village view to 945
+shadow draws over Performance's 900 (`render::budget`). Where cover is
+only cover, near a village or a lookbook view, a log pile (one mesh's
+worth) does the job; keep wrecks for the roads out, where they tell
+something, a few at a time.
+
 - **On the verge, never the road.** Just off the carriageway, angled as
   if pulled over or slewed; `Overlap` finds one on a road (they aren't
   among the prefabs a road may run into). The road stays the exposed
@@ -632,6 +660,20 @@ and after: Marrow's routes 95/96/93% with 30/30/22 m open at most, now
 turn and the village was the gap); Cinder's North sidings route 93% and
 30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
 route 98% and 10 m, now 99% and 4 m.
+
+## Terraces
+
+A plateau with a `height` is ground the map declares: a terrace, a
+ledge, a dam's crest, a stepped street. Fitting a building in
+(`terrain::settle`: flat under its walls, then a ramp of 0.5 m per metre
+back up to the ground, out to 8 m) never digs below a declared terrace
+the building doesn't stand on. A road's fill on top of one it may still
+trim. On its own terrace a building settles as anywhere else, so put it
+wholly on the terrace or wholly off it: one that hangs off the edge
+stands on its lowest corner and lowers the terrace to it. `map_lint`
+builds the land with and without settling and finds any declared ground
+taken more than 0.5 m below its level (`TERRACE_CUT`). Sallow's valve
+house dug the dam-face stair down to a stuck cluster before this.
 
 ## Performance: what's in view
 

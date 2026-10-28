@@ -262,7 +262,11 @@ fn sweep(
         ResMut<Assets<StandardMaterial>>,
         ResMut<Assets<Mesh>>,
     ),
-    (mut exit, mut time): (MessageWriter<AppExit>, ResMut<Time<Virtual>>),
+    (mut exit, mut time, loaded): (
+        MessageWriter<AppExit>,
+        ResMut<Time<Virtual>>,
+        Option<Res<crate::render::timeline::Loaded>>,
+    ),
     mut boot: Local<u32>,
 ) {
     let Some(_zone) = zone else {
@@ -393,7 +397,10 @@ fn sweep(
         }
         Stage::Warm => {
             st.frames += 1;
-            if st.frames >= WARM {
+            // And everything in (`render::timeline`): a picture taken
+            // while pipelines still compile depends on the wall clock.
+            let waited = st.frames >= super::cinematic::LOAD_WAIT;
+            if st.frames >= WARM && (loaded.is_some() || waited) {
                 st.stage = Stage::Spawn;
             }
         }

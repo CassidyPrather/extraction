@@ -25,21 +25,21 @@ const IPD: f32 = 0.064;
 /// The frame's budget: two eyes' worth of draws and shadow draws, and
 /// shaded fragments at the eye size with every pixel at the one-eye
 /// overdraw cap.
-struct Stereo {
-    draws: usize,
-    shadow_draws: usize,
+pub(super) struct Stereo {
+    pub draws: usize,
+    pub shadow_draws: usize,
     /// Millions of fragments a frame, both eyes.
-    fragments_m: f32,
+    pub fragments_m: f32,
 }
 
-fn eye_px() -> f32 {
+pub(super) fn eye_px() -> f32 {
     std::env::var("BUDGET_EYE_PX")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(crate::rig::comfort::Comfort::AUTO_EYE_PX)
 }
 
-fn budget() -> Stereo {
+pub(super) fn budget() -> Stereo {
     let px = eye_px();
     Stereo {
         draws: BUDGET.draws * 2,
@@ -52,7 +52,7 @@ fn budget() -> Stereo {
 #[derive(Component)]
 struct RightEye;
 
-fn both_eyes(app: &mut App) -> (Entity, Entity) {
+pub(super) fn both_eyes(app: &mut App) -> (Entity, Entity) {
     let w = app.world_mut();
     let left = w
         .query_filtered::<Entity, With<crate::render::FreeCamera>>()
@@ -72,7 +72,20 @@ fn both_eyes(app: &mut App) -> (Entity, Entity) {
 }
 
 /// Both eyes' loads, and how many 3D views draw anything at all.
-fn measure(app: &mut App, eyes: (Entity, Entity)) -> (ViewLoad, ViewLoad, usize) {
+/// Both eyes as the headset's: a square view of the eye's field.
+pub(super) fn eye_projections(app: &mut App) {
+    let w = app.world_mut();
+    let mut q =
+        w.query_filtered::<&mut Projection, Or<(With<super::FreeCamera>, With<RightEye>)>>();
+    for mut p in q.iter_mut(w) {
+        if let Projection::Perspective(p) = &mut *p {
+            p.fov = super::budget::EYE_FOV_DEG.to_radians();
+            p.aspect_ratio = 1.0;
+        }
+    }
+}
+
+pub(super) fn measure(app: &mut App, eyes: (Entity, Entity)) -> (ViewLoad, ViewLoad, usize) {
     app.world_mut()
         .run_system_once(
             move |cams: Query<(Entity, &Camera, &VisibleEntities), With<Camera3d>>,
@@ -101,7 +114,8 @@ fn measure(app: &mut App, eyes: (Entity, Entity)) -> (ViewLoad, ViewLoad, usize)
 }
 
 fn holds(map: &str) {
-    let _one_at_a_time = super::budget::tests::heavy();
+    // Counts: draws, shadow draws, fragments.
+    let _counting = super::budget::tests::counted();
     let mut app = super::budget::tests::client_threads(map, "clearing", None);
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {

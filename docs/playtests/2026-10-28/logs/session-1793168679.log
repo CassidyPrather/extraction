@@ -1,0 +1,1569 @@
+2026-10-28T06:24:40.249974Z  INFO bevy_diagnostic::system_information_diagnostics_plugin::internal: SystemInfo { os: "Windows 10 Home", kernel: "19045", cpu: "Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz", core_count: "6", memory: "63.9 GiB" }
+2026-10-28T06:24:40.371179Z  INFO bevy_mod_openxr::openxr::init: Loaded OpenXR runtime: SteamVR/OpenXR 2.18.4
+2026-10-28T06:24:40.371449Z  INFO bevy_mod_openxr::openxr::init: Using system: SteamVR/OpenXR : lighthouse
+2026-10-28T06:24:40.889321Z  INFO extraction::render::timeline: load: plugins building at 0.96 s (frame 0)
+2026-10-28T06:24:40.918183Z  INFO bevy_pbr::cluster: GPU clustering is supported on this device.
+2026-10-28T06:24:40.918518Z  INFO bevy_render::batching::gpu_preprocessing: GPU preprocessing is fully supported on this device.
+2026-10-28T06:24:40.919363Z  INFO extraction::report: report: textures: BC7 where baked
+2026-10-28T06:24:40.919942Z  INFO bevy_winit::system: Creating new window Extraction (65v0)
+2026-10-28T06:24:41.035104Z  INFO extraction::render::timeline: load: startup begins (window, GPU) at 1.10 s (frame 0)
+2026-10-28T06:24:41.082481Z  INFO extraction::world: zone `Training Yard` built in 47 ms (241x241 heightmap)
+2026-10-28T06:24:41.085115Z  INFO extraction::player: spawning local player at [0, 12.03214, 80] (ground 12.03)
+2026-10-28T06:24:41.085155Z  INFO extraction::report: report: runtime: SteamVR/OpenXR 2.18.4
+2026-10-28T06:24:41.085866Z  INFO extraction::report: report: headset: SteamVR/OpenXR : lighthouse
+2026-10-28T06:24:41.086033Z  INFO extraction::rig::xr: eyes: 1800x1800 (60% of the runtime's 2980x2980)
+2026-10-28T06:24:41.086146Z  INFO extraction::report: report: eye targets: about 1084 MB (2 x 2980x2980, MSAA 4x)
+2026-10-28T06:24:41.086212Z  INFO extraction::rig::xr: eyes: holding the frame rate, from 1800x1800 up to 2980x2980
+2026-10-28T06:24:41.089703Z  INFO extraction::audio: sound bank: 105 sets
+2026-10-28T06:24:41.091873Z  INFO extraction::world::trees: 18 trunk colliders
+2026-10-28T06:24:41.100619Z  INFO extraction::world::trees: 88 trees scattered in 9 ms
+2026-10-28T06:24:41.135985Z  INFO extraction::world::rocks: 513 rocks scattered in 51 ms
+2026-10-28T06:24:41.172605Z  INFO extraction::render::first_sight: preload: 244 models asked for at start (render::first_sight)
+2026-10-28T06:24:41.245510Z  INFO extraction::world::buildings: 10 building loot spots
+2026-10-28T06:24:41.246425Z  INFO extraction::wildlife::flock: a flock of 16 Rooks on the shed at [24, 15, -12]
+2026-10-28T06:24:41.246605Z  INFO extraction::wildlife: wildlife: 2 perch sites (96 perches), 1 flocks, in 151 ms
+2026-10-28T06:24:41.267986Z  INFO extraction::robots::walker: navigation grid built in 8 ms
+2026-10-28T06:24:41.269959Z  INFO extraction::items::loot: 18 items rolled into 10 building loot spots
+2026-10-28T06:24:41.270725Z  INFO extraction::world::scenes: 0 staged scenes
+2026-10-28T06:24:41.271577Z  INFO extraction::render::timeline: load: startup done (zone, terrain, nav, props) at 1.34 s (frame 0)
+2026-10-28T06:24:41.271651Z  INFO firewheel_cpal: Attempting to start CPAL audio stream...
+2026-10-28T06:24:41.316954Z  INFO firewheel_cpal: Starting output audio stream with device "Some(DeviceId(Wasapi, "{0.0.0.00000000}.{f356c204-4173-4e3a-8088-9987f6ff2a57}"))" with configuration StreamConfig { channels: 2, sample_rate: 48000, buffer_size: Fixed(480) } (native sample format: F32)
+2026-10-28T06:24:41.336049Z  INFO extraction::persist: restored 14 items
+2026-10-28T06:24:41.351525Z  INFO extraction::render::timeline: load: first frame at 1.42 s (frame 1)
+2026-10-28T06:24:41.672610Z  INFO extraction::rig::xr: OpenXR runtime from XR_RUNTIME_JSON: C:\Program Files (x86)\Steam\steamapps/common/SteamVR\steamxr_win64.json
+2026-10-28T06:24:41.673691Z  INFO extraction::report: report: build: 0.1.0+g2798e450
+2026-10-28T06:24:41.780531Z  INFO extraction::report: report: valley: training_yard
+2026-10-28T06:24:41.830874Z  INFO extraction::report: report: gpu: NVIDIA GeForce RTX 3080 (Vulkan, driver NVIDIA 610.88)
+2026-10-28T06:24:41.910249Z  INFO extraction::progression: job 1: Scout { map: "marrow_creek", place: "Old farm", at: [180.0, 145.0], seen: false }
+2026-10-28T06:24:42.052321Z  INFO extraction::world::trees: forest: foliage fetched (cards, impostors)
+2026-10-28T06:24:42.054384Z  INFO extraction::world::trees: forest: 88 trees in 18 chunks
+2026-10-28T06:24:42.112341Z  WARN bevy_light: Point lights and/or spot lights are present, but no entity has `ShadowLodOrigin`, and no camera that renders to the window has been found. Consider using the `ShadowLodOrigin` component to set a LOD origin.
+2026-10-28T06:24:42.123011Z  INFO extraction::render::timeline: load: a 3D view drawing at 2.19 s (frame 1)
+2026-10-28T06:24:42.311815Z  INFO extraction::render::timeline: load: first frame rendered at 2.38 s (frame 2)
+2026-10-28T06:24:42.365682Z  INFO extraction::robots::doors: 2 doorways in 2 buildings
+2026-10-28T06:24:42.666212Z  INFO extraction::render::timeline: load: buildings dressed (props in) at 2.73 s (frame 2)
+2026-10-28T06:24:43.830756Z  INFO extraction::render::timeline: load: every model loaded (preload landed) at 3.90 s (frame 4)
+2026-10-28T06:24:44.257606Z  INFO extraction::world::impostors: impostor captured (256x640)
+2026-10-28T06:24:44.289174Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-10-28T06:24:44.318451Z  INFO extraction::world::impostors: impostor captured (256x576)
+2026-10-28T06:24:44.350663Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:24:44.364070Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:24:44.377044Z  INFO extraction::world::impostors: impostor captured (256x256)
+2026-10-28T06:24:44.389782Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:24:44.412743Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:24:44.435541Z  INFO extraction::world::impostors: impostor captured (256x448)
+2026-10-28T06:24:44.495368Z  INFO extraction::render::timeline: load: forest streamed, impostors captured at 4.56 s (frame 14)
+2026-10-28T06:24:44.570667Z  INFO extraction::raid: raid: Driver: "Kit's in the crate, front left. Look at it, press E."
+2026-10-28T06:24:44.709518Z  INFO extraction::rig::xr: headset: starting the session after 3.4 s (the load has settled)
+2026-10-28T06:24:44.709762Z  INFO extraction::render::timeline: load: headset session asked for at 4.78 s (frame 20)
+2026-10-28T06:24:44.729427Z  INFO extraction::render::timeline: load: every material and pipeline ready (ground and buildings drawn) at 4.80 s (frame 20)
+2026-10-28T06:24:44.729632Z  INFO extraction::render::timeline: load: everything in at 4.80 s (frame 20)
+2026-10-28T06:24:44.831194Z  INFO extraction::rig::xr: XR session created: driving the rig from the headset
+2026-10-28T06:24:44.831214Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-10-28T06:24:44.831458Z  INFO bevy_mod_openxr::openxr::render: XrCamera resolution: [2980, 2980]
+2026-10-28T06:24:44.860011Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attaching 1 sessions
+2026-10-28T06:24:44.985708Z  INFO bevy_mod_openxr::openxr::action_set_attaching: attached sessions!
+2026-10-28T06:24:45.000471Z  INFO bevy_mod_openxr::openxr::init: entered XR state IDLE
+2026-10-28T06:24:45.000686Z  INFO bevy_mod_openxr::openxr::init: entered XR state READY
+2026-10-28T06:24:45.001945Z  WARN bevy_render::camera: Camera order ambiguities detected for active cameras with the following priorities: {(0, Some(Window(NormalizedWindowRef(65v0))))}. To fix this, ensure there is exactly one Camera entity spawned with a given order for a given RenderTarget. Ambiguities should be resolved because either (1) multiple active cameras were spawned accidentally, which will result in rendering multiple instances of the scene or (2) for cases where multiple active cameras is intentional, ambiguities could result in unpredictable render results.
+2026-10-28T06:24:45.280421Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-10-28T06:24:45.281908Z  INFO extraction::rig::xr: input: fingers tracked (Left hand first)
+2026-10-28T06:24:45.331078Z  INFO extraction::rig::xr: input: left hand profile none
+2026-10-28T06:24:45.331217Z  INFO extraction::rig::xr: input: right hand profile none
+2026-10-28T06:24:51.363738Z  INFO extraction: frames: 419 in 10 s, mean 23.9 ms, 1% 313.1 ms, worst 936.6 ms (AtBase)
+2026-10-28T06:24:51.363770Z  INFO extraction::render::budget: cpu: main 11.9 ms a frame (1% 26.6), physics 1.4 (1% 2.5), render world 7.4 (1% 24.4)
+2026-10-28T06:24:51.363906Z  INFO extraction: gpu: 1.4 ms a frame (main_opaque_pass_3d 0.7, clustering 0.2, bin_unpacking 0.2, msaa_writeback 0.1, tonemapping 0.1, upscaling 0.1)
+2026-10-28T06:24:54.751127Z  INFO extraction::render::hold_rate::xr: eyes: 2644x2644 (89% of the runtime's width), holding the frame rate, gpu 0.9 ms of a 13.3 ms frame
+2026-10-28T06:24:58.048941Z  INFO extraction::render::timeline: load: warm-up shelf done at 18.12 s (frame 921)
+2026-10-28T06:24:58.049097Z  INFO extraction::render::warmup: warm-up: 73 kinds of thing shelved (1441 entries) over 900 frames: {"BoltMaterial": 1, "HaloMaterial": 1, "HazeExt>": 1, "ImpostorCut>": 1, "MarkFog>": 1, "ParticleMaterial": 2, "RainMaterial": 1, "ShaftMaterial": 1, "SheetMaterial": 1, "SkyMaterial": 1, "StandardMaterial": 41, "Sway>": 2, "TerrainExt>": 1, "TreeSway>": 1, "model": 7, "unworn": 10}
+2026-10-28T06:25:01.364093Z  INFO extraction: frames: 750 in 10 s, mean 13.3 ms, 1% 15.9 ms, worst 20.4 ms (AtBase)
+2026-10-28T06:25:01.364171Z  INFO extraction::render::budget: cpu: main 8.1 ms a frame (1% 9.9), physics 1.3 (1% 2.1), render world 6.0 (1% 7.9)
+2026-10-28T06:25:01.364244Z  INFO extraction: gpu: 1.4 ms a frame (main_opaque_pass_3d 0.7, clustering 0.2, bin_unpacking 0.2, msaa_writeback 0.1, tonemapping 0.1, upscaling 0.1)
+2026-10-28T06:25:04.751307Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 1.4 ms of a 13.3 ms frame
+2026-10-28T06:25:06.101837Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-10-28T06:25:11.361038Z  INFO extraction: frames: 642 in 10 s, mean 15.6 ms, 1% 28.2 ms, worst 55.5 ms (AtBase)
+2026-10-28T06:25:11.361104Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 11.0), physics 1.4 (1% 2.5), render world 6.9 (1% 18.4)
+2026-10-28T06:25:11.361233Z  INFO extraction: gpu: 4.6 ms a frame (main_opaque_pass_3d 3.3, clustering 0.3, tonemapping 0.3, bin_unpacking 0.3, upscaling 0.2, early_mesh_preprocessing 0.1)
+2026-10-28T06:25:14.768124Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.4 ms of a 26.7 ms frame
+2026-10-28T06:25:20.643173Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-10-28T06:25:20.668785Z  INFO extraction::rig::xr: input: Left grip works
+2026-10-28T06:25:20.668984Z  INFO extraction::rig::xr: input: Right grip works
+2026-10-28T06:25:20.714846Z  INFO extraction::rig::xr: input: left hand profile /interaction_profiles/valve/index_controller
+2026-10-28T06:25:20.714996Z  INFO extraction::rig::xr: input: right hand profile /interaction_profiles/valve/index_controller
+2026-10-28T06:25:21.378877Z  INFO extraction: frames: 418 in 10 s, mean 23.9 ms, 1% 29.2 ms, worst 33.1 ms (AtBase)
+2026-10-28T06:25:21.378940Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 10.3), physics 1.2 (1% 2.3), render world 13.9 (1% 18.9)
+2026-10-28T06:25:21.379055Z  INFO extraction: gpu: 11.7 ms a frame (main_opaque_pass_3d 9.5, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:25:21.558542Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4220v12 is invalid; its index now has generation 13.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:25:21.558830Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1904v11 is invalid; its index now has generation 12.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:25:24.780493Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 26.7 ms frame
+2026-10-28T06:25:25.551484Z  INFO extraction::rig::xr: input: Right trigger works
+2026-10-28T06:25:31.119988Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-10-28T06:25:31.120122Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-10-28T06:25:31.376222Z  INFO extraction: frames: 504 in 10 s, mean 19.9 ms, 1% 29.2 ms, worst 30.2 ms (AtBase)
+2026-10-28T06:25:31.376285Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.4), physics 1.2 (1% 2.4), render world 10.3 (1% 18.8)
+2026-10-28T06:25:31.376371Z  INFO extraction: gpu: 9.3 ms a frame (main_opaque_pass_3d 7.4, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:25:34.303961Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-10-28T06:25:34.304159Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-10-28T06:25:34.774025Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.8 ms of a 13.3 ms frame
+2026-10-28T06:25:41.407207Z  INFO extraction: frames: 493 in 10 s, mean 20.3 ms, 1% 31.0 ms, worst 55.3 ms (AtBase)
+2026-10-28T06:25:41.407264Z  INFO extraction::render::budget: cpu: main 8.2 ms a frame (1% 10.5), physics 1.1 (1% 1.9), render world 11.3 (1% 19.4)
+2026-10-28T06:25:41.407409Z  INFO extraction: gpu: 8.0 ms a frame (main_opaque_pass_3d 6.6, bin_unpacking 0.3, clustering 0.3, tonemapping 0.3, upscaling 0.2, early_mesh_preprocessing 0.1)
+2026-10-28T06:25:44.810947Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 26.7 ms frame
+2026-10-28T06:25:51.418219Z  INFO extraction: frames: 383 in 10 s, mean 26.1 ms, 1% 29.9 ms, worst 41.7 ms (AtBase)
+2026-10-28T06:25:51.418298Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 9.9), physics 1.1 (1% 1.7), render world 16.1 (1% 19.6)
+2026-10-28T06:25:51.418407Z  INFO extraction: gpu: 14.6 ms a frame (main_opaque_pass_3d 12.5, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:25:53.018729Z  INFO extraction::onboarding: onboarding: Wrist done
+2026-10-28T06:25:54.797235Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.1 ms of a 13.3 ms frame
+2026-10-28T06:26:01.430698Z  INFO extraction: frames: 549 in 10 s, mean 18.2 ms, 1% 28.9 ms, worst 34.2 ms (AtBase)
+2026-10-28T06:26:01.430786Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.2), physics 1.2 (1% 2.2), render world 8.9 (1% 19.3)
+2026-10-28T06:26:01.430893Z  INFO extraction: gpu: 8.8 ms a frame (main_opaque_pass_3d 6.9, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:04.809604Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 13.3 ms frame
+2026-10-28T06:26:11.443760Z  INFO extraction: frames: 517 in 10 s, mean 19.4 ms, 1% 28.8 ms, worst 36.8 ms (AtBase)
+2026-10-28T06:26:11.443851Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.2 (1% 2.4), render world 9.8 (1% 18.8)
+2026-10-28T06:26:11.443931Z  INFO extraction: gpu: 9.6 ms a frame (main_opaque_pass_3d 7.6, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:14.832365Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 26.7 ms frame
+2026-10-28T06:26:16.355177Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1879v15 is invalid; its index now has generation 16.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:16.355326Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3065v16 is invalid; its index now has generation 17.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:18.394923Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4129v17 is invalid; its index now has generation 18.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:18.395059Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1883v15 is invalid; its index now has generation 16.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:21.443437Z  INFO extraction: frames: 443 in 10 s, mean 22.6 ms, 1% 29.2 ms, worst 29.7 ms (AtBase)
+2026-10-28T06:26:21.443506Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 9.9), physics 1.1 (1% 2.0), render world 12.8 (1% 19.0)
+2026-10-28T06:26:21.443607Z  INFO extraction: gpu: 11.2 ms a frame (main_opaque_pass_3d 9.0, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:24.862370Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:26:27.520089Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3617v5 is invalid; its index now has generation 6.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:27.520223Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4008v8 is invalid; its index now has generation 9.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:26:31.486241Z  INFO extraction: frames: 427 in 10 s, mean 23.5 ms, 1% 29.6 ms, worst 31.0 ms (AtBase)
+2026-10-28T06:26:31.486293Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.1), physics 1.1 (1% 2.1), render world 13.7 (1% 19.4)
+2026-10-28T06:26:31.486414Z  INFO extraction: gpu: 11.2 ms a frame (main_opaque_pass_3d 9.0, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:34.854023Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.1 ms of a 13.3 ms frame
+2026-10-28T06:26:41.496869Z  INFO extraction: frames: 502 in 10 s, mean 19.9 ms, 1% 28.7 ms, worst 30.0 ms (AtBase)
+2026-10-28T06:26:41.496946Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 9.9), physics 1.1 (1% 2.1), render world 10.4 (1% 18.9)
+2026-10-28T06:26:41.497034Z  INFO extraction: gpu: 10.3 ms a frame (main_opaque_pass_3d 8.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:44.857101Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-10-28T06:26:51.525398Z  INFO extraction: frames: 436 in 10 s, mean 23.0 ms, 1% 28.8 ms, worst 29.4 ms (AtBase)
+2026-10-28T06:26:51.525441Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.1), physics 1.1 (1% 2.1), render world 13.3 (1% 19.0)
+2026-10-28T06:26:51.525580Z  INFO extraction: gpu: 10.8 ms a frame (main_opaque_pass_3d 8.9, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:26:54.888203Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 26.7 ms frame
+2026-10-28T06:27:01.526270Z  INFO extraction: frames: 385 in 10 s, mean 26.0 ms, 1% 29.4 ms, worst 29.9 ms (AtBase)
+2026-10-28T06:27:01.526312Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 9.9), physics 1.1 (1% 1.7), render world 16.3 (1% 19.2)
+2026-10-28T06:27:01.526474Z  INFO extraction: gpu: 11.9 ms a frame (main_opaque_pass_3d 10.0, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:04.886200Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.7 ms of a 26.7 ms frame
+2026-10-28T06:27:11.541931Z  INFO extraction: frames: 422 in 10 s, mean 23.8 ms, 1% 29.5 ms, worst 31.0 ms (AtBase)
+2026-10-28T06:27:11.541992Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 2.0), render world 13.9 (1% 18.9)
+2026-10-28T06:27:11.542104Z  INFO extraction: gpu: 10.9 ms a frame (main_opaque_pass_3d 8.9, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:14.911173Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.9 ms of a 26.7 ms frame
+2026-10-28T06:27:21.546612Z  INFO extraction: frames: 486 in 10 s, mean 20.6 ms, 1% 29.6 ms, worst 30.4 ms (AtBase)
+2026-10-28T06:27:21.546679Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.4), physics 1.2 (1% 2.5), render world 10.9 (1% 19.0)
+2026-10-28T06:27:21.546786Z  INFO extraction: gpu: 9.7 ms a frame (main_opaque_pass_3d 7.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:22.359209Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3067v27 is invalid; its index now has generation 28.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:22.359341Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4139v25 is invalid; its index now has generation 26.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:24.912505Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.2 ms of a 26.7 ms frame
+2026-10-28T06:27:26.424923Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2404v20 is invalid; its index now has generation 21.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:26.425083Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3062v20 is invalid; its index now has generation 21.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:31.549214Z  INFO extraction: frames: 555 in 10 s, mean 18.0 ms, 1% 28.2 ms, worst 30.0 ms (AtBase)
+2026-10-28T06:27:31.549278Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.2), physics 1.2 (1% 2.3), render world 8.6 (1% 19.0)
+2026-10-28T06:27:31.549382Z  INFO extraction: gpu: 8.9 ms a frame (main_opaque_pass_3d 7.1, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:32.563207Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4149v26 is invalid; its index now has generation 27.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:32.563344Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4255v26 is invalid; its index now has generation 27.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:27:34.939769Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 26.7 ms frame
+2026-10-28T06:27:41.563062Z  INFO extraction: frames: 453 in 10 s, mean 22.1 ms, 1% 28.8 ms, worst 29.0 ms (AtBase)
+2026-10-28T06:27:41.563097Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.5), physics 1.1 (1% 2.3), render world 12.5 (1% 19.2)
+2026-10-28T06:27:41.563232Z  INFO extraction: gpu: 9.9 ms a frame (main_opaque_pass_3d 8.0, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:44.955520Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.6 ms of a 26.7 ms frame
+2026-10-28T06:27:51.589874Z  INFO extraction: frames: 409 in 10 s, mean 24.5 ms, 1% 29.3 ms, worst 30.4 ms (AtBase)
+2026-10-28T06:27:51.589924Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.3), physics 1.2 (1% 1.9), render world 14.6 (1% 19.3)
+2026-10-28T06:27:51.590114Z  INFO extraction: gpu: 11.3 ms a frame (main_opaque_pass_3d 9.2, tonemapping 0.6, clustering 0.5, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:27:54.965712Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.0 ms of a 26.7 ms frame
+2026-10-28T06:28:01.606380Z  INFO extraction: frames: 387 in 10 s, mean 25.9 ms, 1% 28.8 ms, worst 28.9 ms (AtBase)
+2026-10-28T06:28:01.606459Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.0), physics 1.1 (1% 1.8), render world 16.0 (1% 19.1)
+2026-10-28T06:28:01.606594Z  INFO extraction: gpu: 11.9 ms a frame (main_opaque_pass_3d 9.8, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:28:04.990973Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.1 ms of a 26.7 ms frame
+2026-10-28T06:28:11.604304Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 28.6 ms, worst 32.3 ms (AtBase)
+2026-10-28T06:28:11.604349Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.1 (1% 1.6), render world 16.8 (1% 19.3)
+2026-10-28T06:28:11.604571Z  INFO extraction: gpu: 12.0 ms a frame (main_opaque_pass_3d 9.9, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:28:13.603512Z  INFO extraction::rig::xr: input: Right stick works
+2026-10-28T06:28:15.019761Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.5 ms of a 13.3 ms frame
+2026-10-28T06:28:15.667844Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4260v26 is invalid; its index now has generation 27.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:15.668042Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3070v26 is invalid; its index now has generation 27.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:15.950789Z  INFO extraction::rig::xr: input: Left stick works
+2026-10-28T06:28:21.615141Z  INFO extraction: frames: 409 in 10 s, mean 24.5 ms, 1% 28.9 ms, worst 36.1 ms (AtBase)
+2026-10-28T06:28:21.615219Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 10.5), physics 1.1 (1% 2.0), render world 14.7 (1% 19.0)
+2026-10-28T06:28:21.615454Z  INFO extraction: gpu: 11.0 ms a frame (main_opaque_pass_3d 8.8, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:28:25.008463Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.3 ms of a 13.3 ms frame
+2026-10-28T06:28:31.601674Z  INFO extraction: frames: 586 in 10 s, mean 17.1 ms, 1% 28.7 ms, worst 30.0 ms (AtBase)
+2026-10-28T06:28:31.601747Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.7), physics 1.3 (1% 2.5), render world 7.8 (1% 19.1)
+2026-10-28T06:28:31.601855Z  INFO extraction: gpu: 8.7 ms a frame (main_opaque_pass_3d 6.7, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:28:35.017003Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 2.3 ms of a 13.3 ms frame
+2026-10-28T06:28:39.516275Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4168v27 is invalid; its index now has generation 28.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:39.516422Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3850v25 is invalid; its index now has generation 26.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:41.628989Z  INFO extraction: frames: 495 in 10 s, mean 20.2 ms, 1% 29.4 ms, worst 39.8 ms (AtBase)
+2026-10-28T06:28:41.629057Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.4), physics 1.2 (1% 2.7), render world 10.7 (1% 19.2)
+2026-10-28T06:28:41.629167Z  INFO extraction: gpu: 9.3 ms a frame (main_opaque_pass_3d 7.4, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:28:42.562787Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3814v29 is invalid; its index now has generation 30.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:42.562928Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4255v32 is invalid; its index now has generation 33.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:28:45.042441Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.7 ms of a 26.7 ms frame
+2026-10-28T06:28:51.632944Z  INFO extraction: frames: 390 in 10 s, mean 25.6 ms, 1% 28.8 ms, worst 29.7 ms (AtBase)
+2026-10-28T06:28:51.632988Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.2), physics 1.1 (1% 1.8), render world 15.8 (1% 19.1)
+2026-10-28T06:28:51.633121Z  INFO extraction: gpu: 12.2 ms a frame (main_opaque_pass_3d 10.0, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:28:55.056269Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.4 ms of a 26.7 ms frame
+2026-10-28T06:29:01.641866Z  INFO extraction: frames: 471 in 10 s, mean 21.3 ms, 1% 28.6 ms, worst 30.0 ms (AtBase)
+2026-10-28T06:29:01.641920Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.2), physics 1.2 (1% 2.2), render world 11.5 (1% 19.0)
+2026-10-28T06:29:01.642024Z  INFO extraction: gpu: 9.6 ms a frame (main_opaque_pass_3d 7.7, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:05.070554Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.7 ms of a 26.7 ms frame
+2026-10-28T06:29:06.393804Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3618v35 is invalid; its index now has generation 36.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:29:06.393956Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4139v34 is invalid; its index now has generation 35.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:29:11.628462Z  INFO extraction: frames: 511 in 10 s, mean 19.6 ms, 1% 29.2 ms, worst 30.1 ms (AtBase)
+2026-10-28T06:29:11.628521Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.0), physics 1.2 (1% 2.1), render world 10.0 (1% 19.1)
+2026-10-28T06:29:11.628632Z  INFO extraction: gpu: 9.2 ms a frame (main_opaque_pass_3d 7.3, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:15.086067Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.8 ms of a 26.7 ms frame
+2026-10-28T06:29:21.639875Z  INFO extraction: frames: 445 in 10 s, mean 22.5 ms, 1% 29.1 ms, worst 30.2 ms (AtBase)
+2026-10-28T06:29:21.639961Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 9.8), physics 1.1 (1% 2.1), render world 12.7 (1% 19.0)
+2026-10-28T06:29:21.640056Z  INFO extraction: gpu: 10.3 ms a frame (main_opaque_pass_3d 8.3, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:25.098874Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:29:31.666765Z  INFO extraction: frames: 424 in 10 s, mean 23.6 ms, 1% 28.6 ms, worst 41.2 ms (AtBase)
+2026-10-28T06:29:31.666820Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.6), physics 1.1 (1% 2.2), render world 13.7 (1% 19.3)
+2026-10-28T06:29:31.666939Z  INFO extraction: gpu: 10.5 ms a frame (main_opaque_pass_3d 8.5, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:35.121492Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.6 ms of a 26.7 ms frame
+2026-10-28T06:29:41.666939Z  INFO extraction: frames: 453 in 10 s, mean 22.1 ms, 1% 30.0 ms, worst 41.1 ms (AtBase)
+2026-10-28T06:29:41.667008Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 12.7), physics 1.1 (1% 2.2), render world 12.2 (1% 19.2)
+2026-10-28T06:29:41.667098Z  INFO extraction: gpu: 9.9 ms a frame (main_opaque_pass_3d 7.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:44.454434Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3063v32 is invalid; its index now has generation 33.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:29:44.454571Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4145v37 is invalid; its index now has generation 38.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:29:45.107352Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.6 ms of a 13.3 ms frame
+2026-10-28T06:29:51.696874Z  INFO extraction: frames: 441 in 10 s, mean 22.7 ms, 1% 28.7 ms, worst 30.0 ms (AtBase)
+2026-10-28T06:29:51.696919Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.1), physics 1.1 (1% 2.0), render world 13.1 (1% 19.2)
+2026-10-28T06:29:51.697051Z  INFO extraction: gpu: 10.8 ms a frame (main_opaque_pass_3d 8.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:29:55.134564Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 26.7 ms frame
+2026-10-28T06:30:01.722024Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 28.9 ms, worst 29.9 ms (AtBase)
+2026-10-28T06:30:01.722057Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.1), physics 1.1 (1% 1.7), render world 16.9 (1% 19.2)
+2026-10-28T06:30:01.722235Z  INFO extraction: gpu: 12.3 ms a frame (main_opaque_pass_3d 10.0, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:05.134859Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 26.7 ms frame
+2026-10-28T06:30:06.288875Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4124v37 is invalid; its index now has generation 38.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:30:06.289014Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3656v35 is invalid; its index now has generation 36.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:30:11.732540Z  INFO extraction: frames: 402 in 10 s, mean 24.9 ms, 1% 28.4 ms, worst 30.1 ms (AtBase)
+2026-10-28T06:30:11.732589Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 9.8), physics 1.1 (1% 1.9), render world 15.1 (1% 19.0)
+2026-10-28T06:30:11.732702Z  INFO extraction: gpu: 12.0 ms a frame (main_opaque_pass_3d 9.9, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:15.164933Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 26.7 ms frame
+2026-10-28T06:30:21.733024Z  INFO extraction: frames: 405 in 10 s, mean 24.7 ms, 1% 29.0 ms, worst 30.7 ms (AtBase)
+2026-10-28T06:30:21.733063Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.2), physics 1.1 (1% 1.8), render world 14.8 (1% 19.3)
+2026-10-28T06:30:21.733189Z  INFO extraction: gpu: 12.4 ms a frame (main_opaque_pass_3d 10.4, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:25.178052Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.5 ms of a 26.7 ms frame
+2026-10-28T06:30:31.732085Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 28.7 ms, worst 29.9 ms (AtBase)
+2026-10-28T06:30:31.732134Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 9.9), physics 1.1 (1% 1.7), render world 16.9 (1% 19.0)
+2026-10-28T06:30:31.732328Z  INFO extraction: gpu: 15.2 ms a frame (main_opaque_pass_3d 12.8, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.4, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:35.174053Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 26.7 ms frame
+2026-10-28T06:30:41.762462Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 28.6 ms, worst 29.3 ms (AtBase)
+2026-10-28T06:30:41.762508Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 9.9), physics 1.1 (1% 1.8), render world 16.8 (1% 19.1)
+2026-10-28T06:30:41.762691Z  INFO extraction: gpu: 15.2 ms a frame (main_opaque_pass_3d 12.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.4, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:45.201753Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.1 ms of a 26.7 ms frame
+2026-10-28T06:30:51.785854Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 32.5 ms (AtBase)
+2026-10-28T06:30:51.785898Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.3), physics 1.0 (1% 1.8), render world 16.9 (1% 19.3)
+2026-10-28T06:30:51.786066Z  INFO extraction: gpu: 14.7 ms a frame (main_opaque_pass_3d 12.3, bin_unpacking 0.6, tonemapping 0.6, clustering 0.5, upscaling 0.4, early_mesh_preprocessing 0.2)
+2026-10-28T06:30:55.216934Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 26.7 ms frame
+2026-10-28T06:31:01.811819Z  INFO extraction: frames: 397 in 10 s, mean 25.3 ms, 1% 30.4 ms, worst 36.7 ms (AtBase)
+2026-10-28T06:31:01.811897Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 10.4), physics 1.1 (1% 1.9), render world 15.3 (1% 19.3)
+2026-10-28T06:31:01.812015Z  INFO extraction: gpu: 12.2 ms a frame (main_opaque_pass_3d 10.1, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:31:05.230414Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.7 ms of a 26.7 ms frame
+2026-10-28T06:31:11.825126Z  INFO extraction: frames: 400 in 10 s, mean 25.0 ms, 1% 30.4 ms, worst 34.1 ms (AtBase)
+2026-10-28T06:31:11.825203Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 12.2), physics 1.1 (1% 2.2), render world 14.9 (1% 19.1)
+2026-10-28T06:31:11.825346Z  INFO extraction: gpu: 11.9 ms a frame (main_opaque_pass_3d 9.9, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:31:15.230801Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.7 ms of a 13.3 ms frame
+2026-10-28T06:31:21.842879Z  INFO extraction: frames: 402 in 10 s, mean 24.9 ms, 1% 29.6 ms, worst 31.0 ms (AtBase)
+2026-10-28T06:31:21.842955Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 11.2), physics 1.1 (1% 2.0), render world 14.9 (1% 18.9)
+2026-10-28T06:31:21.843059Z  INFO extraction: gpu: 11.5 ms a frame (main_opaque_pass_3d 9.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:31:24.907257Z  INFO extraction::rig::xr: input: Left secondary works
+2026-10-28T06:31:24.907408Z  INFO extraction::rig::xr: input: Right secondary works
+2026-10-28T06:31:25.256049Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.7 ms of a 26.7 ms frame
+2026-10-28T06:31:25.385065Z  INFO extraction::rig::xr: input: Left primary works
+2026-10-28T06:31:25.441855Z  INFO extraction::rig::xr: input: Right primary works
+2026-10-28T06:31:28.211668Z  INFO extraction::rig::xr: input: Right stick click works
+2026-10-28T06:31:31.864634Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 28.5 ms, worst 29.0 ms (AtBase)
+2026-10-28T06:31:31.864674Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.1 (1% 1.6), render world 16.9 (1% 19.1)
+2026-10-28T06:31:31.864802Z  INFO extraction: gpu: 13.3 ms a frame (main_opaque_pass_3d 11.0, tonemapping 0.5, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:31:33.528850Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3804v40 is invalid; its index now has generation 41.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:33.529028Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4157v45 is invalid; its index now has generation 46.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:35.252801Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.1 ms of a 26.7 ms frame
+2026-10-28T06:31:36.561627Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2404v36 is invalid; its index now has generation 37.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:36.561777Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3653v17 is invalid; its index now has generation 18.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:41.878485Z  INFO extraction: frames: 445 in 10 s, mean 22.5 ms, 1% 28.7 ms, worst 30.9 ms (AtBase)
+2026-10-28T06:31:41.878606Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.5), physics 1.2 (1% 2.3), render world 12.5 (1% 19.2)
+2026-10-28T06:31:41.878658Z  INFO extraction: gpu: 10.4 ms a frame (main_opaque_pass_3d 8.3, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:31:42.623961Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4145v47 is invalid; its index now has generation 48.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:42.624145Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4150v47 is invalid; its index now has generation 48.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:45.265455Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.5 ms of a 26.7 ms frame
+2026-10-28T06:31:49.228211Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3789v41 is invalid; its index now has generation 42.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:49.228409Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3662v30 is invalid; its index now has generation 31.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:31:51.877762Z  INFO extraction: frames: 454 in 10 s, mean 22.0 ms, 1% 29.0 ms, worst 34.5 ms (AtBase)
+2026-10-28T06:31:51.877809Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.5), physics 1.1 (1% 2.3), render world 12.4 (1% 19.2)
+2026-10-28T06:31:51.877950Z  INFO extraction: gpu: 10.1 ms a frame (main_opaque_pass_3d 8.1, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:31:55.295402Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 26.7 ms frame
+2026-10-28T06:32:01.876900Z  INFO extraction: frames: 414 in 10 s, mean 24.2 ms, 1% 28.9 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:32:01.876956Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 10.1), physics 1.1 (1% 1.9), render world 14.3 (1% 19.1)
+2026-10-28T06:32:01.877069Z  INFO extraction: gpu: 10.9 ms a frame (main_opaque_pass_3d 8.8, tonemapping 0.6, clustering 0.5, bin_unpacking 0.4, upscaling 0.4, early_mesh_preprocessing 0.2)
+2026-10-28T06:32:05.321347Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.4 ms of a 26.7 ms frame
+2026-10-28T06:32:11.890246Z  INFO extraction: frames: 413 in 10 s, mean 24.2 ms, 1% 29.3 ms, worst 30.8 ms (AtBase)
+2026-10-28T06:32:11.890299Z  INFO extraction::render::budget: cpu: main 8.2 ms a frame (1% 10.0), physics 1.1 (1% 1.9), render world 14.4 (1% 19.2)
+2026-10-28T06:32:11.890419Z  INFO extraction: gpu: 11.1 ms a frame (main_opaque_pass_3d 9.0, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.4, early_mesh_preprocessing 0.2)
+2026-10-28T06:32:12.559852Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4126v46 is invalid; its index now has generation 47.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:12.559987Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3820v44 is invalid; its index now has generation 45.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:15.310836Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.2 ms of a 13.3 ms frame
+2026-10-28T06:32:19.158401Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2834v38 is invalid; its index now has generation 39.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:19.158570Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1900v41 is invalid; its index now has generation 42.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:21.906281Z  INFO extraction: frames: 522 in 10 s, mean 19.2 ms, 1% 29.2 ms, worst 33.4 ms (AtBase)
+2026-10-28T06:32:21.906340Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.6), physics 1.2 (1% 2.3), render world 9.5 (1% 19.1)
+2026-10-28T06:32:21.906453Z  INFO extraction: gpu: 9.0 ms a frame (main_opaque_pass_3d 7.1, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:32:24.262667Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3076v44 is invalid; its index now has generation 45.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:24.262799Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4212v38 is invalid; its index now has generation 39.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:25.345241Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.3 ms of a 26.7 ms frame
+2026-10-28T06:32:26.294176Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4006v39 is invalid; its index now has generation 40.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:26.294313Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3804v45 is invalid; its index now has generation 46.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:31.930273Z  INFO extraction: frames: 543 in 10 s, mean 18.5 ms, 1% 28.5 ms, worst 29.8 ms (AtBase)
+2026-10-28T06:32:31.930341Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.2), physics 1.3 (1% 2.5), render world 9.0 (1% 18.8)
+2026-10-28T06:32:31.930442Z  INFO extraction: gpu: 8.9 ms a frame (main_opaque_pass_3d 6.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:32:35.361356Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:32:39.184617Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3814v49 is invalid; its index now has generation 50.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:39.184845Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1900v43 is invalid; its index now has generation 44.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:32:41.524141Z  INFO extraction::onboarding: onboarding: TakePistol done
+2026-10-28T06:32:41.942323Z  INFO extraction: frames: 404 in 10 s, mean 24.8 ms, 1% 28.7 ms, worst 33.0 ms (AtBase)
+2026-10-28T06:32:41.942362Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.2 (1% 1.9), render world 14.8 (1% 19.4)
+2026-10-28T06:32:41.942479Z  INFO extraction: gpu: 11.5 ms a frame (main_opaque_pass_3d 9.5, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:32:45.389476Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.7 ms of a 26.7 ms frame
+2026-10-28T06:32:51.943148Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 33.0 ms (AtBase)
+2026-10-28T06:32:51.943216Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.8), physics 1.2 (1% 1.8), render world 16.7 (1% 19.7)
+2026-10-28T06:32:51.943314Z  INFO extraction: gpu: 12.6 ms a frame (main_opaque_pass_3d 10.6, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:32:54.865178Z  INFO extraction::rig::xr: input: Left trigger works
+2026-10-28T06:32:55.398901Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.2 ms of a 26.7 ms frame
+2026-10-28T06:33:01.955839Z  INFO extraction: frames: 468 in 10 s, mean 21.4 ms, 1% 28.8 ms, worst 30.8 ms (AtBase)
+2026-10-28T06:33:01.955920Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.2), physics 1.2 (1% 2.5), render world 11.3 (1% 18.9)
+2026-10-28T06:33:01.955996Z  INFO extraction: gpu: 9.8 ms a frame (main_opaque_pass_3d 8.0, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:05.423663Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 26.7 ms frame
+2026-10-28T06:33:11.984726Z  INFO extraction: frames: 403 in 10 s, mean 24.9 ms, 1% 29.0 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:33:11.984771Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.2 (1% 1.9), render world 14.8 (1% 19.1)
+2026-10-28T06:33:11.984908Z  INFO extraction: gpu: 11.6 ms a frame (main_opaque_pass_3d 9.7, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:12.121196Z  INFO extraction::raid: raid: Safety's on. Click the stick on the gun hand.
+2026-10-28T06:33:15.416522Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.4 ms of a 13.3 ms frame
+2026-10-28T06:33:21.987046Z  INFO extraction: frames: 431 in 10 s, mean 23.2 ms, 1% 29.3 ms, worst 31.7 ms (AtBase)
+2026-10-28T06:33:21.987106Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.4), physics 1.2 (1% 2.3), render world 13.4 (1% 19.3)
+2026-10-28T06:33:21.987231Z  INFO extraction: gpu: 9.9 ms a frame (main_opaque_pass_3d 7.8, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:25.454343Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.1 ms of a 26.7 ms frame
+2026-10-28T06:33:32.009002Z  INFO extraction: frames: 398 in 10 s, mean 25.2 ms, 1% 30.2 ms, worst 34.6 ms (AtBase)
+2026-10-28T06:33:32.009087Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 12.7), physics 1.1 (1% 2.3), render world 15.2 (1% 19.4)
+2026-10-28T06:33:32.009188Z  INFO extraction: gpu: 11.1 ms a frame (main_opaque_pass_3d 9.0, tonemapping 0.6, clustering 0.5, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:35.465571Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.5 ms of a 26.7 ms frame
+2026-10-28T06:33:42.021452Z  INFO extraction: frames: 401 in 10 s, mean 25.0 ms, 1% 28.9 ms, worst 30.3 ms (AtBase)
+2026-10-28T06:33:42.021493Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.0), physics 1.1 (1% 1.8), render world 15.1 (1% 19.2)
+2026-10-28T06:33:42.021646Z  INFO extraction: gpu: 11.5 ms a frame (main_opaque_pass_3d 9.5, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:45.491456Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 26.7 ms frame
+2026-10-28T06:33:50.002912Z  INFO extraction::onboarding: onboarding: TakeRadio done
+2026-10-28T06:33:50.004439Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp off the back of the truck."
+2026-10-28T06:33:52.021374Z  INFO extraction: frames: 385 in 10 s, mean 26.0 ms, 1% 29.1 ms, worst 50.2 ms (AtBase)
+2026-10-28T06:33:52.021417Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.4), physics 1.1 (1% 2.0), render world 16.0 (1% 19.5)
+2026-10-28T06:33:52.021556Z  INFO extraction: gpu: 13.0 ms a frame (main_opaque_pass_3d 11.1, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:33:55.518929Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.1 ms of a 26.7 ms frame
+2026-10-28T06:34:02.037765Z  INFO extraction: frames: 427 in 10 s, mean 23.5 ms, 1% 29.1 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:34:02.037845Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.2), physics 1.2 (1% 2.1), render world 13.7 (1% 19.2)
+2026-10-28T06:34:02.038170Z  INFO extraction: gpu: 10.3 ms a frame (main_opaque_pass_3d 8.4, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:05.533371Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.1 ms of a 26.7 ms frame
+2026-10-28T06:34:12.065379Z  INFO extraction: frames: 401 in 10 s, mean 25.0 ms, 1% 29.2 ms, worst 37.1 ms (AtBase)
+2026-10-28T06:34:12.065412Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.3), physics 1.1 (1% 1.8), render world 15.1 (1% 19.3)
+2026-10-28T06:34:12.065554Z  INFO extraction: gpu: 11.6 ms a frame (main_opaque_pass_3d 9.6, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:15.519190Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 26.7 ms frame
+2026-10-28T06:34:22.074275Z  INFO extraction: frames: 384 in 10 s, mean 26.1 ms, 1% 29.2 ms, worst 31.7 ms (AtBase)
+2026-10-28T06:34:22.074334Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 1.8), render world 16.0 (1% 19.4)
+2026-10-28T06:34:22.074460Z  INFO extraction: gpu: 12.6 ms a frame (main_opaque_pass_3d 10.6, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:23.276372Z  INFO extraction::onboarding: onboarding: PutAway done
+2026-10-28T06:34:25.542895Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 26.7 ms frame
+2026-10-28T06:34:32.075172Z  INFO extraction: frames: 386 in 10 s, mean 25.9 ms, 1% 29.4 ms, worst 33.6 ms (AtBase)
+2026-10-28T06:34:32.075219Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.1), physics 1.1 (1% 2.2), render world 15.8 (1% 19.1)
+2026-10-28T06:34:32.075355Z  INFO extraction: gpu: 12.6 ms a frame (main_opaque_pass_3d 10.5, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:35.569126Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 26.7 ms frame
+2026-10-28T06:34:42.101034Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 31.6 ms (AtBase)
+2026-10-28T06:34:42.101091Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.0), physics 1.2 (1% 1.8), render world 16.6 (1% 18.9)
+2026-10-28T06:34:42.101198Z  INFO extraction: gpu: 12.2 ms a frame (main_opaque_pass_3d 10.2, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:45.573740Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:34:46.262629Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4219v60 is invalid; its index now has generation 61.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:34:46.262762Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4142v63 is invalid; its index now has generation 64.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:34:52.115911Z  INFO extraction: frames: 387 in 10 s, mean 25.9 ms, 1% 29.8 ms, worst 39.4 ms (AtBase)
+2026-10-28T06:34:52.115940Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 11.0), physics 1.2 (1% 2.1), render world 15.7 (1% 18.8)
+2026-10-28T06:34:52.116087Z  INFO extraction: gpu: 11.6 ms a frame (main_opaque_pass_3d 9.5, tonemapping 0.6, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:34:55.584671Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.0 ms of a 26.7 ms frame
+2026-10-28T06:35:02.142223Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 28.7 ms, worst 29.4 ms (AtBase)
+2026-10-28T06:35:02.142296Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.0), physics 1.1 (1% 1.7), render world 17.0 (1% 19.3)
+2026-10-28T06:35:02.142429Z  INFO extraction: gpu: 12.9 ms a frame (main_opaque_pass_3d 10.7, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:35:05.609581Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:35:12.166721Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.1 ms, worst 29.4 ms (AtBase)
+2026-10-28T06:35:12.166761Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.1), physics 1.1 (1% 1.7), render world 17.0 (1% 19.3)
+2026-10-28T06:35:12.166901Z  INFO extraction: gpu: 15.2 ms a frame (main_opaque_pass_3d 13.1, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:35:15.596836Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-10-28T06:35:22.182630Z  INFO extraction: frames: 469 in 10 s, mean 21.4 ms, 1% 28.7 ms, worst 29.4 ms (AtBase)
+2026-10-28T06:35:22.182717Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.2 (1% 2.3), render world 11.5 (1% 19.1)
+2026-10-28T06:35:22.182805Z  INFO extraction: gpu: 10.1 ms a frame (main_opaque_pass_3d 8.2, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:35:25.621629Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.9 ms of a 26.7 ms frame
+2026-10-28T06:35:28.519693Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-10-28T06:35:28.519839Z  INFO bevy_mod_openxr::openxr::init: entered XR state SYNCHRONIZED
+2026-10-28T06:35:29.703376Z  INFO bevy_mod_openxr::openxr::init: entered XR state VISIBLE
+2026-10-28T06:35:29.703524Z  INFO bevy_mod_openxr::openxr::init: entered XR state FOCUSED
+2026-10-28T06:35:30.396127Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3804v61 is invalid; its index now has generation 62.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:35:30.396293Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2834v55 is invalid; its index now has generation 56.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:35:32.209158Z  INFO extraction: frames: 453 in 10 s, mean 22.1 ms, 1% 29.1 ms, worst 48.6 ms (AtBase)
+2026-10-28T06:35:32.209201Z  INFO extraction::render::budget: cpu: main 8.3 ms a frame (1% 9.8), physics 1.1 (1% 1.8), render world 12.6 (1% 19.2)
+2026-10-28T06:35:32.209372Z  INFO extraction: gpu: 9.8 ms a frame (main_opaque_pass_3d 8.0, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.2, early_mesh_preprocessing 0.2)
+2026-10-28T06:35:35.633970Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.4 ms of a 26.7 ms frame
+2026-10-28T06:35:42.210294Z  INFO extraction: frames: 438 in 10 s, mean 22.8 ms, 1% 28.9 ms, worst 32.4 ms (AtBase)
+2026-10-28T06:35:42.210342Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 11.4), physics 1.2 (1% 2.2), render world 13.0 (1% 19.5)
+2026-10-28T06:35:42.210467Z  INFO extraction: gpu: 11.0 ms a frame (main_opaque_pass_3d 8.9, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:35:45.652010Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.1 ms of a 26.7 ms frame
+2026-10-28T06:35:52.206540Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 28.8 ms, worst 29.1 ms (AtBase)
+2026-10-28T06:35:52.206591Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.1 (1% 1.7), render world 16.7 (1% 19.2)
+2026-10-28T06:35:52.206710Z  INFO extraction: gpu: 13.5 ms a frame (main_opaque_pass_3d 11.3, tonemapping 0.5, clustering 0.5, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:35:55.641458Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 13.3 ms frame
+2026-10-28T06:36:02.233245Z  INFO extraction: frames: 413 in 10 s, mean 24.3 ms, 1% 29.3 ms, worst 39.7 ms (AtBase)
+2026-10-28T06:36:02.233311Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 12.7), physics 1.1 (1% 2.0), render world 14.2 (1% 19.4)
+2026-10-28T06:36:02.233512Z  INFO extraction: gpu: 12.7 ms a frame (main_opaque_pass_3d 10.6, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:36:05.676753Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 26.7 ms frame
+2026-10-28T06:36:12.233151Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.0 ms, worst 30.3 ms (AtBase)
+2026-10-28T06:36:12.233200Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 11.0), physics 1.1 (1% 1.9), render world 16.7 (1% 19.1)
+2026-10-28T06:36:12.233356Z  INFO extraction: gpu: 15.1 ms a frame (main_opaque_pass_3d 13.1, tonemapping 0.5, clustering 0.5, bin_unpacking 0.4, upscaling 0.2, early_mesh_preprocessing 0.2)
+2026-10-28T06:36:15.701686Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:36:21.941092Z  INFO extraction::onboarding: onboarding: Crouch done
+2026-10-28T06:36:22.263535Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 28.8 ms, worst 33.2 ms (AtBase)
+2026-10-28T06:36:22.263579Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.3), physics 1.1 (1% 1.7), render world 16.9 (1% 19.4)
+2026-10-28T06:36:22.263730Z  INFO extraction: gpu: 13.2 ms a frame (main_opaque_pass_3d 11.1, tonemapping 0.5, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:36:25.729923Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:36:32.284841Z  INFO extraction: frames: 408 in 10 s, mean 24.6 ms, 1% 28.7 ms, worst 30.5 ms (AtBase)
+2026-10-28T06:36:32.284903Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 10.0), physics 1.1 (1% 2.0), render world 14.7 (1% 19.4)
+2026-10-28T06:36:32.285050Z  INFO extraction: gpu: 12.2 ms a frame (main_opaque_pass_3d 9.9, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:36:33.618148Z  INFO extraction::onboarding: onboarding: Turn done
+2026-10-28T06:36:35.729692Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.3 ms of a 26.7 ms frame
+2026-10-28T06:36:42.279726Z  INFO extraction: frames: 386 in 10 s, mean 25.9 ms, 1% 30.1 ms, worst 32.8 ms (AtBase)
+2026-10-28T06:36:42.279784Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.1 (1% 2.0), render world 16.1 (1% 19.1)
+2026-10-28T06:36:42.279887Z  INFO extraction: gpu: 13.1 ms a frame (main_opaque_pass_3d 10.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, main_transparent_pass_3d 0.5, upscaling 0.3)
+2026-10-28T06:36:45.719570Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 13.3 ms frame
+2026-10-28T06:36:48.555407Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2227v51 is invalid; its index now has generation 52.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:36:48.555556Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3766v63 is invalid; its index now has generation 64.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:36:52.311058Z  INFO extraction: frames: 508 in 10 s, mean 19.7 ms, 1% 28.7 ms, worst 39.1 ms (AtBase)
+2026-10-28T06:36:52.311110Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.4), physics 1.2 (1% 2.5), render world 9.9 (1% 18.8)
+2026-10-28T06:36:52.311322Z  INFO extraction: gpu: 9.4 ms a frame (main_opaque_pass_3d 7.1, tonemapping 0.5, main_transparent_pass_3d 0.4, bin_unpacking 0.4, clustering 0.4, upscaling 0.3)
+2026-10-28T06:36:55.754426Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.2 ms of a 26.7 ms frame
+2026-10-28T06:37:02.310521Z  INFO extraction: frames: 458 in 10 s, mean 21.9 ms, 1% 29.0 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:37:02.310570Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 9.9), physics 1.2 (1% 2.2), render world 12.1 (1% 19.0)
+2026-10-28T06:37:02.310679Z  INFO extraction: gpu: 10.7 ms a frame (main_opaque_pass_3d 8.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:37:05.780260Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.5 ms of a 26.7 ms frame
+2026-10-28T06:37:10.396794Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2402v68 is invalid; its index now has generation 69.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:10.396929Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3794v48 is invalid; its index now has generation 49.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:12.322767Z  INFO extraction: frames: 475 in 10 s, mean 21.1 ms, 1% 32.3 ms, worst 40.4 ms (AtBase)
+2026-10-28T06:37:12.322844Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 12.2), physics 1.3 (1% 2.4), render world 11.1 (1% 19.1)
+2026-10-28T06:37:12.322945Z  INFO extraction: gpu: 9.7 ms a frame (main_opaque_pass_3d 7.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:37:12.457563Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2834v65 is invalid; its index now has generation 66.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:12.457702Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3064v63 is invalid; its index now has generation 64.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:15.781941Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.1 ms of a 26.7 ms frame
+2026-10-28T06:37:22.354714Z  INFO extraction: frames: 457 in 10 s, mean 21.9 ms, 1% 28.3 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:37:22.354770Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.2 (1% 2.3), render world 12.1 (1% 18.9)
+2026-10-28T06:37:22.354889Z  INFO extraction: gpu: 10.7 ms a frame (main_opaque_pass_3d 8.8, tonemapping 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:37:25.783063Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.1 ms of a 13.3 ms frame
+2026-10-28T06:37:26.155471Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3809v70 is invalid; its index now has generation 71.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:26.155608Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4170v73 is invalid; its index now has generation 74.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:26.463475Z  INFO extraction::raid: raid: Driver: "Not done yet. Pull again to go."
+2026-10-28T06:37:26.661627Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4213v78 is invalid; its index now has generation 79.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:26.661766Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4145v78 is invalid; its index now has generation 79.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:37:32.364925Z  INFO extraction: frames: 528 in 10 s, mean 19.0 ms, 1% 28.5 ms, worst 29.6 ms (AtBase)
+2026-10-28T06:37:32.364994Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.4), physics 1.3 (1% 2.6), render world 9.6 (1% 18.9)
+2026-10-28T06:37:32.365159Z  INFO extraction: gpu: 9.3 ms a frame (main_opaque_pass_3d 7.3, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:37:35.808600Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 26.7 ms frame
+2026-10-28T06:37:42.363321Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 30.5 ms (AtBase)
+2026-10-28T06:37:42.363368Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.1), physics 1.1 (1% 1.8), render world 16.8 (1% 19.1)
+2026-10-28T06:37:42.363502Z  INFO extraction: gpu: 16.6 ms a frame (main_opaque_pass_3d 13.9, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:37:45.821436Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.1 ms of a 26.7 ms frame
+2026-10-28T06:37:52.393306Z  INFO extraction: frames: 386 in 10 s, mean 26.0 ms, 1% 31.8 ms, worst 40.6 ms (AtBase)
+2026-10-28T06:37:52.393372Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.3), physics 1.2 (1% 2.1), render world 13.8 (1% 19.5)
+2026-10-28T06:37:52.393473Z  INFO extraction: gpu: 16.5 ms a frame (main_opaque_pass_3d 13.7, tonemapping 0.7, main_transparent_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:37:55.832575Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.6 ms of a 26.7 ms frame
+2026-10-28T06:38:02.419309Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 30.4 ms (AtBase)
+2026-10-28T06:38:02.419376Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 9.9), physics 1.1 (1% 1.8), render world 16.8 (1% 19.2)
+2026-10-28T06:38:02.419488Z  INFO extraction: gpu: 14.2 ms a frame (main_opaque_pass_3d 11.5, tonemapping 0.6, main_transparent_pass_3d 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:38:05.832208Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 26.7 ms frame
+2026-10-28T06:38:12.430959Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.9 ms, worst 41.4 ms (AtBase)
+2026-10-28T06:38:12.431002Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 2.0), render world 16.8 (1% 18.9)
+2026-10-28T06:38:12.431136Z  INFO extraction: gpu: 16.7 ms a frame (main_opaque_pass_3d 14.0, tonemapping 0.6, main_transparent_pass_3d 0.5, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:38:15.845608Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.9 ms of a 26.7 ms frame
+2026-10-28T06:38:22.429747Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 32.8 ms, worst 63.1 ms (AtBase)
+2026-10-28T06:38:22.429822Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.1 (1% 1.8), render world 16.8 (1% 19.5)
+2026-10-28T06:38:22.429919Z  INFO extraction: gpu: 16.5 ms a frame (main_opaque_pass_3d 13.8, tonemapping 0.6, main_transparent_pass_3d 0.5, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:38:25.874590Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.7 ms of a 26.7 ms frame
+2026-10-28T06:38:32.456009Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 31.9 ms, worst 59.5 ms (AtBase)
+2026-10-28T06:38:32.456074Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 11.0), physics 1.1 (1% 1.8), render world 16.7 (1% 19.9)
+2026-10-28T06:38:32.456323Z  INFO extraction: gpu: 15.5 ms a frame (main_opaque_pass_3d 12.8, main_transparent_pass_3d 0.6, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:38:35.889263Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.9 ms of a 26.7 ms frame
+2026-10-28T06:38:42.469564Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.6 ms, worst 42.3 ms (AtBase)
+2026-10-28T06:38:42.469612Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 1.8), render world 16.2 (1% 19.4)
+2026-10-28T06:38:42.469740Z  INFO extraction: gpu: 18.4 ms a frame (main_opaque_pass_3d 15.8, tonemapping 0.6, main_transparent_pass_3d 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3)
+2026-10-28T06:38:45.876637Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.6 ms of a 26.7 ms frame
+2026-10-28T06:38:52.494819Z  INFO extraction: frames: 373 in 10 s, mean 26.9 ms, 1% 30.7 ms, worst 31.5 ms (AtBase)
+2026-10-28T06:38:52.494931Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.2 (1% 2.0), render world 11.8 (1% 18.4)
+2026-10-28T06:38:52.495005Z  INFO extraction: gpu: 19.9 ms a frame (main_opaque_pass_3d 16.9, tonemapping 0.7, bin_unpacking 0.6, main_transparent_pass_3d 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:38:55.898693Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.7 ms of a 26.7 ms frame
+2026-10-28T06:38:56.428604Z  INFO extraction::onboarding: onboarding: Run done
+2026-10-28T06:38:56.429875Z  INFO extraction::raid: raid: Driver: "Good. Next: the next lamp, right of the track."
+2026-10-28T06:39:02.522395Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 31.2 ms, worst 59.7 ms (AtBase)
+2026-10-28T06:39:02.522479Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.7), physics 1.2 (1% 2.0), render world 16.4 (1% 20.1)
+2026-10-28T06:39:02.522567Z  INFO extraction: gpu: 18.0 ms a frame (main_opaque_pass_3d 15.0, tonemapping 0.7, main_transparent_pass_3d 0.7, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:39:05.909742Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:39:12.535708Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.7 ms, worst 38.2 ms (AtBase)
+2026-10-28T06:39:12.535792Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 12.5), physics 1.2 (1% 2.1), render world 16.5 (1% 19.2)
+2026-10-28T06:39:12.535918Z  INFO extraction: gpu: 15.5 ms a frame (main_opaque_pass_3d 13.3, tonemapping 0.7, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:39:14.192893Z  INFO extraction::onboarding: onboarding: Pack done
+2026-10-28T06:39:14.194193Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp by the pen."
+2026-10-28T06:39:15.925219Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.3 ms of a 26.7 ms frame
+2026-10-28T06:39:18.245397Z  INFO extraction::onboarding: onboarding: DropMag done
+2026-10-28T06:39:22.551498Z  INFO extraction: frames: 373 in 10 s, mean 26.9 ms, 1% 31.6 ms, worst 61.2 ms (AtBase)
+2026-10-28T06:39:22.551559Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.2 (1% 1.8), render world 14.4 (1% 19.3)
+2026-10-28T06:39:22.551688Z  INFO extraction: gpu: 18.4 ms a frame (main_opaque_pass_3d 15.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:39:22.643738Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3785v81 is invalid; its index now has generation 82.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:39:22.643923Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4153v90 is invalid; its index now has generation 91.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:39:23.587846Z  INFO extraction::onboarding: onboarding: SeatMag done
+2026-10-28T06:39:25.953479Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:39:32.561729Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 32.8 ms, worst 38.9 ms (AtBase)
+2026-10-28T06:39:32.561790Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.1 (1% 1.9), render world 16.4 (1% 19.6)
+2026-10-28T06:39:32.561887Z  INFO extraction: gpu: 16.9 ms a frame (main_opaque_pass_3d 14.4, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:39:36.007066Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.3 ms of a 40.0 ms frame
+2026-10-28T06:39:41.963481Z  INFO extraction::raid: raid: Out of the truck. The Surge is due in about 60 minutes.
+2026-10-28T06:39:41.964750Z  INFO extraction::raid: raid: Driver: "Off you go. Next: the lamp by the pen."
+2026-10-28T06:39:42.574188Z  INFO extraction: frames: 349 in 10 s, mean 28.7 ms, 1% 41.4 ms, worst 42.2 ms (Out)
+2026-10-28T06:39:42.574280Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.5), physics 1.1 (1% 1.8), render world 16.5 (1% 30.1)
+2026-10-28T06:39:42.574419Z  INFO extraction: gpu: 18.6 ms a frame (main_opaque_pass_3d 15.7, tonemapping 0.6, main_transparent_pass_3d 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:39:45.843872Z  INFO extraction::onboarding: onboarding: FarGrab done
+2026-10-28T06:39:45.845657Z  INFO extraction::raid: raid: Driver: "Good. Next: the range, left past the gate."
+2026-10-28T06:39:46.037394Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.8 ms of a 53.3 ms frame
+2026-10-28T06:39:52.600101Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 29.6 ms, worst 59.3 ms (Out)
+2026-10-28T06:39:52.600139Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.4), physics 1.1 (1% 1.7), render world 16.6 (1% 19.0)
+2026-10-28T06:39:52.600369Z  INFO extraction: gpu: 17.1 ms a frame (main_opaque_pass_3d 14.6, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:39:56.018472Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 26.7 ms frame
+2026-10-28T06:39:57.280022Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3069v87 is invalid; its index now has generation 88.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:39:57.280157Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3833v92 is invalid; its index now has generation 93.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:40:02.616403Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.4 ms, worst 38.6 ms (Out)
+2026-10-28T06:40:02.616459Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.7), physics 1.1 (1% 1.8), render world 16.7 (1% 19.5)
+2026-10-28T06:40:02.616581Z  INFO extraction: gpu: 17.5 ms a frame (main_opaque_pass_3d 15.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:40:06.032199Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 26.7 ms frame
+2026-10-28T06:40:12.642180Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.1 ms, worst 40.9 ms (Out)
+2026-10-28T06:40:12.642223Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.1 (1% 1.7), render world 16.6 (1% 19.2)
+2026-10-28T06:40:12.642371Z  INFO extraction: gpu: 18.6 ms a frame (main_opaque_pass_3d 16.4, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:40:16.055993Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.9 ms of a 26.7 ms frame
+2026-10-28T06:40:22.652373Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 39.5 ms (Out)
+2026-10-28T06:40:22.652424Z  INFO extraction::render::budget: cpu: main 8.4 ms a frame (1% 9.9), physics 1.1 (1% 1.7), render world 16.9 (1% 19.7)
+2026-10-28T06:40:22.652563Z  INFO extraction: gpu: 16.3 ms a frame (main_opaque_pass_3d 14.2, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:40:26.055009Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.6 ms of a 26.7 ms frame
+2026-10-28T06:40:32.653535Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 29.4 ms, worst 42.0 ms (Out)
+2026-10-28T06:40:32.653564Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 9.8), physics 1.1 (1% 1.8), render world 16.8 (1% 19.1)
+2026-10-28T06:40:32.653747Z  INFO extraction: gpu: 17.0 ms a frame (main_opaque_pass_3d 14.4, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:40:36.068711Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.4 ms of a 26.7 ms frame
+2026-10-28T06:40:42.658588Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 41.5 ms (Out)
+2026-10-28T06:40:42.658633Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.4), physics 1.1 (1% 2.0), render world 16.8 (1% 19.1)
+2026-10-28T06:40:42.658785Z  INFO extraction: gpu: 16.5 ms a frame (main_opaque_pass_3d 13.6, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:40:46.097095Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 26.7 ms frame
+2026-10-28T06:40:52.668123Z  INFO extraction: frames: 363 in 10 s, mean 27.6 ms, 1% 40.9 ms, worst 43.6 ms (Out)
+2026-10-28T06:40:52.668165Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.4), physics 1.1 (1% 1.9), render world 16.7 (1% 29.4)
+2026-10-28T06:40:52.668506Z  INFO extraction: gpu: 18.1 ms a frame (main_opaque_pass_3d 15.3, tonemapping 0.6, main_transparent_pass_3d 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:40:56.107754Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 26.7 ms frame
+2026-10-28T06:41:02.678621Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 31.5 ms, worst 40.0 ms (Out)
+2026-10-28T06:41:02.678681Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.5), physics 1.2 (1% 1.9), render world 15.4 (1% 20.4)
+2026-10-28T06:41:02.678803Z  INFO extraction: gpu: 19.1 ms a frame (main_opaque_pass_3d 16.3, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:41:06.121222Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.9 ms of a 26.7 ms frame
+2026-10-28T06:41:12.696909Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.8 ms, worst 40.8 ms (Out)
+2026-10-28T06:41:12.696957Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.5), physics 1.1 (1% 2.0), render world 16.7 (1% 19.2)
+2026-10-28T06:41:12.697107Z  INFO extraction: gpu: 18.8 ms a frame (main_opaque_pass_3d 16.1, tonemapping 0.6, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:41:16.136472Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 26.7 ms frame
+2026-10-28T06:41:22.708181Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 38.8 ms (Out)
+2026-10-28T06:41:22.708235Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.5), physics 1.2 (1% 1.9), render world 16.0 (1% 19.3)
+2026-10-28T06:41:22.708338Z  INFO extraction: gpu: 17.6 ms a frame (main_opaque_pass_3d 15.2, tonemapping 0.7, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:41:26.133940Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:41:32.719359Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.2 ms, worst 39.4 ms (Out)
+2026-10-28T06:41:32.719531Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.5), physics 1.2 (1% 2.1), render world 16.7 (1% 19.7)
+2026-10-28T06:41:32.720047Z  INFO extraction: gpu: 16.4 ms a frame (main_opaque_pass_3d 13.9, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:41:36.146172Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:41:42.717698Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 29.8 ms, worst 43.3 ms (Out)
+2026-10-28T06:41:42.717766Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.3), physics 1.2 (1% 1.9), render world 16.8 (1% 19.3)
+2026-10-28T06:41:42.717988Z  INFO extraction: gpu: 16.4 ms a frame (main_opaque_pass_3d 14.0, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:41:43.573780Z  INFO extraction::onboarding: onboarding: Rack done
+2026-10-28T06:41:46.162181Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.2 ms of a 26.7 ms frame
+2026-10-28T06:41:52.717645Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 33.9 ms (Out)
+2026-10-28T06:41:52.717759Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.1), physics 1.1 (1% 1.8), render world 16.7 (1% 19.2)
+2026-10-28T06:41:52.717802Z  INFO extraction: gpu: 16.5 ms a frame (main_opaque_pass_3d 14.1, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:41:54.597454Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3613v9 is invalid; its index now has generation 10.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:41:54.597593Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2218v96 is invalid; its index now has generation 97.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:41:56.160913Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.8 ms of a 26.7 ms frame
+2026-10-28T06:42:02.731175Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 39.4 ms (Out)
+2026-10-28T06:42:02.731222Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 1.9), render world 16.7 (1% 19.0)
+2026-10-28T06:42:02.731385Z  INFO extraction: gpu: 18.5 ms a frame (main_opaque_pass_3d 16.0, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:42:06.176366Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:42:12.760303Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 40.5 ms (Out)
+2026-10-28T06:42:12.760348Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.5), physics 1.1 (1% 2.1), render world 16.8 (1% 19.0)
+2026-10-28T06:42:12.760468Z  INFO extraction: gpu: 17.9 ms a frame (main_opaque_pass_3d 15.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:42:16.186861Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.8 ms of a 26.7 ms frame
+2026-10-28T06:42:22.757235Z  INFO extraction: frames: 372 in 10 s, mean 26.9 ms, 1% 31.1 ms, worst 43.7 ms (Out)
+2026-10-28T06:42:22.757305Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.3), physics 1.1 (1% 2.1), render world 15.3 (1% 19.1)
+2026-10-28T06:42:22.757424Z  INFO extraction: gpu: 18.5 ms a frame (main_opaque_pass_3d 15.8, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:42:26.211745Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.3 ms of a 26.7 ms frame
+2026-10-28T06:42:29.692751Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3884v14 is invalid; its index now has generation 15.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:42:29.692902Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4183v82 is invalid; its index now has generation 83.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:42:32.769959Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.7 ms, worst 39.6 ms (Out)
+2026-10-28T06:42:32.770017Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.6), physics 1.1 (1% 1.9), render world 16.4 (1% 19.1)
+2026-10-28T06:42:32.770142Z  INFO extraction: gpu: 18.2 ms a frame (main_opaque_pass_3d 15.9, bin_unpacking 0.6, tonemapping 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:42:36.212153Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 26.7 ms frame
+2026-10-28T06:42:36.880374Z  INFO extraction::raid: raid: Safety's on. Click the stick on the gun hand.
+2026-10-28T06:42:42.783179Z  INFO extraction: frames: 372 in 10 s, mean 26.9 ms, 1% 30.5 ms, worst 38.5 ms (Out)
+2026-10-28T06:42:42.783209Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.1 (1% 1.8), render world 12.8 (1% 18.6)
+2026-10-28T06:42:42.783357Z  INFO extraction: gpu: 19.5 ms a frame (main_opaque_pass_3d 16.9, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:42:46.227869Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.3 ms of a 26.7 ms frame
+2026-10-28T06:42:50.028726Z  INFO extraction::onboarding: onboarding: Safety done
+2026-10-28T06:42:52.796304Z  INFO extraction: frames: 369 in 10 s, mean 27.1 ms, 1% 32.5 ms, worst 39.8 ms (Out)
+2026-10-28T06:42:52.796334Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 13.4), physics 1.2 (1% 2.3), render world 12.0 (1% 18.3)
+2026-10-28T06:42:52.796485Z  INFO extraction: gpu: 19.8 ms a frame (main_opaque_pass_3d 17.6, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:42:56.253825Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:43:02.810120Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 37.3 ms (Out)
+2026-10-28T06:43:02.810180Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.2), physics 1.1 (1% 1.9), render world 16.1 (1% 19.3)
+2026-10-28T06:43:02.810319Z  INFO extraction: gpu: 17.1 ms a frame (main_opaque_pass_3d 14.4, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.5, upscaling 0.3)
+2026-10-28T06:43:06.265461Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.0 ms of a 26.7 ms frame
+2026-10-28T06:43:11.330538Z  INFO extraction::onboarding: onboarding: HitPlate done
+2026-10-28T06:43:12.822715Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 34.6 ms, worst 40.2 ms (Out)
+2026-10-28T06:43:12.822839Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.2 (1% 1.9), render world 16.5 (1% 20.5)
+2026-10-28T06:43:12.822921Z  INFO extraction: gpu: 16.8 ms a frame (main_opaque_pass_3d 14.5, bin_unpacking 0.6, tonemapping 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:43:16.266999Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.5 ms of a 26.7 ms frame
+2026-10-28T06:43:22.826543Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.9 ms, worst 30.5 ms (Out)
+2026-10-28T06:43:22.826586Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.4), physics 1.4 (1% 2.1), render world 16.2 (1% 19.1)
+2026-10-28T06:43:22.826753Z  INFO extraction: gpu: 18.6 ms a frame (main_opaque_pass_3d 15.8, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:43:26.277924Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:43:32.869828Z  INFO extraction: frames: 359 in 10 s, mean 27.9 ms, 1% 41.2 ms, worst 43.1 ms (Out)
+2026-10-28T06:43:32.869886Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.8), physics 1.4 (1% 2.2), render world 15.0 (1% 28.8)
+2026-10-28T06:43:32.870021Z  INFO extraction: gpu: 19.0 ms a frame (main_opaque_pass_3d 16.1, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:43:36.278613Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.1 ms of a 26.7 ms frame
+2026-10-28T06:43:42.863212Z  INFO extraction: frames: 296 in 10 s, mean 33.8 ms, 1% 48.0 ms, worst 52.2 ms (Out)
+2026-10-28T06:43:42.863362Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 11.1), physics 1.5 (1% 2.6), render world 20.3 (1% 29.7)
+2026-10-28T06:43:42.863432Z  INFO extraction: gpu: 20.0 ms a frame (main_opaque_pass_3d 16.9, main_transparent_pass_3d 0.8, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:43:46.307155Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 26.7 ms frame
+2026-10-28T06:43:52.889271Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.7 ms, worst 33.9 ms (Out)
+2026-10-28T06:43:52.889322Z  INFO extraction::render::budget: cpu: main 9.1 ms a frame (1% 11.1), physics 1.5 (1% 2.3), render world 15.1 (1% 18.6)
+2026-10-28T06:43:52.889427Z  INFO extraction: gpu: 18.5 ms a frame (main_opaque_pass_3d 15.9, tonemapping 0.6, main_transparent_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:43:53.384388Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3788v109 is invalid; its index now has generation 110.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:43:53.384581Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3852v40 is invalid; its index now has generation 41.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:43:56.297099Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.8 ms of a 26.7 ms frame
+2026-10-28T06:44:02.917228Z  INFO extraction: frames: 370 in 10 s, mean 27.1 ms, 1% 31.3 ms, worst 34.9 ms (Out)
+2026-10-28T06:44:02.917262Z  INFO extraction::render::budget: cpu: main 9.6 ms a frame (1% 14.0), physics 1.5 (1% 2.6), render world 10.7 (1% 18.1)
+2026-10-28T06:44:02.917422Z  INFO extraction: gpu: 20.5 ms a frame (main_opaque_pass_3d 17.9, tonemapping 0.6, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:44:06.307304Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.9 ms of a 26.7 ms frame
+2026-10-28T06:44:09.276907Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3784v110 is invalid; its index now has generation 111.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:44:09.277051Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2971v62 is invalid; its index now has generation 63.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:44:12.931206Z  INFO extraction: frames: 369 in 10 s, mean 27.1 ms, 1% 31.6 ms, worst 32.1 ms (Out)
+2026-10-28T06:44:12.931246Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.8), physics 1.4 (1% 2.2), render world 11.1 (1% 17.9)
+2026-10-28T06:44:12.931371Z  INFO extraction: gpu: 21.0 ms a frame (main_opaque_pass_3d 18.4, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:44:16.319289Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.2 ms of a 26.7 ms frame
+2026-10-28T06:44:16.465890Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2403v122 is invalid; its index now has generation 123.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:44:16.466037Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1904v110 is invalid; its index now has generation 111.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:44:22.944701Z  INFO extraction: frames: 322 in 10 s, mean 31.1 ms, 1% 41.9 ms, worst 42.6 ms (Out)
+2026-10-28T06:44:22.944744Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.5), physics 1.3 (1% 1.9), render world 15.6 (1% 29.6)
+2026-10-28T06:44:22.944891Z  INFO extraction: gpu: 20.7 ms a frame (main_opaque_pass_3d 18.4, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:44:26.349984Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.4 ms of a 40.0 ms frame
+2026-10-28T06:44:32.984209Z  INFO extraction: frames: 272 in 10 s, mean 36.8 ms, 1% 42.3 ms, worst 43.9 ms (Out)
+2026-10-28T06:44:32.984261Z  INFO extraction::render::budget: cpu: main 9.1 ms a frame (1% 11.3), physics 1.4 (1% 2.0), render world 20.8 (1% 29.2)
+2026-10-28T06:44:32.984378Z  INFO extraction: gpu: 22.9 ms a frame (main_opaque_pass_3d 20.5, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:44:36.344484Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.6 ms of a 26.7 ms frame
+2026-10-28T06:44:42.984829Z  INFO extraction: frames: 370 in 10 s, mean 27.1 ms, 1% 41.1 ms, worst 45.6 ms (Out)
+2026-10-28T06:44:42.984954Z  INFO extraction::render::budget: cpu: main 9.3 ms a frame (1% 13.1), physics 1.6 (1% 2.4), render world 12.8 (1% 25.9)
+2026-10-28T06:44:42.985003Z  INFO extraction: gpu: 19.0 ms a frame (main_opaque_pass_3d 16.9, tonemapping 0.6, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:44:46.344316Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 12.1 ms of a 26.7 ms frame
+2026-10-28T06:44:53.009627Z  INFO extraction: frames: 357 in 10 s, mean 28.1 ms, 1% 42.0 ms, worst 44.1 ms (Out)
+2026-10-28T06:44:53.009716Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 11.0), physics 1.5 (1% 2.3), render world 13.5 (1% 28.4)
+2026-10-28T06:44:53.009817Z  INFO extraction: gpu: 20.6 ms a frame (main_opaque_pass_3d 18.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:44:56.368600Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 26.7 ms frame
+2026-10-28T06:45:03.020881Z  INFO extraction: frames: 372 in 10 s, mean 26.9 ms, 1% 31.0 ms, worst 42.8 ms (Out)
+2026-10-28T06:45:03.020950Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.6), physics 1.4 (1% 2.2), render world 13.8 (1% 18.8)
+2026-10-28T06:45:03.021053Z  INFO extraction: gpu: 18.9 ms a frame (main_opaque_pass_3d 16.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:45:06.384153Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 26.7 ms frame
+2026-10-28T06:45:07.382687Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4190v111 is invalid; its index now has generation 112.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:07.382822Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4185v41 is invalid; its index now has generation 42.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:13.031980Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.5 ms, worst 39.2 ms (Out)
+2026-10-28T06:45:13.032030Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.6), physics 1.4 (1% 2.4), render world 14.9 (1% 18.6)
+2026-10-28T06:45:13.032173Z  INFO extraction: gpu: 18.5 ms a frame (main_opaque_pass_3d 15.8, tonemapping 0.6, main_transparent_pass_3d 0.5, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:45:16.380871Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.1 ms of a 26.7 ms frame
+2026-10-28T06:45:21.582275Z  INFO extraction::onboarding: onboarding: FillMag done
+2026-10-28T06:45:21.583547Z  INFO extraction::raid: raid: Driver: "Good. Next: the house on the right."
+2026-10-28T06:45:21.648323Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3073v19 is invalid; its index now has generation 20.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:21.648460Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4008v114 is invalid; its index now has generation 115.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:23.033785Z  INFO extraction: frames: 373 in 10 s, mean 26.8 ms, 1% 31.6 ms, worst 54.9 ms (Out)
+2026-10-28T06:45:23.033835Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.2), physics 1.2 (1% 2.1), render world 16.2 (1% 18.8)
+2026-10-28T06:45:23.033974Z  INFO extraction: gpu: 18.3 ms a frame (main_opaque_pass_3d 15.8, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:45:26.396989Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.9 ms of a 26.7 ms frame
+2026-10-28T06:45:33.062048Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 29.9 ms (Out)
+2026-10-28T06:45:33.062095Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.1), physics 1.2 (1% 2.1), render world 16.6 (1% 19.1)
+2026-10-28T06:45:33.062218Z  INFO extraction: gpu: 17.1 ms a frame (main_opaque_pass_3d 14.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:45:36.396207Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.4 ms of a 26.7 ms frame
+2026-10-28T06:45:43.063052Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.5 ms, worst 30.4 ms (Out)
+2026-10-28T06:45:43.063129Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.3), physics 1.2 (1% 2.0), render world 16.4 (1% 18.9)
+2026-10-28T06:45:43.063251Z  INFO extraction: gpu: 18.1 ms a frame (main_opaque_pass_3d 15.4, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:45:46.411147Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.0 ms of a 26.7 ms frame
+2026-10-28T06:45:47.006692Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2374v20 is invalid; its index now has generation 21.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:47.006850Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4187v110 is invalid; its index now has generation 111.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:45:52.728260Z  INFO extraction::raid: raid: Safety's on. Click the stick on the gun hand.
+2026-10-28T06:45:53.071686Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.4 ms, worst 38.8 ms (Out)
+2026-10-28T06:45:53.071737Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.0), physics 1.1 (1% 1.8), render world 16.6 (1% 18.8)
+2026-10-28T06:45:53.071882Z  INFO extraction: gpu: 18.8 ms a frame (main_opaque_pass_3d 16.3, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:45:56.433599Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.4 ms of a 26.7 ms frame
+2026-10-28T06:46:03.098587Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 33.5 ms (Out)
+2026-10-28T06:46:03.098643Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 11.6), physics 1.1 (1% 1.9), render world 16.1 (1% 18.9)
+2026-10-28T06:46:03.098771Z  INFO extraction: gpu: 18.9 ms a frame (main_opaque_pass_3d 16.6, bin_unpacking 0.6, tonemapping 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.1)
+2026-10-28T06:46:06.464124Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 26.7 ms frame
+2026-10-28T06:46:13.101857Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 30.5 ms, worst 40.4 ms (Out)
+2026-10-28T06:46:13.101940Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.2 (1% 1.9), render world 15.7 (1% 20.1)
+2026-10-28T06:46:13.102059Z  INFO extraction: gpu: 17.6 ms a frame (main_opaque_pass_3d 15.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:46:16.474723Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:46:23.127991Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.4 ms, worst 39.8 ms (Out)
+2026-10-28T06:46:23.128045Z  INFO extraction::render::budget: cpu: main 8.6 ms a frame (1% 10.1), physics 1.1 (1% 2.0), render world 16.6 (1% 18.7)
+2026-10-28T06:46:23.128179Z  INFO extraction: gpu: 18.2 ms a frame (main_opaque_pass_3d 15.6, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:46:26.499992Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.4 ms of a 26.7 ms frame
+2026-10-28T06:46:33.127549Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 39.7 ms (Out)
+2026-10-28T06:46:33.127607Z  INFO extraction::render::budget: cpu: main 8.5 ms a frame (1% 10.4), physics 1.1 (1% 1.9), render world 16.7 (1% 18.8)
+2026-10-28T06:46:33.127711Z  INFO extraction: gpu: 16.5 ms a frame (main_opaque_pass_3d 14.2, bin_unpacking 0.7, tonemapping 0.6, clustering 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:46:36.514131Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:46:43.140894Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 39.7 ms (Out)
+2026-10-28T06:46:43.140979Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.8), physics 1.3 (1% 2.0), render world 16.4 (1% 18.8)
+2026-10-28T06:46:43.141081Z  INFO extraction: gpu: 16.8 ms a frame (main_opaque_pass_3d 14.3, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:46:46.542500Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 26.7 ms frame
+2026-10-28T06:46:53.152639Z  INFO extraction: frames: 371 in 10 s, mean 27.0 ms, 1% 31.8 ms, worst 41.3 ms (Out)
+2026-10-28T06:46:53.152710Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.3 (1% 2.1), render world 13.3 (1% 19.0)
+2026-10-28T06:46:53.152843Z  INFO extraction: gpu: 18.2 ms a frame (main_opaque_pass_3d 15.4, tonemapping 0.6, main_transparent_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:46:55.675494Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2142v28 is invalid; its index now has generation 29.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:46:55.675695Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3086v36 is invalid; its index now has generation 37.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:46:56.544383Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:47:03.177826Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 31.6 ms, worst 42.7 ms (Out)
+2026-10-28T06:47:03.177879Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 11.3), physics 1.3 (1% 2.2), render world 14.5 (1% 20.4)
+2026-10-28T06:47:03.178003Z  INFO extraction: gpu: 18.3 ms a frame (main_opaque_pass_3d 15.4, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:47:06.554322Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.3 ms of a 26.7 ms frame
+2026-10-28T06:47:13.193694Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 32.6 ms, worst 40.2 ms (Out)
+2026-10-28T06:47:13.193733Z  INFO extraction::render::budget: cpu: main 9.1 ms a frame (1% 12.5), physics 1.4 (1% 2.7), render world 16.1 (1% 19.2)
+2026-10-28T06:47:13.193871Z  INFO extraction: gpu: 16.8 ms a frame (main_opaque_pass_3d 14.0, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:47:16.553967Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.5 ms of a 26.7 ms frame
+2026-10-28T06:47:23.219871Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.9 ms, worst 30.9 ms (Out)
+2026-10-28T06:47:23.219921Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.5), physics 1.3 (1% 2.1), render world 16.2 (1% 19.0)
+2026-10-28T06:47:23.220046Z  INFO extraction: gpu: 17.5 ms a frame (main_opaque_pass_3d 14.9, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:47:26.578239Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.8 ms of a 26.7 ms frame
+2026-10-28T06:47:33.229988Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.4 ms, worst 42.2 ms (Out)
+2026-10-28T06:47:33.230063Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 11.3), physics 1.4 (1% 2.3), render world 16.4 (1% 19.7)
+2026-10-28T06:47:33.230157Z  INFO extraction: gpu: 16.3 ms a frame (main_opaque_pass_3d 13.6, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:47:36.593050Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.3 ms of a 26.7 ms frame
+2026-10-28T06:47:43.242273Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.2 ms, worst 40.4 ms (Out)
+2026-10-28T06:47:43.242314Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.9), physics 1.4 (1% 2.2), render world 16.3 (1% 19.4)
+2026-10-28T06:47:43.242449Z  INFO extraction: gpu: 13.1 ms a frame (main_opaque_pass_3d 10.7, main_transparent_pass_3d 0.6, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:47:46.608011Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.7 ms of a 26.7 ms frame
+2026-10-28T06:47:53.272107Z  INFO extraction: frames: 388 in 10 s, mean 25.8 ms, 1% 31.6 ms, worst 32.1 ms (Out)
+2026-10-28T06:47:53.272155Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 11.1), physics 1.4 (1% 2.6), render world 15.7 (1% 18.8)
+2026-10-28T06:47:53.272315Z  INFO extraction: gpu: 11.4 ms a frame (main_opaque_pass_3d 9.1, tonemapping 0.5, main_transparent_pass_3d 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:47:56.608308Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:47:57.856381Z  INFO extraction::onboarding: onboarding: OpenDoor done
+2026-10-28T06:48:03.270215Z  INFO extraction: frames: 391 in 10 s, mean 25.6 ms, 1% 29.8 ms, worst 35.3 ms (Out)
+2026-10-28T06:48:03.270236Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.7), physics 1.5 (1% 2.3), render world 15.3 (1% 18.8)
+2026-10-28T06:48:03.270408Z  INFO extraction: gpu: 11.5 ms a frame (main_opaque_pass_3d 9.4, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:48:06.605895Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 26.7 ms frame
+2026-10-28T06:48:06.643076Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3889v53 is invalid; its index now has generation 54.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:48:06.643235Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2400v39 is invalid; its index now has generation 40.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:48:13.293879Z  INFO extraction: frames: 438 in 10 s, mean 22.9 ms, 1% 29.0 ms, worst 30.7 ms (Out)
+2026-10-28T06:48:13.293938Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 11.4), physics 1.6 (1% 3.0), render world 12.6 (1% 18.5)
+2026-10-28T06:48:13.294051Z  INFO extraction: gpu: 9.8 ms a frame (main_opaque_pass_3d 7.9, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.2, early_mesh_preprocessing 0.2)
+2026-10-28T06:48:16.631112Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:48:23.309014Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.7 ms, worst 40.4 ms (Out)
+2026-10-28T06:48:23.309086Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.7), physics 1.5 (1% 2.4), render world 16.4 (1% 19.2)
+2026-10-28T06:48:23.309207Z  INFO extraction: gpu: 13.7 ms a frame (main_opaque_pass_3d 11.3, tonemapping 0.6, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:48:26.643458Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.0 ms of a 26.7 ms frame
+2026-10-28T06:48:28.911537Z  INFO extraction::onboarding: onboarding: Search done
+2026-10-28T06:48:28.913233Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp on the right."
+2026-10-28T06:48:33.335448Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.8 ms, worst 56.5 ms (Out)
+2026-10-28T06:48:33.335484Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.5), physics 1.4 (1% 2.2), render world 16.3 (1% 18.5)
+2026-10-28T06:48:33.335611Z  INFO extraction: gpu: 13.5 ms a frame (main_opaque_pass_3d 11.1, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:48:36.644436Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.7 ms of a 26.7 ms frame
+2026-10-28T06:48:43.337347Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.1 ms, worst 31.3 ms (Out)
+2026-10-28T06:48:43.337389Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.4), physics 1.4 (1% 2.1), render world 16.4 (1% 18.9)
+2026-10-28T06:48:43.337533Z  INFO extraction: gpu: 12.6 ms a frame (main_opaque_pass_3d 9.9, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:48:46.672904Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:48:53.364013Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.8 ms, worst 32.0 ms (Out)
+2026-10-28T06:48:53.364063Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.7), physics 1.3 (1% 2.2), render world 16.3 (1% 18.4)
+2026-10-28T06:48:53.364177Z  INFO extraction: gpu: 12.7 ms a frame (main_opaque_pass_3d 10.4, bin_unpacking 0.5, tonemapping 0.5, clustering 0.4, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:48:56.702184Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.3 ms of a 26.7 ms frame
+2026-10-28T06:49:03.363951Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.3 ms, worst 30.5 ms (Out)
+2026-10-28T06:49:03.364000Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 11.2), physics 1.4 (1% 2.1), render world 16.4 (1% 19.2)
+2026-10-28T06:49:03.364168Z  INFO extraction: gpu: 12.5 ms a frame (main_opaque_pass_3d 9.6, main_transparent_pass_3d 0.9, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:49:06.725094Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.7 ms of a 26.7 ms frame
+2026-10-28T06:49:13.360539Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 30.0 ms, worst 32.8 ms (Out)
+2026-10-28T06:49:13.360576Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.7), physics 1.3 (1% 2.2), render world 16.4 (1% 19.0)
+2026-10-28T06:49:13.360796Z  INFO extraction: gpu: 11.5 ms a frame (main_opaque_pass_3d 8.8, main_transparent_pass_3d 0.7, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:49:16.723332Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.8 ms of a 26.7 ms frame
+2026-10-28T06:49:23.387180Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 30.1 ms (Out)
+2026-10-28T06:49:23.387234Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.3), physics 1.3 (1% 2.1), render world 16.5 (1% 18.8)
+2026-10-28T06:49:23.387358Z  INFO extraction: gpu: 12.4 ms a frame (main_opaque_pass_3d 9.6, main_transparent_pass_3d 0.8, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:49:26.752207Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.8 ms of a 26.7 ms frame
+2026-10-28T06:49:33.417064Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.9 ms, worst 30.8 ms (Out)
+2026-10-28T06:49:33.417114Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.4), physics 1.3 (1% 2.1), render world 16.5 (1% 19.1)
+2026-10-28T06:49:33.417249Z  INFO extraction: gpu: 12.5 ms a frame (main_opaque_pass_3d 10.0, tonemapping 0.5, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:49:36.777340Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.2 ms of a 26.7 ms frame
+2026-10-28T06:49:43.430013Z  INFO extraction: frames: 399 in 10 s, mean 25.1 ms, 1% 29.2 ms, worst 30.1 ms (Out)
+2026-10-28T06:49:43.430055Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.8), physics 1.4 (1% 2.4), render world 14.9 (1% 19.2)
+2026-10-28T06:49:43.430195Z  INFO extraction: gpu: 11.7 ms a frame (main_opaque_pass_3d 9.4, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, main_transparent_pass_3d 0.3, upscaling 0.3)
+2026-10-28T06:49:46.788958Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 26.7 ms frame
+2026-10-28T06:49:53.428954Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 30.9 ms (Out)
+2026-10-28T06:49:53.429022Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.5), physics 1.4 (1% 2.3), render world 16.4 (1% 18.9)
+2026-10-28T06:49:53.429142Z  INFO extraction: gpu: 11.9 ms a frame (main_opaque_pass_3d 9.1, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:49:56.788790Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.3 ms of a 26.7 ms frame
+2026-10-28T06:50:03.453520Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 30.9 ms (Out)
+2026-10-28T06:50:03.453560Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.4 (1% 2.3), render world 16.3 (1% 18.8)
+2026-10-28T06:50:03.453720Z  INFO extraction: gpu: 12.7 ms a frame (main_opaque_pass_3d 9.8, tonemapping 0.7, main_transparent_pass_3d 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:50:06.783807Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu not measured of a 13.3 ms frame
+2026-10-28T06:50:09.260916Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4008v147 is invalid; its index now has generation 148.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:09.261057Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3786v58 is invalid; its index now has generation 59.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:12.333659Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3797v41 is invalid; its index now has generation 42.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:12.333830Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3789v139 is invalid; its index now has generation 140.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:12.333980Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2436v32 is invalid; its index now has generation 33.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:12.334107Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3800v44 is invalid; its index now has generation 45.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:50:13.466556Z  INFO extraction: frames: 499 in 10 s, mean 20.1 ms, 1% 28.8 ms, worst 31.9 ms (Out)
+2026-10-28T06:50:13.466607Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.8), physics 1.5 (1% 2.7), render world 10.1 (1% 18.5)
+2026-10-28T06:50:13.466740Z  INFO extraction: gpu: 9.6 ms a frame (main_opaque_pass_3d 7.6, tonemapping 0.5, bin_unpacking 0.4, clustering 0.4, upscaling 0.2, main_transparent_pass_3d 0.2)
+2026-10-28T06:50:16.801070Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.2 ms of a 26.7 ms frame
+2026-10-28T06:50:23.496439Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.7 ms, worst 31.0 ms (Out)
+2026-10-28T06:50:23.496498Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.9), physics 1.4 (1% 2.2), render world 16.2 (1% 18.6)
+2026-10-28T06:50:23.496613Z  INFO extraction: gpu: 13.6 ms a frame (main_opaque_pass_3d 11.1, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:50:26.831453Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.9 ms of a 26.7 ms frame
+2026-10-28T06:50:33.519617Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.0 ms, worst 34.4 ms (Out)
+2026-10-28T06:50:33.519668Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.7), physics 1.4 (1% 2.1), render world 16.3 (1% 18.9)
+2026-10-28T06:50:33.519786Z  INFO extraction: gpu: 13.6 ms a frame (main_opaque_pass_3d 11.0, tonemapping 0.6, bin_unpacking 0.6, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:50:36.854826Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.4 ms of a 26.7 ms frame
+2026-10-28T06:50:43.549432Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 46.3 ms (Out)
+2026-10-28T06:50:43.549505Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.3 (1% 2.0), render world 16.4 (1% 19.0)
+2026-10-28T06:50:43.549614Z  INFO extraction: gpu: 12.0 ms a frame (main_opaque_pass_3d 9.6, bin_unpacking 0.6, tonemapping 0.5, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:50:46.855602Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.5 ms of a 26.7 ms frame
+2026-10-28T06:50:53.563012Z  INFO extraction: frames: 389 in 10 s, mean 25.7 ms, 1% 28.9 ms, worst 29.6 ms (Out)
+2026-10-28T06:50:53.563053Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.5), physics 1.3 (1% 2.1), render world 15.7 (1% 18.6)
+2026-10-28T06:50:53.563185Z  INFO extraction: gpu: 10.4 ms a frame (main_opaque_pass_3d 8.1, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.2)
+2026-10-28T06:50:56.866958Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.8 ms of a 26.7 ms frame
+2026-10-28T06:51:03.561541Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 32.2 ms (Out)
+2026-10-28T06:51:03.561586Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.3 (1% 2.3), render world 16.6 (1% 19.0)
+2026-10-28T06:51:03.561723Z  INFO extraction: gpu: 11.0 ms a frame (main_opaque_pass_3d 8.5, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:51:06.897421Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.7 ms of a 26.7 ms frame
+2026-10-28T06:51:13.573259Z  INFO extraction: frames: 387 in 10 s, mean 25.9 ms, 1% 29.2 ms, worst 30.6 ms (Out)
+2026-10-28T06:51:13.573312Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.4), physics 1.3 (1% 2.5), render world 15.7 (1% 18.6)
+2026-10-28T06:51:13.573437Z  INFO extraction: gpu: 11.2 ms a frame (main_opaque_pass_3d 8.6, main_transparent_pass_3d 0.6, bin_unpacking 0.6, tonemapping 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:51:16.908148Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.3 ms of a 26.7 ms frame
+2026-10-28T06:51:23.600469Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.4 ms, worst 29.8 ms (Out)
+2026-10-28T06:51:23.600549Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.3 (1% 2.2), render world 16.4 (1% 18.8)
+2026-10-28T06:51:23.600641Z  INFO extraction: gpu: 11.4 ms a frame (main_opaque_pass_3d 8.7, main_transparent_pass_3d 0.7, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:51:26.932758Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 3.7 ms of a 26.7 ms frame
+2026-10-28T06:51:33.613998Z  INFO extraction: frames: 413 in 10 s, mean 24.2 ms, 1% 29.5 ms, worst 30.4 ms (Out)
+2026-10-28T06:51:33.614009Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.5), physics 1.4 (1% 2.4), render world 14.2 (1% 18.9)
+2026-10-28T06:51:33.614186Z  INFO extraction: gpu: 10.3 ms a frame (main_opaque_pass_3d 7.8, main_transparent_pass_3d 0.6, tonemapping 0.5, bin_unpacking 0.5, clustering 0.4, upscaling 0.2)
+2026-10-28T06:51:36.949966Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:51:43.639156Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.9 ms, worst 31.2 ms (Out)
+2026-10-28T06:51:43.639175Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.4 (1% 2.3), render world 14.6 (1% 18.4)
+2026-10-28T06:51:43.639332Z  INFO extraction: gpu: 18.0 ms a frame (main_opaque_pass_3d 15.3, tonemapping 0.6, main_transparent_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:51:46.962131Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.5 ms of a 26.7 ms frame
+2026-10-28T06:51:53.639176Z  INFO extraction: frames: 374 in 10 s, mean 26.7 ms, 1% 30.8 ms, worst 40.9 ms (Out)
+2026-10-28T06:51:53.639225Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.3), physics 1.3 (1% 2.2), render world 16.7 (1% 19.8)
+2026-10-28T06:51:53.639392Z  INFO extraction: gpu: 16.3 ms a frame (main_opaque_pass_3d 13.5, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:51:56.974913Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.7 ms of a 26.7 ms frame
+2026-10-28T06:52:03.640517Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 31.1 ms, worst 32.1 ms (Out)
+2026-10-28T06:52:03.640577Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 11.0), physics 1.3 (1% 2.1), render world 13.4 (1% 18.8)
+2026-10-28T06:52:03.640688Z  INFO extraction: gpu: 18.1 ms a frame (main_opaque_pass_3d 15.5, tonemapping 0.6, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.5, upscaling 0.2)
+2026-10-28T06:52:06.986264Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.7 ms of a 26.7 ms frame
+2026-10-28T06:52:13.639544Z  INFO extraction: frames: 369 in 10 s, mean 27.1 ms, 1% 31.6 ms, worst 38.9 ms (Out)
+2026-10-28T06:52:13.639595Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.6), physics 1.3 (1% 2.2), render world 13.3 (1% 18.5)
+2026-10-28T06:52:13.639811Z  INFO extraction: gpu: 18.1 ms a frame (main_opaque_pass_3d 15.5, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.5, upscaling 0.3)
+2026-10-28T06:52:17.031384Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 12.8 ms of a 40.0 ms frame
+2026-10-28T06:52:20.288341Z  INFO extraction::onboarding: onboarding: Dressing done
+2026-10-28T06:52:20.288711Z  INFO extraction::raid: raid: You bind the wound. The bleeding stops.
+2026-10-28T06:52:20.290404Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp on the right. Mind the shimmer."
+2026-10-28T06:52:20.927361Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3810v154 is invalid; its index now has generation 155.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:20.927497Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3886v68 is invalid; its index now has generation 69.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:20.927590Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1910v117 is invalid; its index now has generation 118.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:20.927735Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1959v16 is invalid; its index now has generation 17.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:23.650418Z  INFO extraction: frames: 323 in 10 s, mean 31.0 ms, 1% 42.7 ms, worst 64.8 ms (Out)
+2026-10-28T06:52:23.650447Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.7), physics 1.3 (1% 2.1), render world 15.3 (1% 29.6)
+2026-10-28T06:52:23.650595Z  INFO extraction: gpu: 20.4 ms a frame (main_opaque_pass_3d 18.1, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3, main_transparent_pass_3d 0.2)
+2026-10-28T06:52:27.020548Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.3 ms of a 26.7 ms frame
+2026-10-28T06:52:33.649490Z  INFO extraction: frames: 346 in 10 s, mean 28.9 ms, 1% 41.8 ms, worst 42.1 ms (Out)
+2026-10-28T06:52:33.649535Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.4), physics 1.3 (1% 2.0), render world 15.0 (1% 29.5)
+2026-10-28T06:52:33.649662Z  INFO extraction: gpu: 19.0 ms a frame (main_opaque_pass_3d 16.3, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:52:37.039903Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.6 ms of a 26.7 ms frame
+2026-10-28T06:52:43.676022Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.6 ms, worst 31.8 ms (Out)
+2026-10-28T06:52:43.676074Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.8), physics 1.3 (1% 2.1), render world 16.2 (1% 18.4)
+2026-10-28T06:52:43.676310Z  INFO extraction: gpu: 17.8 ms a frame (main_opaque_pass_3d 15.1, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.2)
+2026-10-28T06:52:46.385127Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3805v147 is invalid; its index now has generation 148.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:46.385267Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1961v55 is invalid; its index now has generation 56.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:52:47.041082Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.8 ms of a 26.7 ms frame
+2026-10-28T06:52:53.675261Z  INFO extraction: frames: 372 in 10 s, mean 26.9 ms, 1% 30.8 ms, worst 31.9 ms (Out)
+2026-10-28T06:52:53.675295Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.7), physics 1.3 (1% 2.1), render world 12.8 (1% 18.9)
+2026-10-28T06:52:53.675430Z  INFO extraction: gpu: 19.4 ms a frame (main_opaque_pass_3d 16.5, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:52:57.053913Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.4 ms of a 26.7 ms frame
+2026-10-28T06:53:03.693286Z  INFO extraction: frames: 373 in 10 s, mean 26.9 ms, 1% 31.4 ms, worst 41.0 ms (Out)
+2026-10-28T06:53:03.693330Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.3 (1% 2.0), render world 14.0 (1% 18.8)
+2026-10-28T06:53:03.693564Z  INFO extraction: gpu: 17.7 ms a frame (main_opaque_pass_3d 14.9, main_transparent_pass_3d 0.7, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:53:07.055529Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.6 ms of a 26.7 ms frame
+2026-10-28T06:53:13.696384Z  INFO extraction: frames: 329 in 10 s, mean 30.4 ms, 1% 42.1 ms, worst 43.3 ms (Out)
+2026-10-28T06:53:13.696390Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.7), physics 1.2 (1% 2.0), render world 12.8 (1% 29.7)
+2026-10-28T06:53:13.696569Z  INFO extraction: gpu: 20.3 ms a frame (main_opaque_pass_3d 17.5, main_transparent_pass_3d 0.6, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:53:17.094048Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.4 ms of a 40.0 ms frame
+2026-10-28T06:53:22.302448Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4183v95 is invalid; its index now has generation 96.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:53:22.302673Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2379v35 is invalid; its index now has generation 36.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:53:23.731611Z  INFO extraction: frames: 298 in 10 s, mean 33.6 ms, 1% 43.5 ms, worst 44.9 ms (Out)
+2026-10-28T06:53:23.731682Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.2 (1% 1.8), render world 19.5 (1% 30.4)
+2026-10-28T06:53:23.731842Z  INFO extraction: gpu: 21.1 ms a frame (main_opaque_pass_3d 18.4, tonemapping 0.6, bin_unpacking 0.5, main_transparent_pass_3d 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:53:27.105696Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.1 ms of a 40.0 ms frame
+2026-10-28T06:53:33.773336Z  INFO extraction: frames: 278 in 10 s, mean 36.1 ms, 1% 43.1 ms, worst 43.9 ms (Out)
+2026-10-28T06:53:33.773371Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.8), physics 1.2 (1% 2.0), render world 20.7 (1% 30.9)
+2026-10-28T06:53:33.773507Z  INFO extraction: gpu: 22.5 ms a frame (main_opaque_pass_3d 18.9, main_transparent_pass_3d 1.3, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.2)
+2026-10-28T06:53:37.102860Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 11.9 ms of a 26.7 ms frame
+2026-10-28T06:53:38.331424Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4131v74 is invalid; its index now has generation 75.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:53:38.331564Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2354v17 is invalid; its index now has generation 18.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:53:43.800044Z  INFO extraction: frames: 268 in 10 s, mean 37.4 ms, 1% 43.4 ms, worst 44.0 ms (Out)
+2026-10-28T06:53:43.800089Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.6), physics 1.2 (1% 1.8), render world 22.5 (1% 30.2)
+2026-10-28T06:53:43.800245Z  INFO extraction: gpu: 22.3 ms a frame (main_opaque_pass_3d 18.7, main_transparent_pass_3d 1.2, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:53:47.161056Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 12.9 ms of a 40.0 ms frame
+2026-10-28T06:53:53.838132Z  INFO extraction: frames: 251 in 10 s, mean 40.0 ms, 1% 42.8 ms, worst 43.1 ms (Out)
+2026-10-28T06:53:53.838175Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.7), physics 1.2 (1% 1.5), render world 26.8 (1% 30.1)
+2026-10-28T06:53:53.838315Z  INFO extraction: gpu: 24.6 ms a frame (main_opaque_pass_3d 20.8, main_transparent_pass_3d 1.3, tonemapping 0.6, main_transmissive_pass_3d 0.5, bin_unpacking 0.5, clustering 0.4)
+2026-10-28T06:53:57.204455Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.9 ms of a 40.0 ms frame
+2026-10-28T06:54:03.849994Z  INFO extraction: frames: 257 in 10 s, mean 39.0 ms, 1% 42.9 ms, worst 43.9 ms (Out)
+2026-10-28T06:54:03.850063Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.1 (1% 1.6), render world 24.5 (1% 30.1)
+2026-10-28T06:54:03.850218Z  INFO extraction: gpu: 23.6 ms a frame (main_opaque_pass_3d 20.4, main_transparent_pass_3d 0.8, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, main_transmissive_pass_3d 0.4)
+2026-10-28T06:54:07.197842Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.7 ms of a 40.0 ms frame
+2026-10-28T06:54:13.879778Z  INFO extraction: frames: 258 in 10 s, mean 38.9 ms, 1% 43.1 ms, worst 44.6 ms (Out)
+2026-10-28T06:54:13.879823Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.7), physics 1.1 (1% 1.6), render world 24.7 (1% 30.5)
+2026-10-28T06:54:13.879971Z  INFO extraction: gpu: 24.5 ms a frame (main_opaque_pass_3d 21.4, main_transparent_pass_3d 0.8, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, main_transmissive_pass_3d 0.4)
+2026-10-28T06:54:17.239793Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.7 ms of a 40.0 ms frame
+2026-10-28T06:54:19.638983Z  INFO extraction::onboarding: onboarding: Artifact done
+2026-10-28T06:54:21.149282Z  INFO extraction::raid: raid: Too hot to hold: you drop it. Let it cool, or pocket it.
+2026-10-28T06:54:23.915626Z  INFO extraction: frames: 251 in 10 s, mean 40.0 ms, 1% 43.3 ms, worst 46.6 ms (Out)
+2026-10-28T06:54:23.915666Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 11.2), physics 1.1 (1% 1.6), render world 26.8 (1% 30.7)
+2026-10-28T06:54:23.915807Z  INFO extraction: gpu: 23.6 ms a frame (main_opaque_pass_3d 19.8, main_transparent_pass_3d 1.1, tonemapping 0.6, main_transmissive_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5)
+2026-10-28T06:54:27.252293Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.5 ms of a 40.0 ms frame
+2026-10-28T06:54:33.932137Z  INFO extraction: frames: 257 in 10 s, mean 39.0 ms, 1% 43.4 ms, worst 44.1 ms (Out)
+2026-10-28T06:54:33.932192Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 11.2), physics 1.2 (1% 1.9), render world 24.3 (1% 30.3)
+2026-10-28T06:54:33.932499Z  INFO extraction: gpu: 24.0 ms a frame (main_opaque_pass_3d 20.9, main_transparent_pass_3d 0.8, tonemapping 0.6, clustering 0.5, bin_unpacking 0.4, upscaling 0.3)
+2026-10-28T06:54:37.265079Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 26.7 ms frame
+2026-10-28T06:54:43.921381Z  INFO extraction: frames: 310 in 10 s, mean 32.3 ms, 1% 42.1 ms, worst 42.6 ms (Out)
+2026-10-28T06:54:43.921444Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 10.8), physics 1.2 (1% 2.0), render world 18.9 (1% 29.8)
+2026-10-28T06:54:43.921554Z  INFO extraction: gpu: 18.5 ms a frame (main_opaque_pass_3d 15.7, main_transparent_pass_3d 0.6, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:54:47.290702Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.6 ms of a 40.0 ms frame
+2026-10-28T06:54:53.968314Z  INFO extraction: frames: 252 in 10 s, mean 39.8 ms, 1% 42.8 ms, worst 66.8 ms (Out)
+2026-10-28T06:54:53.968331Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 17.8), physics 1.2 (1% 2.0), render world 26.3 (1% 30.8)
+2026-10-28T06:54:53.968480Z  INFO extraction: gpu: 21.8 ms a frame (main_opaque_pass_3d 18.7, main_transparent_pass_3d 0.8, tonemapping 0.6, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:54:57.336247Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 12.7 ms of a 40.0 ms frame
+2026-10-28T06:55:00.013174Z  INFO extraction::onboarding: onboarding: Probe done
+2026-10-28T06:55:00.015024Z  INFO extraction::raid: raid: Driver: "Good. Next: the lamp on the left."
+2026-10-28T06:55:00.387749Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4008v177 is invalid; its index now has generation 178.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:55:00.387994Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 1929v87 is invalid; its index now has generation 88.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:55:00.388168Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4129v118 is invalid; its index now has generation 119.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:55:00.388342Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3614v42 is invalid; its index now has generation 43.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:55:03.975580Z  INFO extraction: frames: 264 in 10 s, mean 38.0 ms, 1% 43.7 ms, worst 57.8 ms (Out)
+2026-10-28T06:55:03.975674Z  INFO extraction::render::budget: cpu: main 9.1 ms a frame (1% 10.7), physics 1.2 (1% 1.7), render world 24.6 (1% 29.7)
+2026-10-28T06:55:03.975751Z  INFO extraction: gpu: 23.2 ms a frame (main_opaque_pass_3d 20.0, main_transparent_pass_3d 0.9, tonemapping 0.6, bin_unpacking 0.5, clustering 0.4, upscaling 0.3)
+2026-10-28T06:55:07.345587Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.8 ms of a 26.7 ms frame
+2026-10-28T06:55:13.998955Z  INFO extraction: frames: 345 in 10 s, mean 29.1 ms, 1% 41.8 ms, worst 43.8 ms (Out)
+2026-10-28T06:55:13.999016Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 15.3), physics 1.3 (1% 2.2), render world 13.7 (1% 29.6)
+2026-10-28T06:55:13.999162Z  INFO extraction: gpu: 19.0 ms a frame (main_opaque_pass_3d 16.4, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:55:17.356128Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.3 ms of a 53.3 ms frame
+2026-10-28T06:55:24.064007Z  INFO extraction: frames: 336 in 10 s, mean 29.9 ms, 1% 42.2 ms, worst 43.7 ms (Out)
+2026-10-28T06:55:24.064046Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.6), physics 1.2 (1% 2.0), render world 11.4 (1% 30.1)
+2026-10-28T06:55:24.064243Z  INFO extraction: gpu: 21.3 ms a frame (main_opaque_pass_3d 18.4, tonemapping 0.6, main_transparent_pass_3d 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:55:27.427229Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.9 ms of a 40.0 ms frame
+2026-10-28T06:55:34.077005Z  INFO extraction: frames: 250 in 10 s, mean 40.0 ms, 1% 43.7 ms, worst 52.8 ms (Out)
+2026-10-28T06:55:34.077058Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.7), physics 1.2 (1% 1.8), render world 26.9 (1% 30.6)
+2026-10-28T06:55:34.077185Z  INFO extraction: gpu: 22.8 ms a frame (main_opaque_pass_3d 19.9, main_transparent_pass_3d 0.6, tonemapping 0.6, clustering 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:55:37.420457Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 11.3 ms of a 26.7 ms frame
+2026-10-28T06:55:44.086917Z  INFO extraction: frames: 377 in 10 s, mean 26.6 ms, 1% 40.8 ms, worst 42.7 ms (Out)
+2026-10-28T06:55:44.086965Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.6), physics 1.2 (1% 1.9), render world 16.2 (1% 29.1)
+2026-10-28T06:55:44.087108Z  INFO extraction: gpu: 15.6 ms a frame (main_opaque_pass_3d 13.0, tonemapping 0.6, main_transparent_pass_3d 0.5, clustering 0.4, bin_unpacking 0.4, upscaling 0.3)
+2026-10-28T06:55:44.618208Z  INFO extraction::onboarding: onboarding: Button done
+2026-10-28T06:55:44.619585Z  INFO extraction::raid: raid: Driver: "Good. Next: the north post, end of the track."
+2026-10-28T06:55:47.435027Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.3 ms of a 26.7 ms frame
+2026-10-28T06:55:54.097853Z  INFO extraction: frames: 394 in 10 s, mean 25.4 ms, 1% 29.3 ms, worst 55.4 ms (Out)
+2026-10-28T06:55:54.097901Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.4), physics 1.2 (1% 2.1), render world 15.3 (1% 19.2)
+2026-10-28T06:55:54.098035Z  INFO extraction: gpu: 14.8 ms a frame (main_opaque_pass_3d 12.2, tonemapping 0.6, bin_unpacking 0.5, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:55:57.447200Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 10.3 ms of a 53.3 ms frame
+2026-10-28T06:56:04.099152Z  INFO extraction: frames: 345 in 10 s, mean 29.0 ms, 1% 41.1 ms, worst 43.0 ms (Out)
+2026-10-28T06:56:04.099250Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.2 (1% 2.1), render world 15.2 (1% 29.2)
+2026-10-28T06:56:04.099396Z  INFO extraction: gpu: 19.5 ms a frame (main_opaque_pass_3d 16.7, tonemapping 0.7, main_transparent_pass_3d 0.6, bin_unpacking 0.5, clustering 0.5, upscaling 0.3)
+2026-10-28T06:56:07.492875Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 4.6 ms of a 26.7 ms frame
+2026-10-28T06:56:14.087242Z  INFO extraction: frames: 373 in 10 s, mean 26.8 ms, 1% 31.0 ms, worst 42.8 ms (Out)
+2026-10-28T06:56:14.087314Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.6), physics 1.2 (1% 1.8), render world 12.7 (1% 18.7)
+2026-10-28T06:56:14.087516Z  INFO extraction: gpu: 18.8 ms a frame (main_opaque_pass_3d 16.5, tonemapping 0.7, clustering 0.5, bin_unpacking 0.5, upscaling 0.3, early_mesh_preprocessing 0.2)
+2026-10-28T06:56:17.478168Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.4 ms of a 26.7 ms frame
+2026-10-28T06:56:24.111409Z  INFO extraction: frames: 369 in 10 s, mean 27.1 ms, 1% 31.9 ms, worst 39.9 ms (Out)
+2026-10-28T06:56:24.111469Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.2 (1% 2.1), render world 10.9 (1% 19.0)
+2026-10-28T06:56:24.111583Z  INFO extraction: gpu: 19.7 ms a frame (main_opaque_pass_3d 17.0, tonemapping 0.7, main_transparent_pass_3d 0.5, clustering 0.5, bin_unpacking 0.4, upscaling 0.3)
+2026-10-28T06:56:27.488147Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.2 ms of a 26.7 ms frame
+2026-10-28T06:56:34.123541Z  INFO extraction: frames: 350 in 10 s, mean 28.6 ms, 1% 41.4 ms, worst 42.8 ms (Out)
+2026-10-28T06:56:34.123600Z  INFO extraction::render::budget: cpu: main 8.8 ms a frame (1% 10.9), physics 1.2 (1% 2.0), render world 11.9 (1% 29.0)
+2026-10-28T06:56:34.123727Z  INFO extraction: gpu: 20.8 ms a frame (main_opaque_pass_3d 18.3, tonemapping 0.7, clustering 0.5, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:56:35.989984Z  INFO extraction::onboarding: onboarding: CallTruck done
+2026-10-28T06:56:35.990340Z  INFO extraction::raid: raid: Truck: "The north post, north, 10 m. Two minutes. Keep low."
+2026-10-28T06:56:37.513833Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 9.0 ms of a 26.7 ms frame
+2026-10-28T06:56:44.123868Z  INFO extraction: frames: 375 in 10 s, mean 26.7 ms, 1% 29.8 ms, worst 34.4 ms (TruckCalled { rv: 0, eta: 1.8941225 })
+2026-10-28T06:56:44.123894Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.3), physics 1.2 (1% 1.9), render world 15.9 (1% 19.2)
+2026-10-28T06:56:44.124075Z  INFO extraction: gpu: 18.4 ms a frame (main_opaque_pass_3d 16.1, tonemapping 0.7, clustering 0.4, bin_unpacking 0.4, upscaling 0.3, main_transparent_pass_3d 0.3)
+2026-10-28T06:56:45.992053Z  INFO extraction::raid: raid: Truck: "I'm at the north post. Five minutes, then I go."
+2026-10-28T06:56:47.514888Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 11.8 ms of a 26.7 ms frame
+2026-10-28T06:56:54.152441Z  INFO extraction: frames: 376 in 10 s, mean 26.7 ms, 1% 29.3 ms, worst 32.8 ms (TruckWaiting { rv: 0, left: 291.868 })
+2026-10-28T06:56:54.152540Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 13.6), physics 1.2 (1% 2.2), render world 15.7 (1% 18.7)
+2026-10-28T06:56:54.152625Z  INFO extraction: gpu: 18.7 ms a frame (main_opaque_pass_3d 16.0, tonemapping 0.7, clustering 0.5, main_transparent_pass_3d 0.5, bin_unpacking 0.5, upscaling 0.3)
+2026-10-28T06:56:57.540692Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.6 ms of a 26.7 ms frame
+2026-10-28T06:57:02.672203Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 4170v168 is invalid; its index now has generation 169.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:57:02.672341Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2363v11 is invalid; its index now has generation 12.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:57:04.153463Z  INFO extraction: frames: 374 in 10 s, mean 26.8 ms, 1% 30.7 ms, worst 31.3 ms (TruckWaiting { rv: 0, left: 281.85458 })
+2026-10-28T06:57:04.153598Z  INFO extraction::render::budget: cpu: main 8.7 ms a frame (1% 10.6), physics 1.2 (1% 2.0), render world 13.3 (1% 18.6)
+2026-10-28T06:57:04.153752Z  INFO extraction: gpu: 19.4 ms a frame (main_opaque_pass_3d 16.6, tonemapping 0.7, bin_unpacking 0.6, clustering 0.5, main_transparent_pass_3d 0.4, upscaling 0.3)
+2026-10-28T06:57:07.564993Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 8.0 ms of a 26.7 ms frame
+2026-10-28T06:57:09.338569Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 2423v48 is invalid; its index now has generation 49.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:57:09.338705Z  WARN bevy_ecs::error::handler: Encountered an error in command `<Enable the debug feature to see the name>`: Entity despawned: The entity with ID 3770v34 is invalid; its index now has generation 35.
+Note that interacting with a despawned entity is the most common cause of this error but there are others
+
+    If you were attempting to apply a command to this entity,
+    and want to handle this error gracefully, consider using `EntityCommands::queue_handled` or `queue_silenced`.
+
+2026-10-28T06:57:14.160604Z  INFO extraction: frames: 370 in 10 s, mean 27.0 ms, 1% 31.8 ms, worst 40.0 ms (TruckWaiting { rv: 0, left: 271.8418 })
+2026-10-28T06:57:14.160613Z  INFO extraction::render::budget: cpu: main 9.0 ms a frame (1% 10.5), physics 1.2 (1% 2.2), render world 11.0 (1% 18.5)
+2026-10-28T06:57:14.160768Z  INFO extraction: gpu: 19.7 ms a frame (main_opaque_pass_3d 16.7, tonemapping 0.7, bin_unpacking 0.6, clustering 0.6, main_transparent_pass_3d 0.6, upscaling 0.3)
+2026-10-28T06:57:17.577151Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 5.3 ms of a 26.7 ms frame
+2026-10-28T06:57:24.222980Z  INFO extraction: frames: 338 in 10 s, mean 29.7 ms, 1% 42.3 ms, worst 42.7 ms (TruckWaiting { rv: 0, left: 261.82663 })
+2026-10-28T06:57:24.223018Z  INFO extraction::render::budget: cpu: main 8.9 ms a frame (1% 10.6), physics 1.2 (1% 2.1), render world 15.3 (1% 30.4)
+2026-10-28T06:57:24.223144Z  INFO extraction: gpu: 17.7 ms a frame (main_opaque_pass_3d 14.6, tonemapping 0.7, main_transparent_pass_3d 0.7, bin_unpacking 0.6, clustering 0.5, upscaling 0.3)
+2026-10-28T06:57:27.579010Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 7.1 ms of a 26.7 ms frame
+2026-10-28T06:57:34.246162Z  INFO extraction: frames: 289 in 10 s, mean 34.7 ms, 1% 42.9 ms, worst 44.0 ms (TruckWaiting { rv: 0, left: 251.80077 })
+2026-10-28T06:57:34.246235Z  INFO extraction::render::budget: cpu: main 9.2 ms a frame (1% 11.0), physics 1.2 (1% 2.2), render world 21.6 (1% 30.6)
+2026-10-28T06:57:34.246417Z  INFO extraction: gpu: 21.6 ms a frame (main_opaque_pass_3d 18.4, main_transparent_pass_3d 0.7, tonemapping 0.7, clustering 0.6, bin_unpacking 0.6, upscaling 0.3)
+2026-10-28T06:57:37.590756Z  INFO extraction::render::hold_rate::xr: eyes: 2980x2980 (100% of the runtime's width), holding the frame rate, gpu 6.6 ms of a 26.7 ms frame
+2026-10-28T06:57:40.097775Z  INFO extraction::onboarding: onboarding: PullCord done
+2026-10-28T06:57:40.099061Z  INFO extraction::raid: raid: Driver: "That's the lot. The real one's colder."
+2026-10-28T06:57:40.100101Z  INFO extraction::raid: raid: "Right then." The engine turns over.
+2026-10-28T06:57:40.100582Z  INFO extraction::camp: camp: on to marrow_creek
+2026-10-28T06:57:40.104839Z  INFO extraction::render::timeline: load: leaving (exit asked) at 1980.17 s (frame 77234)
+2026-10-28T06:57:40.311815Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer
+2026-10-28T06:57:40.986246Z  INFO extraction::render::timeline: load: closed (world dropped) at 1981.05 s (frame 77234)

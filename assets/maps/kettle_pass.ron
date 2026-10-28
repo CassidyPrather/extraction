@@ -302,12 +302,12 @@
 
         // Kettle mine: the head-frame shed, wagons, pump house and hut.
         (prefab: "rail_shed", at: (-210.0, -65.0), rot: 75.0),
-        (prefab: "boxcar", at: (-175.7, -42.3), rot: 103.8),
+        (prefab: "boxcar", at: (-232.39, -54.43), rot: 102.05),
         // The yard's lamp hut by the pickup, and the road-menders' hut at the
         // pass: each a roof to wait under for the truck.
         (prefab: "shed", at: (-203.5, -41.0), rot: 188.0, tag: "lamp_hut"),
         (prefab: "shed", at: (21.5, -261.5), rot: 272.0, tag: "road_hut"),
-        (prefab: "boxcar", at: (-152.8, -35.5), rot: 110.3),
+        (prefab: "boxcar", at: (-145.52, -32.57), rot: 293.09),
         (prefab: "pump_station", at: (-200.0, -100.0), rot: 90.0),
         (prefab: "mast_hut", at: (-232.0, -95.0), rot: 15.0),
 
@@ -365,6 +365,50 @@
         (prefab: "wreck_uaz", at: (24.2, -217.2), rot: 356.0),
         // The low farm's car, in its yard between the barn and the house.
         (prefab: "wreck_lada", at: (-191.0, 178.0), rot: 120.0),
+
+        // Cover within a four-second sprint of every step of the first jobs
+        // (map_lint FIRST_RUN): cars abandoned on the verges in the
+        // evacuation, and log piles stacked by the ways across the open.
+        (prefab: "wreck_lada", at: (111.1, 268.9), rot: 23.0),
+        (prefab: "wreck_uaz", at: (104.0, 243.0), rot: 90.0),
+        (prefab: "wreck_lorry", at: (102.7, 230.5), rot: 157.0),
+        (prefab: "wreck_lada", at: (94.5, 206.7), rot: 224.0),
+        (prefab: "wreck_uaz", at: (69.3, 170.5), rot: 291.0),
+        (prefab: "log_pile", at: (57.3, 158.5), rot: 358.0),
+        (prefab: "log_pile", at: (47.0, -76.0), rot: 65.0),
+        (prefab: "log_pile", at: (127.0, 252.0), rot: 132.0),
+        (prefab: "log_pile", at: (116.9, -7.1), rot: 199.0),
+        (prefab: "log_pile", at: (135.0, -116.0), rot: 266.0),
+        (prefab: "log_pile", at: (55.0, 172.0), rot: 63.0),
+        (prefab: "log_pile", at: (43.0, 176.0), rot: 40.0),
+        (prefab: "log_pile", at: (30.5, 178.7), rot: 107.0),
+        (prefab: "log_pile", at: (16.9, 180.9), rot: 174.0),
+        (prefab: "log_pile", at: (-17.0, 176.0), rot: 241.0),
+        (prefab: "log_pile", at: (-73.0, 172.0), rot: 308.0),
+        (prefab: "log_pile", at: (51.0, 212.0), rot: 15.0),
+        (prefab: "log_pile", at: (39.0, 208.0), rot: 82.0),
+        (prefab: "log_pile", at: (27.0, 204.0), rot: 149.0),
+        (prefab: "log_pile", at: (15.0, 200.0), rot: 216.0),
+        (prefab: "log_pile", at: (3.0, 196.0), rot: 283.0),
+        (prefab: "log_pile", at: (-9.0, 192.0), rot: 350.0),
+        (prefab: "log_pile", at: (83.0, 244.0), rot: 57.0),
+        (prefab: "log_pile", at: (-9.0, 220.0), rot: 124.0),
+        (prefab: "log_pile", at: (31.0, 156.0), rot: 191.0),
+        (prefab: "log_pile", at: (-25.0, 164.0), rot: 258.0),
+        // And on the ways home from them, to the nearest rendezvous.
+        (prefab: "log_pile", at: (49.0, -99.0), rot: 31.0),
+        (prefab: "log_pile", at: (19.0, -146.0), rot: 300.0),
+        (prefab: "log_pile", at: (5.0, -170.0), rot: 200.0),
+        (prefab: "log_pile", at: (32.0, -239.0), rot: 232.0),
+        (prefab: "log_pile", at: (-97.3, 95.5), rot: 299.0),
+        (prefab: "log_pile", at: (-98.0, 80.0), rot: 6.0),
+        (prefab: "log_pile", at: (-105.5, 68.3), rot: 73.0),
+        (prefab: "log_pile", at: (30.3, -106.5), rot: 140.0),
+        (prefab: "log_pile", at: (-45.0, -197.0), rot: 207.0),
+        (prefab: "log_pile", at: (-47.0, -159.0), rot: 274.0),
+        (prefab: "log_pile", at: (-46.0, -211.0), rot: 341.0),
+        (prefab: "log_pile", at: (-9.0, -250.0), rot: 120.0),
+        (prefab: "log_pile", at: (109.5, -151.3), rot: 115.0),
     ],
 
     markers: [

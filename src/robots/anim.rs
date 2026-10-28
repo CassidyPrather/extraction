@@ -41,6 +41,15 @@ const ACCEL: f32 = 2.6;
 const TURN_RATE: f32 = 1.7;
 const TURN_RESPONSE: f32 = 5.0;
 const STEP_HEIGHT: f32 = 0.26;
+/// A dazzled walker's turret casts about this far either way (rad).
+pub const DAZZLED_CAST: f32 = 1.2;
+/// How fast a walker's turret swings onto a device it's hunting (rad/s):
+/// slower than at a target, so the turn onto it is its tell.
+pub const HUNT_TURN: f32 = 1.1;
+/// Held back by a hazard (`Gait::hamper` at 1): its strides this much
+/// longer in the swing, its body this much lower (m at size 1).
+pub const HAMPER_STRIDE: f32 = 0.8;
+pub const HAMPER_SAG: f32 = 0.16;
 /// A badly hurt leg (half health or less) drags its foot this far through
 /// its swing before lifting it.
 pub const SCUFF_UNTIL: f32 = 0.4;
@@ -133,6 +142,9 @@ pub struct Gait {
     pub leg_health: [f32; LEGS],
     /// How lame it is, 0..1: what slows it down.
     pub limp: f32,
+    /// How much a hazard holds it back (`hazards::Hampered`: 1 - its pace
+    /// share): it labours, lower, its strides long and heavy.
+    pub hamper: f32,
     /// How low it hangs for missing legs, metres (smoothed).
     sag: f32,
     /// Each swing's length in seconds, set at lift-off.
@@ -245,6 +257,7 @@ impl Default for Gait {
             wobble_vel: Vec3::ZERO,
             leg_health: [1.0; LEGS],
             limp: 0.0,
+            hamper: 0.0,
             sag: 0.0,
             dur: [0.3; LEGS],
             retargeted: [false; LEGS],
@@ -503,7 +516,9 @@ pub fn step_walker(
             // (Long, slow swings: each leg a crane's arm.)
             Shape::Heavy => 1.9,
             Shape::Orb => 1.0,
-        };
+        }
+        // Held back, each step a labour.
+        * (1.0 + HAMPER_STRIDE * g.hamper);
     let trigger = (0.3 + 0.16 * fast) * s;
     let rot_ahead = Quat::from_rotation_y(w.yaw + g.yaw_rate * step_time * 0.9);
     let lookahead = v * step_time + v.normalize_or_zero() * trigger * 0.45 * fast.min(1.0);
@@ -559,7 +574,8 @@ pub fn step_walker(
             landed(f.to);
             // A heavy foot taking weight; a bad leg buckles a little more.
             kick += (0.22 + 0.1 * fast.min(1.0) + (1.0 - h) * 0.5)
-                * if g.shape == Shape::Heavy { 1.6 } else { 1.0 };
+                * if g.shape == Shape::Heavy { 1.6 } else { 1.0 }
+                * (1.0 + g.hamper);
             // The hitch: weight on the bad leg, it gives; the body drops
             // and rolls onto that side, and comes up off it quick.
             if favoured == Some(i) {
@@ -656,6 +672,7 @@ pub fn step_walker(
     } else {
         missing as f32 * 0.14
             + g.limp * 0.05
+            + g.hamper * HAMPER_SAG
             + g.brace.length() * 0.12
             + LOW * g.crouch
             + if g.steady > 0.0 { 0.07 } else { 0.0 }
@@ -851,6 +868,7 @@ pub(crate) fn walk(
         &Robot,
         Option<&super::Intent>,
         Has<super::Stunned>,
+        Option<&super::hazards::Hampered>,
     )>,
     mut legs: Query<(&WalkerLeg, &RobotPart, &mut Transform), Without<Walker>>,
     targets: Query<&GlobalTransform>,
@@ -864,8 +882,19 @@ pub(crate) fn walk(
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
-    for (entity, mut w, mut g, mut t, mut poses, aware, children, robot, intent, stunned) in
-        &mut walkers
+    for (
+        entity,
+        mut w,
+        mut g,
+        mut t,
+        mut poses,
+        aware,
+        children,
+        robot,
+        intent,
+        stunned,
+        hampered,
+    ) in &mut walkers
     {
         let pos = t.translation - g.sway;
         // Steering along the path.
@@ -894,10 +923,12 @@ pub(crate) fn walk(
         // where it's going.
         let face = seen.or(intent.look.map(|l| l - pos));
         g.recover(dt);
+        g.hamper = hampered.map_or(0.0, |h| (1.0 - h.pace).clamp(0.0, 1.0));
         let drive = Drive {
             desired,
             face,
-            pace: intent.pace,
+            // Slowed by a hazard (`hazards::Hampered`).
+            pace: intent.pace * hampered.map_or(1.0, |h| h.pace),
             down: w.collapsed || robot.wrecked || stunned || g.down(),
             stunned: stunned && !w.collapsed && !robot.wrecked,
             low: intent.low,
@@ -1010,7 +1041,7 @@ fn kick_loose(
         ),
         (
             Without<RigidBodyDisabled>,
-            Without<crate::interact::Held>,
+            crate::interact::NotCarried,
             Without<super::RobotPart>,
         ),
     >,
@@ -1084,7 +1115,9 @@ fn haul_lines(
 }
 
 /// A walker's turret turns to whoever it's after (or where its brain is
-/// looking), at a turret's pace, and dips its barrel to them.
+/// looking), at a turret's pace, and dips its barrel to them. Hunting a
+/// device (`devices::Hunting`) it swings onto that, slow and deliberate,
+/// and holds there through its aim: the tell before the shot.
 #[allow(clippy::type_complexity)]
 pub(crate) fn aim_turrets(
     mut walkers: Query<(
@@ -1094,28 +1127,47 @@ pub(crate) fn aim_turrets(
         Option<&super::Intent>,
         &Children,
         &Robot,
+        Option<&super::devices::Hunting>,
+        Has<super::hazards::Dazzled>,
+        Option<&super::RobotSeed>,
     )>,
     mut turrets: Query<&mut Transform, (With<WalkerTurret>, Without<Walker>)>,
     targets: Query<&GlobalTransform>,
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (mut w, t, aware, intent, children, robot) in &mut walkers {
+    let now = time.elapsed_secs();
+    for (mut w, t, aware, intent, children, robot, hunting, dazzled, seed) in &mut walkers {
         if robot.wrecked {
             continue;
         }
-        let at = aware
-            .target
-            .filter(|_| aware.can_see_target)
-            .and_then(|p| targets.get(p).ok())
-            .map(|g| g.translation() + Vec3::Y * 1.1)
-            .or(intent.and_then(|i| i.look));
+        let device = hunting
+            .and_then(|h| targets.get(h.device).ok())
+            .map(|g| g.translation());
+        let at = device.or_else(|| {
+            aware
+                .target
+                .filter(|_| aware.can_see_target)
+                .and_then(|p| targets.get(p).ok())
+                .map(|g| g.translation() + Vec3::Y * 1.1)
+                .or(intent.and_then(|i| i.look))
+        });
         let local = at.map(|p| t.rotation.inverse() * (p - t.translation));
         let want = local
             .filter(|l| Vec2::new(l.x, l.z).length() > 0.3)
             .map_or(0.0, |l| (-l.x).atan2(-l.z));
+        // Dazzled (`hazards::Dazzled`), it's lost you: the turret casts
+        // about, back and forth, instead of tracking.
+        let want = if dazzled {
+            let k = seed.map_or(0, |s| s.low() % 100) as f32;
+            wrap(w.turret_yaw + (now * 2.3 + k).sin() * DAZZLED_CAST)
+        } else {
+            want
+        };
         let d = wrap(want - w.turret_yaw);
-        w.turret_yaw = wrap(w.turret_yaw + d.clamp(-2.2 * dt, 2.2 * dt));
+        // (Onto a device it means to shoot: slower, so the swing reads.)
+        let rate = if device.is_some() { HUNT_TURN } else { 2.2 };
+        w.turret_yaw = wrap(w.turret_yaw + d.clamp(-rate * dt, rate * dt));
         let pitch = local
             .map(|l| (l.y - 0.46).atan2(Vec2::new(l.x, l.z).length().max(0.5)))
             .unwrap_or(0.0)
@@ -1174,6 +1226,10 @@ mod tests {
             velocity: Vec3::ZERO,
             yaw: 0.0,
             gun_cooldown: 0.0,
+            suppressing: false,
+            gap: None,
+            closing: 0.0,
+            pursuing: false,
             turret_yaw: 0.0,
             phase: 0,
             collapsed: false,
@@ -1488,6 +1544,41 @@ mod tests {
     /// down among them: some move, none goes flying.
     #[test]
     fn feet_kick_loose_things_aside() {
+        let moved = kicked(|_| None).iter().filter(|d| **d > 0.1).count();
+        assert!(moved >= 2, "{moved} of 12 moved");
+    }
+
+    /// The same walk, with things carried among them (in a hand, a
+    /// socket, a pack: `interact::NotCarried`): those aren't kicked.
+    #[test]
+    fn feet_leave_carried_things_alone() {
+        let d = kicked(|k| match k % 4 {
+            1 => Some(Carry::Held),
+            2 => Some(Carry::Socket),
+            3 => Some(Carry::Pack),
+            _ => None,
+        });
+        for (k, d) in d.iter().enumerate() {
+            if k % 4 != 0 {
+                assert!(*d < 0.05, "carried thing {k} kicked {d:.2} m");
+            }
+        }
+        assert!(
+            d.iter().step_by(4).any(|d| *d > 0.1),
+            "the loose ones still are: {d:?}"
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    enum Carry {
+        Held,
+        Socket,
+        Pack,
+    }
+
+    /// A walker walks through twelve kits (the `k`th carried as `carry`
+    /// says): how far each moved.
+    fn kicked(carry: impl Fn(usize) -> Option<Carry>) -> Vec<f32> {
         let mut app = crate::headless_app(
             crate::LaunchOptions {
                 robots: false,
@@ -1522,6 +1613,33 @@ mod tests {
                 },
             ));
             q.apply(app.world_mut());
+            let e = *items.last().unwrap();
+            match carry(k) {
+                Some(Carry::Held) => {
+                    app.world_mut().entity_mut(e).insert(crate::interact::Held {
+                        player: e,
+                        hand: e,
+                        side: crate::rig::Side::Left,
+                        point: 0,
+                        offset: Transform::IDENTITY,
+                    });
+                }
+                Some(Carry::Socket) => {
+                    app.world_mut()
+                        .entity_mut(e)
+                        .insert(crate::interact::InSocket {
+                            socket: Entity::PLACEHOLDER,
+                        });
+                }
+                Some(Carry::Pack) => {
+                    app.world_mut()
+                        .entity_mut(e)
+                        .insert(crate::interact::body::InBackpack {
+                            bag: Entity::PLACEHOLDER,
+                        });
+                }
+                None => {}
+            }
         }
         let walker = {
             let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
@@ -1561,21 +1679,21 @@ mod tests {
         for _ in 0..(90 * 8) {
             app.update();
         }
-        let mut moved = 0;
-        for (e, s0) in items.iter().zip(&start) {
-            let p = app
-                .world()
-                .get::<GlobalTransform>(*e)
-                .unwrap()
-                .translation();
-            assert!(p.is_finite());
-            let d = p.xz().distance(s0.xz());
-            assert!(d < 6.0, "a kit flew {d:.1} m");
-            if d > 0.1 {
-                moved += 1;
-            }
-        }
-        assert!(moved >= 2, "{moved} of 12 moved");
+        items
+            .iter()
+            .zip(&start)
+            .map(|(e, s0)| {
+                let p = app
+                    .world()
+                    .get::<GlobalTransform>(*e)
+                    .unwrap()
+                    .translation();
+                assert!(p.is_finite());
+                let d = p.xz().distance(s0.xz());
+                assert!(d < 6.0, "a kit flew {d:.1} m");
+                d
+            })
+            .collect()
     }
 
     /// A walker in lying snow leaves prints where its feet come down, in

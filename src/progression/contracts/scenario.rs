@@ -11,11 +11,14 @@
 //! Every contract's steps lie in one valley (a photograph can be taken in
 //! any), so each runs whole on its own map:
 //!
-//! - `contract_post_counter`, `contract_mast_relay`,
-//!   `contract_the_overflow`: `--map marrow_creek`
-//! - `contract_hajek_tin`: `--map kettle_pass`
-//! - `contract_walker_portrait`, `contract_the_heavy`: `--map cinder_works`
+//! - `contract_post_counter`, `contract_mast_relay`, `contract_annas_tape`,
+//!   `contract_the_overflow`, `contract_keepers_log`: `--map marrow_creek`
+//! - `contract_hajek_tin`, `contract_the_canary`, `contract_deputys_lamp`:
+//!   `--map kettle_pass`
+//! - `contract_walker_portrait`, `contract_the_heavy`,
+//!   `contract_charging_manifest`: `--map cinder_works`
 //! - `contract_scour_key`: `--map sallow_reservoir`
+//! - `contract_up_the_fell`: `--map rime_fell`
 //!
 //! Shortcuts:
 //! - The career is set at the start so the contract is the one the driver
@@ -26,6 +29,9 @@
 //! - Every raid ends with the raid's phase set to extracting (no radio
 //!   call, no walk to a rendezvous); the first one too, so the bot starts
 //!   in the truck.
+//! - Down a signature site, the bot's put straight into the room its thing
+//!   lies in, a stride off (`Task::TeleportDown`): no stairs, no water let
+//!   down, no gas crossed, no crane ridden.
 //! - The walk across the valley is skipped (`Task::Teleport` to some way
 //!   short of the place, or of the door of the house a thing lies in);
 //!   the last stretch is walked, the door opened, the thing picked up.
@@ -35,7 +41,9 @@
 //!   and taken away again once it's in the picture.
 
 use bevy::prelude::*;
-use extraction_core::contracts::{CONTRACTS, Contract, Offered, Subject, Unlock, contract};
+use extraction_core::contracts::{
+    CONTRACTS, Contract, Offered, PLANT_RADIUS, Subject, Unlock, contract, opened,
+};
 use extraction_core::progression::{
     FIRST_VALLEYS, Job, Progress, SCOUT_RADIUS, TIERS, fetch_takes,
 };
@@ -63,6 +71,11 @@ pub const SCENARIOS: &[(&str, &str)] = &[
     ("contract_scour_key", "scour_key"),
     ("contract_the_heavy", "the_heavy"),
     ("contract_annas_tape", "annas_tape"),
+    ("contract_up_the_fell", "up_the_fell"),
+    ("contract_keepers_log", "keepers_log"),
+    ("contract_the_canary", "the_canary"),
+    ("contract_deputys_lamp", "deputys_lamp"),
+    ("contract_charging_manifest", "charging_manifest"),
 ];
 
 /// The last task while the scenario runs: the director adds each step's.
@@ -155,6 +168,14 @@ pub struct Scene<'w, 's> {
     benches: Query<'w, 's, &'static crate::raid::bench::Bench>,
     entrances: Res<'w, crate::robots::doors::Entrances>,
     spatial: avian3d::prelude::SpatialQuery<'w, 's>,
+    sites: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Building,
+            &'static Transform,
+        ),
+    >,
 }
 
 impl Scene<'_, '_> {
@@ -435,7 +456,7 @@ pub fn direct(
             for u in c.unlocks {
                 let open = match u {
                     Unlock::Recipe(r) => scene.benches.iter().any(|b| b.taught.contains(r)),
-                    Unlock::Valley(v) => progression.0.opens(v),
+                    Unlock::Valley(v) => opened(&progression.0, v),
                 };
                 if open {
                     fail(&mut bot, format!("{u:?} open before the contract"));
@@ -524,6 +545,73 @@ pub fn direct(
                 t.extend(legs(short, to, within));
                 t
             };
+            // Indoors: up to its door, open it, and in (and through an
+            // inner door, if the room it's in has one nearer). None if
+            // `p` isn't in a house with a door.
+            let indoors = |p: Vec3| -> Option<Vec<Task>> {
+                let building = scene.entrances.building_at(p);
+                let shell =
+                    building.and_then(|b| scene.entrances.shells.iter().find(|s| s.building == b));
+                let doors: Vec<_> = scene
+                    .entrances
+                    .doors
+                    .iter()
+                    .filter(|d| Some(d.building) == building)
+                    .collect();
+                // In the shell's walls, or a wall within it.
+                let outer = |d: &&crate::robots::doors::Entrance| {
+                    shell.is_some_and(|s| {
+                        let l = s.xf.compute_affine().inverse().transform_point3(d.mid);
+                        l.x.abs() > s.half.x - 0.6 || l.z.abs() > s.half.y - 0.6
+                    })
+                };
+                let nearest = |want_outer: bool| {
+                    doors
+                        .iter()
+                        .filter(|d| outer(d) == want_outer)
+                        .min_by(|a, b| a.mid.distance(p).total_cmp(&b.mid.distance(p)))
+                        .copied()
+                };
+                let front_door = nearest(true);
+                let inner = nearest(false)
+                    .filter(|i| front_door.is_some_and(|f| i.mid.distance(p) < f.mid.distance(p)));
+                let d = front_door?;
+                let mut t = Vec::new();
+                let out = d.out.xz().normalize_or(Vec2::Y);
+                let front = d.mid.xz() + out * 1.3;
+                let short = d.mid.xz() + out * SHORT;
+                let inside = d.mid.xz() - out * 1.5;
+                t.push(Task::Teleport(Vec3::new(short.x, 0.0, short.y)));
+                t.extend(legs(short, front, 0.4));
+                t.extend([
+                    Task::OpenDoor(d.door),
+                    Task::WalkTo {
+                        to: inside,
+                        within: 0.5,
+                    },
+                ]);
+                if let Some(i) = inner {
+                    // From this side of it to the other.
+                    let n = i.out.xz().normalize_or(Vec2::Y);
+                    let k = if (inside - i.mid.xz()).dot(n) > 0.0 {
+                        1.0
+                    } else {
+                        -1.0
+                    };
+                    t.extend([
+                        Task::WalkTo {
+                            to: i.mid.xz() + n * k * 1.3,
+                            within: 0.4,
+                        },
+                        Task::OpenDoor(i.door),
+                        Task::WalkTo {
+                            to: i.mid.xz() - n * k * 1.3,
+                            within: 0.5,
+                        },
+                    ]);
+                }
+                Some(t)
+            };
             let mut t = Vec::new();
             match &job {
                 Job::Scout { at, .. } => {
@@ -533,7 +621,19 @@ pub fn direct(
                     t.push(Task::Wait(1.0));
                 }
                 Job::Plant { item, at, .. } => {
-                    t.extend(approach(Vec2::from_array(*at), 1.0));
+                    // Indoors, through its doors and up to it; else across
+                    // the open to it.
+                    let spot = scene.zone.on_ground(at[0], at[1]) + Vec3::Y;
+                    match indoors(spot) {
+                        Some(way) => {
+                            t.extend(way);
+                            t.push(Task::WalkTo {
+                                to: Vec2::from_array(*at),
+                                within: PLANT_RADIUS * 0.5,
+                            });
+                        }
+                        None => t.extend(approach(Vec2::from_array(*at), 1.0)),
+                    }
                     // Out of its slot (or the pack), and set down here.
                     if let Some(e) = scene.carrying(item, player).first() {
                         t.extend(scene.take(*e, player, Side::Right));
@@ -558,72 +658,22 @@ pub fn direct(
                         return;
                     };
                     bot.log.push(format!("{item} lies at {:.0?}", p));
-                    // Indoors: up to its door, open it, and in (and through
-                    // an inner door, if the room it's in has one nearer).
-                    let building = scene.entrances.building_at(p);
-                    let shell = building
-                        .and_then(|b| scene.entrances.shells.iter().find(|s| s.building == b));
-                    let doors: Vec<_> = scene
-                        .entrances
-                        .doors
+                    // Down a site: straight into its room, a stride off.
+                    let down = scene
+                        .sites
                         .iter()
-                        .filter(|d| Some(d.building) == building)
-                        .collect();
-                    // In the shell's walls, or a wall within it.
-                    let outer = |d: &&crate::robots::doors::Entrance| {
-                        shell.is_some_and(|s| {
-                            let l = s.xf.compute_affine().inverse().transform_point3(d.mid);
-                            l.x.abs() > s.half.x - 0.6 || l.z.abs() > s.half.y - 0.6
-                        })
-                    };
-                    let nearest = |want_outer: bool| {
-                        doors
-                            .iter()
-                            .filter(|d| outer(d) == want_outer)
-                            .min_by(|a, b| a.mid.distance(p).total_cmp(&b.mid.distance(p)))
-                            .copied()
-                    };
-                    let front_door = nearest(true);
-                    let inner = nearest(false).filter(|i| {
-                        front_door.is_some_and(|f| i.mid.distance(p) < f.mid.distance(p))
-                    });
-                    match front_door {
-                        Some(d) => {
-                            let out = d.out.xz().normalize_or(Vec2::Y);
-                            let front = d.mid.xz() + out * 1.3;
-                            let short = d.mid.xz() + out * SHORT;
-                            let inside = d.mid.xz() - out * 1.5;
-                            t.push(Task::Teleport(Vec3::new(short.x, 0.0, short.y)));
-                            t.extend(legs(short, front, 0.4));
-                            t.extend([
-                                Task::OpenDoor(d.door),
-                                Task::WalkTo {
-                                    to: inside,
-                                    within: 0.5,
-                                },
-                            ]);
-                            if let Some(i) = inner {
-                                // From this side of it to the other.
-                                let n = i.out.xz().normalize_or(Vec2::Y);
-                                let k = if (inside - i.mid.xz()).dot(n) > 0.0 {
-                                    1.0
-                                } else {
-                                    -1.0
-                                };
-                                t.extend([
-                                    Task::WalkTo {
-                                        to: i.mid.xz() + n * k * 1.3,
-                                        within: 0.4,
-                                    },
-                                    Task::OpenDoor(i.door),
-                                    Task::WalkTo {
-                                        to: i.mid.xz() - n * k * 1.3,
-                                        within: 0.5,
-                                    },
-                                ]);
-                            }
-                        }
-                        None => t.extend(approach(p.xz(), 1.0)),
+                        .find_map(|(b, xf)| super::under(b, xf, p.xz()));
+                    if let Some((_, middle)) = down {
+                        let from = p.xz() + (middle.xz() - p.xz()).normalize_or(Vec2::X) * 1.5;
+                        t.extend([
+                            Task::TeleportDown(Vec3::new(from.x, middle.y, from.y)),
+                            Task::WalkTo {
+                                to: p.xz(),
+                                within: 0.8,
+                            },
+                        ]);
+                    } else {
+                        t.extend(indoors(p).unwrap_or_else(|| approach(p.xz(), 1.0)));
                     }
                     t.extend([
                         Task::PickUp {
@@ -999,7 +1049,7 @@ pub fn direct(
                         }
                     }
                     Unlock::Valley(v) => {
-                        if progression.0.opens(v) {
+                        if opened(&progression.0, v) {
                             pass(&mut bot, format!("the route card offers {v}"));
                         } else {
                             fail(&mut bot, format!("{v} still kept back"));

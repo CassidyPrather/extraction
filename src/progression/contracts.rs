@@ -9,10 +9,9 @@
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use extraction_core::contracts::{
-    Contract, PHOTO_CONE, PHOTO_RANGE, PLANT_RADIUS, Subject, Unlock,
-};
+use extraction_core::contracts::{Contract, PHOTO_CONE, PHOTO_RANGE, PLANT_RADIUS, Unlock};
 use extraction_core::progression::Job;
+use extraction_core::underground as ug;
 
 use super::{Progression, lines};
 use crate::interact::{Held, InSocket, body::InBackpack};
@@ -20,7 +19,8 @@ use crate::items::{Catalog, Item, SpawnItem, spawn_item};
 use crate::launch::LaunchOptions;
 use crate::raid::{Phase, Raid};
 use crate::rig::RigHead;
-use crate::robots::{Breed, Robot, RobotKind};
+use crate::robots::{Breed, Robot};
+use crate::world::buildings::Building;
 use crate::world::{Layer, Zone};
 
 /// A contract's thing to bring lies this close to its place (a building's
@@ -87,6 +87,7 @@ pub fn place_bring(
     spots: Option<Res<crate::world::buildings::BuildingLoot>>,
     items: Query<&Item>,
     catalog: Res<Catalog>,
+    sites: Query<(&Building, &Transform)>,
     mut tried: Local<u32>,
 ) {
     let Some(Job::Bring { map, item, at, .. }) = &progression.0.job else {
@@ -107,6 +108,24 @@ pub fn place_bring(
         return;
     }
     let near = Vec2::from_array(*at);
+    // Down a site (`docs/UNDERGROUND.md`): on the floor of the room it's in
+    // (once the site's built: never on the grass over it).
+    if extraction_core::contracts::down_site(&zone.map, *at).is_some() {
+        let Some((p, _)) = sites.iter().find_map(|(b, xf)| under(b, xf, near)) else {
+            return;
+        };
+        spawn_item(
+            &mut commands,
+            &catalog,
+            SpawnItem {
+                kind,
+                transform: Transform::from_translation(p),
+                condition: 0.9,
+            },
+        );
+        info!("{item} laid down the site at {p:?}");
+        return;
+    }
     let spot = spots
         .iter()
         .flat_map(|s| s.0.iter().map(|s| s.at))
@@ -125,6 +144,27 @@ pub fn place_bring(
         },
     );
     info!("{item} laid at {p:?}");
+}
+
+/// The floor under `near` (world, xz) if it's in a room of this site, a
+/// little in from the walls; and the middle of that room's floor.
+pub(super) fn under(b: &Building, xf: &Transform, near: Vec2) -> Option<(Vec3, Vec3)> {
+    let l = ug::layout(&b.prefab)?;
+    let local =
+        xf.compute_affine()
+            .inverse()
+            .transform_point3(Vec3::new(near.x, xf.translation.y, near.y));
+    let room = l.rooms.iter().find(|r| {
+        (local.x - r.at[0]).abs() < r.size[0] / 2.0 && (local.z - r.at[1]).abs() < r.size[1] / 2.0
+    })?;
+    let half = Vec2::new(room.size[0], room.size[1]) / 2.0 - 0.5;
+    let c = Vec2::new(room.at[0], room.at[1]);
+    let p = c + (local.xz() - c).clamp(-half, half);
+    let floor = l.floor_of(room);
+    Some((
+        xf.transform_point(Vec3::new(p.x, floor + 0.15, p.y)),
+        xf.transform_point(Vec3::new(c.x, floor, c.y)),
+    ))
 }
 
 /// A Plant step: its thing set down (not held, not packed) by its place,
@@ -180,7 +220,18 @@ pub fn photograph(
     items: Query<&Item>,
     catalog: Res<Catalog>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
-    robots: Query<(Entity, &Robot, &GlobalTransform, Option<&Breed>)>,
+    robots: Query<(
+        Entity,
+        &Robot,
+        &GlobalTransform,
+        Option<&Breed>,
+        (
+            Has<crate::robots::indoor::Crawler>,
+            Has<crate::robots::hound::Hound>,
+            Has<crate::robots::grappler::Grappler>,
+            Has<crate::robots::indoor::Dormant>,
+        ),
+    )>,
     spatial: SpatialQuery,
 ) {
     let down = matches!(raid.phase, Phase::Down { .. });
@@ -210,34 +261,42 @@ pub fn photograph(
             _ => None,
         };
         let framed = subject.is_some_and(|subject| {
-            robots.iter().any(|(e, r, g, breed)| {
-                let is = match subject {
-                    Subject::Heavy => breed.is_some_and(|b| b.0 == "heavy"),
-                    Subject::Walker => {
-                        r.kind == RobotKind::Walker && !breed.is_some_and(|b| b.0 == "heavy")
+            robots
+                .iter()
+                .any(|(e, r, g, breed, (crawler, hound, grappler, dormant))| {
+                    // Only the kind the card names (`robots::subjects`).
+                    let is = crate::robots::subjects::counts(
+                        subject,
+                        r,
+                        breed,
+                        crate::robots::subjects::Shape {
+                            crawler,
+                            hound,
+                            grappler,
+                            dormant,
+                        },
+                    );
+                    let to = g.translation() - eye;
+                    let d = to.length();
+                    if r.wrecked || !is || d > PHOTO_RANGE || d < 0.5 {
+                        return false;
                     }
-                };
-                let to = g.translation() - eye;
-                let d = to.length();
-                if r.wrecked || !is || d > PHOTO_RANGE || d < 0.5 {
-                    return false;
-                }
-                if look.angle_between(to) > PHOTO_CONE {
-                    return false;
-                }
-                // In sight: nothing of the world's between (its own body
-                // may be what the ray meets).
-                let dir = Dir3::new(to).unwrap_or(Dir3::NEG_Z);
-                spatial
-                    .cast_ray(
-                        eye,
-                        dir,
-                        d,
-                        true,
-                        &SpatialQueryFilter::from_mask(Layer::World),
-                    )
-                    .is_none_or(|hit| hit.entity == e || hit.distance > d - 1.5)
-            })
+                    if look.angle_between(to) > PHOTO_CONE {
+                        return false;
+                    }
+                    // In sight: nothing of the world's between (its own body
+                    // may be what the ray meets).
+                    let dir = Dir3::new(to).unwrap_or(Dir3::NEG_Z);
+                    spatial
+                        .cast_ray(
+                            eye,
+                            dir,
+                            d,
+                            true,
+                            &SpatialQueryFilter::from_mask(Layer::World),
+                        )
+                        .is_none_or(|hit| hit.entity == e || hit.distance > d - 1.5)
+                })
         });
         match (&mut progression.0.job, framed) {
             (Some(Job::Photograph { subject, taken }), true) => {

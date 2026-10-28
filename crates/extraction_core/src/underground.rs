@@ -1973,6 +1973,30 @@ pub fn check(l: &Layout) -> Vec<String> {
             }
         }
     }
+    // Every tread a full [`STEP_CELLS`] deep along a row or a column: a
+    // corridor between levels that turns a corner outside the rooms steps
+    // across it diagonally, a riser every cell, a sawtooth a body jams on
+    // (the adit's incline, once). Climb on the straight; turn on a landing.
+    'treads: for j in 0..r.nz {
+        for i in 0..r.nx {
+            for [p, q] in [[(i + 1, j), (i + 2, j)], [(i, j + 1), (i, j + 2)]] {
+                let cells = [(i, j), p, q];
+                if cells.iter().any(|&(a, b)| {
+                    a >= r.nx || b >= r.nz || !r.get(a, b).flat() || r.pit[b * r.nx + a]
+                }) {
+                    continue;
+                }
+                let [f0, f1, f2] = cells.map(|(a, b)| r.floors[b * r.nx + a]);
+                if (f0 - f1).abs() > 0.01 && (f1 - f2).abs() > 0.01 {
+                    bad.push(format!(
+                        "a tread one cell deep at {:?} (a corridor between levels turning outside a room)",
+                        r.centre(p.0, p.1)
+                    ));
+                    break 'treads;
+                }
+            }
+        }
+    }
     let seen = r.flood();
     for (k, room) in l.rooms.iter().enumerate() {
         let reached = (0..r.cells.len()).any(|c| seen[c] && r.cells[c] == Cell::Room(k as u16));
@@ -2351,10 +2375,228 @@ pub fn plan_svg(id: &str) -> Option<String> {
     Some(out)
 }
 
+/// The pace a way out is timed at (m/s): the player's walk.
+pub const WAY_OUT_PACE: f32 = 2.4;
+/// Up a shaft by the cage (`world::cage`): its ride (m/s) and the wait for
+/// it, bell and gate (s).
+const LIFT_PACE: f32 = 1.5;
+const LIFT_WAIT: f32 = 8.0;
+/// The longest a loot spot may lie from a way out with only the one way
+/// to it (s): a crawler behind in that way, and it's a trap.
+pub const DEAD_END_MAX: f32 = 60.0;
+
+/// The way out from one loot spot: how long it takes at a walk, calm (the
+/// shortest way, to whichever kiosk), and pressed (a crawler behind in the
+/// way it came: the first corridor, room or stair out of its room on that
+/// way shut), `None` if then there's no way out at all.
+#[derive(Clone, Debug)]
+pub struct WayOut {
+    pub room: String,
+    pub at: P2,
+    pub calm: f32,
+    pub pressed: Option<f32>,
+}
+
+impl Raster {
+    /// Seconds to the nearest kiosk from every open cell, at a walk past
+    /// the `shut` cells (wading slower, stairs slower, a shaft by the
+    /// cage); infinite where there's no way. Also each cell's next step on
+    /// that way (`None` at a kiosk, or with no way).
+    pub fn time_out(&self, shut: &[bool]) -> (Vec<f32>, Vec<Option<usize>>) {
+        use std::cmp::Reverse;
+        use std::collections::BinaryHeap;
+        let n = self.cells.len();
+        let mut t = vec![f32::INFINITY; n];
+        let mut next = vec![None; n];
+        let mut heap = BinaryHeap::new();
+        let open = |k: usize| self.cells[k].open() && !shut[k];
+        let floor = |k: usize| self.floor_at(self.centre(k % self.nx, k / self.nx));
+        for k in (0..n).filter(|&k| open(k)) {
+            if self.in_kiosk(self.centre(k % self.nx, k / self.nx)) {
+                t[k] = 0.0;
+                heap.push(Reverse((0u32, k)));
+            }
+        }
+        // Slower going in a cell: wading, swimming, climbing.
+        let slow = |k: usize| {
+            let w = self.water[k];
+            let wet = if w > 1.2 {
+                3.0
+            } else if w > 0.5 {
+                1.8
+            } else {
+                1.0
+            };
+            let climb = if matches!(self.cells[k], Cell::Stair(_)) {
+                1.4
+            } else {
+                1.0
+            };
+            wet * climb
+        };
+        while let Some(Reverse((ms, k))) = heap.pop() {
+            if ms as f32 / 1000.0 > t[k] + 1e-3 {
+                continue;
+            }
+            let (i, j) = ((k % self.nx) as i64, (k / self.nx) as i64);
+            for (di, dj) in [
+                (-1i64, 0i64),
+                (1, 0),
+                (0, -1),
+                (0, 1),
+                (-1, -1),
+                (-1, 1),
+                (1, -1),
+                (1, 1),
+            ] {
+                let (a, b) = (i + di, j + dj);
+                if a < 0 || b < 0 || a >= self.nx as i64 || b >= self.nz as i64 {
+                    continue;
+                }
+                let m = b as usize * self.nx + a as usize;
+                if !open(m) {
+                    continue;
+                }
+                // Round a corner only where both its sides are open.
+                if di != 0
+                    && dj != 0
+                    && !(open(j as usize * self.nx + a as usize)
+                        && open(b as usize * self.nx + i as usize))
+                {
+                    continue;
+                }
+                let d = if di != 0 && dj != 0 {
+                    CELL * std::f32::consts::SQRT_2
+                } else {
+                    CELL
+                };
+                let mut dt = d * 0.5 * (slow(k) + slow(m)) / WAY_OUT_PACE;
+                // A drop no one steps: the cage's shaft.
+                let rise = match (floor(k), floor(m)) {
+                    (Some(a), Some(b)) => (a - b).abs(),
+                    _ => 0.0,
+                };
+                if rise > 0.6 {
+                    dt += rise / LIFT_PACE + LIFT_WAIT;
+                }
+                let tm = t[k] + dt;
+                if tm < t[m] {
+                    t[m] = tm;
+                    next[m] = Some(k);
+                    heap.push(Reverse(((tm * 1000.0) as u32, m)));
+                }
+            }
+        }
+        (t, next)
+    }
+}
+
+/// Every loot spot's way out in a site (see [`WayOut`]).
+pub fn ways_out(id: &str) -> Vec<WayOut> {
+    match (layout(id), raster(id)) {
+        (Some(l), Some(r)) => ways_out_of(l, r),
+        _ => Vec::new(),
+    }
+}
+
+/// The same, for a layout and its raster.
+pub fn ways_out_of(l: &Layout, r: &Raster) -> Vec<WayOut> {
+    let none = vec![false; r.cells.len()];
+    let (calm, next) = r.time_out(&none);
+    let mut out = Vec::new();
+    for (ri, room) in l.rooms.iter().enumerate() {
+        for prop in room.props.iter().filter(|p| p.loot.is_some()) {
+            let at = add(room.at, prop.at);
+            // Its cell, or the nearest of its room's that's open.
+            let Some(k) = (0..r.cells.len())
+                .filter(|&k| r.cells[k] == Cell::Room(ri as u16) && calm[k].is_finite())
+                .min_by(|&a, &b| {
+                    let da = sub(r.centre(a % r.nx, a / r.nx), at);
+                    let db = sub(r.centre(b % r.nx, b / r.nx), at);
+                    (da[0].hypot(da[1])).total_cmp(&db[0].hypot(db[1]))
+                })
+            else {
+                continue;
+            };
+            // Out of its room the shortest way: what it steps into first.
+            let mut c = k;
+            while r.cells[c] == Cell::Room(ri as u16) {
+                match next[c] {
+                    Some(m) => c = m,
+                    None => break,
+                }
+            }
+            let first = r.cells[c];
+            let shut: Vec<bool> = if first == Cell::Room(ri as u16) {
+                // A kiosk in the room itself: shut it.
+                r.cells
+                    .iter()
+                    .map(|&x| matches!(x, Cell::Stair(_)))
+                    .collect()
+            } else {
+                r.cells.iter().map(|&x| x == first).collect()
+            };
+            let (pressed, _) = r.time_out(&shut);
+            out.push(WayOut {
+                room: room.id.clone(),
+                at,
+                calm: calm[k],
+                pressed: pressed[k].is_finite().then_some(pressed[k]),
+            });
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::terrain::Heightmap;
+
+    /// The way out under pressure: from every loot spot, timed at a walk
+    /// to the nearest kiosk, calm and with a crawler behind in the way it
+    /// came. A spot with no second way lies within [`DEAD_END_MAX`] of a
+    /// way out (`--nocapture` prints the table).
+    #[test]
+    fn no_loot_spot_is_a_long_dead_end() {
+        let mut bad = Vec::new();
+        for (id, _) in SITES {
+            let ways = ways_out(id);
+            assert!(!ways.is_empty(), "{id}: no loot spots timed");
+            let worst = ways
+                .iter()
+                .max_by(|a, b| a.calm.total_cmp(&b.calm))
+                .unwrap();
+            let dead = ways.iter().filter(|w| w.pressed.is_none()).count();
+            println!(
+                "{id:16} spots {:2}  deepest {:13} calm {:5.1} s  pressed {:>6}  dead ends {dead} (longest {:.1} s)",
+                ways.len(),
+                worst.room,
+                worst.calm,
+                worst.pressed.map_or("none".into(), |p| format!("{p:.1}")),
+                ways.iter()
+                    .filter(|w| w.pressed.is_none())
+                    .map(|w| w.calm)
+                    .fold(0.0f32, f32::max),
+            );
+            for w in &ways {
+                println!(
+                    "    {:14} {:5.1?} calm {:5.1} pressed {}",
+                    w.room,
+                    w.at,
+                    w.calm,
+                    w.pressed.map_or("none".into(), |p| format!("{p:.1}"))
+                );
+                if w.pressed.is_none() && w.calm > DEAD_END_MAX {
+                    bad.push(format!(
+                        "{id} {} at {:.1?}: {:.0} s out, and no second way",
+                        w.room, w.at, w.calm
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "long dead ends:\n{}", bad.join("\n"));
+    }
 
     fn maps() -> Vec<MapDef> {
         crate::map::VALLEYS
@@ -2383,7 +2625,8 @@ mod tests {
             assert!(bad.is_empty(), "{id}:\n{}", bad.join("\n"));
             let r = raster(id).unwrap();
             let rooms = l.rooms.len();
-            assert!((6..=14).contains(&rooms), "{id}: {rooms} rooms");
+            // (A landing where a stair between levels turns counts.)
+            assert!((6..=16).contains(&rooms), "{id}: {rooms} rooms");
             assert!(r.cells.iter().filter(|c| c.open()).count() > 100);
         }
     }
@@ -2408,7 +2651,8 @@ mod tests {
             ["stair_foot", "vent_room", "burner_gallery", "near_ledge"],
             "open as the cellars stand"
         );
-        // The adit's deep level: only by the winze's cage.
+        // The adit's deep level: by the cage, or walked by the old
+        // incline; only the shaft itself is behind the works.
         let l = layout("adit_rime").unwrap();
         let shut: Vec<&str> = l
             .rooms
@@ -2419,8 +2663,8 @@ mod tests {
             .collect();
         assert_eq!(
             shut,
-            ["winze", "level_station", "vein_drive", "assay_store"],
-            "the adit's deep level is behind its cage"
+            ["winze"],
+            "the adit's deep level is walked to by its incline"
         );
         let mut bad = l.clone();
         let cage = bad.cage.as_mut().unwrap();

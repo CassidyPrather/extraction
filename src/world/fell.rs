@@ -287,10 +287,11 @@ fn slat_bench(b: &mut Builder, x: f32, y: f32, back: f32, face: f32, len: f32) {
 
 /// Each bay's floor over the placement's origin: they step up the hill a
 /// storey at a time, each a sill's height over its terrace (the map
-/// terraces the ground at 0, 4, 8 and 12 m).
-pub const MILL_FLOORS: [f32; 4] = [0.15, 4.15, 8.15, 12.15];
+/// terraces the ground at 0, 4, 8 and 12 m). The terrain keeps its ground
+/// under them (`extraction_core::terrain`), so they live in the core.
+pub use extraction_core::map::MILL_FLOORS;
 /// How deep each bay is (z), and the mill's half width (x) and half length.
-const BAY: f32 = 10.0;
+const BAY: f32 = extraction_core::map::MILL_BAY;
 const MILL_HW: f32 = 10.0;
 const MILL_HD: f32 = 20.0;
 /// Outside walls and the bays' fronts: timber framing under corrugated
@@ -2489,6 +2490,57 @@ mod tests {
                 bad.push(format!("{id}: piece {i} floats at {at:.2?}"));
             }
         }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Nowhere in any valley does the ground come up through a stepped
+    /// building's floor: the terraces under the mill blended a metre up
+    /// through the back of each bay (bots pinned against it, short of the
+    /// loot along the back wall).
+    #[test]
+    fn the_ground_never_comes_up_through_a_stepped_floor() {
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for (name, _) in extraction_core::map::VALLEYS {
+            let map = crate::world::load_map_def(name);
+            let mut hm = None;
+            for p in &map.placements {
+                if stepped_floor(&p.prefab, Vec2::ZERO).is_none() {
+                    continue;
+                }
+                let hm = hm.get_or_insert_with(|| extraction_core::terrain::Heightmap::build(&map));
+                seen += 1;
+                let base = if p.absolute {
+                    p.y
+                } else {
+                    hm.height(p.at) + p.y
+                };
+                let turn = Quat::from_rotation_y(-p.rot.to_radians());
+                let mut worst = (0.0f32, Vec2::ZERO);
+                let mut z = -MILL_HD + WALL;
+                while z <= MILL_HD - WALL {
+                    let mut x = -INNER;
+                    while x <= INNER {
+                        let l = Vec2::new(x, z);
+                        let w = turn * Vec3::new(x, 0.0, z);
+                        let ground = hm.height([p.at[0] + w.x, p.at[1] + w.z]);
+                        let over = ground - (base + stepped_floor(&p.prefab, l).unwrap());
+                        if over > worst.0 {
+                            worst = (over, l);
+                        }
+                        x += 0.25;
+                    }
+                    z += 0.25;
+                }
+                if worst.0 > 0.01 {
+                    bad.push(format!(
+                        "{name}: {} has ground {:.2} m over its floor at local {:.2?}",
+                        p.prefab, worst.0, worst.1
+                    ));
+                }
+            }
+        }
+        assert!(seen > 0, "no stepped building placed in any valley");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 

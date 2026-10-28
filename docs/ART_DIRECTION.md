@@ -103,6 +103,33 @@ Night is half the game, and it must be both beautiful and playable.
   the camp's lantern and the truck's work lamp each have a tight core and
   a wider glow, which spreads more in damp air. A torch throws a soft
   cone of lit air with dust drifting in it; fog and rain show it most.
+- **A coloured lamp stays its colour up close.** A red landmark and a
+  green rendezvous beacon must read as red and green, not white. The
+  tonemapper (AgX) runs a colour to white past about 1 in its brightest
+  channel, and a green, which is nearly all luminance, at about a third
+  of that. So every lamp's light is scaled down, hue kept, until it is
+  under both caps as the tonemapper gets it, after the eyes' adaptation:
+  - a halo, in `halo.wgsl` (`HUE_CAP`, `LUMA_CAP`);
+  - a bulb, by putting `render::grade::ToTheEye` on it with the lamp's
+    colour at any strength (`hue_safe`, `LAMP_CHANNEL_CAP`,
+    `LAMP_LUMA_CAP`).
+- **A landmark's lamp shows from below.** On a wide flat top, like a
+  chimney's mouth, the lamp stands on a short pole (`lamp_lift`, at most
+  1.5 m) so the rim doesn't hide it from the ground.
+- Gauge: `scripts/lamp_check.sh [map]` shoots every landmark lamp and
+  beacon at night from 50, 150 and 300 m, on up to six bearings each.
+  A distance passes when some bearing sees the lamp brighter than its
+  surroundings and in its own colour.
+  - Open (2026-10-28):
+    - Sallow, Kettle and Cinder pass.
+    - Marrow fails once: lamp 8913 from 300 m, dim on all three
+      bearings, not yet looked at.
+    - Rime Fell and Training Yard haven't been run with the final gauge.
+    - Next step: `scripts/lamp_check.sh marrow_creek` and look at that
+      lamp's views (`target/lamps/<map>/wayfind.json`, its `*_a.png`),
+      then run the two remaining valleys.
+    - The beacon bulb on `ToTheEye` is Fourth valley's change
+      (`render/rv_beacons.rs`); it lands on top of this one.
 - **Eyes, not a camera.** Out of a lit room you begin to see again
   within a few seconds; the rest of your night vision comes over a
   minute. Standing by a lamp keeps your eyes from opening as far. The

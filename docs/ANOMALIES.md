@@ -15,7 +15,7 @@ looks like. Code: `src/anomaly/`, rules in
 | Well | standing, one a valley | drags loose things and walkers toward a heart 1.3 m up that crushes (30/s); bends rounds that pass close | a lens in the air that turns the world over, grit spiralling in, a violet throb | lodestone |
 | Mirror | standing, one a valley | blinks whatever crosses it out the far side, radius + 3 m on, still moving; 1.5 s to fold back up | almost nothing: a shimmer at waist height, a glint now and then | mirror shard |
 | Hush | standing, one a valley | eats every sound made in it: a shot, a step, your stones' hum never leave it; detectors inside are mute; past 8 s the silence presses (3 hp/s) | almost nothing: pale dust hanging dead still | hushstone |
-| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a white rime on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
+| Frost | standing, Rime Fell's own (the col, the scree) | still cold that steals heat: it feeds the body's chill (the valley's, `world::cold`), 0.3/s at its edge to 0.8/s at its heart, so a second or two in and you're frozen through and shivering for minutes after; in it you stiffen (up to 70% of your pace, too stiff to run from 0.4), you're told at 0.4, and frozen through it bites (8 hp/s) | a glaze of blue ice on the ground, motes hanging and glinting in a cold blue light, the air over it faintly wavering | rimestone |
 
 Wells, mirrors, hushes and frosts don't move between cycles: the maps place them
 (`MarkerKind::Anomaly`), so they become landmarks you learn. The director
@@ -311,3 +311,88 @@ What it taught us:
   is its pale dust, and only just (3-6 deg² in three valleys).
 - **Motion reads from the corner of the eye.** The mirror carries a
   glint that crosses it every 4 s, each mirror on its own beat.
+
+### First contact: what it is and where it starts, at 5 m
+
+A first-time player meets an anomaly on foot in VR, with nothing on the
+field map. What tells them it's there is the 20 m gauge above; what it
+does, and where it starts, has to be in the world too, never an invisible
+wall. So:
+
+- **Each kind does something you can see to the ground and the grass
+  in it, out to its edge and no further** (`shaders/sway.wgsl` takes the
+  four anomalies nearest the eye, `world::cover::AnomalyGrass`):
+
+  | Kind | The grass | The ground |
+  |---|---|---|
+  | Lift | torn up and gone | scoured to raw rusty subsoil, grooved in a spiral, and a broad pale bank of the grit it flings out just inside its rim |
+  | Burner | burnt to the ground | scorched, coals glowing in patches |
+  | Snare | standing on end, quivering | fused dark and glassy, still faintly charged (blue) |
+  | Well | laid flat toward its heart | pressed dark and hard |
+  | Mirror | wiped flat | glazed like still water, giving back the sky |
+  | Hush | dead still, whatever the wind; pressed into its dust | pale settled dust, and its edge a ragged line of it |
+  | Frost | stiff, bowed under the rime | glazed in blue ice (pale hoar was lost on snow) |
+
+  What it does to you comes on top of that: leaves circling, embers and
+  heat shimmer, arcs, grit spiralling in, a glint, dust hanging dead still,
+  glinting crystals and your own breath.
+
+- **The mark runs to the edge.** Every mark used to share the particles'
+  soft falloff, solid to half its radius and gone by 0.8: a burner's
+  scorch ended 0.9 m inside where it burns. Marks have their own texture
+  now, solid to 0.93 of the edge and gone by 1.02, its edge wavering a
+  few centimetres, mottled in colour and glow so it reads as ground, not
+  a painted disc.
+
+- **It holds in murk and dark.** Marks are fogged as if half as far off,
+  as particles are (`MarkMaterial`, `shaders/anomaly_mark.wgsl`), and the
+  lift's, mirror's and hush's hold a faint light of their own, too faint
+  to see by day.
+
+**The edge gauge** (`scripts/anomaly_edges.py [--map=NAME]`): for each
+kind, a view from 5 m off its edge at eye height, in clear day, fog,
+downpour and a moonless night (by the player's torch: every stash has
+one; `--torch` hangs its beam on the shot's camera). Along five lines on
+the ground across the edge it measures the colour difference (CIE ΔE)
+the anomaly makes, smoothed over three 10 cm steps, and asks that what it
+changes 0.3-1 m inside beats what it changes 0.3-1 m outside by 8 ΔE,
+and that, along two lines across its sides, the change reaches halfway,
+walking in from outside, within 35 cm of the true edge (a side's place on
+the screen hardly moves with the ground's height; the near edge's does,
+on a slope). Three near lines of five must pass. (It samples a strip one row tall: at 5 m half a
+metre of ground is a few rows, and a square window straddled the edge.)
+
+Marrow Creek, before and after:
+
+| | Edges that read (of 28) |
+|---|---|
+| First run | 17 |
+| Marks to the edge, grass, half-reach fog, torch at eye, faint light | 27 |
+
+Every valley, at the end (each kind in clear, fog, downpour, night: 28
+edges a valley; a kind passes when its edge reads in some condition, and
+every kind passes in every valley):
+
+| Valley | Edges that read | The ones that don't |
+|---|---|---|
+| Marrow Creek | 26 | the lift in clear and fog: from that spot its first 0.7 m inside is behind a rise in the ground (its sides place it 0.0 m off; its grit bank shows plainly beyond the rise) |
+| Kettle Pass | 26 | the well in clear and night: one side places it 0.4 m off (0.35 allowed) |
+| Cinder Works | 27 | the hush at night: one side 0.4 m off |
+| Sallow Reservoir | 28 | |
+| Rime Fell | 26 | the mirror in fog and downpour: its glaze gives back a sky the grey of the snow (it reads by day and by torch) |
+
+Two marks were changed for it. A lift's scoured ground was a dark rust
+under any light: on Sallow's silt and on uphill grass its near edge
+didn't read (2 lines of 5 at best). Its texture is coloured now, not
+tinted, so the grit it flings out can be paler than the soil: a broad
+bank of it, thickest just inside the rim, pale on dark ground with the
+rust and grooves through it on pale. A frost's pale hoar was no mark on
+Rime Fell's snow (0 of 4); it's a glaze of dark blue ice now (4 of 4).
+At 20 m the lift and the frost still read and draw no outline (lift
+26-94 deg², frost 21-24, outlines 0.18-0.29: Marrow's `legibility.png`,
+and `legibility_{rime_fell,sallow_reservoir}_tip.png` beside those
+valleys' full sheets). Before and after, each kind at 5 m by day:
+`docs/shots/anomalies/contact_before_after.png`. Sheets:
+`docs/shots/anomalies/edges*.png` (Marrow Creek, Kettle Pass, Cinder Works and Sallow
+Reservoir's other kinds on shots from before the last merge of main; their
+marks didn't change).

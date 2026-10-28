@@ -727,7 +727,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             at: [1.53, 0.0],
             out: [1.0, 0.0],
             width: 2.0,
-            clear: 2.2,
+            clear: 3.0,
         }],
         "factory_hall" => &[
             Entrance {
@@ -860,6 +860,11 @@ pub fn prefab_foundation(id: &str) -> f32 {
 /// foundation shows on the downhill side rather than the hill being dug
 /// out on the uphill one.
 pub fn prefab_lift(id: &str) -> f32 {
+    // A goods wagon stands on its bogies on the rail's grade, often up an
+    // embankment: its door's steps go down as far as the bank falls.
+    if id == "boxcar" {
+        return 0.6;
+    }
     (prefab_foundation(id) - 0.4).clamp(0.0, 0.9)
 }
 
@@ -903,6 +908,40 @@ pub fn placement_clears(pl: &Placement, p: P2, extra: f32) -> bool {
     let (s, c) = pl.rot.to_radians().sin_cos();
     let (lx, lz) = (dx * c + dz * s, -dx * s + dz * c);
     lx.abs() < w * 0.5 + STRIP_MARGIN + extra && lz.abs() < d * 0.5 + STRIP_MARGIN + extra
+}
+
+/// The ore mill's bays, stepped up its slope from the front (local -z):
+/// each bay's floor over the placement's origin, and how deep a bay is.
+/// `world::fell` builds the mill on them.
+pub const MILL_FLOORS: [f32; 4] = [0.15, 4.15, 8.15, 12.15];
+pub const MILL_BAY: f32 = 10.0;
+
+/// The floor of the bay over a prefab-local point of a building stepped
+/// down its slope (the ore mill), inside its footprint; `None` for every
+/// other prefab and outside the walls. The stairs between bays rise off
+/// these floors, never below them.
+pub fn stepped_floor_level(id: &str, local: P2) -> Option<f32> {
+    if id != "ore_mill" {
+        return None;
+    }
+    let [w, _, d] = prefab_footprint(id);
+    // A centimetre's grace: a terrain sample on the wall's line, turned
+    // into the building's frame, lands either side of it by rounding.
+    const ON_THE_LINE: f32 = 0.01;
+    if local[0].abs() > w * 0.5 + ON_THE_LINE || local[1].abs() > d * 0.5 + ON_THE_LINE {
+        return None;
+    }
+    let k = ((local[1] + d * 0.5) / MILL_BAY).floor() as i32;
+    Some(MILL_FLOORS[k.clamp(0, MILL_FLOORS.len() as i32 - 1) as usize])
+}
+
+/// Whether a world point is under a building stepped down its slope.
+pub fn under_stepped(map: &MapDef, q: P2) -> bool {
+    map.placements.iter().any(|p| {
+        let (s, c) = p.rot.to_radians().sin_cos();
+        let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+        stepped_floor_level(&p.prefab, [dx * c + dz * s, -dx * s + dz * c]).is_some()
+    })
 }
 
 /// Whether a prefab wants the ground levelled under it (buildings do;

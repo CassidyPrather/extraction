@@ -260,6 +260,103 @@ pub fn measures() -> Vec<Measures> {
         .collect()
 }
 
+/// How a thing you came for stands out from what it lies on, seen with
+/// eyes used to the room, against a day outside: the room's sky light
+/// where it lies (`ao::SkyField`, the light loot is tinted by), times the
+/// difference between a mid-grey thing (0.18) and the surface under it,
+/// with its occlusion; at the darkest of a day, a dusk and a downpour's
+/// day. A dim room where it still stands out is fine; a bright one where
+/// it matches the floor isn't.
+#[derive(Clone, Debug)]
+pub struct LootSight {
+    pub prefab: &'static str,
+    pub at: Vec3,
+    pub table: &'static str,
+    /// What it lies on.
+    pub on: String,
+    /// The room's light there, as a share of before the field.
+    pub light: f32,
+    /// What stands it out, seen (as a day outside's mid-grey's share).
+    pub seen: f32,
+}
+
+/// The reflectance of a mid-grey thing, the gauge's stand-in for loot.
+pub const LOOT_GREY: f32 = 0.18;
+/// The least [`LootSight::seen`]: a mid-grey thing 30% off its ground,
+/// at the floor indoors was held to before the field (`grade`'s
+/// `LOOT_SEEN_FLOOR`).
+pub fn loot_seen_floor() -> f32 {
+    LOOT_GREY * 0.3 * crate::render::grade::LOOT_SEEN_FLOOR
+}
+
+fn luminance(c: bevy::color::Color) -> f32 {
+    let l = c.to_linear();
+    0.2126 * l.red + 0.7152 * l.green + 0.0722 * l.blue
+}
+
+/// Every surface prefab's loot spots, as [`LootSight`]s.
+pub fn loot_sights() -> Vec<LootSight> {
+    use crate::world::weather::{Conditions, Hour, WeatherKind};
+    let worst = [
+        Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1),
+        Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 1),
+        Conditions::compose(WeatherKind::Downpour, Hour::Day, 1),
+    ];
+    let indoors = worst
+        .iter()
+        .map(crate::render::grade::indoor_seen)
+        .fold(f32::INFINITY, f32::min);
+    let outdoors = worst
+        .iter()
+        .map(|c| crate::world::sky::sky_dim(c) * c.light)
+        .fold(f32::INFINITY, f32::min);
+    let mut out = Vec::new();
+    for id in buildings::PREFABS {
+        let Some(geo) = buildings::prefab(id) else {
+            continue;
+        };
+        let f = extraction_core::map::prefab_footprint(id);
+        let occ = buildings::occluders(&geo).within(bevy::math::Vec2::new(f[0], f[2]) * 0.5);
+        let cover = buildings::roof_cover(id);
+        for spot in &geo.loot {
+            let p = spot.at;
+            // The surface under it: the highest top just below the spot.
+            let under = geo
+                .pieces
+                .iter()
+                .filter_map(|piece| {
+                    let Shape::Box(size) = piece.shape else {
+                        return None;
+                    };
+                    let l = piece.at.rotation.inverse() * (p - piece.at.translation);
+                    let h = size * 0.5;
+                    (l.x.abs() <= h.x + 0.02
+                        && l.z.abs() <= h.z + 0.02
+                        && l.y >= h.y - 0.02
+                        && l.y <= h.y + 0.35)
+                        .then(|| (piece.at.translation.y + h.y, piece.mat))
+                })
+                .max_by(|a, b| a.0.total_cmp(&b.0));
+            let (top, mat) = under.unwrap_or((p.y - 0.05, crate::render::materials::Mat::Planks));
+            let surface = bevy::math::Vec3::new(p.x, top + 0.002, p.z);
+            let albedo = luminance(mat.info().2);
+            let near = occ.light(surface, bevy::math::Vec3::Y);
+            let light = crate::world::ao::sky_light(occ.lying_at(p));
+            let inside = cover.is_some_and(|c| c.covers(p + bevy::math::Vec3::Y * 0.3));
+            let sky = if inside { indoors } else { outdoors };
+            out.push(LootSight {
+                prefab: id,
+                at: p,
+                table: spot.table,
+                on: format!("{mat:?}"),
+                light,
+                seen: sky * light * (LOOT_GREY - albedo * near).abs(),
+            });
+        }
+    }
+    out
+}
+
 /// Images a model expects next to it (embedded ones are fine).
 pub fn outside_images() -> Vec<String> {
     glb::all_models()
@@ -472,6 +569,35 @@ mod tests {
     /// says what's a landmark, and where a building's inside ends (hearing,
     /// shelter from the rain).
     const HEIGHT_SPARE: f32 = 0.5;
+
+    /// What you came for stands out from what it lies on, without a
+    /// torch, by day, at dusk and in a downpour (`loot_sights`; prints every
+    /// spot with `-- --nocapture`).
+    #[test]
+    fn loot_stands_out_from_what_it_lies_on() {
+        let all = loot_sights();
+        assert!(all.len() > 50, "only {} loot spots", all.len());
+        let floor = loot_seen_floor();
+        let mut bad = Vec::new();
+        for s in &all {
+            println!(
+                "{:<22} {:<10} on {:<12} at ({:5.1}, {:4.1}, {:5.1}): light {:4.2}, seen {:.4}",
+                s.prefab, s.table, s.on, s.at.x, s.at.y, s.at.z, s.light, s.seen
+            );
+            if s.seen < floor {
+                bad.push(format!(
+                    "{} {} on {} at ({:.1}, {:.1}, {:.1}): seen {:.4} under {floor:.4} (room light {:.2})",
+                    s.prefab, s.table, s.on, s.at.x, s.at.y, s.at.z, s.seen, s.light
+                ));
+            }
+        }
+        println!("{} of {} spots under {floor:.4}", bad.len(), all.len());
+        assert!(
+            bad.is_empty(),
+            "loot that doesn't stand out:\n{}",
+            bad.join("\n")
+        );
+    }
 
     /// Prints every loose part (`-- --nocapture`) and fails on any not in
     /// `LOOSE_KNOWN`.

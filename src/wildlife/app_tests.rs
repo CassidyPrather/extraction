@@ -29,13 +29,19 @@ fn listen(
 }
 
 fn app() -> (App, Entity, Zone) {
-    let mut app = crate::headless_app(
-        crate::LaunchOptions {
-            robots: false,
-            ..Default::default()
-        },
-        false,
-    );
+    app_on(None)
+}
+
+/// [`app`] on a valley of its own (`None`: the default, Marrow Creek).
+fn app_on(map: Option<&str>) -> (App, Entity, Zone) {
+    let mut opts = crate::LaunchOptions {
+        robots: false,
+        ..Default::default()
+    };
+    if let Some(m) = map {
+        opts.map = m.to_string();
+    }
+    let mut app = crate::headless_app(opts, false);
     app.init_resource::<Log>().add_systems(Last, listen);
     app.finish();
     app.cleanup();
@@ -225,6 +231,86 @@ fn a_walker_goes_to_look_where_you_flushed_the_birds() {
             assert_eq!(looked, f32::MAX, "investigated with no birds going up");
         }
     }
+}
+
+/// A stone onto the birds' roof: they go up calling, and a walker 75 m
+/// off goes to look where they were. It's a diversion, not a give-away:
+/// the alarm is from nobody, so the walker isn't onto you.
+#[test]
+fn a_stone_onto_their_roof_sends_a_walker_to_look_there() {
+    let (mut app, player, zone) = app();
+    let (_, centre, post) = one_flock_heard(&mut app, &zone, 75.0, true);
+    // You, well away: the far side of the building, standing still.
+    let side = (centre - post).with_y(0.0).normalize();
+    let off = centre + side * 30.0;
+    put(&mut app, player, zone.on_ground(off.x, off.z));
+    let walker = walker_at(&mut app, &zone, post, centre);
+    // A fresh flock on that roof, sitting (getting the walker to its post
+    // may have put the first one up).
+    let roof = app.world().resource::<Perches>().clone();
+    let i = roof
+        .sites
+        .iter()
+        .position(|s| s.centre.distance(centre) < 0.1)
+        .unwrap();
+    let old: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, With<Flock>>()
+        .iter(app.world())
+        .collect();
+    for e in old {
+        app.world_mut().despawn(e);
+    }
+    let mut rng = extraction_core::noise::Rng::new(2);
+    let flock = new_flock(Species::Rook, i, &roof.sites[i], &mut rng);
+    app.world_mut()
+        .spawn((Transform::from_translation(centre), flock));
+    {
+        let mut log = app.world_mut().resource_mut::<Log>();
+        log.investigating.clear();
+        log.flushed.clear();
+    }
+    let site = &roof.sites[i];
+    // Thrown: just out of a hand.
+    let stone = app.world_mut().spawn_empty().id();
+    let now = app.world().resource::<Time>().elapsed_secs();
+    app.world_mut()
+        .resource_mut::<super::LetGo>()
+        .0
+        .insert(stone, now);
+    for _ in 0..3 {
+        app.world_mut()
+            .write_message(crate::items::impacts::ItemImpact {
+                item: stone,
+                at: centre.with_y(site.top()),
+                speed: 6.0,
+                mass: 0.3,
+                material: crate::items::impacts::Material::Wood,
+                ground: None,
+            });
+        app.update();
+    }
+    for _ in 0..90 * 6 {
+        app.update();
+    }
+    let log = app.world().resource::<Log>();
+    let up = log.flushed.first().expect("the flock went up");
+    assert_eq!(up.cause, FlushCause::Thrown);
+    assert!(up.alarm && up.by.is_none());
+    // Gone to look (or looking round) near where the birds were.
+    let looked = match app.world().get::<Brain>(walker) {
+        Some(Brain::Investigate { at, .. } | Brain::Search { at, .. }) => {
+            Vec2::new(at.x - centre.x, at.z - centre.z).length()
+        }
+        _ => f32::MAX,
+    };
+    let spread = crate::robots::senses::HEARD_SPREAD * post.distance(centre);
+    assert!(
+        looked < spread.max(8.0),
+        "went to look {looked:.1} m from the flock ({spread:.1} m allowed)"
+    );
+    let aware = app.world().get::<crate::robots::Awareness>(walker).unwrap();
+    assert_ne!(aware.target, Some(player), "it's onto you");
 }
 
 /// Sitting and flying, no bird is ever inside any collider in the valley
@@ -499,4 +585,160 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
         b.pos.y
     );
     assert!(app.world().resource::<Deaths>().0.len() >= 2);
+}
+
+/// The diversion gauge (`docs/WILDLIFE.md`, "Using them"): in each valley,
+/// at up to four of its low roofs, a walker on watch 65 m off with its back
+/// to the birds, and a 40 m crossing 35 m in front of it, in its sight.
+/// Walk it with a stone onto the birds' roof first (4 s before), and
+/// without: how often the walker gets onto you. Prints the table.
+///
+///     cargo test --profile fast --lib wildlife_diversion_gauge -- --ignored --nocapture
+#[test]
+#[ignore = "a gauge: prints the table"]
+fn wildlife_diversion_gauge() {
+    println!("| Valley | Crossings | Seen, plain | Seen, a stone onto the birds first |");
+    println!("| - | - | - | - |");
+    for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+        let (mut app, _, zone) = app_on(Some(map));
+        let perches = app.world().resource::<Perches>().clone();
+        let nav = app
+            .world()
+            .resource::<crate::robots::walker::Nav>()
+            .0
+            .clone();
+        let ways = crossings(&mut app, &zone, &perches, &nav);
+        drop(app);
+        let mut seen = [0, 0];
+        for &(i, post, from, to) in &ways {
+            for (arm, stone) in [(0, false), (1, true)] {
+                if crossing_seen(map, i, post, from, to, stone) {
+                    seen[arm] += 1;
+                }
+            }
+        }
+        println!("| {map} | {} | {} | {} |", ways.len(), seen[0], seen[1]);
+    }
+}
+
+/// Up to four set-ups in a valley: (site, walker's post, crossing from, to).
+fn crossings(
+    app: &mut App,
+    zone: &Zone,
+    perches: &Perches,
+    nav: &extraction_core::nav::NavGrid,
+) -> Vec<(usize, Vec3, Vec3, Vec3)> {
+    let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
+    let spatial = q.get(app.world()).unwrap();
+    let world = SpatialQueryFilter::from_mask(crate::world::Layer::World);
+    let sees = |a: Vec3, b: Vec3| {
+        Dir3::new(b - a).is_ok_and(|d| {
+            spatial
+                .cast_ray(a, d, a.distance(b) - 0.3, true, &world)
+                .is_none()
+        })
+    };
+    let walk = |p: Vec3| nav.walkable([p.x, p.z]);
+    let mut out = Vec::new();
+    for (i, s) in perches.sites.iter().enumerate() {
+        if out.len() >= 4 {
+            break;
+        }
+        if s.spots.len() < 8 || s.top() > zone.ground(s.centre.x, s.centre.z) + 8.0 {
+            continue;
+        }
+        let up = s.centre.with_y(s.top()) + Vec3::Y * super::flock::ALARM_HEIGHT;
+        let found = (0..16).find_map(|k| {
+            let a = k as f32 / 16.0 * std::f32::consts::TAU;
+            let dir = Vec3::new(a.cos(), 0.0, a.sin());
+            let side = Vec3::new(-dir.z, 0.0, dir.x);
+            let post = zone.on_ground(s.centre.x + dir.x * 65.0, s.centre.z + dir.z * 65.0);
+            let mid = post + dir * 35.0;
+            let mid = zone.on_ground(mid.x, mid.z);
+            let ends = [mid - side * 20.0, mid + side * 20.0].map(|p| zone.on_ground(p.x, p.z));
+            let eye = post + Vec3::Y * 1.5;
+            let ok = walk(post)
+                && walk(mid)
+                && ends.iter().all(|&p| walk(p))
+                && !crate::acoustics::blocked(&spatial, up, eye)
+                && ends
+                    .iter()
+                    .chain([&mid])
+                    .all(|&p| sees(eye, p + Vec3::Y * 1.6));
+            ok.then_some((i, post, ends[0], ends[1]))
+        });
+        out.extend(found);
+    }
+    out
+}
+
+/// One crossing, from its own fresh valley: did the walker get onto you?
+fn crossing_seen(map: &str, site: usize, post: Vec3, from: Vec3, to: Vec3, stone: bool) -> bool {
+    let (mut app, player, zone) = app_on(Some(map));
+    // Out of the way while it takes its post.
+    put(&mut app, player, zone.on_ground(post.x + 250.0, post.z));
+    let perches = app.world().resource::<Perches>().clone();
+    let centre = perches.sites[site].centre;
+    let walker = walker_at(&mut app, &zone, post, centre);
+    let old: Vec<Entity> = app
+        .world_mut()
+        .query_filtered::<Entity, Or<(With<Flock>, With<super::ducks::Raft>)>>()
+        .iter(app.world())
+        .collect();
+    for e in old {
+        app.world_mut().despawn(e);
+    }
+    let mut rng = extraction_core::noise::Rng::new(5);
+    let flock = new_flock(Species::Rook, site, &perches.sites[site], &mut rng);
+    app.world_mut()
+        .spawn((Transform::from_translation(centre), flock));
+    if stone {
+        let s = app.world_mut().spawn_empty().id();
+        let now = app.world().resource::<Time>().elapsed_secs();
+        app.world_mut()
+            .resource_mut::<super::LetGo>()
+            .0
+            .insert(s, now);
+        let at = centre.with_y(perches.sites[site].top());
+        for _ in 0..3 {
+            app.world_mut()
+                .write_message(crate::items::impacts::ItemImpact {
+                    item: s,
+                    at,
+                    speed: 6.0,
+                    mass: 0.3,
+                    material: crate::items::impacts::Material::Wood,
+                    ground: None,
+                });
+            app.update();
+        }
+    } else {
+        for _ in 0..3 {
+            app.update();
+        }
+    }
+    for _ in 0..90 * 4 {
+        app.update();
+    }
+    // Across, at a walk.
+    put(&mut app, player, from);
+    let along = (to - from).with_y(0.0).normalize();
+    let mut onto = false;
+    for _ in 0..90 * 32 {
+        {
+            let mut input = app.world_mut().get_mut::<RigInput>(player).unwrap();
+            input.head.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, along);
+            input.locomotion = Vec2::Y;
+        }
+        app.update();
+        let aware = app.world().get::<crate::robots::Awareness>(walker).unwrap();
+        let brain = app.world().get::<Brain>(walker).unwrap();
+        onto |= aware.target == Some(player)
+            && (aware.suspicion > 0.5 || matches!(brain, Brain::Engage));
+        let at = app.world().get::<Transform>(player).unwrap().translation;
+        if at.xz().distance(to.xz()) < 1.5 {
+            break;
+        }
+    }
+    onto
 }

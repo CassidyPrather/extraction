@@ -361,6 +361,11 @@ pub(crate) fn perceive(
         Option<&MotionSight>,
         Has<super::indoor::Dormant>,
         Option<&MindSeed>,
+        (
+            Has<super::hazards::Dazzled>,
+            Has<super::hazards::Deafened>,
+            Has<super::hazards::Frosted>,
+        ),
     )>,
     players: Query<
         (
@@ -372,7 +377,7 @@ pub(crate) fn perceive(
         With<Player>,
     >,
     torches: Query<(&crate::gadgets::Device, &GlobalTransform), With<crate::gadgets::Powered>>,
-    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight): (
+    (lighting, hearing, cloaks, conditions, zone, entrances, hushes, glints, starlight, among): (
         Res<Lighting>,
         Option<Res<crate::hearing::Hearing>>,
         Res<crate::gadgets::Cloaks>,
@@ -382,6 +387,7 @@ pub(crate) fn perceive(
         Option<Res<crate::anomaly::hush::Hushes>>,
         Option<Res<crate::weapons::optics::Glints>>,
         Option<Res<crate::weapons::flares::Starlight>>,
+        Option<Res<crate::wildlife::herd::Among>>,
     ),
     heads: Query<(&ChildOf, &GlobalTransform), With<RigHead>>,
     loads: Query<(&crate::interact::Held, &LinearVelocity), With<crate::interact::carry::Bulky>>,
@@ -392,9 +398,11 @@ pub(crate) fn perceive(
     spatial: SpatialQuery,
     time: Res<Time>,
     mut noticed: MessageWriter<Noticed>,
-    (mut gave_up, mut bored): (
+    (mut gave_up, mut bored, mut broke, mut own): (
         MessageReader<super::search::LostYou>,
         Local<std::collections::HashMap<Entity, Vec<(Vec3, f32)>>>,
+        MessageReader<crate::destruction::Broke>,
+        Local<Vec<(Vec3, f32)>>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -412,8 +420,20 @@ pub(crate) fn perceive(
         spots.retain(|(_, until)| *until > now);
         !spots.is_empty() && robots.contains(*e)
     });
+    // What a machine breaks going through, it made: no robot turns to it
+    // (`disturbed::MACHINE_HAND`; the same rule as for the sign).
+    // (Its noise may come a tick after the break: kept a moment.)
+    own.retain(|(_, t)| now - t < 1.0);
+    for b in broke.read() {
+        if robots.iter().any(|(_, r, _, g, ..)| {
+            !r.wrecked && g.translation().distance(b.at) < super::disturbed::MACHINE_HAND
+        }) {
+            own.push((b.at, now));
+        }
+    }
     let mut sounds: Vec<Sound> = noises
         .read()
+        .filter(|n| !(n.source.is_none() && own.iter().any(|(o, _)| o.distance(n.at) < 0.05)))
         .map(|n| Sound {
             at: n.at,
             radius: n.radius,
@@ -512,7 +532,13 @@ pub(crate) fn perceive(
                 feet,
                 head,
                 height,
-                speed: Vec2::new(body.velocity.x, body.velocity.z).length(),
+                // Walking among a herd you're one more shape moving
+                // (`wildlife::herd::Among`): only running stands out.
+                speed: {
+                    let v = Vec2::new(body.velocity.x, body.velocity.z).length();
+                    let among = among.as_deref().is_some_and(|a| a.hides(feet));
+                    if among && v <= 3.0 { 0.0 } else { v }
+                },
                 cover: !indoors
                     && dark.is_none()
                     && matches!(surface, Surface::Grass | Surface::Forest),
@@ -536,8 +562,19 @@ pub(crate) fn perceive(
         })
         .collect();
     let mut corridor_budget = CORRIDOR_BUDGET;
-    for (robot_e, robot, senses, gt, mut aware, stunned, local, motion, dormant, mind_seed) in
-        &mut robots
+    for (
+        robot_e,
+        robot,
+        senses,
+        gt,
+        mut aware,
+        stunned,
+        local,
+        motion,
+        dormant,
+        mind_seed,
+        (dazzled, deaf, frosted),
+    ) in &mut robots
     {
         let mind_seed = mind_seed.map_or(robot_e.to_bits(), |m| m.0);
         aware.news = false;
@@ -568,10 +605,18 @@ pub(crate) fn perceive(
                 }
                 !any || alive
             })
-            .unwrap_or(true);
+            .unwrap_or(true)
+            // Dazzled by a hazard (`hazards`): it's lost you a while.
+            && !dazzled;
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
-        let reach = conditions.sight(senses.sight);
+        let reach = conditions.sight(senses.sight)
+            // Optics frosted (`hazards::Frosted`).
+            * if frosted {
+                super::hazards::FROST_SIGHT
+            } else {
+                1.0
+            };
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
@@ -675,7 +720,8 @@ pub(crate) fn perceive(
             }
         }
         let ear = gt.translation();
-        for s in &sounds {
+        // Deafened by a hazard (`hazards`): it hears nothing.
+        for s in sounds.iter().filter(|_| !deaf) {
             if s.source == Some(robot_e) {
                 continue;
             }

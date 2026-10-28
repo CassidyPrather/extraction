@@ -609,13 +609,30 @@ pub fn clear_of_buildings(map: &MapDef, p: [f32; 2], reach: f32) -> bool {
     crate::map_surge::anomaly_room(map, p).0 >= reach
 }
 
+/// How far a run-time bloom's reach keeps from a rendezvous, metres: the
+/// truck, its tailgate and the way up to it (`map_lint::TRUCK_APPROACH`).
+/// A Well that opened on Sallow's Inflow bridge tailgate held a bot off
+/// the bell for three minutes of the truck's five.
+pub const RV_CLEAR: f32 = 12.0;
+
+/// Whether an anomaly reaching `reach` at `p` keeps clear of every
+/// rendezvous by [`RV_CLEAR`].
+pub fn clear_of_rendezvous(map: &MapDef, p: [f32; 2], reach: f32) -> bool {
+    map.markers_of(&crate::map::MarkerKind::Rendezvous)
+        .all(|m| geom::dist(m.at, p) >= reach + RV_CLEAR)
+}
+
 /// Somewhere a run-time bloom (the director's, the Surge's) may open: the
 /// same ground as the Surge's own layout, `placeable` (dry, not steep,
-/// clear of every building by its footprint), `clear_of_roads` and
-/// `clear_of_buildings` for how far the kind reaches.
+/// clear of every building by its footprint), `clear_of_roads`,
+/// `clear_of_buildings` and `clear_of_rendezvous` for how far the kind
+/// reaches.
 pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
     let reach = kind.danger_radius(radius);
-    placeable(map, hm, p) && clear_of_roads(hm, p, reach) && clear_of_buildings(map, p, reach)
+    placeable(map, hm, p)
+        && clear_of_roads(hm, p, reach)
+        && clear_of_buildings(map, p, reach)
+        && clear_of_rendezvous(map, p, reach)
 }
 
 /// Cycles between the Surge's great scatters. In between, what it scattered
@@ -1187,6 +1204,28 @@ mod tests {
         assert!(surge_bloom_spot([0.0, 0.0], [0.0, 0.0], || 0.5, |_| false).is_none());
     }
 
+    /// No bloom opens on a truck's tailgate, in any valley.
+    #[test]
+    fn no_bloom_opens_at_the_truck() {
+        for src in crate::map::VALLEYS.map(|v| v.1) {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = Heightmap::build(&map);
+            for m in map.markers_of(&MarkerKind::Rendezvous) {
+                let l = geom::len(m.at).max(1e-3);
+                let tail = [m.at[0] - m.at[0] / l * 3.6, m.at[1] - m.at[1] / l * 3.6];
+                for kind in AnomalyKind::ALL {
+                    let r = kind.radius_range().0;
+                    assert!(
+                        !bloom_ok(&map, &hm, tail, kind, r),
+                        "{}: a {kind:?} may bloom on {}'s tailgate",
+                        map.name,
+                        m.name
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn blooms_never_open_by_a_building_or_a_road_in_any_valley() {
         for src in crate::map::VALLEYS.map(|v| v.1) {
@@ -1221,6 +1260,11 @@ mod tests {
                 assert!(
                     clear_of_roads(&hm, p, kind.danger_radius(r)),
                     "{}: {p:?} by a road",
+                    map.name
+                );
+                assert!(
+                    clear_of_rendezvous(&map, p, kind.danger_radius(r)),
+                    "{}: a {kind:?} bloom at {p:?} by the truck",
                     map.name
                 );
                 // Nor against a wall, a kiosk or in front of a door.

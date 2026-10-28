@@ -52,6 +52,30 @@ impl Plugin for ReelPlugin {
 /// Frames to let things settle before the first shot.
 const WARMUP: u32 = 45;
 
+/// `reel:hazards`: each hazard, the machine shown struck by it, and what it
+/// does to it (`hazards::effect`): a grid four across, left to right,
+/// nearest row first.
+const HAZARD_ROW: [(
+    super::hazards::Hazard,
+    super::hazards::Machine,
+    super::hazards::Effect,
+); 11] = {
+    use super::hazards::{Effect as E, Hazard as H, Machine as M};
+    [
+        (H::Lift, M::Drone, E::Thrown),
+        (H::Burner, M::Walker, E::Hurt),
+        (H::Snare, M::Walker, E::Hurt),
+        (H::Well, M::Walker, E::Hurt),
+        (H::Mirror, M::Walker, E::Dazzled),
+        (H::Hush, M::Walker, E::Deafened),
+        (H::Gas, M::Crawler, E::Hurt),
+        (H::Mine, M::Walker, E::Hurt),
+        (H::Emp, M::Walker, E::Stunned),
+        (H::Frost, M::Walker, E::Slowed),
+        (H::Heat, M::Crawler, E::Hurt),
+    ]
+};
+
 /// Which damage a `tells` robot takes.
 #[derive(Component)]
 struct TellCase(u8);
@@ -343,6 +367,63 @@ fn reel(
                 }
                 first.unwrap()
             }
+            "hazards" => {
+                // Every hazard of the Zone's, each on a machine it touches,
+                // in a grid at 8-14 m (`HAZARD_ROW`, left to right, near row
+                // first): struck each second below, its mark on it
+                // (`hazard_look`).
+                let mut first = None;
+                for (k, (hazard, machine, _)) in HAZARD_ROW.iter().enumerate() {
+                    // A grid, four across, at 8, 11 and 14 m: none behind
+                    // another.
+                    let (row, col) = (k / 4, k % 4);
+                    let n = if row < 2 { 4 } else { 3 };
+                    let row = 8.0 + row as f32 * 3.0;
+                    let x = (col as f32 - (n - 1) as f32 * 0.5) * 3.2
+                        + if (k / 4) % 2 == 1 { 1.6 } else { 0.0 };
+                    let p = eye + flat * row + right * x;
+                    let at = zone.on_ground(p.x, p.z);
+                    let e = match machine {
+                        super::hazards::Machine::Drone => {
+                            let a = at + Vec3::Y * 2.5;
+                            spawn_drone(&mut commands, a, job(a))
+                        }
+                        super::hazards::Machine::Crawler => super::walker::spawn_walker_sized(
+                            &mut commands,
+                            &zone,
+                            at,
+                            job(at),
+                            false,
+                            super::indoor::CRAWLER_HP,
+                            super::indoor::CRAWLER_SIZE,
+                            None,
+                        ),
+                        _ => spawn_walker(&mut commands, &zone, at, job(at)),
+                    };
+                    let _ = hazard;
+                    // Blind; a drone keeps its mind so it holds its post
+                    // (a walker without one stands).
+                    commands
+                        .entity(e)
+                        .remove::<Senses>()
+                        .insert(TellCase(k as u8));
+                    if *machine != super::hazards::Machine::Drone {
+                        commands.entity(e).remove::<Brain>();
+                    }
+                    first.get_or_insert(e);
+                }
+                first.unwrap()
+            }
+            "scan" => {
+                // A walker 6 m off that notices a device in front of you
+                // (devices::DeviceNoticed): its scan beam, red, then
+                // amber (`visuals::scan_beams`).
+                let p = eye + flat * 6.0 + right * 1.5;
+                let at = zone.on_ground(p.x, p.z);
+                let w = spawn_walker(&mut commands, &zone, at, job(at));
+                commands.entity(w).remove::<Senses>().remove::<Brain>();
+                w
+            }
             "pylon" => {
                 // A relay pylon 3 m off, side on: its cable down the
                 // cabinet into the junction box (`network::PylonCable`).
@@ -618,6 +699,62 @@ fn reel(
             }
         });
     }
+    // `hazards`: each machine struck by its hazard, once a second, as the
+    // hazards tell it (`hazards::HazardStruck`); a mirror's dazzle and a
+    // frost's stiffness held on it as they'd hold.
+    if what == "hazards" && frame >= WARMUP && (frame - WARMUP) % 30 == 2 {
+        commands.queue(move |world: &mut World| {
+            let mut q = world.query::<(Entity, &TellCase, &GlobalTransform)>();
+            let row: Vec<(Entity, u8, Vec3)> = q
+                .iter(world)
+                .map(|(e, c, g)| (e, c.0, g.translation()))
+                .collect();
+            for (e, k, at) in row {
+                let Some(&(hazard, _, effect)) = HAZARD_ROW.get(k as usize) else {
+                    continue;
+                };
+                world.write_message(super::hazards::HazardStruck {
+                    robot: e,
+                    hazard,
+                    effect,
+                    at,
+                });
+                match effect {
+                    super::hazards::Effect::Dazzled => {
+                        world.entity_mut(e).insert(super::hazards::Dazzled(1.5));
+                    }
+                    super::hazards::Effect::Slowed => {
+                        world.entity_mut(e).insert(super::hazards::Hampered {
+                            pace: super::hazards::FROST_PACE,
+                            left: 1.5,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+    // `scan`: the walker clocks a device on the ground in front of you,
+    // shooting it first, then coming to look.
+    if what == "scan" && (frame == WARMUP + 16 || frame == WARMUP + 52) {
+        let p = eye + flat * 3.0 - right * 0.4;
+        let at = zone.on_ground(p.x, p.z) + Vec3::Y * 0.1;
+        let reaction = if frame == WARMUP + 16 {
+            super::devices::Reaction::Hunt
+        } else {
+            super::devices::Reaction::Investigate
+        };
+        commands.queue(move |world: &mut World| {
+            let device = world.spawn(Transform::from_translation(at)).id();
+            world.write_message(super::devices::DeviceNoticed {
+                robot: subject,
+                device,
+                at,
+                placed: super::devices::TABLE[0].0,
+                reaction,
+            });
+        });
+    }
     // One heavy round into its side: it goes down, lies a moment, gets up.
     // (Its core is made to take it: this is about the knock.)
     if what == "knockdown" && frame == 12 {
@@ -698,4 +835,29 @@ fn hidden(zone: &Zone, eye: Vec3, to: Vec3) -> f32 {
             zone.ground(p.x, p.z) - (p.y - 0.2)
         })
         .fold(f32::MIN, f32::max)
+}
+
+#[cfg(test)]
+mod hazard_row_tests {
+    use super::*;
+
+    /// The hazards reel shows each hazard once, doing to its machine what
+    /// the table says it does (`hazards::effect`), and none does nothing.
+    #[test]
+    fn the_hazard_row_is_the_table() {
+        for h in super::super::hazards::HAZARDS {
+            let rows: Vec<_> = HAZARD_ROW.iter().filter(|r| r.0 == h).collect();
+            assert_eq!(rows.len(), 1, "{h:?} shown once");
+            let (_, m, fx) = *rows[0];
+            // (A well's table effect is its drag; the reel shows the crush
+            // at its heart, which `hazards` tells as Hurt besides.)
+            let crush = h == super::super::hazards::Hazard::Well
+                && fx == super::super::hazards::Effect::Hurt;
+            assert!(
+                crush || super::super::hazards::effect(m, h) == fx,
+                "{h:?} on {m:?}"
+            );
+            assert_ne!(fx, super::super::hazards::Effect::Unaffected);
+        }
+    }
 }

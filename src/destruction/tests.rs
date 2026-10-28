@@ -35,7 +35,10 @@ fn run(app: &mut App, ticks: usize) {
 }
 
 /// A pane with clear air a couple of metres out from it, and that way
-/// (out of the sash's face).
+/// (out of the sash's face): upright, on the ground floor (a walker can
+/// shoulder it, a lobbed bolt meets its face), with clear air in front of
+/// it down to a body's height. Taken in order of where it stands, so a
+/// valley's layout changing elsewhere doesn't change which.
 fn open_pane(app: &mut App) -> (Entity, Vec3, Vec3) {
     let spatial_ok = |app: &mut App, from: Vec3, to: Vec3| {
         let world = app.world_mut();
@@ -52,22 +55,36 @@ fn open_pane(app: &mut App) -> (Entity, Vec3, Vec3) {
             )
             .is_none()
     };
-    let panes: Vec<(Entity, Pane)> = app
+    let mut panes: Vec<(Entity, Pane)> = app
         .world_mut()
         .query::<(Entity, &Pane)>()
         .iter(app.world())
         .map(|(e, p)| (e, p.clone()))
         .collect();
+    panes.sort_by_key(|(_, p)| key(p.centre()));
+    let zone = app.world().resource::<crate::world::Zone>().clone();
     assert!(
         panes.len() > 50,
         "the valley's windows are glazed ({})",
         panes.len()
     );
     for (e, p) in panes {
+        let c = p.centre();
+        let ground = zone.ground(c.x, c.z);
+        if p.broken.is_some() || c.y - ground > 2.2 {
+            continue;
+        }
         for out in [p.world.rotation * Vec3::NEG_Z, p.world.rotation * Vec3::Z] {
-            let from = p.centre() + out * 2.0;
-            if spatial_ok(app, from, p.centre()) {
-                return (e, p.centre(), out);
+            if out.y.abs() > 0.3 {
+                continue;
+            }
+            let from = c + out * 2.0;
+            // Clear to the pane, and at a walker's chest beside it.
+            let low = Vec3::new(from.x, ground + 1.0, from.z);
+            if spatial_ok(app, from, c) && spatial_ok(app, low, c.with_y(ground + 1.0) + out * 0.3)
+            {
+                println!("open_pane: {c:.2} facing {out:.2}");
+                return (e, c, out);
             }
         }
     }
@@ -1257,6 +1274,8 @@ fn a_wrecks_door_comes_off_to_a_crowbar_and_not_to_rounds() {
                 model: None,
                 model_at: Transform::IDENTITY,
                 hp: None,
+                shadow: true,
+                nuts: false,
             },
         );
     }
@@ -1938,4 +1957,123 @@ fn a_ladas_door_comes_off_to_a_crowbar_and_the_surge_hangs_it_back() {
     super::surge(app.world_mut());
     run(&mut app, 2);
     assert_eq!(parts(&mut app).len(), 10, "the Surge hangs it back");
+}
+
+#[test]
+fn a_wheels_nuts_undone_take_it_off_and_the_surge_bolts_it_back() {
+    use super::hooks::{PRY_HOLD, Pried, Turned, Unboltable};
+    use super::strip::{CAR_WHEEL_PRY, NUT_TURNS, Nuts, WHEEL_NUTS, WheelNut};
+    let mut app = app(None);
+    run(&mut app, 3);
+    let zone = app.world().resource::<crate::world::Zone>().clone();
+    let at = zone.on_ground(40.0, 280.0);
+    app.world_mut().spawn((
+        crate::world::buildings::Building {
+            prefab: "wreck_lada".into(),
+        },
+        Transform::from_translation(at),
+    ));
+    run(&mut app, 3);
+    let wheels = |app: &mut App| -> Vec<(Entity, Vec3, Vec<Entity>)> {
+        app.world_mut()
+            .query::<(Entity, &GlobalTransform, &Nuts)>()
+            .iter(app.world())
+            .filter(|(_, g, _)| g.translation().distance(at) < 4.0)
+            .map(|(e, g, n)| (e, g.translation(), n.0.clone()))
+            .collect()
+    };
+    let nuts_near = |app: &mut App| {
+        app.world_mut()
+            .query_filtered::<&GlobalTransform, With<WheelNut>>()
+            .iter(app.world())
+            .filter(|g| g.translation().distance(at) < 4.0)
+            .count()
+    };
+    let on = wheels(&mut app);
+    assert_eq!(on.len(), 4, "four wheels, each on its nuts");
+    assert_eq!(
+        nuts_near(&mut app),
+        4 * WHEEL_NUTS,
+        "and the nuts are there"
+    );
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let id = catalog.kind("car_wheel").expect("Kit's car_wheel");
+    let count = |app: &mut App| {
+        app.world_mut()
+            .query::<&crate::items::Item>()
+            .iter(app.world())
+            .filter(|i| i.kind() == id)
+            .count()
+    };
+    let before = count(&mut app);
+    let (wheel, wheel_at, nuts) = on[0].clone();
+    // A nut sits on the wheel's outer face, undone along it.
+    for n in &nuts {
+        let g = *app.world().get::<GlobalTransform>(*n).unwrap();
+        let out = g.rotation() * app.world().get::<Unboltable>(*n).unwrap().axis;
+        assert!(
+            (g.translation() - wheel_at).dot(out) > 0.0,
+            "a nut on the outside of its wheel"
+        );
+    }
+    let bar = app.world_mut().spawn_empty().id();
+    let turn = |app: &mut App, nut: Entity, angle: f32| {
+        // A spanner swings about a quarter turn a tick at most.
+        let mut left = angle;
+        while left > 0.0 {
+            let a = left.min(0.4);
+            app.world_mut().write_message(Turned {
+                target: nut,
+                angle: a,
+                by: bar,
+            });
+            run(app, 1);
+            left -= a;
+        }
+    };
+    // Three out, the last only half undone: it's still on.
+    for n in &nuts[..WHEEL_NUTS - 1] {
+        turn(&mut app, *n, NUT_TURNS * 1.05);
+        assert!(app.world().get_entity(*n).is_err(), "the nut's out");
+    }
+    turn(&mut app, nuts[WHEEL_NUTS - 1], NUT_TURNS * 0.5);
+    run(&mut app, 2);
+    assert!(
+        app.world().get_entity(wheel).is_ok(),
+        "one nut still holds it"
+    );
+    assert_eq!(count(&mut app), before, "nothing dropped yet");
+    // The last one out: off it comes.
+    turn(&mut app, nuts[WHEEL_NUTS - 1], NUT_TURNS * 0.55);
+    run(&mut app, 2);
+    assert!(app.world().get_entity(wheel).is_err(), "the wheel's off");
+    assert_eq!(count(&mut app), before + 1, "a wheel to carry");
+    assert!(app.world().resource::<Broken>().0.contains(&key(wheel_at)));
+    // Another prised off with the crowbar: its nuts go with it.
+    let (other, _, other_nuts) = on[1].clone();
+    for _ in 0..((PRY_HOLD * 90.0) as usize + 4) {
+        app.world_mut().write_message(Pried {
+            target: other,
+            torque: CAR_WHEEL_PRY * 1.2,
+            by: bar,
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(other).is_err(), "prised off");
+    assert!(
+        other_nuts
+            .iter()
+            .all(|n| app.world().get_entity(*n).is_err()),
+        "no nut left in the air where it was"
+    );
+    assert_eq!(
+        nuts_near(&mut app),
+        2 * WHEEL_NUTS,
+        "the others' nuts still on"
+    );
+    // The Surge: both back, bolted on.
+    super::surge(app.world_mut());
+    run(&mut app, 2);
+    assert_eq!(wheels(&mut app).len(), 4, "four wheels again");
+    assert_eq!(nuts_near(&mut app), 4 * WHEEL_NUTS, "every nut back");
 }

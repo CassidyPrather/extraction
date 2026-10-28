@@ -46,6 +46,9 @@ RANGE_TARGETS = {
     "detector.click": (3, 2), "gun.dry_fire": (5, 1), "gun.malfunction": (5, 1),
     "radio.squelch": (3, 2), "chatter.squelch": (3, 2), "chatter.static": (3, 2), "chatter.voice": (3, 2),
     "power.generator": (40, 20), "ug.canary": (15, 8),
+    # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
+    "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
+    "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
     "hand.refused": (2, 1), "hit.glance": (2, 1), "offering": (10, 5),
     "truck.arrive": (60, 15), "walker.aim": (60, 30),
     "voice.idle": (20, 8), "voice.noticed": (30, 15), "voice.investigating": (30, 15),
@@ -113,9 +116,18 @@ CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0, "gun.squib": 
                "gun.bulged": 1400.0, "gun.out_of_battery": 3000.0, "ug.echo": 2500.0, "gun.bolt_stuck": 1800.0, "heavy.step": 220.0,
                "heavy.slam": 600.0, "heavy.stall": 2500.0, "echo.slap": 2500.0,
                "thunder.crack": 8000.0, "thunder.roll": 4000.0,
+               # src/audio.rs fault_layers: each stoppage its own.
+               "gun.ftf": 2500.0, "gun.short_stroke": 2500.0, "gun.dud": 4000.0,
+               "gun.hang_fizz": 5000.0, "gun.trigger_block": 2500.0, "gun.trigger_dead": 3000.0,
+               "gun.double_feed": 1200.0,
                # src/audio_underground.rs: water down a pipe, firedamp
                # through rock, a cart's iron wheels.
-               "ug.gurgle": 900.0, "ug.whump": 300.0, "ug.cart": 600.0}
+               "ug.gurgle": 900.0, "ug.whump": 300.0, "ug.cart": 600.0,
+               # the kiosk doors' breath (`stair_breath`), one cut-off a cue.
+               "ug.breath_hum": 400.0, "ug.breath_water": 1000.0,
+               "ug.breath_draught": 650.0, "ug.breath_hiss": 3500.0,
+               "ug.breath_buzz": 2500.0, "ug.breath_roar": 500.0,
+               "ug.breath_wind": 1000.0}
 
 
 def own_filter(cue_name):

@@ -351,10 +351,84 @@ pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
 /// day outside. The night is under it; the torch is for that.
 pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
 
+/// The most a lamp's light may bring the tonemapper and keep its colour:
+/// AgX runs a colour to white past about 1 in its brightest channel, and
+/// sooner the brighter it is to the eye (a green, nearly all luminance,
+/// at a third of where a red goes). `halo.wgsl` holds the same two.
+pub const LAMP_CHANNEL_CAP: f32 = 1.0;
+pub const LAMP_LUMA_CAP: f32 = 0.3;
+
+/// `c` scaled down (hue kept) until it's under both caps: any colour of
+/// lamp, at any strength, reaches the tonemapper still its colour.
+pub fn hue_safe(c: LinearRgba) -> LinearRgba {
+    let m = c.red.max(c.green).max(c.blue);
+    let y = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+    if m <= 0.0 {
+        return c;
+    }
+    let k = (LAMP_CHANNEL_CAP / m)
+        .min(LAMP_LUMA_CAP / y.max(1e-6))
+        .min(1.0);
+    LinearRgba::rgb(c.red * k, c.green * k, c.blue * k)
+}
+
+/// A lamp's bulb as it should reach the tonemapper: its material's
+/// emissive is set each frame to `emissive`, made `hue_safe`, over the
+/// grade's gain (the eyes' adaptation, up to three stops at night,
+/// multiplies an emissive like everything else), so a red or green bulb
+/// stays its colour on screen. Give it the lamp's colour at any strength.
+/// Put it on any entity; several may share a material.
+#[derive(Component, Clone)]
+pub struct ToTheEye {
+    pub material: Handle<StandardMaterial>,
+    pub emissive: LinearRgba,
+}
+
+pub fn emissives_to_the_eye(
+    bulbs: Query<&ToTheEye>,
+    grades: Query<(&Camera, &ColorGrading)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut done: Local<Vec<AssetId<StandardMaterial>>>,
+) {
+    let Some(stops) = grades
+        .iter()
+        .find(|(c, _)| c.is_active)
+        .map(|(_, g)| g.global.exposure)
+    else {
+        return;
+    };
+    let gain = 2f32.powf(-stops);
+    done.clear();
+    for b in &bulbs {
+        let id = b.material.id();
+        if done.contains(&id) {
+            continue;
+        }
+        done.push(id);
+        let want = hue_safe(b.emissive) * gain;
+        if materials.get(id).is_some_and(|m| m.emissive != want) {
+            if let Some(mut m) = materials.get_mut(id) {
+                m.emissive = want;
+            }
+        }
+    }
+}
+
 /// The ambient before `dim_indoors` this frame, and what it wrote, so
-/// `undim` gives back exactly what was there (if nothing changed it since).
+/// `undim` gives back exactly what was there (if nothing changed it since);
+/// the same for each camera's fog colours (RGB: the alpha carries the
+/// wetness, `world::sky::carry_wetness`).
 #[derive(Resource, Default)]
-pub struct Dimmed(Option<(f32, f32)>);
+pub struct Dimmed(Option<(f32, f32)>, Vec<(Entity, [Vec3; 2], [Vec3; 2])>);
+
+fn rgb(c: Color) -> Vec3 {
+    let l = c.to_linear();
+    Vec3::new(l.red, l.green, l.blue)
+}
+
+fn with_rgb(c: Color, v: Vec3) -> Color {
+    Color::LinearRgba(LinearRgba::new(v.x, v.y, v.z, c.alpha()))
+}
 
 /// Indoors, the room's walls cut the sky's light: the ambient (the sky's
 /// share of every surface's light; lamps and torches aren't it) drops to
@@ -362,11 +436,14 @@ pub struct Dimmed(Option<(f32, f32)>);
 /// is dark until a light is on. Applied last thing before the frame is
 /// drawn and taken off again first thing in the next (`undim`), so the
 /// sky and the underground, which set the ambient from what they last
-/// wrote, never see it. The outdoors through a doorway dims with it; the
-/// sky and the fog, unlit, don't.
+/// wrote, never see it. The fog's light goes with it: the air in a room
+/// is lit by the room, and fogged at the sky's brightness it laid a grey
+/// veil over the dark end of every room. The outdoors through a doorway
+/// dims with it; the sky, unlit, doesn't.
 pub fn dim_indoors(
     adapt: Res<Adaptation>,
     mut ambient: ResMut<GlobalAmbientLight>,
+    mut fogs: Query<(Entity, &mut DistanceFog)>,
     mut dimmed: ResMut<Dimmed>,
 ) {
     let k = 1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT);
@@ -375,12 +452,38 @@ pub fn dim_indoors(
         ambient.brightness *= k;
         (before, ambient.brightness)
     });
+    dimmed.1.clear();
+    if k >= 0.999 {
+        return;
+    }
+    for (e, mut fog) in &mut fogs {
+        let before = [rgb(fog.color), rgb(fog.directional_light_color)];
+        let wrote = [before[0] * k, before[1] * k];
+        fog.color = with_rgb(fog.color, wrote[0]);
+        fog.directional_light_color = with_rgb(fog.directional_light_color, wrote[1]);
+        dimmed.1.push((e, before, wrote));
+    }
 }
 
-pub fn undim(mut ambient: ResMut<GlobalAmbientLight>, mut dimmed: ResMut<Dimmed>) {
+pub fn undim(
+    mut ambient: ResMut<GlobalAmbientLight>,
+    mut fogs: Query<&mut DistanceFog>,
+    mut dimmed: ResMut<Dimmed>,
+) {
     if let Some((before, wrote)) = dimmed.0.take() {
         if ambient.brightness == wrote {
             ambient.brightness = before;
+        }
+    }
+    for (e, before, wrote) in dimmed.1.drain(..) {
+        let Ok(mut fog) = fogs.get_mut(e) else {
+            continue;
+        };
+        if rgb(fog.color).abs_diff_eq(wrote[0], 1e-6) {
+            fog.color = with_rgb(fog.color, before[0]);
+        }
+        if rgb(fog.directional_light_color).abs_diff_eq(wrote[1], 1e-6) {
+            fog.directional_light_color = with_rgb(fog.directional_light_color, before[1]);
         }
     }
 }
@@ -431,6 +534,97 @@ mod tests {
             let night = indoor_seen(&Conditions::compose_with_moon(*kind, Hour::Night, 1, 0.5));
             assert!(night < LOOT_SEEN_FLOOR, "{kind:?} night: {night:.3}");
         }
+    }
+
+    #[test]
+    fn any_lamp_colour_is_kept_under_both_caps() {
+        let y = |c: LinearRgba| 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+        for c in [
+            LinearRgba::rgb(120.0, 6.0, 2.0),
+            LinearRgba::rgb(4.0, 110.0, 20.0),
+            LinearRgba::rgb(0.1, 1.7, 0.35),
+            LinearRgba::rgb(3.0, 3.0, 2.8),
+        ] {
+            let s = hue_safe(c);
+            assert!(s.red.max(s.green).max(s.blue) <= LAMP_CHANNEL_CAP + 1e-5);
+            assert!(y(s) <= LAMP_LUMA_CAP + 1e-5);
+            // The same hue.
+            assert!((s.green / s.red - c.green / c.red).abs() < 1e-3 * c.green / c.red);
+        }
+        // A dim one is left alone.
+        let dim = LinearRgba::rgb(0.2, 0.01, 0.003);
+        assert_eq!(hue_safe(dim), dim);
+    }
+
+    #[test]
+    fn a_bulb_reaches_the_eye_at_its_colour_however_open_the_eyes() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_systems(Update, emissives_to_the_eye);
+        let red = LinearRgba::rgb(0.9, 0.045, 0.014);
+        let m = app
+            .world_mut()
+            .resource_mut::<Assets<StandardMaterial>>()
+            .add(StandardMaterial::default());
+        app.world_mut().spawn(ToTheEye {
+            material: m.clone(),
+            emissive: red,
+        });
+        let mut grading = ColorGrading::default();
+        grading.global.exposure = 3.0;
+        app.world_mut().spawn((Camera::default(), grading));
+        app.update();
+        let e = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&m)
+            .unwrap()
+            .emissive;
+        // Three stops open: an eighth, to come out at `red` after the grade.
+        assert!((e.red * 8.0 - red.red).abs() < 1e-5 && (e.green * 8.0 - red.green).abs() < 1e-6);
+    }
+
+    #[test]
+    fn indoors_the_fog_dims_with_the_ambient_and_comes_back() {
+        let mut app = App::new();
+        app.insert_resource(Adaptation {
+            indoors: 1.0,
+            ..default()
+        })
+        .insert_resource(GlobalAmbientLight {
+            brightness: 100.0,
+            ..default()
+        })
+        .init_resource::<Dimmed>()
+        .add_systems(Update, (undim, dim_indoors).chain());
+        let wet = 0.7;
+        let cam = app
+            .world_mut()
+            .spawn(DistanceFog {
+                color: Color::linear_rgba(0.4, 0.5, 0.6, wet),
+                directional_light_color: Color::linear_rgba(1.0, 0.9, 0.8, 0.5),
+                ..default()
+            })
+            .id();
+        for _ in 0..3 {
+            app.update();
+        }
+        let fog = app.world().get::<DistanceFog>(cam).unwrap();
+        let k = INTERIOR_LIGHT;
+        assert!(rgb(fog.color).abs_diff_eq(Vec3::new(0.4, 0.5, 0.6) * k, 1e-5));
+        assert!(rgb(fog.directional_light_color).abs_diff_eq(Vec3::new(1.0, 0.9, 0.8) * k, 1e-5));
+        // The wetness on the alpha rides through.
+        assert!((fog.color.alpha() - wet).abs() < 1e-6);
+        // Outside again: all of it back.
+        app.world_mut().resource_mut::<Adaptation>().indoors = 0.0;
+        app.update();
+        let fog = app.world().get::<DistanceFog>(cam).unwrap();
+        assert!(rgb(fog.color).abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-5));
+        assert_eq!(
+            app.world().resource::<GlobalAmbientLight>().brightness,
+            100.0
+        );
     }
 
     #[test]

@@ -4,10 +4,21 @@ use std::env;
 use std::process::Command;
 
 fn main() {
-    // Rebuild when the checked-out commit, tags, or working-tree state change
+    // Rebuild when the checked-out commit or the tags change: HEAD, the
+    // branch it points at, and the packed refs a pull or gc may move it to.
+    // Not `.git/index`: `git describe --dirty` refreshes the index itself,
+    // so watching it made every build stale the next (cargo run after cargo
+    // build recompiled the whole game). A build's "-dirty" is as of when
+    // the commit last changed.
     println!("cargo::rerun-if-changed=.git/HEAD");
-    println!("cargo::rerun-if-changed=.git/index");
+    println!("cargo::rerun-if-changed=.git/packed-refs");
     println!("cargo::rerun-if-changed=.git/refs/tags");
+    if let Some(branch) = std::fs::read_to_string(".git/HEAD")
+        .ok()
+        .and_then(|head| head.strip_prefix("ref: ").map(|r| r.trim().to_string()))
+    {
+        println!("cargo::rerun-if-changed=.git/{branch}");
+    }
 
     let pkg_version = env::var("CARGO_PKG_VERSION").expect("cargo always sets CARGO_PKG_VERSION");
     let version = git_describe().map_or_else(

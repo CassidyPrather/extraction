@@ -22,6 +22,8 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(dirigible_tally)
+            .add_systems(Update, scan_beams)
             .add_plugins((
                 super::reel::ReelPlugin,
                 super::fx::RobotFxPlugin,
@@ -1083,6 +1085,142 @@ fn dress_pylon_cable(
     });
 }
 
+/// A dirigible's tally (Robot minds' `recall`: how often it's reported
+/// you): a lamp on the front of its gondola, big enough to read from the
+/// ground. `recall` lights every `TallyLamp`, this one too.
+fn dirigible_tally(
+    add: On<Add, super::dirigible::Dirigible>,
+    mut commands: Commands,
+    meshes: Option<ResMut<Assets<Mesh>>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+) {
+    let (Some(mut meshes), Some(mut materials)) = (meshes, materials) else {
+        return;
+    };
+    let r = super::dirigible::RADIUS;
+    commands.spawn((
+        Name::new("Tally lamp"),
+        super::recall::TallyLamp { relay: add.entity },
+        Mesh3d(meshes.add(Sphere::new(0.15))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.08, 0.06, 0.05),
+            ..default()
+        })),
+        // The gondola's nose, low (it hangs at -RADIUS - 0.5; 1.1 m tall,
+        // 4 m long).
+        Transform::from_xyz(0.0, -r - 0.85, -2.05),
+        NotShadowCaster,
+        ChildOf(add.entity),
+    ));
+}
+
+/// A machine's look at a device it's noticed (`devices::DeviceNoticed`):
+/// a fan of light from its eye onto the device for [`SCAN_FOR`] seconds,
+/// sweeping across it, red if it means to shoot it, amber if it's coming
+/// to look. In a headset you see the moment you've been clocked.
+#[derive(Component)]
+struct ScanBeam {
+    robot: Entity,
+    at: Vec3,
+    left: f32,
+    mat: Handle<StandardMaterial>,
+    color: LinearRgba,
+}
+
+/// How long a scan beam shows (s), and how far it sweeps either side of
+/// the device (m).
+pub const SCAN_FOR: f32 = 0.6;
+const SCAN_SWEEP: f32 = 0.35;
+/// How bright the fan is at its height (added onto the scene).
+const SCAN_BRIGHT: f32 = 0.7;
+
+/// A scan beam's colour for what the machine means to do.
+pub fn scan_colour(reaction: super::devices::Reaction) -> LinearRgba {
+    match reaction {
+        super::devices::Reaction::Investigate => LinearRgba::rgb(1.0, 0.55, 0.08),
+        super::devices::Reaction::Hunt | super::devices::Reaction::ShootFromAfar => {
+            LinearRgba::rgb(1.0, 0.08, 0.04)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scan_beams(
+    mut commands: Commands,
+    mut noticed: MessageReader<super::devices::DeviceNoticed>,
+    eyes: Query<(&RobotPart, &GlobalTransform)>,
+    mut beams: Query<(Entity, &mut ScanBeam, &mut Transform)>,
+    meshes: Option<ResMut<Assets<Mesh>>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut cone: Local<Option<Handle<Mesh>>>,
+    time: Res<Time>,
+) {
+    let (Some(mut meshes), Some(mut materials)) = (meshes, materials) else {
+        noticed.clear();
+        return;
+    };
+    let eye_of = |robot: Entity| {
+        eyes.iter()
+            .find(|(p, _)| p.robot == robot && p.role == PartRole::Sensor && p.alive())
+            .map(|(_, g)| g.translation())
+    };
+    for n in noticed.read() {
+        if eye_of(n.robot).is_none() {
+            continue;
+        }
+        let color = scan_colour(n.reaction);
+        let mesh = cone
+            .get_or_insert_with(|| meshes.add(Cone::new(0.22, 1.0)))
+            .clone();
+        // (Unlit, it shows its base colour, added onto what's behind.)
+        let mat = materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            alpha_mode: AlphaMode::Add,
+            unlit: true,
+            fog_enabled: false,
+            cull_mode: None,
+            ..default()
+        });
+        commands.spawn((
+            ScanBeam {
+                robot: n.robot,
+                at: n.at,
+                left: SCAN_FOR,
+                mat: mat.clone(),
+                color,
+            },
+            Mesh3d(mesh),
+            MeshMaterial3d(mat),
+            Transform::from_scale(Vec3::ZERO),
+            NotShadowCaster,
+        ));
+    }
+    let dt = time.delta_secs();
+    for (e, mut b, mut t) in &mut beams {
+        b.left -= dt;
+        let Some(eye) = eye_of(b.robot).filter(|_| b.left > 0.0) else {
+            commands.entity(e).despawn();
+            continue;
+        };
+        // Across the device and back, once.
+        let k = 1.0 - b.left / SCAN_FOR;
+        let to = b.at - eye;
+        let side = to.cross(Vec3::Y).normalize_or(Vec3::X);
+        let aim = b.at + side * SCAN_SWEEP * (k * std::f32::consts::TAU).sin();
+        let run = aim - eye;
+        let len = run.length().max(0.1);
+        // (The cone's tip is its +Y end: at the eye, its base on the device.)
+        *t = Transform::from_translation(eye + run * 0.5)
+            .with_rotation(Quat::from_rotation_arc(Vec3::Y, -run / len))
+            .with_scale(Vec3::new(1.0, len, 1.0));
+        // Up fast, fading over the rest.
+        let fade = (k / 0.15).min(1.0) * (1.0 - k).powf(0.5);
+        if let Some(mut m) = materials.get_mut(&b.mat) {
+            m.base_color = (b.color * SCAN_BRIGHT * fade).into();
+        }
+    }
+}
+
 /// A beacon at full flash, and how much of it glows between flashes.
 const BEACON_ON: LinearRgba = LinearRgba::rgb(40.0, 24.0, 8.0);
 const BEACON_REST: f32 = 0.06;
@@ -1679,6 +1817,9 @@ fn guttering(bad: f32, now: f32, k: u32) -> f32 {
     if n > 0.85 - 0.6 * bad { 0.2 } else { 1.0 }
 }
 
+/// How badly a dazzled machine's eye gutters (0..1: `guttering`).
+pub const DAZZLED_GUTTER: f32 = 0.85;
+
 /// A robot's own eye material, so its eye can say how alert it is.
 #[derive(Component)]
 struct AlertEye(Handle<StandardMaterial>, Handle<StandardMaterial>);
@@ -1694,7 +1835,13 @@ fn alert_eyes(
     cameras: Query<&GlobalTransform, (With<Camera3d>, Without<crate::render::OffscreenCamera>)>,
     places: Query<&GlobalTransform, With<Robot>>,
     parts: Query<&RobotPart>,
-    robots: Query<(Entity, &super::Awareness, Option<&AlertEye>, &Robot)>,
+    robots: Query<(
+        Entity,
+        &super::Awareness,
+        Option<&AlertEye>,
+        &Robot,
+        Has<super::hazards::Dazzled>,
+    )>,
     conditions: Option<Res<crate::world::weather::Conditions>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mats: Option<Res<RobotMats>>,
@@ -1803,9 +1950,17 @@ fn alert_eyes(
             *b = b.max(bad);
         }
     }
-    for (robot, aware, own, _) in &robots {
+    for (robot, aware, own, _, dazzled) in &robots {
         let Some(own) = own else {
             continue;
+        };
+        // Dazzled (a mirror's fold, a hush, thrown: `hazards`), its eye
+        // stutters as a failing one does, hard.
+        let bad = cores.get(&robot).copied().unwrap_or(0.0);
+        let bad = if dazzled {
+            bad.max(DAZZLED_GUTTER)
+        } else {
+            bad
         };
         let stutter = if flicker.contains_key(&robot) {
             if (now * 37.0 + robot.index_u32() as f32).sin() > 0.1 {
@@ -1815,11 +1970,7 @@ fn alert_eyes(
             }
         } else {
             1.0
-        } * guttering(
-            cores.get(&robot).copied().unwrap_or(0.0),
-            now,
-            robot.index_u32(),
-        );
+        } * guttering(bad, now, robot.index_u32());
         let a = aware.suspicion.clamp(0.0, 1.0);
         let x = if aware.can_see_target {
             aware.exposure.clamp(0.0, 1.0)
@@ -1870,7 +2021,7 @@ fn alert_eyes(
         };
         let alive = part.alive();
         let want = match (alive, moods.get(&part.robot), robots.get(part.robot)) {
-            (true, Some(&(color, on)), Ok((_, _, _, r))) if !r.wrecked && on > 0.0 => {
+            (true, Some(&(color, on)), Ok((_, _, _, r, _))) if !r.wrecked && on > 0.0 => {
                 // Wide enough to read as a point at 60-80 m on a clear
                 // night, when there's no haze to spread it.
                 let radius = if r.kind == RobotKind::Drone {
@@ -2112,5 +2263,22 @@ mod lamp_tests {
         assert!(!lamp_lit(0.8, 20.0, false), "not by day");
         assert!(!lamp_lit(0.02, 90.0, false), "not out of sight");
         assert!(!lamp_lit(0.02, 20.0, true), "not wrecked");
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::*;
+    use crate::robots::devices::Reaction;
+
+    /// Red if it means to shoot it, amber if it's coming to look: and the
+    /// two tell apart (amber has more green in it).
+    #[test]
+    fn a_scan_says_what_it_means_to_do() {
+        let hunt = scan_colour(Reaction::Hunt);
+        assert_eq!(hunt, scan_colour(Reaction::ShootFromAfar));
+        let look = scan_colour(Reaction::Investigate);
+        assert!(look.green > hunt.green * 4.0, "{look:?} vs {hunt:?}");
+        assert!(hunt.red >= 1.0 && look.red >= 1.0);
     }
 }

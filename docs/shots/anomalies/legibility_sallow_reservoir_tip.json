@@ -1,0 +1,167 @@
+[
+ {
+  "kind": "lift",
+  "weather": "fog",
+  "changed": 0.0319,
+  "noise": 0.0,
+  "over_noise": 0.0319,
+  "deg2": 38.33,
+  "floor": 2.0,
+  "outline": 0.21,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "weather": "downpour",
+  "changed": 0.0214,
+  "noise": 0.0,
+  "over_noise": 0.0214,
+  "deg2": 25.7,
+  "floor": 2.0,
+  "outline": 0.22,
+  "ok": true
+ },
+ {
+  "kind": "lift",
+  "weather": "night",
+  "changed": 0.0475,
+  "noise": 0.0,
+  "over_noise": 0.0475,
+  "deg2": 57.01,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "fog",
+  "changed": 0.0316,
+  "noise": 0.0,
+  "over_noise": 0.0316,
+  "deg2": 37.92,
+  "floor": 2.0,
+  "outline": 0.33,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "downpour",
+  "changed": 0.0354,
+  "noise": 0.0,
+  "over_noise": 0.0354,
+  "deg2": 42.43,
+  "floor": 2.0,
+  "outline": 0.29,
+  "ok": true
+ },
+ {
+  "kind": "burner",
+  "weather": "night",
+  "changed": 0.0518,
+  "noise": 0.0,
+  "over_noise": 0.0518,
+  "deg2": 62.12,
+  "floor": 2.0,
+  "outline": 0.26,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "fog",
+  "changed": 0.1803,
+  "noise": 0.0,
+  "over_noise": 0.1803,
+  "deg2": 216.42,
+  "floor": 2.0,
+  "outline": 0.15,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "downpour",
+  "changed": 0.1852,
+  "noise": 0.0,
+  "over_noise": 0.1852,
+  "deg2": 222.21,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "well",
+  "weather": "night",
+  "changed": 0.057,
+  "noise": 0.0,
+  "over_noise": 0.057,
+  "deg2": 68.39,
+  "floor": 2.0,
+  "outline": 0.24,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "fog",
+  "changed": 0.0075,
+  "noise": 0.0,
+  "over_noise": 0.0075,
+  "deg2": 9.03,
+  "floor": 1.0,
+  "outline": 0.21,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "downpour",
+  "changed": 0.0088,
+  "noise": 0.0,
+  "over_noise": 0.0088,
+  "deg2": 10.54,
+  "floor": 1.0,
+  "outline": 0.19,
+  "ok": true
+ },
+ {
+  "kind": "mirror",
+  "weather": "night",
+  "changed": 0.021,
+  "noise": 0.0,
+  "over_noise": 0.021,
+  "deg2": 25.19,
+  "floor": 1.0,
+  "outline": 0.14,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "weather": "fog",
+  "changed": 0.0701,
+  "noise": 0.0,
+  "over_noise": 0.0701,
+  "deg2": 84.17,
+  "floor": 2.0,
+  "outline": 0.06,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "weather": "downpour",
+  "changed": 0.1173,
+  "noise": 0.0,
+  "over_noise": 0.1173,
+  "deg2": 140.76,
+  "floor": 2.0,
+  "outline": 0.11,
+  "ok": true
+ },
+ {
+  "kind": "hush",
+  "weather": "night",
+  "changed": 0.0026,
+  "noise": 0.0,
+  "over_noise": 0.0026,
+  "deg2": 3.15,
+  "floor": 2.0,
+  "outline": 0.17,
+  "ok": true
+ }
+]

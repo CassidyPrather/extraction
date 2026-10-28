@@ -59,6 +59,7 @@ impl Plugin for WarmupPlugin {
                             shelve::<crate::world::beams::BeamMaterial>,
                             shelve::<crate::world::storm::SheetMaterial>,
                             shelve::<crate::world::storm::BoltMaterial>,
+                            shelve::<crate::anomaly::visuals::MarkMaterial>,
                         ),
                         shelve_unworn,
                         shelve_models,
@@ -558,7 +559,11 @@ fn layout_of(mesh: &Mesh) -> Option<u64> {
 }
 
 /// Each mesh's layout as it arrives, before the render world takes its
-/// data.
+/// data. Every mesh not yet seen, each frame of the warm-up, and those
+/// changed: a mesh added after the frame's asset events (in `PostUpdate`
+/// past `AssetEventSystems`, as a resting gun's merged one can be) has its
+/// event a frame late, by when a render-world-only mesh's data is gone,
+/// and the shelf drew the real mesh in its place.
 fn record_layouts(
     mut shelf: ResMut<Shelf>,
     mut events: MessageReader<AssetEvent<Mesh>>,
@@ -568,20 +573,30 @@ fn record_layouts(
         events.clear();
         return;
     }
-    for ev in events.read() {
-        if let AssetEvent::Added { id } | AssetEvent::Modified { id } = ev {
-            let Some(mesh) = meshes.get(*id) else {
-                continue;
-            };
-            let Some(l) = layout_of(mesh) else {
-                continue;
-            };
-            shelf.layouts.insert(*id, l);
-            if !shelf.twins.contains_key(&l) {
-                if let Some(twin) = point_twin(mesh) {
-                    let twin = meshes.add(twin);
-                    shelf.twins.insert(l, twin);
-                }
+    let changed: Vec<AssetId<Mesh>> = events
+        .read()
+        .filter_map(|ev| match ev {
+            AssetEvent::Modified { id } => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let new: Vec<AssetId<Mesh>> = meshes
+        .ids()
+        .filter(|id| !shelf.layouts.contains_key(id))
+        .chain(changed)
+        .collect();
+    for id in new {
+        let Some(mesh) = meshes.get(id) else {
+            continue;
+        };
+        let Some(l) = layout_of(mesh) else {
+            continue;
+        };
+        shelf.layouts.insert(id, l);
+        if !shelf.twins.contains_key(&l) {
+            if let Some(twin) = point_twin(mesh) {
+                let twin = meshes.add(twin);
+                shelf.twins.insert(l, twin);
             }
         }
     }
@@ -659,7 +674,8 @@ fn shelve_start(
     mut commands: Commands,
     eyes: Query<Entity, With<bevy_mod_xr::camera::XrCamera>>,
     proxies: Query<Entity, With<ProxyEye>>,
-    free: Query<Entity, With<super::FreeCamera>>,
+    // The flat view's (a free camera, or the player's own head's).
+    flat: Query<Entity, (super::EyeCamera, Without<ProxyEye>)>,
     cameras: Query<(), With<Camera>>,
     forest: Option<Res<crate::world::trees::ForestBuilt>>,
     props: Query<(), With<crate::world::buildings::PropsPending>>,
@@ -720,12 +736,18 @@ fn shelve_start(
             ..default()
         };
     } else if shelf.camera.is_none() {
-        shelf.camera = free.iter().next();
+        shelf.camera = flat.iter().min();
     }
     shelf.stocking = false;
-    if shelf.camera.is_none() || shelf.frame > shelf.warm_for + KEEP {
-        // Its time is up: nothing more to wait on.
-        if shelf.frame > shelf.warm_for + KEEP && !warmed.0 {
+    // The world settled: the forest built, the buildings dressed (the
+    // impostors' pictures are views of their own, not the world's).
+    let settled = forest.is_some() && props.is_empty();
+    let unwatched = shelf.camera.is_none();
+    if unwatched || shelf.frame > shelf.warm_for + KEEP {
+        // Its time is up, or the world's in and there's no eye to warm
+        // for: nothing to wait on. (The shelf once looked only for a free
+        // camera, and flat play without one waited on it for ever.)
+        if (!unwatched || settled) && !warmed.0 {
             warmed.0 = true;
         }
         return;
@@ -763,11 +785,8 @@ fn shelve_start(
         }
     }
     shelf.stocking = now <= shelf.warm_for && now % RESTOCK == 1;
-    // Once the world has settled (the forest built, the buildings dressed;
-    // the impostors' pictures are views of their own, not the world's): a
-    // restock now (what streamed in since the last waits no longer), and
-    // warm once it's been out its frames.
-    let settled = forest.is_some() && props.is_empty();
+    // Once the world has settled: a restock now (what streamed in since
+    // the last waits no longer), and warm once it's been out its frames.
     if settled && shelf.settled_at.is_none() {
         shelf.settled_at = Some(now);
         shelf.stocking = true;
@@ -1042,7 +1061,8 @@ mod tests {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_the_shelf_stocks_and_clears() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
+        // Counts: what's shelved, the decoys.
+        let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let decoys = |app: &mut App| {
             let w = app.world_mut();
@@ -1133,7 +1153,8 @@ mod tests {
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_two_eyes_one_shelf() {
-        let _one_at_a_time = super::super::budget::tests::heavy();
+        // Counts: the shelves, their lights.
+        let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
         let eye = |app: &mut App, n: u32| {
             app.world_mut()

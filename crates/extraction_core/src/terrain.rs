@@ -144,6 +144,16 @@ fn relief(p: P2, seed: u32) -> f32 {
 
 impl Heightmap {
     pub fn build(map: &MapDef) -> Self {
+        Self::build_with(map, true)
+    }
+
+    /// The land as the map shapes it, before `settle` fits the buildings
+    /// in: what `map_lint` measures the settling against.
+    pub fn build_unsettled(map: &MapDef) -> Self {
+        Self::build_with(map, false)
+    }
+
+    fn build_with(map: &MapDef, settled: bool) -> Self {
         let n = (map.size / map.cell).round() as usize + 1;
         let origin = -map.half();
         let mut hm = Self {
@@ -170,7 +180,9 @@ impl Heightmap {
         for (i, road) in map.roads.iter().enumerate() {
             hm.road(i, road);
         }
-        hm.settle(map);
+        if settled {
+            hm.settle(map);
+        }
         hm.underground(map);
         hm
     }
@@ -771,6 +783,24 @@ impl Heightmap {
         ((h[1] + h[3] - h[0] - h[2]) * 0.5).atan2(track)
     }
 
+    /// Whether `p` is on the declared ground `poly`, its edge too.
+    pub fn on_terrace(poly: &[P2], p: P2) -> bool {
+        geom::point_in_polygon(poly, p) || geom::polygon_edge_distance(poly, p) < 1e-3
+    }
+
+    /// The ground a map declares: each plateau it sets to a height (a
+    /// terrace, a ledge, a dam's crest), as polygon and level.
+    pub fn terraces(map: &MapDef) -> impl Iterator<Item = (&[P2], f32)> {
+        map.features.iter().filter_map(|f| match f {
+            TerrainFeature::Plateau {
+                polygon,
+                height: Some(h),
+                ..
+            } => Some((polygon.as_slice(), *h)),
+            _ => None,
+        })
+    }
+
     /// Roads are graded after the pads, and a road's fill can rise inside
     /// a building: under every floor, the ground goes no higher than the
     /// footing the building stands on (its lowest corner, as the game
@@ -790,6 +820,10 @@ impl Heightmap {
                 l[0].abs() <= w * 0.5 + 1.0 && l[1].abs() <= d * 0.5 + 1.0
             })
         };
+        let on_terrace = Self::on_terrace;
+        let terraces: Vec<(&[P2], f32, (P2, P2))> = Self::terraces(map)
+            .map(|(poly, level)| (poly, level, geom::bounds(poly)))
+            .collect();
         for (me, p) in map.placements.iter().enumerate() {
             if p.absolute || !crate::map::prefab_wants_pad(&p.prefab) {
                 continue;
@@ -806,6 +840,21 @@ impl Heightmap {
             let reach = half_w.max(half_d) + 8.0;
             let lo = [p.at[0] - reach, p.at[1] - reach];
             let hi = [p.at[0] + reach, p.at[1] + reach];
+            // The terraces the map declares round it that it doesn't stand
+            // on: past its walls it digs none below its level (a house below
+            // a terraced street dug the steps above it away); what a road
+            // banked on top it may still trim.
+            let others: Vec<(&[P2], f32)> = terraces
+                .iter()
+                .filter(|(poly, _, (a, b))| {
+                    a[0] <= hi[0]
+                        && b[0] >= lo[0]
+                        && a[1] <= hi[1]
+                        && b[1] >= lo[1]
+                        && !geom::point_in_polygon(poly, p.at)
+                })
+                .map(|(poly, level, _)| (*poly, *level))
+                .collect();
             // Lowering cells can lower the corner the building stands on in
             // turn: settle until it stops moving.
             for _ in 0..8 {
@@ -823,6 +872,15 @@ impl Heightmap {
                     if !inside && (hm.roads[k].weight > 0 || under_other(me, q)) {
                         return;
                     }
+                    let floor = if inside {
+                        f32::NEG_INFINITY
+                    } else {
+                        others
+                            .iter()
+                            .filter(|(poly, _)| on_terrace(poly, q))
+                            .map(|(_, level)| *level)
+                            .fold(f32::NEG_INFINITY, f32::max)
+                    };
                     // A smooth minimum past the flat, so the cut meets the
                     // hillside in a rounded shoulder, not a straight crease
                     // (it only ever lowers, and never under the walls).
@@ -834,11 +892,83 @@ impl Heightmap {
                     } else {
                         a.min(b)
                     };
-                    hm.heights[k] = lower;
+                    hm.heights[k] = lower.max(floor.min(a));
                 });
                 if footing(self) >= y - 1e-3 {
                     break;
                 }
+            }
+        }
+        // A building stepped down its slope (the ore mill) stands where the
+        // map put it, on terraces the map cut for it, and isn't padded; but
+        // each terrace's blend ran out over the bay below it and up through
+        // that bay's floor, a metre high at the footing (bots pinned against
+        // it, short of the loot along the back wall). Under each bay the
+        // ground goes no higher than its floor; a cell either side of the
+        // footing between two bays, no higher than the lower one's, so the
+        // slope between samples doesn't rise through it either.
+        for p in &map.placements {
+            if crate::map::stepped_floor_level(&p.prefab, [0.0, 0.0]).is_none() {
+                continue;
+            }
+            let base = if p.absolute {
+                p.y
+            } else {
+                self.height(p.at) + p.y
+            };
+            let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+            let (s, c) = (-p.rot.to_radians()).sin_cos();
+            let reach = (w * 0.5).hypot(d * 0.5) + self.cell;
+            let lo = [p.at[0] - reach, p.at[1] - reach];
+            let hi = [p.at[0] + reach, p.at[1] + reach];
+            let cell = self.cell;
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+                let l = [dx * c - dz * s, dx * s + dz * c];
+                // Inside the walls only: past them is the map's own
+                // terrace, at its own level.
+                if crate::map::stepped_floor_level(&p.prefab, l).is_none() {
+                    return;
+                }
+                let level = [-cell, 0.0, cell]
+                    .iter()
+                    .flat_map(|ox| [-cell, 0.0, cell].map(|oz| [l[0] + ox, l[1] + oz]))
+                    .filter_map(|q| crate::map::stepped_floor_level(&p.prefab, q))
+                    .fold(f32::INFINITY, f32::min);
+                if level.is_finite() {
+                    hm.heights[k] = hm.heights[k].min(base + level);
+                }
+            });
+            // Each door opens onto its bay's terrace, a sill below the
+            // floor, as far as its strip runs (the roads meeting in the yard
+            // were graded 0.9 m under the front door), easing back to the
+            // land beyond.
+            const BLEND: f32 = 3.0;
+            let (ws, wc) = p.rot.to_radians().sin_cos();
+            let world = |v: P2| [v[0] * wc - v[1] * ws, v[0] * ws + v[1] * wc];
+            for e in crate::map::prefab_entrances(&p.prefab) {
+                let inside = [e.at[0] - e.out[0] * 0.5, e.at[1] - e.out[1] * 0.5];
+                let Some(level) = crate::map::stepped_floor_level(&p.prefab, inside) else {
+                    continue;
+                };
+                let target = base + level - crate::map::MILL_FLOORS[0];
+                let face = geom::add(p.at, world(e.at));
+                let out = world(e.out);
+                let side = [-out[1], out[0]];
+                let len = e.clear.max(crate::map_lint::DOOR_REACH);
+                let half = e.width * 0.5 + crate::map_lint::DOOR_SHOULDER;
+                let r = len + half + BLEND;
+                let (lo, hi) = ([face[0] - r, face[1] - r], [face[0] + r, face[1] + r]);
+                self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                    let v = geom::sub(q, face);
+                    let (s, t) = (geom::dot(v, out), geom::dot(v, side).abs());
+                    if s < 0.0 {
+                        return;
+                    }
+                    let d = (s - len).max(0.0).hypot((t - half).max(0.0));
+                    let w = 1.0 - geom::smoothstep(0.0, BLEND, d);
+                    hm.heights[k] += (target - hm.heights[k]) * w;
+                });
             }
         }
     }
@@ -1168,6 +1298,34 @@ mod tests {
         assert!((hm.height([0.0, 0.0]) - 10.0).abs() < 1e-4);
         assert!(hm.height([99.0, 0.0]) > 18.0);
         assert!(hm.slope_deg([0.0, 0.0]) < 0.1);
+    }
+
+    /// A house below a terrace the map sets keeps its own footing, and
+    /// the ramp settling it in stops at the terrace's level: it used to
+    /// dig the step above it away, metres deep. (It stands past its pad's
+    /// blend from the terrace: the ramp reaches further.)
+    #[test]
+    fn settling_a_house_leaves_the_terrace_above_it_be() {
+        let mut map = flat_map();
+        map.features.push(TerrainFeature::Plateau {
+            polygon: vec![[0.0, -20.0], [30.0, -20.0], [30.0, 20.0], [0.0, 20.0]],
+            height: Some(16.0),
+            blend: 2.0,
+        });
+        map.placements.push(Placement {
+            prefab: "house_brick".into(),
+            at: [-11.5, 0.0],
+            rot: 0.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        let hm = Heightmap::build(&map);
+        assert!(hm.footing("house_brick", [-11.5, 0.0], 0.0) < 11.0);
+        for x in [0.0, 0.5, 2.0, 3.0] {
+            let h = hm.height([x, 0.0]);
+            assert!(h > 15.5, "the terrace at x {x} is cut to {h}");
+        }
     }
 
     #[test]

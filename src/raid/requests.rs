@@ -25,6 +25,8 @@ use crate::world::{Layer, Zone};
 
 /// Caches go at least this far from the truck: worth the walk.
 const CACHE_AWAY: f32 = 150.0;
+/// ...and none of your usual ways within this of it (m).
+const CACHE_CLEAR: f32 = 30.0;
 
 /// How many jobs have been paid for, and where the last cache was left.
 #[derive(Resource, Debug, Clone, Default, PartialEq)]
@@ -105,7 +107,11 @@ fn press_card(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut done: MessageWriter<crate::progression::JobDone>,
-    logbook: Res<crate::raid::logbook::Logbook>,
+    (logbook, mind, canaries): (
+        Res<crate::raid::logbook::Logbook>,
+        Option<Res<crate::robots::memory::ZoneMind>>,
+        Query<&crate::world::workings::Canary>,
+    ),
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -224,7 +230,19 @@ fn press_card(
                 Vec::new()
             }
             Job::Bring { item: id, .. } => {
-                let have = in_stash(id, 1);
+                // A living thing comes home living (a canary that went
+                // quiet in the gas doesn't count).
+                let all = in_stash(id, u32::MAX);
+                let have: Vec<_> = all
+                    .iter()
+                    .copied()
+                    .filter(|(_, e)| canaries.get(*e).map_or(true, |c| c.life > 0.0))
+                    .take(1)
+                    .collect();
+                if have.is_empty() && !all.is_empty() {
+                    raid.say(lines::BROUGHT_DEAD);
+                    continue;
+                }
                 if have.is_empty() {
                     raid.say(lines::not_brought(&crate::progression::want_name(
                         &catalog, id,
@@ -272,6 +290,7 @@ fn press_card(
                     &mut rng,
                     tier,
                     order,
+                    mind.as_deref(),
                 )
             }
             _ => None,
@@ -299,7 +318,8 @@ fn press_card(
 }
 
 /// Leaves the driver's cache at a building loot spot well away from the
-/// truck, and says where.
+/// truck, and off your usual ways (the machines walk those now:
+/// `robots::memory`), and says where.
 #[allow(clippy::too_many_arguments)]
 fn place_cache(
     commands: &mut Commands,
@@ -310,6 +330,7 @@ fn place_cache(
     rng: &mut Rng,
     tier: u32,
     order: &extraction_core::progression::Order,
+    mind: Option<&crate::robots::memory::ZoneMind>,
 ) -> Option<(String, Vec3)> {
     let base = zone
         .marker(&MarkerKind::TruckStop)
@@ -325,6 +346,7 @@ fn place_cache(
     if far.is_empty() {
         return None;
     }
+    let far = off_your_ways(far, mind);
     let at = far[rng.below(far.len())];
     // From the third tier on the driver has more to give: a second pile;
     // past the ladder, a third, of what you ordered.
@@ -353,6 +375,21 @@ fn place_cache(
         );
     }
     Some((describe_place(zone, at), at))
+}
+
+/// The spots none of your usual ways come near, if any are; else all of
+/// them (a blank memory keeps every spot, in order: the same draw).
+fn off_your_ways(spots: Vec<Vec3>, mind: Option<&crate::robots::memory::ZoneMind>) -> Vec<Vec3> {
+    let quiet: Vec<Vec3> = spots
+        .iter()
+        .copied()
+        .filter(|p| {
+            mind.is_none_or(|m| {
+                m.memory.heat_near([p.x, p.z], CACHE_CLEAR) < crate::robots::memory::USUAL_WAY
+            })
+        })
+        .collect();
+    if quiet.is_empty() { spots } else { quiet }
 }
 
 /// "in the barn by the Low farm."
@@ -499,6 +536,39 @@ fn way_from_the_drop(
     )
 }
 
+/// "He's heard walkers by the slag road. From the drop: north-east,
+/// 300 m.": where one of a photograph's subjects is at work up here, by
+/// the place nearest it.
+fn heard_working(
+    subject: extraction_core::contracts::Subject,
+    robots: &Query<crate::robots::subjects::Candidate>,
+    zone: &crate::world::Zone,
+) -> Option<String> {
+    use extraction_core::map::MarkerKind;
+    let drop = zone.marker(&MarkerKind::Insertion).map(|m| m.at)?;
+    let at = robots
+        .iter()
+        .filter(|c| c.findable(subject, zone))
+        .map(|c| [c.at.translation().x, c.at.translation().z])
+        .min_by(|a, b| {
+            extraction_core::geom::dist(*a, drop).total_cmp(&extraction_core::geom::dist(*b, drop))
+        })?;
+    let place = zone
+        .map
+        .markers
+        .iter()
+        .filter(|m| m.kind == MarkerKind::Poi && !m.name.is_empty())
+        .min_by(|a, b| {
+            extraction_core::geom::dist(a.at, at).total_cmp(&extraction_core::geom::dist(b.at, at))
+        })?;
+    Some(format!(
+        "\nHe's heard {} working by {}. From the drop: {}.",
+        subject.name().to_lowercase(),
+        crate::raid::lines::the(&place.name),
+        crate::raid::lines::way(drop, at)
+    ))
+}
+
 fn card_text(
     requests: Res<Requests>,
     progression: Res<Progression>,
@@ -509,6 +579,8 @@ fn card_text(
     mut cards: Query<&mut ScreenText, With<RequestCard>>,
     added: Query<(), Added<RequestCard>>,
     mut last: Local<String>,
+    robots: Query<crate::robots::subjects::Candidate>,
+    mut heard: Local<Option<String>>,
 ) {
     let p = &progression.0;
     let tier = p.tier_def();
@@ -536,6 +608,34 @@ fn card_text(
         Some(job) => {
             text += &crate::progression::job_text(job, &catalog, &opts.map, epilogue.done);
             text += &way_from_the_drop(job, &opts.map, &zone, p.done == 0);
+            // The first thing to leave out there: a long walk, and a roof
+            // within a sprint of all of it (`map_lint`'s first jobs).
+            let planted_before = p.contracts_done.iter().any(|id| {
+                extraction_core::contracts::contract(id).is_some_and(|c| {
+                    c.steps
+                        .iter()
+                        .any(|s| matches!(s, extraction_core::contracts::Step::Plant { .. }))
+                })
+            });
+            if matches!(
+                job,
+                extraction_core::progression::Job::Plant { planted: false, .. }
+            ) && !planted_before
+            {
+                text += crate::raid::lines::SHEDS_ON_THE_WAY;
+            }
+            // A photograph names no place: where he's heard them working
+            // (once, when he has: the line doesn't follow them about).
+            if let extraction_core::progression::Job::Photograph {
+                subject,
+                taken: false,
+            } = job
+            {
+                if heard.is_none() {
+                    *heard = heard_working(*subject, &robots, &zone);
+                }
+                text += heard.as_deref().unwrap_or("");
+            }
         }
         None => text += lines::NOTHING_YET,
     }
@@ -565,6 +665,29 @@ fn card_text(
 pub(crate) mod tests {
     use super::*;
     use crate::progression::Progression;
+
+    /// The driver's cache keeps off your usual ways, where it can.
+    #[test]
+    fn a_cache_keeps_off_your_ways() {
+        let spots = vec![Vec3::new(0.0, 0.0, 0.0), Vec3::new(300.0, 0.0, 0.0)];
+        let mut mind = crate::robots::memory::ZoneMind::default();
+        assert_eq!(
+            off_your_ways(spots.clone(), Some(&mind)),
+            spots,
+            "blank: all"
+        );
+        // Two raids the same way, past the first spot.
+        let mut trace = extraction_core::zone_memory::RaidTrace::default();
+        trace.walked(5.0, 5.0);
+        mind.memory.fold(&trace);
+        mind.memory.fold(&trace);
+        assert_eq!(off_your_ways(spots.clone(), Some(&mind)), vec![spots[1]]);
+        // Your ways past every spot: it goes somewhere anyway.
+        trace.walked(300.0, 5.0);
+        mind.memory.fold(&trace);
+        mind.memory.fold(&trace);
+        assert_eq!(off_your_ways(spots.clone(), Some(&mind)), spots);
+    }
 
     pub(crate) fn app() -> App {
         let opts = crate::LaunchOptions {
@@ -660,6 +783,40 @@ pub(crate) mod tests {
             .job
             .clone()
             .expect("a job on the card")
+    }
+
+    /// A canary brought home dead doesn't do; alive, it does.
+    #[test]
+    fn a_canary_has_to_come_home_alive() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Bring {
+            map: "kettle_pass".into(),
+            place: "Miners' Row".into(),
+            item: "canary".into(),
+            at: [-56.2, 123.6],
+        });
+        stash(&mut app, "canary", 1);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let bird = app
+            .world_mut()
+            .query::<(Entity, &Item)>()
+            .iter(app.world())
+            .find(|(_, i)| catalog.get(i.kind()).id == "canary")
+            .map(|(e, _)| e)
+            .unwrap();
+        let life = |app: &mut App, life: f32| {
+            app.world_mut()
+                .entity_mut(bird)
+                .insert(crate::world::workings::Canary { alarm: 0.0, life });
+            app.update();
+        };
+        let done = |app: &App| app.world().resource::<Progression>().0.done;
+        life(&mut app, 0.0);
+        press_card(&mut app);
+        assert_eq!(done(&app), 0, "a dead one isn't taken");
+        life(&mut app, 0.4);
+        press_card(&mut app);
+        assert_eq!(done(&app), 1, "a live one is");
     }
 
     #[test]

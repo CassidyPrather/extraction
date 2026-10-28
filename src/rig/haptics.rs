@@ -121,6 +121,42 @@ pub fn shot_kick(recoil: f32, shouldered: bool) -> (f32, f32, f32) {
     (a, (0.05 + 0.006 * recoil).clamp(0.05, 0.08), a * 0.6)
 }
 
+/// How a gun's handling is felt (the shot aside): a shape, or a plain
+/// pulse (amplitude, seconds, and the supporting hand's amplitude). Each
+/// step of a reload feels unlike the others (`weapons::reload`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum HandlingFeel {
+    Shape(super::shapes::Shape),
+    Pulse(f32, f32, f32),
+}
+
+pub fn handling_feel(event: &FireEvent) -> Option<HandlingFeel> {
+    use super::shapes::{BOLT_CATCH, BOLT_HOME, CHAMBER, MAG_HALF, MAG_SEAT};
+    use HandlingFeel::*;
+    Some(match event {
+        FireEvent::MagazineInserted => Shape(MAG_SEAT),
+        FireEvent::MagazineHalfSeated => Shape(MAG_HALF),
+        FireEvent::BoltClosed => Shape(BOLT_HOME),
+        FireEvent::BoltLocked => Shape(BOLT_CATCH),
+        FireEvent::Chambered | FireEvent::RoundLoaded => Shape(CHAMBER),
+        FireEvent::DryFire => Pulse(0.35, 0.02, 0.0),
+        // The hammer stopped hard by a primer that didn't go: firmer than
+        // falling on nothing.
+        FireEvent::Dud => Pulse(0.5, 0.03, 0.0),
+        // The finger meeting the safety, or a Nagant's open gate: a soft
+        // dead stop.
+        FireEvent::TriggerBlocked => Pulse(0.15, 0.06, 0.0),
+        // The hammer already down: the trigger goes back slack, no break.
+        FireEvent::TriggerDead => Pulse(0.1, 0.012, 0.0),
+        FireEvent::MagazineRemoved => Pulse(0.3, 0.03, 0.0),
+        // The magazine's weight going out of the well all at once.
+        FireEvent::MagazineDropped => Pulse(0.45, 0.05, 0.2),
+        FireEvent::Cocked => Pulse(0.25, 0.02, 0.0),
+        FireEvent::ModeChanged(_) => Pulse(0.2, 0.015, 0.0),
+        _ => return None,
+    })
+}
+
 fn gun_haptics(
     mut events: MessageReader<GunEvent>,
     held: Query<(&Held, Option<&Supported>)>,
@@ -132,43 +168,36 @@ fn gun_haptics(
     mut out: MessageWriter<Haptic>,
     mut shapes: MessageWriter<super::shapes::HapticShape>,
 ) {
-    use super::shapes::{BOLT_HOME, CHAMBER, HapticShape, MAG_SEAT};
+    use super::shapes::HapticShape;
     for ev in events.read() {
         let Some((grip, support)) = hands_on(ev.gun, &held, &locals) else {
             continue;
         };
-        // The three moments of loading have shapes of their own
-        // (`rig::shapes`), the supporting hand feeling them fainter.
-        let shape = match ev.event {
-            FireEvent::MagazineInserted => Some(MAG_SEAT),
-            FireEvent::BoltClosed | FireEvent::BoltLocked => Some(BOLT_HOME),
-            FireEvent::Chambered | FireEvent::RoundLoaded => Some(CHAMBER),
-            _ => None,
-        };
-        if let Some(shape) = shape {
-            shapes.write(HapticShape {
-                side: grip,
-                shape,
-                scale: 1.0,
-            });
-            if let Some(s) = support {
+        let (a, t, support_a) = match handling_feel(&ev.event) {
+            // The moments of loading have shapes of their own
+            // (`rig::shapes`), the supporting hand feeling them fainter.
+            Some(HandlingFeel::Shape(shape)) => {
                 shapes.write(HapticShape {
-                    side: s,
+                    side: grip,
                     shape,
-                    scale: 0.5,
+                    scale: 1.0,
                 });
+                if let Some(s) = support {
+                    shapes.write(HapticShape {
+                        side: s,
+                        shape,
+                        scale: 0.5,
+                    });
+                }
+                continue;
             }
-            continue;
-        }
-        let (a, t, support_a) = match ev.event {
-            FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
-                shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
-            }),
-            FireEvent::DryFire | FireEvent::Dud => (0.35, 0.02, 0.0),
-            FireEvent::MagazineRemoved => (0.3, 0.03, 0.0),
-            FireEvent::Cocked => (0.25, 0.02, 0.0),
-            FireEvent::ModeChanged(_) => (0.2, 0.015, 0.0),
-            _ => continue,
+            Some(HandlingFeel::Pulse(a, t, support_a)) => (a, t, support_a),
+            None => match ev.event {
+                FireEvent::Fired { .. } => guns.get(ev.gun).map_or((1.0, 0.07, 0.6), |(g, h)| {
+                    shot_kick(g.firearm.def.recoil, h.is_some_and(|h| h.hold.shouldered))
+                }),
+                _ => continue,
+            },
         };
         out.write(Haptic {
             side: grip,

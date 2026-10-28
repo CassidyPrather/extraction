@@ -69,6 +69,10 @@
             (kind: Shelf, at: (-2.1, 0.0), rot: 90.0, loot: Some("curio")),
             (kind: SmallCrate, at: (0.2, 1.4), loot: Some("gadgets")),
         ]),
+        // The old incline's landings: where it turns, half way down, and
+        // its foot on the deep level.
+        (id: "incline_turn", at: (33.0, -4.0), size: (3.0, 3.0), floor: Some(-19.0), height: 2.6, lamp: Dead),
+        (id: "incline_foot", at: (10.0, -4.0), size: (3.0, 3.0), floor: Some(-24.5), height: 2.6, lamp: Dead),
         // The ore bin under the mill's back apron, where the tubs tipped.
         (id: "ore_bin", at: (39.0, -44.0), size: (6.0, 4.0), height: 3.0, lamp: Flicker, props: [
             (kind: Machine, at: (-2.0, 0.8)),
@@ -87,6 +91,14 @@
         (from: "winze", to: "level_station"),
         (from: "level_station", to: "vein_drive", via: [(16.0, 1.0)]),
         (from: "vein_drive", to: "assay_store", via: [(6.0, 1.0)], doors: To),
+        // The old incline: how the deep level was worked before the winze
+        // was sunk, stepped up from the vein drive to the main drift's far
+        // end. The long way, but the way out when something's waiting at
+        // the cage (and it can follow you down it). It climbs on the
+        // straight and turns on its landings.
+        (from: "drift", to: "incline_turn", via: [(33.0, 21.0)], doors: From),
+        (from: "incline_turn", to: "incline_foot"),
+        (from: "incline_foot", to: "vein_drive", via: [(10.0, 1.0)]),
         // The drainage way from the sump back up to the lamp room.
         (from: "sump", to: "lamp_room", via: [(-10.0, -10.0)]),
     ],

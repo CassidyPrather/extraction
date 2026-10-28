@@ -13,8 +13,9 @@
 //! - Well: in for the stone at its heart and straight out, healthy or not
 //!   at all.
 //! - Hush: in and out before the silence presses (anyone does that).
-//! - Frost: in only with a live hearth on you (it keeps the chill off);
-//!   without one, it's left.
+//! - Frost: in only with a hearth on you (it keeps the chill off): live,
+//!   or sealed in a lead case and taken out at the edge (sealed it draws
+//!   no drones on the way); without one, it's left.
 
 use bevy::prelude::*;
 use extraction_core::anomaly::{AnomalyKind, HOT_SECS};
@@ -46,8 +47,23 @@ pub struct Kit {
     pub spare: Option<Entity>,
     /// Its gun, slung or in hand.
     pub gun: Option<Entity>,
-    /// A live hearth on it, anywhere.
-    pub hearth: bool,
+    /// A hearth on it, and how.
+    pub hearth: Hearth,
+}
+
+/// A hearth in a raider's kit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hearth {
+    None,
+    /// Live: in the pack or a hand.
+    Live,
+    /// Sealed in a lead case: `case`, and the stone in it; the case in the
+    /// pack, or in a body slot (a stowed case goes to a free one first).
+    Sealed {
+        case: Entity,
+        stone: Entity,
+        packed: bool,
+    },
 }
 
 /// The tasks to take `stone` (at `at`) from the anomaly of `kind` centred
@@ -164,12 +180,52 @@ pub fn plan(
         }
         AnomalyKind::Frost => {
             // The hearth keeps the chill from ever biting or stiffening
-            // you much: straight in and out.
-            if !kit.hearth {
-                return None;
+            // you much: straight in and out. Sealed, it's out of its case
+            // at the edge (into the right hand, the case back in the
+            // pack), and live from there on.
+            match kit.hearth {
+                Hearth::None => return None,
+                Hearth::Live => {}
+                Hearth::Sealed {
+                    case,
+                    stone: hearth,
+                    packed,
+                } => {
+                    if packed {
+                        t.extend([
+                            Task::ToggleBackpack,
+                            Task::Wait(0.6),
+                            Task::GrabFromHere {
+                                item: case,
+                                side: Side::Left,
+                            },
+                            Task::ToggleBackpack,
+                        ]);
+                    } else {
+                        t.push(Task::Grab {
+                            item: case,
+                            side: Side::Left,
+                        });
+                    }
+                    t.extend([
+                        Task::Wait(0.3),
+                        Task::Grab {
+                            item: hearth,
+                            side: Side::Right,
+                        },
+                        Task::Wait(0.3),
+                        Task::Stow(Side::Left),
+                        Task::Wait(0.3),
+                    ]);
+                }
             }
             t.extend(take);
             t.push(back);
+            // A hearth taken out of its case is in the right hand: into the
+            // pack with it, out of the way of the gun.
+            if matches!(kit.hearth, Hearth::Sealed { .. }) {
+                t.push(Task::Stow(Side::Right));
+            }
         }
         AnomalyKind::Well | AnomalyKind::Hush => {
             t.extend(take);
@@ -216,7 +272,7 @@ mod tests {
             junk: Some(bolt),
             spare: None,
             gun: None,
-            hearth: false,
+            hearth: Hearth::None,
         };
         let way = plan(
             AnomalyKind::Snare,
@@ -266,13 +322,13 @@ mod tests {
             junk: Some(e),
             spare: Some(e),
             gun: Some(e),
-            hearth: true,
+            hearth: Hearth::Live,
         };
         let bare = Kit {
             junk: None,
             spare: None,
             gun: None,
-            hearth: false,
+            hearth: Hearth::None,
         };
         for kind in AnomalyKind::ALL {
             let t = plan(
@@ -302,14 +358,17 @@ mod tests {
         }
     }
 
-    /// A frost's two bands, measured: a novice walks in for the stone and
-    /// out; a skilled raider does the same with a live hearth in its pack.
-    /// Both come out with it; the novice pays for it.
+    /// A frost's bands, measured: a novice walks in for the stone and out;
+    /// a skilled raider does the same with a hearth in its pack, live or
+    /// sealed in a lead case (out of it at the edge). All come out with
+    /// it; the novice pays for it.
     #[test]
     fn a_hearth_takes_the_frost_out_of_a_frost_dive() {
         use crate::interact::body::{Backpack, InBackpack};
         use avian3d::prelude::{ColliderDisabled, RigidBodyDisabled};
-        let dive = |hearth: bool| -> (f32, bool, f32) {
+        // 0: none, 1: live, 2: sealed in the pack, 3: sealed, picked up
+        // and stowed (wherever stowing puts it: a belt slot first).
+        let dive = |how: u8| -> (f32, bool, f32) {
             let mut app = crate::headless_app(Default::default(), false);
             app.finish();
             app.cleanup();
@@ -328,21 +387,68 @@ mod tests {
             crate::anomaly::spawn_anomaly(w, AnomalyKind::Frost, centre, 3.0, None);
             let stone =
                 crate::anomaly::surge::grow(w, "art_rimestone", centre + Vec3::Y * 0.15).unwrap();
-            if hearth {
+            let mut hearth = Hearth::None;
+            if how == 3 {
+                let case =
+                    crate::anomaly::surge::grow(w, "lead_case", me + Vec3::new(0.5, 0.3, 0.0))
+                        .unwrap();
+                let h = crate::anomaly::surge::grow(w, "art_hearth", Vec3::ZERO).unwrap();
+                app.update();
+                crate::persist::seat_in_mount(app.world_mut(), case, h);
+                app.world_mut()
+                    .entity_mut(p)
+                    .insert(crate::bot::Bot::new(vec![
+                        Task::Grab {
+                            item: case,
+                            side: Side::Left,
+                        },
+                        Task::Stow(Side::Left),
+                        Task::Wait(0.5),
+                    ]));
+                for _ in 0..90 * 6 {
+                    app.update();
+                }
+                let packed = app.world().get::<InBackpack>(case).is_some();
+                assert!(
+                    packed || app.world().get::<crate::interact::InSocket>(case).is_some(),
+                    "stowed somewhere"
+                );
+                hearth = Hearth::Sealed {
+                    case,
+                    stone: h,
+                    packed,
+                };
+            } else if how > 0 {
                 let pack = w
                     .query::<(Entity, &Backpack)>()
                     .iter(w)
                     .find(|(_, b)| b.owner == p && b.carried)
                     .map(|(e, _)| e)
                     .unwrap();
-                let e = crate::anomaly::surge::grow(w, "art_hearth", Vec3::ZERO).unwrap();
-                w.get_mut::<Backpack>(pack).unwrap().contents.push(e);
-                w.entity_mut(e).insert((
+                let h = crate::anomaly::surge::grow(w, "art_hearth", Vec3::ZERO).unwrap();
+                let packed = if how == 1 {
+                    h
+                } else {
+                    crate::anomaly::surge::grow(w, "lead_case", Vec3::ZERO).unwrap()
+                };
+                w.get_mut::<Backpack>(pack).unwrap().contents.push(packed);
+                w.entity_mut(packed).insert((
                     InBackpack { bag: pack },
                     ChildOf(pack),
                     RigidBodyDisabled,
                     ColliderDisabled,
                 ));
+                hearth = Hearth::Live;
+                if how >= 2 {
+                    app.update();
+                    crate::persist::seat_in_mount(app.world_mut(), packed, h);
+                    app.update();
+                    hearth = Hearth::Sealed {
+                        case: packed,
+                        stone: h,
+                        packed: true,
+                    };
+                }
             }
             let edge = Vec2::new(me.x, me.z);
             let kit = Kit {
@@ -351,7 +457,7 @@ mod tests {
                 gun: None,
                 hearth,
             };
-            let tasks = if hearth {
+            let tasks = if how > 0 {
                 plan(AnomalyKind::Frost, centre, 3.0, edge, stone, centre, &kit).unwrap()
             } else {
                 assert!(
@@ -392,14 +498,22 @@ mod tests {
                 .is_some_and(|c| c.0 == p);
             (full - hp, taken, peak)
         };
-        let (novice, n_took, n_peak) = dive(false);
-        let (skilled, s_took, s_peak) = dive(true);
+        let (novice, n_took, n_peak) = dive(0);
+        let (skilled, s_took, s_peak) = dive(1);
+        let (sealed, c_took, c_peak) = dive(2);
+        let (worn, w_took, _) = dive(3);
         println!(
             "frost dive: novice lost {novice:.0} hp, chill to {n_peak:.2}; \
-             with a hearth {skilled:.0} hp, chill to {s_peak:.2}"
+             with a hearth {skilled:.0} hp, chill to {s_peak:.2}; \
+             with one sealed {sealed:.0} hp, chill to {c_peak:.2}"
         );
-        assert!(n_took && s_took, "both come out with it");
+        assert!(n_took && s_took && c_took && w_took, "all come out with it");
+        assert_eq!(
+            worn, 0.0,
+            "a case stowed on the belt: its hearth out, never bitten"
+        );
         assert_eq!(skilled, 0.0, "a hearth: never bitten");
+        assert_eq!(sealed, 0.0, "a hearth out of its case: never bitten");
         assert!(
             (5.0..60.0).contains(&novice),
             "a novice is bitten, not killed ({novice:.0} hp)"

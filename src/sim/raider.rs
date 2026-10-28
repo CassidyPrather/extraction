@@ -23,7 +23,7 @@ use extraction_core::map::{MapDef, MarkerKind};
 use extraction_core::nav::{NavGrid, Obstacle};
 use extraction_core::noise::Rng;
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::indoor::{BuildingPlan, plan_buildings};
 use super::telemetry::{SimLog, round};
@@ -290,6 +290,8 @@ pub struct Raider {
     pub combat: Option<Combat>,
     /// Deliberately walking into an anomaly (for an artifact).
     pub diving: bool,
+    /// Why it last left a stone lying in an anomaly (for the log).
+    pass_why: Option<String>,
     rng: Rng,
     grid: NavGrid,
     plans: Vec<BuildingPlan>,
@@ -341,21 +343,48 @@ pub struct Raider {
     /// Waiting at the rendezvous for the truck (it keeps low and still).
     at_rv: bool,
     /// Where it waits for the truck at rendezvous `.0` while the drones
-    /// survey a place nearby: in the lee of the shelter there
+    /// survey a place nearby: under the shelter's roof, or in its lee
     /// (`map_lint::wait_shelter`), out of their eye till the truck stops.
     wait_at: Option<(usize, Option<Vec2>)>,
     /// Gone to vent a flue: the lever, and the way on (to the loot and
     /// taking it) once it's open.
     after_vent: Option<(Entity, Vec<Task>)>,
+    /// What worth having was on it last tick (`knocked_loose`).
+    kept: Vec<Entity>,
     /// When it last froze for a searching robot, or threw a distraction.
     froze_at: f32,
     distracted_at: f32,
     /// Creeping up on a walker to throw a distraction past it.
     stalking: Option<Stalk>,
+    /// `SIM_DIVERT=1`: its distractions go into the wildlife (a stone onto
+    /// a flock's roof, among a herd) where it can (see [`wild_mark`]).
+    divert: bool,
+    /// Calm walkers that could see it, being watched for whether they get
+    /// onto it (see [`watch`]); and when each was last watched.
+    watches: Vec<Watch>,
+    watched: HashMap<Entity, f32>,
     /// The region it set out for, read off the field map like a player
     /// planning a raid: sites there look better than their distance says.
     objective: Option<Vec2>,
 }
+
+/// A calm walker within [`WATCH_NEAR`] with a clear line to it, that
+/// could see it: did it get onto it in the next
+/// [`WATCH_FOR`] seconds?
+#[derive(Clone, Copy, Debug)]
+struct Watch {
+    walker: Entity,
+    since: f32,
+    spotted: bool,
+    /// It threw into the wildlife meanwhile.
+    wild: bool,
+}
+
+/// How long a watched stretch is (s)...
+const WATCH_FOR: f32 = 30.0;
+/// ...that starts with a calm walker this near with a clear line to it
+/// (a walker's sight, m).
+const WATCH_NEAR: f32 = 75.0;
 
 /// A creep-and-throw in progress (see [`stalk`]).
 #[derive(Clone, Copy, Debug)]
@@ -525,9 +554,14 @@ pub fn attach_raider(
     );
     let mut kit = kit_tasks();
     // `SIM_CONTRACT`: the contract's kit lies with the rest (`sim::mod`).
+    // On Rime Fell, the hearth the sim kit lays, sealed: the career's from
+    // "Up the fell", the way into the frost.
+    // (The case, with the hearth seated in it: `sim::seat_sim_hearth`.)
+    let hearth = (opts.map == "rime_fell").then_some("lead_case");
     for id in contract_kit()
         .into_iter()
         .chain(super::harvest::kit(traits.name))
+        .chain(hearth)
     {
         kit.push(Task::PickUp {
             id: id.to_owned(),
@@ -575,9 +609,14 @@ pub fn attach_raider(
                 at_rv: false,
                 wait_at: None,
                 after_vent: None,
+                kept: Vec::new(),
+                pass_why: None,
                 froze_at: -99.0,
                 distracted_at: -99.0,
                 stalking: None,
+                divert: std::env::var("SIM_DIVERT").is_ok_and(|v| v == "1"),
+                watches: Vec::new(),
+                watched: HashMap::new(),
                 objective,
             },
         ));
@@ -718,6 +757,10 @@ pub struct Scene<'w, 's> {
     /// The bots' sockets by entity (`Task::Draw` counts them in entity
     /// order).
     owned_sockets: Query<'w, 's, (Entity, &'static SocketOwner), With<Socket>>,
+    /// The wildlife, for throwing into ([`wild_mark`]).
+    flocks: Query<'w, 's, &'static crate::wildlife::flock::Flock>,
+    herds: Query<'w, 's, &'static crate::wildlife::herd::Herd>,
+    perches: Option<Res<'w, crate::wildlife::perches::Perches>>,
 }
 
 impl Scene<'_, '_> {
@@ -926,6 +969,7 @@ pub fn think(
             }
             spot_anomalies(&mut bot, r, &scene, here);
             spot_sealed(&mut bot, r, &scene, &mut log);
+            spot_held(&mut bot, r, &scene);
             sneak(
                 me,
                 &mut bot,
@@ -1037,6 +1081,12 @@ pub fn think(
             bot.replace(tasks);
         }
 
+        if let Some(tasks) = knocked_loose(me, r, &scene, &mut log, pos) {
+            r.interrupted = true;
+            bot.replace(tasks);
+            continue;
+        }
+
         if !bot.done() {
             continue;
         }
@@ -1091,6 +1141,13 @@ pub fn think(
                 r.act = Act::Idle;
             }
             Stage::Raid => {
+                // What it just took counts before it decides to go: a stone
+                // grabbed as the heat tips it home is still loot.
+                if settle_take(me, r, &scene, &mut log, pos) {
+                    if let Act::Take(s, _) = r.act {
+                        r.act = Act::Search(s);
+                    }
+                }
                 if let Some(why) = time_to_go(me, r, &scene, health, own_gun) {
                     log.stats.extract_reason = Some(why.to_string());
                     log.event(
@@ -1437,6 +1494,7 @@ fn sneak(
     swimming: bool,
     input: &mut crate::rig::RigInput,
 ) {
+    watch(me, r, scene, log, eye);
     let hurrying = bot.sprint
         || r.combat.is_some()
         || r.act == Act::Board
@@ -1527,22 +1585,35 @@ fn sneak(
         };
         // A thrown bolt carries 15 m or so: well off to one side of the
         // line to it, so it turns and walks off that way, whichever side
-        // there's ground to land on.
+        // there's ground to land on. Diverting, onto birds or among deer
+        // there, if there are any.
         let toward = (w.xz() - eye.xz()).normalize_or(Vec2::X);
-        let Some(to) = [1.1f32, -1.1]
+        let wild = if r.divert {
+            wild_mark(scene, eye, w)
+        } else {
+            None
+        };
+        let side = [1.1f32, -1.1]
             .into_iter()
             .map(|a| eye.xz() + Vec2::from_angle(a).rotate(toward) * 15.0)
             .find(|p| r.grid.walkable([p.x, p.y]))
-        else {
+            .map(|p| scene.zone.on_ground(p.x, p.y));
+        let Some(to) = wild.map(|(p, _)| p).or(side) else {
             if r.debug {
                 log.event("distract_skip", json!({"why": "no ground"}));
             }
             return;
         };
         r.distracted_at = r.clock;
+        if wild.is_some() {
+            for wt in &mut r.watches {
+                wt.wild = true;
+            }
+        }
         log.event(
             "distract",
-            json!({"x": round(to.x, 1), "z": round(to.y, 1), "walker_dist": round(w.distance(eye), 0)}),
+            json!({"x": round(to.x, 1), "z": round(to.z, 1), "walker_dist": round(w.distance(eye), 0),
+                   "wild": wild.map(|(_, k)| k)}),
         );
         r.interrupted = true;
         bot.replace([
@@ -1552,11 +1623,88 @@ fn sneak(
             },
             Task::Throw {
                 side: Side::Left,
-                at: scene.zone.on_ground(to.x, to.y),
+                at: to,
             },
             Task::Wait(2.0),
         ]);
     }
+}
+
+/// Somewhere in the wildlife to throw at, a throw off and well to one
+/// side of the walker at `walker`: a sitting flock's roof, or among a
+/// herd. What it is, for the log.
+fn wild_mark(scene: &Scene, eye: Vec3, walker: Vec3) -> Option<(Vec3, &'static str)> {
+    let toward = (walker - eye).xz().normalize_or(Vec2::X);
+    let ok = |p: Vec3| {
+        let d = (p - eye).xz();
+        let l = d.length();
+        (8.0..20.0).contains(&l) && toward.angle_to(d / l).abs() > 0.8
+    };
+    if let Some(perches) = &scene.perches {
+        for f in &scene.flocks {
+            if f.phase != crate::wildlife::flock::Phase::Settled {
+                continue;
+            }
+            let s = &perches.sites[f.site];
+            let p = s.centre.with_y(s.top());
+            if ok(p) {
+                return Some((p, "flock"));
+            }
+        }
+    }
+    scene
+        .herds
+        .iter()
+        .filter_map(|h| h.leader().map(|b| b.pos))
+        .find(|p| ok(*p))
+        .map(|p| (p, "herd"))
+}
+
+/// Each watched walker, [`WATCH_FOR`] seconds on: did it get onto the bot
+/// (`watch`: `unseen` or `spotted`, whether it was diverting, whether it
+/// threw into the wildlife meanwhile).
+fn watch(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog, eye: Vec3) {
+    let clock = r.clock;
+    for (e, robot, gt, aware, brain, _) in &scene.robots {
+        let calm = robot.kind == crate::robots::RobotKind::Walker
+            && !robot.wrecked
+            && !matches!(brain, Brain::Engage | Brain::Leave { .. } | Brain::Down)
+            && !(aware.target == Some(me) && aware.suspicion > 0.5);
+        let at = gt.translation();
+        if calm
+            && at.distance(eye) < WATCH_NEAR
+            && r.watched.get(&e).is_none_or(|t| clock - t > 60.0)
+            && scene.visible(eye, at)
+        {
+            r.watched.insert(e, clock);
+            r.watches.push(Watch {
+                walker: e,
+                since: clock,
+                spotted: false,
+                wild: false,
+            });
+        }
+    }
+    let divert = r.divert;
+    r.watches.retain_mut(|wt| {
+        let Ok((_, robot, _, aware, brain, _)) = scene.robots.get(wt.walker) else {
+            return false;
+        };
+        if robot.wrecked {
+            return false;
+        }
+        wt.spotted |=
+            aware.target == Some(me) && (matches!(brain, Brain::Engage) || aware.suspicion > 0.5);
+        if clock - wt.since < WATCH_FOR {
+            return true;
+        }
+        log.event(
+            "watch",
+            json!({"outcome": if wt.spotted { "spotted" } else { "unseen" },
+                   "divert": divert, "wild": wt.wild}),
+        );
+        false
+    });
 }
 
 /// Unaware walkers this far off are worth creeping up on (m)...
@@ -2161,6 +2309,37 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
 /// A lockdown has bolted a door for good (the shelter's programme): its
 /// doorway is a wall in the plan from now on, and a walk planned through
 /// it is planned again, the escape tunnel's way.
+/// Which doors are held shut on power right now, in every plan; and a
+/// route queued through one with no switch thrown before it (a way out
+/// planned through a door the breaker still holds) is dropped, to be
+/// planned again round it.
+fn spot_held(bot: &mut Bot, r: &mut Raider, scene: &Scene) {
+    for plan in r.plans.iter_mut() {
+        if plan.doors.is_empty() {
+            continue;
+        }
+        plan.held.clear();
+        plan.held.extend(
+            plan.doors
+                .iter()
+                .map(|d| d.entity)
+                .filter(|d| scene.power_locked.contains(*d)),
+        );
+    }
+    let mut pressed = false;
+    for t in &bot.tasks {
+        match t {
+            Task::Press(_) => pressed = true,
+            Task::OpenDoor(d) if !pressed && r.plans.iter().any(|p| p.held.contains(d)) => {
+                r.interrupted = true;
+                bot.replace([Task::Wait(0.1)]);
+                return;
+            }
+            _ => {}
+        }
+    }
+}
+
 fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
     let mut new = Vec::new();
     for plan in r.plans.iter_mut() {
@@ -2173,16 +2352,7 @@ fn spot_sealed(bot: &mut Bot, r: &mut Raider, scene: &Scene, log: &mut SimLog) {
             {
                 continue;
             }
-            let along = d.b - d.a;
-            let dir = along.normalize_or(Vec2::X);
-            plan.grid.block(
-                Obstacle::Rect {
-                    at: ((d.a + d.b) * 0.5).to_array(),
-                    half: [along.length() * 0.5 + 0.1, 0.3],
-                    yaw: dir.y.atan2(dir.x),
-                },
-                0.0,
-            );
+            plan.grid.block(d.leaf(), 0.0);
             new.push((d.entity, plan.name.clone()));
         }
     }
@@ -2259,9 +2429,21 @@ fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<
     indoor_to(plan, from, goal, within)
 }
 
+/// As [`indoor`], through doors held shut on power: for a route that
+/// throws their switches first.
+fn indoor_through_held(
+    plan: &BuildingPlan,
+    from: Vec3,
+    to: Vec2,
+    within: f32,
+) -> Option<Vec<Task>> {
+    let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
+    indoor_path(plan, from, goal, within, true)
+}
+
 /// Out of the building: to the floor nearest the way out.
 fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
-    let goal = stand_near(plan, plan.to_local(from).xz(), to)?;
+    let goal = stand_near_with(plan, plan.to_local(from).xz(), to, false)?;
     indoor_to(plan, from, goal, within)
 }
 
@@ -2269,8 +2451,22 @@ fn indoor_out(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<
 const LEG_MAX: f32 = 10.0;
 
 fn indoor_to(plan: &BuildingPlan, from: Vec3, goal: Vec2, within: f32) -> Option<Vec<Task>> {
+    indoor_path(plan, from, goal, within, false)
+}
+
+fn indoor_path(
+    plan: &BuildingPlan,
+    from: Vec3,
+    goal: Vec2,
+    within: f32,
+    through_held: bool,
+) -> Option<Vec<Task>> {
     let a = plan.to_local(from).xz();
-    let path = plan.path(a, goal)?;
+    let path = if through_held {
+        plan.path_through_held(a, goal)?
+    } else {
+        plan.path(a, goal)?
+    };
     let mut tasks = Vec::new();
     // A long straight run (an underground site's long stair) in legs, each
     // well inside a walk's time.
@@ -2391,6 +2587,15 @@ fn near_walkable_same_side(plan: &BuildingPlan, from: Vec2) -> Option<Vec2> {
 /// the same side of the walls as `goal` when it's indoors: somewhere to
 /// stand, not something to reach (that's [`reach_cell`]).
 pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<Vec2> {
+    stand_near_with(plan, from, goal, true)
+}
+
+/// As [`stand_near`]; `keep_in`: a goal within the walls is reached from
+/// inside them, not from the ground outside. Not for a way out, which is
+/// outside: an underground site's kiosk lies within its walls' bounds, and
+/// keeping in left a raider no stand by it (Rime's adit, out of the
+/// magazine).
+fn stand_near_with(plan: &BuildingPlan, from: Vec2, goal: Vec2, keep_in: bool) -> Option<Vec2> {
     let g = &plan.grid;
     let start = if g.walkable(from.to_array()) {
         from
@@ -2404,7 +2609,7 @@ pub(crate) fn stand_near(plan: &BuildingPlan, from: Vec2, goal: Vec2) -> Option<
     let mut stack = vec![(si, sj)];
     seen[sj * n + si] = true;
     let mut best: Option<(f32, Vec2)> = None;
-    let indoors = plan.indoors(goal);
+    let indoors = keep_in && plan.indoors(goal);
     while let Some((i, j)) = stack.pop() {
         let c = Vec2::from_array(g.centre(i, j));
         let d = c.distance(goal);
@@ -2628,10 +2833,40 @@ fn raid_step(
                             }
                             return t;
                         }
+                        if let Some(why) = r.pass_why.take() {
+                            let id = scene.items.get(item).map_or("?".into(), |(_, it, ..)| {
+                                scene.catalog.get(it.kind()).id.clone()
+                            });
+                            log.event("pass", json!({"item": id, "why": why}));
+                        }
                         r.skip.insert(item);
                         r.act = Act::Search(s);
                     }
                     None => {
+                        // A stone lying in an anomaly it wouldn't take:
+                        // say which and why not (skipped already, or not
+                        // worth it).
+                        if r.sites[s].kind == SiteKind::Anomaly {
+                            let site = &r.sites[s];
+                            for (e, it, gt, h, so, b) in &scene.items {
+                                let def = scene.catalog.get(it.kind());
+                                if h.is_none()
+                                    && so.is_none()
+                                    && b.is_none()
+                                    && def.category == Category::Artifact
+                                    && at_site(r, site, gt.translation())
+                                {
+                                    let why = if r.skip.contains(&e) {
+                                        "passed on it"
+                                    } else if r.traits.value(def) < r.traits.min_value {
+                                        "not worth it"
+                                    } else {
+                                        "no room"
+                                    };
+                                    log.event("pass", json!({"item": def.id, "why": why}));
+                                }
+                            }
+                        }
                         r.sites[s].visited = true;
                         r.act = Act::Idle;
                         // Out the door it came in by.
@@ -2654,21 +2889,8 @@ fn raid_step(
                 }
             }
             Act::Take(s, item) => {
-                if scene.mine(me, item) {
-                    let (id, at) = scene
-                        .items
-                        .get(item)
-                        .map(|(_, it, gt, ..)| {
-                            (scene.catalog.get(it.kind()).id.clone(), gt.translation())
-                        })
-                        .unwrap_or_default();
-                    log.stats.loot.push(id.clone());
-                    log.event(
-                        "loot",
-                        json!({"item": id, "site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1),
-                               "ix": round(at.x, 1), "iz": round(at.z, 1)}),
-                    );
-                    r.skip.insert(item);
+                if settle_take(me, r, scene, log, pos) {
+                    // Taken (and counted).
                 } else if !r.interrupted || r.skip.contains(&item) {
                     r.skip.insert(item);
                 } else if let Some(t) = take_item(r, scene, s, item, pos) {
@@ -2684,6 +2906,30 @@ fn raid_step(
         }
     }
     vec![Task::Wait(0.2)]
+}
+
+/// A take that's done (the thing is on it): logged as loot, once. True if
+/// it was.
+fn settle_take(me: Entity, r: &mut Raider, scene: &Scene, log: &mut SimLog, pos: Vec3) -> bool {
+    let Act::Take(s, item) = r.act else {
+        return false;
+    };
+    if r.skip.contains(&item) || !scene.mine(me, item) {
+        return false;
+    }
+    let (id, at) = scene
+        .items
+        .get(item)
+        .map(|(_, it, gt, ..)| (scene.catalog.get(it.kind()).id.clone(), gt.translation()))
+        .unwrap_or_default();
+    log.stats.loot.push(id.clone());
+    log.event(
+        "loot",
+        json!({"item": id, "site": r.sites[s].name, "x": round(pos.x, 1), "z": round(pos.z, 1),
+               "ix": round(at.x, 1), "iz": round(at.z, 1)}),
+    );
+    r.skip.insert(item);
+    true
 }
 
 fn kind_name(k: SiteKind) -> &'static str {
@@ -2760,6 +3006,16 @@ fn choose_site(r: &mut Raider, scene: &Scene, here: Vec2) -> Option<usize> {
             SiteKind::Field => r.traits.fields * 3.0,
             // One stone at most, and only some cycles; but a hunter knows
             // where they are.
+            // A frost, for one who has a hearth for it: as good as a
+            // field, it's what the hearth's for.
+            SiteKind::Anomaly
+                if hearth_kit(scene) != super::harvest::Hearth::None
+                    && scene.anomalies.iter().any(|(_, a, g)| {
+                        a.kind == AnomalyKind::Frost && g.translation().xz().distance(s.at) < 3.0
+                    }) =>
+            {
+                r.traits.fields * 3.0
+            }
             SiteKind::Anomaly => r.traits.fields * 1.5,
             // Picking over a wreck is for when nothing else is coming.
             SiteKind::Wreck(_) if r.hp < 60.0 || heat > 0.0 => 0.0,
@@ -3203,11 +3459,38 @@ fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
     let plan = r
         .plans
         .iter()
-        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))?;
-    let exit = way_out(plan, plan.to_local(pos).xz(), &|d| {
+        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
+    let why = |what: &dyn Fn() -> String| {
+        if std::env::var_os("SIM_DEBUG").is_some() {
+            eprintln!("leave_building at {pos:?}: {}", what());
+        }
+    };
+    let Some(plan) = plan else {
+        if r.plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
+            why(&|| "in an underground site's grid but not in it".into());
+        }
+        return None;
+    };
+    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &|d| {
         scene.power_locked.contains(d)
-    })?;
-    indoor_out(plan, pos, exit, 0.6)
+    }) else {
+        why(&|| format!("{}: no way out", plan.name));
+        return None;
+    };
+    let out = indoor_out(plan, pos, exit, 0.6);
+    if out.is_none() {
+        why(&|| {
+            let l = plan.to_local(pos).xz();
+            format!(
+                "{}: no route to {exit:?} from {l:?} (walkable {}, held {}, a path {})",
+                plan.name,
+                plan.grid.walkable(l.to_array()),
+                plan.held.len(),
+                plan.path_through_held(l, exit).is_some()
+            )
+        });
+    }
+    out
 }
 
 /// Where to walk to be out of a building from a local point: the nearest
@@ -3377,7 +3660,7 @@ fn take_item(
                 Some(CardJob::Bring { item: id, .. })
                     if scene.items.get(item).is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == *id)
             );
-            let route = match indoor(plan, pos, goal, 0.3) {
+            let route = match indoor_through_held(plan, pos, goal, 0.3) {
                 Some(route) => route,
                 None if wanted => {
                     let near = stand_near(plan, plan.to_local(pos).xz(), goal)?;
@@ -3418,12 +3701,27 @@ fn take_item(
                         .iter()
                         .find(|(_, sw, _)| sw.site == plan.entity && sw.stage == k)?;
                     let at_switch = gt.translation();
-                    tasks.extend(indoor(plan, from, plan.to_local(at_switch).xz(), 0.5)?);
+                    tasks.extend(indoor_through_held(
+                        plan,
+                        from,
+                        plan.to_local(at_switch).xz(),
+                        0.5,
+                    )?);
                     tasks.push(Task::Press(switch));
                     tasks.push(Task::Wait(1.0));
                     from = at_switch;
                 }
-                tasks.extend(indoor(plan, from, plan.to_local(at).xz(), 0.3)?);
+                tasks.extend(indoor_through_held(
+                    plan,
+                    from,
+                    plan.to_local(at).xz(),
+                    0.3,
+                )?);
+            } else if route
+                .iter()
+                .any(|t| matches!(t, Task::OpenDoor(d) if plan.held.contains(d)))
+            {
+                return None;
             } else {
                 tasks.extend(route);
             }
@@ -3437,11 +3735,21 @@ fn take_item(
                 .find(|(_, c, rad)| c.xz().distance(at.xz()) < rad + 0.6);
             if let Some((kind, centre, rad)) = hazard {
                 let skilled = super::harvest::skilled(r.traits.name);
+                // A dive that costs nothing done right (a frost, a hearth
+                // on it) is no risk however hurt it is.
+                let free = skilled
+                    && kind == AnomalyKind::Frost
+                    && hearth_kit(scene) != super::harvest::Hearth::None;
                 // Not hurt, it doesn't; and nobody careful reaches into a
                 // well's heart (unless it knows how: in and straight out).
                 if r.traits.avoid_anomalies
-                    && (r.hp < 60.0 || kind == AnomalyKind::Well && !skilled)
+                    && (r.hp < 60.0 && !free || kind == AnomalyKind::Well && !skilled)
                 {
+                    r.pass_why = Some(format!(
+                        "{} ({kind:?}, skilled {skilled}, hearth {:?})",
+                        if r.hp < 60.0 { "hurt" } else { "well" },
+                        hearth_kit(scene),
+                    ));
                     return None;
                 }
                 let out = (pos.xz() - centre.xz()).normalize_or(Vec2::X);
@@ -3453,7 +3761,7 @@ fn take_item(
                         junk: first,
                         spare: first.and_then(|j| junk_but(r, scene, j)),
                         gun: r.gun,
-                        hearth: carries(scene, "art_hearth"),
+                        hearth: hearth_kit(scene),
                     };
                     if let Some(way) = super::harvest::plan(kind, centre, rad, edge, item, at, &kit)
                     {
@@ -3463,6 +3771,7 @@ fn take_item(
                     }
                     // Into a frost without a hearth, nobody who knows does.
                     if kind == AnomalyKind::Frost {
+                        r.pass_why = Some("frost without a hearth".into());
                         return None;
                     }
                 }
@@ -3523,14 +3832,48 @@ fn junk(r: &Raider, scene: &Scene) -> Option<Entity> {
         .map(|(e, _)| e)
 }
 
-/// Whether something of kind `id` is in its pack.
-fn carries(scene: &Scene, id: &str) -> bool {
-    scene.bags.iter().find(|b| b.carried).is_some_and(|me| {
-        me.contents
+/// The hearth on it: loose (live), or sealed in a lead case, in its pack
+/// or a body slot (a stowed case goes to a free belt slot before the pack).
+fn hearth_kit(scene: &Scene) -> super::harvest::Hearth {
+    use super::harvest::Hearth;
+    let Some(me) = scene.bags.iter().find(|b| b.carried) else {
+        return Hearth::None;
+    };
+    let is = |e: Entity, id: &str| {
+        scene
+            .items
+            .get(e)
+            .is_ok_and(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
+    };
+    let in_case = |case: Entity| {
+        scene
+            .sockets
             .iter()
-            .filter_map(|e| scene.items.get(*e).ok())
-            .any(|(_, it, ..)| scene.catalog.get(it.kind()).id == id)
-    })
+            .filter(|(_, owner)| owner.0 == case)
+            .find_map(|(sock, _)| sock.occupant.filter(|h| is(*h, "art_hearth")))
+    };
+    // In the pack, then on the body.
+    let packed = me.contents.iter().map(|e| (*e, true));
+    let worn = scene
+        .sockets
+        .iter()
+        .filter(|(_, owner)| owner.0 == me.owner)
+        .filter_map(|(sock, _)| sock.occupant)
+        .map(|e| (e, false));
+    let on: Vec<(Entity, bool)> = packed.chain(worn).collect();
+    if on.iter().any(|(e, _)| is(*e, "art_hearth")) {
+        return Hearth::Live;
+    }
+    on.into_iter()
+        .filter(|(e, _)| is(*e, "lead_case"))
+        .find_map(|(case, packed)| {
+            in_case(case).map(|stone| Hearth::Sealed {
+                case,
+                stone,
+                packed,
+            })
+        })
+        .unwrap_or(Hearth::None)
 }
 
 /// Getting out: radio, walk to the RV, board, pull the bell.
@@ -3617,11 +3960,37 @@ fn extract_step(
         Some((_, Some(lee))) if !waiting => lee,
         _ => approach,
     };
-    r.at_rv = here.distance(goal) <= 4.0;
-    if here.distance(goal) > 4.0 {
+    // Under a roof it's in at the door or it's not under it: in all the
+    // way, by the building's plan, and not walked back out of it.
+    let goal3 = Vec3::new(goal.x, pos.y, goal.y);
+    let roof = r
+        .plans
+        .iter()
+        .position(|p| goal != approach && p.indoors(p.to_local(goal3).xz()));
+    let near = if roof.is_some() { 0.8 } else { 4.0 };
+    r.at_rv = here.distance(goal) <= near;
+    if here.distance(goal) > near {
         r.act = Act::ToRv;
-        if let Some(out) = leave_building(r, scene, pos) {
+        if let Some(plan) = roof.map(|b| &r.plans[b]).filter(|p| p.in_grid(pos)) {
+            if let Some(route) = indoor(plan, pos, plan.to_local(goal3).xz(), 0.4) {
+                return route;
+            }
+        } else if let Some(out) = leave_building(r, scene, pos) {
             return out;
+        } else if let Some(plan) = r
+            .plans
+            .iter()
+            .find(|p| p.levels.is_some() && p.contains(pos, 0.0))
+        {
+            // Down a site with no way out found: never the Zone's straight
+            // line, which walks into the rock. Its nearest way up, or wait
+            // for one to open.
+            return plan
+                .entries
+                .iter()
+                .filter_map(|e| indoor_to(plan, pos, *e, 0.6))
+                .min_by_key(|t| t.len())
+                .unwrap_or_else(|| vec![Task::Wait(1.0)]);
         }
         return travel(&r.grid, here, goal, 2.0).unwrap_or_else(|| {
             vec![Task::WalkTo {
@@ -3642,6 +4011,58 @@ fn extract_step(
         }
         _ => vec![Task::Wait(2.0)],
     }
+}
+
+/// Its own things knocked loose (a robot's blow, a fall): anything worth
+/// more than junk that was on it last tick and now lies within 15 m, out
+/// of any anomaly, it goes back for at once. Not what it set down on
+/// purpose (`skip`), nor junk it threw, nor while it's fighting.
+fn knocked_loose(
+    me: Entity,
+    r: &mut Raider,
+    scene: &Scene,
+    log: &mut SimLog,
+    pos: Vec3,
+) -> Option<Vec<Task>> {
+    let worth = |e: Entity| {
+        scene
+            .items
+            .get(e)
+            .is_ok_and(|(_, it, ..)| r.traits.value(scene.catalog.get(it.kind())) > 3.0)
+    };
+    let before = std::mem::take(&mut r.kept);
+    r.kept = scene
+        .items
+        .iter()
+        .map(|(e, ..)| e)
+        .filter(|e| scene.mine(me, *e) && worth(*e))
+        .collect();
+    if r.combat.is_some() {
+        return None;
+    }
+    let lost = before.into_iter().find(|e| {
+        !r.skip.contains(e)
+            && scene.items.get(*e).is_ok_and(|(_, _, gt, h, so, b)| {
+                let at = gt.translation();
+                h.is_none()
+                    && so.is_none()
+                    && b.is_none()
+                    && at.distance(pos) < 15.0
+                    && out_of_anomaly(scene, at.xz()).is_none()
+            })
+    })?;
+    let id = scene.items.get(lost).map_or(String::new(), |(_, it, ..)| {
+        scene.catalog.get(it.kind()).id.clone()
+    });
+    log.event("fetch_kit", json!({"item": id}));
+    Some(vec![
+        Task::Grab {
+            item: lost,
+            side: Side::Left,
+        },
+        Task::Stow(Side::Left),
+        Task::Wait(0.2),
+    ])
 }
 
 /// Kit upkeep between jobs: pick up the magazines it dropped reloading,
