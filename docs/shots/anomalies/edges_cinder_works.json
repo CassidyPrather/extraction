@@ -139,41 +139,41 @@
   "condition": "night",
   "lines": [
    {
-    "step": 28.6,
+    "step": 12.0,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 12.5,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 32.0,
-    "slip": 0.0,
-    "ok": true
-   },
-   {
-    "step": 29.1,
+    "step": 13.9,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 27.9,
+    "step": 12.3,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 28.9,
+    "step": 13.2,
     "slip": 0.3,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 29.2,
-    "slip": 0.1,
-    "ok": true
+    "step": 3.4,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 29.0,
-    "slip": 0.1,
-    "ok": true
+    "step": 5.3,
+    "slip": null,
+    "ok": false
    }
   ],
   "passing": 5,
