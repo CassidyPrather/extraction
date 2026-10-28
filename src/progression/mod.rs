@@ -70,7 +70,8 @@ impl Plugin for ProgressionPlugin {
                     place_recorder,
                     place_letter,
                     place_ledger,
-                    scout,
+                    // The job out there: its place seen, which way it is.
+                    (scout, nudge, restate_after_fall),
                     contracts::place_bring,
                     contracts::watch_plant,
                     contracts::photograph,
@@ -767,6 +768,110 @@ fn scout(
         *seen = true;
         raid.say(lines::scout_noticed(place));
         crate::rig::haptics::step_done(&mut commands, None);
+    }
+}
+
+/// Heading away from the job on the card, you're told once where it is
+/// (`extraction_core::progression::Drift`): over the radio if you carry
+/// one, else on the wrist. Not once its part out there is done, or you
+/// have the thing it wants home.
+fn nudge(
+    progression: Res<Progression>,
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    carried: Query<(&Item, &CarriedBy)>,
+    catalog: Res<Catalog>,
+    mut drift: Local<(extraction_core::progression::Drift, Option<Job>)>,
+) {
+    let job = progression.0.job.as_ref();
+    // Fresh each raid, and for each job.
+    if raid.phase == Phase::AtBase || drift.1.as_ref() != job {
+        *drift = (Default::default(), job.cloned());
+    }
+    if raid.phase != Phase::Out {
+        return;
+    }
+    let (Some(job), Some((player, at))) = (job, players.iter().next()) else {
+        return;
+    };
+    let Some((map, mark)) = job.still_at() else {
+        return;
+    };
+    if map != opts.map {
+        return;
+    }
+    let wants = match job {
+        Job::Bring { item, .. } => Some(item.as_str()),
+        Job::Recover { .. } => Some(RECOVER_ITEM),
+        Job::Letter => Some(extraction_core::progression::LETTER_ITEM),
+        Job::Ledger => Some(extraction_core::progression::LEDGER_ITEM),
+        _ => None,
+    };
+    let has = |id: &str| {
+        carried
+            .iter()
+            .any(|(i, by)| by.0 == player && catalog.get(i.kind()).id == id)
+    };
+    if wants.is_some_and(has) {
+        return;
+    }
+    let here = at.translation().xz();
+    let d = here.distance(Vec2::from_array(mark));
+    if drift.0.update(d, raid.clock) {
+        let way = crate::raid::lines::way(here.to_array(), mark);
+        raid.say(lines::job_this_way(&job_place(job), &way, has("radio")));
+    }
+}
+
+/// Woken in the truck after going down, with the job's part out there not
+/// done: the driver says it's still waiting, and where (from the truck, in
+/// this valley; or which valley).
+fn restate_after_fall(
+    progression: Res<Progression>,
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    zone: Res<Zone>,
+    // The falls counted so far, and one not yet answered.
+    mut seen: Local<Option<(u32, bool)>>,
+) {
+    let (deaths, owed) = seen.get_or_insert((raid.deaths, false));
+    if raid.deaths > *deaths {
+        *deaths = raid.deaths;
+        *owed = true;
+    }
+    if !*owed || raid.phase != Phase::AtBase {
+        return;
+    }
+    *owed = false;
+    let Some(job) = progression.0.job.as_ref() else {
+        return;
+    };
+    let Some((map, mark)) = job.still_at() else {
+        return;
+    };
+    let place = job_place(job);
+    if map == opts.map {
+        let truck = zone
+            .marker(&extraction_core::map::MarkerKind::TruckStop)
+            .map_or([0.0, 0.0], |m| m.at);
+        let way = crate::raid::lines::way(truck, mark);
+        raid.say(lines::job_waiting(&place, Some(&way)));
+    } else {
+        raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
+    }
+}
+
+/// The job's place, by name: "Old farm", "house by the well".
+fn job_place(job: &Job) -> String {
+    match job {
+        Job::Scout { place, .. } | Job::Bring { place, .. } | Job::Plant { place, .. } => {
+            place.clone()
+        }
+        Job::Recover { region, .. } => region.clone(),
+        Job::Letter => "house by the well".into(),
+        Job::Ledger => "Depot".into(),
+        Job::Fetch { .. } | Job::Photograph { .. } => String::new(),
     }
 }
 
