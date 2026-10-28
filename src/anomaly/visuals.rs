@@ -371,10 +371,13 @@ fn grain_at(x: u32, y: u32) -> f32 {
 /// nearly the edge and gone just past it, so where the mark stops is where
 /// the anomaly starts (a mark that fades out well inside is an invisible
 /// wall). Its edge wavers a little, never more than a few centimetres on a
-/// typical one, and it's a touch grainy. On a disc of 1.1 radii.
-fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
+/// typical one, and it's a touch grainy. On a disc of 1.1 radii. With its
+/// glow: the same, but for a lift's, whose glow is its grooves alone (its
+/// grit lit too would wash them out to a plain lit disc in the dark).
+fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> (Handle<Image>, Handle<Image>) {
     let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
+    let mut glow = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
         for x in 0..n {
             let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
@@ -415,6 +418,8 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
                 let lumps = value_noise(px * 14.0, py * 14.0, 4);
                 let grit = (bank * (0.45 + 0.4 * lumps + 0.15 * wear) + 0.4 * ridge).min(0.95);
                 let sand = [0.86, 0.74, 0.58].map(|c| c * grain);
+                let lit = ((t * grain * (1.0 - grit)).clamp(0.0, 1.0) * 255.0) as u8;
+                glow.extend_from_slice(&[lit, lit, lit, (alpha * 255.0) as u8]);
                 std::array::from_fn(|i| rust[i] * grain * (1.0 - grit) + sand[i] * grit)
             } else {
                 [tone * grain; 3]
@@ -423,17 +428,22 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> Handle<Image> {
             data.extend_from_slice(&[r, g, b, (alpha * 255.0) as u8]);
         }
     }
-    images.add(Image::new(
-        Extent3d {
-            width: n,
-            height: n,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    ))
+    let mut image = |data| {
+        images.add(Image::new(
+            Extent3d {
+                width: n,
+                height: n,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            data,
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::RENDER_WORLD,
+        ))
+    };
+    let colour = image(data);
+    let glow = if spiral { image(glow) } else { colour.clone() };
+    (colour, glow)
 }
 
 /// Hermite step from `a` to `b`.
@@ -540,8 +550,8 @@ fn init_assets(
         ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
-    let mark = mark_texture(&mut images, false);
-    let scoured = mark_texture(&mut images, true);
+    let (mark, _) = mark_texture(&mut images, false);
+    let (scoured, scoured_glow) = mark_texture(&mut images, true);
     // Fogged as if half as far off, as the Zone's other things are
     // (`MarkMaterial`); the shiny ones (fused, glazed) catch the light.
     let mut ground_with = |tex: &Handle<Image>, c: Color, emissive: LinearRgba, rough: f32| {
@@ -572,7 +582,8 @@ fn init_assets(
     let flattened = ground_with(
         &scoured,
         Color::srgba(1.0, 1.0, 1.0, 0.97),
-        LinearRgba::rgb(0.035, 0.018, 0.008),
+        // (Its grooves darken it on the whole: the glow made up for that.)
+        LinearRgba::rgb(0.065, 0.034, 0.015),
         0.95,
     );
     let mut ground =
@@ -620,9 +631,10 @@ fn init_assets(
         0.95,
     );
     // (A lift's texture's colour is its own: lit by it, its pale grit
-    // would glow too. An even warmth, faded with the mark.)
+    // would glow too. Its glow is in its grooves, as by day: an even one
+    // left it a plain disc in the dark.)
     if let Some(mut m) = marks.get_mut(&flattened) {
-        m.base.emissive_texture = None;
+        m.base.emissive_texture = Some(scoured_glow);
     }
     // Torn turf, the dark earth under it showing: a drag scar is a smear,
     // soft at its edges, not an anomaly's own mark.

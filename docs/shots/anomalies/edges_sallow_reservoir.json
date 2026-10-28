@@ -139,45 +139,45 @@
   "condition": "night",
   "lines": [
    {
-    "step": 31.8,
+    "step": 13.3,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 33.6,
-    "slip": 0.1,
-    "ok": true
-   },
-   {
-    "step": 29.0,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 28.8,
+    "step": 15.6,
     "slip": 0.4,
     "ok": true
    },
    {
-    "step": 31.2,
+    "step": 12.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 11.6,
+    "slip": 0.4,
+    "ok": true
+   },
+   {
+    "step": 10.7,
     "slip": 0.3,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 27.9,
-    "slip": 0.1,
-    "ok": true
+    "step": 5.5,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 29.5,
-    "slip": 0.1,
+    "step": 10.3,
+    "slip": 0.5,
     "ok": true
    }
   ],
   "passing": 5,
-  "ok": true
+  "ok": false
  },
  {
   "kind": "burner",
