@@ -155,6 +155,28 @@ fn radio_at_base(
 mod tests {
     use super::*;
 
+    /// Once you've done what a hint says, it isn't said again (the
+    /// playtest heard "Safety's on" three minutes after it had taken the
+    /// range's pistol off safe itself).
+    #[test]
+    fn a_hint_stops_once_you_know() {
+        let mut raid = Raid {
+            phase: Phase::AtBase,
+            clock: 0.0,
+            raids: 0,
+            recalled: false,
+            cycle: 0,
+            extractions: 0,
+            deaths: 0,
+            log: Vec::new(),
+        };
+        let mut hints = Hints::default();
+        assert!(hints.give(Hint::Safety, 0.0, false, &mut raid));
+        hints.known(Hint::Safety);
+        assert!(!hints.give(Hint::Safety, 100.0, false, &mut raid));
+        assert!(hints.give(Hint::Empty, 100.0, false, &mut raid));
+    }
+
     /// Every hint fits the wrist whole.
     #[test]
     fn hints_fit_the_wrist() {

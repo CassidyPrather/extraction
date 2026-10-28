@@ -1712,7 +1712,15 @@ fn warn_near_anomalies(
 }
 
 /// In the yard the truck comes in seconds, not minutes, and waits for you.
-fn hurry_the_truck(mut raid: ResMut<Raid>) {
+fn hurry_the_truck(mut raid: ResMut<Raid>, mut run: ResMut<crate::raid::TruckRun>) {
+    // It comes in ten seconds, nothing's hunting you, and the driver says
+    // so when you call.
+    if run.transit != HURRY || run.hunted {
+        *run = crate::raid::TruckRun {
+            transit: HURRY,
+            hunted: false,
+        };
+    }
     match &mut raid.phase {
         Phase::TruckCalled { eta, .. } if *eta > HURRY => *eta = HURRY,
         Phase::TruckWaiting { left, .. } if *left < 60.0 => *left = crate::raid::TRUCK_WAIT,

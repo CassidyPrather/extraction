@@ -2919,6 +2919,36 @@ mod onboarding {
         assert!(crate::take_restart().is_some(), "the second goes");
     }
 
+    /// The driver names the next station once: stepping out of the truck
+    /// doesn't say it again (the playtest heard "Next: the lamp by the
+    /// pen." twice in 28 s).
+    #[test]
+    fn the_driver_names_the_next_station_once() {
+        let mut vr = Vr::first_run();
+        vr.step(5);
+        let pen = crate::onboarding::station_of(Goal::FarGrab);
+        at_station(&mut vr, pen - 1, &[Goal::PutAway]);
+        vr.step(2);
+        // The last of the station in the truck (as the playtest's Pack).
+        let skip = card(&mut vr, OnboardCard::Skip(pen - 1));
+        take_card(&mut vr, skip);
+        let next = crate::onboarding::next_line(pen);
+        assert!(said(&vr, &next), "sent on");
+        // Then out of the truck.
+        vr.app
+            .world_mut()
+            .resource_mut::<crate::raid::Raid>()
+            .say("Out of the truck. The Surge is due in about 60 minutes.");
+        vr.step(3);
+        let log = &vr.app.world().resource::<crate::raid::Raid>().log;
+        let named = log
+            .iter()
+            .filter(|(t, _)| t.contains(crate::onboarding::STATIONS[pen].where_))
+            .count();
+        assert_eq!(named, 1, "{log:?}");
+        assert!(!log.iter().any(|(t, _)| t.starts_with("Out of the truck")));
+    }
+
     /// A station's SKIP card (squeezed) passes it and lights the next; the
     /// board's START OVER puts you back at the crate. Boards say the keys in
     /// flat mode and the controls in a headset.
