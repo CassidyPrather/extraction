@@ -832,8 +832,43 @@ mod vr {
     /// lets the slide go, and it fires.
     #[test]
     fn a_pistol_run_dry_and_reloaded_tells_you_the_slide_is_back() {
-        let mut r = hold("pm_pistol", false, false);
-        seat_mag(&mut r, "pm_mag", 1);
+        run_dry_and_reload("pm_pistol", "pm_mag", 8);
+    }
+
+    /// The same for every gun that holds open on a detachable magazine
+    /// (the SVD), so the cue is the class's, not the pistol's.
+    #[test]
+    fn every_hold_open_gun_run_dry_tells_you_the_slide_is_back() {
+        let catalog = crate::items::Catalog::load();
+        let mut n = 0;
+        for (_, def) in catalog.iter() {
+            let Some(f) = def.firearm.as_ref() else {
+                continue;
+            };
+            let Some(fam) = f.magazine_family.as_ref() else {
+                continue;
+            };
+            if !f.last_round_hold_open || def.id == "pm_pistol" {
+                continue;
+            }
+            let (_, mag) = catalog
+                .iter()
+                .find(|(_, d)| {
+                    d.magazine
+                        .as_ref()
+                        .is_some_and(|m| &m.fits == fam && !m.stripper)
+                })
+                .expect("a magazine for it");
+            let cap = mag.magazine.as_ref().unwrap().capacity;
+            run_dry_and_reload(&def.id, &mag.id, cap);
+            n += 1;
+        }
+        assert!(n > 0, "the SVD at least");
+    }
+
+    fn run_dry_and_reload(gun: &str, mag: &str, full: u32) {
+        let mut r = hold(gun, false, false);
+        seat_mag(&mut r, mag, 1);
         rack(&mut r);
         {
             let mut g = gun_mut(&mut r);
@@ -841,23 +876,26 @@ mod vr {
                 g.firearm.cycle_mode();
             }
         }
-        assert_eq!(fire(&mut r, 1, true).len(), 1, "the last round");
-        assert!(gun_mut(&mut r).firearm.locked_back, "held open");
+        assert_eq!(fire(&mut r, 1, true).len(), 1, "{gun}: the last round");
+        assert!(gun_mut(&mut r).firearm.locked_back, "{gun}: held open");
         r.vr.primary(Side::Right, true);
         r.vr.step(3);
         r.vr.primary(Side::Right, false);
         r.vr.step(10);
-        assert!(gun_mut(&mut r).firearm.magazine.is_none(), "dropped");
-        seat_mag(&mut r, "pm_mag", 8);
+        assert!(gun_mut(&mut r).firearm.magazine.is_none(), "{gun}: dropped");
+        seat_mag(&mut r, mag, full);
         assert!(
             fire(&mut r, 1, true).is_empty(),
-            "the slide's back: nothing"
+            "{gun}: the slide's back: nothing"
         );
-        assert!(said(&r, "Slide's back"), "the wrist says what lets it go");
+        assert!(
+            said(&r, "Slide's back"),
+            "{gun}: the wrist says what lets it go"
+        );
         r.vr.secondary(Side::Right, true);
         r.vr.step(3);
         r.vr.secondary(Side::Right, false);
         r.vr.step(5);
-        assert_eq!(fire(&mut r, 1, true).len(), 1, "let go, it fires");
+        assert_eq!(fire(&mut r, 1, true).len(), 1, "{gun}: let go, it fires");
     }
 }
