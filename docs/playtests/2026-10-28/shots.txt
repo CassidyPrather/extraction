@@ -1,0 +1,63 @@
+# Before and after the 28 October playtest fixes: one contact sheet.
+#
+#   scripts/before_after.py docs/playtests/2026-10-28/shots.txt
+#
+# Builds `before` and `after` once each (scripts/build_at.sh), shoots every
+# line below with both, and writes target/before_after/<before>_<after>/
+# sheet.jpg and index.html. Try one line on its own with
+# `--only NAME`; `--check` reads the list without shooting.
+#
+# Owners: when your fix lands, make your line show it. Add a line, or fix
+# the staging of one below. One shot a line:
+#
+#   name | owner | what to look for | game arguments [| before's arguments]
+#
+# - Game arguments are the game's own flags. The rig adds --screenshot,
+#   --size, --new-game, a fresh --data-dir, --frames 30 and --seed 7
+#   (unless you give your own --frames or --seed).
+# - Leading NAME=value words go into the game's environment
+#   (EXTRACTION_YARD_AT=5 starts the yard at station 5).
+# - --camera x,y,z,yaw,pitch: y 0 stands you there. Yaw 0 looks along -Z
+#   and 90 along +X.
+# - --gallery stages things in front of the camera (src/dev.rs:
+#   `<gun>`, `<gun>+open`, `fp:<item>`, `treat`, `walker`, ...).
+# - The fifth field is only for a shot whose staging is new with the fix:
+#   the before build gets those arguments instead.
+# - Pick a still moment that shows the fix. Use --hour day --weather
+#   clearing unless the fix is about the light, and --no-robots unless
+#   it's about them.
+
+before 2798e450
+after origin/claude/serene-clarke-rcgj62
+size 1280x720
+
+# Onboarding (#3): in the headset, the first wrist line and the boards
+# are VR's, with no "press E". The rig shoots a flat window, so this is
+# the flat truck start until Onboarding gives a staging that reads as VR.
+yard_first_wrist | Onboarding | The truck at the yard's start: the kit board and the first wrist line, no "press E" in the headset | --map training_yard --frames 240 --hour day --weather clearing --no-robots
+
+# Onboarding and Weapon feel (#4): the range now practises reloading from
+# slide-lock.
+range_board | Onboarding, Weapon feel | The range's board at station 5: the slide-lock reload is a step, not a tip afterwards | EXTRACTION_YARD_AT=5 --map training_yard --camera -4.2,0,49.3,315,-6 --frames 90 --hour day --weather clearing --no-robots
+
+# Weapon feel (#4): a pistol run dry, its slide locked back.
+pistol_slide_lock | Weapon feel | A PM run dry: the slide held back, and the cue that says so | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol+open,0,0.45 --frames 40 --hour day --weather clearing --no-robots
+
+# Weapon feel (#14): "Safety's on" three times. The safety has to read on
+# the gun.
+pistol_safety | Weapon feel | The PM's left side: whether the safety is on, read on the gun | --map training_yard --camera 0,0,40,0,0 --gallery pm_pistol,180,0.35 --frames 40 --hour day --weather clearing --no-robots
+
+# Hands (#12): "The bleeding stops." while it hadn't.
+bleeding_dressed | Hands | A limb dressed and still bleeding, and the line that goes with it | --map training_yard --camera 0,0,40,0,0 --gallery treat,down --frames 60 --hour day --weather clearing --no-robots
+
+# Robot bodies (#13): a hit on the walker's core next to one on a weak
+# spot, at 15 m.
+walker_hits | Robot bodies | A walker at 15 m: a core hit against a weak-spot hit, how each shows | --map training_yard --camera 0,0,40,0,0 --gallery walker,0,15 --frames 60 --hour day --weather clearing
+
+# Visual design, performance (#8): the far trees after a slow load. The
+# software renderer loads slowly anyway.
+marrow_far_forest | Visual design | Marrow Creek's far forest after a slow load: impostors drawn, not missing | --map marrow_creek --camera 40,0,279,300,-2 --frames 150 --hour day --weather clearing --no-robots
+
+# Map design and Onboarding (#5): the first job's walk from the gate,
+# toward the Old farm (190, 145).
+first_job_walk | Map design, Onboarding | From the south gate toward the Old farm: the first job's way reads from where you start | --map marrow_creek --camera 40,0,270,50,-2 --frames 120 --hour day --weather clearing --no-robots
