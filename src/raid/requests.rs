@@ -107,9 +107,10 @@ fn press_card(
     zone: Res<Zone>,
     opts: Res<crate::launch::LaunchOptions>,
     mut done: MessageWriter<crate::progression::JobDone>,
-    (logbook, mind): (
+    (logbook, mind, canaries): (
         Res<crate::raid::logbook::Logbook>,
         Option<Res<crate::robots::memory::ZoneMind>>,
+        Query<&crate::world::workings::Canary>,
     ),
 ) {
     for ev in events.read() {
@@ -229,7 +230,19 @@ fn press_card(
                 Vec::new()
             }
             Job::Bring { item: id, .. } => {
-                let have = in_stash(id, 1);
+                // A living thing comes home living (a canary that went
+                // quiet in the gas doesn't count).
+                let all = in_stash(id, u32::MAX);
+                let have: Vec<_> = all
+                    .iter()
+                    .copied()
+                    .filter(|(_, e)| canaries.get(*e).map_or(true, |c| c.life > 0.0))
+                    .take(1)
+                    .collect();
+                if have.is_empty() && !all.is_empty() {
+                    raid.say(lines::BROUGHT_DEAD);
+                    continue;
+                }
                 if have.is_empty() {
                     raid.say(lines::not_brought(&crate::progression::want_name(
                         &catalog, id,
@@ -770,6 +783,40 @@ pub(crate) mod tests {
             .job
             .clone()
             .expect("a job on the card")
+    }
+
+    /// A canary brought home dead doesn't do; alive, it does.
+    #[test]
+    fn a_canary_has_to_come_home_alive() {
+        let mut app = app();
+        app.world_mut().resource_mut::<Progression>().0.job = Some(Job::Bring {
+            map: "kettle_pass".into(),
+            place: "Miners' Row".into(),
+            item: "canary".into(),
+            at: [-56.2, 123.6],
+        });
+        stash(&mut app, "canary", 1);
+        let catalog = app.world().resource::<Catalog>().clone();
+        let bird = app
+            .world_mut()
+            .query::<(Entity, &Item)>()
+            .iter(app.world())
+            .find(|(_, i)| catalog.get(i.kind()).id == "canary")
+            .map(|(e, _)| e)
+            .unwrap();
+        let life = |app: &mut App, life: f32| {
+            app.world_mut()
+                .entity_mut(bird)
+                .insert(crate::world::workings::Canary { alarm: 0.0, life });
+            app.update();
+        };
+        let done = |app: &App| app.world().resource::<Progression>().0.done;
+        life(&mut app, 0.0);
+        press_card(&mut app);
+        assert_eq!(done(&app), 0, "a dead one isn't taken");
+        life(&mut app, 0.4);
+        press_card(&mut app);
+        assert_eq!(done(&app), 1, "a live one is");
     }
 
     #[test]

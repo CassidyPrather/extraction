@@ -218,8 +218,9 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 | Up the fell | Lev | past the ladder, trust 6, after the scour key | plant a relay in the observatory (Rime Fell); a hearth in the kit, for the frost | 2 hand flares, 2 boxes 7.62R AP, trust 2 | Rime Fell |
 | The heavy | the town paper | past the ladder, trust 5 | photograph a heavy; plant a relay at the Fire lookout (Cinder) | 2 EMP grenades, a steel plate, trust 3 | |
 | The keeper's log | the water board | past the ladder, trust 8 | bring Brabec's pump log up from the sump of the pump wells (Marrow) | 2 power cells, 3 chemlights, trust 2 | |
-| The deputy's lamp | Irena, from the mine office | past the ladder, trust 9 | bring the deputy's flame lamp out of the old heading, in the deep workings' gas (Kettle) | an injector, 2 chemlights, trust 2 | |
-| The charging manifest | Vlasta Kralova | past the ladder, trust 10 | bring the charging manifest off the far ledge of the furnace cellars, over the ash pit (Cinder) | a steel plate, 2 boxes 7.62R AP, trust 3 | |
+| The canary | Old Fiala, at the lodge | past the ladder, trust 9 | bring the canary up alive from the cage landing of the deep workings (Kettle); one that died in the gas isn't taken | a tea tin, an injector, trust 2 | |
+| The deputy's lamp | Irena, from the mine office | past the ladder, trust 10, after the canary | bring the deputy's flame lamp out of the old heading, in the deep workings' gas (Kettle) | an injector, 2 chemlights, trust 2 | |
+| The charging manifest | Vlasta Kralova | past the ladder, trust 11 | bring the charging manifest off the far ledge of the furnace cellars, over the ash pit (Cinder) | a steel plate, 2 boxes 7.62R AP, trust 3 | |
 
 **The ladder keeps its length.** A contract starts only at the head of its
 tier, and its steps are that tier's jobs (counted toward the fitting as
@@ -230,7 +231,7 @@ as it starts; its pay as the last step's handed in, with what it opens
 said on the wrist.
 
 **Trust** is earned only by contracts (7 by the ladder's end, 9 by the
-overflow, 16 with the scour key, the fell and the heavy, 23 with the
+overflow, 16 with the scour key, the fell and the heavy, 25 with the
 signature sites'); past the ladder it's what the driver's bigger asks wait on. **The
 fourth valley** is opened by the overflow, which the driver offers once
 the career has raided all three valleys: Sallow Reservoir is the place
@@ -255,6 +256,32 @@ drawn into the right hand, a look at the spot, let go): at the Radio mast
 4 raiders of 4 that reached it set it down (`contract.done`), though all
 four died on the way home through Marrow. The telemetry's `contract.done`
 is the step's own part, `met` that and home with it.
+
+The contract scenarios run by name, not in `--scenario all`: each is
+several raids on its own valley's map, and its director starts only when
+`--scenario` is its own name (a test holds each to `bot::scenarios::OPT_IN`).
+Down a signature site the bot is put straight into the room its thing lies
+in (`Task::TeleportDown`): no stairs, no water let down, no gas crossed, no
+crane ridden. The canary scenario checks the live bird is taken; that a dead
+one isn't is `raid::requests`'s.
+
+**Left out, and why.** Three contracts were talked about and aren't in the
+table:
+
+- *The heavy's hand* (Lev: bring a heavy's claw, whole). The claw
+  (`heavy_claw`) is Bulky, carried in two hands, and nothing Bulky goes in
+  a bag or the stash crate (`inventory::Backpack::check`); the card only
+  takes things from the stash. Next step, if wanted: the card takes a
+  wanted Bulky thing laid in the truck bed (`raid::requests`, the
+  stash search), and the scenario bot carries it two-handed into the bed.
+- *Ride the crane* (the furnace cellars' charging crane,
+  `world::furnace::CraneRidden`). The charging manifest asks it already: the
+  far ledge is reached only by the crane over the ash pit, so a ride of its
+  own was the same walk with nothing to bring home. A step kind for it
+  (a Ride, done on `CraneRidden`) would be new in `Job`, the card and the
+  sims, for no new play.
+- *A later Rime Fell contract* (the observatory's weather log, and on). Only
+  an idea; Up the fell is the valley's one contract.
 
 ## Safehouses: staying out overnight
 
