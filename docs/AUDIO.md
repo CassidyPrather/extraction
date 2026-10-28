@@ -872,6 +872,26 @@ voices them:
   the slope, is a reflector (`acoustics::reflectors`, "ore_mill"). A
   shot 50 m down the slope from it comes back about 0.3 s later.
 
+## What your gun and your hits tell you (the playtest of 28 October)
+
+**Your gun's state** (`scripts/audio_gunstate.py`): every cue that says
+what the gun is doing (the slide locked back, the trigger falling on an
+empty chamber or a hammer already down, the trigger blocked, the safety,
+and a press with the action open) is played in the hand under a walker
+suppressing at 20 m, your feet at a run, and both, and must clear the
+masking by 6 dB. The slide-lock is the slide's half of a rack, the safety
+a switch, the dead trigger a dulled dry-fire click. (The slide-lock lands
+with your own last shot: the press after, `gun.action_open`, is the tell.)
+
+**A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
+what the hit did. Shrugged off, a thin tink; a wound, the impact and a
+low thud; telling (a weak spot, a part giving way), a crunch and an
+electrical crack, a sensor's glass breaking. At 30 m telling stands 11.7
+LU over a shrug (wants 10), and a wound between them.
+
+**A walker hunting you is never silent:** standing to look, its head
+sweeps round (`walker.scan`), heard to 81 m.
+
 ## The machines' plan, heard
 
 When machines share a plan on you (`robots::squad::SquadCall`), each

@@ -1496,7 +1496,11 @@ fn hit_sounds(
     use crate::weapons::impacts::ImpactKind as K;
     for i in impacts.read() {
         let v = i.velocity.length();
-        if v < BLOW_SPEED {
+        // A robot's part struck, round or blow, is heard by what the hit
+        // did to it (`audio_machines::struck_sounds`, `RobotStruck`); only
+        // a round's spall out of its far side is heard here.
+        let robot = i.kind == K::Robot;
+        if v < BLOW_SPEED && !robot {
             // A blow: what it struck, struck with weight (slower, duller,
             // `hit.blow`), as loud as the swing; steel struck hard rings
             // with a clank under it (a crowbar on a robot's panel).
@@ -1567,17 +1571,19 @@ fn hit_sounds(
                     .clamp(0.25, 1.0)
                     .log10()
         };
-        play_at_speed(
-            &mut commands,
-            &bank,
-            &mut rng.0,
-            set,
-            Some(i.point),
-            cue,
-            trim,
-            if exit { speed * 0.9 } else { speed },
-            0.08,
-        );
+        if !robot {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(i.point),
+                cue,
+                trim,
+                if exit { speed * 0.9 } else { speed },
+                0.08,
+            );
+        }
         // Out through steel, a plank or a wall, it throws spall out of
         // the far side: a spray of bits clattering just past the hole
         // (`hit.spall`).
