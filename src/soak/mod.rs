@@ -120,6 +120,12 @@ mod tests {
             ("src/destruction/breach.rs", "geos", "buildings"),
             ("src/world/snow.rs", "last", "players' footsteps"),
             ("src/world/live.rs", "told", "players, told once"),
+            ("src/items/usage.rs", "last", "keyed by player and hand"),
+            (
+                "src/wildlife/bodies.rs",
+                "known",
+                "removed as each carcass is taken (a retain would lose a death before it's marked)",
+            ),
             ("src/world/underground.rs", "inside", "players"),
             ("src/wildlife/rats.rs", "*", "buildings"),
             ("src/world/furnace.rs", "*", "buildings"),
@@ -150,6 +156,8 @@ mod tests {
                 let keyed = [
                     "HashMap<Entity",
                     "HashSet<Entity",
+                    "HashMap<(Entity",
+                    "HashSet<(Entity",
                     "Vec<Entity>",
                     "Vec<(Entity",
                 ]

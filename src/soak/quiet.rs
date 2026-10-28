@@ -105,11 +105,26 @@ pub fn class(line: &str) -> Option<(String, String, String)> {
     Some((level, target, message))
 }
 
-/// Whether a class is on the allow-list.
-pub fn allowed(level: &str, target: &str, message: &str) -> bool {
-    ALLOWED
-        .iter()
-        .any(|(l, t, m, _)| *l == level && *t == target && message.contains(m))
+/// Allowed only once the session is closing (a line with one of
+/// [`EXITING`] came before it): teardown, not a fault.
+pub const EXIT_ONLY: &[(&str, &str, &str, &str)] = &[(
+    "WARN",
+    "bevy_render::diagnostic::internal",
+    "Failed to download render statistics buffer",
+    "a buffer map still pending as the app tears down (Performance: only ever after an exit)",
+)];
+
+/// What a session's log says as it closes.
+pub const EXITING: &[&str] = &["exit asked", "No windows are open"];
+
+/// Whether a class is on the allow-list (`exiting`: the session has said
+/// it's closing).
+pub fn allowed(level: &str, target: &str, message: &str, exiting: bool) -> bool {
+    let on = |list: &[(&str, &str, &str, &str)]| {
+        list.iter()
+            .any(|(l, t, m, _)| *l == level && *t == target && message.contains(m))
+    };
+    on(ALLOWED) || (exiting && on(EXIT_ONLY))
 }
 
 #[cfg(test)]
@@ -208,9 +223,11 @@ mod tests {
                 "the {s} session didn't finish:\n{}",
                 text.lines().rev().take(40).collect::<Vec<_>>().join("\n")
             );
+            let mut exiting = false;
             for line in text.lines() {
+                exiting |= EXITING.iter().any(|e| line.contains(e));
                 if let Some(c) = class(line) {
-                    if !allowed(&c.0, &c.1, &c.2) {
+                    if !allowed(&c.0, &c.1, &c.2, exiting) {
                         let e = found.entry(c).or_default();
                         e.0 += 1;
                         if !e.1.contains(&s) {
@@ -242,5 +259,11 @@ mod tests {
         assert_eq!(t, "bevy_ecs::error::handler");
         assert_eq!(m, "Entity despawned: The entity with ID #v# is invalid");
         assert!(class("2026 INFO extraction: fine").is_none());
+        // Teardown's warning passes only after the exit.
+        let stats = "WARN bevy_render::diagnostic::internal: Failed to download render \
+                     statistics buffer: Error occurred";
+        let (l, t, m) = class(stats).unwrap();
+        assert!(!allowed(&l, &t, &m, false));
+        assert!(allowed(&l, &t, &m, true));
     }
 }
