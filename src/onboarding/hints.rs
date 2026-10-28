@@ -3,7 +3,8 @@
 //! in the truck does nothing; an empty chamber clicks. Someone new can't
 //! tell those from a broken control (the first headset session found most
 //! controls "dead" and couldn't tell why), so the wrist says what to do,
-//! a few times, then trusts you.
+//! a few times, then trusts you. Where the gun already says it in its own
+//! way (the safety's dead stop and buzz, `weapons::stoppages`), once.
 
 use bevy::prelude::*;
 use extraction_core::firearm::{Event as FireEvent, FireMode};
@@ -20,10 +21,17 @@ const QUIET: f32 = 20.0;
 
 pub struct HintsPlugin;
 
+/// What you've shown you know: done what the hint would tell you (off safe
+/// by your own hand, a round chambered after a click, a call from out in
+/// the Zone). It isn't said again (the playtest heard "Safety's on" three
+/// minutes after it had taken the range's pistol off safe itself).
+#[derive(Resource, Default, Debug)]
+pub struct Known(pub std::collections::HashSet<Hint>);
+
 impl Plugin for HintsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Hints>()
-            .add_systems(Update, (on_safe, dry_click, radio_at_base));
+            .add_systems(Update, (on_safe, dry_click, slide_back, radio_at_base));
     }
 }
 
@@ -31,6 +39,7 @@ impl Plugin for HintsPlugin {
 pub enum Hint {
     Safety,
     Empty,
+    SlideBack,
     RadioAtBase,
 }
 
@@ -41,7 +50,18 @@ impl Hint {
             (Hint::Safety, true) => "Safety's on. Press X.",
             (Hint::Empty, false) => "Click. Nothing in the chamber: rack the slide or bolt.",
             (Hint::Empty, true) => "Click. Nothing in the chamber: press V (R reloads).",
+            (Hint::SlideBack, false) => "Slide's back. Press B to let it go.",
+            (Hint::SlideBack, true) => "Slide's back. Press V to let it go.",
             (Hint::RadioAtBase, _) => "Truck: \"I'm right here. Step out first.\"",
+        }
+    }
+
+    /// How many times it's said in a session: once where the gun tells it
+    /// as well (the safety's dead stop and buzz).
+    fn times(self) -> u32 {
+        match self {
+            Hint::Safety => 1,
+            _ => TIMES,
         }
     }
 }
@@ -54,7 +74,7 @@ impl Hints {
     /// Say it, unless it's been said enough or just now.
     pub fn give(&mut self, hint: Hint, now: f32, flat: bool, raid: &mut Raid) -> bool {
         let e = self.0.entry(hint).or_insert((0, f32::NEG_INFINITY));
-        if e.0 >= TIMES || now - e.1 < QUIET {
+        if e.0 >= hint.times() || now - e.1 < QUIET {
             return false;
         }
         e.0 += 1;
@@ -74,7 +94,8 @@ fn on_safe(
     inputs: Query<&RigInput, With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
+    known: Res<Known>,
     time: Res<Time>,
     mut was: Local<bool>,
 ) {
@@ -87,9 +108,11 @@ fn on_safe(
             squeezed = true;
         }
     }
-    if squeezed && !*was {
-        let flat = *driver == RigDriver::Flat;
-        hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+    // (Not till it's known which words, nor once you know.)
+    if let (true, false, Some(flat)) = (squeezed, *was, driver.flat()) {
+        if !known.0.contains(&Hint::Safety) {
+            hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+        }
     }
     *was = squeezed;
 }
@@ -101,14 +124,57 @@ fn dry_click(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
+    driver: crate::rig::KnownDriver,
+    mut known: ResMut<Known>,
+    mut clicked: Local<Vec<Entity>>,
+    time: Res<Time>,
+) {
+    for ev in events.read() {
+        let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
+        if !mine {
+            continue;
+        }
+        match ev.event {
+            FireEvent::ModeChanged(m) if m != FireMode::Safe => {
+                known.0.insert(Hint::Safety);
+            }
+            // Racked after it clicked: you know what the click means.
+            FireEvent::Chambered if clicked.contains(&ev.gun) => {
+                known.0.insert(Hint::Empty);
+            }
+            FireEvent::DryFire => {
+                clicked.push(ev.gun);
+                if let (Some(flat), false) = (driver.flat(), known.0.contains(&Hint::Empty)) {
+                    hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The slide locked back on the last round, or the trigger pulled on an
+/// open action: what lets it go.
+fn slide_back(
+    mut events: MessageReader<GunEvent>,
+    held: Query<&Held>,
+    guns: Query<&Gun>,
+    locals: Query<(), With<LocalPlayer>>,
+    mut hints: ResMut<Hints>,
+    mut raid: ResMut<Raid>,
     driver: Res<RigDriver>,
     time: Res<Time>,
 ) {
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
-        if mine && ev.event == FireEvent::DryFire {
+        let holds_open = guns
+            .get(ev.gun)
+            .is_ok_and(|g| g.firearm.def.last_round_hold_open && g.firearm.locked_back);
+        let open =
+            ev.event == FireEvent::ActionOpen || (ev.event == FireEvent::BoltLocked && holds_open);
+        if mine && open && holds_open {
             let flat = *driver == RigDriver::Flat;
-            hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+            hints.give(Hint::SlideBack, time.elapsed_secs(), flat, &mut raid);
         }
     }
 }
@@ -119,10 +185,16 @@ fn radio_at_base(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
+    mut known: ResMut<Known>,
     time: Res<Time>,
 ) {
     for c in calls.read() {
-        if locals.contains(c.player) && raid.phase == Phase::AtBase {
+        if !locals.contains(c.player) {
+            continue;
+        }
+        if raid.phase != Phase::AtBase {
+            known.0.insert(Hint::RadioAtBase);
+        } else if !known.0.contains(&Hint::RadioAtBase) {
             hints.give(Hint::RadioAtBase, time.elapsed_secs(), false, &mut raid);
         }
     }
@@ -135,7 +207,12 @@ mod tests {
     /// Every hint fits the wrist whole.
     #[test]
     fn hints_fit_the_wrist() {
-        for h in [Hint::Safety, Hint::Empty, Hint::RadioAtBase] {
+        for h in [
+            Hint::Safety,
+            Hint::Empty,
+            Hint::SlideBack,
+            Hint::RadioAtBase,
+        ] {
             for flat in [false, true] {
                 let l = h.line(flat);
                 let n = crate::render::screen::wrap(l, 26, usize::MAX).len();

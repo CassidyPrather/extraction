@@ -124,11 +124,31 @@ fn origin(zone: &Zone) -> Vec2 {
     Vec2::new(m[0], m[1])
 }
 
+/// Where drill target `i` stands: its distance north of the insertion,
+/// on the ground as it is, and in sight of a shooter standing there. Off
+/// to the side, a step at a time, if a bank or a track's grading is in the
+/// way, so polishing the map can't put a drill's target out of reach.
 pub fn target_point(zone: &Zone, i: usize) -> Vec3 {
     let o = origin(zone);
-    let x = o.x + 6.0 + i as f32 * 1.5;
-    let z = o.y - TARGET_DISTANCES[i];
-    Vec3::new(x, zone.ground(x, z) + 1.3, z)
+    let eye = Vec3::new(o.x, zone.ground(o.x, o.y) + 1.6, o.y);
+    let at = |x: f32, z: f32| Vec3::new(x, zone.ground(x, z) + 1.3, z);
+    let (x, z) = (o.x + 6.0 + i as f32 * 1.5, o.y - TARGET_DISTANCES[i]);
+    (0..25)
+        .map(|k| {
+            let side = (k + 1) / 2;
+            let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
+            at(x + sign * side as f32 * 2.0, z)
+        })
+        .find(|p| clear_over_ground(zone, eye, *p))
+        .unwrap_or_else(|| at(x, z))
+}
+
+/// Whether the line from `a` to `b` stays clear of the ground.
+fn clear_over_ground(zone: &Zone, a: Vec3, b: Vec3) -> bool {
+    (1..40).all(|j| {
+        let p = a.lerp(b, j as f32 / 40.0);
+        p.y > zone.ground(p.x, p.z) + 0.25
+    })
 }
 
 pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
@@ -1117,4 +1137,34 @@ fn finish_scenario(
         });
     }
     let _ = Expect::Hits(0);
+}
+
+#[cfg(test)]
+mod target_tests {
+    use super::*;
+
+    /// On every map, every drill target is in sight of a shooter at the
+    /// insertion, over the ground as it is now.
+    #[test]
+    fn every_drill_target_is_in_sight_on_every_map() {
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "sallow_reservoir",
+            "cinder_works",
+            "rime_fell",
+            "training_yard",
+        ] {
+            let zone = Zone::load(map);
+            let o = origin(&zone);
+            let eye = Vec3::new(o.x, zone.ground(o.x, o.y) + 1.6, o.y);
+            for i in 0..TARGET_DISTANCES.len() {
+                let t = target_point(&zone, i);
+                assert!(
+                    clear_over_ground(&zone, eye, t),
+                    "{map}: target {i} at {t} out of sight"
+                );
+            }
+        }
+    }
 }

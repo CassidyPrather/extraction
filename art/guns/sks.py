@@ -12,6 +12,8 @@ the wrist, -Z down the bore (bore axis y = 0.048), +Y up, metres.
 - `bolt_carrier`  the carrier and bolt with the charging handle on the
                   right; slides back with the bolt (origin on the bore)
 - `trigger`
+- `selector`      the safety behind the trigger: forward is safe, turned back about
+                  its pin it fires
 - empties `pt_muzzle`, `pt_sight`, `pt_load_port` (the clip guide, where
   a clip seats over the open action), `pt_bayonet_tip` (the point with
   the bayonet fixed)
@@ -187,12 +189,17 @@ mag.box((0.012, 0.005, 0.085), (0, -0.0145, -0.04), "Blued", bevel=0.0015)
 for z in (-0.06, -0.034, -0.014):
     mag.cyl(0.0019, -0.0066, 0.0066, "Steel", segs=12, xf=T(0, -0.0145, z) @ RY(math.pi / 2),
             chamfer=0.0003)
-# The safety behind the trigger, pushed forward (safe).
-mag.box((0.006, 0.012, 0.005), (0, -0.022, -0.012), "Blued", bevel=0.0012,
-        xf=RX(0.4, about=(0, -0.017, -0.012)))
-for k in range(3):
-    mag.box((0.0064, 0.0008, 0.0011), (0, -0.0185 - k * 0.0028, -0.0145), "Blued", bevel=0.0003,
-            segs=1, xf=RX(0.4, about=(0, -0.017, -0.012)))
+# The safety behind the trigger, pushed forward (safe); a part of its own,
+# turned back about its pin to fire (`selector`).
+SAFETY_PIN = (0.0, -0.017, -0.012)
+safety = Part("selector", origin=SAFETY_PIN)
+# Long enough to stand down into the guard behind the trigger on safe, where
+# a finger meets it, and to swing up out of the way to fire.
+safety.box((0.0062, 0.021, 0.005), (0, -0.0265, -0.012), "Blued", bevel=0.0012,
+           xf=RX(0.4, about=SAFETY_PIN))
+for k in range(4):
+    safety.box((0.0066, 0.0008, 0.0011), (0, -0.0215 - k * 0.0028, -0.0145), "Steel",
+               bevel=0.0003, segs=1, xf=RX(0.4, about=SAFETY_PIN))
 
 # --- Barrel, gas system, sights, bayonet ----------------------------------------------
 # Its origin at the breech, on the bore: a cut barrel is drawn as this
@@ -302,7 +309,7 @@ trig.sweep(catmull([(-0.05, -0.012), (-0.052, -0.022), (-0.049, -0.031), (-0.044
 join("static", stock, recv, mag, worn={})
 join("static_barrel", barrel, leaf, stock_fore, furn, worn={})
 join("static_butt", stock_butt, butt_furn, worn={})
-for p in (carrier, trig, bayonet):
+for p in (carrier, trig, bayonet, safety):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))

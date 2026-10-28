@@ -11,6 +11,10 @@ magazine (axis y = 0.016) under it to the cap at z -0.62.
 its origin at (0, 0.045, -0.13): pumping slides it back +Z by 0.09, the
 forend along the tube to just short of the receiver and the bolt back
 inside the receiver, clear of the ejection port.
+
+`crossbolt` is the safety through the guard's rear web, its origin on its
+axis: pushed through to the right it's safe; pushed left 8 mm to fire, it
+bares a red band on the left.
 """
 
 import math
@@ -100,9 +104,14 @@ misc.sweep(guard_path, section_rect(0.0105, 0.0052, 0.0016), "Blued")
 web = fillet([(-0.032, -0.003), (-0.009, -0.003), (-0.011, -0.022), (-0.019, -0.026),
               (-0.030, -0.012)], [0.0, 0.0, 0.004, 0.004, 0.006], 3)
 misc.prism(web, -0.0055, 0.0055, "Blued", axis="x", bevel=0.001, segs=1)
-# Crossbolt safety, pushed through to the right (safe).
-misc.cyl(0.0042, -0.0095, 0.0115, "Steel", segs=16,
-         xf=T(0, -0.0125, -0.0215) @ RY(math.pi / 2), chamfer=0.0008)
+# Crossbolt safety, pushed through to the right (safe): a part of its own
+# (`crossbolt`), pushed left to fire, which bares its red band on the left.
+CROSSBOLT = (0.0, -0.0125, -0.0215)
+crossbolt = Part("crossbolt", origin=CROSSBOLT)
+crossbolt.cyl(0.0042, -0.0095, 0.0115, "Steel", segs=16,
+              xf=T(0, CROSSBOLT[1], CROSSBOLT[2]) @ RY(math.pi / 2), chamfer=0.0008)
+crossbolt.cyl(0.0043, -0.0135, -0.0095, "Red", segs=16,
+              xf=T(0, CROSSBOLT[1], CROSSBOLT[2]) @ RY(math.pi / 2))
 # Action (slide) release lever, front left inside the guard.
 rel = fillet([(-0.0745, -0.003), (-0.0675, -0.003), (-0.0685, -0.016), (-0.072, -0.0205),
               (-0.0765, -0.0185)], [0.0, 0.0, 0.0015, 0.0015, 0.0015], 2)
@@ -260,6 +269,7 @@ join("static_barrel", barrel, tube, worn={})
 join("static_butt", stock, pad, sw, worn={})
 make(bolt, worn={})
 make(trig, worn={})
+make(crossbolt, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.068, -0.03))

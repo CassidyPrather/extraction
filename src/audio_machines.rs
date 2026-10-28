@@ -65,6 +65,7 @@ impl Plugin for MachineSoundsPlugin {
                     filed_sounds,
                     suppress_sounds,
                     hazard_sounds,
+                    scan_sounds,
                 ),
             );
     }
@@ -497,6 +498,76 @@ pub fn hazard_layers(hazard: Hazard, effect: Effect, flies: bool) -> &'static [L
     }
 }
 
+/// A walker hunting you (`Brain::Investigate` or `Search`) standing to
+/// look sweeps its head round: its servos whine as it turns
+/// (`walker.scan`), every [`SCAN_EVERY`] or so while it stands. Walking,
+/// its feet are heard (`audio::walker_steps`); standing, it was silent,
+/// and a walker that stood out of sight and then closed 14 m gave the
+/// playtest of 28 October 3.5 s of warning. (Its voice on the way back is
+/// Robot minds', `search::ComingBack`.)
+fn scan_sounds(
+    mut commands: Commands,
+    walkers: Query<
+        (
+            Entity,
+            &GlobalTransform,
+            &crate::robots::Brain,
+            &crate::robots::Robot,
+        ),
+        (
+            Without<crate::robots::heavy::Heavy>,
+            Without<crate::robots::hound::Hound>,
+            Without<crate::robots::indoor::Crawler>,
+        ),
+    >,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut was: Local<std::collections::HashMap<Entity, (Vec3, f32)>>,
+) {
+    use crate::robots::{Brain, RobotKind};
+    let now = time.elapsed_secs();
+    let dt = time.delta_secs().max(1e-4);
+    was.retain(|e, _| walkers.contains(*e));
+    for (e, gt, brain, robot) in &walkers {
+        if robot.kind != RobotKind::Walker || robot.wrecked {
+            continue;
+        }
+        let at = gt.translation();
+        let (last, next) = was
+            .entry(e)
+            .or_insert((at, now + rng.0.range(0.0, SCAN_EVERY)));
+        let speed = at.xz().distance(last.xz()) / dt;
+        *last = at;
+        let hunting = matches!(brain, Brain::Investigate { .. } | Brain::Search { .. });
+        if !scans(hunting, speed) || now < *next {
+            continue;
+        }
+        *next = now + SCAN_EVERY * rng.0.range(0.75, 1.25);
+        play_at_speed(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            "machines/servo",
+            Some(at + Vec3::Y * 1.8),
+            "walker.scan",
+            0.0,
+            0.7,
+            0.06,
+        );
+    }
+}
+
+/// A walker's head sweeps about this often (s) while it stands looking...
+pub const SCAN_EVERY: f32 = 2.2;
+/// ...standing being slower than this (m/s).
+pub const SCAN_STILL: f32 = 0.3;
+
+/// Whether a walker at `speed` m/s, `hunting` you or not, sweeps its head.
+pub fn scans(hunting: bool, speed: f32) -> bool {
+    hunting && speed < SCAN_STILL
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -570,6 +641,10 @@ mod tests {
     /// that no sound needs: each with why. Everything else written as a
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
+        (
+            "RobotStruck",
+            "Robot bodies' read of a hit (shrug, wound, telling); Audio's sounds for it are coming, and the hit itself is heard (Impact) until then",
+        ),
         (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
@@ -765,6 +840,20 @@ mod tests {
         assert_eq!(filed_level(5).0, 0.0);
         assert!(filed_level(3).1 > filed_level(1).1);
         assert_eq!(filed_level(50), filed_level(5));
+    }
+
+    /// A walker hunting you is never silent: standing to look, it sweeps
+    /// its head (in the mix, heard to 30 m); walking, its feet are heard;
+    /// one not hunting you doesn't sweep.
+    #[test]
+    fn a_hunting_walker_is_never_silent() {
+        assert!(scans(true, 0.0));
+        assert!(!scans(true, 1.2), "walking: its feet are heard instead");
+        assert!(!scans(false, 0.0));
+        let c = crate::audio_mix::MIX
+            .iter()
+            .find(|c| c.name == "walker.scan");
+        assert_eq!(c.map(|c| c.set), Some("machines/servo"));
     }
 
     /// Every way the Zone strikes a machine that's heard is in the mix

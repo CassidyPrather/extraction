@@ -173,18 +173,29 @@ fn trace_raid(
     }
 }
 
-/// A place's name for a line: the nearest named marker within reach ("near
-/// the mill"), or none.
-fn place_near(zone: &Zone, at: [f32; 2]) -> Option<String> {
-    zone.map
-        .markers
+/// How far a memory line looks for a place to name.
+const MEMORY_PLACE_NEAR: f32 = 150.0;
+
+fn place_near(map: &extraction_core::map::MapDef, at: [f32; 2]) -> Option<String> {
+    place_within(map, at, MEMORY_PLACE_NEAR)
+}
+
+/// A place's name for a line: the nearest named place within `reach` ("near
+/// the mill"), never a note's or a terminal's, or none. Every line that
+/// names where something is goes through here.
+pub(crate) fn place_within(
+    map: &extraction_core::map::MapDef,
+    at: [f32; 2],
+    reach: f32,
+) -> Option<String> {
+    map.markers
         .iter()
-        .filter(|m| !m.name.is_empty())
+        .filter(|m| m.kind.names_a_place() && !m.name.is_empty())
         .map(|m| {
             let d = Vec2::from(m.at).distance(Vec2::from(at));
             (m, d)
         })
-        .filter(|(_, d)| *d < 150.0)
+        .filter(|(_, d)| *d < reach)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(m, _)| m.name.clone())
 }
@@ -262,7 +273,7 @@ fn raid_turns(
                 continue;
             };
             *said = true;
-            let place = place_near(&zone, [me.x, me.z]);
+            let place = place_near(&zone.map, [me.x, me.z]);
             raid.say(line(
                 crate::raid::lines::MEMORY_CONTACT,
                 crate::raid::lines::MEMORY_CONTACT_AWAY,
@@ -360,7 +371,7 @@ fn raid_turns(
                 }
             }
             if done.len() == 1 {
-                if let Some(place) = place_near(&zone, at) {
+                if let Some(place) = place_near(&zone.map, at) {
                     remarks.push(line(
                         crate::raid::lines::MEMORY_SHUT,
                         crate::raid::lines::MEMORY_SHUT,
@@ -403,7 +414,7 @@ fn raid_turns(
             line(
                 crate::raid::lines::MEMORY_WATCHER,
                 crate::raid::lines::MEMORY_WATCHER_AWAY,
-                place_near(&zone, at).as_deref(),
+                place_near(&zone.map, at).as_deref(),
                 mind.memory.raids,
             ),
         );
@@ -464,5 +475,38 @@ mod tests {
             "it leans your way: {hits:?}"
         );
         assert!(ratio < PATROL_LEAN * 1.15, "but only so far: {hits:?}");
+    }
+
+    /// A memory line names a place, never a note or a terminal lying
+    /// somewhere: anywhere in every valley, the name it says is a place's.
+    #[test]
+    fn memory_lines_name_places_not_notes() {
+        use extraction_core::map::{MapDef, VALLEYS};
+        for (id, text) in VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            let things: Vec<&str> = map
+                .markers
+                .iter()
+                .filter(|m| m.kind.text().is_some())
+                .map(|m| m.name.as_str())
+                .collect();
+            let mut said = 0;
+            for x in (-300..=300).step_by(10) {
+                for z in (-300..=300).step_by(10) {
+                    if let Some(name) = place_near(&map, [x as f32, z as f32]) {
+                        said += 1;
+                        let place = map
+                            .markers
+                            .iter()
+                            .any(|m| m.kind.names_a_place() && m.name == name);
+                        assert!(
+                            place && !things.contains(&name.as_str()),
+                            "{id}: a line at ({x}, {z}) names {name:?}, which isn't a place"
+                        );
+                    }
+                }
+            }
+            assert!(said > 0, "{id}: no place is ever named");
+        }
     }
 }

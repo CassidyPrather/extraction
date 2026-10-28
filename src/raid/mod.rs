@@ -40,6 +40,8 @@ pub const SURGE_LENGTH: f32 = 120.0;
 pub const SLEEP_WINDOW: f32 = 15.0 * 60.0;
 /// Seconds of warning before it.
 pub const SURGE_WARNING: f32 = 5.0 * 60.0;
+/// The last call before the Surge.
+pub const SURGE_LAST: f32 = 60.0;
 /// Seconds for the truck to drive round to a rendezvous.
 pub const TRUCK_TRANSIT: f32 = 120.0;
 /// Seconds the truck waits at a rendezvous before giving up.
@@ -76,12 +78,47 @@ pub struct Raid {
     pub deaths: u32,
     /// Messages for the HUD / radio chatter: (text, seconds left to show).
     pub log: Vec<(String, f32)>,
+    /// The truck's answer to a call, said once its drive is settled (the
+    /// yard and the bots shorten it after the call): the line with its
+    /// `{t}` still to fill, and whether a frame has passed.
+    pub pending_call: Option<(String, bool)>,
+    /// What was said lately, as [`claim`]s, with seconds left before it
+    /// may be said again.
+    pub said_lately: Vec<(String, f32)>,
+}
+
+/// How long a thing said is held back from being said again.
+pub const REPEAT_HOLD: f32 = 30.0;
+
+/// What a line claims, for telling a repeat: its last sentence when that
+/// says something by itself (four words or more: "Next: the lamp by the
+/// pen."), so two ways into the same news are one claim; else the whole
+/// line ("Copy." alone isn't news, the line around it is).
+pub fn claim(line: &str) -> String {
+    let t = line.trim().trim_end_matches(['"', '\'']).trim();
+    let body = t.trim_end_matches(['.', '!', '?']);
+    let last = body
+        .rfind(['.', '!', '?'])
+        .map_or(body, |i| &body[i + 1..])
+        .trim();
+    let words = last.split_whitespace().count();
+    let key = if words >= 4 { last } else { t };
+    key.to_lowercase()
 }
 
 impl Raid {
+    /// Say a line on the radio and the wrist. The same news twice inside
+    /// [`REPEAT_HOLD`] is said once: the second time adds nothing and
+    /// reads as the game stuttering.
     pub fn say(&mut self, text: impl Into<String>) {
         let t = text.into();
+        let key = claim(&t);
+        if self.said_lately.iter().any(|(k, _)| *k == key) {
+            debug!("raid (said lately): {t}");
+            return;
+        }
         info!("raid: {t}");
+        self.said_lately.push((key, REPEAT_HOLD));
         self.log.push((t, 8.0));
     }
 
@@ -141,6 +178,8 @@ impl Plugin for RaidPlugin {
             cycle: 0,
             extractions: 0,
             deaths: 0,
+            pending_call: None,
+            said_lately: Vec::new(),
             log: Vec::new(),
         })
         .add_message::<RadioCall>()
@@ -282,7 +321,12 @@ fn radio_calls(
                 };
                 let n = raid.clock as u32;
                 let b = lines::way(here, rvs[i].1);
-                raid.say(lines::fill(lines::pick(lines::CALLED, n), name, 0.0, &b));
+                // Said when the drive is known (`tick_raid`): how long is
+                // its own `{t}`.
+                raid.pending_call = Some((
+                    lines::fill(lines::pick(lines::CALLED, n), name, 0.0, &b),
+                    false,
+                ));
                 raid.phase = Phase::TruckCalled {
                     rv: i,
                     eta: TRUCK_TRANSIT,
@@ -290,7 +334,7 @@ fn radio_calls(
             }
             Phase::TruckCalled { eta, .. } => {
                 let n = raid.clock as u32;
-                raid.say(lines::fill(lines::pick(lines::ON_THE_WAY, n), "", eta, ""))
+                raid.say(lines::fill_time(lines::pick(lines::ON_THE_WAY, n), eta))
             }
             Phase::TruckWaiting { rv, .. } => {
                 let (name, at) = rendezvous(&zone).get(rv).cloned().unwrap_or_else(|| {
@@ -332,9 +376,25 @@ pub(crate) fn tick_raid(
         l.1 -= dt;
     }
     raid.log.retain(|l| l.1 > 0.0);
+    for l in &mut raid.said_lately {
+        l.1 -= dt;
+    }
+    raid.said_lately.retain(|l| l.1 > 0.0);
     match raid.phase.clone() {
-        Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. } => return,
+        Phase::AtBase | Phase::Extracting { .. } | Phase::Down { .. } => {
+            raid.pending_call = None;
+            return;
+        }
         Phase::TruckCalled { rv, eta } => {
+            // The call's answer, a frame on: whatever shortens the drive
+            // has, and it says the time the truck will take.
+            if let Some((line, aged)) = raid.pending_call.take() {
+                if aged {
+                    raid.say(lines::fill_time(&line, eta));
+                } else {
+                    raid.pending_call = Some((line, true));
+                }
+            }
             let eta = eta - dt;
             if eta <= 0.0 {
                 let name = rendezvous(&zone)
@@ -342,7 +402,10 @@ pub(crate) fn tick_raid(
                     .map(|r| r.0.clone())
                     .unwrap_or_default();
                 let n = raid.clock as u32;
-                raid.say(lines::fill(lines::pick(lines::ARRIVED, n), &name, 0.0, ""));
+                raid.say(lines::fill_time(
+                    &lines::fill(lines::pick(lines::ARRIVED, n), &name, 0.0, ""),
+                    TRUCK_WAIT,
+                ));
                 raid.phase = Phase::TruckWaiting {
                     rv,
                     left: TRUCK_WAIT,
@@ -367,10 +430,16 @@ pub(crate) fn tick_raid(
     raid.clock += dt;
     let after = raid.surge_in();
     if before > SURGE_WARNING && after <= SURGE_WARNING {
-        raid.say("The sky is going the wrong colour. Five minutes until the Surge.");
+        raid.say(format!(
+            "The sky is going the wrong colour. {} until the Surge.",
+            lines::time_words(SURGE_WARNING)
+        ));
     }
-    if before > 60.0 && after <= 60.0 {
-        raid.say("One minute. Get out, or get under something.");
+    if before > SURGE_LAST && after <= SURGE_LAST {
+        raid.say(format!(
+            "{}. Get out, or get under something.",
+            lines::time_words(SURGE_LAST)
+        ));
     }
     if before > 0.0 && after <= 0.0 {
         raid.say("The Surge is here.");
@@ -635,5 +704,108 @@ mod tests {
             }
         ));
         app.world().get_entity(can).is_err()
+    }
+
+    /// The truck says how long it'll be, and that's how long it is: called
+    /// far from the gate, a drive cut short after the call (as the yard and
+    /// the bots cut it) is what the radio says, not the usual two minutes.
+    #[test]
+    fn the_truck_says_its_real_time() {
+        for (cut, want) in [(None, "Two minutes"), (Some(10.0), "Ten seconds")] {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            if let Some(cut) = cut {
+                app.add_systems(Update, move |mut raid: ResMut<Raid>| {
+                    if let Phase::TruckCalled { eta, .. } = &mut raid.phase {
+                        *eta = eta.min(cut);
+                    }
+                });
+            }
+            app.finish();
+            app.cleanup();
+            app.update();
+            let player = app
+                .world_mut()
+                .query_filtered::<Entity, With<LocalPlayer>>()
+                .iter(app.world())
+                .next()
+                .unwrap();
+            // Out in the valley, far from the gate's short run.
+            let zone = app.world().resource::<Zone>().clone();
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = zone.on_ground(0.0, -150.0);
+            app.update();
+            app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+            app.world_mut().write_message(RadioCall { player });
+            for _ in 0..4 {
+                app.update();
+            }
+            let raid = app.world().resource::<Raid>();
+            let said: Vec<&str> = raid
+                .log
+                .iter()
+                .map(|(l, _)| l.as_str())
+                .filter(|l| l.starts_with("Truck:"))
+                .collect();
+            assert_eq!(said.len(), 1, "{said:?}");
+            assert!(said[0].contains(want), "{cut:?}: {said:?}");
+        }
+    }
+
+    /// The same news twice in a row is said once: two ways into one claim
+    /// ("Good. Next: the lamp." then "Off you go. Next: the lamp.") are
+    /// one line; it can be said again once REPEAT_HOLD has passed; and a
+    /// line that differs only in a word too short to be news ("Copy.") is
+    /// still the same line, so it's held too.
+    #[test]
+    fn the_same_news_is_said_once() {
+        assert_eq!(
+            claim("Driver: \"Good. Next: the lamp by the pen.\""),
+            claim("Driver: \"Off you go. Next: the lamp by the pen.\"")
+        );
+        assert_ne!(
+            claim("Truck: \"Copy. Ten seconds.\""),
+            claim("Truck: \"Ten seconds.\"")
+        );
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let said = |app: &App| {
+            app.world()
+                .resource::<Raid>()
+                .log
+                .iter()
+                .filter(|(l, _)| l.contains("Next: the lamp"))
+                .count()
+        };
+        let before = app.world().resource::<Raid>().log.len();
+        let mut raid = app.world_mut().resource_mut::<Raid>();
+        raid.say("Driver: \"Good. Next: the lamp by the pen.\"");
+        raid.say("Driver: \"Off you go. Next: the lamp by the pen.\"");
+        assert_eq!(said(&app), 1, "said once");
+        assert!(app.world().resource::<Raid>().log.len() > before);
+        // Near the end of the hold, a second of the game runs it out.
+        for l in &mut app.world_mut().resource_mut::<Raid>().said_lately {
+            l.1 = l.1.min(0.5);
+        }
+        for _ in 0..60 {
+            app.update();
+        }
+        let mut raid = app.world_mut().resource_mut::<Raid>();
+        raid.log.clear();
+        raid.say("Driver: \"Off you go. Next: the lamp by the pen.\"");
+        assert_eq!(said(&app), 1, "and again, later");
     }
 }

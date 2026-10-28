@@ -177,6 +177,12 @@ fn gallery(
             .replace("+wet", "")
             .replace("+fog", "");
         let first = first.as_str();
+        // `pm_pistol+dry`: run dry, the slide held back on an empty
+        // magazine (`weapons::stoppages`).
+        let (first, dry) = match first.strip_suffix("+dry") {
+            Some(s) => (s, true),
+            None => (first, false),
+        };
         // `ak74+open`: work the action, to check the moving parts.
         // `mp133+jam`: a double feed, to see it drawn in the port.
         let (first, jam) = match first.strip_suffix("+jam") {
@@ -365,6 +371,18 @@ fn gallery(
                     }
                 }
             }
+            // A gun's safety, close up: the same gun on safe (above) and
+            // off it (below), its trigger guard in front of the eye.
+            s if s.starts_with("safety:") => {
+                let id = &s["safety:".len()..];
+                let d = dist.unwrap_or(0.35);
+                for (up, how) in [(0.06, 0), (-0.06, 3)] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let Some(e) = spawn_static(&mut commands, id, at) {
+                        told.push((e, how));
+                    }
+                }
+            }
             // The tells (`weapons::legibility`): a Mosin as it lies and
             // one cocked (its cocking piece back), the double as it lies
             // and cocked (its indicators up), an AK new and one worn out
@@ -447,6 +465,9 @@ fn gallery(
                     opening.push(gun);
                 } else if let Some(mag) = mag.and_then(|m| spawn_static(&mut commands, &m, at)) {
                     pending_mags.push((gun, mag));
+                    if dry {
+                        told.push((gun, 4));
+                    }
                 }
             }
         }
@@ -460,6 +481,23 @@ fn gallery(
             match how {
                 1 => g.firearm.hammers_cocked.iter_mut().for_each(|h| *h = true),
                 2 => g.firearm.condition = 0.08,
+                3 => {
+                    while g.firearm.fire_mode() == extraction_core::firearm::FireMode::Safe {
+                        g.firearm.cycle_mode();
+                    }
+                }
+                // Run dry once its magazine's in: the last round gone, the
+                // slide back on the empty magazine.
+                4 => {
+                    let f = &mut g.firearm;
+                    let Some(m) = f.magazine.as_mut() else {
+                        return true;
+                    };
+                    m.rounds = 0;
+                    f.chambers.iter_mut().for_each(|c| *c = None);
+                    f.bolt_travel = 1.0;
+                    f.locked_back = true;
+                }
                 _ => {}
             }
             false
