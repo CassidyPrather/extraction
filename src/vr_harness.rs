@@ -3574,9 +3574,10 @@ mod first_aid {
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
         let centre = wrist + Vec3::Z * 0.12;
-        let steps = (turns * 24.0) as usize;
+        // A turn in two thirds of a second, as quick as a hand goes round.
+        let steps = (turns * 60.0) as usize;
         for i in 0..=steps.max(30) {
-            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 24.0);
+            let a = std::f32::consts::TAU * (i.min(steps) as f32 / 60.0);
             vr.move_hand(
                 Side::Right,
                 centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,

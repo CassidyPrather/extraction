@@ -181,9 +181,13 @@ fn wrap_dressings(
             };
             let r = &mut w.rounds[i];
             if !near {
-                // Drifted off: what's wound stays a while, then unwinds.
-                r.last = None;
+                // Drifted off (a circle by hand dips out under the arm):
+                // what's wound stays a while, and the way back in counts
+                // the arc it went round outside; then it unwinds.
                 r.away += dt;
+                if r.away > KEEP {
+                    r.last = None;
+                }
                 if r.away > KEEP {
                     r.net -= r.net.signum() * (dt * UNWIND).min(r.net.abs());
                 }
