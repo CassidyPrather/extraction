@@ -1117,9 +1117,24 @@ checks that each one:
 | Squib | a weak pop, no crack | no kick | no flash; the bullet seen down the bore | rod the bore, then work it | fire on it (the barrel bulges) |
 | Stuck bolt | a dull clack | a hard stop at the handle | the handle down and unmoved | slap it up | lift gently (it grinds) |
 | Empty | a click, or the catch | a click, or the stop | held open, or the follower up | reload | work the action (nothing feeds) |
-| On safe | a creak | a soft dead stop | the selector on safe | selector off safe | pull harder |
+| Slide locked back, a fresh magazine in | the open action's dry rattle, every press | a hollow give and stop, every press | the slide back, the barrel bare | B (flat: V) lets the slide go | pull again (it stays open) |
+| On safe | a creak | a soft dead stop, every press | the lever, crossbolt or bolt on safe | selector off safe (on its release) | pull harder |
 | Nagant gate open | a creak | a soft dead stop | the gate open | shut the gate | pull harder |
 | Crossbow string short | the string's slap | a slam | the string at rest, uncocked | draw it right onto the latch | draw short again |
+
+**No press goes unanswered** (the first playtest's first death: a pistol
+run dry and reloaded, the slide still back, and nothing at all from the
+trigger). Every trigger press that doesn't fire says why, every press,
+held or not: `TriggerBlocked` (on safe, a Nagant's gate open), `ActionOpen`
+(the slide or bolt open), `DryFire` (the hammer falling on an empty
+chamber), `TriggerDead` (the hammer already down, or a jammed action).
+The first few times a slide locks back on a hold-open gun, the wrist adds
+"Slide's back. Press B to let it go." Every gun with a safety shows it
+moving: a lever, the MP-133's crossbolt (a red band shows off safe), the
+crossbow's door bolt. The safety feels different going on and coming off.
+The stick-click selector acts on release, and not at all during a
+two-stick playtest mark. `every_pull_on_a_stopped_gun_says_why` and the
+headset `every_hold_open_gun_run_dry_tells_you_the_slide_is_back` hold it.
 
 How often each stoppage happens depends on the gun's condition and dirt:
 `malfunction_chance`, the dud chance, `sticky_chance` and slam fire. So
