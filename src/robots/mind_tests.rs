@@ -4999,3 +4999,226 @@ fn a_walker_goes_after_a_runner_getting_away() {
     let d = flat(app.world().get::<Transform>(w).unwrap().translation - me);
     assert!(chased, "it went after you ({d:.1} m off at the end)");
 }
+
+/// What [`super::search::ComingBack`] said, and when (frame).
+/// And everything the wrist was told.
+#[derive(Resource, Default)]
+struct Back(Vec<(super::search::ComingBack, u32)>, u32, Vec<String>);
+
+fn watch_back(
+    mut r: MessageReader<super::search::ComingBack>,
+    raid: Res<crate::raid::Raid>,
+    mut b: ResMut<Back>,
+) {
+    b.1 += 1;
+    let f = b.1;
+    b.0.extend(r.read().map(|m| (*m, f)));
+    for (t, _) in &raid.log {
+        if !b.2.contains(t) {
+            b.2.push(t.clone());
+        }
+    }
+}
+
+fn said_coming_back(app: &App) -> bool {
+    let wrist = &app.world().resource::<Back>().2;
+    crate::raid::lines::COMING_BACK
+        .iter()
+        .any(|l| wrist.iter().any(|s| s == l))
+}
+
+/// A house with a long walkable run out from one face (to `from`, 65 m
+/// out; `post` by the face), and room to hide behind it (`hide`): the
+/// house is between the run and you.
+fn house_with_a_run(app: &App, zone: &Zone) -> (Vec3, Vec3, Vec3) {
+    let shells = app
+        .world()
+        .resource::<super::doors::Entrances>()
+        .shells
+        .clone();
+    let nav = app.world().resource::<super::walker::Nav>().0.clone();
+    shells
+        .iter()
+        .find_map(|s| {
+            let w = |x: f32| {
+                let p = s.xf.transform_point(Vec3::new(x, 0.0, 0.0));
+                zone.on_ground(p.x, p.z)
+            };
+            let hx = s.half.x;
+            if s.half.y < 3.0 || hx > 8.0 {
+                return None;
+            }
+            let (post, from, hide) = (w(hx + 3.0), w(hx + 68.0), w(-hx - 2.0));
+            let run = (0..=22).map(|i| w(hx + 3.0 + i as f32 * 3.0));
+            let ok = run.clone().all(|p| nav.walkable([p.x, p.z]))
+                && nav.walkable([hide.x, hide.z])
+                && run.clone().all(|p| (p.y - post.y).abs() < 4.0)
+                && (hide.y - post.y).abs() < 2.0;
+            ok.then_some((post, from, hide))
+        })
+        .expect("a house with a long run out from it")
+}
+
+/// An unarmed walker at `at`, its post `post`, that was fighting `player`
+/// and has lost them (out of sight): `last` is where it last saw them.
+fn walker_that_lost(
+    app: &mut App,
+    zone: &Zone,
+    player: Entity,
+    at: Vec3,
+    post: Vec3,
+    last: Vec3,
+) -> Entity {
+    let mut queue = CommandQueue::default();
+    let walker = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::walker::spawn_walker_with(
+            &mut c,
+            zone,
+            at,
+            Job {
+                kind: JobKind::Watch,
+                site: post,
+                duration: 999.0,
+                exit: post,
+            },
+            false,
+            130.0,
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..90 {
+        app.update();
+    }
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(walker).unwrap();
+        a.target = Some(player);
+        a.can_see_target = false;
+        a.last_known = Some(last);
+        a.uncertainty = 1.0;
+        a.suspicion = 0.9;
+    }
+    *app.world_mut().get_mut::<Brain>(walker).unwrap() = Brain::Engage;
+    // A second of the fight (it had you a moment ago)...
+    for _ in 0..90 {
+        app.world_mut().get_mut::<Awareness>(walker).unwrap().unseen = 0.0;
+        app.update();
+    }
+    // ...then it's lost you.
+    walker
+}
+
+/// Playtest, 28 October, raid 1 (t = 1015–1167): a walker shooting at you
+/// loses you behind a house and comes to look. Losing you within a step
+/// of where it last saw you, it goes from fighting to searching inside one
+/// tick; it still went to look, and says so, and the driver's "keep
+/// still" line is said: the first time its situation happens.
+#[test]
+fn a_walker_that_lost_you_coming_to_look_is_told() {
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Back>().add_systems(Update, watch_back);
+    #[derive(Resource, Default)]
+    struct Looked(Vec<Entity>);
+    app.init_resource::<Looked>().add_systems(
+        Update,
+        |mut r: MessageReader<super::search::Investigating>, mut l: ResMut<Looked>| {
+            l.0.extend(r.read().map(|m| m.robot));
+        },
+    );
+    let (post, from, hide) = house_with_a_run(&app, &zone);
+    put(&mut app, player, hide);
+    // 10 m out from the house; it last saw you by the house. It pushes
+    // there still fighting, and searches from there (no "going to look"
+    // between: `walker_brain`'s out-of-sight push).
+    let out = post + (from - post).normalize() * 10.0;
+    let out = zone.on_ground(out.x, out.z);
+    let walker = walker_that_lost(&mut app, &zone, player, out, post, post);
+    // Still, behind the house, as the driver said.
+    for _ in 0..90 * 20 {
+        put(&mut app, player, hide);
+        app.update();
+    }
+    let brain = app.world().get::<Brain>(walker).unwrap().clone();
+    assert!(
+        app.world().resource::<Looked>().0.contains(&walker),
+        "it went to look, and said so ({brain:?})"
+    );
+    assert!(
+        app.world()
+            .resource::<Back>()
+            .0
+            .iter()
+            .any(|(b, _)| b.robot == walker && b.about == player),
+        "coming back to look is told ({brain:?})"
+    );
+    let firsts = app.world().resource::<crate::onboarding::firsts::Firsts>();
+    assert!(
+        firsts.met(crate::onboarding::firsts::First::ComingToLook),
+        "the driver's line: {:?}",
+        firsts.0
+    );
+}
+
+/// The same raid, the walker's return: it gave up on you and walked back
+/// to its post, which was past where you hid (the house between). It's
+/// heard and told coming back well before it's there: at least as long as
+/// the valley warned of it the first time (16.8 s), and the driver says
+/// to keep still.
+#[test]
+fn a_walker_walking_back_past_you_is_told_well_before() {
+    /// The first contact's warning that raid (s).
+    const FIRST_CONTACT_LEAD: f32 = 16.8;
+    let (mut app, player, zone) = app(None);
+    app.init_resource::<Back>().add_systems(Update, watch_back);
+    let (post, from, hide) = house_with_a_run(&app, &zone);
+    put(&mut app, player, hide);
+    // Out at the far end of the run, it fought you and lost you...
+    let last = from + (post - from).normalize() * 8.0;
+    let last = zone.on_ground(last.x, last.z);
+    let walker = walker_that_lost(&mut app, &zone, player, from, post, last);
+    // ...gave up, and goes back to its post by the house.
+    {
+        let mut a = app.world_mut().get_mut::<Awareness>(walker).unwrap();
+        a.suspicion = 0.0;
+        a.last_known = None;
+    }
+    *app.world_mut().get_mut::<Brain>(walker).unwrap() = Brain::Transit { to: post };
+    let start = app.world().resource::<Back>().1;
+    let mut there = None;
+    let mut seen = None;
+    for f in 0..90 * 90 {
+        put(&mut app, player, hide);
+        app.update();
+        let a = app.world().get::<Awareness>(walker).unwrap();
+        if a.can_see_target && seen.is_none() {
+            seen = Some(f);
+        }
+        let p = app.world().get::<Transform>(walker).unwrap().translation;
+        if flat(p - post) < 3.0 {
+            there = Some(f);
+            break;
+        }
+    }
+    let there = there.expect("it walked back to its post");
+    let arrived = there.min(seen.unwrap_or(there)) as f32 / 90.0;
+    let told = app
+        .world()
+        .resource::<Back>()
+        .0
+        .iter()
+        .find(|(b, _)| b.robot == walker)
+        .map(|(_, f)| (f - start) as f32 / 90.0);
+    let told = told.expect("told it's coming back");
+    eprintln!(
+        "LEAD told {told:.1} s, there or seeing you {arrived:.1} s: {:.1} s ahead",
+        arrived - told
+    );
+    assert!(
+        arrived - told >= FIRST_CONTACT_LEAD,
+        "told {:.1} s ahead (told at {told:.1} s, there or seeing you at {arrived:.1} s)",
+        arrived - told
+    );
+    let firsts = app.world().resource::<crate::onboarding::firsts::Firsts>();
+    assert!(firsts.met(crate::onboarding::firsts::First::ComingToLook));
+    assert!(said_coming_back(&app), "the wrist says it's coming back");
+}

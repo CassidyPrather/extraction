@@ -17,6 +17,7 @@ pub mod drive;
 pub mod ledges;
 #[cfg(test)]
 mod physics;
+pub mod quiet;
 #[cfg(test)]
 mod save_fuzz;
 
