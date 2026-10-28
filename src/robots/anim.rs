@@ -985,7 +985,7 @@ impl Plugin for AnimPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                knock_walkers.after(crate::weapons::ballistics::BallisticsSystems),
+                knock_walkers.after(super::damage_parts),
                 haul_lines.after(super::perceive),
                 kick_loose,
                 print_snow,
@@ -1180,25 +1180,35 @@ pub(crate) fn aim_turrets(
     }
 }
 
-/// Hits rock a walker's body.
+/// How hard a hit rocks a walker, by what it did (`damage::strike`):
+/// armour shrugging a round hardly moves it; a weak spot or a part
+/// breaking, it flinches.
+pub fn knock_share(strike: super::damage::Strike) -> f32 {
+    use super::damage::Strike;
+    match strike {
+        Strike::Shrug => 0.15,
+        Strike::Wound => 1.0,
+        Strike::Telling => 1.7,
+    }
+}
+
+/// Hits rock a walker's body, as hard as they mattered.
 pub(crate) fn knock_walkers(
-    mut hits: MessageReader<crate::weapons::ballistics::Hit>,
-    parts: Query<&RobotPart>,
+    mut struck: MessageReader<super::damage::RobotStruck>,
     mut walkers: Query<(&mut Gait, &GlobalTransform)>,
 ) {
-    for hit in hits.read() {
-        let Ok(part) = parts.get(hit.entity) else {
+    for s in struck.read() {
+        let Ok((mut g, gt)) = walkers.get_mut(s.robot) else {
             continue;
         };
-        let Ok((mut g, gt)) = walkers.get_mut(part.robot) else {
-            continue;
-        };
-        let dir = hit.velocity.normalize_or_zero();
+        let k = knock_share(s.strike);
         g.knock(
-            hit.point - gt.translation(),
-            dir * (hit.damage * 0.02).min(0.6),
+            s.at - gt.translation(),
+            s.dir * (s.dealt * 0.02 * k).min(0.6 * k),
         );
-        g.daze(hit.damage, dir);
+        if s.strike != super::damage::Strike::Shrug {
+            g.daze(s.dealt * k.min(1.0), s.dir);
+        }
     }
 }
 
@@ -1417,6 +1427,117 @@ mod tests {
         );
     }
 
+    /// The playtest's fight, a pistol round (34) at a walker: off its
+    /// front plate it shrugs and hardly rocks; in the core it's a wound;
+    /// in the eye or a knee it tells, and the walker flinches harder than
+    /// at anything the plate took.
+    #[test]
+    fn a_hit_that_matters_reads_from_one_that_doesnt() {
+        use super::super::PartRole;
+        use super::super::damage::{RobotStruck, Strike};
+        let fresh = || {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let at = zone.on_ground(40.0, 230.0);
+            let walker = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = super::super::walker::spawn_walker(
+                    &mut c,
+                    &zone,
+                    at,
+                    super::super::Job {
+                        kind: super::super::JobKind::Survey,
+                        site: at,
+                        duration: 999.0,
+                        exit: at,
+                    },
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..90 {
+                app.update();
+            }
+            (app, walker)
+        };
+        // One round into `role`; what it read as, and the most it rocked.
+        let shoot = |role: PartRole| {
+            let (mut app, walker) = fresh();
+            let part = app
+                .world_mut()
+                .query::<(Entity, &RobotPart)>()
+                .iter(app.world())
+                .find(|(_, p)| p.robot == walker && p.role == role)
+                .map(|(e, _)| e)
+                .unwrap();
+            // (The same spot on the body each time: the rock is the hit's
+            // weight, not where it lands.)
+            let at = app
+                .world()
+                .get::<GlobalTransform>(walker)
+                .unwrap()
+                .translation()
+                + Vec3::new(0.0, 0.25, -0.35);
+            let mut cursor = app
+                .world()
+                .resource::<Messages<RobotStruck>>()
+                .get_cursor_current();
+            app.world_mut()
+                .write_message(crate::weapons::ballistics::Hit {
+                    entity: part,
+                    point: at,
+                    normal: Vec3::Z,
+                    velocity: Vec3::new(0.3, 0.0, -1.0).normalize() * 315.0,
+                    damage: 34.0,
+                    shooter: None,
+                    mass_g: 6.1,
+                    load: Default::default(),
+                    blow: None,
+                });
+            let mut rocked = 0.0f32;
+            let mut read = None;
+            for _ in 0..6 {
+                app.update();
+                let msgs = app.world().resource::<Messages<RobotStruck>>();
+                for m in cursor.read(msgs) {
+                    read = Some(m.strike);
+                }
+                let g = app.world().get::<Gait>(walker).unwrap();
+                rocked = rocked.max(g.wobble_vel.length());
+            }
+            (read.expect("it read as something"), rocked)
+        };
+        let (plate, plate_rock) = shoot(PartRole::Armour(0));
+        let (core, core_rock) = shoot(PartRole::Core);
+        let (eye, eye_rock) = shoot(PartRole::Sensor);
+        let (knee, knee_rock) = shoot(PartRole::Leg(0));
+        assert_eq!(plate, Strike::Shrug);
+        assert_eq!(core, Strike::Wound);
+        assert_eq!(eye, Strike::Telling);
+        assert_eq!(knee, Strike::Telling);
+        assert!(
+            plate_rock * 3.0 < core_rock,
+            "the plate hardly rocks it ({plate_rock:.3} against {core_rock:.3})"
+        );
+        assert!(
+            eye_rock.max(knee_rock) > core_rock,
+            "a weak spot rocks it more than a wound ({eye_rock:.3}, {knee_rock:.3} against {core_rock:.3})"
+        );
+    }
+
     /// A heavy hit knocks a walker off its feet, over the way it was
     /// pushed; it lies a moment and gets up on its legs (not snapped back
     /// up). A light hit only rocks it.
@@ -1457,7 +1578,8 @@ mod tests {
         for _ in 0..90 {
             app.update();
         }
-        // A core that can take it (this is about the knock, not the kill).
+        // A core that can take it (this is about the knock, not the kill;
+        // its make's health, so a hit reads as the wound it is).
         let core = app
             .world_mut()
             .query::<(Entity, &mut RobotPart)>()
@@ -1465,7 +1587,6 @@ mod tests {
             .find(|(_, p)| p.robot == walker && p.role == super::super::PartRole::Core)
             .map(|(e, mut p)| {
                 p.hp = 1.0e6;
-                p.max_hp = 1.0e6;
                 e
             })
             .unwrap();
