@@ -65,4 +65,37 @@ def run(sets, out):
         flags += bool(bad)
         lines.append(f"    {cue:18s} " + " ".join(f"{r:>26s}" for r in row)
                      + ("  masked (" + "; ".join(bad) + ")" if bad else ""))
-    return flags, lines
+    f, more = strikes(sets, mix)
+    return flags + f, lines + more
+
+
+# A robot struck (audio_machines::struck_layers): each kind's layers.
+STRIKES = {
+    "shrugged off": ["hit.shrug"],
+    "a wound": ["hit.wound", "hit.wound_thud"],
+    "telling": ["hit.telling", "hit.telling_fizz"],
+}
+STRIKE_AT = 30.0   # m: told apart this far off without looking...
+STRIKE_APART = 10.0  # ...by at least this much louder (LU), telling over shrug
+
+
+def strikes(sets, mix):
+    """How loud each kind of strike on a robot is heard at STRIKE_AT m
+    (its layers together), and whether telling stands clear of a shrug."""
+    import math
+    loud = {}
+    for kind, cues in STRIKES.items():
+        p = 0.0
+        for n in cues:
+            c = next((c for c in mix if c["name"] == n), None)
+            if c is None or c["set"] not in sets:
+                return 0, [f"  Strikes on a robot: {n} not in the mix or the bank"]
+            p += 10 ** (am.heard(dict(c, dist=STRIKE_AT), sets) / 10)
+        loud[kind] = 10 * math.log10(p)
+    apart = loud["telling"] - loud["shrugged off"]
+    bad = apart < STRIKE_APART or not (loud["shrugged off"] < loud["a wound"] < loud["telling"])
+    line = (f"  A robot struck, heard at {STRIKE_AT:.0f} m: "
+            + ", ".join(f"{k} {v:.1f}" for k, v in loud.items())
+            + f" LUFS; telling over a shrug by {apart:+.1f} LU (wants {STRIKE_APART:+.0f})"
+            + (" (!)" if bad else ""))
+    return int(bad), [line]
