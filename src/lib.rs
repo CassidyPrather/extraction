@@ -356,11 +356,11 @@ pub fn task_pools() -> bevy::app::TaskPoolPlugin {
 
 /// Where this session's log goes: `<data dir>/logs/`, one file a session,
 /// the last ten kept (send them with a bug report).
-fn log_dir() -> std::path::PathBuf {
+pub(crate) fn log_dir() -> std::path::PathBuf {
     persist::data_dir().join("logs")
 }
 
-fn session_stamp() -> u64 {
+pub(crate) fn session_stamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
