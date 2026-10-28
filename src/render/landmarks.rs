@@ -88,6 +88,40 @@ pub fn top_of(id: &str) -> Option<Vec3> {
         .max_by(|a, b| a.y.total_cmp(&b.y))
 }
 
+/// How far a landmark's lamp stands up off its top, on a pole: half the
+/// top's width times 0.75, so a wide flat top (a chimney's mouth, a
+/// tower's roof) doesn't hide it from below: it shows looking up at
+/// anything under 53 degrees (from 50 m off a 30 m chimney is 31). A
+/// pitched roof's lamp sits on the ridge; no pole is over `POLE_MAX`.
+pub fn lamp_lift(id: &str) -> f32 {
+    let Some(geo) = prefab(id) else {
+        return 0.0;
+    };
+    let top = |p: &&crate::world::buildings::Piece| {
+        let up = match p.shape {
+            Shape::Box(s) => s.y * 0.5,
+            Shape::Prism(s) => s.y,
+            Shape::Cylinder(_, h) => h * 0.5,
+        };
+        (p.at.translation + p.at.rotation * Vec3::Y * up).y
+    };
+    geo.pieces
+        .iter()
+        .max_by(|a, b| top(a).total_cmp(&top(b)))
+        .map_or(0.0, |p| match p.shape {
+            Shape::Box(s) => 0.75 * 0.5 * s.x.max(s.z),
+            Shape::Cylinder(r, _) => 0.75 * r,
+            Shape::Prism(_) => 0.0,
+        })
+        .min(POLE_MAX)
+}
+
+/// The tallest a lamp's pole gets (m).
+const POLE_MAX: f32 = 1.5;
+
+/// The lamp's pole (m).
+const POLE_R: f32 = 0.05;
+
 /// The bulb's light as it reaches the tonemapper: red on screen, not white
 /// (`render::grade::ToTheEye`).
 const BULB: LinearRgba = LinearRgba::rgb(0.9, 0.045, 0.014);
@@ -100,6 +134,7 @@ fn light_landmarks(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    mut pole_mat: Local<Option<Handle<StandardMaterial>>>,
     mut made: Local<
         Option<(
             Handle<Mesh>,
@@ -176,7 +211,27 @@ fn light_landmarks(
             material: lamp.clone(),
             emissive: BULB,
         });
-        let at = top + Vec3::Y * (LAMP_R + 0.05);
+        let lift = lamp_lift(&b.prefab);
+        let at = top + Vec3::Y * (lift + LAMP_R + 0.05);
+        if lift > 0.05 {
+            let mat = pole_mat
+                .get_or_insert_with(|| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.08, 0.08, 0.08),
+                        perceptual_roughness: 0.7,
+                        metallic: 0.6,
+                        ..default()
+                    })
+                })
+                .clone();
+            let pole = meshes.add(Cylinder::new(POLE_R, lift).mesh().resolution(6));
+            commands.entity(e).with_child((
+                Name::new("Landmark lamp pole"),
+                Mesh3d(pole),
+                MeshMaterial3d(mat),
+                Transform::from_translation(top + Vec3::Y * lift * 0.5),
+            ));
+        }
         commands.entity(e).with_children(|c| {
             c.spawn((
                 Name::new("Landmark lamp"),
@@ -302,6 +357,34 @@ mod tests {
             };
             assert_eq!(v, want, "paused {paused}: at {dark} s");
         }
+    }
+
+    /// A chimney's lamp stands clear of its mouth: seen from 50 m off and
+    /// a whole chimney below (the lamp gauge's nearest view), the line to
+    /// the bulb's top clears the rim.
+    #[test]
+    fn a_chimney_lamp_shows_over_its_rim_from_below() {
+        let top = top_of("chimney").expect("a chimney has a top");
+        let lift = lamp_lift("chimney");
+        assert!(lift > 0.5, "{lift}");
+        let geo = prefab("chimney").unwrap();
+        let r = geo
+            .pieces
+            .iter()
+            .filter_map(|p| match p.shape {
+                Shape::Cylinder(r, _) => Some(r),
+                _ => None,
+            })
+            .fold(0.0f32, f32::max);
+        // Looking up from 50 m off at the chimney's foot: over the rim
+        // (r out from the axis) the line has risen r * tan by the axis.
+        let tan = top.y / 50.0;
+        assert!(
+            lift + 2.0 * LAMP_R > r * tan,
+            "lift {lift}, rim {r}, tan {tan}"
+        );
+        // No pole past POLE_MAX, whatever the top.
+        assert!(lamp_lift("house_plank") <= POLE_MAX);
     }
 
     /// Every landmark the valleys place has a top to carry a lamp, near the

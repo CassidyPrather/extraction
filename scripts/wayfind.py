@@ -17,7 +17,7 @@ landmark's lamp from 50 m, 150 m and 300 m must be measurably brighter than
 what's round it: its brightest pixel (within LAMP_NEAR of where it lands)
 at least LAMP_LIFT times and LAMP_STEP over the brighter of the same
 spot without the lamp and the median round it. The exit status is the
-number of lamp distances where no bearing (up to three) sees it pass (a
+number of lamp distances where no bearing (up to six) sees it pass (a
 view fails dim, or a coloured lamp's colour lost to white: LAMP_HUE); one with another light in line (there without
 the lamp: LAMP_BLOWN) says nothing either way and isn't counted.
 A faint lamp far off may pass on its colour instead of LAMP_STEP: its own
@@ -193,7 +193,7 @@ def main(argv):
     d = argv[0]
     views = json.load(open(os.path.join(d, "wayfind.json")))
     if lamps:
-        # Each lamp from each distance, on up to three bearings: it passes
+        # Each lamp from each distance, on up to six bearings: it passes
         # that distance if any bearing sees it, bright and its colour.
         groups = {}
         for v in views:

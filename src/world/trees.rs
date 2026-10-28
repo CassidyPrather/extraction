@@ -681,8 +681,41 @@ fn chunk_of(p: Vec3) -> (i32, i32) {
 
 /// Trees by chunk, for streaming near detail.
 #[derive(Resource, Default)]
-struct ForestGrid {
+pub struct ForestGrid {
     cells: std::collections::HashMap<(i32, i32), Vec<(Entity, Tree, Vec3)>>,
+}
+
+/// A crown as a sight line meets it, roughly (m): this far round the trunk,
+/// from this high over its foot to that. Crowns have no colliders, so a
+/// raycast sees through a forest; this doesn't.
+const CROWN_R: f32 = 2.2;
+const CROWN_FROM: f32 = 2.5;
+const CROWN_TO: f32 = 16.0;
+
+impl ForestGrid {
+    /// How many tree crowns the line from `a` to `b` runs through
+    /// (sampled every metre; the last `spare` metres before `b` don't
+    /// count: what's there is what you're looking at).
+    pub fn crowns_on(&self, a: Vec3, b: Vec3, spare: f32) -> usize {
+        let len = a.distance(b);
+        let steps = (len - spare).max(0.0) as i32;
+        let mut hit: Vec<Entity> = Vec::new();
+        for k in 1..steps {
+            let p = a.lerp(b, k as f32 / len.max(1e-3));
+            let Some(cell) = self.cells.get(&chunk_of(p)) else {
+                continue;
+            };
+            for (e, _, t) in cell {
+                if t.xz().distance(p.xz()) < CROWN_R
+                    && (CROWN_FROM..CROWN_TO).contains(&(p.y - t.y))
+                    && !hit.contains(e)
+                {
+                    hit.push(*e);
+                }
+            }
+        }
+        hit.len()
+    }
 }
 
 #[derive(Resource)]

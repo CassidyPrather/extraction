@@ -351,12 +351,33 @@ pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
 /// day outside. The night is under it; the torch is for that.
 pub const LOOT_SEEN_FLOOR: f32 = 1.0 / 8.0;
 
+/// The most a lamp's light may bring the tonemapper and keep its colour:
+/// AgX runs a colour to white past about 1 in its brightest channel, and
+/// sooner the brighter it is to the eye (a green, nearly all luminance,
+/// at a third of where a red goes). `halo.wgsl` holds the same two.
+pub const LAMP_CHANNEL_CAP: f32 = 1.0;
+pub const LAMP_LUMA_CAP: f32 = 0.3;
+
+/// `c` scaled down (hue kept) until it's under both caps: any colour of
+/// lamp, at any strength, reaches the tonemapper still its colour.
+pub fn hue_safe(c: LinearRgba) -> LinearRgba {
+    let m = c.red.max(c.green).max(c.blue);
+    let y = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+    if m <= 0.0 {
+        return c;
+    }
+    let k = (LAMP_CHANNEL_CAP / m)
+        .min(LAMP_LUMA_CAP / y.max(1e-6))
+        .min(1.0);
+    LinearRgba::rgb(c.red * k, c.green * k, c.blue * k)
+}
+
 /// A lamp's bulb as it should reach the tonemapper: its material's
-/// emissive is set each frame to `emissive` over the grade's gain (the
-/// eyes' adaptation, up to three stops at night, multiplies an emissive
-/// like everything else), so a red or green bulb stays its colour on
-/// screen; past about 1 in a channel AgX runs it to white. Put it on any
-/// entity; several may share a material.
+/// emissive is set each frame to `emissive`, made `hue_safe`, over the
+/// grade's gain (the eyes' adaptation, up to three stops at night,
+/// multiplies an emissive like everything else), so a red or green bulb
+/// stays its colour on screen. Give it the lamp's colour at any strength.
+/// Put it on any entity; several may share a material.
 #[derive(Component, Clone)]
 pub struct ToTheEye {
     pub material: Handle<StandardMaterial>,
@@ -384,7 +405,7 @@ pub fn emissives_to_the_eye(
             continue;
         }
         done.push(id);
-        let want = b.emissive * gain;
+        let want = hue_safe(b.emissive) * gain;
         if materials.get(id).is_some_and(|m| m.emissive != want) {
             if let Some(mut m) = materials.get_mut(id) {
                 m.emissive = want;
@@ -513,6 +534,26 @@ mod tests {
             let night = indoor_seen(&Conditions::compose_with_moon(*kind, Hour::Night, 1, 0.5));
             assert!(night < LOOT_SEEN_FLOOR, "{kind:?} night: {night:.3}");
         }
+    }
+
+    #[test]
+    fn any_lamp_colour_is_kept_under_both_caps() {
+        let y = |c: LinearRgba| 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+        for c in [
+            LinearRgba::rgb(120.0, 6.0, 2.0),
+            LinearRgba::rgb(4.0, 110.0, 20.0),
+            LinearRgba::rgb(0.1, 1.7, 0.35),
+            LinearRgba::rgb(3.0, 3.0, 2.8),
+        ] {
+            let s = hue_safe(c);
+            assert!(s.red.max(s.green).max(s.blue) <= LAMP_CHANNEL_CAP + 1e-5);
+            assert!(y(s) <= LAMP_LUMA_CAP + 1e-5);
+            // The same hue.
+            assert!((s.green / s.red - c.green / c.red).abs() < 1e-3 * c.green / c.red);
+        }
+        // A dim one is left alone.
+        let dim = LinearRgba::rgb(0.2, 0.01, 0.003);
+        assert_eq!(hue_safe(dim), dim);
     }
 
     #[test]
