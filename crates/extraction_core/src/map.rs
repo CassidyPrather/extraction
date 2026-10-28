@@ -361,6 +361,21 @@ fn sentry_arc() -> f32 {
 }
 
 impl MarkerKind {
+    /// Whether this marker's name is a place's, one a line can say "by the
+    /// ..." about: a farm, a depot, the Gate. A note's or terminal's name
+    /// ("Gate log", "Credit book") is a thing lying somewhere, not a place.
+    pub fn names_a_place(&self) -> bool {
+        matches!(
+            self,
+            MarkerKind::Insertion
+                | MarkerKind::Rendezvous
+                | MarkerKind::RobotGate
+                | MarkerKind::Poi
+                | MarkerKind::ArtifactField
+                | MarkerKind::Offering
+        )
+    }
+
     /// The words a note, sign or terminal carries (all of a terminal's
     /// pages), for checks and exports.
     pub fn text(&self) -> Option<String> {
