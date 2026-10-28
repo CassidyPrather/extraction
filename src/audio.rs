@@ -1156,6 +1156,9 @@ pub fn fault_layers(
         // The trigger back slack on a hammer already down: the faint tick
         // of the disconnector, nothing falling.
         FireEvent::TriggerDead => &[("guns/dry_fire", "gun.trigger_dead", 1.6, Some(10000.0))],
+        // The trigger back on an open action (a slide locked back): the
+        // slide's hollow rattle on its catch, nothing falling.
+        FireEvent::ActionOpen => &[("guns/bolt_open", "gun.action_open", 1.4, Some(3000.0))],
         FireEvent::Squib { .. } => &[("guns/rifle_shot", "gun.squib", 1.25, Some(450.0))],
         FireEvent::Bulged { .. } => &[
             ("guns/rifle_shot", "gun.bulged", 0.85, Some(1400.0)),
@@ -1339,6 +1342,9 @@ fn handling_speed_of(event: &FireEvent) -> f64 {
         FireEvent::BoltLocked => 1.5,
         FireEvent::MagazineHalfSeated => 0.7,
         FireEvent::MagazineDropped => 0.85,
+        // The safety thumbed on low and firm, off high and light.
+        FireEvent::ModeChanged(extraction_core::firearm::FireMode::Safe) => 0.85,
+        FireEvent::ModeChanged(_) => 1.15,
         _ => 1.0,
     }
 }

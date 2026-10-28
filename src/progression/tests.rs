@@ -304,6 +304,47 @@ fn wandering_off_the_job_is_told_once_and_a_fall_restates_it() {
     );
 }
 
+/// The designer's second raid (playtest 28 October) left with nothing; the
+/// first, without the map. Off the truck's steps without them, the driver
+/// says what's missing and where, once; you can still go.
+#[test]
+fn stepping_off_the_truck_without_kit_is_told_once() {
+    let mut app = crate::raid::requests::tests::app();
+    let said = |app: &App| {
+        app.world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .filter(|(l, _)| l.contains("on you."))
+            .map(|(l, _)| l.clone())
+            .collect::<Vec<_>>()
+    };
+    let truck = app
+        .world_mut()
+        .query_filtered::<&GlobalTransform, With<Truck>>()
+        .iter(app.world())
+        .next()
+        .unwrap()
+        .translation();
+    // Off the steps with the kit all in the crate.
+    for id in ["pm_pistol", "radio", "map_case"] {
+        stash(&mut app, id, 1);
+    }
+    go(&mut app, [truck.x, truck.z + 6.0]);
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+    let lines = said(&app);
+    assert_eq!(lines.len(), 1, "{:?}", app.world().resource::<Raid>().log);
+    assert!(
+        lines[0].contains("No gun, radio or map on you. In the crate."),
+        "{lines:?}"
+    );
+    // Once: about on the gravel, nothing more; and you can still go.
+    go(&mut app, [truck.x + 2.0, truck.z + 8.0]);
+    assert_eq!(said(&app).len(), 1);
+    go(&mut app, [truck.x, truck.z + 20.0]);
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::Out);
+}
+
 #[test]
 fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
     let mut app = crate::raid::requests::tests::app();

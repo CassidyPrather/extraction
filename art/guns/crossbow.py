@@ -21,7 +21,8 @@ string's served middle and its leather cradle, sliding back with the
 draw; origin where it crosses the rail at rest), `string_rest` (the two
 string halves at rest), `string_drawn` (the V drawn to the latch; its
 origin on the line through the string's tip anchors, so the game can
-scale it along Z for a partial draw), `trigger` (origin on its pin) and
+scale it along Z for a partial draw), `trigger` (origin on its pin), `safety_bolt` (the door bolt, drawn back
++Z to fire) and
 `static_rail_bolt` (a bolt lying in the groove, nocked on the latched
 string, shown while loaded).
 """
@@ -380,9 +381,12 @@ latch.prism(fillet([(-0.130, 0.035), (-0.085, 0.035), (-0.085, 0.051), (-0.130, 
             0.0235, 0.0275, "Iron", axis="x", bevel=0.0007, segs=1)
 for z0 in (-0.128, -0.095):
     latch.tube(0.0045, 0.0033, z0, z0 + 0.008, "Iron", segs=12, xf=T(0.032, 0.043, 0))
-latch.cyl(0.0032, -0.138, -0.080, "Worn", segs=10, chamfer=0.0006, xf=T(0.032, 0.043, 0))
-latch.cyl(0.0022, 0.0, 0.016, "Worn", segs=8, xf=T(0.032, 0.043, -0.108) @ RY(math.pi / 2))
-latch.sphere(0.004, (0.049, 0.043, -0.108), "Worn", segs=12, rings=6)
+# The bolt itself (`safety_bolt`): shot forward under the latch's levers
+# (safe), drawn back to fire.
+safety_bolt = Part("safety_bolt", origin=(0.032, 0.043, -0.108))
+safety_bolt.cyl(0.0032, -0.138, -0.080, "Worn", segs=10, chamfer=0.0006, xf=T(0.032, 0.043, 0))
+safety_bolt.cyl(0.0022, 0.0, 0.016, "Worn", segs=8, xf=T(0.032, 0.043, -0.108) @ RY(math.pi / 2))
+safety_bolt.sphere(0.004, (0.049, 0.043, -0.108), "Worn", segs=12, rings=6)
 
 # --- Trigger and guard -------------------------------------------------------------------------
 kit.box((0.016, 0.004, 0.028), (0.0, -0.010, -0.048), "Worn", bevel=0.0008, segs=1)
@@ -428,7 +432,7 @@ rb_body.cut(rb_cut)
 
 screws.cut(slots)
 join("static", stock, nose, grip, pad, rail, latch, prod, kit, screws)
-for p in (cradle, rest, drawn, trig):
+for p in (cradle, rest, drawn, trig, safety_bolt):
     make(p)
 join("static_rail_bolt", rb_body, rb_vanes)
 

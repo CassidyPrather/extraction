@@ -125,6 +125,8 @@ pub(crate) fn moves_for(name: &str) -> Option<Moves> {
         ("barrels", Moves::Barrels),
         ("trigger", Moves::Trigger),
         ("selector", Moves::Selector),
+        ("crossbolt", Moves::Crossbolt),
+        ("safety_bolt", Moves::SafetyBolt),
         ("hammer", Moves::Hammer),
         ("cylinder", Moves::Cylinder),
         ("gate", Moves::Gate),
@@ -274,6 +276,10 @@ fn finish_gun_models(
 pub const COCKED_BACK: f32 = 0.012;
 /// How far a cocking indicator stands proud when its lock is cocked (m).
 pub const INDICATOR_UP: f32 = 0.003;
+/// How far a crossbolt safety slides left to fire, metres.
+pub const CROSSBOLT_PUSH: f32 = 0.008;
+/// How far a door-bolt safety draws back to fire, metres.
+pub const SAFETY_BOLT_DRAW: f32 = 0.014;
 /// How far back a cocked hammer tips, radians.
 const HAMMER_BACK: f32 = 0.5;
 /// How far a revolver's gate swings open, radians.
@@ -388,6 +394,17 @@ fn animate_parts(
                     let mut r = part.rest;
                     r.translation.z +=
                         f.bolt_travel * travel + if cocked { COCKED_BACK } else { 0.0 };
+                    r
+                }
+                Moves::Crossbolt | Moves::SafetyBolt => {
+                    let mut r = part.rest;
+                    if f.fire_mode() != FireMode::Safe {
+                        r.translation += if part.moves == Moves::Crossbolt {
+                            Vec3::NEG_X * CROSSBOLT_PUSH
+                        } else {
+                            Vec3::Z * SAFETY_BOLT_DRAW
+                        };
+                    }
                     r
                 }
                 Moves::Indicator(i) => {
