@@ -196,9 +196,16 @@ fn deaths(
                     kind: CarcassKind,
                     commands: &mut Commands|
      -> bool {
-        match known.get(&(owner, index)) {
-            // Taken away?
-            Some(c) => !carcasses.contains(*c),
+        match known.get(&(owner, index)).copied() {
+            // Taken away? Then forget it (every animal ever killed stayed
+            // in here for the session).
+            Some(c) => {
+                let taken = !carcasses.contains(c);
+                if taken {
+                    known.remove(&(owner, index));
+                }
+                taken
+            }
             None => {
                 let mut c = commands.spawn((
                     Name::new("Carcass"),
