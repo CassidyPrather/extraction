@@ -24,6 +24,10 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 844e46d | 21:00 (release check) | 40/40 exit 0 (five valleys, seeds 1-8), no timeouts, 26 extracted; stucks 135 against 130 on round 47's seeds; "plough" only on Rime seed 1 (the same raid). 12/12 contract scenarios. `--check-buildings` dusk + night in every valley: 46 checked, 3 flagged on Rime (quarantine_gate from inside the guard booth, a log pile in black fog: probe false positives). visual_diff --quick from fb959f9: 2 of 10 changed (Marrow's anomaly mark, intended), buildings 18/18 | 1056 lib tests, 0 FAILED, all within budget, 36 min; extraction_core 345 passed; bin and doc tests pass | gauges 17/17 in 1683 s |
+| fb959f9 | 17:00 | 36/36 exit 0, no timeouts, 25 extracted (Cinder 7/8, Sallow 6/8, Marrow 5/8, Rime 4/8, Kettle 3/4) | 1 FAILED (walkers_go_round_what_hurts_them, deterministic: the wary grid's smoothing cut through the burner), 39 min | gauges 17/17 in 1639 s |
+| 47c302b | 14:45 | lost (container restart mid-suite); Rime seeds 2 and 4 no longer time out | lost | robots::hazards passes; the shelf gauge 3/3 alone |
+| 0b1f837 | 13:00 | 20/20 exit 0, 14 extracted (identical to 76027ef seed for seed: nothing sim-side changed) | 0 FAILED, 27 min; every_drowned_house 125.7 s > 120 | gauges 16/17 in 1748 s (first_contact Sallow 7.13 > 6.8, its budget since raised) |
 | 76027ef | 11:00 | 32/32 exit 0, 20 extracted (Kettle 4/4, Marrow 5/8, Cinder 4/8, Sallow 4/8, Rime 1/4); Rime seeds 2 and 4 time out 25 m under ground in adit_rime's deep level (141-152, -60..-82); Cinder seed 8's death now reads "blast" | 0 FAILED, 27 min; bridges 121.6 s > 120 | gauges 15/17 in 2169 s: warm-up shelf entries draw the real mesh; first_contact Sallow 7.52 > 6.8 s. `--check-buildings 1` on Cinder dusk + night: 10 checked, 0 missing; transform_guard tests pass |
 | 58f9a7e | 09:30 | skipped (main moved) | 1 FAILED (pinner cadence, passes on 76027ef), 26 min | gauges 16/16 in 2022 s: the first green tier since 5955943 |
 | 8864da5 | 08:10 | cut short | 0 FAILED, 28 min (subjects 349 s over budget); contract_keepers_log, deputys_lamp, charging_manifest pass | cut short |
@@ -60,20 +64,21 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 76027ef (round 44); 0b1f837 (round 45) running.
+As of 844e46d (the wave's release candidate): nothing blocking.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::warmup::tests::gauge_the_shelf_stocks_and_clears`: 10 shelf entries draw the real mesh, not their twin | new since 58f9a7e | Performance | routed (4a8e84e5's try_insert fix may cover it) |
-| `render::first_contact` gauge: Sallow loaded in 7.52 s against 6.8 (LOAD_SLACK=1.5); 4.5-4.9 s before | | Performance | re-running alone on 0b1f837 |
-| Sim: Rime seeds 2 and 4 stuck in adit_rime's deep level, y 85 under ground at 110 | the deep level's second way out (round 40) | Underground | replaying seed 4 |
-| the gauge tier at 2022-2169 s (target 1500) | first_sight's frames after bringing out on the real clock | Performance | 411 → 33 s in 4a8e84e5 (in 0b1f837) |
-| `world::bridges::tests::a_bot_walks_over_every_bridge` 121.6 s (budget 120; 93 s before) | | | watching |
+| Sim: Rime ore-mill take stucks (seed 2, 137-150, 30-32) | stepped surface buildings planned as one floor | coordinator | parked as a follow-up |
+| `--check-buildings` flags on Rime: quarantine_gate in interior (dusk 0.3%, night 0.0%), log_pile in insertion at night (0.3%) | probe false positives: a frame-edge strip seen from inside the booth; black fog | Capture | follow-up |
+| Sallow's rendezvous beacons at 50 m (`scripts/lamp_check.sh`, white core) | | Visual design, Fourth valley | parked |
+| the gauge tier at 1683 s on this 4-core container (target 1500) | | Performance | open |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| walkers_go_round_what_hurts_them (the wary grid now closes hazard cells), the Rime adit kiosk counted as indoors | 844e46d | Robot minds, Underground |
+| Rime seeds 2 and 4 timing out in adit_rime (no stand at the kiosk exit, then a straight line into the rock), the warm-up shelf race (resting guns' merged meshes), Sallow's first_contact budget, the gauge tier's time (first_sight 852 → 41 s) | 47c302b / fb959f9 | coordinator, Performance |
 | Marrow m02_village shadow draws (car wrecks, ~40 shadow casters each), subjects findable_early (and its 950 s), the first_sight flake (the dog model asked for mid-raid), warmup's MarkMaterial, Cinder seed 5's pocket (the raider's indoor routes), no-shooter hits named | 58f9a7e / 76027ef / 0b1f837 | Map design, Destruction, Robot minds, Performance, coordinator, Verifier |
 | the two pane tests (`open_pane` now takes upright ground-floor panes in a fixed order), Marrow ducks and flock, Lev k14 (the fixture), first_contact load (this machine: LOAD_SLACK=1.5), the wreck.rs unused `mut` | 782d919 / b131b78 | Destruction, Wildlife, Story, Performance, Verifier |
 | legibility site signs, Cinder water_tower ledge trap, recall table, walker_loses_you, crawler_hears_round_a_corner, what_a_machine_breaks, haptics button; first_contact VRAM (it was RGBA8 without etcpak) | c495f9f | Legibility, World models, Robot minds, Hands, Performance |
