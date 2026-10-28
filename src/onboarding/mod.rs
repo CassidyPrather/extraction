@@ -405,7 +405,7 @@ pub const STATIONS: &[Station] = &[
         rot: 0.0,
         goals: &[Goal::CallTruck, Goal::PullCord],
         where_: "the north post, end of the track",
-        tip: "Truck: 2 min to come, waits\n5. No more. My card in the\ntruck has your first job.",
+        tip: "Here it's quick. Out there:\n2 min to come, waits 5.\nMy card has your first job.",
         in_order: false,
     },
 ];
