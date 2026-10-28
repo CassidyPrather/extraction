@@ -272,6 +272,14 @@ def main():
         with open(out / "mix.txt", "a") as f:
             f.write("\n" + text + "\n")
     flagged += where_flags
+    import audio_gunstate  # noqa: E402  (your gun's state in a fight)
+    gun_flags, gun_lines = audio_gunstate.run(sets, out)
+    if gun_lines:
+        text = "\n".join(gun_lines)
+        print("\n" + text)
+        with open(out / "mix.txt", "a") as f:
+            f.write("\n" + text + "\n")
+    flagged += gun_flags
     import audio_score  # noqa: E402  (the score against the world)
     score_flags, score_lines = audio_score.run(sets, out)
     if score_lines:

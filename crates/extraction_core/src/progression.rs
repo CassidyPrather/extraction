@@ -508,6 +508,48 @@ impl Job {
             | Job::Plant { map, at, .. } => Some((map.as_str(), *at)),
         }
     }
+
+    /// Where it still wants you to go, if anywhere: its mark, until its
+    /// part out there is done (the place seen, the relay down). A thing to
+    /// bring home is done once you have it, which the game knows.
+    pub fn still_at(&self) -> Option<(&str, [f32; 2])> {
+        match self {
+            Job::Scout { seen: true, .. } | Job::Plant { planted: true, .. } => None,
+            _ => self.mark(),
+        }
+    }
+}
+
+/// Walked this much farther from the job than you've been this raid (m),
+/// you're told where it is ([`Drift`]).
+pub const NUDGE_AWAY: f32 = 100.0;
+/// And not again for this long (raid seconds), however far you go.
+pub const NUDGE_AGAIN: f32 = 600.0;
+
+/// A raid's heading away from the job on the card: the nearest you've been
+/// to it, and when you were last told where it is. One a raid, fresh.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Drift {
+    nearest: Option<f32>,
+    told: Option<f32>,
+}
+
+impl Drift {
+    /// `d` from the job now, `t` raid seconds: whether to say where it is.
+    /// Once you've gone [`NUDGE_AWAY`] past the nearest you got; then not
+    /// until you've gone that much past where you were told, and
+    /// [`NUDGE_AGAIN`] has passed.
+    pub fn update(&mut self, d: f32, t: f32) -> bool {
+        let nearest = self.nearest.map_or(d, |n| n.min(d));
+        self.nearest = Some(nearest);
+        let rested = self.told.is_none_or(|told| t - told >= NUDGE_AGAIN);
+        if d > nearest + NUDGE_AWAY && rested {
+            self.nearest = Some(d);
+            self.told = Some(t);
+            return true;
+        }
+        false
+    }
 }
 
 /// The career's standing with the driver.
@@ -1034,6 +1076,55 @@ pub fn roll_job(progress: &Progress, seed: u64, here: &str, valleys: &[Valley]) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The designer's first raid (playtest 28 October): toward the Old
+    /// farm to 137 m, then west after "Something heard you", to the
+    /// logging camp and the village: told once, early, and not nagged.
+    #[test]
+    fn heading_away_from_the_job_is_told_once() {
+        let mut d = Drift::default();
+        // Out of the truck, 190 m off; in to 137 m: nothing.
+        for (t, m) in [(0.0, 190.0), (300.0, 160.0), (484.0, 137.0)] {
+            assert!(!d.update(m, t), "{m} m at {t} s");
+        }
+        // West: 200 m, nothing yet; 240 m, told.
+        assert!(!d.update(200.0, 560.0));
+        assert!(d.update(240.0, 600.0), "told at 240 m");
+        // On west to the camp and the village: not again so soon...
+        for (t, m) in [(700.0, 300.0), (850.0, 360.0), (1000.0, 420.0)] {
+            assert!(!d.update(m, t), "nagged at {m} m, {t} s");
+        }
+        // ...nor after a long while if you haven't gone much farther.
+        assert!(!d.update(330.0, 1300.0));
+        // A long while and a long way on: once more.
+        assert!(d.update(460.0, 1300.0));
+        // Turned back toward it: never.
+        let mut back = Drift::default();
+        for (t, m) in [(0.0, 300.0), (200.0, 250.0), (400.0, 120.0), (900.0, 20.0)] {
+            assert!(!back.update(m, t));
+        }
+    }
+
+    #[test]
+    fn a_job_done_out_there_wants_you_nowhere() {
+        let scout = |seen| Job::Scout {
+            map: "marrow_creek".into(),
+            place: "Old farm".into(),
+            at: [1.0, 2.0],
+            seen,
+        };
+        assert_eq!(scout(false).still_at(), Some(("marrow_creek", [1.0, 2.0])));
+        assert_eq!(scout(true).still_at(), None);
+        assert_eq!(scout(true).mark(), Some(("marrow_creek", [1.0, 2.0])));
+        assert_eq!(
+            Job::Fetch {
+                item: "x".into(),
+                n: 1
+            }
+            .still_at(),
+            None
+        );
+    }
     use crate::map::{CINDER_WORKS, KETTLE_PASS, MARROW_CREEK};
 
     fn valleys() -> Vec<(&'static str, MapDef)> {

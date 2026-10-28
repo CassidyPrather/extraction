@@ -357,6 +357,22 @@ pub const FIRST_RUN: f32 = 4.0 * crate::map_surge::SPRINT;
 pub const FIRST_OPEN: f32 = 10.0;
 /// A way by a place counts as on the way within this of the direct walk.
 pub const FIRST_DETOUR: f32 = 1.3;
+/// What `first_jobs` calls the career's first job.
+pub const FIRST_OF_ALL: &str = "the career's first";
+/// The career's first job is the obvious way to go from the drop: the easy
+/// walk there heads for it from the start, within this many degrees of
+/// its bearing for its first [`FIRST_HEAD`] metres (the designer's first
+/// raid followed the road north past the Old farm's turn, which a spruce
+/// stand hid)...
+pub const FIRST_TURN: f32 = 40.0;
+pub const FIRST_HEAD: f32 = 120.0;
+/// ...and nothing with loot near the drop pulls you off it: no roof to
+/// go into, kiosk or loot within [`LURE_REACH`] (what you look round at as
+/// the truck goes) of the insertion further than [`LURE_OFF`] from that
+/// walk (a shed 49 m up the road to the Village, and the cars by it, took
+/// the designer's first ten minutes).
+pub const LURE_REACH: f32 = 60.0;
+pub const LURE_OFF: f32 = 25.0;
 /// The first ten minutes: places a raid can reach and work by then, as a
 /// walk on comfortable ground from the insertion, metres (about four
 /// minutes' walking, the rest looking).
@@ -723,13 +739,109 @@ pub fn wait_shelter(map: &MapDef, rv: P2, from: P2) -> Option<(String, f32, P2)>
     Some((q.name, d, lee))
 }
 
+/// The career's first job from the drop at `ins` to `at`: the easy walk
+/// there heads for it ([`FIRST_TURN`] over [`FIRST_HEAD`]), nothing with
+/// loot near the drop lies off it ([`LURE_REACH`], [`LURE_OFF`]), and,
+/// measured, how far a scare's nearest roof (`roofs`, its doors) lies
+/// back from the job.
+fn first_way(r: &mut Report, map: &MapDef, comfy: &NavGrid, ins: P2, at: P2, roofs: &[P2]) {
+    let find = |r: &mut Report, rule: Rule, what: String, at: P2| {
+        r.findings.push(Finding { rule, what, at });
+    };
+    let Some(path) = comfy.path(ins, at) else {
+        return;
+    };
+    let pts = resample(&path);
+    let bearing = |p: P2| (p[1] - ins[1]).atan2(p[0] - ins[0]);
+    let want = bearing(at);
+    let (mut along, mut worst, mut worst_at) = (0.0f32, 0.0f32, ins);
+    for w in pts.windows(2) {
+        along += dist(w[0], w[1]);
+        if along > FIRST_HEAD {
+            break;
+        }
+        if dist(w[1], ins) < 20.0 {
+            continue;
+        }
+        let mut off = (bearing(w[1]) - want).to_degrees().abs() % 360.0;
+        if off > 180.0 {
+            off = 360.0 - off;
+        }
+        if off > worst {
+            (worst, worst_at) = (off, w[1]);
+        }
+    }
+    if worst > FIRST_TURN {
+        find(
+            r,
+            Rule::Choice,
+            format!(
+                "the easy way to the career's first job turns {worst:.0} degrees off its bearing in the first {FIRST_HEAD:.0} m"
+            ),
+            worst_at,
+        );
+    }
+    let off_way = |p: P2| {
+        pts.iter()
+            .map(|q| dist(*q, p))
+            .fold(f32::INFINITY, f32::min)
+    };
+    let lures = solids(map)
+        .into_iter()
+        .filter(|s| s.kiosk() || crate::map_surge::roofed(&s.prefab))
+        .map(|s| (s.name.clone(), s.rect.at))
+        .chain(
+            map.markers
+                .iter()
+                .filter(|m| matches!(m.kind, MarkerKind::Loot { .. }))
+                .map(|m| (m.name.clone(), m.at)),
+        );
+    for (name, p) in lures {
+        if dist(p, ins) <= LURE_REACH && off_way(p) > LURE_OFF {
+            find(
+                r,
+                Rule::Choice,
+                format!(
+                    "the {name} {:.0} m from the drop and {:.0} m off the way to the career's first job draws a newcomer off it",
+                    dist(p, ins),
+                    off_way(p)
+                ),
+                p,
+            );
+        }
+    }
+    // A scare on the way: does the nearest roof send you back, or on?
+    let back = pts
+        .iter()
+        .map(|p| {
+            let q = roofs
+                .iter()
+                .copied()
+                .min_by(|a, b| dist(*a, *p).total_cmp(&dist(*b, *p)));
+            q.map_or(0.0, |q| dist(q, at) - dist(*p, at))
+        })
+        .fold(0.0f32, f32::max);
+    r.measures.push(format!(
+        "career's first job: {:.0} m the easy way; the nearest roof to a scare at worst {back:.0} m further from the job",
+        path_length(&pts)
+    ));
+}
+
 /// The first job of each kind that sends you somewhere in the valley
-/// `id`: the first contract step of each (`contracts::CONTRACTS`, a scout,
+/// `id`: the career's first (`progression::first_job`, named
+/// [`FIRST_OF_ALL`]), the first contract step of each (`contracts::CONTRACTS`, a scout,
 /// a thing to bring, one to leave) and the ladder's fixed ones (the
 /// letter, the ledger), as what and where.
 pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
     use crate::contracts::Step;
     let mut out: Vec<(String, P2)> = Vec::new();
+    // The career's very first job, here if a career can start here.
+    if let Some(crate::progression::Job::Scout { place, at, .. }) =
+        crate::progression::first_job(id, map)
+            .filter(|_| crate::progression::FIRST_VALLEYS.contains(&id))
+    {
+        out.push((format!("{FIRST_OF_ALL} ({place})"), at));
+    }
     let mut seen: Vec<&str> = Vec::new();
     for c in crate::contracts::CONTRACTS {
         for s in c.steps {
@@ -2109,6 +2221,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     }
                 }
             }
+            if what.starts_with(FIRST_OF_ALL) {
+                first_way(&mut r, map, &comfy, ins, at, &roofs);
+            }
             let (mut gap, mut gap_at, mut roof, mut roof_at) = (0.0f32, ins, 0.0f32, ins);
             let (mut back, mut back_at) = (0.0f32, at);
             for (home, pts) in &walks {
@@ -3259,6 +3374,40 @@ mod tests {
             "{}",
             r.text()
         );
+    }
+
+    /// The designer's first raid in Marrow went up the road to the Village,
+    /// past the Old farm's hidden turn, by way of a shed and the cars by
+    /// it: without the farm track the easy way to the career's first job
+    /// heads north, off its bearing; with a shed by the road again, it
+    /// draws a newcomer off.
+    #[test]
+    fn the_first_job_is_the_obvious_way_from_the_drop() {
+        let base = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        let check = |map: &MapDef, what: &str| {
+            let hm = Heightmap::build(map);
+            let r = lint(map, &hm);
+            assert!(
+                r.findings
+                    .iter()
+                    .any(|f| f.rule == Rule::Choice && f.what.contains(what)),
+                "{what}: {}",
+                r.text()
+            );
+        };
+        let mut map = base.clone();
+        map.roads.retain(|r| r.name != "Farm track");
+        check(&map, "turns");
+        let mut map = base.clone();
+        map.placements.push(crate::map::Placement {
+            prefab: "shed".into(),
+            at: [22.0, 224.0],
+            rot: 90.0,
+            y: 0.0,
+            absolute: false,
+            tag: String::new(),
+        });
+        check(&map, "draws a newcomer off");
     }
 
     /// Take away the bus shelter at Marrow's Bus depot and the wait for

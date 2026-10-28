@@ -59,7 +59,10 @@ impl Plugin for XrDriverPlugin {
                 XrSessionCreated,
                 (attach_actions, spawn_controller_spaces, make_tracking_root),
             )
-            .add_systems(Update, (ride_player, dress_eyes, follow_mirror))
+            .add_systems(
+                Update,
+                (ride_player, dress_eyes, follow_mirror, window_card).chain(),
+            )
             .add_systems(
                 PreUpdate,
                 sync_actions
@@ -771,6 +774,65 @@ fn follow_mirror(
     }
 }
 
+/// The window during a headset session, unless it mirrors the eye: a
+/// cheap camera that clears it and says where the game is, and carries
+/// the flat UI. Without one, nothing drew to the window once the flat
+/// camera went: it still presented, its images never cleared (blown-out
+/// garbage and old frames on the monitor), and on the playtest's RTX 3080
+/// the frames grew to seconds until the driver reset the GPU, and the
+/// window's swapchain panicked on the way out.
+#[derive(Component)]
+pub struct WindowCard;
+
+fn window_card(
+    mut commands: Commands,
+    driver: Res<super::RigDriver>,
+    mirrors: Query<(), With<Mirror>>,
+    cards: Query<Entity, With<WindowCard>>,
+) {
+    let want = *driver == super::RigDriver::Xr && mirrors.is_empty();
+    if !want {
+        for e in &cards {
+            commands.entity(e).try_despawn();
+        }
+        return;
+    }
+    if !cards.is_empty() {
+        return;
+    }
+    info!("window: a card (\"In the headset\"); the eyes draw to the headset alone");
+    let camera = commands
+        .spawn((
+            Name::new("Window card"),
+            WindowCard,
+            Camera2d,
+            Camera {
+                // Under the mirror, the frame it's on as it goes.
+                order: -50,
+                clear_color: ClearColorConfig::Custom(Color::srgb(0.04, 0.045, 0.05)),
+                ..default()
+            },
+        ))
+        .id();
+    commands.spawn((
+        WindowCard,
+        Text::new("In the headset"),
+        TextFont {
+            font_size: bevy::text::FontSize::Px(28.0),
+            ..default()
+        },
+        TextColor(Color::srgba(0.85, 0.87, 0.85, 0.85)),
+        Node {
+            position_type: PositionType::Absolute,
+            left: percent(50.0),
+            top: percent(50.0),
+            margin: UiRect::left(px(-90.0)),
+            ..default()
+        },
+        UiTargetCamera(camera),
+    ));
+}
+
 /// The local player's root is the playspace; the flat camera goes away.
 ///
 /// `bevy_mod_xr` makes its own tracking root at startup and parents the
@@ -1084,5 +1146,53 @@ mod tests {
         }
         let at = at.expect("the session started in the end");
         assert!(at >= 19, "not before {SESSION_WAIT_MAX} s (frame {at})");
+    }
+    /// Cameras drawing to the window (the eyes draw to the swapchain).
+    fn on_window(app: &mut App) -> usize {
+        let w = app.world_mut();
+        w.query::<(&Camera, Option<&bevy::camera::RenderTarget>)>()
+            .iter(w)
+            .filter(|(c, t)| {
+                c.is_active && t.is_none_or(|t| matches!(t, bevy::camera::RenderTarget::Window(_)))
+            })
+            .count()
+    }
+
+    /// A headset session leaves the window exactly one camera, mirror or
+    /// not: the flat camera goes, and the card (or the mirror) takes the
+    /// window. With none, the window presented images nothing cleared,
+    /// until the playtest's GPU was reset.
+    #[test]
+    fn a_session_leaves_one_camera_on_the_window() {
+        for mirror in [false, true] {
+            let mut app = App::new();
+            app.add_plugins(MinimalPlugins)
+                .insert_resource(crate::launch::LaunchOptions {
+                    mirror,
+                    ..default()
+                })
+                .insert_resource(crate::world::sky::Weather::default())
+                .insert_resource(super::super::RigDriver::Flat)
+                .add_systems(XrSessionCreated, make_tracking_root)
+                .add_systems(Update, (follow_mirror, window_card).chain());
+            app.world_mut()
+                .spawn((super::super::RigHead, Camera3d::default()));
+            app.update();
+            assert_eq!(on_window(&mut app), 1, "flat, mirror {mirror}");
+            // The session: the eyes come, the flat camera goes.
+            for i in 0..2 {
+                app.world_mut().spawn((
+                    XrCamera(i),
+                    bevy::camera::RenderTarget::None {
+                        size: UVec2::splat(64),
+                    },
+                ));
+            }
+            app.world_mut().run_schedule(XrSessionCreated);
+            for _ in 0..3 {
+                app.update();
+                assert_eq!(on_window(&mut app), 1, "in the headset, mirror {mirror}");
+            }
+        }
     }
 }

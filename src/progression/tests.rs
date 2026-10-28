@@ -250,6 +250,60 @@ fn going_down_forgets_what_you_scouted() {
     assert_eq!(progress(&app).done, 0, "not until you get it home");
 }
 
+/// The designer's first raid (playtest 28 October): close to the first
+/// job, then away. Told once which way it is; going down, told again at
+/// the truck that it's still waiting.
+#[test]
+fn wandering_off_the_job_is_told_once_and_a_fall_restates_it() {
+    let mut app = crate::raid::requests::tests::app();
+    let Some(Job::Scout { at, .. }) = progress(&app).job else {
+        panic!("the first job's a scout");
+    };
+    let said = |app: &App, what: &str| {
+        app.world()
+            .resource::<Raid>()
+            .log
+            .iter()
+            .filter(|(l, _)| l.contains(what))
+            .count()
+    };
+    let nudged = |app: &App| said(app, "That's the job") + said(app, "The job: ");
+    // Toward it, then not far off it: nothing.
+    go(&mut app, [at[0] - 120.0, at[1]]);
+    go(&mut app, [at[0] - 180.0, at[1]]);
+    assert_eq!(nudged(&app), 0, "not yet");
+    // Well off: once.
+    go(&mut app, [at[0] - 260.0, at[1]]);
+    assert_eq!(
+        nudged(&app),
+        1,
+        "told: {:?}",
+        app.world().resource::<Raid>().log
+    );
+    go(&mut app, [at[0] - 300.0, at[1] + 20.0]);
+    assert_eq!(nudged(&app), 1, "not nagged");
+    // Down: woken in the truck, it's still waiting.
+    let player = one::<With<LocalPlayer>>(&mut app);
+    app.world_mut().write_message(crate::health::Downed {
+        player,
+        at: Vec3::ZERO,
+    });
+    app.update();
+    if let Phase::Down { left } = &mut app.world_mut().resource_mut::<Raid>().phase {
+        *left = 0.0;
+    }
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
+    assert_eq!(
+        said(&app, "still waiting"),
+        1,
+        "{:?}",
+        app.world().resource::<Raid>().log
+    );
+}
+
 #[test]
 fn the_cabinet_has_a_dressing_each_raid_and_the_aerial_warns_early() {
     let mut app = crate::raid::requests::tests::app();
