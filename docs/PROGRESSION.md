@@ -407,6 +407,35 @@ in the truck has your first job. It teaches the
 whole loop in one raid: go somewhere, call the truck, get home, press the
 card, and the cache it pays shows up as a red cross on the map.
 
+**When it isn't reached** (playtest 28 October, `docs/playtests/2026-10-28`):
+the designer's first raid got 137 m from the Old farm, then turned west after
+"Something heard you" and died in the village; the second left the truck
+with nothing. Nothing said where the job was in 26 minutes out. Now, for
+any job, not only the first:
+
+- **It pulls you back.** 100 m farther from an unfinished job than you've
+  been this raid, you're told once which way it is: "Truck: \"The old farm's
+  east, 230 m. That's the job.\"" (on the wrist, as your own note, with no
+  radio). Again only after 10 minutes and as far again; never once its part
+  out there is done, or you have the thing it wants
+  (`extraction_core::progression::Drift`, `progression::nudge`).
+- **It survives a fall.** Woken in the truck, the driver says it's still
+  waiting, and which way from the drop (`progression::restate_after_fall`).
+- **You can't leave unequipped by accident.** Stepping off the truck at
+  base without a gun, a radio or the map, the driver says once what's
+  missing and where: "No gun, radio or map on you. In the crate." (or "On
+  the ledge.", the spare radio). You can still go. A step off the truck
+  counts, not a session opening at camp (`progression::tailgate`).
+
+Two first-hour newcomers play the misses (`first_hour_wanderer`,
+`first_hour_empty_handed`; by name, not in the five), and
+`SIM_NO_NUDGE=1` / `SIM_NO_TAILGATE=1` turn the lines off to compare:
+
+| Newcomer | Lines off | Lines on |
+| - | - | - |
+| Wanderer (near the job, then off to a named place) | waits 4 min, nothing said, goes home; the card won't take the job: fails | told "east, 230 m" at 168 s, goes back; job paid at 427 s |
+| Empty-handed (takes nothing from the crate) | sets off with nothing, nothing said (job 1 has no machine on it; it got home) | told at the steps, goes back for the kit; job paid at 222 s |
+
 ## Pacing
 
 How many raids each tier takes, at the sim bots' rates (see "Measuring it"
