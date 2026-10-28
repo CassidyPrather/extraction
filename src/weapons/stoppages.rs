@@ -737,6 +737,14 @@ mod tests {
                         bad.push(format!("{id} {}: pull {k} fired", s.name));
                         break;
                     }
+                    // A double-action revolver fires into its squib: the
+                    // bulge says it, and the gun's done saying anything.
+                    if ev
+                        .iter()
+                        .any(|e| matches!(e, FireEvent::Bulged { .. } | FireEvent::OutOfBattery))
+                    {
+                        break;
+                    }
                     if heard(f.action, id, &ev).is_empty() || felt(&ev).is_empty() {
                         bad.push(format!("{id} {}: pull {k} said nothing ({ev:?})", s.name));
                     }
