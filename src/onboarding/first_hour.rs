@@ -636,10 +636,11 @@ pub(super) struct RaidView<'w, 's> {
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
 
-/// The wanderer goes this near the job (m), then this far off (m), and
-/// waits this long (s) to be told the way back before giving it up.
+/// The wanderer goes this near the job (m), then off to a place this much
+/// farther from it (m), and waits this long (s) to be told the way back
+/// before giving it up.
 const WANDER_SHORT: f32 = 130.0;
-const WANDER_OFF: f32 = 260.0;
+const WANDER_OFF: f32 = 120.0;
 const WANDER_WAIT: f32 = 240.0;
 
 /// Kit a newcomer takes from the crate: what the yard used, and the map
@@ -1189,6 +1190,16 @@ pub(super) fn direct_raid(
                     "set off with nothing on me, and nothing said",
                 );
                 state.went_back = true;
+                // Back up the steps: out from the bed, through the gate.
+                tasks.push(Task::WalkTo {
+                    to: at_truck(0.05, 1.2),
+                    within: 0.5,
+                });
+                let idle = bot.tasks.pop_back();
+                bot.tasks.extend(tasks);
+                bot.tasks.extend(idle);
+                bot.restart();
+                return;
             }
             // The wanderer, gone off: back only once it's told the way.
             if let Some(off) = state.wandered_at
@@ -1268,9 +1279,20 @@ pub(super) fn direct_raid(
             if p.wanders && state.wandered_at.is_none() {
                 let toward = (at - from).normalize_or(Vec2::Y);
                 let short = at - toward * WANDER_SHORT;
-                let side = toward.perp();
-                let side = if side.dot(-short) >= 0.0 { side } else { -side };
-                let off = short + (side - toward).normalize_or(side) * WANDER_OFF;
+                // Off to somewhere with a name, farther from the job (the
+                // playtest: the logging camp, the village).
+                let Some(off) = world
+                    .zone
+                    .map
+                    .markers_of(&MarkerKind::Poi)
+                    .map(|m| Vec2::from(m.at))
+                    .filter(|m| m.distance(at) > WANDER_SHORT + WANDER_OFF)
+                    .min_by(|a, b| a.distance(short).total_cmp(&b.distance(short)))
+                else {
+                    state.wandered_at = Some(now);
+                    state.told_back = true;
+                    return;
+                };
                 tasks.extend(route(&world, &view, from, short));
                 tasks.extend(route(&world, &view, short, off));
                 state.wandered_at = Some(now);
