@@ -423,6 +423,20 @@ Before this, in the 28 October playtest:
 
 In the replay of that return (`a_walker_walking_back_past_you_is_told_well_before`), it's told 26.5 s before it's there. The valley warned of that walker 16.8 s ahead on first contact.
 
+**A drone in the open is outrun, not hidden from** (`robots/drone_drill.rs`; playtest, 28 October, raid 2: down 16.1 s after the lock, in the open). Measured over each valley's open ground, a drone at its standoff locking on to someone:
+
+| | Five valleys |
+|---|---|
+| Nearest way in under a roof | median 53–71 m; within 30 m on 11–18% of open ground |
+| Lock chirp to first hit | about 1 s (0.9 s lock) |
+| Stood still | 40 of 40 down, median 14–17 s (10–28) |
+| Sprinting for that roof | 5 of 40 down; 36 made it in |
+| Sprinting to and fro across its line, no roof | still up (`in_the_open_a_runner_outlasts_a_drone`) |
+
+The time is there: a runner's hard to hit (`CROSSING_SPREAD`). The driver's old advice wasn't. "Run across it, to cover" sent people looking for cover, and the bots stopped behind a wall. A wall or a tree hides no one from 10 m up, and a roof is most often 60 m off. The line now names what works in the open: "Don't stop. Sprint across it. A runner's hard to hit." Then: "Only a roof stops it. Walls and trees don't. Keep going."
+
+The lock's tells are a placed chirp with a hard tick, and a red light under the drone for the 0.9 s lock. The light reaches 8 m, and the drone sits 20 m off and 10 m up, so in daylight it's the sound that reads. Whether it reads in the headset is for the playtest transcript.
+
 **Every attack has a tell.** Drones chirp and settle 0.9 s; walkers'
 turrets settle 0.7 s (`WalkerAim`); grapplers rear back 0.6 s before a
 throw (`HarpoonWindup`). Tactics differ by kind: drones stand off at 20 m

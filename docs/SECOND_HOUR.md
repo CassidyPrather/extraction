@@ -9,8 +9,8 @@ spaced five seconds apart, because the wrist only shows the newest one.
 Each line fits the radio (3 lines of 26 characters) and uses no game words.
 The wrist pages a long line (3 lines of 18 a page, 2 under a caption's
 speaker), so where there's danger now, what to do comes first: it's on
-the first page, and the reason follows ("Run across it, to cover. That chirp
-is it taking aim.").
+the first page, and the reason follows ("Don't stop. Sprint across it. A
+runner's hard to hit.").
 
 | Moment | When | He says |
 | - | - | - |
