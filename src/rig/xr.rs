@@ -51,7 +51,7 @@ impl Plugin for XrDriverPlugin {
         app.init_resource::<SessionGate>()
             .add_systems(PreUpdate, handle_session)
             .add_systems(Startup, create_actions.run_if(session_available))
-            .add_systems(Update, headset_missing)
+            .add_systems(Update, (headset_missing, give_up_on_the_session))
             .add_systems(Startup, size_swapchain)
             .add_systems(Update, report_input.run_if(openxr_session_running))
             .add_systems(OxrSendActionBindings, suggest_bindings)
@@ -310,6 +310,22 @@ fn report_input(
     }
 }
 
+/// Longest the words wait on a headset that was asked for (the load's
+/// own wait, [`SESSION_WAIT_MAX`], and some): after it, a window it is
+/// (the yard says its opening again if a headset does start later).
+pub const DRIVER_WAIT_MAX: f32 = SESSION_WAIT_MAX + 40.0;
+
+fn give_up_on_the_session(
+    mut commands: Commands,
+    pending: Option<Res<super::DriverPending>>,
+    time: Res<Time<Real>>,
+) {
+    if pending.is_some() && time.elapsed_secs() > DRIVER_WAIT_MAX {
+        warn!("headset: no session after {DRIVER_WAIT_MAX:.0} s; the words are the window's");
+        commands.remove_resource::<super::DriverPending>();
+    }
+}
+
 /// The headset was asked for and the runtime had none (not connected, or
 /// the machine's active OpenXR runtime isn't the one driving it: a Meta
 /// runtime left active on a SteamVR machine says "not available"). Reopen
@@ -335,6 +351,8 @@ fn headset_missing(
     if *state != bevy_mod_xr::session::XrState::Unavailable {
         return;
     }
+    // No headset coming: the window's the player's.
+    commands.remove_resource::<super::DriverPending>();
     let tooling = opts.tooling();
     let tried = opts.steamvr || std::env::var_os("XR_RUNTIME_JSON").is_some();
     if !tooling && !tried {
@@ -842,12 +860,11 @@ fn window_card(
 fn make_tracking_root(
     mut commands: Commands,
     flat_cams: Query<Entity, (With<super::RigHead>, With<Camera3d>)>,
-    mut driver: ResMut<super::RigDriver>,
 ) {
     for c in &flat_cams {
         commands.entity(c).remove::<Camera3d>().remove::<Camera>();
     }
-    *driver = super::RigDriver::Xr;
+    commands.queue(super::headset_started);
     info!("XR session created: driving the rig from the headset");
 }
 
@@ -953,6 +970,8 @@ fn drive_xr_rig(
             .map(|s| Vec2::new(s.current_state.x, s.current_state.y))
             .unwrap_or(Vec2::ZERO)
     };
+    // Both sticks clicked is a playtest mark, not the fire selector too.
+    let both_clicked = read_b(&a.stick_click, a.left) && read_b(&a.stick_click, a.right);
     for (side, path) in [(Side::Left, a.left), (Side::Right, a.right)] {
         let grip = read_f(&a.grip, path);
         let trigger = read_f(&a.trigger, path);
@@ -969,7 +988,7 @@ fn drive_xr_rig(
         hand.stick = stick;
         // The click is the gun hand's (its fire selector); the other
         // stick's click is the sprint.
-        hand.stick_click = click && side == comfort.gun_side();
+        hand.stick_click = click && side == comfort.gun_side() && !both_clicked;
         hand.thumb_rest = thumb_rest;
     }
     // Both sticks clicked, standing still: a playtest mark.

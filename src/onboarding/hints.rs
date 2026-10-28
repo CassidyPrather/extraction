@@ -20,6 +20,13 @@ const QUIET: f32 = 20.0;
 
 pub struct HintsPlugin;
 
+/// What you've shown you know: done what the hint would tell you (off safe
+/// by your own hand, a round chambered after a click, a call from out in
+/// the Zone). It isn't said again (the playtest heard "Safety's on" three
+/// minutes after it had taken the range's pistol off safe itself).
+#[derive(Resource, Default, Debug)]
+pub struct Known(pub std::collections::HashSet<Hint>);
+
 impl Plugin for HintsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Hints>()
@@ -74,7 +81,8 @@ fn on_safe(
     inputs: Query<&RigInput, With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
+    known: Res<Known>,
     time: Res<Time>,
     mut was: Local<bool>,
 ) {
@@ -87,9 +95,11 @@ fn on_safe(
             squeezed = true;
         }
     }
-    if squeezed && !*was {
-        let flat = *driver == RigDriver::Flat;
-        hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+    // (Not till it's known which words, nor once you know.)
+    if let (true, false, Some(flat)) = (squeezed, *was, driver.flat()) {
+        if !known.0.contains(&Hint::Safety) {
+            hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
+        }
     }
     *was = squeezed;
 }
@@ -101,14 +111,31 @@ fn dry_click(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
+    mut known: ResMut<Known>,
+    mut clicked: Local<Vec<Entity>>,
     time: Res<Time>,
 ) {
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
-        if mine && ev.event == FireEvent::DryFire {
-            let flat = *driver == RigDriver::Flat;
-            hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+        if !mine {
+            continue;
+        }
+        match ev.event {
+            FireEvent::ModeChanged(m) if m != FireMode::Safe => {
+                known.0.insert(Hint::Safety);
+            }
+            // Racked after it clicked: you know what the click means.
+            FireEvent::Chambered if clicked.contains(&ev.gun) => {
+                known.0.insert(Hint::Empty);
+            }
+            FireEvent::DryFire => {
+                clicked.push(ev.gun);
+                if let (Some(flat), false) = (driver.flat(), known.0.contains(&Hint::Empty)) {
+                    hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -119,10 +146,16 @@ fn radio_at_base(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
+    mut known: ResMut<Known>,
     time: Res<Time>,
 ) {
     for c in calls.read() {
-        if locals.contains(c.player) && raid.phase == Phase::AtBase {
+        if !locals.contains(c.player) {
+            continue;
+        }
+        if raid.phase != Phase::AtBase {
+            known.0.insert(Hint::RadioAtBase);
+        } else if !known.0.contains(&Hint::RadioAtBase) {
             hints.give(Hint::RadioAtBase, time.elapsed_secs(), false, &mut raid);
         }
     }
