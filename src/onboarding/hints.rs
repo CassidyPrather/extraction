@@ -30,7 +30,6 @@ pub struct Known(pub std::collections::HashSet<Hint>);
 impl Plugin for HintsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Hints>()
-            .init_resource::<Known>()
             .add_systems(Update, (on_safe, dry_click, radio_at_base));
     }
 }

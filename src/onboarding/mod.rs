@@ -623,6 +623,7 @@ impl Plugin for OnboardingPlugin {
         app.init_resource::<Onboarding>()
             .add_message::<GoalDone>()
             .add_plugins((hints::HintsPlugin, firsts::FirstsPlugin))
+            .init_resource::<hints::Known>()
             .add_systems(Update, second_hour::direct)
             .init_resource::<first_hour::Fight>()
             .add_systems(
