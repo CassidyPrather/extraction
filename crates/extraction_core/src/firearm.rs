@@ -252,6 +252,9 @@ pub enum Event {
     /// The trigger pulled with the hammer already down (after a dud, a
     /// squib, a short stroke): slack, no break.
     TriggerDead,
+    /// The trigger pulled with the action open: a slide locked back on an
+    /// empty magazine, a bolt drawn. Let it go home first.
+    ActionOpen,
     MagazineRemoved,
     /// A round was pushed into an internal magazine or a breech.
     RoundLoaded,
@@ -463,6 +466,10 @@ pub struct Firearm {
     trigger_down: bool,
     /// Semi-auto needs the trigger released before the next shot.
     trigger_reset: bool,
+    /// This press has already said why it didn't fire (blocked, open, a
+    /// hammer down): once a press, held or not.
+    #[serde(default)]
+    told: bool,
     /// Seconds until the next automatic shot may fire.
     cooldown: f32,
     /// Which barrel fires next on a double.
@@ -518,6 +525,7 @@ impl Firearm {
             build: crate::gunsmith::Build::default(),
             trigger_down: false,
             trigger_reset: true,
+            told: false,
             cooldown: 0.0,
             next_barrel: 0,
         }
@@ -659,6 +667,7 @@ impl Firearm {
         } else if !trigger && self.trigger_down {
             self.trigger_down = false;
             self.trigger_reset = true;
+            self.told = false;
         }
         events
     }
@@ -727,10 +736,22 @@ impl Firearm {
         let mut events = Vec::new();
         let blocked = self.fire_mode() == FireMode::Safe
             || (self.def.action == ActionKind::Revolver && self.gate_open);
-        if blocked && self.trigger_reset {
+        if blocked && !self.told {
             // Felt once a press: the finger meets the block.
-            self.trigger_reset = false;
+            self.told = true;
             return vec![Event::TriggerBlocked];
+        }
+        if !self.told && !blocked && !self.is_ready() && self.hang.is_none() {
+            // The action's open (a slide locked back on the last round, a
+            // bolt drawn): the trigger goes back on nothing. Or, on an open
+            // bolt or a crossbow, nothing's cocked to let go.
+            self.told = true;
+            let dead = self.def.open_bolt || self.def.action == ActionKind::Crossbow;
+            return vec![if dead {
+                Event::TriggerDead
+            } else {
+                Event::ActionOpen
+            }];
         }
         if self.fire_mode() == FireMode::Safe
             || !self.trigger_reset
@@ -745,7 +766,7 @@ impl Firearm {
         }
         if self.def.open_bolt {
             if self.malfunction.is_some() {
-                return events;
+                return self.dead_trigger();
             }
             if self.fire_mode() != FireMode::Auto {
                 self.trigger_reset = false;
@@ -758,7 +779,7 @@ impl Firearm {
             .malfunction
             .is_some_and(|m| m != Malfunction::FailureToFeed)
         {
-            return events;
+            return self.dead_trigger();
         }
         if self.fire_mode() != FireMode::Auto {
             self.trigger_reset = false;
@@ -773,8 +794,10 @@ impl Firearm {
             } else {
                 // The hammer's already down: the trigger goes back slack,
                 // no break, no click (once a press).
-                self.trigger_reset = false;
-                events.push(Event::TriggerDead);
+                if !self.told {
+                    self.told = true;
+                    events.push(Event::TriggerDead);
+                }
                 return events;
             }
         }
@@ -844,6 +867,16 @@ impl Firearm {
             _ => events.push(Event::DryFire),
         }
         events
+    }
+
+    /// A jammed action holds the sear: the trigger goes back on nothing,
+    /// said once a press.
+    fn dead_trigger(&mut self) -> Vec<Event> {
+        if self.told {
+            return Vec::new();
+        }
+        self.told = true;
+        vec![Event::TriggerDead]
     }
 
     /// A crossbow's trigger lets the string go: a bolt on the rail flies;
@@ -2096,6 +2129,51 @@ mod tests {
         let mut ev = gun.update(0.016, true, &mut r);
         ev.extend(gun.update(0.016, false, &mut r));
         (gun, ev)
+    }
+
+    /// Every pull that doesn't fire says why, every time: the safety, an
+    /// open action, a hammer already down, an empty chamber.
+    #[test]
+    fn every_pull_that_doesnt_fire_says_why() {
+        let pull = |g: &mut Firearm| {
+            let mut r = || 0.99;
+            let mut ev = g.update(0.016, true, &mut r);
+            ev.extend(g.update(0.016, false, &mut r));
+            ev
+        };
+        // Run dry: the slide locks back; a fresh magazine in, slide still back.
+        let mut gun = Firearm::new(pistol(), 1.0);
+        gun.insert_magazine(mag("pm", 1)).unwrap();
+        rack(&mut gun);
+        gun.cycle_mode();
+        assert!(fired(&pull(&mut gun)));
+        assert!(gun.locked_back, "held open on the last round");
+        gun.remove_magazine();
+        gun.insert_magazine(mag("pm", 8)).unwrap();
+        for _ in 0..3 {
+            assert_eq!(pull(&mut gun), vec![Event::ActionOpen], "every pull");
+        }
+        // The slide let go: it fires.
+        gun.release_slide_stop();
+        assert!(fired(&pull(&mut gun)));
+        // On safe: blocked, every pull.
+        let mut gun = Firearm::new(pistol(), 1.0);
+        gun.insert_magazine(mag("pm", 8)).unwrap();
+        rack(&mut gun);
+        for _ in 0..3 {
+            assert_eq!(pull(&mut gun), vec![Event::TriggerBlocked]);
+        }
+        // A rifle with a magazine in and nothing chambered: a click, then a
+        // dead trigger, every pull.
+        let mut gun = Firearm::new(rifle(), 1.0);
+        gun.cycle_mode();
+        gun.cycle_mode();
+        gun.insert_magazine(mag("ak545", 30)).unwrap();
+        gun.hammers_cocked[0] = true;
+        assert_eq!(pull(&mut gun), vec![Event::DryFire]);
+        for _ in 0..3 {
+            assert_eq!(pull(&mut gun), vec![Event::TriggerDead]);
+        }
     }
 
     #[test]

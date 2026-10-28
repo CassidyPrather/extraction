@@ -712,6 +712,40 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// Every pull on a stopped gun says why, every pull: nobody squeezes a
+    /// dead gun at a walker without knowing it's dead (the first playtest's
+    /// first death: a pistol run dry, a fresh magazine in, the slide still
+    /// back, and the trigger answered nothing).
+    #[test]
+    fn every_pull_on_a_stopped_gun_says_why() {
+        let catalog = Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            let Some(f) = def.firearm.as_ref() else {
+                continue;
+            };
+            let id = def.id.as_str();
+            for s in stoppages(id, f) {
+                // (A hang-fire goes off in its own time; hold on.)
+                if !s.stops || s.name == "hang-fire" {
+                    continue;
+                }
+                let mut g = s.gun.clone();
+                for k in 1..=3 {
+                    let ev = pull(&mut g, &[]);
+                    if shot(&ev) {
+                        bad.push(format!("{id} {}: pull {k} fired", s.name));
+                        break;
+                    }
+                    if heard(f.action, id, &ev).is_empty() || felt(&ev).is_empty() {
+                        bad.push(format!("{id} {}: pull {k} said nothing ({ev:?})", s.name));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// How often a gun stops is its condition and dirt: a worn, filthy one
     /// jams and sticks far more than one fresh off the bench.
     #[test]
@@ -730,5 +764,57 @@ mod tests {
             );
             assert!(worn.sticky_chance() > fresh.sticky_chance(), "{id}");
         }
+    }
+}
+
+#[cfg(test)]
+mod vr {
+    use crate::rig::Side;
+    use crate::weapons::feel::vr_tests::*;
+    use extraction_core::firearm::FireMode;
+
+    fn said(r: &Range, text: &str) -> bool {
+        r.vr.app
+            .world()
+            .resource::<crate::raid::Raid>()
+            .log
+            .iter()
+            .any(|(t, _)| t.contains(text))
+    }
+
+    /// The first playtest's first death, played through: the PM run dry
+    /// at a walker, the empty magazine dropped and a full one seated, the
+    /// slide still back. The trigger fires nothing, and says so: the open
+    /// action's dry tick and give in the hand, and the wrist's line. B
+    /// lets the slide go, and it fires.
+    #[test]
+    fn a_pistol_run_dry_and_reloaded_tells_you_the_slide_is_back() {
+        let mut r = hold("pm_pistol", false, false);
+        seat_mag(&mut r, "pm_mag", 1);
+        rack(&mut r);
+        {
+            let mut g = gun_mut(&mut r);
+            while g.firearm.fire_mode() != FireMode::Semi {
+                g.firearm.cycle_mode();
+            }
+        }
+        assert_eq!(fire(&mut r, 1, true).len(), 1, "the last round");
+        assert!(gun_mut(&mut r).firearm.locked_back, "held open");
+        r.vr.primary(Side::Right, true);
+        r.vr.step(3);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(10);
+        assert!(gun_mut(&mut r).firearm.magazine.is_none(), "dropped");
+        seat_mag(&mut r, "pm_mag", 8);
+        assert!(
+            fire(&mut r, 1, true).is_empty(),
+            "the slide's back: nothing"
+        );
+        assert!(said(&r, "Slide's back"), "the wrist says what lets it go");
+        r.vr.secondary(Side::Right, true);
+        r.vr.step(3);
+        r.vr.secondary(Side::Right, false);
+        r.vr.step(5);
+        assert_eq!(fire(&mut r, 1, true).len(), 1, "let go, it fires");
     }
 }
