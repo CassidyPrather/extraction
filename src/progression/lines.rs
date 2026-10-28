@@ -258,6 +258,27 @@ pub fn job_this_way(place: &str, way: &str, radio: bool) -> String {
     }
 }
 
+/// Off the truck without them (`progression::tailgate`): what you haven't
+/// got, and where it is ("crate", "ledge", or nowhere to hand).
+pub fn not_carrying(missing: &[(&str, Option<&str>)]) -> String {
+    let names: Vec<&str> = missing.iter().map(|(n, _)| *n).collect();
+    let what = match names.as_slice() {
+        [] => String::new(),
+        [a] => (*a).to_owned(),
+        [a, b] => format!("{a} or {b}"),
+        [rest @ .., last] => format!("{} or {last}", rest.join(", ")),
+    };
+    let crate_ = missing.iter().any(|(_, p)| *p == Some("crate"));
+    let ledge = missing.iter().any(|(_, p)| *p == Some("ledge"));
+    let where_ = match (crate_, ledge) {
+        (true, true) => " Crate and ledge.",
+        (true, false) => " In the crate.",
+        (false, true) => " On the ledge.",
+        (false, false) => " Go careful.",
+    };
+    format!("Truck: \"No {what} on you.{where_}\"")
+}
+
 /// Back after going down (`progression::restate_after_fall`): the job's
 /// still there, and which way from the truck (or which valley).
 pub fn job_waiting(place: &str, where_: Option<&str>) -> String {
@@ -391,6 +412,12 @@ mod tests {
             job_this_way(place, "north-west, 1480 m", true),
             job_waiting(place, Some("north-west, 1480 m")),
             job_waiting(place, Some("Sallow Reservoir")),
+            not_carrying(&[
+                ("gun", Some("crate")),
+                ("radio", Some("ledge")),
+                ("map", Some("crate")),
+            ]),
+            not_carrying(&[("gun", None), ("radio", Some("ledge"))]),
             job_this_way(place, "north-west, 1480 m", false),
             scout_forgotten(place),
             AERIAL_SURGE.into(),
