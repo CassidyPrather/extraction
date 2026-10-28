@@ -388,7 +388,10 @@ tinted, so the grit it flings out can be paler than the soil: a broad
 bank of it, thickest just inside the rim, pale on dark ground with the
 rust and grooves through it on pale. A frost's pale hoar was no mark on
 Rime Fell's snow (0 of 4); it's a glaze of dark blue ice now (4 of 4).
-Before and after, each kind at 5 m by day:
+At 20 m the lift and the frost still read and draw no outline (lift
+26-94 deg², frost 21-24, outlines 0.18-0.29: Marrow's `legibility.png`,
+and `legibility_{rime_fell,sallow_reservoir}_tip.png` beside those
+valleys' full sheets). Before and after, each kind at 5 m by day:
 `docs/shots/anomalies/contact_before_after.png`. Sheets:
 `docs/shots/anomalies/edges*.png` (Marrow Creek, Kettle Pass, Cinder Works and Sallow
 Reservoir's other kinds on shots from before the last merge of main; their
