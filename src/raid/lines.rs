@@ -50,24 +50,24 @@ pub fn pick<'a>(ways: &[&'a str], n: u32) -> &'a str {
 /// from you ("north-west, 480 m": the map only says RV, so the name alone
 /// tells someone new nothing).
 pub const CALLED: &[&str] = &[
-    "Truck: \"Copy. {rv}, {b}. Two minutes.\"",
-    "Truck: \"On my way to {rv}, {b}. Two minutes.\"",
-    "Truck: \"{rv}, {b}. Two minutes. Keep low.\"",
-    "Truck: \"Heard you. {rv}, {b}. Two minutes.\"",
+    "Truck: \"Copy. {rv}, {b}. {t}.\"",
+    "Truck: \"On my way to {rv}, {b}. {t}.\"",
+    "Truck: \"Coming. {rv}, {b}. {t}.\"",
+    "Truck: \"Heard you. {rv}, {b}. {t}.\"",
 ];
 
-/// Called again while on the way: `{s}` is seconds left.
+/// Called again while on the way: `{t}` is the time left, in words.
 pub const ON_THE_WAY: &[&str] = &[
-    "Truck: \"Still on my way. {s} seconds.\"",
-    "Truck: \"{s} seconds. Road's bad.\"",
-    "Truck: \"I'm coming. {s} seconds.\"",
+    "Truck: \"Still on my way. {t}.\"",
+    "Truck: \"{t}. Road's bad.\"",
+    "Truck: \"I'm coming. {t}.\"",
 ];
 
-/// Arrived at `{rv}`.
+/// Arrived at `{rv}`: `{t}` is how long it waits (`TRUCK_WAIT`), in words.
 pub const ARRIVED: &[&str] = &[
-    "Truck: \"At {rv}. I'll wait five minutes, no more.\"",
-    "Truck: \"I'm at {rv}. Five minutes, then I go.\"",
-    "Truck: \"At {rv}. Engine's running. Five minutes.\"",
+    "Truck: \"At {rv}. {t}, no more.\"",
+    "Truck: \"I'm at {rv}. {t}, then I go.\"",
+    "Truck: \"At {rv}. Engine's running. {t}.\"",
 ];
 
 /// Called while waiting at `{rv}`, `{b}` from you.
@@ -420,6 +420,66 @@ pub fn fill(line: &str, rv: &str, s: f32, b: &str) -> String {
         .replace("{b}", b)
 }
 
+/// How long, as he'd say it: "Ten seconds", "A minute", "Two minutes"
+/// (rounded the way you'd round for someone waiting: never longer than
+/// it is by more than a breath).
+pub fn time_words(secs: f32) -> String {
+    const WORDS: [&str; 21] = [
+        "no",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+        "twenty",
+    ];
+    let cap = |w: &str| -> String {
+        let mut c = w.chars();
+        c.next()
+            .map(|f| f.to_uppercase().chain(c).collect::<String>())
+            .unwrap_or_default()
+    };
+    let secs = secs.max(0.0);
+    if secs < 45.0 {
+        // To the nearest five, from ten.
+        let n = if secs < 10.0 {
+            secs.round()
+        } else {
+            (secs / 5.0).round() * 5.0
+        } as usize;
+        return match n {
+            0 | 1 => "Any second".into(),
+            n if n <= 20 => format!("{} seconds", cap(WORDS[n])),
+            n => format!("{n} seconds"),
+        };
+    }
+    let mins = (secs / 60.0).round().max(1.0) as usize;
+    match mins {
+        1 => "A minute".into(),
+        n if n <= 20 => format!("{} minutes", cap(WORDS[n])),
+        n => format!("{n} minutes"),
+    }
+}
+
+/// Fills a line's `{t}` with [`time_words`] (`{t}` leads its sentence).
+pub fn fill_time(line: &str, secs: f32) -> String {
+    line.replace("{t}", &time_words(secs))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,11 +515,17 @@ mod tests {
         assert_eq!(way([0.0, 0.0], [-50.0, 3.0]), "west, 50 m");
     }
 
-    /// Every line, filled with every place, fits the wrist whole.
-    #[test]
-    fn every_line_fits_the_wrist() {
-        let mut lines: Vec<String> = Vec::new();
-        let pools: [&[&str]; 42] = [
+    const EPILOGUE_ONES: &[&str] = &[
+        crate::raid::epilogue::SETTING_OFF,
+        crate::raid::epilogue::GOING_DOWN,
+        crate::raid::epilogue::STACKS_SHUT,
+        crate::raid::epilogue::RELEASED,
+    ];
+    const TRUCK_ONES: &[&str] = &[NO_FUEL, FIRST_SHORT_RUN];
+
+    /// Every pool of lines said over the radio or the wrist.
+    fn every_pool() -> Vec<&'static [&'static str]> {
+        vec![
             SQUAD_FLANK_BY,
             SQUAD_SPOT_BY,
             SQUAD_FLANK,
@@ -477,12 +543,7 @@ mod tests {
             MEMORY_WAYS,
             crate::raid::epilogue::FOUND,
             BEAT_ENDED,
-            &[
-                crate::raid::epilogue::SETTING_OFF,
-                crate::raid::epilogue::GOING_DOWN,
-                crate::raid::epilogue::STACKS_SHUT,
-                crate::raid::epilogue::RELEASED,
-            ],
+            EPILOGUE_ONES,
             CARGO_ANNA,
             CARGO_ARTIFACT,
             CARGO_EYE,
@@ -506,8 +567,59 @@ mod tests {
             COMING_HOME_QUIET,
             CHATTER_CLOSE,
             CHATTER_FAR,
-            &[NO_FUEL, FIRST_SHORT_RUN],
+            TRUCK_ONES,
+        ]
+    }
+
+    /// A line that says how long, how far or how many says what the code
+    /// holds: the number comes from a slot (`{t}`, `{s}`, `{b}`) filled
+    /// from the game's state, never written into the line, where it goes
+    /// stale the first time the state differs (the truck said "Two
+    /// minutes" in the yard, where it comes in ten seconds).
+    #[test]
+    fn every_claim_comes_from_the_code() {
+        let numbers = [
+            "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "fifteen", "twenty", "thirty", "forty", "fifty", "a", "an", "half", "few",
         ];
+        let units = [
+            "second", "seconds", "minute", "minutes", "hour", "hours", "m", "metres", "km",
+        ];
+        for pool in every_pool() {
+            for line in pool {
+                let words: Vec<String> = line
+                    .split(|c: char| !c.is_alphanumeric())
+                    .filter(|w| !w.is_empty())
+                    .map(|w| w.to_lowercase())
+                    .collect();
+                for w in words.windows(2) {
+                    let number = numbers.contains(&w[0].as_str())
+                        || w[0].chars().all(|c| c.is_ascii_digit());
+                    assert!(
+                        !(number && units.contains(&w[1].as_str())),
+                        "states \"{} {}\" as written, not from the code: {line}",
+                        w[0],
+                        w[1]
+                    );
+                }
+            }
+        }
+        // The one said apart from a pool, by its own constant.
+        let aerial = crate::progression::lines::AERIAL_SURGE.to_lowercase();
+        let ahead = time_words(crate::progression::AERIAL_WARNING).to_lowercase();
+        assert!(aerial.contains(&ahead), "{aerial:?} isn't {ahead:?}");
+    }
+
+    /// Every line, filled with every place, fits the wrist whole.
+    #[test]
+    fn every_line_fits_the_wrist() {
+        let mut lines: Vec<String> = Vec::new();
+        let pools = every_pool();
+        let most = crate::raid::TRUCK_TRANSIT.max(crate::raid::TRUCK_WAIT) as u32;
+        let longest = (0..=most)
+            .map(|t| time_words(t as f32))
+            .max_by_key(|w| w.len())
+            .unwrap();
         for pool in pools {
             for line in pool {
                 for rv in rendezvous_names() {
@@ -517,7 +629,8 @@ mod tests {
                     } else {
                         "north-west"
                     };
-                    lines.push(fill(line, &rv, 120.0, b));
+                    // The longest time it can say: a drive, or its wait.
+                    lines.push(fill(line, &rv, 120.0, b).replace("{t}", &longest));
                 }
             }
         }
@@ -602,17 +715,41 @@ mod tests {
         );
     }
 
+    /// The time a line says is the time it is, near enough for someone
+    /// waiting.
+    #[test]
+    fn times_read_as_said() {
+        for (secs, said) in [
+            (0.4, "Any second"),
+            (7.0, "Seven seconds"),
+            (10.0, "Ten seconds"),
+            (12.0, "Ten seconds"),
+            (38.0, "40 seconds"),
+            (60.0, "A minute"),
+            (120.0, "Two minutes"),
+            (300.0, "Five minutes"),
+        ] {
+            assert_eq!(time_words(secs), said, "{secs}");
+        }
+    }
+
     #[test]
     fn places_read_as_places() {
         assert_eq!(the("The pass"), "the pass");
         assert_eq!(the("Bus depot"), "the bus depot");
         assert_eq!(
-            fill(CALLED[2], "The pass", 0.0, "east, 300 m"),
-            "Truck: \"The pass, east, 300 m. Two minutes. Keep low.\""
+            fill_time(
+                &fill("Truck: \"{rv}, {b}. {t}.\"", "The pass", 0.0, "east, 300 m"),
+                120.0
+            ),
+            "Truck: \"The pass, east, 300 m. Two minutes.\""
         );
         assert_eq!(
-            fill(CALLED[0], "Hunting lodge", 0.0, "north-west, 480 m"),
-            "Truck: \"Copy. The hunting lodge, north-west, 480 m. Two minutes.\""
+            fill_time(
+                &fill(CALLED[0], "Hunting lodge", 0.0, "north-west, 480 m"),
+                10.0
+            ),
+            "Truck: \"Copy. The hunting lodge, north-west, 480 m. Ten seconds.\""
         );
     }
 
