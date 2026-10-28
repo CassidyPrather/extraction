@@ -712,6 +712,10 @@ mod tests {
             "a wall breached is heard as it Broke (destruction)",
         ),
         ("CalledOut", "the robots' call is their voice's Calling"),
+        (
+            "ComingBack",
+            "a machine coming back is heard by its own Investigating call (MindShift)",
+        ),
         ("CarriedOutOfDepot", "progression bookkeeping"),
         ("Cleared", "a space cleared for the nav grids"),
         (
@@ -769,6 +773,10 @@ mod tests {
         ("Slept", "a fade"),
         ("Smash", "what it breaks is heard (Broke)"),
         ("ToggleBackpack", "flat mode's pack; opening it is heard"),
+        (
+            "Treated",
+            "telemetry's note of a dressing or injector used; the use is heard",
+        ),
     ];
 
     /// Every gameplay event has a sound: each `Message` type the game

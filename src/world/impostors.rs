@@ -12,7 +12,7 @@ use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::image::{ImageSampler, ImageSamplerDescriptor};
 use bevy::mesh::Indices;
 use bevy::prelude::*;
-use bevy::render::gpu_readback::{Readback, ReadbackComplete};
+use bevy::render::gpu_readback::ReadbackComplete;
 use bevy::render::render_resource::{
     Extent3d, PrimitiveTopology, TextureDimension, TextureFormat, TextureUsages,
 };
@@ -217,13 +217,18 @@ fn read_back(
         }
         c.reading = true;
         let (out, size, rig) = (c.out.clone(), c.size, c.rig.clone());
-        commands.spawn(Readback::texture(c.target.clone())).observe(
+        crate::render::readback::read_texture(&mut commands, c.target.clone()).observe(
             move |done: On<ReadbackComplete>,
+                  once: Query<&crate::render::readback::ReadOnce>,
                   mut images: ResMut<Assets<Image>>,
                   mut materials: ResMut<Assets<ImpostorMaterial>>,
                   mut captures: Query<&mut Capture>,
                   mut commands: Commands| {
-                commands.entity(done.entity).despawn();
+                // Once: two in a frame counted an empty picture as two
+                // tries, and despawned twice.
+                if !crate::render::readback::taken(&done, &once, &mut commands) {
+                    return;
+                }
                 let expected = (size.x * size.y * 4) as usize;
                 if let Some(dir) = std::env::var_os("EXTRACTION_IMPOSTOR_DUMP") {
                     let path = std::path::Path::new(&dir).join(format!(
