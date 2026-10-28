@@ -1346,12 +1346,17 @@ fn treat_for_gallery(
                 commands.entity(h).insert(Bloodied(1.0));
             }
         }
-        if let Some(mut raid) = raid {
-            raid.say(crate::interact::wounds::dressed_line(
-                Some(Limb::UpperArm(Side::Right)),
-                Some(&wounds),
-                health.bleeding,
-            ));
+    }
+    // Said, and said again whenever it's gone from the log (a line lasts
+    // seconds; frames here are slow), so the wrist shows it.
+    if let Some(mut raid) = raid {
+        let line = crate::interact::wounds::dressed_line(
+            Some(Limb::UpperArm(Side::Right)),
+            Some(&wounds),
+            health.bleeding,
+        );
+        if !raid.log.iter().any(|(t, _)| *t == line) {
+            raid.say(line);
         }
     }
     let left = input.hand_mut(Side::Left);
