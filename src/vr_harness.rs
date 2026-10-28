@@ -6217,19 +6217,37 @@ mod wounds {
                 .count()
         };
         assert!(bloody(&mut vr) > 0, "a bloody glove");
-        // Home: health made whole, as the truck does.
-        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase = crate::raid::Phase::AtBase;
-        *vr.app
-            .world_mut()
-            .get_mut::<crate::health::Health>(vr.player)
-            .unwrap() = crate::health::Health::default();
+        // Home the way a raid ends: extracted, the truck drives you back
+        // (`raid::truck::finish_raid` makes you whole and sets the phase).
+        vr.app.world_mut().resource_mut::<crate::raid::Raid>().phase =
+            crate::raid::Phase::Extracting { left: 0.0 };
         vr.step(4);
+        assert!(
+            matches!(
+                vr.app.world().resource::<crate::raid::Raid>().phase,
+                crate::raid::Phase::AtBase
+            ),
+            "home"
+        );
         assert!(
             wounds(&vr).is_empty(),
             "no wounds at home: {:?}",
             wounds(&vr)
         );
         assert_eq!(bloody(&mut vr), 0, "clean gloves");
+        // Hurt at base, the phase never changing (in a full run something
+        // else can set it first): the wounds stay while you're hurt, and go
+        // once you're whole.
+        let thigh = on(&mut vr, Limb::Thigh(Side::Left), 0.4);
+        shot(&mut vr, thigh, 30.0);
+        vr.step(4);
+        assert!(!wounds(&vr).is_empty(), "hurt at base, the wounds show");
+        *vr.app
+            .world_mut()
+            .get_mut::<crate::health::Health>(vr.player)
+            .unwrap() = crate::health::Health::default();
+        vr.step(4);
+        assert!(wounds(&vr).is_empty(), "whole again: {:?}", wounds(&vr));
     }
 
     /// The glove of a hand laid on an open wound comes away bloody; the
