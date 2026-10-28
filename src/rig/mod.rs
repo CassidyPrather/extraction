@@ -167,6 +167,38 @@ impl Plugin for RigPlugin {
 #[derive(Resource, Clone, Debug)]
 pub struct XrMissing(pub String);
 
+/// The headset's been asked for and its session hasn't started (nor been
+/// given up on): till then nobody knows whether the player's in a headset
+/// or at the window, so nothing picks headset or flat words
+/// ([`KnownDriver`]). The runtime's own loader is all a headset shows
+/// meanwhile, 3 to 20 s.
+#[derive(Resource)]
+pub struct DriverPending;
+
+/// The driver, once it's known.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct KnownDriver<'w> {
+    driver: Res<'w, RigDriver>,
+    pending: Option<Res<'w, DriverPending>>,
+}
+
+impl KnownDriver<'_> {
+    pub fn get(&self) -> Option<RigDriver> {
+        self.pending.is_none().then_some(*self.driver)
+    }
+
+    /// Flat words or headset words: `None` till it's known.
+    pub fn flat(&self) -> Option<bool> {
+        self.get().map(|d| d == RigDriver::Flat)
+    }
+}
+
+/// The headset session started: the rig is the headset's.
+pub fn headset_started(world: &mut World) {
+    world.insert_resource(RigDriver::Xr);
+    world.remove_resource::<DriverPending>();
+}
+
 /// Run condition: the flat driver is in charge.
 pub fn flat_driving(driver: Res<RigDriver>) -> bool {
     *driver == RigDriver::Flat

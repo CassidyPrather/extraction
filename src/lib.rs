@@ -301,6 +301,7 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         );
         app.add_plugins(rig::xr::XrDriverPlugin);
         app.insert_resource(XrActive);
+        app.insert_resource(rig::DriverPending);
     } else {
         app.add_plugins(defaults);
     }

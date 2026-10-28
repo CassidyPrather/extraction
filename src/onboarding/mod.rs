@@ -349,8 +349,9 @@ pub struct Onboarding {
     pub skipped: Vec<Goal>,
     /// Seconds the yard has been open (for the opening line).
     pub age: f32,
-    /// The opening line has been said.
+    /// The opening line has been said (for flat play, or not).
     pub greeted: bool,
+    pub greeted_flat: bool,
     /// Ducked under the low beam on the track (noticed, not asked for).
     pub ducked: bool,
 }
@@ -1433,16 +1434,25 @@ fn announce(
     mut raid: ResMut<Raid>,
     mut steps: MessageWriter<StepDone>,
     time: Res<Time>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     players: Query<(), With<LocalPlayer>>,
 ) {
-    let flat = *driver == RigDriver::Flat;
     if players.is_empty() {
         return;
     }
     ob.age += time.delta_secs();
-    if !ob.greeted && ob.age > 1.5 {
+    // Nothing's said till it's known whether you're in a headset or at the
+    // window (a headset's session starts 3 to 20 s in).
+    let Some(flat) = driver.flat() else {
+        return;
+    };
+    // Said once, for how you play; again if that changed before you'd
+    // started (a headset that came up after the window had been given the
+    // words).
+    let unstarted = ob.done.is_empty();
+    if ob.age > 1.5 && (!ob.greeted || (unstarted && ob.greeted_flat != flat)) {
         ob.greeted = true;
+        ob.greeted_flat = flat;
         raid.say(if flat { GREET_FLAT } else { GREET_VR });
     }
     for d in done.read() {
@@ -1536,11 +1546,14 @@ pub fn checklist_text(ob: &Onboarding) -> String {
 
 fn signs(
     ob: Res<Onboarding>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut signs: Query<(&StationSign, &mut ScreenText)>,
 ) {
-    let flat = *driver == RigDriver::Flat;
+    // Blank till it's known which controls to name.
+    let Some(flat) = driver.flat() else {
+        return;
+    };
     let comfort = comfort.map(|c| c.clone()).unwrap_or_default();
     for (s, mut screen) in &mut signs {
         let t = sign_text(&ob, s.0, flat, &comfort);
@@ -1631,6 +1644,76 @@ pub mod bot;
 mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
+
+    /// A headset whose session starts 10 s in (the playtest's took 3 to
+    /// 19) hears only headset words: no line is said and no board names a
+    /// control till it's known which, and "press E" never reaches the
+    /// wrist.
+    #[test]
+    fn a_headset_that_starts_late_hears_only_headset_words() {
+        let dir = std::env::temp_dir().join(format!("extraction-late-xr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opts = crate::LaunchOptions {
+            robots: false,
+            map: TRAINING_YARD.into(),
+            data_dir: Some(dir.clone()),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        // As `lib.rs` does when the headset's plugins are in.
+        app.insert_resource(crate::rig::DriverPending);
+        app.finish();
+        app.cleanup();
+        let comfort = crate::rig::comfort::Comfort::default();
+        let mut heard: Vec<String> = Vec::new();
+        let mut started = false;
+        let mut boards = 0;
+        loop {
+            let t = app.world().resource::<Time>().elapsed_secs();
+            if t > 16.0 {
+                break;
+            }
+            if t >= 10.0 && !started {
+                started = true;
+                crate::rig::headset_started(app.world_mut());
+            }
+            app.update();
+            for (line, _) in &app.world().resource::<Raid>().log {
+                if !heard.contains(line) {
+                    heard.push(line.clone());
+                }
+            }
+            let ob = app.world().resource::<Onboarding>().clone();
+            let mut q = app.world_mut().query::<(&StationSign, &ScreenText)>();
+            for (sign, screen) in q.iter(app.world()) {
+                if screen.text.is_empty() {
+                    continue;
+                }
+                boards += 1;
+                assert!(
+                    started,
+                    "board {} written before the driver was known",
+                    sign.0
+                );
+                assert_eq!(
+                    screen.text,
+                    sign_text(&ob, sign.0, false, &comfort),
+                    "board {} in flat words",
+                    sign.0
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(boards > 0, "the boards were written once it was known");
+        assert!(
+            heard.iter().any(|l| l == GREET_VR),
+            "greeted for a headset: {heard:?}"
+        );
+        assert!(
+            !heard.iter().any(|l| l == GREET_FLAT),
+            "greeted for the window: {heard:?}"
+        );
+    }
 
     // The first playtest's first complaint was signs it couldn't read, and
     // these are what someone new reads first: they hold to the must-read

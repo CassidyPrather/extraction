@@ -10,7 +10,7 @@ use extraction_core::firearm::{Event as FireEvent, FireMode};
 
 use crate::interact::Held;
 use crate::raid::{Phase, RadioCall, Raid};
-use crate::rig::{LocalPlayer, RigDriver, RigInput};
+use crate::rig::{LocalPlayer, RigInput};
 use crate::weapons::{Gun, GunEvent};
 
 /// How many times each hint is given in a session.
@@ -74,7 +74,7 @@ fn on_safe(
     inputs: Query<&RigInput, With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     time: Res<Time>,
     mut was: Local<bool>,
 ) {
@@ -87,8 +87,7 @@ fn on_safe(
             squeezed = true;
         }
     }
-    if squeezed && !*was {
-        let flat = *driver == RigDriver::Flat;
+    if let (true, false, Some(flat)) = (squeezed, *was, driver.flat()) {
         hints.give(Hint::Safety, time.elapsed_secs(), flat, &mut raid);
     }
     *was = squeezed;
@@ -101,13 +100,12 @@ fn dry_click(
     locals: Query<(), With<LocalPlayer>>,
     mut hints: ResMut<Hints>,
     mut raid: ResMut<Raid>,
-    driver: Res<RigDriver>,
+    driver: crate::rig::KnownDriver,
     time: Res<Time>,
 ) {
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
-        if mine && ev.event == FireEvent::DryFire {
-            let flat = *driver == RigDriver::Flat;
+        if let (true, Some(flat)) = (mine && ev.event == FireEvent::DryFire, driver.flat()) {
             hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
         }
     }
