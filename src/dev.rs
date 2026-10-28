@@ -365,6 +365,18 @@ fn gallery(
                     }
                 }
             }
+            // A gun's safety, close up: the same gun on safe (above) and
+            // off it (below), its trigger guard in front of the eye.
+            s if s.starts_with("safety:") => {
+                let id = &s["safety:".len()..];
+                let d = dist.unwrap_or(0.35);
+                for (up, how) in [(0.06, 0), (-0.06, 3)] {
+                    let at = eye + fwd * d + Vec3::Y * up;
+                    if let Some(e) = spawn_static(&mut commands, id, at) {
+                        told.push((e, how));
+                    }
+                }
+            }
             // The tells (`weapons::legibility`): a Mosin as it lies and
             // one cocked (its cocking piece back), the double as it lies
             // and cocked (its indicators up), an AK new and one worn out
@@ -460,6 +472,11 @@ fn gallery(
             match how {
                 1 => g.firearm.hammers_cocked.iter_mut().for_each(|h| *h = true),
                 2 => g.firearm.condition = 0.08,
+                3 => {
+                    while g.firearm.fire_mode() == extraction_core::firearm::FireMode::Safe {
+                        g.firearm.cycle_mode();
+                    }
+                }
                 _ => {}
             }
             false
