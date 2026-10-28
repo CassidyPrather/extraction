@@ -80,6 +80,18 @@ Things that have bitten captures, and what now guards against them:
   5.8%, including a dark hut at night. The visual diff runs it on every
   shot and prints `BUILDINGS PASS` or `BUILDINGS MISSING`.
 
+  It judges only what it could see. A building that would fail is
+  `SKIPPED`, with the reason, never passed, when:
+  - its box is a sliver run off the frame's edge;
+  - something nearer blocks it: each probe raycasts from the eye through
+    its footprint box (`seen` in the probes file);
+  - its patch is black fog.
+  Rime on 844e46d8 flagged three of those: the gate beside the guard
+  booth the camera is up against, at dusk and night, and a log pile in
+  black fog at night. A lost building still stands where it was placed,
+  collider and all, so it is still judged. `--self-test` (run by
+  `cargo test`) holds that on the missing furnace's own numbers.
+
   The game-side fix is `transform_guard`: each frame, everything attached
   marks every ancestor's tree, between `mark_dirty_trees` and the
   propagation, so the optimisation stays on (turning it off globally

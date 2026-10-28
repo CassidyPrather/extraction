@@ -159,6 +159,9 @@ else
     echo "BUILDINGS MISSING $NEW: $(tail -1 "$VD/diff/$TAG/buildings.txt")"
     grep '^ERROR' "$VD/diff/$TAG/buildings.txt"
 fi
+# Buildings it couldn't judge (a sliver, behind something, black fog):
+# never counted as there.
+grep '^SKIPPED' "$VD/diff/$TAG/buildings.txt" || true
 
 # Keep the newest KEEP shot sets and builds (and the two just compared).
 prune() { # dir
