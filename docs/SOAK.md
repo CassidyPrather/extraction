@@ -78,6 +78,55 @@ such cycles and holds each reset to the size of the one before.
   of the raider's career (with the wreck and map fixes): no leaks, memory
   flat at 185-210 MB, frame time flat.
 
+## A quiet log
+
+`soak::quiet::tests::no_session_logs_a_warning` plays four sessions, each
+in its own process for 45 s of game time:
+- the yard with its own bot;
+- the sims' raider in Marrow Creek and in Kettle Pass, robots and all;
+- the whole client in the yard, with no window and no GPU.
+
+Any WARN or ERROR line whose class (level, target, message with numbers
+and entity ids taken out) isn't on `soak::quiet::ALLOWED` fails it. Each
+entry says why. Today they're the client session's missing GPU and sound
+card, and the shadow-origin warning, which comes once before the headset's
+eyes exist.
+
+The first headset night's log had 354 "Entity despawned" errors from the
+screens' and impostors' readbacks. They need a GPU to happen, so this
+session can't see them; Legibility is fixing them. Its other classes, by
+owner:
+- the render statistics buffer failing to download, once a session
+  (Performance);
+- the `--mirror` cameras' order ambiguity (rig);
+- dropped command queues and closed readback channels as the device was
+  lost (shutdown).
+
+The headless sessions (the yard, both raids, and `first_hour` with every
+persona) log nothing at WARN or above.
+
+## Recordings
+
+The recorder's state (the next position sample, the last health, hits
+waiting to show, anomalies inside, time in the air, the death's cause)
+used to live in systems' `Local`s for the app's life. A session's second
+raid restarted its clock at 0 but kept its next sample at the first raid's
+1,168 s, so the first headset night's second raid has no positions and no
+damage. It all lives in the recording now (`SimLog`), and each starts
+clean (`every_raid_of_a_session_is_recorded_whole`). Players' heals and
+fights are counted as the bots' are, and a blow from a hand or tool is a
+`blow`, not a stopped round.
+
+The yard is recorded like a raid. In every game, bots included,
+`sim::observe` notes each of these as a `PLAYTEST` line in the log and
+in the recording:
+- every press of a card, cord or button;
+- every card or board read (looked at from within 1.6 m for a second);
+- every onboarding goal;
+- every comfort setting changed, from what to what.
+
+Test: `the_yard_is_recorded_with_its_presses_reads_and_settings`.
+
 ## Save and load
 
 Checks: `cargo test -p extraction_core save::` (the file fuzzer, in

@@ -160,6 +160,7 @@ pub const MIX: &[Cue] = &[
     cue!("gun.hang_fizz", "physical/zip", -16.0, 45.0, 0.5, Signal),
     cue!("gun.trigger_block", "physical/handle_metal", -14.0, 45.0, 0.5, Detail),
     cue!("gun.string_slap", "impacts/wood", -6.0, 75.0, 0.5, Detail),
+    cue!("gun.action_open", "guns/bolt_open", -4.0, 50.0, 0.5, Signal),
     cue!("gun.trigger_dead", "guns/dry_fire", 0.0, 65.0, 0.5, Signal),
     cue!("flare.pop", "guns/pistol_shot", -12.0, 85.0, 0.5, Detail),
     cue!("flare.burn", "anomaly/burner_roar", -2.0, 60.0, 10.0, Detail),
@@ -408,6 +409,9 @@ pub const MIX: &[Cue] = &[
     cue!("walker.aim_lock", "machines/servo", -9.5, 75.0, 25.0, Signal, 15.0),
     cue!("harpoon.windup", "machines/servo", -9.5, 75.0, 15.0, Signal, 12.0),
     cue!("walker.servo", "machines/servo", -9.5, 70.0, 25.0, Detail, 10.0),
+    // A walker hunting you, standing to look: its head swept round
+    // (`audio_machines::scan_sounds`), heard to 30 m.
+    cue!("walker.scan", "machines/servo", -12.0, 80.0, 25.0, Signal, 15.0),
     // The pinner going over to suppressing fire (`walker::Suppressing`):
     // its feed racked heavy and a mode's snap; racked down when it stops.
     cue!("walker.suppress", "guns/charging_handle", -11.0, 85.0, 25.0, Signal, 15.0),

@@ -34,6 +34,13 @@ pub struct SimLog {
     pub recent: Vec<(f32, String, f32)>,
     /// What dealt the latest damage.
     pub last_cause: String,
+    /// The recorder's bookkeeping between frames. It belongs to this
+    /// recording, not to the app: kept in a system's `Local` it outlived the
+    /// raid, and a session's second raid logged no positions and no damage
+    /// (its next sample was due at the first raid's 1,168 s).
+    pub tracker: Tracker,
+    /// The death's cause and finisher, once known (the summary names it).
+    pub death: Option<(String, String)>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -49,6 +56,9 @@ pub struct Stats {
     pub distance: f32,
     pub anomaly_entries: u32,
     pub heals: u32,
+    /// Blows from a hand or a tool that struck something other than a
+    /// robot (rounds stopped by the world are `blocked`).
+    pub blows: u32,
     pub extract_reason: Option<String>,
 }
 
@@ -69,6 +79,35 @@ impl SimLog {
             finished: false,
             recent: Vec::new(),
             last_cause: String::new(),
+            tracker: Tracker::default(),
+            death: None,
+        }
+    }
+
+    /// The next raid in the same recording file (the soak's career plays
+    /// raid after raid in one process): everything kept for one raid
+    /// starts again.
+    pub fn new_raid(&mut self) {
+        self.t = 0.0;
+        self.stats = Stats::default();
+        self.finished = false;
+        self.recent.clear();
+        self.last_cause.clear();
+        self.tracker = Tracker::default();
+        self.death = None;
+    }
+
+    /// Writes the damage waiting for the next sample (at the end of a
+    /// recording, so the last second's isn't lost).
+    pub fn flush_damage(&mut self, at: Vec3, hp: f32) {
+        let pending = std::mem::take(&mut self.tracker.pending);
+        for (cause, amount) in pending {
+            *self.stats.damage.entry(cause.clone()).or_default() += amount;
+            self.event(
+                "damage",
+                json!({"cause": cause, "amount": round(amount, 1), "x": round(at.x, 1),
+                       "z": round(at.z, 1), "hp": round(hp.max(0.0), 0)}),
+            );
         }
     }
 
@@ -100,9 +139,26 @@ pub fn round(v: f32, places: i32) -> f64 {
     (v as f64 * k).round() / k
 }
 
+/// A fight a player is in (the sim's raider keeps its own): when it
+/// started and was last active, the robot's name, shots fired and hits
+/// landed when it started.
+#[derive(Clone, Debug)]
+pub struct Fight {
+    pub since: f32,
+    pub last: f32,
+    pub robot: String,
+    pub shots_at_start: u32,
+    pub hits_at_start: u32,
+}
+
+/// A player's fight ends this long after the last shot or hit either way.
+pub const FIGHT_LULL: f32 = 20.0;
+
 /// Per-run bookkeeping the recorder keeps between frames.
 #[derive(Default)]
 pub struct Tracker {
+    /// A player's fights, by robot.
+    fights: Vec<(Entity, Fight)>,
     last_pos: Option<Vec3>,
     next_sample: f32,
     last_hp: Option<f32>,
@@ -132,7 +188,6 @@ pub(crate) fn phase_name(p: &Phase) -> &'static str {
 /// Watches the bot and the world and writes what happened.
 pub fn record(
     mut log: ResMut<SimLog>,
-    mut tr: Local<Tracker>,
     time: Res<Time>,
     raid: Res<Raid>,
     bots: Query<
@@ -151,15 +206,20 @@ pub fn record(
         With<LocalPlayer>,
     >,
     colliders: Query<(), With<BodyCollider>>,
-    robots: Query<(&Robot, Option<&crate::robots::Breed>)>,
+    robots: Query<(
+        &Robot,
+        Option<&crate::robots::Breed>,
+        Option<&GlobalTransform>,
+    )>,
     parts: Query<&RobotPart>,
     anomalies: Query<(Entity, &Anomaly, &GlobalTransform)>,
     mut shots: MessageReader<Shot>,
     mut hits: MessageReader<Hit>,
     mut anomaly_events: MessageReader<AnomalyEvent>,
-    (mut bites, mut shocks): (
+    (mut bites, mut shocks, mut treated): (
         MessageReader<crate::anomaly::costs::ArtifactBite>,
         MessageReader<crate::world::live::Shocked>,
+        MessageReader<crate::items::usage::Treated>,
     ),
     (names, parents): (Query<&Name>, Query<&ChildOf>),
 ) {
@@ -173,6 +233,64 @@ pub fn record(
     else {
         return;
     };
+    let mut tr = std::mem::take(&mut log.tracker);
+    record_frame(
+        &mut log,
+        &mut tr,
+        t,
+        dt,
+        &raid,
+        (me, tf, health, body, raider, children, in_gas, in_heat),
+        &colliders,
+        &robots,
+        &parts,
+        &anomalies,
+        (&mut shots, &mut hits, &mut anomaly_events),
+        (&mut bites, &mut shocks, &mut treated),
+        (&names, &parents),
+    );
+    log.tracker = tr;
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn record_frame(
+    log: &mut SimLog,
+    tr: &mut Tracker,
+    t: f32,
+    dt: f32,
+    raid: &Raid,
+    (me, tf, health, body, raider, children, in_gas, in_heat): (
+        Entity,
+        &Transform,
+        &Health,
+        &Body,
+        Option<&Raider>,
+        &Children,
+        bool,
+        bool,
+    ),
+    colliders: &Query<(), With<BodyCollider>>,
+    robots: &Query<(
+        &Robot,
+        Option<&crate::robots::Breed>,
+        Option<&GlobalTransform>,
+    )>,
+    parts: &Query<&RobotPart>,
+    anomalies: &Query<(Entity, &Anomaly, &GlobalTransform)>,
+    (shots, hits, anomaly_events): (
+        &mut MessageReader<Shot>,
+        &mut MessageReader<Hit>,
+        &mut MessageReader<AnomalyEvent>,
+    ),
+    (bites, shocks, treated): (
+        &mut MessageReader<crate::anomaly::costs::ArtifactBite>,
+        &mut MessageReader<crate::world::live::Shocked>,
+        &mut MessageReader<crate::items::usage::Treated>,
+    ),
+    (names, parents): (&Query<&Name>, &Query<&ChildOf>),
+) {
+    // (The sim's raider logs its own fights and heals.)
+    let player = raider.is_none();
     let pos = tf.translation;
     let xz = |p: Vec3| json!({"x": round(p.x, 1), "z": round(p.z, 1)});
 
@@ -208,8 +326,11 @@ pub fn record(
                 log.stats.hits += 1;
                 let kind = robots
                     .get(part.robot)
-                    .map(|(r, b)| crate::robots::robot_name(r.kind, b))
+                    .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
                     .unwrap_or_default();
+                if player {
+                    fight_with(log, tr, t, part.robot, &kind, robots, pos);
+                }
                 log.event(
                     "hit",
                     json!({"robot": kind, "part": format!("{:?}", part.role), "damage": round(h.damage, 1)}),
@@ -227,18 +348,33 @@ pub fn record(
                     })
                     .map(|n| n.as_str().to_string())
                     .unwrap_or_else(|| "world".into());
-                log.stats.blocked += 1;
+                // A hand's or a tool's blow isn't a stopped round.
+                let (ev, count) = if h.blow.is_some() {
+                    ("blow", &mut log.stats.blows)
+                } else {
+                    ("blocked", &mut log.stats.blocked)
+                };
+                *count += 1;
                 log.event(
-                    "blocked",
+                    ev,
                     json!({"what": what, "x": round(h.point.x, 1), "z": round(h.point.z, 1),
                            "y": round(h.point.y - pos.y, 1)}),
                 );
             }
         } else if colliders.contains(h.entity) && children.contains(&h.entity) {
+            if player {
+                if let Some(s) = h.shooter.filter(|s| robots.contains(*s)) {
+                    let kind = robots
+                        .get(s)
+                        .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
+                        .unwrap_or_default();
+                    fight_with(log, tr, t, s, &kind, robots, pos);
+                }
+            }
             let cause = h
                 .shooter
                 .and_then(|s| robots.get(s).ok())
-                .map(|(r, b)| crate::robots::robot_name(r.kind, b))
+                .map(|(r, b, _)| crate::robots::robot_name(r.kind, b))
                 // Nobody's: a mine, a grenade or an anomaly's blast, a
                 // falling beam, a stray round. Named by what it was.
                 .unwrap_or_else(|| {
@@ -272,10 +408,49 @@ pub fn record(
     }
     tr.recent_air = body.airborne.max(tr.recent_air - dt);
 
+    // A player's dressings and injectors.
+    for u in treated.read() {
+        if u.player == me && player {
+            log.stats.heals += 1;
+            log.event(
+                "heal",
+                json!({"item": u.item, "hp": round(health.hp, 0), "bleeding": round(health.bleeding, 2)}),
+            );
+        }
+    }
+    // A player's fights end with the robot wrecked or gone, a lull, or
+    // the player down.
+    let fights = std::mem::take(&mut tr.fights);
+    for (robot, f) in fights {
+        let wrecked = robots.get(robot).map_or(None, |(r, ..)| Some(r.wrecked));
+        let outcome = match wrecked {
+            Some(true) => Some("wrecked"),
+            None => Some("gone"),
+            _ if health.down => Some("died"),
+            _ if t - f.last > FIGHT_LULL => Some("broke_off"),
+            _ => None,
+        };
+        match outcome {
+            Some(o) => {
+                if o == "wrecked" {
+                    *log.stats.kills.entry(f.robot.clone()).or_default() += 1;
+                }
+                log.event(
+                    "engage_end",
+                    json!({"robot": f.robot, "outcome": o,
+                           "shots": log.stats.shots - f.shots_at_start,
+                           "hits": log.stats.hits - f.hits_at_start,
+                           "secs": round(t - f.since, 1), "x": round(pos.x, 1), "z": round(pos.z, 1)}),
+                );
+            }
+            None => tr.fights.push((robot, f)),
+        }
+    }
+
     // Anomalies: walking into one, and anything one does nearby.
     let mut inside_now = Vec::new();
     let mut inside_kind = None;
-    for (e, a, gt) in &anomalies {
+    for (e, a, gt) in anomalies.iter() {
         let rel = pos - gt.translation();
         if Vec2::new(rel.x, rel.z).length() < a.radius + 0.3 && rel.y < 3.0 {
             inside_now.push(e);
@@ -388,22 +563,55 @@ pub fn record(
                    "stage": raider.map_or("player", |r| r.stage_name()),
                    "doing": raider.map_or("player", |r| r.doing())}),
         );
-        let pending = std::mem::take(&mut tr.pending);
-        for (cause, amount) in pending {
-            *log.stats.damage.entry(cause.clone()).or_default() += amount;
-            log.event(
-                "damage",
-                json!({"cause": cause, "amount": round(amount, 1), "x": round(pos.x, 1),
-                       "z": round(pos.z, 1), "hp": round(hp.max(0.0), 0)}),
-            );
-        }
+        log.tracker.pending = std::mem::take(&mut tr.pending);
+        log.flush_damage(pos, hp);
     }
+}
+
+/// A player in a fight with `robot`: a new one is an engagement.
+fn fight_with(
+    log: &mut SimLog,
+    tr: &mut Tracker,
+    t: f32,
+    robot: Entity,
+    kind: &str,
+    robots: &Query<(
+        &Robot,
+        Option<&crate::robots::Breed>,
+        Option<&GlobalTransform>,
+    )>,
+    pos: Vec3,
+) {
+    if let Some((_, f)) = tr.fights.iter_mut().find(|(e, _)| *e == robot) {
+        f.last = t;
+        return;
+    }
+    let at = robots
+        .get(robot)
+        .ok()
+        .and_then(|(.., g)| g.map(|g| g.translation()))
+        .unwrap_or(pos);
+    log.stats.engagements += 1;
+    log.event(
+        "engage",
+        json!({"robot": kind, "dist": round(at.distance(pos), 0), "noticed": true,
+               "x": round(pos.x, 1), "z": round(pos.z, 1), "rx": round(at.x, 1), "rz": round(at.z, 1)}),
+    );
+    tr.fights.push((
+        robot,
+        Fight {
+            since: t,
+            last: t,
+            robot: kind.to_owned(),
+            shots_at_start: log.stats.shots,
+            hits_at_start: log.stats.hits,
+        },
+    ));
 }
 
 /// Ends the run: extracted, dead, or out of time.
 pub fn finish(
     mut log: ResMut<SimLog>,
-    mut tr_death: Local<Option<(String, String)>>,
     raid: Res<Raid>,
     mut downed: MessageReader<Downed>,
     mut bots: Query<(Entity, &Transform, &mut Raider), With<LocalPlayer>>,
@@ -434,7 +642,7 @@ pub fn finish(
                 json!({"cause": cause, "finisher": finisher, "x": round(pos.x, 1), "z": round(pos.z, 1),
                        "doing": raider.doing()}),
             );
-            *tr_death = Some((cause, finisher));
+            log.death = Some((cause, finisher));
             outcome = Some("died");
         }
     }
@@ -454,7 +662,7 @@ pub fn finish(
     };
     raider.stage = super::raider::Stage::Done;
     let s = log.stats.clone();
-    let death = tr_death.clone();
+    let death = log.death.clone();
     log.event(
         "end",
         json!({
@@ -466,6 +674,7 @@ pub fn finish(
             "shots": s.shots,
             "hits": s.hits,
             "blocked": s.blocked,
+            "blows": s.blows,
             "engagements": s.engagements,
             "kills": s.kills,
             "damage": s.damage.iter().map(|(k, v)| (k.clone(), round(*v, 1))).collect::<BTreeMap<_, _>>(),

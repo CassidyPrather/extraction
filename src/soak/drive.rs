@@ -122,13 +122,7 @@ impl Career {
         }
         lay_out_kit(world);
         world.entity_mut(me).remove::<Raider>();
-        {
-            let mut log = world.resource_mut::<SimLog>();
-            log.finished = false;
-            log.stats = default();
-            log.t = 0.0;
-            log.recent.clear();
-        }
+        world.resource_mut::<SimLog>().new_raid();
         let _ = world.run_system_cached(crate::sim::raider::attach_raider);
     }
 }

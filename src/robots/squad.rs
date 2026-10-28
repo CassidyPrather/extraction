@@ -505,19 +505,19 @@ fn radio_calls(
         // one (a compass word alone goes stale; "by the mill" doesn't).
         let place = zone.as_deref().and_then(|z| {
             let post = Vec2::new(call.post.x, call.post.z);
-            let d = |m: &&extraction_core::map::Marker| Vec2::from(m.at).distance(post);
-            let named = z.map.markers.iter().filter(|m| !m.name.is_empty());
             match call.role {
                 Role::CutOff => z
                     .map
                     .markers_of(&MarkerKind::Rendezvous)
                     .filter(|m| !m.name.is_empty())
-                    .min_by(|a, b| d(a).total_cmp(&d(b))),
-                _ => named
-                    .filter(|m| d(m) < PLACE_NEAR)
-                    .min_by(|a, b| d(a).total_cmp(&d(b))),
+                    .min_by(|a, b| {
+                        Vec2::from(a.at)
+                            .distance(post)
+                            .total_cmp(&Vec2::from(b.at).distance(post))
+                    })
+                    .map(|m| m.name.clone()),
+                _ => super::memory::place_within(&z.map, post.into(), PLACE_NEAR),
             }
-            .map(|m| m.name.clone())
         });
         raid.say(call_line(call, me, place.as_deref(), said.1));
         aired.0.push((*call, now));

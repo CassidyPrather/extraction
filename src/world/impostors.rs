@@ -12,7 +12,7 @@ use bevy::camera::{RenderTarget, ScalingMode};
 use bevy::image::{ImageSampler, ImageSamplerDescriptor};
 use bevy::mesh::Indices;
 use bevy::prelude::*;
-use bevy::render::gpu_readback::{Readback, ReadbackComplete};
+use bevy::render::gpu_readback::ReadbackComplete;
 use bevy::render::render_resource::{
     Extent3d, PrimitiveTopology, TextureDimension, TextureFormat, TextureUsages,
 };
@@ -112,9 +112,6 @@ pub(crate) struct Capture {
     tries: u32,
     /// Seconds (real) spent waiting on the GPU, for the last resort.
     waited: f32,
-    /// Its picture's in (or given up on): a second readback landing in
-    /// the same frame is ignored.
-    done: bool,
     /// Textures the rig needs loaded before its picture is worth taking.
     needs: Vec<Handle<Image>>,
 }
@@ -218,7 +215,6 @@ pub fn capture(
         reading: false,
         tries: 0,
         waited: 0.0,
-        done: false,
         needs,
     });
     Impostor {
@@ -302,18 +298,17 @@ fn read_back(
         }
         c.reading = true;
         let (out, size, rig) = (c.out.clone(), c.size, c.rig.clone());
-        commands.spawn(Readback::texture(c.target.clone())).observe(
+        crate::render::readback::read_texture(&mut commands, c.target.clone()).observe(
             move |done: On<ReadbackComplete>,
+                  once: Query<&crate::render::readback::ReadOnce>,
                   mut images: ResMut<Assets<Image>>,
                   mut materials: ResMut<Assets<ImpostorMaterial>>,
                   mut captures: Query<&mut Capture>,
                   mut commands: Commands| {
-                // A readback repeats until it's gone, so two may land in a
-                // frame: only the first counts.
-                commands.entity(done.entity).try_despawn();
-                match captures.get_mut(e) {
-                    Ok(c) if !c.done && c.reading => {}
-                    _ => return,
+                // Once: two in a frame counted an empty picture as two
+                // tries, and despawned twice.
+                if !crate::render::readback::taken(&done, &once, &mut commands) {
+                    return;
                 }
                 let expected = (size.x * size.y * 4) as usize;
                 if let Some(dir) = std::env::var_os("EXTRACTION_IMPOSTOR_DUMP") {
@@ -338,12 +333,8 @@ fn read_back(
                             return;
                         }
                         warn!("impostor capture stayed empty; far trees of a variant won't show");
-                        c.done = true;
                     }
                 } else {
-                    if let Ok(mut c) = captures.get_mut(e) {
-                        c.done = true;
-                    }
                     info!("impostor captured ({}x{})", size.x, size.y);
                     // A new texture, pointed to by the materials that showed
                     // the placeholder (swapping an image's contents under a

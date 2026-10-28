@@ -795,16 +795,20 @@ mod tests {
                 app.update();
             }
         };
-        go(&mut app, outside, 60);
+        // Frames enough for each change to settle (the depth eases in at
+        // 0.15 a frame, the eyes' indoors over 0.4 s) and no more: under
+        // the suite's load this ran 203 s at twice the frames
+        // (`scripts/test_times.py`).
+        go(&mut app, outside, 30);
         let day = app.world().resource::<GlobalAmbientLight>().brightness;
         assert!(day > 100.0, "{day}");
-        go(&mut app, below, 60);
-        go(&mut app, outside, 60);
-        for room in rooms.iter().cycle().take(8) {
-            go(&mut app, *room, 30);
-            go(&mut app, outside, 30);
+        go(&mut app, below, 40);
+        go(&mut app, outside, 30);
+        for room in rooms.iter().cycle().take(5) {
+            go(&mut app, *room, 20);
+            go(&mut app, outside, 20);
         }
-        go(&mut app, outside, 120);
+        go(&mut app, outside, 60);
         let after = app.world().resource::<GlobalAmbientLight>().brightness;
         // Which way round two systems run is the scheduler's choice unless
         // it's pinned, so this run may have got the good order by luck:

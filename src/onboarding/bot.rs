@@ -316,6 +316,22 @@ impl DirectorWorld<'_, '_> {
             .collect()
     }
 
+    /// The range's empty magazine (not the full one by it).
+    fn empty_mag(&self, near: Vec2) -> Option<Entity> {
+        self.items
+            .iter()
+            .filter(|(e, it, gt, _, held, sock)| {
+                held.is_none()
+                    && sock.is_none()
+                    && self.catalog.get(it.kind()).id == "pm_mag"
+                    && it.rounds == 0
+                    && gt.translation().xz().distance(near) < 2.0
+                    && !self.stash.iter().any(|b| b.contents.contains(e))
+            })
+            .map(|(e, ..)| e)
+            .next()
+    }
+
     fn loose(&self, id: &str, near: Vec2) -> Option<Entity> {
         self.items
             .iter()
@@ -454,7 +470,11 @@ impl DirectorWorld<'_, '_> {
             | Goal::Rack
             | Goal::Safety
             | Goal::HitPlate
-            | Goal::DropMag => {
+            | Goal::RunDry
+            | Goal::DropMag
+            | Goal::Reload
+            | Goal::SlideRelease
+            | Goal::FireAgain => {
                 let table = Vec2::from(super::RANGE_TABLE_AT);
                 let stand = table + Vec2::new(0.0, 0.9);
                 if here.distance(stand) > 2.0 {
@@ -464,7 +484,7 @@ impl DirectorWorld<'_, '_> {
                     Goal::FillMag => {
                         t.extend(self.free_hands());
                         if let (Some(mag), Some(ammo), true) = (
-                            self.loose("pm_mag", table),
+                            self.empty_mag(table),
                             self.loose("ammo_9x18", table),
                             self.one_handed(),
                         ) {
@@ -477,7 +497,7 @@ impl DirectorWorld<'_, '_> {
                             t.push(OneHandCombine(ammo));
                             t.push(Stow(Side::Right));
                         } else if let (Some(mag), Some(ammo)) =
-                            (self.loose("pm_mag", table), self.loose("ammo_9x18", table))
+                            (self.empty_mag(table), self.loose("ammo_9x18", table))
                         {
                             t.push(Grab {
                                 item: mag,
@@ -506,6 +526,22 @@ impl DirectorWorld<'_, '_> {
                     Goal::Rack => t.push(Gun(crate::weapons::flat::MacroKind::Rack)),
                     Goal::Safety => t.push(Gun(crate::weapons::flat::MacroKind::Mode)),
                     Goal::DropMag => t.push(Wait(0.6)),
+                    // The full one off the table into a pouch, then R (a
+                    // mag in, the slide let go: both count).
+                    Goal::Reload => {
+                        if let Some((spare, _)) = self.placed(Placed::SpareMag) {
+                            if self.one_handed() {
+                                t.push(Release(Side::Left));
+                            }
+                            t.push(Grab {
+                                item: spare,
+                                side: Side::Left,
+                            });
+                            t.push(Stow(Side::Left));
+                        }
+                        t.push(Gun(crate::weapons::flat::MacroKind::Reload));
+                    }
+                    Goal::SlideRelease => t.push(Gun(crate::weapons::flat::MacroKind::Rack)),
                     _ => {
                         let plate = self
                             .buildings
@@ -514,8 +550,16 @@ impl DirectorWorld<'_, '_> {
                             .map(|(_, gt)| gt.transform_point(Vec3::new(0.0, 1.2, 0.07)))
                             .min_by(|a, b| a.xz().distance(here).total_cmp(&b.xz().distance(here)));
                         if let Some(p) = plate {
-                            t.push(Expect(crate::bot::Expect::GunRounds(1, 9)));
-                            t.push(Fire { at: p, shots: 3 });
+                            let shots = match goal {
+                                // Till the slide stays back.
+                                Goal::RunDry => 20,
+                                Goal::FireAgain => 1,
+                                _ => {
+                                    t.push(Expect(crate::bot::Expect::GunRounds(1, 9)));
+                                    3
+                                }
+                            };
+                            t.push(Fire { at: p, shots });
                         }
                     }
                 }

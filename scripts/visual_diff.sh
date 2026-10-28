@@ -11,11 +11,8 @@
 # three or more merges within ten minutes. MAIN_REF defaults to
 # origin/claude/serene-clarke-rcgj62.
 #
-# Each sha is built once, in a worktree at target/vdiff/wt (always the same
-# path, so the shared target/vdiff/build stays incremental). It is kept as
-# target/vdiff/bin/<sha>/ with a copy of its assets, which links the
-# generated textures in from this checkout because they are gitignored.
-# Its shots go to target/vdiff/shots/<sha>/<map>/<mood>/<view>.png at
+# Each sha is built once (scripts/build_at.sh, kept in
+# target/vdiff/bin/<sha>/). Its shots go to target/vdiff/shots/<sha>/<map>/<mood>/<view>.png at
 # 960x540. Both are reused next round and pruned to the newest KEEP
 # (default 3). The cameras are scripts/visual_diff/<map>.stills,
 # committed. Remake them with scripts/visual_diff_cameras.sh when a valley
@@ -77,24 +74,8 @@ for i, (h, t, s) in enumerate(rows):
 fi
 echo "visual diff: $OLD -> $NEW"
 
-build() { # sha
-    local sha="$1" out="$VD/bin/$1"
-    [ -x "$out/extraction" ] && return
-    echo "building $sha"
-    git worktree remove --force "$VD/wt" 2>/dev/null || rm -rf "$VD/wt"
-    git worktree prune
-    git worktree add -q --detach "$VD/wt" "$sha"
-    for d in textures/foliage textures/materials textures/sky textures/terrain .cache; do
-        if [ -e "$ROOT/assets/$d" ] && [ ! -e "$VD/wt/assets/$d" ]; then
-            ln -s "$ROOT/assets/$d" "$VD/wt/assets/$d"
-        fi
-    done
-    (cd "$VD/wt" && CARGO_TARGET_DIR="$VD/build" cargo build --profile fast 2>&1 | tail -1)
-    mkdir -p "$out"
-    cp "$VD/build/fast/extraction" "$out/extraction"
-    # A binary finds assets/ next to itself first (a packaged build).
-    cp -a "$VD/wt/assets" "$out/assets"
-    git worktree remove --force "$VD/wt"
+build() { # sha (scripts/build_at.sh)
+    "$ROOT/scripts/build_at.sh" "$1" > /dev/null
 }
 
 # Shots are kept a file at a time, so a quick run (or a bisect on one
