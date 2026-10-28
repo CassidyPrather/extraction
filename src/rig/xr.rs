@@ -61,7 +61,14 @@ impl Plugin for XrDriverPlugin {
             )
             .add_systems(
                 Update,
-                (ride_player, dress_eyes, follow_mirror, window_card).chain(),
+                (
+                    ride_player,
+                    dress_eyes,
+                    follow_mirror,
+                    window_card,
+                    one_window_camera,
+                )
+                    .chain(),
             )
             .add_systems(
                 PreUpdate,
@@ -851,6 +858,45 @@ fn window_card(
     ));
 }
 
+/// In a session, any frame with more than one camera on the window says
+/// which (once a session): Bevy's "camera order ambiguities" names only
+/// the order.
+fn one_window_camera(
+    driver: Res<super::RigDriver>,
+    cameras: Query<(
+        Entity,
+        Option<&Name>,
+        &Camera,
+        Option<&bevy::camera::RenderTarget>,
+    )>,
+    mut said: Local<bool>,
+) {
+    if *said || *driver != super::RigDriver::Xr {
+        return;
+    }
+    let on: Vec<String> = cameras
+        .iter()
+        .filter(|(_, _, c, t)| {
+            c.is_active && t.is_none_or(|t| matches!(t, bevy::camera::RenderTarget::Window(_)))
+        })
+        .map(|(e, n, c, _)| {
+            format!(
+                "{} ({e}, order {})",
+                n.map_or("unnamed", |n| n.as_str()),
+                c.order
+            )
+        })
+        .collect();
+    if on.len() > 1 {
+        *said = true;
+        warn!(
+            "window: {} cameras on it in the headset session: {}",
+            on.len(),
+            on.join(", ")
+        );
+    }
+}
+
 /// The local player's root is the playspace; the flat camera goes away.
 ///
 /// `bevy_mod_xr` makes its own tracking root at startup and parents the
@@ -859,10 +905,16 @@ fn window_card(
 /// root (which left the eyes at the world origin, under the map).
 fn make_tracking_root(
     mut commands: Commands,
-    flat_cams: Query<Entity, (With<super::RigHead>, With<Camera3d>)>,
+    mut flat_cams: Query<(Entity, &mut Camera), (With<super::RigHead>, With<Camera3d>)>,
 ) {
-    for c in &flat_cams {
-        commands.entity(c).remove::<Camera3d>().remove::<Camera>();
+    // Switched off, not taken off: a `Camera` removed keeps its render
+    // world copy, which went on drawing its last view over the window
+    // (the playtest's blown-out window, a second camera at order 0 beside
+    // the mirror). `Camera3d` goes, so the eyes' systems don't take it for
+    // one.
+    for (c, mut camera) in &mut flat_cams {
+        camera.is_active = false;
+        commands.entity(c).remove::<Camera3d>();
     }
     commands.queue(super::headset_started);
     info!("XR session created: driving the rig from the headset");
@@ -1212,6 +1264,14 @@ mod tests {
                 app.update();
                 assert_eq!(on_window(&mut app), 1, "in the headset, mirror {mirror}");
             }
+            // The flat camera is switched off, not removed: a removed
+            // `Camera` leaves its render world copy drawing to the window.
+            let w = app.world_mut();
+            let head = w
+                .query_filtered::<Option<&Camera>, With<super::super::RigHead>>()
+                .single(w)
+                .unwrap();
+            assert!(head.is_some_and(|c| !c.is_active), "mirror {mirror}");
         }
     }
 }
