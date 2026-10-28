@@ -186,6 +186,30 @@ body's slack to spare as well (`CAPSULE_SKIN`, 0.06 m more:
 `every_loot_spot_is_reached_from_its_own_side`): a spot reached only
 through a gap narrower than that pins whoever goes for it.
 
+## Floors and colliders
+
+`underground::floor_under` (`site_under`) says where a point down a site
+stands, and the colliders must agree with it both ways:
+`site_floors_and_colliders_agree` casts a ray down at every 0.125 m round
+every site's open cells and fails a point the plan calls floored with
+nothing under it, or a collider floor the plan doesn't have. A point a
+hair past its open cells still counts as on them (`BODY_REACH`: a body
+against a wall has its centre there), but no further than the wall's
+thickness allows: an open cell runs up to half a cell past its wall's
+face, so `BODY_REACH` is `WALL` less half a cell (0.12 m). It was a body's
+radius (0.35 m), which took in 5-10 cm of collider-less rock past the
+outer face of walls everywhere (3377 points over the nine sites): a watch
+let go there, past the bunker hall's wall, read as on the hall's floor and
+fell for ever (Soak).
+
+Left, one: where a room meets a pit on a different floor (the cellars'
+near ledge over the ash pit, its east corner at site (4, 40)), `walls`
+stops each wall run at the junction of the two floors' bands, and the
+ledge's run leaves a sliver at the corner, a few centimetres across, with
+nothing under it. The test knows it (`KNOWN`) and fails when it's fixed,
+so it comes off the list. Next: in `walls`, run the higher band's wall on
+over the junction by a wall's thickness, as at a corner.
+
 ## The Depot
 
 The place the convoys go. The lore says each Gate is a depot, the
