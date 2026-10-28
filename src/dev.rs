@@ -159,7 +159,6 @@ fn gallery(
     mut told: Local<Vec<(Entity, u8)>>,
     mut bipods: Query<&mut crate::weapons::armoury::Bipod>,
     mut jamming: Local<bool>,
-    mut drying: Local<Vec<Entity>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -467,7 +466,7 @@ fn gallery(
                 } else if let Some(mag) = mag.and_then(|m| spawn_static(&mut commands, &m, at)) {
                     pending_mags.push((gun, mag));
                     if dry {
-                        drying.push(gun);
+                        told.push((gun, 4));
                     }
                 }
             }
@@ -486,6 +485,18 @@ fn gallery(
                     while g.firearm.fire_mode() == extraction_core::firearm::FireMode::Safe {
                         g.firearm.cycle_mode();
                     }
+                }
+                // Run dry once its magazine's in: the last round gone, the
+                // slide back on the empty magazine.
+                4 => {
+                    let f = &mut g.firearm;
+                    let Some(m) = f.magazine.as_mut() else {
+                        return true;
+                    };
+                    m.rounds = 0;
+                    f.chambers.iter_mut().for_each(|c| *c = None);
+                    f.bolt_travel = 1.0;
+                    f.locked_back = true;
                 }
                 _ => {}
             }
@@ -515,22 +526,6 @@ fn gallery(
             if let Ok(mut b) = bipods.get_mut(e) {
                 b.deployed = true;
             }
-            false
-        });
-        // Run dry once its magazine's in: the last round gone, the slide
-        // back on the empty magazine.
-        drying.retain(|&e| {
-            let Ok(mut gun) = guns.get_mut(e) else {
-                return true;
-            };
-            let f = &mut gun.firearm;
-            let Some(m) = f.magazine.as_mut() else {
-                return true;
-            };
-            m.rounds = 0;
-            f.chambers.iter_mut().for_each(|c| *c = None);
-            f.bolt_travel = 1.0;
-            f.locked_back = true;
             false
         });
         pending_mags.retain(|&(gun, mag)| {
