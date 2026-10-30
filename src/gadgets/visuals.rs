@@ -801,7 +801,7 @@ fn add_wrist_feed(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     for (e, glove) in &gloves {
-        if glove.side != crate::rig::Side::Left || glove.ghost {
+        if glove.side != crate::rig::Side::Left {
             continue;
         }
         let m = materials.add(StandardMaterial {
