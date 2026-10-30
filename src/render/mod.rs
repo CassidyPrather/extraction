@@ -18,6 +18,7 @@ pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
 pub mod hold_rate;
+pub mod hurt;
 pub mod kit;
 pub mod kitchen;
 pub mod landmarks;
@@ -116,6 +117,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(body::BodyPlugin)
         .add_plugins(tools::ToolVisualsPlugin)
         .add_plugins(blink::BlinkPlugin)
+        .add_plugins(hurt::HurtVignettePlugin)
         .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Below>()

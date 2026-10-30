@@ -1274,7 +1274,13 @@ fn relocate(world: &mut World) {
     info!("driving to {to}");
     crate::request_restart(&to);
     if !world.resource::<LaunchOptions>().headless {
-        world.write_message(AppExit::Success);
+        // In a headset, after the loading view has said where to.
+        match world.get_resource_mut::<crate::rig::loading::Leaving>() {
+            Some(mut leaving) => leaving.go(&to),
+            None => {
+                world.write_message(AppExit::Success);
+            }
+        }
     }
 }
 

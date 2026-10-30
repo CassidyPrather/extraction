@@ -174,9 +174,15 @@ for sx in (-1, 1):
 # receiver.
 recv.box((0.014, 0.022, 0.006), (0.0, 0.014, WELL_Z + 0.035), "Blued", bevel=0.0015)
 
-recv.prism(fillet([(WELL_Z - 0.03, 0.03), (WELL_Z + 0.03, 0.03), (WELL_Z + 0.03, 0.012),
-                   (WELL_Z - 0.03, 0.012)], 0.003, 2), -0.016, 0.016, "Blued", axis="x",
-           bevel=0.0012, segs=1)
+housing = Part("housing")
+housing.prism(fillet([(WELL_Z - 0.03, 0.03), (WELL_Z + 0.03, 0.03), (WELL_Z + 0.03, 0.012),
+                      (WELL_Z - 0.03, 0.012)], 0.003, 2), -0.016, 0.016, "Blued", axis="x",
+              bevel=0.0012, segs=1)
+# The drum's feed tower goes up through it (it stood through solid steel:
+# `capture::seated`): 21 x 38 mm, 0.6 mm clear.
+hc = Part("cut")
+hc.box((0.0222, 0.03, 0.0392), (0.0, 0.021, WELL_Z - 0.005), "Blued")
+housing.cut(hc)
 # Trigger guard.
 guard = catmull([(-0.075, 0.012), (-0.078, -0.004), (-0.066, -0.018), (-0.045, -0.02),
                  (-0.024, -0.016), (-0.012, -0.006), (-0.006, 0.0)], 6, closed=False)
@@ -250,7 +256,7 @@ for i in range(3):
                  "Blued", bevel=0.0002, segs=1)
 
 screws.cut(slots)
-join("static", stock, furn, recv, jacket, barrel, screws, worn={})
+join("static", stock, furn, recv, housing, jacket, barrel, screws, worn={})
 for p in (bolt, trig, selector):
     make(p, worn={})
 

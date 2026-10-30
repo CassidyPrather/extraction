@@ -666,3 +666,82 @@ Left for whoever owns them:
 - If the right stick goes down a frame before the left, a mark can still
   flip the safety. The fire selector acts on the press, so fully
   separating the two needs a change in `weapons`.
+
+# The yard, one thing at a time (design, after the transcript)
+
+The designer's first priority (`docs/playtests/2026-10-28/TRANSCRIPT.md`, O1 to O3): "making
+the onboarding fun and not just following a list of instructions, and presenting you with one
+thing at a time." In the headset, the truck showed all of these at once, before anything happened:
+- the step board, over the crate;
+- 11 lines of stations by the tailgate;
+- a dozen settings cards;
+- the logbook, the workbench board and a "Read this" note;
+- a crate of 13 look-alike items.
+
+## Already fixed overnight (on main)
+
+- The VR greeting, not "press E".
+- A step counts only at its station, and in order. ("I've somehow done half this tutorial":
+  the transcript's range, 0:16:28.)
+- The boards agree with the code, and the run board's click order is fixed.
+- RUN IT DRY.
+- The mark: said in the yard, chimed and buzzed.
+
+## Rules (each with a test or a bot check)
+
+1. **One thing to read.**
+   - In the yard, the only text in view is the step you're on: what to do, how, and with what.
+   - It's shown on the current station's board and on the wrist.
+   - Boards ahead are blank. A finished board shows its tip, then folds away when you leave.
+   - In the yard the truck carries nothing else to read. The settings cards stay folded behind
+     one SETTINGS card. The logbook, the workbench, the camp note and the job card come back in
+     the real truck.
+   - The step board hangs on the cab wall above the crate, not in front of it.
+   - *Test:* in the truck at the start, one text panel is in view apart from the SETTINGS card,
+     and each board ahead is blank.
+2. **Name what you can see, and say how.**
+   - Every step names a thing you can pick out: the item it needs, or the target it acts on.
+   - That one thing is marked while the step is current, with a soft pulse and a ring.
+   - The board says what it looks like: "the green radio with the stubby aerial", "the white
+     roll with the red cross".
+   - "Next: the lit lamp" becomes where, said plainly: "Climb down off the back. The lit lamp
+     on the left."
+   - The snare gets a ring of little red flags, so "throw a part in" has a target.
+   - The range uses the pistol you carry. There's no second gun on the table.
+   - *Test:* every goal has a target; while the goal is current, exactly one thing in the yard
+     is marked, and it's that target.
+3. **A skill before the moment it's needed.**
+   - The kit station runs: take the pistol, holster it, take the radio, pocket it. Your hands
+     are never both full before pockets are taught.
+   - Pushing a button comes second, in the truck. The button is the SETTINGS card, so pressing
+     it is the lesson and opens the settings: the menu the tester looked for.
+   - The pack is taught with the far-grabbed box.
+   - *Test:* walking the goals in order, no step needs a free hand, a pocket or a press that
+     hasn't been taught.
+4. **A payoff at each station.**
+   - Each finished step clicks in both hands and chimes (already the case).
+   - Each station also ends on something that happens in the world: the lamp turns green, the
+     plate rings, the door swings, the snare cracks, the truck comes.
+   - Each station says one line of what it's for, once it's done. That's what the tips are now.
+
+## Stations, reordered
+
+| # | Station | Steps |
+| - | - | - |
+| 1 | Your kit (truck) | take the pistol; holster it; take the radio; pocket it |
+| 2 | Buttons (truck) | push the SETTINGS card's amber button (the settings unfold) |
+| 3 | Getting about | turn, crouch, run |
+| 4 | Out of reach | far-grab the box; into the pack |
+| 5 | The range | rounds into the mag, seat, rack, safety off, a plate |
+| 6 | Run it dry | as before |
+| 7 | The house | the door, what's inside |
+| 8 | First aid | your wrist, a dressing |
+| 9 | The shimmer | a part at the flagged patch; the stone |
+| 10 | Going home | the radio, the cord |
+
+## Not this wave
+
+- **A title screen**: a feature, and the designer said basics first.
+- **The cooking table**: Model correctness removes it, and nothing goes through it.
+- **Model problems** (the dressing's size, the magazine's look): Model correctness owns them.
+  The mark and the name carry the step meanwhile.

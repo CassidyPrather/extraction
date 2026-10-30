@@ -496,6 +496,7 @@ pub(crate) fn flocks(
     mut noises: MessageReader<crate::robots::Noise>,
     landed: Res<super::Landed>,
     mut flushed: MessageWriter<Flushed>,
+    mut alighted: MessageWriter<super::Alighted>,
     time: Res<Time>,
 ) {
     let thrown = &landed.0;
@@ -525,6 +526,7 @@ pub(crate) fn flocks(
             .is_some_and(|c| c.hour == crate::world::weather::Hour::Night),
     };
     for (entity, mut flock, mut tf) in &mut flocks {
+        let was = flock.phase;
         if let Some(f) = flock.tick(&ctx, dt) {
             debug!("a flock went up at {:.0} ({:?})", f.at, f.cause);
             flushed.write(Flushed {
@@ -534,6 +536,14 @@ pub(crate) fn flocks(
                 cause: f.cause,
                 by: f.by,
                 alarm: f.alarm,
+            });
+        }
+        // The last one down: they're all on the roof again.
+        if matches!(was, Phase::Landing { .. }) && flock.phase == Phase::Settled {
+            alighted.write(super::Alighted {
+                flock: entity,
+                at: perches.sites[flock.site].centre,
+                birds: flock.alive() as u32,
             });
         }
         tf.translation = flock.mean();

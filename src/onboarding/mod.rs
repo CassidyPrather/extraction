@@ -57,6 +57,7 @@ use crate::world::{Layer, Zone};
 pub enum Goal {
     TakePistol,
     TakeRadio,
+    Pocket,
     Turn,
     Crouch,
     Run,
@@ -93,7 +94,8 @@ impl Goal {
             Goal::Turn => "Turn around",
             Goal::Crouch => "Crouch",
             Goal::Run => "Run",
-            Goal::PutAway => "Holster or pocket it",
+            Goal::PutAway => "Holster the pistol",
+            Goal::Pocket => "Pocket the radio",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
@@ -169,8 +171,10 @@ impl Goal {
             (Goal::Run, true) => &["shift", "w"],
             // `watch_hands`: let go at a body socket; let go over the
             // shoulder (the pack).
-            (Goal::PutAway, false) => &["hip or", "open your hand"],
+            (Goal::PutAway, false) => &["hip", "open your hand"],
             (Goal::PutAway, true) => &["g"],
+            (Goal::Pocket, false) => &["pocket", "open your hand"],
+            (Goal::Pocket, true) => &["g"],
             (Goal::Pack, false) => &["shoulder", "open your hand"],
             (Goal::Pack, true) => &["g"],
             (Goal::FarGrab, false) => &["point", "grip", "flick"],
@@ -212,6 +216,38 @@ impl Goal {
         }
     }
 
+    /// What doing it takes that someone new may not have been shown: a
+    /// free hand means what was in it has somewhere to go.
+    pub fn needs(self) -> &'static [Skill] {
+        match self {
+            // The radio's taken with the pistol put away.
+            Goal::TakeRadio => &[Skill::Holster],
+            // A finger free to push: both put away.
+            Goal::Button => &[Skill::Holster, Skill::Pocket],
+            Goal::FarGrab | Goal::Probe | Goal::Search | Goal::OpenDoor => {
+                &[Skill::Holster, Skill::Pocket]
+            }
+            // A magazine in one hand and the box in the other.
+            Goal::FillMag => &[Skill::Holster, Skill::Pocket, Skill::Pack],
+            Goal::SeatMag => &[Skill::Holster],
+            Goal::Artifact => &[Skill::FarGrab],
+            Goal::CallTruck => &[Skill::Pocket],
+            _ => &[],
+        }
+    }
+
+    /// What it shows you how to do.
+    pub fn teaches(self) -> &'static [Skill] {
+        match self {
+            Goal::PutAway => &[Skill::Holster],
+            Goal::Pocket => &[Skill::Pocket],
+            Goal::Button => &[Skill::Press],
+            Goal::FarGrab => &[Skill::FarGrab],
+            Goal::Pack => &[Skill::Pack],
+            _ => &[],
+        }
+    }
+
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
@@ -225,9 +261,11 @@ impl Goal {
             (Goal::Crouch, true) => "Press C (again to stand).",
             (Goal::Run, false) => "Push the left stick\nforward and click it.",
             (Goal::Run, true) => "Hold Shift and W.",
-            (Goal::PutAway, false) => "Hold it at your hip or\nchest. Open your hand.",
+            (Goal::PutAway, false) => "Hold it at your hip.\nOpen your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
-            (Goal::Pack, false) => "Hold it over your shoulder.\nOpen your hand.",
+            (Goal::Pocket, false) => "Hold it to a chest pocket.\nOpen your hand.",
+            (Goal::Pocket, true) => "Hold it. Press G.",
+            (Goal::Pack, false) => "The box: over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
             (Goal::FarGrab, false) => "Point at it. Squeeze GRIP.\nFlick your hand back.",
             (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
@@ -273,6 +311,16 @@ impl Goal {
     }
 }
 
+/// Something you're shown how to do, that later steps rely on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Skill {
+    Holster,
+    Pocket,
+    Pack,
+    Press,
+    FarGrab,
+}
+
 /// A station: a post by the track (the first hangs in the truck).
 pub struct Station {
     pub title: &'static str,
@@ -295,13 +343,34 @@ pub struct Station {
 
 /// The stations, in order, from the truck north up the track.
 pub const STATIONS: &[Station] = &[
+    // The pistol is holstered before the radio's taken, and the radio
+    // pocketed before anything else: hands are never both full before
+    // you've been shown where things go (the playtest held both, looking
+    // for a pocket nobody had shown it).
     Station {
         title: "YOUR KIT",
         at: [0.0, 0.0],
         rot: 0.0,
-        goals: &[Goal::TakePistol, Goal::TakeRadio],
+        goals: &[
+            Goal::TakePistol,
+            Goal::PutAway,
+            Goal::TakeRadio,
+            Goal::Pocket,
+        ],
         where_: "the crate in the truck",
         tip: "Everything you own rides\nin that crate between raids.",
+        in_order: true,
+    },
+    // In the truck too, and early: pushing a button is how anything on a
+    // card is done, and this one opens the settings (the playtest looked
+    // for a menu and found none).
+    Station {
+        title: "SETTINGS",
+        at: [0.0, 0.0],
+        rot: 0.0,
+        goals: &[Goal::Button],
+        where_: "the SETTINGS card on the wall to your left",
+        tip: "Change them any time.",
         in_order: false,
     },
     Station {
@@ -309,27 +378,18 @@ pub const STATIONS: &[Station] = &[
         at: [-3.5, 89.0],
         rot: 0.0,
         goals: &[Goal::Turn, Goal::Crouch, Goal::Run],
-        where_: "the lamp off the back of the truck",
+        where_: "off the back of the truck, the lamp on your left",
         tip: "Running tires you; weight\nslows you. Crouched, the\nmachines see you later.",
-        in_order: false,
-    },
-    Station {
-        title: "PUT IT AWAY",
-        at: [3.5, 87.0],
-        rot: 0.0,
-        goals: &[Goal::PutAway, Goal::Pack],
-        where_: "the next lamp, right of the track",
-        tip: "Weight slows you.\nCarry what you'll use.",
         in_order: false,
     },
     Station {
         title: "OUT OF REACH",
         at: [-3.0, 83.5],
         rot: 0.0,
-        goals: &[Goal::FarGrab],
-        where_: "the lamp by the pen",
-        tip: "Works on anything loose\nup to five metres off.",
-        in_order: false,
+        goals: &[Goal::FarGrab, Goal::Pack],
+        where_: "the lamp by the pen, straight on",
+        tip: "Works on anything loose\nup to five metres off.\nWeight slows you.",
+        in_order: true,
     },
     Station {
         title: "THE RANGE",
@@ -389,15 +449,6 @@ pub const STATIONS: &[Station] = &[
         where_: "the lamp on the right. Mind the shimmer",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
         in_order: true,
-    },
-    Station {
-        title: "BUTTONS",
-        at: [-3.5, -50.0],
-        rot: 270.0,
-        goals: &[Goal::Button],
-        where_: "the lamp on the left",
-        tip: "Any card with a button\ndoes something: settings,\nthe route, terminals.",
-        in_order: false,
     },
     Station {
         title: "GOING HOME",
@@ -560,7 +611,7 @@ pub struct Checklist;
 pub enum OnboardCard {
     /// Skip station `n`.
     Skip(usize),
-    /// The BUTTONS station's card.
+    /// The SETTINGS station's card (pressing it opens the settings).
     Push,
     /// Back to the first station.
     StartOver,
@@ -654,7 +705,7 @@ impl Plugin for OnboardingPlugin {
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
-                    (lamps, signs, checklist),
+                    (lamps, signs, checklist, one_thing_to_read),
                     warn_near_anomalies,
                     hurry_the_truck,
                     out_of_the_truck.after(crate::raid::tick_raid),
@@ -664,6 +715,111 @@ impl Plugin for OnboardingPlugin {
                     .run_if(in_yard),
             );
     }
+}
+
+/// Out of sight and out of reach while the yard isn't teaching it; the
+/// collision layers it had, to put back.
+#[derive(Component, Debug)]
+pub struct Folded(pub CollisionLayers);
+
+/// Whether a panel with words is one the yard shows now. One thing to read
+/// at a time (the playtest's truck: a dozen settings cards, the logbook,
+/// the bench, a note and the list, all at once, "completely
+/// overwhelming"):
+/// - a station's board: in the truck only while it's the station; out in
+///   the yard always (blank ahead, its tip done);
+/// - a SKIP card: its station's, while it's the station;
+/// - the SETTINGS card: always (it's the menu); the settings cards behind
+///   it once it's been pushed;
+/// - the list by the tailgate: never (the lamps lead);
+/// - the truck's own boards (logbook, bench, route, job card): when it's
+///   time to go home.
+pub fn yard_shows(ob: &Onboarding, what: Panel) -> bool {
+    let current = ob.current();
+    match what {
+        Panel::Sign(i) => !in_truck(i) || current == Some(i),
+        Panel::Skip(i) => current == Some(i),
+        Panel::Settings | Panel::Other => true,
+        Panel::SettingsCard => ob.is_done(Goal::Button),
+        Panel::List => false,
+        Panel::Truck => current.is_none_or(|i| i >= station_of(Goal::CallTruck)),
+    }
+}
+
+/// What a panel with words is, for [`yard_shows`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Panel {
+    Sign(usize),
+    Skip(usize),
+    Settings,
+    SettingsCard,
+    List,
+    Truck,
+    Other,
+}
+
+/// Folds and unfolds the yard's panels (`yard_shows`).
+#[allow(clippy::type_complexity)]
+fn one_thing_to_read(
+    mut commands: Commands,
+    ob: Res<Onboarding>,
+    trucks: Query<Entity, With<Truck>>,
+    panels: Query<
+        (
+            Entity,
+            Option<&StationSign>,
+            Option<&OnboardCard>,
+            Has<crate::raid::comfort_board::ComfortCard>,
+            Has<Checklist>,
+            Option<&Folded>,
+            Option<&CollisionLayers>,
+        ),
+        With<ScreenText>,
+    >,
+    parents: Query<&ChildOf>,
+) {
+    let truck = trucks.iter().next();
+    let in_the_truck = |e: Entity| truck.is_some_and(|t| parents.iter_ancestors(e).any(|a| a == t));
+    for (e, sign, card, setting, list, folded, layers) in &panels {
+        let what = match (sign, card) {
+            (Some(s), _) => Panel::Sign(s.0),
+            (_, Some(OnboardCard::Skip(i))) => Panel::Skip(*i),
+            (_, Some(OnboardCard::Push)) => Panel::Settings,
+            (_, Some(_)) => Panel::Other,
+            _ if setting => Panel::SettingsCard,
+            _ if list => Panel::List,
+            _ if in_the_truck(e) => Panel::Truck,
+            _ => Panel::Other,
+        };
+        let show = yard_shows(&ob, what);
+        match (show, folded) {
+            (false, None) => {
+                commands.entity(e).insert((
+                    Folded(layers.copied().unwrap_or_default()),
+                    Visibility::Hidden,
+                    CollisionLayers::NONE,
+                ));
+            }
+            (true, Some(f)) => {
+                commands
+                    .entity(e)
+                    .insert((f.0, Visibility::Inherited))
+                    .remove::<Folded>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The stations in the truck's bed (the kit, the settings): no post of
+/// their own, no SKIP card.
+pub fn in_truck(i: usize) -> bool {
+    STATIONS[i].goals.iter().any(|g| {
+        matches!(
+            g,
+            Goal::TakePistol | Goal::PutAway | Goal::TakeRadio | Goal::Pocket | Goal::Button
+        )
+    })
 }
 
 pub fn in_yard(opts: Res<LaunchOptions>) -> bool {
@@ -739,19 +895,27 @@ fn setup(
     let truck = trucks.iter().next();
     let base = base_pose(&zone);
     for (i, st) in STATIONS.iter().enumerate() {
-        let (post, board_at) = if i == 0 {
-            // Hung from the canopy over the crate, tipped toward where you
-            // stand in the bed.
+        let (post, board_at) = if in_truck(i) {
             let Some(truck) = truck else { continue };
+            let at = if i == 0 {
+                // High on the cab wall, over the crate but clear of it: the
+                // playtest's board hung in front of the crate, in the way of
+                // the hands.
+                Transform::from_xyz(-0.52, FLOOR + 1.68, -1.42)
+                    .with_rotation(Quat::from_rotation_x(-0.2))
+            } else {
+                // On the left canvas wall where the settings cards fold out.
+                Transform::from_xyz(-1.1, FLOOR + 1.55, -0.7)
+                    .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
+            };
             let post = commands
                 .spawn((
-                    Name::new("Station 1"),
+                    Name::new(format!("Station {}", i + 1)),
                     StationPost {
                         index: i,
                         lamp: Lamp::Dark,
                     },
-                    Transform::from_xyz(-0.36, FLOOR + 1.5, -1.05)
-                        .with_rotation(Quat::from_rotation_x(-0.32)),
+                    at,
                     Visibility::default(),
                     ChildOf(truck),
                 ))
@@ -788,7 +952,7 @@ fn setup(
         commands.spawn((
             Name::new("Station board"),
             StationSign(i),
-            if i == 0 {
+            if in_truck(i) {
                 crate::render::legibility::TextSource::TruckBoard
             } else {
                 crate::render::legibility::TextSource::StationBoard
@@ -799,9 +963,10 @@ fn setup(
             ChildOf(post),
         ));
         if STATIONS[i].goals.contains(&Goal::Button) {
+            // Under its board, below the settings cards' rows.
             commands.spawn((
-                card(OnboardCard::Push, "PUSH ME", PUSH_CARD),
-                Transform::from_xyz(-0.27, BOARD_Y - SIGN.y * 0.5 - 0.17, 0.03),
+                card(OnboardCard::Push, "SETTINGS", PUSH_CARD),
+                Transform::from_xyz(0.0, -0.47, 0.01),
                 ChildOf(post),
             ));
         }
@@ -871,7 +1036,7 @@ fn setup(
         }
     };
 
-    // Out of reach: a box of rounds (the range wants it) on a crate in a
+    // Out of reach: the cleaning kit (a box too big for a pocket) on a crate in a
     // fenced pen.
     let stand = ground(&zone, FAR_STAND_AT);
     let h = PEN_HALF;
@@ -904,15 +1069,15 @@ fn setup(
         ]),
         CollisionLayers::new(Layer::World, LayerMask::ALL),
     ));
+    // A box too big for a pocket: the pack's lesson comes with it.
     let far = spawn(
         &mut commands,
-        "ammo_9x18",
+        "cleaning_kit",
         Transform::from_translation(stand + Vec3::Y * (FAR_CRATE.y + 0.04)),
     );
     if let Some(e) = far {
         commands.entity(e).insert(Placed::FarBox);
     }
-    set_rounds(&mut commands, far, 16);
 
     // The range: a pistol, an empty magazine and a box of rounds on a table.
     let table = ground(&zone, RANGE_TABLE_AT);
@@ -1222,12 +1387,17 @@ fn watch_hands(
                     }
                 }
             }
-            InteractEvent::Socketed { socket, .. } => {
+            InteractEvent::Socketed { socket, item } => {
                 if let Ok((s, owner)) = sockets.get(*socket) {
                     if matches!(s.kind, SocketKind::Body(_))
                         && owner.is_some_and(|o| locals.contains(o.0))
                     {
-                        complete(&mut ob, Goal::PutAway, &mut out);
+                        // The pistol holstered; the radio pocketed.
+                        match id(*item) {
+                            Some("pm_pistol") => complete(&mut ob, Goal::PutAway, &mut out),
+                            Some("radio") => complete(&mut ob, Goal::Pocket, &mut out),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -1675,34 +1845,38 @@ pub fn sign_text(
     comfort: &crate::rig::comfort::Comfort,
 ) -> String {
     let st = &STATIONS[i];
-    let mut t = format!("{}  {}\n\n", i + 1, st.title);
-    let next = st.goals.iter().find(|g| !ob.is_done(**g));
-    for g in st.goals {
-        let mark = if ob.skipped.contains(g) {
-            " --  "
-        } else if ob.is_done(*g) {
-            " OK  "
-        } else if Some(g) == next {
-            " >>  "
-        } else {
-            "     "
-        };
-        t += &format!("{mark}{}\n", g.label());
-    }
-    match next {
-        Some(g) => {
-            t += "\n";
-            t += &g.how_for(flat, comfort);
+    // One thing to read: the step you're on, with how, and nothing ahead
+    // of it (the playtest's truck was "completely overwhelming").
+    if ob.station_done(i) {
+        // Done: what's worth knowing, out in the yard; in the truck the
+        // board clears for the next.
+        if in_truck(i) {
+            return String::new();
         }
-        None => {
-            // Done: the steps are ticked off; what's worth knowing instead.
-            t = format!("{}  {}\n\nDONE.\n\n{}", i + 1, st.title, st.tip);
-            if i + 1 < STATIONS.len() {
-                t += "\n\nNext: the lit lamp.";
-            }
-        }
+        // (Where next is the driver's to say, and the lit lamp's to
+        // show: "Next: the lit lamp" on a board left the playtest stuck
+        // in the truck for two minutes.)
+        return format!("{}\n\nDONE.\n\n{}", st.title, st.tip);
     }
-    t
+    if ob.current() != Some(i) {
+        return String::new();
+    }
+    let Some(g) = st.goals.iter().copied().find(|g| !ob.is_done(*g)) else {
+        return String::new();
+    };
+    let k = st.goals.iter().position(|x| *x == g).unwrap_or(0) + 1;
+    let n = st.goals.len();
+    let step = if n > 1 {
+        format!("  ({k} of {n})")
+    } else {
+        String::new()
+    };
+    format!(
+        "{}{step}\n\n{}\n\n{}",
+        st.title,
+        g.label(),
+        g.how_for(flat, comfort)
+    )
 }
 
 /// The list by the tailgate.
@@ -1968,7 +2142,7 @@ mod tests {
                     for i in 0..STATIONS.len() {
                         let size = if i == 0 { TRUCK_SIGN } else { SIGN };
                         let s = paper(sign_text(&ob, i, flat, &comfort), size);
-                        let source = if i == 0 {
+                        let source = if in_truck(i) {
                             TextSource::TruckBoard
                         } else {
                             TextSource::StationBoard
@@ -2032,6 +2206,28 @@ mod tests {
             let wrapped = crate::render::screen::wrap(&l, 26, usize::MAX);
             assert!(wrapped.len() <= 3, "{} lines: {l}", wrapped.len());
         }
+    }
+
+    /// Each skill is shown before the first step that needs it (the
+    /// playtest held the pistol and the radio both, looking for a pocket
+    /// nobody had shown it). And a card is pushed (the SKIP, the
+    /// settings) only after pushing's been shown.
+    #[test]
+    fn a_skill_is_taught_before_it_is_needed() {
+        let mut taught: Vec<Skill> = Vec::new();
+        for g in all_goals() {
+            for n in g.needs() {
+                assert!(
+                    taught.contains(n),
+                    "{g:?} needs {n:?}, not yet shown (shown: {taught:?})"
+                );
+            }
+            taught.extend(g.teaches());
+        }
+        // Every station outside the truck has a SKIP card: pushing comes
+        // first.
+        let first_outside = (0..STATIONS.len()).find(|i| !in_truck(*i)).unwrap();
+        assert!(station_of(Goal::Button) < first_outside);
     }
 
     /// Every board names what its step's code accepts, and so does

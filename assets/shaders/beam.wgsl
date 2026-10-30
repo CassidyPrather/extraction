@@ -6,6 +6,8 @@
 //
 // uv.x runs round the cone, uv.y along it (0 at the lamp, 1 at the end of
 // the unit cone; the mesh is scaled to the beam's length).
+// No fog: additive, so fog's colour would be added onto what's behind;
+// the light thins in the air along the beam itself.
 
 #import bevy_pbr::{
     forward_io::VertexOutput,

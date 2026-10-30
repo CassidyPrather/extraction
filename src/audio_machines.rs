@@ -704,6 +704,10 @@ mod tests {
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
         (
+            "Alighted",
+            "a flock back on its roof: for Audio's wings settling (wildlife; takeoff is Flushed)",
+        ),
+        (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
         ),
