@@ -1120,3 +1120,33 @@ content's own cost isn't fixed yet. It splits two ways:
     the default without `--mirror`, and costs next to nothing.
   - Bevy doesn't time shadow passes (no diagnostic span). Count their
     draws per view before judging the GPU's share.
+
+### Marrow's main thread, profiled (30 October)
+
+The busy moment by system (`system_profile`, with tracing, one thread,
+after Map design's ford rises and birch belt): main schedule 44.6 ms,
+Update 14.0, PostUpdate 12.7, FixedPostUpdate 7.0. The named costs are
+Bevy's own, and each grows with the valley's mesh entities (11,136):
+
+| system | ms a frame |
+|---|---|
+| `check_visibility_cpu_culling` | 2.3 |
+| `check_entities_needing_specialization<StandardMaterial>` | 1.45 |
+| `propagate_parent_transforms` + `mark_dirty_trees` | 2.1 |
+| `check_visibility_ranges` | 0.7 |
+| `calculate_bounds` | 0.5 |
+
+Update's 14 ms is spread over hundreds of small systems, inflated by
+the tracing spans.
+
+Found on the way: the drones' beacon and halo were rewritten every
+frame with the same value, and the shell's glow followed the light's
+creep. Each write re-specialises every mesh wearing the material. These
+are now written only on a change, and the light is stepped in 64ths.
+`budget`'s `gauge_no_shared_material_rewritten_each_frame` holds every
+material worn by four or more meshes to that, and names the fields a
+write changed. It didn't move the 1.45 ms: that's the check's
+per-entity baseline.
+
+The lever is fewer mesh entities. Merge static props per material at
+load, as the guns were (`weapons`' merged parts).
