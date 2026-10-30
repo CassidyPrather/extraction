@@ -39,7 +39,8 @@ pub struct NotesRead(pub Vec<String>);
 /// The board, truck space: on the right canvas wall toward the tailgate,
 /// facing in, above the first-aid box (`art/vehicles/truck.py`, its top at
 /// FLOOR + 1.27) and clear of the bench display and the route card.
-pub const BOARD_AT: Vec3 = Vec3::new(1.12, FLOOR + 1.62, 1.1);
+/// Its cork's face (1 cm out) clear of the side slat's (x 1.1125).
+pub const BOARD_AT: Vec3 = Vec3::new(1.10, FLOOR + 1.62, 1.1);
 /// Its face, metres (local x across, y up): up to the canopy's top rail.
 pub const BOARD: Vec2 = Vec2::new(1.2, 0.70);
 /// A pinned copy: the note's name, big enough to read from the bed.
@@ -354,10 +355,11 @@ fn pin_cards(
                     size: Vec2::new(column_width(columns()[col].1) - 0.03, HEADER - 0.015),
                     style: ScreenStyle::Card,
                 },
+                // 8 mm off the cork (at 2 mm they fought it).
                 Transform::from_xyz(
                     columns()[col].0 + column_width(columns()[col].1) * 0.5,
                     BOARD.y * 0.5 - HEADER * 0.5,
-                    0.012,
+                    0.018,
                 ),
                 Visibility::default(),
                 ChildOf(board),

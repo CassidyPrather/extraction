@@ -70,6 +70,15 @@ pub struct Flushed {
     pub alarm: bool,
 }
 
+/// A flock came down onto a roof: its last bird is sitting (for sound:
+/// the flutter of wings settling, a call or two).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Alighted {
+    pub flock: Entity,
+    pub at: Vec3,
+    pub birds: u32,
+}
+
 /// Something animals keep away from, this tick.
 #[derive(Clone, Copy, Debug)]
 pub struct Threat {
@@ -193,6 +202,7 @@ impl Plugin for WildlifePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(bodies::BodiesPlugin)
             .add_message::<Flushed>()
+            .add_message::<Alighted>()
             .add_message::<herd::Startled>()
             .add_message::<rats::Scurried>()
             .init_resource::<Threats>()

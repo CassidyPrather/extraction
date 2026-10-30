@@ -7,6 +7,10 @@
 //! whisk (each grab is a stroke). Pot, pan, oven and crock run on the
 //! clock: turn the knob to start, and take it off before it burns. What a
 //! station makes comes out as an item in it, to eat or to cook further.
+//!
+//! Set aside (the 28 October playtest, 0:13:36: "this can very much be
+//! sidelined"): the table isn't put up unless [`KitchenWanted`] is there
+//! or `EXTRACTION_KITCHEN=1`. Its food stays in the loot as plain food.
 
 use avian3d::prelude::*;
 use bevy::prelude::*;
@@ -94,7 +98,15 @@ impl Plugin for KitchenPlugin {
     }
 }
 
-fn spawn_kitchen(mut commands: Commands, zone: Res<Zone>) {
+/// Puts the kitchen up beside the truck (it's set aside otherwise).
+#[derive(Resource, Clone, Copy, Debug, Default)]
+pub struct KitchenWanted;
+
+fn spawn_kitchen(mut commands: Commands, zone: Res<Zone>, wanted: Option<Res<KitchenWanted>>) {
+    let env = std::env::var("EXTRACTION_KITCHEN").is_ok_and(|v| v == "1");
+    if wanted.is_none() && !env {
+        return;
+    }
     let Some(stop) = zone.marker(&MarkerKind::TruckStop) else {
         return;
     };
@@ -487,6 +499,7 @@ mod tests {
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);
+        app.insert_resource(KitchenWanted);
         app.finish();
         app.cleanup();
         app.update();

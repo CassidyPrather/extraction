@@ -158,13 +158,15 @@ pub(super) fn direct(
     let mut tasks = Vec::new();
     // A newcomer's habits, at each new station.
     let station = station_of(goal);
-    if let Some(p) = persona.filter(|_| state.station != Some(station) && station > 0) {
+    // (Not in the truck: its stations have no post to walk to.)
+    if let Some(p) = persona.filter(|_| state.station != Some(station) && !super::in_truck(station))
+    {
         let post = |i: usize| Vec2::from(STATIONS[i].at);
         if p.lost {
             // Off up the track to the wrong lamp first; the lit lamp and
             // the boards put it right.
             let wrong = (station + 2) % STATIONS.len();
-            if wrong > 0 {
+            if !super::in_truck(wrong) {
                 // Up the track the wrong way, to that one's lamp.
                 let lamp = Vec2::new(0.0, post(wrong).y);
                 tasks.extend(world.go(here, lamp, 1.5));
@@ -409,15 +411,17 @@ impl DirectorWorld<'_, '_> {
                 } else {
                     "radio"
                 };
-                let side = if goal == Goal::TakePistol {
-                    Side::Right
-                } else {
-                    Side::Left
-                };
+                // (The pistol's holstered by the time the radio's taken:
+                // the right hand again.)
                 if let Some(e) = self.in_stash(id) {
-                    t.push(Grab { item: e, side });
+                    t.push(Grab {
+                        item: e,
+                        side: Side::Right,
+                    });
                 }
             }
+            // Into a pocket.
+            Goal::Pocket => t.push(Stow(Side::Right)),
             Goal::Turn => {
                 // A look over the shoulder and back.
                 t.push(LookAt(Vec3::new(here.x, 13.0, here.y + 10.0)));
@@ -437,20 +441,9 @@ impl DirectorWorld<'_, '_> {
                 }
                 t.push(Stow(Side::Right));
             }
-            Goal::Pack => {
-                // The cleaning kit is too big for any slot: into the pack.
-                t.extend(self.free_hands());
-                if let Some(e) = self
-                    .in_stash("cleaning_kit")
-                    .or_else(|| self.loose("cleaning_kit", here))
-                {
-                    t.push(Grab {
-                        item: e,
-                        side: Side::Right,
-                    });
-                    t.push(Stow(Side::Right));
-                }
-            }
+            // The far box (the cleaning kit: too big for any slot) into the
+            // pack.
+            Goal::Pack => t.push(Stow(Side::Right)),
             Goal::FarGrab => {
                 if let Some((e, at)) = self.placed(Placed::FarBox) {
                     t.extend(self.free_hands());
@@ -677,12 +670,12 @@ impl DirectorWorld<'_, '_> {
                 }
             }
             Goal::Button => {
+                // The SETTINGS card, in the truck by you.
                 if let Some((e, _)) = self
                     .cards
                     .iter()
                     .find(|(_, c)| **c == super::OnboardCard::Push)
                 {
-                    t.extend(self.go(here, self.station(goal) + Vec2::new(1.2, 0.0), 0.5));
                     t.push(Press(e));
                 }
             }

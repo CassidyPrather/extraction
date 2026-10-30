@@ -1054,7 +1054,7 @@ fn reached_near(g: &NavGrid, seen: &[bool], p: P2, r: f32) -> bool {
 }
 
 /// A path resampled every [`STEP`] metres.
-fn resample(path: &[P2]) -> Vec<P2> {
+pub(crate) fn resample(path: &[P2]) -> Vec<P2> {
     let mut out = vec![path[0]];
     let mut carry = 0.0;
     for w in path.windows(2) {
@@ -2935,6 +2935,102 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         ));
     }
 
+    // -- Tight, broken, quiet between (map_openness) -------------------------------
+    {
+        use crate::map_openness as mo;
+        let o = mo::openness(map, hm, &walk);
+        let pull = mo::pull(map, hm);
+        let mean = pull.iter().map(|p| p.2).sum::<usize>() as f32 / pull.len().max(1) as f32;
+        let places = mo::pull_at_places(map, hm);
+        let empty = mo::empty_walks(map, &comfy);
+        r.measures.push(format!(
+            "openness: a standing figure seen {:.0} m (median), {:.0} m (p90); {:.0}% of the open ground seen past a walker's {:.0} m; a fight at a hot spot heard by {mean:.1} others; places heard by: {}; longest empty walk {:.0} m",
+            o.median,
+            o.p90,
+            o.open_share * 100.0,
+            mo::OPEN_REACH,
+            places
+                .iter()
+                .map(|(n, _, k)| format!("{n} {k}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            empty.iter().map(|e| e.2).fold(0.0, f32::max)
+        ));
+        if mo::TIGHT.contains(&map.name.as_str()) {
+            if o.open_share > mo::OPEN_MAX {
+                find(
+                    &mut r,
+                    Rule::Landmark,
+                    format!(
+                        "{:.0}% of the open ground is seen past a walker's sight (at most {:.0}%): break the sightlines",
+                        o.open_share * 100.0,
+                        mo::OPEN_MAX * 100.0
+                    ),
+                    ins,
+                );
+            }
+            if mean > mo::PULL_MEAN {
+                find(
+                    &mut r,
+                    Rule::Patrol,
+                    format!(
+                        "a fight at a hot spot is heard by {mean:.1} others on average (at most {:.1}): put rises between them",
+                        mo::PULL_MEAN
+                    ),
+                    ins,
+                );
+            }
+            let danger = |p: P2| {
+                map.regions
+                    .iter()
+                    .filter(|reg| geom::point_in_polygon(&reg.polygon, p))
+                    .map(|reg| reg.danger)
+                    .max()
+                    .unwrap_or(0)
+            };
+            for (name, at, k) in &places {
+                if danger(*at) <= 1 && *k > mo::QUIET_PULL {
+                    find(
+                        &mut r,
+                        Rule::Patrol,
+                        format!(
+                            "a fight at {name}, a quiet place, is heard by {k} hot spots (at most {})",
+                            mo::QUIET_PULL
+                        ),
+                        *at,
+                    );
+                }
+            }
+            for reg in map.regions.iter().filter(|reg| reg.danger >= 2) {
+                if reg.notice.is_none_or(|n| n > mo::NOTICE_MAX) {
+                    find(
+                        &mut r,
+                        Rule::Patrol,
+                        format!(
+                            "{}, a hot zone, lets its machines notice you from any range: cap it (notice, at most {:.0} m)",
+                            reg.name,
+                            mo::NOTICE_MAX
+                        ),
+                        reg.polygon[0],
+                    );
+                }
+            }
+            for (a, b, len, at) in &empty {
+                if *len > mo::EMPTY_MAX {
+                    find(
+                        &mut r,
+                        Rule::Spacing,
+                        format!(
+                            "{len:.0} m of the walk from {a} to {b} has nothing to stop at (at most {:.0})",
+                            mo::EMPTY_MAX
+                        ),
+                        *at,
+                    );
+                }
+            }
+        }
+    }
+
     // -- Route choice ---------------------------------------------------------------
     for (name, at) in &rvs {
         if dist(*at, ins) < RV_FAR {
@@ -3374,6 +3470,38 @@ mod tests {
             "{}",
             r.text()
         );
+    }
+
+    /// The playtest of 28 October found Marrow "a couple of points in an
+    /// otherwise empty plane", seen from too far, its fights heard by every
+    /// machine: without its rises round the Village and the ford-keeper's
+    /// hut, the openness rules find all of it.
+    #[test]
+    fn marrow_without_its_rises_is_open_and_loud() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.features.retain(|f| {
+            !matches!(f, crate::map::TerrainFeature::Ridge { points, .. }
+                if [[-120.0, -28.0], [78.0, 30.0], [-78.0, 58.0]].contains(&points[0]))
+        });
+        map.placements.retain(|p| p.tag != "ford_hut");
+        for reg in &mut map.regions {
+            reg.notice = None;
+        }
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        for what in [
+            "seen past a walker's sight",
+            "heard by",
+            "a quiet place",
+            "nothing to stop at",
+            "notice you from any range",
+        ] {
+            assert!(
+                r.findings.iter().any(|f| f.what.contains(what)),
+                "{what}: {}",
+                r.text()
+            );
+        }
     }
 
     /// The designer's first raid in Marrow went up the road to the Village,

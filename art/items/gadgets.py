@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import (ALONG_X, UP, cell_bay, centred, cube, item, panel, ring, transform,
+from _kit import (ALONG_X, UP, cell_cradle, centred, cube, item, panel, ring, transform,
                   tube_path, wanted)
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
@@ -34,19 +34,21 @@ def flashlight():
     p = Part("body")
     # Head: a flared bell with a glass lens and a bezel ring.
     p.lathe([(0.0, -0.09), (0.0168, -0.09), (0.0175, -0.087), (0.0175, -0.068), (0.0135, -0.055),
-             (0.0135, 0.0095), (0.0, 0.0095)], "Paint", segs=24)
+             (0.0135, -0.012), (0.0, -0.012)], "Paint", segs=24)
     p.tube(0.0178, 0.0145, -0.0905, -0.086, "Steel", segs=24)
     p.cyl(0.0148, -0.0895, -0.088, "Lens", segs=20)
     # A slide switch on top, a ring of grip ridges.
     p.box((0.008, 0.004, 0.018), (0.0, 0.0145, -0.035), "Black", bevel=0.0015, segs=1)
     for k in range(3):
-        p.tube(0.0142, 0.0125, -0.02 + k * 0.008, -0.016 + k * 0.008, "Paint", segs=20)
+        p.tube(0.0142, 0.0125, -0.046 + k * 0.008, -0.042 + k * 0.008, "Paint", segs=20)
     # Tail and a lanyard loop.
-    p.lathe([(0.0, 0.0305), (0.0135, 0.0305), (0.0135, 0.084), (0.012, 0.09), (0.0, 0.09)],
+    p.lathe([(0.0, 0.052), (0.0135, 0.052), (0.0135, 0.084), (0.012, 0.09), (0.0, 0.09)],
             "Paint", segs=24)
     p.lathe([(0.004, -0.0012), (0.0055, 0.0), (0.004, 0.0012), (0.0025, 0.0)], "Steel", segs=10,
             xf=T(0, 0, 0.094) @ ALONG_X @ S(1, 1.6, 1), closed=True)
-    cell_bay(p, 0.0135, "Paint")
+    # The cell lies along it in an open cradle (it crossed the tube
+    # through an open bore: the 28 October playtest, 0:11:13).
+    cell_cradle(p, 0.0135, "Paint", -0.012, 0.052)
     return [p]
 
 

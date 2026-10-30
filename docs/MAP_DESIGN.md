@@ -673,6 +673,57 @@ turn and the village was the gap); Cinder's North sidings route 93% and
 30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
 route 98% and 10 m, now 99% and 4 m.
 
+## Tight, broken, quiet between
+
+The playtest of 28 October (`docs/playtests/2026-10-28/TRANSCRIPT.md`,
+P1): Marrow Creek was "a couple of points in an otherwise empty plane",
+its places "too far apart", its machines seeing you "from as far away",
+and a gunfight anywhere drawing "the entirety of the robots to your front
+door". The tester's ask: designed, busy places with the machines' activity
+broken up by big patches of near nothing, and sightlines broken by the
+land. `map_openness` measures it for every valley (the map lint's
+`openness:` line); `TIGHT` lists the valleys held to it (Marrow Creek, the
+prototype; the others join as they're reworked).
+
+- **Break the sightlines.** From the open ground (out of the woods),
+  sixteen bearings each, a standing figure is followed over the land and
+  past what stands on it (buildings and rocks block, a wood wears a line
+  out over 30 m of it). No more than 12% of the open ground may be seen
+  past a walker's sight (75 m) along half its bearings (`OPEN_MAX`).
+  Landforms first: a rise costs no frame time, hides you, and stops a
+  shot's sound too (below). Then tree belts on the rises and hedges
+  along field edges, and ruins; woods are the dearest thing in a frame.
+- **Quiet between the hot zones.** A hot spot is where the machines work,
+  watch or come in (work sites, sentries, spotters, the Gate). A gunshot
+  carries 220 m to a machine's ear in the open, 45% as far past a rise
+  or a wall standing 1.2 m over its line (`robots::senses`). A fight at a
+  hot spot is heard by at most 1.5 others on average (`PULL_MEAN`), and a
+  fight at a quiet place (danger 1) by at most two (`QUIET_PULL`). Put
+  the rise between a quiet place and the work sites round it, not the
+  distance: Marrow's Village had three sites within 120 m and was heard
+  by four hot spots; the bank, ford and clearing rises round it make it
+  one.
+- **Something to stop at.** "Too far apart" is empty walking, not
+  distance: on each place's walk to its nearest neighbour, no more than
+  100 m with nothing to stop at, a roof, a kiosk or loot, within 40 m
+  (`EMPTY_MAX`, `STOP_NEAR`). A hut on a long walk is a stop and a roof
+  both. Mind what a stop holds: a shed's toolbox has matches, and a shed
+  by the wrong road sent the first fetch job into the drones.
+- **Hot zones see their own ground.** Every hot region (danger 2 or
+  more) caps how far a machine standing in it notices you
+  (`Region::notice`, at most 50 m, `NOTICE_MAX`; Robot minds' senses take
+  the smaller of it and the machine's own sight). Marrow's hot regions
+  are capped at 45 m; the quiet ground between carries no cap, so a
+  machine that wanders out of its zone sees as far as it ever did.
+
+Marrow, before and after (the lint's measures): open ground seen past a
+walker 19% -> 9%, the 90th-percentile sightline 86 -> 74 m, a fight at a
+hot spot heard by 2.3 -> 1.1 others, the Village by 4 -> 1, the longest
+empty walk 135 -> 70 m (the ford-keeper's hut between the Old farm and
+the Hollow). Rises: the bank, ford and clearing rises round the Village,
+the spotter's rise by the district road north of the creek, the lane
+bank south of the Village, the rail yard's spoil heap.
+
 ## Terraces
 
 A plateau with a `height` is ground the map declares: a terrace, a
