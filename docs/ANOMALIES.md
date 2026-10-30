@@ -326,10 +326,10 @@ wall. So:
   | Kind | The grass | The ground |
   |---|---|---|
   | Lift | torn up and gone | scoured to raw rusty subsoil, grooved in a spiral, and a broad pale bank of the grit it flings out just inside its rim |
-  | Burner | burnt to the ground | scorched, coals glowing in patches |
-  | Snare | standing on end, quivering | fused dark and glassy, still faintly charged (blue) |
+  | Burner | burnt to the ground | charred black, coals glowing in patches, its burning front glowing round its rim |
+  | Snare | standing on end, quivering | sooty, burnt deeper along the branching paths its arcs take, which glow faint blue near its heart |
   | Well | laid flat toward its heart | pressed dark and hard |
-  | Mirror | wiped flat | glazed like still water, giving back the sky |
+  | Mirror | wiped flat | bleached pale, a sheen of light pooled at its heart |
   | Hush | dead still, whatever the wind; pressed into its dust | pale settled dust, and its edge a ragged line of it |
   | Frost | stiff, bowed under the rime | glazed in blue ice (pale hoar was lost on snow) |
 
@@ -343,6 +343,14 @@ wall. So:
   now, solid to 0.93 of the edge and gone by 1.02, its edge wavering a
   few centimetres, mottled in colour and glow so it reads as ground, not
   a painted disc.
+
+- **It reads as light or scorch, never as a thing laid on the grass.**
+  A playtester took the snare's glassy mark for a blue puddle and the
+  burner's for a red carpet (playtest 2026-10-28, 0:28:29). Every mark is
+  matte now (a glossy disc gives back the sky), and its glow is light as
+  light falls on the ground: pooled at its heart and falling off, a
+  burner's in coals and its burning front, a snare's along its burn
+  paths (`MarkGlow`); never an even sheet.
 
 - **It holds in murk and dark.** Marks are fogged as if half as far off,
   as particles are (`MarkMaterial`, `shaders/anomaly_mark.wgsl`), and the

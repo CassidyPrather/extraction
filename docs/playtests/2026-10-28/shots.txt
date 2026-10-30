@@ -26,6 +26,11 @@
 # - A fix the rig can't stage (it needs a knob the old build hasn't got):
 #   `--picture docs/shots/...png` in place of the arguments, in each
 #   half, shows a pair you took yourself. Say how in what to look for.
+# - --dolly x,y,z,yaw,pitch:x,y,z[:seconds[:fps]] in place of --camera
+#   walks the camera between the two points and keeps every frame (one
+#   launch, `--cinematic`): for a fix that shows in motion (an LOD pop, a
+#   flicker). The sheet shows six frames down the walk; index.html plays
+#   the two walks side by side.
 # - Pick a still moment that shows the fix. Use --hour day --weather
 #   clearing unless the fix is about the light, and --no-robots unless
 #   it's about them.
@@ -37,11 +42,14 @@ size 1280x720
 # Onboarding (#3, #6): a flat capture can't show the headset's greeting
 # (the window's is the flat one, rightly, before and after), so the yard's
 # start is shown by the list on its post behind the truck.
-yard_tailgate_list | Onboarding | The list by the tailgate: eleven stations now, RUN IT DRY among them, and "Odd? Both sticks (F9): a mark." under "Follow the lit lamps." | --map training_yard --camera -1.9,0,94.2,0,-8 --frames 120 --hour day --weather clearing --no-robots
+yard_tailgate_list | Onboarding | The list by the tailgate is folded away in the yard now (one thing to read: the lit lamp and the step on its board lead). Before, eleven stations of text | --map training_yard --camera -1.9,0,94.2,0,-8 --frames 120 --hour day --weather clearing --no-robots
+yard_truck_start | Onboarding | The truck at the start: one board with one step ("Take the pistol: the black pistol, ringed in the crate"), the pistol ringed, and a SETTINGS card; the settings cards, logbook, workbench and notes are folded away. Before, all of them at once | --map training_yard --frames 150 --hour day --weather clearing --no-robots
+snare_flags | Onboarding | The training snare ringed at its edge with six red flags, where "a part at the flags" says to throw. Before, an unmarked shimmer beside the burner | EXTRACTION_YARD_AT=9 --map training_yard --camera 5,0,-26,36,-15 --frames 120 --hour day --weather clearing --no-robots
 
 # Onboarding and Weapon feel (#4): the range now practises reloading from
 # slide-lock.
 range_board | Onboarding, Weapon feel | The range's board at station 5: five steps now (fill, seat, rack, safety, a plate), "Drop the mag" moved to the next station; done, its tip says "Eight rounds in a PM's mag. Count them." | EXTRACTION_YARD_AT=5 --map training_yard --camera -4.9,0,48.6,315,-4 --frames 90 --hour day --weather clearing --no-robots
+range_table_marked | Onboarding | The range table: the empty magazine the step names is ringed (it was the "mysterious brown block"). Before, nothing marked | EXTRACTION_YARD_AT=5 --map training_yard --camera -13.5,0,44.7,0,-40 --frames 120 --hour day --weather clearing --no-robots
 run_it_dry | Onboarding, Weapon feel | The new station 6 by the range: Shoot it empty, Drop the empty mag, A full mag in, Let the slide go, Fire again. Before, nothing stood there | EXTRACTION_YARD_AT=6 --map training_yard --camera -8.4,0,47.6,315,-4 --frames 90 --hour day --weather clearing --no-robots
 
 # Weapon feel (#4): a pistol run dry, its slide locked back.
@@ -64,6 +72,10 @@ walker_hits | Robot bodies | Four walkers at 15 m, each shot once with a pistol 
 # Visual design (#8): the far trees after a slow load. The software
 # renderer is too slow a frame to reproduce it (2798e450 captured all 9
 # here), so this pair is Visual design's own, from scripts/impostor_check.sh.
+# Visual design (M5): walking into the forest along Marrow's road, the
+# trees ahead crossing 62-74 m, where the near cards hand over to the far
+# impostor. Watch the pair video in index.html.
+treeline_walk | Visual design | Trees ahead of you on Marrow's forest road as you walk 20 m in (the pair video in index.html): watch the trees 60-75 m ahead change from far impostor to near cards: before, in one frame at 68 m; after, cross-dithered over 62-74 m. (In this light the two already look alike: the frame-to-frame numbers can't tell the builds apart, the swaying near branches swamp them) | --map marrow_creek --hour day --weather clearing --no-robots --dolly -58,0,170,270,-2:-78,0,170
 marrow_far_forest | Visual design | Marrow Creek's far forest after a load as slow as the headset's (Visual design's pair from scripts/impostor_check.sh marrow_creek, frames padded to 90 ms and the GPU held 120 s; not this rig): before, 0 of 9 impostors captured, so the trees past 68 m are bare trunks; after, all 9, with crowns | --picture docs/shots/visual-design/far_forest_slow_load_after.png | --picture docs/shots/visual-design/far_forest_slow_load_before.png
 
 # Map design and Onboarding (#5): the first job's walk from the gate,

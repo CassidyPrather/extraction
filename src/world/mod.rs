@@ -20,6 +20,7 @@ pub mod fell_sounds;
 pub mod furnace;
 pub mod glow;
 pub mod halos;
+pub mod hinge;
 pub mod impostors;
 pub mod live;
 pub mod lockdown;
@@ -151,6 +152,10 @@ pub enum Layer {
     /// Shards and splinters (`destruction::debris`): they fall on the
     /// world and nothing else, and no query looks for them.
     Debris,
+    /// A container's walls and floor (the stash crate): loose things land
+    /// on them and stay out of them, and nothing else (the body, a hand, a
+    /// held thing's leash, a line of sight) treats them as a wall.
+    Container,
 }
 
 pub struct WorldPlugin;
@@ -166,7 +171,17 @@ impl Plugin for WorldPlugin {
             cold::ColdPlugin,
         ))
         .add_systems(PreStartup, init_zone)
-        .add_systems(Update, buildings::swing_doors)
+        .add_systems(
+            Update,
+            (
+                hinge::take_hold,
+                hinge::swing_by_hand,
+                buildings::swing_doors,
+                hinge::take_parts,
+                hinge::move_parts,
+            )
+                .chain(),
+        )
         .add_systems(Update, minefields::lay_for_gallery)
         .add_systems(
             Startup,

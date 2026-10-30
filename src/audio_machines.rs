@@ -9,8 +9,9 @@
 //! Like the rest of Audio this only listens.
 
 use bevy::prelude::*;
+use bevy_seedling::prelude::*;
 
-use crate::audio::{AudioRng, CRACKLE_SET, SoundBank, play_at_speed};
+use crate::audio::{AudioRng, CRACKLE_SET, SoundBank, play_at_speed, reverb_send};
 use crate::robots::devices::{DeviceNoticed, Reaction};
 use crate::robots::hazards::{Effect, Hazard, HazardStruck};
 use crate::robots::hound::HoundCrouch;
@@ -68,6 +69,8 @@ impl Plugin for MachineSoundsPlugin {
                     hazard_sounds,
                     scan_sounds,
                     struck_sounds,
+                    grind_sounds,
+                    tether_sounds,
                 ),
             );
     }
@@ -630,6 +633,168 @@ pub fn struck_layers(
     }
 }
 
+/// A minelayer's grind: its treads and drive labouring along, louder and
+/// quicker the faster it crawls, silent standing (`minelayer.grind`). Its
+/// design promised "it grinds along slowly", and nothing played it: the
+/// playtest of 28 October walked up to one with "no audio feedback".
+#[derive(Component)]
+struct GrindLoop(Entity);
+
+/// The grind's level under its cue (dB) and playback speed at `speed` m/s:
+/// silent standing, full at [`GRIND_FULL`].
+pub fn grind_level(speed: f32) -> Option<(f32, f64)> {
+    if speed < GRIND_MOVING {
+        return None;
+    }
+    let k = (speed / GRIND_FULL).clamp(0.0, 1.0);
+    Some((-10.0 * (1.0 - k), 0.7 + 0.3 * k as f64))
+}
+pub const GRIND_MOVING: f32 = 0.15;
+pub const GRIND_FULL: f32 = 1.2;
+
+#[allow(clippy::type_complexity)]
+fn grind_sounds(
+    mut commands: Commands,
+    layers: Query<
+        (Entity, &GlobalTransform, &crate::robots::Robot),
+        With<crate::robots::minelayer::Minelayer>,
+    >,
+    mut loops: Query<(
+        Entity,
+        &GrindLoop,
+        &mut Transform,
+        &mut PlaybackSettings,
+        &SampleEffects,
+    )>,
+    mut volumes: Query<&mut VolumeNode>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    time: Res<Time>,
+    mut was: Local<std::collections::HashMap<Entity, Vec3>>,
+) {
+    let dt = time.delta_secs().max(1e-4);
+    was.retain(|e, _| layers.contains(*e));
+    for (e, gt, robot) in &layers {
+        let at = gt.translation();
+        let last = was.insert(e, at).unwrap_or(at);
+        let speed = at.xz().distance(last.xz()) / dt;
+        let level = grind_level(speed).filter(|_| !robot.wrecked);
+        let mine = loops.iter_mut().find(|(_, l, ..)| l.0 == e);
+        match (mine, level) {
+            (Some((_, _, mut t, mut settings, effects)), Some((db, sp))) => {
+                t.translation = at;
+                if (settings.speed - sp).abs() > 0.02 {
+                    settings.speed = sp;
+                }
+                if let Ok(mut v) = volumes.get_effect_mut(effects) {
+                    v.volume = Volume::Decibels(crate::audio_mix::db("minelayer.grind") + db);
+                }
+            }
+            (Some((l, ..)), None) => commands.entity(l).despawn(),
+            (None, Some((db, sp))) => {
+                let Some(sample) = bank.pick("drag/metal", &mut rng.0) else {
+                    continue;
+                };
+                commands.spawn((
+                    GrindLoop(e),
+                    SamplePlayer::new(sample).looping(),
+                    PlaybackSettings::default().with_speed(sp),
+                    Transform::from_translation(at),
+                    sample_effects![
+                        VolumeNode {
+                            volume: Volume::Decibels(crate::audio_mix::db("minelayer.grind") + db),
+                            ..default()
+                        },
+                        crate::audio_mix::spatial("minelayer.grind"),
+                        reverb_send("minelayer.grind")
+                    ],
+                ));
+            }
+            (None, None) => {}
+        }
+    }
+    for (l, g, ..) in &loops {
+        if !layers.contains(g.0) {
+            commands.entity(l).despawn();
+        }
+    }
+}
+
+/// A grappler's line on you (`grappler::Tethered`, its goal to hold you
+/// for the others): its winch straining at the grappler the whole time
+/// the line holds (`grapple.winch`), harder as it nears its end; let go
+/// (the hold run out, the grappler wrecked or stunned), the line whips
+/// slack and the winch clanks (`grapple.slack`, `grapple.clank`). The
+/// playtest of 28 October couldn't tell what grapplers wanted of it.
+#[derive(Component)]
+struct WinchLoop(Entity);
+
+fn tether_sounds(
+    mut commands: Commands,
+    held: Query<(Entity, &crate::robots::grappler::Tethered)>,
+    mut gone: RemovedComponents<crate::robots::grappler::Tethered>,
+    places: Query<&GlobalTransform>,
+    mut loops: Query<(Entity, &WinchLoop, &mut Transform, &mut PlaybackSettings)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for (player, t) in &held {
+        let Ok(at) = places.get(t.by).map(|g| g.translation() + Vec3::Y * 1.0) else {
+            continue;
+        };
+        let strain = winch_speed(t.left);
+        match loops.iter_mut().find(|(_, l, ..)| l.0 == player) {
+            Some((_, _, mut tf, mut settings)) => {
+                tf.translation = at;
+                if (settings.speed - strain).abs() > 0.02 {
+                    settings.speed = strain;
+                }
+            }
+            None => {
+                let Some(sample) = bank.pick("machines/servo", &mut rng.0) else {
+                    continue;
+                };
+                commands.spawn((
+                    WinchLoop(player),
+                    SamplePlayer::new(sample)
+                        .looping()
+                        .with_volume(Volume::Decibels(crate::audio_mix::db("grapple.winch"))),
+                    PlaybackSettings::default().with_speed(strain),
+                    Transform::from_translation(at),
+                    sample_effects![
+                        crate::audio_mix::spatial("grapple.winch"),
+                        reverb_send("grapple.winch")
+                    ],
+                ));
+            }
+        }
+    }
+    for player in gone.read() {
+        for (l, w, tf, _) in &loops {
+            if w.0 == player {
+                let at = tf.translation;
+                commands.entity(l).despawn();
+                layers(
+                    &mut commands,
+                    &bank,
+                    &mut rng,
+                    at,
+                    &[
+                        ("physical/whoosh", "grapple.slack", 1.4),
+                        ("machines/clank", "grapple.clank", 1.2),
+                    ],
+                );
+            }
+        }
+    }
+}
+
+/// The winch's pitch with `left` s of the hold to go: rising as it strains
+/// toward the end of its 4 s.
+pub fn winch_speed(left: f32) -> f64 {
+    0.6 + 0.25 * (1.0 - (left / 4.0).clamp(0.0, 1.0)) as f64
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -703,10 +868,6 @@ mod tests {
     /// that no sound needs: each with why. Everything else written as a
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
-        (
-            "Alighted",
-            "a flock back on its roof: for Audio's wings settling (wildlife; takeoff is Flushed)",
-        ),
         (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
@@ -869,8 +1030,23 @@ mod tests {
         let mut n = 0;
         for lit in code.split('"').skip(1).step_by(2) {
             let prefixes = [
-                "mender.", "mine.", "plough.", "spotter.", "sorter.", "hound.", "robot.", "wreck.",
-                "cell.", "you.", "device.", "squad.", "relay.", "walker.", "hazard.", "hit.",
+                "mender.",
+                "mine.",
+                "plough.",
+                "spotter.",
+                "sorter.",
+                "hound.",
+                "robot.",
+                "wreck.",
+                "cell.",
+                "you.",
+                "device.",
+                "squad.",
+                "relay.",
+                "walker.",
+                "hazard.",
+                "hit.",
+                "minelayer.",
             ];
             if prefixes.iter().any(|p| lit.starts_with(p)) && !lit.contains(' ') {
                 assert!(
@@ -938,6 +1114,35 @@ mod tests {
                     "{role:?}: telling plays a shrug's {l:?}"
                 );
             }
+        }
+    }
+
+    /// A minelayer crawling is heard (its grind, in the mix with its set,
+    /// louder the faster), and silent standing.
+    #[test]
+    fn a_minelayer_grinds_as_it_crawls() {
+        assert!(grind_level(0.0).is_none());
+        let (slow, _) = grind_level(0.3).unwrap();
+        let (fast, _) = grind_level(GRIND_FULL).unwrap();
+        assert!(slow < fast && fast == 0.0);
+        let c = crate::audio_mix::MIX
+            .iter()
+            .find(|c| c.name == "minelayer.grind");
+        assert_eq!(c.map(|c| c.set), Some("drag/metal"));
+    }
+
+    /// A grappler's hold is heard while it lasts, straining harder toward
+    /// its end, and its letting go is heard; all in the mix.
+    #[test]
+    fn a_grapplers_hold_is_heard() {
+        assert!(winch_speed(0.5) > winch_speed(3.5));
+        for (set, cue) in [
+            ("machines/servo", "grapple.winch"),
+            ("physical/whoosh", "grapple.slack"),
+            ("machines/clank", "grapple.clank"),
+        ] {
+            let c = crate::audio_mix::MIX.iter().find(|c| c.name == cue);
+            assert_eq!(c.map(|c| c.set), Some(set), "{cue}");
         }
     }
 

@@ -103,6 +103,24 @@ pub const SNOW_CODE: f32 = 0.01;
 pub const NO_SNOW: f32 = 1.0e5;
 
 const WET_WGSL: &str = r#"
+// The room the eye is in (`render::grade::dim_indoors`): how far its walls
+// cut the sky's light (1 out of doors) and how far it reaches (m), off the
+// ambient's alpha, which the lighting never reads.
+fn extraction_room() -> vec2<f32> {
+    let a = view_bindings::lights.ambient_color.a;
+    if (a >= 0.0) {
+        return vec2<f32>(1.0, 0.0);
+    }
+    let reach = floor(-a / 4.0);
+    return vec2<f32>(max(-a - reach * 4.0, 0.05), reach);
+}
+
+// How much of the room's cut past it (`at`, from the eye) is given back:
+// the outdoors seen from a room keeps the sky's light.
+fn extraction_outdoors(room: vec2<f32>, at: vec3<f32>) -> f32 {
+    return smoothstep(room.y, room.y + 3.0, distance(at, view_bindings::view.world_position.xyz));
+}
+
 fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
     var o = p;
     let alpha_mode = p.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -124,6 +142,16 @@ fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
     let open = select(1.0, clamp(p.material.base_color.a, 0.0, 1.0), opaque);
     if (opaque) {
         o.material.base_color.a = 1.0;
+    }
+    // From a room, what's under the sky past its walls keeps the sky's
+    // light (the ambient is the room's: `grade::dim_indoors`). What's under
+    // a roof stays the room's dark, this one's or the next house's.
+    let room = extraction_room();
+    if (room.x < 0.999) {
+        // (The terrain's alpha is below zero: under the sky, wet already.)
+        let sky = select(open, 1.0, opaque && p.material.base_color.a < -0.5);
+        let back = extraction_outdoors(room, p.world_position.xyz) * smoothstep(0.8, 0.95, sky);
+        o.diffuse_occlusion = p.diffuse_occlusion * mix(1.0, 1.0 / room.x, back);
     }
 #ifdef DISTANCE_FOG
     if (snow > 0.002 && HF_SNOW_LINE < 1.0e4) {
@@ -259,8 +287,12 @@ fn extraction_height_fog(
         depth = depth + cd;
     }}
     let amount = 1.0 - exp(-max(depth, 0.0));
-    let fog_color = fog_params.base_color.rgb * 1.06
-        + scattering * fog_params.directional_light_color.rgb * fog_params.directional_light_color.a;
+    // The air in the room is the room's (dimmed with it); the air out past
+    // it, the sky's.
+    let room = extraction_room();
+    let lit = mix(1.0, 1.0 / room.x, extraction_outdoors(room, frag));
+    let fog_color = (fog_params.base_color.rgb * 1.06
+        + scattering * fog_params.directional_light_color.rgb * fog_params.directional_light_color.a) * lit;
     return vec4<f32>(mix(color.rgb, fog_color, amount), color.a);
 }}
 

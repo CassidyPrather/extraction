@@ -146,6 +146,7 @@ mod tests {
             rounds: 0,
             charge_wh: 0.0,
             local: [0.0; 3],
+            turn: [0.0, 0.0, 0.0, 1.0],
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),

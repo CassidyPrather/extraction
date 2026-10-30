@@ -1513,6 +1513,7 @@ fn treat_for_gallery(
 /// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
+    comfort: Option<ResMut<crate::rig::comfort::Comfort>>,
     mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
     mut cams: Query<
         &mut Transform,
@@ -1526,6 +1527,14 @@ fn pose_body_for_gallery(
     let Some(spec) = opts.gallery.as_deref() else {
         return;
     };
+    // A gallery of the body (or of wounds on it) draws it, whatever the
+    // setting (off by default).
+    if let Some(mut c) = comfort
+        && (spec.contains("body") || spec.contains("treat"))
+        && !c.body
+    {
+        c.body = true;
+    }
     let (stoop, behind, above) = (
         spec.contains("stoop"),
         spec.contains("behind"),

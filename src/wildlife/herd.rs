@@ -150,7 +150,17 @@ pub struct Beast {
     pub gone: bool,
     /// Its place round the leader, running or ambling.
     slot: Vec2,
+    /// The way round to where it's going, when it can't go straight: the
+    /// waypoints left, and where they lead.
+    route: Vec<Vec2>,
+    route_to: Option<Vec2>,
 }
+
+/// A beast more than this from its waypoint goes straight there; within
+/// it, on to the next (m).
+const WAYPOINT: f32 = 1.5;
+/// A target moved this far is a new one, routed afresh (m).
+const REROUTE: f32 = 4.0;
 
 impl Beast {
     pub fn alive(&self) -> bool {
@@ -303,6 +313,8 @@ pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
                 timer: rng.range(2.0, 10.0),
                 gone: false,
                 slot,
+                route: Vec::new(),
+                route_to: None,
             }
         })
         .collect();
@@ -568,6 +580,7 @@ fn escape(nav: &NavGrid, zone: &Zone, at: Vec2, from: Vec2, vel: Vec2, rng: &mut
 /// onto ground it can't stand on.
 fn step(b: &mut Beast, ctx: &Ctx, want: Option<Vec2>, speed: f32, dt: f32) {
     let here = b.pos.xz();
+    let want = want.map(|w| route(b, ctx, here, w));
     let target_vel = match want {
         Some(w) if w.distance(here) > 0.3 => (w - here).normalize() * speed,
         _ => Vec2::ZERO,
@@ -577,6 +590,16 @@ fn step(b: &mut Beast, ctx: &Ctx, want: Option<Vec2>, speed: f32, dt: f32) {
     let dv = (target_vel - vel).clamp_length_max(accel * dt);
     let mut vel = vel + dv;
     let next = here + vel * dt;
+    // Somewhere it can't be (put down on a rock's edge, a fence's line):
+    // off it the way it's going, whatever's underfoot, until it's clear.
+    if !open(ctx.nav, ctx.zone, here) {
+        b.pos = ctx.zone.on_ground(next.x, next.y);
+        b.vel = Vec3::new(vel.x, 0.0, vel.y);
+        if vel.length() > 0.2 {
+            b.yaw = vel.y.atan2(vel.x);
+        }
+        return;
+    }
     if !open(ctx.nav, ctx.zone, next) {
         // Blocked: slide along whichever axis is open, or stop.
         let sx = Vec2::new(next.x, here.y);
@@ -603,6 +626,29 @@ fn step(b: &mut Beast, ctx: &Ctx, want: Option<Vec2>, speed: f32, dt: f32) {
         let d = crate::robots::anim::wrap_angle(want - b.yaw);
         b.yaw += d.clamp(-2.0 * dt, 2.0 * dt);
     }
+}
+
+/// Where to head for to get to `w`: straight at it when the way's open,
+/// else the next waypoint of a path round (a fence, a rock, a building in
+/// the way: a deer walked into one and stood there for good).
+fn route(b: &mut Beast, ctx: &Ctx, here: Vec2, w: Vec2) -> Vec2 {
+    if ctx.nav.line_clear([here.x, here.y], [w.x, w.y]) {
+        b.route.clear();
+        b.route_to = None;
+        return w;
+    }
+    if b.route_to.is_none_or(|t| t.distance(w) > REROUTE) {
+        b.route = ctx
+            .nav
+            .path([here.x, here.y], [w.x, w.y])
+            .map(|p| p.into_iter().skip(1).map(Vec2::from).collect())
+            .unwrap_or_default();
+        b.route_to = Some(w);
+    }
+    while b.route.len() > 1 && b.route[0].distance(here) < WAYPOINT {
+        b.route.remove(0);
+    }
+    b.route.first().copied().unwrap_or(w)
 }
 
 /// Herds' ticks.
@@ -867,6 +913,59 @@ mod tests {
         let me = zone.on_ground(to.x, to.y);
         assert!(among.hides(me));
         assert!(!among.hides(me + Vec3::X * (AMONG_NEAR + 40.0)));
+    }
+
+    /// Bait with something in the straight way (a fence, a rock, a
+    /// building): every animal finds its way round to it, in every valley.
+    #[test]
+    fn they_go_round_whats_in_the_way() {
+        for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+            let Some(kind) = Kind::for_map(map) else {
+                continue;
+            };
+            let (zone, nav, mut herd) = herd_in(map, kind);
+            let from = herd.home;
+            // A walkable spot 60-150 m off with the line to it blocked.
+            let to = (0..48).find_map(|k| {
+                let a = k as f32 / 48.0 * std::f32::consts::TAU;
+                (60..=150).step_by(15).find_map(|d| {
+                    let p = from + Vec2::from_angle(a) * d as f32;
+                    (open(&nav, &zone, p)
+                        && !nav.line_clear([from.x, from.y], [p.x, p.y])
+                        && nav.path([from.x, from.y], [p.x, p.y]).is_some())
+                    .then_some(p)
+                })
+            });
+            let Some(to) = to else {
+                continue;
+            };
+            let ctx = Ctx {
+                zone: &zone,
+                nav: &nav,
+                threats: &[],
+                loud: &[],
+                hounds: &[],
+            };
+            for _ in 0..(600.0 / DT) as usize {
+                herd.lure(to);
+                herd.tick(&ctx, DT);
+                if herd
+                    .beasts
+                    .iter()
+                    .all(|b| b.pos.xz().distance(to) < AMONG_NEAR)
+                {
+                    break;
+                }
+            }
+            for (i, b) in herd.beasts.iter().enumerate() {
+                let d = b.pos.xz().distance(to);
+                assert!(
+                    d < AMONG_NEAR,
+                    "{map}: {kind:?} {i} stuck {d:.0} m off at {:.0}",
+                    b.pos
+                );
+            }
+        }
     }
 
     /// A stone into the thicket they're grazing in puts them to flight

@@ -143,7 +143,10 @@ impl Plugin for TruckPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_truck)
             .add_systems(PostStartup, start_in_truck)
-            .add_systems(Update, (press_things, drive_truck, finish_raid).chain());
+            .add_systems(
+                Update,
+                (press_things, drive_truck, finish_raid, fit_ladder).chain(),
+            );
     }
 }
 
@@ -175,23 +178,210 @@ pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
     parked(zone, at, yaw)
 }
 
-/// The truck standing at `at` facing `yaw`, settled low enough that its
-/// rear steps reach the ground where the ground falls away behind it
-/// (otherwise the bed is out of reach on a slope). That sinks its wheels
-/// where the ground falls away (the 28 October playtest, 0:12:57;
-/// `capture::footing` lists it): standing it on its wheels waits on a rear
-/// ladder that reaches the ground.
+/// The truck standing at `at` facing `yaw` on its wheels: pitched and
+/// rolled to the ground under them, and set down until the highest
+/// ground under a wheel meets its tyre. (It used to be lowered as far as
+/// 0.8 m so its rear steps reached the ground behind it, which sank its
+/// wheels in the soil: the 28 October playtest, 0:12:57. The steps reach
+/// down now instead: [`ladder_steps`].)
 fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
-    let rot = Quat::from_rotation_y(yaw);
-    let mut t = Transform::from_translation(zone.on_ground(at[0], at[1])).with_rotation(rot);
-    let foot = t.transform_point(Vec3::new(0.0, 0.0, 2.6));
-    let drop = t.translation.y - zone.ground(foot.x, foot.z);
-    t.translation.y -= drop.clamp(0.0, 0.8);
+    let level = Transform::from_translation(zone.on_ground(at[0], at[1]))
+        .with_rotation(Quat::from_rotation_y(yaw));
+    let ground = |w: &Vec3| {
+        let p = level.transform_point(Vec3::new(w.x, 0.0, w.z));
+        zone.ground(p.x, p.z)
+    };
+    let mean = |f: &dyn Fn(&Vec3) -> bool| {
+        let (sum, n) = WHEELS
+            .iter()
+            .filter(|w| f(w))
+            .fold((0.0, 0.0), |(s, n), w| (s + ground(w), n + 1.0));
+        sum / n
+    };
+    let (front, rear) = (mean(&|w| w.z < -1.0), mean(&|w| w.z > -1.0));
+    let (left, right) = (mean(&|w| w.x < 0.0), mean(&|w| w.x > 0.0));
+    // Front axle to the middle of the two rear ones. (The rear ladder
+    // hangs plumb whatever the pitch: [`ladder_swing`].)
+    let slope = (front - rear).atan2(3.9 + 0.8);
+    // Steeper than a bed can stand without its loose kit sliding, the
+    // truck stands level and settled low as it used to, its rear steps on
+    // the ground and its wheels in the soil: the base stops fall 1 to 1.4 m
+    // from cab to tail, and want levelling (`capture::footing` lists them).
+    if slope.abs() > MAX_SLOPE {
+        let mut t = level;
+        let foot = t.transform_point(Vec3::new(0.0, 0.0, 2.6));
+        let drop = t.translation.y - zone.ground(foot.x, foot.z);
+        t.translation.y -= drop.clamp(0.0, 0.8);
+        return t;
+    }
+    // Pitched no further than a body can still climb its ladder at; the
+    // wheels at the low end hang down to the ground the rest of the way
+    // ([`wheel_droop`]).
+    let pitch = slope.clamp(-MAX_PITCH, MAX_PITCH);
+    let roll = (right - left).atan2(2.0);
+    let mut t = level.with_rotation(
+        Quat::from_rotation_y(yaw) * Quat::from_rotation_x(pitch) * Quat::from_rotation_z(roll),
+    );
+    // Each tyre's lowest points, round its contact patch, against the
+    // ground under them.
+    let lift = WHEELS
+        .iter()
+        .flat_map(|w| (-2..=2).map(move |k| *w + Vec3::new(0.0, -w.y, k as f32 * 0.05)))
+        .map(|c| {
+            let bottom = t.transform_point(c);
+            zone.ground(bottom.x, bottom.z) - bottom.y
+        })
+        .fold(f32::MIN, f32::max);
+    // Tyres settle a little into the soil.
+    t.translation.y += lift - WHEEL_SETTLE;
     t
 }
 
-/// How far a wheel drops on its springs to meet the ground (m).
-pub const WHEEL_DROOP: f32 = 0.16;
+/// The most a parked truck pitches end to end (radians, 12 degrees): past
+/// it the low wheels hang down to the ground. And the steepest stop it
+/// stands on its wheels at (3 degrees: steeper, kit slides in the bed).
+const MAX_PITCH: f32 = 0.21;
+const MAX_SLOPE: f32 = 0.05;
+
+/// How far a parked truck's tyres settle into the soil (m).
+pub const WHEEL_SETTLE: f32 = 0.025;
+
+/// How far the lowest tread (top 0.37) may stand over the ground behind
+/// it before a ramp is hung from it (m): a body steps up 0.4 at most.
+const STEP_REACH: f32 = 0.3;
+/// The ramp's slope: well inside what a body walks up (`player`'s 0.65
+/// normal, about 49 degrees).
+const RAMP_SLOPE: f32 = 0.6;
+
+/// The truck's frame turned only about the vertical: the ramp stands
+/// level in it.
+pub fn level_frame(pose: &Transform) -> Transform {
+    let (yaw, ..) = pose.rotation.to_euler(EulerRot::YXZ);
+    Transform::from_translation(pose.translation).with_rotation(Quat::from_rotation_y(yaw))
+}
+
+/// Where the rear ladder hangs from, truck space (`art/vehicles/truck.py`'s
+/// `ladder`).
+pub const LADDER_HINGE: Vec3 = Vec3::new(0.0, 1.0, 1.85);
+
+/// How the rear ladder turns about [`LADDER_HINGE`], truck space, to hang
+/// plumb when the truck stands pitched or rolled. Pitched with the truck,
+/// a step's back face leaned over a body pressing on it, and a body can't
+/// step up under an overhang (`player::try_step`).
+pub fn ladder_swing(pose: &Transform) -> Quat {
+    pose.rotation.inverse() * level_frame(pose).rotation
+}
+
+/// A point on the ladder (truck space, as built) where it hangs.
+pub fn on_ladder(pose: &Transform, p: Vec3) -> Vec3 {
+    LADDER_HINGE + ladder_swing(pose) * (p - LADDER_HINGE)
+}
+
+/// A boarding ramp hung from the lowest rear step down to the ground
+/// where the ground falls away behind the truck, so the bed is in reach
+/// from it: (size, centre, tilt about X) in [`level_frame`]. A plank 0.9
+/// wide and 5 cm thick, its top from the tread's back edge (z 2.4, y 0.37
+/// in the truck's frame) down to the lowest ground behind.
+pub fn ladder_steps(zone: &Zone, pose: &Transform) -> Vec<(Vec3, Vec3, f32)> {
+    let level = level_frame(pose);
+    let inv = level.compute_affine().inverse();
+    // Where the lowest tread's back edge hangs, in the level frame.
+    let edge =
+        inv.transform_point3(pose.transform_point(on_ladder(pose, Vec3::new(0.0, 0.37, 2.4))));
+    // The lowest ground across the ramp's width at `z`, level frame.
+    let ground = |z: f32| {
+        [-0.4, 0.0, 0.4]
+            .iter()
+            .map(|x| {
+                let w = level.transform_point(Vec3::new(*x, 0.0, z));
+                zone.ground(w.x, w.z) - level.translation.y
+            })
+            .fold(f32::MAX, f32::min)
+    };
+    let top = edge.y;
+    if top - ground(edge.z + 0.15) <= STEP_REACH {
+        return Vec::new();
+    }
+    // Out until the slope meets the ground.
+    let mut run = 0.3;
+    while run < 3.0 && top - RAMP_SLOPE * run > ground(edge.z + run) {
+        run += 0.05;
+    }
+    let drop = RAMP_SLOPE * run;
+    let len = run.hypot(drop);
+    let tilt = drop.atan2(run);
+    let thick = 0.05;
+    // Its top face's middle, then down by half its thickness along its
+    // normal.
+    let mid = Vec3::new(edge.x, top - drop * 0.5, edge.z + run * 0.5);
+    let normal = Vec3::new(0.0, run / len, drop / len);
+    vec![(Vec3::new(0.9, thick, len), mid - normal * thick * 0.5, tilt)]
+}
+
+/// One of the truck's fixed rear steps: its centre in the truck's frame.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct RearStep(pub Vec3);
+
+/// The boarding ramp ([`ladder_steps`]): its size (`render::props` draws
+/// it).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct LadderStep(pub Vec3);
+
+/// Fits the truck's ladder to the ground behind it wherever it stands.
+fn fit_ladder(
+    mut commands: Commands,
+    zone: Option<Res<Zone>>,
+    trucks: Query<(Entity, &Transform, Option<&Children>), (With<Truck>, Changed<Transform>)>,
+    steps: Query<(), With<LadderStep>>,
+    mut rear: Query<(&RearStep, &mut Transform), Without<Truck>>,
+    mut fitted: Local<std::collections::HashMap<Entity, Transform>>,
+) {
+    let Some(zone) = zone else { return };
+    for (truck, pose, children) in &trucks {
+        // Only where it has moved to (physics touches it every frame).
+        if fitted.get(&truck).is_some_and(|f| {
+            f.translation.distance(pose.translation) < 0.01
+                && f.rotation.angle_between(pose.rotation) < 0.01
+        }) {
+            continue;
+        }
+        fitted.insert(truck, *pose);
+        // The fixed rear steps hang plumb from the ladder's hinge.
+        let swing = ladder_swing(pose);
+        for c in children.into_iter().flatten() {
+            if let Ok((step, mut t)) = rear.get_mut(*c) {
+                t.translation = on_ladder(pose, step.0);
+                t.rotation = swing;
+            }
+        }
+        for c in children.into_iter().flatten() {
+            if steps.contains(*c) {
+                commands.entity(*c).despawn();
+            }
+        }
+        // From the level frame into the truck's.
+        let to_truck = Transform::from_matrix(Mat4::from(
+            pose.compute_affine().inverse() * level_frame(pose).compute_affine(),
+        ));
+        for (size, centre, tilt) in ladder_steps(&zone, pose) {
+            commands.spawn((
+                Name::new("Boarding ramp"),
+                LadderStep(size),
+                Collider::cuboid(size.x, size.y, size.z),
+                CollisionLayers::new(Layer::World, LayerMask::ALL),
+                to_truck
+                    * Transform::from_translation(centre)
+                        .with_rotation(Quat::from_rotation_x(tilt)),
+                Visibility::default(),
+                ChildOf(truck),
+            ));
+        }
+    }
+}
+
+/// How far a wheel drops on its springs to meet the ground (m): an army
+/// truck's axles articulate a long way.
+pub const WHEEL_DROOP: f32 = 0.4;
 
 /// How far wheel `i` hangs below its place in `WHEELS` to meet the ground
 /// under it (the truck is rigid, the ground under six wheels isn't flat).
@@ -214,11 +404,16 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
         .id();
     commands.entity(truck).with_children(|c| {
         for (size, centre, _) in TRUCK_PARTS {
-            c.spawn((
+            let mut e = c.spawn((
                 Collider::cuboid(size.x, size.y, size.z),
                 CollisionLayers::new(Layer::World, LayerMask::ALL),
                 Transform::from_translation(*centre),
             ));
+            // The rear steps stay level however the truck stands
+            // (`level_steps`).
+            if centre.z > 1.9 {
+                e.insert(RearStep(*centre));
+            }
         }
         c.spawn((
             Name::new("Bell pull"),
@@ -235,28 +430,83 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
         ));
     });
     // The stash: a big crate bolted to the bed floor.
-    commands.spawn((
-        Name::new("Stash crate"),
-        Stash,
-        Backpack {
-            owner: Entity::PLACEHOLDER,
-            open: true,
-            model: inventory::Backpack {
-                capacity: extraction_core::progression::STASH_BASE,
-                mass: 0.0,
+    commands
+        .spawn((
+            Name::new("Stash crate"),
+            Stash,
+            Backpack {
+                owner: Entity::PLACEHOLDER,
+                open: true,
+                model: inventory::Backpack {
+                    capacity: extraction_core::progression::STASH_BASE,
+                    mass: 0.0,
+                },
+                contents: Vec::new(),
+                carried: false,
+                half: Vec3::new(0.45, 0.3, 0.6),
             },
-            contents: Vec::new(),
-            carried: false,
-            half: Vec3::new(0.45, 0.3, 0.6),
-        },
-        // Up on a stand, the kit on a shelf in its top: waist height for
-        // someone standing in the bed (it sat on the floor; the first
-        // playtest found most things to pick up were on the floor).
-        Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
-        Visibility::default(),
-        ChildOf(truck),
-    ));
+            // Up on a stand, the kit on a shelf in its top: waist height for
+            // someone standing in the bed (it sat on the floor; the first
+            // playtest found most things to pick up were on the floor).
+            Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
+            Visibility::default(),
+            ChildOf(truck),
+        ))
+        .with_children(|c| {
+            // Solid, as it's drawn: the stand and the crate's lower half one
+            // block from the bed up to the shelf, and four walls round the
+            // shelf, open on top. It had no collider at all: things dropped
+            // over it fell through, and one came to rest under it, out of
+            // sight and reach.
+            let (w, d) = STASH_OUTER;
+            let floor = -(STASH_RAISE + 0.35);
+            let solid = -floor;
+            c.spawn((
+                Name::new("Stash crate body"),
+                Collider::cuboid(w, solid, d),
+                stash_layers(),
+                Transform::from_xyz(0.0, floor + solid * 0.5, 0.0),
+            ));
+            let (wall, high) = (0.03, STASH_WALL);
+            for (size, at) in [
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new(-(w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new((w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, -(d - wall) * 0.5),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, (d - wall) * 0.5),
+                ),
+            ] {
+                c.spawn((
+                    Name::new("Stash crate wall"),
+                    Collider::cuboid(size.x, size.y, size.z),
+                    stash_layers(),
+                    Transform::from_translation(at),
+                ));
+            }
+        });
 }
+
+/// The crate stops loose things, and nothing else: a crate the body
+/// couldn't pass kept it from the cord in the narrow bed, and one a held
+/// thing's leash took for a wall kept the kit in it.
+fn stash_layers() -> CollisionLayers {
+    CollisionLayers::new(Layer::Container, [Layer::Item])
+}
+
+/// The stash crate's outside, width and depth (as drawn).
+pub const STASH_OUTER: (f32, f32) = (0.95, 1.25);
+/// How high its walls stand over the shelf.
+pub const STASH_WALL: f32 = 0.325;
 
 /// How high the stash crate's stand lifts it off the bed.
 pub const STASH_RAISE: f32 = 0.3;

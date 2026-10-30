@@ -33,7 +33,9 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::terrain::Surface;
 
-use super::{Awareness, NOTICED, Noise, Noticed, PartRole, Robot, RobotPart, Senses, Stunned};
+use super::{
+    Awareness, NOTICED, Noise, Noticed, PartRole, Robot, RobotKind, RobotPart, Senses, Stunned,
+};
 use crate::player::{Body, Footstep, Player};
 use crate::rig::RigHead;
 use crate::world::{Layer, Zone};
@@ -179,8 +181,9 @@ pub const HEARD_SPREAD_MIN: f32 = 1.5;
 /// Its guess lands at least this share of the spread off the true spot:
 /// it heard roughly where, so a still shooter isn't walked straight onto.
 pub const HEARD_MISS: f32 = 0.35;
-/// A rifle's report (AK-74: 900 m/s, 48 damage) carries this far.
-pub const GUNSHOT: f32 = 220.0;
+/// A rifle's report (AK-74: 900 m/s, 48 damage) carries this far (it was
+/// 220): the map lint's own (`map_openness`), so the two can't drift.
+pub const GUNSHOT: f32 = extraction_core::map_openness::GUNSHOT;
 /// Walking pace footsteps (1.4 m/s) on firm ground carry this far.
 pub const FOOTSTEP: f32 = 7.0;
 /// A door swinging.
@@ -275,11 +278,17 @@ pub fn exposure(c: &SightCase) -> f32 {
 
 /// How far a gunshot carries, by its calibre: muzzle energy (speed squared
 /// times damage per projectile, times projectiles) against the AK's, to
-/// the 0.3 power. A pistol is heard at about 150 m, a Mosin at 250.
+/// the 0.15 power. A pistol is heard at about 110 m, a Mosin at 170: one
+/// fight pulls in what's near it, not the valley (playtest, 28 October:
+/// "one fight pulls every robot"; Map design keeps its hot zones further
+/// apart than this).
 pub fn gunshot_reach(speed: f32, damage: f32, projectiles: u32) -> f32 {
     let energy = (speed / 900.0).powi(2) * damage * projectiles.max(1) as f32 / 48.0;
-    (GUNSHOT * energy.max(0.01).powf(0.15)).clamp(120.0, 280.0)
+    (GUNSHOT * energy.max(0.01).powf(0.15)).clamp(GUNSHOT_REACH.0, GUNSHOT_REACH.1)
 }
+
+/// The quietest and loudest a gunshot carries (m).
+pub const GUNSHOT_REACH: (f32, f32) = (90.0, 190.0);
 
 /// How loud each surface is underfoot, against firm ground.
 pub fn surface_loudness(s: Surface) -> f32 {
@@ -344,6 +353,18 @@ pub(crate) fn door_noise(
                 source: Some(p),
             });
         }
+    }
+}
+
+/// The furthest a machine of this kind notices you (m), however far its
+/// eyes are good for (playtest P1: "enemies see you from too far"). It
+/// cuts where it notices you, not how well it sees you nearer in. Map
+/// design's lint reckons with the same (`map_openness::OPEN_REACH`).
+pub fn notice_far(kind: RobotKind) -> f32 {
+    match kind {
+        RobotKind::Walker => 60.0,
+        RobotKind::Drone => 70.0,
+        _ => f32::MAX,
     }
 }
 
@@ -610,13 +631,24 @@ pub(crate) fn perceive(
             && !dazzled;
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
-        let reach = conditions.sight(senses.sight)
+        // A hot zone's guards see their own ground (`Region::notice`, Map
+        // design's caps): no further than that while they stand in it.
+        let notice = zone
+            .map
+            .region_at([eye.x, eye.z])
+            .and_then(|r| r.notice)
+            .unwrap_or(f32::MAX)
+            .min(notice_far(robot.kind));
+        // How well it sees (its own sight), and how far it notices you at
+        // all (that, capped): a cap that shortens its reach, not its eyes.
+        let frost = if frosted {
             // Optics frosted (`hazards::Frosted`).
-            * if frosted {
-                super::hazards::FROST_SIGHT
-            } else {
-                1.0
-            };
+            super::hazards::FROST_SIGHT
+        } else {
+            1.0
+        };
+        let acuity = conditions.sight(senses.sight) * frost;
+        let reach = conditions.sight(senses.sight.min(notice)) * frost;
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
@@ -642,7 +674,7 @@ pub(crate) fn perceive(
                 }
                 let mut e = exposure(&SightCase {
                     distance: dist,
-                    reach,
+                    reach: acuity,
                     ground_fog: conditions.ground_fog,
                     light: t.light,
                     height: t.height,
@@ -940,7 +972,12 @@ mod tests {
         let shotgun = gunshot_reach(400.0, 14.0, 9);
         assert!((ak - GUNSHOT).abs() < 1.0, "{ak}");
         assert!(pistol < shotgun && shotgun < ak && ak < mosin);
-        assert!(pistol > 150.0, "a pistol still gets reported: {pistol}");
+        // Round a hot zone, not across the valley (Map design keeps them
+        // further apart than this).
+        assert!(
+            pistol > 100.0 && mosin < 200.0,
+            "a pistol still heard round the zone, a rifle not the valley over: {pistol} {mosin}"
+        );
         let walk = footstep_reach(surface_loudness(Surface::Asphalt), 1.4, STANDING);
         let run = footstep_reach(surface_loudness(Surface::Gravel), 4.5, STANDING);
         let creep = footstep_reach(surface_loudness(Surface::Grass), 0.7, 1.0);
