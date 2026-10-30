@@ -153,6 +153,7 @@ fn add_hurt_vignette(
         }
         let quad = meshes.add(Rectangle::new(0.5, 0.5));
         let mut vignette = HurtVignette::default();
+        // At the eye, not out in the air: no fog to take.
         for side in SIDES {
             vignette.materials.push(materials.add(StandardMaterial {
                 base_color: tint(0.0),
