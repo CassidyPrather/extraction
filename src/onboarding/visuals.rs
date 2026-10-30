@@ -387,8 +387,10 @@ struct MarkRing;
 #[derive(Resource)]
 struct MarkMat(Handle<StandardMaterial>);
 
-/// A soft warm ring round what the step names, breathing: what to reach
-/// for, at a glance, without words.
+/// A thin steady amber ring round what the step names: what to reach for,
+/// at a glance, without words. Steady, and nothing like the hands' green
+/// reach glow or the far-grab ring, so it reads as "this one" and not as
+/// "in reach".
 #[allow(clippy::type_complexity)]
 fn ring_marked(
     mut commands: Commands,
@@ -406,7 +408,6 @@ fn ring_marked(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mat: Option<Res<MarkMat>>,
-    time: Res<Time>,
 ) {
     let handle = match mat {
         Some(m) => m.0.clone(),
@@ -445,10 +446,5 @@ fn ring_marked(
             Transform::from_scale(Vec3::splat(1.0 / scale)),
             ChildOf(e),
         ));
-    }
-    // Breathing, a second and a half a breath.
-    if let Some(mut m) = materials.get_mut(&handle) {
-        let k = 0.55 + 0.45 * (time.elapsed_secs() * std::f32::consts::TAU / 1.5).sin();
-        m.emissive = LinearRgba::rgb(3.0 * k, 2.0 * k, 0.6 * k);
     }
 }

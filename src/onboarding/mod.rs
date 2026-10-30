@@ -112,7 +112,7 @@ impl Goal {
             Goal::Search => "Take the dressing",
             Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
-            Goal::Probe => "A part at the flags",
+            Goal::Probe => "A part at the sparks",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
             Goal::CallTruck => "Call the truck",
@@ -318,8 +318,8 @@ impl Goal {
             (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "One hand: circle it round\nthe other forearm 1.5x.",
             (Goal::Dressing, true) => "Hold it. Press U.",
-            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the red flags.",
-            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the red flags.",
+            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the sparks.",
+            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the sparks.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
             (Goal::Artifact, true) => "From the edge: look at\nit. Press E.",
             (Goal::Button, false) => "Point a finger, TRIGGER\noff. Push the amber cap.",
@@ -484,7 +484,7 @@ pub const STATIONS: &[Station] = &[
         at: [4.5, -30.0],
         rot: 90.0,
         goals: &[Goal::Probe, Goal::Artifact],
-        where_: "the lamp on the right. Mind the shimmer",
+        where_: "the lamp on the right. Mind the sparks",
         tip: "Burners show; snares and\nlifts hide. Many stones\nand the machines know.",
         in_order: true,
     },
@@ -1882,6 +1882,8 @@ fn press_cards(
 /// 26: it shows only the newest message, and cuts a long one off).
 pub const GREET_VR: &str = "Driver: \"Kit's in the crate by your left knee. Reach in, squeeze.\"";
 pub const GREET_FLAT: &str = "Driver: \"Kit's in the crate, front left. Look at it, press E.\"";
+pub const SPENT_LINE: &str =
+    "Driver: \"See it go dark? Spent. A few seconds, then it's back: your gap.\"";
 pub const ALL_DONE_LINE: &str = "Driver: \"That's the lot. The real one's colder.\"";
 pub const TOO_CLOSE_LINE: &str = "Driver: \"Back out. That shimmer burns. Ask me how I know.\"";
 pub const START_OVER_LINE: &str = "Driver: \"From the top. The crate in the truck.\"";
@@ -1925,6 +1927,11 @@ fn announce(
             at: None,
             station: d.station_done,
         });
+        // What the throw did, and what it's for (the playtest: "it
+        // definitely got zapped. I don't know what that did.").
+        if d.goal == Goal::Probe {
+            raid.say(SPENT_LINE);
+        }
         if !d.station_done {
             continue;
         }
@@ -2311,6 +2318,7 @@ mod tests {
             DUCK_LINE,
             MARK_LINE_VR,
             MARK_LINE_FLAT,
+            SPENT_LINE,
             crate::camp::YARD_CORD_LINE,
         ]
         .map(String::from)
