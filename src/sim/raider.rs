@@ -1014,6 +1014,7 @@ pub fn think(
                 &scene,
                 &mut log,
                 eye,
+                pos,
                 gun,
                 health.since_hit < 4.0,
             );
@@ -1380,6 +1381,7 @@ fn react_to_robots(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    pos: Vec3,
     gun: Option<Entity>,
     hurt: bool,
 ) {
@@ -1463,10 +1465,9 @@ fn react_to_robots(
         // Back off the way it came, out of sight.
         if r.clock > r.retreat_until {
             r.retreat_until = r.clock + 12.0;
-            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
-            let to = eye.xz() + away * 25.0;
             log.event("evade", json!({"robot": kind, "dist": round(d, 0)}));
-            if let Some(tasks) = travel(&r.grid, eye.xz(), to, 2.0) {
+            let shut = |d| scene.power_locked.contains(d);
+            if let Some(tasks) = run_from(&r.plans, &r.grid, pos, at, 25.0, &shut) {
                 r.interrupted = true;
                 bot.replace(tasks);
                 bot.sprint = true;
@@ -1482,9 +1483,9 @@ fn react_to_robots(
         }
         if r.clock > r.retreat_until {
             r.retreat_until = r.clock + 15.0;
-            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
             log.event("flee", json!({"robot": kind, "dist": round(d, 0)}));
-            if let Some(tasks) = travel(&r.grid, eye.xz(), eye.xz() + away * 40.0, 2.0) {
+            let shut = |d| scene.power_locked.contains(d);
+            if let Some(tasks) = run_from(&r.plans, &r.grid, pos, at, 40.0, &shut) {
                 r.interrupted = true;
                 bot.replace(tasks);
                 bot.sprint = true;
@@ -3517,9 +3518,38 @@ fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
+/// Away from a robot at `at` in a hurry, about `metres` off: inside a
+/// building or down a site, out by its nearest way out first (the open
+/// ground's grid has none of their walls, and a run on it went into them:
+/// Kettle sims, 30 October, raiders fleeing a crawler in the mine); on
+/// open ground, straight away.
+fn run_from(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    pos: Vec3,
+    at: Vec3,
+    metres: f32,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec<Task>> {
+    if let Some(out) = leave_plans(plans, pos, shut) {
+        return Some(out);
+    }
+    let away = (pos.xz() - at.xz()).normalize_or(Vec2::X);
+    travel(grid, pos.xz(), pos.xz() + away * metres, 2.0)
+}
+
 fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
-    let plan = r
-        .plans
+    leave_plans(&r.plans, pos, &|d| scene.power_locked.contains(d))
+}
+
+/// Out of whichever of `plans` `pos` is in, by its nearest way out (a
+/// door `shut` doesn't count). None if it's in none, or there's no way.
+fn leave_plans(
+    plans: &[BuildingPlan],
+    pos: Vec3,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec<Task>> {
+    let plan = plans
         .iter()
         .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
     let why = |what: &dyn Fn() -> String| {
@@ -3528,14 +3558,12 @@ fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
         }
     };
     let Some(plan) = plan else {
-        if r.plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
+        if plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
             why(&|| "in an underground site's grid but not in it".into());
         }
         return None;
     };
-    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &|d| {
-        scene.power_locked.contains(d)
-    }) else {
+    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), shut) else {
         why(&|| format!("{}: no way out", plan.name));
         return None;
     };
@@ -4278,5 +4306,106 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
         SiteKind::Anomaly => at.xz().distance(site.at) < 4.5,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
+    }
+}
+
+#[cfg(test)]
+mod run_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    /// Running from a robot down a site, or in a building, goes out by
+    /// the site's own ways, never the open ground's straight line through
+    /// its walls (Kettle sims, 30 October: raiders fleeing a crawler in
+    /// the mine ran into its rock). From deep in Kettle's mine and its
+    /// deep kettle, every leg of the run is clear on the site's own plan.
+    #[test]
+    fn a_run_from_a_robot_underground_keeps_to_the_site() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        // Open ground with nothing on it: what the raider's own grid knows
+        // of a site's walls underground.
+        let open = NavGrid {
+            n: 400,
+            cell: 2.0,
+            origin: -400.0,
+            cost: vec![1; 400 * 400],
+            lanes: Vec::new(),
+        };
+        let mut through = vec![];
+        let mut tried = 0;
+        for plan in plans.iter().filter(|p| p.levels.is_some()) {
+            let g = &plan.grid;
+            // The few floor cells furthest from its ways in.
+            let mut deep: Vec<Vec2> = (0..g.n * g.n)
+                .map(|k| Vec2::from(g.centre(k % g.n, k / g.n)))
+                .filter(|c| g.walkable(c.to_array()) && plan.contains(plan.to_world(*c), 0.0))
+                .collect();
+            let far = |c: &Vec2| {
+                plan.entries
+                    .iter()
+                    .map(|e| e.distance(*c))
+                    .fold(f32::INFINITY, f32::min)
+            };
+            deep.sort_by(|a, b| far(b).total_cmp(&far(a)));
+            for c in deep.iter().step_by(7).take(4) {
+                let feet = plan
+                    .xf
+                    .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                let robot = feet + Vec3::X * 3.0;
+                let Some(route) = run_from(&plans, &open, feet, robot, 40.0, &|_| false) else {
+                    continue;
+                };
+                tried += 1;
+                // Each leg sampled every quarter metre: inside the site,
+                // on its floor (or in a doorway).
+                let door = |q: Vec2| {
+                    plan.doors.iter().any(|d| {
+                        let t = (q - d.a).dot(d.b - d.a) / (d.b - d.a).length_squared();
+                        (q - d.a.lerp(d.b, t.clamp(0.0, 1.0))).length() < 1.0
+                    })
+                };
+                let mut at = feet.xz();
+                'legs: for t in &route {
+                    let Task::WalkTo { to, .. } = t else {
+                        continue;
+                    };
+                    let steps = (at.distance(*to) / 0.25).ceil().max(1.0) as usize;
+                    for k in 0..=steps {
+                        let w = at.lerp(*to, k as f32 / steps as f32);
+                        let q = plan.to_local(Vec3::new(w.x, feet.y, w.y)).xz();
+                        let inside = plan.contains(Vec3::new(w.x, feet.y, w.y), 0.0);
+                        // (Its ways out are where a run out of it ends.)
+                        let exit = plan.entries.iter().any(|e| e.distance(q) < 0.5);
+                        // (A path's smoothing may graze a corner: floor
+                        // within a cell of it is on its way.)
+                        let floor = [(0.0, 0.0), (0.3, 0.0), (-0.3, 0.0), (0.0, 0.3), (0.0, -0.3)]
+                            .iter()
+                            .any(|(x, z)| g.walkable([q.x + x, q.y + z]));
+                        if inside && !floor && !door(q) && !exit {
+                            through.push(format!("{}: from {at} to {to}, at {q}", plan.name));
+                            break 'legs;
+                        }
+                    }
+                    at = *to;
+                }
+            }
+        }
+        assert!(tried >= 4, "tried {tried}");
+        assert!(through.is_empty(), "ran through the rock: {through:#?}");
     }
 }
