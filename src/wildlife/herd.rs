@@ -313,7 +313,7 @@ fn home_where(zone: &Zone, nav: &NavGrid, seed: u64, kind: Kind, edge_only: bool
         // Where the herd is put down (new_herd's slots) clear, metre by
         // metre: no beast starts inside a rock.
         let put_down =
-            (-5..=11).all(|x| (-5..=5).all(|z| open(nav, zone, p + Vec2::new(x as f32, z as f32))));
+            (-4..=9).all(|x| (-4..=4).all(|z| open(nav, zone, p + Vec2::new(x as f32, z as f32))));
         if !put_down {
             continue;
         }
