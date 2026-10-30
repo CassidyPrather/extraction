@@ -3,14 +3,21 @@
 // branch it is (the cards are one mesh per tree variant, so this comes
 // from the local position, and each tree's phase from where it stands).
 // A card close to the eye shrinks to its centre (`trees::card_scale`):
-// whole from 2 m, gone by 1.2 m, smoothly.
+// whole to 0.5 m, gone by 0.3 m (only in your face), smoothly.
 
 #import bevy_pbr::{
     mesh_functions,
-    forward_io::{Vertex, VertexOutput},
+    forward_io::{Vertex, VertexOutput, FragmentOutput},
     view_transformations::position_world_to_clip,
     mesh_view_bindings::{globals, view},
+    pbr_fragment::pbr_input_from_standard_material,
+    pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
 }
+
+// Where the cards hand over to the impostor: `impostors::NEAR` and
+// `impostors::LOD_BAND` (a test holds them equal).
+const LOD_NEAR: f32 = 68.0;
+const LOD_BAND: f32 = 6.0;
 
 struct Sway {
     // xy: the wind's direction (world x/z), z: strength 0..1, w: gustiness.
@@ -110,7 +117,7 @@ fn vertex(
         vec4<f32>(card_centre, 1.0)
     ).xyz;
     centre = centre + offset(centre, card_centre, world_from_local[3].xyz);
-    let left = smoothstep(1.2, 2.0, distance(centre, view.world_position.xyz));
+    let left = smoothstep(0.3, 0.5, distance(centre, view.world_position.xyz));
     out.world_position = vec4<f32>(mix(centre, out.world_position.xyz, left), 1.0);
 #endif
     out.position = position_world_to_clip(out.world_position.xyz);
@@ -144,5 +151,30 @@ fn vertex(
         vertex.instance_index, world_from_local[3]);
 #endif
 
+    return out;
+}
+
+// The same pattern as the impostor's (`impostor.wgsl`), the other side of
+// it: across the band each pixel is the cards' or the impostor's.
+fn lod_dither(px: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(floor(px), vec2<f32>(0.06711056, 0.00583715))));
+}
+
+@fragment
+fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
+#ifdef VERTEX_OUTPUT_INSTANCE_INDEX
+    // The tree's foot (the cards hang from it), by horizontal distance as
+    // the impostor measures.
+    let base = mesh_functions::get_world_from_local(in.instance_index)[3].xz;
+    let f = smoothstep(LOD_NEAR - LOD_BAND, LOD_NEAR + LOD_BAND, distance(view.world_position.xz, base));
+    if (lod_dither(in.position.xy) < f) {
+        discard;
+    }
+#endif
+    var pbr_input = pbr_input_from_standard_material(in, is_front);
+    pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
+    var out: FragmentOutput;
+    out.color = apply_pbr_lighting(pbr_input);
+    out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }

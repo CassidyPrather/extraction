@@ -209,6 +209,7 @@ fn add_sleep_fade(
         if !locals.contains(parent.parent()) {
             continue;
         }
+        // At the eye, not out in the air: no fog to take.
         let material = materials.add(StandardMaterial {
             base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
             alpha_mode: AlphaMode::Blend,
