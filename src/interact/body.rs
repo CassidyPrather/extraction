@@ -42,9 +42,19 @@ pub const CHEST_BELOW_EYES: f32 = 0.38;
 const BEND: f32 = 0.45;
 /// Bending over, the hips stay where they are while the head goes forward
 /// and down: the anchor (and the belt on it) may trail the neck by this
-/// much per metre the head has dropped, up to [`HINGE_MOST`].
-const HINGE: f32 = 1.3;
+/// much per metre the head has dropped past [`HINGE_FROM`], up to
+/// [`HINGE_MOST`].
+const HINGE: f32 = 1.8;
 const HINGE_MOST: f32 = 0.45;
+/// A head this little lower than standing isn't bending: walking's bob, a
+/// glance down at the legs. The hips come along under it (the 28 October
+/// playtest: walking round the room, the hips stayed put and the body
+/// looked tilted).
+const HINGE_FROM: f32 = 0.1;
+/// How fast the anchor closes on where it should be, per second: quick
+/// enough to keep up with a walk (at 12 the hips trailed a walking pace by
+/// 7 cm), slow enough to smooth the tracking.
+const FOLLOW: f32 = 30.0;
 
 /// Index of a body socket in the default slot layout (1-9 keys in flat mode).
 #[derive(Component, Clone, Copy, Debug)]
@@ -539,6 +549,17 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
     }
 }
 
+/// Where the head turns on the neck (in the head's own frame, below and
+/// behind the eyes): looking down swings the eyes forward round it, and the
+/// body stays where it is. The torso anchor hangs under it and the drawn
+/// spine runs up to it (`rig::stance`), so the two agree.
+pub fn neck_pivot(head: &Transform) -> Vec3 {
+    head.translation + head.rotation * NECK_PIVOT
+}
+
+/// The neck's pivot from the eyes, in the head's frame.
+const NECK_PIVOT: Vec3 = Vec3::new(0.0, -0.1, 0.09);
+
 /// The torso trails the head: always under it, turning when the head has
 /// looked far enough away or the player is walking.
 fn follow_head(
@@ -579,15 +600,15 @@ fn follow_head(
             let y = torso.standing - CHEST_BELOW_EYES - drop + input.lifted;
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
-            let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
+            let neck = neck_pivot(&head);
             // Upright, under the neck; bending over, the hips stay put (up
             // to a point) and the chest leans out over them (`rig::stance`).
-            let bent = ((torso.standing - raw) * HINGE).clamp(0.0, HINGE_MOST);
+            let bent = ((torso.standing - raw - HINGE_FROM) * HINGE).clamp(0.0, HINGE_MOST);
             let under = Vec2::new(neck.x, neck.z);
             let was = Vec2::new(t.translation.x, t.translation.z);
             let at = under + (was - under).clamp_length_max(bent);
             let want = Vec3::new(at.x, y, at.y);
-            let ease = (12.0 * dt).min(1.0);
+            let ease = (FOLLOW * dt).min(1.0);
             t.translation = if t.translation.distance(want) > 0.5 {
                 want
             } else {

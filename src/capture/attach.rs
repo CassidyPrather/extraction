@@ -708,64 +708,25 @@ mod tests {
         // The first run's tally (30 October), to work down: mostly pieces
         // 2-3 mm off what holds them, and parts shut inside shells (an
         // eye's iris in its glass). Take a model out when it's clean.
-        "guns/mp133:",
-        "guns/pm_pistol:",
-        "guns/rpk74:",
-        "guns/sks:",
-        "guns/svd:",
-        "items/binoculars:",
-        "items/car_bonnet:",
-        "items/car_door:",
-        "items/climbing_kit:",
-        "items/deployable_cover:",
-        "items/emp_grenade:",
-        "items/robot_gunpod:",
-        "items/spare_parts:",
-        "items/stock_sks:",
-        "items/vest:",
-        "props/armchair:",
-        "props/bar_rack:",
+        // Loose by design: checked into blocks a little off true, the gaps black.
         "props/beam_charred:",
-        "props/belongings_box:",
-        "props/books_charred:",
-        "props/bow_saw:",
-        "props/cellar_vent:",
-        "props/chair:",
-        "props/charcoal_sack:",
+        // Loose by design: split pieces on the ground beside a block dug 15 cm in (the lint's floor
+        // is the block's buried foot).
         "props/chopping_block:",
-        "props/clothes_line:",
-        "props/control_stand:",
-        "props/cot:",
-        "props/counter_drawers:",
-        "props/depot_bin:",
-        "props/depot_conveyor:",
+        // To fix: the straps stay where the shut lid had them; they should swing back with the lid.
         "props/depot_crate_long_open:",
-        "props/depot_crate_small:",
+        // To fix: as the long one, the strap left behind by the swung lid.
         "props/depot_crate_small_open:",
-        "props/dishes_broken:",
-        "props/exercise_books:",
-        "props/filter_unit:",
-        "props/gate_valve:",
-        "props/gramophone:",
-        "props/kept_bicycle:",
-        "props/landing_net:",
-        "props/locker:",
-        "props/logbook:",
-        "props/reading_glasses:",
-        "props/rope_coil:",
-        "props/shelf_metal:",
+        // To check: the frames, webbing and lacing read 8-18 mm off each other in the island test.
         "props/snowshoes:",
-        "props/stash_stand:",
-        "props/suitcase_open:",
-        "props/suitcase_shut:",
+        // Loose by design: fallen legs and boards on the floor; the ash heap sinks below it, so the
+        // lint's floor is under the debris.
         "props/table_burnt:",
-        "props/terminal:",
-        "props/till:",
-        "props/washstand:",
-        "props/winch:",
+        // Loose by design: round logs resting on each other touch along lines the vertex test can't
+        // see.
         "props/woodpile:",
+        // Loose by design: as the woodpile, logs resting on logs.
         "props/woodpile_lean:",
-        "props/workbench:",
         "vehicles/bench:",
         "vehicles/stash_crate:",
         "vehicles/truck:",

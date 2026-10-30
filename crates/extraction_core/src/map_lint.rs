@@ -424,10 +424,9 @@ pub const TERRACE_CUT: f32 = 0.5;
 /// wheels in the soil, or its loose kit slides in the bed.
 pub const TRUCK_LEVEL: f32 = 0.05;
 /// Valleys whose truck stands as it did, settled low (not levelled for,
-/// nor held to [`TRUCK_LEVEL`]): the Training Yard, whose own tests (the
-/// first look round the bed, the vault over the tailgate) are tuned to
-/// the truck as it stands there now; its owner (Onboarding) levels it.
-pub const TRUCK_AS_IT_WAS: &[&str] = &["Training Yard"];
+/// nor held to [`TRUCK_LEVEL`]). None now: the Training Yard's truck is
+/// on its wheels too (the playtest saw it sunk in the soil).
+pub const TRUCK_AS_IT_WAS: &[&str] = &[];
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;

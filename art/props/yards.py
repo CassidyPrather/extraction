@@ -53,7 +53,8 @@ def blob(p, size, at, mat, segs=8, rings=5, xf=None):
 # --- The clothes line -------------------------------------------------------------------------
 
 POST_TOP = 1.9
-LINE_HX = 1.96
+# Into the bars at the posts (x 2.0 less 0.03: it stopped 6 mm short).
+LINE_HX = 1.98
 
 
 def line_y(x, sag):
@@ -107,7 +108,7 @@ def clothes_line():
         x = -0.05 + sx * 0.2
         top = line_y(x, sag) - 0.06
         p.box((0.13, 0.42, 0.008), (0, -0.21, 0), "Blue",
-              xf=T(x, top, zf - 0.008) @ RZ(sx * 0.18))
+              xf=T(x, top, zf - 0.007) @ RZ(sx * 0.18))
     hang(p, 0.62, 0.42, 0.56, zf, sag, "Ticking")
     for x in (1.12, 1.3):
         hang(p, x, 0.09, 0.3, zf, sag, "Wool", pegs=False)

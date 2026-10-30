@@ -1164,4 +1164,234 @@ mod tests {
         let debris = app.world_mut().query::<&Debris>().iter(app.world()).count();
         assert!(debris <= MAX_DEBRIS, "{debris} pieces");
     }
+
+    /// What a wreck drops can be picked up off the ground: every piece of
+    /// its loot lies where someone standing beside the hull reaches it, not
+    /// under the chassis or on top of it (warp sim, 30 October: four bots
+    /// stood at a fresh wreck reaching for a drop they never got to).
+    #[test]
+    fn a_wrecks_loot_lies_in_reach() {
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let job = |at| super::super::Job {
+            kind: super::super::JobKind::Survey,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let walker_at = zone.on_ground(40.0, 230.0);
+        let drone_at = zone.on_ground(60.0, 230.0);
+        let (walker, drone) = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let w = super::super::walker::spawn_walker(&mut c, &zone, walker_at, job(walker_at));
+            c.entity(w).remove::<super::super::Senses>();
+            let d =
+                super::super::drone::spawn_drone(&mut c, drone_at + Vec3::Y * 3.0, job(drone_at));
+            c.entity(d)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            (w, d)
+        };
+        for _ in 0..30 {
+            app.update();
+        }
+        for e in [walker, drone] {
+            app.world_mut().get_mut::<Robot>(e).unwrap().wrecked = true;
+        }
+        for _ in 0..90 * 10 {
+            app.update();
+        }
+        use bevy::ecs::system::RunSystemOnce;
+        let wrecks: Vec<Vec3> = [walker, drone]
+            .iter()
+            .map(|e| {
+                app.world()
+                    .get::<GlobalTransform>(*e)
+                    .unwrap()
+                    .translation()
+            })
+            .collect();
+        let mut drops = vec![];
+        for at in wrecks {
+            drops.extend(
+                app.world_mut()
+                    .query_filtered::<&GlobalTransform, With<crate::items::Item>>()
+                    .iter(app.world())
+                    .map(|g| (at, g.translation()))
+                    .filter(|(at, p)| p.xz().distance(at.xz()) < 4.0),
+            );
+        }
+        assert!(!drops.is_empty(), "nothing dropped");
+        // Standing somewhere clear (the player's capsule, player.rs: 0.28 m
+        // round, 1.75 m tall, against World and Robot) within a bot's
+        // reach of it, and it no higher than a standing hand.
+        let out = app
+            .world_mut()
+            .run_system_once(
+                move |spatial: SpatialQuery,
+                      terrain: Query<Entity, With<crate::world::TerrainCollider>>| {
+                    // The ground is the zone's own; the heightfield is no obstacle.
+                    let terrain = terrain.iter().next();
+                    let body = Collider::capsule(0.28, 1.75 - 0.56);
+                    let mut out = vec![];
+                    for (at, p) in &drops {
+                        let stands = [0.3, 0.6, 0.9, crate::bot::REACH - 0.1].iter().any(|r| {
+                            (0..16).any(|k| {
+                                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                                let (x, z) = (p.x + a.cos() * r, p.z + a.sin() * r);
+                                let g = zone.ground(x, z);
+                                p.y - g < crate::bot::STAND_REACH
+                                    && spatial
+                                        .shape_intersections(
+                                            &body,
+                                            Vec3::new(x, g + 0.05 + 1.75 / 2.0, z),
+                                            Quat::IDENTITY,
+                                            &SpatialQueryFilter::from_mask([
+                                                Layer::World,
+                                                Layer::Robot,
+                                            ])
+                                            .with_excluded_entities(terrain),
+                                        )
+                                        .is_empty()
+                            })
+                        });
+                        if !stands {
+                            out.push(format!(
+                                "({:.1}, {:.2} up, {:.1}) {:.2} m off the core",
+                                p.x,
+                                p.y - zone.ground(p.x, p.z),
+                                p.z,
+                                p.xz().distance(at.xz())
+                            ));
+                        }
+                    }
+                    out
+                },
+            )
+            .unwrap();
+        assert!(out.is_empty(), "loot nobody can stand to reach: {out:?}");
+    }
+
+    /// A drop that rolled round the far side of a walker's hull: a bot
+    /// reaching for it from this side goes round the hull to it, not into
+    /// it (warp sims, 30 October: five bots stood at a fresh wreck pressing
+    /// into the hull for the last of its loot).
+    #[test]
+    fn a_bot_goes_round_a_wreck_for_its_loot() {
+        use crate::bot::{Bot, Task};
+        use crate::rig::Side;
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e).remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..30 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Robot>(walker).unwrap().wrecked = true;
+        for _ in 0..(90.0 * (SETTLE_BY + 1.0)) as usize {
+            app.update();
+        }
+        let hull = app
+            .world()
+            .get::<GlobalTransform>(walker)
+            .unwrap()
+            .translation();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let mut stuck = vec![];
+        for (k, a) in [0.0f32, 1.6, 3.1, 4.7].into_iter().enumerate() {
+            let away = Vec2::from_angle(a);
+            let item_at = hull.xz() + away * 1.3;
+            let from = hull.xz() - away * 2.6;
+            let item = {
+                let catalog = app.world().resource::<crate::items::Catalog>().clone();
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let e = crate::items::spawn_item(
+                    &mut c,
+                    &catalog,
+                    crate::items::SpawnItem {
+                        kind: catalog.kind("servo").unwrap(),
+                        transform: Transform::from_translation(
+                            zone.on_ground(item_at.x, item_at.y) + Vec3::Y * 0.2,
+                        ),
+                        condition: 0.6,
+                    },
+                );
+                q.apply(app.world_mut());
+                e
+            };
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = zone.on_ground(from.x, from.y) + Vec3::Y * 0.05;
+            for _ in 0..30 {
+                app.update();
+            }
+            app.world_mut()
+                .entity_mut(player)
+                .insert(Bot::new(vec![Task::Grab {
+                    item,
+                    side: Side::Left,
+                }]));
+            let mut got = false;
+            for _ in 0..90 * 15 {
+                app.update();
+                if app.world().get::<Bot>(player).unwrap().done() {
+                    got = true;
+                    break;
+                }
+            }
+            let bot = app.world().get::<Bot>(player).unwrap();
+            if !got || bot.failed > 0 {
+                let p = app.world().get::<Transform>(player).unwrap().translation;
+                stuck.push(format!(
+                    "try {k}: at ({:.1}, {:.1}) {:?}",
+                    p.x, p.z, bot.log
+                ));
+            }
+            app.world_mut().entity_mut(player).remove::<Bot>();
+            app.world_mut().entity_mut(item).despawn();
+        }
+        assert!(stuck.is_empty(), "pressed into the hull: {stuck:?}");
+    }
 }

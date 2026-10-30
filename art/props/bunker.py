@@ -46,13 +46,15 @@ def filter_unit():
                 bolt(p, (x + dx, y, -0.49), (0, 0, -1), r=0.008, h=0.006)
     # The crank wheel on its boss, a handle on its rim.
     cx, cy, z = -0.34, 0.95, -0.49
-    p.cyl(0.05, 0.0, 0.05, "Iron", segs=12, xf=T(cx, cy, z - 0.05))
+    # The boss out to the spokes (they stood 11 mm past it), the handle
+    # from the rim (1 cm off it).
+    p.cyl(0.05, 0.0, 0.072, "Iron", segs=12, xf=T(cx, cy, z - 0.072))
     p.tube(0.2, 0.18, 0.0, 0.025, "Iron", segs=24, xf=T(cx, cy, z - 0.08))
     for k in range(4):
         a = k * math.pi / 2 + 0.3
         rod(p, (cx, cy, z - 0.07), (cx + math.cos(a) * 0.185, cy + math.sin(a) * 0.185, z - 0.07),
             0.009, "Iron", segs=6)
-    rod(p, (cx + 0.19, cy, z - 0.09), (cx + 0.19, cy, z - 0.17), 0.012, "Black", segs=8)
+    rod(p, (cx + 0.19, cy, z - 0.075), (cx + 0.19, cy, z - 0.17), 0.012, "Black", segs=8)
     # A gauge: bezel, dark face.
     gx, gy = 0.34, 1.2
     p.cyl(0.07, 0.0, 0.03, "Zinc", segs=16, xf=T(gx, gy, z - 0.03))
