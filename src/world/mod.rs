@@ -385,3 +385,71 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod terrain_queries {
+    /// No shape or point query that can take in the World layer tests the
+    /// terrain's heightfield: each such test is ~28 ms in Marrow Creek
+    /// (parry walks the cells), and one per frame was a quarter of the
+    /// busy moment's main thread (blink's head test). A query whose filter
+    /// names `Layer::World` must leave the terrain out
+    /// (`with_excluded_entities`, the `TerrainCollider`) or go through
+    /// `sphere_in_world`, which asks the heightmap. Casts (move-and-slide)
+    /// take another path and aren't held to this.
+    #[test]
+    fn no_shape_query_tests_the_terrain_heightfield() {
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    out.push(p);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        assert!(files.len() > 50, "found the sources: {}", files.len());
+        let mut wrong = Vec::new();
+        for f in files {
+            let text = std::fs::read_to_string(&f).unwrap();
+            let lines: Vec<&str> = text.lines().collect();
+            for (i, l) in lines.iter().enumerate() {
+                let query = [
+                    "shape_intersections",
+                    "project_point",
+                    "point_intersections",
+                ]
+                .iter()
+                .any(|q| l.contains(&format!("{q}(")) || l.contains(&format!(".{q}")));
+                if !query || l.trim_start().starts_with("//") || l.contains("fn ") {
+                    continue;
+                }
+                let window = lines[i..(i + 12).min(lines.len())].join("\n");
+                let before = lines[i.saturating_sub(12)..i].join("\n");
+                let world = window.contains("Layer::World") || window.contains("LayerMask::ALL");
+                let terrain_safe = |t: &str| {
+                    t.contains("excluded_entities")
+                        || t.contains("sphere_in_world")
+                        || t.contains("ground_solid_at")
+                };
+                if world && !terrain_safe(&window) && !terrain_safe(&before) {
+                    wrong.push(format!("{}:{}", f.display(), i + 1));
+                }
+            }
+        }
+        let mut wrong: Vec<String> = wrong
+            .into_iter()
+            .filter(|w| !w.contains("render/budget.rs") && !w.contains("destruction/tests.rs"))
+            .collect();
+        wrong.sort();
+        assert!(
+            wrong.is_empty(),
+            "World-layer shape queries that test the terrain: {wrong:#?}"
+        );
+    }
+}
