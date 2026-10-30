@@ -34,6 +34,15 @@ pub struct Swinging {
     since: f32,
 }
 
+/// When a hand let go of this door (seconds, `Time::elapsed`): a palm
+/// still on its leaf isn't a push for a moment (`physics_hands::push_doors`
+/// would shut a door the hand's just swung, or tapped open).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct LetGo(pub f32);
+
+/// How long after a hand lets go its palm on the leaf isn't a push.
+pub const LET_GO: f32 = 0.6;
+
 /// A door left where a hand let it go: `swing_doors` doesn't drive it to
 /// either end until it's toggled (`open` no longer what it was).
 #[derive(Component, Clone, Copy, Debug)]
@@ -138,7 +147,7 @@ pub fn swing_by_hand(
         let hand = hands.get(held.hand).ok().filter(|h| h.grip_down);
         let Some(hand) = hand else {
             let mut e = commands.entity(e);
-            e.remove::<Swinging>();
+            e.remove::<Swinging>().insert(LetGo(time.elapsed_secs()));
             let tap = time.elapsed_secs() - held.since < TAP
                 && (door.angle - held.leaf_from).abs() * PER_UNIT < TAP_TURN;
             if tap {
