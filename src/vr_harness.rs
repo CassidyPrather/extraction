@@ -2993,6 +2993,52 @@ mod onboarding {
         assert!(!safety_said(&vr), "not told again once you know");
     }
 
+    /// Each step that names a thing marks it, and only it, while it's the
+    /// step: what to reach for can be picked out (the playtest couldn't
+    /// tell the radio in a crate of thirteen things, nor the dressing, nor
+    /// where to throw a part).
+    #[test]
+    fn the_step_marks_what_it_names() {
+        use crate::onboarding::{Marked, Names};
+        let mut vr = Vr::first_run();
+        vr.step(5);
+        let mut named = 0;
+        for g in crate::onboarding::all_goals() {
+            let Some(n) = g.names() else { continue };
+            named += 1;
+            let st = crate::onboarding::station_of(g);
+            let before: Vec<Goal> = crate::onboarding::STATIONS[st]
+                .goals
+                .iter()
+                .copied()
+                .take_while(|x| *x != g)
+                .collect();
+            at_station(&mut vr, st, &before);
+            vr.step(3);
+            let marked: Vec<Entity> = vr
+                .app
+                .world_mut()
+                .query_filtered::<Entity, With<Marked>>()
+                .iter(vr.app.world())
+                .collect();
+            assert_eq!(marked.len(), 1, "{g:?}: {} marked", marked.len());
+            let e = marked[0];
+            let w = vr.app.world();
+            let right = match n {
+                Names::Stash(id) => w
+                    .get::<crate::items::Item>(e)
+                    .is_some_and(|it| w.resource::<Catalog>().get(it.kind()).id == id),
+                Names::Placed(p) => w.get::<Placed>(e) == Some(&p),
+                Names::SettingsCard => w.get::<OnboardCard>(e) == Some(&OnboardCard::Push),
+                Names::Snare => w.get::<crate::onboarding::Probed>(e).is_some(),
+                Names::Cord => w.get::<Pressable>(e) == Some(&Pressable::BellPull),
+                Names::HouseDoor => w.get::<crate::world::buildings::DoorLeaf>(e).is_some(),
+            };
+            assert!(right, "{g:?} marked the wrong thing");
+        }
+        assert!(named >= 10, "only {named} steps name a thing");
+    }
+
     /// One thing to read: in the truck at the start, the only words in
     /// view are the step you're on and the SETTINGS card (the playtest's
     /// truck: a dozen settings cards, the logbook, the bench, a note and
