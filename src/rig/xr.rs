@@ -894,7 +894,8 @@ fn make_tracking_root(
 
 #[derive(Default)]
 struct TurnState {
-    armed: bool,
+    /// The turning stick's flicks (a press of it is never one).
+    flicks: super::Flicks,
     sprint: bool,
 }
 
@@ -1041,21 +1042,29 @@ fn drive_xr_rig(
     input.sprint = turn.sprint;
     let right_stick = input.hand(move_side.other()).stick;
     input.turn = 0.0;
-    if right_stick.x.abs() < 0.3 && right_stick.y > -0.3 {
-        turn.armed = true;
-    }
+    // Its flicks: snap turns and the crouch toggle; never while it's
+    // pressed in (the fire selector's click) or just after.
+    let turn_path = if comfort.left_handed { a.left } else { a.right };
+    let pressed = read_b(&a.stick_click, turn_path);
+    let flick = turn.flicks.step(
+        right_stick,
+        pressed,
+        time.elapsed_secs(),
+        !comfort.smooth_turn,
+    );
     // Turn around the head, not the playspace origin: snaps, or smoothly.
     let angle = if comfort.smooth_turn {
-        if right_stick.x.abs() > 0.25 {
+        if right_stick.x.abs() > 0.25 && !pressed {
             -right_stick.x * comfort.turn_speed.to_radians() * time.delta_secs()
         } else {
             0.0
         }
-    } else if turn.armed && right_stick.x.abs() > 0.7 {
-        turn.armed = false;
-        -right_stick.x.signum() * comfort.snap_angle.to_radians()
     } else {
-        0.0
+        match flick {
+            Some(super::Flick::Right) => -comfort.snap_angle.to_radians(),
+            Some(super::Flick::Left) => comfort.snap_angle.to_radians(),
+            _ => 0.0,
+        }
     };
     if angle != 0.0 {
         let head_world = root.transform_point(input.head.translation);
@@ -1063,8 +1072,7 @@ fn drive_xr_rig(
         root.translation = head_world + rot * (root.translation - head_world);
         root.rotation = rot * root.rotation;
     }
-    if turn.armed && right_stick.y < -0.7 {
-        turn.armed = false;
+    if flick == Some(super::Flick::Down) {
         input.crouch = !input.crouch;
     }
 }

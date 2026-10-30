@@ -268,9 +268,12 @@ fn rain_volume(
             }
         }
     }
+    // Walled in, the roof's drumming; under an open roof, well under the
+    // open rain (`acoustics::drum_level`).
+    let drum_at = crate::acoustics::drum_level(&listening.space);
     for (set, level) in drums.iter_mut() {
         let target = if drum == Some(*set) && rain_db.is_some() {
-            1.0
+            drum_at
         } else {
             0.0
         };
@@ -381,6 +384,7 @@ impl Plugin for AudioPlugin {
                         heavy_sounds,
                         heavy_loops,
                         flock_sounds,
+                        flock_landing,
                         anomaly_voices,
                         tool_sounds,
                         hush_world,
@@ -2911,10 +2915,59 @@ fn break_sounds(
     }
 }
 
+/// A flock settling back on a roof (`wildlife::Alighted`, as the last
+/// bird sits): the wings braking over the perch, a few birds' worth,
+/// softer and slower than going up (`flock.land`), and one call. Every
+/// flight is heard both ways (the playtest of 28 October wanted wings on
+/// takeoff and landing).
+fn flock_landing(
+    mut commands: Commands,
+    mut alighted: MessageReader<crate::wildlife::Alighted>,
+    flocks: Query<&crate::wildlife::flock::Flock>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    use crate::wildlife::flock::Species;
+    for a in alighted.read() {
+        let n = (a.birds as f32 / 6.0).clamp(1.0, 3.0) as usize;
+        for _ in 0..n {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/wings",
+                Some(a.at + Vec3::Y * 1.0),
+                "flock.land",
+                0.0,
+                0.85,
+                0.12,
+            );
+        }
+        let (calls, cue) = match flocks.get(a.flock).map(|f| f.species) {
+            Ok(Species::Raven) => ("ambience/raven", "flock.call"),
+            Ok(Species::Jackdaw) => ("ambience/jackdaw", "flock.call"),
+            Ok(Species::Heron) => ("wildlife/heron", "flock.heron"),
+            Ok(Species::Chough) => ("wildlife/chough", "flock.chough"),
+            _ => ("ambience/crow", "flock.call"),
+        };
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            calls,
+            Some(a.at + Vec3::Y * 1.0),
+            cue,
+            -6.0,
+            0.1,
+        );
+    }
+}
+
 /// A flock going up (`wildlife::Flushed`): the clatter of wings and the
 /// birds' own calls, rooks (as crows), ravens or jackdaws by the flock's
 /// species. Alarmed: a burst of calls; restless: one, softer. (The wings
-/// are a quick cloth flutter until a recording of wings can be fetched.)
+/// are a synthesised wingbeat, `synth_foley::wings`, until a recording of
+/// wings can be fetched.)
 fn flock_sounds(
     mut commands: Commands,
     mut flushed: MessageReader<crate::wildlife::Flushed>,
@@ -2970,12 +3023,12 @@ fn flock_sounds(
                 &mut commands,
                 &bank,
                 &mut rng.0,
-                "physical/cloth",
+                "wildlife/wings",
                 up,
                 "flock.wings",
                 if restless { -6.0 } else { 0.0 },
-                1.5,
-                0.15,
+                1.0,
+                0.12,
             );
         }
         let n = if f.alarm {
@@ -3895,8 +3948,15 @@ fn sentry_sounds(
 /// A break this big (m²) is a wall breached (`destruction::breach`).
 const BREACH_SIZE: f32 = 2.5;
 
+/// Whether a space sounds like indoors (the room's hush, the wind cut):
+/// walled round under a roof, not just roofed.
+pub fn indoor_space(space: &crate::acoustics::Space) -> bool {
+    use crate::acoustics::SpaceKind;
+    matches!(space.kind, SpaceKind::Room | SpaceKind::Hall)
+}
+
 /// The wind in the trees, and the hush of a room: which you hear depends
-/// on whether you're under a roof.
+/// on whether you're walled in under a roof.
 #[derive(Component)]
 struct WindLoop;
 #[derive(Component)]
@@ -3916,11 +3976,13 @@ fn indoor_ambience(
 ) {
     hush.left = (hush.left - time.delta_secs()).max(0.0);
     let hushed = hush.db();
+    // In a building, and walled round (`acoustics::probe`): under a porch
+    // roof or an open shed you're out of doors with a roof over you.
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
             .next()
             .is_some_and(|c| e.building_at(c.translation()).is_some())
-    });
+    }) && indoor_space(&listening.space);
     // Ease over about a second as you step through a door.
     let target = if indoors { 1.0 } else { 0.0 };
     *inside += (target - *inside).clamp(-time.delta_secs(), time.delta_secs());

@@ -195,6 +195,10 @@ pub struct Adaptation {
     /// The grade's shadow lift (set with the weather), before `Below`
     /// takes it away.
     pub base_lift: f32,
+    /// How far the room the eye is in reaches from the eye (m: its
+    /// farthest corner), kept after stepping out while `indoors` eases off.
+    /// Past it is the outdoors, which the room's dark doesn't touch.
+    pub room: f32,
     settled: bool,
 }
 
@@ -257,10 +261,14 @@ pub fn adapt_eyes(
         .filter(|(_, c)| c.is_active)
         .map(|(g, _)| g.translation())
         .next();
-    let indoors = match (eye, &entrances) {
-        (Some(p), Some(e)) => e.building_at(p).is_some(),
-        _ => false,
+    let shell = match (eye, &entrances) {
+        (Some(p), Some(e)) => e.shells.iter().find(|s| s.contains(p)),
+        _ => None,
     };
+    let indoors = shell.is_some();
+    if let (Some(s), Some(p)) = (shell, eye) {
+        adapt.room = room_reach(s, p);
+    }
     // Through a doorway the room's dark comes on over a step or two.
     let dt = time.delta_secs();
     let want = if indoors { 1.0 } else { 0.0 };
@@ -292,6 +300,27 @@ pub fn adapt_eyes(
         }
     }
 }
+
+/// How far `shell` reaches from `eye`: its farthest corner (at most
+/// `ROOM_MAX`).
+pub fn room_reach(shell: &crate::robots::doors::Shell, eye: Vec3) -> f32 {
+    let (h, y) = (shell.half, shell.height);
+    let mut far = 0.0f32;
+    for c in [
+        Vec3::new(-h.x, 0.0, -h.y),
+        Vec3::new(h.x, 0.0, -h.y),
+        Vec3::new(-h.x, 0.0, h.y),
+        Vec3::new(h.x, 0.0, h.y),
+    ] {
+        for c in [c, c + Vec3::Y * y] {
+            far = far.max(shell.xf.transform_point(c).distance(eye));
+        }
+    }
+    far.min(ROOM_MAX)
+}
+
+/// The farthest a room is taken to reach (m).
+pub const ROOM_MAX: f32 = 40.0;
 
 /// The light a held torch throws back at the eye, against a day's: a
 /// share of its light, if it's within arm's reach (a spot light carried
@@ -429,12 +458,16 @@ fn differs(a: LinearRgba, b: LinearRgba, step: f32) -> bool {
     (a - b).abs().max_element() > step * a.max_element().max(b.max_element()).max(1e-6)
 }
 
-/// The ambient before `dim_indoors` this frame, and what it wrote, so
-/// `undim` gives back exactly what was there (if nothing changed it since);
+/// The ambient (brightness, alpha) before `dim_indoors` this frame, and
+/// what it wrote, so `undim` gives back exactly what was there (if nothing
+/// changed it since);
 /// the same for each camera's fog colours (RGB: the alpha carries the
 /// wetness, `world::sky::carry_wetness`).
 #[derive(Resource, Default)]
-pub struct Dimmed(Option<(f32, f32)>, Vec<(Entity, [Vec3; 2], [Vec3; 2])>);
+pub struct Dimmed(
+    Option<([f32; 2], [f32; 2])>,
+    Vec<(Entity, [Vec3; 2], [Vec3; 2])>,
+);
 
 fn rgb(c: Color) -> Vec3 {
     let l = c.to_linear();
@@ -453,8 +486,14 @@ fn with_rgb(c: Color, v: Vec3) -> Color {
 /// sky and the underground, which set the ambient from what they last
 /// wrote, never see it. The fog's light goes with it: the air in a room
 /// is lit by the room, and fogged at the sky's brightness it laid a grey
-/// veil over the dark end of every room. The outdoors through a doorway
-/// dims with it; the sky, unlit, doesn't.
+/// veil over the dark end of every room.
+///
+/// Only the room: the outdoors through a doorway or a window keeps the
+/// sky's light and the sky's fog (dimmed with the room, the valley went
+/// grey the moment you stepped in). The ambient's alpha, which the
+/// lighting never reads, carries the cut and how far the room reaches
+/// ([`room_code`]); the shader (`render::fog`) gives the sky's light back
+/// to what's open to the sky past the room, and the fog's past it.
 pub fn dim_indoors(
     adapt: Res<Adaptation>,
     mut ambient: ResMut<GlobalAmbientLight>,
@@ -463,9 +502,14 @@ pub fn dim_indoors(
 ) {
     let k = 1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT);
     dimmed.0 = (k < 0.999).then(|| {
-        let before = ambient.brightness;
+        let before = [ambient.brightness, ambient.color.alpha()];
         ambient.brightness *= k;
-        (before, ambient.brightness)
+        // (No light to give back, no room to carry: left as it was.)
+        if ambient.brightness > 1e-6 {
+            let a = room_code(k, adapt.room) / ambient.brightness;
+            ambient.color.set_alpha(a);
+        }
+        (before, [ambient.brightness, ambient.color.alpha()])
     });
     dimmed.1.clear();
     if k >= 0.999 {
@@ -480,14 +524,25 @@ pub fn dim_indoors(
     }
 }
 
+/// What the ambient's alpha comes to on the GPU (alpha x brightness) for
+/// a room cutting the sky's light to `k` and reaching `reach` m: negative
+/// (a real ambient's is never), whole metres in fours and the cut in the
+/// remainder. `render::fog`'s `extraction_room` reads it back.
+pub fn room_code(k: f32, reach: f32) -> f32 {
+    -(reach.clamp(0.0, ROOM_MAX).ceil() * 4.0 + k.clamp(0.0, 1.0))
+}
+
 pub fn undim(
     mut ambient: ResMut<GlobalAmbientLight>,
     mut fogs: Query<&mut DistanceFog>,
     mut dimmed: ResMut<Dimmed>,
 ) {
     if let Some((before, wrote)) = dimmed.0.take() {
-        if ambient.brightness == wrote {
-            ambient.brightness = before;
+        if ambient.brightness == wrote[0] {
+            ambient.brightness = before[0];
+        }
+        if ambient.color.alpha() == wrote[1] {
+            ambient.color.set_alpha(before[1]);
         }
     }
     for (e, before, wrote) in dimmed.1.drain(..) {
@@ -664,6 +719,7 @@ mod tests {
         let mut app = App::new();
         app.insert_resource(Adaptation {
             indoors: 1.0,
+            room: 7.3,
             ..default()
         })
         .insert_resource(GlobalAmbientLight {
@@ -690,15 +746,21 @@ mod tests {
         assert!(rgb(fog.directional_light_color).abs_diff_eq(Vec3::new(1.0, 0.9, 0.8) * k, 1e-5));
         // The wetness on the alpha rides through.
         assert!((fog.color.alpha() - wet).abs() < 1e-6);
+        // The shader's told the cut and how far the room reaches (as
+        // `render::fog`'s `extraction_room` reads the ambient's alpha), so
+        // the outdoors past it keeps the sky's light.
+        let amb = app.world().resource::<GlobalAmbientLight>();
+        let a = amb.color.alpha() * amb.brightness;
+        let reach = (-a / 4.0).floor();
+        assert_eq!(reach, 8.0);
+        assert!((-a - reach * 4.0 - k).abs() < 1e-4, "{a}");
         // Outside again: all of it back.
         app.world_mut().resource_mut::<Adaptation>().indoors = 0.0;
         app.update();
         let fog = app.world().get::<DistanceFog>(cam).unwrap();
         assert!(rgb(fog.color).abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-5));
-        assert_eq!(
-            app.world().resource::<GlobalAmbientLight>().brightness,
-            100.0
-        );
+        let amb = app.world().resource::<GlobalAmbientLight>();
+        assert_eq!((amb.brightness, amb.color.alpha()), (100.0, 1.0));
     }
 
     #[test]

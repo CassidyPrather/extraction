@@ -5530,23 +5530,32 @@ pub fn spawn_door(commands: &mut Commands, root: Entity, d: DoorDef) -> Entity {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct DoorLeaf(pub DoorDef);
 
-/// Pressing a door toggles it; it swings over a second.
+/// Pressing a door toggles it; it swings over a second. (Not one a hand
+/// has hold of, nor one left part-way by a hand till it's toggled:
+/// `hinge`.)
+#[allow(clippy::type_complexity)]
 pub fn swing_doors(
+    mut commands: Commands,
     mut events: MessageReader<crate::interact::InteractEvent>,
     mut doors: Query<(
+        Entity,
         &mut Door,
         &mut Transform,
         &DoorLeaf,
         Has<crate::robots::doors::Wedged>,
         Option<&super::underground::PowerLocked>,
+        Has<super::hinge::Swinging>,
+        Option<&super::hinge::Resting>,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((mut d, _, _, wedged, locked)) = doors.get_mut(*item) {
-                if wedged {
+            if let Ok((_, mut d, _, _, wedged, locked, held, _)) = doors.get_mut(*item) {
+                if held {
+                    // A hand's taking hold of it (`hinge::take_hold`).
+                } else if wedged {
                     raid.say("It won't budge: there's a wedge under it.");
                 } else if locked.is_some_and(|l| l.stage == super::underground::SEALED) {
                     raid.say("Bolted by the shelter's programme. It won't open again.");
@@ -5558,7 +5567,17 @@ pub fn swing_doors(
             }
         }
     }
-    for (mut d, mut t, leaf, _, _) in &mut doors {
+    for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+        if held {
+            continue;
+        }
+        if let Some(r) = resting {
+            if r.open == d.open {
+                continue;
+            }
+            // Toggled since it was left: it swings again.
+            commands.entity(e).remove::<super::hinge::Resting>();
+        }
         let target = if d.open { 1.0 } else { 0.0 };
         d.angle += (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
         t.rotation = Quat::from_rotation_y(leaf.0.yaw + d.angle * 1.75);

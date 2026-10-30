@@ -688,15 +688,17 @@ prototype; the others join as they're reworked).
 - **Break the sightlines.** From the open ground (out of the woods),
   sixteen bearings each, a standing figure is followed over the land and
   past what stands on it (buildings and rocks block, a wood wears a line
-  out over 30 m of it). No more than 12% of the open ground may be seen
-  past a walker's sight (75 m) along half its bearings (`OPEN_MAX`).
+  out over 30 m of it). No more than 16% of the open ground may be seen
+  past the longest-sighted ground machine's sight (a drone's or a
+  pylon's, 70 m) along half its bearings (`OPEN_MAX`, `OPEN_REACH`).
   Landforms first: a rise costs no frame time, hides you, and stops a
   shot's sound too (below). Then tree belts on the rises and hedges
   along field edges, and ruins; woods are the dearest thing in a frame.
 - **Quiet between the hot zones.** A hot spot is where the machines work,
   watch or come in (work sites, sentries, spotters, the Gate). A gunshot
-  carries 220 m to a machine's ear in the open, 45% as far past a rise
-  or a wall standing 1.2 m over its line (`robots::senses`). A fight at a
+  carries 150 m to a machine's ear in the open (a pistol's about 105 m),
+  45% as far past a rise or a wall standing 1.2 m over its line
+  (`map_openness::GUNSHOT`, the one number `robots::senses` reads too). A fight at a
   hot spot is heard by at most 1.5 others on average (`PULL_MEAN`), and a
   fight at a quiet place (danger 1) by at most two (`QUIET_PULL`). Put
   the rise between a quiet place and the work sites round it, not the
@@ -716,10 +718,11 @@ prototype; the others join as they're reworked).
   are capped at 45 m; the quiet ground between carries no cap, so a
   machine that wanders out of its zone sees as far as it ever did.
 
-Marrow, before and after (the lint's measures): open ground seen past a
-walker 19% -> 9%, the 90th-percentile sightline 86 -> 74 m, a fight at a
-hot spot heard by 2.3 -> 1.1 others, the Village by 4 -> 1, the longest
-empty walk 135 -> 70 m (the ford-keeper's hut between the Old farm and
+Marrow, before and after (the lint's measures, at today's 70 m sight and
+150 m gunshot): open ground seen past a drone's sight 25% -> 15%, the
+90th-percentile sightline 86 -> 74 m, a fight in the Village heard by
+3 -> 0 hot spots (a hot spot's by 1.1 others on average, the shorter
+gunshot doing most of that), the longest empty walk 135 -> 70 m (the ford-keeper's hut between the Old farm and
 the Hollow). Rises: the bank, ford and clearing rises round the Village,
 the spotter's rise by the district road north of the creek, the lane
 bank south of the Village, the rail yard's spoil heap.
