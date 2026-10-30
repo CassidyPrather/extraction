@@ -74,8 +74,8 @@ Every weak point, every robot, as made (`weak_points::tests::every_robots_weak_p
 
 Not weak, by design: a walker's core (four rounds), every plate, a drone's body, the plough's and minelayer's hulls. Their hazard paint ("Warn", "Yellow") and the drones' beacons no longer wear orange (`weak_points::paint`; beacons are a cool white): on a robot, orange means shoot here and nothing else.
 
-## Left to do: feet that won't land in a wall (M3, playtest 0:57:47)
+## Feet that won't land in a wall (M3, playtest 0:57:47)
 
-- **Where:** `anim::step_walker` picks each foot's next spot from the gait alone. `footing` only raycasts down for the ground under it.
-- **Why:** the walker is kinematic, so nothing stops a foot planted inside a wall. Robot minds' path fix keeps its centre 1.3 m off buildings (`walker::keep_off_walls`), which covers the 1.05 m reach. A walker shoved, knocked down or crawling can still end up closer.
-- **Next step:** cast from the hip to the foot's target against `Layer::World` structures. If the cast hits, plant short of the wall, pulled back along the cast. Then extend `feet_stand_on_rubble`'s test with a wall beside the walker.
+The walker is kinematic, so nothing physical stopped a foot planted in a wall. Its path is Robot minds' (`walker::keep_off_walls` keeps its centre 1.3 m off buildings). The body now guards its own feet: each step's target is cast for from the body at hip height against `Layer::World`, and a foot aimed through a wall comes down 0.14 m short of it (`anim::wall_clear`, `step_walker_walled`). A slope rising under the ray isn't a wall, and rubble (`Layer::Debris`) is still stood on. `anim::tests::feet_never_land_in_a_wall` walks a walker along a wall 0.5 m off its middle. With the guard switched off, a foot came down 0.18 m inside it; with it, none does.
+
+No shot: a wall tall enough to matter hides the far feet from any camera that shows the walker, and a cut-away view isn't something the reel can stage yet. `reel:wall` stages the walk for a look in the game.
