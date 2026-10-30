@@ -630,9 +630,18 @@ fn first_person_hands(
         .nth(3)
         .and_then(|z| z.parse().ok())
         .unwrap_or(0.0);
+    // `fp:WHAT,ZOOM,TURN,TRIGGER,TILT` then tips it TILT degrees about the
+    // view's left-right axis, its underside up to the eye (a supporting
+    // hand under a handguard).
+    let tilt: f32 = spec
+        .split(',')
+        .nth(4)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(0.0);
     let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
     let view = move |t: Transform| {
-        let q = Quat::from_rotation_y(turn.to_radians());
+        let q = Quat::from_axis_angle(right, tilt.to_radians())
+            * Quat::from_rotation_y(turn.to_radians());
         Transform::from_translation(pivot + q * (t.translation - pivot))
             .with_rotation(q * t.rotation)
     };
@@ -734,8 +743,13 @@ fn first_person_hands(
             Some(handle) => glove(
                 &mut commands,
                 Side::Right,
-                Transform::from_translation((item_at * handle.local).translation)
-                    .with_rotation(level.rotation),
+                match guns.get(item).ok().and_then(|g| g.layout.handle.as_ref()) {
+                    Some(h) => {
+                        item_at * crate::render::props::handle_pose(h, 0.0, 0.0, Side::Right)
+                    }
+                    None => Transform::from_translation((item_at * handle.local).translation)
+                        .with_rotation(level.rotation),
+                },
                 hold_curl(Some(handle.role), 0.0, 0.0),
             ),
             None => glove(&mut commands, Side::Right, level, curl),

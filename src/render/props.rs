@@ -910,6 +910,36 @@ pub(crate) fn support_pose(layout: &crate::weapons::layout::GunLayout, side: Sid
     Transform::from_xyz(0.0, lift, 0.0).with_rotation(support_turn(layout, side))
 }
 
+/// A hand on a gun's handle (`weapons::layout::HandleLayout`), in gun
+/// space: on the handle where it has got to along its travel, overhand,
+/// the palm down on it and the fist round it (along the bore on a slide or
+/// barrels, round a knob or string across it), the fingers forward of a
+/// knob so a pull back hooks it.
+pub(crate) fn handle_pose(
+    h: &crate::weapons::layout::HandleLayout,
+    travel: f32,
+    lift: f32,
+    side: Side,
+) -> Transform {
+    use crate::weapons::layout::HandleKind;
+    let s = side.sign();
+    // The fist's axis: a slide's or barrels' length, or across the gun.
+    let wrap = match h.kind {
+        HandleKind::Slide | HandleKind::BreakBarrels | HandleKind::Pump => Vec3::Z,
+        HandleKind::ChargingHandle | HandleKind::TurnBolt | HandleKind::String => Vec3::X * -s,
+    };
+    let palm = Vec3::NEG_Y;
+    // The glove unturned has its palm to -X (right) or +X (left) and its
+    // fist round Y: turn those onto `palm` and `wrap`.
+    let turn = Quat::from_mat3(&Mat3::from_cols(palm * -s, wrap, wrap.cross(palm) * s));
+    let at = h.grab + Vec3::Z * travel * h.travel + Vec3::Y * lift * BOLT_LIFT;
+    Transform::from_translation(at).with_rotation(turn)
+}
+
+/// How far a turn-bolt's knob rises as the bolt is lifted, metres (for the
+/// hand on it: `handle_pose`).
+const BOLT_LIFT: f32 = 0.03;
+
 /// How a hand on a gun's support turns from the gun's own frame. A glove
 /// unturned wraps a grip standing up through its origin (`glove_frame`),
 /// right for the gun hand on a pistol grip; a supporting hand holds from
@@ -1462,6 +1492,14 @@ fn pose_hands(
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     guns: Query<&crate::weapons::Gun>,
     supports: Query<&crate::interact::Supported>,
+    gun_at: Query<
+        &Transform,
+        (
+            With<crate::weapons::Gun>,
+            Without<HandVisual>,
+            Without<Finger>,
+        ),
+    >,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -1500,6 +1538,21 @@ fn pose_hands(
                 .get(item)
                 .map_or(Transform::IDENTITY, |g| support_pose(&g.layout, v.side));
             pose = igt.mul_transform(p.local).mul_transform(hold);
+            on_support = true;
+        }
+        // A hand working a gun's handle is drawn on it, where the handle has
+        // got to: left at the controller it floated off the knob, turned
+        // however the hand happened to be.
+        if let Some((item, _)) = hand.handle
+            && let (Ok(gun), Ok(at)) = (guns.get(item), gun_at.get(item))
+            && let Some(h) = &gun.layout.handle
+        {
+            pose = at.mul_transform(handle_pose(
+                h,
+                gun.firearm.bolt_travel,
+                gun.firearm.handle_lift,
+                v.side,
+            ));
             on_support = true;
         }
         // A wall stops the glove where the hand's body stopped.
@@ -2522,6 +2575,48 @@ mod glove_tests {
             checked += 1;
         }
         assert!(checked >= 10, "only {checked} guns have a support");
+    }
+
+    /// On every gun's handle (slide, charging handle, bolt, barrels,
+    /// string), a hand working it holds it overhand, its palm down on the
+    /// handle: not left at the controller in whatever turn the hand had.
+    #[test]
+    fn every_hand_on_a_handle_has_its_palm_on_it() {
+        use crate::weapons::layout::HandleKind;
+        let ids = [
+            "pm_pistol",
+            "ak74",
+            "mosin",
+            "toz_double",
+            "sks",
+            "nagant",
+            "ppsh",
+            "mp133",
+            "svd",
+            "toz8",
+            "rpk74",
+            "flare_pistol",
+            "crossbow",
+        ];
+        let mut checked = 0;
+        for id in ids {
+            let layout = crate::weapons::layout::layout(id).unwrap();
+            let Some(h) = layout.handle.filter(|h| h.kind != HandleKind::Pump) else {
+                continue;
+            };
+            for side in [Side::Left, Side::Right] {
+                let pose = handle_pose(&h, 0.0, 0.0, side);
+                let palm = pose.rotation * glove_frame(side).rotation * Vec3::NEG_Y;
+                assert!(
+                    palm.y < -0.8,
+                    "{id}: the {side:?} hand on its {:?} has its palm to {palm}",
+                    h.kind
+                );
+                assert!(pose.translation.distance(h.grab) < 1e-4);
+            }
+            checked += 1;
+        }
+        assert!(checked >= 8, "only {checked} guns have a handle");
     }
 
     /// Two hands on the PM: the cupping hand's fingers wrap round outside
