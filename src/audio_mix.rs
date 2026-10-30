@@ -447,7 +447,7 @@ pub const MIX: &[Cue] = &[
     // winch straining, then the line whipping slack and the winch's clank.
     cue!("grapple.winch", "machines/servo", -10.0, 80.0, 10.0, Signal, 8.0),
     cue!("grapple.slack", "physical/whoosh", -6.0, 80.0, 10.0, Action, 6.0),
-    cue!("grapple.clank", "machines/clank", -6.0, 90.0, 10.0, Action, 6.0),
+    cue!("grapple.clank", "machines/clank", 0.0, 90.0, 10.0, Action, 6.0),
     cue!("pylon.work", "machines/servo", -9.5, 75.0, 30.0, Detail, 15.0),
     cue!("robot.part", "machines/clank", 1.0, 100.0, 15.0, Action, 10.0),
     cue!("robot.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
