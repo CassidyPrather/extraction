@@ -144,6 +144,11 @@ pub const STAND_INS: &[StandIn] = &[
         render: filed,
     },
     StandIn {
+        set: "wildlife/wings",
+        variants: 4,
+        render: wings,
+    },
+    StandIn {
         set: "alarm/klaxon",
         variants: 2,
         render: klaxon,
@@ -797,6 +802,36 @@ fn ice_crack(rng: &mut Rng, sr: f32) -> Vec<f32> {
             let t = i as f32 / sr;
             let snap = noise(rng) * (-t * 90.0).exp();
             snap * 0.6 + ring.run(snap) * 3.0 + body.run(snap) * (-t * 25.0).exp()
+        })
+        .collect()
+}
+
+/// A big bird's wings beating: each downstroke a soft whump of air
+/// (noise through the body of the wing, a few hundred Hz) with a feathery
+/// hiss over it, five to eight strokes at five or six a second, the first
+/// the hardest, as a rook or a raven labours up (`wildlife::Flushed`) or
+/// brakes to land.
+fn wings(rng: &mut Rng, sr: f32) -> Vec<f32> {
+    let strokes = 5 + (rng.f32() * 4.0) as usize;
+    let rate = 5.0 + rng.f32() * 1.5;
+    let len = (strokes as f32 / rate + 0.25) * sr;
+    let mut air = Bp::new(420.0 * jitter(rng, 0.15), 1.2, sr);
+    let mut feather = Bp::new(3_200.0 * jitter(rng, 0.2), 0.8, sr);
+    (0..len as usize)
+        .map(|i| {
+            let t = i as f32 / sr;
+            let k = (t * rate) as usize;
+            let into = t * rate - k as f32;
+            // A stroke: fast in, slower out; the later ones lighter.
+            let stroke = if k < strokes {
+                (into / 0.15).min(1.0)
+                    * (-(into - 0.15).max(0.0) * 9.0).exp()
+                    * (0.55f32).powf(k as f32 * 0.35)
+            } else {
+                0.0
+            };
+            let n = noise(rng);
+            air.run(n) * stroke * 4.0 + feather.run(n) * stroke * 0.8
         })
         .collect()
 }

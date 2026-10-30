@@ -68,7 +68,7 @@ fn shoot(
         &InheritedVisibility,
         Option<&Name>,
     )>,
-    mut cams: Query<(&mut Transform, &mut Projection, &Camera), With<FreeCamera>>,
+    mut cams: Query<(Entity, &mut Transform, &mut Projection, &Camera), With<FreeCamera>>,
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
     ambient: Res<GlobalAmbientLight>,
@@ -120,7 +120,7 @@ fn shoot(
         state.next += 1;
         return;
     };
-    let Ok((mut cam, mut proj, camera)) = cams.single_mut() else {
+    let Ok((cam_e, mut cam, mut proj, camera)) = cams.single_mut() else {
         return;
     };
     let Ok(window) = windows.single() else {
@@ -135,9 +135,13 @@ fn shoot(
     let want =
         Transform::from_translation(centre + normal * r.at).looking_at(centre, rot * Vec3::Y);
     let fov = (window.height() / eye_px_per_deg()).to_radians();
+    // Held (`capture::Lens`), not set once: the flat optic zoom eases every
+    // camera back to 75 degrees each frame, and which ran last was the
+    // scheduler's choice (the gauges shot at 75 once a system was added).
     if let Projection::Perspective(p) = &mut *proj {
         if (p.fov - fov).abs() > 1e-4 {
             p.fov = fov;
+            commands.entity(cam_e).insert(crate::capture::Lens(fov));
         }
     }
     if cam.translation.distance(want.translation) > 0.002 {

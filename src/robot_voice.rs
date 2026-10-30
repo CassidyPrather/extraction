@@ -735,12 +735,34 @@ type Kinds<'w, 's> = Query<
         Has<crate::robots::grappler::Grappler>,
         Has<crate::robots::indoor::Warden>,
         Has<crate::robots::heavy::Heavy>,
+        Has<crate::robots::minelayer::Minelayer>,
+        Has<crate::robots::sentry::Sentry>,
+        Has<crate::robots::spotter::Spotter>,
     ),
 >;
 
 fn kind_of(robots: &Kinds, e: Entity) -> Option<VoiceKind> {
-    let (r, h, c, g, w, giant) = robots.get(e).ok()?;
+    let (r, h, c, g, w, giant, minelayer, sentry, spotter) = robots.get(e).ok()?;
+    if r.kind == RobotKind::Pylon {
+        return pylon_voice(minelayer, sentry || spotter);
+    }
     voice_of(r.kind, h, c, g, w, giant)
+}
+
+/// The machines that stand or crawl as pylons and still tell you what
+/// they're about (`search::MindShift`): the minelayer in the crawler's
+/// insect voice, low to the ground; the sentry and the spotter in the
+/// drone's thin one. The rest (a pylon proper, the plough with its horn)
+/// say nothing. Mute, the playtest of 28 October couldn't tell what the
+/// minelayer was "or what its relationship to me was".
+pub fn pylon_voice(minelayer: bool, watcher: bool) -> Option<VoiceKind> {
+    if minelayer {
+        Some(VoiceKind::Crawler)
+    } else if watcher {
+        Some(VoiceKind::Drone)
+    } else {
+        None
+    }
 }
 
 /// What the minds say they're doing (`robots::search::MindShift`), one
@@ -1274,6 +1296,15 @@ mod tests {
         let k = VoiceKind::Walker;
         assert!(when[1].0 - when[0].0 >= duration(k, Utterance::Noticed) - 0.02);
         assert!(when[2].0 - when[1].0 >= duration(k, Utterance::Investigating) - 0.02);
+    }
+
+    /// The minelayer, the sentry and the spotter speak (they tell you
+    /// they've seen you); a pylon proper doesn't.
+    #[test]
+    fn the_watching_pylons_speak() {
+        assert_eq!(pylon_voice(true, false), Some(VoiceKind::Crawler));
+        assert_eq!(pylon_voice(false, true), Some(VoiceKind::Drone));
+        assert_eq!(pylon_voice(false, false), None);
     }
 
     /// Pylons and sorters don't speak.
