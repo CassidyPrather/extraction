@@ -194,6 +194,36 @@ No joints and no disabled bodies, ever: a piece can be despawned at any
 moment (mid-flight, asleep, the tick it was thrown) without leaving the
 solver an island to trip on.
 
+## What rested on it falls
+
+A body asleep on a support doesn't wake when the support goes, so loot
+on a supply crate's lid hung in the air once the crate was smashed (the
+playtest's "googly eyes", 0:52:37). Whenever a breakable goes (`Cleared`:
+a crate, a door, a board, a wreck's part, a floor hole) `wake_what_rested`
+wakes every sleeping body in its space or a hand's breadth over it, and
+it falls.
+
+## Doors in the hand (`world::hinge`)
+
+In VR a grip on a door's leaf takes hold of it (playtest F5: a grip used
+to toggle it, so it jittered, wouldn't hold part-way, and flung):
+
+- held, the leaf turns about its hinge to follow the hand round, within
+  its range and no faster than `hinge::MOST` (4 rad/s), from any grip
+  point; let go, it stays where it was left (`Resting`) till something
+  toggles it;
+- a quick squeeze (under `hinge::TAP`, the leaf hardly moved) still
+  toggles it, swinging over a second as a press does;
+- a palm on a door that's held or was let go of in the last
+  `hinge::LET_GO` isn't a push (`physics_hands::push_doors`), so the hand
+  that left it can't shove it back;
+- flat-screen and bots press, as before.
+
+Windows (their sashes) and drawers (`counter_drawers`) don't move yet:
+they're drawn and collided as part of their building, with no separate
+moving part. They need their own nodes in the models (World models, Kit)
+before a hand can take hold of them.
+
 ## Drawing it
 
 One mesh per building draws all its panes whole (`Mat::Glass`), and one its
@@ -258,7 +288,12 @@ door's crash).
   nothing we spawn is drawn without its model or its texture on disk; a
   Lada's wheel's nuts turned out (a half turn holds; the crowbar takes
   the nuts with the wheel; the Surge bolts it back), and the same through
-  a spanner in a tracked hand (`vr_harness` `wheel_nuts`).
+  a spanner in a tracked hand (`vr_harness` `wheel_nuts`); loot asleep
+  on a crate's lid falls when the crate's smashed; and (`vr_harness`
+  `door_hinge`) two doors in every valley gripped at the latch, the
+  middle and near the hinge and pulled round 80°: the leaf follows with
+  no step back, no jump past the rate, no stop short, and stays when let
+  go.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.
