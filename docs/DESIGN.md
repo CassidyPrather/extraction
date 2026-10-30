@@ -423,6 +423,20 @@ Before this, in the 28 October playtest:
 
 In the replay of that return (`a_walker_walking_back_past_you_is_told_well_before`), it's told 26.5 s before it's there. The valley warned of that walker 16.8 s ahead on first contact.
 
+**A drone in the open is outrun, not hidden from** (`robots/drone_drill.rs`; playtest, 28 October, raid 2: down 16.1 s after the lock, in the open). Measured over each valley's open ground, a drone at its standoff locking on to someone:
+
+| | Five valleys |
+|---|---|
+| Nearest way in under a roof | median 53–71 m; within 30 m on 11–18% of open ground |
+| Lock chirp to first hit | about 1 s (0.9 s lock) |
+| Stood still | 40 of 40 down, median 14–17 s (10–28) |
+| Sprinting for that roof | 5 of 40 down; 36 made it in |
+| Sprinting to and fro across its line, no roof | still up (`in_the_open_a_runner_outlasts_a_drone`) |
+
+The time is there: a runner's hard to hit (`CROSSING_SPREAD`). The driver's old advice wasn't. "Run across it, to cover" sent people looking for cover, and the bots stopped behind a wall. A wall or a tree hides no one from 10 m up, and a roof is most often 60 m off. The line now names what works in the open: "Don't stop. Sprint across it. A runner's hard to hit." Then: "Only a roof stops it. Walls and trees don't. Keep going."
+
+The lock's tells are a placed chirp with a hard tick, and a red light under the drone for the 0.9 s lock. The light reaches 8 m, and the drone sits 20 m off and 10 m up, so in daylight it's the sound that reads. Whether it reads in the headset is for the playtest transcript.
+
 **Every attack has a tell.** Drones chirp and settle 0.9 s; walkers'
 turrets settle 0.7 s (`WalkerAim`); grapplers rear back 0.6 s before a
 throw (`HarpoonWindup`). Tactics differ by kind: drones stand off at 20 m
@@ -1117,9 +1131,24 @@ checks that each one:
 | Squib | a weak pop, no crack | no kick | no flash; the bullet seen down the bore | rod the bore, then work it | fire on it (the barrel bulges) |
 | Stuck bolt | a dull clack | a hard stop at the handle | the handle down and unmoved | slap it up | lift gently (it grinds) |
 | Empty | a click, or the catch | a click, or the stop | held open, or the follower up | reload | work the action (nothing feeds) |
-| On safe | a creak | a soft dead stop | the selector on safe | selector off safe | pull harder |
+| Slide locked back, a fresh magazine in | the open action's dry rattle, every press | a hollow give and stop, every press | the slide back, the barrel bare | B (flat: V) lets the slide go | pull again (it stays open) |
+| On safe | a creak | a soft dead stop, every press | the lever, crossbolt or bolt on safe | selector off safe (on its release) | pull harder |
 | Nagant gate open | a creak | a soft dead stop | the gate open | shut the gate | pull harder |
 | Crossbow string short | the string's slap | a slam | the string at rest, uncocked | draw it right onto the latch | draw short again |
+
+**No press goes unanswered** (the first playtest's first death: a pistol
+run dry and reloaded, the slide still back, and nothing at all from the
+trigger). Every trigger press that doesn't fire says why, every press,
+held or not: `TriggerBlocked` (on safe, a Nagant's gate open), `ActionOpen`
+(the slide or bolt open), `DryFire` (the hammer falling on an empty
+chamber), `TriggerDead` (the hammer already down, or a jammed action).
+The first few times a slide locks back on a hold-open gun, the wrist adds
+"Slide's back. Press B to let it go." Every gun with a safety shows it
+moving: a lever, the MP-133's crossbolt (a red band shows off safe), the
+crossbow's door bolt. The safety feels different going on and coming off.
+The stick-click selector acts on release, and not at all during a
+two-stick playtest mark. `every_pull_on_a_stopped_gun_says_why` and the
+headset `every_hold_open_gun_run_dry_tells_you_the_slide_is_back` hold it.
 
 How often each stoppage happens depends on the gun's condition and dirt:
 `malfunction_chance`, the dud chance, `sticky_chance` and slam fire. So

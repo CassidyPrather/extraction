@@ -1094,3 +1094,29 @@ and 11-19 M of 64.8 M fragments. That's what the gauge fails on.
 `XR=1 scripts/stress.sh` runs it in Monado, both eyes at 640x720. In
 Marrow Creek the opaque pass was 96% of the GPU, and its worst frames
 4% over typical.
+
+## Next: the 28 October playtest's CPU side
+
+Last night's playtest (RTX 3080 and i7-8700K, a Beyond 2 at 75 Hz;
+`docs/playtests/2026-10-28/ANALYSIS.md` §4) ran at 25–37 fps. The eye
+governor's faults are fixed above ("Holding the frame rate"). The
+content's own cost isn't fixed yet. It splits two ways:
+
+- **GPU, the far forest:** Visual design's (the walk to the logging
+  camp, p50 37.9 ms). Hold it to the auto eye size, 1800 px, which the
+  governor can settle near. Its floor is about 58% of 2980.
+- **CPU, Performance's, not started:**
+  - Marrow Creek's main thread runs 12.1 ms a frame (1%: 15.1). That is
+    over the 11.3 ms a 75 Hz frame leaves; physics is 2.5 ms of it.
+    Split it by system with `cpu::ScheduleTimes` on the logging camp
+    walk and the Village, and cut what runs per frame but needn't.
+  - The render world runs 10–16 ms (1%: 19), on its own thread.
+    Pipelined, it bounds the frame with the main thread. Frame time
+    correlates r = 0.87–0.96 with it. Find what's extracted or prepared
+    each frame that doesn't change: the 1,800+ meshes, the lights, the
+    warm-up shelf's leftovers.
+  - The yard's burner: p50 33.1 ms. Split it the same way.
+  - The mirror is a third render. The window card ("In the headset") is
+    the default without `--mirror`, and costs next to nothing.
+  - Bevy doesn't time shadow passes (no diagnostic span). Count their
+    draws per view before judging the GPU's share.

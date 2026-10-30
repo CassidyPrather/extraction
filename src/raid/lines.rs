@@ -555,6 +555,7 @@ mod tests {
             BEAT_LETTER,
             BEAT_RECALLED,
             LOST_YOU,
+            COMING_BACK,
             CALLED_OUT,
             CALLED,
             ON_THE_WAY,

@@ -789,7 +789,8 @@ fn nudge(
     if raid.phase == Phase::AtBase || drift.1.as_ref() != job {
         *drift = (Default::default(), job.cloned());
     }
-    if raid.phase != Phase::Out {
+    // (`SIM_NO_NUDGE=1`: as before it was said, to compare runs.)
+    if raid.phase != Phase::Out || std::env::var_os("SIM_NO_NUDGE").is_some() {
         return;
     }
     let (Some(job), Some((player, at))) = (job, players.iter().next()) else {
@@ -880,22 +881,32 @@ fn tailgate(
     items: Query<(Entity, &Item, Option<&CarriedBy>, &GlobalTransform)>,
     stash: Query<&Backpack, With<Stash>>,
     catalog: Res<Catalog>,
-    mut said: Local<bool>,
+    // Said this time home; and how far off the truck you were last frame
+    // (a step off it counts, not a session putting you at camp).
+    mut said: Local<(bool, Option<f32>)>,
 ) {
     if raid.phase != Phase::AtBase {
-        *said = false;
+        *said = (false, None);
         return;
     }
-    if *said || opts.map == crate::camp::TRAINING_YARD {
+    // (`SIM_NO_TAILGATE=1`: as before it was said, to compare runs.)
+    if said.0
+        || opts.map == crate::camp::TRAINING_YARD
+        || std::env::var_os("SIM_NO_TAILGATE").is_some()
+    {
         return;
     }
     let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {
         return;
     };
-    if at.translation().xz().distance(truck.translation().xz()) < OFF_THE_TRUCK {
+    let d = at.translation().xz().distance(truck.translation().xz());
+    let was = said.1.replace(d);
+    // Walked off the steps: from on the truck to off it, a step at a time.
+    let stepped = was.is_some_and(|w| w < OFF_THE_TRUCK && d - w < 1.0);
+    if d < OFF_THE_TRUCK || !stepped {
         return;
     }
-    *said = true;
+    said.0 = true;
     let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
     let near_truck = |g: &GlobalTransform| g.translation().distance(truck.translation()) < 3.0;
     let is = |it: &Item, want: &str| {

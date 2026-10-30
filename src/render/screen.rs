@@ -513,6 +513,8 @@ fn show_mipped(
 /// with distance, and filtered anisotropically so they stay sharp at a
 /// slant.
 pub fn mipped(data: &[u8], w: u32, h: u32, stride: usize) -> Image {
+    #[cfg(test)]
+    BUILT_HERE.with(|n| n.set(n.get() + 1));
     let lin: Vec<f32> = (0..=255u8)
         .map(|v| LinearRgba::from(Srgba::rgb_u8(v, 0, 0)).red)
         .collect();
@@ -576,6 +578,13 @@ pub fn mipped(data: &[u8], w: u32, h: u32, stride: usize) -> Image {
     sampler.set_anisotropic_filter(16);
     image.sampler = ImageSampler::Descriptor(sampler);
     image
+}
+
+// How many mip chains were built on this thread (the tests: none on the
+// main one).
+#[cfg(test)]
+thread_local! {
+    static BUILT_HERE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Linear light to sRGB bytes, in steps fine enough that every byte is
@@ -706,7 +715,8 @@ mod tests {
 
     /// The panels a goal tick redraws (signs, the tailgate's checklist, the
     /// wrist) finishing in the same frame cost that frame next to nothing:
-    /// their mips are built off the main thread.
+    /// their mips are built off the main thread. Counted, not timed (a
+    /// clock flakes on a loaded machine): built on it, six cost 80.7 ms.
     #[test]
     fn a_burst_of_redraws_costs_no_frame() {
         let mut app = app();
@@ -730,14 +740,13 @@ mod tests {
                 data: data.clone(),
             })
             .collect();
-        let t = std::time::Instant::now();
+        let before = BUILT_HERE.with(|n| n.get());
         for d in done {
             world.trigger(d);
         }
         world.flush();
-        let ms = t.elapsed().as_secs_f32() * 1000.0;
-        eprintln!("{} panels' pictures took the frame {ms:.1} ms", sizes.len());
-        assert!(ms < 4.0, "{ms:.1} ms on the main thread");
+        let here = BUILT_HERE.with(|n| n.get()) - before;
+        assert_eq!(here, 0, "mip chains built on the main thread");
         // And they all show, mipped, a few frames on.
         let shows = |app: &mut App| {
             let world = app.world();

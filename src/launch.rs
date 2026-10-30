@@ -1,7 +1,7 @@
 //! Command-line launch options.
 //!
 //! ```text
-//! extraction [--flat] [--mirror] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
+//! extraction [--flat] [--mirror] [--headset] [--data-dir DIR] [--detail 0.25..1] [--map NAME] [--seed N] [--scene NAME]
 //!            [--screenshot PATH [--frames N] [--camera X,Y,Z,YAW,PITCH [--torch]]]
 //!            [--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]] [--bot] [--size WxH]
 //!            [--save PATH] [--new-game] [--surge-in SECONDS] [--no-record]
@@ -38,6 +38,9 @@ pub struct LaunchOptions {
     pub flat: bool,
     /// In the headset: show the left eye's view in the desktop window.
     pub mirror: bool,
+    /// `--headset`: the headset path even where a screenshot would make it
+    /// flat (the window's own shot of a session without the mirror).
+    pub headset: bool,
     /// Use SteamVR's OpenXR runtime, whichever is the machine's active one.
     pub steamvr: bool,
     /// The profile folder (career, settings, logs) instead of the usual
@@ -156,6 +159,7 @@ impl Default for LaunchOptions {
         Self {
             flat: false,
             mirror: false,
+            headset: false,
             steamvr: false,
             data_dir: None,
             detail: 1.0,
@@ -241,6 +245,7 @@ impl LaunchOptions {
             match a.as_str() {
                 "--flat" => o.flat = true,
                 "--mirror" => o.mirror = true,
+                "--headset" => o.headset = true,
                 "--steamvr" => o.steamvr = true,
                 "--data-dir" => o.data_dir = Some(PathBuf::from(val())),
                 "--detail" => o.detail = val().parse::<f32>().unwrap_or(1.0).clamp(0.25, 1.0),
@@ -414,8 +419,9 @@ impl LaunchOptions {
                     .get_or_insert((Vec3::new(0.0, 60.0, 0.0), 0.0, -30.0));
             }
         }
-        // A screenshot with the mirror on is of the headset's view.
-        if o.mirror {
+        // A screenshot with the mirror on is of the headset's view; with
+        // `--headset`, of the window during a session.
+        if o.mirror || o.headset {
             o.flat = false;
         }
         // The crossing is the fourth valley's unless it's told otherwise.
@@ -463,6 +469,12 @@ mod tests {
                 .map(String::from),
         );
         assert!(o.flat, "screenshots force flat mode");
+        let headset = LaunchOptions::parse(
+            "--screenshot out.png --headset"
+                .split(' ')
+                .map(String::from),
+        );
+        assert!(!headset.flat, "unless the headset is asked for");
         assert_eq!(o.frames, 30);
         assert_eq!(o.seed, 9);
         assert_eq!(o.camera, Some((Vec3::new(1.0, 2.0, 3.0), 90.0, -10.0)));

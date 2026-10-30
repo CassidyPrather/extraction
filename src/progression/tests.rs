@@ -326,11 +326,24 @@ fn stepping_off_the_truck_without_kit_is_told_once() {
         .next()
         .unwrap()
         .translation();
-    // Off the steps with the kit all in the crate.
+    // In the bed, then off the steps with the kit all in the crate. (Off
+    // the truck before ever being on it, a session's first frames, is the
+    // first-hour bots' to show: no line at camp.)
     for id in ["pm_pistol", "radio", "map_case"] {
         stash(&mut app, id, 1);
     }
+    // Put straight at camp (a session opening): nothing.
+    go(&mut app, [truck.x, truck.z]);
     go(&mut app, [truck.x, truck.z + 6.0]);
+    assert!(
+        said(&app).is_empty(),
+        "not put off the truck, only stepping off"
+    );
+    // Stepped off, a stride at a time.
+    go(&mut app, [truck.x, truck.z]);
+    for z in [1.5, 2.3, 3.1, 3.9, 4.7] {
+        go(&mut app, [truck.x, truck.z + z]);
+    }
     assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
     let lines = said(&app);
     assert_eq!(lines.len(), 1, "{:?}", app.world().resource::<Raid>().log);

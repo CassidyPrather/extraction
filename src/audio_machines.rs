@@ -47,6 +47,7 @@ impl Plugin for MachineSoundsPlugin {
             .add_message::<DeviceNoticed>()
             .add_message::<SquadCall>()
             .add_message::<HazardStruck>()
+            .add_message::<crate::robots::damage::RobotStruck>()
             .add_message::<crate::health::Hurt>()
             .add_message::<crate::health::Downed>()
             .add_systems(
@@ -66,6 +67,7 @@ impl Plugin for MachineSoundsPlugin {
                     suppress_sounds,
                     hazard_sounds,
                     scan_sounds,
+                    struck_sounds,
                 ),
             );
     }
@@ -568,6 +570,66 @@ pub fn scans(hunting: bool, speed: f32) -> bool {
     hunting && speed < SCAN_STILL
 }
 
+/// A robot struck (`robots::damage::RobotStruck`), by what the hit did, so
+/// that at 10-30 m you can tell without looking (the playtest of 28
+/// October put four core hits into a walker and couldn't):
+///
+/// - **shrugged off** (armour took it, a dead part, a glance): a thin high
+///   tink, quieter than any hit that did harm (`hit.shrug`);
+/// - **a wound**: the metal impact, and a low thud of it going in
+///   (`hit.wound`, `hit.wound_thud`);
+/// - **telling** (a weak spot, or a part giving way): a crunch, an
+///   electrical crack, louder still (`hit.telling`, `hit.telling_fizz`);
+///   a sensor's glass breaks instead of the crunch.
+///
+/// A blow (a crowbar) is the same, slower and duller (`blow_db` of its
+/// speed). A part destroyed is heard on top (`part_sounds`).
+fn struck_sounds(
+    mut commands: Commands,
+    mut struck: MessageReader<crate::robots::damage::RobotStruck>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+) {
+    for s in struck.read() {
+        for &(set, cue, speed) in struck_layers(s.strike, s.role) {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                set,
+                Some(s.at),
+                cue,
+                0.0,
+                speed,
+                0.08,
+            );
+        }
+    }
+}
+
+/// What a strike sounds like: (set, cue, speed) layers.
+pub fn struck_layers(
+    strike: crate::robots::damage::Strike,
+    role: crate::robots::PartRole,
+) -> &'static [(&'static str, &'static str, f64)] {
+    use crate::robots::damage::Strike;
+    match (strike, role) {
+        (Strike::Shrug, _) => &[("impacts/ricochet", "hit.shrug", 1.5)],
+        (Strike::Wound, _) => &[
+            ("impacts/metal", "hit.wound", 1.0),
+            ("physical/body_hit", "hit.wound_thud", 0.6),
+        ],
+        (Strike::Telling, crate::robots::PartRole::Sensor) => &[
+            ("physical/glass_break", "hit.telling_glass", 1.3),
+            (CRACKLE_SET, "hit.telling_fizz", 1.2),
+        ],
+        (Strike::Telling, _) => &[
+            ("impacts/metal", "hit.telling", 0.8),
+            (CRACKLE_SET, "hit.telling_fizz", 1.2),
+        ],
+    }
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -641,10 +703,6 @@ mod tests {
     /// that no sound needs: each with why. Everything else written as a
     /// `Message` must be read by Audio (or by the robots' voices).
     const UNHEARD: &[(&str, &str)] = &[
-        (
-            "RobotStruck",
-            "Robot bodies' read of a hit (shrug, wound, telling); Audio's sounds for it are coming, and the hit itself is heard (Impact) until then",
-        ),
         (
             "ArmOrder",
             "the heavy's mind to its arm; the arm's moves are heard (ArmState)",
@@ -807,7 +865,7 @@ mod tests {
         for lit in code.split('"').skip(1).step_by(2) {
             let prefixes = [
                 "mender.", "mine.", "plough.", "spotter.", "sorter.", "hound.", "robot.", "wreck.",
-                "cell.", "you.", "device.", "squad.", "relay.", "walker.", "hazard.",
+                "cell.", "you.", "device.", "squad.", "relay.", "walker.", "hazard.", "hit.",
             ];
             if prefixes.iter().any(|p| lit.starts_with(p)) && !lit.contains(' ') {
                 assert!(
@@ -840,6 +898,42 @@ mod tests {
         assert_eq!(filed_level(5).0, 0.0);
         assert!(filed_level(3).1 > filed_level(1).1);
         assert_eq!(filed_level(50), filed_level(5));
+    }
+
+    /// Every strike on a robot is heard as what it did: each kind its own
+    /// sound, in the mix with its set; a telling hit never plays a
+    /// shrug's.
+    #[test]
+    fn a_hit_that_matters_sounds_like_it() {
+        use crate::robots::PartRole;
+        use crate::robots::damage::Strike;
+        let roles = [
+            PartRole::Core,
+            PartRole::Sensor,
+            PartRole::Weapon,
+            PartRole::Rotor(0),
+            PartRole::Leg(0),
+            PartRole::GasCell(0),
+            PartRole::Armour(0),
+        ];
+        for role in roles {
+            let kinds = [Strike::Shrug, Strike::Wound, Strike::Telling];
+            for k in kinds {
+                let ls = struck_layers(k, role);
+                assert!(!ls.is_empty(), "{k:?} on {role:?} is silent");
+                for (set, cue, _) in ls {
+                    let c = crate::audio_mix::MIX.iter().find(|c| c.name == *cue);
+                    assert_eq!(c.map(|c| c.set), Some(*set), "{cue}");
+                }
+            }
+            let shrug = struck_layers(Strike::Shrug, role);
+            for l in struck_layers(Strike::Telling, role) {
+                assert!(
+                    !shrug.contains(l),
+                    "{role:?}: telling plays a shrug's {l:?}"
+                );
+            }
+        }
     }
 
     /// A walker hunting you is never silent: standing to look, it sweeps

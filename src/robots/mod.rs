@@ -20,6 +20,8 @@ pub mod dirigible;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
+#[cfg(test)]
+mod drone_drill;
 pub mod flee;
 pub mod flight;
 pub mod fx;

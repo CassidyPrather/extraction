@@ -129,6 +129,9 @@ fn dry_click(
     mut clicked: Local<Vec<Entity>>,
     time: Res<Time>,
 ) {
+    // Guns in a hand only, once each (every dry click pushed its gun
+    // again, for the session).
+    clicked.retain(|g| held.contains(*g));
     for ev in events.read() {
         let mine = held.get(ev.gun).is_ok_and(|h| locals.contains(h.player));
         if !mine {
@@ -143,7 +146,9 @@ fn dry_click(
                 known.0.insert(Hint::Empty);
             }
             FireEvent::DryFire => {
-                clicked.push(ev.gun);
+                if !clicked.contains(&ev.gun) {
+                    clicked.push(ev.gun);
+                }
                 if let (Some(flat), false) = (driver.flat(), known.0.contains(&Hint::Empty)) {
                     hints.give(Hint::Empty, time.elapsed_secs(), flat, &mut raid);
                 }

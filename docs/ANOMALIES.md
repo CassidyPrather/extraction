@@ -378,7 +378,7 @@ every kind passes in every valley):
 | Marrow Creek | 26 | the lift in clear and fog: from that spot its first 0.7 m inside is behind a rise in the ground (its sides place it 0.0 m off; its grit bank shows plainly beyond the rise) |
 | Kettle Pass | 26 | the well in clear and night: one side places it 0.4 m off (0.35 allowed) |
 | Cinder Works | 27 | the hush at night: one side 0.4 m off |
-| Sallow Reservoir | 28 | |
+| Sallow Reservoir | 27 | the lift at night: one side 0.5 m off (its glow is in its grooves, not its grit: by torch its far sides are dim) |
 | Rime Fell | 26 | the mirror in fog and downpour: its glaze gives back a sky the grey of the snow (it reads by day and by torch) |
 
 Two marks were changed for it. A lift's scoured ground was a dark rust

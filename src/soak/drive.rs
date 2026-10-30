@@ -267,11 +267,14 @@ pub fn client_app(opts: crate::LaunchOptions) -> App {
     .insert_resource(Time::<Fixed>::from_hz(90.0))
     // Despawning a camera (the impostors' captures) needs this; without a
     // renderer its queue is never drained, a few bytes an entity.
-    .add_plugins(bevy::render::sync_world::SyncWorldPlugin)
+    .add_plugins(bevy::render::sync_world::SyncWorldPlugin);
     // As `run` has it: sound, and system errors as warnings.
-    .add_plugins(crate::audio::AudioPlugin)
-    .add_plugins(avian3d::prelude::PhysicsPlugins::default())
-    .add_plugins((crate::GamePlugin, crate::ClientPlugin));
+    // (`SOAK_NO_AUDIO=1`: without sound, to tell what grows because of it.)
+    if std::env::var_os("SOAK_NO_AUDIO").is_none() {
+        app.add_plugins(crate::audio::AudioPlugin);
+    }
+    app.add_plugins(avian3d::prelude::PhysicsPlugins::default())
+        .add_plugins((crate::GamePlugin, crate::ClientPlugin));
     app.finish();
     app.cleanup();
     app

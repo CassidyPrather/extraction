@@ -1715,7 +1715,7 @@ pub fn checklist_text(ob: &Onboarding) -> String {
         };
         t += &format!("{mark}{} {}\n", i + 1, st.title);
     }
-    t += "\nFollow the lit lamps.\nAnything odd: both sticks\nclicked (F9) marks it.";
+    t += "\nFollow the lit lamps.\nOdd? Both sticks (F9): a mark.";
     t
 }
 

@@ -48,6 +48,8 @@ RANGE_TARGETS = {
     "power.generator": (40, 20), "ug.canary": (15, 8),
     # a walker hunting you, standing to look (audio_machines::scan_sounds)
     "walker.scan": (30, 15),
+    # a robot struck where it tells (audio_machines::struck_sounds)
+    "hit.telling": (30, 15),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
