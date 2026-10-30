@@ -3292,6 +3292,25 @@ mod onboarding {
         assert_eq!(ahead, 0, "boards ahead are blank");
     }
 
+    /// Done in the truck, the driver says to get off it, plainly, and the
+    /// next lamp lights (the playtest read "Next: the lit lamp" as a lamp
+    /// in the truck and stood there two minutes).
+    #[test]
+    fn done_in_the_truck_you_are_told_to_get_off_it() {
+        let mut vr = Vr::first_run();
+        let settings = crate::onboarding::station_of(Goal::Button);
+        at_station(&mut vr, settings, &[]);
+        vr.step(5);
+        let card = card(&mut vr, OnboardCard::Push);
+        take_card(&mut vr, card);
+        vr.step(3);
+        assert!(done(&vr, Goal::Button));
+        assert!(said(&vr, "off the back of the truck"), "told to get off");
+        assert!(!said(&vr, "lit lamp"), "not \"the lit lamp\"");
+        let l = lamps(&mut vr);
+        assert_eq!(l[settings + 1], Lamp::Lit, "{l:?}");
+    }
+
     /// The driver names the next station once: stepping out of the truck
     /// doesn't say it again (the playtest heard "Next: the lamp by the
     /// pen." twice in 28 s).
