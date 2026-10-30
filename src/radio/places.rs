@@ -242,6 +242,38 @@ mod tests {
 
     /// Everything laid finds a table, shelf or crate by its note: none of
     /// it lies on the floor.
+    /// The first music you meet is in the valley's mood: no tape lying
+    /// within [`FIRST_REACH`] of a map's insertion plays a bright tune
+    /// (`tapes::BRIGHT`).
+    #[test]
+    fn the_first_music_you_meet_is_in_the_mood() {
+        use extraction_core::music::tapes::{BRIGHT, TAPES};
+        const FIRST_REACH: f32 = 150.0;
+        let mut checked = 0;
+        for p in PLACES.iter().filter(|p| p.item.starts_with("tape_")) {
+            let zone = crate::world::Zone::load(p.map);
+            let near = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Insertion)
+                .any(|m| Vec2::from(m.at).distance(Vec2::from(p.at)) < FIRST_REACH);
+            if !near {
+                continue;
+            }
+            checked += 1;
+            let tape = TAPES.iter().find(|t| t.item == p.item).unwrap();
+            for take in tape.sides.iter().flat_map(|s| s.iter()) {
+                assert!(
+                    !BRIGHT.contains(&take.tune),
+                    "{} by {}'s insertion plays {}",
+                    p.item,
+                    p.map,
+                    take.tune
+                );
+            }
+        }
+        assert!(checked > 0, "no tape near an insertion was checked");
+    }
+
     #[test]
     fn everything_lies_on_a_surface() {
         let catalog =

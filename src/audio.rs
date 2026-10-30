@@ -384,6 +384,7 @@ impl Plugin for AudioPlugin {
                         heavy_sounds,
                         heavy_loops,
                         flock_sounds,
+                        flock_landing,
                         anomaly_voices,
                         tool_sounds,
                         hush_world,
@@ -2914,10 +2915,57 @@ fn break_sounds(
     }
 }
 
+/// A flock coming down to land (`flock::Phase::Landing`): the wings
+/// braking over the perch, a few birds' worth, softer and slower than
+/// going up (`flock.land`). Every flight is heard both ways.
+fn flock_landing(
+    mut commands: Commands,
+    flocks: Query<(Entity, &crate::wildlife::flock::Flock)>,
+    perches: Option<Res<crate::wildlife::perches::Perches>>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut was: Local<HashMap<Entity, bool>>,
+) {
+    use crate::wildlife::flock::Phase;
+    was.retain(|e, _| flocks.contains(*e));
+    for (e, f) in &flocks {
+        let landing = matches!(f.phase, Phase::Landing { .. });
+        let before = was.insert(e, landing).unwrap_or(landing);
+        let Phase::Landing { to } = f.phase else {
+            continue;
+        };
+        if before {
+            continue;
+        }
+        let Some(at) = perches
+            .as_ref()
+            .and_then(|p| p.sites.get(to))
+            .map(|s| s.centre)
+        else {
+            continue;
+        };
+        let n = (f.birds.len() as f32 / 6.0).clamp(1.0, 3.0) as usize;
+        for _ in 0..n {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "wildlife/wings",
+                Some(at + Vec3::Y * 1.0),
+                "flock.land",
+                0.0,
+                0.85,
+                0.12,
+            );
+        }
+    }
+}
+
 /// A flock going up (`wildlife::Flushed`): the clatter of wings and the
 /// birds' own calls, rooks (as crows), ravens or jackdaws by the flock's
 /// species. Alarmed: a burst of calls; restless: one, softer. (The wings
-/// are a quick cloth flutter until a recording of wings can be fetched.)
+/// are a synthesised wingbeat, `synth_foley::wings`, until a recording of
+/// wings can be fetched.)
 fn flock_sounds(
     mut commands: Commands,
     mut flushed: MessageReader<crate::wildlife::Flushed>,
@@ -2973,12 +3021,12 @@ fn flock_sounds(
                 &mut commands,
                 &bank,
                 &mut rng.0,
-                "physical/cloth",
+                "wildlife/wings",
                 up,
                 "flock.wings",
                 if restless { -6.0 } else { 0.0 },
-                1.5,
-                0.15,
+                1.0,
+                0.12,
             );
         }
         let n = if f.alarm {
