@@ -539,3 +539,28 @@ mod probe_file {
         }
     }
 }
+
+#[cfg(test)]
+mod probe_grid {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn probe_grid() {
+        let text = std::fs::read_to_string(std::env::var("MAP_FILE").unwrap()).unwrap();
+        let map = MapDef::from_ron(&text).unwrap();
+        let hm = Heightmap::build(&map);
+        let v: Vec<f32> = std::env::var("GRID").unwrap().split(',').map(|s| s.parse().unwrap()).collect();
+        let (x0, x1, z0, z1, st) = (v[0], v[1], v[2], v[3], v[4]);
+        let mut z = z0;
+        while z <= z1 {
+            let mut row = format!("{z:5.0}:");
+            let mut x = x0;
+            while x <= x1 {
+                row += &format!(" {:5.1}", hm.height([x, z]));
+                x += st;
+            }
+            eprintln!("{row}");
+            z += st;
+        }
+    }
+}

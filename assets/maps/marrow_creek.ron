@@ -31,17 +31,19 @@
         // Rises between the quiet places and the machines' ground
         // (map_openness; the playtest of 28 October, P1): the bank rise
         // north of the creek's paths in two, the district road through the gap;
-        Ridge(points: [(-78.0, -54.0), (-50.0, -52.0), (-30.0, -50.0)], width: 16.0, height: 6.0),
+        Ridge(points: [(-84.0, -54.0), (-64.0, -52.0), (-48.0, -50.0)], width: 16.0, height: 6.0),
         Ridge(points: [(26.0, -36.0), (50.0, -30.0), (66.0, -18.0)], width: 20.0, height: 4.5),
         // the ford spur between the Village and the ford;
         Ridge(points: [(66.0, -14.0), (70.0, 0.0), (74.0, 14.0)], width: 18.0, height: 6.0),
         // and the ford rise along the Old farm's south edge.
+        Ridge(points: [(60.0, -64.0), (95.0, -66.0), (128.0, -70.0)], width: 16.0, height: 5.0),
+        // the Hollow's south rim, between it and the rail yard;
         Ridge(points: [(66.0, 46.0), (100.0, 42.0), (132.0, 44.0)], width: 14.0, height: 3.5),
         // The valley falls gently from north-west to south-east.
         Tilt(dir: (1.0, 0.6), rise_per_100m: -1.6),
 
         // Radio-mast hill: the landmark you can see through the fog.
-        Hill(at: (-54.0, -78.8), radius: 66.0, height: 12.1),
+        Hill(at: (-54.0, -78.8), radius: 66.0, height: 9.0),
         Hill(at: (-31.0, -128.0), radius: 33.0, height: 6.6),
         // Western ridge above the pumping station.
         Ridge(points: [(-180.0, 50.1), (-140.4, -24.6), (-149.5, -66.3)], width: 49.5, height: 8.8),
@@ -87,7 +89,7 @@
         Plateau(polygon: [(-135.0, -5.9), (-85.0, -5.9), (-85.0, 30.1), (-135.0, 30.1)], blend: 16.5),
         Plateau(polygon: [(44.0, -136.0), (159.0, -133.1), (158.5, -72.8), (52.8, -88.1)], blend: 13.8),
         Plateau(polygon: [(-21.2, -137.0), (43.8, -137.0), (43.8, -92.3), (-21.2, -92.6)], blend: 11.0),
-        Plateau(polygon: [(-156.0, -92.0), (-136.0, -92.0), (-136.0, -72.0), (-156.0, -72.0)], blend: 11.0),
+        Plateau(polygon: [(-156.0, -92.0), (-136.0, -92.0), (-136.0, -72.0), (-156.0, -72.0)], blend: 20.0),
         Plateau(polygon: [(-175.9, -173.1), (-107.0, -174.1), (-107.0, -114.1), (-177.0, -114.1)], blend: 8.2),
         // The survey post's pad on the Hollow's north rim.
         Plateau(polygon: [(28.8, 5.8), (42.5, 8.0), (43.6, 22.8), (36.6, 14.4)], blend: 6.6),
@@ -126,7 +128,7 @@
         // Service road from the bus depot to the radio mast.
         (
             name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
-            points: [(8.0, -80.0), (-17.2, -70.0), (-30.0, -52.0), (-44.0, -42.0), (-60.0, -54.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
+            points: [(8.0, -80.0), (-6.0, -74.0), (-20.0, -66.0), (-30.0, -56.0), (-40.0, -46.0), (-50.0, -44.0), (-62.0, -56.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
         ),
         // The ranger's path: off the forest path at the footbridge, north
         // under the ridge to the tower. With the logging road and the forest
@@ -134,7 +136,7 @@
         // pumping station, tower.
         (
             name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-91.2, -20.3), (-94.3, -45.1), (-106.1, -56.1), (-112.0, -68.0), (-122.0, -78.0), (-134.0, -82.0), (-142.0, -82.0)],
+            points: [(-91.2, -20.3), (-94.3, -45.1), (-106.1, -56.1), (-114.0, -66.0), (-126.0, -72.0), (-138.0, -76.0), (-144.0, -78.0)],
         ),
         // The haulers' track: from the Gate down to the Depot's intake ramp,
         // worn by the convoys.
@@ -166,7 +168,7 @@
         ),
         (
             name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-38.6, -26.3), (-22.2, -30.6), (-10.1, -52.6), (-16.9, -78.9), (-14.0, -73.6), (-3.2, -65.9)],
+            points: [(-38.6, -26.3), (-22.2, -30.6), (-12.0, -50.0), (-4.0, -66.0), (6.0, -78.0)],
         ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
@@ -362,7 +364,7 @@
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // Behind the north house, open to the south.
-        (prefab: "fence_garden", at: (-29.6, 61.0), rot: 180.0),
+        (prefab: "fence_garden", at: (-29.6, 59.0), rot: 180.0),
         (prefab: "fence_garden", at: (-34.0, 63.8), rot: 90.0),
         // Behind the house over the road, open to the south.
         (prefab: "fence_garden", at: (29.1, 49.6), rot: 0.0),
@@ -421,8 +423,8 @@
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (68.5, 11.0), name: "Hollow hush"),
         (kind: Offering, at: (-32.2, 78.5), name: "The well"),
         (kind: Offering, at: (120.0, -52.0), name: "The stone ring"),
-        (kind: WorkSite, at: (-35.0, -78.0), name: "North bank site"),
-        (kind: WorkSite, at: (112.0, -2.0), name: "Ford field site"),
+        (kind: WorkSite, at: (-75.0, -110.0), name: "North bank site"),
+        (kind: WorkSite, at: (105.0, -10.0), name: "Ford field site"),
         (kind: WorkSite, at: (-138.0, -20.0), name: "Forest clearing site"),
         (kind: Poi, at: (-90.8, 93.5), name: "Logging camp"),
         (kind: Poi, at: (99.0, 79.8), name: "Old farm"),
