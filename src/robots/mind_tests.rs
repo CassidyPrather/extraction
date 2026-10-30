@@ -360,31 +360,39 @@ fn a_search_takes_in_doorways_and_cover() {
     });
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    // A door with open ground before it (which comes first in the list
-    // depends on the valley's buildings).
+    // Every door with open ground before it, whichever the valley's
+    // buildings are (one picked by its place in the list broke each time
+    // they changed).
     let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
-    let door = e
-        .doors
-        .iter()
-        .find(|d| {
-            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
-                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
-        })
-        .expect("a door with open ground before it");
-    let at = door.mid + door.out * 6.0;
-    let spots = plan_search(
-        at,
-        10.0,
-        at + Vec3::X * 20.0,
-        super::indoor::NavRef::Zone(&nav),
-        e,
-    );
-    assert!(spots.len() >= 2, "{spots:?}");
+    let mut tried = 0;
+    let mut short = vec![];
+    for door in e.doors.iter().filter(|d| {
+        (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+            && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+    }) {
+        tried += 1;
+        let at = door.mid + door.out * 6.0;
+        let spots = plan_search(
+            at,
+            10.0,
+            at + Vec3::X * 20.0,
+            super::indoor::NavRef::Zone(&nav),
+            e,
+        );
+        // A doorway: this one, or a nearer one (a row of houses).
+        let doorway = spots.iter().any(|s| {
+            e.doors
+                .iter()
+                .any(|d| flat(*s - (d.mid + d.out * 1.8)) < 0.5)
+        });
+        if spots.len() < 2 || !doorway {
+            short.push(format!("{:.0}: {spots:?}", door.mid));
+        }
+    }
+    assert!(tried >= 5, "doors with open ground before them: {tried}");
     assert!(
-        spots
-            .iter()
-            .any(|s| flat(*s - (door.mid + door.out * 1.8)) < 0.5),
-        "the doorway: {spots:?}"
+        short.is_empty(),
+        "searches that missed the doorway or its cover: {short:#?}"
     );
 }
 

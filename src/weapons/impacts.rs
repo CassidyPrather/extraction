@@ -1127,6 +1127,20 @@ mod plate_tests {
                     "target {i}: no marked metal hit on the plate ({seen:?})"
                 ));
             }
+            // The mark is where you'd see it: a hit inside the painted
+            // centre (12 cm) on its front, not hidden behind it.
+            let hidden = |im: &&Impact| {
+                let off = im.point - *plate;
+                let along = off.dot(normal);
+                (off - normal * along).length() < 0.11 && along < 0.0
+            };
+            if let Some(first) = seen.iter().find(|im| im.decal)
+                && hidden(&first)
+            {
+                bad.push(format!(
+                    "target {i}: the mark is behind the face you see ({first:?})"
+                ));
+            }
             if seen
                 .iter()
                 .any(|im| (im.point - *plate).dot(-normal) > 0.05)

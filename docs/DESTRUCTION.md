@@ -222,10 +222,24 @@ to toggle it, so it jittered, wouldn't hold part-way, and flung):
   that left it can't shove it back;
 - flat-screen and bots press, as before.
 
-Windows (their sashes) and drawers (`counter_drawers`) don't move yet:
-they're drawn and collided as part of their building, with no separate
-moving part. They need their own nodes in the models (World models, Kit)
-before a hand can take hold of them.
+Anything else that moves in the hand is a `hinge::Moving` part: a leaf
+that turns about its rest frame's +Y up to `most`, or a drawer that slides
+out along its -Z up to `travel`. Held, it follows the hand (clamped, no
+faster than `MOST` or `SLIDE_MOST`); let go part-way it stays; a quick
+squeeze, or a press flat or a bot's, sends it to its other end.
+
+- Counters: Model correctness split `counter_drawers` and `counter_cabinet`
+  into a `carcass` and moving nodes. `Builder::counter` draws only the
+  carcass; `hinge::fit_counters` puts each drawer (0.4 m) and cabinet door
+  (1.9 rad; the right-hand one turned over so it opens the same way) up as
+  a part, its node drawn on it. Their origins and boxes are the models'
+  own (`COUNTER_NODES`).
+- Windows: `window_sash` is split too (`frame`, `leaf_l`, `leaf_r`,
+  `fortochka`, each leaf with its latch), so its latch no longer hangs off
+  the frame. Its leaves don't swing yet: the panes are glazed per building
+  in its space, so a leaf would swing away from its glass. Next: each
+  pane owned by its leaf (the model's `glass_<leaf>_<n>` empties), glazed
+  on the leaf's entity, and the leaves put up as parts like the counters'.
 
 ## Drawing it
 
@@ -296,7 +310,9 @@ door's crash).
   `door_hinge`) two doors in every valley gripped at the latch, the
   middle and near the hinge and pulled round 80°: the leaf follows with
   no step back, no jump past the rate, no stop short, and stays when let
-  go.
+  go; two drawers and two cabinet doors in every valley, pulled out
+  0.3 m and swung round 80° the same way; and a casement and a drawer in
+  the yard, and a press running a drawer shut.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

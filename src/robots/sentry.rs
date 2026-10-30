@@ -1120,16 +1120,26 @@ pub(crate) mod tests {
             vr.app.world_mut().flush();
             (s, h)
         };
+        // Standing in the line of fire (not off round a search of its post,
+        // whose tour goes wherever the post's surroundings send it).
+        *vr.app.world_mut().get_mut::<Brain>(heavy).unwrap() = Brain::Working {
+            at: zone.on_ground(40.0, 223.0),
+            left: 999.0,
+        };
         vr.stand(zone.on_ground(40.0, 214.0), 0.0);
-        vr.step(90 * 15);
-        let fired = vr
-            .app
-            .world()
-            .get::<Sentry>(sentry)
-            .unwrap()
-            .gun
-            .warned
-            .is_some();
+        // Opened up at any time in it (its warning lapses once it's lost you).
+        let mut fired = false;
+        for _ in 0..15 {
+            vr.step(90);
+            fired |= vr
+                .app
+                .world()
+                .get::<Sentry>(sentry)
+                .unwrap()
+                .gun
+                .warned
+                .is_some();
+        }
         let hits = vr.app.world().resource::<RobotHits>().0;
         assert!(fired, "it opened up on you");
         assert!(hits > 0, "and the heavy in the way took {hits} rounds");

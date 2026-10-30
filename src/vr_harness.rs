@@ -7258,6 +7258,73 @@ mod door_hinge {
     }
 
     #[test]
+    fn counters_drawers_and_cabinet_doors_follow_the_hand_in_every_valley() {
+        let tick = 1.0 / 90.0;
+        let mut bad = Vec::new();
+        let (mut drawers, mut doors) = (0, 0);
+        for map in crate::test_maps() {
+            let mut vr = Vr::new(&map);
+            vr.step(5);
+            let mut parts: Vec<(Entity, Moving, [i32; 3])> = {
+                let mut q = vr.app.world_mut().query::<(Entity, &Moving)>();
+                q.iter(vr.app.world())
+                    .map(|(e, m)| (e, *m, crate::destruction::key(m.rest.translation)))
+                    .collect()
+            };
+            parts.sort_by_key(|p| p.2);
+            let (mut d, mut c) = (0, 0);
+            for (e, m, _) in parts {
+                let rest = m.rest;
+                let front = rest.rotation * Vec3::NEG_Z;
+                let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+                let stand = rest.translation + front * 0.75;
+                let feet = zone.on_ground(stand.x, stand.z);
+                vr.stand(feet, front.x.atan2(front.z));
+                match m.motion {
+                    Motion::Slide { .. } if d < 2 => {
+                        d += 1;
+                        let at = |x: f32| rest.transform_point(Vec3::new(0.0, 0.02, -0.29 - x));
+                        let path: Vec<Vec3> = (1..=90).map(|i| at(0.3 * i as f32 / 90.0)).collect();
+                        let (a, left) = carry(&mut vr, e, at(0.0), &path);
+                        bad.extend(smooth(
+                            &format!("{map} drawer {e}"),
+                            &a,
+                            left,
+                            crate::world::hinge::SLIDE_MOST * tick * 1.5,
+                            0.28,
+                        ));
+                    }
+                    Motion::Hinge { .. } if c < 2 => {
+                        c += 1;
+                        let at = |a: f32| {
+                            rest.transform_point(
+                                Quat::from_rotation_y(a) * Vec3::new(0.24, 0.0, -0.03),
+                            )
+                        };
+                        let path: Vec<Vec3> = (1..=90).map(|i| at(1.4 * i as f32 / 90.0)).collect();
+                        let (a, left) = carry(&mut vr, e, at(0.0), &path);
+                        bad.extend(smooth(
+                            &format!("{map} cabinet door {e}"),
+                            &a,
+                            left,
+                            MOST * tick * 1.5,
+                            1.3,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            drawers += d;
+            doors += c;
+        }
+        assert!(
+            drawers >= 4 && doors >= 4,
+            "counters in the valleys ({drawers} drawers, {doors} doors)"
+        );
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    #[test]
     fn a_door_follows_the_hand_round_its_hinge_in_every_valley() {
         let tick = 1.0 / 90.0;
         let most = MOST / PER_UNIT * tick * 1.5 + 1e-3;

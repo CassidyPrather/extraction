@@ -50,6 +50,8 @@ pub struct Census {
     /// Robots by kind, job and what they're doing ("Walker Collect
     /// Leave"): which ones pile up.
     pub robot_kinds: BTreeMap<String, usize>,
+    /// Stowed things gone astray (`stowed::audit`): none, ever.
+    pub astray: Vec<String>,
 }
 
 /// Entity counts by kind: the sorted short names of an archetype's
@@ -187,6 +189,7 @@ pub fn take(world: &mut World, t: f32) -> Census {
         phase,
         raids,
         robot_kinds,
+        astray: super::stowed::audit(world),
     }
 }
 
@@ -310,6 +313,13 @@ impl Record {
                 a.tick_ms,
                 b.tick_ms,
             );
+        }
+        let astray: Vec<&String> = self.censuses.iter().flat_map(|c| &c.astray).collect();
+        for a in astray.iter().take(8) {
+            s += &format!("ASTRAY: {a}\n");
+        }
+        if astray.len() > 8 {
+            s += &format!("ASTRAY: and {} more\n", astray.len() - 8);
         }
         let leaks = self.leaks();
         if leaks.is_empty() {

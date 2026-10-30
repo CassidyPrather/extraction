@@ -100,3 +100,15 @@ pouches, the compass), nothing the IK can't back up. Bottom, the PM in
 the right glove from its left side (`fp:pm_pistol,1.6,90`): before, the
 thumb hooked across and into the frame; after, it lies forward along the
 frame under the slide.
+`22_gloves.jpg` (28 October playtest, M2: the hands are the most-seen
+model; `fp:open,2.4,90` and `fp:open,2.4,0`): top before, bottom after
+the first pass on `art/hands/gloves.py`. Rounder fingers (16 sides, fuller
+caps) and a finer palm; a leather patch over each fingertip; a moulded pad
+over each knuckle; the leather a shade lighter than the olive nylon, so
+palm and back read apart. Still to come: the back of the hand's panels
+and stitching, the thumb's shape, and the cuff.
+`23_glove_back.jpg` (`fp:open,2.4,270`, the back of the hand, the side
+you see most): left the glove before this wave, right after its second
+pass. A padded panel over the back of the hand with dark seams down its
+sides, a moulded pad on each knuckle, leather fingertips. (The block at
+the wrist is the display's housing, on each glove.)
