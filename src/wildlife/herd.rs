@@ -551,29 +551,41 @@ impl Herd {
 }
 
 /// The most open way away from `from`, every half second (otherwise the
-/// way it's going, if that's still open).
+/// way it's going, if that's still open). Cornered (a ridge, a fence, the
+/// creek: no open run away), it takes a shorter one, and failing that
+/// breaks past whatever's at it, wide of it, rather than stand there.
 fn escape(nav: &NavGrid, zone: &Zone, at: Vec2, from: Vec2, vel: Vec2, rng: &mut Rng) -> Vec2 {
     let away = (at - from).normalize_or(Vec2::X);
     let going = vel.normalize_or_zero();
-    let ahead_open = |d: Vec2| (1..=4).all(|k| open(nav, zone, at + d * (k as f32 * 4.0)));
-    if going != Vec2::ZERO && going.dot(away) > 0.3 && ahead_open(going) && !rng.chance(0.03) {
+    let ahead_open =
+        |d: Vec2, run: f32| (1..=4).all(|k| open(nav, zone, at + d * (k as f32 * run / 4.0)));
+    if going != Vec2::ZERO && going.dot(away) > 0.3 && ahead_open(going, 16.0) && !rng.chance(0.03)
+    {
         return going;
     }
-    (0..16)
+    let dirs: Vec<Vec2> = (0..16)
         .map(|k| {
             let a = k as f32 / 16.0 * std::f32::consts::TAU;
             Vec2::new(a.cos(), a.sin())
         })
-        .filter(|d| ahead_open(*d))
-        .max_by(|a, b| {
-            let score = |d: &Vec2| {
-                d.dot(away)
-                    + 0.3 * d.dot(going)
-                    + zone.forest_cover(at.x + d.x * 15.0, at.y + d.y * 15.0) * 0.4
-            };
-            score(a).total_cmp(&score(b))
-        })
-        .unwrap_or(away)
+        .collect();
+    let score = |d: &Vec2| {
+        d.dot(away)
+            + 0.3 * d.dot(going)
+            + zone.forest_cover(at.x + d.x * 15.0, at.y + d.y * 15.0) * 0.4
+    };
+    for run in [16.0, 8.0, 4.0] {
+        // Not straight back into it: past it, wide.
+        let past = |d: &Vec2| d.dot(away) > -0.7;
+        if let Some(d) = dirs
+            .iter()
+            .filter(|d| ahead_open(**d, run) && past(d))
+            .max_by(|a, b| score(a).total_cmp(&score(b)))
+        {
+            return *d;
+        }
+    }
+    away
 }
 
 /// Move toward `want` at up to `speed`, turning as an animal does, never
@@ -913,6 +925,55 @@ mod tests {
         let me = zone.on_ground(to.x, to.y);
         assert!(among.hides(me));
         assert!(!among.hides(me + Vec3::X * (AMONG_NEAR + 40.0)));
+    }
+
+    /// Cornered (the valley's edge behind them, someone 3 m off): they
+    /// break out past, not stand there to be caught.
+    #[test]
+    fn cornered_they_break_out() {
+        for map in ["marrow_creek", "kettle_pass", "sallow_reservoir"] {
+            let (zone, nav, mut herd) = herd_in(map, Kind::Deer);
+            // Walk out from home until the way on is shut: a corner.
+            let found = (0..16).find_map(|k| {
+                let a = k as f32 / 16.0 * std::f32::consts::TAU;
+                let dir = Vec2::from_angle(a);
+                let mut p = herd.home;
+                for _ in 0..200 {
+                    let next = p + dir * 2.0;
+                    if !open(&nav, &zone, next) {
+                        let shut = (1..=4).any(|k| !open(&nav, &zone, p + dir * (k as f32 * 4.0)));
+                        let back = (1..=4).all(|k| open(&nav, &zone, p - dir * (k as f32 * 4.0)));
+                        return (shut && back).then_some((p, dir));
+                    }
+                    p = next;
+                }
+                None
+            });
+            let Some((corner, dir)) = found else {
+                continue;
+            };
+            for b in &mut herd.beasts {
+                b.pos = zone.on_ground(corner.x, corner.y);
+            }
+            let me = zone.on_ground(corner.x - dir.x * 3.0, corner.y - dir.y * 3.0);
+            let threats = [player(me, 4.0, false)];
+            let ctx = Ctx {
+                zone: &zone,
+                nav: &nav,
+                threats: &threats,
+                loud: &[],
+                hounds: &[],
+            };
+            let mut furthest = 0.0f32;
+            for _ in 0..(20.0 / DT) as usize {
+                herd.tick(&ctx, DT);
+                furthest = furthest.max(herd.leader().unwrap().pos.xz().distance(me.xz()));
+            }
+            assert!(
+                furthest > 15.0,
+                "{map}: cornered at {corner:.0}, got {furthest:.0} m off"
+            );
+        }
     }
 
     /// Bait with something in the straight way (a fence, a rock, a
