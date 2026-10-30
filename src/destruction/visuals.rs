@@ -516,13 +516,18 @@ fn shoot_for_screenshot(
         }
     }
     // `EXTRACTION_OPEN=1`: ninety frames before the capture, every window
-    // leaf, drawer and cabinet door within 12 m of the camera swings open,
-    // as to a squeeze.
-    if std::env::var("EXTRACTION_OPEN").is_ok() && *frame + 90 == opts.frames {
+    // leaf, drawer and cabinet door within 12 m of the camera (or as many
+    // metres as it says, past 1) swings open, as to a squeeze.
+    let open = std::env::var("EXTRACTION_OPEN")
+        .ok()
+        .map(|v| v.parse::<f32>().ok().filter(|r| *r > 1.0).unwrap_or(12.0));
+    if let Some(reach) = open
+        && *frame + 90 == opts.frames
+    {
         let eye = Vec3::new(cam.x, cam.y, cam.z);
         let mut n = 0;
         for (name, mut m) in &mut moving {
-            if m.rest.translation.xz().distance(eye.xz()) < 12.0 {
+            if m.rest.translation.xz().distance(eye.xz()) < reach {
                 m.open = true;
                 m.left = false;
                 n += 1;
