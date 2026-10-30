@@ -201,7 +201,10 @@ on a supply crate's lid hung in the air once the crate was smashed (the
 playtest's "googly eyes", 0:52:37). Whenever a breakable goes (`Cleared`:
 a crate, a door, a board, a wreck's part, a floor hole) `wake_what_rested`
 wakes every sleeping body in its space or a hand's breadth over it, and
-it falls.
+it falls. `crate_loot_on_lid.png` (Marrow's footbridge cache, its loot on
+the lid) and `crate_loot_fallen.png` (smashed, the loot down in the
+grass); the playtest's own frame of the fault is
+`docs/playtests/2026-10-28/transcript/screenshots/05237_broken-crate-googly-eyes.jpg`.
 
 ## Doors in the hand (`world::hinge`)
 

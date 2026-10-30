@@ -6910,6 +6910,13 @@ mod door_hinge {
                         }
                     }
                     let end = *swung.last().unwrap();
+                    let worst = swung.windows(2).map(|w| w[1] - w[0]).fold(0.0f32, f32::max);
+                    println!(
+                        "{at}: to {:.0}°, largest step {:.2}° a tick, {:.0}° after letting go",
+                        (end * PER_UNIT).to_degrees(),
+                        (worst * PER_UNIT).to_degrees(),
+                        (left * PER_UNIT).to_degrees()
+                    );
                     if end * PER_UNIT < 1.0 {
                         bad.push(format!(
                             "{at}: it stuck at {:.0}°",
