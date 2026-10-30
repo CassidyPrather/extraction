@@ -1,0 +1,4 @@
+before 5de61c40
+after  48d8edfa
+ak_wood_stock | Weapon feel | Finer grain along the stock (both halves have the new texture brightness: generated textures are shared) | --camera 40,0,262,0,0 --gallery ak74,20,0.3,0.12
+ak_wood_guard | Weapon feel | Finer grain along the handguard (as above) | --camera 40,0,262,0,0 --gallery ak74,20,0.3,-0.3
