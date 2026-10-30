@@ -1299,7 +1299,11 @@ fn watch_guns(
                 complete(&mut ob, Goal::Rack, &mut out);
                 complete(&mut ob, Goal::SlideRelease, &mut out);
             }
-            extraction_core::firearm::Event::BoltLocked => {
+            // A short-filled magazine can run dry on the plate shot,
+            // before this step is asked: a squeeze on the slide already
+            // back still counts.
+            extraction_core::firearm::Event::BoltLocked
+            | extraction_core::firearm::Event::ActionOpen => {
                 complete(&mut ob, Goal::RunDry, &mut out)
             }
             extraction_core::firearm::Event::Fired { .. } => {
