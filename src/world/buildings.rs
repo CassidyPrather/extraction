@@ -5033,12 +5033,14 @@ fn target(b: &mut Builder) {
         Vec3::new(0.0, 1.2, 0.05),
         Mat::Canvas,
     );
+    // The steel plate: solid, so a round rings off it with a spark and
+    // leaves its mark (a plate drawn but not there let rounds through).
     b.piece(
         Shape::Cylinder(0.3, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.07)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
-        false,
+        true,
     );
     b.piece(
         Shape::Cylinder(0.12, 0.01),

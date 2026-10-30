@@ -1300,7 +1300,7 @@ fn run_tasks(
                     hand(gun_side).and_then(|h| h.holding),
                     hand(off_side).and_then(|h| h.holding),
                 ) {
-                    combine.write(Combine { a, b });
+                    combine.write(Combine::all(a, b));
                 }
                 bot.next();
             }

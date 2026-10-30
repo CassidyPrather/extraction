@@ -911,6 +911,7 @@ fn buttons(
     mut out: MessageWriter<GunEvent>,
     mut ejected: MessageWriter<Ejection>,
     mut drop_mag: MessageWriter<DropMagazine>,
+    mut present_mag: MessageWriter<reload::PresentMagazine>,
     catalog: Res<Catalog>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut racks: Local<Vec<(Entity, Entity)>>,
@@ -950,10 +951,16 @@ fn buttons(
                     let open = !gun.firearm.gate_open;
                     events.extend(gun.firearm.set_gate(open));
                 }
+                // The release: the magazine out of its catch, held half
+                // out of the well while the button's down (the other hand
+                // takes it, `interact::find_grab`); let go, it falls.
                 _ => {
-                    drop_mag.write(DropMagazine { gun: e });
+                    present_mag.write(reload::PresentMagazine { gun: e });
                 }
             }
+        }
+        if !p && p0 && !revolver {
+            drop_mag.write(DropMagazine { gun: e });
         }
         if s && !s0 {
             if revolver {
@@ -1301,6 +1308,10 @@ pub fn drop_magazines(
         let Ok((mut it, gt)) = mags.get_mut(mag_e) else {
             continue;
         };
+        commands.entity(mag_e).remove::<reload::Presented>();
+        // (Held out by the release, it was out of the mechanism already,
+        // and its click was then.)
+        let was_seated = removed.is_some();
         if let Some(m) = removed {
             it.rounds = m.rounds;
             it.loads = m.loads;
@@ -1314,12 +1325,14 @@ pub fn drop_magazines(
             Vec3::ZERO,
             true,
         );
-        out.write(GunEvent {
-            gun: req.gun,
-            item: String::new(),
-            event: FireEvent::MagazineRemoved,
-            at: world.translation,
-        });
+        if was_seated {
+            out.write(GunEvent {
+                gun: req.gun,
+                item: String::new(),
+                event: FireEvent::MagazineRemoved,
+                at: world.translation,
+            });
+        }
     }
 }
 
@@ -1367,12 +1380,15 @@ impl Plugin for WeaponEffectsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Ejection>()
             .add_message::<DropMagazine>()
+            .add_message::<reload::PresentMagazine>()
             .add_message::<CasingLanded>()
             .add_systems(
                 FixedUpdate,
                 (
                     handle_released,
+                    reload::present_magazines,
                     drop_magazines,
+                    reload::unpresent,
                     spawn_ejections,
                     land_casings,
                     feel::kick_guns,
