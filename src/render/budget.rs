@@ -2108,13 +2108,20 @@ pub(crate) mod tests {
             .next()
             .map(|g| g.translation())
             .expect("a head");
+        let zone = w.resource::<crate::world::Zone>().clone();
+        let terrain = w
+            .query_filtered::<Entity, With<crate::world::TerrainCollider>>()
+            .iter(w)
+            .next();
         let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(w);
         let spatial = state.get(w).expect("the spatial query");
         let n = 50;
         let t0 = std::time::Instant::now();
         let mut hits = 0;
         for _ in 0..n {
-            hits += usize::from(super::super::blink::head_in_solid(&spatial, at));
+            hits += usize::from(super::super::blink::head_in_solid(
+                &spatial, &zone, terrain, at,
+            ));
         }
         let full = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
         let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);

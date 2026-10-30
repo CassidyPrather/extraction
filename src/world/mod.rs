@@ -76,6 +76,18 @@ impl Zone {
         self.hm.height([x, z])
     }
 
+    /// Whether the ground's collider is there at x/z: inside the map, and
+    /// not a cell opened over an underground stairwell.
+    pub fn ground_solid_at(&self, x: f32, z: f32) -> bool {
+        let hm = &self.hm;
+        let (fi, fj) = ((x - hm.origin) / hm.cell, (z - hm.origin) / hm.cell);
+        if fi < 0.0 || fj < 0.0 {
+            return false;
+        }
+        let (i, j) = (fi as usize, fj as usize);
+        i + 1 < hm.n && j + 1 < hm.n && !hm.holes[hm.idx(i, j)]
+    }
+
     /// A point on the ground.
     pub fn on_ground(&self, x: f32, z: f32) -> Vec3 {
         Vec3::new(x, self.ground(x, z), z)
@@ -214,6 +226,41 @@ fn init_zone(mut commands: Commands, opts: Res<LaunchOptions>) {
 /// The ground's collider (one heightfield for the whole map).
 #[derive(Component)]
 pub struct TerrainCollider;
+
+/// Whether a sphere is inside or touching the world's solid things.
+///
+/// The terrain is left out of the physics query and asked of the heightmap:
+/// a sphere's test against the whole map's heightfield is about 28 ms in
+/// Marrow Creek (parry walks its cells), against 0.001 ms for a building's
+/// compound (`budget`'s `head_query_cost`). Every other World collider is
+/// tested as usual.
+pub fn sphere_in_world(
+    spatial: &SpatialQuery,
+    zone: &Zone,
+    terrain: Option<Entity>,
+    at: Vec3,
+    radius: f32,
+) -> bool {
+    if zone.ground_solid_at(at.x, at.z) && at.y - radius < zone.ground(at.x, at.z) {
+        return true;
+    }
+    let mut filter = SpatialQueryFilter::from_mask([Layer::World]);
+    if let Some(t) = terrain {
+        filter = filter.with_excluded_entities([t]);
+    }
+    let mut any = false;
+    spatial.shape_intersections_callback(
+        &Collider::sphere(radius),
+        at,
+        Quat::IDENTITY,
+        &filter,
+        |_| {
+            any = true;
+            false
+        },
+    );
+    any
+}
 
 /// The ground: one heightfield collider for the whole map.
 fn spawn_terrain_collider(mut commands: Commands, zone: Res<Zone>) {
