@@ -31,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import item, wanted  # noqa: E402
-from common import RX, RY, T, Part, fillet, section_circle  # noqa: E402
+from common import RX, RY, T, Part, fillet, section_circle, section_rect  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
 
@@ -126,18 +126,37 @@ def bolt_cutters():
 # --- Hacksaw -----------------------------------------------------------------------------------
 
 def hacksaw():
+    """A pressed-steel hacksaw: a frame of flat tube bent round over the
+    blade, a pistol grip at the back, a toothed blade between two pins, a
+    wing nut tensioning it at the front. (It was three red rods and a
+    strip: "super primitive", the 28 October playtest, 0:42:31.)"""
     p = Part("body")
-    # The wooden pistol grip at the back, below the frame.
-    p.box((0.026, 0.09, 0.07), (0.0, -0.015, 0.165), "Wood", bevel=0.008, segs=2)
-    # The frame: a red steel tube, up from the grip, along the top and down
-    # to the blade's front pin.
-    rod(p, (0.0, -0.042, 0.105), (0.0, 0.045, 0.105), 0.006, "Red", segs=10)
-    rod(p, (0.0, 0.045, 0.105), (0.0, 0.045, -0.215), 0.006, "Red", segs=10)
-    rod(p, (0.0, 0.045, -0.215), (0.0, -0.042, -0.215), 0.006, "Red", segs=10)
-    # The blade, its teeth down.
-    p.box((0.0012, 0.012, 0.31), (0.0, -0.045, -0.055), "Steel")
-    # The wing nut that tensions it, at the front pin.
-    p.box((0.018, 0.006, 0.004), (0.0, -0.04, -0.222), "Iron", bevel=0.001)
+    # The frame: one flat tube, bent at both top corners, from the grip's
+    # post round to the front pin.
+    path = fillet([(0.108, -0.036), (0.108, 0.045), (-0.206, 0.045), (-0.206, -0.036)], 0.022,
+                  6, closed=False)
+    p.sweep(path, section_rect(0.008, 0.014, r=0.0025, segs=2), "Red")
+    # The pistol grip, shaped and rounded, its two rivets.
+    grip = fillet([(0.112, 0.03), (0.152, 0.03), (0.202, -0.034), (0.204, -0.056),
+                   (0.184, -0.06), (0.158, -0.03), (0.146, -0.022), (0.122, -0.022)], 0.009, 3)
+    p.prism(grip, -0.012, 0.012, "Wood", axis="x", bevel=0.005, segs=2)
+    for z, y in ((0.13, 0.012), (0.17, -0.02)):
+        p.cyl(0.0035, -0.0128, 0.0128, "Steel", segs=10, xf=T(0.0, y, z) @ RY(math.pi / 2))
+    # The blade: 0.6 mm steel, 12 mm deep, teeth down at 1.8 mm.
+    z0, z1, top, bot = -0.204, 0.104, -0.039, -0.051
+    outline = [(z1, top), (z0, top)]
+    n = int((z1 - z0) / 0.0018)
+    for k in range(n + 1):
+        z = z0 + k * (z1 - z0) / n
+        outline.append((z, bot + (0.0012 if k % 2 else 0.0)))
+    p.prism(outline, -0.0003, 0.0003, "Steel", axis="x")
+    # The pins' blocks at each end, the blade hooked over them.
+    for z in (0.112, -0.21):
+        p.box((0.009, 0.026, 0.012), (0.0, -0.042, z), "Iron", bevel=0.0015, segs=1)
+        p.cyl(0.0022, -0.006, 0.006, "Steel", segs=8, xf=T(0.0, -0.045, z) @ RY(math.pi / 2))
+    # The wing nut at the front.
+    p.cyl(0.0035, -0.216, -0.221, "Iron", segs=10, xf=T(0.0, -0.042, 0.0))
+    p.box((0.024, 0.008, 0.003), (0.0, -0.042, -0.22), "Iron", bevel=0.001, segs=1)
     return [p]
 
 
