@@ -275,6 +275,19 @@ deploy). Each
   turns copies of it to face out at the other corners. Leg segments run
   along +Y from the near joint (0.8 m and 0.95 m). Their hinge axis is X,
   and `pose_leg_visuals` points it along the leg plane's normal.
+- **The truck stands on its wheels** (`raid::truck::parked`), pitched up
+  to 12 degrees and rolled to the ground under them. On a steeper stop,
+  the low wheels hang down to the ground on their springs, up to 0.4 m
+  (`wheel_droop`, drawn by `render::props::droop_wheels`). The rear ladder
+  is its own node, `ladder`, hinged at the bed's tail
+  (`LADDER_HINGE`), and it hangs plumb, colliders and all (`ladder_swing`).
+  Pitched with the truck, its steps' faces leaned over a body pressing on
+  them, and a body can't step up under an overhang. Where the ground falls
+  away behind it, a cleated plank ramp hangs from the lowest tread down to
+  the ground (`ladder_steps`). It used to be lowered up to 0.8 m so its
+  steps reached the ground, which sank its wheels (the 28 October
+  playtest, 0:12:57). `capture::footing` and
+  `the_trucks_steps_reach_the_ground_at_every_stop` hold both.
 - **The truck** is built round its gameplay boxes (`TRUCK_PARTS` in
   `src/raid/truck.rs`), which stay as they are: the bed floor's top is
   `FLOOR`, the canvas walls sit just outside the side colliders, the
@@ -481,10 +494,11 @@ Small items drawn bigger than they were modelled are in `art/items/_kit.py`'s
 puts their new bounds in `items.ron` as their `dims`.
 
 Each lint's test has a `KNOWN` list: what it found that isn't fixed yet,
-by model, prefab or placement. Anything new fails. Take a line out when
-it's fixed. On 30 October the lists held:
-- cracks in 23 prefabs, mostly the halls, depots and towers;
-- 2 to 3 mm gaps between pieces in about 140 models, many of them parts
-  enclosed in shells;
-- the counter tops, clutter and staged scenes left after the first round of fixes;
-- scopes bedding 2 to 3 mm onto receivers.
+by model, prefab or placement. Anything new fails, and the test prints
+the lines nothing matches any more (`fixed, out of KNOWN`): take those
+out. On 30 October, after the second round, the lists held:
+- cracks in about 20 prefabs, mostly the depots, towers and ruins;
+- gaps of 2 to 3 mm between pieces in about 90 models;
+- a few clutter and scene things;
+- the scopes bedding 2 to 3 mm onto the receivers;
+- the PPSh drum, 4 mm into its well.

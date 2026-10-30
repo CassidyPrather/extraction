@@ -341,6 +341,8 @@ pub fn move_bodies(
         body.height = height;
         let shape = capsule(height);
         let mut centre = root.translation + under_before + Vec3::Y * height * 0.5;
+        let start = centre;
+        let mut under = under;
         let walked = under - under_before;
         if !climbing && walked.length_squared() > 1e-8 {
             let out = move_and_slide.move_and_slide(
@@ -371,6 +373,17 @@ pub fn move_bodies(
                     reached
                 }
             };
+            // The feet got as far as the capsule did, no further. Where
+            // they were stopped (a bench leant over, a wall), the room stays
+            // where it is and the head goes on into it (`render::blink`
+            // shuts the eyes inside); pushing the room back to keep the
+            // head out moved you for leaning (the 28 October playtest).
+            let got = Vec3::new(centre.x - start.x, 0.0, centre.z - start.z);
+            if got.distance_squared(walked) > 1e-8 {
+                under = under_before + got;
+                let local = root.rotation.inverse() * under;
+                body.feet = Some(Vec2::new(local.x, local.z));
+            }
         }
         let mut grounded = false;
         let out = move_and_slide.move_and_slide(

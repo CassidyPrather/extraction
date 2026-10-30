@@ -91,6 +91,7 @@ pub(super) fn poke_buttons(
     players: Query<(Entity, &RigInput, &Children), With<LocalPlayer>>,
     hands: Query<(&RigHand, &Hand)>,
     mut buttons: Query<(&GlobalTransform, &mut PokeButton)>,
+    targets: Query<&Visibility>,
     driver: Res<RigDriver>,
     mut events: MessageWriter<InteractEvent>,
 ) {
@@ -111,6 +112,13 @@ pub(super) fn poke_buttons(
         }
     }
     for (gt, mut button) in &mut buttons {
+        // A card put out of sight (the training yard folds what it isn't
+        // teaching yet) has nothing to push.
+        if targets.get(button.target) == Ok(&Visibility::Hidden) {
+            button.depth = 0.0;
+            button.down = false;
+            continue;
+        }
         let to_local = gt.affine().inverse();
         let mut depth = 0.0f32;
         let mut by = None;

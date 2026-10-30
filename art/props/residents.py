@@ -263,6 +263,9 @@ def sewing_machine():
     p.box((0.7, 0.03, 0.03), (0, 0.12, 0.15), "Iron")
     p.box((0.4, 0.02, 0.25), (0, 0.08, -0.05), "Iron",
           xf=T(0, 0.08, -0.05) @ RX(0.25) @ T(0, -0.08, 0.05))
+    # The treadle's pivot rod, across between the stand's sides (the
+    # treadle hung in the air without it).
+    p.cyl(0.008, -0.36, 0.36, "Iron", segs=8, xf=T(0, 0.08, -0.05) @ RY(math.pi / 2))
     p.lathe([(0.21, -0.012), (0.23, -0.012), (0.23, 0.012), (0.21, 0.012)], "Iron", segs=20,
             closed=True, xf=T(0.33, 0.35, 0.0) @ RY(math.pi / 2))
     # The machine head: the bed, the arm, the wheel.

@@ -7,6 +7,7 @@ pub mod blink;
 pub mod body;
 pub mod budget;
 pub mod cards;
+pub mod clear_eyes;
 pub mod comfort;
 pub mod cpu;
 pub mod eye_projection;
@@ -107,6 +108,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
+        .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)

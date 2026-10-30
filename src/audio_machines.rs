@@ -930,6 +930,7 @@ mod tests {
         ),
         ("Noticed", "a mind's turn: heard in its voice"),
         ("PianoNote", "the piano's own sounds (radio)"),
+        ("PresentMagazine", "heard as the gun's MagazineRemoved"),
         ("Relocate", "a load"),
         ("SaveNow", "a save"),
         ("Searching", "a mind's turn: heard in its voice"),

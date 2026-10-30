@@ -182,6 +182,8 @@ impl Plugin for WorldPlugin {
                 hinge::take_hold,
                 hinge::swing_by_hand,
                 buildings::swing_doors,
+                hinge::take_parts,
+                hinge::move_parts,
             )
                 .chain(),
         )
