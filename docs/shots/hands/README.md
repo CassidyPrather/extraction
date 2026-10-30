@@ -143,3 +143,16 @@ centimetres off (`render::props` test
 `a_palm_cupping_a_pistol_is_drawn_on_its_cup`). From the eye, from the
 left, and from below right. Still rough: the left glove's fingertips
 pass a little into the right hand's at the front of the grip.
+
+`28_support_hands.jpg` (`fp:pm_pistol,1.6,90`, `,0`, `fp:ak74,1.2,300`):
+the supporting hand on the PM and on the AK, before (top) and after
+(bottom). Before, the glove on a support or cup took the gun's own turn,
+which wraps a grip standing up through it. Under the PM's butt that made
+a fist round nothing, back to the gun: sausage fingers and a blob palm,
+cruder-looking than the glove passes though it was the same model. Beside
+the AK's handguard it was the same fist. After, a supporting hand holds
+from below, palm up (`render::props::support_pose`, tested on every gun):
+the PM's butt sits in the palm with the fingers forward under the gun
+hand's, and the AK's handguard lies in the palm with the fingers up its
+far side. The display's housing is now 7 mm thick and only on the
+display's hand, and the cuff's end is dark again.

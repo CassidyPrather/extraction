@@ -744,13 +744,11 @@ fn first_person_hands(
             Some(support) => glove(
                 &mut commands,
                 Side::Left,
-                (item_at * support.local).with_rotation(
-                    item_at.rotation
-                        * support.local.rotation
-                        * guns.get(item).map_or(Quat::IDENTITY, |g| {
-                            crate::render::props::support_turn(&g.layout, Side::Left)
-                        }),
-                ),
+                item_at
+                    * support.local
+                    * guns.get(item).map_or(Transform::IDENTITY, |g| {
+                        crate::render::props::support_pose(&g.layout, Side::Left)
+                    }),
                 if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
                     crate::render::props::CUP_CURL
                 } else {

@@ -894,6 +894,22 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }
 
+/// How far over its grab point a palm cupping a handgun is drawn: up
+/// against the butt. (The grab point stays lower, clear of a magazine's
+/// foot: `weapons::reload` `a_grab_takes_the_gun_never_the_magazine_in_it`.)
+const CUP_LIFT: f32 = 0.02;
+
+/// A supporting hand's pose from its grab point (`support_turn`, and for a
+/// handgun's cup, lifted up against the butt).
+pub(crate) fn support_pose(layout: &crate::weapons::layout::GunLayout, side: Side) -> Transform {
+    let lift = if layout.support.is_none() {
+        CUP_LIFT
+    } else {
+        0.0
+    };
+    Transform::from_xyz(0.0, lift, 0.0).with_rotation(support_turn(layout, side))
+}
+
 /// How a hand on a gun's support turns from the gun's own frame. A glove
 /// unturned wraps a grip standing up through its origin (`glove_frame`),
 /// right for the gun hand on a pistol grip; a supporting hand holds from
@@ -1480,12 +1496,10 @@ fn pose_hands(
                 .get(s.point)
                 .filter(|p| p.role == GripRole::Support)
         {
-            let turn = guns
+            let hold = guns
                 .get(item)
-                .map_or(Quat::IDENTITY, |g| support_turn(&g.layout, v.side));
-            pose = igt
-                .mul_transform(p.local)
-                .with_rotation(igt.rotation * p.local.rotation * turn);
+                .map_or(Transform::IDENTITY, |g| support_pose(&g.layout, v.side));
+            pose = igt.mul_transform(p.local).mul_transform(hold);
             on_support = true;
         }
         // A wall stops the glove where the hand's body stopped.
@@ -2331,6 +2345,21 @@ mod glove_tests {
         );
     }
 
+    /// The PM as a `Gun`, for a test that poses hands on it.
+    fn pm_gun() -> crate::weapons::Gun {
+        use extraction_core::items::{BUILTIN_CATALOG, ItemCatalog};
+        let cat = ItemCatalog::from_ron(BUILTIN_CATALOG).unwrap();
+        let def = cat.get(cat.expect("pm_pistol")).firearm.clone().unwrap();
+        crate::weapons::Gun {
+            firearm: extraction_core::firearm::Firearm::new(def, 1.0),
+            layout: crate::weapons::layout::layout("pm_pistol").unwrap(),
+            magwell: None,
+            trigger: 0.0,
+            dice: extraction_core::noise::Rng::new(0),
+            mass: None,
+        }
+    }
+
     /// Two hands on the PM: the other palm cupped under its grip is drawn
     /// on the grip's cup, as the gun hand is drawn on the grip, not at its
     /// controller a few centimetres off (the 28 October playtest: "I can't
@@ -2394,6 +2423,7 @@ mod glove_tests {
                     side: Side::Left,
                     point: 1,
                 },
+                pm_gun(),
             ))
             .id();
         app.world_mut().get_mut::<Hand>(right).unwrap().holding = Some(gun);
@@ -2416,7 +2446,10 @@ mod glove_tests {
             app.update();
         }
         let at = |e| *app.world().get::<Transform>(e).unwrap();
-        let want = gun_at.transform_point(cup);
+        let want = gun_at
+            .mul_transform(Transform::from_translation(cup))
+            .mul_transform(support_pose(&layout, Side::Left))
+            .translation;
         let got = at(left_glove).translation;
         assert!(
             got.distance(want) < 0.002,
@@ -2506,7 +2539,7 @@ mod glove_tests {
         let cup = crate::weapons::layout::cup_pose(&layout).expect("a pistol has a cup");
         let cupping = finger_points(
             gun.mul_transform(cup)
-                .with_rotation(support_turn(&layout, Side::Left)),
+                .mul_transform(support_pose(&layout, Side::Left)),
             Side::Left,
             CUP_CURL,
         );
