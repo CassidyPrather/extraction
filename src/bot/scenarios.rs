@@ -384,7 +384,8 @@ pub fn tasks(name: &str, zone: &Zone) -> Option<Vec<Task>> {
             Support,
             Gun(MacroKind::Mode),
             Fire { at: t1, shots: 5 },
-            Expect(super::Expect::GunRounds(5, 5)),
+            // (A double feed cleared throws the rammed round out.)
+            Expect(super::Expect::GunRounds(4, 5)),
             Expect(super::Expect::Hits(4)),
             Release(Side::Left),
             Stow(Side::Right),
@@ -1168,5 +1169,104 @@ mod target_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod stoppage_tests {
+    use super::*;
+    use extraction_core::firearm::{Event as FireEvent, Malfunction};
+
+    /// The jam the test asks of the drill's gun, and whether it came.
+    #[derive(Resource)]
+    struct Jam {
+        kind: Malfunction,
+        asked: bool,
+        came: bool,
+    }
+
+    /// After the drill gun's first shot, its next cycle jams.
+    fn jam_after_first_shot(
+        mut events: MessageReader<crate::weapons::GunEvent>,
+        mut guns: Query<&mut crate::weapons::Gun>,
+        mut jam: ResMut<Jam>,
+    ) {
+        for ev in events.read() {
+            match ev.event {
+                FireEvent::Fired { .. } if !jam.asked => {
+                    if let Ok(mut g) = guns.get_mut(ev.gun) {
+                        g.firearm.jam_next = Some(jam.kind);
+                        jam.asked = true;
+                    }
+                }
+                // (An open bolt only stovepipes, whatever's asked.)
+                FireEvent::Malfunctioned(_) if jam.asked => jam.came = true,
+                _ => {}
+            }
+        }
+    }
+
+    /// A drill's gun that jams mid-string is cleared the way its jam is
+    /// cleared and the drill still passes: a worn gun's dice (seeded by
+    /// where it lay, so any layout change re-rolls them) never decide a
+    /// scenario. Every magazine-fed drill, every jam.
+    #[test]
+    fn a_drill_gun_that_jams_still_finishes_its_drill() {
+        let mut bad = Vec::new();
+        for drill in [
+            "pistol_drill",
+            "rifle_drill",
+            "smg_drill",
+            "lmg_drill",
+            "marksman_drill",
+        ] {
+            for kind in [
+                Malfunction::FailureToEject,
+                Malfunction::FailureToFeed,
+                Malfunction::DoubleFeed,
+            ] {
+                let mut app = crate::headless_app(
+                    LaunchOptions {
+                        robots: false,
+                        scenario: Some(drill.into()),
+                        ..Default::default()
+                    },
+                    true,
+                );
+                app.insert_resource(Jam {
+                    kind,
+                    asked: false,
+                    came: false,
+                })
+                .add_systems(Update, jam_after_first_shot);
+                app.finish();
+                app.cleanup();
+                let mut done = None;
+                for _ in 0..60 * 120 {
+                    app.update();
+                    let w = app.world_mut();
+                    let bot = w
+                        .query_filtered::<&Bot, With<LocalPlayer>>()
+                        .iter(w)
+                        .next()
+                        .map(|b| (b.tasks.is_empty(), b.failed, b.log.clone()));
+                    if let Some((true, failed, log)) = bot {
+                        done = Some((failed, log));
+                        break;
+                    }
+                }
+                let jam = app.world().resource::<Jam>();
+                match done {
+                    None => bad.push(format!("{drill} {kind:?}: never finished")),
+                    Some(_) if !jam.came => bad.push(format!("{drill} {kind:?}: no jam came")),
+                    Some((0, _)) => {}
+                    Some((n, log)) => bad.push(format!(
+                        "{drill} {kind:?}: {n} failed\n  {}",
+                        log.join("\n  ")
+                    )),
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 }
