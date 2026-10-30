@@ -36,6 +36,9 @@ pub const OPEN_REACH: f32 = 70.0;
 /// the game's `robots::senses` and this lint share (a 5.45's; a pistol
 /// carries about 105 m, a Mosin 170)...
 pub const GUNSHOT: f32 = 150.0;
+/// The reach any one weapon's shot is held to, m: (quietest, loudest),
+/// the clamp `robots::senses` puts on a weapon's own figure.
+pub const GUNSHOT_REACH: (f32, f32) = (90.0, 190.0);
 /// ...and the share of it past a hill or a wall in the way
 /// (`robots::senses::OCCLUDED`) standing this high over the line
 /// (`robots::senses::HEARD_OVER`).
