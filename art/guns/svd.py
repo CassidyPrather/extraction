@@ -132,7 +132,7 @@ barrel.cyl(0.0128, -0.874, -0.838, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0
 barrel.prism(fillet([(-0.871, 0.06), (-0.842, 0.06), (-0.846, 0.091), (-0.867, 0.091)],
                     0.0015, 2), -0.0065, 0.0065, "Blued", axis="x", bevel=0.0008, segs=1)
 barrel.tube(0.0128, 0.0110, -0.870, -0.843, "Blued", segs=22, xf=T(0, 0.1, 0), chamfer=0.0006)
-barrel.prism(fillet([(-0.860, 0.089), (-0.853, 0.089), (-0.8545, 0.106), (-0.8585, 0.106)],
+barrel.prism(fillet([(-0.860, 0.089), (-0.853, 0.089), (-0.8545, 0.1071), (-0.8585, 0.1071)],
                     0.0006, 1), -0.0013, 0.0013, "Blued", axis="x", bevel=0.0003, segs=1)
 barrel.prism(fillet([(-0.872, BORE - 0.0105), (-0.838, BORE - 0.0105), (-0.842, BORE - 0.022),
                      (-0.868, BORE - 0.022)], 0.0015, 2), -0.0045, 0.0045, "Blued", axis="x",
@@ -151,7 +151,8 @@ barrel.prism(fillet(notch, [0.0005, 0.0005, 0.0005, 0.0003, 0.0, 0.0006, 0.0, 0.
              -0.225, -0.219, "Blued", axis="z")
 for k in range(10):
     z = -0.2775 + k * 0.0052
-    y = 0.0985 + (z + 0.282) / 0.06 * 0.003 + 0.0045
+    # On the leaf's top (they floated 2 mm over it: `capture::attach`).
+    y = 0.1005 + (z + 0.282) / 0.06 * 0.004 - 0.0001
     w = 0.008 if k % 2 == 0 else 0.0045
     barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
 
@@ -194,8 +195,9 @@ ring_sec = [(x * 1.07, 0.063 + (y - 0.063) * 1.06) for x, y in
 rings.prism(ring_sec, HG1 - 0.002, HG1 + 0.012, "Blued", axis="z", bevel=0.0008, segs=1)
 rings.prism(ring_sec, HG0 - 0.004, HG0 + 0.007, "Blued", axis="z", bevel=0.0008, segs=1)
 # The rear ring's latch lever on the right.
-rings.box((0.0035, 0.024, 0.007), (0.0245, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
-          xf=RX(-0.3, about=(0.0245, 0.05, HG1 + 0.005)))
+# (Bearing on the ring: it stood 2 mm off it, `capture::attach`.)
+rings.box((0.0035, 0.024, 0.007), (0.0228, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
+          xf=RX(-0.3, about=(0.0228, 0.05, HG1 + 0.005)))
 
 # --- Skeleton stock: laminated wood, the thumbhole behind the grip ------------------------
 def comb_y(z):
@@ -321,7 +323,7 @@ for p in (carrier, selector, trig):
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 # The eye behind the notch, on the line over the front post.
-empty("pt_sight", (0.0, 0.1068, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("pt_port", (RX_HW, 0.0705, -0.148))
 empty("pt_support", (0.0, 0.03, -0.40))
 empty("pt_handle", (0.047, 0.0645, -0.2))

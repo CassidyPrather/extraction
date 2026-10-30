@@ -2509,6 +2509,12 @@ mod onboarding {
         vr.move_hand(Side::Left, feet + Vec3::new(-0.3, 1.0, -0.2));
         vr.step(10);
         assert!(done(&vr, Goal::Rack), "racked");
+        // A squeeze on safe: nothing (that's the safety, felt).
+        vr.trigger(Side::Right, 1.0);
+        vr.step(4);
+        vr.trigger(Side::Right, 0.0);
+        vr.step(4);
+        assert!(done(&vr, Goal::DeadTrigger), "the dead trigger");
         // Safety off: click the stick on the gun hand.
         vr.stick_click(Side::Right, true);
         vr.step(2);
@@ -2646,6 +2652,47 @@ mod onboarding {
         assert!(done(&vr, Goal::Search), "the find counted");
     }
 
+    /// Taking the dressing in the house, the crate catches your watch arm:
+    /// a cut on that forearm, bleeding till it's dressed (not wearing off
+    /// on its own), so first aid has something to find and to wrap.
+    #[test]
+    fn the_house_crate_scratches_and_first_aid_has_a_cut_to_dress() {
+        use crate::interact::wounds::{Limb, Wounds};
+        let mut vr = Vr::first_run();
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Search),
+            &[Goal::OpenDoor],
+        );
+        let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
+        let find = placed(&mut vr, Placed::HouseFind);
+        let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
+        let inside = doorway + inward * 0.4;
+        vr.stand(Vec3::new(inside.x, doorway.y, inside.z), 0.0);
+        vr.step(20);
+        take(&mut vr, Side::Right, find);
+        assert!(done(&vr, Goal::Search));
+        vr.step(5);
+        let cut = |vr: &Vr| {
+            let w = vr.app.world().get::<Wounds>(vr.player).expect("wounds");
+            w.0.iter()
+                .find(|w| w.limb == Limb::Forearm(Side::Left))
+                .copied()
+        };
+        let c = cut(&vr).expect("a cut on the watch arm");
+        assert!(!c.dressed);
+        assert!(said(&vr, "got your arm"));
+        // Half a minute on, still bleeding: it waits for the dressing.
+        vr.step(90 * 30);
+        let h = vr
+            .app
+            .world()
+            .get::<crate::health::Health>(vr.player)
+            .unwrap();
+        assert!(h.bleeding > 0.0, "the cut stopped by itself");
+        assert!(h.hp > 90.0, "a scratch, not a wound: {}", h.hp);
+    }
+
     /// First aid: raise the left hand and look at the back of it (the
     /// wrist's screen); then a dressing in hand, the face button.
     #[test]
@@ -2689,16 +2736,28 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        // Wound round the left forearm (`interact::first_aid`).
+        // Wound round the left forearm (`interact::first_aid`), round the
+        // forearm the body has: from the wrist back toward its elbow.
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        let centre = wrist + Vec3::Z * 0.12;
+        vr.step(5);
+        let st = vr
+            .app
+            .world()
+            .get::<crate::rig::stance::Stance>(vr.player)
+            .unwrap()
+            .clone();
+        let forearm = crate::interact::wounds::segments(&st, eye, [Some(wrist), None])
+            .into_iter()
+            .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+            .unwrap();
+        let axis = (forearm.a - forearm.b).normalize();
+        let centre = wrist + axis * 0.12;
+        let u = axis.any_orthonormal_vector();
+        let v = axis.cross(u);
         for i in 0..=48 {
             let a = std::f32::consts::TAU * i as f32 / 24.0;
-            vr.move_hand(
-                Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
-            );
+            vr.move_hand(Side::Right, centre + (u * a.cos() + v * a.sin()) * 0.06);
             vr.step(1);
         }
         vr.step(3);
@@ -3231,6 +3290,25 @@ mod onboarding {
             .filter(|(s, t)| s.0 > 0 && !t.text.is_empty())
             .count();
         assert_eq!(ahead, 0, "boards ahead are blank");
+    }
+
+    /// Done in the truck, the driver says to get off it, plainly, and the
+    /// next lamp lights (the playtest read "Next: the lit lamp" as a lamp
+    /// in the truck and stood there two minutes).
+    #[test]
+    fn done_in_the_truck_you_are_told_to_get_off_it() {
+        let mut vr = Vr::first_run();
+        let settings = crate::onboarding::station_of(Goal::Button);
+        at_station(&mut vr, settings, &[]);
+        vr.step(5);
+        let card = card(&mut vr, OnboardCard::Push);
+        take_card(&mut vr, card);
+        vr.step(3);
+        assert!(done(&vr, Goal::Button));
+        assert!(said(&vr, "off the back of the truck"), "told to get off");
+        assert!(!said(&vr, "lit lamp"), "not \"the lit lamp\"");
+        let l = lamps(&mut vr);
+        assert_eq!(l[settings + 1], Lamp::Lit, "{l:?}");
     }
 
     /// The driver names the next station once: stepping out of the truck
@@ -4821,6 +4899,37 @@ mod body {
         );
     }
 
+    /// Walking round the room, the hips come with you: the head bobs a
+    /// little and looks down at the legs, and the body stays upright over
+    /// them instead of leaning from hips left behind (the 28 October
+    /// playtest: "as I am moving my legs around the space the hips of the
+    /// character model are staying in place and it looks like I am instead
+    /// tilting around").
+    #[test]
+    fn walking_round_the_room_the_hips_come_along() {
+        let (mut vr, _) = standing();
+        let mut worst = 0.0f32;
+        let frames = 135;
+        for i in 0..=frames {
+            let t = i as f32 / 90.0;
+            let along = 1.2 * i as f32 / frames as f32;
+            let bob = 0.02 * (t * std::f32::consts::TAU * 1.8).sin();
+            look(
+                &mut vr,
+                Vec3::new(0.3 * along, 1.62 + bob, -along),
+                -0.25,
+                -0.5,
+            );
+            vr.step(1);
+            if i > 20 {
+                let st = stance(&vr);
+                let off = (st.neck - st.pelvis.translation).with_y(0.0).length();
+                worst = worst.max(off);
+            }
+        }
+        assert!(worst < 0.06, "the hips trailed the neck by {worst} m");
+    }
+
     /// Straight out at arm's length and a little beyond: the shoulder
     /// comes forward (no further than a shoulder goes) and the drawn arm
     /// reaches the hand from it, not from somewhere off the body.
@@ -5545,8 +5654,10 @@ mod vault {
             .next()
             .expect("a truck in the yard")
             .compute_transform();
-        // Facing the truck's front from behind it, a little off its steps.
-        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        // Facing the truck's front from behind it, a little off its steps,
+        // on the left: the bench stands just in on the right, and a climb
+        // there ends on its top.
+        let behind = truck.transform_point(Vec3::new(-0.75, 0.0, 2.25));
         let ground = vr
             .app
             .world()

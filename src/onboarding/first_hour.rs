@@ -636,11 +636,13 @@ pub(super) struct RaidView<'w, 's> {
     health: Query<'w, 's, &'static crate::health::Health, With<LocalPlayer>>,
 }
 
-/// The wanderer goes this near the job (m), then off to a place this much
-/// farther from it (m), and waits this long (s) to be told the way back
-/// before giving it up.
-const WANDER_SHORT: f32 = 130.0;
-const WANDER_OFF: f32 = 120.0;
+/// The wanderer goes this share of the way to the job (the playtest: in
+/// to 137 m of 188), then off to a place this many times as far from the
+/// job as the drop was, and waits this long (s) to be told the way back
+/// before giving it up. Shares, not metres: Marrow's warp brought the job
+/// from 188 m to 103 m, and 130 m short of it was behind the gate.
+const WANDER_SHARE: f32 = 0.6;
+const WANDER_OFF: f32 = 1.3;
 const WANDER_WAIT: f32 = 240.0;
 
 /// Kit a newcomer takes from the crate: what the yard used, and the map
@@ -1277,8 +1279,8 @@ pub(super) fn direct_raid(
             // The wanderer: most of the way, then off elsewhere, away from
             // it (the playtest: in to 137 m, then west).
             if p.wanders && state.wandered_at.is_none() {
-                let toward = (at - from).normalize_or(Vec2::Y);
-                let short = at - toward * WANDER_SHORT;
+                let way = from.distance(at);
+                let short = from.lerp(at, WANDER_SHARE);
                 // Off to somewhere with a name, farther from the job (the
                 // playtest: the logging camp, the village).
                 let Some(off) = world
@@ -1286,7 +1288,7 @@ pub(super) fn direct_raid(
                     .map
                     .markers_of(&MarkerKind::Poi)
                     .map(|m| Vec2::from(m.at))
-                    .filter(|m| m.distance(at) > WANDER_SHORT + WANDER_OFF)
+                    .filter(|m| m.distance(at) > way * WANDER_OFF)
                     .min_by(|a, b| a.distance(short).total_cmp(&b.distance(short)))
                 else {
                     state.wandered_at = Some(now);
@@ -1294,7 +1296,7 @@ pub(super) fn direct_raid(
                     return;
                 };
                 tasks.extend(route(&world, &view, from, short));
-                tasks.extend(route(&world, &view, short, off));
+                tasks.extend(by_road(&world, &view, short, off));
                 state.wandered_at = Some(now);
                 state.note(
                     now,
@@ -1960,6 +1962,45 @@ fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
         }
     }
     Some(t0)
+}
+
+/// From `from` to `to` by a road that runs near both (as someone walks off
+/// somewhere they've no reason to go: the way that's there), else straight.
+fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+    const NEAR: f32 = 70.0;
+    let nearest = |pts: &[Vec2], p: Vec2| {
+        pts.iter()
+            .enumerate()
+            .min_by(|a, b| a.1.distance(p).total_cmp(&b.1.distance(p)))
+            .map(|(i, q)| (i, q.distance(p)))
+    };
+    let best = world
+        .zone
+        .map
+        .roads
+        .iter()
+        .filter_map(|r| {
+            let pts: Vec<Vec2> = r.points.iter().map(|p| Vec2::from(*p)).collect();
+            let (i, a) = nearest(&pts, from)?;
+            let (j, b) = nearest(&pts, to)?;
+            (a < NEAR && b < NEAR && i != j).then_some((pts, i, j, a + b))
+        })
+        .min_by(|a, b| a.3.total_cmp(&b.3));
+    let Some((pts, i, j, _)) = best else {
+        return route(world, view, from, to);
+    };
+    let along: Vec<Vec2> = if i < j {
+        pts[i..=j].to_vec()
+    } else {
+        pts[j..=i].iter().rev().copied().collect()
+    };
+    let mut t = vec![];
+    let mut at = from;
+    for p in along.into_iter().chain(std::iter::once(to)) {
+        t.extend(route(world, view, at, p));
+        at = p;
+    }
+    t
 }
 
 /// `legs`, round the buildings in the way.

@@ -120,7 +120,8 @@ def spare_parts():
     p.prism(lid, yb + 0.014, yb + 0.02, "Blued", axis="y", bevel=0.0015, segs=1)
     p.box((0.03, 0.0005, 0.018), (0.0, yb + 0.0203, 0.0), "Paper")
     # Coiled spring lying across the lid.
-    ys = yb + 0.0255
+    # On the lid (its end coils stood 0.7 mm off it, 1.5 mm drawn).
+    ys = yb + 0.0247
     for k in range(9):
         z = -0.016 + k * 0.004
         p.lathe([(0.0042, -0.0007), (0.0049, 0.0), (0.0042, 0.0007), (0.0035, 0.0)], "Steel",
@@ -133,7 +134,7 @@ def spare_parts():
               xf=T(0.013 + k * 0.004, yb + 0.0215, 0.01) @ RY(0.3 * k))
     # Binding wire round the lot.
     for x in (-0.018, 0.018):
-        p.box((0.0012, 0.0012, 0.042), (x, yb + 0.0207, 0.0), "Steel")
+        p.box((0.0012, 0.0012, 0.042), (x, yb + 0.0205, 0.0), "Steel")
     # Sits on the floor of a box fitted to it (`dims` in items.ron).
     return centred([p])
 

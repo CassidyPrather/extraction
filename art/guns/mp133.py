@@ -125,7 +125,9 @@ barrel.lathe([(0.0093, BREECH), (0.0128, BREECH), (0.0128, -0.262), (0.0119, -0.
               (0.0110, -0.45), (0.0106, MUZZLE + 0.004), (0.0101, MUZZLE), (0.0093, MUZZLE)],
              "Blued", segs=24, xf=T(0, BORE, 0), closed=True)
 # The rib: a flat strip on posts, its top level with the receiver's.
-RIB_R, RIB_F = 0.0635, 0.0610
+# The bead's top on the eye line just over the receiver (`pt_sight`,
+# `capture::sightline`): the rib's front was 2 mm lower.
+RIB_R, RIB_F = 0.0635, 0.0632
 barrel.prism([(RX_Z0 + 0.002, RIB_R - 0.003), (MUZZLE + 0.002, RIB_F - 0.003),
               (MUZZLE + 0.002, RIB_F), (RX_Z0 + 0.002, RIB_R)],
              -0.004, 0.004, "Blued", axis="x", bevel=0.0007, segs=1)
@@ -219,9 +221,12 @@ bolt.prism(fillet([(-0.006, 0.039), (0.014, 0.039), (0.014, 0.061), (-0.006, 0.0
            BZ0, BZ1, "Steel", axis="z", bevel=0.001, segs=1)
 # Extractor claw on the right of the bolt face, and the bolt's lightening flat.
 bolt.box((0.003, 0.007, 0.012), (0.0150, 0.047, BZ0 + 0.0115), "Steel", bevel=0.0008, segs=1)
-# The action bars, both sides of the tube, from inside the forend into the receiver.
+# The action bars, both sides of the tube, from inside the forend back to
+# the slide under the bolt that they drive (they stopped 75 mm short:
+# `capture::attach`).
 for sx in (-1, 1):
-    bolt.box((0.0018, 0.008, 0.27), (sx * 0.0131, TUBE, -0.365), "Blued", bevel=0.0005, segs=1)
+    bolt.box((0.0018, 0.008, 0.375), (sx * 0.0131, TUBE, -0.3125), "Blued", bevel=0.0005, segs=1)
+bolt.box((0.028, 0.025, 0.02), (0.0, 0.0275, -0.135), "Blued", bevel=0.001, segs=1)
 # The forend: ribbed birch round the tube, rounded at the nose.
 FZ0, FZ1 = -0.515, -0.330
 F_TOP = 0.031
@@ -272,7 +277,7 @@ make(trig, worn={})
 make(crossbolt, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.068, -0.03))
+empty("pt_sight", (0.0, 0.0665, -0.03))
 empty("pt_port", (0.022, 0.05, -0.12))
 empty("pt_load_port", (0.0, 0.0, -0.13))
 empty("pt_support", (0.0, 0.012, -0.42))

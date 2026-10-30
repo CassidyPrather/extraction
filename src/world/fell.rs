@@ -569,7 +569,9 @@ fn mill_back(b: &mut Builder) {
         &[high(2.5), pane(4.0, 1.4, 5.9, 6.9)],
     );
     // The tub track in from the back door, its last tub left on it.
-    for x in [3.62, 4.38] {
+    // At the tub's gauge, its treads on the rails' heads (the rails were
+    // 1.5 cm wider, the treads half off them).
+    for x in [3.655, 4.345] {
         b.deco(
             Vec3::new(0.06, 0.05, 4.2),
             Vec3::new(x, f + 0.025, MILL_HD - WALL - 2.1),

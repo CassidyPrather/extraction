@@ -109,8 +109,10 @@ fn screenshot_when_ready(
 fn sights_to_the_eye(
     opts: Res<LaunchOptions>,
     zone: Option<Res<crate::world::Zone>>,
+    catalog: Res<crate::items::Catalog>,
     mut guns: Query<(
         &crate::weapons::Gun,
+        &crate::items::Item,
         &mut Transform,
         &mut crate::weapons::feel::Handling,
     )>,
@@ -119,9 +121,9 @@ fn sights_to_the_eye(
     else {
         return;
     };
-    if !spec.starts_with("sights:") {
+    let Some(id) = spec.strip_prefix("sights:") else {
         return;
-    }
+    };
     let ground = zone.ground(cam.x, cam.z);
     let eye_y = if cam.y == 0.0 {
         ground + 1.7
@@ -130,7 +132,12 @@ fn sights_to_the_eye(
     };
     let eye = Vec3::new(cam.x, eye_y, cam.z);
     let look = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
-    for (gun, mut tf, mut handling) in &mut guns {
+    // The gallery's gun only: one lying in the zone would come to the eye
+    // too, over it.
+    for (gun, item, mut tf, mut handling) in &mut guns {
+        if catalog.get(item.kind()).id != id {
+            continue;
+        }
         // The eye 4 cm behind the rear sight, on the line to the front post.
         let rear = gun.layout.sight.translation;
         let front = crate::weapons::feel::front_post(gun);
@@ -303,7 +310,8 @@ fn gallery(
                     }
                     _ => {
                         let at = eye + flat * dist.unwrap_or(4.0);
-                        let at = Vec3::new(at.x, zone.ground(at.x, at.z) + 0.45, at.z);
+                        let y = crate::robots::dirigible::pod_rest(|x, z| zone.ground(x, z), at);
+                        let at = Vec3::new(at.x, y, at.z);
                         commands.spawn((
                             crate::robots::dirigible::CargoPod {
                                 carrier: Entity::PLACEHOLDER,

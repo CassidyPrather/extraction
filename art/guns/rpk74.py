@@ -140,10 +140,11 @@ fsb = fillet([(FS_Z, BORE - 0.0135), (FS_Z + 0.034, BORE - 0.0135), (FS_Z + 0.03
              [0.002, 0.002, 0.004, 0.006, 0.0025, 0.0025, 0.006, 0.004], 2)
 barrel.prism(fsb, -0.0125, 0.0125, "Blued", axis="x", bevel=0.0015, segs=2)
 for sx in (-1, 1):
-    barrel.prism(fillet([(FS_Z + 0.006, 0.092), (FS_Z + 0.020, 0.092), (FS_Z + 0.0185, 0.1085),
-                         (FS_Z + 0.0085, 0.1085)], 0.002, 2), sx * 0.0105 - 0.002,
+    barrel.prism(fillet([(FS_Z + 0.006, 0.092), (FS_Z + 0.020, 0.092), (FS_Z + 0.0185, 0.1105),
+                         (FS_Z + 0.0085, 0.1105)], 0.002, 2), sx * 0.0105 - 0.002,
                  sx * 0.0105 + 0.002, "Blued", axis="x", bevel=0.0006, segs=1)
-barrel.cyl(0.0016, 0.092, 0.1045, "Blued", segs=8, xf=T(0, 0, FS_Z + 0.013) @ RX(-math.pi / 2))
+# (Its top on the eye line, `pt_sight`: `capture::sightline`.)
+barrel.cyl(0.0016, 0.092, 0.1071, "Blued", segs=8, xf=T(0, 0, FS_Z + 0.013) @ RX(-math.pi / 2))
 # Lightening hole through the column.
 fc = Part("cut")
 fc.cyl(0.0042, -0.02, 0.02, "Blued", segs=12, xf=T(0, 0.0805, FS_Z + 0.014) @ RY(math.pi / 2))
@@ -175,7 +176,8 @@ for sx in (-1, 1):
                xf=T(0, 0.1062, -0.1685) @ RY(math.pi / 2), chamfer=0.0005)
 for k in range(11):
     z = -0.2245 + k * 0.0052
-    y = 0.0985 + (z + 0.229) / 0.061 * 0.003 + 0.0045
+    # On the leaf's top (they floated 2 mm over it: `capture::attach`).
+    y = 0.1005 + (z + 0.229) / 0.061 * 0.004 - 0.0001
     w = 0.008 if k % 2 == 0 else 0.0045
     barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
 # Rear handguard retainer band and its locking lever on the right.
@@ -258,13 +260,15 @@ radii[2] = 0.0
 stock_prof = fillet(stock_prof, radii, 4)
 
 
-def stock_w(z, y):
-    k = 0.0168 + (z - 0.02) / 0.28 * 0.0052 - max(0.0, -0.06 - y) * 0.03
-    return (-k, k)
+def stock_w(z, yc, h):
+    # Half widths at the belly (narrowing into the foot) and the comb.
+    k = 0.0168 + (z - 0.02) / 0.28 * 0.0052
+    return (k - max(0.0, -0.06 - (yc - h)) * 0.03, k * 0.85)
 
 
+# Rounded across (as the AK's): the extruded outline read as a plank.
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.008, segs=4, width=stock_w)
+stock.stock(stock_prof, 0.0192, 0.2958, "Wood", stock_w, stations=90, segs=28, power=2.8)
 butt = Part("butt")
 butt_prof = fillet([(0.2955, 0.0425), (0.306, 0.0425), (0.306, -0.1175), (0.2955, -0.1175)],
                    [0.002, 0.004, 0.004, 0.002], 2)
@@ -275,6 +279,9 @@ butt.cyl(0.0022, 0.306, 0.3085, "Steel", segs=8, xf=T(0, -0.104, 0))
 # Sling loop on the left of the stock, ahead of the foot.
 loop = catmull([(0.205, -0.054), (0.211, -0.04), (0.225, -0.04), (0.231, -0.054)], 3, closed=False)
 butt.sweep(loop, section_rect(0.003, 0.003, 0.0008), "Steel", xf=T(-0.0205, -0.008, 0.0))
+# Its two studs into the wood, where the rounded stock falls away under it.
+for z in (0.205, 0.231):
+    butt.cyl(0.0016, -0.022, -0.010, "Steel", segs=10, xf=T(0, -0.062, z) @ RY(math.pi / 2))
 
 # --- Moving parts -------------------------------------------------------------------------
 carrier = Part("bolt_carrier", origin=(0.0, 0.07, -0.14))
@@ -349,7 +356,7 @@ print(f"  bipod: BIPOD_DEPLOY {BIPOD_DEPLOY:+.4f} rad ({math.degrees(BIPOD_DEPLO
       f"deployed feet tips at x +-{tip_r.x:.4f}, y {dep.y:+.4f}, z {dep.z:+.4f}; folded {tip_r}")
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.104, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("pt_port", (0.025, 0.07, -0.13))
 empty("pt_support", (0.0, 0.03, -0.34))
 empty("pt_handle", (0.045, 0.062, -0.17))
