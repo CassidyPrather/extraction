@@ -290,7 +290,7 @@ impl Goal {
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
             (Goal::FarGrab, false) => "Point at the ringed box.\nSqueeze GRIP, flick back.",
             (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
-            (Goal::FillMag, false) => "The ringed mag, the box:\none in each hand. Touch them.",
+            (Goal::FillMag, false) => "The ringed mag, the box:\none a hand. Touch them.",
             (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press T.",
             (Goal::SeatMag, false) => "Table's pistol in hand. Push\nthe mag up into the grip.",
             (Goal::SeatMag, true) => "Table's pistol in hand.\nPress R.",
