@@ -447,7 +447,7 @@ fn shoot_for_screenshot(
     mut breaches: MessageWriter<super::hooks::Breach>,
     parts: Query<(), With<super::wood::Timber>>,
     names: Query<NameOrEntity>,
-    mut moving: Query<&mut crate::world::hinge::Moving>,
+    mut moving: Query<(NameOrEntity, &mut crate::world::hinge::Moving)>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -516,16 +516,17 @@ fn shoot_for_screenshot(
         }
     }
     // `EXTRACTION_OPEN=1`: ninety frames before the capture, every window
-    // leaf, drawer and cabinet door within 12 m of the view swings open,
+    // leaf, drawer and cabinet door within 12 m of the camera swings open,
     // as to a squeeze.
     if std::env::var("EXTRACTION_OPEN").is_ok() && *frame + 90 == opts.frames {
         let eye = Vec3::new(cam.x, cam.y, cam.z);
         let mut n = 0;
-        for mut m in &mut moving {
+        for (name, mut m) in &mut moving {
             if m.rest.translation.xz().distance(eye.xz()) < 12.0 {
                 m.open = true;
                 m.left = false;
                 n += 1;
+                info!("EXTRACTION_OPEN: {name} at {:.1}", m.rest.translation);
             }
         }
         info!("EXTRACTION_OPEN: {n} opened");
