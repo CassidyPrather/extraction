@@ -156,8 +156,10 @@ def picture_frame():
 def boots():
     """A pair of work boots by the door, one fallen over: 0.35 x 0.28."""
     p = Part("static")
-    for (x, z, tip) in ((-0.07, 0.0, 0.0), (0.1, 0.05, 1.45)):
-        xf = T(x, 0, z) @ RZ(tip) @ T(0, 0.0 if tip == 0 else 0.05, 0)
+    # (The fallen one lifted onto its side: tipped, it dipped 4 cm under
+    # the floor it lies on.)
+    for (x, z, tip, lift) in ((-0.07, 0.0, 0.0, 0.0), (0.1, 0.05, 1.45, 0.0425)):
+        xf = T(x, lift, z) @ RZ(tip) @ T(0, 0.0 if tip == 0 else 0.05, 0)
         p.box((0.1, 0.04, 0.29), (0, 0.02, -0.02), "Black", bevel=0.01, segs=1, xf=xf)
         p.box((0.095, 0.08, 0.21), (0, 0.08, -0.06), "Leather", bevel=0.02, segs=1, xf=xf)
         p.lathe([(0.0, 0.0), (0.05, 0.0), (0.05, 0.16), (0.0, 0.16)], "Leather", segs=10,

@@ -1214,13 +1214,13 @@ pub fn yard(
             if !site.clear(c, half) {
                 continue;
             }
-            let Some(y) = site.level(c, half, ground) else {
+            let Some((y, tilt)) = site.level(c, half, ground) else {
                 continue;
             };
             placed.push((c, half));
             out.push((
                 t.model,
-                Transform::from_xyz(c.x, y, c.y).with_rotation(Quat::from_rotation_y(yaw)),
+                Transform::from_xyz(c.x, y, c.y).with_rotation(tilt * Quat::from_rotation_y(yaw)),
             ));
             break;
         }
@@ -1397,22 +1397,53 @@ impl<'a> YardSite<'a> {
         !self.scenes.iter().any(|s| s.distance(at) < 3.0 + r)
     }
 
-    /// The thing's height (building-local) to stand on the ground at its
-    /// lowest corner, or `None` if the spot is under water or too steep.
-    fn level(&self, c: Vec2, half: Vec2, ground: &dyn Fn(Vec2) -> Option<f32>) -> Option<f32> {
+    /// The thing's height (building-local) and tilt to stand on the ground
+    /// under it, tilted to it (set at its lowest corner and level, a bed
+    /// or a pump on a slope stood into the hill on its high side:
+    /// `capture::footing`), or `None` if the spot is under water or too
+    /// steep.
+    fn level(
+        &self,
+        c: Vec2,
+        half: Vec2,
+        ground: &dyn Fn(Vec2) -> Option<f32>,
+    ) -> Option<(f32, Quat)> {
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
-        for k in [
+        let mut h = [0.0f32; 5];
+        for (i, k) in [
             Vec2::ZERO,
             Vec2::new(-1.0, -1.0),
             Vec2::new(1.0, -1.0),
             Vec2::new(1.0, 1.0),
             Vec2::new(-1.0, 1.0),
-        ] {
-            let h = ground(self.to_map(c + half * k))?;
-            lo = lo.min(h);
-            hi = hi.max(h);
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            h[i] = ground(self.to_map(c + half * k))? - self.xf.translation.y;
+            lo = lo.min(h[i]);
+            hi = hi.max(h[i]);
         }
-        (hi - lo < 0.35).then_some(lo - self.xf.translation.y - 0.02)
+        if hi - lo >= 0.35 {
+            return None;
+        }
+        // The ground's plane under it (building-local slopes along x, z).
+        let dx = ((h[2] + h[3]) - (h[1] + h[4])) / (4.0 * half.x.max(0.01));
+        let dz = ((h[3] + h[4]) - (h[1] + h[2])) / (4.0 * half.y.max(0.01));
+        let mean = h.iter().sum::<f32>() / 5.0;
+        let tilt = Quat::from_rotation_arc(Vec3::Y, Vec3::new(-dx, 1.0, -dz).normalize());
+        // Settled a little, and no corner standing off the ground.
+        let worst = [
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1.0, -1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(-1.0, 1.0),
+        ]
+        .iter()
+        .zip(&h[1..])
+        .map(|(k, g)| mean + dx * half.x * k.x + dz * half.y * k.y - g)
+        .fold(0.0f32, f32::max);
+        Some((mean - worst - 0.01, tilt))
     }
 }
 
