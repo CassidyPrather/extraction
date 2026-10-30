@@ -343,7 +343,13 @@ impl Plugin for InteractPlugin {
 /// your hands pass through each other (a magazine has to go up inside the
 /// gun in your other hand; the first headset playtest found the gun's box
 /// keeping it out), still meeting the world and robots.
-pub(crate) const LOOSE: [Layer; 4] = [Layer::World, Layer::Item, Layer::Robot, Layer::Hand];
+pub(crate) const LOOSE: [Layer; 5] = [
+    Layer::World,
+    Layer::Item,
+    Layer::Robot,
+    Layer::Hand,
+    Layer::Container,
+];
 const IN_HAND: [Layer; 2] = [Layer::World, Layer::Robot];
 
 fn held_layers(add: On<Add, Held>, mut commands: Commands) {

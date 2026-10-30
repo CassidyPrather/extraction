@@ -229,7 +229,7 @@ fn what_goes_in_the_pack_stays_where_it_was_put() {
 /// it lay: everything came back stood upright).
 #[test]
 fn a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay() {
-    use crate::raid::truck::Stash;
+    use crate::raid::truck::{STASH_OUTER, Stash};
     let dir = std::env::temp_dir().join(format!("extraction-stowed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -336,5 +336,182 @@ fn a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay() {
             "{id} came back in the {} as it lay: {held:?}",
             if *in_pack { "pack" } else { "crate" }
         );
+    }
+}
+
+/// Things dropped over and round the crate end up in it or beside it,
+/// never through it or under it, where nobody can see or reach them (the
+/// first night: one fell through, a magazine came to rest under it).
+#[test]
+fn nothing_dropped_on_the_crate_goes_through_or_under_it() {
+    use crate::raid::truck::{STASH_OUTER, Stash};
+    let mut app = crate::headless_app(
+        crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        },
+        false,
+    );
+    app.finish();
+    app.cleanup();
+    for _ in 0..5 {
+        app.update();
+    }
+    let (crate_, at) = {
+        let w = app.world_mut();
+        w.query_filtered::<(Entity, &GlobalTransform), With<Stash>>()
+            .iter(w)
+            .next()
+            .map(|(e, g)| (e, *g))
+            .unwrap()
+    };
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let (w, d) = STASH_OUTER;
+    let ids = [
+        "ak_mag",
+        "ammo_545",
+        "field_dressing",
+        "radio",
+        "pm_pistol",
+        "canned_stew",
+    ];
+    let mut dropped = Vec::new();
+    let mut k = 0;
+    for i in -3..=3 {
+        for j in -3..=3 {
+            // Over the crate and a hand's width round it.
+            let local = Vec3::new(
+                i as f32 * (w * 0.5 + 0.12) / 3.0,
+                0.8,
+                j as f32 * (d * 0.5 + 0.12) / 3.0,
+            );
+            let p = at.transform_point(local);
+            let Some(kind) = catalog.kind(ids[k % ids.len()]) else {
+                continue;
+            };
+            k += 1;
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind,
+                    transform: Transform::from_translation(p)
+                        .with_rotation(Quat::from_rotation_z(0.3 * k as f32)),
+                    condition: 1.0,
+                },
+            );
+            q.apply(app.world_mut());
+            dropped.push((e, local));
+        }
+    }
+    for _ in 0..90 * 4 {
+        app.update();
+    }
+    let inv = at.affine().inverse();
+    let mut bad = Vec::new();
+    let mut inside = 0;
+    for (e, from) in &dropped {
+        let wld = app.world();
+        if wld.get::<InBackpack>(*e).is_some_and(|b| b.bag == crate_) {
+            inside += 1;
+            continue;
+        }
+        let p = inv.transform_point3(wld.get::<GlobalTransform>(*e).unwrap().translation());
+        let under = p.x.abs() < w * 0.5 && p.z.abs() < d * 0.5 && p.y < 0.0;
+        let through = p.y < -(crate::raid::truck::STASH_RAISE + 0.35) - 0.1;
+        if under || through || !p.is_finite() {
+            bad.push(format!(
+                "dropped at {from:.2}, lies at {p:.2} (crate's frame)"
+            ));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "under or through the crate:\n{}",
+        bad.join("\n")
+    );
+    assert!(
+        inside >= 10,
+        "what fell in is in it ({inside} of {})",
+        dropped.len()
+    );
+}
+
+/// What's in a pouch stays in it, seated as it was, while you walk, turn
+/// and crouch (the first night's radio left a pouch somewhere on the way).
+#[test]
+fn what_is_in_a_pouch_stays_seated() {
+    use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+    let mut vr = Vr::first_run();
+    let feet = vr.feet() + Vec3::new(0.0, 0.0, -6.0);
+    let feet = Vec3::new(
+        feet.x,
+        vr.app
+            .world()
+            .resource::<crate::world::Zone>()
+            .ground(feet.x, feet.z),
+        feet.z,
+    );
+    vr.stand(feet, 0.0);
+    vr.step(5);
+    let me = vr.player;
+    let pouches: Vec<Entity> = vr
+        .app
+        .world_mut()
+        .query::<(Entity, &Socket, &SocketOwner)>()
+        .iter(vr.app.world())
+        .filter(|(_, s, o)| {
+            o.0 == me && matches!(s.kind, SocketKind::Body(_)) && s.occupant.is_none()
+        })
+        .map(|(e, ..)| e)
+        .collect();
+    let mut seated = Vec::new();
+    // (What fits which slot isn't the point: how it sits there is.)
+    for (pouch, id) in pouches.iter().zip(["radio", "field_dressing", "ammo_545"]) {
+        let item = vr.spawn(id, Transform::from_translation(feet + Vec3::Y));
+        vr.step(1);
+        let mut q = bevy::ecs::system::SystemState::<(Commands, Query<&mut Socket>)>::new(
+            vr.app.world_mut(),
+        );
+        let (mut c, mut sockets) = q.get_mut(vr.app.world_mut()).unwrap();
+        let mut s = sockets.get_mut(*pouch).unwrap();
+        crate::interact::seat_in_socket(&mut c, item, *pouch, &mut s);
+        q.apply(vr.app.world_mut());
+        seated.push((item, *pouch));
+    }
+    assert_eq!(seated.len(), 3, "three things in pouches");
+    vr.step(5);
+    let check = |vr: &mut Vr, when: &str| {
+        let w = vr.app.world();
+        for (item, pouch) in &seated {
+            assert!(
+                w.get::<InSocket>(*item).is_some_and(|i| i.socket == *pouch),
+                "{when}: {item} left its pouch"
+            );
+            let seat = w.get::<Socket>(*pouch).unwrap().seat;
+            let t = w.get::<Transform>(*item).unwrap();
+            assert!(
+                t.translation.distance(seat.translation) < 0.005
+                    && t.rotation.angle_between(seat.rotation) < 0.02,
+                "{when}: {item} moved in its pouch"
+            );
+        }
+    };
+    for k in 0..12 {
+        let p = feet + Vec3::new(0.6 * k as f32, 0.0, 0.3 * (k % 3) as f32);
+        let p = Vec3::new(
+            p.x,
+            vr.app
+                .world()
+                .resource::<crate::world::Zone>()
+                .ground(p.x, p.z),
+            p.z,
+        );
+        vr.stand(p, k as f32 * 0.7);
+        vr.head(Vec3::new(0.0, if k % 2 == 0 { 1.65 } else { 1.0 }, 0.0));
+        vr.step(12);
+        check(&mut vr, &format!("step {k}"));
     }
 }

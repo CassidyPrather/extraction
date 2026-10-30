@@ -83,6 +83,64 @@ pub struct InBackpack {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StowedPose(pub Transform);
 
+/// A loose item slower than this inside an open container has come to
+/// rest in it, m/s.
+const AT_REST: f32 = 0.3;
+
+/// A thing that comes to rest inside an open crate, tray or pack is in it:
+/// dropped in from above rather than let go inside, it used to lie there
+/// loose (and before the crate had walls, fell through it). It's stowed as
+/// it lies, if there's room. (Not a dead raider's bag: what lands on one
+/// isn't theirs.)
+#[allow(clippy::type_complexity)]
+fn settle_into_containers(
+    mut commands: Commands,
+    loose: Query<
+        (Entity, &Item, &GlobalTransform, Option<&LinearVelocity>),
+        (
+            Without<Held>,
+            Without<InBackpack>,
+            Without<super::InSocket>,
+            Without<RigidBodyDisabled>,
+            Without<Backpack>,
+        ),
+    >,
+    mut bags: Query<(Entity, &mut Backpack, &GlobalTransform), Without<crate::raid::Remains>>,
+    kinds: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut events: MessageWriter<super::InteractEvent>,
+) {
+    for (e, item, gt, v) in &loose {
+        if v.is_some_and(|v| v.0.length() > AT_REST) {
+            continue;
+        }
+        let p = gt.translation();
+        for (be, mut bag, bgt) in &mut bags {
+            if !bag.open {
+                continue;
+            }
+            let inv = bgt.affine().inverse();
+            let local = inv.transform_point3(p);
+            if !local.abs().cmple(bag.half).all() {
+                continue;
+            }
+            let def = catalog.get(item.kind());
+            let held: Vec<ItemKind> = bag
+                .contents
+                .iter()
+                .filter_map(|c| kinds.get(*c).ok().map(|i| i.kind()))
+                .collect();
+            let used = bag.used(&catalog, &held);
+            if bag.fits(used, def.size, def.bulk) {
+                let pose = Transform::from_matrix((inv * gt.affine()).into());
+                stow_posed(&mut commands, e, be, &mut bag, pose);
+                events.write(super::InteractEvent::Stowed { item: e });
+            }
+            break;
+        }
+    }
+}
+
 /// A stowed item's pose is taken as it goes in (`stow_posed`, or whatever
 /// else put it there).
 fn remember_stowed_poses(
@@ -159,7 +217,11 @@ impl Plugin for BodyPlugin {
             )
             .add_systems(
                 PostUpdate,
-                (remember_stowed_poses, keep_stowed_poses)
+                (
+                    settle_into_containers,
+                    remember_stowed_poses,
+                    keep_stowed_poses,
+                )
                     .chain()
                     .before(bevy::transform::TransformSystems::Propagate),
             )
