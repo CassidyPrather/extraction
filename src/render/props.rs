@@ -26,6 +26,8 @@ impl Plugin for PropVisualsPlugin {
             (
                 (dress_truck, dress_containers, finish_models).chain(),
                 droop_wheels,
+                swing_ladder,
+                dress_ladder,
                 spawn_hand_visuals,
                 dress_gloves,
                 dress_camp,
@@ -204,6 +206,9 @@ fn finish_models(
                 if let Some(i) = wheel {
                     commands.entity(holder).insert(TruckWheel(i));
                 }
+                if node.name == "ladder" {
+                    commands.entity(holder).insert(TruckLadder);
+                }
                 spawn_primitives(&mut commands, holder, node, &mut mat);
             }
         }
@@ -213,6 +218,26 @@ fn finish_models(
 /// One of the truck model's road wheels: `WHEELS[i]`.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct TruckWheel(pub usize);
+
+/// The truck model's rear ladder: hangs plumb from its hinge
+/// (`raid::truck::ladder_swing`), as its steps' colliders do.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TruckLadder;
+
+fn swing_ladder(
+    trucks: Query<&Transform, (With<Truck>, Without<TruckLadder>)>,
+    mut ladders: Query<(&ChildOf, &mut Transform), With<TruckLadder>>,
+) {
+    for (parent, mut t) in &mut ladders {
+        let Ok(pose) = trucks.get(parent.parent()) else {
+            continue;
+        };
+        let swing = crate::raid::truck::ladder_swing(pose);
+        if t.rotation.angle_between(swing) > 1e-4 {
+            t.rotation = swing;
+        }
+    }
+}
 
 /// Each wheel hangs on its springs down to the ground under it
 /// (`raid::truck::wheel_droop`), wherever the truck stands.
@@ -229,6 +254,51 @@ fn droop_wheels(
         let y = WHEELS[w.0].y - crate::raid::truck::wheel_droop(&zone, pose, w.0);
         if (t.translation.y - y).abs() > 1e-4 {
             t.translation.y = y;
+        }
+    }
+}
+
+/// The truck's boarding ramp (`raid::truck::ladder_steps`): a plank deck
+/// with cleats across it, hooked over the lowest step.
+fn dress_ladder(
+    mut commands: Commands,
+    steps: Query<(Entity, &crate::raid::truck::LadderStep), Added<crate::raid::truck::LadderStep>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    use crate::render::materials::{Mat, metric_box};
+    for (e, step) in &steps {
+        let size = step.0;
+        let planks = lib.get(Mat::Planks, &server, &mut materials);
+        let iron = lib.get(Mat::DarkMetal, &server, &mut materials);
+        let mut part = |size: Vec3, at: Vec3, m: &Handle<StandardMaterial>| {
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(size))),
+                MeshMaterial3d(m.clone()),
+                Transform::from_translation(at),
+                ChildOf(e),
+            ));
+        };
+        part(size, Vec3::ZERO, &planks);
+        let top = size.y * 0.5;
+        let n = (size.z / 0.25).floor() as i32;
+        for k in 1..n {
+            let z = -size.z * 0.5 + k as f32 * 0.25;
+            part(
+                Vec3::new(0.8, 0.025, 0.03),
+                Vec3::new(0.0, top + 0.0125, z),
+                &planks,
+            );
+        }
+        // The hooks over the step's edge.
+        for x in [-0.35, 0.35] {
+            part(
+                Vec3::new(0.05, 0.06, 0.04),
+                Vec3::new(x, top + 0.03, -size.z * 0.5 + 0.02),
+                &iron,
+            );
         }
     }
 }

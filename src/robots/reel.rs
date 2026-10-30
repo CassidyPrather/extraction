@@ -20,7 +20,8 @@
 //! `knockdown` (a heavy round into a walker's
 //! side: down, and up again), `strikes` (four walkers at 15 m shot in the
 //! front plate, the core, the eye and a knee: a shrug, a wound and two
-//! hits that tell, `damage::strike`), `rubble` (a walker over a heap of broken
+//! hits that tell, `damage::strike`), `wall` (a walker along a wall nearer
+//! than its legs reach: its feet come down short of it), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
 //! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
@@ -443,6 +444,31 @@ fn reel(
                 }
                 first.unwrap()
             }
+            "wall" => {
+                // A walker 6 m off walking along a house wall 0.5 m from its
+                // middle, nearer than its legs reach (`anim::wall_clear`).
+                use avian3d::prelude::*;
+                let p = eye + flat * 6.0 - right * 3.0;
+                let at = zone.on_ground(p.x, p.z);
+                let wall = at + flat * 0.65;
+                let rot = Quat::from_rotation_arc(Vec3::X, right);
+                commands.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(9.0, 2.6, 0.3))),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        base_color: Color::srgb(0.55, 0.32, 0.25),
+                        perceptual_roughness: 0.9,
+                        ..default()
+                    })),
+                    RigidBody::Static,
+                    Collider::cuboid(9.0, 2.6, 0.3),
+                    CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+                    Transform::from_translation(wall + right * 3.0 + Vec3::Y * 1.0)
+                        .with_rotation(rot),
+                ));
+                let w = spawn_walker(&mut commands, &zone, at, job(at));
+                commands.entity(w).remove::<Senses>().remove::<Brain>();
+                w
+            }
             "scan" => {
                 // A walker 6 m off that notices a device in front of you
                 // (devices::DeviceNoticed): its scan beam, red, then
@@ -557,6 +583,7 @@ fn reel(
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
                 "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" => vec![],
+                "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
                 // The lame one walks across, so it limps.

@@ -23,6 +23,67 @@ pub const SEAT_SPEED: f32 = 0.3;
 pub const HALF_DROP: f32 = 0.008;
 /// How fast a dropped magazine leaves the well, m/s down the gun.
 const DROP_SPEED: f32 = 0.6;
+/// How far a magazine hangs out of the well while the release is held:
+/// out of the catch, held for the other hand to take, metres.
+pub const PRESENT_DROP: f32 = 0.035;
+
+/// A magazine let go by the release and held out of the well while the
+/// button's down, for the other hand to take (the first playtest wanted
+/// it held, not dropped). Let go of the button, and it falls.
+#[derive(Component, Debug)]
+pub struct Presented;
+
+/// The mag release pressed: the magazine comes out of the catch and hangs
+/// half out of the well.
+#[derive(Message, Clone, Copy, Debug)]
+pub struct PresentMagazine {
+    pub gun: Entity,
+}
+
+pub(crate) fn present_magazines(
+    mut commands: Commands,
+    mut requests: MessageReader<PresentMagazine>,
+    mut guns: Query<(&mut Gun, &GlobalTransform)>,
+    sockets: Query<&Socket>,
+    mut mags: Query<&mut crate::items::Item, With<Mag>>,
+    mut out: MessageWriter<GunEvent>,
+) {
+    for req in requests.read() {
+        let Ok((mut gun, gt)) = guns.get_mut(req.gun) else {
+            continue;
+        };
+        let Some(m) = gun
+            .magwell
+            .and_then(|w| sockets.get(w).ok())
+            .and_then(|s| s.occupant)
+        else {
+            continue;
+        };
+        let Some(removed) = gun.firearm.remove_magazine() else {
+            continue;
+        };
+        if let Ok(mut it) = mags.get_mut(m) {
+            it.rounds = removed.rounds;
+            it.loads = removed.loads;
+        }
+        commands.entity(m).insert(Presented);
+        out.write(GunEvent {
+            gun: req.gun,
+            item: String::new(),
+            event: FireEvent::MagazineRemoved,
+            at: gt.translation(),
+        });
+    }
+}
+
+/// Out of the well (taken, or dropped): no longer held out.
+pub(crate) fn unpresent(mut events: MessageReader<InteractEvent>, mut commands: Commands) {
+    for ev in events.read() {
+        if let InteractEvent::Unsocketed { item, .. } = ev {
+            commands.entity(*item).try_remove::<Presented>();
+        }
+    }
+}
 
 /// Every magazine in a hand and its hand's velocity, as of the last tick
 /// (rebuilt every tick: the well reads it the tick the hand lets go).
@@ -47,7 +108,7 @@ pub(crate) fn note_approach(
 pub(crate) fn hang_mags(
     guns: Query<&Gun>,
     sockets: Query<&Socket>,
-    mut mags: Query<(&Mag, &mut Transform), With<InSocket>>,
+    mut mags: Query<(&Mag, &mut Transform, Has<Presented>), With<InSocket>>,
 ) {
     for gun in &guns {
         let Some(m) = gun
@@ -57,11 +118,14 @@ pub(crate) fn hang_mags(
         else {
             continue;
         };
-        let Ok((mag, mut t)) = mags.get_mut(m) else {
+        let Ok((mag, mut t, presented)) = mags.get_mut(m) else {
             continue;
         };
-        // Half-seated, or slipped down the well (a failure to feed).
-        let short = if gun.firearm.mag_unseated {
+        // Held out by the release; half-seated, or slipped down the well
+        // (a failure to feed).
+        let short = if presented {
+            PRESENT_DROP
+        } else if gun.firearm.mag_unseated {
             HALF_DROP
         } else {
             0.0
@@ -403,5 +467,233 @@ mod vr {
             }
         }
         assert_eq!(fire(&mut r, 1, true).len(), 1, "it feeds");
+    }
+}
+
+#[cfg(test)]
+mod grab {
+    use super::*;
+    use crate::interact::{GripRole, InSocket};
+    use crate::rig::Side;
+    use crate::weapons::feel::vr_tests::*;
+
+    /// Every gun with a magazine well, and the magazine that fits it.
+    fn guns_and_mags() -> Vec<(String, String)> {
+        let catalog = crate::items::Catalog::load();
+        catalog
+            .iter()
+            .filter_map(|(_, d)| {
+                let fam = d.firearm.as_ref()?.magazine_family.clone()?;
+                let (_, m) = catalog.iter().find(|(_, m)| {
+                    m.magazine
+                        .as_ref()
+                        .is_some_and(|m| m.fits == fam && !m.stripper)
+                })?;
+                Some((d.id.clone(), m.id.clone()))
+            })
+            .collect()
+    }
+
+    /// Six ways in to a point, 3 cm off it.
+    const APPROACHES: [Vec3; 6] = [
+        Vec3::new(0.03, 0.0, 0.0),
+        Vec3::new(-0.03, 0.0, 0.0),
+        Vec3::new(0.0, 0.03, 0.0),
+        Vec3::new(0.0, -0.03, 0.0),
+        Vec3::new(0.0, 0.0, 0.03),
+        Vec3::new(0.0, 0.0, -0.03),
+    ];
+
+    fn holding(r: &mut Range, side: Side) -> Option<Entity> {
+        r.vr.hand_state(side).holding
+    }
+
+    /// The first playtest's top complaint: grabbing the pistol took its
+    /// magazine. For every gun with a seated magazine, a grab at its grip
+    /// from any side takes the gun, lying loose or held in the other hand
+    /// (a pass between hands); only a deliberate pull from under the well
+    /// of a gun already in the other hand takes the magazine.
+    #[test]
+    fn a_grab_takes_the_gun_never_the_magazine_in_it() {
+        let mut bad = Vec::new();
+        for (gun, mag) in guns_and_mags() {
+            for (k, off) in APPROACHES.iter().enumerate() {
+                // Held in the right hand: the left closes on its grip.
+                let mut r = hold(&gun, false, false);
+                let m = seat_mag(&mut r, &mag, 3);
+                let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
+                r.vr.hand(Side::Left, grip + *off, Quat::IDENTITY, 0.0, 0.0);
+                r.vr.step(2);
+                r.vr.grip(Side::Left, 1.0);
+                r.vr.step(3);
+                if holding(&mut r, Side::Left) != Some(r.gun) {
+                    bad.push(format!(
+                        "{gun}: a pass from approach {k} took {:?}",
+                        holding(&mut r, Side::Left)
+                    ));
+                }
+                if r.vr.app.world().get::<InSocket>(m).is_none() {
+                    bad.push(format!(
+                        "{gun}: a pass from approach {k} pulled the magazine"
+                    ));
+                }
+                // Let go of everything, the gun left lying still: the right
+                // hand comes back for it.
+                r.vr.grip(Side::Left, 0.0);
+                r.vr.grip(Side::Right, 0.0);
+                r.vr.app
+                    .world_mut()
+                    .entity_mut(r.gun)
+                    .insert(avian3d::prelude::RigidBody::Static);
+                r.vr.step(3);
+                let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
+                r.vr.hand(Side::Right, grip + *off, Quat::IDENTITY, 0.0, 0.0);
+                r.vr.step(2);
+                r.vr.grip(Side::Right, 1.0);
+                r.vr.step(3);
+                if holding(&mut r, Side::Right) != Some(r.gun) {
+                    bad.push(format!(
+                        "{gun}: lying, approach {k} took {:?}",
+                        holding(&mut r, Side::Right)
+                    ));
+                }
+                if r.vr.app.world().get::<InSocket>(m).is_none() {
+                    bad.push(format!("{gun}: lying, approach {k} pulled the magazine"));
+                }
+            }
+            // The deliberate pull: the gun in the right hand, the left
+            // closing under the well on the magazine's foot.
+            let mut r = hold(&gun, false, false);
+            let m = seat_mag(&mut r, &mag, 3);
+            let foot = {
+                let w = r.vr.app.world();
+                let gt = w.get::<GlobalTransform>(m).unwrap();
+                gt.translation() - gt.rotation() * Vec3::Y * w.get::<Mag>(m).unwrap().height * 0.5
+            };
+            // (A pistol's magazine sits inside its grip, its foot in the
+            // gun hand's palm: it comes out by its release, held out for
+            // the other hand, `the_release_held_hangs_...`.)
+            let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
+            if foot.distance(grip) < 0.08 {
+                continue;
+            }
+            r.vr.hand(Side::Left, foot - Vec3::Y * 0.01, Quat::IDENTITY, 0.0, 0.0);
+            r.vr.step(2);
+            r.vr.grip(Side::Left, 1.0);
+            r.vr.step(3);
+            if holding(&mut r, Side::Left) != Some(m) {
+                bad.push(format!(
+                    "{gun}: a pull at the magazine's foot took {:?}",
+                    holding(&mut r, Side::Left)
+                ));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Held, the mag release lets the magazine out of its catch and holds
+    /// it half out of the well for the other hand; let go of the button,
+    /// and it falls.
+    #[test]
+    fn the_release_held_hangs_the_magazine_out_for_the_other_hand() {
+        let mut r = hold("pm_pistol", false, false);
+        let m = seat_mag(&mut r, "pm_mag", 8);
+        r.vr.primary(Side::Right, true);
+        r.vr.step(4);
+        let w = r.vr.app.world();
+        assert!(w.get::<InSocket>(m).is_some(), "still in the well");
+        assert!(w.get::<Presented>(m).is_some(), "held out");
+        let low =
+            -w.get::<Transform>(m).unwrap().translation.y - w.get::<Mag>(m).unwrap().height * 0.5;
+        assert!((low - PRESENT_DROP).abs() < 1e-4, "half out: {low}");
+        assert!(
+            gun_mut(&mut r).firearm.magazine.is_none(),
+            "out of the catch"
+        );
+        // The other hand takes it by its middle.
+        let at =
+            r.vr.app
+                .world()
+                .get::<GlobalTransform>(m)
+                .unwrap()
+                .translation();
+        r.vr.hand(Side::Left, at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(Side::Left, 1.0);
+        r.vr.step(3);
+        assert_eq!(holding(&mut r, Side::Left), Some(m), "taken");
+        r.vr.primary(Side::Right, false);
+        r.vr.step(5);
+        assert_eq!(holding(&mut r, Side::Left), Some(m), "still in the hand");
+        assert_eq!(
+            r.vr.app
+                .world()
+                .get::<crate::items::Item>(m)
+                .unwrap()
+                .rounds,
+            8
+        );
+        // Pressed and let go with nothing taking it: it falls.
+        let mut r = hold("pm_pistol", false, false);
+        let m = seat_mag(&mut r, "pm_mag", 8);
+        r.vr.primary(Side::Right, true);
+        r.vr.step(3);
+        r.vr.primary(Side::Right, false);
+        r.vr.step(10);
+        assert!(r.vr.app.world().get::<InSocket>(m).is_none(), "dropped");
+    }
+
+    /// A box held at a magazine's lips (not only its middle) loads it, a
+    /// round at a time while it's held there.
+    #[test]
+    fn a_box_at_the_lips_loads_a_round_at_a_time() {
+        let mut r = hold("pm_pistol", false, false);
+        // The gun away; a box in the right hand, an empty magazine in the left.
+        r.vr.grip(Side::Right, 0.0);
+        r.vr.step(2);
+        let mag = take(&mut r, "pm_mag", 0);
+        let box_at = r.feet + Vec3::new(0.35, 1.0, -0.3);
+        let bx = r.vr.spawn("ammo_9x18", Transform::from_translation(box_at));
+        r.vr.app
+            .world_mut()
+            .entity_mut(bx)
+            .insert(avian3d::prelude::RigidBody::Static);
+        r.vr.hand(Side::Right, box_at, Quat::IDENTITY, 0.0, 0.0);
+        r.vr.step(2);
+        r.vr.grip(Side::Right, 1.0);
+        r.vr.step(3);
+        assert_eq!(holding(&mut r, Side::Right), Some(bx), "the box");
+        r.vr.app
+            .world_mut()
+            .entity_mut(bx)
+            .insert(avian3d::prelude::RigidBody::Dynamic);
+        // To the lips: past the old reach of the middle.
+        let lips = {
+            let w = r.vr.app.world();
+            let gt = w.get::<GlobalTransform>(mag).unwrap();
+            gt.translation() + gt.up().as_vec3() * (w.get::<Mag>(mag).unwrap().height * 0.5)
+        };
+        r.vr.hand(Side::Right, lips + Vec3::Y * 0.13, Quat::IDENTITY, 1.0, 0.0);
+        let rounds = |r: &Range| {
+            r.vr.app
+                .world()
+                .get::<crate::items::Item>(mag)
+                .unwrap()
+                .rounds
+        };
+        let mut seen = Vec::new();
+        for _ in 0..40 {
+            r.vr.step(1);
+            seen.push(rounds(&r));
+        }
+        assert!(seen[0] <= 1, "not all at once: {seen:?}");
+        assert!(
+            seen.windows(2).all(|w| w[1] <= w[0] + 1),
+            "a round at a time: {seen:?}"
+        );
+        assert!(
+            *seen.last().unwrap() >= 3,
+            "and on while it's held there: {seen:?}"
+        );
     }
 }

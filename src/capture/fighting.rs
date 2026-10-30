@@ -120,6 +120,18 @@ pub fn fights(
     solids: &[Solid],
     seen: impl Fn(Vec3, Vec3) -> bool,
 ) -> Vec<Fight> {
+    fights_over(faces, names, solids, seen, MIN_AREA)
+}
+
+/// [`fights`], counting overlaps down to `min_area` (m²): a magazine's top
+/// is a few square centimetres.
+pub fn fights_over(
+    faces: &[Face],
+    names: &[String],
+    solids: &[Solid],
+    seen: impl Fn(Vec3, Vec3) -> bool,
+    min_area: f32,
+) -> Vec<Fight> {
     // Bucket by plane: the normal to 1/40, the offset to a millimetre.
     let mut buckets: HashMap<([i32; 3], i64), Vec<(usize, Vec3, f32)>> = HashMap::new();
     for (i, f) in faces.iter().enumerate() {
@@ -195,7 +207,7 @@ pub fn fights(
     }
     let mut out: Vec<Fight> = total
         .into_iter()
-        .filter(|(_, (a, _, _))| *a >= MIN_AREA)
+        .filter(|(_, (a, _, _))| *a >= min_area)
         .map(|((s1, s2, m1, m2), (area, at, normal))| Fight {
             at: at / area,
             normal,

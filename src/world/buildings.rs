@@ -772,8 +772,10 @@ impl Builder {
             Vec3::new(0.0, floor_y - depth * 0.5, 0.0),
             mat,
         );
+        // Under the walls' inner faces however thin they are (an 8 cm
+        // booth wall's floor stopped a centimetre short of it).
         self.piece(
-            Shape::Box(Vec3::new(w - 0.1, 0.03, d - 0.1)),
+            Shape::Box(Vec3::new(w - 0.06, 0.03, d - 0.06)),
             Transform::from_xyz(0.0, floor_y + 0.015, 0.0),
             floor,
             false,
@@ -978,7 +980,7 @@ impl Builder {
             }
             self.piece(
                 Shape::Box(Vec3::new(0.15, 0.03, depth + 0.08)),
-                Transform::from_translation(local(u_ridge + 0.07, thick * 0.5 + 0.017))
+                Transform::from_translation(local(u_ridge + 0.07, thick * 0.5 + 0.015))
                     .with_rotation(rot),
                 Mat::DarkMetal,
                 false,
@@ -3052,7 +3054,7 @@ fn pump_station(b: &mut Builder) {
 /// The works' machine floor: an overhead crane on runway beams along the
 /// columns, its hook hanging, and a row of lathes.
 fn factory_fitout(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
-    let xc = w * 0.5 - 0.26;
+    let xc = w * 0.5 - HALL_COLUMN_IN;
     let rail_y = f + h - 1.6;
     for side in [-1.0f32, 1.0] {
         // Runway beam on brackets off the columns (at +-3.75 and +-7.5).
@@ -3154,6 +3156,11 @@ fn factory_fitout(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
 /// A hall's steel frame: columns inside the long walls and a truss on
 /// each pair under the open roof (`gable_roof_with`, pitch 14 degrees,
 /// over `w + 0.5`), clear of the side windows.
+/// How far in from a hall's long walls' middles its columns' middles
+/// stand: their faces on the walls' (0.25 thick). A centimetre further in,
+/// the gap behind each showed as a slit (`capture::attach`).
+const HALL_COLUMN_IN: f32 = 0.25;
+
 fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
     let pitch = 14f32.to_radians();
     let eave = f + h;
@@ -3162,7 +3169,7 @@ fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
     let cx = (rw * 0.5 + ov) * 0.5;
     let cy = eave + (rw * 0.5) * pitch.tan() * 0.5 - ov * pitch.tan() * 0.5 + 0.06;
     let under = |x: f32| cy + (cx - x.abs()) * pitch.tan() - thick * 0.5 / pitch.cos();
-    let xc = w * 0.5 - 0.26;
+    let xc = w * 0.5 - HALL_COLUMN_IN;
     let mut zs = Vec::new();
     let mut z = 3.75;
     while z <= d * 0.5 - 1.5 {
@@ -3188,7 +3195,9 @@ fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
         );
         for side in [-1.0f32, 1.0] {
             let (x0, x1) = (side * (xc + 0.12), 0.0);
-            let (y0, y1) = (under(x0) - 0.1, under(x1) - 0.1);
+            // Its top on the sheeting's underside (a centimetre under
+            // it, the gap showed: `capture::attach`).
+            let (y0, y1) = (under(x0) - 0.09, under(x1) - 0.09);
             let along = Vec2::new(x1 - x0, y1 - y0);
             b.piece(
                 Shape::Box(Vec3::new(along.length(), 0.18, 0.14)),
@@ -3198,7 +3207,7 @@ fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
                 false,
             );
             let xq = side * xc * 0.5;
-            let top = under(xq) - 0.19;
+            let top = under(xq) - 0.18;
             b.piece(
                 Shape::Box(Vec3::new(0.1, top - eave, 0.1)),
                 Transform::from_xyz(xq, (top + eave) * 0.5, z),
@@ -3206,7 +3215,7 @@ fn hall_frame(b: &mut Builder, w: f32, d: f32, h: f32, f: f32) {
                 false,
             );
         }
-        let top = under(0.0) - 0.19;
+        let top = under(0.0) - 0.18;
         b.piece(
             Shape::Box(Vec3::new(0.12, top - eave, 0.12)),
             Transform::from_xyz(0.0, (top + eave) * 0.5, z),
@@ -3224,9 +3233,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
         Mat::Concrete,
         false,
     );
+    // Its top under the walls' feet (2 cm below them, light showed under
+    // every wall: `capture::attach`).
     b.bx(
         Vec3::new(w + 0.4, 1.0, d + 0.4),
-        Vec3::new(0.0, f - 0.52, 0.0),
+        Vec3::new(0.0, f - 0.5, 0.0),
         Mat::Concrete,
     );
     b.shell(
@@ -4767,11 +4778,14 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
 
 fn ranger_tower(b: &mut Builder) {
     let top = tower_legs(b);
+    // On the deck's top (`tower_legs`: top + 0.075); 5 mm over it, the
+    // walls' feet showed a slit all round.
+    let deck = top + 0.075;
     b.shell(
         4.0,
         4.0,
-        top + 0.08,
-        2.4,
+        deck,
+        2.405,
         0.08,
         Mat::Planks,
         [
@@ -4782,7 +4796,7 @@ fn ranger_tower(b: &mut Builder) {
         ],
     );
     b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
-    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+    b.table(Vec3::new(0.0, deck, 0.6), 0.0, Some("gadgets"));
 }
 
 /// The survey post: the ranger tower's legs, stair and platform, but open
@@ -5021,9 +5035,10 @@ fn guard_booth(b: &mut Builder) {
         Mat::PaintedMetal,
         [&[door(1.1)], &[window(1.1)], &[window(1.1)], &[window(1.1)]],
     );
+    // The roof on the walls' tops (it stood 25 mm over them).
     b.bx(
         Vec3::new(2.6, 0.15, 2.6),
-        Vec3::new(0.0, f + 2.5, 0.0),
+        Vec3::new(0.0, f + 2.4 + 0.075, 0.0),
         Mat::Corrugated,
     );
     b.counter(Vec3::new(0.0, f, 0.6), 0.0, 1.6, Some("ammo_common"));
@@ -5044,19 +5059,24 @@ fn target(b: &mut Builder) {
         Vec3::new(0.0, 1.2, 0.05),
         Mat::Canvas,
     );
+    // The steel plate: solid, so a round rings off it with a spark and
+    // leaves its mark (a plate drawn but not there let rounds through).
     b.piece(
         Shape::Cylinder(0.3, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.07)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
-        false,
+        true,
     );
+    // Its painted centre too: a bull's-eye's mark would be drawn over by
+    // a disc that isn't there. The round marks it and goes on to ring
+    // off the steel behind.
     b.piece(
         Shape::Cylinder(0.12, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.08)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::Plaster,
-        false,
+        true,
     );
     b.bx(
         Vec3::new(2.4, 1.0, 1.0),

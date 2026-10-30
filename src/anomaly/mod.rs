@@ -558,6 +558,13 @@ fn burners(
     }
 }
 
+/// Every snare held spent, for a shot of what a spent one looks like
+/// (`EXTRACTION_SPENT_SNARES`).
+fn held_spent() -> bool {
+    static SPENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SPENT.get_or_init(|| std::env::var_os("EXTRACTION_SPENT_SNARES").is_some())
+}
+
 /// Snares: discharge into everything in reach when anything touches them.
 #[allow(clippy::too_many_arguments)]
 fn snares(
@@ -588,6 +595,10 @@ fn snares(
     for (e, mut a, gt, mut dice) in &mut anomalies {
         let rng = &mut dice.0;
         if a.kind != AnomalyKind::Snare {
+            continue;
+        }
+        if held_spent() {
+            a.charge = 0.0;
             continue;
         }
         let hurry = 1.0 + extraction_core::anomaly::SURGE_HURRY * agitation.0;
