@@ -351,7 +351,13 @@ fn crouched_in_grass_in_fog_at_30m_you_are_not_seen() {
 /// walls, not just open field.
 #[test]
 fn a_search_takes_in_doorways_and_cover() {
-    let (app, _, _) = app(None);
+    // A valley's own doors (the test field gets none of the valleys'
+    // dressing, and its first door is the depot's ramp).
+    let (app, _, _) = app_with(crate::LaunchOptions {
+        robots: false,
+        map: "marrow_creek".into(),
+        ..Default::default()
+    });
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
     // A door with open ground before it (which comes first in the list
