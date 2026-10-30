@@ -35,6 +35,8 @@ software renderer is.
 | `strikes_before.png` | `reel:strikes,20,1` at 14:00, 15 m (crop), on main before this change: four walkers shot with a pistol round (34) every half second, left to right in the front plate, the core, the eye and a knee. At 15 m none of the four reads as more than a speck: the plate's, the eye's and the knee's leave a small dark mark, the core's nothing you can see. This is the playtest's fight (raid 1, t=997-1015: four core hits that read as nothing) | 1/30 s |
 | `strikes_after.png` | The same, after (`damage::strike`, `fx::strike_flashes`): the plate **shrugs** (a dull scuff, it hardly rocks), the core is **wounded** (an orange spit and molten drops, and its smoke from the first round), the eye and the knee **tell** (a white-hot flash and a spray of sparks, and it flinches). Audio's sounds follow the same three (`damage::RobotStruck`) | 1/30 s |
 | `strikes_before_frame.png` | One whole frame of the before (1280x720, uncropped): the fourth, where the rounds have just landed, as the after's `--frames 48` still (for Capture's before/after sheet, which crops it itself) | — |
+| `weak_points_15m_before.png` / `weak_points_15m_after.png` | `reel:strikes,1,1` at 14:00, 15 m (crop), main and after: four whole walkers. Before, the knees are 12 cm grey joints and the eye an 8 cm band. After, every weak point (`weak_points::is_weak`: what one pistol round tells on) wears the one shoot-here orange: a ball at each knee, a ring round the eye and the turret. Each is at least 0.24 m across (0.92 deg at 15 m) | — |
+| `weak_points_25m_before.png` / `weak_points_25m_after.png` | `reel:tellsbefore,1,1`, the same at 24-36 m (crop): the knees still pick the walkers out, 0.55 deg at 25 m, what a VR pistol holds (`weak_points::VR_HOLD_DEG`) | — |
 | `weathering.png` | The same walker in the training yard (clean), Marrow Creek (rust streaks, moss on top) and Cinder Works (sooted, heat-blued metal) | still |
 | `walker_limp.png` | A walker with a leg shot off: limping across on three, one foot up at a time, the dead leg dangling, the body sagging toward the gap | 0.2 s |
 | `drone_wreck.png` | A drone killed in the air: a rotor flies off, it corkscrews down on its fading lift trailing smoke, hits in a burst of sparks, sheds its panel and gun pod, and smoulders | 0.17 s |
@@ -53,3 +55,21 @@ python3 scripts/contact_sheet.py docs/shots/robot-bodies/walker_wreck.png 4 \
 
 Other reels: `turn`, `limp` (a leg shot off), `hurt` (a leg at a fifth),
 `drone`, `dronewreck`.
+
+## Weak points: what a VR pistol can hit (F2, playtest 1:04:22)
+
+Every weak point, every robot, as made (`weak_points::tests::every_robots_weak_points_are_big_and_marked` prints it). A VR pistol at arm's length holds about 0.55 deg (`VR_HOLD_DEG`); a weak point must subtend that at 25 m, so 0.24 m across (`WEAK_ACROSS`). Before, a walker's knee was 0.12 m (0.46 deg at 15 m, 0.28 at 25 m) and its eye 0.06 m deep.
+
+| Robot | Weak points | Across | At 15 m | At 25 m |
+|---|---|---|---|---|
+| Walker, grappler | eye, turret, 4 knees | 0.24 m | 0.92 deg | 0.55 deg |
+| Crawler | eye, emitter, 4 knees | 0.24 m | 0.92 deg | 0.55 deg |
+| Hound | eye, 4 knees | 0.24 m | 0.92 deg | 0.55 deg |
+| Heavy | 12 bolts | 0.24 m | 0.92 deg | 0.55 deg |
+| Drone | eye, gun, 4 rotors | 0.24 m | 0.92 deg | 0.55 deg |
+| Mender | core, eye, arm, 4 rotors | 0.24 m | 0.92 deg | 0.55 deg |
+| Sentry, spotter, sorter | eye | 0.24 m | 0.92 deg | 0.55 deg |
+| Pylon | eye | 0.36 m | 1.38 deg | 0.83 deg |
+| Dirigible | eye | 0.60 m | 2.29 deg | 1.38 deg |
+
+Not weak, by design: a walker's core (four rounds), every plate, a drone's body, the plough's and minelayer's hulls. Their hazard paint ("Warn", "Yellow") and the drones' beacons no longer wear orange (`weak_points::paint`; beacons are a cool white): on a robot, orange means shoot here and nothing else.
