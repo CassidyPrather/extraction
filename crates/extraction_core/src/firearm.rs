@@ -419,6 +419,10 @@ pub struct Firearm {
     /// state the gun's own jam leaves it.
     #[serde(default)]
     pub jam_next: Option<Malfunction>,
+    /// The next round struck is a dud, whatever the dice say (as
+    /// [`Self::jam_next`]).
+    #[serde(default)]
+    pub dud_next: bool,
     /// The magazine has slipped down in the well (a failure to feed): the
     /// bolt can't strip from it until it's tapped home.
     #[serde(default)]
@@ -515,6 +519,7 @@ impl Firearm {
             mode: 0,
             malfunction: None,
             jam_next: None,
+            dud_next: false,
             mag_unseated: false,
             mag_half: false,
             struck: None,
@@ -837,7 +842,7 @@ impl Firearm {
                         0.0
                     };
                 let (dud, hang) = self.primer(load);
-                if roll() < dud_chance + dud {
+                if std::mem::take(&mut self.dud_next) || roll() < dud_chance + dud {
                     self.struck = Some(c);
                     events.push(Event::Dud);
                     return events;
@@ -916,7 +921,7 @@ impl Firearm {
             return events;
         }
         let dud_chance = 0.002 + 0.02 * (1.0 - self.condition);
-        if roll() < dud_chance {
+        if std::mem::take(&mut self.dud_next) || roll() < dud_chance {
             // A dud stays chambered under a closed bolt: rack it out.
             self.chambers[0] = Some(Round::Live);
             self.set_chamber_load(0, self.fed);
@@ -2248,6 +2253,32 @@ mod tests {
             assert_eq!(gun.mag_unseated, dice.mag_unseated, "{kind:?}");
             assert_eq!(gun.chambers, dice.chambers, "{kind:?}");
         }
+    }
+
+    /// A dud asked for is the next round struck, and racking it out
+    /// clears it.
+    #[test]
+    fn a_dud_asked_for_is_the_next_round_struck() {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        gun.insert_magazine(Magazine {
+            family: "ak545".into(),
+            capacity: 30,
+            rounds: 10,
+            ..Default::default()
+        })
+        .unwrap();
+        rack(&mut gun);
+        gun.cycle_mode();
+        gun.cycle_mode();
+        gun.dud_next = true;
+        let ev = shoot(&mut gun);
+        assert!(ev.contains(&Event::Dud), "{ev:?}");
+        assert!(!fired(&ev));
+        assert_eq!(gun.struck, Some(0));
+        assert!(!gun.dud_next, "spent");
+        rack(&mut gun);
+        assert_eq!(gun.struck, None, "racked out");
+        assert!(fired(&shoot(&mut gun)));
     }
 
     #[test]
