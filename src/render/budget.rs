@@ -2018,6 +2018,13 @@ pub(crate) mod tests {
                     })
                     .unwrap_or_default();
                 *unnamed.entry(names.join(",")).or_default() += 1;
+                let path = w
+                    .get::<Mesh3d>(*e)
+                    .and_then(|m| w.resource::<AssetServer>().get_path(m.0.id()))
+                    .map_or("(made in code)".to_string(), |p| {
+                        p.path().to_string_lossy().to_string()
+                    });
+                *unnamed.entry(format!("mesh from {path}")).or_default() += 1;
             }
             if name == "(unnamed)" {
                 let mut at = *e;
@@ -2059,7 +2066,7 @@ pub(crate) mod tests {
         let mut u: Vec<_> = unnamed.into_iter().collect();
         u.sort_by(|a, b| b.1.cmp(&a.1));
         println!("unnamed roots' meshes by their own name:");
-        for (name, n) in u.iter().take(20) {
+        for (name, n) in u.iter().take(40) {
             println!("  {n:6}  {name}");
         }
     }
