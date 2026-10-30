@@ -279,6 +279,12 @@ pub fn not_carrying(missing: &[(&str, Option<&str>)]) -> String {
     format!("Truck: \"No {what} on you.{where_}\"")
 }
 
+/// A new career's first camp (`progression::new_career`): what you had in
+/// the training yard was the yard's (playtest 28 October: "none of the
+/// material from the tutorial has carried over").
+pub const NEW_CAREER_KIT: &str =
+    "Driver: \"The yard's kit stays at the yard. Yours is in the crate.\"";
+
 /// Back after going down (`progression::restate_after_fall`): the job's
 /// still there, and which way from the truck (or which valley).
 pub fn job_waiting(place: &str, where_: Option<&str>) -> String {
@@ -400,6 +406,7 @@ mod tests {
             fetch_short(2, 3, name),
             FETCH_WORN.into(),
             BROUGHT_DEAD.into(),
+            NEW_CAREER_KIT.into(),
             scout_not_seen(place),
             paid_nothing(&thanks(Some(place))),
             LETTER_HOME.into(),
