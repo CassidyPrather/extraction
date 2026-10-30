@@ -421,6 +421,27 @@ pub fn step_walker(
     ground: &mut impl FnMut(Vec3) -> f32,
     landed: &mut impl FnMut(Vec3),
 ) {
+    step_walker_walled(w, g, t, drive, dt, ground, landed, &mut |_, to| to);
+}
+
+/// How far short of a wall a foot comes down (m, at a walker's size): its
+/// pad, and a little air.
+pub const FOOT_OFF_WALL: f32 = 0.14;
+
+/// [`step_walker`], with `clear(from, to)` saying how far toward `to` a
+/// foot can go from `from` (the body, at hip height) before a wall: a foot
+/// never comes down inside one, it plants short of it (`wall_clear`).
+#[allow(clippy::too_many_arguments)]
+pub fn step_walker_walled(
+    w: &mut Walker,
+    g: &mut Gait,
+    t: &mut Transform,
+    drive: &Drive,
+    dt: f32,
+    ground: &mut impl FnMut(Vec3) -> f32,
+    landed: &mut impl FnMut(Vec3),
+    clear: &mut impl FnMut(Vec3, Vec3) -> Vec3,
+) {
     if dt <= 0.0 {
         return;
     }
@@ -540,7 +561,7 @@ pub fn step_walker(
         if nt >= 0.5 && !g.retargeted[i] {
             g.retargeted[i] = true;
             if !drive.down {
-                let p = ideal_xz(i);
+                let p = clear(Vec3::new(next.x, probe_y, next.z), ideal_xz(i));
                 f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
             }
         }
@@ -644,7 +665,7 @@ pub fn step_walker(
                 break;
             };
             need[i] = 0.0;
-            let p = ideal_xz(i);
+            let p = clear(Vec3::new(next.x, probe_y, next.z), ideal_xz(i));
             let f = &mut w.feet[i];
             f.from = f.planted;
             f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
@@ -809,6 +830,31 @@ pub fn step_walker(
     }
 }
 
+/// Where a foot aimed from `from` (the body, at hip height) at `to` can
+/// come down: short of the first wall in the way (`ray(from, dir, reach)`
+/// gives the distance and the normal of what it hits), [`FOOT_OFF_WALL`]
+/// off it. A floor-like hit (a slope rising under the ray) isn't a wall.
+pub fn wall_clear(
+    from: Vec3,
+    to: Vec3,
+    size: f32,
+    ray: impl FnOnce(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let flat = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
+    let len = flat.length();
+    let Ok(dir) = Dir3::new(flat) else {
+        return to;
+    };
+    let off = FOOT_OFF_WALL * size;
+    match ray(from, dir, len + off) {
+        Some((d, n)) if n.y.abs() < 0.6 => {
+            let keep = (d - off).clamp(0.0, len);
+            Vec3::new(from.x + dir.x * keep, to.y, from.z + dir.z * keep)
+        }
+        _ => to,
+    }
+}
+
 /// The walkable surface under `p` (probed from `p`, about hip height):
 /// steps, floors and kerbs by a ray down (`ray(from, reach)` gives the
 /// distance to what it hits), else the terrain. Below the terrain (an
@@ -945,7 +991,25 @@ pub(crate) fn walk(
         let mut landed = |at: Vec3| {
             steps.write(WalkerStep { at, by, yaw });
         };
-        step_walker(&mut w, &mut g, &mut t, &drive, dt, &mut ground, &mut landed);
+        // Walls: buildings, not rubble (a foot stands on that).
+        let walls = SpatialQueryFilter::from_mask([Layer::World]);
+        let mut clear = |from: Vec3, to: Vec3| {
+            wall_clear(from, to, size, |o, dir, reach| {
+                spatial
+                    .cast_ray(o, dir, reach, true, &walls)
+                    .map(|h| (h.distance, h.normal))
+            })
+        };
+        step_walker_walled(
+            &mut w,
+            &mut g,
+            &mut t,
+            &drive,
+            dt,
+            &mut ground,
+            &mut landed,
+            &mut clear,
+        );
         if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
             // Lying snow packs to ice under it: steep ground is treacherous.
             let ice = |p: Vec3| {
@@ -1355,6 +1419,106 @@ mod tests {
     /// Feet meet what's lying about: walking over a block of rubble
     /// (Destruction's debris layer), every foot that comes down on it
     /// stands on its top, neither floating nor sunk.
+    /// A foot aimed through a wall comes down short of it; a slope under
+    /// the ray isn't a wall; nothing in the way, it goes where it was aimed.
+    #[test]
+    fn a_foot_stops_short_of_a_wall() {
+        let from = Vec3::new(0.0, 1.0, 0.0);
+        let to = Vec3::new(1.05, 0.0, 0.0);
+        let wall = |_: Vec3, _: Dir3, _: f32| Some((0.7, Vec3::NEG_X));
+        let p = wall_clear(from, to, 1.0, wall);
+        assert!((p.x - (0.7 - FOOT_OFF_WALL)).abs() < 1e-4, "{p:?}");
+        assert_eq!(p.y, to.y);
+        let slope = |_: Vec3, _: Dir3, _: f32| Some((0.9, Vec3::new(-0.5, 0.86, 0.0)));
+        assert_eq!(wall_clear(from, to, 1.0, slope), to);
+        assert_eq!(wall_clear(from, to, 1.0, |_, _, _| None), to);
+    }
+
+    /// The playtest's walker through a wall (0:57:47): walked along a house
+    /// wall closer than its legs reach (its path is Robot minds', kept off
+    /// walls; this is the body's own guard, for when it's shoved or knocked
+    /// there), no foot ever comes down inside the wall.
+    #[test]
+    fn feet_never_land_in_a_wall() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        // A wall 0.5 m off its centre, along its way: its feet reach 1.05
+        // (0.74 to the side, at rest).
+        let wall = Vec3::new(at.x, 0.0, at.z + 0.5 + 0.15);
+        let half = Vec3::new(6.0, 1.5, 0.15);
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_xyz(wall.x, zone.ground(wall.x, wall.z) + half.y - 0.3, wall.z),
+        ));
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..20 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+            vec![Vec3::new(at.x + 5.0, 0.0, at.z)];
+        // (Where it was stood is spawning's; this is where it steps.)
+        let stood: Vec<Vec3> = app
+            .world()
+            .get::<Walker>(walker)
+            .unwrap()
+            .feet
+            .iter()
+            .map(|f| f.planted)
+            .collect();
+        let mut steps = 0;
+        for _ in 0..(90 * 6) {
+            app.update();
+            let w = app.world().get::<Walker>(walker).unwrap();
+            for f in w
+                .feet
+                .iter()
+                .filter(|f| f.alive && f.t >= 1.0 && !stood.contains(&f.planted))
+            {
+                let into = f.planted.z - (wall.z - half.z);
+                assert!(
+                    into < 0.0,
+                    "a foot came down {into:.2} m inside the wall at {:?}",
+                    f.planted
+                );
+                steps += 1;
+            }
+        }
+        let gone = app.world().get::<Transform>(walker).unwrap().translation.x - at.x;
+        assert!(gone > 2.0, "it walked along the wall ({gone:.1} m)");
+        assert!(steps > 100);
+    }
+
     #[test]
     fn feet_stand_on_rubble() {
         let mut app = crate::headless_app(

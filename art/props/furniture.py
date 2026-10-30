@@ -336,7 +336,8 @@ def workbench():
     # Steel angle frame: legs, rails under the top and over the shelf.
     for sx in (-1, 1):
         for sz in (-1, 1):
-            angle_iron(p, top0 - 0.011, (sx * 0.95, (top0 + 0.001) / 2, sz * 0.35), "y",
+            # Up to the top's underside (they stopped 5 mm short of it).
+            angle_iron(p, top0 - 0.006, (sx * 0.95, (top0 + 0.006) / 2, sz * 0.35), "y",
                        "Rusty", w=0.045, t=0.005, flip=(-sx, -sz))
             p.box((0.07, 0.006, 0.07), (sx * 0.925, 0.003, sz * 0.325), "Rusty")
     for sz in (-1, 1):

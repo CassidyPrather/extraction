@@ -262,7 +262,7 @@ for p in (bolt, trig, selector):
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.08, 0.0))
-empty("magwell", (0.0, 0.03, WELL_Z))
+empty("magwell", (0.0, 0.026, WELL_Z))
 
 # Where a sling attaches: the swivel on the stock's left ahead of the well, and the slot through the butt.
 empty("pt_sling_front", (-0.021, 0.006, -0.185))

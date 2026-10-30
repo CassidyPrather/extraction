@@ -374,7 +374,8 @@ fn grain_at(x: u32, y: u32) -> f32 {
 /// typical one, and it's a touch grainy. On a disc of 1.1 radii. With its
 /// glow: the same, but for a lift's, whose glow is its grooves alone (its
 /// grit lit too would wash them out to a plain lit disc in the dark).
-fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> (Handle<Image>, Handle<Image>) {
+fn mark_texture(images: &mut Assets<Image>, pattern: Pattern) -> (Handle<Image>, Handle<Image>) {
+    let spiral = pattern == Pattern::Spiral;
     let n = 256u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     let mut glow = Vec::with_capacity((n * n * 4) as usize);
@@ -395,7 +396,12 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> (Handle<Image>, Han
             let (px, py) = (u * 1.1, v * 1.1);
             let blot = 0.65 * value_noise(px * 4.0, py * 4.0, 1)
                 + 0.35 * value_noise(px * 9.0, py * 9.0, 2);
-            let tone = 0.45 + 0.55 * blot;
+            let mut tone = 0.45 + 0.55 * blot;
+            if pattern == Pattern::Veins {
+                // Burnt deeper along the arcs' branching paths out from
+                // its heart.
+                tone *= 1.0 - 0.7 * veins(px, py, r);
+            }
             let alpha = (1.0 - fall * fall * (3.0 - 2.0 * fall)) * (0.8 + 0.2 * blot);
             // A lift's ground is scoured in a spiral by what it spins:
             // rusty subsoil, grooved (a plain colour can't stand out on
@@ -444,6 +450,95 @@ fn mark_texture(images: &mut Assets<Image>, spiral: bool) -> (Handle<Image>, Han
     let colour = image(data);
     let glow = if spiral { image(glow) } else { colour.clone() };
     (colour, glow)
+}
+
+/// What a mark's ground is patterned with.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pattern {
+    /// Mottled.
+    Plain,
+    /// A lift's: scoured grooves, a bank of grit round the rim.
+    Spiral,
+    /// A snare's: burnt along branching paths out from its heart.
+    Veins,
+}
+
+/// Branching lines out from the heart, 0..1 (1 on a line): the paths an
+/// arc burns, forking as they go out. `r` in radii.
+fn veins(px: f32, py: f32, r: f32) -> f32 {
+    let a = py.atan2(px);
+    // Wandering, not ruled: the angle bent by noise, more further out.
+    let bend = 0.5 * value_noise(px * 3.0, py * 3.0, 6) + 0.25 * value_noise(px * 8.0, py * 8.0, 7);
+    let line = |n: f32, w: f32| {
+        let d = ((a + bend * r) * n * 0.5).sin().abs();
+        1.0 - smooth(0.0, w, d)
+    };
+    // Trunks from the heart; branches between them from a third out.
+    let trunks = line(7.0, 0.14);
+    let branches = line(19.0, 0.18) * smooth(0.3, 0.5, r) * value_noise(px * 5.0, py * 5.0, 8);
+    trunks.max(branches) * (1.0 - smooth(0.9, 1.0, r))
+}
+
+/// How a mark is lit of itself.
+#[derive(Clone, Copy)]
+enum MarkGlow {
+    /// Light pooled at its heart, falling off to its edge: what light cast
+    /// on the ground looks like (an even glow reads as a flat thing laid
+    /// on the grass: a carpet, a puddle).
+    Pool,
+    /// A sheen: light pooled at its heart over a glow to its edge (a
+    /// mirror's: by night it's the palest thing on the ground, out to
+    /// where it starts).
+    Sheen,
+    /// Coals: hot in patches, more of them toward its heart.
+    Coals,
+    /// Along a snare's veins, brightest near its heart.
+    Veins,
+}
+
+/// A mark's glow, on the same disc as its texture.
+fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
+    let n = 128u32;
+    let mut data = Vec::with_capacity((n * n * 4) as usize);
+    for y in 0..n {
+        for x in 0..n {
+            let u = (x as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let v = (y as f32 + 0.5) / n as f32 * 2.0 - 1.0;
+            let r = (u * u + v * v).sqrt() * 1.1;
+            let (px, py) = (u * 1.1, v * 1.1);
+            let blot = value_noise(px * 4.0, py * 4.0, 1);
+            let pool = (-2.5 * r * r).exp();
+            let g = match glow {
+                // A faint floor to the edge: in the dark, where it starts
+                // still shows.
+                MarkGlow::Pool => 0.2 + 0.8 * pool * (0.75 + 0.25 * blot),
+                MarkGlow::Sheen => 0.45 + 0.55 * pool * (0.75 + 0.25 * blot),
+                MarkGlow::Coals => {
+                    let spots = smooth(0.55, 0.72, value_noise(px * 7.0, py * 7.0, 5));
+                    // And its burning front, round its rim, as a grass
+                    // fire's edge glows: where it starts, by night too.
+                    let front = smooth(0.8, 0.9, r) * (1.0 - smooth(0.97, 1.01, r));
+                    let ragged = 0.45 + 0.55 * value_noise(px * 12.0, py * 12.0, 9);
+                    (spots * (0.3 + 0.7 * pool) + 0.1 * pool).max(0.85 * front * ragged)
+                }
+                MarkGlow::Veins => 0.15 + 0.85 * veins(px, py, r) * (0.3 + 0.7 * pool),
+            };
+            let g = if r > 1.02 { 0.0 } else { g };
+            let c = (g.clamp(0.0, 1.0) * 255.0) as u8;
+            data.extend_from_slice(&[c, c, c, 255]);
+        }
+    }
+    images.add(Image::new(
+        Extent3d {
+            width: n,
+            height: n,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    ))
 }
 
 /// Hermite step from `a` to `b`.
@@ -550,29 +645,37 @@ fn init_assets(
         ));
     let radial = radial_texture(&mut images);
     let dot = dot_texture(&mut images);
-    let (mark, _) = mark_texture(&mut images, false);
-    let (scoured, scoured_glow) = mark_texture(&mut images, true);
+    let (mark, _) = mark_texture(&mut images, Pattern::Plain);
+    let (scoured, scoured_glow) = mark_texture(&mut images, Pattern::Spiral);
+    let (veined, _) = mark_texture(&mut images, Pattern::Veins);
+    let pool = glow_texture(&mut images, MarkGlow::Pool);
+    let coals = glow_texture(&mut images, MarkGlow::Coals);
+    let sheen = glow_texture(&mut images, MarkGlow::Sheen);
+    let vein_glow = glow_texture(&mut images, MarkGlow::Veins);
     // Fogged as if half as far off, as the Zone's other things are
-    // (`MarkMaterial`); the shiny ones (fused, glazed) catch the light.
-    let mut ground_with = |tex: &Handle<Image>, c: Color, emissive: LinearRgba, rough: f32| {
-        marks.add(MarkMaterial {
-            base: StandardMaterial {
-                base_color: c,
-                base_color_texture: Some(tex.clone()),
-                emissive,
-                emissive_texture: Some(tex.clone()),
-                alpha_mode: AlphaMode::Blend,
-                perceptual_roughness: rough,
-                reflectance: if rough < 0.5 { 0.9 } else { 0.5 },
-                depth_bias: 50.0,
-                fog_enabled: false,
-                ..default()
-            },
-            extension: MarkFog {
-                reach: Vec4::new(MARK_FOG_REACH, 0.0, 0.0, 0.0),
-            },
-        })
-    };
+    // (`MarkMaterial`). Matte, every one: a glossy disc gives back the sky
+    // and reads as a puddle. Lit of itself as light on the ground is, or
+    // as coals are (`MarkGlow`), never evenly.
+    let mut ground_with =
+        |tex: &Handle<Image>, glow: &Handle<Image>, c: Color, emissive: LinearRgba, rough: f32| {
+            marks.add(MarkMaterial {
+                base: StandardMaterial {
+                    base_color: c,
+                    base_color_texture: Some(tex.clone()),
+                    emissive,
+                    emissive_texture: Some(glow.clone()),
+                    alpha_mode: AlphaMode::Blend,
+                    perceptual_roughness: rough,
+                    reflectance: 0.5,
+                    depth_bias: 50.0,
+                    fog_enabled: false,
+                    ..default()
+                },
+                extension: MarkFog {
+                    reach: Vec4::new(MARK_FOG_REACH, 0.0, 0.0, 0.0),
+                },
+            })
+        };
     // Scoured bare by the lift: raw rusty subsoil, grooved in a spiral by
     // what it spins, every loose thing on it and the turf itself taken up.
     // (A plain colour can't stand out on grass, ash and silt alike: pale
@@ -581,33 +684,42 @@ fn init_assets(
     // still shows.
     let flattened = ground_with(
         &scoured,
+        &scoured_glow,
         Color::srgba(1.0, 1.0, 1.0, 0.97),
         // (Its grooves darken it on the whole: the glow made up for that.)
         LinearRgba::rgb(0.065, 0.034, 0.015),
         0.95,
     );
-    let mut ground =
-        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, c, emissive, rough);
-    let scorch = ground(
+    // Charred black, its coals glowing in patches.
+    let scorch = ground_with(
+        &mark,
+        &coals,
         Color::srgba(0.03, 0.025, 0.02, 0.92),
-        LinearRgba::rgb(0.07, 0.01, 0.0),
+        LinearRgba::rgb(0.16, 0.025, 0.0),
         0.95,
     );
-    // Fused by the arcs: dark and glassy, still charged: a faint cold blue
-    // glow in it.
-    let glassy = ground(
-        Color::srgba(0.06, 0.07, 0.09, 0.88),
-        LinearRgba::rgb(0.0, 0.05, 0.16),
-        0.2,
+    // Burnt by the arcs: sooty, scorched deeper along the branching paths
+    // they take, which still glow a faint cold blue near its heart. (It
+    // was dark glass: it gave back the sky, a blue puddle.)
+    let glassy = ground_with(
+        &veined,
+        &vein_glow,
+        Color::srgba(0.07, 0.07, 0.08, 0.9),
+        LinearRgba::rgb(0.0, 0.08, 0.26),
+        0.85,
     );
-    // Glazed like still water under a mirror, giving back the sky.
-    // It holds a little light, like still water at dusk: in the dark it's
-    // the palest thing on the ground.
-    let glazed = ground(
+    // Bleached pale under a mirror, with a sheen to it, and a little light
+    // pooled at its heart: in the dark it's the palest thing on the
+    // ground. (It was glazed like still water: a puddle.)
+    let glazed = ground_with(
+        &mark,
+        &sheen,
         Color::srgba(0.46, 0.53, 0.64, 0.82),
-        LinearRgba::rgb(0.022, 0.026, 0.034),
-        0.06,
+        LinearRgba::rgb(0.04, 0.048, 0.062),
+        0.55,
     );
+    let mut ground =
+        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, &pool, c, emissive, rough);
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
     // Pale as ash, faintly so even in the dark.
@@ -620,14 +732,14 @@ fn init_assets(
     // snow: pale hoar on snow was no mark at all.)
     let frosted = ground(
         Color::srgba(0.22, 0.36, 0.62, 0.94),
-        LinearRgba::rgb(0.0, 0.012, 0.045),
-        0.4,
+        LinearRgba::rgb(0.0, 0.016, 0.06),
+        0.6,
     );
     // Pressed dark and hard, a faint violet in it (the well's own light:
     // in shadow and at night its edge still shows).
     let crushed = ground(
         Color::srgba(0.035, 0.03, 0.035, 0.95),
-        LinearRgba::rgb(0.02, 0.004, 0.05),
+        LinearRgba::rgb(0.03, 0.006, 0.075),
         0.95,
     );
     // (A lift's texture's colour is its own: lit by it, its pale grit
@@ -872,6 +984,9 @@ struct Arcs {
 }
 
 const ARC_SEGMENTS: usize = 7;
+/// How far past its edge the yard's snare reaches for metal in a hand
+/// (only to show it: it strikes from `SNARE_METAL_REACH`), metres.
+const BECKON: f32 = 2.0;
 const ARCS: usize = 5;
 
 struct System {
@@ -1249,11 +1364,14 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
                 + 0.15 * (t * 13.0).sin() * (t * 7.3).sin()
                 + 0.05 * (t * 31.0).sin()
         }
-        // Steady, with a crackle now and then.
+        // Steady, with a crackle now and then; spent, it goes dark and
+        // quiet, and its crackle comes back as it charges (what a thrown
+        // part did to it, and how long you have).
         AnomalyKind::Snare => {
             let tick = (t * 12.0).floor();
             let crack = ((tick * 12.9898).sin() * 43758.545).fract().abs();
-            0.55 + 0.3 * charge + if crack > 0.93 { 0.4 } else { 0.0 }
+            let crackle = if crack > 0.93 { 0.4 } else { 0.0 };
+            0.1 + 0.75 * charge + crackle * smooth(0.4, 0.8, charge)
         }
         // A slow, heavy throb.
         AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
@@ -1456,9 +1574,12 @@ fn jag(rng: &mut extraction_core::noise::Rng, from: Vec3, to: Vec3, rough: f32) 
 /// it discharges they reach out to its full radius, and to whatever it
 /// struck.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn snare_arcs(
     mut arcs: Query<(&mut Arcs, &Mesh3d, &ChildOf, &GlobalTransform)>,
-    anomalies: Query<(&Anomaly, &Look)>,
+    anomalies: Query<(&Anomaly, &Look, Has<crate::onboarding::Probed>)>,
+    held: Query<(&GlobalTransform, &Item), With<crate::interact::Held>>,
+    catalog: Res<Catalog>,
     mut meshes: ResMut<Assets<Mesh>>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
@@ -1469,7 +1590,7 @@ fn snare_arcs(
     let dt = time.delta_secs();
     let eye = eye_position(&heads, &locals, &cams);
     for (mut a, mesh, parent, gt) in &mut arcs {
-        let Ok((anomaly, look)) = anomalies.get(parent.parent()) else {
+        let Ok((anomaly, look, beckons)) = anomalies.get(parent.parent()) else {
             continue;
         };
         for r in &mut a.reaching {
@@ -1494,7 +1615,8 @@ fn snare_arcs(
         });
         let width = thin * (1.0 + 2.5 * look.flash);
         for _ in 0..ARCS {
-            if !rng.chance(0.25 + 0.75 * hot) {
+            // None at all while it's spent: dark and still until it charges.
+            if !rng.chance(((hot - 0.25) / 0.75).max(0.0)) {
                 continue;
             }
             let dir = Vec3::new(
@@ -1511,6 +1633,19 @@ fn snare_arcs(
                 paths.push((jag(&mut rng, from, fork, 0.15), width * 0.6));
             }
             paths.push((main, width));
+        }
+        // The yard's snare, charged, reaches for metal in a hand from
+        // further off than it can strike: this is the one to throw it at.
+        if beckons && anomaly.charge >= 1.0 {
+            for (g, item) in &held {
+                let to = g.translation() - gt.translation();
+                if to.length() < anomaly.radius + BECKON
+                    && catalog.get(item.kind()).tags.iter().any(|t| t == "metal")
+                    && rng.chance(0.5)
+                {
+                    paths.push((jag(&mut rng, Vec3::ZERO, to * 0.6, 0.14), thin * 1.2));
+                }
+            }
         }
         for (to, _) in a.reaching.clone() {
             paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), thin * 2.0));

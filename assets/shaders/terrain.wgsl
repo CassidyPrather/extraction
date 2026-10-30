@@ -533,7 +533,8 @@ fn fragment(
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
     // The terrain wets itself (above): no sky openness for the wet patch.
-    pbr_input.material.base_color.a = 0.0;
+    // Below zero: still under the open sky (`render::fog`, the room).
+    pbr_input.material.base_color.a = -1.0;
 
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);

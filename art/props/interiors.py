@@ -78,7 +78,9 @@ def winch():
         p.box((0.025, 0.36, 0.04), (x, 0.75 - 0.15, 0.0), "Iron",
               xf=T(x, 0.75, 0) @ RX(0.7 * sx) @ T(-x, -0.75, 0))
         a = 0.7 * sx
-        hy, hz = 0.75 - 0.3 * math.cos(a), 0.3 * math.sin(a)
+        # On the arm's end (RX(a) takes the arm's -Y to -z sin(a): the
+        # handles were on the shaft's other side, in the air).
+        hy, hz = 0.75 - 0.3 * math.cos(a), -0.3 * math.sin(a)
         rod(p, (x, hy, hz), (x + sx * 0.18, hy, hz), 0.018, "Timber", segs=6)
     p.cyl(0.17, 0.46, 0.49, "Iron", segs=16, xf=T(0, 0.75, 0) @ ALONG_X)
     rod(p, (0.475, 0.98, -0.3), (0.475, 0.9, -0.12), 0.015, "Iron", segs=5)
