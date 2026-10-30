@@ -2092,13 +2092,17 @@ pub(crate) mod tests {
         }
     }
 
-    /// What `blink::head_in_solid` costs at the busy moment's head, and
-    /// what an early-out query would (`cargo test --lib head_query_cost
-    /// -- --ignored --nocapture`).
+    /// What `blink::head_in_solid` costs at the busy moment's head (it
+    /// runs every frame): under a millisecond. A sphere tested against the
+    /// whole map's heightfield was 28 ms (blink alone was 25 ms of a 78 ms
+    /// main schedule); `world::sphere_in_world` asks the heightmap for the
+    /// ground instead. Prints what each query costs there, and which
+    /// colliders' boxes reach the head.
     #[test]
-    #[ignore = "bench: prints"]
-    fn head_query_cost() {
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_head_test_is_cheap() {
         use avian3d::prelude::*;
+        let _one_at_a_time = heavy();
         let mut app = busy_scene("marrow_creek");
         app.update();
         let w = app.world_mut();
@@ -2154,6 +2158,10 @@ pub(crate) mod tests {
         println!(
             "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
              a point {point:.3} ms ({hits} hits)"
+        );
+        assert!(
+            full < 1.0,
+            "head_in_solid {full:.3} ms a call: it runs every frame"
         );
         // Which colliders a head-sized box reaches, and the sphere test's
         // cost against each alone.
