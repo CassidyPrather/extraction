@@ -138,10 +138,10 @@ for sx in (-1, 1):
                  bevel=0.0006, segs=1)
 # The post screws into a drum across the block; the drum's ends show
 # below the ears, the post's flat-topped blade above. Its top is level
-# with the rear notch's floor (y 0.1066), on the eye line (`pt_sight`)
-# the game zeroes along: it stood 2 mm under it.
-barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1065),
-              (0.0012, 0.1068), (0.0, 0.1068)], "Blued", segs=14,
+# with the eye line (`pt_sight`, y 0.1071) the game zeroes along, 0.4 mm
+# over the rear notch's floor (its fillet's bottom, 0.1067) (`capture::sightline`): it stood 2 mm under.
+barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1068),
+              (0.0012, 0.1071), (0.0, 0.1071)], "Blued", segs=14,
              xf=T(0, 0, -0.601) @ RX(-math.pi / 2))
 barrel.cyl(0.0046, -0.0128, 0.0128, "Blued", segs=20, xf=T(0, 0.084, -0.6015) @ RY(math.pi / 2),
            chamfer=0.0006)
@@ -265,13 +265,16 @@ stock_prof = fillet([(0.019, 0.0765), (0.30, 0.036), (0.30, -0.086), (0.255, -0.
                      (0.025, 0.004), (0.019, 0.022)], [0.0, 0.0, 0.0, 0.02, 0.01, 0.0], 6)
 
 
-def stock_w(z, y):
+def stock_w(z, yc, h):
+    # Half widths at the belly and the comb: the comb a little narrower.
     k = 0.0165 + (z - 0.02) / 0.28 * 0.0045
-    return (-k, k)
+    return (k, k * 0.85)
 
 
+# Rounded across (a superellipse each few millimetres), not a slab with
+# bevelled edges: the extruded outline read as a plank at the cheek.
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.008, segs=4, width=stock_w)
+stock.stock(stock_prof, 0.0192, 0.2998, "Wood", stock_w, stations=90, segs=28, power=2.8)
 sc = Part("cut")
 # The AK-74's lightening grooves along both sides of the stock.
 for sx in (-1, 1):
@@ -322,6 +325,9 @@ butt.cut(bpc)
 # Sling loop on the left of the stock.
 loop = catmull([(0.255, -0.06), (0.262, -0.046), (0.276, -0.046), (0.283, -0.06)], 6, closed=False)
 butt.sweep(loop, section_rect(0.003, 0.003, 0.0008, segs=3), "Steel", xf=T(-0.022, -0.012, 0.0))
+# Its two studs into the wood, where the rounded stock falls away under it.
+for z in (0.255, 0.283):
+    butt.cyl(0.0016, -0.0235, -0.012, "Steel", segs=10, xf=T(0, -0.072, z) @ RY(math.pi / 2))
 
 # --- Moving parts -------------------------------------------------------------------------
 carrier = Part("bolt_carrier", origin=(0.0, 0.07, -0.14))
@@ -374,7 +380,7 @@ for p in (carrier, selector, trig):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, -0.69))
-empty("pt_sight", (0.0, 0.1068, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("magwell", (0.0, 0.0265, -0.1415))
 
 # Where a sling attaches: the front swivel on the gas block's left, the loop on the stock's left.

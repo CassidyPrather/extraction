@@ -123,19 +123,25 @@ static.lathe([(0.0039, MUZZLE + 0.003), (0.0045, MUZZLE + 0.001), (0.0068, MUZZL
               (0.0, -0.09)], "Blued", segs=40, xf=T(0, BORE, 0))
 # The front sight blade near the muzzle; the rear notch in the top strap.
 static.prism(fillet([(MUZZLE + 0.006, BORE + 0.006), (MUZZLE + 0.016, BORE + 0.006),
-                     (MUZZLE + 0.014, BORE + 0.0135), (MUZZLE + 0.0075, BORE + 0.0135)],
+                     (MUZZLE + 0.014, BORE + 0.0095), (MUZZLE + 0.0075, BORE + 0.0095)],
                     0.0008, 1), -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
 # The blade's base, a saddle on the barrel.
 static.prism(fillet([(MUZZLE + 0.004, BORE + 0.0062), (MUZZLE + 0.019, BORE + 0.0062),
                      (MUZZLE + 0.017, BORE + 0.0088), (MUZZLE + 0.006, BORE + 0.0088)],
                     0.0007, 2), -0.0026, 0.0026, "Blued", axis="x", bevel=0.0005, segs=2)
-# The rear sight: a hump on the top strap with a U notch.
+# The rear sight: a hump on the top strap, its U notch cut through it
+# (drawn in its outline, the caps were filled across the notch and the eye
+# saw no notch: `capture::sightline`). Its floor 0.4 mm under the eye line.
 rs = [(-0.0047, BORE + 0.0078), (0.0047, BORE + 0.0078), (0.0047, BORE + 0.0102),
-      (0.0038, BORE + 0.0116), (0.0017, BORE + 0.0116), (0.0015, BORE + 0.0098),
-      (0.0, BORE + 0.0091), (-0.0015, BORE + 0.0098), (-0.0017, BORE + 0.0116),
-      (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
-static.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0003, 0.0006, 0.0, 0.0006, 0.0003, 0.0006,
-                         0.0006], 3), 0.0, 0.0062, "Blued", axis="z", bevel=0.0003, segs=2)
+      (0.0038, BORE + 0.0116), (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
+rsight = Part("rear_sight")
+rsight.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0006, 0.0006], 3), 0.0, 0.0062, "Blued",
+             axis="z", bevel=0.0003, segs=2)
+rsc = Part("cut")
+rsc.prism(fillet([(-0.0015, BORE + 0.0091), (0.0015, BORE + 0.0091), (0.0015, BORE + 0.013),
+                  (-0.0015, BORE + 0.013)], [0.0006, 0.0006, 0.0, 0.0], 3),
+          -0.001, 0.0072, "Blued", axis="z")
+rsight.cut(rsc)
 # The ejector rod's housing under the barrel, a tube on a lug, and the
 # cylinder axis pin's head at the front of the frame.
 static.tube(0.0042, 0.0028, -0.165, -0.075, "Blued", segs=24, xf=T(0, CYL_Y - 0.004, 0),
@@ -283,14 +289,14 @@ trig = Part("trigger", origin=(0.0, 0.006, -0.02))
 trig.sweep(catmull([(-0.022, 0.004), (-0.026, -0.004), (-0.025, -0.012), (-0.021, -0.016)], 6,
                    closed=False), section_rect(0.0045, 0.003, 0.0011, 3), "Blued")
 
-join("static_frame", frame, static, grip, grip_check, worn={})
+join("static_frame", frame, static, rsight, grip, grip_check, worn={})
 for p in [cyl, hammer, gate, rod, trig]:
     make(p, worn={})
 for p in rounds:
     make(p)
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, BORE + 0.012, 0.012))
+empty("pt_sight", (0.0, BORE + 0.0095, 0.012))
 empty("pt_load_port", (0.016, gy, -0.012))
 
 report()

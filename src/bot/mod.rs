@@ -1405,6 +1405,7 @@ fn run_tasks(
             Task::Grab { item, side } => {
                 if hand(side).and_then(|h| h.holding) == Some(item) {
                     bot.walk = None;
+                    bot.sidesteps = 0;
                     bot.next();
                     continue;
                 }
@@ -1425,8 +1426,29 @@ fn run_tasks(
                 let at = gt.translation();
                 bot.look = at;
                 let flat = Vec2::new(at.x, at.z);
-                if pos.distance(flat) > REACH {
+                let d = pos.distance(flat);
+                if d > REACH {
                     bot.walk = Some(flat);
+                    // Up against something between it and the thing (a
+                    // wreck's hull, the drop rolled round the far side): a
+                    // step to the side, as for a walk, and round to it.
+                    if d < bot.progress.0 - 0.3 {
+                        bot.progress = (d, 0.0);
+                    } else {
+                        bot.progress.1 += dt;
+                    }
+                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 {
+                        let ahead = (flat - pos).normalize_or(Vec2::X);
+                        let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
+                        let step = pos + ahead.perp() * side * 1.8 + ahead * 0.6;
+                        bot.sidesteps += 1;
+                        bot.tasks.push_front(Task::WalkTo {
+                            to: step,
+                            within: SIDESTEP,
+                        });
+                        bot.restart();
+                        continue;
+                    }
                 } else if at.y - root.translation.y > STAND_REACH {
                     // Over its head, out of any hand's reach: it waits a
                     // little (it may come down), then gives up.
