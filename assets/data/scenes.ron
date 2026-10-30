@@ -437,8 +437,9 @@
         map: "marrow_creek",
         name: "Lev's chair",
         // After the ending (he's been down to the Depot with you): a chair
-        // by the well, facing her house.
-        at: (-26.0, 112.0),
+        // by the well, facing her house (off the lane bank's foot, whose
+        // rise tilted the ground under it).
+        at: (-27.0, 105.0),
         rot: 25.0,
         after: Some(Ended),
         pieces: [

@@ -26,6 +26,16 @@ it. Shots are kept in target/before_after/<sha>/ and taken again only
 when their arguments change. `--try BINARY` shoots the list with your
 own build only, into target/before_after/try/, to stage a line.
 
+`--dolly X,Y,Z,YAW,PITCH:X,Y,Z[:SECONDS[:FPS]]` in place of `--camera`
+shoots motion: the camera walks from the first point to the second (Y 0:
+eyes 1.7 m over the ground, as `--camera`), looking along YAW and PITCH
+all the way, at walking pace (1.4 m/s) unless SECONDS says, every frame
+saved at FPS (default 10) by `--cinematic` from one launch: an LOD pop or
+a flicker shows between frames, not in any one. On the sheet each half is
+a strip of DOLLY_STRIP frames down the walk (`--crop` crops each frame);
+the page plays the two walks side by side (`<name>_pair.mp4`, with
+ffmpeg), and every frame is kept in target/before_after/<sha>/<name>/.
+
 Out: target/before_after/<before>_<after>/sheet.jpg and index.html, a row
 a shot: its name, owner and what to look for over the before and the after.
 A shot that didn't come out is a grey tile with the end of its log, never
@@ -57,6 +67,7 @@ class Shot:
         self.args, self.crop = take_crop(args)
         self.before_args, before_crop = take_crop(before_args)
         self.crop = self.crop or before_crop
+        self.dolly = "--dolly" in self.args
 
 
 def take_crop(args):
@@ -67,6 +78,51 @@ def take_crop(args):
     i = args.index("--crop")
     box = tuple(int(v) for v in args[i + 1].split(","))
     return args[:i] + args[i + 2:], box
+
+
+# Frames down a dolly's walk on the sheet; walking pace (m/s) and frame
+# rate when the line doesn't say.
+DOLLY_STRIP = 6
+WALK = 1.4
+DOLLY_FPS = 10
+
+
+def take_dolly(args):
+    """(args without `--dolly SPEC`, the walk or None): (from x,y,z, to
+    x,y,z, yaw, pitch, seconds, fps)."""
+    if "--dolly" not in args:
+        return args, None
+    i = args.index("--dolly")
+    parts = args[i + 1].split(":")
+    a = [float(v) for v in parts[0].split(",")]
+    b = [float(v) for v in parts[1].split(",")]
+    if len(a) != 5 or len(b) != 3:
+        raise ValueError("--dolly wants X,Y,Z,YAW,PITCH:X,Y,Z[:SECONDS[:FPS]]")
+    dist = sum((p - q) ** 2 for p, q in zip(a[:3], b)) ** 0.5
+    secs = float(parts[2]) if len(parts) > 2 and parts[2] else max(dist / WALK, 1.0)
+    fps = int(parts[3]) if len(parts) > 3 and parts[3] else DOLLY_FPS
+    return args[:i] + args[i + 2:], (a[:3], b, a[3], a[4], secs, fps)
+
+
+def cine(walk):
+    """The walk as a one-shot `.cine` (`capture::cinematic`): written key
+    points, an even pace (no ease), the look held 60 m ahead."""
+    import math
+    a, b, yaw, pitch, secs, _ = walk
+    yaw, pitch = math.radians(yaw), math.radians(pitch)
+    # `--camera`'s yaw (`dev.rs`): -Z turned by -YAW about +Y.
+    d = (math.sin(yaw) * math.cos(pitch), math.sin(pitch), -math.cos(yaw) * math.cos(pitch))
+
+    def key(p):
+        if p[1] == 0:
+            at = f"{p[0]:.2f},~1.7,{p[2]:.2f}"
+            look = f"{p[0] + d[0] * 60:.2f},~{1.7 + d[1] * 60:.2f},{p[2] + d[2] * 60:.2f}"
+        else:
+            at = f"{p[0]:.2f},{p[1]:.2f},{p[2]:.2f}"
+            look = f"{p[0] + d[0] * 60:.2f},{p[1] + d[1] * 60:.2f},{p[2] + d[2] * 60:.2f}"
+        return f"  at {at}  look {look}\n"
+
+    return f"shot dolly dur={secs:.2f} ease=0\n" + key(a) + key(b)
 
 
 def parse(path):
@@ -100,6 +156,7 @@ def parse(path):
             args = shlex.split(fields[3])
             before = shlex.split(fields[4]) if len(fields) == 5 and fields[4] else args
             for a in (args, before):
+                take_dolly(take_crop(a)[0])
                 box = take_crop(a)[1]
                 if box is not None and (len(box) != 4 or box[0] >= box[2] or box[1] >= box[3]):
                     raise ValueError("--crop wants x0,y0,x1,y1 in pixels")
@@ -162,13 +219,32 @@ def shoot(binary, sha, shot, args, size):
         if os.path.exists(f):
             os.remove(f)
     data = tempfile.mkdtemp(prefix="before_after_")
-    env, argv = command(binary, list(args), png, size)
+    args, walk = take_dolly(take_crop(list(args))[0])
+    if walk:
+        frames = os.path.join(folder, shot.name)
+        shutil.rmtree(frames, ignore_errors=True)
+        os.makedirs(frames)
+        path = os.path.join(frames, "dolly.cine")
+        with open(path, "w") as f:
+            f.write(cine(walk))
+        # (`--frames`: the first shot's settle at its first pose. No
+        # `--screenshot` below, so no plain shot.)
+        args = [a for a in args]
+        if "--frames" not in args:
+            args += ["--frames", "60"]
+        args += ["--cinematic", path, "--capture-out", frames, "--fps", str(walk[5])]
+    env, argv = command(binary, args, png, size)
+    if walk:
+        i = argv.index("--screenshot")
+        argv = argv[:i] + argv[i + 2:]
     argv += ["--data-dir", data]
     run = subprocess.run(argv, env=env, cwd=ROOT, capture_output=True, text=True)
     shutil.rmtree(data, ignore_errors=True)
     log = (run.stdout + run.stderr).splitlines()
     with open(os.path.join(folder, shot.name + ".log"), "w") as f:
         f.write(" ".join(shlex.quote(a) for a in argv) + "\n\n" + "\n".join(log))
+    if walk:
+        strip(os.path.join(frames, "dolly"), png, shot.crop, walk[5])
     if not os.path.exists(png):
         why = [l for l in log if "panicked" in l or "ERROR" in l] or log[-3:] or ["no output"]
         code = {124: "timed out", 137: "killed (out of memory?)"}.get(run.returncode,
@@ -177,6 +253,44 @@ def shoot(binary, sha, shot, args, size):
     with open(stamp, "w") as f:
         f.write(key)
     return png, ""
+
+
+def strip(frames, png, crop, fps):
+    """A dolly's frames as one picture (DOLLY_STRIP of them down the walk,
+    each cropped), and as `<name>.mp4` beside it with ffmpeg."""
+    if not os.path.isdir(frames):
+        return
+    names = sorted(f for f in os.listdir(frames) if f.endswith(".png"))
+    if not names:
+        return
+    n = min(DOLLY_STRIP, len(names))
+    pick = [names[round(i * (len(names) - 1) / max(n - 1, 1))] for i in range(n)]
+    imgs = [Image.open(os.path.join(frames, f)).convert("RGB") for f in pick]
+    if crop:
+        imgs = [im.crop(crop) for im in imgs]
+    w, h = imgs[0].size
+    out = Image.new("RGB", (w, (h + 4) * n - 4), (24, 24, 24))
+    d = ImageDraw.Draw(out)
+    for i, (f, im) in enumerate(zip(pick, imgs)):
+        out.paste(im, (0, i * (h + 4)))
+        d.text((8, i * (h + 4) + 6), f"frame {int(f[1:6])}", fill=(255, 230, 120), font=font(max(14, h // 24)))
+    out.save(png)
+    if shutil.which("ffmpeg"):
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i",
+                        os.path.join(frames, "f%05d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                        "-crf", "20", png[:-4] + ".mp4"])
+
+
+def pair(b, a, out, name):
+    """The two walks side by side, `<name>_pair.mp4` in `out`, or None."""
+    vb, va = b[:-4] + ".mp4", a[:-4] + ".mp4"
+    if not (shutil.which("ffmpeg") and os.path.exists(vb) and os.path.exists(va)):
+        return None
+    dst = os.path.join(out, f"{name}_pair.mp4")
+    run = subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", vb, "-i", va, "-filter_complex",
+                          "[0:v]pad=iw+8:ih[l];[l][1:v]hstack", "-c:v", "libx264", "-pix_fmt",
+                          "yuv420p", "-crf", "20", dst])
+    return dst if run.returncode == 0 else None
 
 
 def font(size):
@@ -205,7 +319,8 @@ def sheet(rows, title, out):
     W, GAP, HEAD = 960, 12, 74
     H = W * 9 // 16
     big, small = font(26), font(17)
-    tiles = [(s, tile(*b, W, H, s.crop), tile(*a, W, H, s.crop)) for s, b, a in rows]
+    tiles = [(s, tile(*b, W, H, None if s.dolly else s.crop),
+              tile(*a, W, H, None if s.dolly else s.crop)) for s, b, a in rows]
     height = 70 + sum(HEAD + max(b.height, a.height) + 2 * GAP for _, b, a in tiles)
     img = Image.new("RGB", (2 * W + 3 * GAP, height), (24, 24, 24))
     d = ImageDraw.Draw(img)
@@ -239,8 +354,14 @@ def page(rows, title, out, copy):
 
     body = []
     for s, b, a in rows:
+        video = ""
+        if s.dolly and b[0] and a[0]:
+            mp4 = pair(b[0], a[0], out, s.name)
+            if mp4:
+                video = (f'<video src="{html.escape(os.path.basename(mp4))}" controls loop muted '
+                         f'autoplay playsinline></video><p>before | after, the walk as shot</p>')
         body.append(f"<h2>{html.escape(s.name)} <small>{html.escape(s.owner)}</small></h2>"
-                    f"<p>{html.escape(s.caption)}</p><div class=pair>"
+                    f"<p>{html.escape(s.caption)}</p>{video}<div class=pair>"
                     f"<figure>{pic('', 'before', *b)}<figcaption>before</figcaption></figure>"
                     f"<figure>{pic('', 'after', *a)}<figcaption>after</figcaption></figure></div>")
     with open(os.path.join(out, "index.html"), "w") as f:
@@ -248,7 +369,7 @@ def page(rows, title, out, copy):
 <style>body{{background:#181818;color:#eee;font:15px sans-serif;margin:16px}}
 h2{{color:#ffdc8c;margin:28px 0 4px}} small{{color:#aaa;font-weight:normal}}
 .pair{{display:grid;grid-template-columns:1fr 1fr;gap:10px}} img{{width:100%}}
-figure{{margin:0}} .none{{background:#464646;padding:20px;min-height:120px}}</style>
+figure{{margin:0}} video{{width:100%}} .none{{background:#464646;padding:20px;min-height:120px}}</style>
 <h1>{html.escape(title)}</h1>{''.join(body)}""")
 
 

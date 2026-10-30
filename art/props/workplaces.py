@@ -208,8 +208,11 @@ def washstand():
     for sz in (-1, 1):
         rod(p, (0.288, top - 0.12, sz * 0.13), (0.33, top - 0.12, sz * 0.13), 0.007, "Timber",
             segs=5)
+    # The towel draped over it: its fold on the rail, both halves hanging
+    # against it (they hung 3 mm clear of it).
+    p.box((0.024, 0.006, 0.2), (0.33, top - 0.12 + 0.01, 0.0), "Cream")
     for sx in (-1, 1):
-        p.box((0.004, 0.24, 0.2), (0.33 + sx * 0.011, top - 0.23, 0.0), "Cream",
+        p.box((0.004, 0.24, 0.2), (0.33 + sx * 0.0095, top - 0.23, 0.0), "Cream",
               xf=T(0.33, top - 0.12, 0) @ RZ(sx * 0.06) @ T(-0.33, -top + 0.12, 0))
     return [p]
 
