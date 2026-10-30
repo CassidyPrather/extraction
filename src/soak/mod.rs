@@ -21,8 +21,7 @@ mod physics;
 pub mod quiet;
 #[cfg(test)]
 mod save_fuzz;
-#[cfg(test)]
-mod stowed;
+pub mod stowed;
 
 #[cfg(test)]
 mod tests {
