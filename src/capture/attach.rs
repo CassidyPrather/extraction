@@ -465,7 +465,9 @@ pub fn slits(geo: &buildings::Geo) -> Vec<(usize, usize, f32, f32, Vec3)> {
                 Shape::Cylinder(r, h) => Vec3::new(2.0 * r, h, 2.0 * r),
             };
             let l = q.at.rotation.inverse() * (p - q.at.translation);
-            (l.abs() - s * 0.5).max_element() < -0.0005
+            // On a face counts: a crack's middle on the seam between two
+            // boxes that fill it (a wall's end and its corner cap).
+            (l.abs() - s * 0.5).max_element() < 0.0005
         })
     };
     let mut out = Vec::new();
@@ -816,26 +818,7 @@ mod tests {
     }
 
     /// Building faults waiting on their owners, by the start of their line.
-    const BUILDINGS_KNOWN: &[&str] = &[
-        // The first run's tally (30 October): cracks between the halls',
-        // depots', towers' and ruins' boxes, to close by their builders'
-        // rules as the gable's was (Models, next round).
-        "boxcar:",
-        "cabin_log_burnt:",
-        "chapel:",
-        "farmhouse_burnt:",
-        "farmhouse_damaged:",
-        "house_brick:",
-        "house_brick_burnt:",
-        "house_brick_damaged:",
-        "house_plank_burnt:",
-        "house_plank_damaged:",
-        "pump_station:",
-        "ranger_tower:",
-        "sawmill:",
-        "shop:",
-        "shop_burnt:",
-        "shop_damaged:",
-        "survey_tower:",
-    ];
+    /// Every prefab is crack-free (30 October, the third round): keep it
+    /// that way, and fix a new one in its builder.
+    const BUILDINGS_KNOWN: &[&str] = &[];
 }
