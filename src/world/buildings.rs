@@ -3233,9 +3233,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
         Mat::Concrete,
         false,
     );
+    // Its top under the walls' feet (2 cm below them, light showed under
+    // every wall: `capture::attach`).
     b.bx(
         Vec3::new(w + 0.4, 1.0, d + 0.4),
-        Vec3::new(0.0, f - 0.52, 0.0),
+        Vec3::new(0.0, f - 0.5, 0.0),
         Mat::Concrete,
     );
     b.shell(

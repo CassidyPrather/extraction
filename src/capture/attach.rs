@@ -299,8 +299,17 @@ pub fn detached(tris: &[[Vec3; 3]]) -> Vec<(Vec3, Vec3, f32)> {
 
 /// Models assembled from their parts in the game (a robot, an animal, the
 /// rig's slot pieces, a truck's one wheel), whose pieces are placed apart.
-pub fn assembled(folder: &str, _name: &str) -> bool {
+pub fn assembled(folder: &str, name: &str) -> bool {
     matches!(folder, "animals" | "robots" | "hands" | "kit")
+        // Landmarks and works dressing their buildings' boxes, and things
+        // hung on a wall: held by what the building draws round them.
+        // (A window's or a door's own pieces still hold each other: the
+        // playtest's latch floated off its casement.)
+        || (folder == "props"
+            && super::footing::exempt(name)
+            && !["rubble", "window_", "door_", "_burnt", "_charred", "ash_"]
+                .iter()
+                .any(|k| name.contains(k)))
 }
 
 /// Pieces too small to see from arm's length (m, their box's diagonal).
@@ -714,18 +723,13 @@ mod tests {
         "items/vest:",
         "props/armchair:",
         "props/bar_rack:",
-        "props/barometer:",
         "props/beam_charred:",
         "props/belongings_box:",
-        "props/blast_furnace_lod2:",
         "props/books_charred:",
         "props/bow_saw:",
-        "props/cap_hook:",
-        "props/cellar_crane_hook:",
         "props/cellar_vent:",
         "props/chair:",
         "props/charcoal_sack:",
-        "props/child_drawing:",
         "props/chopping_block:",
         "props/clothes_line:",
         "props/control_stand:",
@@ -739,38 +743,16 @@ mod tests {
         "props/dishes_broken:",
         "props/exercise_books:",
         "props/filter_unit:",
-        "props/fun_bull_wheel:",
         "props/gate_valve:",
         "props/gramophone:",
-        "props/headframe:",
         "props/kept_bicycle:",
-        "props/kept_bus:",
         "props/landing_net:",
-        "props/lead_hook:",
-        "props/lever_frame:",
         "props/locker:",
         "props/logbook:",
-        "props/mill_exterior:",
-        "props/mill_jaw_crusher:",
-        "props/mill_ore_bin:",
-        "props/mill_pump:",
-        "props/mill_race:",
-        "props/mill_race_lod1:",
-        "props/obs_bunk:",
-        "props/obs_radio:",
         "props/reading_glasses:",
         "props/rope_coil:",
-        "props/ropeway_pylon:",
-        "props/ropeway_pylon_down:",
-        "props/ropeway_pylon_down_lod1:",
-        "props/ropeway_pylon_down_lod2:",
-        "props/ropeway_station:",
-        "props/ropeway_station_lod1:",
-        "props/ropeway_station_lod2:",
         "props/sewing_machine:",
         "props/shelf_metal:",
-        "props/signal_box:",
-        "props/signal_flags:",
         "props/snowshoes:",
         "props/stash_stand:",
         "props/suitcase_open:",
@@ -778,15 +760,11 @@ mod tests {
         "props/table_burnt:",
         "props/terminal:",
         "props/till:",
-        "props/traps_hook:",
         "props/washstand:",
         "props/winch:",
         "props/woodpile:",
         "props/woodpile_lean:",
         "props/workbench:",
-        "props/wreck_lada:",
-        "props/wreck_lorry:",
-        "props/wreck_uaz:",
         "vehicles/bench:",
         "vehicles/stash_crate:",
         "vehicles/truck:",
@@ -844,10 +822,8 @@ mod tests {
         // depots', towers' and ruins' boxes, to close by their builders'
         // rules as the gable's was (Models, next round).
         "boxcar:",
-        "bus_depot:",
         "cabin_log_burnt:",
         "chapel:",
-        "factory_hall:",
         "farmhouse_burnt:",
         "farmhouse_damaged:",
         "house_brick:",
@@ -856,7 +832,6 @@ mod tests {
         "house_plank_burnt:",
         "house_plank_damaged:",
         "pump_station:",
-        "rail_shed:",
         "ranger_tower:",
         "sawmill:",
         "shop:",
