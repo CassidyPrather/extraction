@@ -1769,12 +1769,29 @@ fn clear_stoppage(bot: &mut Bot, mac: &mut GunMacro, gun_e: Entity, gun: &Gun) -
         bot.clearing = false;
         bot.note("cleared a stoppage".into());
     }
-    let Some(m) = gun.firearm.malfunction else {
-        return false;
+    let f = &gun.firearm;
+    // A round hanging fire: muzzle on the target, hands off, wait it out
+    // (racking it now would throw a live primer's round out burning).
+    if f.hang.is_some() {
+        bot.trigger = false;
+        return true;
+    }
+    // A dud under the hammer, in a gun a rack clears (a revolver's next
+    // press turns to the next chamber; a break-action's is the next
+    // barrel).
+    use extraction_core::firearm::ActionKind;
+    let rackable = matches!(
+        f.def.action,
+        ActionKind::SemiAuto | ActionKind::BoltAction | ActionKind::Pump
+    );
+    let what = match (f.malfunction, f.struck) {
+        (Some(m), _) => format!("{m:?}, {}", m.remedy()),
+        (None, Some(_)) if rackable => "a dud, tap-rack".to_owned(),
+        _ => return false,
     };
     bot.trigger = false;
     bot.clearing = true;
-    bot.note(format!("stoppage: {m:?}, {}", m.remedy()));
+    bot.note(format!("stoppage: {what}"));
     mac.start(gun_e, macro_steps(MacroKind::Rack, gun));
     true
 }

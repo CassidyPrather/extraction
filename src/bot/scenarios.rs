@@ -1177,10 +1177,11 @@ mod stoppage_tests {
     use super::*;
     use extraction_core::firearm::{Event as FireEvent, Malfunction};
 
-    /// The jam the test asks of the drill's gun, and whether it came.
+    /// The jam (or, with none, the dud) the test asks of the drill's
+    /// gun, and whether it came.
     #[derive(Resource)]
     struct Jam {
-        kind: Malfunction,
+        kind: Option<Malfunction>,
         asked: bool,
         came: bool,
     }
@@ -1195,12 +1196,16 @@ mod stoppage_tests {
             match ev.event {
                 FireEvent::Fired { .. } if !jam.asked => {
                     if let Ok(mut g) = guns.get_mut(ev.gun) {
-                        g.firearm.jam_next = Some(jam.kind);
+                        match jam.kind {
+                            Some(k) => g.firearm.jam_next = Some(k),
+                            None => g.firearm.dud_next = true,
+                        }
                         jam.asked = true;
                     }
                 }
+                FireEvent::Dud if jam.asked && jam.kind.is_none() => jam.came = true,
                 // (An open bolt only stovepipes, whatever's asked.)
-                FireEvent::Malfunctioned(_) if jam.asked => jam.came = true,
+                FireEvent::Malfunctioned(_) if jam.asked && jam.kind.is_some() => jam.came = true,
                 _ => {}
             }
         }
@@ -1209,7 +1214,7 @@ mod stoppage_tests {
     /// A drill's gun that jams mid-string is cleared the way its jam is
     /// cleared and the drill still passes: a worn gun's dice (seeded by
     /// where it lay, so any layout change re-rolls them) never decide a
-    /// scenario. Every magazine-fed drill, every jam.
+    /// scenario. Every magazine-fed drill, every jam and a dud.
     #[test]
     fn a_drill_gun_that_jams_still_finishes_its_drill() {
         let mut bad = Vec::new();
@@ -1221,9 +1226,11 @@ mod stoppage_tests {
             "marksman_drill",
         ] {
             for kind in [
-                Malfunction::FailureToEject,
-                Malfunction::FailureToFeed,
-                Malfunction::DoubleFeed,
+                Some(Malfunction::FailureToEject),
+                Some(Malfunction::FailureToFeed),
+                Some(Malfunction::DoubleFeed),
+                // A dud.
+                None,
             ] {
                 let mut app = crate::headless_app(
                     LaunchOptions {
