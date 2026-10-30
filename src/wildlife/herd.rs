@@ -897,7 +897,9 @@ mod tests {
     /// of them.
     #[test]
     fn bait_draws_them_and_hides_you_among_them() {
-        let (zone, nav, mut herd) = herd_in("marrow_creek", Kind::Deer);
+        // A 120 m open way in: the test field's meadow (a tight valley has
+        // none by design).
+        let (zone, nav, mut herd) = herd_in(extraction_core::map::TEST_FIELD_ID, Kind::Deer);
         let to = approach(&zone, &nav, herd.home) * 120.0 + herd.home;
         assert!(open(&nav, &zone, to));
         let ctx = Ctx {

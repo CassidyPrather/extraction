@@ -235,17 +235,26 @@ squeeze, or a press flat or a bot's, sends it to its other end.
   a part, its node drawn on it. Their origins and boxes are the models'
   own (`COUNTER_NODES`).
 - Windows: `window_sash` is split too (`frame`, `leaf_l`, `leaf_r`,
-  `fortochka`, each leaf with its latch), so its latch no longer hangs off
-  the frame. Its leaves don't swing yet: the panes are glazed per building
-  in its space, so a leaf would swing away from its glass. Next: each
-  pane owned by its leaf (the model's `glass_<leaf>_<n>` empties), glazed
-  on the leaf's entity, and the leaves put up as parts like the counters'.
+  `fortochka`, each leaf with its latch). An intact sash is drawn by its
+  `frame` (`dress_buildings`; a weathered one stays `window_sash_broken`,
+  shut, and a boarded one is always weathered), and `glass::glaze` hangs
+  its three leaves (`hinge::fit_sash`, `SASH_LEAVES`) on their hinges,
+  turned over so each swings into the room, up to `hinge::WINDOW_LEAF`
+  (100°). A leaf has no collider (a round or a thrown thing must reach
+  its glass): it's taken hold of within its half-diagonal of its middle.
+  Its pane rides on it: `Pane::rest` is where it hangs shut and
+  `Pane::leaf` its leaf; `glass::carry_panes` moves `world`/`inv` as the
+  leaf swings (without marking the pane changed), so rounds, fists and
+  blasts find it where it is now, while its key (`Pane::key`), the
+  `PaneGrid` cell and the glitter it leaves on the floor stay where it
+  hangs shut. The fixed top-right light stays in the frame.
 
 ## Drawing it
 
 One mesh per building draws all its panes whole (`Mat::Glass`), and one its
 broken panes' teeth in a paler, glinting shard material, rebuilt when a
-pane changes. Under each broken pane a scatter of small flat shards lies
+pane changes; a window's leaf has its own two, hung from it, so they
+swing with it. Under each broken pane a scatter of small flat shards lies
 on the floor (or the ground) on the side the glass fell (`Break::fell`;
 a restored pane's fell in), a few millimetres proud: what tells a window
 was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass

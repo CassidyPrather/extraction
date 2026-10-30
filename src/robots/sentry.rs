@@ -759,6 +759,7 @@ pub(crate) mod tests {
 
     pub(crate) fn world_with_sentry(at: [f32; 2], centre: f32, arc: f32) -> (App, Entity) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -834,7 +835,7 @@ pub(crate) mod tests {
     /// comes round it chirps, and only then, a second later, fires.
     /// The same player behind it is never seen, never shot.
     fn stand_and_watch(behind: bool, cut: bool) -> (bool, bool, f32) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<Acts>()
             .init_resource::<Hurts>()
@@ -921,7 +922,7 @@ pub(crate) mod tests {
             out.0.extend(shots.read().map(|s| s.seed));
         }
         let run = |pad: usize| {
-            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
             vr.app.init_resource::<Seeds>().add_systems(Update, seeds);
             for k in 0..pad {
                 vr.app.world_mut().spawn(Name::new(format!("pad {k}")));
@@ -972,7 +973,7 @@ pub(crate) mod tests {
         use crate::interact::GripRole;
         use crate::interact::tools::cutters::{JAWS, LEFT};
         use crate::rig::Side;
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
             let mut c = vr.app.world_mut().commands();
@@ -1092,7 +1093,7 @@ pub(crate) mod tests {
     /// heavy.
     #[test]
     fn a_heavy_walks_into_its_fire() {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<RobotHits>()
             .add_systems(Update, count_robot_hits);

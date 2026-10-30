@@ -6,9 +6,9 @@ shot mc_arrival gen=road index=0 from=0.03 to=0.18 height=2.6 dur=12 pitch=3
 
 # Over the gate, drifting up the valley.
 shot mc_aerial dur=14 ease=0.3 weather=clearing clear=2.5
-  at 40,~40,310  look 30,~5,180
-  at 35,~55,250  look 15,~5,110
-  at 25,~70,190  look 0,~5,40
+  at 22,~40,188  look 16,~5,98
+  at 17,~55,128  look 13,~5,78
+  at 12,~70,95  look -2,~5,8
 
 # Round the sawmill.
 shot mc_sawmill gen=orbit target=sawmill turns=0.3 dur=12
@@ -21,6 +21,6 @@ shot mc_tower gen=rise target=ranger_tower dur=10
 
 # Down the village street.
 shot mc_village dur=12
-  at 5,~1.8,160  look 5,~2,120
-  at 6,~2.2,135  look 5,~2,95
-  at 8,~3,110    look 2,~2,70
+  at 4,~1.8,95   look 2,~2,60
+  at 3,~2.2,80   look 0,~2,45
+  at 1,~3,65     look -2,~2,25

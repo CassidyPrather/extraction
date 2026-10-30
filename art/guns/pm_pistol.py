@@ -164,7 +164,7 @@ grip.lathe([(0.0, gzb + 0.0012), (0.0017, gzb + 0.0011), (0.0027, gzb + 0.0006),
            xf=T(0, -0.025, 0))
 grip_cut.box((0.006, 0.0007, 0.0014), (0.0, -0.025, gzb + 0.0012), "Steel")
 grip_check.checkering(grip_cut, grip_x, None, None, (-0.008, 0.034, -0.0405, 0.009),
-                      pitch=0.0019, depth=0.0005, mat="Bakelite")
+                      pitch=0.0019, depth=0.0007, mat="Bakelite")
 
 # Trigger guard: a large rounded loop (it hinges down for stripping).
 guard_path = catmull([
@@ -237,7 +237,7 @@ make(hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
 empty("pt_muzzle", (0.0, BORE_Y, -0.13))
-empty("pt_sight", (0.0, 0.079, 0.03))
+empty("pt_sight", (0.0, 0.0805, 0.03))
 empty("pt_port", (0.012, 0.068, -0.045))
 empty("magwell", MAGWELL, RX(-0.216))
 
