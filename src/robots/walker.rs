@@ -202,8 +202,9 @@ impl Plugin for WalkerPlugin {
 /// through a house wall (playtest, 28 October, 0:57:47; the gap is
 /// `walkers_keep_their_feet_out_of_walls`).
 pub const WALL_CLEARANCE: f32 = 1.6;
-/// ...for anything this big across, at its narrowest (m).
-pub const BIG: f32 = 2.0;
+/// ...for any building, and anything else this big across at its
+/// narrowest (m).
+pub const BIG: f32 = 3.0;
 /// The grid's cells are 2 m: a path between open ones can still pass
 /// nearer a wall than its cells' middles. Its corners are pushed out to
 /// this off every building ([`keep_off_walls`]) (m).
@@ -286,7 +287,10 @@ pub fn walker_grid(
         .filter(|p| !extraction_core::underground::is_site(&p.prefab))
     {
         let f = extraction_core::map::prefab_footprint(&p.prefab);
-        if f[0].min(f[2]) < BIG {
+        // A building of any size (walls, a way in), or anything big.
+        let building = !extraction_core::map::prefab_walls(&p.prefab).is_empty()
+            || !extraction_core::map::prefab_entrances(&p.prefab).is_empty();
+        if !building && f[0].min(f[2]) < BIG {
             continue;
         }
         g.block(

@@ -421,7 +421,7 @@ A grappler's line is **one at a time**. The first to spear you has you for 12 s 
 
 `intent_roster` holds every `spawn_*` in `robots/` to this. Spawned in front of you, each says it's seen you within 12 s, or it's excused on the roster with a reason (the mender mends machines; the plough keeps its lane).
 
-**A walker keeps its feet out of the walls** (0:57:47). Its feet stand 1.05 m from its middle, and it's kinematic, so nothing pushes it out of a wall. The grid kept it 0.6 m off. Walkers now path on `walker::walker_grid`, where buildings and anything 2 m or more across are kept 1.6 m off. Every outdoor path is then bent out to 1.3 m (`keep_off_walls`), because a path between 2 m cells cuts nearer than the cells' middles. `walkers_keep_their_feet_out_of_walls` checks paths round houses in all five valleys against the building boxes.
+**A walker keeps its feet out of the walls** (0:57:47). Its feet stand 1.05 m from its middle, and it's kinematic, so nothing pushes it out of a wall. The grid kept it 0.6 m off. Walkers now path on `walker::walker_grid`, where buildings of any size and anything else 3 m or more across are kept 1.6 m off. Every outdoor path is then bent out to 1.3 m (`keep_off_walls`), because a path between 2 m cells cuts nearer than the cells' middles. `walkers_keep_their_feet_out_of_walls` checks paths round houses in all five valleys against the building boxes.
 
 **How far they notice you, and how far a fight pulls** (P1, with Map design):
 - sight: walker 60 m (was 75), drone 70 (90), pylon 70 (85);

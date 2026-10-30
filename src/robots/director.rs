@@ -61,6 +61,9 @@ pub struct Director {
 pub const HEAT_GAP: f32 = 8.0;
 /// ...a point cools in this long (s)...
 pub const HEAT_COOL: f32 = 150.0;
+/// A noise of yours that carries this far is reported: any gunshot (the
+/// quietest carries `senses::GUNSHOT_REACH.0`), not a door or a step.
+pub const LOUD: f32 = super::senses::GUNSHOT_REACH.0;
 /// ...and from this much a response brings two walkers too.
 pub const ESCALATE: f32 = 2.5;
 
@@ -138,11 +141,11 @@ fn hear_reports(
             continue;
         }
         let by_player = n.source.is_some_and(|s| players.contains(s));
-        if by_player && n.radius > 150.0 && director.heat_gap <= 0.0 {
+        if by_player && n.radius >= LOUD && director.heat_gap <= 0.0 {
             director.heat += 1.0;
             director.heat_gap = HEAT_GAP;
         }
-        if by_player && n.radius > 150.0 && director.response_cooldown <= 0.0 {
+        if by_player && n.radius >= LOUD && director.response_cooldown <= 0.0 {
             let delay = director.rng.range(35.0, 70.0);
             director.queue_response(delay, n.at);
             director.response_cooldown = 45.0;

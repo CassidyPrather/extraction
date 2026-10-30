@@ -899,6 +899,10 @@ mod tests {
         ("search.rs", "the wrist's line pacing"),
         ("search.rs", "the brain it had last tick"),
         ("search.rs", "where it was last looking, for LostYou"),
+        (
+            "grappler.rs",
+            "whose line has you: one grappler's at a time, for its throw's cooldown",
+        ),
         // Changes nothing it does: only whether its return is told.
         (
             "search.rs",
