@@ -482,13 +482,19 @@ const COUNTER_NODES: &[CounterNode] = &[
     ),
 ];
 
-/// A counter node's origin in its model's space (`model#node`), if it's
-/// one we move.
-pub fn counter_node_origin(drawn: &str) -> Option<Vec3> {
+/// A moving node's origin in its model's space (`model#node`: a
+/// counter's, a window's leaf), if it's one we move.
+pub fn node_origin(drawn: &str) -> Option<Vec3> {
     COUNTER_NODES
         .iter()
         .find(|n| n.0 == drawn)
         .map(|n| Vec3::from(n.1))
+        .or_else(|| {
+            SASH_LEAVES
+                .iter()
+                .find(|n| n.0 == drawn)
+                .map(|n| Vec3::from(n.1))
+        })
 }
 
 /// How far a drawer pulls out (m: `DRAWER_TRAVEL`, the model's), and a
