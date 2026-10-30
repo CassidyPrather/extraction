@@ -569,6 +569,7 @@ fn a_poisoned_career_loads_whole_and_in_the_world() {
         rounds,
         charge_wh: f32::INFINITY,
         local: [f32::NAN, 0.0, 1.0e30],
+        turn: [0.0, 0.0, 0.0, 1.0],
         gun: None,
         inserted: Vec::new(),
         loads: Default::default(),

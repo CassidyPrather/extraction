@@ -1315,7 +1315,9 @@ impl Builder {
         let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
             .map(|i| {
                 let x = -len * 0.5 + w * (i as f32 + 0.5);
-                let m = ["counter_cabinet", "counter_drawers"][(i + pick) % 2];
+                // (Their doors and drawers are their own, moving:
+                // `hinge::fit_counters`.)
+                let m = ["counter_cabinet#carcass", "counter_drawers#carcass"][(i + pick) % 2];
                 (
                     m,
                     Transform::from_translation(at + front * Vec3::X * x)
@@ -5158,19 +5160,24 @@ fn target(b: &mut Builder) {
         Vec3::new(0.0, 1.2, 0.05),
         Mat::Canvas,
     );
+    // The steel plate: solid, so a round rings off it with a spark and
+    // leaves its mark (a plate drawn but not there let rounds through).
     b.piece(
         Shape::Cylinder(0.3, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.07)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
-        false,
+        true,
     );
+    // Its painted centre too: a bull's-eye's mark would be drawn over by
+    // a disc that isn't there. The round marks it and goes on to ring
+    // off the steel behind.
     b.piece(
         Shape::Cylinder(0.12, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.08)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::Plaster,
-        false,
+        true,
     );
     b.bx(
         Vec3::new(2.4, 1.0, 1.0),
@@ -5646,23 +5653,32 @@ pub fn spawn_door(commands: &mut Commands, root: Entity, d: DoorDef) -> Entity {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct DoorLeaf(pub DoorDef);
 
-/// Pressing a door toggles it; it swings over a second.
+/// Pressing a door toggles it; it swings over a second. (Not one a hand
+/// has hold of, nor one left part-way by a hand till it's toggled:
+/// `hinge`.)
+#[allow(clippy::type_complexity)]
 pub fn swing_doors(
+    mut commands: Commands,
     mut events: MessageReader<crate::interact::InteractEvent>,
     mut doors: Query<(
+        Entity,
         &mut Door,
         &mut Transform,
         &DoorLeaf,
         Has<crate::robots::doors::Wedged>,
         Option<&super::underground::PowerLocked>,
+        Has<super::hinge::Swinging>,
+        Option<&super::hinge::Resting>,
     )>,
     time: Res<Time>,
     mut raid: ResMut<crate::raid::Raid>,
 ) {
     for ev in events.read() {
         if let crate::interact::InteractEvent::Pressed { item, .. } = ev {
-            if let Ok((mut d, _, _, wedged, locked)) = doors.get_mut(*item) {
-                if wedged {
+            if let Ok((_, mut d, _, _, wedged, locked, held, _)) = doors.get_mut(*item) {
+                if held {
+                    // A hand's taking hold of it (`hinge::take_hold`).
+                } else if wedged {
                     raid.say("It won't budge: there's a wedge under it.");
                 } else if locked.is_some_and(|l| l.stage == super::underground::SEALED) {
                     raid.say("Bolted by the shelter's programme. It won't open again.");
@@ -5674,7 +5690,17 @@ pub fn swing_doors(
             }
         }
     }
-    for (mut d, mut t, leaf, _, _) in &mut doors {
+    for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+        if held {
+            continue;
+        }
+        if let Some(r) = resting {
+            if r.open == d.open {
+                continue;
+            }
+            // Toggled since it was left: it swings again.
+            commands.entity(e).remove::<super::hinge::Resting>();
+        }
         let target = if d.open { 1.0 } else { 0.0 };
         d.angle += (target - d.angle).clamp(-time.delta_secs() * 1.6, time.delta_secs() * 1.6);
         t.rotation = Quat::from_rotation_y(leaf.0.yaw + d.angle * 1.75);
@@ -6078,8 +6104,14 @@ pub fn dress_buildings(
         let mut sash = broken.iter();
         for d in &mut geo.props {
             for (name, _) in &mut d.models {
-                if *name == "window_sash" && sash.next() == Some(&true) {
-                    *name = "window_sash_broken";
+                // An intact one's leaves hang apart, to open
+                // (`hinge::fit_sash`): the building draws its frame.
+                if *name == "window_sash" {
+                    *name = if sash.next() == Some(&true) {
+                        "window_sash_broken"
+                    } else {
+                        super::hinge::SASH_FRAME
+                    };
                 }
             }
         }

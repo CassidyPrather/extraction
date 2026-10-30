@@ -93,13 +93,16 @@ pub const TAPES: &[TapeDef] = &[
         ],
         wear: 0.7,
     },
-    // A soldier, Marrow's south gate booth: it runs out mid-song.
+    // A soldier, Marrow's south gate booth: slow things for a night on
+    // the gate, and it runs out mid-song. (It was a dance mix: the first
+    // music anyone meets, by the insertion, it was "on the nose" and
+    // spoiled the valley's mood in the playtest of 28 October.)
     TapeDef {
         item: "tape_duty",
         labels: ["DUTY MIX 2", "DUTY MIX 2 B"],
         sides: [
-            &[take("dance_band"), take("ragtime")],
-            &[take("polka"), cut("ragtime", 35.0)],
+            &[take("greensleeves"), cut("fur_elise", 40.0)],
+            &[take("brahms_lullaby"), cut("greensleeves", 35.0)],
         ],
         wear: 0.6,
     },
@@ -127,6 +130,12 @@ pub const TAPES: &[TapeDef] = &[
         wear: 0.95,
     },
 ];
+
+/// Tunes too bright for where you first meet music in a valley: a dance
+/// band, ragtime, a polka, a folk waltz. Fine deeper in (an old man's
+/// lodge dances), wrong by the insertion, where they spoil the mood
+/// before the valley has set it (`radio::places`' test).
+pub const BRIGHT: &[&str] = &["dance_band", "ragtime", "polka", "waltz_folk"];
 
 /// The 78s: one tune a side, and the side that plays is the one up.
 #[derive(Debug)]

@@ -7,8 +7,9 @@
 //!   colour, a light, a shape you know), not only felt or shown on touch;
 //! - the part you put your hand to at least [`MIN_PART_DEG`] across from
 //!   [`SEEN_FROM`];
-//! - its claims true in the game: a kind that says the near ring shows
-//!   round it is on the item layer, where the hand's hover finds it.
+//! - its claims true in the game: a kind that says taking it shows (the
+//!   glove's tint near, the ring from afar) is on the item layer, where
+//!   the hand's hover finds it.
 //!
 //! Every interactable in every valley, the yard and the camp is classified
 //! by its components ([`kind_of`]); one that isn't a known kind fails, and
@@ -66,8 +67,9 @@ pub enum Cue {
     Lit,
     /// A shape that says what to do (a handle, a knob, a rung).
     Shape(&'static str),
-    /// The ring round it when an empty hand is near enough to take it, or
-    /// points at it from afar (`render::props::far_cue`).
+    /// Taking it shows: an empty hand near enough to take it tints the
+    /// glove (`render::props::tint_gloves`), and pointed at from afar it
+    /// has the ring round it (`render::props::far_cue`).
     Ring,
     /// The controller ticks on hover and clicks on use.
     Haptic,
@@ -391,6 +393,11 @@ mod tests {
                 .flatten()
                 .collect();
             for (e, t) in traits(w) {
+                // Folded away by the training yard till it's taught
+                // (`onboarding::Folded`): out of sight and reach on purpose.
+                if w.get::<crate::onboarding::Folded>(e).is_some() {
+                    continue;
+                }
                 let what = w.get::<Name>(e).map_or(format!("{e}"), |n| n.to_string());
                 let kind = match kind_of(&t) {
                     Ok(Some(k)) => k,

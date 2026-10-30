@@ -33,23 +33,23 @@ pub const PLACES: &[Place] = &[
     by(
         "marrow_creek",
         "tape_practice",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         0.45,
     ),
     by(
         "marrow_creek",
         "cassette_player",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         -0.5,
     ),
     // The south gate booth: the soldier's mix and his player.
-    by("marrow_creek", "tape_duty", [47.50, 284.40], 153.4, 0.3),
+    by("marrow_creek", "tape_duty", [29.50, 162.90], 153.4, 0.3),
     by(
         "marrow_creek",
         "cassette_player",
-        [47.50, 284.40],
+        [29.50, 162.90],
         153.4,
         -0.35,
     ),
@@ -105,7 +105,7 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "marrow_creek",
         what: Standing::Piano,
-        at: [-18.21, 19.08, 95.00],
+        at: [-20.41, 18.96, 63.50],
         rot: 90.0,
     },
     // Fiala's gramophone, on the lodge floor against the windowless log
@@ -268,6 +268,38 @@ mod tests {
 
     /// Everything laid finds a table, shelf or crate by its note: none of
     /// it lies on the floor.
+    /// The first music you meet is in the valley's mood: no tape lying
+    /// within [`FIRST_REACH`] of a map's insertion plays a bright tune
+    /// (`tapes::BRIGHT`).
+    #[test]
+    fn the_first_music_you_meet_is_in_the_mood() {
+        use extraction_core::music::tapes::{BRIGHT, TAPES};
+        const FIRST_REACH: f32 = 150.0;
+        let mut checked = 0;
+        for p in PLACES.iter().filter(|p| p.item.starts_with("tape_")) {
+            let zone = crate::world::Zone::load(p.map);
+            let near = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Insertion)
+                .any(|m| Vec2::from(m.at).distance(Vec2::from(p.at)) < FIRST_REACH);
+            if !near {
+                continue;
+            }
+            checked += 1;
+            let tape = TAPES.iter().find(|t| t.item == p.item).unwrap();
+            for take in tape.sides.iter().flat_map(|s| s.iter()) {
+                assert!(
+                    !BRIGHT.contains(&take.tune),
+                    "{} by {}'s insertion plays {}",
+                    p.item,
+                    p.map,
+                    take.tune
+                );
+            }
+        }
+        assert!(checked > 0, "no tape near an insertion was checked");
+    }
+
     #[test]
     fn everything_lies_on_a_surface() {
         let catalog =

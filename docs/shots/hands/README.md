@@ -91,3 +91,55 @@ Right, after: the right upper arm bound, the wrist raised; it reads BLEED
 and pages through the line said when the dressing went on, "That one's
 bound. You're still bleeding: the right thigh." (the old line was "The
 bleeding stops.").
+`21_body_and_thumb.jpg` (28 October playtest, transcript M1 and M2). Top,
+looking down (`--gallery kit+down`): before (left, `--body`, as the
+headset showed it whatever the setting) the sleeves, the jacket and the
+harness's straps, placed by guessing from a head and two hands; after
+(right, the default) the gloves and what you reach for on yourself (the
+pouches, the compass), nothing the IK can't back up. Bottom, the PM in
+the right glove from its left side (`fp:pm_pistol,1.6,90`): before, the
+thumb hooked across and into the frame; after, it lies forward along the
+frame under the slide.
+`22_gloves.jpg` (28 October playtest, M2: the hands are the most-seen
+model; `fp:open,2.4,90` and `fp:open,2.4,0`): top before, bottom after
+the first pass on `art/hands/gloves.py`. Rounder fingers (16 sides, fuller
+caps) and a finer palm; a leather patch over each fingertip; a moulded pad
+over each knuckle; the leather a shade lighter than the olive nylon, so
+palm and back read apart. Still to come: the back of the hand's panels
+and stitching, the thumb's shape, and the cuff.
+`23_glove_back.jpg` (`fp:open,2.4,270`, the back of the hand, the side
+you see most): left the glove before this wave, right after its second
+pass. A padded panel over the back of the hand with dark seams down its
+sides, a moulded pad on each knuckle, leather fingertips. (The block at
+the wrist is the display's housing, on each glove.)
+
+`24_glove_cuff.jpg` (`kit+down`, the default view, the cuff end to the
+eye as when reaching forward): left the third pass's first try, right
+after. The dome meant to close the cuff was scaled about a point back in
+the hand, so it ran in as a funnel and read as a hole; it now closes
+over the arm's end in leather. The third pass also tapers the thumb.
+
+`25_side_opening_pack.jpg` (`--gallery pack`, `pack+side`, flat mode):
+the pack swung off the left shoulder and held in front. Before, it hung
+with its straps to you and opened at the top, the lid thrown back at
+you. Now it's a panel loader: it hangs with its outer face to you,
+tipped up toward the eyes, and opens there. The cavity is lined a shade
+off the canvas, the dressing shows inside, and the front panel (with the
+big pocket on it) folds down from its bottom edge.
+
+`26_hips_upright.jpg` (`--gallery body+down+side`, BODY on): standing
+and looking down, from beside. The hips stay under the neck, and the
+belt, harness and pack sit over the planted feet. Before, the drawn
+spine ran up to a neck that followed the eyes forward when looking down,
+and walking let the hips hang back by up to 19 cm, so the body leaned
+(the 28 October playtest). The jacket isn't drawn here because it lies
+between the eyes and the floor (`render::clear_eyes`).
+
+`27_two_hand_pistol.jpg` (`fp:pm_pistol,1.6,0`, `,90`, `,300`): the PM
+in both hands (28 October playtest, M2: "I can't use both hands on the
+gun"). The left palm is cupped under the grip, drawn on the gun's cup
+point as the right is drawn on the grip, not at its controller a few
+centimetres off (`render::props` test
+`a_palm_cupping_a_pistol_is_drawn_on_its_cup`). From the eye, from the
+left, and from below right. Still rough: the left glove's fingertips
+pass a little into the right hand's at the front of the grip.

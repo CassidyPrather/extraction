@@ -21,6 +21,7 @@ pub mod lines;
 pub mod logbook;
 pub mod requests;
 pub mod route;
+pub mod slowed;
 pub mod truck;
 
 use bevy::prelude::*;
@@ -185,6 +186,7 @@ impl Plugin for RaidPlugin {
         .add_message::<RadioCall>()
         .add_message::<DepartRequest>()
         .add_message::<truck::DropEverything>()
+        .add_plugins(slowed::SlowedPlugin)
         .add_plugins((
             truck::TruckPlugin,
             bench::BenchPlugin,

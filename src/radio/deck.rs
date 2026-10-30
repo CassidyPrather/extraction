@@ -218,11 +218,14 @@ pub(super) fn mount_buttons(
     doors: Query<Entity, (With<DeckDoor>, Without<PokeButton>)>,
 ) {
     for e in keys.iter().chain(doors.iter()) {
-        commands.entity(e).insert(PokeButton {
-            target: e,
-            depth: 0.0,
-            down: false,
-        });
+        commands.entity(e).insert((
+            PokeButton {
+                target: e,
+                depth: 0.0,
+                down: false,
+            },
+            crate::interact::poke::OwnLook,
+        ));
     }
 }
 

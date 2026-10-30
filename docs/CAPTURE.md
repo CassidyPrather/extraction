@@ -105,6 +105,20 @@ Things that have bitten captures, and what now guards against them:
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
 
+## Textures first
+
+Materials, foliage cards, terrain and sky are made by
+`scripts/fetch_assets.py` and gitignored. Without them (or without a set
+added to the manifest since) the game draws flat fallback colours: guns
+with no gun metal. So a capture (`--cinematic`, `--sweep`, `--trailer`)
+or a `--screenshot` checks first, against `scripts/assets_manifest.json`,
+and stops with the missing files and the command that makes them
+(`capture::assets`). `scripts/build_at.sh`, and so the visual diff and
+the before/after rig, checks the same way with `scripts/check_textures.py`
+before it builds, because an old build predates the game's check but
+takes its textures from this checkout. `EXTRACTION_ALLOW_FALLBACK=1`
+shoots the fallback on purpose.
+
 ## Cinematics: `--cinematic FILE`
 
 The free camera flies each shot's spline. The spline is a centripetal
@@ -379,6 +393,19 @@ scripts/before_after.py LIST --check                             # read the list
 - **Pictures taken elsewhere:** `--picture FILE` in place of the arguments, for a fix the rig cannot stage. Marrow Creek's impostors were one: the software renderer's frames are too slow for the old build to give up on them.
 - **Small in frame:** `--crop x0,y0,x1,y1`, in pixels, crops both
   halves on the sheet only (the walkers at 15 m).
+- **In motion:** `--dolly X,Y,Z,YAW,PITCH:X,Y,Z[:SECONDS[:FPS]]` in place
+  of `--camera`. The camera walks a straight line between the two points,
+  looking along YAW and PITCH the whole way. Y 0 means eyes 1.7 m over the
+  ground, as with `--camera`. It moves at walking pace (1.4 m/s) unless
+  SECONDS is given, and saves a frame every 1/FPS s (default 10). Both
+  builds shoot the walk in one launch each: the rig writes a one-shot
+  `.cine` and runs `--cinematic`, which builds from before the tool have
+  too. On the sheet each half shows six frames down the walk; `--crop`
+  crops each frame. `index.html` plays the two walks side by side
+  (`<name>_pair.mp4`, with ffmpeg). Every frame is kept in
+  `target/before_after/<sha>/<name>/dolly/`. Use it for what shows only
+  between frames: an LOD pop, a flicker, a crossfade (`treeline_walk`).
+  The first frame settles for `--frames` (default 60) at its pose.
 - **Slow frames:** the software renderer takes seconds a frame. Give a
   big valley 150 frames or so; a run has 30 minutes. A bug that needs many
   fast frames (a give-up counted in frames) won't show here.

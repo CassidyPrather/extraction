@@ -451,6 +451,7 @@ fn press_camp(
     mut exit: MessageWriter<AppExit>,
     mut slot: Option<ResMut<crate::persist::SaveSlot>>,
     onboarding: Option<Res<crate::onboarding::Onboarding>>,
+    mut leaving: Option<ResMut<crate::rig::loading::Leaving>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -481,7 +482,13 @@ fn press_camp(
             CampCard::Title | CampCard::Career => {}
             CampCard::Training => {
                 raid.say("The driver nods at the yard. \"Take your time.\"");
-                leave(&opts, TRAINING_YARD, false, &mut exit);
+                leave(
+                    &opts,
+                    TRAINING_YARD,
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
             CampCard::NewCareer => {
                 let now = time.elapsed_secs();
@@ -495,7 +502,13 @@ fn press_camp(
                     if crate::persist::owns_profile(&opts) {
                         crate::persist::burn_career(&opts);
                     }
-                    leave(&opts, TRAINING_YARD, true, &mut exit);
+                    leave(
+                        &opts,
+                        TRAINING_YARD,
+                        true,
+                        &mut exit,
+                        leaving.as_deref_mut(),
+                    );
                 }
             }
             CampCard::PackUp => {
@@ -526,14 +539,27 @@ fn press_camp(
                     crate::persist::mark_trained(&opts);
                 }
                 raid.say("\"Right then.\" The engine turns over.");
-                leave(&opts, &crate::persist::next_valley(&opts), false, &mut exit);
+                leave(
+                    &opts,
+                    &crate::persist::next_valley(&opts),
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
         }
     }
 }
 
-/// End this session and open the game again in `map`.
-fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<AppExit>) {
+/// End this session and open the game again in `map` (in a headset,
+/// after the loading view has said where to: `rig::loading::Leaving`).
+fn leave(
+    opts: &LaunchOptions,
+    map: &str,
+    fresh: bool,
+    exit: &mut MessageWriter<AppExit>,
+    leaving: Option<&mut crate::rig::loading::Leaving>,
+) {
     info!(
         "camp: on to {map}{}",
         if fresh { " (new career)" } else { "" }
@@ -548,8 +574,14 @@ fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<
     } else {
         crate::request_restart(map);
     }
-    if !opts.headless {
-        exit.write(AppExit::Success);
+    if opts.headless {
+        return;
+    }
+    match leaving {
+        Some(leaving) => leaving.go(map),
+        None => {
+            exit.write(AppExit::Success);
+        }
     }
 }
 
@@ -567,7 +599,8 @@ fn camp_text(
             CampCard::Career => {
                 let mut t = format!("{}\n\n", zone.map.name.to_uppercase());
                 if raid.raids == 0 {
-                    t += "A new logbook.\n\n";
+                    // (The yard's kit was the yard's: `progression::lines`.)
+                    t += "A new logbook.\nThe yard's kit stayed in the yard.\n\n";
                 } else {
                     t += &format!(
                         "Raids: {}\nHome: {}   Lost: {}\nSurges seen: {}\n\n",
@@ -742,6 +775,97 @@ mod tests {
             o.map, TRAINING_YARD,
             "a new career starts in the yard again"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Playtest 28 October: "none of the material from the tutorial has
+    /// carried over". The yard's kit is the yard's (it saves nothing), and
+    /// the career says so; the career and its kit cross every restart
+    /// after, by the arguments the game really relaunches with.
+    #[test]
+    fn the_career_and_its_kit_cross_every_restart() {
+        let _restarts = crate::RESTART_TEST
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::take_restart();
+        let dir = std::env::temp_dir()
+            .join(format!("extraction-test-{}", std::process::id()))
+            .join("crossing");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let args: Vec<String> = ["--data-dir", dir.to_str().unwrap(), "--no-robots"]
+            .map(String::from)
+            .into();
+        let launch = |to: &crate::Restart| {
+            let o = LaunchOptions::parse(crate::relaunch_args(args.clone(), to));
+            assert_eq!(o.map, to.map);
+            open(o)
+        };
+        let stash = |app: &mut App| -> Vec<String> {
+            let catalog = app.world().resource::<crate::items::Catalog>().clone();
+            let bag = app
+                .world_mut()
+                .query_filtered::<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>()
+                .iter(app.world())
+                .next()
+                .map(|b| b.contents.clone())
+                .unwrap_or_default();
+            let mut ids: Vec<String> = bag
+                .iter()
+                .filter_map(|e| app.world().get::<crate::items::Item>(*e))
+                .map(|i| catalog.get(i.kind()).id.clone())
+                .collect();
+            ids.sort();
+            ids
+        };
+        let said = |app: &App, what: &str| {
+            app.world()
+                .resource::<Raid>()
+                .log
+                .iter()
+                .any(|(l, _)| l.contains(what))
+        };
+
+        // The yard, skipped (the cord leaves the same way).
+        let mut o = LaunchOptions::parse(args.clone());
+        crate::persist::choose_start(&mut o);
+        assert_eq!(o.map, TRAINING_YARD);
+        let mut yard = open(o);
+        let skip = card(&mut yard, CampCard::SkipYard).unwrap();
+        press(&mut yard, skip);
+        drop(yard);
+        let to = crate::take_restart().expect("on to the valley");
+
+        // The valley: a new career, its own kit in the crate, and told the
+        // yard's stayed behind.
+        let mut valley = launch(&to);
+        for _ in 0..200 {
+            valley.update();
+        }
+        let kit = stash(&mut valley);
+        assert!(kit.iter().any(|i| i == "pm_pistol"), "{kit:?}");
+        assert!(
+            said(&valley, "yard's kit stays at the yard"),
+            "{:?}",
+            valley.world().resource::<Raid>().log
+        );
+        // Something of its own, and a raid behind it; saved.
+        valley.world_mut().resource_mut::<Raid>().raids = 3;
+        valley.world_mut().write_message(crate::persist::SaveNow);
+        valley.update();
+        drop(valley);
+
+        // Valley to valley (the route card, a death's drive home: the same
+        // restart): the career and the kit arrive, and nothing's said.
+        crate::request_restart(&to.map);
+        let to = crate::take_restart().unwrap();
+        let mut again = launch(&to);
+        for _ in 0..200 {
+            again.update();
+        }
+        assert_eq!(again.world().resource::<Raid>().raids, 3, "the career");
+        assert_eq!(stash(&mut again), kit, "the kit");
+        assert!(!said(&again, "yard's kit"), "said once, to a new career");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

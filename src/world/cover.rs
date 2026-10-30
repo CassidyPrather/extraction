@@ -327,7 +327,11 @@ fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
     let sedge = s.kind == CoverKind::Sedge;
     let blades = if sedge { 10 } else { 6 + r.below(5) };
     let (tall, width) = if sedge { (0.55, 0.014) } else { (0.27, 0.011) };
-    let dry = r.f32();
+    // Dry and green by the patch, tens of metres across (straw-dry
+    // stretches, lusher ones), not tuft by tuft at random: evenly mixed,
+    // a field read as one carpet pasted across it.
+    let patch = extraction_core::noise::fbm(s.pos[0] / 55.0, s.pos[2] / 55.0, 0x0D21, 3, 0.5);
+    let dry = (r.f32() * 0.3 + (patch * 0.6 + 0.5) * 0.7).clamp(0.0, 1.0);
     // The root takes the ground's own olive, so a tuft grows out of the
     // sward instead of sitting on it as a dark dot.
     let root = lin(Color::srgb(0.2, 0.21, 0.11));
@@ -340,7 +344,7 @@ fn tuft(b: &mut Builder, s: &CoverSpot, burnt: bool) {
         }
     } else if sedge {
         lin(Color::srgb(0.36, 0.39, 0.22))
-    } else if dry < 0.3 {
+    } else if dry > 0.6 {
         lin(Color::srgb(0.58, 0.53, 0.36))
     } else {
         lin(Color::srgb(0.4 + 0.12 * dry, 0.45, 0.25))

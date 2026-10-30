@@ -123,9 +123,12 @@ struct Flap {
 }
 
 /// A piece of worn kit, shown only while its player wears the thing (or,
-/// for the harness's chest panel, only while they don't wear a vest).
+/// for the harness's chest panel, only while they don't wear a vest). The
+/// harness's straps and panel show only with the body drawn
+/// (`Comfort::body`): without the body under them they hang in the air.
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 enum WornPiece {
+    Harness,
     Vest,
     /// The plate in the vest's front (0) or back (1) pocket.
     Plate(usize),
@@ -140,11 +143,12 @@ struct WornBy {
 }
 
 impl WornPiece {
-    fn shown(self, worn: &Worn) -> bool {
+    fn shown(self, worn: &Worn, body: bool) -> bool {
         match self {
+            WornPiece::Harness => body,
             WornPiece::Vest => worn.vest.is_some(),
             WornPiece::Plate(i) => worn.vest.is_some() && worn.plates[i].is_some(),
-            WornPiece::Panel => worn.vest.is_none(),
+            WornPiece::Panel => body && worn.vest.is_none(),
             WornPiece::Helmet => worn.helmet.is_some(),
         }
     }
@@ -320,7 +324,9 @@ fn wear_kit(
         let worn = |piece| WornBy { player, piece };
         if let Some(h) = rig.as_deref().and_then(|r| ModelNode::find(r, "harness")) {
             let at = hang(&mut commands, t, h, None);
-            commands.entity(at).insert(Leans(Transform::IDENTITY));
+            commands
+                .entity(at)
+                .insert((worn(WornPiece::Harness), Leans(Transform::IDENTITY)));
         }
         if let Some(h) = rig
             .as_deref()
@@ -408,10 +414,15 @@ fn wear_kit(
 
 /// Worn kit shows while it's worn: the vest (and the plates in it) in
 /// place of the harness's chest panel, the helmet on the head.
-fn show_worn(worn: Query<&Worn>, mut pieces: Query<(&WornBy, &mut Visibility)>) {
+fn show_worn(
+    worn: Query<&Worn>,
+    mut pieces: Query<(&WornBy, &mut Visibility)>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+) {
+    let body = comfort.as_deref().is_none_or(|c| c.body);
     for (by, mut v) in &mut pieces {
         let w = worn.get(by.player).copied().unwrap_or_default();
-        v.set_if_neq(if by.piece.shown(&w) {
+        v.set_if_neq(if by.piece.shown(&w, body) {
             Visibility::Inherited
         } else {
             Visibility::Hidden
@@ -521,11 +532,15 @@ mod tests {
             ..default()
         };
         use WornPiece::*;
-        let shown = |w: &Worn| [Vest, Plate(0), Plate(1), Panel, Helmet].map(|p| p.shown(w));
+        let shown = |w: &Worn| [Vest, Plate(0), Plate(1), Panel, Helmet].map(|p| p.shown(w, true));
         assert_eq!(shown(&bare), [false, false, false, true, false]);
         assert_eq!(shown(&vest), [true, true, false, false, false]);
         // Plates without a vest (a stale pocket) don't hang in the air.
         assert_eq!(shown(&helmet), [false, false, false, true, true]);
+        // Without the body drawn, the harness's straps and panel go (they'd
+        // hang in the air); what's worn stays.
+        assert!(!Harness.shown(&bare, false) && !Panel.shown(&bare, false));
+        assert!(Harness.shown(&bare, true) && Vest.shown(&vest, false));
     }
 
     /// Every slot kind that draws something has its piece and both flaps,

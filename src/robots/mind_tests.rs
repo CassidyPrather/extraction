@@ -18,6 +18,7 @@ fn listen(mut s: MessageReader<Searching>, mut heard: ResMut<Heard>) {
 
 fn app(weather: Option<&str>) -> (App, Entity, Zone) {
     app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         weather: weather.map(Into::into),
         ..Default::default()
@@ -350,34 +351,48 @@ fn crouched_in_grass_in_fog_at_30m_you_are_not_seen() {
 /// walls, not just open field.
 #[test]
 fn a_search_takes_in_doorways_and_cover() {
-    let (app, _, _) = app(None);
+    // A valley's own doors (the test field gets none of the valleys'
+    // dressing, and its first door is the depot's ramp).
+    let (app, _, _) = app_with(crate::LaunchOptions {
+        robots: false,
+        map: "marrow_creek".into(),
+        ..Default::default()
+    });
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    // A door with open ground before it (which comes first in the list
-    // depends on the valley's buildings).
+    // Every door with open ground before it, whichever the valley's
+    // buildings are (one picked by its place in the list broke each time
+    // they changed).
     let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
-    let door = e
-        .doors
-        .iter()
-        .find(|d| {
-            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
-                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
-        })
-        .expect("a door with open ground before it");
-    let at = door.mid + door.out * 6.0;
-    let spots = plan_search(
-        at,
-        10.0,
-        at + Vec3::X * 20.0,
-        super::indoor::NavRef::Zone(&nav),
-        e,
-    );
-    assert!(spots.len() >= 2, "{spots:?}");
+    let mut tried = 0;
+    let mut short = vec![];
+    for door in e.doors.iter().filter(|d| {
+        (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+            && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+    }) {
+        tried += 1;
+        let at = door.mid + door.out * 6.0;
+        let spots = plan_search(
+            at,
+            10.0,
+            at + Vec3::X * 20.0,
+            super::indoor::NavRef::Zone(&nav),
+            e,
+        );
+        // A doorway: this one, or a nearer one (a row of houses).
+        let doorway = spots.iter().any(|s| {
+            e.doors
+                .iter()
+                .any(|d| flat(*s - (d.mid + d.out * 1.8)) < 0.5)
+        });
+        if spots.len() < 2 || !doorway {
+            short.push(format!("{:.0}: {spots:?}", door.mid));
+        }
+    }
+    assert!(tried >= 5, "doors with open ground before them: {tried}");
     assert!(
-        spots
-            .iter()
-            .any(|s| flat(*s - (door.mid + door.out * 1.8)) < 0.5),
-        "the doorway: {spots:?}"
+        short.is_empty(),
+        "searches that missed the doorway or its cover: {short:#?}"
     );
 }
 
@@ -975,6 +990,7 @@ fn lit_torch(app: &mut App, me: Vec3) -> Entity {
 #[test]
 fn at_night_you_are_unseen_until_you_light_a_torch() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         hour: Some("night".into()),
         ..Default::default()
@@ -3147,6 +3163,7 @@ fn watchers_near(app: &mut App, at: Vec3) -> usize {
 #[test]
 fn a_fresh_career_is_unaffected_by_memory() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3239,6 +3256,7 @@ fn a_raid_is_remembered() {
 #[test]
 fn a_walker_is_left_watching_where_you_killed_one() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3280,6 +3298,7 @@ fn a_walker_is_left_watching_where_you_killed_one() {
 #[test]
 fn a_sentry_minds_your_favourite_rendezvous() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -5221,4 +5240,164 @@ fn a_walker_walking_back_past_you_is_told_well_before() {
     let firsts = app.world().resource::<crate::onboarding::firsts::Firsts>();
     assert!(firsts.met(crate::onboarding::firsts::First::ComingToLook));
     assert!(said_coming_back(&app), "the wrist says it's coming back");
+}
+
+/// Playtest, 28 October, 0:57:47: a walker through a house wall. Its feet
+/// stand `anim::FOOT_RADIUS` out from its middle; in every valley, a walker's
+/// paths round the buildings keep its middle at least that (and a hand's
+/// breadth) off every building's walls.
+#[test]
+fn walkers_keep_their_feet_out_of_walls() {
+    const GAP: f32 = super::anim::FOOT_RADIUS + 0.1;
+    let mut worst: Vec<String> = vec![];
+    for map in [
+        "marrow_creek",
+        "cinder_works",
+        "kettle_pass",
+        "rime_fell",
+        "sallow_reservoir",
+    ] {
+        let (app, _, zone) = app_with(crate::LaunchOptions {
+            robots: false,
+            map: map.into(),
+            ..Default::default()
+        });
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let shells = app
+            .world()
+            .resource::<super::doors::Entrances>()
+            .shells
+            .clone();
+        // From the middle of each box: (local point, half extents).
+        let off_wall = |p: Vec2| {
+            shells
+                .iter()
+                .map(|s| {
+                    let l = s.xf.compute_affine().inverse().transform_point3(Vec3::new(
+                        p.x,
+                        s.xf.translation.y,
+                        p.y,
+                    ));
+                    let dx = (l.x.abs() - s.half.x).max(0.0);
+                    let dz = (l.z.abs() - s.half.y).max(0.0);
+                    Vec2::new(dx, dz).length()
+                })
+                .fold(f32::MAX, f32::min)
+        };
+        let mut rng = extraction_core::noise::Rng::new(28);
+        let mut least = (f32::MAX, Vec2::ZERO);
+        // Round each house: from one side of it to the other.
+        for s in shells.iter().take(60) {
+            let c = s.xf.translation.xz();
+            let r = s.half.length() + 8.0;
+            for _ in 0..2 {
+                let a = rng.range(0.0, std::f32::consts::TAU);
+                let from = c + Vec2::new(a.cos(), a.sin()) * r;
+                let to = c - Vec2::new(a.cos(), a.sin()) * r;
+                if !nav.walkable(from.to_array()) || !nav.walkable(to.to_array()) {
+                    continue;
+                }
+                let Some(path) = nav.path(from.to_array(), to.to_array()) else {
+                    continue;
+                };
+                // As a walker follows it (`walker_brain`).
+                let path = super::walker::keep_off_walls(
+                    path.iter()
+                        .skip(1)
+                        .map(|q| Vec3::new(q[0], 0.0, q[1]))
+                        .collect(),
+                    Vec3::new(from.x, 0.0, from.y),
+                    &shells,
+                );
+                let mut last = from;
+                for q in path.iter().map(|q| q.xz()) {
+                    let n = (last.distance(q) / 0.25).ceil().max(1.0) as usize;
+                    for k in 0..=n {
+                        let p = last.lerp(q, k as f32 / n as f32);
+                        let d = off_wall(p);
+                        if d < least.0 {
+                            least = (d, p);
+                        }
+                    }
+                    last = q;
+                }
+            }
+        }
+        let _ = &zone;
+        if least.0 < GAP {
+            worst.push(format!(
+                "{map}: {:.2} m off a wall at {:.0}",
+                least.0, least.1
+            ));
+        }
+    }
+    assert!(
+        worst.is_empty(),
+        "walker paths closer than {GAP:.2} m to a building: {worst:?}"
+    );
+}
+
+/// Map design's hot zones cap how far their guards see (`Region::notice`,
+/// playtest P1): a walker standing in a region capped at 20 m doesn't make
+/// you out at 30 m in the open by day; the same walker, uncapped, does.
+#[test]
+fn a_hot_zones_guards_see_their_own_ground() {
+    let sees = |cap: Option<f32>| {
+        let (mut app, player, zone) = app(None);
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let spot = (0..400)
+            .map(|i| {
+                let a = i as f32 * 2.399;
+                let r = 20.0 + i as f32 * 0.6;
+                zone.on_ground(a.cos() * r, a.sin() * r)
+            })
+            .find(|p| {
+                let post = zone.on_ground(p.x, p.z + 30.0);
+                nav.walkable([p.x, p.z])
+                    && nav.walkable([post.x, post.z])
+                    && (post.y - p.y).abs() < 1.0
+                    && nav.line_clear([p.x, p.z], [post.x, post.z])
+                    && zone.forest_cover(p.x, p.z) < 0.2
+                    && zone.forest_cover(post.x, post.z) < 0.2
+            })
+            .expect("open ground somewhere");
+        let post = zone.on_ground(spot.x, spot.z + 30.0);
+        if let Some(cap) = cap {
+            // A hot zone round the walker's post.
+            let mut map = (*zone.map).clone();
+            let (x, z) = (post.x, post.z);
+            map.regions.insert(
+                0,
+                extraction_core::map::Region {
+                    name: "Hot".into(),
+                    polygon: vec![
+                        [x - 10.0, z - 10.0],
+                        [x + 10.0, z - 10.0],
+                        [x + 10.0, z + 10.0],
+                        [x - 10.0, z + 10.0],
+                    ],
+                    danger: 2,
+                    loot: None,
+                    notice: Some(cap),
+                },
+            );
+            app.insert_resource(Zone {
+                map: std::sync::Arc::new(map),
+                hm: zone.hm.clone(),
+            });
+        }
+        put(&mut app, player, spot);
+        let walker = walker_at(&mut app, &zone, post);
+        let mut seen = false;
+        for i in 0..90 * 8 {
+            // Standing, shifting about.
+            let sway = Vec3::X * ((i as f32 / 90.0).sin() * 0.5);
+            put(&mut app, player, spot + sway);
+            app.update();
+            seen |= app.world().get::<Awareness>(walker).unwrap().can_see_target;
+        }
+        seen
+    };
+    assert!(sees(None), "uncapped, it sees you at 30 m");
+    assert!(!sees(Some(20.0)), "capped at 20 m, it doesn't");
 }

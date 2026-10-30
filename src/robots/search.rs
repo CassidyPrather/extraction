@@ -211,6 +211,7 @@ impl Plugin for SearchPlugin {
                 (call_out, forget_the_downed).after(super::perceive),
             )
             .add_systems(FixedPostUpdate, (announce, coming_back).chain())
+            .add_systems(Update, log_pulled)
             .add_systems(Update, wrist_lines);
     }
 }
@@ -357,6 +358,9 @@ pub fn give_up(brain: &mut Brain, job: &mut Job) {
 /// walkable ground hard by obstacles (behind a wall, a wreck, a trunk),
 /// within `radius` (clamped to [`SEARCH_RADIUS`]); at most
 /// [`SEARCH_SPOTS`], nearest-first from `from`.
+/// How far round a spot it looks for something solid, to call it cover (m).
+pub const COVER_PROBE: f32 = 2.6;
+
 pub fn plan_search(
     at: Vec3,
     radius: f32,
@@ -373,7 +377,8 @@ pub fn plan_search(
         .filter(|p| flat(*p - at) < r + 4.0)
         .collect();
     doors.sort_by(|a, b| flat(*a - at).total_cmp(&flat(*b - at)));
-    picks.extend(doors.into_iter().take(2));
+    doors.truncate(2);
+    picks.extend(doors.iter().copied());
     let blocked = |p: Vec3| !nav.walkable(p);
     for ring in [0.45, 1.0] {
         for k in 0..12 {
@@ -382,9 +387,12 @@ pub fn plan_search(
             if blocked(p) {
                 continue;
             }
+            // Hard by something: blocked ground within a probe that
+            // reaches past the walkers' clearance off walls (it's
+            // `walker::WALL_CLEARANCE`, on 2 m cells).
             let cover = (0..8).any(|j| {
                 let b = j as f32 * std::f32::consts::FRAC_PI_4;
-                blocked(p + Vec3::new(b.cos(), 0.0, b.sin()) * 1.6)
+                blocked(p + Vec3::new(b.cos(), 0.0, b.sin()) * COVER_PROBE)
             });
             if cover {
                 picks.push(p);
@@ -402,18 +410,39 @@ pub fn plan_search(
         }
     }
     picks.dedup_by(|a, b| flat(*a - *b) < 3.0);
-    // Nearest-first tour from where it stands.
+    // Nearest-first tour from where it stands; the doorways always in it
+    // (a tour cut short by nearer cover dropped them).
     let mut tour = Vec::new();
     let mut here = from;
-    while !picks.is_empty() && tour.len() < SEARCH_SPOTS {
-        let i = (0..picks.len())
-            .min_by(|&i, &j| flat(picks[i] - here).total_cmp(&flat(picks[j] - here)))
+    let room = SEARCH_SPOTS.saturating_sub(doors.len());
+    let mut covers: Vec<Vec3> = picks
+        .into_iter()
+        .filter(|p| doors.iter().all(|d| flat(*d - *p) > 0.01))
+        .collect();
+    let mut chosen: Vec<Vec3> = Vec::new();
+    while !covers.is_empty() && chosen.len() < room {
+        let i = (0..covers.len())
+            .min_by(|&i, &j| flat(covers[i] - here).total_cmp(&flat(covers[j] - here)))
             .unwrap();
-        let p = picks.swap_remove(i);
-        if tour.iter().all(|q: &Vec3| flat(*q - p) > 3.0) {
-            tour.push(p);
+        let p = covers.swap_remove(i);
+        if chosen
+            .iter()
+            .chain(doors.iter())
+            .all(|q: &Vec3| flat(*q - p) > 3.0)
+        {
+            chosen.push(p);
             here = p;
         }
+    }
+    let mut all: Vec<Vec3> = doors.into_iter().chain(chosen).collect();
+    here = from;
+    while !all.is_empty() {
+        let i = (0..all.len())
+            .min_by(|&i, &j| flat(all[i] - here).total_cmp(&flat(all[j] - here)))
+            .unwrap();
+        let p = all.swap_remove(i);
+        tour.push(p);
+        here = p;
     }
     tour
 }
@@ -709,6 +738,70 @@ fn announce(
     log.hurt.retain(|e, _| seen.contains(e));
 }
 
+/// A sim run's telemetry: a machine left what it was doing to go and look
+/// at something (a shot, a call, a line's song), and from how far (`pulled`;
+/// Map design counts a fight's pull with it, playtest P1).
+fn log_pulled(
+    log: Option<ResMut<crate::sim::telemetry::SimLog>>,
+    mut looking: MessageReader<Investigating>,
+    mut minds: MessageReader<MindShift>,
+    robots: Query<(&Robot, Option<&super::Breed>, &Job)>,
+    time: Res<Time>,
+    // Who answered a call, and when; who's been sent already.
+    mut seen: Local<(
+        std::collections::HashMap<Entity, f32>,
+        std::collections::HashSet<Entity>,
+    )>,
+) {
+    let now = time.elapsed_secs();
+    let (answered, sent) = &mut *seen;
+    for m in minds.read() {
+        if matches!(m.state, Mind::Answering { .. }) {
+            answered.insert(m.robot, now);
+        }
+    }
+    answered.retain(|_, t| now - *t < PULLED_CALL);
+    let Some(mut log) = log else {
+        looking.clear();
+        return;
+    };
+    for l in looking.read() {
+        let Ok((robot, breed, job)) = robots.get(l.robot) else {
+            continue;
+        };
+        let cause = pulled_cause(
+            job.kind == JobKind::Response && sent.insert(l.robot),
+            answered.contains_key(&l.robot),
+        );
+        log.event(
+            "pulled",
+            serde_json::json!({"robot": super::robot_name(robot.kind, breed),
+                "cause": cause,
+                "from": crate::sim::telemetry::round(flat(l.toward - l.at), 1),
+                "x": crate::sim::telemetry::round(l.at.x, 1),
+                "z": crate::sim::telemetry::round(l.at.z, 1)}),
+        );
+    }
+}
+
+/// A call answered this long before a machine goes to look is why it
+/// went (s).
+pub const PULLED_CALL: f32 = 5.0;
+
+/// Why a machine went to look (`pulled`): sent from the Gate (a response
+/// team's first look, "dispatch"), answering another's call ("call"), or
+/// something it heard or glimpsed itself ("noticed": the pull Map design's
+/// openness rules stand on).
+pub fn pulled_cause(dispatched: bool, answered: bool) -> &'static str {
+    if dispatched {
+        "dispatch"
+    } else if answered {
+        "call"
+    } else {
+        "noticed"
+    }
+}
+
 /// How each robot stands with the local player, for [`coming_back`].
 #[derive(Default)]
 struct Back {
@@ -791,6 +884,13 @@ fn coming_back(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pull_says_why() {
+        assert_eq!(pulled_cause(true, true), "dispatch");
+        assert_eq!(pulled_cause(false, true), "call");
+        assert_eq!(pulled_cause(false, false), "noticed");
+    }
 
     #[test]
     fn a_search_dwells_sweeps_and_ends() {

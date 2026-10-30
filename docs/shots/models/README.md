@@ -39,5 +39,5 @@ b15461c) on 30 October.
 | Battery through the flashlight (0:11:13) | Fixed | `seated::mounted_things_sit_in_their_mounts`; `m3_flashlight_cell.jpg` |
 | Model seam (0:44:00) | Not found | The shot looks down a road at a car wreck and the barriers. Every wreck's nodes pass the island test and the barriers have no cracks. Nothing in it is a known defect. |
 | Walker through a wall (0:57:47) | Not a model | The walker's body went into a wall while it steered. That's its movement against the building's colliders (Robot minds and bodies), not a model. |
-| Dirigible basket buried (1:01:50) | Fixed | The cargo pod hung 0.15 m up on its cable, its skids 0.3 m into the ground. Now `dirigible::pod_rest` stands it on the highest ground under it, on the cable, when the ship sinks and in the dev spawn; `a_lowered_pod_stands_on_the_ground`. |
+| Dirigible basket buried (1:01:50) | Fixed | By Robot bodies (cfeb8e6a). The cargo pod hung 0.15 m up on its cable, its skids 0.3 m into the ground; `dirigible::pod_rest` stands it on the highest ground under it, `the_pod_sits_on_the_ground_not_in_it`. The dev spawn uses it too. |
 | Broken crate's "googly eyes" (0:52:37) | Fixed | By Destruction |

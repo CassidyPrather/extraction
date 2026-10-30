@@ -372,10 +372,7 @@ mod tests {
     }
 
     /// Items off their size waiting on their owners: (id, why).
-    const KNOWN: &[(&str, &str)] = &[(
-        "nagant",
-        "11% short of an M1895's 235 mm; its layout (`weapons::layout`) and model scale together (Weapon feel)",
-    )];
+    const KNOWN: &[(&str, &str)] = &[];
 
     /// Every row names an item that exists.
     #[test]

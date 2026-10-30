@@ -125,7 +125,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Village",
             item: "holm_watch",
             // The post office's counter, in the village.
-            near: Some([-20.0, 65.0]),
+            near: Some([-22.2, 33.5]),
         }],
         kit: &[],
         pay: &[("field_dressing", 1), ("matches", 2)],
@@ -175,7 +175,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Village",
             item: "tape_practice",
             // Hana's house by the well (Radio lays the tape there).
-            near: Some([-17.3, 93.7]),
+            near: Some([-19.6, 62.2]),
         }],
         kit: &[],
         pay: &[("canned_stew", 2), ("tea_tin", 1)],
@@ -359,7 +359,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Pumping station",
             item: "pump_log",
             // The sump, at the pump wells' bottom.
-            near: Some([-186.0, 42.0]),
+            near: Some([-96.0, 32.1]),
         }],
         kit: &[],
         pay: &[("power_cell", 2), ("chemlight", 3)],
@@ -648,7 +648,7 @@ mod tests {
         }
         // And the surface's are on it.
         let m = &v.iter().find(|(v, _)| *v == "marrow_creek").unwrap().1;
-        assert_eq!(down_site(m, [-20.0, 65.0]), None);
+        assert_eq!(down_site(m, [-22.2, 33.5]), None);
     }
 
     #[test]

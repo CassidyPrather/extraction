@@ -1,5 +1,6 @@
 // The glass eye's view of robots: a hot rim on a faint fill, drawn through
 // everything (the pipeline turns the depth test off).
+// No fog: a sight through walls (the glass eye's), not part of the air.
 
 #import bevy_pbr::{
     forward_io::VertexOutput,

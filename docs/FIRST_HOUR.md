@@ -78,14 +78,14 @@ killed.
   yard, and nothing came. The yard has no machine talk now
   (`raid::chatter`).
 - **The job card named a place, but not where it is.** "Go up to the Old
-  farm and look round." The Old farm is 190 m north-east of where the
-  truck drops you. It has nothing tall enough to see from the gate, and
+  farm and look round." The Old farm is 100 m north-east of where the
+  truck drops you (190 m before the valley was pulled in). It has nothing tall enough to see from the gate, and
   the yard never shows the map. The card now adds "From the drop:
-  north-east, 190 m. Ringed on your map." (`raid::requests`.)
+  north-east, 100 m. Ringed on your map." (`raid::requests`.)
 - **The truck named a rendezvous the map doesn't.** "Heading for the
   Ranger tower", but the field map labels every rendezvous just "RV".
   The truck now says which way and how far from you: "Copy. The ranger
-  tower, north-west, 480 m. Two minutes." It does so again if you call
+  tower, north-west, 240 m. Two minutes." It does so again if you call
   while it waits. (`raid::lines::way`.)
 
 - **The truck came down on top of a newcomer at the rendezvous.** Told
@@ -666,3 +666,109 @@ Left for whoever owns them:
 - If the right stick goes down a frame before the left, a mark can still
   flip the safety. The fire selector acts on the press, so fully
   separating the two needs a change in `weapons`.
+
+# The yard, one thing at a time (design, after the transcript)
+
+The designer's first priority (`docs/playtests/2026-10-28/TRANSCRIPT.md`, O1 to O3): "making
+the onboarding fun and not just following a list of instructions, and presenting you with one
+thing at a time." In the headset, the truck showed all of these at once, before anything happened:
+- the step board, over the crate;
+- 11 lines of stations by the tailgate;
+- a dozen settings cards;
+- the logbook, the workbench board and a "Read this" note;
+- a crate of 13 look-alike items.
+
+## Already fixed overnight (on main)
+
+- The VR greeting, not "press E".
+- A step counts only at its station, and in order. ("I've somehow done half this tutorial":
+  the transcript's range, 0:16:28.)
+- The boards agree with the code, and the run board's click order is fixed.
+- RUN IT DRY.
+- The mark: said in the yard, chimed and buzzed.
+
+## Rules (each with a test or a bot check)
+
+1. **One thing to read.**
+   - In the yard, the only text in view is the step you're on: what to do, how, and with what.
+   - It's shown on the current station's board and on the wrist.
+   - Boards ahead are blank. A finished board shows its tip, then folds away when you leave.
+   - In the yard the truck carries nothing else to read. The settings cards stay folded behind
+     one SETTINGS card. The logbook, the workbench, the camp note and the job card come back in
+     the real truck.
+   - The step board hangs on the cab wall above the crate, not in front of it.
+   - *Test:* in the truck at the start, one text panel is in view apart from the SETTINGS card,
+     and each board ahead is blank.
+2. **Name what you can see, and say how.**
+   - Every step names a thing you can pick out: the item it needs, or the target it acts on.
+   - That one thing is marked while the step is current, with a soft pulse and a ring.
+   - The board says what it looks like: "the green radio with the stubby aerial", "the white
+     roll with the red cross".
+   - "Next: the lit lamp" becomes where, said plainly: "Climb down off the back. The lit lamp
+     on the left."
+   - The snare gets a ring of little red flags, so "throw a part in" has a target.
+   - The range's own pistol stays, but it's the one marked and named ("the table's pistol"):
+     your kit pistol stays holstered. (Emptying the kit pistol for the range would send the
+     first raid out with it unloaded, since the career carries the kit.)
+   - *Test:* every goal has a target; while the goal is current, exactly one thing in the yard
+     is marked, and it's that target.
+3. **A skill before the moment it's needed.**
+   - The kit station runs: take the pistol, holster it, take the radio, pocket it. Your hands
+     are never both full before pockets are taught.
+   - Pushing a button comes second, in the truck. The button is the SETTINGS card, so pressing
+     it is the lesson and opens the settings: the menu the tester looked for.
+   - The pack is taught with the far-grabbed box.
+   - *Test:* walking the goals in order, no step needs a free hand, a pocket or a press that
+     hasn't been taught.
+4. **A payoff at each station.**
+   - Each finished step clicks in both hands and chimes (already the case).
+   - Each station also ends on something that happens in the world: the lamp turns green, the
+     plate rings, the door swings, the snare cracks, the truck comes.
+   - Each station says one line of what it's for, once it's done. That's what the tips are now.
+
+## Stations, reordered
+
+| # | Station | Steps |
+| - | - | - |
+| 1 | Your kit (truck) | take the pistol; holster it; take the radio; pocket it |
+| 2 | Buttons (truck) | push the SETTINGS card's amber button (the settings unfold) |
+| 3 | Getting about | turn, crouch, run |
+| 4 | Out of reach | far-grab the box; into the pack |
+| 5 | The range | rounds into the mag, seat, rack, safety off, a plate |
+| 6 | Run it dry | as before |
+| 7 | The house | the door, what's inside |
+| 8 | First aid | your wrist, a dressing |
+| 9 | The shimmer | a part at the flagged patch; the stone |
+| 10 | Going home | the radio, the cord |
+
+## Not this wave
+
+- **A title screen**: a feature, and the designer said basics first.
+- **The cooking table**: Model correctness removes it, and nothing goes through it.
+- **Model problems** (the dressing's size, the magazine's look): Model correctness owns them.
+  The mark and the name carry the step meanwhile.
+
+## TRANSCRIPT O1–O3, instance by instance (against main, 30 October)
+
+Each row says what was lost at the time, its status, and what shows it: a test, a bot check or a
+shot. Where minutes were lost, they come from the video's clock.
+
+| Class | Instance (video) | Lost | Status | Shown by |
+| - | - | - | - | - |
+| O1 | The truck's boards a wall of text (0:01:03) | the start | **Fixed**: one step in view; the rest folds till taught | `one_thing_to_read_in_the_truck` (3 panels; 24 without); `yard_truck_before_after.jpg` |
+| O1 | Text z-fighting on the truck boards (0:01:00) | | **Fixed** (Legibility: the cards off the slat) | Legibility's own test |
+| O1 | The sign in front of the crate (0:06:00) | | **Fixed**: the board is on the cab wall, clear of the crate | `yard_truck_before_after.jpg` |
+| O1 | No settings, no menu (0:06:28) | | **Fixed** for settings: SETTINGS is the second step, and the cards fold out. **Open**: a title screen and a menu button (features; not this wave) | `a_skill_is_taught_before_it_is_needed` |
+| O1 | "Let the player have some fun" (1:06:27) | | **In hand**: each station ends on something happening; the next lamp flares; a cut to dress; a trigger that won't | `yard_firstaid_…`, `yard_rangestep_before_after.jpg` |
+| O2 | "Next, the lit lamp" meant leave the truck (0:10:28–0:12:45) | ~2 min | **Fixed**: done boards don't say it; the driver says "off the back of the truck, the lamp on your left"; that lamp flares | `done_in_the_truck_you_are_told_to_get_off_it` |
+| O2 | "Throw a part in": which target? (0:27:40–0:30:04) | ~2.5 min | **Fixed**: "the sparks", six red flags, a ring at its edge; once it's set off, "See it go dark? Spent…" | `the_step_marks_what_it_names`; `yard_snare_before_after.jpg` |
+| O2 | "Take the radio": which one? (0:08:45) | ~10 s | **Fixed**: the radio is ringed in the crate; "the green radio, ringed in the crate" | `the_step_marks_what_it_names` |
+| O2 | "Safety off" without how (0:16:44–0:17:55) | ~1 min | **Fixed**: the board shows the step's how; first you squeeze and it's dead, then "That's the safety. Click the stick…" | the range test; `yard_rangestep_before_after.jpg` |
+| O2 | The wrong gun and ammo, a second gun (0:19:31–0:20:47) | ~1 min | **Fixed**: the table's pistol and its empty magazine are ringed and named; the kit pistol stays holstered | `the_step_marks_what_it_names`; `yard_range_before_after.jpg` |
+| O2 | A brown block on the table (0:19:32) | | **Fixed**: it's the empty magazine, now ringed and named "the ringed mag" | `yard_range_before_after.jpg` |
+| O2 | "Push the button" should come first (0:30:43) | | **Fixed**: the second step, in the truck | `a_skill_is_taught_before_it_is_needed` |
+| O2 | The dressing didn't read as one (0:27:20) | ~20 s | **Fixed** for finding it: ringed, "the white roll". Its look (too small) is Model correctness's (M4) | `the_step_marks_what_it_names` |
+| O3 | Both hands full, no pocket shown (0:09:03) | ~30 s | **Fixed**: holster before the radio, the radio pocketed, the pack with the far box | `a_skill_is_taught_before_it_is_needed`; the kit test |
+
+Open, in order of what they cost: none from O1–O3 that this wave can close. The title screen
+and a menu button are features the designer set aside ("the basics first").

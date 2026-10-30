@@ -26,6 +26,9 @@ pub struct Comfort {
     pub snap_angle: f32,
     /// How dark the edges of the view go while the stick moves you (0 off).
     pub vignette: f32,
+    /// How dark the edges go red when you're hurt, most on the side it
+    /// came from (`render::hurt`; 0 off).
+    pub hurt_vignette: f32,
     /// Quiet sounds up and loud ones down (`audio_mix::NARROW`).
     pub narrow_dynamics: bool,
     /// The eyes' resolution as a share of what the runtime recommends;
@@ -62,8 +65,12 @@ pub struct Comfort {
     /// Iron sights: the front post goes soft as the eye comes down behind
     /// them, focused on the target (`weapons::optics`).
     pub post_blur: bool,
-    /// Your body drawn under you, looking down (`render::body`); off, only
-    /// the arms and hands.
+    /// Your body drawn under you, looking down (`render::body`), with the
+    /// sleeves (`render::arms`) and the harness's straps (`render::kit`).
+    /// Off (the default), the hands and what you reach for on yourself
+    /// (the pouches, the holster, the pack): a body placed by guessing from
+    /// a head and two hands looks wrong more than it looks like you (the
+    /// 28 October playtest).
     pub body: bool,
     /// Samples a pixel on the edges of things (MSAA): 4, 2, or 0 (off).
     /// Each eye carries a target this many times its size; fewer is
@@ -87,6 +94,7 @@ impl Default for Comfort {
             turn_speed: 120.0,
             snap_angle: 30.0,
             vignette: 0.6,
+            hurt_vignette: 0.6,
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
@@ -99,7 +107,7 @@ impl Default for Comfort {
             captions: true,
             machine_tick: true,
             post_blur: true,
-            body: true,
+            body: false,
             msaa: 4,
             soft_leaves: true,
             hold_rate: true,
@@ -396,6 +404,7 @@ impl Comfort {
                 "--no-machine-tick" => c.machine_tick = false,
                 "--no-post-blur" => c.post_blur = false,
                 "--no-body" => c.body = false,
+                "--body" => c.body = true,
                 "--render-scale" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.render_scale = if v <= 0.0 { 0.0 } else { v.clamp(0.3, 1.0) };
@@ -437,6 +446,11 @@ impl Comfort {
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.vignette = v.clamp(0.0, 1.0);
+                    }
+                }
+                "--hurt-vignette" => {
+                    if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
+                        c.hurt_vignette = v.clamp(0.0, 1.0);
                     }
                 }
                 _ => {}

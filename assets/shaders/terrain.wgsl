@@ -352,9 +352,14 @@ fn fragment(
     // up a moderate slope, bare rock only where it's steepest.
     let patches = fbm(wp.xz * 0.05 + vec2<f32>(11.0, 7.0)) - 0.5;
     let rock = clamp(splat.g * 1.4 + breakup * 0.6 + patches * 0.9 - 0.2, 0.0, 1.0);
-    let road = clamp(splat.b * 1.15 + fine * 0.35, 0.0, 1.0);
-    // Patches of bare earth in open grass.
-    let bare = smoothstep(0.62, 0.75, fbm(wp.xz * 0.11 + vec2<f32>(5.0, 3.0))) * (1.0 - forest);
+    // A road's edge wanders (mid-scale breakup) and frays (fine): ruled by
+    // its splat alone it read as a seam along every path.
+    let road = clamp(splat.b * 1.15 + fine * 0.35 + breakup * 0.25, 0.0, 1.0);
+    // Patches of bare earth in open grass, their edges ragged and thinning
+    // out over a metre or two (a narrow threshold drew each one as a
+    // hard-edged disc of litter on the grass).
+    let bare_n = fbm(wp.xz * 0.11 + vec2<f32>(5.0, 3.0)) + fine * 0.14 + breakup * 0.1;
+    let bare = smoothstep(0.6, 0.76, bare_n) * (1.0 - forest);
 
     w[0] = (1.0 - forest) * (1.0 - bare);
     w[1] = forest;
@@ -369,8 +374,10 @@ fn fragment(
     w[road_layer] = road;
     // Paths are worn dirt, faint.
     if (road_kind == 5u) { w[6] = road * 0.8; }
-    // Asphalt crumbles at the edges into gravel.
+    // Asphalt crumbles at the edges into gravel; gravel and ballast into a
+    // verge of worn dirt before the grass.
     if (road_kind == 1u) { w[4] = road * (1.0 - road) * 2.0; }
+    if (road_kind == 2u || road_kind == 3u) { w[6] = max(w[6], road * (1.0 - road) * 1.6); }
 
     // Composite top-down: base (grass/forest), then mud, gravel/road, rock.
     var albedo = vec3<f32>(0.0);
@@ -526,7 +533,8 @@ fn fragment(
 
     pbr_input.material.base_color = alpha_discard(pbr_input.material, pbr_input.material.base_color);
     // The terrain wets itself (above): no sky openness for the wet patch.
-    pbr_input.material.base_color.a = 0.0;
+    // Below zero: still under the open sky (`render::fog`, the room).
+    pbr_input.material.base_color.a = -1.0;
 
 #ifdef PREPASS_PIPELINE
     let out = deferred_output(in, pbr_input);

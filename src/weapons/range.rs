@@ -476,7 +476,12 @@ mod tests {
             load(&mut r, family, 10, FireMode::Semi);
             r.vr.step(5);
             let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
-            let fwd = gt.forward().as_vec3();
+            // Down the line the round leaves on: the bore, turned up by its
+            // sights' zero.
+            let fwd = {
+                let gun = r.vr.app.world().get::<Gun>(r.gun).unwrap();
+                crate::weapons::zero::shot_dir(gun, gt.rotation(), false)
+            };
             let at = gt.translation() + fwd * 8.0;
             // Side on to the line, held still and senseless.
             let drone = {

@@ -364,8 +364,13 @@ fn spotter_mind(
     mut out: MessageWriter<SpotterEvent>,
     mut counters: ResMut<crate::bot::Counters>,
     time: Res<Time>,
+    (mut minds, mut log): (
+        MessageWriter<super::search::MindShift>,
+        ResMut<super::search::MindLog>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     for (e, mut s, t, aware, stunned) in &mut spotters {
         s.clock += dt;
         if s.float != Float::Aloft || stunned {
@@ -389,6 +394,8 @@ fn spotter_mind(
         let was = s.watch.fix;
         match s.watch.step(seen.is_some(), dt) {
             WatchAct::Fixing if was == 0.0 => {
+                // What it's about, as every machine says it.
+                log.shift(&mut minds, e, super::search::Mind::Noticed, at, now);
                 out.write(SpotterEvent {
                     spotter: e,
                     at,
@@ -408,6 +415,7 @@ fn spotter_mind(
                     source: Some(e),
                 });
                 counters.bump(CALLS);
+                log.shift(&mut minds, e, super::search::Mind::Calling, at, now);
                 out.write(SpotterEvent {
                     spotter: e,
                     at,
@@ -673,7 +681,7 @@ pub(crate) mod tests {
     /// fix and calls; the call is a klaxon and a response queued. A
     /// player straight under it is never seen.
     fn stand(at: Vec2, cut_first: bool) -> (Vec<SpotterAct>, Entity, crate::vr_harness::Vr) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
@@ -745,7 +753,7 @@ pub(crate) mod tests {
     /// salvage beside it.
     #[test]
     fn holed_it_sinks_to_a_wreck() {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {

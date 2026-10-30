@@ -208,7 +208,12 @@ fn dress_heavies(
                         m.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
                     })
                 }
-                (Some(n), _) => model_mats.get(n, &mut lib, &server, &mut materials),
+                (Some(n), _) => model_mats.get(
+                    super::weak_points::paint(n),
+                    &mut lib,
+                    &server,
+                    &mut materials,
+                ),
                 (None, _) => model_mats.get("Dark", &mut lib, &server, &mut materials),
             }
         };

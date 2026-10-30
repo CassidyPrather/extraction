@@ -284,6 +284,35 @@ fn flat_drum(
     }
 }
 
+/// The range a gun's iron sights are zeroed at, metres: where the round
+/// crosses the line from the rear sight over the front post. A pistol's at
+/// close range, a shotgun's and a crossbow's a little further, a rifle's at
+/// 100 m (the first playtest's rounds struck under the post: the sights sat
+/// over a bore that wasn't zeroed to them).
+pub fn iron_zero_m(def: &extraction_core::firearm::FirearmDef) -> f32 {
+    use extraction_core::firearm::ActionKind;
+    match def.action {
+        ActionKind::Crossbow | ActionKind::BreakAction | ActionKind::Pump => 20.0,
+        _ if def.muzzle_velocity < 500.0 => 15.0,
+        _ => 100.0,
+    }
+}
+
+/// How far up (radians) the bore points over a gun's iron sight line, so
+/// the round crosses it at [`iron_zero_m`].
+pub fn iron_up(gun: &Gun) -> f32 {
+    let def = &gun.firearm.def;
+    let h = gun.layout.sight.translation.y - gun.layout.muzzle.y;
+    super::ballistics::zero_angle(def.muzzle_velocity, h, iron_zero_m(def))
+}
+
+/// Which way a shot leaves a gun turned `rotation`: down the bore, turned
+/// up by its iron sights' zero unless a scope (with its own) is on it.
+pub fn shot_dir(gun: &Gun, rotation: Quat, scoped: bool) -> Vec3 {
+    let up = if scoped { 0.0 } else { iron_up(gun) };
+    rotation * Quat::from_rotation_x(up) * Vec3::NEG_Z
+}
+
 /// The height of a scope's line of sight over its gun's bore.
 pub fn sight_height(gun: &Gun, gun_gt: &GlobalTransform, scope_gt: &GlobalTransform) -> f32 {
     gun_gt
@@ -534,6 +563,61 @@ fn digits(v: u32, at: Vec2, dot: &mut dyn FnMut(f32, f32)) {
 
 #[cfg(test)]
 mod tests {
+    /// Every gun's round, fired over its iron sights, strikes on the line of
+    /// those sights at its zero (within a centimetre) and close to it on
+    /// the way (no more than 6 cm off between 5 m and the zero: a rifle's
+    /// round starts a sight's height under the line, a slow flare's or a
+    /// bolt's arcs over it): what you point at is what you hit.
+    #[test]
+    fn every_gun_hits_where_its_iron_sights_point() {
+        use crate::weapons::ballistics::height_at;
+        let catalog = crate::items::Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            let (Some(f), Some(layout)) =
+                (def.firearm.as_ref(), super::super::layout::layout(&def.id))
+            else {
+                continue;
+            };
+            // (A flare's fired at the sky, a crossbow bolt's arc is the
+            // shooter's to judge: both slow, both lobbed.)
+            if f.muzzle_velocity < 150.0 {
+                continue;
+            }
+            let h = layout.sight.translation.y - layout.muzzle.y;
+            let gun = super::Gun {
+                firearm: extraction_core::firearm::Firearm::new(f.clone(), 1.0),
+                layout,
+                magwell: None,
+                trigger: 0.0,
+                dice: extraction_core::noise::Rng::new(1),
+                mass: None,
+            };
+            // The way the game sends it (`triggers`), held level.
+            let dir = super::shot_dir(&gun, Quat::IDENTITY, false);
+            let angle = dir.y.asin();
+            let zero = super::iron_zero_m(f);
+            let mut m = 5.0;
+            while m <= zero + 0.01 {
+                let Some((y, _)) = height_at(f.muzzle_velocity, angle, m) else {
+                    break;
+                };
+                let off = y - h;
+                let tol = if (m - zero).abs() < 0.5 { 0.01 } else { 0.06 };
+                if off.abs() > tol {
+                    bad.push(format!(
+                        "{}: {:.1} cm off the sights at {m} m",
+                        def.id,
+                        off * 100.0
+                    ));
+                    break;
+                }
+                m += 5.0;
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     use super::*;
     use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
     use crate::rig::Side;

@@ -7,6 +7,7 @@ pub mod blink;
 pub mod body;
 pub mod budget;
 pub mod cards;
+pub mod clear_eyes;
 pub mod comfort;
 pub mod cpu;
 pub mod eye_projection;
@@ -18,6 +19,7 @@ pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
 pub mod hold_rate;
+pub mod hurt;
 pub mod kit;
 pub mod kitchen;
 pub mod landmarks;
@@ -106,6 +108,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
+        .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
         .add_plugins(wayfind_shots::WayfindShotsPlugin)
         .add_plugins(landmarks::LandmarkLampsPlugin)
@@ -116,6 +119,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(body::BodyPlugin)
         .add_plugins(tools::ToolVisualsPlugin)
         .add_plugins(blink::BlinkPlugin)
+        .add_plugins(hurt::HurtVignettePlugin)
         .add_plugins(hand_push::HandPushPlugin)
         .init_resource::<grade::Adaptation>()
         .init_resource::<grade::Below>()

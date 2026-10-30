@@ -172,6 +172,13 @@ impl CoverMap {
                     0.35,
                     noise::fbm(p[0] / 38.0, p[1] / 38.0, self.seed, 3, 0.5),
                 );
+                // And within a meadow, clumps a few metres across: thick
+                // here, a gap there, so the near ground isn't evenly sown.
+                let clump = geom::smoothstep(
+                    -0.3,
+                    0.3,
+                    noise::fbm(p[0] / 8.0, p[1] / 8.0, self.seed ^ 0x51, 2, 0.5),
+                );
                 let wet = hm.wetness(p);
                 let shade = self.forest(p).filter(|_| self.shaded(p, 6.0));
                 let fern_share = if self.burnt { 0.3 } else { 1.0 };
@@ -181,7 +188,13 @@ impl CoverMap {
                     Some(u) if roll < (0.08 * u + 0.025) * fern_share => (CoverKind::Fern, 1.0),
                     Some(_) => (CoverKind::Grass, 0.15 + 0.25 * meadow),
                     None if wet > 0.35 => (CoverKind::Sedge, 0.35),
-                    None => (CoverKind::Grass, 0.45 + 0.5 * meadow),
+                    // Thick in the lush patches, thin in the short ones: one
+                    // density the field over read as the same grass pasted
+                    // across it (playtest 2026-10-28, 1:00:37).
+                    None => (
+                        CoverKind::Grass,
+                        (0.25 + 0.7 * meadow) * (0.1 + 1.1 * clump),
+                    ),
                 };
                 let chance = if self.burnt { chance * 0.55 } else { chance };
                 // A second roll for the chance so it isn't tied to the fern pick.
@@ -199,7 +212,8 @@ impl CoverMap {
                     pos: [p[0], hm.height(p) - 0.03, p[1]],
                     kind,
                     scale: match kind {
-                        CoverKind::Grass => scale * (0.75 + 0.5 * meadow),
+                        // Taller in the thick of a clump, short in its gaps.
+                        CoverKind::Grass => scale * (0.6 + 0.8 * meadow) * (0.7 + 0.6 * clump),
                         _ => scale,
                     },
                     yaw,
@@ -244,18 +258,60 @@ mod tests {
         assert!(kept > 0, "the inner half of each patch keeps its plants");
     }
 
+    /// An open meadow isn't sown evenly: grass counted in 8 m cells over
+    /// a stretch of Marrow Creek's open ground varies cell to cell (thick
+    /// clumps, short gaps). The same density the field over read as one
+    /// grass pasted across it (playtest 2026-10-28, 1:00:37).
+    #[test]
+    fn a_meadow_is_clumped_not_evenly_sown() {
+        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        let hm = Heightmap::build(&map);
+        let cover = CoverMap::new(&map, &hm);
+        let cell = 8.0;
+        let mut counts = Vec::new();
+        let mut z = -240.0;
+        while z < 240.0 {
+            let mut x = -240.0;
+            while x < 240.0 {
+                let grass = cover
+                    .patch(&hm, [x, z], cell)
+                    .iter()
+                    .filter(|s| s.kind == CoverKind::Grass)
+                    .count();
+                // Open ground only: a cell with grass in it, no road or tree.
+                let open = cover.forest([x + 4.0, z + 4.0]).is_none()
+                    && hm.road_at([x + 4.0, z + 4.0]).weight == 0;
+                if open && grass > 0 {
+                    counts.push(grass as f32);
+                }
+                x += cell * 3.0;
+            }
+            z += cell * 3.0;
+        }
+        assert!(counts.len() > 100, "{} open cells", counts.len());
+        let mean = counts.iter().sum::<f32>() / counts.len() as f32;
+        let var = counts.iter().map(|c| (c - mean).powi(2)).sum::<f32>() / counts.len() as f32;
+        let cv = var.sqrt() / mean;
+        println!("open grass per 8 m cell: mean {mean:.0}, variation {cv:.2}");
+        assert!(cv > 0.35, "the meadow is sown evenly: variation {cv:.2}");
+    }
+
     #[test]
     fn cover_grows_in_the_open_and_under_trees_but_not_on_roads_or_floors() {
-        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        // The rules, on the test field's wide meadows (a tight valley is
+        // mostly its places and their ways).
+        let map = MapDef::from_ron(crate::map::TEST_FIELD).unwrap();
         let hm = Heightmap::build(&map);
         let cover = CoverMap::new(&map, &hm);
         let size = 24.0;
         let mut counts = std::collections::HashMap::new();
         let mut patches = 0;
-        let mut z = -240.0;
-        while z < 240.0 {
-            let mut x = -240.0;
-            while x < 240.0 {
+        // The middle three quarters of the valley, whatever its size.
+        let reach = map.size * 0.375;
+        let mut z = -reach;
+        while z < reach {
+            let mut x = -reach;
+            while x < reach {
                 let a = cover.patch(&hm, [x, z], size);
                 assert_eq!(a, cover.patch(&hm, [x, z], size), "same patch, same plants");
                 for s in &a {

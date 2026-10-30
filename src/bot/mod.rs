@@ -285,6 +285,8 @@ pub struct Bot {
     pub elapsed: f32,
     /// Shots fired in the current Fire task.
     pub fired: u32,
+    /// Clearing a stoppage mid-string (`clear_stoppage`).
+    clearing: bool,
     pub look: Vec3,
     pub walk: Option<Vec2>,
     pub aim: bool,
@@ -331,6 +333,7 @@ impl Bot {
             tasks: tasks.into(),
             elapsed: 0.0,
             fired: 0,
+            clearing: false,
             look: Vec3::NEG_Z,
             walk: None,
             aim: false,
@@ -384,6 +387,7 @@ impl Bot {
     }
 
     fn next(&mut self) {
+        self.clearing = false;
         self.tasks.pop_front();
         self.restart();
         self.deferred = 0;
@@ -1273,9 +1277,9 @@ fn run_tasks(
             Task::Fire { at, shots } => {
                 bot.look = at;
                 bot.aim = true;
-                let Some(gun) = hand(gun_side)
+                let Some((gun_e, gun)) = hand(gun_side)
                     .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok())
+                    .and_then(|e| guns.get(e).ok().map(|g| (e, g)))
                 else {
                     bot.aim = false;
                     bot.next();
@@ -1285,11 +1289,19 @@ fn run_tasks(
                 if bot.elapsed < 0.6 {
                     continue;
                 }
+                if clear_stoppage(&mut bot, &mut mac, gun_e, gun) {
+                    continue;
+                }
                 let auto = gun.firearm.fire_mode() == extraction_core::firearm::FireMode::Auto;
                 let period = if auto { 0.15 } else { 0.35 };
-                let phase = ((bot.elapsed - 0.6) / period) as u32;
-                bot.trigger = (bot.elapsed - 0.6) % period < period * 0.5;
-                if phase >= shots || gun.firearm.live_rounds() == 0 && !bot.trigger {
+                let was = bot.trigger;
+                bot.trigger = bot.fired < shots && (bot.elapsed - 0.6) % period < period * 0.5;
+                if bot.trigger && !was {
+                    bot.fired += 1;
+                }
+                if bot.fired >= shots && !bot.trigger
+                    || gun.firearm.live_rounds() == 0 && !bot.trigger
+                {
                     bot.trigger = false;
                     bot.aim = false;
                     bot.next();
@@ -1300,7 +1312,7 @@ fn run_tasks(
                     hand(gun_side).and_then(|h| h.holding),
                     hand(off_side).and_then(|h| h.holding),
                 ) {
-                    combine.write(Combine { a, b });
+                    combine.write(Combine::all(a, b));
                 }
                 bot.next();
             }
@@ -1369,9 +1381,13 @@ fn run_tasks(
                 };
                 bot.look = rgt.translation();
                 bot.aim = true;
-                let gun = hand(gun_side)
-                    .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok());
+                let held = hand(gun_side).and_then(|h| h.holding);
+                let gun = held.and_then(|e| guns.get(e).ok());
+                if let (Some(e), Some(g)) = (held, gun)
+                    && clear_stoppage(&mut bot, &mut mac, e, g)
+                {
+                    continue;
+                }
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
                 if bot.elapsed > 0.5 && !empty && bot.fired < shots {
                     let period = 0.3;
@@ -1389,6 +1405,7 @@ fn run_tasks(
             Task::Grab { item, side } => {
                 if hand(side).and_then(|h| h.holding) == Some(item) {
                     bot.walk = None;
+                    bot.sidesteps = 0;
                     bot.next();
                     continue;
                 }
@@ -1409,8 +1426,29 @@ fn run_tasks(
                 let at = gt.translation();
                 bot.look = at;
                 let flat = Vec2::new(at.x, at.z);
-                if pos.distance(flat) > REACH {
+                let d = pos.distance(flat);
+                if d > REACH {
                     bot.walk = Some(flat);
+                    // Up against something between it and the thing (a
+                    // wreck's hull, the drop rolled round the far side): a
+                    // step to the side, as for a walk, and round to it.
+                    if d < bot.progress.0 - 0.3 {
+                        bot.progress = (d, 0.0);
+                    } else {
+                        bot.progress.1 += dt;
+                    }
+                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 {
+                        let ahead = (flat - pos).normalize_or(Vec2::X);
+                        let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
+                        let step = pos + ahead.perp() * side * 1.8 + ahead * 0.6;
+                        bot.sidesteps += 1;
+                        bot.tasks.push_front(Task::WalkTo {
+                            to: step,
+                            within: SIDESTEP,
+                        });
+                        bot.restart();
+                        continue;
+                    }
                 } else if at.y - root.translation.y > STAND_REACH {
                     // Over its head, out of any hand's reach: it waits a
                     // little (it may come down), then gives up.
@@ -1585,9 +1623,13 @@ fn run_tasks(
                 let flight = at.distance(root.translation) / 700.0;
                 bot.look = at + vel * (1.0 / AIM_RATE + flight);
                 bot.aim = true;
-                let gun = hand(gun_side)
-                    .and_then(|h| h.holding)
-                    .and_then(|e| guns.get(e).ok());
+                let held = hand(gun_side).and_then(|h| h.holding);
+                let gun = held.and_then(|e| guns.get(e).ok());
+                if let (Some(e), Some(g)) = (held, gun)
+                    && clear_stoppage(&mut bot, &mut mac, e, g)
+                {
+                    continue;
+                }
                 let empty = gun.is_none_or(|g| g.firearm.live_rounds() == 0);
                 // Squeeze only with the body square to the target.
                 let to = bot.look - root.translation;
@@ -1732,4 +1774,46 @@ mod tests {
         }
         assert!(round_about(Vec2::new(5.0, 0.0), Vec2::new(5.0, 6.0), c, 3.0).is_empty());
     }
+}
+
+/// A stoppage in the gun in hand, as a shooter meets it: the trigger off,
+/// the gun's own clearance worked (tap-rack; for a double feed, drop the
+/// magazine, rack, reload: `flat::macro_steps`), then back to the string.
+/// True while it's being cleared; the presses then aren't counted, so a
+/// jam costs time, not the drill (a worn gun's dice, seeded by where it
+/// lay, would otherwise decide whether a scenario passes).
+fn clear_stoppage(bot: &mut Bot, mac: &mut GunMacro, gun_e: Entity, gun: &Gun) -> bool {
+    if bot.clearing {
+        if mac.busy() {
+            bot.trigger = false;
+            return true;
+        }
+        bot.clearing = false;
+        bot.note("cleared a stoppage".into());
+    }
+    let f = &gun.firearm;
+    // A round hanging fire: muzzle on the target, hands off, wait it out
+    // (racking it now would throw a live primer's round out burning).
+    if f.hang.is_some() {
+        bot.trigger = false;
+        return true;
+    }
+    // A dud under the hammer, in a gun a rack clears (a revolver's next
+    // press turns to the next chamber; a break-action's is the next
+    // barrel).
+    use extraction_core::firearm::ActionKind;
+    let rackable = matches!(
+        f.def.action,
+        ActionKind::SemiAuto | ActionKind::BoltAction | ActionKind::Pump
+    );
+    let what = match (f.malfunction, f.struck) {
+        (Some(m), _) => format!("{m:?}, {}", m.remedy()),
+        (None, Some(_)) if rackable => "a dud, tap-rack".to_owned(),
+        _ => return false,
+    };
+    bot.trigger = false;
+    bot.clearing = true;
+    bot.note(format!("stoppage: {what}"));
+    mac.start(gun_e, macro_steps(MacroKind::Rack, gun));
+    true
 }

@@ -52,8 +52,24 @@ pub struct Drone {
 }
 
 /// A drone settling its gun on someone, before the first burst: the chirp
-/// that tells you to get behind something.
-pub const LOCK_TIME: f32 = 0.9;
+/// that tells you to get behind something. It holds still while it does
+/// ([`holding`]): the window to put a round in it, or to run.
+pub const LOCK_TIME: f32 = 1.5;
+/// Between bursts (s)...
+pub const BURST_GAP: f32 = 1.8;
+/// ...the first of which it holds still, after a burst, as it does
+/// through the burst (s): someone in a headset with a pistol gets a
+/// still thing to aim at every couple of seconds (`drone_drill`).
+pub const HOLD_AFTER: f32 = 1.2;
+/// In a fight it flies this gently (`Intent::pace`: its push, 1 is full).
+pub const FIGHT_PACE: f32 = 0.6;
+
+/// Locking on, firing, or just after a burst: it hovers where it is.
+pub fn holding(d: &Drone) -> bool {
+    (d.lock > 0.0 && d.lock < LOCK_TIME)
+        || d.burst_left > 0
+        || d.gun_cooldown > BURST_GAP - HOLD_AFTER
+}
 /// A still body shows a drone this share of a moving one (a walker 0.55).
 pub const STILL_SHOWS: f32 = 0.3;
 /// Its rounds scatter this much more (radians) per m/s its target runs
@@ -219,8 +235,11 @@ pub const STANDOFF: f32 = 20.0;
 /// (to look over what you're behind)...
 pub const FIGHT_ALTITUDE: (f32, f32) = (8.0, 13.0);
 /// ...circling (rad/s), faster while you're looking at it: it slides out
-/// of your aim, round to your flank.
-pub const ORBIT: (f32, f32) = (0.35, 0.9);
+/// of your aim, round to your flank. Across your view at its standoff
+/// that's about 9 and 14 degrees a second: a moving target a pistol in a
+/// headset can follow (it was 20 and 52: "way too fast for somebody in VR
+/// to possibly have a shot", playtest, 28 October).
+pub const ORBIT: (f32, f32) = (0.15, 0.25);
 /// Searching, it sweeps the spots this high (m)...
 const SEARCH_ALTITUDE: f32 = 6.0;
 /// ...and comes down to a doorway on its round, this high and this far
@@ -286,7 +305,10 @@ fn drone_brain(
             let p = ent.mid + ent.out * if open { 3.5 } else { 7.0 };
             Some(Vec3::new(p.x, zone.ground(p.x, p.z) + 2.7, p.z))
         };
-        d.phase += dt * ORBIT.0;
+        let still = matches!(*brain, Brain::Engage) && holding(&d);
+        if !still {
+            d.phase += dt * ORBIT.0;
+        }
         // Alarm overrides the job.
         let leaving = matches!(*brain, Brain::Leave { .. });
         search::react(&mut brain, aware, ENGAGE_AT);
@@ -436,9 +458,10 @@ fn drone_brain(
                         let to_me = (pos - h.translation()).normalize_or_zero();
                         (h.rotation() * Vec3::NEG_Z).dot(to_me) > 0.9
                     });
-                if eyed || seen.is_none() {
+                if (eyed || seen.is_none()) && !still {
                     d.phase += dt * (ORBIT.1 - ORBIT.0);
                 }
+                intent.pace = FIGHT_PACE;
                 // Stand off and circle: hard to hit, keeps a firing line;
                 // over where you were, higher, when it's lost you.
                 let h = if seen.is_some() {
@@ -573,7 +596,7 @@ fn drone_guns(
             seed: *seed,
         });
         d.burst_left -= 1;
-        d.gun_cooldown = if d.burst_left == 0 { 1.8 } else { 0.11 };
+        d.gun_cooldown = if d.burst_left == 0 { BURST_GAP } else { 0.11 };
     }
 }
 
