@@ -245,13 +245,6 @@
         // On the knoll between the drop and the Old farm: newcomers cut
         // across this field to the first job, and Onboarding's first-fight
         // personas died in it with nothing in reach.
-        // A belt along the ford rise's crest, east of the Village: the rise
-        // reads as a field edge, and its trees break the line over it.
-        (
-            name: "Ford rise belt", seed: 21, density: 0.7, undergrowth: 0.5,
-            mix: [(Birch, 0.6), (Spruce, 0.4)],
-            polygon: [(79.0, 36.0), (88.0, 34.0), (92.0, 122.0), (83.0, 124.0)],
-        ),
         (
             name: "Knoll spinney", seed: 11, density: 1.4, undergrowth: 0.6,
             mix: [(Birch, 0.5), (Spruce, 0.5)],

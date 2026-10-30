@@ -304,6 +304,7 @@ mod tests {
     fn terrain_collider_matches_heightmap() {
         let opts = crate::LaunchOptions {
             robots: false,
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);
