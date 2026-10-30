@@ -44,7 +44,6 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
-                (ghost_through_walls, fade_ghosts).chain(),
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -428,9 +427,6 @@ pub(crate) struct HandVisual {
     /// glove and how far its last joint bends (radians); `None` swings it
     /// by its curl.
     thumb: Option<(Vec3, f32)>,
-    /// The faint glove at the tracked pose, shown when the real hand has
-    /// gone where the glove can't (into a wall).
-    pub(crate) ghost: bool,
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -482,30 +478,12 @@ fn spawn_hand_visuals(
                 curl: [0.0; 5],
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
-                ghost: false,
             },
             PlayerGlove,
         ));
-        // The ghost: where your real hand is when a wall stops the glove
-        // (`interact::physics_hands`), faint, hidden otherwise.
-        let ghost = spawn_hand(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            rh.side,
-            [0.0; 5],
-        );
-        commands.entity(ghost).insert((
-            HandVisual {
-                hand: e,
-                side: rh.side,
-                curl: [0.0; 5],
-                spread: std::array::from_fn(rest_spread),
-                thumb: None,
-                ghost: true,
-            },
-            Visibility::Hidden,
-        ));
+        // No ghost of the real hand when a wall stops the glove: seen
+        // apart from the glove, it read as tracking gone wrong (the 28
+        // October playtest). The glove stops; the hand's buzz says why.
     }
 }
 
@@ -824,90 +802,6 @@ fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread
     Quat::from_rotation_x(-bend * c)
 }
 
-/// The ghost glove shows through whatever stopped the hand you see: your
-/// real hand is in the wall, so a ghost drawn behind its face would never
-/// be seen. Its meshes swap to the glass eye's material once dressed: a
-/// faint rim, additive, with no depth test. (Without that material, in
-/// tests, it keeps its plain translucent one.)
-fn ghost_through_walls(
-    mut commands: Commands,
-    ghosts: Query<(Entity, &HandVisual, Option<&GhostLook>)>,
-    children: Query<&Children>,
-    plain: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
-    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-) {
-    let Some(mut xray) = xray else {
-        return;
-    };
-    for (e, v, look) in &ghosts {
-        if !v.ghost {
-            continue;
-        }
-        // Each ghost its own, so each fades on its own.
-        let m = match look {
-            Some(l) => l.0.clone(),
-            None => {
-                let m = xray.add(crate::anomaly::visuals::XrayMaterial {
-                    color: LinearRgba::BLACK,
-                });
-                commands.entity(e).try_insert(GhostLook(m.clone()));
-                m
-            }
-        };
-        for d in children.iter_descendants(e) {
-            if !plain.contains(d) {
-                continue;
-            }
-            // `try_`: a glove's boxes go the frame its model comes in,
-            // which can be this one.
-            commands
-                .entity(d)
-                .try_remove::<MeshMaterial3d<StandardMaterial>>()
-                .try_insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
-        }
-    }
-}
-
-/// A ghost glove's own x-ray material.
-#[derive(Component)]
-struct GhostLook(Handle<crate::anomaly::visuals::XrayMaterial>);
-
-/// The ghost at full strength (its rim's colour).
-const GHOST_RIM: LinearRgba = LinearRgba::rgb(0.11, 0.12, 0.13);
-
-/// How strongly the ghost shows for a gap between the glove you see and
-/// your real hand (m): nothing within 2 cm, fading up to full at 8.
-pub(crate) fn ghost_fade(gap: f32) -> f32 {
-    let t = ((gap - 0.02) / 0.06).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
-/// The ghost brightens as your real hand goes further into what stopped
-/// the glove, and fades as they come back together.
-fn fade_ghosts(
-    ghosts: Query<(&HandVisual, &GhostLook)>,
-    hands: Query<&crate::interact::Hand>,
-    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-) {
-    let Some(mut xray) = xray else {
-        return;
-    };
-    for (v, look) in &ghosts {
-        let Ok(hand) = hands.get(v.hand) else {
-            continue;
-        };
-        let k = hand.felt.map_or(0.0, |f| {
-            ghost_fade(f.translation.distance(hand.world.translation))
-        });
-        let want = GHOST_RIM * k;
-        if let Some(mut m) = xray.get_mut(&look.0)
-            && m.color != want
-        {
-            m.color = want;
-        }
-    }
-}
-
 /// A glove: the palm at the root, joints below it. Without a tracked hand
 /// (the gallery's), it keeps the curl it's given. It wears boxes until its
 /// model (`glove_model`) is in, and keeps them if it never comes.
@@ -928,7 +822,6 @@ pub(crate) fn spawn_hand(
                 curl,
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
-                ghost: false,
             },
             GloveMaterial(vec![glove.clone()]),
             Transform::default(),
@@ -1042,10 +935,6 @@ fn dress_gloves(
         };
         commands.entity(e).remove::<GloveParts>();
         let Some(model) = model else {
-            // A ghost of boxes would read as solid hands: none at all.
-            if v.ghost {
-                commands.entity(e).despawn();
-            }
             continue;
         };
         let Some(palm) = find_node(&model, "palm") else {
@@ -1053,18 +942,7 @@ fn dress_gloves(
             continue;
         };
         let mut own: Vec<(String, Handle<StandardMaterial>)> = Vec::new();
-        let ghost = v.ghost.then(|| {
-            materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.84, 0.86, 0.2),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            })
-        });
         let mut mat = |name: Option<&str>| {
-            if let Some(g) = &ghost {
-                return g.clone();
-            }
             let name = name.unwrap_or("Glove");
             if let Some((_, h)) = own.iter().find(|(n, _)| n == name) {
                 return h.clone();
@@ -1351,7 +1229,7 @@ fn curl_targets(
 /// gun is blocked by a wall), otherwise on the tracked pose.
 fn pose_hands(
     time: Res<Time>,
-    mut visuals: Query<(&mut HandVisual, &mut Transform, Option<&mut Visibility>), Without<Finger>>,
+    mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
     mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
     hands: Query<(&Hand, &Transform, &ChildOf), (Without<HandVisual>, Without<Finger>)>,
     roots_t: Query<&Transform, (Without<Hand>, Without<HandVisual>, Without<Finger>)>,
@@ -1364,7 +1242,7 @@ fn pose_hands(
     guns: Query<&crate::weapons::Gun>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
-    for (mut v, mut t, mut vis) in &mut visuals {
+    for (mut v, mut t) in &mut visuals {
         let Ok((hand, local, parent)) = hands.get(v.hand) else {
             continue;
         };
@@ -1384,21 +1262,9 @@ fn pose_hands(
                 }
             }
         }
-        // A wall stops the glove where the hand's body stopped; the ghost
-        // stays on the real hand and shows only when the two are apart.
-        let tracked = pose;
-        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none() && !v.ghost) {
+        // A wall stops the glove where the hand's body stopped.
+        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none()) {
             pose = felt;
-        }
-        if let (true, Some(vis)) = (v.ghost, vis.as_mut()) {
-            let apart = hand
-                .felt
-                .is_some_and(|f| ghost_fade(f.translation.distance(tracked.translation)) > 0.0);
-            vis.set_if_neq(if apart && hand.holding.is_none() {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            });
         }
         *t = pose;
         let thumb_rest = input.is_ok_and(|i| i.thumb_rest);
@@ -1446,7 +1312,7 @@ fn pose_hands(
         if let Ok(p) = models.get(up) {
             up = p.parent();
         }
-        let Ok((v, _, _)) = visuals.get(up) else {
+        let Ok((v, _)) = visuals.get(up) else {
             continue;
         };
         let spread = v.spread.get(f.finger).copied().unwrap_or(0.0);
@@ -1846,22 +1712,6 @@ mod glove_tests {
         );
     }
 
-    /// The ghost isn't there while the glove and your hand agree, comes
-    /// up smoothly as they part, and is at full strength by 8 cm.
-    #[test]
-    fn the_ghost_fades_in_with_the_gap() {
-        assert_eq!(ghost_fade(0.0), 0.0);
-        assert_eq!(ghost_fade(0.02), 0.0);
-        assert_eq!(ghost_fade(0.08), 1.0);
-        assert_eq!(ghost_fade(0.5), 1.0);
-        let mut last = 0.0;
-        for i in 0..=100 {
-            let k = ghost_fade(i as f32 * 0.001);
-            assert!(k >= last, "the ghost dims as the hand goes in");
-            last = k;
-        }
-    }
-
     #[test]
     fn the_right_wrist_display_is_the_left_mirrored_and_reads() {
         let m = |v: Vec3| Vec3::new(-v.x, v.y, v.z);
@@ -2046,7 +1896,6 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
-                    ghost: false,
                 },
                 Transform::default(),
             ))
@@ -2153,7 +2002,6 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
-                    ghost: false,
                 },
                 Transform::default(),
             ))

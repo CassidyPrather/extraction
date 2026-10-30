@@ -243,9 +243,6 @@ fn mark_palms(
         return;
     };
     for (glove, v) in &gloves {
-        if v.ghost {
-            continue;
-        }
         let patch = match marks.palms.iter().find(|(g, _)| *g == glove) {
             Some((_, p)) => *p,
             None => {
