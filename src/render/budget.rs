@@ -1965,6 +1965,57 @@ pub(crate) mod tests {
         }
     }
 
+    /// Mesh entities in a settled valley by what they belong to (their
+    /// root's name), and how many of those roots move or can be handled:
+    /// what merging static props per material could save
+    /// (`cargo test --lib mesh_census -- --ignored --nocapture`,
+    /// `BUDGET_MAP` for another valley).
+    #[test]
+    #[ignore = "census: prints, asserts nothing"]
+    fn mesh_census() {
+        let _counting = counted();
+        let map = std::env::var("BUDGET_MAP").unwrap_or("marrow_creek".into());
+        let mut app = client_threads(&map, "clearing", None);
+        settle(&mut app);
+        let w = app.world_mut();
+        let meshes: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
+        let mut by_root: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut moving = 0;
+        for e in &meshes {
+            let mut root = *e;
+            let mut dynamic = false;
+            loop {
+                if w.get::<avian3d::prelude::RigidBody>(root)
+                    .is_some_and(|b| !b.is_static())
+                {
+                    dynamic = true;
+                }
+                match w.get::<ChildOf>(root) {
+                    Some(p) => root = p.parent(),
+                    None => break,
+                }
+            }
+            let name = w
+                .get::<Name>(root)
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            let entry = by_root.entry(name).or_default();
+            entry.0 += 1;
+            if dynamic {
+                entry.1 += 1;
+                moving += 1;
+            }
+        }
+        let mut v: Vec<_> = by_root.into_iter().collect();
+        v.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        println!(
+            "{map}: {} mesh entities, {moving} under a moving body; by root (meshes, moving):",
+            meshes.len()
+        );
+        for (name, (n, m)) in v.iter().take(60) {
+            println!("  {n:6} {m:6}  {name}");
+        }
+    }
+
     /// No material many meshes wear is rewritten (nearly) every frame in
     /// a busy moment: each write is every one of them re-specialised on the
     /// main thread. The robots' shared shell was, as the day's light crept
