@@ -1555,6 +1555,50 @@ mod tests {
         assert!(gap < 0.06, "in the hand: its near side {gap} from it");
     }
 
+    /// Lean far out over a table: the head goes where it goes, and the
+    /// rig's root (the room) never moves for it (the 28 October playtest:
+    /// leaning over a bench pushed the play space back).
+    #[test]
+    fn leaning_over_a_table_never_moves_the_room() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(60);
+        // A bench, waist high, its near edge 30 cm ahead.
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(1.2, 0.85, 0.8),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, 0.425, -0.7)),
+        ));
+        vr.step(10);
+        let root = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        // Bend out over it, further and further, then back.
+        for k in 1..=60 {
+            let f = k as f32 / 60.0;
+            vr.head(Vec3::new(0.0, 1.7 - 0.45 * f, -0.75 * f));
+            vr.step(1);
+        }
+        vr.step(30);
+        let moved = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation
+            - root;
+        assert!(
+            Vec2::new(moved.x, moved.z).length() < 0.01,
+            "the room moved {moved} for a lean"
+        );
+    }
+
     /// Bend down to reach your hip: the holster stays at your hip. Crouch
     /// right down: it comes down with you.
     #[test]
