@@ -96,7 +96,12 @@ fn dress(
             ))
             .id();
         spawn_primitives(commands, holder, node, |name| {
-            model_mats.get(name.unwrap_or("Dark"), &mut lib, &server, &mut materials)
+            model_mats.get(
+                super::weak_points::paint(name.unwrap_or("Dark")),
+                &mut lib,
+                &server,
+                &mut materials,
+            )
         });
     };
     for e in &totes {
