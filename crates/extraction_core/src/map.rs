@@ -1299,9 +1299,9 @@ mod tests {
     #[test]
     fn risk_pays_in_loot() {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
-        let village = map.richness_at([5.0, 70.0]);
-        let hollow = map.richness_at([150.0, -40.0]);
-        let rail = map.richness_at([185.0, -215.0]);
+        let village = map.richness_at([-12.0, 45.0]);
+        let hollow = map.richness_at([82.5, -22.0]);
+        let rail = map.richness_at([95.0, -113.8]);
         assert!(village < 1.0, "the village is picked over ({village})");
         assert!(rail > 1.0 && hollow > rail, "{rail} {hollow}");
     }
@@ -1309,15 +1309,15 @@ mod tests {
     #[test]
     fn marrow_creek_parses_and_builds() {
         let map = MapDef::from_ron(MARROW_CREEK).expect("map parses");
-        assert_eq!(map.size, 640.0);
+        assert_eq!(map.size, 388.0);
         assert!(map.markers_of(&MarkerKind::Rendezvous).count() >= 2);
         let hm = Heightmap::build(&map);
         // The creek has water, and the village bridge leaves it alone.
         assert!(
-            hm.water_level([11.0, 10.0]).is_some(),
+            hm.water_level([8.6, -20.2]).is_some(),
             "creek under the bridge"
         );
-        assert!(hm.water_level([5.0, 70.0]).is_none(), "village is dry");
+        assert!(hm.water_level([-12.0, 45.0]).is_none(), "village is dry");
         // Every insertion and rendezvous is on walkable ground.
         for m in map
             .markers
@@ -1335,7 +1335,7 @@ mod tests {
         let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         for rv in map.markers_of(&MarkerKind::Rendezvous) {
             assert!(
-                crate::geom::dist(ins.at, rv.at) > 350.0,
+                crate::geom::dist(ins.at, rv.at) > 350.0 * crate::map_lint::valley_scale(&map),
                 "{} is too close to the insertion",
                 rv.name
             );

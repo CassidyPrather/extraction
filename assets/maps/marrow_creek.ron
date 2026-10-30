@@ -34,7 +34,7 @@
         Ridge(points: [(-84.0, -54.0), (-64.0, -52.0), (-48.0, -50.0)], width: 16.0, height: 6.0),
         Ridge(points: [(26.0, -36.0), (50.0, -30.0), (66.0, -18.0)], width: 20.0, height: 4.5),
         // the ford spur between the Village and the ford;
-        Ridge(points: [(66.0, -14.0), (70.0, 0.0), (74.0, 14.0)], width: 18.0, height: 6.0),
+        Ridge(points: [(56.0, -14.0), (58.0, 0.0), (60.0, 14.0)], width: 16.0, height: 6.0),
         // and the ford rise along the Old farm's south edge.
         Ridge(points: [(60.0, -64.0), (95.0, -66.0), (128.0, -70.0)], width: 16.0, height: 5.0),
         // the Hollow's south rim, between it and the rail yard;
@@ -354,7 +354,7 @@
         (prefab: "shed", at: (133.5, -125.8), rot: 313.0, tag: "platelayers_hut"),
         // The yard's water tower: the landmark you see the yard by.
         (prefab: "water_tower", at: (142.0, -94.8), rot: 0.0),
-        (prefab: "boxcar", at: (59.4, -134.5), rot: 114.6),
+        (prefab: "boxcar", at: (61.0, -137.7), rot: 296.6),
         (prefab: "ranger_tower", at: (-146.0, -82.0), rot: 0.0),
         (prefab: "robot_gate", at: (-142.0, -144.1), rot: 45.0),
 

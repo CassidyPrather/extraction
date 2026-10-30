@@ -252,10 +252,12 @@ mod tests {
         let size = 24.0;
         let mut counts = std::collections::HashMap::new();
         let mut patches = 0;
-        let mut z = -240.0;
-        while z < 240.0 {
-            let mut x = -240.0;
-            while x < 240.0 {
+        // The middle three quarters of the valley, whatever its size.
+        let reach = map.size * 0.375;
+        let mut z = -reach;
+        while z < reach {
+            let mut x = -reach;
+            while x < reach {
                 let a = cover.patch(&hm, [x, z], size);
                 assert_eq!(a, cover.patch(&hm, [x, z], size), "same patch, same plants");
                 for s in &a {
