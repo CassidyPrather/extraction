@@ -11,7 +11,7 @@
         map: "marrow_creek",
         name: "Farm barricade",
         // Behind crates in the farmyard, facing the Gate.
-        at: (181.0, 158.0),
+        at: (100.0, 92.8),
         rot: 315.0,
         pieces: [
             Crate(at: (-0.9, -1.0), size: 0.9),
@@ -37,7 +37,7 @@
         name: "Path marker",
         // Where the ranger's path leaves the footbridge: the pump keeper's
         // word for the quiet way.
-        at: (-184.0, -42.0),
+        at: (-87.0, -48.0),
         rot: 0.0,
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.5),
@@ -53,7 +53,7 @@
         map: "marrow_creek",
         name: "Survey table",
         // The survey team's table on the Hollow's edge, below the post.
-        at: (114.0, -14.0),
+        at: (48.3, 2.6),
         rot: 60.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -215,7 +215,7 @@
         name: "Bus depot queue",
         // Chairs set out for the queue on the 14th, and what was left on
         // them when the buses went.
-        at: (30.0, -205.0),
+        at: (18.8, -97.0),
         rot: 180.0,
         pieces: [
             Chair(at: (-1.5, 0.0), rot: 0.0),
@@ -263,7 +263,7 @@
         name: "Shelter dorm",
         // Under the village, in the civil-defence shelter's dorm (room
         // "dorm", site bunker_marrow): she came down after they took Jan.
-        at: (-13.3, 100.4),
+        at: (-15.5, 68.9),
         rot: 90.0,
         floor: Some(11.61),
         pieces: [
@@ -335,7 +335,7 @@
         map: "marrow_creek",
         name: "Rusty's corner",
         // Behind the house by the well: the dog's bed and his tin.
-        at: (-25.5, 96.0),
+        at: (-27.7, 64.5),
         rot: 90.0,
         after: Some(Tier(1)),
         pieces: [
@@ -357,7 +357,7 @@
         name: "Hana's basket",
         // In the shelter's hall under the village (room "hall", site
         // bunker_marrow): left on the floor for Mrs Holm.
-        at: (-7.5, 93.0),
+        at: (-9.7, 61.5),
         rot: 0.0,
         floor: Some(11.61),
         after: Some(Tier(2)),
@@ -378,7 +378,7 @@
         map: "marrow_creek",
         name: "By the well",
         // Her chair at the well, and her basket dropped.
-        at: (-27.0, 105.5),
+        at: (-29.2, 74.0),
         rot: 330.0,
         after: Some(Tier(3)),
         pieces: [
@@ -399,7 +399,7 @@
         map: "marrow_creek",
         name: "Valley office copy",
         // The inspector's carbon, dropped from the post office's sack.
-        at: (-27.5, 61.0),
+        at: (-29.7, 29.5),
         rot: 270.0,
         after: Some(Tier(4)),
         pieces: [
@@ -417,7 +417,7 @@
         name: "At the fence",
         // After the recall: by the south gate where the soldiers turned bus
         // four back, his flask and a note on a crate.
-        at: (33.0, 290.0),
+        at: (15.0, 168.5),
         rot: 180.0,
         after: Some(Recalled),
         pieces: [
@@ -438,7 +438,7 @@
         name: "Lev's chair",
         // After the ending (he's been down to the Depot with you): a chair
         // by the well, facing her house.
-        at: (-26.0, 112.0),
+        at: (-28.2, 80.5),
         rot: 25.0,
         after: Some(Ended),
         pieces: [
@@ -590,8 +590,8 @@
         map: "marrow_creek",
         name: "Hauler's tag",
         // On a pallet of bicycles in the sorting hall.
-        at: (-231.5, -188.0),
-        floor: Some(15.31),
+        at: (-123.5, -77.1),
+        floor: Some(12.21),
         note: Some((
             name: "Hauler's tag",
             text: "INTAKE 00412\nBicycle (1). Marrow, village.\nCondition: kept.",
@@ -604,8 +604,8 @@
         name: "Tag office desk",
         // The tag office's desk: the intake terminal and the review docket
         // nobody stamped.
-        at: (-212.8, -192.5),
-        floor: Some(15.31),
+        at: (-104.8, -81.6),
+        floor: Some(12.21),
         note: Some((
             name: "Review docket",
             text: "REVIEW DOCKET - MARROW, KETTLE, CINDER\nPrepared for the Authority's review, 1 April.\nItems for decision: 48,212. Personnel: 31.\nRecommendation: ______\nStamp: ______\nPrepared by P. Rus, Inspector",
@@ -630,8 +630,8 @@
         map: "marrow_creek",
         name: "Marek crate",
         // Bay K-14, the long crate. Closed; her basket strapped on top.
-        at: (-263.6, -178.6),
-        floor: Some(11.31),
+        at: (-155.6, -67.7),
+        floor: Some(8.21),
         note: Some((
             name: "Marek tag",
             text: "CUSTODIAN - KEPT\nMAREK, H. Civilian. Marrow.\nRecovered: village, 3 FEB.\nWith: basket (1).\nReview: pending.",
@@ -643,8 +643,8 @@
     (
         map: "marrow_creek",
         name: "The dog's crate",
-        at: (-264.3, -177.1),
-        floor: Some(11.31),
+        at: (-156.3, -66.2),
+        floor: Some(8.21),
         note: Some((
             name: "Dog's tag",
             text: "CUSTODIAN - KEPT\nMAREK. Domestic animal (1).\nRecovered: village, 14 NOV.\nTag on collar: RUSTY.\nReview: pending.",
@@ -655,8 +655,8 @@
     (
         map: "marrow_creek",
         name: "Holm crate",
-        at: (-260.4, -177.2),
-        floor: Some(11.31),
+        at: (-152.4, -66.3),
+        floor: Some(8.21),
         note: Some((
             name: "Holm tag",
             text: "CUSTODIAN - KEPT\nHOLM, J. Civilian. Marrow.\nRecovered: street, 3 NOV.\nReview: pending.",
@@ -668,8 +668,8 @@
         map: "marrow_creek",
         name: "Vey's crate",
         // In the kept stacks' middle row: the survey chief, from the Hollow.
-        at: (-260.5, -194.0),
-        floor: Some(11.31),
+        at: (-152.5, -83.1),
+        floor: Some(8.21),
         note: Some((
             name: "Vey tag",
             text: "CUSTODIAN - KEPT\nVEY, O. Institute survey.\nRecovered: the Hollow, 23 NOV.\nWith: notebook (1).\nReview: pending.",
@@ -683,9 +683,9 @@
         name: "Pump control desk",
         // The drowned pump station's control desk (room "control", site
         // pump_marrow): the rest of the pump keeper's log.
-        at: (-162.6, 13.8),
+        at: (-72.6, 3.9),
         rot: 0.0,
-        floor: Some(17.61),
+        floor: Some(14.61),
         pieces: [],
         note: Some((
             name: "Pump log, below",
@@ -699,7 +699,7 @@
         name: "Brabec's locker",
         // By his locker in the sump (site pump_marrow; the boots are the
         // layout's), under 2.4 m of water until it's pumped.
-        at: (-188.4, 40.2),
+        at: (-98.4, 30.3),
         rot: 0.0,
         floor: Some(12.61),
         pieces: [
@@ -758,7 +758,7 @@
         name: "The second lorry",
         // The depot yard: what was left for the luggage lorry on the 15th,
         // one piece a household, labelled. It never came.
-        at: (15.0, -239.0),
+        at: (3.8, -131.0),
         rot: 0.0,
         pieces: [
             Prop(model: "suitcase_shut", at: (-3.2, 0.0, -0.6), rot: 10.0, size: (0.62, 0.22, 0.47)),
@@ -882,7 +882,7 @@
         // In the village street by the post office, where the collector
         // took Jan Holm on 3 Nov with the shelter's lamp oil on his cart.
         // Hana left it where it stopped.
-        at: (-16.0, 76.0),
+        at: (-18.2, 44.5),
         rot: 0.0,
         pieces: [
             Pallet(at: (0.0, 0.0), rot: 15.0),

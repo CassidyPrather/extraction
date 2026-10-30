@@ -105,7 +105,7 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "marrow_creek",
         what: Standing::Piano,
-        at: [-18.21, 19.08, 95.00],
+        at: [-20.41, 18.96, 63.50],
         rot: 90.0,
     },
     // Fiala's gramophone, on the lodge floor against the windowless log

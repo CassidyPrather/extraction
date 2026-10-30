@@ -991,7 +991,7 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
         (_, _, "post_office") => Some(Story::PostOffice),
         (_, _, "mine_office") => Some(Story::MineOffice),
         (_, _, "foreman") => Some(Story::Foreman),
-        (Valley::Marrow, "house_plank", _) if here(-18.0, 95.0) => Some(Story::Hana),
+        (Valley::Marrow, "house_plank", _) if here(-20.2, 63.5) => Some(Story::Hana),
         (Valley::Kettle, "house_plank", _) if here(-30.0, 72.0) => Some(Story::ShotFirer),
         _ => None,
     }
@@ -1538,7 +1538,7 @@ mod tests {
             &map,
             "cabin_log",
             "",
-            &Transform::from_xyz(-145.0, 0.0, 190.0),
+            &Transform::from_xyz(-70.8, 0.0, 113.5),
             false,
         );
         assert!(tomas.iter().any(|(m, _)| *m == "tally_board"));
@@ -1822,7 +1822,7 @@ mod tests {
         // set's.
         let mut map = crate::world::load_map_def("marrow_creek");
         map.markers.clear();
-        for (prefab, x, z) in [("shop", -16.0, 35.0), ("cabin_log", -185.0, 190.0)] {
+        for (prefab, x, z) in [("shop", -18.2, 3.5), ("cabin_log", -110.8, 113.5)] {
             let xf = Transform::from_xyz(x, 0.0, z);
             let things = dress(&map, prefab, "", &xf, false);
             let set = kit(prefab, false);
@@ -1849,7 +1849,7 @@ mod tests {
     #[test]
     fn storys_houses_have_their_things() {
         let map = crate::world::load_map_def("marrow_creek");
-        let xf = Transform::from_xyz(-18.0, 0.0, 95.0);
+        let xf = Transform::from_xyz(-20.2, 0.0, 63.5);
         let hana = dress(&map, "house_plank", "", &xf, false);
         let names: Vec<_> = hana.iter().map(|(n, _)| *n).collect();
         assert!(
@@ -1925,7 +1925,7 @@ mod tests {
                 let [w, _, d] = prefab_footprint(&p.prefab);
                 let (hw, hd) = (w * 0.5, d * 0.5);
                 let door = prefab_entrances(&p.prefab)[0];
-                let hana = name == "marrow_creek" && Vec2::from(p.at) == Vec2::new(-18.0, 95.0);
+                let hana = name == "marrow_creek" && Vec2::from(p.at) == Vec2::new(-20.2, 63.5);
                 assert_eq!(
                     yard.iter().any(|(m, _)| *m == "dog_kennel"),
                     hana,
