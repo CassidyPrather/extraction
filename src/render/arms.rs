@@ -548,7 +548,7 @@ fn pose_body_shadow(
 
 /// A piece of a sleeve.
 #[derive(Component)]
-struct ArmPart;
+pub(crate) struct ArmPart;
 
 #[cfg(test)]
 mod tests {

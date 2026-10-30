@@ -460,6 +460,11 @@ fn seat_from_body(
     }
 }
 
+/// How far a thing taken by a free grip may be from the hand's middle, at
+/// its nearest side, and stay where it's taken (m); further, it's brought
+/// in to the hand.
+const PALM_REACH: f32 = 0.05;
+
 /// The fastest anything leaves a hand, m/s: a hard overarm throw. A
 /// controller's tracking jumping (or the playspace moving) while it holds
 /// something would otherwise let go of it at hundreds of m/s.
@@ -822,11 +827,16 @@ fn apply_hand_actions(
         Query<(), With<crate::anomaly::harvest::Scalded>>,
         Query<(), With<crate::weapons::gunsmith::InVice>>,
     ),
-    ropes: Query<&crate::gadgets::climbing::Rope>,
-    ladders: Query<(), With<hand_climb::Ladder>>,
+    // Things held where the hand is (a rope, a ladder).
+    holds: (
+        Query<&crate::gadgets::climbing::Rope>,
+        Query<(), With<hand_climb::Ladder>>,
+    ),
     time: Res<Time>,
     slot_places: Query<&Transform, With<body::BodySlot>>,
+    bounds: Query<&ColliderAabb>,
 ) {
+    let (ropes, ladders) = holds;
     for action in actions.read() {
         match *action {
             HandAction::Grab {
@@ -885,7 +895,7 @@ fn apply_hand_actions(
                     warn!("grab: player {player} has no {side:?} hand");
                     continue;
                 };
-                let Ok((gt, grabbable, held, in_socket, _, bulky)) = items.get(item) else {
+                let Ok((gt, grabbable, held, in_socket, is_item, bulky)) = items.get(item) else {
                     warn!("grab: {item} is not grabbable");
                     continue;
                 };
@@ -969,7 +979,22 @@ fn apply_hand_actions(
                             GripRole::Free => hand_world.compute_affine().inverse() * gt.affine(),
                             _ => gp.local.compute_affine().inverse(),
                         };
-                        let offset = Transform::from_matrix(offset.into());
+                        let mut offset = Transform::from_matrix(offset.into());
+                        // A thing held touches the hand. Taken from further
+                        // off (caught by a far grab, snatched as it flew
+                        // past), it comes in until its nearest side is at the
+                        // hand, as it's turned: held where it was caught, it
+                        // hung a foot ahead of the hand.
+                        if gp.role == GripRole::Free
+                            && is_item.is_some()
+                            && let Ok(aabb) = bounds.get(item)
+                        {
+                            let at = hand_world.translation;
+                            let gap = at.clamp(aabb.min, aabb.max) - at;
+                            if gap.length() > PALM_REACH {
+                                offset.translation -= hand_world.rotation.inverse() * gap;
+                            }
+                        }
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
                         // Something bulky doesn't take on the hand's speed as

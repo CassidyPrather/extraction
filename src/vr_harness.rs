@@ -1546,6 +1546,13 @@ mod tests {
                 .unwrap()
                 .translation()
         );
+        // In the hand, not a foot ahead of it (the 28 October playtest): it
+        // was caught 30 cm out and held there.
+        vr.step(10);
+        let palm = vr.hand_state(Side::Right).world.translation;
+        let aabb = *vr.app.world().get::<ColliderAabb>(item).unwrap();
+        let gap = palm.clamp(aabb.min, aabb.max).distance(palm);
+        assert!(gap < 0.06, "in the hand: its near side {gap} from it");
     }
 
     /// Bend down to reach your hip: the holster stays at your hip. Crouch
