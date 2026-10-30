@@ -617,7 +617,14 @@ pub(crate) fn perceive(
             && !dazzled;
         let eye = gt.transform_point(senses.eye);
         let forward = gt.forward().as_vec3();
-        let reach = conditions.sight(senses.sight)
+        // A hot zone's guards see their own ground (`Region::notice`, Map
+        // design's caps): no further than that while they stand in it.
+        let notice = zone
+            .map
+            .region_at([eye.x, eye.z])
+            .and_then(|r| r.notice)
+            .unwrap_or(f32::MAX);
+        let reach = conditions.sight(senses.sight.min(notice))
             // Optics frosted (`hazards::Frosted`).
             * if frosted {
                 super::hazards::FROST_SIGHT

@@ -63,6 +63,20 @@ pub struct Minelayer {
     pub flee_cooldown: f32,
 }
 
+impl Minelayer {
+    /// Laying a field: seconds until the next mine drops. It counts down
+    /// only once it's stopped over the spot (it's `rules::LAY_TIME` while
+    /// it drives there), so below that it's stopped and about to lay: the
+    /// moment for the chute's hiss (`audio_machines`). `None` when it isn't
+    /// laying.
+    pub fn laying_in(&self) -> Option<f32> {
+        match self.doing {
+            Doing::Lay { wait, .. } => Some(wait.max(0.0)),
+            _ => None,
+        }
+    }
+}
+
 /// What it's about.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Doing {
