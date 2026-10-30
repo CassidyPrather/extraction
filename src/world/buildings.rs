@@ -6049,8 +6049,14 @@ pub fn dress_buildings(
         let mut sash = broken.iter();
         for d in &mut geo.props {
             for (name, _) in &mut d.models {
-                if *name == "window_sash" && sash.next() == Some(&true) {
-                    *name = "window_sash_broken";
+                // An intact one's leaves hang apart, to open
+                // (`hinge::fit_sash`): the building draws its frame.
+                if *name == "window_sash" {
+                    *name = if sash.next() == Some(&true) {
+                        "window_sash_broken"
+                    } else {
+                        super::hinge::SASH_FRAME
+                    };
                 }
             }
         }

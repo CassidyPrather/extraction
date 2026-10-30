@@ -2183,8 +2183,9 @@ fn list_counters() {
 #[test]
 fn counters_drawers_and_doors_are_drawn_where_they_hang() {
     // Each moving part's node is drawn from the part's own space back into
-    // its model's: the node's origin (a door's hinge, a drawer's middle)
-    // lands on the part itself, shut, in every counter.
+    // its model's: the node's origin (a door's or a window leaf's hinge, a
+    // drawer's middle) lands on the part itself, shut, in every counter
+    // and window.
     let mut app = app(None);
     run(&mut app, 3);
     let mut checked = 0;
@@ -2193,8 +2194,8 @@ fn counters_drawers_and_doors_are_drawn_where_they_hang() {
         .query::<(&crate::world::hinge::Moving, &super::wood::Drawn)>()
         .iter(app.world())
     {
-        let name = d.model.expect("a counter part draws its node");
-        let origin = crate::world::hinge::counter_node_origin(name).expect("a node we move");
+        let name = d.model.expect("a moving part draws its node");
+        let origin = crate::world::hinge::node_origin(name).expect("a node we move");
         let drawn = (m.rest * d.at).transform_point(origin);
         assert!(
             drawn.distance(m.rest.translation) < 1e-3,

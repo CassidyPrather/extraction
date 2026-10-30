@@ -209,7 +209,7 @@ pub const SLIDE_MOST: f32 = 1.2;
 /// door, a drawer. `rest` is its pose shut (world); `at` how far it's open
 /// (radians or metres); `open` the end it's headed for when nothing holds
 /// it; `left` it was let go part-way and stays.
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct Moving {
     pub motion: Motion,
     pub rest: Transform,
@@ -263,6 +263,47 @@ pub fn spawn_moving(
     centre: Vec3,
 ) -> Entity {
     use avian3d::prelude::*;
+    let e = moving(
+        commands,
+        name,
+        rest,
+        motion,
+        crate::interact::GrabPoint::free(),
+    );
+    commands.entity(e).insert(RigidBody::Kinematic).with_child((
+        Collider::cuboid(size.x, size.y, size.z),
+        CollisionLayers::new(super::Layer::World, LayerMask::ALL),
+        Transform::from_translation(centre),
+    ));
+    e
+}
+
+/// A moving part with nothing to bump into, taken hold of within `reach`
+/// of `grip` (its own space): a window's leaf, whose glass is its pane's
+/// (`destruction::glass`), which a round or a thrown thing must reach.
+pub fn spawn_moving_open(
+    commands: &mut Commands,
+    name: &str,
+    rest: Transform,
+    motion: Motion,
+    grip: Vec3,
+    reach: f32,
+) -> Entity {
+    let point = crate::interact::GrabPoint::new(
+        Transform::from_translation(grip),
+        crate::interact::GripRole::Primary,
+        reach,
+    );
+    moving(commands, name, rest, motion, point)
+}
+
+fn moving(
+    commands: &mut Commands,
+    name: &str,
+    rest: Transform,
+    motion: Motion,
+    point: crate::interact::GrabPoint,
+) -> Entity {
     commands
         .spawn((
             Name::new(name.to_string()),
@@ -275,16 +316,10 @@ pub fn spawn_moving(
             },
             crate::raid::truck::Pressable::Door,
             crate::interact::Grabbable {
-                points: vec![crate::interact::GrabPoint::free()],
+                points: vec![point],
             },
             rest,
             Visibility::default(),
-            RigidBody::Kinematic,
-        ))
-        .with_child((
-            Collider::cuboid(size.x, size.y, size.z),
-            CollisionLayers::new(super::Layer::World, LayerMask::ALL),
-            Transform::from_translation(centre),
         ))
         .id()
 }
@@ -344,7 +379,10 @@ pub fn move_parts(
     time: Res<Time>,
 ) {
     let dt = time.delta_secs();
-    for (e, mut part, mut t, held) in &mut parts {
+    for (e, mut stored, mut t, held) in &mut parts {
+        // Changed only when it moves: a window's panes follow theirs
+        // (`glass::carry_panes`).
+        let mut part = *stored;
         let (most, pace) = part.motion.rates();
         let end = part.motion.end();
         match held {
@@ -380,7 +418,10 @@ pub fn move_parts(
             }
             None => {}
         }
-        *t = part.pose();
+        if part != *stored {
+            *stored = part;
+        }
+        t.set_if_neq(part.pose());
     }
 }
 
@@ -441,13 +482,19 @@ const COUNTER_NODES: &[CounterNode] = &[
     ),
 ];
 
-/// A counter node's origin in its model's space (`model#node`), if it's
-/// one we move.
-pub fn counter_node_origin(drawn: &str) -> Option<Vec3> {
+/// A moving node's origin in its model's space (`model#node`: a
+/// counter's, a window's leaf), if it's one we move.
+pub fn node_origin(drawn: &str) -> Option<Vec3> {
     COUNTER_NODES
         .iter()
         .find(|n| n.0 == drawn)
         .map(|n| Vec3::from(n.1))
+        .or_else(|| {
+            SASH_LEAVES
+                .iter()
+                .find(|n| n.0 == drawn)
+                .map(|n| Vec3::from(n.1))
+        })
 }
 
 /// How far a drawer pulls out (m: `DRAWER_TRAVEL`, the model's), and a
@@ -512,6 +559,88 @@ fn spawn_counter_node(
         range: crate::render::lod::near_range().end_margin,
         shadow: false,
     });
+}
+
+/// A window sash's leaves (`window_sash`, `art/props/openings.py`):
+/// `model#node`, the node's origin (its hinge, mid-height) in the model's
+/// space, its box's centre from there and its size (read from the model),
+/// whether it hangs from its right (its free edge toward -X), and which of
+/// [`crate::destruction::glass::sash_panes`] is its glass. The frame
+/// keeps the fixed light. All open into the room (+Z).
+pub const SASH_LEAVES: [(&str, [f32; 3], [f32; 3], [f32; 3], bool, usize); 3] = [
+    (
+        "window_sash#leaf_l",
+        [-0.44, -0.1325, 0.01],
+        [0.207, 0.0, -0.024],
+        [0.415, 0.715, 0.048],
+        false,
+        0,
+    ),
+    (
+        "window_sash#leaf_r",
+        [0.44, -0.1325, 0.01],
+        [-0.207, 0.0, -0.024],
+        [0.415, 0.715, 0.048],
+        true,
+        1,
+    ),
+    (
+        "window_sash#fortochka",
+        [-0.44, 0.3825, 0.01],
+        [0.26, 0.0, -0.02],
+        [0.52, 0.215, 0.04],
+        false,
+        2,
+    ),
+];
+
+/// What the building draws of an intact sash: its frame, the leaves
+/// being their own (`fit_sash`).
+pub const SASH_FRAME: &str = "window_sash#frame";
+
+/// How far a window's leaf swings in, radians.
+pub const WINDOW_LEAF: f32 = 1.75;
+
+/// Hang an intact sash's leaves, `prop` its pose in the world (scaled to
+/// its opening): each a moving part on its hinge, drawn from its node of
+/// the model. Returns them in [`SASH_LEAVES`]'s order.
+pub fn fit_sash(commands: &mut Commands, prop: bevy::math::Affine3A) -> [Entity; 3] {
+    let (scale, _, _) = prop.to_scale_rotation_translation();
+    SASH_LEAVES.map(|(drawn, origin, centre, size, right, _)| {
+        // Turned over so a positive turn swings the free edge into the
+        // room: about -Y for a leaf hung on the left, +Y on the right
+        // with its +X its free edge.
+        let flip = if right {
+            Quat::from_rotation_y(std::f32::consts::PI)
+        } else {
+            Quat::from_rotation_x(std::f32::consts::PI)
+        };
+        let node = bevy::math::Affine3A::from_rotation_translation(flip, Vec3::from(origin));
+        let (_, rot, at) = (prop * node).to_scale_rotation_translation();
+        let rest = Transform::from_translation(at).with_rotation(rot);
+        let s = scale.abs();
+        let box_centre = flip.inverse() * (Vec3::from(centre) * s);
+        let box_size = Vec3::from(size) * s;
+        let reach = 0.5 * Vec2::new(box_size.x, box_size.y).length();
+        let e = spawn_moving_open(
+            commands,
+            drawn,
+            rest,
+            Motion::Hinge { most: WINDOW_LEAF },
+            box_centre,
+            reach.max(0.2),
+        );
+        let model_at = Transform::from_matrix((rest.compute_affine().inverse() * prop).into());
+        commands.entity(e).insert(crate::destruction::wood::Drawn {
+            model: Some(drawn),
+            mat: crate::render::materials::Mat::Timber,
+            at: model_at,
+            size: box_size,
+            range: crate::render::lod::near_range().end_margin,
+            shadow: false,
+        });
+        e
+    })
 }
 
 #[cfg(test)]
