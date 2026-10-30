@@ -1980,6 +1980,9 @@ pub(crate) mod tests {
         let w = app.world_mut();
         let meshes: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
         let mut by_root: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut roots: HashMap<String, std::collections::HashSet<Entity>> = HashMap::new();
+        // An unnamed root's meshes by their own (or nearest) name.
+        let mut unnamed: HashMap<String, usize> = HashMap::new();
         let mut moving = 0;
         for e in &meshes {
             let mut root = *e;
@@ -1998,6 +2001,25 @@ pub(crate) mod tests {
             let name = w
                 .get::<Name>(root)
                 .map_or("(unnamed)".to_string(), |n| n.to_string());
+            roots.entry(name.clone()).or_default().insert(root);
+            if name == "(unnamed)" {
+                let mut at = *e;
+                let mut own = format!(
+                    "(no name; {} components)",
+                    w.entity(at).archetype().component_count()
+                );
+                for _ in 0..8 {
+                    if let Some(n) = w.get::<Name>(at) {
+                        own = n.to_string();
+                        break;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => break,
+                    }
+                }
+                *unnamed.entry(own).or_default() += 1;
+            }
             let entry = by_root.entry(name).or_default();
             entry.0 += 1;
             if dynamic {
@@ -2012,7 +2034,16 @@ pub(crate) mod tests {
             meshes.len()
         );
         for (name, (n, m)) in v.iter().take(60) {
-            println!("  {n:6} {m:6}  {name}");
+            println!(
+                "  {n:6} {m:6}  {name} ({} roots)",
+                roots.get(name).map_or(0, |r| r.len())
+            );
+        }
+        let mut u: Vec<_> = unnamed.into_iter().collect();
+        u.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("unnamed roots' meshes by their own name:");
+        for (name, n) in u.iter().take(20) {
+            println!("  {n:6}  {name}");
         }
     }
 
