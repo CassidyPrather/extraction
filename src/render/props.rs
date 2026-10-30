@@ -783,12 +783,13 @@ fn finger_aim_spread(side: Side, finger: usize, c: f32, spread: f32) -> Quat {
     let curl = Quat::from_rotation_x(-JOINT_BEND[0] * c);
     if finger == 4 {
         // The thumb swings rather than bends at its root: out beside the
-        // index when open, down along the far side of a grip, across the
-        // fingers in a fist; its pad turned toward them.
+        // index when open, forward along its own side of a grip (a pistol's
+        // frame: aimed across it, it went through it), across the fingers
+        // in a fist; its pad turned toward them.
         let t = |x: f32, y: f32, z: f32| Vec3::new(x * thumb_side, y, z);
         let (open, grip, fist) = (
             t(0.45, -0.25, -0.86),
-            t(-0.15, -0.55, -0.82),
+            t(0.1, -0.32, -0.94),
             t(-0.75, -0.45, -0.5),
         );
         let d = if c < THUMB_ON_GRIP {
@@ -1312,6 +1313,7 @@ fn pose_hands(
     models: Query<&ChildOf, With<GloveModel>>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     guns: Query<&crate::weapons::Gun>,
+    supports: Query<&crate::interact::Supported>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
     for (mut v, mut t) in &mut visuals {
@@ -1334,8 +1336,23 @@ fn pose_hands(
                 }
             }
         }
+        // The other hand on a gun's support (the handguard, a palm cupped
+        // under a pistol's grip) sits on it as the grip hand sits on the
+        // grip: left at the controller, two hands on a pistol never looked
+        // like two hands on it (the 28 October playtest).
+        let mut on_support = false;
+        if let Some(item) = hand.supporting
+            && let (Ok((_, igt, g)), Ok(s)) = (held.get(item), supports.get(item))
+            && let Some(p) = g
+                .points
+                .get(s.point)
+                .filter(|p| p.role == GripRole::Support)
+        {
+            pose = igt.mul_transform(p.local);
+            on_support = true;
+        }
         // A wall stops the glove where the hand's body stopped.
-        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none()) {
+        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none() && !on_support) {
             pose = felt;
         }
         *t = pose;
