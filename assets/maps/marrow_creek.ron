@@ -391,8 +391,9 @@
 
         // Cover within a four-second sprint of every step of the first jobs
         // (map_lint FIRST_RUN) on the tight valley's ground: the farms' and
-        // the village's wood, stacked by the ways.
-        (prefab: "log_pile", at: (28.3, 128.5), rot: 155.0),
+        // the village's wood, stacked by the ways (clear of the drills'
+        // line north from the drop, bot::scenarios::target_point).
+        (prefab: "log_pile", at: (35.0, 131.0), rot: 155.0),
         (prefab: "log_pile", at: (48.0, 118.0), rot: 336.0),
         (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
         (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
