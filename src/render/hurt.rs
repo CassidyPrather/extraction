@@ -143,10 +143,16 @@ fn add_hurt_vignette(
     mut commands: Commands,
     heads: Query<(Entity, &ChildOf), Added<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
+    opts: Res<crate::launch::LaunchOptions>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
+    // With a camera of its own (a gauge, a screenshot, a flyover) the
+    // player's head isn't the view: there's nothing of theirs to darken.
+    if opts.camera.is_some() {
+        return;
+    }
     for (head, parent) in &heads {
         if !locals.contains(parent.parent()) {
             continue;
