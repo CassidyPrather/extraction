@@ -261,6 +261,34 @@ pub(crate) fn fly_dirigibles(
     }
 }
 
+/// The cargo pod's origin stands this high over what it sits on (its
+/// skids' undersides: `art/robots/logistics.py`), and hangs this far under
+/// the cable's end (its lifting eye).
+pub const POD_SIT: f32 = 0.48;
+pub const POD_HANG: f32 = 0.45;
+/// Half the pod's footprint (x, z), skids and all.
+pub const POD_HALF: Vec2 = Vec2::new(0.65, 0.9);
+
+/// Where the pod's origin rests at `at` (x, z) on ground `ground`: on its
+/// skids, on the highest ground under any corner or its middle, so no part
+/// of it is in the ground (on a slope its low side stands clear).
+pub fn pod_rest(ground: impl Fn(f32, f32) -> f32, at: Vec3) -> f32 {
+    let mut top = ground(at.x, at.z);
+    for (sx, sz) in [
+        (-1.0, -1.0),
+        (-1.0, 1.0),
+        (1.0, -1.0),
+        (1.0, 1.0),
+        (0.0, -1.0),
+        (0.0, 1.0),
+        (-1.0, 0.0),
+        (1.0, 0.0),
+    ] {
+        top = top.max(ground(at.x + sx * POD_HALF.x, at.z + sz * POD_HALF.y));
+    }
+    top + POD_SIT
+}
+
 /// Lowering, landing and reeling up the cargo pod.
 fn cargo(
     mut commands: Commands,
@@ -281,7 +309,9 @@ fn cargo(
     for (e, mut d, brain, gt, mut rng) in &mut ships {
         let pos = gt.translation();
         let gondola = pos.y - RADIUS - 1.1;
-        let drop = (gondola - zone.ground(pos.x, pos.z) - 0.6).max(0.0);
+        // Down until it sits on its skids, on the highest ground under it.
+        let rest = pod_rest(|x, z| zone.ground(x, z), pos);
+        let drop = (gondola - POD_HANG - rest).max(0.0);
         let lowering = matches!(brain, Brain::Working { .. }) && !d.sinking;
         let target = if lowering { drop } else { 0.0 };
         d.cable += (target - d.cable).clamp(-2.0 * dt, 2.0 * dt);
@@ -348,15 +378,14 @@ fn cargo(
         if d.sinking {
             if let Some(p) = d.pod.take() {
                 if let Ok(mut t) = pods.get_mut(p) {
-                    let g = zone.ground(t.translation.x, t.translation.z);
-                    t.translation.y = g + 0.45;
+                    t.translation.y = pod_rest(|x, z| zone.ground(x, z), t.translation);
                 }
             }
             continue;
         }
         if let Some(p) = d.pod {
             if let Ok(mut t) = pods.get_mut(p) {
-                t.translation = Vec3::new(pos.x, gondola - d.cable - 0.45, pos.z);
+                t.translation = Vec3::new(pos.x, gondola - d.cable - POD_HANG, pos.z);
             }
             // Reeled all the way back up after the job: it goes with the ship.
             if !lowering && d.cable <= 0.0 && matches!(brain, Brain::Leave { .. }) {
@@ -396,6 +425,33 @@ fn report_sightings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pod set down on a hillside is on it, not in it: every corner of
+    /// its footprint has ground at or under its skids, on flat ground and
+    /// on a 30% slope (the playtest's was buried in a hill, 1:01:50).
+    #[test]
+    fn the_pod_sits_on_the_ground_not_in_it() {
+        for slope in [0.0f32, 0.3, -0.45] {
+            let ground = move |x: f32, z: f32| 10.0 + slope * x + 0.1 * slope * z;
+            let at = Vec3::new(3.0, 0.0, -2.0);
+            let y = pod_rest(ground, at);
+            let skids = y - POD_SIT;
+            for sx in [-1.0, 0.0, 1.0] {
+                for sz in [-1.0, 0.0, 1.0] {
+                    let g = ground(at.x + sx * POD_HALF.x, at.z + sz * POD_HALF.y);
+                    assert!(
+                        g <= skids + 1e-4,
+                        "slope {slope}: corner ({sx}, {sz}) is {:.2} m in",
+                        g - skids
+                    );
+                }
+            }
+            // And on flat ground it sits, not floats.
+            if slope == 0.0 {
+                assert!((skids - 10.0).abs() < 1e-4);
+            }
+        }
+    }
 
     #[test]
     fn a_logistics_run_lands_a_full_pod() {
