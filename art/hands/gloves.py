@@ -262,7 +262,9 @@ def palm(ts):
     # its tab, open at the arm's end.
     # Closed at the arm's end by a low dome, right to its middle: an open
     # cuff showed a black hole whenever the hand pointed away from the eye,
-    # and a dome stopped short left a dark ring there.
+    # and a dome stopped short left a dark ring there. The dome is leather:
+    # in the nylon it read as a hole all the same, being dark and facing the
+    # eye.
     prof = [  # (z, grow over the wrist's shape, scale about its centre)
         (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
@@ -271,7 +273,7 @@ def palm(ts):
     ]
     zw = Z_WRIST - 0.001
     _, yc0, _ = palm_shape(zw)
-    centre = Vector((0.0, yc0, 0.0))
+    centre = Vector((0.0, yc0, zw))
     rings = [[centre + (palm_point(zw, 2 * math.pi * k / segs, g) - centre) * sc
               + Vector((0, 0, z - zw)) for k in range(segs)] for z, g, sc in prof]
     _, faces = p.loft(rings, "Glove")
@@ -279,6 +281,8 @@ def palm(ts):
         c = f.calc_center_median()
         if 0.0563 < c.z < 0.0787 and f.normal.z * f.normal.z < 0.5:
             f.material_index = p._mi("Padding")
+        elif c.z > 0.0905:
+            f.material_index = p._mi("Leather")
     # The strap's tab on the little finger's side, sewn down at its end.
     w, yc, h = palm_shape(zw)
     x = -ts * (w * 0.97 + 0.0055)
