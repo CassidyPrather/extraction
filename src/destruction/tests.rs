@@ -15,6 +15,7 @@ use crate::world::buildings::{Door, DoorLeaf};
 
 fn app(save: Option<std::path::PathBuf>) -> App {
     let opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         save,
         ..Default::default()

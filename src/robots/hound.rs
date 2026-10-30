@@ -147,6 +147,7 @@ mod tests {
     #[test]
     fn a_hound_runs_to_where_its_sent() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };

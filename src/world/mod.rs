@@ -117,6 +117,11 @@ impl Zone {
 /// Reads `assets/maps/<name>.ron`, falling back to the built-in copy of
 /// Marrow Creek so tests and odd working directories still get a map.
 pub(crate) fn load_map_def(name: &str) -> MapDef {
+    // Tests only: no build you play can load the test field.
+    #[cfg(test)]
+    if name == extraction_core::map::TEST_FIELD_ID {
+        return MapDef::from_ron(extraction_core::map::TEST_FIELD).expect("test field parses");
+    }
     let candidates = [
         crate::asset_root_path()
             .join("maps")
@@ -273,6 +278,25 @@ impl Plugin for WorldVisualsPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The test field is never a valley you play: it isn't on the valleys'
+    /// list or the jobs', and it isn't a file in `assets/maps`, where the
+    /// truck's route card, a saved career and `--map` find a valley. Only
+    /// the game's own tests are served it (`load_map_def`).
+    #[test]
+    fn the_test_field_cannot_be_reached_from_play() {
+        use extraction_core::map::{TEST_FIELD_ID, VALLEYS};
+        assert!(VALLEYS.iter().all(|(id, _)| *id != TEST_FIELD_ID));
+        assert!(
+            crate::progression::valleys()
+                .iter()
+                .all(|(id, _)| *id != TEST_FIELD_ID)
+        );
+        let file = format!("{TEST_FIELD_ID}.ron");
+        assert!(!crate::asset_root_path().join("maps").join(&file).exists());
+        assert!(!std::path::Path::new("assets/maps").join(&file).exists());
+        assert_eq!(load_map_def(TEST_FIELD_ID).name, "Test field");
+    }
 
     /// The heightfield collider must agree with the heightmap it was built
     /// from (parry's row/column convention is easy to get transposed).

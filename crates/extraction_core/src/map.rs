@@ -1032,6 +1032,13 @@ pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_res
 /// The fifth (docs/FIFTH_VALLEY.md).
 pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
+/// The test field's id: a valley only tests load, never on [`VALLEYS`],
+/// the career or the truck's way (the game serves it to its own tests
+/// alone). The ground Marrow Creek had before its places were pulled in,
+/// so the mechanics tests that staged scenes on its open meadow keep
+/// theirs.
+pub const TEST_FIELD_ID: &str = "test_field";
+pub const TEST_FIELD: &str = include_str!("../../../assets/test/test_field.ron");
 
 /// Every valley the truck drives to, (map id, map text), in the order a
 /// career meets them. Tests that hold "every valley" to something go over

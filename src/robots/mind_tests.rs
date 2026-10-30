@@ -18,6 +18,7 @@ fn listen(mut s: MessageReader<Searching>, mut heard: ResMut<Heard>) {
 
 fn app(weather: Option<&str>) -> (App, Entity, Zone) {
     app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         weather: weather.map(Into::into),
         ..Default::default()
@@ -975,6 +976,7 @@ fn lit_torch(app: &mut App, me: Vec3) -> Entity {
 #[test]
 fn at_night_you_are_unseen_until_you_light_a_torch() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         hour: Some("night".into()),
         ..Default::default()
@@ -3147,6 +3149,7 @@ fn watchers_near(app: &mut App, at: Vec3) -> usize {
 #[test]
 fn a_fresh_career_is_unaffected_by_memory() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3239,6 +3242,7 @@ fn a_raid_is_remembered() {
 #[test]
 fn a_walker_is_left_watching_where_you_killed_one() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3280,6 +3284,7 @@ fn a_walker_is_left_watching_where_you_killed_one() {
 #[test]
 fn a_sentry_minds_your_favourite_rendezvous() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });

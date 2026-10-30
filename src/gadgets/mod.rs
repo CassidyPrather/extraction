@@ -693,6 +693,7 @@ mod tests {
 
     fn app() -> App {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };

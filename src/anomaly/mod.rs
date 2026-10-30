@@ -859,6 +859,7 @@ mod tests {
 
     fn app(robots: bool) -> App {
         let opts = LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots,
             ..Default::default()
         };
@@ -942,6 +943,7 @@ mod tests {
         std::fs::write(&path, ron::to_string(&career).unwrap()).unwrap();
         let mut app = crate::headless_app(
             LaunchOptions {
+                map: extraction_core::map::TEST_FIELD_ID.into(),
                 save: Some(path),
                 ..Default::default()
             },

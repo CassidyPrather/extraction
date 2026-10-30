@@ -206,6 +206,7 @@ mod tests {
     #[test]
     fn a_grappler_spears_a_player_in_reach() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
