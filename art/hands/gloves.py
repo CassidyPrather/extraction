@@ -52,7 +52,9 @@ RADII = [
     [0.0096, 0.0089, 0.0082, 0.0075],
     [0.0092, 0.0085, 0.0078, 0.0072],
     [0.0084, 0.0077, 0.0071, 0.0066],
-    [0.0112, 0.0103, 0.0094],
+    # The thumb: broad at its root (the thenar), slimmer to its tip, not a
+    # sausage of one width.
+    [0.0122, 0.0102, 0.0086],
 ]
 SIDES = 16
 
@@ -258,14 +260,14 @@ def palm(ts):
 
     # The cuff: a short gauntlet over the wrist, with a padded strap and
     # its tab, open at the arm's end.
-    # Closed at the arm's end by a low dome: an open cuff showed a black
-    # hole whenever the hand pointed away from the eye.
+    # Closed at the arm's end by a low dome, right to its middle: an open
+    # cuff showed a black hole whenever the hand pointed away from the eye,
+    # and a dome stopped short left a dark ring there.
     prof = [  # (z, grow over the wrist's shape, scale about its centre)
         (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
-        (0.079, 0.0030, 1), (0.090, 0.0034, 1), (0.0925, 0.0034, 0.985),
-        (0.0945, 0.0034, 0.95), (0.0965, 0.0034, 0.87), (0.0983, 0.0034, 0.74),
-        (0.0998, 0.0034, 0.55), (0.1008, 0.0034, 0.3),
+        (0.079, 0.0030, 1), (0.090, 0.0034, 1),
+        (0.0935, 0.0034, 0.985), (0.0968, 0.0034, 0.940), (0.1000, 0.0034, 0.866), (0.1029, 0.0034, 0.766), (0.1053, 0.0034, 0.643), (0.1073, 0.0034, 0.500), (0.1088, 0.0034, 0.342), (0.1097, 0.0034, 0.174), (0.1100, 0.0034, 0.000),
     ]
     zw = Z_WRIST - 0.001
     _, yc0, _ = palm_shape(zw)
