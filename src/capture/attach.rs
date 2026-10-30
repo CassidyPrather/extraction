@@ -706,11 +706,6 @@ mod tests {
         // The first run's tally (30 October), to work down: mostly pieces
         // 2-3 mm off what holds them, and parts shut inside shells (an
         // eye's iris in its glass). Take a model out when it's clean.
-        "guns/mp133:",
-        "guns/pm_pistol:",
-        "guns/rpk74:",
-        "guns/sks:",
-        "guns/svd:",
         "items/binoculars:",
         "items/car_bonnet:",
         "items/car_door:",
@@ -719,7 +714,6 @@ mod tests {
         "items/emp_grenade:",
         "items/robot_gunpod:",
         "items/spare_parts:",
-        "items/stock_sks:",
         "items/vest:",
         "props/armchair:",
         "props/bar_rack:",

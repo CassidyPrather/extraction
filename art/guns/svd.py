@@ -151,7 +151,8 @@ barrel.prism(fillet(notch, [0.0005, 0.0005, 0.0005, 0.0003, 0.0, 0.0006, 0.0, 0.
              -0.225, -0.219, "Blued", axis="z")
 for k in range(10):
     z = -0.2775 + k * 0.0052
-    y = 0.0985 + (z + 0.282) / 0.06 * 0.003 + 0.0045
+    # On the leaf's top (they floated 2 mm over it: `capture::attach`).
+    y = 0.1005 + (z + 0.282) / 0.06 * 0.004 - 0.0001
     w = 0.008 if k % 2 == 0 else 0.0045
     barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
 
@@ -194,8 +195,9 @@ ring_sec = [(x * 1.07, 0.063 + (y - 0.063) * 1.06) for x, y in
 rings.prism(ring_sec, HG1 - 0.002, HG1 + 0.012, "Blued", axis="z", bevel=0.0008, segs=1)
 rings.prism(ring_sec, HG0 - 0.004, HG0 + 0.007, "Blued", axis="z", bevel=0.0008, segs=1)
 # The rear ring's latch lever on the right.
-rings.box((0.0035, 0.024, 0.007), (0.0245, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
-          xf=RX(-0.3, about=(0.0245, 0.05, HG1 + 0.005)))
+# (Bearing on the ring: it stood 2 mm off it, `capture::attach`.)
+rings.box((0.0035, 0.024, 0.007), (0.0228, 0.05, HG1 + 0.005), "Blued", bevel=0.0008,
+          xf=RX(-0.3, about=(0.0228, 0.05, HG1 + 0.005)))
 
 # --- Skeleton stock: laminated wood, the thumbhole behind the grip ------------------------
 def comb_y(z):

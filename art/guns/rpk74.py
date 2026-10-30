@@ -176,7 +176,8 @@ for sx in (-1, 1):
                xf=T(0, 0.1062, -0.1685) @ RY(math.pi / 2), chamfer=0.0005)
 for k in range(11):
     z = -0.2245 + k * 0.0052
-    y = 0.0985 + (z + 0.229) / 0.061 * 0.003 + 0.0045
+    # On the leaf's top (they floated 2 mm over it: `capture::attach`).
+    y = 0.1005 + (z + 0.229) / 0.061 * 0.004 - 0.0001
     w = 0.008 if k % 2 == 0 else 0.0045
     barrel.box((w, 0.0003, 0.0006), (-0.0065 + w / 2 + 0.0004, y + 0.00015, z), "Worn")
 # Rear handguard retainer band and its locking lever on the right.

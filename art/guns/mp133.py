@@ -221,9 +221,12 @@ bolt.prism(fillet([(-0.006, 0.039), (0.014, 0.039), (0.014, 0.061), (-0.006, 0.0
            BZ0, BZ1, "Steel", axis="z", bevel=0.001, segs=1)
 # Extractor claw on the right of the bolt face, and the bolt's lightening flat.
 bolt.box((0.003, 0.007, 0.012), (0.0150, 0.047, BZ0 + 0.0115), "Steel", bevel=0.0008, segs=1)
-# The action bars, both sides of the tube, from inside the forend into the receiver.
+# The action bars, both sides of the tube, from inside the forend back to
+# the slide under the bolt that they drive (they stopped 75 mm short:
+# `capture::attach`).
 for sx in (-1, 1):
-    bolt.box((0.0018, 0.008, 0.27), (sx * 0.0131, TUBE, -0.365), "Blued", bevel=0.0005, segs=1)
+    bolt.box((0.0018, 0.008, 0.375), (sx * 0.0131, TUBE, -0.3125), "Blued", bevel=0.0005, segs=1)
+bolt.box((0.028, 0.025, 0.02), (0.0, 0.0275, -0.135), "Blued", bevel=0.001, segs=1)
 # The forend: ribbed birch round the tube, rounded at the nose.
 FZ0, FZ1 = -0.515, -0.330
 F_TOP = 0.031

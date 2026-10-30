@@ -135,6 +135,10 @@ for z0, y0, xs in ((0.16, -0.075, -0.021), (-0.474, 0.0, -0.0195)):
     loop = [(z0 + 0.011 * math.cos(a), y0 + 0.011 * math.sin(a))
             for a in [math.pi * 0.5 + math.pi * i / 16 for i in range(17)]]
     (butt_furn if z0 > 0 else furn).sweep(loop, section_rect(0.0028, 0.0028, 0.0008, segs=3), "Blued", xf=T(xs, 0, 0))
+# The rear swivel's two studs, from its loop's ends into the wood (the loop
+# hung 2 mm off the stock: `capture::attach`).
+for y in (-0.064, -0.086):
+    butt_furn.cyl(0.0017, -0.0225, -0.012, "Blued", segs=10, xf=T(0, y, 0.16) @ RY(math.pi / 2))
 
 # --- Receiver ----------------------------------------------------------------------
 recv = Part("receiver")
