@@ -80,7 +80,7 @@
         Channel(
             points: [(-181.5, -33.0), (-160.0, -34.7), (-80.0, -25.0), (-40.0, -14.0),
                      (-21.7, -15.3), (30.6, -13.2), (55.2, 25.8), (104.7, 28.9), (181.5, 38.5)],
-            width: 16.0, depth: 2.2,
+            width: 16.0, depth: 1.6,
         ),
 
         // Building pads.
@@ -134,7 +134,7 @@
         // pumping station, tower.
         (
             name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-91.2, -20.3), (-94.3, -45.1), (-106.1, -56.1), (-114.0, -66.0), (-126.0, -72.0), (-138.0, -76.0), (-144.0, -78.0)],
+            points: [(-87.4, -42.0), (-94.3, -48.0), (-106.1, -56.1), (-114.0, -66.0), (-126.0, -72.0), (-138.0, -76.0), (-144.0, -78.0)],
         ),
         // The haulers' track: from the Gate down to the Depot's intake ramp,
         // worn by the convoys.
@@ -156,7 +156,7 @@
         // mast: the pumping station's second way home, to the Bus depot.
         // The Old farm's track to the checkpoint, across the field past its
         // wood stores and field shed: the first job's walk, where its cover
-        // stands, the farm's water tower ahead from the first step (the
+        // stands, the farm ahead from the first step (the
         // road north hid the farm lane's turn, and the designer's first
         // raid walked on past it to the Village).
         (
@@ -401,6 +401,7 @@
         (prefab: "log_pile", at: (-12.4, -78.4), rot: 197.0),
         (prefab: "log_pile", at: (-43.7, 9.5), rot: 92.0),
         (prefab: "log_pile", at: (-66.5, 7.3), rot: 114.0),
+        (prefab: "log_pile", at: (-31.0, -21.5), rot: 80.0),
     ],
 
     markers: [
@@ -428,7 +429,7 @@
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (68.5, 11.0), name: "Hollow hush"),
         (kind: Offering, at: (-32.2, 78.5), name: "The well"),
         (kind: Offering, at: (120.0, -52.0), name: "The stone ring"),
-        (kind: WorkSite, at: (-75.0, -110.0), name: "North bank site"),
+        (kind: WorkSite, at: (40.0, -95.0), name: "North bank site"),
         (kind: WorkSite, at: (105.0, -10.0), name: "Ford field site"),
         (kind: WorkSite, at: (-138.0, -20.0), name: "Forest clearing site"),
         (kind: Poi, at: (-90.8, 93.5), name: "Logging camp"),
