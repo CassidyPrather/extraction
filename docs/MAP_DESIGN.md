@@ -709,9 +709,12 @@ prototype; the others join as they're reworked).
   (`EMPTY_MAX`, `STOP_NEAR`). A hut on a long walk is a stop and a roof
   both. Mind what a stop holds: a shed's toolbox has matches, and a shed
   by the wrong road sent the first fetch job into the drones.
-- **Who notices how far** is the machines' side (Robot minds): the map
-  marks its quiet places and hot zones; how far each zone's guards see
-  is theirs to cap.
+- **Hot zones see their own ground.** Every hot region (danger 2 or
+  more) caps how far a machine standing in it notices you
+  (`Region::notice`, at most 50 m, `NOTICE_MAX`; Robot minds' senses take
+  the smaller of it and the machine's own sight). Marrow's hot regions
+  are capped at 45 m; the quiet ground between carries no cap, so a
+  machine that wanders out of its zone sees as far as it ever did.
 
 Marrow, before and after (the lint's measures): open ground seen past a
 walker 19% -> 10%, the 90th-percentile sightline 86 -> 74 m, a fight at a

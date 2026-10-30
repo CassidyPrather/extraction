@@ -58,6 +58,9 @@ pub const PULL_MEAN: f32 = 1.5;
 /// ...and no walk between neighbouring places runs this far with nothing
 /// to stop at ([`STOP_NEAR`]), metres.
 pub const EMPTY_MAX: f32 = 100.0;
+/// Every hot region (danger 2 or more) caps how far its machines notice
+/// you at this or less (`Region::notice`, metres; Robot minds' senses).
+pub const NOTICE_MAX: f32 = 50.0;
 
 /// How far into a wood (at a density of 1) a line of sight goes, metres:
 /// one trunk hides little, a wood's depth hides everything.

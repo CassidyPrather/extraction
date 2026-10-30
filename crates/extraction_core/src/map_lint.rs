@@ -3001,6 +3001,20 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     );
                 }
             }
+            for reg in map.regions.iter().filter(|reg| reg.danger >= 2) {
+                if reg.notice.is_none_or(|n| n > mo::NOTICE_MAX) {
+                    find(
+                        &mut r,
+                        Rule::Patrol,
+                        format!(
+                            "{}, a hot zone, lets its machines notice you from any range: cap it (notice, at most {:.0} m)",
+                            reg.name,
+                            mo::NOTICE_MAX
+                        ),
+                        reg.polygon[0],
+                    );
+                }
+            }
             for (a, b, len, at) in &empty {
                 if *len > mo::EMPTY_MAX {
                     find(
@@ -3470,6 +3484,9 @@ mod tests {
                 if [[-120.0, -28.0], [78.0, 30.0], [-78.0, 58.0]].contains(&points[0]))
         });
         map.placements.retain(|p| p.tag != "ford_hut");
+        for reg in &mut map.regions {
+            reg.notice = None;
+        }
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         for what in [
@@ -3477,6 +3494,7 @@ mod tests {
             "heard by",
             "a quiet place",
             "nothing to stop at",
+            "notice you from any range",
         ] {
             assert!(
                 r.findings.iter().any(|f| f.what.contains(what)),
