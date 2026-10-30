@@ -116,7 +116,9 @@ fn mark_wounds(
         ),
         Without<LocalPlayer>,
     >,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
+    let body = comfort.as_deref().is_none_or(|c| c.body);
     let marks = &mut *marks;
     let look = marks
         .look
@@ -124,7 +126,13 @@ fn mark_wounds(
     let Some((player, wounds)) = players.iter().next() else {
         return;
     };
-    let segs = player_segments(player, &bodies, &hands).unwrap_or_default();
+    // On the drawn body only (`Comfort::body`): without it a mark would
+    // hang in the air. The glove's blood and the wrist's BLEED still tell.
+    let segs = if body {
+        player_segments(player, &bodies, &hands).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     while marks.wounds.len() < wounds.0.len() {
         let e = mark(&mut commands, &look.patch, &look.blood);
         marks.wounds.push(e);
@@ -184,7 +192,9 @@ fn mark_splint(
     bodies: Query<(&Transform, &RigInput, &Stance, &Children), With<LocalPlayer>>,
     hands: Query<(&RigHand, &Hand)>,
     mut parts: Query<(&mut Transform, &mut Visibility), (Without<LocalPlayer>, Without<RigHand>)>,
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
 ) {
+    let body = comfort.as_deref().is_none_or(|c| c.body);
     let marks = &mut *marks;
     let Some(look) = marks.look.as_ref() else {
         return;
@@ -194,7 +204,7 @@ fn mark_splint(
         let b = mark(&mut commands, &look.slat, &look.wood);
         marks.slats = vec![a, b];
     }
-    let shin = players.iter().next().and_then(|(p, f)| {
+    let shin = players.iter().next().filter(|_| body).and_then(|(p, f)| {
         let segs = player_segments(p, &bodies, &hands)?;
         segs.into_iter()
             .find(|s| f.splinted && s.limb == Limb::Shin(f.leg))
