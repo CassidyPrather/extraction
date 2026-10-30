@@ -73,8 +73,9 @@ pub fn seat_lift(
     time: Res<Time>,
 ) {
     let seated = comfort.is_some_and(|c| c.seated);
-    let flat = driver.is_some_and(|d| *d == RigDriver::Flat);
-    let headset = driver.is_some_and(|d| *d == RigDriver::Xr);
+    let driver = driver.map(|d| *d);
+    let flat = driver == Some(RigDriver::Flat);
+    let headset = driver == Some(RigDriver::Xr);
     let dt = time.delta_secs();
     for (e, mut input, seat, bot) in &mut players {
         let Some(mut seat) = seat else {
