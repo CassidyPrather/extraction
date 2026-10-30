@@ -35,6 +35,8 @@ pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
+#[cfg(test)]
+mod intent_roster;
 pub mod memory;
 pub mod mender;
 pub mod mender_look;

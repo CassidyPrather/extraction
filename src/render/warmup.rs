@@ -415,6 +415,11 @@ impl Default for Shelf {
 const DECOYS_AT: Vec3 = Vec3::new(0.0, -5000.0, 0.0);
 
 impl Shelf {
+    /// Its time's up: stocked its frames, and out of them.
+    fn done(&self) -> bool {
+        self.frame > self.warm_for + KEEP
+    }
+
     /// Puts one thing on the shelf: tiny, in front of the eye, with the
     /// flags its pipeline depends on.
     fn put(
@@ -609,9 +614,12 @@ fn record_layouts(
 #[derive(Resource, Default)]
 pub struct Warmed(pub bool);
 
-/// Before the headset's session: an eye like the headset's (its custom
-/// projection, look and samples), drawing into a small image under the
-/// world, for the shelf to hang from. A pipeline is built per kind of
+/// In a headset game, for as long as the shelf is stocked: an eye like
+/// the headset's (its custom projection, look and samples), drawing into a
+/// small image under the world, for the shelf to hang from. The shelf is
+/// never on a view the player sees: on the playtest's eye it restocked
+/// every 45 frames for 900, and the lamp and trees at Marrow Creek's
+/// spawn flickered "on a steady pulse". A pipeline is built per kind of
 /// view, and the eyes' custom projection is a kind of its own: warmed on
 /// the flat camera, every pipeline was built again as the session began,
 /// 58 of them, in the player's first seconds in the headset.
@@ -621,13 +629,15 @@ pub struct ProxyEye;
 fn proxy_eye(
     mut commands: Commands,
     gate: Option<Res<crate::rig::xr::SessionGate>>,
-    eyes: Query<(), With<bevy_mod_xr::camera::XrCamera>>,
+    shelf: Res<Shelf>,
     proxies: Query<Entity, With<ProxyEye>>,
     weather: Option<Res<crate::world::sky::Weather>>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    let want = gate.is_some_and(|g| g.waiting.is_some()) && eyes.is_empty();
+    // For as long as the shelf's stocked: it's the shelf's camera in a
+    // headset game, the eyes and mirror the player sees never are.
+    let want = gate.is_some() && !shelf.done();
     if !want {
         for e in &proxies {
             commands.entity(e).try_despawn();
@@ -672,54 +682,33 @@ fn proxy_eye(
 fn shelve_start(
     mut shelf: ResMut<Shelf>,
     mut commands: Commands,
-    eyes: Query<Entity, With<bevy_mod_xr::camera::XrCamera>>,
+    gate: Option<Res<crate::rig::xr::SessionGate>>,
+    shown: Option<Res<crate::rig::loading::LoadingView>>,
     proxies: Query<Entity, With<ProxyEye>>,
     // The flat view's (a free camera, or the player's own head's).
-    flat: Query<Entity, (super::EyeCamera, Without<ProxyEye>)>,
+    flat: Query<
+        Entity,
+        (
+            super::EyeCamera,
+            Without<ProxyEye>,
+            Without<bevy_mod_xr::camera::XrCamera>,
+        ),
+    >,
     cameras: Query<(), With<Camera>>,
     forest: Option<Res<crate::world::trees::ForestBuilt>>,
     props: Query<(), With<crate::world::buildings::PropsPending>>,
     mut warmed: ResMut<Warmed>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // The headset's eye once there is one (it comes with the session),
-    // else the flat camera. Either eye will do, and the shelf stays on the
-    // one it took: there are two, in no set order, and starting over each
-    // time the query named the other one never finished the warm-up and
-    // left a set of decoys (and their lights) behind each time.
-    // Its camera gone (the proxy, as the session began): start again on
-    // whichever there is.
+    // In a headset game the proxy eye, from the start and to the end: the
+    // shelf never goes on a view the player sees (the eyes, the mirror).
+    // Flat, the flat camera. The shelf stays on the camera it took (there
+    // can be two, in no set order: starting over each time the query named
+    // the other one never finished, and left decoys behind each time).
     if shelf.camera.is_some_and(|c| !cameras.contains(c)) {
         shelf.camera = None;
     }
-    let on_an_eye = shelf.camera.is_some_and(|c| eyes.contains(c));
-    if let Some(eye) = eyes.iter().min().filter(|_| !on_an_eye) {
-        if shelf.camera != Some(eye) {
-            for (e, _) in shelf.on.drain(..) {
-                commands.entity(e).try_despawn();
-            }
-            for e in std::mem::take(&mut shelf.decoys) {
-                commands.entity(e).try_despawn();
-            }
-            // (What was learned of the meshes stays: their data has gone
-            // to the render world since.)
-            let (layouts, twins) = (
-                std::mem::take(&mut shelf.layouts),
-                std::mem::take(&mut shelf.twins),
-            );
-            *shelf = Shelf {
-                camera: Some(eye),
-                layouts,
-                twins,
-                ..default()
-            };
-        }
-    } else if let Some(proxy) = proxies
-        .iter()
-        .next()
-        .filter(|p| !on_an_eye && shelf.camera != Some(*p))
-    {
-        // A headset's coming: warm for its eyes, from the start.
+    if let Some(proxy) = proxies.iter().next().filter(|p| shelf.camera != Some(*p)) {
         for (e, _) in shelf.on.drain(..) {
             commands.entity(e).try_despawn();
         }
@@ -735,8 +724,23 @@ fn shelve_start(
             decoys,
             ..default()
         };
-    } else if shelf.camera.is_none() {
+    } else if shelf.camera.is_none() && gate.is_none() {
         shelf.camera = flat.iter().min();
+    }
+    // In a headset game the shelf's put away as the world shows: its
+    // restocks touch what every view shares (the visibility ranges' buffer
+    // among it, which the lamp's halo and the trees' fades read), and on
+    // the playtest those two flickered on its 45-frame pulse.
+    if gate.is_some()
+        && shown.is_some_and(|v| v.lifted_at.is_some())
+        && shelf.warm_for > shelf.frame
+    {
+        info!(
+            "warm-up: shelf put away as the world shows ({} frames, {} kinds)",
+            shelf.frame,
+            shelf.kinds.len()
+        );
+        shelf.warm_for = shelf.frame;
     }
     shelf.stocking = false;
     // The world settled: the forest built, the buildings dressed (the
@@ -1144,18 +1148,19 @@ mod tests {
         }
     }
 
-    /// In a headset there are two eyes, and which one a query names first
-    /// can change. The shelf stays on the one it took: it still finishes,
-    /// and leaves no decoys (each with its lights) behind. (It started
-    /// over each time the order changed: in a slow simulated headset the
-    /// lights piled up by a dozen a restock and the eye's opaque pass grew
-    /// tenfold.)
+    /// In a headset game the shelf is on the proxy eye from its first
+    /// frame to its last, never on an eye the player sees (on the
+    /// playtest's, it restocked every 45 frames for 900 and Marrow Creek's
+    /// spawn flickered on that pulse). There are two eyes, and which one a
+    /// query names first can change: it doesn't move the shelf, which
+    /// still finishes and leaves no decoys (each with its lights) behind.
     #[test]
     #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
     fn gauge_two_eyes_one_shelf() {
         // Counts: the shelves, their lights.
         let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
+        app.init_resource::<crate::rig::xr::SessionGate>();
         let eye = |app: &mut App, n: u32| {
             app.world_mut()
                 .spawn((
@@ -1164,7 +1169,7 @@ mod tests {
                 ))
                 .id()
         };
-        let (a, _b) = (eye(&mut app, 0), eye(&mut app, 1));
+        let (a, b) = (eye(&mut app, 0), eye(&mut app, 1));
         let decoys = |app: &mut App| {
             let w = app.world_mut();
             w.query_filtered::<&Transform, With<crate::anomaly::Anomaly>>()
@@ -1183,6 +1188,17 @@ mod tests {
             }
             app.update();
             most = most.max(decoys(&mut app));
+            let on = app.world().resource::<Shelf>().camera;
+            assert!(
+                on != Some(a) && on != Some(b),
+                "frame {i}: the shelf on an eye"
+            );
+            if let Some(on) = on {
+                assert!(
+                    app.world().get::<ProxyEye>(on).is_some(),
+                    "frame {i}: not the proxy"
+                );
+            }
         }
         assert_eq!(most, kinds, "one set of decoys, at most");
         assert_eq!(decoys(&mut app), 0, "the decoys gone");

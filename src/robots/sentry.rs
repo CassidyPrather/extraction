@@ -456,8 +456,13 @@ fn sentry_mind(
     minds: Query<&super::senses::MindSeed>,
     others: Query<(&Brain, &Awareness, &Robot), (Without<Sentry>, Without<super::heavy::Heavy>)>,
     time: Res<Time>,
+    (mut voice, mut log): (
+        MessageWriter<super::search::MindShift>,
+        ResMut<super::search::MindLog>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     let heard: Vec<(Vec3, f32, Option<Entity>)> =
         noises.read().map(|n| (n.at, n.radius, n.source)).collect();
     let engaged: Vec<Entity> = others
@@ -575,6 +580,8 @@ fn sentry_mind(
         let armed = gun.is_some_and(|(_, part)| part.alive());
         match s.gun.step(in_view && armed, dt) {
             GunAct::Chirp => {
+                // It has you: said as every machine says it.
+                log.shift(&mut voice, e, super::search::Mind::Noticed, head, now);
                 out.write(SentryEvent {
                     sentry: e,
                     at: head,

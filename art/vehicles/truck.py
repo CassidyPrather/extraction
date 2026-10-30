@@ -209,8 +209,10 @@ for sx in (-1, 1):
     ch.box((0.32, 0.03, 0.55), (sx * 1.0, 0.92, -2.62), "Iron", bevel=0.006, segs=1)
     for z in (-2.85, -2.4):
         ch.box((0.2, 0.18, 0.03), (sx * 0.95, 0.83, z), "Paint")
-    # Mud flaps behind the front wheels.
+    # Mud flaps behind the front wheels, each hung from an arm off the
+    # frame rail (they hung off nothing: the 28 October playtest, 0:13:02).
     ch.box((0.38, 0.5, 0.012), (sx * 1.0, 0.6, -3.24), "Rubber")
+    ch.box((0.34, 0.04, 0.03), (sx * 0.665, 0.86, -3.24), "Paint")
 
 # Spare wheel on the right, in a carrier under the bed front.
 build_wheel(ch, T(0.93, 0.54, -1.18) @ S(0.95, 0.95, 0.95))
@@ -235,7 +237,8 @@ for sx in (-1, 1):
     ch.box((0.08, 0.06, 0.01), (sx * 0.96, 0.84, 1.952), "LampRed", bevel=0.004, segs=1)
     ch.box((0.06, 0.06, 0.01), (sx * 0.87, 0.84, 1.952), "Lamp", bevel=0.004, segs=1)
     ch.box((0.4, 0.62, 0.012), (sx * 1.0, 0.57, 2.02), "Rubber")
-    ch.box((0.42, 0.04, 0.04), (sx * 1.0, 0.9, 2.02), "Paint")
+    # The flap's bar, run forward onto the cross-member.
+    ch.box((0.42, 0.04, 0.14), (sx * 1.0, 0.9, 1.96), "Paint")
 # Rear steps: a hanging ladder whose treads are the step colliders' tops.
 # Each stringer is a straight slanted bar the treads' back ends sit on (a
 # stepped outline here once crossed itself, and its cap's triangles

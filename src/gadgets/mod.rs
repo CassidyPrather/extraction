@@ -203,6 +203,14 @@ fn gun_mounts(
     }
 }
 
+/// A cell (its length along Y) turned to lie along a light (along Z).
+const CELL_ALONG: Quat = Quat::from_xyzw(
+    std::f32::consts::FRAC_1_SQRT_2,
+    0.0,
+    0.0,
+    std::f32::consts::FRAC_1_SQRT_2,
+);
+
 /// Sockets that come with gadgets themselves, and their behaviour markers.
 fn item_mounts(
     add: On<Add, Item>,
@@ -224,12 +232,21 @@ fn item_mounts(
         ),
         "flashlight" | "weapon_light" | "laser_module" | "cloak_generator" | "jammer" => {
             let id = catalog.get(item.kind()).id.as_str();
+            // A light's cell lies along it in an open cradle on its top
+            // (`art/items/_kit.py`'s `cell_cradle`); it once stood across
+            // the tube through a bore (the 28 October playtest, 0:11:13).
+            let (at, seat) = match id {
+                "flashlight" => (0.02, CELL_ALONG),
+                "weapon_light" => (0.008, CELL_ALONG),
+                "laser_module" => (0.0025, CELL_ALONG),
+                _ => (0.02, Quat::IDENTITY),
+            };
             spawn_mount(
                 &mut commands,
                 e,
                 Mount::Cell,
-                Transform::from_xyz(0.0, 0.0, 0.02),
-                Transform::IDENTITY,
+                Transform::from_xyz(0.0, 0.0, at),
+                Transform::from_rotation(seat),
             );
             let (watts, kind) = match id {
                 "laser_module" => (0.6, DeviceKind::Laser),
@@ -266,7 +283,7 @@ fn item_mounts(
             &mut commands,
             e,
             Mount::Cradle,
-            Transform::from_xyz(0.0, 0.03, 0.0),
+            Transform::from_xyz(0.0, ADAPTER_CRADLE, 0.0),
             Transform::IDENTITY,
         ),
         "pu_scope" => {
@@ -332,17 +349,47 @@ fn track_mounts(
 
 /// A thing on a muzzle sits with its back face on the muzzle, however
 /// long it is (the mount's seat is right for the short adapter only).
+/// Where the adapter's cradle socket is, and the top of the ring an
+/// artifact rests on (`art/items/attachments.py`).
+const ADAPTER_CRADLE: f32 = 0.03;
+const ADAPTER_RING_TOP: f32 = 0.025;
+
+/// Where an item sits in a socket: the socket's seat, moved for the
+/// item's size where the mount needs it. A can's back face goes on the
+/// muzzle; an artifact rests on the adapter's ring by its own height (one
+/// seat for all sank the bigger ones into it: `capture::seated`).
+pub fn seat_pose(
+    socket: &Socket,
+    owner: &extraction_core::items::ItemDef,
+    def: &extraction_core::items::ItemDef,
+) -> Transform {
+    let mut t = socket.seat;
+    match socket.kind {
+        SocketKind::Mount(Mount::Muzzle) => t.translation.z = -def.size_m()[2] * 0.5,
+        SocketKind::Mount(Mount::Cradle) if owner.id == "artifact_adapter" => {
+            t.translation.y = ADAPTER_RING_TOP - ADAPTER_CRADLE + def.size_m()[1] * 0.5;
+        }
+        _ => {}
+    }
+    t
+}
+
 fn seat_on_muzzle(
     mut seated: Query<(&InSocket, &Item, &mut Transform), Added<InSocket>>,
-    sockets: Query<&Socket>,
+    sockets: Query<(&Socket, &SocketOwner)>,
+    owners: Query<&Item>,
     catalog: Res<Catalog>,
 ) {
     for (in_socket, item, mut t) in &mut seated {
-        let Ok(socket) = sockets.get(in_socket.socket) else {
+        let Ok((socket, owner)) = sockets.get(in_socket.socket) else {
             continue;
         };
-        if socket.kind == SocketKind::Mount(Mount::Muzzle) {
-            t.translation.z = -catalog.get(item.kind()).size_m()[2] * 0.5;
+        let Ok(owner) = owners.get(owner.0) else {
+            continue;
+        };
+        let pose = seat_pose(socket, catalog.get(owner.kind()), catalog.get(item.kind()));
+        if pose != *t {
+            *t = pose;
         }
     }
 }

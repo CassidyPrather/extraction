@@ -62,6 +62,8 @@ struct ScreenView {
     emissive: bool,
     /// Counts redraws: a picture read back from an older one is dropped.
     generation: u32,
+    /// Under the words, for paper and cards: paper, not a flat sheet.
+    paper: Option<Handle<Image>>,
 }
 
 #[derive(Clone, Copy)]
@@ -90,17 +92,32 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
         .id();
     let font = fit_font(text, view.px, view.font);
     let mut text_e = Entity::PLACEHOLDER;
-    let ui = commands
-        .spawn((
+    let mut root = commands.spawn((
+        Node {
+            width: percent(100),
+            height: percent(100),
+            padding: UiRect::all(px(font * 0.8)),
+            flex_direction: FlexDirection::Column,
+            ..default()
+        },
+        UiTargetCamera(camera),
+    ));
+    // The sheet under the words: the whole panel, padding and all, drawn
+    // first (as the root's own image it came out a box inset in it).
+    if let Some(paper) = &view.paper {
+        root.with_child((
             Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
                 width: percent(100),
                 height: percent(100),
-                padding: UiRect::all(px(font * 0.8)),
-                flex_direction: FlexDirection::Column,
                 ..default()
             },
-            UiTargetCamera(camera),
-        ))
+            ImageNode::new(paper.clone()).with_mode(NodeImageMode::Stretch),
+        ));
+    }
+    let ui = root
         .with_children(|ui| {
             text_e = ui
                 .spawn((
@@ -241,6 +258,7 @@ fn build_screens(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut drawings: ResMut<Drawings>,
+    mut paper: Local<[Option<Handle<Image>>; 2]>,
 ) {
     for (e, screen, source, name) in &screens {
         if source.is_none() {
@@ -309,7 +327,18 @@ fn build_screens(
             reflectance: if emissive { 0.05 } else { 0.5 },
             ..default()
         });
+        // Paper and cards each their own sheet, in their own colour.
+        let sheet = match screen.style {
+            ScreenStyle::Paper => Some(0),
+            ScreenStyle::Card => Some(1),
+            _ => None,
+        };
         let mut view = ScreenView {
+            paper: sheet.map(|i| {
+                paper[i]
+                    .get_or_insert_with(|| images.add(paper_image(bg)))
+                    .clone()
+            }),
             drawing: None,
             image: handle.clone(),
             refresh: FIRST_FRAMES,
@@ -587,6 +616,51 @@ thread_local! {
     static BUILT_HERE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
+/// A sheet of paper in `bg`'s colour, not a flat one (playtest 2026-10-28,
+/// F4: a note read as "a solid white background"): a little darker on
+/// the whole, mottled, with fibres, and darker toward its edges, as a
+/// handled sheet is. Seeded, so every sheet is the same paper.
+pub fn paper_image(bg: Color) -> Image {
+    const N: u32 = 256;
+    let base = bg.to_srgba();
+    let mut rng = fastrand::Rng::with_seed(28);
+    // Mottling: a coarse grid of shades, smoothly blended.
+    const G: usize = 9;
+    let coarse: Vec<f32> = (0..G * G).map(|_| rng.f32() * 2.0 - 1.0).collect();
+    let at = |gx: usize, gy: usize| coarse[gy.min(G - 1) * G + gx.min(G - 1)];
+    let mut data = Vec::with_capacity((N * N * 4) as usize);
+    for y in 0..N {
+        for x in 0..N {
+            let (u, v) = (x as f32 / N as f32, y as f32 / N as f32);
+            let (fx, fy) = (u * (G - 1) as f32, v * (G - 1) as f32);
+            let (ix, iy) = (fx as usize, fy as usize);
+            let (tx, ty) = (fx.fract(), fy.fract());
+            let mottle = at(ix, iy) * (1.0 - tx) * (1.0 - ty)
+                + at(ix + 1, iy) * tx * (1.0 - ty)
+                + at(ix, iy + 1) * (1.0 - tx) * ty
+                + at(ix + 1, iy + 1) * tx * ty;
+            let fibre = rng.f32() - 0.5;
+            // Darker toward the edges: the last tenth of the sheet.
+            let edge = u.min(1.0 - u).min(v.min(1.0 - v));
+            let rim = (1.0 - (edge / 0.1).min(1.0)).powi(2);
+            let k = 0.94 + 0.03 * mottle + 0.03 * fibre - 0.12 * rim;
+            let px = |c: f32| ((c * k).clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            data.extend_from_slice(&[px(base.red), px(base.green), px(base.blue), 255]);
+        }
+    }
+    Image::new(
+        Extent3d {
+            width: N,
+            height: N,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+}
+
 /// Linear light to sRGB bytes, in steps fine enough that every byte is
 /// reached (the darkest sRGB steps are 1/3300 apart in linear light).
 const SRGB_STEPS: usize = 8192;
@@ -639,6 +713,7 @@ mod tests {
             material: material.clone(),
             emissive: false,
             generation: 0,
+            paper: None,
         };
         let before: Vec<Entity> = world
             .query_filtered::<Entity, With<Readback>>()
@@ -655,6 +730,25 @@ mod tests {
             .find(|e| !before.contains(e))
             .expect("a readback");
         (panel, readback, material)
+    }
+
+    /// Paper is paper: not one flat colour but mottled and fibred, a touch
+    /// darker than its colour on the whole, and darkest at its edges.
+    #[test]
+    fn paper_is_not_a_flat_sheet() {
+        let bg = Color::srgb(0.84, 0.81, 0.72);
+        let img = paper_image(bg);
+        let n = img.width() as usize;
+        let data = img.data.as_ref().unwrap();
+        let red = |x: usize, y: usize| data[(y * n + x) * 4] as f32 / 255.0;
+        let all: Vec<f32> = (0..n * n).map(|i| red(i % n, i / n)).collect();
+        let mean = all.iter().sum::<f32>() / all.len() as f32;
+        let sd = (all.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / all.len() as f32).sqrt();
+        assert!(sd > 0.01, "flat: {sd}");
+        assert!(mean < 0.84 && mean > 0.7, "{mean}");
+        let rim: f32 = (0..n).map(|i| red(i, 0) + red(0, i)).sum::<f32>() / (2 * n) as f32;
+        let mid: f32 = (n / 3..2 * n / 3).map(|i| red(i, n / 2)).sum::<f32>() / (n / 3) as f32;
+        assert!(rim < mid - 0.05, "edges {rim} against the middle {mid}");
     }
 
     /// What a panel's readback hands back: rows padded to 256 bytes.
