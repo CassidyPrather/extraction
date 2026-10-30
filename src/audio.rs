@@ -268,9 +268,12 @@ fn rain_volume(
             }
         }
     }
+    // Walled in, the roof's drumming; under an open roof, well under the
+    // open rain (`acoustics::drum_level`).
+    let drum_at = crate::acoustics::drum_level(&listening.space);
     for (set, level) in drums.iter_mut() {
         let target = if drum == Some(*set) && rain_db.is_some() {
-            1.0
+            drum_at
         } else {
             0.0
         };
@@ -3895,8 +3898,15 @@ fn sentry_sounds(
 /// A break this big (m²) is a wall breached (`destruction::breach`).
 const BREACH_SIZE: f32 = 2.5;
 
+/// Whether a space sounds like indoors (the room's hush, the wind cut):
+/// walled round under a roof, not just roofed.
+pub fn indoor_space(space: &crate::acoustics::Space) -> bool {
+    use crate::acoustics::SpaceKind;
+    matches!(space.kind, SpaceKind::Room | SpaceKind::Hall)
+}
+
 /// The wind in the trees, and the hush of a room: which you hear depends
-/// on whether you're under a roof.
+/// on whether you're walled in under a roof.
 #[derive(Component)]
 struct WindLoop;
 #[derive(Component)]
@@ -3916,11 +3926,13 @@ fn indoor_ambience(
 ) {
     hush.left = (hush.left - time.delta_secs()).max(0.0);
     let hushed = hush.db();
+    // In a building, and walled round (`acoustics::probe`): under a porch
+    // roof or an open shed you're out of doors with a roof over you.
     let indoors = entrances.is_some_and(|e| {
         cams.iter()
             .next()
             .is_some_and(|c| e.building_at(c.translation()).is_some())
-    });
+    }) && indoor_space(&listening.space);
     // Ease over about a second as you step through a door.
     let target = if indoors { 1.0 } else { 0.0 };
     *inside += (target - *inside).clamp(-time.delta_secs(), time.delta_secs());
