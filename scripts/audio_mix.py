@@ -42,7 +42,10 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 # a far-off rumble you stop listening for ("maybe heard from too far",
 # the playtest of 28 October, 0:58:24). A walker sees 75 m
 # (robots::walker, sight).
-RANGE_MOST = {"walker.step": 90}
+RANGE_MOST = {"walker.step": 90,
+              # a minelayer is heard as you near it (it turns tail at 30 m),
+              # not across the valley
+              "minelayer.grind": 60}
 
 RANGE_TARGETS = {
     "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8), "anomaly.frost": (4, 2),
