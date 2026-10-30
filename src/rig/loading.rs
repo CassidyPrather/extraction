@@ -107,6 +107,7 @@ fn hold_views(
     if let Some(words) = words {
         for (e, layers, kept) in &views {
             if !kept {
+                info!("loading view: held on {e} (\"{words}\")");
                 commands
                     .entity(e)
                     .insert((HeldLayers(layers.cloned()), RenderLayers::layer(LAYER)));
@@ -115,9 +116,6 @@ fn hold_views(
         if !cards.iter().any(|(_, c)| c.0 == words) {
             for (e, _) in &cards {
                 commands.entity(e).try_despawn();
-            }
-            if !views.is_empty() {
-                info!("loading view: \"{words}\"");
             }
             commands.spawn((
                 Name::new("Loading view"),
