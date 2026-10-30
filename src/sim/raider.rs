@@ -2105,7 +2105,12 @@ fn fight_on(
         if outcome == "wrecked" {
             *log.stats.kills.entry(c.kind.clone()).or_default() += 1;
             if r.traits.salvage {
-                if let Ok((_, _, gt, ..)) = scene.robots.get(target) {
+                if let Ok((_, _, gt, ..)) = scene.robots.get(target)
+                    // Come down inside a building (a drone in the Bus
+                    // depot's hall): no walk from outside reaches it, and
+                    // its loot is the building's, for searching the building.
+                    && !r.plans.iter().any(|p| p.contains(gt.translation(), 0.0))
+                {
                     r.sites.push(Site {
                         name: format!("{} wreck", c.kind),
                         kind: SiteKind::Wreck(target),

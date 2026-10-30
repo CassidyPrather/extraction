@@ -1437,7 +1437,10 @@ fn run_tasks(
                     } else {
                         bot.progress.1 += dt;
                     }
-                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 {
+                    // (Not underground: a step aside in a cellar is into
+                    // its wall, and the walk slides along it as it is.)
+                    let below = zone.ground(pos.x, pos.y) - root.translation.y > 1.5;
+                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 && !below {
                         let ahead = (flat - pos).normalize_or(Vec2::X);
                         let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
                         let step = pos + ahead.perp() * side * 1.8 + ahead * 0.6;
