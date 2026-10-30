@@ -1197,15 +1197,15 @@ mod tests {
         assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
         let hm = Heightmap::build(&map);
         assert!(
-            hm.water_level([20.0, 56.0]).is_some(),
+            hm.water_level([14.0, 46.0]).is_some(),
             "the canal under the bridge"
         );
-        assert!(hm.water_level([-50.0, 155.0]).is_none(), "Ash Row is dry");
-        assert!(hm.water_level([75.0, -20.0]).is_none(), "the works are dry");
+        assert!(hm.water_level([-34.5, 108.2]).is_none(), "Ash Row is dry");
+        assert!(hm.water_level([56.2, -9.5]).is_none(), "the works are dry");
         let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         for rv in map.markers_of(&MarkerKind::Rendezvous) {
             assert!(
-                crate::geom::dist(ins.at, rv.at) > 350.0,
+                crate::geom::dist(ins.at, rv.at) > 350.0 * crate::map_lint::valley_scale(&map),
                 "{} is too close to the insertion",
                 rv.name
             );

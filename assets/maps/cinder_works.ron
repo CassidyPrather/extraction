@@ -27,7 +27,7 @@
     cell: 1.0,
     base_height: 22.0,
     noise: (seed: 61, amplitude: 3.0, scale: 110.0, octaves: 5, detail: 0.3),
-    rim: (width: 49.0, height: 14.0),
+    rim: (width: 49.0, height: 9.8),
     fence_inset: 38.0,
     // Ash-brown air, and ash still drifting down when it isn't raining.
     haze: Some((1.18, 0.96, 0.76)),
@@ -70,9 +70,9 @@
 
         // The canal's cut, then its bed.
         Channel(points: [(-231.0, 45.5), (-105.0, 42.0), (-1.2, 44.1), (97.5, 42.0), (231.7, 31.8)],
-                width: 28.0, depth: 0.8),
+                width: 40.0, depth: 1.2),
         Channel(points: [(-231.0, 45.5), (-105.0, 42.0), (-1.2, 44.1), (97.5, 42.0), (231.7, 31.8)],
-                width: 11.2, depth: 1.8),
+                width: 16.0, depth: 2.5),
 
         // Building pads.
         Plateau(polygon: [(-85.4, 64.8), (16.6, 71.1), (16.6, 145.9), (-82.6, 133.3)], blend: 10.5),
@@ -308,8 +308,8 @@
         (prefab: "chimney", at: (75.7, -32.0), rot: 0.0),
         (prefab: "rail_shed", at: (97.7, 6.9), rot: 0.0),
         (prefab: "pump_station", at: (115.0, 26.9), rot: 0.0),
-        (prefab: "boxcar", at: (154.0, -16.0), rot: 262.7),
-        (prefab: "boxcar", at: (119.0, 3.6), rot: 86.14),
+        (prefab: "boxcar", at: (165.0, -8.6), rot: 85.7),
+        (prefab: "boxcar", at: (116.3, -0.3), rot: 59.9),
         (prefab: "shed", at: (183.3, 16.6), rot: 0.0),
         // A lone shed out on the south-east flats: the only roof in a
         // minute's run of that corner when the Surge is called.
@@ -357,7 +357,6 @@
         (prefab: "wreck_lada", at: (-12.0, 69.5), rot: 23.0),
         (prefab: "wreck_uaz", at: (-2.3, 54.2), rot: 90.0),
         (prefab: "log_pile", at: (20.7, 57.1), rot: 224.0),
-        (prefab: "wreck_uaz", at: (32.7, 27.6), rot: 291.0),
         (prefab: "wreck_lorry", at: (13.0, 14.6), rot: 358.0),
         (prefab: "wreck_lada", at: (16.2, -8.9), rot: 65.0),
         (prefab: "wreck_uaz", at: (32.6, -30.1), rot: 132.0),
