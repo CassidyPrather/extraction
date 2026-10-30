@@ -83,7 +83,7 @@ pub fn camp_wanted(opts: &LaunchOptions) -> bool {
 
 /// The camp's frame: behind the truck on level ground off the road (and
 /// clear of the camp kitchen beside it), facing the tailgate.
-fn camp_pose(zone: &Zone) -> Transform {
+pub fn camp_pose(zone: &Zone) -> Transform {
     let truck = base_pose(zone);
     let tailgate = truck.transform_point(Vec3::new(0.0, 0.0, 2.2));
     let kitchen = zone
@@ -105,6 +105,21 @@ fn camp_pose(zone: &Zone) -> Transform {
             if kitchen.is_some_and(|k| k.distance(p.xz()) < 3.5) {
                 score += 50.0;
             }
+            // Even under the table, the stool and the box (a rigid table
+            // on a hump stands on two legs).
+            let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+            for (dx, dz) in [
+                (0.0, 0.0),
+                (1.2, 1.0),
+                (-1.2, 1.0),
+                (1.2, -1.0),
+                (-1.2, -1.0),
+            ] {
+                let h = zone.ground(p.x + dx, p.z + dz);
+                lo = lo.min(h);
+                hi = hi.max(h);
+            }
+            score += (hi - lo) * 40.0;
             if score < best.0 {
                 best = (score, p);
             }
@@ -113,10 +128,120 @@ fn camp_pose(zone: &Zone) -> Transform {
     let at = Vec3::new(best.1.x, zone.ground(best.1.x, best.1.z), best.1.z);
     // Local -Z toward the tailgate.
     let to = Vec3::new(tailgate.x - at.x, 0.0, tailgate.z - at.z);
-    Transform::from_translation(at).looking_to(to.normalize_or(Vec3::NEG_Z), Vec3::Y)
+    let mut pose =
+        Transform::from_translation(at).looking_to(to.normalize_or(Vec3::NEG_Z), Vec3::Y);
+    // Down to the lowest ground under the table's feet: no leg in the air
+    // (the 28 October playtest, 0:33:38); the uphill ones go into the soil.
+    pose.translation.y = TABLE_FEET
+        .iter()
+        .map(|f| {
+            let p = pose.transform_point(*f);
+            zone.ground(p.x, p.z)
+        })
+        .fold(f32::MAX, f32::min);
+    pose
 }
 
+/// The table's feet, the camp's frame (`art/props/outdoor.py`).
+const TABLE_FEET: [Vec3; 4] = [
+    Vec3::new(-0.535, 0.0, -0.31),
+    Vec3::new(-0.535, 0.0, 0.31),
+    Vec3::new(0.425, 0.0, -0.31),
+    Vec3::new(0.425, 0.0, 0.31),
+];
+
+/// Where the stool and the ammo box stand, the camp's frame, and their
+/// feet round there.
+const STOOL: Vec3 = Vec3::new(0.75, 0.0, 0.65);
+const BOX: Vec3 = Vec3::new(-0.35, 0.0, -0.03);
+
+/// A thing standing free on the ground at `at` (the camp's frame) with
+/// feet at `feet` round it: tilted to the ground under them and set down
+/// on it (the playtest's stool floated, its crate sank).
+fn on_ground(zone: &Zone, pose: &Transform, at: Vec3, feet: &[Vec3]) -> Transform {
+    let inv = pose.compute_affine().inverse();
+    // The ground under each foot, in the camp's frame.
+    let pts: Vec<Vec3> = feet
+        .iter()
+        .map(|f| {
+            let w = pose.transform_point(at + *f);
+            inv.transform_point3(Vec3::new(w.x, zone.ground(w.x, w.z), w.z))
+        })
+        .collect();
+    // The plane through them (least squares: y = a x + b z + c).
+    let n = pts.len() as f32;
+    let m = pts.iter().fold(Vec3::ZERO, |s, p| s + *p) / n;
+    let (mut sxx, mut sxz, mut szz, mut sxy, mut szy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    for p in &pts {
+        let d = *p - m;
+        sxx += d.x * d.x;
+        sxz += d.x * d.z;
+        szz += d.z * d.z;
+        sxy += d.x * d.y;
+        szy += d.z * d.y;
+    }
+    let det = sxx * szz - sxz * sxz;
+    let (a, b) = if det.abs() > 1e-9 {
+        ((sxy * szz - szy * sxz) / det, (szy * sxx - sxy * sxz) / det)
+    } else {
+        (0.0, 0.0)
+    };
+    let up = Vec3::new(-a, 1.0, -b).normalize();
+    let tilt = Quat::from_rotation_arc(Vec3::Y, up);
+    // Down until its lowest foot is on the plane.
+    let centre = m.y + a * (at.x - m.x) + b * (at.z - m.z);
+    let mut t = Transform::from_translation(Vec3::new(at.x, centre, at.z)).with_rotation(tilt);
+    let worst = feet
+        .iter()
+        .zip(&pts)
+        .map(|(f, g)| t.transform_point(*f).y - g.y)
+        .fold(f32::MIN, f32::max);
+    t.translation.y -= worst.max(0.0);
+    t
+}
+
+fn stool_feet() -> Vec<Vec3> {
+    (0..3)
+        .map(|k| {
+            let a = std::f32::consts::TAU * k as f32 / 3.0 + 0.3;
+            Vec3::new(0.15 * a.cos(), 0.0, 0.15 * a.sin())
+        })
+        .collect()
+}
+
+const BOX_FEET: [Vec3; 4] = [
+    Vec3::new(-0.23, 0.0, -0.18),
+    Vec3::new(0.23, 0.0, -0.18),
+    Vec3::new(-0.23, 0.0, 0.18),
+    Vec3::new(0.23, 0.0, 0.18),
+];
+
 const TABLE_TOP: f32 = 0.76;
+
+/// Where the board stands on the camp's frame: at the table's back edge,
+/// leaning away.
+pub fn board_pose() -> Transform {
+    Transform::from_xyz(0.0, TABLE_TOP + 0.44, -0.27).with_rotation(Quat::from_rotation_x(-0.21))
+}
+
+/// The camp's models in its frame (`render::props::dress_camp` draws them;
+/// `capture::footing` stands them on the ground).
+pub fn models(zone: Option<&Zone>, pose: &Transform) -> Vec<(&'static str, Transform)> {
+    let free = |at: Vec3, feet: &[Vec3]| match zone {
+        Some(z) => on_ground(z, pose, at, feet),
+        None => Transform::from_translation(at),
+    };
+    vec![
+        ("camp_table", Transform::IDENTITY),
+        ("camp_stool", free(STOOL, &stool_feet())),
+        ("camp_box", free(BOX, &BOX_FEET)),
+        (
+            "lantern",
+            Transform::from_translation(Vec3::new(-0.48, TABLE_TOP, 0.12)),
+        ),
+        ("camp_board", board_pose()),
+    ]
+}
 
 fn spawn_camp(
     mut commands: Commands,
@@ -154,8 +279,7 @@ fn spawn_camp(
     let board = commands
         .spawn((
             Name::new("Camp board"),
-            Transform::from_xyz(0.0, TABLE_TOP + 0.44, -0.27)
-                .with_rotation(Quat::from_rotation_x(-0.21)),
+            board_pose(),
             Visibility::default(),
             CampProps::Board,
             ChildOf(camp),
@@ -327,6 +451,7 @@ fn press_camp(
     mut exit: MessageWriter<AppExit>,
     mut slot: Option<ResMut<crate::persist::SaveSlot>>,
     onboarding: Option<Res<crate::onboarding::Onboarding>>,
+    mut leaving: Option<ResMut<crate::rig::loading::Leaving>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -357,7 +482,13 @@ fn press_camp(
             CampCard::Title | CampCard::Career => {}
             CampCard::Training => {
                 raid.say("The driver nods at the yard. \"Take your time.\"");
-                leave(&opts, TRAINING_YARD, false, &mut exit);
+                leave(
+                    &opts,
+                    TRAINING_YARD,
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
             CampCard::NewCareer => {
                 let now = time.elapsed_secs();
@@ -371,7 +502,13 @@ fn press_camp(
                     if crate::persist::owns_profile(&opts) {
                         crate::persist::burn_career(&opts);
                     }
-                    leave(&opts, TRAINING_YARD, true, &mut exit);
+                    leave(
+                        &opts,
+                        TRAINING_YARD,
+                        true,
+                        &mut exit,
+                        leaving.as_deref_mut(),
+                    );
                 }
             }
             CampCard::PackUp => {
@@ -402,14 +539,27 @@ fn press_camp(
                     crate::persist::mark_trained(&opts);
                 }
                 raid.say("\"Right then.\" The engine turns over.");
-                leave(&opts, &crate::persist::next_valley(&opts), false, &mut exit);
+                leave(
+                    &opts,
+                    &crate::persist::next_valley(&opts),
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
         }
     }
 }
 
-/// End this session and open the game again in `map`.
-fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<AppExit>) {
+/// End this session and open the game again in `map` (in a headset,
+/// after the loading view has said where to: `rig::loading::Leaving`).
+fn leave(
+    opts: &LaunchOptions,
+    map: &str,
+    fresh: bool,
+    exit: &mut MessageWriter<AppExit>,
+    leaving: Option<&mut crate::rig::loading::Leaving>,
+) {
     info!(
         "camp: on to {map}{}",
         if fresh { " (new career)" } else { "" }
@@ -424,8 +574,14 @@ fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<
     } else {
         crate::request_restart(map);
     }
-    if !opts.headless {
-        exit.write(AppExit::Success);
+    if opts.headless {
+        return;
+    }
+    match leaving {
+        Some(leaving) => leaving.go(map),
+        None => {
+            exit.write(AppExit::Success);
+        }
     }
 }
 

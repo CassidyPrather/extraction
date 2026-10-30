@@ -44,10 +44,15 @@ fn handle(error: &RenderError, main_world: &mut World, _: &mut World) -> RenderE
         main_world.write_message(AppExit::error());
         return RenderErrorPolicy::StopRendering;
     }
+    stop(&format!("{:?} {}", error.ty, error.description));
+}
+
+/// The GPU's gone: the line in the log and the crash file, and out.
+pub fn stop(error: &str) -> ! {
     let text = line(
         SESSION.get().map(|s| s.elapsed().as_secs_f64()),
         super::timeline::since_start(),
-        &format!("{:?} {}", error.ty, error.description),
+        error,
     );
     error!("{text}");
     let dir = crate::log_dir();
@@ -64,8 +69,65 @@ fn handle(error: &RenderError, main_world: &mut World, _: &mut World) -> RenderE
     std::process::exit(1);
 }
 
+/// Whether a panic is the GPU going (or what its going leaves behind),
+/// from where it was raised and what it said. On the playtest's machine
+/// these came before Bevy's device-lost error ever reached `handle`: the
+/// window's swapchain torn down mid-acquire (wgpu-hal), a screenshot's
+/// readback that couldn't map ("Failed to map buffer"), and the clustering
+/// mutex the first panic poisoned (`PoisonError` in a render crate).
+pub fn is_gpu_loss(message: &str, file: &str) -> bool {
+    let file = file.replace('\\', "/");
+    let render = [
+        "/bevy_render-",
+        "/bevy_pbr-",
+        "/bevy_core_pipeline-",
+        "/bevy_mod_openxr-",
+    ]
+    .iter()
+    .any(|c| file.contains(c));
+    file.contains("/wgpu-hal-")
+        || file.contains("/wgpu-core-")
+        || message.contains("Failed to map buffer")
+        || message.contains("DeviceLost")
+        || message.contains("Device lost")
+        || message.contains("Parent device is lost")
+        || message.contains("swap chain texture")
+        || (render && message.contains("PoisonError"))
+}
+
 #[cfg(test)]
 mod tests {
+    /// The playtest's four crashes (docs/playtests/2026-10-28/logs), and
+    /// a panic of the game's own that isn't the GPU's.
+    #[test]
+    fn the_playtests_gpu_panics_are_the_gpus() {
+        let reg = r"C:\Users\<user>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f";
+        for (message, file) in [
+            (
+                "Trying to destroy a SwapchainAcquireSemaphore that is still in use by a SurfaceTexture",
+                format!(r"{reg}\wgpu-hal-29.0.4\src\vulkan\swapchain\native.rs"),
+            ),
+            (
+                "Failed to map buffer: BufferAsyncError",
+                format!(r"{reg}\bevy_render-0.19.1\src\gpu_readback.rs"),
+            ),
+            (
+                "called `Result::unwrap()` on an `Err` value: PoisonError { .. }",
+                format!(r"{reg}\bevy_pbr-0.19.1\src\cluster\gpu.rs"),
+            ),
+        ] {
+            assert!(super::is_gpu_loss(message, &file), "{message}");
+        }
+        assert!(!super::is_gpu_loss(
+            "called `Option::unwrap()` on a `None` value",
+            "src/raid/mod.rs"
+        ));
+        assert!(!super::is_gpu_loss(
+            "called `Result::unwrap()` on an `Err` value: PoisonError { .. }",
+            "src/lib.rs"
+        ));
+    }
+
     #[test]
     fn the_line_says_when() {
         assert_eq!(

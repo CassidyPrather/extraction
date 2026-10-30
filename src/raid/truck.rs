@@ -177,7 +177,10 @@ pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
 
 /// The truck standing at `at` facing `yaw`, settled low enough that its
 /// rear steps reach the ground where the ground falls away behind it
-/// (otherwise the bed is out of reach on a slope).
+/// (otherwise the bed is out of reach on a slope). That sinks its wheels
+/// where the ground falls away (the 28 October playtest, 0:12:57;
+/// `capture::footing` lists it): standing it on its wheels waits on a rear
+/// ladder that reaches the ground.
 fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let rot = Quat::from_rotation_y(yaw);
     let mut t = Transform::from_translation(zone.on_ground(at[0], at[1])).with_rotation(rot);
@@ -185,6 +188,17 @@ fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let drop = t.translation.y - zone.ground(foot.x, foot.z);
     t.translation.y -= drop.clamp(0.0, 0.8);
     t
+}
+
+/// How far a wheel drops on its springs to meet the ground (m).
+pub const WHEEL_DROOP: f32 = 0.16;
+
+/// How far wheel `i` hangs below its place in `WHEELS` to meet the ground
+/// under it (the truck is rigid, the ground under six wheels isn't flat).
+pub fn wheel_droop(zone: &Zone, pose: &Transform, i: usize) -> f32 {
+    let w = WHEELS[i];
+    let bottom = pose.transform_point(w) - pose.rotation * Vec3::Y * w.y;
+    (bottom.y - zone.ground(bottom.x, bottom.z)).clamp(0.0, WHEEL_DROOP)
 }
 
 fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
@@ -221,28 +235,83 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
         ));
     });
     // The stash: a big crate bolted to the bed floor.
-    commands.spawn((
-        Name::new("Stash crate"),
-        Stash,
-        Backpack {
-            owner: Entity::PLACEHOLDER,
-            open: true,
-            model: inventory::Backpack {
-                capacity: extraction_core::progression::STASH_BASE,
-                mass: 0.0,
+    commands
+        .spawn((
+            Name::new("Stash crate"),
+            Stash,
+            Backpack {
+                owner: Entity::PLACEHOLDER,
+                open: true,
+                model: inventory::Backpack {
+                    capacity: extraction_core::progression::STASH_BASE,
+                    mass: 0.0,
+                },
+                contents: Vec::new(),
+                carried: false,
+                half: Vec3::new(0.45, 0.3, 0.6),
             },
-            contents: Vec::new(),
-            carried: false,
-            half: Vec3::new(0.45, 0.3, 0.6),
-        },
-        // Up on a stand, the kit on a shelf in its top: waist height for
-        // someone standing in the bed (it sat on the floor; the first
-        // playtest found most things to pick up were on the floor).
-        Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
-        Visibility::default(),
-        ChildOf(truck),
-    ));
+            // Up on a stand, the kit on a shelf in its top: waist height for
+            // someone standing in the bed (it sat on the floor; the first
+            // playtest found most things to pick up were on the floor).
+            Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
+            Visibility::default(),
+            ChildOf(truck),
+        ))
+        .with_children(|c| {
+            // Solid, as it's drawn: the stand and the crate's lower half one
+            // block from the bed up to the shelf, and four walls round the
+            // shelf, open on top. It had no collider at all: things dropped
+            // over it fell through, and one came to rest under it, out of
+            // sight and reach.
+            let (w, d) = STASH_OUTER;
+            let floor = -(STASH_RAISE + 0.35);
+            let solid = -floor;
+            c.spawn((
+                Name::new("Stash crate body"),
+                Collider::cuboid(w, solid, d),
+                stash_layers(),
+                Transform::from_xyz(0.0, floor + solid * 0.5, 0.0),
+            ));
+            let (wall, high) = (0.03, STASH_WALL);
+            for (size, at) in [
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new(-(w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new((w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, -(d - wall) * 0.5),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, (d - wall) * 0.5),
+                ),
+            ] {
+                c.spawn((
+                    Name::new("Stash crate wall"),
+                    Collider::cuboid(size.x, size.y, size.z),
+                    stash_layers(),
+                    Transform::from_translation(at),
+                ));
+            }
+        });
 }
+
+/// The crate stops loose things, and nothing else: a crate the body
+/// couldn't pass kept it from the cord in the narrow bed, and one a held
+/// thing's leash took for a wall kept the kit in it.
+fn stash_layers() -> CollisionLayers {
+    CollisionLayers::new(Layer::Container, [Layer::Item])
+}
+
+/// The stash crate's outside, width and depth (as drawn).
+pub const STASH_OUTER: (f32, f32) = (0.95, 1.25);
+/// How high its walls stand over the shelf.
+pub const STASH_WALL: f32 = 0.325;
 
 /// How high the stash crate's stand lifts it off the bed.
 pub const STASH_RAISE: f32 = 0.3;

@@ -87,6 +87,9 @@ struct Slots {
 
 fn slots(w: f32, d: f32) -> Slots {
     let f = 0.5;
+    // The floorboards' top (`Builder::plinth`'s 3 cm floor): what stands
+    // on the floor stood 3 cm into it (`capture::footing`).
+    let floor = f + 0.03;
     let (x, z) = (w * 0.5, d * 0.5);
     let pz = z - d * 0.42;
     let table = Vec3::new(-x * 0.4, f + 0.785, -z * 0.2);
@@ -114,14 +117,14 @@ fn slots(w: f32, d: f32) -> Slots {
         ],
         bed: Vec3::new(x - 0.6, f + 0.56, z - 1.4),
         door_floor: [
-            Vec3::new(-0.95, f, -z + 0.45),
-            Vec3::new(0.95, f, -z + 0.45),
+            Vec3::new(-0.95, floor, -z + 0.45),
+            Vec3::new(0.95, floor, -z + 0.45),
         ],
         door_wall: [
             Vec3::new(-1.1, f + 1.7, -z + 0.09),
             Vec3::new(1.1, f + 1.7, -z + 0.09),
         ],
-        room_floor: Vec3::new(x * 0.25, f, -z * 0.45),
+        room_floor: Vec3::new(x * 0.25, floor, -z * 0.45),
         partition: Vec3::new(0.0, f + 1.05, pz - 0.05),
         sills,
     }
@@ -282,7 +285,9 @@ pub fn dress(
                         Vec3::new(-x + 0.09, f + 1.75, -z * 0.55),
                         Vec3::X,
                     ));
-                    out.push(on("ice_axe", s.table[1], 0.4));
+                    // On the floor by the door (on the table's slot it hung
+                    // in the air where the house has no table).
+                    out.push(on("ice_axe", s.door_floor[1], 0.4));
                     out.push(on("hurricane_lamp", s.kitchen[1], 0.5));
                 }
                 Valley::Cinder => {

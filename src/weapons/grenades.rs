@@ -41,7 +41,7 @@ pub struct GrenadeEvent {
 
 /// Where a hand takes the ring and pulls, item space (the ring is on the
 /// +X side, below the fuse).
-pub const PIN_AT: Vec3 = Vec3::new(0.034, 0.03, 0.0);
+pub const PIN_AT: Vec3 = Vec3::new(0.0408, 0.036, 0.0);
 /// How far the ring must come away to pull the pin, metres.
 pub const PIN_PULL: f32 = 0.05;
 /// Fragments slow fast: their drag over a rifle round's.

@@ -788,16 +788,20 @@ fn add_drone_feeds(
     }
 }
 
-/// The feed screen rides above the wrist panel, hidden until a drone flies.
+/// The feed screen rides above the wrist panel, hidden until a drone flies:
+/// on the glove (the physics hand), as the wrist panel is, so the two never
+/// part (`render::comfort::add_wrist_panel`).
 fn add_wrist_feed(
     mut commands: Commands,
-    hands: Query<(Entity, &crate::rig::RigHand, &ChildOf), Added<crate::rig::RigHand>>,
-    locals: Query<(), With<crate::rig::LocalPlayer>>,
+    gloves: Query<
+        (Entity, &crate::render::props::HandVisual),
+        Added<crate::render::props::PlayerGlove>,
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for (e, hand, parent) in &hands {
-        if hand.side != crate::rig::Side::Left || !locals.contains(parent.parent()) {
+    for (e, glove) in &gloves {
+        if glove.side != crate::rig::Side::Left || glove.ghost {
             continue;
         }
         let m = materials.add(StandardMaterial {

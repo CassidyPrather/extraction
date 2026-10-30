@@ -206,7 +206,11 @@ fn push_doors(
         &crate::world::buildings::DoorLeaf,
         Has<crate::robots::doors::Wedged>,
         Has<crate::world::underground::PowerLocked>,
+        // A door in a hand, or just let go of, isn't pushed (`hinge`).
+        Has<crate::world::hinge::Swinging>,
+        Option<&crate::world::hinge::LetGo>,
     )>,
+    time: Res<Time>,
 ) {
     for (body, pos) in &bodies {
         let Ok(hand) = hands.get(body.hand) else {
@@ -216,8 +220,10 @@ fn push_doors(
             continue;
         }
         let palm = hand.world.transform_point(HAND_CENTRE);
-        for (mut door, gt, leaf, wedged, locked) in &mut doors {
-            if wedged || locked {
+        for (mut door, gt, leaf, wedged, locked, held, let_go) in &mut doors {
+            let just_let_go =
+                let_go.is_some_and(|l| time.elapsed_secs() - l.0 < crate::world::hinge::LET_GO);
+            if wedged || locked || held || just_let_go {
                 continue;
             }
             let to_local = gt.affine().inverse();

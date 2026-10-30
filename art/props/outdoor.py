@@ -9,7 +9,8 @@ assets/models/props/<name>.glb:
                   pitched roof
 - `fence_post`    a concrete quarantine fence post, 2.7 tall, sunk 0.3,
                   kept to a few dozen triangles (there are hundreds)
-- `camp_table`    the camp's table (`camp::TABLE`, top at 0.76 over 1.3 x 0.7)
+- `camp_table`    the camp's table (`camp::TABLE`, top at 0.76 over 1.3 x 0.7);
+                  `camp_stool` and `camp_box` stand by it, each on its own ground
                   on two trestles, an ammo box under it, a stool beside it
 - `camp_board`    the camp's notice board, 1.2 x 0.9, in board space (cards
                   on +Z at z 0.016), with the strut behind
@@ -74,7 +75,7 @@ def fence_post():
 
 
 def camp_table_parts():
-    """The table and its ammo box, the box moved to its place."""
+    """The table alone (its stool and box are their own props)."""
     w = Wear(83)
     table = Part("static")
     top = 0.76
@@ -94,25 +95,33 @@ def camp_table_parts():
                   tilt=-ang, bevel=0.004)
         board(table, (0.035, 0.05, 0.44), (x - 0.055, 0.5, 0.0), "Timber", bevel=0.003)
     board(table, (0.93, 0.05, 0.04), (0.0, 0.55, 0.0), "Timber", bevel=0.003)
-    # The stool by it: a round seat on three splayed legs.
-    sx_, sz_ = 0.75, 0.65
-    table.cyl(0.17, 0.43, 0.47, "Boards", segs=16, xf=T(sx_, 0, sz_) @ UP, chamfer=0.008)
+    return [table]
+
+
+def camp_stool():
+    """The stool by the table: a round seat on three splayed legs, its feet
+    at y 0 round its own origin (`camp::models` stands it on the ground)."""
+    p = Part("static")
+    p.cyl(0.17, 0.43, 0.47, "Boards", segs=16, xf=UP, chamfer=0.008)
     for k in range(3):
         a = 2 * math.pi * k / 3 + 0.3
-        top_p = (sx_ + 0.09 * math.cos(a), 0.44, sz_ + 0.09 * math.sin(a))
-        bot_p = (sx_ + 0.15 * math.cos(a), 0.0, sz_ + 0.15 * math.sin(a))
-        rod(table, bot_p, top_p, 0.018, "Timber", segs=6)
-    # The ammo box.
-    box = Part("box")
+        top_p = (0.09 * math.cos(a), 0.44, 0.09 * math.sin(a))
+        bot_p = (0.15 * math.cos(a), 0.0, 0.15 * math.sin(a))
+        rod(p, bot_p, top_p, 0.018, "Timber", segs=6)
+    return [p]
+
+
+def camp_box():
+    """The ammo box under the table, its bottom at y 0 round its own origin."""
+    w = Wear(84)
+    box = Part("static")
     W, H, D = 0.46, 0.4, 0.36
     side_boards(box, W, H - 0.022, D, 0.0, "Paint", w, 3, 0.004)
     lid_boards(box, W, D, H, "Paint", w, n=3)
     frame_battens(box, W, D, 0.0, H - 0.026, "Paint", bw=0.05)
     for sx in (-1, 1):
         rope_handle(box, sx * W / 2, 0.24, sx, span=0.1)
-    import bmesh
-    bmesh.ops.translate(box.bm, verts=box.bm.verts, vec=(-0.35, 0.0, -0.03))
-    return [table, box]
+    return [box]
 
 
 def camp_board():
@@ -186,6 +195,8 @@ prop("signpost", signpost)
 prop("fence_post", fence_post)
 prop("fence_panel", fence_panel)
 prop("camp_table", camp_table_parts)
+prop("camp_stool", camp_stool)
+prop("camp_box", camp_box)
 prop("camp_board", camp_board)
 prop("camp_post", camp_post)
 prop("lantern", lantern)
