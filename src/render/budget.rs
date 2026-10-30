@@ -2306,6 +2306,68 @@ pub(crate) mod tests {
         assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
+    /// No game system takes more than `SYSTEM_SHARE` of the main
+    /// schedule at any valley's busy moment, timed by Bevy's own
+    /// per-system spans: a share, which survives a busy machine and the
+    /// spans' own cost, where milliseconds don't. One system at 25 ms (the
+    /// eyes' head test, 32% of the frame) reached a playtest build; this
+    /// fails it, and names the system and its valley. Today's biggest game
+    /// system is about 1% (`wildlife::visuals::build_far`). Needs the
+    /// spans: `cargo test --lib --features systime -- --ignored
+    /// gauge_game_systems`.
+    #[cfg(feature = "systime")]
+    #[test]
+    #[ignore = "gauge: cargo test --lib --features systime -- --ignored gauge_game_systems"]
+    fn gauge_game_systems_hold_their_share() {
+        use bevy::log::tracing_subscriber::layer::SubscriberExt;
+        const SYSTEM_SHARE: f64 = 0.02;
+        let _one_at_a_time = heavy();
+        let times = SystemTimes::default();
+        let subscriber = bevy::log::tracing_subscriber::registry().with(times.clone());
+        bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
+        let mut wrong = Vec::new();
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let t = times.clone();
+            let stats = busy_moment_with(map, move || t.0.lock().unwrap().clear());
+            let frame = stats
+                .iter()
+                .find(|(n, _, _)| *n == "main schedule")
+                .map_or(0.0, |s| s.1);
+            let mut ours: Vec<(String, f64)> = times
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(n, _)| n.starts_with("extraction::"))
+                .map(|(n, ms)| (n.clone(), ms / 450.0))
+                .collect();
+            ours.sort_by(|a, b| b.1.total_cmp(&a.1));
+            println!("{map}: main schedule {frame:.2} ms; the heaviest game systems:");
+            for (name, ms) in ours.iter().take(6) {
+                println!("    {ms:7.3} ms ({:4.1}%)  {name}", 100.0 * ms / frame.max(1e-9));
+            }
+            for (name, ms) in &ours {
+                if *ms > frame * SYSTEM_SHARE {
+                    wrong.push(format!(
+                        "{map}: {name} {ms:.2} ms a frame, {:.0}% of {frame:.1}",
+                        100.0 * ms / frame
+                    ));
+                }
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "game systems over {}% of the frame: {wrong:#?}",
+            SYSTEM_SHARE * 100.0
+        );
+    }
+
     /// A busy moment in Marrow Creek holds its CPU budget: the frame in
     /// reference units (`CPU_FRAME_UNITS`), each schedule its share
     /// (`CPU_SHARE`).
