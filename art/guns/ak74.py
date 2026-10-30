@@ -265,13 +265,16 @@ stock_prof = fillet([(0.019, 0.0765), (0.30, 0.036), (0.30, -0.086), (0.255, -0.
                      (0.025, 0.004), (0.019, 0.022)], [0.0, 0.0, 0.0, 0.02, 0.01, 0.0], 6)
 
 
-def stock_w(z, y):
+def stock_w(z, yc, h):
+    # Half widths at the belly and the comb: the comb a little narrower.
     k = 0.0165 + (z - 0.02) / 0.28 * 0.0045
-    return (-k, k)
+    return (k, k * 0.85)
 
 
+# Rounded across (a superellipse each few millimetres), not a slab with
+# bevelled edges: the extruded outline read as a plank at the cheek.
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.008, segs=4, width=stock_w)
+stock.stock(stock_prof, 0.0192, 0.2998, "Wood", stock_w, stations=90, segs=28, power=2.8)
 sc = Part("cut")
 # The AK-74's lightening grooves along both sides of the stock.
 for sx in (-1, 1):
@@ -322,6 +325,9 @@ butt.cut(bpc)
 # Sling loop on the left of the stock.
 loop = catmull([(0.255, -0.06), (0.262, -0.046), (0.276, -0.046), (0.283, -0.06)], 6, closed=False)
 butt.sweep(loop, section_rect(0.003, 0.003, 0.0008, segs=3), "Steel", xf=T(-0.022, -0.012, 0.0))
+# Its two studs into the wood, where the rounded stock falls away under it.
+for z in (0.255, 0.283):
+    butt.cyl(0.0016, -0.0235, -0.012, "Steel", segs=10, xf=T(0, -0.072, z) @ RY(math.pi / 2))
 
 # --- Moving parts -------------------------------------------------------------------------
 carrier = Part("bolt_carrier", origin=(0.0, 0.07, -0.14))
