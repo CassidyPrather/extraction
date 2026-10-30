@@ -6987,7 +6987,7 @@ mod door_hinge {
         vr.step(90);
         let d = vr.app.world().get::<Moving>(drawer).unwrap();
         assert!(
-            d.open && d.at < 1e-3,
+            !d.open && d.at < 1e-3,
             "pressed, the drawer ran shut ({:.3})",
             d.at
         );
