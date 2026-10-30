@@ -407,9 +407,14 @@ fn emp_flashes(
 /// of the camera, narrow the field of view by its magnification.
 fn optic_zoom(
     optics: Query<(&Optic, &GlobalTransform)>,
+    // A camera whose lens is held (a gauge's, a capture's) is its own.
     mut cams: Query<
         (&GlobalTransform, &mut Projection),
-        (With<Camera3d>, Without<crate::render::OffscreenCamera>),
+        (
+            With<Camera3d>,
+            Without<crate::render::OffscreenCamera>,
+            Without<crate::capture::Lens>,
+        ),
     >,
     driver: Res<crate::rig::RigDriver>,
     time: Res<Time>,
@@ -1054,6 +1059,51 @@ fn mark_job(
 #[cfg(test)]
 mod low_cell_tests {
     use super::*;
+
+    /// The flat zoom eases a camera's view back to 75 degrees, but not one
+    /// whose lens is held (a render gauge's at the headset's pixels a
+    /// degree, a capture's): the gauges shot at 75 once the systems' order
+    /// turned.
+    #[test]
+    fn a_held_lens_is_not_zoomed_back() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(crate::rig::RigDriver::Flat)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, optic_zoom);
+        let narrow = 0.6;
+        let cam = |w: &mut World, lens: bool| {
+            let mut e = w.spawn((
+                Camera3d::default(),
+                Projection::Perspective(PerspectiveProjection {
+                    fov: narrow,
+                    ..default()
+                }),
+                GlobalTransform::default(),
+            ));
+            if lens {
+                e.insert(crate::capture::Lens(narrow));
+            }
+            e.id()
+        };
+        let held = cam(app.world_mut(), true);
+        let free = cam(app.world_mut(), false);
+        for _ in 0..30 {
+            app.update();
+        }
+        let fov = |e: Entity| match app.world().get::<Projection>(e).unwrap() {
+            Projection::Perspective(p) => p.fov,
+            _ => unreachable!(),
+        };
+        assert_eq!(fov(held), narrow, "a held lens was zoomed");
+        assert!(
+            fov(free) > 1.0,
+            "the zoom no longer eases back: {}",
+            fov(free)
+        );
+    }
 
     /// Full till a fifth is left, dimmer to 40% by a twentieth, then a
     /// weak glow that drops out now and then.
