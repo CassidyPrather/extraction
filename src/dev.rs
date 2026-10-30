@@ -1332,10 +1332,17 @@ fn plate_hits_for_gallery(
     zone: Option<Res<crate::world::Zone>>,
     targets: Query<(&crate::world::buildings::Building, &GlobalTransform)>,
     mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
     mut state: Local<(u32, Option<Entity>)>,
 ) {
     if opts.gallery.as_deref() != Some("plate") {
         return;
+    }
+    for im in impacts.read() {
+        info!(
+            "gallery plate: {:?} at {} (marked: {})",
+            im.kind, im.point, im.decal
+        );
     }
     let (Some((cam, ..)), Some(zone)) = (opts.camera, zone) else {
         return;
@@ -1376,12 +1383,13 @@ fn plate_hits_for_gallery(
     if (FROM..FROM + ON_FACE.len()).contains(&i) {
         let (x, y) = ON_FACE[i - FROM];
         let at = plate.1.transform_point(Vec3::new(x, 1.2 + y, 0.08));
-        info!("gallery plate: a round from {eye} at {at}");
+        // From in front of the camera's own body, which would take them.
+        let dir = (at - eye).normalize();
         shots.write(crate::weapons::ballistics::Shot {
             gun,
             shooter: Some(gun),
-            origin: eye,
-            direction: (at - eye).normalize(),
+            origin: eye + dir * 0.6,
+            direction: dir,
             speed: 315.0,
             damage: 20.0,
             projectiles: 1,

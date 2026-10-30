@@ -5053,12 +5053,15 @@ fn target(b: &mut Builder) {
         Mat::DarkMetal,
         true,
     );
+    // Its painted centre too: a bull's-eye's mark would be drawn over by
+    // a disc that isn't there. The round marks it and goes on to ring
+    // off the steel behind.
     b.piece(
         Shape::Cylinder(0.12, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.08)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::Plaster,
-        false,
+        true,
     );
     b.bx(
         Vec3::new(2.4, 1.0, 1.0),
