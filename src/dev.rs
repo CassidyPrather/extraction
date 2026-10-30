@@ -31,6 +31,7 @@ impl Plugin for DevPlugin {
                     fight_for_gallery,
                     treat_for_gallery,
                     spall_for_gallery,
+                    plate_hits_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -1318,6 +1319,76 @@ fn spall_for_gallery(
                 seed: u64::from(state.0) << 4 | i as u64,
             });
         }
+    }
+}
+
+/// `--gallery plate`: five pistol rounds from the camera into the steel
+/// plate of the range target nearest it, one a frame, spread over its
+/// face: the sparks and the marks they leave (or, on a plate with no
+/// collider, nothing).
+fn plate_hits_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    targets: Query<(&crate::world::buildings::Building, &GlobalTransform)>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    if opts.gallery.as_deref() != Some("plate") {
+        return;
+    }
+    let (Some((cam, ..)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y == 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    state.0 += 1;
+    if state.0 == 3 {
+        state.1 = Some(commands.spawn(Name::new("Gallery pistol")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    let Some(plate) = targets
+        .iter()
+        .filter(|(b, _)| b.prefab == "target")
+        .min_by(|a, b| {
+            a.1.translation()
+                .distance(eye)
+                .total_cmp(&b.1.translation().distance(eye))
+        })
+    else {
+        return;
+    };
+    const ON_FACE: [(f32, f32); 5] = [
+        (0.0, 0.0),
+        (0.15, 0.1),
+        (-0.12, 0.14),
+        (-0.1, -0.15),
+        (0.14, -0.12),
+    ];
+    let i = state.0 as usize;
+    // Late enough that the yard's colliders are in.
+    const FROM: usize = 60;
+    if (FROM..FROM + ON_FACE.len()).contains(&i) {
+        let (x, y) = ON_FACE[i - FROM];
+        let at = plate.1.transform_point(Vec3::new(x, 1.2 + y, 0.08));
+        info!("gallery plate: a round from {eye} at {at}");
+        shots.write(crate::weapons::ballistics::Shot {
+            gun,
+            shooter: Some(gun),
+            origin: eye,
+            direction: (at - eye).normalize(),
+            speed: 315.0,
+            damage: 20.0,
+            projectiles: 1,
+            spread: 0.0,
+            recoil: 0.0,
+            seed: i as u64,
+        });
     }
 }
 
