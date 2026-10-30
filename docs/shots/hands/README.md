@@ -107,3 +107,8 @@ caps) and a finer palm; a leather patch over each fingertip; a moulded pad
 over each knuckle; the leather a shade lighter than the olive nylon, so
 palm and back read apart. Still to come: the back of the hand's panels
 and stitching, the thumb's shape, and the cuff.
+`23_glove_back.jpg` (`fp:open,2.4,270`, the back of the hand, the side
+you see most): left the glove before this wave, right after its second
+pass. A padded panel over the back of the hand with dark seams down its
+sides, a moulded pad on each knuckle, leather fingertips. (The block at
+the wrist is the display's housing, on each glove.)
