@@ -474,6 +474,7 @@ fn fresh_save(map: &str) -> SaveGame {
         rounds,
         charge_wh: -1.0,
         local: at,
+        turn: [0.0, 0.0, 0.0, 1.0],
         gun: None,
         inserted: Vec::new(),
         loads: Default::default(),
@@ -674,6 +675,17 @@ pub(crate) fn seat_in_mount(world: &mut World, owner: Entity, item: Entity) {
 }
 
 pub(crate) fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: Vec3) {
+    put_in_bag_turned(world, item, bag_e, local, Quat::IDENTITY);
+}
+
+/// [`put_in_bag`], lying as it was put in.
+pub(crate) fn put_in_bag_turned(
+    world: &mut World,
+    item: Entity,
+    bag_e: Entity,
+    local: Vec3,
+    turn: Quat,
+) {
     let stash = world.get::<Stash>(bag_e).is_some();
     let Some(mut bag) = world.get_mut::<Backpack>(bag_e) else {
         return;
@@ -692,7 +704,7 @@ pub(crate) fn put_in_bag(world: &mut World, item: Entity, bag_e: Entity, local: 
     world.entity_mut(item).insert((
         InBackpack { bag: bag_e },
         ChildOf(bag_e),
-        Transform::from_translation(local),
+        Transform::from_translation(local).with_rotation(turn),
         RigidBodyDisabled,
         ColliderDisabled,
         vis,
@@ -721,13 +733,35 @@ fn v3(a: [f32; 3]) -> Vec3 {
     Vec3::from_array(a)
 }
 
+/// A saved turn, made a rotation (a bad one: upright).
+fn q4(a: [f32; 4]) -> Quat {
+    let q = Quat::from_array(a);
+    if q.is_finite() && q.length_squared() > 1e-6 {
+        q.normalize()
+    } else {
+        Quat::IDENTITY
+    }
+}
+
 /// Puts a restored item into `bag` (at `local`), or, with no bag to take
 /// it, lays it on the ground at `fallback`, never leaving it at the
 /// world's origin. What no longer fits inside it goes along.
 fn settle(world: &mut World, e: Entity, bag: Option<Entity>, local: Vec3, fallback: Vec3) {
+    settle_turned(world, e, bag, local, Quat::IDENTITY, fallback);
+}
+
+/// [`settle`], lying in its bag as it was put in.
+fn settle_turned(
+    world: &mut World,
+    e: Entity,
+    bag: Option<Entity>,
+    local: Vec3,
+    turn: Quat,
+    fallback: Vec3,
+) {
     match bag {
         Some(b) => {
-            put_in_bag(world, e, b, local);
+            put_in_bag_turned(world, e, b, local, turn);
             place_unseated(world, e, Some((b, local)));
         }
         None => {
@@ -837,7 +871,7 @@ fn apply_restore(world: &mut World) {
             continue;
         };
         let bag = if held && resumed { None } else { stash };
-        settle(world, e, bag, v3(saved.local), feet);
+        settle_turned(world, e, bag, v3(saved.local), q4(saved.turn), feet);
         placed += 1;
     }
     // What you were wearing.
@@ -881,7 +915,14 @@ fn apply_restore(world: &mut World) {
         let Some(e) = restore_item(world, saved, Transform::IDENTITY) else {
             continue;
         };
-        settle(world, e, pack.or(stash), v3(saved.local), feet);
+        settle_turned(
+            world,
+            e,
+            pack.or(stash),
+            v3(saved.local),
+            q4(saved.turn),
+            feet,
+        );
         placed += 1;
     }
     if zone {
@@ -903,7 +944,14 @@ fn apply_restore(world: &mut World) {
             let bag = spawn_remains(world, v3(r.at));
             for saved in &r.items {
                 if let Some(e) = restore_item(world, saved, Transform::IDENTITY) {
-                    settle(world, e, Some(bag), v3(saved.local), v3(r.at));
+                    settle_turned(
+                        world,
+                        e,
+                        Some(bag),
+                        v3(saved.local),
+                        q4(saved.turn),
+                        v3(r.at),
+                    );
                     placed += 1;
                 }
             }
@@ -951,6 +999,7 @@ pub(crate) fn snapshot_item(world: &World, e: Entity, local: Vec3) -> Option<Sav
         rounds: item.rounds,
         charge_wh: item.charge_wh,
         local: local.to_array(),
+        turn: [0.0, 0.0, 0.0, 1.0],
         gun: None,
         inserted: Vec::new(),
         loads: item.loads.clone(),
@@ -1111,9 +1160,10 @@ pub fn snapshot(world: &mut World) -> SaveGame {
             if world.get::<crate::robots::dirigible::CargoPod>(b).is_some() {
                 continue;
             }
-            let Some(saved) = snapshot_item(world, e, t.translation) else {
+            let Some(mut saved) = snapshot_item(world, e, t.translation) else {
                 continue;
             };
+            saved.turn = t.rotation.to_array();
             let worn = world.get::<Backpack>(b).is_some_and(|bp| bp.carried);
             if world.get::<Remains>(b).is_some() {
                 let at = world
@@ -1171,6 +1221,7 @@ pub fn snapshot(world: &mut World) -> SaveGame {
                 rounds: 0,
                 charge_wh: 0.0,
                 local: [0.0; 3],
+                turn: [0.0, 0.0, 0.0, 1.0],
                 gun: None,
                 inserted: Vec::new(),
                 loads: Default::default(),

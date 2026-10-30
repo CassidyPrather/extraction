@@ -1108,7 +1108,11 @@ fn apply_hand_actions(
                             let def = catalog.get(it.kind());
                             let used = bag.used(&catalog, &items_kinds(&items, &bag.contents));
                             if bag.fits(used, def.size, def.bulk) {
-                                body::stow_in_backpack(&mut commands, item, be, &mut bag, local);
+                                // As it was put in, at whatever angle.
+                                let posed = Transform::from_matrix(
+                                    (bgt.affine().inverse() * gt.affine()).into(),
+                                );
+                                body::stow_posed(&mut commands, item, be, &mut bag, posed);
                                 events.write(InteractEvent::Stowed { item });
                                 stowed = true;
                             } else {

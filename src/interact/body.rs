@@ -79,6 +79,50 @@ pub struct InBackpack {
     pub bag: Entity,
 }
 
+/// The pose a stowed item was put in, in its bag: where it stays.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct StowedPose(pub Transform);
+
+/// A stowed item's pose is taken as it goes in (`stow_posed`, or whatever
+/// else put it there).
+fn remember_stowed_poses(
+    mut commands: Commands,
+    stowed: Query<(Entity, &Transform), Changed<InBackpack>>,
+) {
+    for (e, t) in &stowed {
+        commands.entity(e).insert(StowedPose(*t));
+    }
+}
+
+/// What's in a bag or a pouch stays where it was put, whatever the bag
+/// does. A stowed thing is a child of its bag with its body switched off,
+/// but the physics still writes a child body's place back from its own
+/// position, against the parent's physics pose: a held pack is a moving
+/// body, so each frame put its contents a little elsewhere, until the
+/// first headset night's rounds, radio and cassette were simply gone from
+/// it. The pose it went in at (or the pouch's seat) is put back before
+/// anything is drawn or saved.
+fn keep_stowed_poses(
+    mut stowed: Query<(&StowedPose, &mut Transform), With<InBackpack>>,
+    mut pocketed: Query<(&super::InSocket, &mut Transform), Without<InBackpack>>,
+    sockets: Query<&super::Socket>,
+) {
+    for (pose, mut t) in &mut stowed {
+        if *t != pose.0 {
+            *t = pose.0;
+        }
+    }
+    for (inside, mut t) in &mut pocketed {
+        let Ok(socket) = sockets.get(inside.socket) else {
+            continue;
+        };
+        // Body slots only: a gun's well and mounts seat their own.
+        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != socket.seat {
+            *t = socket.seat;
+        }
+    }
+}
+
 /// Request to open or close the local backpack (flat mode's Tab).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct ToggleBackpack {
@@ -112,6 +156,12 @@ impl Plugin for BodyPlugin {
                         .after(toggle_backpacks)
                         .after(backpack_released),
                 ),
+            )
+            .add_systems(
+                PostUpdate,
+                (remember_stowed_poses, keep_stowed_poses)
+                    .chain()
+                    .before(bevy::transform::TransformSystems::Propagate),
             )
             .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems))
             .add_systems(
@@ -544,12 +594,37 @@ pub fn stow_in_backpack(
     bag: &mut Backpack,
     local: Vec3,
 ) {
-    bag.contents.push(item);
-    let local = local.clamp(-bag.half, bag.half);
+    stow_posed(
+        commands,
+        item,
+        bag_e,
+        bag,
+        Transform::from_translation(local),
+    );
+}
+
+/// Puts an item inside a bag at a local pose: as it was put in, at an
+/// angle if it went in at one (the first headset night's things stood
+/// themselves upright in the pack).
+pub fn stow_posed(
+    commands: &mut Commands,
+    item: Entity,
+    bag_e: Entity,
+    bag: &mut Backpack,
+    local: Transform,
+) {
+    if !bag.contents.contains(&item) {
+        bag.contents.push(item);
+    }
+    let local = Transform {
+        translation: local.translation.clamp(-bag.half, bag.half),
+        rotation: local.rotation.normalize(),
+        scale: Vec3::ONE,
+    };
     commands.entity(item).remove::<(Held, Supported)>().insert((
         InBackpack { bag: bag_e },
         ChildOf(bag_e),
-        Transform::from_translation(local),
+        local,
         RigidBodyDisabled,
         ColliderDisabled,
         if bag.open {

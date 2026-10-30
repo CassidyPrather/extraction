@@ -152,6 +152,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             rounds: 0,
             charge_wh: 0.0,
             local: [0.0, 0.05, -0.5 + i as f32 * 0.016],
+            turn: [0.0, 0.0, 0.0, 1.0],
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
