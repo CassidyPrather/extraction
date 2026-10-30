@@ -156,3 +156,14 @@ the PM's butt sits in the palm with the fingers forward under the gun
 hand's, and the AK's handguard lies in the palm with the fingers up its
 far side. The display's housing is now 7 mm thick and only on the
 display's hand, and the cuff's end is dark again.
+
+`29_support_and_handles.jpg` (`fp:ak74,1.2,300,0,60`, `fp:ak74+handle`,
+`fp:mosin+handle`, `fp:pm_pistol+handle`): the AK's handguard from
+below, lying across the supporting palm with the fingers up its far
+side (`support_pose`). Then a hand working each kind of handle, drawn on
+the handle where it has got to (`handle_pose`, tested on every gun):
+overhand, the palm down on it, the fingers forward of a knob so a pull
+back hooks it, the fist along a pistol's slide. Before, a hand on a
+handle was drawn at its controller, turned however the hand happened to
+be, a few centimetres off the knob. (The gallery's fifth `fp` field,
+TILT, tips a gun to show it from below.)
