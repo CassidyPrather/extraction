@@ -1491,6 +1491,8 @@ pub(crate) fn follow_hands(
         Has<carry::Bulky>,
         Has<carry::Draggable>,
     )>,
+    // The pack hangs from the hand by its own rule (`body::hang_held_pack`).
+    packs: Query<(), With<body::Backpack>>,
     roots: Query<&GlobalTransform, With<Player>>,
     blocked: Res<LeashBlocked>,
     time: Res<Time>,
@@ -1500,8 +1502,11 @@ pub(crate) fn follow_hands(
         &mut held
     {
         // One hand on something bulky drags it, and a wreck is only ever
-        // dragged (`carry`).
-        if (bulky && support.is_none()) || wreck {
+        // dragged (`carry`). A pack hangs under the hand: followed here as
+        // well, by the offset it was taken off the shoulder at, it was
+        // snapped back to that (turned with the wrist, or onto you on a
+        // step) whenever the two drew apart.
+        if (bulky && support.is_none()) || wreck || packs.contains(e) {
             continue;
         }
         let Ok(hand) = hands.get(h.hand) else {

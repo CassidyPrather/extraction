@@ -4885,6 +4885,92 @@ mod carry {
         );
     }
 
+    /// A pack held out in front stays hanging under the hand, upright,
+    /// through a turn of the wrist and a step forward; and a hand in front
+    /// of the shoulder (at the headset's strap) doesn't take it at all (the
+    /// 28 October playtest: it flipped on a wrist turn, snapped onto the
+    /// player on a step, and came off too easily).
+    #[test]
+    fn a_held_pack_hangs_still_and_isnt_taken_by_accident() {
+        use crate::interact::body::{Backpack, HANG};
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        vr.step(4);
+        // A hand beside the head, in front of the shoulder, squeezes: not
+        // the pack.
+        let strap = feet + Vec3::new(-0.18, 1.62, -0.08);
+        vr.hand(Side::Left, strap, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_ne!(
+            vr.hand_state(Side::Left).holding,
+            Some(bag),
+            "taken by accident"
+        );
+        vr.grip(Side::Left, 0.0);
+        vr.step(3);
+        // Over the shoulder, taken, round to the front.
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.move_hand(Side::Left, shoulder);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        let hanging = |vr: &Vr, hand: Vec3| {
+            let t = vr.app.world().get::<GlobalTransform>(bag).unwrap();
+            let off = t.translation().distance(hand - Vec3::Y * HANG);
+            let up = (t.rotation() * Vec3::Y).y;
+            (off, up)
+        };
+        // Turn the wrist half round, and back.
+        let mut worst = (0.0f32, 1.0f32);
+        for i in 0..=60 {
+            let roll = std::f32::consts::PI * (i as f32 / 30.0).min(2.0 - i as f32 / 30.0);
+            vr.hand(Side::Left, front, Quat::from_rotation_z(roll), 1.0, 0.0);
+            vr.step(1);
+            let (off, up) = hanging(&vr, front);
+            worst = (worst.0.max(off), worst.1.min(up));
+        }
+        assert!(
+            worst.0 < 0.12 && worst.1 > 0.8,
+            "it hung still through the wrist turn: off {} up {}",
+            worst.0,
+            worst.1
+        );
+        // A step forward, the hand going with you.
+        let mut worst = 0.0f32;
+        for i in 1..=30 {
+            let ahead = Vec3::NEG_Z * 0.5 * i as f32 / 30.0;
+            vr.head(Vec3::new(0.0, 1.7, 0.0) + ahead);
+            vr.move_hand(Side::Left, front + ahead);
+            vr.step(1);
+            worst = worst.max(hanging(&vr, front + ahead).0);
+        }
+        assert!(
+            worst < 0.15,
+            "it stayed in the hand through a step: off {worst}"
+        );
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag), "still held");
+    }
+
     /// Your pack off the left shoulder into the left hand: it hangs open in
     /// front of you, what's in it showing; the right hand reaches in and
     /// takes a dressing; back over the shoulder it closes, and let go
