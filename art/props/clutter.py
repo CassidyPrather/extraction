@@ -75,7 +75,8 @@ def suitcase_open():
     p.box((0.08, 0.01, 0.22), (L / 2 + 0.03, 0.08, -0.05), "Cream", bevel=0.003, segs=1,
           xf=T(L / 2, 0.11, 0) @ RZ(-0.9) @ T(-L / 2, -0.11, 0))
     for x in (-0.18, 0.18):
-        p.box((0.05, 0.03, 0.02), (x, 0.07, -D / 2 - 0.012), "Brass")
+        # On the front's face (2 mm off it).
+        p.box((0.05, 0.03, 0.02), (x, 0.07, -D / 2 - 0.009), "Brass")
     return [p]
 
 
@@ -85,9 +86,11 @@ def suitcase_shut():
     p.box((0.62, 0.2, 0.42), (0, 0.1, 0), "Leather", bevel=0.02, segs=2)
     for x in (-0.17, 0.17):
         p.box((0.04, 0.21, 0.43), (x, 0.1, 0), "Canvas", bevel=0.004, segs=1)
-    p.box((0.16, 0.025, 0.03), (0, 0.205, -0.235), "Leather", bevel=0.008, segs=1)
+    # The handle on its lugs, the lugs on the face below its rounded edge
+    # (they stood 2 mm off it).
+    p.box((0.16, 0.025, 0.03), (0, 0.185, -0.235), "Leather", bevel=0.008, segs=1)
     for x in (-0.06, 0.06):
-        p.box((0.02, 0.03, 0.02), (x, 0.195, -0.222), "Brass")
+        p.box((0.02, 0.03, 0.02), (x, 0.175, -0.219), "Brass")
     p.box((0.06, 0.05, 0.004), (0.25, 0.12, -0.212), "Cream")
     return [p]
 
@@ -117,7 +120,8 @@ def belongings_box():
     blob(p, (0.22, 0.08, 0.13), (-0.08, 0.3, 0.03), "Wool")
     p.cyl(0.09, 0.0, 0.13, "Enamel", segs=12, xf=T(0.15, 0.2, -0.05) @ UP)
     rod(p, (0.05, 0.33, -0.05), (0.26, 0.33, -0.05), 0.008, "Iron", segs=5)
-    p.cyl(0.035, 0.0, 0.16, "Glass", segs=8, xf=T(0.17, 0.3, 0.1) @ UP)
+    # The lamp stood up on the box's bottom (it hung beside the pot).
+    p.cyl(0.035, 0.0, 0.16, "Glass", segs=8, xf=T(0.17, 0.012, 0.1) @ UP)
     p.box((0.18, 0.02, 0.14), (-0.1, 0.39, -0.05), "Timber", bevel=0.004, segs=1,
           xf=T(-0.1, 0.39, -0.05) @ RX(-0.2) @ T(0.1, -0.39, 0.05))
     return [p]

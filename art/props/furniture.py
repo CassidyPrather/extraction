@@ -133,7 +133,8 @@ def shelf_metal():
             dz, dy = 0.3, abs(b - a)
             L = math.hypot(dz, dy)
             ang = math.atan2(dz, dy) * (1 if k == 0 else -1)
-            board(p, (0.003, L, 0.025), (sx * (0.5245 + k * 0.005), 0.89, 0.0), "Painted",
+            # The second lapped on the first (it stood 2 mm off it).
+            board(p, (0.003, L, 0.025), (sx * (0.5245 + k * 0.003), 0.89, 0.0), "Painted",
                   tilt=ang, bevel=0.0)
     for y in SHELF_YS:
         sag = w.j(0.004)
@@ -358,7 +359,11 @@ def workbench():
         z = -0.4 + bw / 2 + k * (bw + gap)
         board(p, (2.0 + w.j(0.006), top1 - top0, bw), (w.j(0.004), (top0 + top1) / 2, z),
               "Timber", yaw=w.j(0.003), bevel=0.005)
-    board(p, (1.99, 0.1, 0.03), (0.0, top0 - 0.055, -0.385), "Timber", bevel=0.004)
+    # The apron up into the top (5 mm under it), and two battens under the
+    # boards across them all: the middle ones rested on nothing.
+    board(p, (1.99, 0.1, 0.03), (0.0, top0 - 0.049, -0.385), "Timber", bevel=0.004)
+    for x in (-0.6, 0.3):
+        board(p, (0.05, 0.03, 0.74), (x, top0 - 0.014, -0.005), "Timber", bevel=0.003)
     # Steel angle frame: legs, rails under the top and over the shelf.
     for sx in (-1, 1):
         for sz in (-1, 1):
@@ -428,11 +433,12 @@ def chair():
         bw = (0.42 - 0.006) / 3
         z = -0.21 + bw / 2 + k * (bw + 0.003)
         board(p, (0.42, 0.025, bw), (0.0, seat - 0.0125, z), "Timber", w, bevel=0.003)
-    # Seat rails (their tops 5 mm under the planks), stretchers, the back.
+    # Seat rails (their tops a millimetre into the planks: 5 mm under, the
+    # middle plank hung on nothing), stretchers, the back.
     for sz in (-1, 1):
-        board(p, (0.33, 0.05, 0.02), (0.0, seat - 0.055, sz * 0.18), "Timber", bevel=0.002)
+        board(p, (0.33, 0.05, 0.02), (0.0, seat - 0.049, sz * 0.18), "Timber", bevel=0.002)
     for sx in (-1, 1):
-        board(p, (0.02, 0.05, 0.33), (sx * 0.18, seat - 0.055, 0.0), "Timber", bevel=0.002)
+        board(p, (0.02, 0.05, 0.33), (sx * 0.18, seat - 0.049, 0.0), "Timber", bevel=0.002)
         board(p, (0.018, 0.025, 0.34), (sx * 0.18, 0.16, 0.0), "Timber", bevel=0.002)
     for y in (0.62, 0.82):
         board(p, (0.36, 0.07, 0.018), (0.0, y, 0.18), "Timber", w, bevel=0.003)
@@ -462,7 +468,7 @@ def locker():
     rod(p, (W / 2 - 0.07, 1.05, dz - 0.02), (W / 2 - 0.07, 1.05, dz - 0.045), 0.006, "Zinc")
     rod(p, (W / 2 - 0.07, 0.95, dz - 0.02), (W / 2 - 0.07, 0.95, dz - 0.045), 0.006, "Zinc")
     rod(p, (W / 2 - 0.07, 0.94, dz - 0.045), (W / 2 - 0.07, 1.06, dz - 0.045), 0.007, "Zinc")
-    p.box((0.1, 0.05, 0.004), (0.0, 1.72, dz - 0.019), "Cream")
+    p.box((0.1, 0.05, 0.004), (0.0, 1.72, dz - 0.014), "Cream")  # on the door's face
     # Hinges on the left.
     for y in (0.35, 1.5):
         rod(p, (-W / 2 + 0.012, y - 0.04, dz - 0.012), (-W / 2 + 0.012, y + 0.04, dz - 0.012),

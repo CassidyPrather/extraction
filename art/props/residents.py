@@ -66,11 +66,13 @@ def exercise_books():
               ("Blue", "Cream", "Red")[k % 3], wear=w, bevel=0.001, yaw=w.j(0.12))
         y += t
     for sx in (-1, 1):
-        p.box((0.085, 0.003, 0.21), (0.11 + sx * 0.043, 0.0015, 0.0), "Paper",
-              xf=T(0.11, 0, 0) @ RZ(sx * -0.05) @ T(-0.11, 0, 0))
-    for k in range(7):
-        p.box((0.15, 0.0005, 0.002), (0.11, 0.0035 + 0.003 * (k % 2), -0.08 + k * 0.026),
-              "Blue")
+        page = T(0.11, 0, 0) @ RZ(sx * -0.05) @ T(-0.11, 0, 0)
+        p.box((0.085, 0.003, 0.21), (0.11 + sx * 0.043, 0.0015, 0.0), "Paper", xf=page)
+        # Ruled on each page, lying with it (one rule across both stood
+        # over the fold, every other one 3 mm up).
+        for k in range(7):
+            p.box((0.075, 0.0005, 0.002), (0.11 + sx * 0.043, 0.0032, -0.08 + k * 0.026),
+                  "Blue", xf=page)
     rod(p, (0.05, 0.008, 0.06), (0.18, 0.008, 0.02), 0.004, "Yellow", segs=6)
     return [p]
 
@@ -117,9 +119,10 @@ def cot():
     for sx in (-1, 1):
         p.box((0.025, 0.45, D - 0.08), (sx * (L / 2 - 0.02), 0.55, 0), "Timber")
     p.box((L - 0.08, 0.1, D - 0.08), (0, 0.35, 0), "Ticking", bevel=0.02, segs=1)
-    # The blanket over the near rail, hanging.
-    p.box((0.4, 0.012, 0.3), (0.15, H - 0.005, -D / 2 + 0.11), "Wool")
-    p.box((0.4, 0.32, 0.012), (0.15, H - 0.17, -D / 2 - 0.01), "Wool")
+    # The blanket over the near rail (its top was 4 mm over the rail),
+    # hanging down the rail's outer face (it hung 12 mm off it).
+    p.box((0.4, 0.012, 0.3), (0.15, H - 0.01, -D / 2 + 0.11), "Wool")
+    p.box((0.4, 0.32, 0.012), (0.15, H - 0.17, -D / 2 + 0.0025), "Wool")
     return [p]
 
 
@@ -219,7 +222,8 @@ def reading_glasses():
     """Wire spectacles folded on a book: 0.2 x 0.05 x 0.15."""
     p = Part("static")
     board(p, (0.15, 0.035, 0.21), (0.0, 0.0175, 0.0), "Olive", bevel=0.004)
-    y = 0.038
+    # On the book's cover (they lay 2 mm over it).
+    y = 0.0358
     for sx in (-1, 1):
         p.lathe([(0.018, -0.0008), (0.021, -0.0008), (0.021, 0.0008), (0.018, 0.0008)], "Brass",
                 segs=14, closed=True, xf=T(sx * 0.025, y, 0.02) @ RX(math.pi / 2))
@@ -354,6 +358,8 @@ def logbook():
         for k in range(9):
             p.box((0.09, 0.0006, 0.002), (sx * 0.06 - 0.06, 0.0172, -0.08 + k * 0.02), "Black")
     p.box((0.08, 0.012, 0.05), (0.13, 0.006, 0.02), "Black", bevel=0.003, segs=1)
+    # The lever's pivot block (it stood on nothing, 7 mm over the base).
+    p.box((0.014, 0.009, 0.014), (0.13, 0.0155, 0.02), "Brass")
     p.box((0.07, 0.006, 0.012), (0.13, 0.022, 0.02), "Brass",
           xf=T(0.13, 0.022, 0.02) @ RZ(0.08) @ T(-0.13, -0.022, -0.02))
     p.cyl(0.01, 0.0, 0.008, "Black", segs=8, xf=T(0.165, 0.026, 0.02) @ UP)
