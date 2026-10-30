@@ -510,7 +510,11 @@ fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
                 MarkGlow::Pool => 0.2 + 0.8 * pool * (0.75 + 0.25 * blot),
                 MarkGlow::Coals => {
                     let spots = smooth(0.55, 0.72, value_noise(px * 7.0, py * 7.0, 5));
-                    spots * (0.3 + 0.7 * pool) + 0.1 * pool
+                    // And its burning front, round its rim, as a grass
+                    // fire's edge glows: where it starts, by night too.
+                    let front = smooth(0.8, 0.9, r) * (1.0 - smooth(0.97, 1.01, r));
+                    let ragged = 0.45 + 0.55 * value_noise(px * 12.0, py * 12.0, 9);
+                    (spots * (0.3 + 0.7 * pool) + 0.1 * pool).max(0.85 * front * ragged)
                 }
                 MarkGlow::Veins => 0.15 + 0.85 * veins(px, py, r) * (0.3 + 0.7 * pool),
             };
