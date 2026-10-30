@@ -310,6 +310,13 @@ fn home_where(zone: &Zone, nav: &NavGrid, seed: u64, kind: Kind, edge_only: bool
         if edge_only && !(0.05..0.6).contains(&edge) {
             continue;
         }
+        // Where the herd is put down (new_herd's slots) clear, metre by
+        // metre: no beast starts inside a rock.
+        let put_down =
+            (-5..=11).all(|x| (-5..=5).all(|z| open(nav, zone, p + Vec2::new(x as f32, z as f32))));
+        if !put_down {
+            continue;
+        }
         let room = (0..8)
             .filter(|k| {
                 let a = *k as f32 / 8.0 * std::f32::consts::TAU;
