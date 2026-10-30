@@ -989,8 +989,14 @@ fn apply_hand_actions(
                             && is_item.is_some()
                             && let Ok(aabb) = bounds.get(item)
                         {
+                            // Its size from the bounds, its place from where
+                            // it is: a socketed or bagged thing's bounds are
+                            // stale (its collider was off), and from those it
+                            // was pulled anywhere.
+                            let half = ((aabb.max - aabb.min) * 0.5).min(Vec3::splat(1.0));
+                            let c = gt.translation();
                             let at = hand_world.translation;
-                            let gap = at.clamp(aabb.min, aabb.max) - at;
+                            let gap = at.clamp(c - half, c + half) - at;
                             if gap.length() > PALM_REACH {
                                 offset.translation -= hand_world.rotation.inverse() * gap;
                             }

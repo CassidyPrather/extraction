@@ -258,7 +258,8 @@ mod tests {
             ComfortCard::Handed => c.left_handed,
             ComfortCard::Seated => c.seated,
             ComfortCard::OneHanded => c.one_handed,
-            ComfortCard::Body => !c.body,
+            // The body starts hidden (only what's backed up is drawn).
+            ComfortCard::Body => c.body,
             _ => !c.captions,
         };
         for (which, on_word) in [
@@ -266,7 +267,7 @@ mod tests {
             (ComfortCard::Seated, "seated"),
             (ComfortCard::OneHanded, "one"),
             (ComfortCard::Captions, "off"),
-            (ComfortCard::Body, "hidden"),
+            (ComfortCard::Body, "shown"),
         ] {
             let card = app
                 .world_mut()
