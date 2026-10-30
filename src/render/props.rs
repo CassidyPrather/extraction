@@ -891,6 +891,24 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }
 
+/// How a hand on a gun's support turns from the gun's own frame. A glove
+/// unturned wraps a grip standing up through its origin (`glove_frame`),
+/// right for the gun hand on a pistol grip; a supporting hand holds from
+/// below, palm up.
+pub(crate) fn support_turn(layout: &crate::weapons::layout::GunLayout, side: Side) -> Quat {
+    let s = side.sign();
+    if layout.support.is_some() {
+        // Under a long gun's handguard: the palm up into it, the fingers
+        // across and up its far side, the thumb along the near one; the
+        // hand wraps the handguard's length, as the gun hand wraps a grip.
+        Quat::from_mat3(&Mat3::from_cols(Vec3::Y * -s, Vec3::NEG_Z, Vec3::X * s))
+    } else {
+        // Cupping a handgun's butt: the palm up under it, the fingers
+        // forward and curled up round the front of the gun hand's.
+        Quat::from_rotation_z(-std::f32::consts::FRAC_PI_2 * s)
+    }
+}
+
 /// Where the wrist display lies on a glove, in the hand's frame: flat over
 /// the housing on the cuff's back (`art/hands/gloves.py`), its text
 /// running from the elbow to the fingers, so it reads level with the
@@ -1454,7 +1472,12 @@ fn pose_hands(
                 .get(s.point)
                 .filter(|p| p.role == GripRole::Support)
         {
-            pose = igt.mul_transform(p.local);
+            let turn = guns
+                .get(item)
+                .map_or(Quat::IDENTITY, |g| support_turn(&g.layout, v.side));
+            pose = igt
+                .mul_transform(p.local)
+                .with_rotation(igt.rotation * p.local.rotation * turn);
             on_support = true;
         }
         // A wall stops the glove where the hand's body stopped.
@@ -2413,6 +2436,51 @@ mod glove_tests {
             }
         }
         out
+    }
+
+    /// On every gun, a supporting hand's palm faces the gun from below (a
+    /// rifle's handguard laid in it, a pistol's butt cupped in it), not
+    /// out to the side or down: a glove left in the gun's own turn made a
+    /// fist round nothing under the PM and beside the AK's handguard (shot
+    /// 27, the 28 October playtest's M2).
+    #[test]
+    fn every_supporting_palm_faces_up_into_its_gun() {
+        let ids = [
+            "pm_pistol",
+            "ak74",
+            "mosin",
+            "toz_double",
+            "sks",
+            "nagant",
+            "ppsh",
+            "mp133",
+            "svd",
+            "toz8",
+            "rpk74",
+            "flare_pistol",
+            "crossbow",
+        ];
+        let mut checked = 0;
+        for id in ids {
+            let layout = crate::weapons::layout::layout(id).unwrap();
+            let Some(at) = layout
+                .support
+                .or_else(|| crate::weapons::layout::cup(&layout))
+            else {
+                continue;
+            };
+            for side in [Side::Left, Side::Right] {
+                let pose =
+                    Transform::from_translation(at).with_rotation(support_turn(&layout, side));
+                let palm = pose.rotation * glove_frame(side).rotation * Vec3::NEG_Y;
+                assert!(
+                    palm.y > 0.8,
+                    "{id}: the {side:?} supporting palm faces {palm}, not up into the gun"
+                );
+            }
+            checked += 1;
+        }
+        assert!(checked >= 10, "only {checked} guns have a support");
     }
 
     /// Two hands on the PM: the cupping hand's fingers wrap round outside
