@@ -272,10 +272,11 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.46, 0.46, 0.47);
                 m.metallic = 1.0;
             }),
-            // Phenolic grips: the polymer's relief in a deep red-brown.
+            // Phenolic grips: the polymer's relief in a deep red-brown
+            // (light enough that the checkering reads at arm's length).
             "Bakelite" => derive(Mat::Polymer, &|m| {
                 m.base_color_texture = None;
-                m.base_color = Color::srgb(0.2, 0.075, 0.04);
+                m.base_color = Color::srgb(0.27, 0.105, 0.055);
                 m.metallic = 0.0;
             }),
             "Black" => derive(Mat::GunMetal, &|m| {
