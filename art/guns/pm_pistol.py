@@ -70,6 +70,9 @@ slide.cut(cut)
 # --- Barrel (static; shows at the muzzle and through the port) ---------------
 static = Part("static_frame")
 static.tube(0.0064, 0.00465, -0.1305, -0.028, "Blued", segs=36, xf=T(0, BORE_Y, 0), chamfer=0.0007)
+# The barrel's lug, pinned in the frame under it (inside the slide; the
+# barrel hung over the frame: `capture::attach`).
+static.box((0.008, 0.009, 0.03), (0.0, 0.052, -0.05), "Blued", bevel=0.001, segs=1)
 # Chamber hood, filling the port.
 static.box((0.0125, 0.010, 0.026), (0.0, 0.0655, -0.042), "Blued", bevel=0.0015)
 

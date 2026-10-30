@@ -318,14 +318,20 @@ def dishes_broken():
     """Plates in pieces on the floor, a cup on its side: 0.5 across."""
     p = Part("static")
     w = Wear(45)
+    laid = []
     for k in range(9):
         a = w.rng.random() * 2 * math.pi
         r = 0.05 + w.rng.random() * 0.2
         size = 0.03 + w.rng.random() * 0.05
-        # Each a little higher than the last: overlapping, they'd fight.
+        # On the floor, or on a shard it overlaps, a little into it (in one
+        # plane they'd fight; stepped up 4 mm each, the last stood 3 cm
+        # over the floor).
+        x, z = r * math.cos(a), r * math.sin(a)
+        y = max([yj + 0.0055 for xj, zj, sj, yj in laid
+                 if math.hypot(x - xj, z - zj) < size + sj], default=0.0)
+        laid.append((x, z, size, y))
         p.prism([(-size, -size * 0.6), (size, -size * 0.4), (size * 0.2, size)], 0.0, 0.006,
-                "Enamel", axis="y",
-                xf=T(r * math.cos(a), 0.004 * k, r * math.sin(a)) @ RY(a))
+                "Enamel", axis="y", xf=T(x, y, z) @ RY(a))
     p.lathe([(0.0, 0.0), (0.035, 0.0), (0.042, 0.075), (0.038, 0.075), (0.03, 0.005),
              (0.0, 0.005)], "Enamel", segs=12, xf=T(0.12, 0.04, 0.05) @ RZ(1.57) @ UP)
     return [p]
@@ -341,9 +347,11 @@ def books_charred():
         board(p, (0.16 + w.j(0.02), t, 0.22 + w.j(0.02)), (w.j(0.02), y + t / 2, w.j(0.02)),
               "Char", wear=w, bevel=0.006, yaw=w.j(0.3))
         y += t
+    # Ash flakes on the floor round them (21 cm apart: they never overlap,
+    # and stepped up 4 mm each, the last stood 2 cm over the floor).
     for k in range(6):
         a = k * 1.1
-        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015 + 0.004 * k, 0.2 * math.sin(a)),
+        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015, 0.2 * math.sin(a)),
               "Paper" if k % 3 == 0 else "Char", xf=RY(a))
     return [p]
 
