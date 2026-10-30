@@ -577,10 +577,17 @@ fn tint_gloves(
 #[derive(Component)]
 struct ButtonCap;
 
-/// A dark collar on the wall and an amber cap standing proud of it.
+/// A dark collar on the wall and an amber cap standing proud of it, on a
+/// button with no look of its own (`interact::poke::OwnLook`).
 fn dress_buttons(
     mut commands: Commands,
-    buttons: Query<Entity, Added<crate::interact::poke::PokeButton>>,
+    buttons: Query<
+        Entity,
+        (
+            Added<crate::interact::poke::PokeButton>,
+            Without<crate::interact::poke::OwnLook>,
+        ),
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut looks: Local<
@@ -750,8 +757,8 @@ struct GloveModel;
 /// Where a glove's modelled parts go, and the boxes it wears until (or
 /// unless) its model is in.
 #[derive(Component)]
-struct GloveParts {
-    model: Entity,
+pub(crate) struct GloveParts {
+    pub(crate) model: Entity,
     joints: Vec<((usize, usize), Entity)>,
     boxes: Vec<Entity>,
 }
@@ -840,12 +847,34 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
 /// left's mirrored, its text turned round to read the same way (the
 /// forearm across the chest points the other way).
 pub(crate) fn wrist_mount(side: Side) -> Transform {
+    glove_frame(side) * wrist_on_glove(side)
+}
+
+/// A player's glove, as `spawn_hand_visuals` makes one, for tests.
+#[cfg(test)]
+pub(crate) fn player_glove(world: &mut World, side: Side) -> Entity {
+    world.resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+        world.resource_scope(|world, mut materials: Mut<Assets<StandardMaterial>>| {
+            let mut commands = world.commands();
+            let root = spawn_hand(&mut commands, &mut meshes, &mut materials, side, [0.0; 5]);
+            commands.entity(root).insert(PlayerGlove);
+            world.flush();
+            root
+        })
+    })
+}
+
+/// The wrist display in the glove model's own frame (`GloveParts::model`),
+/// 4 mm over its housing's top face: carried by the glove, so the two can
+/// never part (on the tracked hand while the glove was stopped by a wall
+/// or a step behind, the housing covered it or it floated off; playtest
+/// 2026-10-28, F4).
+pub(crate) fn wrist_on_glove(side: Side) -> Transform {
     let axes = match side {
         Side::Left => Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
         Side::Right => Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y),
     };
-    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes));
-    glove_frame(side) * on_glove
+    Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes))
 }
 
 /// A joint's turn, its finger curled `c`.
@@ -1913,6 +1942,129 @@ mod glove_tests {
         assert!(close(r.rotation * Vec3::Y, m(l.rotation * Vec3::Y)));
         // ...and reading left to right, not mirrored.
         assert!(close(r.rotation * Vec3::X, -m(l.rotation * Vec3::X)));
+    }
+
+    /// The wrist display lies on its housing (the glove model's Padding, on
+    /// the back of the cuff): facing out of it, a few millimetres over its
+    /// top face (not in it, not floating), and inside its footprint, on
+    /// both gloves (playtest 2026-10-28, F4: the housing covered it).
+    #[test]
+    fn the_wrist_display_lies_on_its_housing() {
+        let size = crate::render::comfort::WRIST_SIZE;
+        for side in [Side::Left, Side::Right] {
+            let (lo, hi) = housing(side);
+            let t = wrist_on_glove(side);
+            let normal = t.rotation * Vec3::Z;
+            assert!(normal.dot(Vec3::Y) > 0.999, "{side:?} faces {normal}");
+            for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let p = t.transform_point(Vec3::new(x * size.x * 0.5, y * size.y * 0.5, 0.0));
+                let gap = p.y - hi.y;
+                assert!(
+                    (0.002..=0.006).contains(&gap),
+                    "{side:?} corner {p} is {:.1} mm over the housing",
+                    gap * 1000.0
+                );
+                assert!(
+                    (lo.x..=hi.x).contains(&p.x) && (lo.z..=hi.z).contains(&p.z),
+                    "{side:?} corner {p} overhangs the housing {lo}..{hi}"
+                );
+            }
+        }
+    }
+
+    /// The housing's box in the glove model's frame: the palm's primitive
+    /// in the Padding material, through the palm node's own transform.
+    fn housing(side: Side) -> (Vec3, Vec3) {
+        let path = crate::asset_root_path().join(glove_model(side));
+        let bytes = std::fs::read(&path).unwrap();
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        let v3 = |v: &serde_json::Value| {
+            let a = v.as_array().unwrap();
+            Vec3::new(
+                a[0].as_f64().unwrap() as f32,
+                a[1].as_f64().unwrap() as f32,
+                a[2].as_f64().unwrap() as f32,
+            )
+        };
+        let nodes = glb_nodes(side);
+        let palm = nodes.iter().position(|n| n.name == "palm").unwrap();
+        let mesh = json["nodes"][palm]["mesh"].as_u64().unwrap() as usize;
+        let prim = json["meshes"][mesh]["primitives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| {
+                p["material"].as_u64().is_some_and(|m| {
+                    json["materials"][m as usize]["name"].as_str() == Some("Padding")
+                })
+            })
+            .expect("the housing (Padding) on the palm");
+        let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64().unwrap() as usize];
+        let (lo, hi) = (v3(&acc["min"]), v3(&acc["max"]));
+        let at = nodes[palm].local;
+        let corners = (0..8).map(|i| {
+            at.transform_point(Vec3::new(
+                if i & 1 == 0 { lo.x } else { hi.x },
+                if i & 2 == 0 { lo.y } else { hi.y },
+                if i & 4 == 0 { lo.z } else { hi.z },
+            ))
+        });
+        corners.fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(p), b.max(p)))
+    }
+
+    /// A card's button gets the generic collar and cap; a modelled key
+    /// (`OwnLook`) gets nothing over it.
+    #[test]
+    fn a_modelled_key_gets_no_cap_over_it() {
+        use crate::interact::poke::{OwnLook, PokeButton};
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, dress_buttons);
+        let button = || PokeButton {
+            target: Entity::PLACEHOLDER,
+            depth: 0.0,
+            down: false,
+        };
+        let card = app.world_mut().spawn(button()).id();
+        let key = app.world_mut().spawn((button(), OwnLook)).id();
+        app.update();
+        let kids = |e: Entity| app.world().get::<Children>(e).map_or(0, |c| c.len());
+        assert_eq!(kids(card), 2, "a card's button: collar and cap");
+        assert_eq!(kids(key), 0, "a modelled key: nothing over it");
+    }
+
+    /// Every push button but a card's (`interact::poke::mount_button`) is on
+    /// something modelled, and says it has its own look: a new one without
+    /// would get a generic cap stood over its keys.
+    #[test]
+    fn every_modelled_button_keeps_its_own_look() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![src];
+        let mut bad = Vec::new();
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") || p.ends_with("interact/poke.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                // The code, not its tests.
+                let code = text.split("#[cfg(test)]\nmod ").next().unwrap_or("");
+                let made = code.matches("PokeButton {").count();
+                let own = code.matches("OwnLook").count();
+                if made > own {
+                    bad.push(format!("{}: {made} buttons, {own} OwnLook", p.display()));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// A node of a .glb: its name, local transform, children and, for a

@@ -347,8 +347,8 @@ fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>)
                 size: Vec2::new(0.3, 0.12),
                 style: crate::raid::bench::ScreenStyle::Card,
             },
-            // Under the request card.
-            Transform::from_xyz(-1.12, FLOOR + 1.42, 1.32)
+            // Under the request card, in front of the side slat.
+            Transform::from_xyz(-1.105, FLOOR + 1.42, 1.32)
                 .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
             Visibility::Hidden,
             ChildOf(truck),

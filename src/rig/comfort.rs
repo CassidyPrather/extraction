@@ -26,6 +26,9 @@ pub struct Comfort {
     pub snap_angle: f32,
     /// How dark the edges of the view go while the stick moves you (0 off).
     pub vignette: f32,
+    /// How dark the edges go red when you're hurt, most on the side it
+    /// came from (`render::hurt`; 0 off).
+    pub hurt_vignette: f32,
     /// Quiet sounds up and loud ones down (`audio_mix::NARROW`).
     pub narrow_dynamics: bool,
     /// The eyes' resolution as a share of what the runtime recommends;
@@ -87,6 +90,7 @@ impl Default for Comfort {
             turn_speed: 120.0,
             snap_angle: 30.0,
             vignette: 0.6,
+            hurt_vignette: 0.6,
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
@@ -437,6 +441,11 @@ impl Comfort {
                 "--vignette" => {
                     if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
                         c.vignette = v.clamp(0.0, 1.0);
+                    }
+                }
+                "--hurt-vignette" => {
+                    if let Some(v) = it.next().and_then(|v| v.parse::<f32>().ok()) {
+                        c.hurt_vignette = v.clamp(0.0, 1.0);
                     }
                 }
                 _ => {}
