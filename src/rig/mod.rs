@@ -222,3 +222,125 @@ pub(crate) fn apply_rig_poses(
         }
     }
 }
+
+/// A flick of the turning stick: a snap turn (left or right) or the crouch
+/// toggle (down).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Flick {
+    Left,
+    Right,
+    Down,
+}
+
+/// A press of the stick is never a flick (playtest 28 October: the
+/// safety's click, pressed in on the same stick, tipped it past the crouch
+/// flick, and the tester walked slow and couldn't run for ten minutes).
+/// No flick counts while the stick is pressed in, nor [`FLICK_AFTER_PRESS`]
+/// after it's let go; and a flick needs the stick back near the middle
+/// first (armed), so one push is one flick.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Flicks {
+    armed: bool,
+    /// Pressed in until this (seconds, the caller's clock).
+    pressed_until: f32,
+}
+
+/// After a stick press is let go, flicks wait this long (s).
+pub const FLICK_AFTER_PRESS: f32 = 0.35;
+/// Past this far, it's a flick; back within [`FLICK_REST`] it's armed.
+pub const FLICK_PAST: f32 = 0.7;
+pub const FLICK_REST: f32 = 0.3;
+
+impl Flicks {
+    /// This frame's stick and whether it's pressed in, at `now`: the flick
+    /// it makes, if any. `turns`: sideways flicks snap (not with smooth
+    /// turning, which reads the stick itself).
+    pub fn step(&mut self, stick: Vec2, pressed: bool, now: f32, turns: bool) -> Option<Flick> {
+        if pressed {
+            self.pressed_until = now + FLICK_AFTER_PRESS;
+            self.armed = false;
+            return None;
+        }
+        if now < self.pressed_until {
+            self.armed = false;
+            return None;
+        }
+        if stick.x.abs() < FLICK_REST && stick.y > -FLICK_REST {
+            self.armed = true;
+        }
+        if !self.armed {
+            return None;
+        }
+        let flick = if turns && stick.x > FLICK_PAST {
+            Some(Flick::Right)
+        } else if turns && stick.x < -FLICK_PAST {
+            Some(Flick::Left)
+        } else if stick.y < -FLICK_PAST {
+            Some(Flick::Down)
+        } else {
+            None
+        };
+        if flick.is_some() {
+            self.armed = false;
+        }
+        flick
+    }
+}
+
+#[cfg(test)]
+mod flick_tests {
+    use super::*;
+
+    /// The playtest: the safety clicked, the stick tipped down as it went
+    /// in and came out: no crouch. A deliberate flick still crouches.
+    #[test]
+    fn a_stick_press_is_never_a_flick() {
+        let mut f = Flicks::default();
+        let mut t = 0.0;
+        let mut step = |f: &mut Flicks, stick: Vec2, pressed: bool| {
+            t += 1.0 / 90.0;
+            f.step(stick, pressed, t, true)
+        };
+        // At rest: armed.
+        assert_eq!(step(&mut f, Vec2::ZERO, false), None);
+        // Pressed in, tipped down and sideways as the thumb pushes: nothing.
+        for s in [
+            Vec2::new(0.1, -0.5),
+            Vec2::new(0.2, -0.85),
+            Vec2::new(-0.8, -0.9),
+        ] {
+            assert_eq!(step(&mut f, s, true), None, "{s:?} while pressed");
+        }
+        // Let go, the thumb still on it, tipped: nothing for a moment.
+        for _ in 0..10 {
+            assert_eq!(step(&mut f, Vec2::new(0.0, -0.9), false), None);
+        }
+        // Long after, still held down without coming back: not a flick.
+        for _ in 0..90 {
+            assert_eq!(step(&mut f, Vec2::new(0.0, -0.9), false), None);
+        }
+        // Back to the middle, then a real flick down: one crouch.
+        assert_eq!(step(&mut f, Vec2::ZERO, false), None);
+        assert_eq!(step(&mut f, Vec2::new(0.0, -0.9), false), Some(Flick::Down));
+        assert_eq!(
+            step(&mut f, Vec2::new(0.0, -0.9), false),
+            None,
+            "one push, one flick"
+        );
+        // And a snap turn.
+        assert_eq!(step(&mut f, Vec2::ZERO, false), None);
+        assert_eq!(step(&mut f, Vec2::new(0.9, 0.0), false), Some(Flick::Right));
+    }
+
+    /// Smooth turning: sideways is the stick's own, never a snap.
+    #[test]
+    fn smooth_turning_takes_no_snaps() {
+        let mut f = Flicks::default();
+        assert_eq!(f.step(Vec2::ZERO, false, 1.0, false), None);
+        assert_eq!(f.step(Vec2::new(0.9, 0.0), false, 1.1, false), None);
+        assert_eq!(
+            f.step(Vec2::new(0.0, -0.9), false, 1.2, false),
+            Some(Flick::Down)
+        );
+    }
+}
