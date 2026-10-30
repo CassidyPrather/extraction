@@ -177,7 +177,10 @@ pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
 
 /// The truck standing at `at` facing `yaw`, settled low enough that its
 /// rear steps reach the ground where the ground falls away behind it
-/// (otherwise the bed is out of reach on a slope).
+/// (otherwise the bed is out of reach on a slope). That sinks its wheels
+/// where the ground falls away (the 28 October playtest, 0:12:57;
+/// `capture::footing` lists it): standing it on its wheels waits on a rear
+/// ladder that reaches the ground.
 fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let rot = Quat::from_rotation_y(yaw);
     let mut t = Transform::from_translation(zone.on_ground(at[0], at[1])).with_rotation(rot);
@@ -185,6 +188,17 @@ fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let drop = t.translation.y - zone.ground(foot.x, foot.z);
     t.translation.y -= drop.clamp(0.0, 0.8);
     t
+}
+
+/// How far a wheel drops on its springs to meet the ground (m).
+pub const WHEEL_DROOP: f32 = 0.16;
+
+/// How far wheel `i` hangs below its place in `WHEELS` to meet the ground
+/// under it (the truck is rigid, the ground under six wheels isn't flat).
+pub fn wheel_droop(zone: &Zone, pose: &Transform, i: usize) -> f32 {
+    let w = WHEELS[i];
+    let bottom = pose.transform_point(w) - pose.rotation * Vec3::Y * w.y;
+    (bottom.y - zone.ground(bottom.x, bottom.z)).clamp(0.0, WHEEL_DROOP)
 }
 
 fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {

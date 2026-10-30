@@ -26,11 +26,35 @@ def cube(bulk):
     return (bulk / 1000.0) ** (1.0 / 3.0)
 
 
+# Items drawn bigger than they were modelled (x, y, z), for the 28 October
+# playtest (M4: "the world's smallest carrots"; matchbox, grenades and the
+# dressing too small to read in the hand). Each is centred on its box and
+# scaled, so its `dims` in items.ron are its new bounds
+# (`python3 art/items/dims.py` prints them). Real sizes and the rule they're
+# held to: `src/capture/scale.rs`. The grenades (and their pin and spoon)
+# share one scale: `weapons::grenades::PIN_AT` is where both rings hang.
+SCALE = {
+    "carrot": 2.9, "onion": 1.7, "matches": 1.25, "condensed_milk": 1.3,
+    "egg_powder": 1.5, "canned_tomato": 1.15, "canned_beans": 1.15, "canned_stew": 1.3,
+    "flour_sack": 2.4, "rice_bag": 2.8, "sugar_cubes": 2.0, "tea_tin": 2.0,
+    "spice_jar": 2.5, "salt_packet": 3.5, "crackers": 2.1,
+    "f1": 1.2, "rgd5": 1.2, "grenade_pin": 1.2, "grenade_spoon": 1.2,
+    "field_dressing": (3.0, 1.6, 2.0), "door_wedge": (2.0, 1.2, 2.8),
+    "climbing_kit": 2.2, "zipline_kit": 2.0, "wristwatch": 1.7, "chess_piece": 2.6,
+    "old_photo": 1.2, "key_marrow": 1.12, "key_kettle": 1.12, "key_cinder": 1.12,
+    "spare_parts": 2.1, "gun_oil": 1.85, "multitool": 1.15, "powder": 1.2,
+}
+
+
 def item(item_id, build):
     """Build one item in a fresh scene and write its .glb. `build` returns
     the Parts to make."""
     reset()
     parts = build()
+    k = SCALE.get(item_id)
+    if k is not None:
+        k = k if isinstance(k, tuple) else (k, k, k)
+        transform(centred(parts), common.S(*k))
     for p in parts:
         make(p)
     print(f"{item_id}:")
@@ -62,20 +86,18 @@ def wanted(item_id):
     return not argv or item_id in argv
 
 
-def cell_bay(p, r_tube, mat, y=0.0, bay=(0.0095, 0.0305), wall=0.003):
-    """A power cell bay: two cheeks either side of an open vertical bore
-    round the cell's seat at z 0.02, the body's tube left out between
-    `bay` (a z range)."""
-    z0, z1 = bay
-    h = r_tube * 2 + 0.002
-    for sx in (-1, 1):
-        prof = fillet([(z0 - 0.003, y - h / 2), (z1 + 0.003, y - h / 2), (z1 + 0.003, y + h / 2),
-                       (z0 - 0.003, y + h / 2)], 0.003, 2)
-        a, b = sorted((sx * 0.0103, sx * (0.0103 + wall)))
-        p.prism(prof, a, b, mat, axis="x", bevel=0.001, segs=1)
-    # Spring contacts top and bottom, seen through the bore.
-    p.box((0.016, 0.002, 0.004), (0.0, y + h / 2 - 0.001, z0 - 0.001), "Steel")
-    p.box((0.016, 0.002, 0.004), (0.0, y - h / 2 + 0.001, z1 + 0.001), "Steel")
+def cell_cradle(p, r_tube, mat, z0, z1, wall=0.0022):
+    """A power cell's bay along the body: the tube between z0 and z1 cut
+    open on top to a cradle the cell lies in, along Z (`gadgets`'s cell
+    mount turns it so), its ends the body's own walls with a contact on
+    each. The cell is 0.02 across, so the cradle's bore is 0.0206."""
+    r_in = 0.0103
+    r_out = max(r_tube, r_in + wall)
+    # The lower part of the tube, a little past halfway each side.
+    p.lathe([(r_in, z0), (r_out, z0), (r_out, z1), (r_in, z1)], mat, segs=24, closed=True,
+            start=170.0, sweep=200.0)
+    for z, d in ((z0, 1), (z1, -1)):
+        p.cyl(0.0045, z, z + d * 0.0008, "Steel", segs=12)
 
 
 def blob(p, r, centre, mat, scale=(1, 1, 1), bumps=(), segs=20, rings=10):

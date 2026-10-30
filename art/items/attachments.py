@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, cell_bay, item, wanted
+from _kit import ALONG_X, UP, cell_cradle, item, wanted
 from common import Part, RX, RY, RZ, T, S, fillet
 
 
@@ -130,8 +130,10 @@ def pbs_suppressor():
     # onto the muzzle, a plain tube, a front cap with the rubber wipe plug
     # in its mouth. 0.036 x 0.036 x 0.2 m, its back face on the muzzle.
     L = 0.1
-    p.lathe([(0.006, L), (0.0165, L), (0.0175, L - 0.002), (0.0175, L - 0.034),
-             (0.0165, L - 0.036), (0.006, L - 0.036)], "Blued", segs=28, closed=True)
+    # The coupling is hollow, 36 mm deep: a gun's muzzle (and its brake)
+    # goes into it, not through the can (`capture::seated`).
+    p.lathe([(0.0128, L), (0.0165, L), (0.0175, L - 0.002), (0.0175, L - 0.034),
+             (0.0165, L - 0.036), (0.0128, L - 0.036)], "Blued", segs=28, closed=True)
     for k in range(18):
         p.box((0.0012, 0.0012, 0.028), (0.0, 0.0, 0.0), "Blued",
               xf=RZ(2 * math.pi * k / 18) @ T(0.0175, 0, L - 0.018))
@@ -173,16 +175,14 @@ def weapon_light():
     p = Part("body")
     # Head bell and lens at the front (the beam is at z -0.06).
     p.lathe([(0.0, -0.045), (0.0145, -0.045), (0.015, -0.043), (0.015, -0.033), (0.0125, -0.028),
-             (0.0125, 0.0095), (0.0, 0.0095)], "Black", segs=24)
+             (0.0125, -0.024), (0.0, -0.024)], "Black", segs=24)
     p.cyl(0.0125, -0.0458, -0.044, "Lens", segs=20)
-    # Knurled grip rings.
-    for k in range(4):
-        p.tube(0.0132, 0.012, -0.022 + k * 0.007, -0.019 + k * 0.007, "Black", segs=20)
-    # Tail behind the cell bay, a pressure switch on the end.
-    p.lathe([(0.0, 0.0305), (0.0125, 0.0305), (0.0125, 0.042), (0.011, 0.045), (0.0, 0.045)],
+    # Tail behind the cell's cradle, a pressure switch on the end.
+    p.lathe([(0.0, 0.04), (0.0125, 0.04), (0.0125, 0.042), (0.011, 0.045), (0.0, 0.045)],
             "Black", segs=24)
     p.cyl(0.006, 0.044, 0.0465, "Rubber", segs=12)
-    cell_bay(p, 0.0125, "Black")
+    # The cell lies along it, centred at z 0.008 (`gadgets`'s cell mount).
+    cell_cradle(p, 0.0125, "Black", -0.024, 0.04)
     rail_clamp(p, -0.034, 0.0, -0.011)
     return [p]
 
@@ -191,17 +191,19 @@ def weapon_light():
 
 def laser_module():
     p = Part("body")
-    body = fillet([(-0.0105, -0.0105), (0.0105, -0.0105), (0.0105, 0.0105), (-0.0105, 0.0105)],
+    body = fillet([(-0.0125, -0.0125), (0.0125, -0.0125), (0.0125, 0.0125), (-0.0125, 0.0125)],
                   0.003, 2)
-    p.prism(body, -0.03, 0.0095, "Black", axis="z", bevel=0.0015, segs=1)
-    p.prism(body, 0.0305, 0.035, "Black", axis="z", bevel=0.0015, segs=1)
+    p.prism(body, -0.035, -0.0275, "Black", axis="z", bevel=0.0015, segs=1)
+    p.prism(body, 0.033, 0.035, "Black", axis="z", bevel=0.0012, segs=1)
     # Emitter: a recessed aperture with a red lens (the beam starts at z -0.035).
-    p.tube(0.006, 0.0035, -0.034, -0.029, "Black", segs=16)
-    p.cyl(0.0036, -0.0325, -0.031, "LampRed", segs=12)
-    # Windage/elevation screws.
-    p.cyl(0.002, 0.0105, 0.012, "Steel", segs=8, xf=T(0, 0, -0.015) @ UP)
-    p.cyl(0.002, 0.0105, 0.012, "Steel", segs=8, xf=T(0, 0, -0.015) @ ALONG_X)
-    cell_bay(p, 0.0105, "Black", wall=0.0025)
+    p.tube(0.006, 0.0035, -0.036, -0.031, "Black", segs=16)
+    p.cyl(0.0036, -0.0345, -0.033, "LampRed", segs=12)
+    # Windage/elevation screws, on the front block.
+    p.cyl(0.002, 0.0125, 0.014, "Steel", segs=8, xf=T(0, 0, -0.031) @ UP)
+    p.cyl(0.002, 0.0125, 0.014, "Steel", segs=8, xf=T(0, 0, -0.031) @ ALONG_X)
+    # The cell lies along it, centred at z 0.0025 (`gadgets`'s cell mount),
+    # in a cradle between the blocks.
+    cell_cradle(p, 0.0125, "Black", -0.0275, 0.033)
     rail_clamp(p, -0.026, 0.004, -0.0095)
     return [p]
 

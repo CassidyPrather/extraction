@@ -25,6 +25,7 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 (dress_truck, dress_containers, finish_models).chain(),
+                droop_wheels,
                 spawn_hand_visuals,
                 dress_gloves,
                 dress_camp,
@@ -179,28 +180,56 @@ fn finish_models(
             model_mats.get(name.unwrap_or("Paint"), &mut lib, &server, &mut materials)
         };
         for node in &model {
-            let at: Vec<Transform> = if node.name == "wheel" {
+            let at: Vec<(Transform, Option<usize>)> = if node.name == "wheel" {
                 WHEELS
                     .iter()
-                    .map(|w| {
+                    .enumerate()
+                    .map(|(i, w)| {
                         let turn = if w.x < 0.0 {
                             Quat::from_rotation_y(std::f32::consts::PI)
                         } else {
                             Quat::IDENTITY
                         };
-                        Transform::from_translation(*w)
-                            .with_rotation(turn * node.transform.rotation)
+                        let t = Transform::from_translation(*w)
+                            .with_rotation(turn * node.transform.rotation);
+                        (t, Some(i))
                     })
                     .collect()
             } else {
-                vec![node.transform]
+                vec![(node.transform, None)]
             };
-            for t in at {
+            for (t, wheel) in at {
                 let holder = commands
                     .spawn((t, Visibility::default(), ChildOf(truck)))
                     .id();
+                if let Some(i) = wheel {
+                    commands.entity(holder).insert(TruckWheel(i));
+                }
                 spawn_primitives(&mut commands, holder, node, &mut mat);
             }
+        }
+    }
+}
+
+/// One of the truck model's road wheels: `WHEELS[i]`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TruckWheel(pub usize);
+
+/// Each wheel hangs on its springs down to the ground under it
+/// (`raid::truck::wheel_droop`), wherever the truck stands.
+fn droop_wheels(
+    zone: Option<Res<crate::world::Zone>>,
+    trucks: Query<&Transform, (With<Truck>, Without<TruckWheel>)>,
+    mut wheels: Query<(&TruckWheel, &ChildOf, &mut Transform)>,
+) {
+    let Some(zone) = zone else { return };
+    for (w, parent, mut t) in &mut wheels {
+        let Ok(pose) = trucks.get(parent.parent()) else {
+            continue;
+        };
+        let y = WHEELS[w.0].y - crate::raid::truck::wheel_droop(&zone, pose, w.0);
+        if (t.translation.y - y).abs() > 1e-4 {
+            t.translation.y = y;
         }
     }
 }
@@ -563,13 +592,20 @@ fn dress_buttons(
         )>,
     >,
 ) {
-    use crate::interact::poke::{BUTTON_R, CAP};
+    use crate::interact::poke::{BUTTON_R, CAP, TRAVEL};
     for e in &buttons {
         let (collar, cap, dark, amber) = looks
             .get_or_insert_with(|| {
                 (
-                    meshes.add(Cylinder::new(BUTTON_R + 0.008, 0.008)),
-                    meshes.add(Cylinder::new(BUTTON_R, CAP)),
+                    // A bezel ring as deep as the cap's travel, and the cap:
+                    // its back on the bezel's front at rest, on the panel's
+                    // face when it's in (14 mm deep, it went 10 mm through
+                    // the card behind: the 28 October playtest, 0:30:47).
+                    meshes.add(Extrusion::new(
+                        Annulus::new(BUTTON_R + 0.001, BUTTON_R + 0.008),
+                        TRAVEL,
+                    )),
+                    meshes.add(Cylinder::new(BUTTON_R, CAP - TRAVEL)),
                     mat(&mut materials, Color::srgb(0.06, 0.06, 0.06), 0.6, 0.6),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.85, 0.45, 0.08),
@@ -585,17 +621,23 @@ fn dress_buttons(
         commands.spawn((
             Mesh3d(collar),
             MeshMaterial3d(dark),
-            Transform::from_xyz(0.0, 0.0, 0.004).with_rotation(face),
+            Transform::from_xyz(0.0, 0.0, TRAVEL * 0.5),
             ChildOf(e),
         ));
         commands.spawn((
             ButtonCap,
             Mesh3d(cap),
             MeshMaterial3d(amber),
-            Transform::from_xyz(0.0, 0.0, CAP * 0.5).with_rotation(face),
+            Transform::from_xyz(0.0, 0.0, cap_z(0.0)).with_rotation(face),
             ChildOf(e),
         ));
     }
+}
+
+/// A button cap's middle, `depth` in (its front at `CAP` at rest).
+pub fn cap_z(depth: f32) -> f32 {
+    use crate::interact::poke::{CAP, TRAVEL};
+    (CAP + TRAVEL) * 0.5 - depth.clamp(0.0, TRAVEL)
 }
 
 fn push_caps(
@@ -605,7 +647,7 @@ fn push_caps(
     for (button, children) in &buttons {
         for c in children.iter() {
             if let Ok(mut t) = caps.get_mut(c) {
-                t.translation.z = crate::interact::poke::CAP * 0.5 - button.depth;
+                t.translation.z = cap_z(button.depth);
             }
         }
     }
@@ -1467,7 +1509,8 @@ fn pose_hands(
 /// propped at its back, and the post the yard's skip card hangs on.
 fn dress_camp(
     mut commands: Commands,
-    props: Query<(Entity, &crate::camp::CampProps), Added<crate::camp::CampProps>>,
+    props: Query<(Entity, &crate::camp::CampProps, &Transform), Added<crate::camp::CampProps>>,
+    zone: Option<Res<crate::world::Zone>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut lib: ResMut<MaterialLibrary>,
@@ -1475,16 +1518,13 @@ fn dress_camp(
 ) {
     use crate::camp::{BOARD, CampProps, POST_HEIGHT, TABLE};
     use crate::render::materials::{Mat, metric_box};
-    for (e, p) in &props {
+    for (e, p, pose) in &props {
         // Boxes until the models are in (`art/props/outdoor.py`).
         let models = match p {
-            CampProps::Table => vec![
-                ("camp_table", Transform::IDENTITY),
-                (
-                    "lantern",
-                    Transform::from_translation(Vec3::new(-0.48, TABLE.y, 0.12)),
-                ),
-            ],
+            CampProps::Table => crate::camp::models(zone.as_deref(), pose)
+                .into_iter()
+                .filter(|(n, _)| *n != "camp_board")
+                .collect(),
             CampProps::Board => vec![("camp_board", Transform::IDENTITY)],
             CampProps::Post => vec![("camp_post", Transform::IDENTITY)],
         };
@@ -2220,6 +2260,27 @@ mod glove_tests {
             assert!(
                 (curl[f] - wrap[f]).abs() < 0.02,
                 "held curl {curl:?} vs {wrap:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod button_tests {
+    use super::*;
+
+    /// A pressed button's cap stops on its panel's face, however far the
+    /// finger goes; at rest its front is `CAP` out.
+    #[test]
+    fn a_pressed_button_cap_stays_in_front_of_its_panel() {
+        use crate::interact::poke::{CAP, TRAVEL};
+        let half = (CAP - TRAVEL) * 0.5;
+        assert!((cap_z(0.0) + half - CAP).abs() < 1e-6);
+        for d in [0.0, TRAVEL * 0.5, TRAVEL, TRAVEL * 3.0] {
+            assert!(
+                cap_z(d) - half >= -1e-6,
+                "{d}: its back at {}",
+                cap_z(d) - half
             );
         }
     }
