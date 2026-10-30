@@ -185,12 +185,33 @@ fn dress_upgrades(
     }
 }
 
-/// Black over the eyes while a night passes (`progression::safehouse`).
+/// Black over the eyes while a night passes (`progression::safehouse`),
+/// and going down: grey to black while you're down, open on the truck's
+/// bed (playtest 28 October: "I just teleported back to the truck, I have
+/// no idea how or why").
 #[derive(Component)]
 struct SleepFade {
     material: Handle<StandardMaterial>,
     /// Seconds since lying down; none when awake.
     t: Option<f32>,
+    /// Seconds down; and since waking from it.
+    down: f32,
+    woke: Option<f32>,
+}
+
+/// Going down closes the eyes over this (s; the raid's down is 6 s).
+pub const DOWN_CLOSE: f32 = 4.0;
+/// Woken in the truck, they open over this.
+pub const WAKE_OPEN: f32 = 3.0;
+
+/// How dark it is, `down` seconds down.
+pub fn down_dark(down: f32) -> f32 {
+    (down / DOWN_CLOSE).clamp(0.0, 1.0)
+}
+
+/// How dark it is, `t` seconds after waking from going down.
+pub fn wake_dark(t: f32) -> f32 {
+    (1.0 - t / WAKE_OPEN).clamp(0.0, 1.0)
 }
 
 /// Dark this long, then the eyes open over `OPEN` on different light.
@@ -221,6 +242,8 @@ fn add_sleep_fade(
             SleepFade {
                 material: material.clone(),
                 t: None,
+                down: 0.0,
+                woke: None,
             },
             Mesh3d(meshes.add(Rectangle::new(0.6, 0.6))),
             MeshMaterial3d(material),
@@ -233,28 +256,57 @@ fn add_sleep_fade(
 
 fn sleep_fade(
     mut slept: MessageReader<crate::progression::safehouse::Slept>,
+    raid: Res<crate::raid::Raid>,
     mut fades: Query<(&mut SleepFade, &mut Visibility)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
     let new = slept.read().count() > 0;
+    let dt = time.delta_secs();
+    let is_down = matches!(raid.phase, crate::raid::Phase::Down { .. });
     for (mut f, mut vis) in &mut fades {
         if new {
             f.t = Some(0.0);
         }
-        let Some(t) = f.t.as_mut() else {
-            continue;
-        };
-        *t += time.delta_secs();
-        let a = if *t < CLOSE {
-            *t / CLOSE
-        } else if *t < CLOSE + DARK {
-            1.0
+        // Down, then woken: its own fade.
+        if is_down {
+            f.down += dt;
+            f.woke = None;
+        } else if f.down > 0.0 {
+            f.down = 0.0;
+            f.woke = Some(0.0);
+        }
+        let death = if is_down {
+            down_dark(f.down)
+        } else if let Some(w) = f.woke.as_mut() {
+            *w += dt;
+            let a = wake_dark(*w);
+            if a <= 0.0 {
+                f.woke = None;
+            }
+            a
         } else {
-            1.0 - (*t - CLOSE - DARK) / OPEN
+            0.0
         };
+        let sleep = match f.t.as_mut() {
+            Some(t) => {
+                *t += dt;
+                let a = if *t < CLOSE {
+                    *t / CLOSE
+                } else if *t < CLOSE + DARK {
+                    1.0
+                } else {
+                    1.0 - (*t - CLOSE - DARK) / OPEN
+                };
+                if a <= 0.0 {
+                    f.t = None;
+                }
+                a
+            }
+            None => 0.0,
+        };
+        let a = sleep.max(death);
         if a <= 0.0 {
-            f.t = None;
             *vis = Visibility::Hidden;
             continue;
         }
@@ -262,5 +314,22 @@ fn sleep_fade(
         if let Some(mut m) = materials.get_mut(&f.material) {
             m.base_color = Color::srgba(0.0, 0.0, 0.0, a.clamp(0.0, 1.0));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Going down closes the eyes while you're down (the raid's 6 s), and
+    /// they open on the truck after: never a cut from the Zone to the bed.
+    #[test]
+    fn going_down_fades_out_and_waking_fades_in() {
+        assert_eq!(down_dark(0.0), 0.0);
+        assert!(down_dark(2.0) > 0.3 && down_dark(2.0) < 0.7);
+        assert_eq!(down_dark(6.0), 1.0, "dark before the wake");
+        assert_eq!(wake_dark(0.0), 1.0, "waking dark");
+        assert!(wake_dark(1.5) > 0.0 && wake_dark(1.5) < 1.0);
+        assert_eq!(wake_dark(WAKE_OPEN + 0.1), 0.0);
     }
 }

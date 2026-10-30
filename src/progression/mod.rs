@@ -71,7 +71,7 @@ impl Plugin for ProgressionPlugin {
                     place_letter,
                     place_ledger,
                     // The job out there: its place seen, which way it is.
-                    (scout, nudge, restate_after_fall, tailgate),
+                    (scout, nudge, restate_after_fall, tailgate, new_career),
                     contracts::place_bring,
                     contracts::watch_plant,
                     contracts::photograph,
@@ -862,6 +862,27 @@ fn restate_after_fall(
     } else {
         raid.say(lines::job_waiting(&place, Some(&valley_name(map))));
     }
+}
+
+/// A new career's first camp (no raid yet, at camp): the driver says the
+/// yard's kit stayed at the yard, once, when the camp's up. The career
+/// starts from its own crate (`persist::fresh_save`) by design; the yard
+/// saves nothing.
+fn new_career(
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    time: Res<Time>,
+    mut said: Local<bool>,
+) {
+    if *said || raid.raids > 0 || !crate::camp::camp_wanted(&opts) {
+        return;
+    }
+    // When the camp's up, not in the load.
+    if time.elapsed_secs() < 2.0 {
+        return;
+    }
+    *said = true;
+    raid.say(lines::NEW_CAREER_KIT);
 }
 
 /// Off the truck's steps at base, the raid not yet begun (that's 14 m
