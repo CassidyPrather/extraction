@@ -751,7 +751,6 @@ mod tests {
         "props/logbook:",
         "props/reading_glasses:",
         "props/rope_coil:",
-        "props/sewing_machine:",
         "props/shelf_metal:",
         "props/snowshoes:",
         "props/stash_stand:",
