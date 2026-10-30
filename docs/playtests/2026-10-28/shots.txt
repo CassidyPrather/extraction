@@ -74,10 +74,8 @@ walker_hits | Robot bodies | Four walkers at 15 m, each shot once with a pistol 
 # here), so this pair is Visual design's own, from scripts/impostor_check.sh.
 # Visual design (M5): walking into the forest along Marrow's road, the
 # trees ahead crossing 62-74 m, where the near cards hand over to the far
-# impostor. Watch the pair video: before, a tree's crown changes shape in
-# one frame at 68 m (and back as your head moves); after, the two dither
-# into each other over 12 m.
-treeline_walk | Visual design | Trees ahead of you on Marrow's forest road as you walk 20 m in (the pair video in index.html): before, each crown swaps from the far impostor to its near cards in one frame at 68 m; after, the two cross-dither over 62-74 m, no frame where a tree jumps | --map marrow_creek --hour day --weather clearing --no-robots --dolly -58,0,170,270,-2:-78,0,170
+# impostor. Watch the pair video in index.html.
+treeline_walk | Visual design | Trees ahead of you on Marrow's forest road as you walk 20 m in (the pair video in index.html): watch the trees 60-75 m ahead change from far impostor to near cards: before, in one frame at 68 m; after, cross-dithered over 62-74 m. (In this light the two already look alike: the frame-to-frame numbers can't tell the builds apart, the swaying near branches swamp them) | --map marrow_creek --hour day --weather clearing --no-robots --dolly -58,0,170,270,-2:-78,0,170
 marrow_far_forest | Visual design | Marrow Creek's far forest after a load as slow as the headset's (Visual design's pair from scripts/impostor_check.sh marrow_creek, frames padded to 90 ms and the GPU held 120 s; not this rig): before, 0 of 9 impostors captured, so the trees past 68 m are bare trunks; after, all 9, with crowns | --picture docs/shots/visual-design/far_forest_slow_load_after.png | --picture docs/shots/visual-design/far_forest_slow_load_before.png
 
 # Map design and Onboarding (#5): the first job's walk from the gate,
