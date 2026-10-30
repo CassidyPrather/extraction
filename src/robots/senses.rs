@@ -33,7 +33,9 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use extraction_core::terrain::Surface;
 
-use super::{Awareness, NOTICED, Noise, Noticed, PartRole, Robot, RobotPart, Senses, Stunned};
+use super::{
+    Awareness, NOTICED, Noise, Noticed, PartRole, Robot, RobotKind, RobotPart, Senses, Stunned,
+};
 use crate::player::{Body, Footstep, Player};
 use crate::rig::RigHead;
 use crate::world::{Layer, Zone};
@@ -354,6 +356,18 @@ pub(crate) fn door_noise(
     }
 }
 
+/// The furthest a machine of this kind notices you (m), however far its
+/// eyes are good for (playtest P1: "enemies see you from too far"). It
+/// cuts where it notices you, not how well it sees you nearer in. Map
+/// design's lint reckons with the same (`map_openness::OPEN_REACH`).
+pub fn notice_far(kind: RobotKind) -> f32 {
+    match kind {
+        RobotKind::Walker => 60.0,
+        RobotKind::Drone => 70.0,
+        _ => f32::MAX,
+    }
+}
+
 /// Sight and hearing, into each robot's [`Awareness`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn perceive(
@@ -623,14 +637,18 @@ pub(crate) fn perceive(
             .map
             .region_at([eye.x, eye.z])
             .and_then(|r| r.notice)
-            .unwrap_or(f32::MAX);
-        let reach = conditions.sight(senses.sight.min(notice))
+            .unwrap_or(f32::MAX)
+            .min(notice_far(robot.kind));
+        // How well it sees (its own sight), and how far it notices you at
+        // all (that, capped): a cap that shortens its reach, not its eyes.
+        let frost = if frosted {
             // Optics frosted (`hazards::Frosted`).
-            * if frosted {
-                super::hazards::FROST_SIGHT
-            } else {
-                1.0
-            };
+            super::hazards::FROST_SIGHT
+        } else {
+            1.0
+        };
+        let acuity = conditions.sight(senses.sight) * frost;
+        let reach = conditions.sight(senses.sight.min(notice)) * frost;
         let was = aware.suspicion;
         aware.can_see_target = false;
         let mut best = 0.0f32;
@@ -656,7 +674,7 @@ pub(crate) fn perceive(
                 }
                 let mut e = exposure(&SightCase {
                     distance: dist,
-                    reach,
+                    reach: acuity,
                     ground_fog: conditions.ground_fog,
                     light: t.light,
                     height: t.height,

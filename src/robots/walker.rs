@@ -473,7 +473,7 @@ pub fn spawn_walker_sized(
             Intent::default(),
             LegPoses::default(),
             Senses {
-                sight: 60.0,
+                sight: 75.0,
                 fov_deg: 200.0,
                 hearing: 1.2,
                 eye: Vec3::new(0.0, 0.15, -0.3),
