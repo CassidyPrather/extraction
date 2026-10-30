@@ -39,6 +39,8 @@
     ),
 
     features: [
+        // The relay mast hut's pad on the lookout hill's skirt.
+        Plateau(polygon: [(-147.0, -107.0), (-128.0, -107.0), (-128.0, -90.0), (-147.0, -90.0)], blend: 8.0),
         // Rises that break the plain's sightlines (map_openness, P1): the
         // canal's south banks, west and east of the works road, and the
         // works' spoil heaps on the plain north of the water.
@@ -260,6 +262,12 @@
     ],
 
     placements: [
+        (prefab: "log_pile", at: (-147.0, -17.0), rot: 60.0),
+        (prefab: "log_pile", at: (-72.0, 71.0), rot: 130.0),
+        (prefab: "log_pile", at: (-173.0, -15.0), rot: 15.0),
+        (prefab: "log_pile", at: (-162.0, 6.0), rot: 100.0),
+        // The first jobs' cover on the tight valley's ways: woodpiles.
+        (prefab: "log_pile", at: (-17.9, 103.6), rot: 40.0),
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The burnt chapel's tower, standing over what the fire left.
@@ -300,7 +308,7 @@
         (prefab: "chimney", at: (75.7, -32.0), rot: 0.0),
         (prefab: "rail_shed", at: (97.7, 6.9), rot: 0.0),
         (prefab: "pump_station", at: (115.0, 26.9), rot: 0.0),
-        (prefab: "boxcar", at: (152.1, -7.4), rot: 82.7),
+        (prefab: "boxcar", at: (154.0, -16.0), rot: 262.7),
         (prefab: "boxcar", at: (119.0, 3.6), rot: 86.14),
         (prefab: "shed", at: (183.3, 16.6), rot: 0.0),
         // A lone shed out on the south-east flats: the only roof in a
