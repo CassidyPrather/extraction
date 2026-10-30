@@ -1177,35 +1177,39 @@ mod stoppage_tests {
     use super::*;
     use extraction_core::firearm::{Event as FireEvent, Malfunction};
 
-    /// The jam (or, with none, the dud) the test asks of the drill's
-    /// gun, and whether it came.
+    /// The faults the test asks of the drill's gun (a jam, or with none a
+    /// dud), one after its first shot and the next after its third, and
+    /// how many came.
     #[derive(Resource)]
     struct Jam {
-        kind: Option<Malfunction>,
-        asked: bool,
-        came: bool,
+        kinds: Vec<Option<Malfunction>>,
+        shots: u32,
+        asked: usize,
+        came: usize,
     }
 
-    /// After the drill gun's first shot, its next cycle jams.
-    fn jam_after_first_shot(
+    fn jam_after_shots(
         mut events: MessageReader<crate::weapons::GunEvent>,
         mut guns: Query<&mut crate::weapons::Gun>,
         mut jam: ResMut<Jam>,
     ) {
         for ev in events.read() {
             match ev.event {
-                FireEvent::Fired { .. } if !jam.asked => {
-                    if let Ok(mut g) = guns.get_mut(ev.gun) {
-                        match jam.kind {
-                            Some(k) => g.firearm.jam_next = Some(k),
-                            None => g.firearm.dud_next = true,
+                FireEvent::Fired { .. } => {
+                    jam.shots += 1;
+                    let due = jam.shots == 1 + 2 * jam.asked as u32;
+                    if due && jam.asked < jam.kinds.len() {
+                        if let Ok(mut g) = guns.get_mut(ev.gun) {
+                            match jam.kinds[jam.asked] {
+                                Some(k) => g.firearm.jam_next = Some(k),
+                                None => g.firearm.dud_next = true,
+                            }
+                            jam.asked += 1;
                         }
-                        jam.asked = true;
                     }
                 }
-                FireEvent::Dud if jam.asked && jam.kind.is_none() => jam.came = true,
                 // (An open bolt only stovepipes, whatever's asked.)
-                FireEvent::Malfunctioned(_) if jam.asked && jam.kind.is_some() => jam.came = true,
+                FireEvent::Dud | FireEvent::Malfunctioned(_) => jam.came += 1,
                 _ => {}
             }
         }
@@ -1214,7 +1218,9 @@ mod stoppage_tests {
     /// A drill's gun that jams mid-string is cleared the way its jam is
     /// cleared and the drill still passes: a worn gun's dice (seeded by
     /// where it lay, so any layout change re-rolls them) never decide a
-    /// scenario. Every magazine-fed drill, every jam and a dud.
+    /// scenario. Every magazine-fed drill meets every jam and a dud, two
+    /// to a run (one costing no round, one costing one, so each drill's
+    /// count of rounds left still holds).
     #[test]
     fn a_drill_gun_that_jams_still_finishes_its_drill() {
         let mut bad = Vec::new();
@@ -1225,12 +1231,13 @@ mod stoppage_tests {
             "lmg_drill",
             "marksman_drill",
         ] {
-            for kind in [
-                Some(Malfunction::FailureToEject),
-                Some(Malfunction::FailureToFeed),
-                Some(Malfunction::DoubleFeed),
-                // A dud.
-                None,
+            for kinds in [
+                vec![
+                    Some(Malfunction::FailureToEject),
+                    Some(Malfunction::DoubleFeed),
+                ],
+                // A failure to feed, then a dud.
+                vec![Some(Malfunction::FailureToFeed), None],
             ] {
                 let mut app = crate::headless_app(
                     LaunchOptions {
@@ -1240,35 +1247,35 @@ mod stoppage_tests {
                     },
                     true,
                 );
+                let n = kinds.len();
                 app.insert_resource(Jam {
-                    kind,
-                    asked: false,
-                    came: false,
+                    kinds: kinds.clone(),
+                    shots: 0,
+                    asked: 0,
+                    came: 0,
                 })
-                .add_systems(Update, jam_after_first_shot);
+                .add_systems(Update, jam_after_shots);
                 app.finish();
                 app.cleanup();
                 let mut done = None;
                 for _ in 0..60 * 120 {
                     app.update();
                     let w = app.world_mut();
-                    let bot = w
-                        .query_filtered::<&Bot, With<LocalPlayer>>()
-                        .iter(w)
-                        .next()
-                        .map(|b| (b.tasks.is_empty(), b.failed, b.log.clone()));
-                    if let Some((true, failed, log)) = bot {
-                        done = Some((failed, log));
+                    let mut bots = w.query_filtered::<&Bot, With<LocalPlayer>>();
+                    if let Some(b) = bots.iter(w).next().filter(|b| b.tasks.is_empty()) {
+                        done = Some((b.failed, b.log.clone()));
                         break;
                     }
                 }
-                let jam = app.world().resource::<Jam>();
+                let came = app.world().resource::<Jam>().came;
                 match done {
-                    None => bad.push(format!("{drill} {kind:?}: never finished")),
-                    Some(_) if !jam.came => bad.push(format!("{drill} {kind:?}: no jam came")),
+                    None => bad.push(format!("{drill} {kinds:?}: never finished")),
+                    Some(_) if came < n => {
+                        bad.push(format!("{drill} {kinds:?}: {came} of {n} faults came"))
+                    }
                     Some((0, _)) => {}
-                    Some((n, log)) => bad.push(format!(
-                        "{drill} {kind:?}: {n} failed\n  {}",
+                    Some((f, log)) => bad.push(format!(
+                        "{drill} {kinds:?}: {f} failed\n  {}",
                         log.join("\n  ")
                     )),
                 }
