@@ -2187,19 +2187,31 @@ pub(crate) mod tests {
             })
             .collect();
         for (e, name) in names {
-            let filter = SpatialQueryFilter::default().with_mask(LayerMask::ALL);
-            let only = |x: Entity| x == e;
+            let (Some(c), Some(p), Some(r)) = (
+                w.get::<Collider>(e),
+                w.get::<Position>(e),
+                w.get::<Rotation>(e),
+            ) else {
+                println!("    {name}: no collider pose");
+                continue;
+            };
+            let sphere = Collider::sphere(0.09);
             let t0 = std::time::Instant::now();
             for _ in 0..10 {
-                let _ = spatial
-                    .shape_intersections(&Collider::sphere(0.09), at, Quat::IDENTITY, &filter)
-                    .into_iter()
-                    .filter(|x| only(*x))
-                    .count();
+                let _ = avian3d::collision::collider::contact_query::intersection_test(
+                    c,
+                    p.0,
+                    *r,
+                    &sphere,
+                    at,
+                    Quat::IDENTITY,
+                );
             }
             let ms = t0.elapsed().as_secs_f64() * 100.0;
-            println!("    {name}: (whole query) {ms:.3} ms");
-            break;
+            println!(
+                "    {name}: {ms:.3} ms a test, layers {:?}",
+                w.get::<CollisionLayers>(e).map(|l| l.memberships)
+            );
         }
     }
 
