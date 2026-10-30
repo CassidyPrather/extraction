@@ -717,10 +717,12 @@ prototype; the others join as they're reworked).
   machine that wanders out of its zone sees as far as it ever did.
 
 Marrow, before and after (the lint's measures): open ground seen past a
-walker 19% -> 10%, the 90th-percentile sightline 86 -> 74 m, a fight at a
-hot spot heard by 2.3 -> 1.4 others, the Village by 4 -> 1, the longest
-empty walk 135 -> 33 m (the ford-keeper's hut between the Old farm and
-the Hollow).
+walker 19% -> 9%, the 90th-percentile sightline 86 -> 74 m, a fight at a
+hot spot heard by 2.3 -> 1.1 others, the Village by 4 -> 1, the longest
+empty walk 135 -> 70 m (the ford-keeper's hut between the Old farm and
+the Hollow). Rises: the bank, ford and clearing rises round the Village,
+the spotter's rise by the district road north of the creek, the lane
+bank south of the Village, the rail yard's spoil heap.
 
 ## Terraces
 

@@ -425,6 +425,15 @@ mod tests {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
+            if let Ok(place) = std::env::var("WHO_HEARS") {
+                if let Some(m) = map.markers_of(&MarkerKind::Poi).find(|m| m.name == place) {
+                    for (n, at) in hot_spots(&map) {
+                        if heard(&hm, m.at, at) {
+                            eprintln!("   {place} heard at {n} ({:.0} m)", dist(m.at, at));
+                        }
+                    }
+                }
+            }
             if std::env::var("PULL").is_ok() {
                 for (n, at, k) in &p {
                     eprintln!("   {n} ({:.0}, {:.0}): {k}", at[0], at[1]);

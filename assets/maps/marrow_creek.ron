@@ -57,6 +57,14 @@
         // the clearing rise west, between the Village and the forest
         // clearing's site.
         Ridge(points: [(-78.0, 58.0), (-75.0, 100.0), (-72.0, 140.0)], width: 22.0, height: 4.5),
+        // The spotter's rise east of the district road north of the creek,
+        // between the road and the Bank spotter;
+        Ridge(points: [(34.0, -10.0), (40.0, -40.0), (44.0, -70.0)], width: 22.0, height: 4.0),
+        // the lane bank west of the road south of the Village, the fields
+        // to the gate;
+        Ridge(points: [(-22.0, 118.0), (-20.0, 140.0), (-16.0, 165.0)], width: 20.0, height: 3.5),
+        // and the rail yard's spoil heap, the ballast left in a hill.
+        Hill(at: (150.0, -205.0), radius: 26.0, height: 4.5),
 
         // The creek valley. Wide, gentle valley first, then the bed.
         Channel(
