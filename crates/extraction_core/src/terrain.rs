@@ -180,11 +180,60 @@ impl Heightmap {
         for (i, road) in map.roads.iter().enumerate() {
             hm.road(i, road);
         }
+        hm.level_trucks(map);
         if settled {
             hm.settle(map);
         }
         hm.underground(map);
         hm
+    }
+
+    /// The truck stands on its wheels where it stops (`raid::truck::parked`
+    /// stands it level, its wheels in the soil, past 3 degrees): the ground
+    /// under it at its base stop and each rendezvous flat, a margin round
+    /// its body and the ladder's foot, then back to the land at most a
+    /// quarter metre per metre. After the rim, which the base stops stand
+    /// on near the map's edge.
+    fn level_trucks(&mut self, map: &MapDef) {
+        // Its frame: x across (wheels at 1 m), z along (the cab's front
+        // 5 m ahead of its middle, the ladder's foot 3.5 m behind).
+        const HALF_X: f32 = 2.0;
+        const FRONT: f32 = -5.5;
+        const BACK: f32 = 4.0;
+        const RAMP: f32 = 0.25;
+        const REACH: f32 = 8.0;
+        for (_, at, yaw) in map.truck_stands() {
+            let (s, c) = yaw.sin_cos();
+            let local = |q: P2| {
+                let (dx, dz) = (q[0] - at[0], q[1] - at[1]);
+                [dx * c - dz * s, dx * s + dz * c]
+            };
+            let out = |l: [f32; 2]| {
+                (l[0].abs() - HALF_X)
+                    .max(0.0)
+                    .hypot((l[1] - BACK).max(FRONT - l[1]).max(0.0))
+            };
+            let r = BACK.max(-FRONT) + HALF_X + REACH;
+            let (lo, hi) = ([at[0] - r, at[1] - r], [at[0] + r, at[1] + r]);
+            let (mut sum, mut n) = (0.0f32, 0.0f32);
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                if out(local(q)) == 0.0 {
+                    sum += hm.heights[k];
+                    n += 1.0;
+                }
+            });
+            if n == 0.0 {
+                continue;
+            }
+            let level = sum / n;
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let o = out(local(q));
+                if o <= REACH {
+                    let lim = RAMP * o;
+                    hm.heights[k] = level + (hm.heights[k] - level).clamp(-lim, lim);
+                }
+            });
+        }
     }
 
     /// Underground sites: the ground levelled under each exit kiosk to

@@ -1008,6 +1008,37 @@ impl MapDef {
             .filter(move |m| std::mem::discriminant(&m.kind) == std::mem::discriminant(kind))
     }
 
+    /// Where the truck stands: its base stop (rear to the drop) and each
+    /// rendezvous (bed to the valley's middle), with its yaw as the game
+    /// turns it (`Quat::from_rotation_y(yaw)` turning its rear, +Z, that
+    /// way; `raid::truck::base_pose`, `rv_pose`).
+    pub fn truck_stands(&self) -> Vec<(String, P2, f32)> {
+        let ins = self
+            .markers_of(&MarkerKind::Insertion)
+            .next()
+            .map_or([0.0, 0.0], |m| m.at);
+        let yaw_to = |from: P2, to: P2| {
+            let d = crate::geom::sub(to, from);
+            if crate::geom::len(d) < 1e-3 {
+                0.0
+            } else {
+                d[0].atan2(d[1])
+            }
+        };
+        let mut out = Vec::new();
+        for m in self.markers_of(&MarkerKind::TruckStop) {
+            out.push((format!("its stop ({})", m.name), m.at, yaw_to(m.at, ins)));
+        }
+        for m in self.markers_of(&MarkerKind::Rendezvous) {
+            out.push((
+                format!("the rendezvous {}", m.name),
+                m.at,
+                yaw_to(m.at, [0.0, 0.0]),
+            ));
+        }
+        out
+    }
+
     /// Which region a point is in, if any (first match wins).
     /// Loot rolls per spot at `p` (1 outside any region).
     pub fn richness_at(&self, p: P2) -> f32 {

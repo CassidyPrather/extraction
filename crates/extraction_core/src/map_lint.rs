@@ -417,6 +417,12 @@ pub const WAIT_IN: f32 = 1.2;
 /// How far settling a building in may lower ground the map declares (a
 /// plateau set to a height), metres.
 pub const TERRACE_CUT: f32 = 0.5;
+/// The truck's stops and rendezvous stand level under it: the ground
+/// at its front wheels and at its rear ones (`raid::truck::parked`, the
+/// front axle 3.9 m ahead of its middle, the rear 0.8 m behind) falls at
+/// most this, radians (3 degrees): steeper, it stands level with its
+/// wheels in the soil, or its loose kit slides in the bed.
+pub const TRUCK_LEVEL: f32 = 0.05;
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -2642,6 +2648,30 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             wrecks.0, wrecks.1
         ));
     }
+    // The truck stands on its wheels where it stops: at the base, its
+    // rear to the drop; at a rendezvous, its bed to the valley's middle
+    // (`raid::truck::base_pose`, `rv_pose`).
+    let mut worst_truck = 0.0f32;
+    for (what, at, yaw) in map.truck_stands() {
+        let fall = truck_fall(hm, at, yaw);
+        worst_truck = worst_truck.max(fall.abs());
+        if fall.abs() > TRUCK_LEVEL {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "the truck at {what} stands on ground falling {:.1}° from cab to tail (at most {:.1}°): level its stop",
+                    fall.to_degrees(),
+                    TRUCK_LEVEL.to_degrees()
+                ),
+                at,
+            );
+        }
+    }
+    r.measures.push(format!(
+        "truck stops: the ground under the truck falls at most {:.1}°",
+        worst_truck.to_degrees()
+    ));
     // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
     // own placement is padded as any building), so what can go wrong is
     // under the exits' pads, and where their doors open: onto water or a
@@ -3324,6 +3354,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     r.routes = routes;
     r.findings.sort_by_key(|f| f.rule);
     r
+}
+
+/// The fall of the ground under a truck standing at `at` facing `yaw`:
+/// its front axle's ground less its rear axles', over their 4.7 m, as an
+/// angle (radians; `raid::truck::parked`).
+pub fn truck_fall(hm: &Heightmap, at: P2, yaw: f32) -> f32 {
+    let (s, c) = yaw.sin_cos();
+    let ground = |x: f32, z: f32| hm.height([at[0] + x * c + z * s, at[1] - x * s + z * c]);
+    let axle = |z: f32| (ground(-1.0, z) + ground(1.0, z)) * 0.5;
+    (axle(-3.9) - axle(0.8)).atan2(4.7)
 }
 
 #[cfg(test)]

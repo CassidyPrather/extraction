@@ -763,6 +763,14 @@ or patrols stays on that valley, and moves with it when it changes.
 
 ## Terraces
 
+The truck's stands are levelled for it: its base stop and each
+rendezvous, flat under the truck as the game parks it (rear to the drop,
+or bed to the valley's middle) and a margin round it, then back to the
+land at a quarter metre per metre (`terrain::level_trucks`, after the
+rim the base stops stand on). The map lint holds each to 3 degrees from
+cab to tail (`TRUCK_LEVEL`); steeper, the truck stands with its wheels
+in the soil or its loose kit slides in the bed.
+
 A plateau with a `height` is ground the map declares: a terrace, a
 ledge, a dam's crest, a stepped street. Fitting a building in
 (`terrain::settle`: flat under its walls, then a ramp of 0.5 m per metre
