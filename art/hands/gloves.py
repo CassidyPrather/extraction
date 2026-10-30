@@ -54,7 +54,7 @@ RADII = [
     [0.0084, 0.0077, 0.0071, 0.0066],
     [0.0112, 0.0103, 0.0094],
 ]
-SIDES = 10
+SIDES = 16
 
 
 def finger_root(f, ts):
@@ -88,7 +88,7 @@ def segment(f, j):
     r0, r1 = RADII[f][j], RADII[f][j + 1]
     c1 = -(L - r1) if last else -L
     p = Part(f"finger_{f}_{j}")
-    n = 3
+    n = 5
     prof = [(r0 * math.sin(math.pi / 2 * k / n), r0 * math.cos(math.pi / 2 * k / n))
             for k in range(n + 1)]
     # A glove's finger is a touch fuller over the middle of a segment.
@@ -97,6 +97,14 @@ def segment(f, j):
              for k in range(n + 1)]
     _, faces = p.lathe(prof, "Glove", segs=SIDES, start=360.0 / SIDES / 2)
     by_normal(p, faces, "Leather", lambda nm: nm.y < -0.25)
+    # Work gloves wear through at the fingertips first: the outer half of
+    # each last segment is leather all round, a patch you can see from the
+    # back of the hand.
+    if last:
+        mi = p._mi("Leather")
+        for fc in faces:
+            if fc.calc_center_median().z < c1 * 0.5:
+                fc.material_index = mi
     # Pads over the back of the first two segments (the thumb's first).
     if j < 2 and not (f == 4 and j == 1):
         rm = (r0 + r1) * 0.5
@@ -170,8 +178,8 @@ def tube(p, pts, r, mat, sides=6):
 
 def palm(ts):
     p = Part("palm")
-    segs = 20
-    stations = 16
+    segs = 32
+    stations = 24
     rings = []
     for i in range(stations + 1):
         # Bunched toward the rounded knuckle end.
@@ -205,6 +213,13 @@ def palm(ts):
                         + Vector((0, 0, 1)) * half * math.cos(ang))
         bar.append(ring)
     p.loft(bar, "Padding")
+    # A moulded pad over each knuckle, standing proud of the bar: the
+    # hand's own knuckles, armoured, rather than one flat strip.
+    for f in range(4):
+        x = (0.03 - f * 0.02) * ts
+        y, nrm = palm_top(x, zg - 0.003)
+        p.sphere(1.0, (0, 0, 0), "Padding", segs=12, rings=6,
+                 xf=T(x, y + 0.0028, zg - 0.003) @ S(0.0078, 0.0036, 0.0068))
     # Seams down the back of the hand, from the guard to the cuff, and the
     # welt along each side where the leather palm meets the fabric back.
     for x in (-0.013, 0.013):
