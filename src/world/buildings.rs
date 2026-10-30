@@ -1243,7 +1243,9 @@ impl Builder {
         let mut models: Vec<(&'static str, Transform)> = (0..n as usize)
             .map(|i| {
                 let x = -len * 0.5 + w * (i as f32 + 0.5);
-                let m = ["counter_cabinet", "counter_drawers"][(i + pick) % 2];
+                // (Their doors and drawers are their own, moving:
+                // `hinge::fit_counters`.)
+                let m = ["counter_cabinet#carcass", "counter_drawers#carcass"][(i + pick) % 2];
                 (
                     m,
                     Transform::from_translation(at + front * Vec3::X * x)

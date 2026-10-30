@@ -178,6 +178,7 @@ impl Plugin for WorldPlugin {
             )
                 .chain(),
         )
+        .add_systems(FixedUpdate, hinge::fit_counters)
         .add_systems(Update, minefields::lay_for_gallery)
         .add_systems(
             Startup,
