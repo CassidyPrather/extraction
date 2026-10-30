@@ -549,6 +549,9 @@ const FINGER_BONES: [[f32; 3]; 5] = [
 const JOINT_BEND: [f32; 3] = [1.4, 1.65, 1.1];
 /// The thumb's second joint only: its first swings (`finger_aim_spread`).
 const THUMB_BEND: [f32; 3] = [0.0, 0.9, 0.0];
+/// A palm cupping a handgun's butt (`weapons::layout::CUP`): the fingers
+/// forward and up the front, short of the gun hand's.
+pub(crate) const CUP_CURL: [f32; 5] = [0.45, 0.45, 0.45, 0.45, 0.5];
 /// The thumb's curl on a pistol grip (`hold_curl`), where it lies along
 /// the far side of the frame.
 const THUMB_ON_GRIP: f32 = 0.62;
@@ -1406,7 +1409,12 @@ fn curl_targets(
         }
         return curl;
     }
-    if hand.supporting.is_some() {
+    if let Some(item) = hand.supporting {
+        // A palm cupping a handgun's butt reaches forward under the gun
+        // hand's fingers, curled less than a hand round a handguard.
+        if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
+            return CUP_CURL;
+        }
         return hold_curl(Some(GripRole::Support), trigger, 0.0);
     }
     if hand.handle.is_some() {
@@ -2497,9 +2505,10 @@ mod glove_tests {
         );
         let cup = crate::weapons::layout::cup_pose(&layout).expect("a pistol has a cup");
         let cupping = finger_points(
-            gun.mul_transform(cup),
+            gun.mul_transform(cup)
+                .with_rotation(support_turn(&layout, Side::Left)),
             Side::Left,
-            hold_curl(Some(GripRole::Support), 0.0, 0.0),
+            CUP_CURL,
         );
         let nearest = cupping
             .iter()

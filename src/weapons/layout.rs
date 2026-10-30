@@ -168,11 +168,10 @@ impl GunLayout {
 }
 
 /// Where the other hand's palm cups a handgun's grip from below, in the
-/// grip's frame: under the back of the butt, its fingers curled up round
-/// the front of the gun hand's. (At 0.065 down and 0.02 back the cupping
-/// fingers went into the gun hand's: `render::props`
-/// `a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand`.)
-pub const CUP: Vec3 = Vec3::new(0.0, -0.08, 0.04);
+/// grip's frame: under the butt, palm up (`render::props::support_turn`),
+/// its fingers forward and up the front, short of the gun hand's
+/// (`render::props` `a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand`).
+pub const CUP: Vec3 = Vec3::new(0.0, -0.07, -0.02);
 
 /// A handgun's cup (gun space): a gun with no place for a second hand on
 /// it is steadied by one under its grip.
