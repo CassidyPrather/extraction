@@ -229,7 +229,7 @@ fn what_goes_in_the_pack_stays_where_it_was_put() {
 /// it lay: everything came back stood upright).
 #[test]
 fn a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay() {
-    use crate::raid::truck::{STASH_OUTER, Stash};
+    use crate::raid::truck::Stash;
     let dir = std::env::temp_dir().join(format!("extraction-stowed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -271,16 +271,14 @@ fn a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay() {
     for (k, (id, bag)) in [
         ("ammo_545", pack),
         ("radio", pack),
-        ("cassette", pack),
+        ("field_dressing", pack),
         ("ak_mag", crate_),
         ("flashlight", crate_),
     ]
     .into_iter()
     .enumerate()
     {
-        let Some(kind) = catalog.kind(id) else {
-            continue;
-        };
+        let kind = catalog.kind(id).expect(id);
         let pose = Transform::from_xyz(-0.1 + 0.05 * k as f32, 0.05, 0.02)
             .with_rotation(Quat::from_euler(EulerRot::XYZ, 0.7, 0.2 * k as f32, -0.5));
         let mut q =
@@ -513,5 +511,172 @@ fn what_is_in_a_pouch_stays_seated() {
         vr.head(Vec3::new(0.0, if k % 2 == 0 { 1.65 } else { 1.0 }, 0.0));
         vr.step(12);
         check(&mut vr, &format!("step {k}"));
+    }
+}
+
+/// Driving to another valley with things put away: the pack, the crate and
+/// the pouches arrive as they were left, each thing where it was put and as
+/// it lay (the move saves on the way and opens the game again there).
+#[test]
+fn a_map_change_keeps_what_is_put_away_as_it_lay() {
+    use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+    use crate::raid::truck::Stash;
+    let dir = std::env::temp_dir().join(format!("extraction-moving-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("career.ron");
+    let game = |path: &std::path::Path, map: &str| {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: map.into(),
+                map_explicit: true,
+                save: Some(path.to_path_buf()),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..5 {
+            app.update();
+        }
+        app
+    };
+    let mut a = game(&path, "marrow_creek");
+    let w = a.world_mut();
+    let pack = w
+        .query::<(Entity, &Backpack)>()
+        .iter(w)
+        .find(|(_, b)| b.carried)
+        .map(|(e, _)| e)
+        .unwrap();
+    let crate_ = w
+        .query_filtered::<Entity, With<Stash>>()
+        .iter(w)
+        .next()
+        .unwrap();
+    let me = w
+        .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+        .single(w)
+        .unwrap();
+    let pouches: Vec<Entity> = w
+        .query::<(Entity, &Socket, &SocketOwner)>()
+        .iter(w)
+        .filter(|(_, s, o)| {
+            o.0 == me && matches!(s.kind, SocketKind::Body(_)) && s.occupant.is_none()
+        })
+        .map(|(e, ..)| e)
+        .collect();
+    let catalog = a.world().resource::<crate::items::Catalog>().clone();
+    let spawn = |a: &mut App, id: &str| {
+        let kind = catalog.kind(id).expect(id);
+        let mut q = bevy::ecs::system::SystemState::<Commands>::new(a.world_mut());
+        let mut c = q.get_mut(a.world_mut()).unwrap();
+        let e = crate::items::spawn_item(
+            &mut c,
+            &catalog,
+            crate::items::SpawnItem {
+                kind,
+                transform: Transform::from_xyz(0.0, 50.0, 0.0),
+                condition: 1.0,
+            },
+        );
+        q.apply(a.world_mut());
+        e
+    };
+    let mut put = Vec::new();
+    for (k, (id, bag)) in [
+        ("ammo_545", pack),
+        ("radio", pack),
+        ("field_dressing", pack),
+        ("ak_mag", crate_),
+        ("flashlight", crate_),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let e = spawn(&mut a, id);
+        let pose = Transform::from_xyz(0.1 - 0.05 * k as f32, 0.06, -0.03)
+            .with_rotation(Quat::from_euler(EulerRot::YXZ, 0.4 * k as f32, -0.6, 0.9));
+        let mut q =
+            bevy::ecs::system::SystemState::<(Commands, Query<&mut Backpack>)>::new(a.world_mut());
+        let (mut c, mut bags) = q.get_mut(a.world_mut()).unwrap();
+        let mut b = bags.get_mut(bag).unwrap();
+        crate::interact::body::stow_posed(&mut c, e, bag, &mut b, pose);
+        q.apply(a.world_mut());
+        put.push((id, bag == pack, pose));
+    }
+    let mut seated = Vec::new();
+    for (pouch, id) in pouches.iter().zip(["field_dressing", "ammo_545"]) {
+        let e = spawn(&mut a, id);
+        let mut q =
+            bevy::ecs::system::SystemState::<(Commands, Query<&mut Socket>)>::new(a.world_mut());
+        let (mut c, mut sockets) = q.get_mut(a.world_mut()).unwrap();
+        let mut s = sockets.get_mut(*pouch).unwrap();
+        crate::interact::seat_in_socket(&mut c, e, *pouch, &mut s);
+        q.apply(a.world_mut());
+        seated.push(id);
+    }
+    assert_eq!(seated.len(), 2, "two things in pouches");
+    for _ in 0..5 {
+        a.update();
+    }
+    a.world_mut().write_message(crate::raid::route::Relocate {
+        to: "kettle_pass".into(),
+    });
+    a.update();
+    let _ = crate::take_restart();
+    drop(a);
+    let mut b = game(&path, "kettle_pass");
+    for _ in 0..60 {
+        b.update();
+    }
+    let w = b.world_mut();
+    let catalog = w.resource::<crate::items::Catalog>().clone();
+    let held: Vec<(String, bool, Transform)> = w
+        .query::<(&crate::items::Item, &InBackpack, &Transform)>()
+        .iter(w)
+        .filter_map(|(it, inb, t)| {
+            let bag = w.get::<Backpack>(inb.bag)?;
+            Some((catalog.get(it.kind()).id.clone(), bag.carried, *t))
+        })
+        .collect();
+    let me = w
+        .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+        .single(w)
+        .unwrap();
+    let in_pouches: Vec<(String, bool)> = w
+        .query::<(&crate::items::Item, &InSocket, &Transform)>()
+        .iter(w)
+        .filter_map(|(it, ins, t)| {
+            let s = w.get::<Socket>(ins.socket)?;
+            let mine = w.get::<SocketOwner>(ins.socket).is_some_and(|o| o.0 == me);
+            (mine && matches!(s.kind, SocketKind::Body(_))).then(|| {
+                let sat = t.translation.distance(s.seat.translation) < 0.005
+                    && t.rotation.angle_between(s.seat.rotation) < 0.02;
+                (catalog.get(it.kind()).id.clone(), sat)
+            })
+        })
+        .collect();
+    let _ = std::fs::remove_dir_all(&dir);
+    for (id, in_pack, pose) in &put {
+        let found = held.iter().find(|(i, p, t)| {
+            i == id
+                && p == in_pack
+                && t.translation.distance(pose.translation) < 0.01
+                && t.rotation.angle_between(pose.rotation) < 0.03
+        });
+        assert!(
+            found.is_some(),
+            "{id} arrived in the {} as it lay: {held:?}",
+            if *in_pack { "pack" } else { "crate" }
+        );
+    }
+    for id in &seated {
+        assert!(
+            in_pouches.iter().any(|(i, sat)| i == id && *sat),
+            "{id} arrived seated in a pouch: {in_pouches:?}"
+        );
     }
 }
