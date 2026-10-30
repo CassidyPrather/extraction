@@ -714,8 +714,6 @@ mod tests {
         "guns/sks:",
         "guns/svd:",
         "items/binoculars:",
-        "items/car_bonnet:",
-        "items/car_door:",
         "items/climbing_kit:",
         "items/deployable_cover:",
         "items/emp_grenade:",
