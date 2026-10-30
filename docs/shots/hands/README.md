@@ -118,3 +118,11 @@ eye as when reaching forward): left the third pass's first try, right
 after. The dome meant to close the cuff was scaled about a point back in
 the hand, so it ran in as a funnel and read as a hole; it now closes
 over the arm's end in leather. The third pass also tapers the thumb.
+
+`25_side_opening_pack.jpg` (`--gallery pack`, `pack+side`, flat mode):
+the pack swung off the left shoulder and held in front. Before, it hung
+with its straps to you and opened at the top, the lid thrown back at
+you. Now it's a panel loader: it hangs with its outer face to you,
+tipped up toward the eyes, and opens there. The cavity is lined a shade
+off the canvas, the dressing shows inside, and the front panel (with the
+big pocket on it) folds down from its bottom edge.

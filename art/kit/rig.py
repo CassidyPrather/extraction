@@ -253,12 +253,13 @@ def pack():
     # A panel loader: it opens on its outer face (+Z, away from your back),
     # so held in front of you it's the cavity you see, not the top of the
     # bag (the playtest: "opening from the side, facing you"). Lined in a
-    # pale cloth, so the inside reads as a space and what's in it shows.
+    # grey-green cloth, a shade off the canvas, so the inside reads as a
+    # space and what's in it shows.
     inner = Part("pack_inside")
     w = 0.007
     io = fillet([(-hx + w, -hy + w), (hx - w, -hy + w), (hx - w, hy - w), (-hx + w, hy - w)],
                 0.034, 4)
-    inner.prism(io, -hz + 0.012, hz + 0.05, "Cream", axis="z")
+    inner.prism(io, -hz + 0.012, hz + 0.05, "GreyGreen", axis="z")
     p.cut(inner, paint=True)
     return p
 
