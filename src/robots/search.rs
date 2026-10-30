@@ -744,23 +744,61 @@ fn announce(
 fn log_pulled(
     log: Option<ResMut<crate::sim::telemetry::SimLog>>,
     mut looking: MessageReader<Investigating>,
-    robots: Query<(&Robot, Option<&super::Breed>)>,
+    mut minds: MessageReader<MindShift>,
+    robots: Query<(&Robot, Option<&super::Breed>, &Job)>,
+    time: Res<Time>,
+    // Who answered a call, and when; who's been sent already.
+    mut seen: Local<(
+        std::collections::HashMap<Entity, f32>,
+        std::collections::HashSet<Entity>,
+    )>,
 ) {
+    let now = time.elapsed_secs();
+    let (answered, sent) = &mut *seen;
+    for m in minds.read() {
+        if matches!(m.state, Mind::Answering { .. }) {
+            answered.insert(m.robot, now);
+        }
+    }
+    answered.retain(|_, t| now - *t < PULLED_CALL);
     let Some(mut log) = log else {
         looking.clear();
         return;
     };
     for l in looking.read() {
-        let Ok((robot, breed)) = robots.get(l.robot) else {
+        let Ok((robot, breed, job)) = robots.get(l.robot) else {
             continue;
         };
+        let cause = pulled_cause(
+            job.kind == JobKind::Response && sent.insert(l.robot),
+            answered.contains_key(&l.robot),
+        );
         log.event(
             "pulled",
             serde_json::json!({"robot": super::robot_name(robot.kind, breed),
+                "cause": cause,
                 "from": crate::sim::telemetry::round(flat(l.toward - l.at), 1),
                 "x": crate::sim::telemetry::round(l.at.x, 1),
                 "z": crate::sim::telemetry::round(l.at.z, 1)}),
         );
+    }
+}
+
+/// A call answered this long before a machine goes to look is why it
+/// went (s).
+pub const PULLED_CALL: f32 = 5.0;
+
+/// Why a machine went to look (`pulled`): sent from the Gate (a response
+/// team's first look, "dispatch"), answering another's call ("call"), or
+/// something it heard or glimpsed itself ("noticed": the pull Map design's
+/// openness rules stand on).
+pub fn pulled_cause(dispatched: bool, answered: bool) -> &'static str {
+    if dispatched {
+        "dispatch"
+    } else if answered {
+        "call"
+    } else {
+        "noticed"
     }
 }
 
@@ -846,6 +884,13 @@ fn coming_back(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pull_says_why() {
+        assert_eq!(pulled_cause(true, true), "dispatch");
+        assert_eq!(pulled_cause(false, true), "call");
+        assert_eq!(pulled_cause(false, false), "noticed");
+    }
 
     #[test]
     fn a_search_dwells_sweeps_and_ends() {
