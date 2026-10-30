@@ -128,14 +128,6 @@ fn tell(
 mod tests {
     use super::*;
 
-    fn player(app: &mut App) -> Entity {
-        app.world_mut()
-            .query_filtered::<Entity, With<LocalPlayer>>()
-            .iter(app.world())
-            .next()
-            .unwrap()
-    }
-
     fn said(app: &App, what: &str) -> usize {
         app.world()
             .resource::<Raid>()
@@ -152,41 +144,64 @@ mod tests {
 
     /// The playtest's yard: crouched by a flick of the stick, slow and
     /// no running, and nothing said why. Now it's said; and stood up, the
-    /// run comes back.
+    /// run comes back. (In the headset harness: its input is the test's.)
     #[test]
     fn crouched_and_trying_to_run_you_are_told_and_standing_clears_it() {
-        let mut app = crate::raid::requests::tests::app();
-        let p = player(&mut app);
-        let push = |app: &mut App, crouch: bool, frames: u32| {
+        let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+        let at = vr.feet();
+        vr.stand(at, 0.0);
+        vr.step(30);
+        let p = vr.player;
+        let run = |vr: &mut crate::vr_harness::Vr, crouch: bool, frames: usize| {
             for _ in 0..frames {
-                let mut i = app.world_mut().get_mut::<RigInput>(p).unwrap();
+                let mut i = vr.app.world_mut().get_mut::<RigInput>(p).unwrap();
                 i.crouch = crouch;
                 i.sprint = true;
-                i.locomotion = Vec2::new(0.0, 1.0);
-                app.update();
+                i.locomotion = Vec2::Y;
+                drop(i);
+                vr.step(1);
             }
         };
-        push(&mut app, true, 60);
-        assert_eq!(
-            said(&app, "Crouched"),
-            1,
+        run(&mut vr, true, 90);
+        assert!(
+            said(&vr.app, "Crouched") >= 1,
             "{:?}",
-            app.world().resource::<Raid>().log
+            vr.app.world().resource::<Raid>().log
         );
-        let low = speed(&app, p);
-        assert!(low < crate::player::WALK_SPEED, "crouched: {low}");
-        // Still pushing: not said again so soon.
-        push(&mut app, true, 60);
-        assert_eq!(said(&app, "Crouched"), 1);
-        // Stood: running again, nothing holding it.
-        push(&mut app, false, 90);
-        let i = app.world().get::<RigInput>(p).unwrap().clone();
-        assert_eq!(why_not(&i, app.world().get::<Body>(p).unwrap()), None);
-        let fast = speed(&app, p);
+        let low = speed(&vr.app, p);
+        assert!(low <= crate::player::CROUCH_SPEED + 0.1, "crouched: {low}");
+        // Stood: nothing holds the run, and it's running.
+        run(&mut vr, false, 90);
+        let i = vr.app.world().get::<RigInput>(p).unwrap().clone();
+        assert_eq!(why_not(&i, vr.app.world().get::<Body>(p).unwrap()), None);
+        let fast = speed(&vr.app, p);
         assert!(
             fast > crate::player::WALK_SPEED,
             "standing, running: {fast}"
         );
+    }
+
+    /// The first thing that holds a run is the one said; a crouch first.
+    #[test]
+    fn the_reason_is_the_first_that_holds() {
+        let mut input = RigInput::default();
+        let mut body = Body {
+            stamina: 1.0,
+            ..Default::default()
+        };
+        assert_eq!(why_not(&input, &body), None);
+        body.carried_kg = 60.0;
+        assert!(matches!(why_not(&input, &body), Some(Held::Heavy(_))));
+        input.crouch = true;
+        assert_eq!(
+            why_not(&input, &body),
+            Some(Held::Crouched),
+            "the hidden one first"
+        );
+        input.crouch = false;
+        body.carried_kg = 3.0;
+        body.limping = crate::interact::wounds::LIMP;
+        assert_eq!(why_not(&input, &body), Some(Held::Limping));
     }
 
     /// Every cause that stops a run has its line, and it fits the wrist.

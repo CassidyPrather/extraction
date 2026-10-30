@@ -2852,7 +2852,10 @@ mod onboarding {
         vr.primary(Side::Right, false);
         vr.step(3);
         assert!(done(&vr, Goal::CallTruck), "the call counted");
-        vr.step(((crate::onboarding::HURRY + 1.0) * 90.0) as usize);
+        // (Watched, it pulls in after a moment: `raid::truck::UNSEEN_FOR`.)
+        vr.step(
+            ((crate::onboarding::HURRY + 1.0 + crate::raid::truck::UNSEEN_FOR) * 90.0) as usize,
+        );
         assert!(
             matches!(
                 vr.app.world().resource::<crate::raid::Raid>().phase,
