@@ -131,7 +131,7 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
-                sight: 70.0,
+                sight: 90.0,
                 fov_deg: 320.0,
                 hearing: 1.0,
                 eye: Vec3::new(0.0, -0.08, -0.22),
