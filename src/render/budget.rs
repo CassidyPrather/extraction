@@ -2002,6 +2002,23 @@ pub(crate) mod tests {
                 .get::<Name>(root)
                 .map_or("(unnamed)".to_string(), |n| n.to_string());
             roots.entry(name.clone()).or_default().insert(root);
+            if name == "(unnamed)" && std::env::var_os("CENSUS_COMPONENTS").is_some() {
+                let names: Vec<String> = w
+                    .inspect_entity(*e)
+                    .map(|it| {
+                        it.map(|c| {
+                            c.name()
+                                .to_string()
+                                .rsplit("::")
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                        .collect()
+                    })
+                    .unwrap_or_default();
+                *unnamed.entry(names.join(",")).or_default() += 1;
+            }
             if name == "(unnamed)" {
                 let mut at = *e;
                 let mut own = format!(
