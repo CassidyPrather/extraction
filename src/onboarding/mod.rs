@@ -833,7 +833,6 @@ fn one_thing_to_read(
             (_, Some(OnboardCard::Skip(i))) => Panel::Skip(*i),
             (_, Some(OnboardCard::Push)) => Panel::Settings,
             (_, Some(OnboardCard::StartOver)) => Panel::StartOver,
-            (_, Some(_)) => Panel::Other,
             _ if setting => Panel::SettingsCard,
             _ if list => Panel::List,
             _ if in_the_truck(e) => Panel::Truck,

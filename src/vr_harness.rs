@@ -5545,8 +5545,10 @@ mod vault {
             .next()
             .expect("a truck in the yard")
             .compute_transform();
-        // Facing the truck's front from behind it, a little off its steps.
-        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        // Facing the truck's front from behind it, a little off its steps,
+        // on the left: the bench stands just in on the right, and a climb
+        // there ends on its top.
+        let behind = truck.transform_point(Vec3::new(-0.75, 0.0, 2.25));
         let ground = vr
             .app
             .world()
