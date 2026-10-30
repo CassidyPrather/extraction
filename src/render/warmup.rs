@@ -683,6 +683,7 @@ fn shelve_start(
     mut shelf: ResMut<Shelf>,
     mut commands: Commands,
     gate: Option<Res<crate::rig::xr::SessionGate>>,
+    shown: Option<Res<crate::rig::loading::LoadingView>>,
     proxies: Query<Entity, With<ProxyEye>>,
     // The flat view's (a free camera, or the player's own head's).
     flat: Query<
@@ -725,6 +726,21 @@ fn shelve_start(
         };
     } else if shelf.camera.is_none() && gate.is_none() {
         shelf.camera = flat.iter().min();
+    }
+    // In a headset game the shelf's put away as the world shows: its
+    // restocks touch what every view shares (the visibility ranges' buffer
+    // among it, which the lamp's halo and the trees' fades read), and on
+    // the playtest those two flickered on its 45-frame pulse.
+    if gate.is_some()
+        && shown.is_some_and(|v| v.lifted_at.is_some())
+        && shelf.warm_for > shelf.frame
+    {
+        info!(
+            "warm-up: shelf put away as the world shows ({} frames, {} kinds)",
+            shelf.frame,
+            shelf.kinds.len()
+        );
+        shelf.warm_for = shelf.frame;
     }
     shelf.stocking = false;
     // The world settled: the forest built, the buildings dressed (the
