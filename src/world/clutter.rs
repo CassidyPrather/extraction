@@ -428,7 +428,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
         .find(|v| n.contains(v))?;
     match (valley, prefab) {
         // The shop shut on 13 October: "pay me when you're back".
-        ("marrow", "shop") if here(-16.0, 35.0) => {
+        ("marrow", "shop") if here(-18.2, 3.5) => {
             let f = 0.3;
             things(vec![
                 on("till", Vec3::new(-2.2, f + 0.9, -0.45), 0.1),
@@ -438,20 +438,20 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             ])
         }
         // J., the logging foreman.
-        ("marrow", "cabin_log") if here(-185.0, 190.0) => things(vec![
+        ("marrow", "cabin_log") if here(-110.8, 113.5) => things(vec![
             facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
             on("whetstone", Vec3::new(0.38, cf + 0.785, 0.38), 0.3),
             on("boots", Vec3::new(1.95, cf, 2.2), 0.3),
         ]),
         // Tomas of J.'s crew: his tally on the wall by the bed, as his
         // note has it.
-        ("marrow", "cabin_log") if here(-145.0, 190.0) => things(vec![facing(
+        ("marrow", "cabin_log") if here(-70.8, 113.5) => things(vec![facing(
             "tally_board",
             Vec3::new(-cx, cf + 1.45, 1.0),
             px,
         )]),
         // Ondrej Brabec, the pump keeper, who knocked on wood.
-        ("marrow", "pump_station") if here(-200.0, 22.0) => {
+        ("marrow", "pump_station") if here(-110.0, 12.1) => {
             let f = 0.3;
             things(vec![
                 facing("horseshoe", Vec3::new(0.0, f + 2.3, -4.85), pz),
@@ -1485,10 +1485,10 @@ mod tests {
         let root = crate::asset_root_path();
         let mut map = crate::world::load_map_def("marrow_creek");
         let named_at = [
-            ("marrow", "shop", -16.0, 35.0),
-            ("marrow", "cabin_log", -185.0, 190.0),
-            ("marrow", "cabin_log", -145.0, 190.0),
-            ("marrow", "pump_station", -200.0, 22.0),
+            ("marrow", "shop", -18.2, 3.5),
+            ("marrow", "cabin_log", -110.8, 113.5),
+            ("marrow", "cabin_log", -70.8, 113.5),
+            ("marrow", "pump_station", -110.0, 12.1),
             ("kettle", "house_plank", 76.0, 222.0),
             ("kettle", "house_plank", -99.0, 154.0),
             ("kettle", "house_plank", -42.0, 125.0),

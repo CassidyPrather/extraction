@@ -163,8 +163,7 @@
         // raid walked on past it to the Village).
         (
             name: "Farm track", kind: Dirt, width: 3.0, smoothing: 8.0,
-            points: [(31.0, 137.5), (52.0, 140.5), (80.0, 135.0), (71.2, 130.1), (70.2, 122.4),
-                     (60.5, 124.8), (61.0, 116.8), (74.0, 100.8), (85.0, 86.8)],
+            points: [(24.5, 146.5), (40.0, 136.0), (55.0, 124.0), (70.0, 104.0), (86.0, 90.0)],
         ),
         (
             name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
@@ -321,7 +320,7 @@
         // The pumping station's drowned cellars (assets/underground).
         (prefab: "pump_marrow", at: (-83.0, -6.9), rot: 0.0),
         // The Depot, under the Gate: where the haulers take what they keep.
-        (prefab: "depot_marrow", at: (-126.5, -128.7), rot: 0.0),
+        (prefab: "depot_marrow", at: (-122.0, -123.1), rot: 0.0),
         
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).
@@ -396,6 +395,20 @@
         // Cover within a four-second sprint of every step of the first jobs
         // (map_lint FIRST_RUN): cars abandoned on the verges in the
         // evacuation, and log piles stacked by the ways across the open.
+
+        // Cover within a four-second sprint of every step of the first jobs
+        // (map_lint FIRST_RUN) on the tight valley's ground: the farms' and
+        // the village's wood, stacked by the ways.
+        (prefab: "log_pile", at: (28.3, 128.5), rot: 155.0),
+        (prefab: "log_pile", at: (48.0, 118.0), rot: 336.0),
+        (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
+        (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
+        (prefab: "log_pile", at: (10.5, 11.7), rot: 79.0),
+        (prefab: "log_pile", at: (-1.5, -7.7), rot: 62.0),
+        (prefab: "log_pile", at: (2.5, -23.7), rot: 26.0),
+        (prefab: "log_pile", at: (-12.4, -78.4), rot: 197.0),
+        (prefab: "log_pile", at: (-43.7, 9.5), rot: 92.0),
+        (prefab: "log_pile", at: (-66.5, 7.3), rot: 114.0),
     ],
 
     markers: [
@@ -428,7 +441,7 @@
         (kind: WorkSite, at: (-138.0, -20.0), name: "Forest clearing site"),
         (kind: Poi, at: (-90.8, 93.5), name: "Logging camp"),
         (kind: Poi, at: (99.0, 79.8), name: "Old farm"),
-        (kind: Poi, at: (2.8, 38.5), name: "Village"),
+        (kind: Poi, at: (-12.0, 45.0), name: "Village"),
         (kind: Poi, at: (-110.0, 12.1), name: "Pumping station"),
         (kind: Poi, at: (82.5, -22.0), name: "The Hollow"),
         (kind: Poi, at: (13.8, -117.0), name: "Bus depot"),

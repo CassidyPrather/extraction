@@ -549,7 +549,17 @@ mod probe_grid {
         let text = std::fs::read_to_string(std::env::var("MAP_FILE").unwrap()).unwrap();
         let map = MapDef::from_ron(&text).unwrap();
         let hm = Heightmap::build(&map);
-        let v: Vec<f32> = std::env::var("GRID").unwrap().split(',').map(|s| s.parse().unwrap()).collect();
+        if let Ok(foot) = std::env::var("FOOT") {
+            let v: Vec<&str> = foot.split(',').collect();
+            let at = [v[1].parse().unwrap(), v[2].parse().unwrap()];
+            eprintln!("FOOTING {:.3}", hm.footing(v[0], at, v[3].parse().unwrap()));
+            return;
+        }
+        let v: Vec<f32> = std::env::var("GRID")
+            .unwrap()
+            .split(',')
+            .map(|s| s.parse().unwrap())
+            .collect();
         let (x0, x1, z0, z1, st) = (v[0], v[1], v[2], v[3], v[4]);
         let mut z = z0;
         while z <= z1 {

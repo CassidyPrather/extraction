@@ -33,23 +33,23 @@ pub const PLACES: &[Place] = &[
     by(
         "marrow_creek",
         "tape_practice",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         0.45,
     ),
     by(
         "marrow_creek",
         "cassette_player",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         -0.5,
     ),
     // The south gate booth: the soldier's mix and his player.
-    by("marrow_creek", "tape_duty", [47.50, 284.40], 153.4, 0.3),
+    by("marrow_creek", "tape_duty", [29.50, 162.90], 153.4, 0.3),
     by(
         "marrow_creek",
         "cassette_player",
-        [47.50, 284.40],
+        [29.50, 162.90],
         153.4,
         -0.35,
     ),
