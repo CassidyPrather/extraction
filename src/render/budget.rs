@@ -2092,6 +2092,64 @@ pub(crate) mod tests {
         }
     }
 
+    /// What `blink::head_in_solid` costs at the busy moment's head, and
+    /// what an early-out query would (`cargo test --lib head_query_cost
+    /// -- --ignored --nocapture`).
+    #[test]
+    #[ignore = "bench: prints"]
+    fn head_query_cost() {
+        use avian3d::prelude::*;
+        let mut app = busy_scene("marrow_creek");
+        app.update();
+        let w = app.world_mut();
+        let at = w
+            .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>()
+            .iter(w)
+            .next()
+            .map(|g| g.translation())
+            .expect("a head");
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(w);
+        let spatial = state.get(w).expect("the spatial query");
+        let n = 50;
+        let t0 = std::time::Instant::now();
+        let mut hits = 0;
+        for _ in 0..n {
+            hits += usize::from(super::super::blink::head_in_solid(&spatial, at));
+        }
+        let full = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.shape_intersections_callback(
+                &Collider::sphere(0.09),
+                at,
+                Quat::IDENTITY,
+                &filter,
+                |_| {
+                    any = true;
+                    false
+                },
+            );
+            hits += usize::from(any);
+        }
+        let early = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.point_intersections_callback(at, &filter, |_| {
+                any = true;
+                false
+            });
+            hits += usize::from(any);
+        }
+        let point = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
+             a point {point:.3} ms ({hits} hits)"
+        );
+    }
+
     /// No material many meshes wear is rewritten (nearly) every frame in
     /// a busy moment: each write is every one of them re-specialised on the
     /// main thread. The robots' shared shell was, as the day's light crept
