@@ -707,7 +707,9 @@ thing at a time." In the headset, the truck showed all of these at once, before 
    - "Next: the lit lamp" becomes where, said plainly: "Climb down off the back. The lit lamp
      on the left."
    - The snare gets a ring of little red flags, so "throw a part in" has a target.
-   - The range uses the pistol you carry. There's no second gun on the table.
+   - The range's own pistol stays, but it's the one marked and named ("the table's pistol"):
+     your kit pistol stays holstered. (Emptying the kit pistol for the range would send the
+     first raid out with it unloaded, since the career carries the kit.)
    - *Test:* every goal has a target; while the goal is current, exactly one thing in the yard
      is marked, and it's that target.
 3. **A skill before the moment it's needed.**

@@ -109,10 +109,10 @@ impl Goal {
             Goal::SlideRelease => "Let the slide go",
             Goal::FireAgain => "Fire again",
             Goal::OpenDoor => "Open the door",
-            Goal::Search => "Take what's inside",
+            Goal::Search => "Take the dressing",
             Goal::Wrist => "Read your wrist",
             Goal::Dressing => "Use a dressing",
-            Goal::Probe => "Throw a part in first",
+            Goal::Probe => "A part at the flags",
             Goal::Artifact => "Take the stone",
             Goal::Button => "Push the button",
             Goal::CallTruck => "Call the truck",
@@ -216,6 +216,27 @@ impl Goal {
         }
     }
 
+    /// The one thing the step names, that the yard marks while it's the
+    /// step (`Marked`): something you can see and pick out. `None`: the
+    /// step's about you (a stick, your wrist, what's in your hand).
+    pub fn names(self) -> Option<Names> {
+        Some(match self {
+            Goal::TakePistol => Names::Stash("pm_pistol"),
+            Goal::TakeRadio => Names::Stash("radio"),
+            Goal::Button => Names::SettingsCard,
+            Goal::FarGrab => Names::Placed(Placed::FarBox),
+            Goal::FillMag => Names::Placed(Placed::RangeMag),
+            Goal::SeatMag => Names::Placed(Placed::RangeGun),
+            Goal::Reload => Names::Placed(Placed::SpareMag),
+            Goal::OpenDoor => Names::HouseDoor,
+            Goal::Search => Names::Placed(Placed::HouseFind),
+            Goal::Probe => Names::Snare,
+            Goal::Artifact => Names::Placed(Placed::Stone),
+            Goal::PullCord => Names::Cord,
+            _ => return None,
+        })
+    }
+
     /// What doing it takes that someone new may not have been shown: a
     /// free hand means what was in it has somewhere to go.
     pub fn needs(self) -> &'static [Skill] {
@@ -251,10 +272,10 @@ impl Goal {
     /// How, with the control to use: two short lines at most.
     pub fn how(self, flat: bool) -> &'static str {
         match (self, flat) {
-            (Goal::TakePistol | Goal::TakeRadio, false) => {
-                "Reach into the crate: a\nring marks it. Squeeze GRIP."
-            }
-            (Goal::TakePistol | Goal::TakeRadio, true) => "Look at it in the crate.\nPress E.",
+            (Goal::TakePistol, false) => "The black pistol, ringed\nin the crate. Squeeze GRIP.",
+            (Goal::TakeRadio, false) => "The green radio, ringed\nin the crate. Squeeze GRIP.",
+            (Goal::TakePistol, true) => "The black pistol, ringed\nin the crate. Look. Press E.",
+            (Goal::TakeRadio, true) => "The green radio, ringed\nin the crate. Look. Press E.",
             (Goal::Turn, false) => "Push the right stick left\nor right.",
             (Goal::Turn, true) => "Move the mouse round.",
             (Goal::Crouch, false) => "Squat down, or pull the\nright stick down.",
@@ -267,12 +288,12 @@ impl Goal {
             (Goal::Pocket, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "The box: over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
-            (Goal::FarGrab, false) => "Point at it. Squeeze GRIP.\nFlick your hand back.",
+            (Goal::FarGrab, false) => "Point at the ringed box.\nSqueeze GRIP, flick back.",
             (Goal::FarGrab, true) => "From the fence: look at\nit. Press E.",
             (Goal::FillMag, false) => "Mag in one hand, box in\nthe other. Touch them.",
             (Goal::FillMag, true) => "Mag in one hand, box in\nthe other. Press T.",
-            (Goal::SeatMag, false) => "Pistol in one hand. Push\nthe mag up into the grip.",
-            (Goal::SeatMag, true) => "Pistol in hand. Press R.",
+            (Goal::SeatMag, false) => "Table's pistol in hand. Push\nthe mag up into the grip.",
+            (Goal::SeatMag, true) => "Table's pistol in hand.\nPress R.",
             (Goal::Rack, false) => "Other hand on the slide:\nTRIGGER, pull back, let go.",
             (Goal::Rack, true) => "Pistol in hand. Press V.",
             (Goal::Safety, false) => "Click the stick on the\npistol's hand: safe, fire.",
@@ -291,14 +312,14 @@ impl Goal {
             (Goal::FireAgain, true) => "Right mouse aims.\nLeft mouse fires.",
             (Goal::OpenDoor, false) => "GRIP the door anywhere\nand pull it round.",
             (Goal::OpenDoor, true) => "Look at the door. Press E.",
-            (Goal::Search, false) => "On the crate inside.\nSqueeze GRIP.",
-            (Goal::Search, true) => "On the crate inside.\nLook at it. Press E.",
+            (Goal::Search, false) => "The white roll, ringed on\nthe crate. Squeeze GRIP.",
+            (Goal::Search, true) => "The white roll, ringed on\nthe crate. Look. Press E.",
             (Goal::Wrist, false) => "Raise your watch hand and\nlook at the back of it.",
             (Goal::Wrist, true) => "Hold H to check yourself.",
             (Goal::Dressing, false) => "One hand: circle it round\nthe other forearm 1.5x.",
             (Goal::Dressing, true) => "Hold it. Press U.",
-            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the shimmer.",
-            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo: it's thrown.",
+            (Goal::Probe, false) => "GRIP a part, swing, open\nyour hand at the red flags.",
+            (Goal::Probe, true) => "Hold a part. Hold Q, let\ngo at the red flags.",
             (Goal::Artifact, false) => "Don't step in. Point at\nit, GRIP, flick back.",
             (Goal::Artifact, true) => "From the edge: look at\nit. Press E.",
             (Goal::Button, false) => "Point a finger, TRIGGER\noff. Push the amber cap.",
@@ -310,6 +331,23 @@ impl Goal {
         }
     }
 }
+
+/// A thing a step names (`Goal::names`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Names {
+    /// An item of this id in the truck's crate.
+    Stash(&'static str),
+    Placed(Placed),
+    SettingsCard,
+    HouseDoor,
+    Snare,
+    Cord,
+}
+
+/// Marked for the step that names it: the client rings it with a soft
+/// pulse.
+#[derive(Component, Debug)]
+pub struct Marked;
 
 /// Something you're shown how to do, that later steps rely on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -632,6 +670,9 @@ pub enum Prop {
     Stump,
     /// Two stacks of crates across the track with a beam over the gap.
     LowBeam,
+    /// Little red flags round the training snare: "throw a part in" has
+    /// somewhere to throw it (the playtest threw at the burner).
+    SnareFlags,
 }
 
 /// Things put out for a goal.
@@ -642,6 +683,9 @@ pub enum Placed {
     Stone,
     /// The full magazine on the range table.
     SpareMag,
+    /// The range's own pistol, and its empty magazine.
+    RangeGun,
+    RangeMag,
 }
 
 /// The practice house's doorway (its middle, on the floor), once found.
@@ -705,7 +749,7 @@ impl Plugin for OnboardingPlugin {
                         press_cards,
                     ),
                     announce.after(crate::items::usage::UsageSystems),
-                    (lamps, signs, checklist, one_thing_to_read),
+                    (lamps, signs, checklist, one_thing_to_read, mark_the_step),
                     warn_near_anomalies,
                     hurry_the_truck,
                     out_of_the_truck.after(crate::raid::tick_raid),
@@ -808,6 +852,73 @@ fn one_thing_to_read(
             }
             _ => {}
         }
+    }
+}
+
+/// What the step names, marked, and nothing else (`Goal::names`): the
+/// playtest couldn't tell the radio from the walkie-talkie in a crate of
+/// thirteen things, nor the dressing from a red block, nor where "throw a
+/// part in" meant.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn mark_the_step(
+    mut commands: Commands,
+    ob: Res<Onboarding>,
+    marked: Query<Entity, With<Marked>>,
+    placed: Query<(Entity, &Placed)>,
+    bags: Query<(&Backpack, Has<Stash>)>,
+    items: Query<&Item>,
+    catalog: Res<Catalog>,
+    cards: Query<(Entity, &OnboardCard)>,
+    snares: Query<Entity, With<Probed>>,
+    pressables: Query<(Entity, &Pressable)>,
+    doors: Query<(Entity, &GlobalTransform), With<crate::world::buildings::DoorLeaf>>,
+    buildings: Query<(&Building, &GlobalTransform)>,
+) {
+    let target = ob
+        .next_goal()
+        .and_then(|g| g.names())
+        .and_then(|n| match n {
+            Names::Stash(id) => bags
+                .iter()
+                .filter(|(_, stash)| *stash)
+                .flat_map(|(b, _)| b.contents.iter().copied())
+                .find(|e| {
+                    items
+                        .get(*e)
+                        .is_ok_and(|it| catalog.get(it.kind()).id == id)
+                }),
+            Names::Placed(p) => placed.iter().find(|(_, q)| **q == p).map(|(e, _)| e),
+            Names::SettingsCard => cards
+                .iter()
+                .find(|(_, c)| **c == OnboardCard::Push)
+                .map(|(e, _)| e),
+            Names::Snare => snares.iter().next(),
+            Names::Cord => pressables
+                .iter()
+                .find(|(_, p)| **p == Pressable::BellPull)
+                .map(|(e, _)| e),
+            Names::HouseDoor => {
+                let house = buildings
+                    .iter()
+                    .find(|(b, _)| b.prefab.starts_with("house"))
+                    .map(|(_, g)| g.translation())?;
+                doors
+                    .iter()
+                    .min_by(|a, b| {
+                        a.1.translation()
+                            .distance(house)
+                            .total_cmp(&b.1.translation().distance(house))
+                    })
+                    .map(|(e, _)| e)
+            }
+        });
+    for e in &marked {
+        if Some(e) != target {
+            commands.entity(e).remove::<Marked>();
+        }
+    }
+    if let Some(t) = target.filter(|t| !marked.contains(*t)) {
+        commands.entity(t).try_insert(Marked);
     }
 }
 
@@ -1096,17 +1207,23 @@ fn setup(
     ));
     let top = table + Vec3::Y * (TABLE.y + 0.05);
     let rot = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2);
-    spawn(
+    let gun = spawn(
         &mut commands,
         "pm_pistol",
         Transform::from_translation(top + Vec3::new(-0.35, 0.0, 0.0)).with_rotation(rot),
     );
+    if let Some(e) = gun {
+        commands.entity(e).insert(Placed::RangeGun);
+    }
     let mag = spawn(
         &mut commands,
         "pm_mag",
         Transform::from_translation(top + Vec3::new(0.05, 0.0, 0.05)),
     );
     set_rounds(&mut commands, mag, 0);
+    if let Some(e) = mag {
+        commands.entity(e).insert(Placed::RangeMag);
+    }
     // A full one for running it dry.
     let spare = spawn(
         &mut commands,
@@ -1260,6 +1377,12 @@ fn setup(
             charge: 1.0,
             bloom: None,
         },
+        Transform::from_translation(ground(&zone, SNARE_AT)),
+        Visibility::default(),
+    ));
+    commands.spawn((
+        Name::new("Snare flags"),
+        Prop::SnareFlags,
         Transform::from_translation(ground(&zone, SNARE_AT)),
         Visibility::default(),
     ));
