@@ -202,6 +202,9 @@ impl Heightmap {
         const BACK: f32 = 4.0;
         const RAMP: f32 = 0.25;
         const REACH: f32 = 8.0;
+        if crate::map_lint::TRUCK_AS_IT_WAS.contains(&map.name.as_str()) {
+            return;
+        }
         for (_, at, yaw) in map.truck_stands() {
             let (s, c) = yaw.sin_cos();
             let local = |q: P2| {

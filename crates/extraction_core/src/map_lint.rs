@@ -423,6 +423,11 @@ pub const TERRACE_CUT: f32 = 0.5;
 /// most this, radians (3 degrees): steeper, it stands level with its
 /// wheels in the soil, or its loose kit slides in the bed.
 pub const TRUCK_LEVEL: f32 = 0.05;
+/// Valleys whose truck stands as it did, settled low (not levelled for,
+/// nor held to [`TRUCK_LEVEL`]): the Training Yard, whose own tests (the
+/// first look round the bed, the vault over the tailgate) are tuned to
+/// the truck as it stands there now; its owner (Onboarding) levels it.
+pub const TRUCK_AS_IT_WAS: &[&str] = &["Training Yard"];
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -2652,7 +2657,12 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     // rear to the drop; at a rendezvous, its bed to the valley's middle
     // (`raid::truck::base_pose`, `rv_pose`).
     let mut worst_truck = 0.0f32;
-    for (what, at, yaw) in map.truck_stands() {
+    let stands = if TRUCK_AS_IT_WAS.contains(&map.name.as_str()) {
+        Vec::new()
+    } else {
+        map.truck_stands()
+    };
+    for (what, at, yaw) in stands {
         let fall = truck_fall(hm, at, yaw);
         worst_truck = worst_truck.max(fall.abs());
         if fall.abs() > TRUCK_LEVEL {

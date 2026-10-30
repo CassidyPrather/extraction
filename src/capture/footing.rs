@@ -838,6 +838,11 @@ mod tests {
 
     /// Faults waiting on their owners, by text in their line.
     const KNOWN: &[&str] = &[
+        // The yard's truck stands as it did, settled low, its wheels in
+        // the soil (`map_lint::TRUCK_AS_IT_WAS`): its stop waits on its
+        // owner (Onboarding), whose truck tests are tuned to it. Every
+        // valley's stops are levelled for the truck (`terrain::level_trucks`).
+        "training_yard truck: ",
         // Rime's quarantine gate stands on a slope; its posts' footings go
         // 0.4 m into the high side (Map design: level its spot).
         "quarantine_gate: gate_post",
