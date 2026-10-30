@@ -31,7 +31,7 @@
     cell: 1.0,
     base_height: 96.0,
     noise: (seed: 151, amplitude: 3.5, scale: 110.0, octaves: 5, detail: 0.25),
-    rim: (width: 60.0, height: 14.0),
+    rim: (width: 45.0, height: 14.0),
     fence_inset: 38.0,
     // Thin, clear, cold air.
     haze: Some((0.93, 0.98, 1.08)),
