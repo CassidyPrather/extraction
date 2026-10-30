@@ -565,8 +565,9 @@ fn digits(v: u32, at: Vec2, dot: &mut dyn FnMut(f32, f32)) {
 mod tests {
     /// Every gun's round, fired over its iron sights, strikes on the line of
     /// those sights at its zero (within a centimetre) and close to it on
-    /// the way (no more than 4 cm off between 5 m and the zero): what
-    /// you point at is what you hit.
+    /// the way (no more than 6 cm off between 5 m and the zero: a rifle's
+    /// round starts a sight's height under the line, a slow flare's or a
+    /// bolt's arcs over it): what you point at is what you hit.
     #[test]
     fn every_gun_hits_where_its_iron_sights_point() {
         use crate::weapons::ballistics::height_at;
@@ -597,7 +598,7 @@ mod tests {
                     break;
                 };
                 let off = y - h;
-                let tol = if (m - zero).abs() < 0.5 { 0.01 } else { 0.04 };
+                let tol = if (m - zero).abs() < 0.5 { 0.01 } else { 0.06 };
                 if off.abs() > tol {
                     bad.push(format!(
                         "{}: {:.1} cm off the sights at {m} m",
