@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 2ea48de | 2026-10-30 22:00 | Marrow and Kettle seeds 1-8: 16/16 exit 0, no timeouts; Marrow 4/8 extracted (stucks 30 → 3), Kettle 4/8 (stucks 69 → 55; seed 5 on to_rv at (-55, 170-175), seed 7 underground at (-80, 25-30)) | fast-profile workspace suite: 1227 lib, 353 core, 0 FAILED | Marrow and every-valley gauges 7/7 green (b619140e) |
 | cc4d02c | 2026-10-30 (wave 3 final release check) | 40/40 exit 0, no timeouts, 24 extracted (Cinder 6/8, Rime 6/8, Kettle 5/8, Sallow 5/8, Marrow 2/8); stucks 137 (84 on 887612e; Kettle 69, underground taking); 13/13 contract scenarios; `--check-buildings` 42 checked, 0 flagged, 3 skipped | fast-profile workspace suite: 1217 lib, 353 core, 0 FAILED (51 min). Wave 3's mains c930fa8, 957e6d1, f9543d6, 801a952 green on the same suite | gauges 12/17: the Marrow five (m05_spruce overdraw and fragments after the warp, trees after_a_jump) |
 | 887612e | 2026-10-28 (final release check) | 40/40 exit 0, no timeouts, 23 extracted (Cinder 7/8, Sallow 6/8, Marrow 4/8, Kettle 3/8, Rime 3/8); stucks 84 (65 on 2798e45); 13/13 contract scenarios; `--check-buildings` 46 checked, 0 flagged, 3 skipped; visual_diff from 2798e45: 2 of 10 changed (Marrow's lift grooves back), buildings 18/18 | 1119 lib tests, 0 FAILED, all within budget, 46 min; extraction_core 349 passed; bin and doc tests pass | gauges 17/17 in 758 s |
 | 2798e45 | 2026-10-28 (release check) | 40/40 exit 0, no timeouts, 24 extracted; stucks 65 (145 on 844e46d; Rime 85 → 13, the ore mill); 13/13 scenarios; `--check-buildings` 0 flagged, 3 skipped; visual_diff from 844e46d: the anomaly mark's grooves gone (back in 887612e) | 1068 lib tests, 0 FAILED; 6 over budget (a container 1.38x slower; legibility a_trip_underground 41 → 203 s is real) | gauges 17/17 in 1228 s. lamp_check can't finish in software rendering (~4 h a valley) |
@@ -67,20 +68,20 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of cc4d02c (wave 3's final release check).
+As of 2ea48de.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| render budget marrow (and storm), vr_budget marrow and every_valley: m05_spruce overdraw 10.16 > 10, fragments 65.7M > 64.8M; `world::trees::after_a_jump::gauge_near_trees_in_full_after_a_jump` (no stand 250-400 m off) | Marrow's warp to 388 m | Map design | routed |
-| Sim: Kettle stucks taking underground (seed 2 at (-45..-50, 130-135), seed 8 at (-95, 25-30), seed 5 at (-50..-55, 150-175)); all recover | | Underground | noted |
+| Sim: Kettle stucks: underground taking at (-80..-95, 25-30) across shas; seed 5 on to_rv at (-55, 170-175); all recover | | Underground (routed by the coordinator) | open |
+| Sim: Rime seed 1 dies to the plough (cc4d02c) | | routed by the coordinator | open |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952) | | Weapon feel | routed |
-| Marrow extracts 2/8 after the warp (4/8 before) | balance | Map design | noted |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| the Marrow five after the warp (m05_spruce overdraw and fragments, trees after_a_jump); Marrow's stucks and 2/8 extracts | 2ea48de (b619140e) | Map design |
 | wave 3: the logbook, affordance, legibility's 15th source, buttons_sit_clear, Lev's chair, the build-machine path lint, the cloak, Lev's gifts, the doorway search | c930fa8 | Onboarding, Model correctness, Robot minds, Soak |
 | Rime ore-mill take stucks (per-cell floors for stepped surface buildings), the three `--check-buildings` flags on Rime (probes now skip what they can't see), legibility's a_trip_underground time, the gauge tier's time (758 s) | 2798e45 / 887612e | coordinator, Capture, Legibility, Performance |
 | walkers_go_round_what_hurts_them (the wary grid now closes hazard cells), the Rime adit kiosk counted as indoors | 844e46d | Robot minds, Underground |
