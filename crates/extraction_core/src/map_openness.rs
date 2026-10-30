@@ -499,6 +499,9 @@ mod probe_file {
         let hm = Heightmap::build(&map);
         let walk = crate::map_nav::zone_grid(&map, &hm, crate::map_nav::MAX_SLOPE);
         let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        if std::env::var("LINT").is_ok() {
+            eprintln!("{}", crate::map_lint::lint(&map, &hm).text());
+        }
         let o = openness(&map, &hm, &walk);
         let w = walks(&map, &comfy);
         let mean = w.iter().map(|x| x.2).sum::<f32>() / w.len().max(1) as f32;

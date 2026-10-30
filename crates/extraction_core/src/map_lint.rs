@@ -1585,7 +1585,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for (i, a) in marks.iter().enumerate() {
         for b in marks.iter().skip(i + 1) {
             let apart = a.apart(b);
-            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT * k {
+            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT {
                 find(
                     &mut r,
                     Rule::Landmark,
