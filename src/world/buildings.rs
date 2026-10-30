@@ -48,6 +48,31 @@ pub struct DoorDef {
     pub mat: Mat,
 }
 
+/// How far a shell window's sill board reaches into the room past the
+/// wall's inner face (m): a ledge a radio or a globe stands on, its back
+/// against the frame (`window_sash`'s frame is [`SASH_FRAME`] deep).
+pub const SILL_IN: f32 = 0.23;
+/// The window frame's depth either side of the wall's centre line (m).
+pub const SASH_FRAME: f32 = 0.035;
+
+/// A window's sill, inside a building's shell: what clutter stands on
+/// (`clutter`), building-local.
+#[derive(Clone, Copy, Debug)]
+pub struct Sill {
+    /// Its top, on the wall's centre line at the window's middle.
+    pub at: Vec3,
+    /// The window's width.
+    pub len: f32,
+    /// The wall's turn: its local +X along the wall, +Z into the room.
+    pub rot: Quat,
+    /// Its ledge, from the frame's room face to the board's edge, as
+    /// distances into the room from the centre line; the wall's inner
+    /// face between (outside the opening, the wall stands there).
+    pub back: f32,
+    pub inner: f32,
+    pub edge: f32,
+}
+
 /// A modelled prop (`art/props`, see `render::world_props`) drawn in place
 /// of some of a recipe's pieces. Their colliders, surfaces and loot spots
 /// stay as they are; only their boxes' meshes give way, and only once every
@@ -96,6 +121,9 @@ pub struct Geo {
     /// The floor walked on inside, building-local y, where it isn't a
     /// door's sill (a drowned house's silt: it has no doors left).
     pub floor: Option<f32>,
+    /// Its shell's windows' sills, front (-Z) wall first and on round
+    /// as `Builder::shell` builds the walls.
+    pub sills: Vec<Sill>,
 }
 
 /// What a breakable thing is.
@@ -259,6 +287,32 @@ impl Builder {
         self
     }
 
+    /// A window's sill board, its middle `at` (the opening's foot on the
+    /// wall's centre line): 4 cm out past the wall's outer face; in a
+    /// shell, whose walls' +Z is the room, [`SILL_IN`] into the room (a
+    /// ledge things stand on, kept in `Geo::sills`), elsewhere 4 cm.
+    fn sill(&mut self, at: Vec3, width: f32, rot: Quat, thick: f32, mat: Mat) {
+        let out = thick * 0.5 + 0.04;
+        let edge = thick * 0.5 + if self.exterior { SILL_IN } else { 0.04 };
+        self.piece(
+            Shape::Box(Vec3::new(width + 0.1, 0.05, out + edge)),
+            Transform::from_translation(at + rot * Vec3::Z * ((edge - out) * 0.5))
+                .with_rotation(rot),
+            mat,
+            false,
+        );
+        if self.exterior {
+            self.geo.sills.push(Sill {
+                at: at + Vec3::Y * 0.025,
+                len: width,
+                rot,
+                back: SASH_FRAME,
+                inner: thick * 0.5,
+                edge,
+            });
+        }
+    }
+
     pub fn bx(&mut self, size: Vec3, centre: Vec3, mat: Mat) -> &mut Self {
         self.piece(
             Shape::Box(size),
@@ -405,12 +459,7 @@ impl Builder {
                             false,
                         );
                     }
-                    self.piece(
-                        Shape::Box(Vec3::new(o.width + 0.1, 0.05, thick + 0.08)),
-                        Transform::from_translation(mid + Vec3::Y * o.bottom).with_rotation(rot),
-                        frame,
-                        false,
-                    );
+                    self.sill(mid + Vec3::Y * o.bottom, o.width, rot, thick, frame);
                 }
                 OpeningKind::Window => {
                     let from = self.geo.pieces.len();
@@ -483,12 +532,7 @@ impl Builder {
                             });
                         }
                     }
-                    self.piece(
-                        Shape::Box(Vec3::new(o.width + 0.1, 0.05, thick + 0.08)),
-                        Transform::from_translation(mid + Vec3::Y * o.bottom).with_rotation(rot),
-                        frame,
-                        false,
-                    );
+                    self.sill(mid + Vec3::Y * o.bottom, o.width, rot, thick, frame);
                 }
                 OpeningKind::Door => {
                     // Jambs standing a little proud of the wall either
@@ -1721,8 +1765,9 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
         std::f32::consts::PI,
     );
     b.chair(Vec3::new(-x * 0.4 + 0.25, f, -z * 0.2 + 0.6), 0.1);
+    // Between the front wall and the +X wall's window, not before it.
     b.shelf(
-        Vec3::new(x - 0.3, f, -z * 0.4),
+        Vec3::new(x - 0.3, f, -z * 0.75),
         std::f32::consts::FRAC_PI_2,
         Some("house"),
     );
@@ -1734,7 +1779,8 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
         Some("kitchen"),
     );
     b.stove(Vec3::new(-x * 0.35, f, z - 0.45), 0.0);
-    b.shelf(Vec3::new(-x * 0.6, f, z - 0.3), 0.0, Some("kitchen"));
+    // In the corner past the counter's end, clear of the back window.
+    b.shelf(Vec3::new(-x + 0.6, f, z - 0.3), 0.0, Some("kitchen"));
     // Bedroom (back right).
     b.bed(Vec3::new(x - 0.6, f, z - 1.2), 0.0);
     b.crate_box(Vec3::new(x * 0.35, f, z - 0.5), 0.5, Some("house"));
@@ -1942,7 +1988,7 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
         b.bx(Vec3::new(1.2, 0.3, 0.7), at + Vec3::Y * 0.15, Mat::Timber);
         b.dress(from, vec![("table_burnt", Transform::from_translation(at))]);
         b.locker(
-            Vec3::new(x - 0.35, f, -z * 0.5),
+            Vec3::new(x - 0.35, f, -z * 0.75),
             -std::f32::consts::FRAC_PI_2,
         );
         b.loot(Vec3::new(x * 0.35, f + 0.05, z - 0.5), "house");

@@ -319,7 +319,8 @@ def cloth_pinned():
 
 def radio_set():
     """A home-built wireless on a sill, its headphones on it and its aerial
-    lead out of the window behind it: 0.42 x 0.25 x 0.22, its dials -Z."""
+    lead up the window behind it to the vent: 0.42 x 0.25 x 0.22, its
+    dials -Z."""
     p = Part("static")
     p.box((0.42, 0.22, 0.22), (0, 0.11, 0), "Timber", bevel=0.006, segs=1)
     p.box((0.38, 0.17, 0.004), (0, 0.12, -0.111), "Black")
@@ -335,9 +336,11 @@ def radio_set():
         a0, a1 = math.pi * k / n, math.pi * (k + 1) / n
         rod(p, (-0.07 * math.cos(a0), 0.24 + 0.05 * math.sin(a0), 0.05),
             (-0.07 * math.cos(a1), 0.24 + 0.05 * math.sin(a1), 0.05), 0.004, "Steel", segs=4)
-    # The aerial lead out of its back to the window frame, sagging.
-    rod(p, (0.18, 0.18, 0.11), (0.3, 0.25, 0.2), 0.002, "Rope", segs=3)
-    rod(p, (0.3, 0.25, 0.2), (0.45, 0.4, 0.22), 0.002, "Rope", segs=3)
+    # The aerial lead out of its back to the casement behind it, and up
+    # its face to the vent pane (the set's back stands 9 cm off the frame
+    # on a sill's ledge, `clutter::Ledge`).
+    rod(p, (0.15, 0.18, 0.11), (0.15, 0.24, 0.153), 0.002, "Rope", segs=3)
+    rod(p, (0.15, 0.24, 0.153), (0.15, 0.85, 0.153), 0.002, "Rope", segs=3)
     return [p]
 
 
