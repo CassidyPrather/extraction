@@ -240,7 +240,7 @@
         name: "Stone pickers",
         // Someone who went into the ash pit for the stones and didn't come
         // up: their mate's kit at the rim.
-        at: (-108.4, 35.4),
+        at: (-108.0, 4.0),
         rot: 270.0,
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.7),

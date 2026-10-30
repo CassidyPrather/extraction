@@ -1106,7 +1106,7 @@ mod tests {
                 for (i, b) in herd.beasts.iter().enumerate() {
                     assert!(
                         open(&nav, &zone, b.pos.xz()),
-                        "{map}: beast {i} somewhere it can't be at {:.1}",
+                        "{map}: beast {i} somewhere it can't be at {:.1} step {step}",
                         b.pos
                     );
                     assert!(
