@@ -152,10 +152,19 @@ guard = catmull([(-0.033, 0.004), (-0.038, -0.006), (-0.034, -0.017), (-0.02, -0
 static.sweep(guard, section_rect(0.0065, 0.003, 0.001, 3), "Blued")
 
 # Grip: smooth walnut panels on a bird's-head frame, the lanyard ring at
-# the butt.
-grip_prof = catmull([(0.0005, 0.006), (-0.008, -0.03), (-0.008, -0.06), (0.003, -0.08),
-                     (0.02, -0.084), (0.031, -0.075), (0.031, -0.05), (0.022, -0.012),
-                     (0.016, 0.006)], samples=4)
+# the butt. Below the heel of the palm the grip rakes back (RAKE metres
+# back per metre down from RAKE_Y), as an M1895's does, to its 235 mm:
+# the palm's part of it, and so the hold and the aim, stay put.
+RAKE, RAKE_Y = 0.42, -0.025
+
+
+def raked(pts):
+    return [(z + RAKE * max(0.0, RAKE_Y - y), y) for z, y in pts]
+
+
+grip_prof = catmull(raked([(0.0005, 0.006), (-0.008, -0.03), (-0.008, -0.06), (0.003, -0.08),
+                           (0.02, -0.084), (0.031, -0.075), (0.031, -0.05), (0.022, -0.012),
+                           (0.016, 0.006)]), samples=4)
 
 
 def grip_w(z, y):
@@ -181,19 +190,20 @@ def grip_x(z, y):
     return grip_w(z, y)[1]
 
 
-grip_check.checkering(gc, grip_x, None, None, (-0.006, 0.026, -0.07, -0.012), pitch=0.0022,
+grip_check.checkering(gc, grip_x, None, None, (-0.006, 0.046, -0.07, -0.012), pitch=0.0022,
                       depth=0.0005, mat="Wood")
 grip.cut(gc)
 # The grip's frame strap down the back, the butt cap, and the lanyard ring.
-static.prism(fillet([(0.016, 0.006), (0.031, -0.05), (0.031, -0.075), (0.02, -0.0845),
-                     (0.019, -0.081), (0.027, -0.074), (0.027, -0.052), (0.013, 0.006)],
+static.prism(fillet(raked([(0.016, 0.006), (0.031, -0.05), (0.031, -0.075), (0.02, -0.0845),
+                           (0.019, -0.081), (0.027, -0.074), (0.027, -0.052), (0.013, 0.006)]),
                     [0.002, 0.006, 0.006, 0.003, 0.0, 0.004, 0.006, 0.002], 3),
              -0.004, 0.004, "Blued", axis="x")
-static.sweep([(0.024 + 0.0055 * math.cos(a), -0.088 + 0.0055 * math.sin(a))
+BUTT_Z = 0.024 + RAKE * (RAKE_Y + 0.088)
+static.sweep([(BUTT_Z + 0.0055 * math.cos(a), -0.088 + 0.0055 * math.sin(a))
               for a in [2 * math.pi * i / 24 for i in range(24)]],
              section_rect(0.0018, 0.0018, 0.0006, 3), "Steel", closed=True)
-static.box((0.004, 0.006, 0.004), (0, -0.0835, 0.024), "Steel", bevel=0.001, segs=3)
-static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, -0.0825, 0.024) @ RY(math.pi / 2))
+static.box((0.004, 0.006, 0.004), (0, -0.0835, BUTT_Z), "Steel", bevel=0.001, segs=3)
+static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, -0.0825, BUTT_Z) @ RY(math.pi / 2))
 
 # --- Cylinder (turns about its axis) --------------------------------------------------
 cyl = Part("cylinder", origin=(0.0, CYL_Y, 0.0))
