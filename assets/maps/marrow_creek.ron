@@ -78,7 +78,7 @@
         Plateau(polygon: [(-135.0, -5.9), (-85.0, -5.9), (-85.0, 30.1), (-135.0, 30.1)], blend: 16.5),
         Plateau(polygon: [(44.0, -136.0), (159.0, -133.1), (158.5, -72.8), (52.8, -88.1)], blend: 13.8),
         Plateau(polygon: [(-21.2, -137.0), (43.8, -137.0), (43.8, -92.3), (-21.2, -92.6)], blend: 11.0),
-        Plateau(polygon: [(-146.0, -86.1), (-137.5, -100.5), (-139.5, -76.3), (-161.3, -73.5)], blend: 11.0),
+        Plateau(polygon: [(-156.0, -92.0), (-136.0, -92.0), (-136.0, -72.0), (-156.0, -72.0)], blend: 11.0),
         Plateau(polygon: [(-175.9, -173.1), (-107.0, -174.1), (-107.0, -114.1), (-177.0, -114.1)], blend: 8.2),
         // The survey post's pad on the Hollow's north rim.
         Plateau(polygon: [(28.8, 5.8), (42.5, 8.0), (43.6, 22.8), (36.6, 14.4)], blend: 6.6),
@@ -112,16 +112,12 @@
         // Farm track down to the ford and up the far side to the Hollow and the rail yard.
         (
             name: "Ford track", kind: Dirt, width: 3.5, smoothing: 10.0,
-            points: [(94.0, 74.8), (79.2, 25.3), (82.5, 30.7), (82.5, 33.0), (110.5, 6.0),
-                     (130.5, -42.0), (112.4, -65.5), (103.3, -60.9), (95.0, -88.8)],
+            points: [(94.0, 74.8), (88.0, 50.0), (100.0, 22.0), (116.0, -6.0), (128.0, -40.0), (112.4, -65.5), (95.0, -88.8)],
         ),
         // Service road from the bus depot to the radio mast.
         (
             name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
-            points: [(3.8, -67.1), (-11.1, -68.5), (-17.2, -66.7), (-23.4, -38.0),
-                     (-37.4, -24.7), (-55.9, -49.4), (-72.3, -65.0), (-81.2, -80.6),
-                     (-85.9, -85.8), (-83.0, -87.8), (-72.0, -94.8), (-62.0, -94.8),
-                     (-54.0, -83.8)],
+            points: [(6.0, -70.0), (-17.2, -66.7), (-28.0, -46.0), (-44.0, -40.0), (-60.0, -54.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
         ),
         // The ranger's path: off the forest path at the footbridge, north
         // under the ridge to the tower. With the logging road and the forest
@@ -136,7 +132,7 @@
         // worn by the convoys.
         (
             name: "Haulers' track", kind: Dirt, width: 4.0, smoothing: 10.0,
-            points: [(-138.0, -136.1), (-130.0, -132.1), (-123.0, -129.1)],
+            points: [(-140.0, -137.0), (-133.0, -134.0)],
         ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
@@ -166,8 +162,7 @@
         ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-85.7, 63.5), (-86.7, 67.0), (-88.6, 64.9), (-95.0, 35.1), (-90.0, -1.9),
-                     (-88.9, -15.1), (-89.9, -17.0), (-77.6, -49.1), (-56.2, -41.7), (-38.6, -26.3)],
+            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.0, -13.5), (-88.5, -25.5), (-87.0, -37.5), (-77.6, -49.1), (-56.2, -41.7), (-38.6, -26.3)],
             bridges: [(at: (-88.5, -25.5), length: 24.0)],
         ),
     ],
@@ -278,7 +273,7 @@
         // The checkpoint's radio mast at the south gate.
         (prefab: "radio_mast", at: (74.2, 151.2), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
-        (prefab: "mill_race", at: (-60.0, 100.0), rot: 0.0),
+        (prefab: "mill_race", at: (-30.0, 125.0), rot: 90.0),
         // The Old farm's wood stores across the field from the drop: cover
         // every 25 m or so on the way a newcomer walks to the first job.
         // A roof to get under on the first walks (only a roof hides you
@@ -324,7 +319,7 @@
         // Roofs on the mast relay's way past the pumping station, for a newcomer
         // a drone has locked onto: the station's tool shed where the Ranger's
         // path leaves it, and the rangers' store on the path below the mast road.
-        (prefab: "shed", at: (-84.0, -38.0), rot: 270.0, tag: "pump_tool_shed"),
+        (prefab: "shed", at: (-74.0, -34.0), rot: 270.0, tag: "pump_tool_shed"),
         (prefab: "shed", at: (-99.2, -65.6), rot: 270.0, tag: "rangers_store"),
         // And the road-menders' hut on the district road, the mast relay's
         // other way, half way from the creek bridge to the mast road.
@@ -346,12 +341,12 @@
         (prefab: "shed", at: (24.8, -139.0), rot: 306.0, tag: "bus_shelter"),
         (prefab: "radio_mast", at: (-54.0, -78.8), rot: 0.0),
         (prefab: "mast_hut", at: (-46.0, -63.8), rot: 30.0),
-        (prefab: "rail_shed", at: (95.0, -108.8), rot: 10.0),
+        (prefab: "rail_shed", at: (95.0, -104.0), rot: 10.0),
         (prefab: "shed", at: (133.5, -125.8), rot: 313.0, tag: "platelayers_hut"),
         // The yard's water tower: the landmark you see the yard by.
         (prefab: "water_tower", at: (142.0, -94.8), rot: 0.0),
         (prefab: "boxcar", at: (59.4, -134.5), rot: 114.6),
-        (prefab: "ranger_tower", at: (-151.2, -91.6), rot: 0.0),
+        (prefab: "ranger_tower", at: (-146.0, -82.0), rot: 0.0),
         (prefab: "robot_gate", at: (-142.0, -144.1), rot: 45.0),
 
         // Gardens (Destruction's breakable fence_garden, four plank panels
@@ -399,11 +394,11 @@
         (kind: ShortExfil, at: (28.0, 154.5), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (13.8, -147.0), name: "Bus depot"),
         (kind: Rendezvous, at: (125.0, -133.8), name: "Rail yard"),
-        (kind: Rendezvous, at: (-104.3, -56.0), name: "Ranger tower"),
+        (kind: Rendezvous, at: (-108.0, -50.0), name: "Ranger tower"),
         (kind: RobotGate, at: (-142.0, -144.1), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 60.0, power: Some((-141.1, -146.3))), at: (-129.0, -139.3), rot: -20.0, name: "Depot sentry"),
+        (kind: Sentry(arc: 60.0, power: Some((-133.1, -138.0))), at: (-121.0, -131.0), rot: -20.0, name: "Depot sentry"),
         (kind: Sentry(arc: 140.0, power: Some((81.4, -58.4))), at: (71.5, -48.5), rot: -15.0, name: "Hollow sentry"),
         // A spotter over the open ground the road north crosses to the
         // depot and the yard: an alarm, not a gun, where nothing else
@@ -439,7 +434,7 @@
         (kind: Loot(table: "workshop"), at: (-103.8, 75.5), name: "Sawmill lock-up"),
         (kind: Loot(table: "tools"), at: (-87.8, 105.5), name: "Logger's chest"),
         (kind: Loot(table: "medical"), at: (-98.0, 24.1), name: "Pump keeper's store"),
-        (kind: Loot(table: "ammo_common"), at: (-78.0, -44.0), name: "Footbridge cache"),
+        (kind: Loot(table: "ammo_common"), at: (-66.0, -36.0), name: "Footbridge cache"),
         // Clear of the depot's service-stair kiosk just north of it.
         (kind: Loot(table: "ammo_common"), at: (-157.4, -82.2), name: "Ranger's ammo box"),
         (kind: Loot(table: "driver_cache"), at: (46.4, -133.7), name: "Driver's cache"),
