@@ -253,6 +253,11 @@ pub fn run(opts: LaunchOptions) -> AppExit {
     if opts.headless {
         return run_headless(opts);
     }
+    // A capture with textures missing would shoot flat fallbacks.
+    if let Err(e) = capture::assets::ready_for(&opts) {
+        eprintln!("ERROR {e}");
+        std::process::exit(2);
+    }
     let mut app = App::new();
     let window = Window {
         title: "Extraction".into(),

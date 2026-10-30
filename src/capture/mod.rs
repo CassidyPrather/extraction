@@ -14,6 +14,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
+pub mod assets;
 pub mod checks;
 pub mod cinematic;
 pub mod fighting;
