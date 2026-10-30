@@ -115,7 +115,9 @@ fn dress_sentries(
                             m.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
                         })
                     }
-                    (Some(n), _) => model_mats.get(n, &mut lib, &server, materials),
+                    (Some(n), _) => {
+                        model_mats.get(super::weak_points::paint(n), &mut lib, &server, materials)
+                    }
                     (None, _) => model_mats.get("Dark", &mut lib, &server, materials),
                 };
                 let mut ec =

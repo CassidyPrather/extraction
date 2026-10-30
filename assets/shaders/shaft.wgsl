@@ -3,7 +3,8 @@
 // the light (`world::shafts`). No raymarch: each card is soft at its edges,
 // fades out as it turns edge-on (so the cards never show as planes), is
 // brightest looking toward the sun (light scatters forward in haze), and
-// thins with distance.
+// thins with distance. No fog: additive, so fog's colour would be added
+// onto the room behind it; it thins with distance itself.
 //
 // uv.x runs across a card (0..1), uv.y along the light (0 where it comes
 // in, 1 where it ends).
@@ -40,7 +41,14 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let far = 1.0 - smoothstep(shaft.sun.w * 0.6, shaft.sun.w, dist);
     // Close to, a card would fill the view: fade it as you walk into it.
     let near = smoothstep(0.6, 2.5, dist);
-    let k = edge * length_fade * facing * forward * far * near * shaft.color.w;
+    // Out just above the floor it lands on (UV1.x, world y): a card cut
+    // off by the floor drew a bright line there, and three crossed cards
+    // an asterisk.
+    var floor = 1.0;
+#ifdef VERTEX_UVS_B
+    floor = smoothstep(in.uv_b.x, in.uv_b.x + 0.7, in.world_position.y);
+#endif
+    let k = edge * length_fade * facing * forward * far * near * floor * shaft.color.w;
     // Alpha 0: the blend is premultiplied, so this adds.
     return vec4<f32>(shaft.color.rgb * k * view.exposure, 0.0);
 }

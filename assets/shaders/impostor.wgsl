@@ -2,7 +2,8 @@
 // face the eye, standard
 // PBR, alpha-tested (or alpha to coverage: `trees::foliage_alpha`). Within the near cut of the tree's base (carried in
 // UV1; horizontal distance, as the cards are cut) the real cards are drawn
-// instead: the whole tree swaps at once.
+// instead, the two dithered against each other across a band
+// (`impostors::LOD_BAND`).
 
 #import bevy_pbr::{
     mesh_functions,
@@ -54,7 +55,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #endif
 #ifdef VERTEX_UVS_B
     out.uv_b = vertex.uv_b;
-    if (distance(view.world_position.xz, vertex.uv_b) < cut.x) {
+    if (distance(view.world_position.xz, vertex.uv_b) < cut.x - cut.y) {
         out.position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
 #endif
@@ -78,10 +79,19 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     return out;
 }
 
+// A fixed pattern over the screen's pixels (interleaved gradient noise):
+// the impostor's pixels where it's under the fade, the cards' the rest.
+fn lod_dither(px: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(floor(px), vec2<f32>(0.06711056, 0.00583715))));
+}
+
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
 #ifdef VERTEX_UVS_B
-    if (distance(view.world_position.xz, in.uv_b) < cut.x) {
+    // Across the band, dithered in as the cards dither out (the same
+    // pattern, the other side of it: `tree_sway.wgsl`).
+    let f = smoothstep(cut.x - cut.y, cut.x + cut.y, distance(view.world_position.xz, in.uv_b));
+    if (lod_dither(in.position.xy) >= f) {
         discard;
     }
 #endif

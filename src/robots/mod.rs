@@ -68,6 +68,7 @@ pub mod subjects;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
+pub mod weak_points;
 pub mod weathering;
 pub mod wreck;
 
@@ -317,7 +318,7 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
-            .add_plugins(hazard_look::HazardLookPlugin)
+            .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
             .add_systems(
                 FixedUpdate,
                 (damage_parts, senses::door_noise, perceive, wreck_loot)
