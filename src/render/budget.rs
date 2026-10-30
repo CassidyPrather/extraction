@@ -2148,6 +2148,38 @@ pub(crate) mod tests {
             "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
              a point {point:.3} ms ({hits} hits)"
         );
+        // Which colliders a head-sized box reaches, and the sphere test's
+        // cost against each alone.
+        let r = Vec3::splat(0.09);
+        let near = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        println!("  {} colliders' boxes reach the head's", near.len());
+        let names: Vec<(Entity, String)> = near
+            .iter()
+            .map(|e| {
+                let n = w
+                    .get::<Name>(*e)
+                    .map_or("(unnamed)".to_string(), |n| n.to_string());
+                let kind = w
+                    .get::<Collider>(*e)
+                    .map_or("?".to_string(), |c| format!("{:?}", c.shape().shape_type()));
+                (*e, format!("{n} [{kind}]"))
+            })
+            .collect();
+        for (e, name) in names {
+            let filter = SpatialQueryFilter::default().with_mask(LayerMask::ALL);
+            let only = |x: Entity| x == e;
+            let t0 = std::time::Instant::now();
+            for _ in 0..10 {
+                let _ = spatial
+                    .shape_intersections(&Collider::sphere(0.09), at, Quat::IDENTITY, &filter)
+                    .into_iter()
+                    .filter(|x| only(*x))
+                    .count();
+            }
+            let ms = t0.elapsed().as_secs_f64() * 100.0;
+            println!("    {name}: (whole query) {ms:.3} ms");
+            break;
+        }
     }
 
     /// No material many meshes wear is rewritten (nearly) every frame in
