@@ -1965,6 +1965,82 @@ pub(crate) mod tests {
         }
     }
 
+    /// No material many meshes wear is rewritten (nearly) every frame in
+    /// a busy moment: each write is every one of them re-specialised on the
+    /// main thread. The robots' shared shell was, as the day's light crept
+    /// (1.4 ms a frame of `check_entities_needing_specialization` in
+    /// Marrow Creek's busy moment, with tracing).
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_no_shared_material_rewritten_each_frame() {
+        let _counting = counted();
+        let mut app = busy_scene("marrow_creek");
+        let keep_alive = crate::perf::fight::keep_alive;
+        let frames = 20;
+        let mut writes: HashMap<AssetId<StandardMaterial>, usize> = HashMap::new();
+        // What a rewritten material's write changed (its fields, as Debug
+        // shows them), for the failure to say which writer it is.
+        let mut before: HashMap<AssetId<StandardMaterial>, String> = HashMap::new();
+        let mut what: HashMap<AssetId<StandardMaterial>, std::collections::BTreeSet<String>> =
+            HashMap::new();
+        for _ in 0..frames {
+            keep_alive(&mut app);
+            app.update();
+            let w = app.world_mut();
+            for (id, m) in w.resource::<Assets<StandardMaterial>>().iter() {
+                let now = format!("{m:?}");
+                if let Some(old) = before.get(&id).filter(|o| **o != now) {
+                    let diff = now
+                        .split(", ")
+                        .filter(|f| !old.split(", ").any(|g| g == *f))
+                        .map(|f| f.split(':').next().unwrap_or(f).trim().to_string());
+                    what.entry(id).or_default().extend(diff);
+                }
+                before.insert(id, now);
+            }
+            let ids: std::collections::HashSet<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                *writes.entry(id).or_default() += 1;
+            }
+        }
+        let w = app.world_mut();
+        let mut wrong = Vec::new();
+        for (id, n) in writes {
+            if n * 4 < frames * 3 {
+                continue;
+            }
+            let users: Vec<Entity> = w
+                .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                .iter(w)
+                .filter(|(_, m)| m.0.id() == id)
+                .map(|(e, _)| e)
+                .collect();
+            if users.len() < 4 {
+                continue;
+            }
+            let name = w
+                .get::<Name>(users[0])
+                .or_else(|| {
+                    w.get::<ChildOf>(users[0])
+                        .and_then(|p| w.get::<Name>(p.parent()))
+                })
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            wrong.push(format!(
+                "{name}'s material ({} meshes) written in {n} of {frames} frames, changing {:?}",
+                users.len(),
+                what.get(&id)
+            ));
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
     /// A busy moment in Marrow Creek holds its CPU budget: the frame in
     /// reference units (`CPU_FRAME_UNITS`), each schedule its share
     /// (`CPU_SHARE`).
