@@ -98,7 +98,12 @@ pub fn seat_lift(
             seat.window[0] = seat.window[0].max(raw);
             seat.high = seat.window.iter().copied().fold(0.0, f32::max);
         } else {
-            *seat = Seat::default();
+            // Not seated: no seated height (the lift eases on, for a
+            // standing crouch, or back to none).
+            *seat = Seat {
+                lift: seat.lift,
+                ..Default::default()
+            };
         }
         let target = if on {
             let eye = if input.crouch {
