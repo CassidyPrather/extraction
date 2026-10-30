@@ -544,39 +544,39 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 26.6,
+    "step": 23.6,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 31.5,
+    "step": 23.8,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 25.0,
+    "step": 23.7,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 24.4,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 27.3,
-    "slip": 0.2,
-    "ok": true
-   },
-   {
-    "step": 24.6,
+    "step": 24.5,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 27.6,
+    "step": 23.5,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 25.1,
+    "step": 21.7,
     "slip": 0.0,
     "ok": true
    }
@@ -589,39 +589,39 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 16.6,
-    "slip": 0.2,
-    "ok": true
-   },
-   {
-    "step": 19.4,
-    "slip": 0.2,
-    "ok": true
-   },
-   {
     "step": 14.6,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 14.2,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 13.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 16.6,
+    "step": 14.3,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 14.7,
+    "step": 14.2,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 22.3,
+    "step": 20.0,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 17.3,
+    "step": 15.2,
     "slip": 0.0,
     "ok": true
    }
@@ -634,39 +634,39 @@
   "condition": "downpour",
   "lines": [
    {
-    "step": 20.3,
+    "step": 15.4,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 24.1,
+    "step": 14.7,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 17.3,
+    "step": 14.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 20.1,
-    "slip": 0.2,
+    "step": 14.6,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 17.1,
+    "step": 14.9,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 23.3,
+    "step": 19.6,
     "slip": 0.0,
     "ok": true
    },
    {
-    "step": 19.4,
+    "step": 15.8,
     "slip": 0.0,
     "ok": true
    }
@@ -679,40 +679,40 @@
   "condition": "night",
   "lines": [
    {
-    "step": 32.9,
-    "slip": 0.2,
+    "step": 20.1,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 38.1,
-    "slip": 0.2,
+    "step": 20.0,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 26.9,
-    "slip": 0.2,
+    "step": 19.2,
+    "slip": 0.4,
     "ok": true
    },
    {
-    "step": 31.7,
-    "slip": 0.2,
+    "step": 19.4,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 25.6,
-    "slip": 0.2,
+    "step": 18.1,
+    "slip": 0.4,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 34.2,
-    "slip": 0.1,
+    "step": 18.1,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 30.1,
-    "slip": 0.1,
+    "step": 18.2,
+    "slip": 0.3,
     "ok": true
    }
   ],
@@ -724,39 +724,39 @@
   "condition": "clear",
   "lines": [
    {
-    "step": 24.2,
+    "step": 26.1,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 28.0,
+    "step": 28.4,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 24.8,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 27.8,
+    "step": 23.7,
     "slip": 0.2,
     "ok": true
    },
    {
-    "step": 28.1,
+    "step": 28.7,
+    "slip": 0.2,
+    "ok": true
+   },
+   {
+    "step": 28.9,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 28.4,
+    "step": 33.7,
     "slip": 0.1,
     "ok": true
    },
    {
-    "step": 29.4,
+    "step": 31.0,
     "slip": 0.1,
     "ok": true
    }
@@ -769,39 +769,39 @@
   "condition": "fog",
   "lines": [
    {
-    "step": 21.3,
+    "step": 18.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 26.1,
+    "step": 22.3,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 23.0,
+    "step": 18.6,
     "slip": 0.3,
     "ok": true
    },
    {
-    "step": 25.0,
-    "slip": 0.3,
+    "step": 22.0,
+    "slip": 0.2,
     "ok": true
    },
    {
-    "step": 25.5,
+    "step": 22.5,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 26.0,
+    "step": 33.7,
     "slip": 0.1,
     "ok": true
    },
    {
-    "step": 26.8,
+    "step": 25.6,
     "slip": 0.1,
     "ok": true
    }
@@ -814,39 +814,39 @@
   "condition": "downpour",
   "lines": [
    {
+    "step": 14.6,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 18.5,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 15.2,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
+    "step": 17.6,
+    "slip": 0.3,
+    "ok": true
+   },
+   {
     "step": 18.3,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 23.5,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 21.7,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 21.1,
-    "slip": 0.3,
-    "ok": true
-   },
-   {
-    "step": 21.9,
     "slip": 0.2,
     "ok": true
    }
   ],
   "sides": [
    {
-    "step": 23.0,
-    "slip": 0.1,
+    "step": 34.2,
+    "slip": 0.3,
     "ok": true
    },
    {
-    "step": 24.3,
+    "step": 21.4,
     "slip": 0.1,
     "ok": true
    }
@@ -859,45 +859,45 @@
   "condition": "night",
   "lines": [
    {
-    "step": 8.3,
-    "slip": 0.3,
-    "ok": true
+    "step": 6.6,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 13.3,
-    "slip": 0.3,
-    "ok": true
+    "step": 7.7,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 12.7,
-    "slip": 0.3,
-    "ok": true
+    "step": 6.3,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 9.6,
-    "slip": 0.3,
-    "ok": true
+    "step": 7.1,
+    "slip": null,
+    "ok": false
    },
    {
-    "step": 9.7,
-    "slip": 0.2,
-    "ok": true
+    "step": 7.2,
+    "slip": null,
+    "ok": false
    }
   ],
   "sides": [
    {
-    "step": 11.1,
-    "slip": 0.1,
+    "step": 46.7,
+    "slip": 0.4,
     "ok": true
    },
    {
-    "step": 13.0,
-    "slip": 0.1,
+    "step": 10.4,
+    "slip": 0.4,
     "ok": true
    }
   ],
-  "passing": 5,
-  "ok": true
+  "passing": 0,
+  "ok": false
  },
  {
   "kind": "hush",

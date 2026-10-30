@@ -486,6 +486,10 @@ enum MarkGlow {
     /// on the ground looks like (an even glow reads as a flat thing laid
     /// on the grass: a carpet, a puddle).
     Pool,
+    /// A sheen: light pooled at its heart over a glow to its edge (a
+    /// mirror's: by night it's the palest thing on the ground, out to
+    /// where it starts).
+    Sheen,
     /// Coals: hot in patches, more of them toward its heart.
     Coals,
     /// Along a snare's veins, brightest near its heart.
@@ -508,6 +512,7 @@ fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
                 // A faint floor to the edge: in the dark, where it starts
                 // still shows.
                 MarkGlow::Pool => 0.2 + 0.8 * pool * (0.75 + 0.25 * blot),
+                MarkGlow::Sheen => 0.45 + 0.55 * pool * (0.75 + 0.25 * blot),
                 MarkGlow::Coals => {
                     let spots = smooth(0.55, 0.72, value_noise(px * 7.0, py * 7.0, 5));
                     // And its burning front, round its rim, as a grass
@@ -645,6 +650,7 @@ fn init_assets(
     let (veined, _) = mark_texture(&mut images, Pattern::Veins);
     let pool = glow_texture(&mut images, MarkGlow::Pool);
     let coals = glow_texture(&mut images, MarkGlow::Coals);
+    let sheen = glow_texture(&mut images, MarkGlow::Sheen);
     let vein_glow = glow_texture(&mut images, MarkGlow::Veins);
     // Fogged as if half as far off, as the Zone's other things are
     // (`MarkMaterial`). Matte, every one: a glossy disc gives back the sky
@@ -702,16 +708,18 @@ fn init_assets(
         LinearRgba::rgb(0.0, 0.08, 0.26),
         0.85,
     );
-    let mut ground =
-        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, &pool, c, emissive, rough);
     // Bleached pale under a mirror, with a sheen to it, and a little light
     // pooled at its heart: in the dark it's the palest thing on the
     // ground. (It was glazed like still water: a puddle.)
-    let glazed = ground(
+    let glazed = ground_with(
+        &mark,
+        &sheen,
         Color::srgba(0.46, 0.53, 0.64, 0.82),
-        LinearRgba::rgb(0.03, 0.036, 0.046),
+        LinearRgba::rgb(0.04, 0.048, 0.062),
         0.55,
     );
+    let mut ground =
+        |c: Color, emissive: LinearRgba, rough: f32| ground_with(&mark, &pool, c, emissive, rough);
     // Pale dust settled out of the dead air, the ground's colour gone
     // under it.
     // Pale as ash, faintly so even in the dark.
