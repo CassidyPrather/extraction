@@ -1963,6 +1963,27 @@ pub(crate) mod tests {
         for (name, mean, p99) in stats.iter().take(4) {
             println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
         }
+        // How the frame's systems spread: many near-free ones are the
+        // executor's and their empty queries' cost, not work.
+        let ours: Vec<f64> = v
+            .iter()
+            .filter(|(n, _)| n.starts_with("extraction::"))
+            .map(|(_, ms)| ms / frames)
+            .collect();
+        for (lo, hi) in [(0.0, 0.005), (0.005, 0.02), (0.02, 0.1), (0.1, f64::MAX)] {
+            let n: Vec<&f64> = ours.iter().filter(|m| **m >= lo && **m < hi).collect();
+            println!(
+                "  game systems {:>5.3}..{:<5} ms: {:4} of them, {:6.2} ms a frame",
+                lo,
+                if hi == f64::MAX {
+                    "".to_string()
+                } else {
+                    format!("{hi}")
+                },
+                n.len(),
+                n.iter().copied().sum::<f64>()
+            );
+        }
     }
 
     /// Mesh entities in a settled valley by what they belong to (their
