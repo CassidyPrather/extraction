@@ -367,22 +367,45 @@ fn unheld_layers(remove: On<Remove, Held>, mut commands: Commands) {
     });
 }
 
+/// A magazine just pulled from a well (by its foot, or held out by the
+/// release): it doesn't seat back in that well until it's been drawn clear
+/// of it ([`CLEAR_OF_WELL`]).
+#[derive(Component, Debug)]
+pub struct Clearing(pub Entity);
+
+/// How far a pulled magazine's top must get from the well it left before
+/// it can seat there again, metres.
+pub const CLEAR_OF_WELL: f32 = 0.08;
+
 /// A magazine brought up into the well of the gun in your other hand seats
 /// as it arrives: in a headset you don't let go of it first.
 fn seat_on_contact(
     mut commands: Commands,
     mut hands: Query<(Entity, &RigHand, &mut Hand)>,
-    mags: Query<(Entity, &Held, &GlobalTransform, &crate::weapons::Mag)>,
+    mags: Query<(
+        Entity,
+        &Held,
+        &GlobalTransform,
+        &crate::weapons::Mag,
+        Option<&Clearing>,
+    )>,
     mut sockets: Query<(Entity, &mut Socket, &GlobalTransform, &SocketOwner)>,
     held: Query<&Held>,
     mut events: MessageWriter<InteractEvent>,
 ) {
-    for (mag_e, h, gt, mag) in &mags {
+    for (mag_e, h, gt, mag, clearing) in &mags {
         let top = gt.transform_point(Vec3::Y * mag.height * 0.5);
         for (socket_e, mut socket, sgt, owner) in &mut sockets {
             let SocketKind::MagWell(family) = &socket.kind else {
                 continue;
             };
+            // Just pulled from this well: not back in until drawn clear.
+            if clearing.is_some_and(|c| c.0 == socket_e) {
+                if top.distance(sgt.translation()) > CLEAR_OF_WELL {
+                    commands.entity(mag_e).remove::<Clearing>();
+                }
+                continue;
+            }
             if socket.occupant.is_some()
                 || *family != mag.family
                 || owner.0 == mag_e
@@ -525,6 +548,10 @@ type GrabTargets<'w, 's> = Query<
 /// How near a seated part's foot (a magazine's floorplate under the well)
 /// a hand must close to pull it from a host held in the other hand, metres.
 pub const SEATED_REACH: f32 = 0.06;
+/// What a seated part gives away to its host in a close call, metres: a
+/// hand on the gun's grip takes the gun, one right at the floorplate the
+/// magazine.
+pub const SEATED_BIAS: f32 = 0.025;
 
 /// VR path. The grip takes hold of things (and presses doors, cards,
 /// cords); the trigger works a moving part (bolt, slide, charging handle)
@@ -785,13 +812,13 @@ fn find_grab(
             } else {
                 foot.distance(hand.translation)
             };
-            if d <= SEATED_REACH && best.is_none_or(|b| d < b.0) {
+            if d <= SEATED_REACH && best.is_none_or(|b| d + SEATED_BIAS < b.0) {
                 let point = g
                     .points
                     .iter()
                     .position(|p| p.role == GripRole::Free)
                     .unwrap_or(0);
-                best = Some((d, e, point));
+                best = Some((d + SEATED_BIAS, e, point));
             }
             continue;
         }
@@ -1008,6 +1035,9 @@ fn apply_hand_actions(
                         if let Some(s) = in_socket {
                             if let Ok((_, _, mut socket, _)) = sockets.get_mut(s.socket) {
                                 socket.occupant = None;
+                                if matches!(socket.kind, SocketKind::MagWell(_)) {
+                                    commands.entity(item).insert(Clearing(s.socket));
+                                }
                             }
                             events.write(InteractEvent::Unsocketed {
                                 item,
