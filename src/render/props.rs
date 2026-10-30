@@ -894,20 +894,17 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
     Transform::from_translation(roll * -GRIP).with_rotation(roll)
 }
 
-/// How far over its grab point a palm cupping a handgun is drawn: up
-/// against the butt. (The grab point stays lower, clear of a magazine's
-/// foot: `weapons::reload` `a_grab_takes_the_gun_never_the_magazine_in_it`.)
-const CUP_LIFT: f32 = 0.02;
-
-/// A supporting hand's pose from its grab point (`support_turn`, and for a
-/// handgun's cup, lifted up against the butt).
+/// A supporting hand's pose from its grab point (`support_turn`; a palm
+/// cupping a handgun is drawn at `weapons::layout::CUP_DRAWN`, not where it
+/// took hold).
 pub(crate) fn support_pose(layout: &crate::weapons::layout::GunLayout, side: Side) -> Transform {
-    let lift = if layout.support.is_none() {
-        CUP_LIFT
+    use crate::weapons::layout::{CUP, CUP_DRAWN};
+    let shift = if layout.support.is_none() {
+        layout.grip.rotation * (CUP_DRAWN - CUP)
     } else {
-        0.0
+        Vec3::ZERO
     };
-    Transform::from_xyz(0.0, lift, 0.0).with_rotation(support_turn(layout, side))
+    Transform::from_translation(shift).with_rotation(support_turn(layout, side))
 }
 
 /// A hand on a gun's handle (`weapons::layout::HandleLayout`), in gun
