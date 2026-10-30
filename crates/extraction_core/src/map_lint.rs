@@ -873,6 +873,18 @@ pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
     out
 }
 
+/// The span inside the fence of the valley the distance rules were set
+/// for (Marrow Creek as it was: 640 m, its fence 38 m in), metres.
+pub const STANDARD_SPAN: f32 = 564.0;
+
+/// How a valley's span inside its fence compares with
+/// [`STANDARD_SPAN`], at most 1: a tighter valley keeps the rules'
+/// distances in proportion (`docs/MAP_DESIGN.md`, "Tight, broken, quiet
+/// between").
+pub fn valley_scale(map: &MapDef) -> f32 {
+    ((map.size - 2.0 * map.fence_inset) / STANDARD_SPAN).clamp(0.3, 1.0)
+}
+
 /// Every solid thing on the surface, placements first (in order: index
 /// `i < map.placements.len()` is placement `i`), then the sites' exit
 /// kiosks.
@@ -1185,6 +1197,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         find(&mut r, Rule::Reach, "no insertion".into(), [0.0, 0.0]);
         return r;
     };
+    // The distances the rules keep are for a valley of the standard span;
+    // a tighter one keeps them in proportion (the same walking, not the
+    // same metres).
+    let k = valley_scale(map);
     let walk = crate::map_nav::zone_grid(map, hm, crate::map_nav::MAX_SLOPE);
     let comfy = crate::map_nav::zone_grid(map, hm, COMFORT_SLOPE);
     let walk_seen = flood(&walk, ins);
@@ -1397,7 +1413,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             .fold((f32::INFINITY, ""), |a, b| if b.0 < a.0 { b } else { a });
         nn_min = nn_min.min(d);
         nn_max = nn_max.max(d);
-        if d < POI_MIN && i < pois.iter().position(|p| p.0 == other).unwrap_or(0) {
+        if d < POI_MIN * k && i < pois.iter().position(|p| p.0 == other).unwrap_or(0) {
             find(
                 &mut r,
                 Rule::Spacing,
@@ -1565,7 +1581,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     for (i, a) in marks.iter().enumerate() {
         for b in marks.iter().skip(i + 1) {
             let apart = a.apart(b);
-            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT {
+            if a.kind == b.kind && !SERIES.contains(&a.kind.as_str()) && apart < UNIQUE_SIGHT * k {
                 find(
                     &mut r,
                     Rule::Landmark,
@@ -2422,7 +2438,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 .map(|p| dist(*p, ins))
                 .fold(f32::INFINITY, f32::min);
             let inside = geom::point_in_polygon(&reg.polygon, ins);
-            if inside || d < DANGER_FAR {
+            if inside || d < DANGER_FAR * k {
                 find(
                     &mut r,
                     Rule::LootRisk,
@@ -2796,7 +2812,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .collect();
     let robots = map.regions.iter().any(|g| g.danger > 0);
     for g in &gates {
-        if robots && dist(*g, ins) < GATE_FROM_INSERTION {
+        if robots && dist(*g, ins) < GATE_FROM_INSERTION * k {
             find(
                 &mut r,
                 Rule::Patrol,
@@ -2810,7 +2826,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for g in gates.iter().filter(|_| robots) {
         for m in map.markers_of(&MarkerKind::Rendezvous) {
-            if dist(*g, m.at) < RV_FROM_GATE {
+            if dist(*g, m.at) < RV_FROM_GATE * k {
                 find(
                     &mut r,
                     Rule::Patrol,
@@ -2832,7 +2848,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 );
             }
         }
-        if dist(m.at, ins) < WORK_FROM_INSERTION {
+        if dist(m.at, ins) < WORK_FROM_INSERTION * k {
             find(
                 &mut r,
                 Rule::Patrol,
@@ -3033,7 +3049,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
 
     // -- Route choice ---------------------------------------------------------------
     for (name, at) in &rvs {
-        if dist(*at, ins) < RV_FAR {
+        if dist(*at, ins) < RV_FAR * k {
             find(
                 &mut r,
                 Rule::Choice,
@@ -3088,7 +3104,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for (i, (a, pa)) in rvs.iter().enumerate() {
         for (b, pb) in rvs.iter().skip(i + 1) {
-            if dist(*pa, *pb) < RV_APART {
+            if dist(*pa, *pb) < RV_APART * k {
                 find(
                     &mut r,
                     Rule::Choice,
@@ -3277,7 +3293,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         // A kiosk is a building to draw like any other; a light prop isn't.
         let (light, n): (Vec<&Solid>, Vec<&Solid>) = solids
             .iter()
-            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE)
+            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE * k)
             .partition(|q| VIEW_LIGHT.contains(&q.prefab.as_str()));
         light_most = light_most.max(light.len());
         if n.len() > worst.0 {

@@ -349,31 +349,70 @@ pub fn heard(hm: &Heightmap, a: P2, b: P2) -> bool {
     d <= if blocked { GUNSHOT * OCCLUDED } else { GUNSHOT }
 }
 
-/// For each point of interest, how many hot spots would hear a fight
+/// Hot spots within this of one another are one hot zone, metres: a
+/// zone hearing its own fight isn't the valley coming to it.
+pub const ZONE: f32 = 60.0;
+
+/// Each hot spot's zone: an index shared by spots within [`ZONE`] of one
+/// another (chained).
+fn zones(spots: &[(String, P2)]) -> Vec<usize> {
+    let mut zone: Vec<usize> = (0..spots.len()).collect();
+    fn root(z: &mut [usize], i: usize) -> usize {
+        let mut i = i;
+        while z[i] != i {
+            z[i] = z[z[i]];
+            i = z[i];
+        }
+        i
+    }
+    for i in 0..spots.len() {
+        for j in i + 1..spots.len() {
+            if dist(spots[i].1, spots[j].1) <= ZONE {
+                let (a, b) = (root(&mut zone, i), root(&mut zone, j));
+                zone[a] = b;
+            }
+        }
+    }
+    (0..spots.len()).map(|i| root(&mut zone, i)).collect()
+}
+
+/// For each point of interest, how many hot zones would hear a fight
 /// there (the tester's "the entirety of the robots to your front door").
 pub fn pull_at_places(map: &MapDef, hm: &Heightmap) -> Vec<(String, P2, usize)> {
     let spots = hot_spots(map);
+    let zone = zones(&spots);
     map.markers_of(&MarkerKind::Poi)
         .map(|m| {
-            let n = spots.iter().filter(|(_, b)| heard(hm, m.at, *b)).count();
-            (m.name.clone(), m.at, n)
+            let mut heard_by: Vec<usize> = spots
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, b))| heard(hm, m.at, *b))
+                .map(|(i, _)| zone[i])
+                .collect();
+            heard_by.sort_unstable();
+            heard_by.dedup();
+            (m.name.clone(), m.at, heard_by.len())
         })
         .collect()
 }
 
-/// For each hot spot, how many of the others would hear a fight there.
+/// For each hot spot, how many other hot zones would hear a fight there.
 pub fn pull(map: &MapDef, hm: &Heightmap) -> Vec<(String, P2, usize)> {
     let spots = hot_spots(map);
+    let zone = zones(&spots);
     spots
         .iter()
         .enumerate()
         .map(|(i, (name, at))| {
-            let n = spots
+            let mut heard_by: Vec<usize> = spots
                 .iter()
                 .enumerate()
-                .filter(|(j, (_, b))| *j != i && heard(hm, *at, *b))
-                .count();
-            (name.clone(), *at, n)
+                .filter(|(j, (_, b))| zone[*j] != zone[i] && heard(hm, *at, *b))
+                .map(|(j, _)| zone[j])
+                .collect();
+            heard_by.sort_unstable();
+            heard_by.dedup();
+            (name.clone(), *at, heard_by.len())
         })
         .collect()
 }
@@ -479,6 +518,15 @@ mod probe_file {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        if let Ok(place) = std::env::var("WHO_HEARS") {
+            if let Some(m) = map.markers_of(&MarkerKind::Poi).find(|m| m.name == place) {
+                for (n, at) in hot_spots(&map) {
+                    if heard(&hm, m.at, at) {
+                        eprintln!("  {place} heard at {n} ({:.0} m)", dist(m.at, at));
+                    }
+                }
+            }
+        }
         let r = crate::map_lint::lint(&map, &hm);
         for f in &r.findings {
             eprintln!(

@@ -1,14 +1,14 @@
 # Marrow Creek lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
-m01_gate        40,0,255,0,-2        # from the insertion, up the valley
-m02_village     5,0,135,0,-4         # village street from the south
-m03_meadow      170,0,230,315,-2     # farm meadow toward the village
-m04_creek       30,0,20,100,-8       # creek bank, downstream
-m05_spruce      -150,0,240,30,0      # inside the western spruce
-m06_edge        -30,0,170,270,-3     # meadow meeting the spruce edge
-m07_hollow      120,0,25,20,-4       # into the dead stand by the Hollow
-m08_pines       -150,0,-110,0,0      # northern pines
-m09_birches     -45,0,40,30,-2       # village birches
-m10_rail        180,0,-160,0,-3      # toward the rail yard
-m11_summit      -100,0,-160,100,-8   # vista from the mast summit, east
-m12_aerial      40,45,300,0,-8       # over the gate, up the valley
-m13_pump_hall   -168.8,=16.31,39.0,244,-4   # under the pumping station: the pump hall (=y: the height as given, below ground)
+m01_gate        22.0,0,133.5,0,-2    # from the insertion, up the valley
+m02_village     2.8,0,98.9,0,-4      # village street from the south
+m03_meadow      92.9,0,131.9,315,-2  # farm meadow toward the village
+m04_creek       27.7,0,-11.5,100,-8  # creek bank, downstream
+m05_spruce      -78.3,0,151.7,30,0   # inside the western spruce
+m06_edge        -16.5,0,93.5,270,-3  # meadow meeting the spruce edge
+m07_hollow      57.5,0,32.1,20,-4    # into the dead stand by the Hollow
+m08_pines       -66.2,0,-43.1,0,0    # northern pines
+m09_birches     -46.8,0,8.8,30,-2    # village birches
+m10_rail        94.3,0,-61.6,0,-3    # toward the rail yard
+m11_summit      -34.0,0,-63.8,100,-8 # vista from the mast summit, east
+m12_aerial      22.0,45,178.5,0,-8   # over the gate, up the valley
+m13_pump_hall   -78.8,=16.31,29.1,244,-4# under the pumping station: the pump hall (=y: the height as given, below ground)
