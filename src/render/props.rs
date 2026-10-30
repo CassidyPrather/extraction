@@ -2224,6 +2224,101 @@ mod glove_tests {
         );
     }
 
+    /// Two hands on the PM: the other palm cupped under its grip is drawn
+    /// on the grip's cup, as the gun hand is drawn on the grip, not at its
+    /// controller a few centimetres off (the 28 October playtest: "I can't
+    /// use both hands on the gun", 0:55:01, and holding it in both to keep
+    /// it steady, 0:17:27).
+    #[test]
+    fn a_palm_cupping_a_pistol_is_drawn_on_its_cup() {
+        use crate::interact::{GrabPoint, Grabbable, GripRole, Held, Supported};
+        let layout = crate::weapons::layout::layout("pm_pistol").expect("the PM's layout");
+        let cup = crate::weapons::layout::cup(&layout).expect("a pistol has a cup");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, pose_hands);
+        let player = app
+            .world_mut()
+            .spawn((Transform::default(), RigInput::default()))
+            .id();
+        let gun_at = Transform::from_xyz(0.05, 1.3, -0.45).with_rotation(Quat::from_euler(
+            EulerRot::YXZ,
+            0.2,
+            0.1,
+            0.0,
+        ));
+        let grip_hand = gun_at.mul_transform(layout.grip);
+        let right = app
+            .world_mut()
+            .spawn((Hand::default(), grip_hand, ChildOf(player)))
+            .id();
+        // The left controller a little off the cup, as a real palm is.
+        let cupped = gun_at.transform_point(cup) + Vec3::new(-0.03, -0.01, 0.02);
+        let left = app
+            .world_mut()
+            .spawn((
+                Hand::default(),
+                Transform::from_translation(cupped),
+                ChildOf(player),
+            ))
+            .id();
+        let gun = app
+            .world_mut()
+            .spawn((
+                Held {
+                    player,
+                    hand: right,
+                    side: Side::Right,
+                    point: 0,
+                    offset: Transform::IDENTITY,
+                },
+                gun_at,
+                Grabbable {
+                    points: vec![
+                        GrabPoint::new(layout.grip, GripRole::Primary, 0.12),
+                        GrabPoint::new(Transform::from_translation(cup), GripRole::Support, 0.08),
+                    ],
+                },
+                Supported {
+                    hand: left,
+                    side: Side::Left,
+                    point: 1,
+                },
+            ))
+            .id();
+        app.world_mut().get_mut::<Hand>(right).unwrap().holding = Some(gun);
+        app.world_mut().get_mut::<Hand>(left).unwrap().supporting = Some(gun);
+        let glove = |hand, side| {
+            (
+                HandVisual {
+                    hand,
+                    side,
+                    curl: [0.0; 5],
+                    spread: std::array::from_fn(rest_spread),
+                    thumb: None,
+                },
+                Transform::default(),
+            )
+        };
+        let left_glove = app.world_mut().spawn(glove(left, Side::Left)).id();
+        let right_glove = app.world_mut().spawn(glove(right, Side::Right)).id();
+        for _ in 0..3 {
+            app.update();
+        }
+        let at = |e| *app.world().get::<Transform>(e).unwrap();
+        let want = gun_at.transform_point(cup);
+        let got = at(left_glove).translation;
+        assert!(
+            got.distance(want) < 0.002,
+            "the cupping glove at {got}, its cup at {want} (the controller at {cupped})"
+        );
+        let grip = gun_at.mul_transform(layout.grip).translation;
+        assert!(at(right_glove).translation.distance(grip) < 0.002);
+    }
+
     /// With the trigger pulled, the index of the hand on each gun's grip
     /// comes down on that gun's own trigger.
     #[test]
