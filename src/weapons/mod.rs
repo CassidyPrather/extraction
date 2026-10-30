@@ -311,12 +311,8 @@ fn setup_gun_items(
     }
     // A handgun: the other palm cupped under the grip steadies it (it
     // doesn't aim it: `interact::follow_hands`).
-    if let Some(c) = layout::cup(&layout) {
-        points.push(GrabPoint::new(
-            Transform::from_translation(c),
-            GripRole::Support,
-            0.08,
-        ));
+    if let Some(c) = layout::cup_pose(&layout) {
+        points.push(GrabPoint::new(c, GripRole::Support, 0.08));
     }
     // (A pump's forend is the support grip: no handle of its own.)
     if let Some(h) = layout

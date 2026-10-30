@@ -2319,6 +2319,56 @@ mod glove_tests {
         assert!(at(right_glove).translation.distance(grip) < 0.002);
     }
 
+    /// Points along every finger of a glove posed at `pose` and curled
+    /// `curl`, in world space: each bone's two ends and two points between.
+    fn finger_points(pose: Transform, side: Side, curl: [f32; 5]) -> Vec<Vec3> {
+        let mut out = Vec::new();
+        for f in 0..5 {
+            let mut at = pose * glove_frame(side);
+            let mut offset = finger_root(side, f);
+            for j in 0..3 {
+                at = at
+                    * Transform::from_translation(offset)
+                        .with_rotation(joint_rotation(side, f, j, curl[f]));
+                offset = Vec3::new(0.0, 0.0, -FINGER_BONES[f][j]);
+                for k in 0..=3 {
+                    out.push(at.transform_point(offset * k as f32 / 3.0));
+                }
+            }
+        }
+        out
+    }
+
+    /// Two hands on the PM: the cupping hand's fingers wrap round outside
+    /// the gun hand's, never through them (the two-hand shot, 27: the left
+    /// fingertips went into the right hand at the front of the grip).
+    #[test]
+    fn a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand() {
+        let layout = crate::weapons::layout::layout("pm_pistol").expect("the PM's layout");
+        let gun = Transform::IDENTITY;
+        let grip = finger_points(
+            gun.mul_transform(layout.grip),
+            Side::Right,
+            hold_curl(Some(GripRole::Primary), 0.0, 0.0),
+        );
+        let cup = crate::weapons::layout::cup_pose(&layout).expect("a pistol has a cup");
+        let cupping = finger_points(
+            gun.mul_transform(cup),
+            Side::Left,
+            hold_curl(Some(GripRole::Support), 0.0, 0.0),
+        );
+        let nearest = cupping
+            .iter()
+            .flat_map(|a| grip.iter().map(move |b| a.distance(*b)))
+            .fold(f32::MAX, f32::min);
+        // Two fingers side by side: a finger is about 18 mm thick.
+        assert!(
+            nearest > 0.017,
+            "a cupping finger {:.1} mm from a gripping one",
+            nearest * 1000.0
+        );
+    }
+
     /// With the trigger pulled, the index of the hand on each gun's grip
     /// comes down on that gun's own trigger.
     #[test]
