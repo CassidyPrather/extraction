@@ -548,10 +548,17 @@ fn tint_gloves(
 #[derive(Component)]
 struct ButtonCap;
 
-/// A dark collar on the wall and an amber cap standing proud of it.
+/// A dark collar on the wall and an amber cap standing proud of it, on a
+/// button with no look of its own (`interact::poke::OwnLook`).
 fn dress_buttons(
     mut commands: Commands,
-    buttons: Query<Entity, Added<crate::interact::poke::PokeButton>>,
+    buttons: Query<
+        Entity,
+        (
+            Added<crate::interact::poke::PokeButton>,
+            Without<crate::interact::poke::OwnLook>,
+        ),
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut looks: Local<
@@ -1964,6 +1971,60 @@ mod glove_tests {
             ))
         });
         corners.fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(p), b.max(p)))
+    }
+
+    /// A card's button gets the generic collar and cap; a modelled key
+    /// (`OwnLook`) gets nothing over it.
+    #[test]
+    fn a_modelled_key_gets_no_cap_over_it() {
+        use crate::interact::poke::{OwnLook, PokeButton};
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, dress_buttons);
+        let button = || PokeButton {
+            target: Entity::PLACEHOLDER,
+            depth: 0.0,
+            down: false,
+        };
+        let card = app.world_mut().spawn(button()).id();
+        let key = app.world_mut().spawn((button(), OwnLook)).id();
+        app.update();
+        let kids = |e: Entity| app.world().get::<Children>(e).map_or(0, |c| c.len());
+        assert_eq!(kids(card), 2, "a card's button: collar and cap");
+        assert_eq!(kids(key), 0, "a modelled key: nothing over it");
+    }
+
+    /// Every push button but a card's (`interact::poke::mount_button`) is on
+    /// something modelled, and says it has its own look: a new one without
+    /// would get a generic cap stood over its keys.
+    #[test]
+    fn every_modelled_button_keeps_its_own_look() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![src];
+        let mut bad = Vec::new();
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") || p.ends_with("interact/poke.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                // The code, not its tests.
+                let code = text.split("#[cfg(test)]\nmod ").next().unwrap_or("");
+                let made = code.matches("PokeButton {").count();
+                let own = code.matches("OwnLook").count();
+                if made > own {
+                    bad.push(format!("{}: {made} buttons, {own} OwnLook", p.display()));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// A node of a .glb: its name, local transform, children and, for a
