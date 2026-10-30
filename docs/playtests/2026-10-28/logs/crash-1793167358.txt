@@ -1,0 +1,42 @@
+panicked at C:\Users\<user>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bevy_render-0.19.1\src\gpu_readback.rs:364:17:
+Failed to map buffer: BufferAsyncError
+
+   0: std::backtrace_rs::backtrace::win64::trace
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\win64.rs:85
+   1: std::backtrace_rs::backtrace::trace_unsynchronized
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2: std::backtrace::Backtrace::create
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:331
+   3: std::backtrace::Backtrace::force_capture
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:312
+   4: core::iter::traits::iterator::Iterator::for_each::call::<&mut bevy_app::sub_app::SubApp, <bevy_app::app::App>::plugins_state::{closure#0}>::{closure#0}
+   5: std::panicking::panic_with_hook
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:823
+   6: std::panicking::panic_handler::closure$0
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:688
+   7: std::sys::backtrace::__rust_end_short_backtrace<std::panicking::panic_handler::closure_env$0,never$>
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\sys\backtrace.rs:182
+   8: std::panicking::panic_handler
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:679
+   9: core::panicking::panic_fmt
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\panicking.rs:80
+  10: core::result::unwrap_failed
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\result.rs:1871
+  11: <bevy_render::view::window::screenshot::collect_screenshots::{closure#0}::{closure#0} as core::ops::function::FnOnce<(core::result::Result<(), wgpu::api::buffer::BufferAsyncError>,)>>::call_once::{shim:vtable#0}
+  12: RNSNvYNCNvXsq_NtNtCsiHttCC5Fwz3_4wgpu7backend9wgpu_coreNtBc_10CoreBufferNtNtBg_8dispatch15BufferInterface9map_async0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceTINtNtB1X_6result6ResultuNtNtCs4POOTSFataA_9wgpu_core8resource17BufferAccessErrorEEE9call_once
+  13: <wgpu_core::global::Global>::buffer_map_async
+  14: <wgpu::backend::wgpu_core::CoreBuffer as wgpu::dispatch::BufferInterface>::map_async
+  15: <&mut bevy_render::gpu_readback::map_buffers as core::ops::function::FnMut<(bevy_ecs::change_detection::params::ResMut<bevy_render::gpu_readback::GpuReadbacks>,)>>::call_mut
+  16: <bevy_render::view::window::screenshot::ScreenshotPlugin as bevy_app::plugin::Plugin>::build
+  17: bevy_ecs::schedule::executor::__rust_begin_short_backtrace::run_unsafe
+  18: RNvXsj_Csky4qdcBv028_14async_executorINtB5_15AsyncCallOnDropINtNtCsa4hGc9HOxD5_12futures_lite6future11CatchUnwindINtNtNtCs9rw95XCWuke_4core5panic11unwind_safe16AssertUnwindSafeNCNvMs3_NtNtNtCshigRB8ILxNd_8bevy_ecs8schedule8executor14multi_threadedNtB2W_13E
+  19: RNvMs1_NtCs60Jq8JnvMrR_10async_task3rawINtB5_7RawTaskINtCsky4qdcBv028_14async_executor15AsyncCallOnDropINtNtCsa4hGc9HOxD5_12futures_lite6future11CatchUnwindINtNtNtCs9rw95XCWuke_4core5panic11unwind_safe16AssertUnwindSafeNCNvMs3_NtNtNtCshigRB8ILxNd_8bevy_ecs
+  20: RNvXs5_NtCsa4hGc9HOxD5_12futures_lite6futureINtB5_2OrIBH_NCNCNCNCNCNvMs0_NtCsgCSemuWVkk1_10bevy_tasks9task_poolNtB19_8TaskPool12new_internal00000INtCsk9Ji4FCBJhL_13async_channel4RecvuEENCNCINvMsb_Csky4qdcBv028_14async_executorNtB38_5State3runINtNtCs9rw95XC
+  21: RINvMs2_NtNtCsljvfXcM3w8L_3std6thread5localINtB6_8LocalKeyINtNtCs9rw95XCWuke_4core4cell7RefCellTNtCs2r95jJzVbhv_7parking6ParkerNtNtNtBZ_4task4wake5WakerEEE4withNCINvNtCsa4hGc9HOxD5_12futures_lite6future8block_onINtNtBZ_6result6ResultuNtCsk9Ji4FCBJhL_13asyn
+  22: <std::thread::local::LocalKey<bevy_tasks::executor::LocalExecutor>>::with::<<bevy_tasks::task_pool::TaskPool>::new_internal::{closure#0}::{closure#0}::{closure#0}, ()>
+  23: std::sys::backtrace::__rust_begin_short_backtrace::<<bevy_tasks::task_pool::TaskPool>::new_internal::{closure#0}::{closure#0}, ()>
+  24: std::sys::thread_local::native::eager::destroy::<bevy_tasks::executor::LocalExecutor>
+  25: std::sys::thread::windows::impl$0::new::thread_start
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\sys\thread\windows.rs:58
+  26: BaseThreadInitThunk
+  27: RtlUserThreadStart

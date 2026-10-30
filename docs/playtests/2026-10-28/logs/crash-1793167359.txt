@@ -1,0 +1,61 @@
+panicked at C:\Users\<user>\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bevy_pbr-0.19.1\src\cluster\gpu.rs:1156:90:
+called `Result::unwrap()` on an `Err` value: PoisonError { .. }
+
+   0: std::backtrace_rs::backtrace::win64::trace
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\win64.rs:85
+   1: std::backtrace_rs::backtrace::trace_unsynchronized
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\..\..\backtrace\src\backtrace\mod.rs:66
+   2: std::backtrace::Backtrace::create
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:331
+   3: std::backtrace::Backtrace::force_capture
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\backtrace.rs:312
+   4: core::iter::traits::iterator::Iterator::for_each::call::<&mut bevy_app::sub_app::SubApp, <bevy_app::app::App>::plugins_state::{closure#0}>::{closure#0}
+   5: std::panicking::panic_with_hook
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:823
+   6: std::panicking::panic_handler::closure$0
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:688
+   7: std::sys::backtrace::__rust_end_short_backtrace<std::panicking::panic_handler::closure_env$0,never$>
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\sys\backtrace.rs:182
+   8: std::panicking::panic_handler
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:679
+   9: core::panicking::panic_fmt
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\panicking.rs:80
+  10: core::result::unwrap_failed
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\result.rs:1871
+  11: RNSNvYNCINvNtCsiy11xv7EQZb_10bevy_asset4meta30loader_settings_meta_transformNtNtCs4Yw6D4QU5eC_11bevy_shader6shader14ShaderSettingsNCNvXs_NtNtCsgULkDjXkkKy_8bevy_pbr6render4meshNtB2b_16MeshRenderPluginNtNtCsclV2RIrTi81_8bevy_app6plugin6Plugin6finish0E0INtNt
+  12: RINvNtNtCs89r4j2vouvF_5alloc3vec16in_place_collect18from_iter_in_placeINtNtNtNtCs9rw95XCWuke_4core4iter8adapters3map3MapINtNtB4_9into_iter8IntoIterINtNtCs4POOTSFataA_9wgpu_core2id2IdNtNtB2o_7markers7AdapterEENCNvXs7_NtNtCsiHttCC5Fwz3_4wgpu7backend9wgpu_cor
+  13: RNSNvYNCNvXsq_NtNtCsiHttCC5Fwz3_4wgpu7backend9wgpu_coreNtBc_10CoreBufferNtNtBg_8dispatch15BufferInterface9map_async0INtNtNtCs9rw95XCWuke_4core3ops8function6FnOnceTINtNtB1X_6result6ResultuNtNtCs4POOTSFataA_9wgpu_core8resource17BufferAccessErrorEEE9call_once
+  14: <wgpu_core::device::UserClosures>::fire
+  15: <wgpu_core::device::queue::Queue as core::ops::drop::Drop>::drop
+  16: core::ptr::drop_glue::<wgpu_hal::gles::RenderPipeline>
+  17: <alloc::sync::Arc<wgpu_core::device::queue::Queue>>::drop_slow
+  18: <alloc::sync::Arc<wgpu::backend::wgpu_core::CoreQueue>>::drop_slow
+  19: <alloc::sync::Arc<bevy_render::renderer::wgpu_wrapper::WgpuWrapper<wgpu::api::queue::Queue>>>::drop_slow
+  20: core::ptr::drop_glue::<bevy_render::RenderPlugin>
+  21: <alloc::vec::Vec<alloc::boxed::Box<dyn bevy_render::render_phase::draw::Draw<bevy_ui_render::render_pass::TransparentUi>>> as core::ops::drop::Drop>::drop
+  22: core::ptr::drop_glue::<accesskit_windows::subclass::SubclassImpl>
+  23: core::ptr::drop_glue::<accesskit_windows::subclass::SubclassImpl>
+  24: core::ptr::drop_glue::<<bevy_winit::WinitPlugin as bevy_app::plugin::Plugin>::build::{closure#0}>
+  25: <<bevy_winit::WinitPlugin as bevy_app::plugin::Plugin>::build::{closure#0} as core::ops::function::FnOnce<(bevy_app::app::App,)>>::call_once::{shim:vtable#0}
+  26: <bevy_app::app::App>::run
+  27: extraction::run
+  28: extraction::main
+  29: <alloc::vec::Vec<&str> as core::fmt::Debug>::fmt
+  30: <alloc::vec::Vec<&str> as core::fmt::Debug>::fmt
+  31: std::rt::lang_start_internal::closure$0
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\rt.rs:175
+  32: std::panicking::catch_unwind::do_call
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:576
+  33: std::panicking::catch_unwind
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panicking.rs:544
+  34: std::panic::catch_unwind
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\panic.rs:359
+  35: std::rt::lang_start_internal
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\std\src\rt.rs:171
+  36: main
+  37: invoke_main
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:78
+  38: __scrt_common_main_seh
+             at D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl:288
+  39: BaseThreadInitThunk
+  40: RtlUserThreadStart
