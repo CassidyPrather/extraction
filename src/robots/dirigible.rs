@@ -39,6 +39,23 @@ pub struct Dirigible {
     pub sinking: bool,
 }
 
+/// A pod's origin over its skids' undersides (`art/robots/logistics.py`).
+pub const POD_FOOT: f32 = 0.475;
+/// The pod's half footprint, x and z.
+pub const POD_HALF: Vec2 = Vec2::new(0.65, 0.9);
+
+/// Where a pod at x, z stands: its origin's height with its skids on the
+/// highest ground under it (its middle or a corner). Lowered on its cable
+/// it stopped with its origin 0.15 m up, 0.3 m into the ground, deeper on
+/// a slope (the 28 October playtest, 1:01:50).
+pub fn pod_rest(zone: &Zone, x: f32, z: f32) -> f32 {
+    let mut g = zone.ground(x, z);
+    for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        g = g.max(zone.ground(x + sx * POD_HALF.x, z + sz * POD_HALF.y));
+    }
+    g + POD_FOOT
+}
+
 /// A cargo pod: a container with good loot, down on the ground only while
 /// the dirigible works. Its contents are never saved: if it's reeled back
 /// up, whatever you didn't take is gone.
@@ -281,7 +298,8 @@ fn cargo(
     for (e, mut d, brain, gt, mut rng) in &mut ships {
         let pos = gt.translation();
         let gondola = pos.y - RADIUS - 1.1;
-        let drop = (gondola - zone.ground(pos.x, pos.z) - 0.6).max(0.0);
+        // The pod hangs 0.45 m under the cable's end (its lifting eye).
+        let drop = (gondola - 0.45 - pod_rest(&zone, pos.x, pos.z)).max(0.0);
         let lowering = matches!(brain, Brain::Working { .. }) && !d.sinking;
         let target = if lowering { drop } else { 0.0 };
         d.cable += (target - d.cable).clamp(-2.0 * dt, 2.0 * dt);
@@ -348,8 +366,7 @@ fn cargo(
         if d.sinking {
             if let Some(p) = d.pod.take() {
                 if let Ok(mut t) = pods.get_mut(p) {
-                    let g = zone.ground(t.translation.x, t.translation.z);
-                    t.translation.y = g + 0.45;
+                    t.translation.y = pod_rest(&zone, t.translation.x, t.translation.z);
                 }
             }
             continue;
@@ -396,6 +413,40 @@ fn report_sightings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Wherever a pod comes down in a valley, its skids are on the ground:
+    /// none of its corners or middle under it, the highest a hair below.
+    #[test]
+    fn a_lowered_pod_stands_on_the_ground() {
+        for name in ["marrow_creek", "kettle_pass", "cinder_works", "rime_fell"] {
+            let zone = Zone::load(name);
+            let (lo, span) = (zone.hm.origin + 5.0, zone.hm.cell * zone.hm.n as f32 - 10.0);
+            for i in 0..400 {
+                let x = lo + span * ((i * 37 % 400) as f32 / 400.0);
+                let z = lo + span * ((i * 91 % 400) as f32 / 400.0);
+                let foot = pod_rest(&zone, x, z) - POD_FOOT;
+                let mut top = f32::MIN;
+                for (sx, sz) in [
+                    (0.0, 0.0),
+                    (-1.0, -1.0),
+                    (1.0, -1.0),
+                    (1.0, 1.0),
+                    (-1.0, 1.0),
+                ] {
+                    let g = zone.ground(x + sx * POD_HALF.x, z + sz * POD_HALF.y);
+                    assert!(
+                        foot >= g - 1e-4,
+                        "{name} at {x}, {z}: skids under the ground"
+                    );
+                    top = top.max(g);
+                }
+                assert!(
+                    (foot - top).abs() < 1e-4,
+                    "{name} at {x}, {z}: off the ground"
+                );
+            }
+        }
+    }
 
     #[test]
     fn a_logistics_run_lands_a_full_pod() {

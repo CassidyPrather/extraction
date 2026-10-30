@@ -4039,7 +4039,8 @@ fn ropeway_station(b: &mut Builder) {
         Some("workshop"),
     );
     b.strew("rope_coil", Vec3::new(0.7, 0.12, 0.7), at(-2.6, 3.4), 1.1);
-    b.barrel(at(-3.9, 1.6));
+    // On the deck's boards (at z 1.6 it stood over a step 6 cm down).
+    b.barrel(at(-3.9, 2.6));
 }
 
 /// A pylon's colliders, standing at the origin, then `at`: its legs, the
