@@ -73,3 +73,9 @@ Every weak point, every robot, as made (`weak_points::tests::every_robots_weak_p
 | Dirigible | eye | 0.60 m | 2.29 deg | 1.38 deg |
 
 Not weak, by design: a walker's core (four rounds), every plate, a drone's body, the plough's and minelayer's hulls. Their hazard paint ("Warn", "Yellow") and the drones' beacons no longer wear orange (`weak_points::paint`; beacons are a cool white): on a robot, orange means shoot here and nothing else.
+
+## Left to do: feet that won't land in a wall (M3, playtest 0:57:47)
+
+- **Where:** `anim::step_walker` picks each foot's next spot from the gait alone. `footing` only raycasts down for the ground under it.
+- **Why:** the walker is kinematic, so nothing stops a foot planted inside a wall. Robot minds' path fix keeps its centre 1.3 m off buildings (`walker::keep_off_walls`), which covers the 1.05 m reach. A walker shoved, knocked down or crawling can still end up closer.
+- **Next step:** cast from the hip to the foot's target against `Layer::World` structures. If the cast hits, plant short of the wall, pulled back along the cast. Then extend `feet_stand_on_rubble`'s test with a wall beside the walker.
