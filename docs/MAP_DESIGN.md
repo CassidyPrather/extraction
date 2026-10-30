@@ -740,17 +740,26 @@ Marrow, before and after (the lint's measures, at today's 70 m sight and
 | | as it was | rises | pulled in |
 |---|---|---|---|
 | nearest-place walk, mean | 169 m (70 s) | 169 m | 106 m (44 s) |
-| open ground seen past 70 m | 25% | 15% | 14% |
+| open ground seen past 70 m | 25% | 15% | 13% |
 | sightline, 90th percentile | 86 m | 74 m | 72 m |
 | a fight in the Village heard by | 3 | 0 | 1 |
 | longest empty walk | 135 m | 70 m | 70 m |
 
-A fight at a hot spot is now heard by 0.7 other zones on average; the
+A fight at a hot spot is now heard by 0.6 other zones on average; the
 Radio mast's by three, the most. The rises: the creek's banks
 east and west of the bridge, the spur and the rise either side of the
 ford, the Hollow's south rim. The hot zones sit together in the north-west
-(the Gate, the Depot, the north bank's site and its spotter), with the
+(the Gate, the Depot and the bank's spotter; the north bank's site
+stands off by the Bus depot, 188 m from the Gate, so the Gate's
+response isn't on a fight there at once), with the
 Village, the farms and the logging camp quiet round the drop.
+
+A tight valley has no spare field for a test to stage a fight on. A test
+that needs open ground and no particular place loads the test field
+(`extraction_core::map::TEST_FIELD_ID`, `assets/test/test_field.ron`):
+Marrow's ground as it was, 640 m, its meadow round (100, 200), served
+to the game's own tests only. A test about a valley's own places, sites
+or patrols stays on that valley, and moves with it when it changes.
 
 ## Terraces
 
