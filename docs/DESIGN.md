@@ -471,12 +471,12 @@ Now it fights like this:
 - It circles at 0.15 rad/s, and 0.25 while you aim at it (9 and 14° a second).
 - It flies at 0.6 of its push.
 
-| 8 spots a valley | Before (Marrow Creek) | Now (Marrow Creek, Kettle Pass) |
+| 8 spots a valley | Before (Marrow Creek) | Now (all five valleys) |
 |---|---|---|
-| Shooting it: rounds that did any harm | 0 of 192 | hit in 14 of 16 fights |
-| Shooting it: out of the fight (wrecked, a rotor or its gun gone) | 0 of 8 | 10 of 16, median 9 s, 9–21 rounds |
-| Shooting it: the shooter down | 0 of 8 | 0 of 16 |
-| Standing still | 8 of 8 down, 11–26 s | 16 of 16 down, 10–25 s |
+| Shooting it: rounds that did any harm | 0 of 192 | hit in 29 of 40 fights |
+| Shooting it: out of the fight (wrecked, a rotor or its gun gone) | 0 of 8 | 24 of 40, median 7.6 s, mostly 10 rounds |
+| Shooting it: the shooter down | 0 of 8 | 0 of 40 |
+| Standing still | 8 of 8 down, 11–26 s | 38 of 40 down, 10–27 s |
 
 It's still deadly to someone who stands in the open and does nothing. Fought, it's a fair fight. Robot bodies' bigger rotor and eye hit volumes (F2) make it fairer again.
 
