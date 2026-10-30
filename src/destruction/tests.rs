@@ -2159,3 +2159,49 @@ fn what_rested_on_a_crate_falls_when_it_breaks() {
         top.y
     );
 }
+
+/// Not a check: where Marrow Creek's counters' drawers and cabinet doors
+/// are, and which way they face, for the shots.
+#[test]
+#[ignore]
+fn list_counters() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for (n, m) in app
+        .world_mut()
+        .query::<(&Name, &crate::world::hinge::Moving)>()
+        .iter(app.world())
+    {
+        let front = m.rest.rotation * Vec3::NEG_Z;
+        println!(
+            "counter {n} at {:.2} front {:.2}",
+            m.rest.translation, front
+        );
+    }
+}
+
+#[test]
+fn counters_drawers_and_doors_are_drawn_where_they_hang() {
+    // Each moving part's node is drawn from the part's own space back into
+    // its model's: the node's origin (a door's hinge, a drawer's middle)
+    // lands on the part itself, shut, in every counter.
+    let mut app = app(None);
+    run(&mut app, 3);
+    let mut checked = 0;
+    for (m, d) in app
+        .world_mut()
+        .query::<(&crate::world::hinge::Moving, &super::wood::Drawn)>()
+        .iter(app.world())
+    {
+        let name = d.model.expect("a counter part draws its node");
+        let origin = crate::world::hinge::counter_node_origin(name).expect("a node we move");
+        let drawn = (m.rest * d.at).transform_point(origin);
+        assert!(
+            drawn.distance(m.rest.translation) < 1e-3,
+            "{name} is drawn {:.3} m off where it hangs",
+            drawn.distance(m.rest.translation)
+        );
+        checked += 1;
+    }
+    assert!(checked >= 10, "Marrow's counters' parts ({checked})");
+}
