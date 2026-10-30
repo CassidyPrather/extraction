@@ -713,12 +713,6 @@ mod tests {
         // Loose by design: split pieces on the ground beside a block dug 15 cm in (the lint's floor
         // is the block's buried foot).
         "props/chopping_block:",
-        // To fix: the straps stay where the shut lid had them; they should swing back with the lid.
-        "props/depot_crate_long_open:",
-        // To fix: as the long one, the strap left behind by the swung lid.
-        "props/depot_crate_small_open:",
-        // To check: the frames, webbing and lacing read 8-18 mm off each other in the island test.
-        "props/snowshoes:",
         // Loose by design: fallen legs and boards on the floor; the ash heap sinks below it, so the
         // lint's floor is under the debris.
         "props/table_burnt:",
@@ -727,9 +721,6 @@ mod tests {
         "props/woodpile:",
         // Loose by design: as the woodpile, logs resting on logs.
         "props/woodpile_lean:",
-        "vehicles/bench:",
-        "vehicles/stash_crate:",
-        "vehicles/truck:",
     ];
 
     /// No building has a crack between its boxes, and every door hangs in

@@ -25,12 +25,13 @@ main_guard()
 W, D = 0.95, 1.25
 Y0, Y1 = -0.35, 0.3
 c = Part("crate")
-# Floor boards inside, raised on two runners.
-for x in (-0.3, 0.3):
-    c.box((0.08, 0.04, D - 0.02), (x, Y0 + 0.02, 0.0), "Boards", bevel=0.004, segs=1)
+# Floor boards inside, raised on two runners across them all (along the
+# crate, the runners missed the middle board), a hair into them.
+for z in (-0.45, 0.45):
+    c.box((W - 0.06, 0.04, 0.08), (0.0, Y0 + 0.02, z), "Boards", bevel=0.004, segs=1)
 for k in range(5):
     w = (W - 0.06) / 5
-    c.box((w - 0.006, 0.022, D - 0.06), (-W / 2 + 0.03 + w * (k + 0.5), Y0 + 0.051, 0.0),
+    c.box((w - 0.006, 0.022, D - 0.06), (-W / 2 + 0.03 + w * (k + 0.5), Y0 + 0.0505, 0.0),
           "Boards", bevel=0.003, segs=1)
 # Walls: three boards a side, ends and sides.
 h = (Y1 - Y0 - 0.04) / 3

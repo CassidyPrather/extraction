@@ -233,9 +233,11 @@ def snowshoes():
         t = 0.024
         ring(p, 1.0, t / rx, (0, 0, 0), "Timber", segs=20,
              xf=T(x, cy, z) @ S(rx, ry, 0.022 * rx / t))
-        tip = (0.0, -0.009, z)
+        # The tail's ends on the frame's line (x 0.6 of the way out is
+        # 0.8 up the ellipse) and over the nail's shank.
+        tip = (0.0, -0.004, z)
         for sx in (-1, 1):
-            rod(p, (x + sx * rx * 0.6, cy + ry * 0.78, z), tip, 0.011, "Timber", segs=5)
+            rod(p, (x + sx * rx * 0.6, cy + ry * 0.8, z), tip, 0.011, "Timber", segs=5)
         # The gut webbing filling it, a rawhide lacing over it.
         p.cyl(1.0, -0.0015, 0.0015, "Straw", segs=16,
               xf=T(x, cy, z) @ S(rx - 0.01, ry - 0.01, 1.0))
