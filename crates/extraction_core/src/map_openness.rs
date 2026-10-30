@@ -442,3 +442,39 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod probe_file {
+    use super::*;
+    /// The measures and the lint of a map read from MAP_FILE.
+    #[test]
+    #[ignore]
+    fn probe_file() {
+        let text = std::fs::read_to_string(std::env::var("MAP_FILE").unwrap()).unwrap();
+        let map = MapDef::from_ron(&text).unwrap();
+        let hm = Heightmap::build(&map);
+        let walk = crate::map_nav::zone_grid(&map, &hm, crate::map_nav::MAX_SLOPE);
+        let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        let o = openness(&map, &hm, &walk);
+        let w = walks(&map, &comfy);
+        let mean = w.iter().map(|x| x.2).sum::<f32>() / w.len().max(1) as f32;
+        let p = pull(&map, &hm);
+        let pmean = p.iter().map(|x| x.2).sum::<usize>() as f32 / p.len().max(1) as f32;
+        eprintln!(
+            "FILE: seen p90 {:.0} m, open {:.0}%; nearest-place walk mean {mean:.0} m ({:.0} s); pull {pmean:.1}",
+            o.p90,
+            o.open_share * 100.0,
+            mean / WALK
+        );
+        for (a, b, l) in &w {
+            eprintln!("  walk {a} -> {b}: {l:.0} m");
+        }
+        let r = crate::map_lint::lint(&map, &hm);
+        for f in &r.findings {
+            eprintln!(
+                "  FINDING {:?}: {} at ({:.0}, {:.0})",
+                f.rule, f.what, f.at[0], f.at[1]
+            );
+        }
+    }
+}
