@@ -708,8 +708,8 @@ struct GloveModel;
 /// Where a glove's modelled parts go, and the boxes it wears until (or
 /// unless) its model is in.
 #[derive(Component)]
-struct GloveParts {
-    model: Entity,
+pub(crate) struct GloveParts {
+    pub(crate) model: Entity,
     joints: Vec<((usize, usize), Entity)>,
     boxes: Vec<Entity>,
 }
@@ -798,12 +798,34 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
 /// left's mirrored, its text turned round to read the same way (the
 /// forearm across the chest points the other way).
 pub(crate) fn wrist_mount(side: Side) -> Transform {
+    glove_frame(side) * wrist_on_glove(side)
+}
+
+/// A player's glove, as `spawn_hand_visuals` makes one, for tests.
+#[cfg(test)]
+pub(crate) fn player_glove(world: &mut World, side: Side) -> Entity {
+    world.resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+        world.resource_scope(|world, mut materials: Mut<Assets<StandardMaterial>>| {
+            let mut commands = world.commands();
+            let root = spawn_hand(&mut commands, &mut meshes, &mut materials, side, [0.0; 5]);
+            commands.entity(root).insert(PlayerGlove);
+            world.flush();
+            root
+        })
+    })
+}
+
+/// The wrist display in the glove model's own frame (`GloveParts::model`),
+/// 4 mm over its housing's top face: carried by the glove, so the two can
+/// never part (on the tracked hand while the glove was stopped by a wall
+/// or a step behind, the housing covered it or it floated off; playtest
+/// 2026-10-28, F4).
+pub(crate) fn wrist_on_glove(side: Side) -> Transform {
     let axes = match side {
         Side::Left => Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
         Side::Right => Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y),
     };
-    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes));
-    glove_frame(side) * on_glove
+    Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes))
 }
 
 /// A joint's turn, its finger curled `c`.
@@ -1873,6 +1895,75 @@ mod glove_tests {
         assert!(close(r.rotation * Vec3::Y, m(l.rotation * Vec3::Y)));
         // ...and reading left to right, not mirrored.
         assert!(close(r.rotation * Vec3::X, -m(l.rotation * Vec3::X)));
+    }
+
+    /// The wrist display lies on its housing (the glove model's Padding, on
+    /// the back of the cuff): facing out of it, a few millimetres over its
+    /// top face (not in it, not floating), and inside its footprint, on
+    /// both gloves (playtest 2026-10-28, F4: the housing covered it).
+    #[test]
+    fn the_wrist_display_lies_on_its_housing() {
+        let size = crate::render::comfort::WRIST_SIZE;
+        for side in [Side::Left, Side::Right] {
+            let (lo, hi) = housing(side);
+            let t = wrist_on_glove(side);
+            let normal = t.rotation * Vec3::Z;
+            assert!(normal.dot(Vec3::Y) > 0.999, "{side:?} faces {normal}");
+            for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let p = t.transform_point(Vec3::new(x * size.x * 0.5, y * size.y * 0.5, 0.0));
+                let gap = p.y - hi.y;
+                assert!(
+                    (0.002..=0.006).contains(&gap),
+                    "{side:?} corner {p} is {:.1} mm over the housing",
+                    gap * 1000.0
+                );
+                assert!(
+                    (lo.x..=hi.x).contains(&p.x) && (lo.z..=hi.z).contains(&p.z),
+                    "{side:?} corner {p} overhangs the housing {lo}..{hi}"
+                );
+            }
+        }
+    }
+
+    /// The housing's box in the glove model's frame: the palm's primitive
+    /// in the Padding material, through the palm node's own transform.
+    fn housing(side: Side) -> (Vec3, Vec3) {
+        let path = crate::asset_root_path().join(glove_model(side));
+        let bytes = std::fs::read(&path).unwrap();
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        let v3 = |v: &serde_json::Value| {
+            let a = v.as_array().unwrap();
+            Vec3::new(
+                a[0].as_f64().unwrap() as f32,
+                a[1].as_f64().unwrap() as f32,
+                a[2].as_f64().unwrap() as f32,
+            )
+        };
+        let nodes = glb_nodes(side);
+        let palm = nodes.iter().position(|n| n.name == "palm").unwrap();
+        let mesh = json["nodes"][palm]["mesh"].as_u64().unwrap() as usize;
+        let prim = json["meshes"][mesh]["primitives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| {
+                p["material"].as_u64().is_some_and(|m| {
+                    json["materials"][m as usize]["name"].as_str() == Some("Padding")
+                })
+            })
+            .expect("the housing (Padding) on the palm");
+        let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64().unwrap() as usize];
+        let (lo, hi) = (v3(&acc["min"]), v3(&acc["max"]));
+        let at = nodes[palm].local;
+        let corners = (0..8).map(|i| {
+            at.transform_point(Vec3::new(
+                if i & 1 == 0 { lo.x } else { hi.x },
+                if i & 2 == 0 { lo.y } else { hi.y },
+                if i & 4 == 0 { lo.z } else { hi.z },
+            ))
+        });
+        corners.fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(p), b.max(p)))
     }
 
     /// A node of a .glb: its name, local transform, children and, for a

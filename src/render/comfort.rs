@@ -147,18 +147,29 @@ fn vignette(
 struct WristPanel(crate::rig::Side);
 
 /// The panel rides on the back of the glove that isn't the gun hand (the
-/// left, for a right-handed player): one on each, the other hidden.
+/// left, for a right-handed player): one on each, the other hidden. On
+/// the glove itself, not the tracked hand: the glove is the physics hand,
+/// stopped by walls and a tick behind, and the housing is its.
 fn add_wrist_panel(
     mut commands: Commands,
-    hands: Query<(Entity, &crate::rig::RigHand, &ChildOf), Added<crate::rig::RigHand>>,
-    locals: Query<(), With<LocalPlayer>>,
+    gloves: Query<
+        (
+            &crate::render::props::HandVisual,
+            &crate::render::props::GloveParts,
+        ),
+        (
+            Added<crate::render::props::GloveParts>,
+            With<crate::render::props::PlayerGlove>,
+        ),
+    >,
 ) {
-    for (e, hand, parent) in &hands {
-        if !locals.contains(parent.parent()) {
+    for (glove, parts) in &gloves {
+        if glove.ghost {
             continue;
         }
-        commands.entity(e).with_child((
-            WristPanel(hand.side),
+        let side = glove.side;
+        commands.entity(parts.model).with_child((
+            WristPanel(side),
             crate::render::legibility::TextSource::Wrist,
             ScreenText {
                 text: String::new(),
@@ -167,8 +178,8 @@ fn add_wrist_panel(
             },
             // On the back of the wrist, on the glove's display housing, like
             // a watch: turn the wrist to read it.
-            crate::render::props::wrist_mount(hand.side),
-            if hand.side == crate::rig::Side::Left {
+            crate::render::props::wrist_on_glove(side),
+            if side == crate::rig::Side::Left {
                 Visibility::Inherited
             } else {
                 Visibility::Hidden
@@ -416,6 +427,51 @@ pub(crate) const WRIST_COLUMNS: usize = 18;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// However far the glove is from the tracked hand (stopped by a wall,
+    /// a tick behind), the wrist display rides on its housing: it's the
+    /// glove's, not the tracked hand's.
+    #[test]
+    fn the_wrist_display_rides_on_its_glove() {
+        use crate::render::props::{GloveParts, player_glove, wrist_on_glove};
+        use crate::rig::Side;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::transform::TransformPlugin))
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, add_wrist_panel);
+        for side in [Side::Left, Side::Right] {
+            let glove = player_glove(app.world_mut(), side);
+            app.update();
+            // Where the physics hand stopped, nowhere near the tracked one.
+            *app.world_mut().get_mut::<Transform>(glove).unwrap() = Transform::from_xyz(
+                0.4, 1.1, -0.3,
+            )
+            .with_rotation(Quat::from_euler(EulerRot::YXZ, 1.1, -0.6, 2.4));
+            app.update();
+            app.update();
+            let model = app.world().get::<GloveParts>(glove).unwrap().model;
+            let want = app
+                .world()
+                .get::<GlobalTransform>(model)
+                .unwrap()
+                .mul_transform(wrist_on_glove(side));
+            let w = app.world_mut();
+            let panel = w
+                .query::<(&WristPanel, &GlobalTransform)>()
+                .iter(w)
+                .find(|(p, _)| p.0 == side)
+                .map(|(_, g)| *g)
+                .unwrap_or_else(|| panic!("no {side:?} wrist display"));
+            assert!(
+                panel.translation().distance(want.translation()) < 1e-4,
+                "{side:?} display at {} but its housing's spot is {}",
+                panel.translation(),
+                want.translation()
+            );
+            assert!(panel.rotation().dot(want.rotation()).abs() > 0.9999);
+        }
+    }
     use crate::render::screen::wrap;
 
     #[test]
