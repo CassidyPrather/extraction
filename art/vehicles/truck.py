@@ -239,19 +239,22 @@ for sx in (-1, 1):
     ch.box((0.4, 0.62, 0.012), (sx * 1.0, 0.57, 2.02), "Rubber")
     # The flap's bar, run forward onto the cross-member.
     ch.box((0.42, 0.04, 0.14), (sx * 1.0, 0.9, 1.96), "Paint")
-# Rear steps: a hanging ladder whose treads are the step colliders' tops.
+# Rear steps: a hanging ladder whose treads are the step colliders' tops,
+# its own object hinged at the bed's tail (`ladder`, origin on the hinge):
+# the game swings it plumb when the truck stands pitched on a slope.
+ladder = Part("ladder", origin=(0.0, 1.0, 1.85))
 # Each stringer is a straight slanted bar the treads' back ends sit on (a
 # stepped outline here once crossed itself, and its cap's triangles
 # z-fought in the headset).
 stringer = [(1.81, 1.0), (1.89, 1.0), (2.45, 0.30), (2.37, 0.30)]
 for sx in (-1, 1):
-    ch.prism(stringer, sx * 0.47 - 0.012, sx * 0.47 + 0.012, "Paint", axis="x")
+    ladder.prism(stringer, sx * 0.47 - 0.012, sx * 0.47 + 0.012, "Paint", axis="x")
 for y, z0, z1 in ((0.74, 1.8, 2.1), (0.37, 2.1, 2.4)):
-    ch.box((0.9, 0.025, z1 - z0), (0.0, y - 0.0125, (z0 + z1) / 2), "Iron", bevel=0.004, segs=1)
+    ladder.box((0.9, 0.025, z1 - z0), (0.0, y - 0.0125, (z0 + z1) / 2), "Iron", bevel=0.004, segs=1)
     # The nosing lip, a hair narrower and proud of the tread's edge.
-    ch.box((0.894, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.007), "Paint")
+    ladder.box((0.894, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.007), "Paint")
     for k in range(5):
-        ch.box((0.1, 0.006, 0.012), (-0.32 + k * 0.16, y + 0.003, (z0 + z1) / 2), "Paint")
+        ladder.box((0.1, 0.006, 0.012), (-0.32 + k * 0.16, y + 0.003, (z0 + z1) / 2), "Paint")
 
 # =============================================================================
 # Cab and bonnet
@@ -652,7 +655,7 @@ cv.lathe([(0.0, 0.0), (0.03, 0.0), (0.045, 0.06), (0.06, 0.08), (0.0, 0.08)], "B
          segs=16, xf=T(0.45, 2.9, -1.74) @ RX(math.pi / 2))
 cv.box((0.015, 0.015, 0.08), (0.45, 2.91, -1.78), "Iron")
 
-for p_ in (wheel, ch, cab2):
+for p_ in (wheel, ch, cab2, ladder):
     make(p_)
 join("canopy", cv, fw)
 # The bed's painted steel (stakes, the top cap, the tie-down rails) wears
