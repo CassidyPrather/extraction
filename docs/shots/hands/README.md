@@ -100,3 +100,29 @@ pouches, the compass), nothing the IK can't back up. Bottom, the PM in
 the right glove from its left side (`fp:pm_pistol,1.6,90`): before, the
 thumb hooked across and into the frame; after, it lies forward along the
 frame under the slide.
+`22_gloves.jpg` (28 October playtest, M2: the hands are the most-seen
+model; `fp:open,2.4,90` and `fp:open,2.4,0`): top before, bottom after
+the first pass on `art/hands/gloves.py`. Rounder fingers (16 sides, fuller
+caps) and a finer palm; a leather patch over each fingertip; a moulded pad
+over each knuckle; the leather a shade lighter than the olive nylon, so
+palm and back read apart. Still to come: the back of the hand's panels
+and stitching, the thumb's shape, and the cuff.
+`23_glove_back.jpg` (`fp:open,2.4,270`, the back of the hand, the side
+you see most): left the glove before this wave, right after its second
+pass. A padded panel over the back of the hand with dark seams down its
+sides, a moulded pad on each knuckle, leather fingertips. (The block at
+the wrist is the display's housing, on each glove.)
+
+`24_glove_cuff.jpg` (`kit+down`, the default view, the cuff end to the
+eye as when reaching forward): left the third pass's first try, right
+after. The dome meant to close the cuff was scaled about a point back in
+the hand, so it ran in as a funnel and read as a hole; it now closes
+over the arm's end in leather. The third pass also tapers the thumb.
+
+`25_side_opening_pack.jpg` (`--gallery pack`, `pack+side`, flat mode):
+the pack swung off the left shoulder and held in front. Before, it hung
+with its straps to you and opened at the top, the lid thrown back at
+you. Now it's a panel loader: it hangs with its outer face to you,
+tipped up toward the eyes, and opens there. The cavity is lined a shade
+off the canvas, the dressing shows inside, and the front panel (with the
+big pocket on it) folds down from its bottom edge.

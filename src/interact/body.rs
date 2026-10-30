@@ -601,10 +601,15 @@ fn follow_head(
 /// How far under the hand a held pack hangs (its middle), metres.
 pub const HANG: f32 = 0.3;
 
+/// How far a held pack's top leans away from you (radians), so its opening
+/// looks up at the eyes.
+const HANG_TILT: f32 = 0.5;
+
 /// Your pack swung off a shoulder and held: it hangs from the hand by its
-/// top strap, upright, its back to you, and while it's in front of you it's
-/// open, what's in it showing, for the other hand to reach in and take;
-/// taken back over the shoulder it closes (and let go there, it's on).
+/// top strap, its opening (the outer face: it's a panel loader) to you and
+/// tipped up toward the eyes, and while it's in front of you it's open,
+/// what's in it showing, for the other hand to reach in and take; taken
+/// back over the shoulder it closes (and let go there, it's on).
 #[allow(clippy::type_complexity)]
 fn hang_held_pack(
     mut packs: Query<(
@@ -633,7 +638,7 @@ fn hang_held_pack(
         };
         let torso = torso.compute_transform();
         let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
-            .with_rotation(torso.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+            .with_rotation(torso.rotation * Quat::from_rotation_x(-HANG_TILT));
         lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
         let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
         if angle > std::f32::consts::PI {

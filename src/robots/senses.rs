@@ -287,8 +287,8 @@ pub fn gunshot_reach(speed: f32, damage: f32, projectiles: u32) -> f32 {
     (GUNSHOT * energy.max(0.01).powf(0.15)).clamp(GUNSHOT_REACH.0, GUNSHOT_REACH.1)
 }
 
-/// The quietest and loudest a gunshot carries (m).
-pub const GUNSHOT_REACH: (f32, f32) = (90.0, 190.0);
+/// The quietest and loudest a gunshot carries (m): the map lint's own too.
+pub const GUNSHOT_REACH: (f32, f32) = extraction_core::map_openness::GUNSHOT_REACH;
 
 /// How loud each surface is underfoot, against firm ground.
 pub fn surface_loudness(s: Surface) -> f32 {

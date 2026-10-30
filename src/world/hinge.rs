@@ -384,6 +384,136 @@ pub fn move_parts(
     }
 }
 
+/// A counter's moving nodes (`art/props/furniture.py`, split by Model
+/// correctness): `model#node`, the node's origin in the model's space
+/// (on a door's hinge, a drawer's middle shut), its box's centre from
+/// that origin and its size (read from the model), whether it opens the
+/// other way round (a right-hand door: its free edge toward -X), and how
+/// it moves.
+struct CounterNode(&'static str, [f32; 3], [f32; 3], [f32; 3], bool, Motion);
+
+const COUNTER_NODES: &[CounterNode] = &[
+    CounterNode(
+        "counter_drawers#drawer_0",
+        [0.0, 0.68, -0.04],
+        [0.0, 0.0, -0.013],
+        [0.566, 0.244, 0.546],
+        false,
+        Motion::Slide {
+            travel: DRAWER_TRAVEL,
+        },
+    ),
+    CounterNode(
+        "counter_drawers#drawer_1",
+        [0.0, 0.43, -0.04],
+        [0.0, 0.0, -0.013],
+        [0.566, 0.244, 0.546],
+        false,
+        Motion::Slide {
+            travel: DRAWER_TRAVEL,
+        },
+    ),
+    CounterNode(
+        "counter_drawers#drawer_2",
+        [0.0, 0.205, -0.04],
+        [0.0, 0.0, -0.013],
+        [0.566, 0.194, 0.546],
+        false,
+        Motion::Slide {
+            travel: DRAWER_TRAVEL,
+        },
+    ),
+    CounterNode(
+        "counter_cabinet#door_l",
+        [-0.284, 0.455, -0.298],
+        [0.14, 0.0, -0.004],
+        [0.281, 0.7, 0.047],
+        false,
+        Motion::Hinge { most: CABINET_DOOR },
+    ),
+    CounterNode(
+        "counter_cabinet#door_r",
+        [0.284, 0.455, -0.298],
+        [-0.141, 0.0, -0.004],
+        [0.281, 0.7, 0.046],
+        true,
+        Motion::Hinge { most: CABINET_DOOR },
+    ),
+];
+
+/// A counter node's origin in its model's space (`model#node`), if it's
+/// one we move.
+pub fn counter_node_origin(drawn: &str) -> Option<Vec3> {
+    COUNTER_NODES
+        .iter()
+        .find(|n| n.0 == drawn)
+        .map(|n| Vec3::from(n.1))
+}
+
+/// How far a drawer pulls out (m: `DRAWER_TRAVEL`, the model's), and a
+/// cabinet's door swings (radians).
+pub const DRAWER_TRAVEL: f32 = 0.4;
+pub const CABINET_DOOR: f32 = 1.9;
+
+/// A building's counters' drawers and cabinet doors, put up as moving
+/// parts when it's placed (the building draws only their carcasses:
+/// `Builder::counter`).
+pub fn fit_counters(
+    mut commands: Commands,
+    buildings: Query<(&super::buildings::Building, &Transform), Added<super::buildings::Building>>,
+) {
+    for (b, bxf) in &buildings {
+        let Some(geo) = super::buildings::prefab(&b.prefab) else {
+            continue;
+        };
+        for d in &geo.props {
+            for (name, xf) in &d.models {
+                let Some(model) = name.strip_suffix("#carcass") else {
+                    continue;
+                };
+                let prop = bxf.compute_affine() * xf.compute_affine();
+                for n in COUNTER_NODES
+                    .iter()
+                    .filter(|n| n.0.starts_with(model) && n.0[model.len()..].starts_with('#'))
+                {
+                    spawn_counter_node(&mut commands, prop, xf.scale, n);
+                }
+            }
+        }
+    }
+}
+
+fn spawn_counter_node(
+    commands: &mut Commands,
+    prop: bevy::math::Affine3A,
+    scale: Vec3,
+    CounterNode(drawn, origin, centre, size, flipped, motion): &CounterNode,
+) {
+    // Shut, in the world: on its hinge or at its middle, unscaled, a
+    // right-hand door turned over so it opens with the same sense.
+    let flip = if *flipped {
+        Quat::from_rotation_z(std::f32::consts::PI)
+    } else {
+        Quat::IDENTITY
+    };
+    let node = bevy::math::Affine3A::from_rotation_translation(flip, Vec3::from(*origin));
+    let (_, rot, at) = (prop * node).to_scale_rotation_translation();
+    let rest = Transform::from_translation(at).with_rotation(rot);
+    let box_centre = flip.inverse() * Vec3::from(*centre);
+    let box_size = Vec3::from(*size) * Vec3::new(scale.x.abs(), 1.0, 1.0);
+    let e = spawn_moving(commands, drawn, rest, *motion, box_size, box_centre);
+    // Its node drawn where it hangs in the model, from the part's own space.
+    let model_at = Transform::from_matrix((rest.compute_affine().inverse() * prop).into());
+    commands.entity(e).insert(crate::destruction::wood::Drawn {
+        model: Some(drawn),
+        mat: crate::render::materials::Mat::Timber,
+        at: model_at,
+        size: box_size,
+        range: crate::render::lod::near_range().end_margin,
+        shadow: false,
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -332,11 +332,14 @@ fn fit_ladder(
     mut commands: Commands,
     zone: Option<Res<Zone>>,
     trucks: Query<(Entity, &Transform, Option<&Children>), (With<Truck>, Changed<Transform>)>,
+    all: Query<(), With<Truck>>,
     steps: Query<(), With<LadderStep>>,
     mut rear: Query<(&RearStep, &mut Transform), Without<Truck>>,
     mut fitted: Local<std::collections::HashMap<Entity, Transform>>,
 ) {
     let Some(zone) = zone else { return };
+    // A truck gone (the raid over) is forgotten.
+    fitted.retain(|t, _| all.contains(*t));
     for (truck, pose, children) in &trucks {
         // Only where it has moved to (physics touches it every frame).
         if fitted.get(&truck).is_some_and(|f| {
