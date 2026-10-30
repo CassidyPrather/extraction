@@ -241,8 +241,10 @@ def charcoal_sack():
     0.45 x 0.4."""
     p = Part("static")
     w = Wear(73)
-    blob(p, (0.22, 0.2, 0.18), (0.0, 0.18, 0.0), "Canvas")
-    blob(p, (0.12, 0.08, 0.1), (0.0, 0.38, 0.03), "Canvas")
+    # On the floor (2 cm into it: its spilled lumps, on the floor, stood
+    # off its foot).
+    blob(p, (0.22, 0.2, 0.18), (0.0, 0.2, 0.0), "Canvas")
+    blob(p, (0.12, 0.08, 0.1), (0.0, 0.4, 0.03), "Canvas")
     for k in range(6):
         p.box((0.04, 0.03, 0.035), (0.22 + w.j(0.08), 0.015, w.j(0.12)), "Black", bevel=0.008,
               segs=1, xf=T(0.22, 0, 0) @ RY(k * 1.1) @ T(-0.22, 0, 0))

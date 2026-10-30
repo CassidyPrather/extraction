@@ -95,10 +95,13 @@ def rope_coil():
     for k in range(6):
         r = 0.18 + k * 0.03
         y = 0.022 + (k % 3) * 0.04
-        p.lathe([(r - 0.02, y - 0.02), (r + 0.02, y - 0.02), (r + 0.02, y + 0.02),
-                 (r - 0.02, y + 0.02)], "Rope", segs=18, closed=True,
+        # A turn a little thicker than its layer, so each bears on the
+        # next through their jitter (face to face, some lifted off).
+        p.lathe([(r - 0.02, y - 0.022), (r + 0.02, y - 0.022), (r + 0.02, y + 0.022),
+                 (r - 0.02, y + 0.022)], "Rope", segs=18, closed=True,
                 xf=RX(w.j(0.04)) @ RZ(w.j(0.04)) @ UP)
-    rod(p, (0.33, 0.02, 0.0), (0.6, 0.02, 0.25), 0.018, "Rope", segs=5)
+    # The loose end out of the bottom turn (it lay 4 cm off the coil).
+    rod(p, (0.27, 0.02, 0.0), (0.6, 0.02, 0.25), 0.018, "Rope", segs=5)
     return [p]
 
 
@@ -227,7 +230,8 @@ def bar_rack():
         rod(p, (x, 0.0, 0.08 - lean), top, 0.017 if k % 3 else 0.024, "Iron", segs=6)
         if k % 4 == 1:
             # A rake's head at the top.
-            p.box((0.2, 0.03, 0.12), (top[0], top[1] + 0.02, top[2] - 0.04), "Iron")
+            # On the handle's end (5 mm over it).
+            p.box((0.2, 0.03, 0.12), (top[0], top[1] + 0.01, top[2] - 0.04), "Iron")
     # A shovel, a sledge leaning at the end.
     rod(p, (0.95, 0.0, -0.1), (1.0, 1.3, 0.15), 0.02, "Timber", segs=6)
     p.box((0.24, 0.3, 0.02), (0.95, 0.15, -0.12), "Rusty",

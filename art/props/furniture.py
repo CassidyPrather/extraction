@@ -288,13 +288,19 @@ def counter_drawers():
         d = Part(f"drawer_{len(hs) - 1 - k}", origin=(0.0, cy, -0.04))
         board(d, (0.566, h - 0.006, 0.018), (w.j(0.002), cy, -0.289), "Painted",
               bevel=0.003)
-        handle(d, 0.0, y + h - 0.06, -0.298, vertical=False)
-        # The box: sides, back and bottom, 0.5 deep behind the front.
+        handle(d, 0.0, y + h - 0.06, -0.297, vertical=False)
+        # The box: sides, back and bottom, 0.5 deep behind the front, a
+        # millimetre into it (they only met it).
         dh = h - 0.05
         for sx in (-1, 1):
-            d.box((0.012, dh, 0.5), (sx * 0.264, cy - 0.01, -0.03), "Timber")
+            d.box((0.012, dh, 0.5), (sx * 0.264, cy - 0.01, -0.031), "Timber")
         d.box((0.54, dh, 0.012), (0.0, cy - 0.01, 0.214), "Timber")
-        d.box((0.54, 0.008, 0.5), (0.0, cy - 0.01 - dh / 2, -0.03), "Timber")
+        d.box((0.54, 0.008, 0.5), (0.0, cy - 0.01 - dh / 2, -0.031), "Timber")
+        # Its runners on the carcass's sides, its sides riding on them (it
+        # hung 12 mm inside the carcass on nothing).
+        for sx in (-1, 1):
+            p.box((0.0185, 0.02, 0.5), (sx * 0.2735, cy - 0.01 - dh / 2 - 0.009, -0.03),
+                  "Timber")
         drawers.append(d)
         y += h
     return [p] + drawers
