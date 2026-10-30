@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import common  # noqa: E402
-from _kit import UP, ring, text, wanted  # noqa: E402
+from _kit import SCALE, UP, ring, text, wanted  # noqa: E402
 from common import (RX, RY, RZ, T, Part, empty, export, make, report, reset,  # noqa: E402
                     section_rect)
 from mathutils import Vector  # noqa: E402
@@ -104,6 +104,16 @@ def centre_of(parts):
 def write(item_id, parts, points):
     d, size = centre_of(parts)
     points = shifted(parts, points, d)
+    # Drawn bigger than modelled (`_kit.SCALE`), its points with it.
+    k = SCALE.get(item_id)
+    if k is not None:
+        for p in parts:
+            for q in [p] + p.cutters:
+                for v in q.bm.verts:
+                    v.co *= k
+            p.origin = p.origin * k
+        points = {name: tuple(c * k for c in v) for name, v in points.items()}
+        size = size * k
     for p in parts:
         make(p)
     for k, v in points.items():

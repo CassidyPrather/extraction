@@ -11,6 +11,7 @@ pub mod comfort;
 pub mod fingers;
 pub mod flat;
 pub mod haptics;
+pub mod loading;
 pub mod runtime;
 pub mod seated;
 pub mod shapes;

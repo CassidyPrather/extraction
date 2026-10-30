@@ -223,6 +223,9 @@ pub struct Builder {
     /// How far above the ground in front of a door the floor can stand
     /// (the building is lifted that much on a slope: `map::prefab_lift`).
     pub drop: f32,
+    /// The last `shell`'s walls: half its depth (to the walls' middle) and
+    /// their thickness, so a gable stands on its wall.
+    shell_walls: Option<(f32, f32)>,
 }
 
 /// A ruined house's state (its prefab id's suffix, `map::RUIN_STATES`).
@@ -757,6 +760,7 @@ impl Builder {
             self.wall(c[i], c[(i + 1) % 4], y0, h, thick, mat, sides[i]);
         }
         self.exterior = false;
+        self.shell_walls = Some((z, thick));
         self
     }
 
@@ -919,9 +923,16 @@ impl Builder {
                 self.ruin_rafters(side, eave_y, rise, w, d);
             }
         }
-        for z in [-d * 0.5, d * 0.5] {
+        // The gable ends stand on the end walls: from the wall's middle to
+        // a hair proud of its face. (At the roof's ends they stood in front
+        // of the walls, a slot under them: the 28 October playtest, 0:22:50.)
+        let (gz, gd) = match self.shell_walls {
+            Some((hz, t)) if hz < d * 0.5 => (hz + t * 0.25 + 0.005, t * 0.5 + 0.01),
+            _ => (d * 0.5, 0.14),
+        };
+        for z in [-gz, gz] {
             self.piece(
-                Shape::Prism(Vec3::new(w, rise, 0.14)),
+                Shape::Prism(Vec3::new(w, rise, gd)),
                 Transform::from_xyz(0.0, eave_y, z),
                 gable,
                 false,
@@ -5914,6 +5925,10 @@ pub fn dress_buildings(
             commands.entity(e).remove::<PropsPending>();
             continue;
         };
+        // A staged scene's things on the ground under each (`scenes::settle`).
+        if let Some(zone) = &zone {
+            super::scenes::settle(&mut geo, zone, &b.prefab, xf);
+        }
         // Holes torn in its walls (`destruction::breach`): a building
         // with holes has its own shading, not its prefab's.
         let holes = breaches

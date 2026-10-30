@@ -2,6 +2,7 @@
 // eye, built per strike on the CPU (a few dozen segments). Additive: a
 // hot white core with a blue-violet glow round it, only for the flash's
 // frames, and fading with distance into the rain.
+// No fog: additive; it fades with distance into the rain itself.
 
 #import bevy_pbr::{
     mesh_view_bindings::view,

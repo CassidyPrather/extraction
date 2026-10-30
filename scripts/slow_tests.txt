@@ -4,3 +4,4 @@
 world::underground::tests::a_bot_goes_down_and_out_the_other_way 360 a bot walks every site end to end, in every valley
 world::underground::tests::crawlers_walk_their_rounds_in_the_dark 200 every site's crawlers walk a full round
 sim::indoor::tests::every_door_lets_a_bot_in 200 a bot through every door of every building in every valley
+capture::attach::tests::model_pieces_touch_what_holds_them 360 every piece of every model against its neighbours' triangles (to be cut: Models, next round)

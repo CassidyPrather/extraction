@@ -412,6 +412,12 @@ pub struct Region {
     /// one more). By default it follows danger: risk pays.
     #[serde(default)]
     pub loot: Option<f32>,
+    /// How far a machine standing here notices you at most (m): a hot
+    /// zone's guards see their own ground, not the next valley's quarter
+    /// (`robots::senses` takes the smaller of this and a machine's own
+    /// sight; `docs/MAP_DESIGN.md`, "Tight, broken, quiet between").
+    #[serde(default)]
+    pub notice: Option<f32>,
 }
 
 impl Region {
