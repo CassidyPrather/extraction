@@ -45,6 +45,18 @@
         Hill(at: (150.0, -40.0), radius: 55.0, height: -11.0),
         // Logging-camp knoll.
         Hill(at: (-175.0, 185.0), radius: 70.0, height: 7.0),
+        // Rises round the Village that keep its fields out of the machines'
+        // sight and its fights out of their hearing (map_openness; the
+        // playtest of 28 October: "a couple of points in an otherwise
+        // empty plane", "gunfights ... attract the entirety of the
+        // robots"). The bank rise north of the creek, between the Village
+        // and the north bank's work site and spotter;
+        Ridge(points: [(-120.0, -28.0), (-70.0, -36.0), (-25.0, -41.0)], width: 30.0, height: 5.5),
+        // the ford rise east, between the Village and the ford field;
+        Ridge(points: [(78.0, 30.0), (84.0, 75.0), (86.0, 125.0)], width: 30.0, height: 5.0),
+        // the clearing rise west, between the Village and the forest
+        // clearing's site.
+        Ridge(points: [(-78.0, 58.0), (-75.0, 100.0), (-72.0, 140.0)], width: 22.0, height: 4.5),
 
         // The creek valley. Wide, gentle valley first, then the bed.
         Channel(
@@ -271,6 +283,10 @@
         // from a drone): a field shed by the knoll on the way to the Old
         // farm, and one by the road north to the Village.
         (prefab: "shed", at: (86.0, 240.0), rot: 237.0, tag: "field_shed"),
+        // The ford-keeper's hut on the ford track, south of the creek: a
+        // stop on the long walk from the Old farm to the Hollow (map_openness
+        // empty walks), a roof before the Hollow's guns.
+        (prefab: "shed", at: (162.0, 30.0), rot: 270.0, tag: "ford_hut"),
         (prefab: "shed", at: (40.0, 150.0), rot: 270.0, tag: "roadside_shed"),
         (prefab: "log_pile", at: (63.0, 251.0), rot: 48.0),
         (prefab: "log_pile", at: (112.0, 197.0), rot: 48.0),
