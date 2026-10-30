@@ -1804,6 +1804,40 @@ pub(crate) mod tests {
                     .or_default() += 1;
             }
             count!(StandardMaterial, "StandardMaterial");
+            // And whose: a material modified is every mesh wearing it
+            // re-specialised (`check_entities_needing_specialization`).
+            let ids: Vec<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                let users: Vec<Entity> = w
+                    .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                    .iter(w)
+                    .filter(|(_, m)| m.0.id() == id)
+                    .map(|(e, _)| e)
+                    .collect();
+                let name = users.first().map_or("(none)".to_string(), |e| {
+                    let mut at = *e;
+                    for _ in 0..8 {
+                        if let Some(n) = w.get::<Name>(at) {
+                            return n.as_str().to_string();
+                        }
+                        match w.get::<ChildOf>(at) {
+                            Some(p) => at = p.parent(),
+                            None => break,
+                        }
+                    }
+                    "(unnamed)".into()
+                });
+                *mods
+                    .entry(format!("material, {} users, {name}", users.len()))
+                    .or_default() += 1;
+            }
             count!(
                 crate::anomaly::visuals::ParticleMaterial,
                 "ParticleMaterial"
