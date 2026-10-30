@@ -41,9 +41,15 @@ pub const BLAST_REACH: f32 = 7.0;
 pub struct Pane {
     pub half: Vec2,
     pub building: Entity,
-    /// Its world pose (buildings don't move), and that pose's inverse.
+    /// Its world pose now (a leaf's moves as it swings: [`carry_panes`]),
+    /// and that pose's inverse.
     pub world: Transform,
     pub inv: Affine3A,
+    /// Its world pose with its window shut: where it's known by
+    /// ([`key`]), and where its glass fell.
+    pub rest: Transform,
+    /// The window's leaf it's in (`world::hinge::fit_sash`), if it moves.
+    pub leaf: Option<Entity>,
     pub broken: Option<Break>,
 }
 
@@ -65,6 +71,11 @@ pub struct Break {
 impl Pane {
     pub fn centre(&self) -> Vec3 {
         self.world.translation
+    }
+
+    /// Its key in [`Broken`], by where it hangs shut.
+    pub fn key(&self) -> [i32; 3] {
+        key(self.rest.translation)
     }
 
     pub fn area(&self) -> f32 {
@@ -155,8 +166,10 @@ pub fn panes_of(geo: &Geo) -> Vec<(Transform, Vec2, usize)> {
 /// their place (`buildings::dress_buildings` leaves them out).
 pub fn window_glass(geo: &Geo) -> Vec<bool> {
     let mut out = vec![false; geo.pieces.len()];
+    // An intact sash is drawn by its frame by now (`dress_buildings`).
+    let sash = |n: &str| n.split_once('#').map_or(n, |(m, _)| m) == SASH;
     for d in &geo.props {
-        if d.models.is_empty() || d.models.iter().any(|(n, _)| *n != SASH) {
+        if d.models.is_empty() || d.models.iter().any(|(n, _)| !sash(n)) {
             continue;
         }
         for i in d.pieces.clone() {
@@ -171,7 +184,8 @@ pub fn window_glass(geo: &Geo) -> Vec<bool> {
 /// Whether a prop model's primitive of this material is a pane's glass
 /// (drawn by the panes, not merged into the building).
 pub fn drawn_by_panes(model: &str, material: &str) -> bool {
-    model == SASH && material.eq_ignore_ascii_case("glass")
+    let file = model.split_once('#').map_or(model, |(m, _)| m);
+    file == SASH && material.eq_ignore_ascii_case("glass")
 }
 
 /// Panes by 4 m cell of the ground, for the sweeps.
@@ -213,7 +227,13 @@ pub struct GlassPlugin;
 impl Plugin for GlassPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PaneGrid>()
-            .add_systems(FixedUpdate, glaze.before(super::DestructionSystems))
+            .add_systems(
+                FixedUpdate,
+                (glaze, carry_panes)
+                    .chain()
+                    .before(super::DestructionSystems)
+                    .before(crate::weapons::ballistics::BallisticsSystems),
+            )
             .add_systems(
                 FixedUpdate,
                 // After the shots are out, before they fly: each round's
@@ -232,7 +252,8 @@ impl Plugin for GlassPlugin {
 }
 
 /// Glaze each building as it appears: a pane entity per pane, already
-/// broken if the save says so.
+/// broken if the save says so. An intact sash's leaves are hung to open
+/// (`world::hinge::fit_sash`), their panes in them.
 fn glaze(
     mut commands: Commands,
     buildings: Query<(Entity, &Building, &Transform), Added<Building>>,
@@ -244,9 +265,27 @@ fn glaze(
             continue;
         };
         let years = weathered_sashes(&building.prefab, bxf);
-        for (local, half, sash) in panes_of(&geo) {
+        let leaves: Vec<Option<[Entity; 3]>> = sash_poses(&geo)
+            .into_iter()
+            .enumerate()
+            .map(|(i, xf)| {
+                (!years.get(i).copied().unwrap_or(false)).then(|| {
+                    crate::world::hinge::fit_sash(
+                        &mut commands,
+                        bxf.compute_affine() * xf.compute_affine(),
+                    )
+                })
+            })
+            .collect();
+        for (n, (local, half, sash)) in panes_of(&geo).into_iter().enumerate() {
             let world = *bxf * local;
             let k = key(world.translation);
+            let leaf = leaves.get(sash).copied().flatten().and_then(|l| {
+                crate::world::hinge::SASH_LEAVES
+                    .iter()
+                    .position(|f| f.5 == n % 4)
+                    .map(|i| l[i])
+            });
             let broken = if years.get(sash).copied().unwrap_or(false) {
                 Some(Break {
                     seed: seed_of(k),
@@ -265,6 +304,8 @@ fn glaze(
                         building: b,
                         world,
                         inv: world.compute_affine().inverse(),
+                        rest: world,
+                        leaf,
                         broken,
                     },
                     local,
@@ -274,6 +315,39 @@ fn glaze(
             grid.0.entry(cell(world.translation)).or_default().push(e);
         }
     }
+}
+
+/// A leaf's panes go where it swings: their world pose from its pose now.
+/// Unchanged as far as the glass is drawn (it hangs from the leaf).
+pub fn carry_panes(
+    mut panes: Query<&mut Pane>,
+    leaves: Query<&crate::world::hinge::Moving, Changed<crate::world::hinge::Moving>>,
+) {
+    if leaves.is_empty() {
+        return;
+    }
+    for mut p in &mut panes {
+        let Some(m) = p.leaf.and_then(|l| leaves.get(l).ok()) else {
+            continue;
+        };
+        let world = m.pose()
+            * Transform::from_matrix(
+                (m.rest.compute_affine().inverse() * p.rest.compute_affine()).into(),
+            );
+        let p = p.bypass_change_detection();
+        p.world = world;
+        p.inv = world.compute_affine().inverse();
+    }
+}
+
+/// Each `window_sash` model's pose in its building, in [`panes_of`]'s
+/// order.
+pub fn sash_poses(geo: &Geo) -> Vec<Transform> {
+    geo.props
+        .iter()
+        .filter(|d| !d.models.is_empty() && d.models.iter().all(|(n, _)| *n == SASH))
+        .flat_map(|d| d.models.iter().map(|(_, xf)| *xf))
+        .collect()
 }
 
 /// A pane that was broken in an earlier session: the same teeth every
@@ -324,7 +398,7 @@ pub fn shatter(
     if pane.broken.is_some() {
         return;
     }
-    let k = key(pane.centre());
+    let k = pane.key();
     let l = pane.inv.transform_point3(at);
     let impact = Vec2::new(l.x, l.y).clamp(-pane.half, pane.half);
     let seed = seed_of(k)
@@ -625,7 +699,8 @@ pub fn in_the_glass(pane: &Pane, feet: Vec3) -> bool {
     let Some(b) = pane.broken.filter(|b| !b.weathered) else {
         return false;
     };
-    let l = pane.inv.transform_point3(feet);
+    // Where it fell: under the window shut.
+    let l = pane.rest.compute_affine().inverse().transform_point3(feet);
     let out = l.z * b.fell;
     l.x.abs() < pane.half.x + 0.3
         && (-0.1..0.95).contains(&out)

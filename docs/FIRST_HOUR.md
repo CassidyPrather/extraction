@@ -78,14 +78,14 @@ killed.
   yard, and nothing came. The yard has no machine talk now
   (`raid::chatter`).
 - **The job card named a place, but not where it is.** "Go up to the Old
-  farm and look round." The Old farm is 190 m north-east of where the
-  truck drops you. It has nothing tall enough to see from the gate, and
+  farm and look round." The Old farm is 100 m north-east of where the
+  truck drops you (190 m before the valley was pulled in). It has nothing tall enough to see from the gate, and
   the yard never shows the map. The card now adds "From the drop:
-  north-east, 190 m. Ringed on your map." (`raid::requests`.)
+  north-east, 100 m. Ringed on your map." (`raid::requests`.)
 - **The truck named a rendezvous the map doesn't.** "Heading for the
   Ranger tower", but the field map labels every rendezvous just "RV".
   The truck now says which way and how far from you: "Copy. The ranger
-  tower, north-west, 480 m. Two minutes." It does so again if you call
+  tower, north-west, 240 m. Two minutes." It does so again if you call
   while it waits. (`raid::lines::way`.)
 
 - **The truck came down on top of a newcomer at the rendezvous.** Told

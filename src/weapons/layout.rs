@@ -210,7 +210,9 @@ fn pm() -> GunLayout {
         muzzle: Vec3::new(0.0, 0.062, -0.13),
         port: Vec3::new(0.012, 0.068, -0.045),
         eject: Vec3::new(1.0, 0.6, 0.15),
-        sight: at(0.0, 0.079, 0.03),
+        // The eye line: through the rear notch (its floor 79.8 mm) onto the
+        // front blade's top.
+        sight: at(0.0, 0.0805, 0.03),
         // The well's mouth, at the top of the grip; magazines hang from it,
         // raked back with the grip.
         magwell: Some(

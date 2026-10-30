@@ -129,7 +129,9 @@ impl Mat {
                 Color::srgb(0.86, 0.87, 0.88),
                 0.35,
             ),
-            Mat::GunMetal => (Some("gun_metal"), 0.4, Color::srgb(0.08, 0.08, 0.09), 0.4),
+            // Tiled fine: at 0.4 m a pistol's slide was a few blotches of
+            // the scan, like speckled stone; this reads as a satin finish.
+            Mat::GunMetal => (Some("gun_metal"), 0.15, Color::srgb(0.08, 0.08, 0.09), 0.4),
             Mat::GunWood => (Some("gun_wood"), 0.5, Color::srgb(0.36, 0.17, 0.08), 0.5),
             Mat::Polymer => (
                 Some("polymer_plum"),

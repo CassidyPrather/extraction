@@ -870,6 +870,7 @@ mod tests {
 
     fn app(robots: bool) -> App {
         let opts = LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots,
             ..Default::default()
         };

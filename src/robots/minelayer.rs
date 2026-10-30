@@ -1020,7 +1020,7 @@ mod tests {
     }
 
     fn harness() -> (crate::vr_harness::Vr, Zone) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         (vr, zone)
