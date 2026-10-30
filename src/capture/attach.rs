@@ -708,8 +708,6 @@ mod tests {
         // The first run's tally (30 October), to work down: mostly pieces
         // 2-3 mm off what holds them, and parts shut inside shells (an
         // eye's iris in its glass). Take a model out when it's clean.
-        "items/car_bonnet:",
-        "items/car_door:",
         // Loose by design: checked into blocks a little off true, the gaps black.
         "props/beam_charred:",
         // Loose by design: split pieces on the ground beside a block dug 15 cm in (the lint's floor

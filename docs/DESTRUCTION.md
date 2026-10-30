@@ -247,7 +247,12 @@ squeeze, or a press flat or a bot's, sends it to its other end.
   leaf swings (without marking the pane changed), so rounds, fists and
   blasts find it where it is now, while its key (`Pane::key`), the
   `PaneGrid` cell and the glitter it leaves on the floor stay where it
-  hangs shut. The fixed top-right light stays in the frame.
+  hangs shut. The fixed top-right light stays in the frame. Shots:
+  `window_shut.png` and `window_open.png` (a workshop on Marrow, its
+  leaves swung in with `EXTRACTION_OPEN=8`: on a `--screenshot` run,
+  ninety frames before the capture, everything that moves within that
+  many metres of the camera, 12 by default, opens, and is logged with
+  where it hangs).
 
 ## Drawing it
 
