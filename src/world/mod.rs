@@ -151,6 +151,10 @@ pub enum Layer {
     /// Shards and splinters (`destruction::debris`): they fall on the
     /// world and nothing else, and no query looks for them.
     Debris,
+    /// A container's walls and floor (the stash crate): loose things land
+    /// on them and stay out of them, and nothing else (the body, a hand, a
+    /// held thing's leash, a line of sight) treats them as a wall.
+    Container,
 }
 
 pub struct WorldPlugin;

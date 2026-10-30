@@ -207,6 +207,9 @@ pub struct SavedItem {
     /// Position inside a container, when it's in one.
     #[serde(default)]
     pub local: [f32; 3],
+    /// And how it lies there, a quaternion (older saves: upright).
+    #[serde(default = "upright")]
+    pub turn: [f32; 4],
     #[serde(default)]
     pub gun: Option<SavedGun>,
     /// A magazine in the well (or later, attachments).
@@ -282,6 +285,10 @@ fn clamp_count(v: &mut u32, what: &str, fixed: &mut Vec<String>) {
         fixed.push(format!("{what} was {v}; set to {MAX_COUNT}"));
         *v = MAX_COUNT;
     }
+}
+
+fn upright() -> [f32; 4] {
+    [0.0, 0.0, 0.0, 1.0]
 }
 
 impl SavedItem {
@@ -610,6 +617,7 @@ mod tests {
             rounds: 0,
             charge_wh: 0.0,
             local: [0.0; 3],
+            turn: [0.0, 0.0, 0.0, 1.0],
             gun: None,
             inserted: Vec::new(),
             loads: Loads::default(),

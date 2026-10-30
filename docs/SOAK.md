@@ -95,6 +95,45 @@ such cycles and holds each reset to the size of the one before.
 - **Underground floors:** `soak::floors` probes every open raster cell of
   every site, and finds the colliders' floor wherever the raster has one.
 
+## Stowed things (B1, the first headset night's "the backpack doesn't work")
+
+The rule: a thing put in a pack, a pouch or the crate stays there, as it
+was put in, through every move of the pack, pulling it out, snapping it
+back, walking, and a save and load. Nothing falls through a container or
+comes to rest under one. `soak::stowed` holds it:
+- `what_goes_in_the_pack_stays_where_it_was_put`: the headset's hands put
+  five things of every size into the open pack at an angle. Then the pack
+  is swung, flipped, let hang, walked off with, taken back, snapped on
+  and walked with.
+- `what_is_in_a_pouch_stays_seated`.
+- `a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay`.
+- `nothing_dropped_on_the_crate_goes_through_or_under_it`.
+
+What was wrong:
+- **Things drifted out of a moving pack.** A stowed thing is a child of
+  its bag with its body switched off. But the physics still writes a child
+  body's place back from its own position, against the parent's physics
+  pose, and a held pack is a moving body. So each frame put its contents a
+  little elsewhere: one swing and flip had a thing 0.93 m out of the pack,
+  hidden. That's where the rounds, the radio and the cassette went. A
+  stowed thing's pose in its bag (`StowedPose`, taken as it goes in) and a
+  pouch's seat are now put back each frame before anything is drawn or
+  saved.
+- **Things stood themselves upright.** Stowing kept only where a thing
+  went in. It now keeps how it lay (`stow_posed`), and the save keeps that
+  too (`SavedItem::turn`; older saves load upright).
+- **The crate had no collider at all.** Things dropped over it fell
+  through to the bed, and one came to rest under its stand. It's solid now,
+  on a new `Container` layer: the stand and lower half are one block, with
+  walls round the shelf. Loose things collide with it; the body, hands,
+  lines of sight and a held thing's leash don't. Its first walls, on the
+  World layer, kept the body from the cord in the narrow bed and stopped
+  every grab of the kit at its wall.
+- **Something dropped into an open crate, tray or pack lay there loose.**
+  Now a thing that comes to rest inside one is put in it, as it lies
+  (`settle_into_containers`). A dead raider's bag doesn't take what lands
+  on it.
+
 ## A quiet log
 
 `soak::quiet::tests::no_session_logs_a_warning` plays four sessions, each
