@@ -6,8 +6,10 @@
 // drop at (40, 270), and the land, roads and buildings as they stood.
 // Nothing reads its content tables (they key on the valley's id), so it
 // carries no stories, scenes or dressing of its own.
+// Its name keeps "Marrow" so the machines weather as they did there
+// (`robots::weathering::Valley::of_map`), their bodies the tests' own.
 (
-    name: "Test field",
+    name: "Test field (Marrow Creek as it was)",
     description: "Tests only: Marrow Creek's ground as it was.",
     size: 640.0,
     cell: 1.0,
