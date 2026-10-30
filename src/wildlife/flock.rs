@@ -165,7 +165,7 @@ impl Species {
     }
 
     /// Birds in a flock, at least and at most.
-    fn flock_size(self) -> (usize, usize) {
+    pub fn flock_size(self) -> (usize, usize) {
         match self {
             Species::Rook => (10, 20),
             Species::Raven => (4, 8),
@@ -285,7 +285,10 @@ pub fn spawn_flocks(commands: &mut Commands, map: &str, perches: &Perches, seed:
         let yard = (map == "training_yard").then(|| {
             let at = crate::onboarding::ROOKS_AT;
             (0..perches.sites.len())
-                .filter(|&i| !perches.sites[i].wading)
+                .filter(|&i| {
+                    !perches.sites[i].wading
+                        && perches.sites[i].spots.len() >= species.flock_size().0
+                })
                 .min_by(|&a, &b| {
                     let d = |i: usize| perches.sites[i].centre.xz().distance(Vec2::from(at));
                     d(a).total_cmp(&d(b))

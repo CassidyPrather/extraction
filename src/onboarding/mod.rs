@@ -2307,6 +2307,15 @@ mod tests {
             site.prefab,
             site.centre
         );
+        // Room for the whole flock (birds left over circle for ever).
+        let species = crate::wildlife::flock::Species::for_map(TRAINING_YARD);
+        assert!(
+            site.spots.len() >= species.flock_size().0,
+            "{} perches on the {} for a flock of at least {}",
+            site.spots.len(),
+            site.prefab,
+            species.flock_size().0
+        );
         let near = |p: Vec2| {
             site.spots
                 .iter()
