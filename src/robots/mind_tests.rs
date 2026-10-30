@@ -5317,3 +5317,68 @@ fn walkers_keep_their_feet_out_of_walls() {
         "walker paths closer than {GAP:.2} m to a building: {worst:?}"
     );
 }
+
+/// Map design's hot zones cap how far their guards see (`Region::notice`,
+/// playtest P1): a walker standing in a region capped at 20 m doesn't make
+/// you out at 30 m in the open by day; the same walker, uncapped, does.
+#[test]
+fn a_hot_zones_guards_see_their_own_ground() {
+    let sees = |cap: Option<f32>| {
+        let (mut app, player, zone) = app(None);
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let spot = (0..400)
+            .map(|i| {
+                let a = i as f32 * 2.399;
+                let r = 20.0 + i as f32 * 0.6;
+                zone.on_ground(a.cos() * r, a.sin() * r)
+            })
+            .find(|p| {
+                let post = zone.on_ground(p.x, p.z + 30.0);
+                nav.walkable([p.x, p.z])
+                    && nav.walkable([post.x, post.z])
+                    && (post.y - p.y).abs() < 1.0
+                    && nav.line_clear([p.x, p.z], [post.x, post.z])
+                    && zone.forest_cover(p.x, p.z) < 0.2
+                    && zone.forest_cover(post.x, post.z) < 0.2
+            })
+            .expect("open ground somewhere");
+        let post = zone.on_ground(spot.x, spot.z + 30.0);
+        if let Some(cap) = cap {
+            // A hot zone round the walker's post.
+            let mut map = (*zone.map).clone();
+            let (x, z) = (post.x, post.z);
+            map.regions.insert(
+                0,
+                extraction_core::map::Region {
+                    name: "Hot".into(),
+                    polygon: vec![
+                        [x - 10.0, z - 10.0],
+                        [x + 10.0, z - 10.0],
+                        [x + 10.0, z + 10.0],
+                        [x - 10.0, z + 10.0],
+                    ],
+                    danger: 2,
+                    loot: None,
+                    notice: Some(cap),
+                },
+            );
+            app.insert_resource(Zone {
+                map: std::sync::Arc::new(map),
+                hm: zone.hm.clone(),
+            });
+        }
+        put(&mut app, player, spot);
+        let walker = walker_at(&mut app, &zone, post);
+        let mut seen = false;
+        for i in 0..90 * 8 {
+            // Standing, shifting about.
+            let sway = Vec3::X * ((i as f32 / 90.0).sin() * 0.5);
+            put(&mut app, player, spot + sway);
+            app.update();
+            seen |= app.world().get::<Awareness>(walker).unwrap().can_see_target;
+        }
+        seen
+    };
+    assert!(sees(None), "uncapped, it sees you at 30 m");
+    assert!(!sees(Some(20.0)), "capped at 20 m, it doesn't");
+}

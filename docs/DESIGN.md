@@ -426,7 +426,7 @@ A grappler's line is **one at a time**. The first to spear you has you for 12 s 
 **How far they notice you, and how far a fight pulls** (P1, with Map design):
 - sight: walker 60 m (was 75), drone 70 (90), pylon 70 (85);
 - a gunshot carries 90–190 m (was 120–280): a pistol about 105 m, a rifle 150;
-- Map design caps notice per region in its hot zones, and keeps those zones further apart than a fight's pull.
+- Map design caps notice per region in its hot zones (`Region::notice`; Marrow's at 45 m). A machine standing in one sees no further than that (`a_hot_zones_guards_see_their_own_ground`). Map design also keeps those zones further apart than a fight's pull, or puts a rise between them.
 
 A sim run logs `pulled` (from how far a machine left to go and look) for counting it.
 
