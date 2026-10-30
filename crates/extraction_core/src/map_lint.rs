@@ -877,11 +877,15 @@ pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
 /// for (Marrow Creek as it was: 640 m, its fence 38 m in), metres.
 pub const STANDARD_SPAN: f32 = 564.0;
 
-/// How a valley's span inside its fence compares with
-/// [`STANDARD_SPAN`], at most 1: a tighter valley keeps the rules'
-/// distances in proportion (`docs/MAP_DESIGN.md`, "Tight, broken, quiet
-/// between").
+/// How a tight valley's span inside its fence compares with
+/// [`STANDARD_SPAN`], at most 1: a valley pulled in on purpose
+/// ([`crate::map_openness::TIGHT`]) keeps the rules' distances in proportion
+/// (`docs/MAP_DESIGN.md`, "Tight, broken, quiet between"). Any other
+/// valley keeps them as set, the Training Yard's small one too.
 pub fn valley_scale(map: &MapDef) -> f32 {
+    if !crate::map_openness::TIGHT.contains(&map.name.as_str()) {
+        return 1.0;
+    }
     ((map.size - 2.0 * map.fence_inset) / STANDARD_SPAN).clamp(0.3, 1.0)
 }
 
@@ -3448,7 +3452,7 @@ mod tests {
         let rv = map.markers_of(&MarkerKind::Rendezvous).next().unwrap().at;
         map.markers.push(crate::map::Marker {
             kind: MarkerKind::Spotter,
-            at: [rv[0] + 30.0, rv[1] + 30.0],
+            at: [rv[0] + 20.0, rv[1] + 20.0],
             rot: 0.0,
             name: "Test spotter".into(),
             y: 0.0,
@@ -3469,13 +3473,13 @@ mod tests {
         );
     }
 
-    /// Take away the cover by the district road south of Marrow's creek
-    /// bridge and the first job's way to the radio mast runs in the open.
+    /// Take away the light cover round Marrow's creek bridge and the first
+    /// job's way to the radio mast runs in the open.
     #[test]
     fn a_first_job_walk_in_the_open_is_found() {
         let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         map.placements.retain(|p| {
-            !(dist(p.at, [8.0, -25.0]) < 30.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
+            !(dist(p.at, [0.0, -10.0]) < 45.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
         });
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
@@ -3490,24 +3494,40 @@ mod tests {
 
     /// The playtest of 28 October found Marrow "a couple of points in an
     /// otherwise empty plane", seen from too far, its fights heard by every
-    /// machine: without its rises round the Village and the ford-keeper's
-    /// hut, the openness rules find all of it.
+    /// machine. Undo each fix and its rule finds it: the rises by the
+    /// creek's banks, the ford and the Hollow's rim; the hot zones' capped
+    /// notice; the quiet places kept clear of work; the roofs and loot
+    /// between the places.
     #[test]
-    fn marrow_without_its_rises_is_open_and_loud() {
+    fn marrow_undone_is_open_loud_and_empty() {
         let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         map.features.retain(|f| {
             !matches!(f, crate::map::TerrainFeature::Ridge { points, .. }
-                if [[-120.0, -28.0], [78.0, 30.0], [-78.0, 58.0]].contains(&points[0]))
+                if [[-84.0, -54.0], [26.0, -36.0], [56.0, -14.0], [60.0, -64.0], [66.0, 46.0]]
+                    .contains(&points[0]))
         });
-        map.placements.retain(|p| p.tag != "ford_hut");
         for reg in &mut map.regions {
             reg.notice = None;
         }
+        let pois: Vec<P2> = map.markers_of(&MarkerKind::Poi).map(|m| m.at).collect();
+        for at in pois {
+            map.markers.push(crate::map::Marker {
+                kind: MarkerKind::WorkSite,
+                at: [at[0] + 25.0, at[1]],
+                rot: 0.0,
+                name: String::new(),
+                y: 0.0,
+            });
+        }
+        map.placements
+            .retain(|p| !crate::map_surge::roofed(&p.prefab));
+        map.markers
+            .retain(|m| !matches!(m.kind, MarkerKind::Loot { .. }));
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         for what in [
             "seen past a walker's sight",
-            "heard by",
+            "others on average",
             "a quiet place",
             "nothing to stop at",
             "notice you from any range",
@@ -3545,7 +3565,7 @@ mod tests {
         let mut map = base.clone();
         map.placements.push(crate::map::Placement {
             prefab: "shed".into(),
-            at: [22.0, 224.0],
+            at: [4.0, 102.5],
             rot: 90.0,
             y: 0.0,
             absolute: false,
@@ -3711,7 +3731,9 @@ mod tests {
             name: "test ditch".into(),
             points: vec![[exit[0] - 20.0, exit[1]], [exit[0] + 20.0, exit[1]]],
             width: 6.0,
-            depth: 0.7,
+            // The exit's pad is levelled into a hillside: deep enough to
+            // stand over it.
+            depth: 4.0,
         });
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
@@ -3744,12 +3766,12 @@ mod tests {
         let house = map
             .placements
             .iter()
-            .find(|p| p.prefab == "house_plank" && p.at == [-18.0, 95.0] && p.rot == 90.0)
+            .find(|p| p.prefab == "house_plank" && p.at == [-20.2, 63.5] && p.rot == 90.0)
             .expect("the village's north house moved");
         let face = [house.at[0] + 3.59, house.at[1]];
         map.placements.push(fence([face[0] + 2.125, face[1]], 90.0));
         // Across the district road in the village, which runs north-south.
-        map.placements.push(fence([3.75, 50.0], 0.0));
+        map.placements.push(fence([0.3, 28.5], 0.0));
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         let found = |rule: Rule, s: &str| {
@@ -3800,10 +3822,10 @@ mod tests {
         let bare = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         let mut map = bare.clone();
         // On the district road in the village, which runs north-south.
-        map.placements.push(wreck("wreck_lada", [3.5, 50.0], 0.0));
-        // Across the side of the radio mast's hill, 18° there.
+        map.placements.push(wreck("wreck_lada", [0.3, 28.5], 0.0));
+        // Across the side of the radio mast's hill, 17° there.
         map.placements
-            .push(wreck("wreck_lorry", [-120.0, -220.0], 90.0));
+            .push(wreck("wreck_lorry", [-47.0, -125.0], 90.0));
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         let found = |rule: Rule, s: &str| {
@@ -3817,12 +3839,12 @@ mod tests {
             r.text()
         );
         assert!(
-            found(Rule::Footing, "the wreck_lorry at (-120, -220) has ground"),
+            found(Rule::Footing, "the wreck_lorry at (-47, -125) has ground"),
             "{}",
             r.text()
         );
         let was = Heightmap::build(&bare);
-        for at in [[-120.0, -220.0], [-120.0, -226.0], [-110.0, -220.0]] {
+        for at in [[-47.0, -125.0], [-47.0, -131.0], [-37.0, -125.0]] {
             assert_eq!(hm.height(at), was.height(at), "the ground moved at {at:?}");
         }
     }
