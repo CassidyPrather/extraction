@@ -17,8 +17,15 @@ use bevy::render::render_resource::{
     Extent3d, PrimitiveTopology, TextureDimension, TextureFormat, TextureUsages,
 };
 
-/// Foliage switches between cards and impostor this far from the tree.
+/// Foliage switches between cards and impostor this far from the tree...
 pub const NEAR: f32 = 68.0;
+/// ...across a band this far either side, the two dithered against each
+/// other pixel by pixel (complementary: every pixel shows one or the
+/// other, never both or neither). A swap all at once at one distance
+/// popped (playtest 2026-10-28: "ugly as sin"), and a tree on the line
+/// flickered as the head moved; the band is its hysteresis.
+/// `tree_sway.wgsl` holds the same two (`LOD_NEAR`, `LOD_BAND`).
+pub const LOD_BAND: f32 = 6.0;
 /// The capture rigs' render layer (nothing else is on it).
 const LAYER: usize = 9;
 /// Capture width, texels (a multiple of 64: readback rows stay unpadded).
@@ -632,7 +639,7 @@ pub fn material(image: Handle<Image>, tint: Color) -> ImpostorMaterial {
             ..default()
         },
         extension: ImpostorCut {
-            cut: Vec4::new(NEAR, 0.0, 0.0, 0.0),
+            cut: Vec4::new(NEAR, LOD_BAND, 0.0, 0.0),
         },
     }
 }
