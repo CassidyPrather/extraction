@@ -1548,13 +1548,20 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
-    /// The game's own executor (`crate::single_threaded`): the timing
-    /// gauges measure the frame as it runs, schedule shares and all.
-    /// `BUDGET_EXECUTOR=multi` puts Bevy's multi-threaded one back on the
-    /// busy moment and `BUDGET_THREADS=all` gives it every core, to weigh
+    /// The game's own executors (`crate::one_thread_once_loaded`: every
+    /// core while loading, one thread once the world's in): the timing
+    /// gauges measure the load and the frame as they run, schedule shares
+    /// and all. `BUDGET_EXECUTOR=multi` keeps Bevy's multi-threaded one on
+    /// past the load and `BUDGET_THREADS=all` gives it every core, to weigh
     /// the two again on another machine.
     pub(crate) fn as_the_game_runs(app: &mut App) {
-        crate::single_threaded(app);
+        let mut schedules = app.world_mut().resource_mut::<Schedules>();
+        for (_, schedule) in schedules.iter_mut() {
+            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+        }
+        if !std::env::var("BUDGET_EXECUTOR").is_ok_and(|k| k == "multi") {
+            crate::one_thread_once_loaded(app);
+        }
     }
 
     pub(crate) fn busy_scene(map: &str) -> App {
@@ -1607,12 +1614,8 @@ pub(crate) mod tests {
     /// `busy_moment`, calling `measuring` as the measured frames begin.
     fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
         let mut app = busy_scene(map);
-        if std::env::var("BUDGET_EXECUTOR").is_ok_and(|k| k == "multi") {
-            let mut schedules = app.world_mut().resource_mut::<Schedules>();
-            for (_, s) in schedules.iter_mut() {
-                s.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
-            }
-        }
+        let one = app.world().get_resource::<crate::OneThread>();
+        println!("executors: one thread {:?}", one.map(|o| o.done));
         let keep_alive = crate::perf::fight::keep_alive;
         let skip = app
             .world()
