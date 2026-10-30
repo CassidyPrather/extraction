@@ -128,14 +128,17 @@ def kept_bicycle():
     p.box((0.24, 0.06, 0.12), (seat[0] - 0.02, seat[1] + 0.09, 0.0), "Leather",
           bevel=0.02, segs=1)
     rod(seat, (seat[0] - 0.02, seat[1] + 0.06), 0.011, "Zinc")
-    rod(head, (head[0] - 0.03, head[1] + 0.18), 0.012, "Zinc")
+    # The stem up to the bar (it stopped 5 cm short: bar and grips in the
+    # air).
+    rod(head, (head[0] - 0.08, head[1] + 0.2), 0.012, "Zinc")
     p.cyl(0.011, -0.27, 0.27, "Zinc", segs=8, xf=T(head[0] - 0.08, head[1] + 0.2, 0.0))
     for z in (-0.27, 0.27):
         p.cyl(0.016, z - 0.05, z + 0.05, "Rubber", segs=8,
               xf=T(head[0] - 0.08, head[1] + 0.2, 0.0))
-    p.box((0.4, 0.07, 0.012), (-0.22, 0.31, 0.04), "Painted")
-    # The tag hangs from the saddle.
-    tag(p, (seat[0] - 0.02, seat[1] - 0.04, 0.07), "z", 1.0)
+    # The chain guard on the stay (it stood 2.4 cm off it).
+    p.box((0.4, 0.07, 0.012), (-0.22, 0.31, 0.015), "Painted")
+    # The tag on the seat tube (it hung in the air under the saddle).
+    tag(p, (-0.11, 0.6, 0.011), "z", 1.0)
     return [p]
 
 
