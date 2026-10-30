@@ -481,7 +481,7 @@ fn veins(px: f32, py: f32, r: f32) -> f32 {
 
 /// How a mark is lit of itself.
 #[derive(Clone, Copy)]
-enum Glow {
+enum MarkGlow {
     /// Light pooled at its heart, falling off to its edge: what light cast
     /// on the ground looks like (an even glow reads as a flat thing laid
     /// on the grass: a carpet, a puddle).
@@ -493,7 +493,7 @@ enum Glow {
 }
 
 /// A mark's glow, on the same disc as its texture.
-fn glow_texture(images: &mut Assets<Image>, glow: Glow) -> Handle<Image> {
+fn glow_texture(images: &mut Assets<Image>, glow: MarkGlow) -> Handle<Image> {
     let n = 128u32;
     let mut data = Vec::with_capacity((n * n * 4) as usize);
     for y in 0..n {
@@ -507,12 +507,12 @@ fn glow_texture(images: &mut Assets<Image>, glow: Glow) -> Handle<Image> {
             let g = match glow {
                 // A faint floor to the edge: in the dark, where it starts
                 // still shows.
-                Glow::Pool => 0.2 + 0.8 * pool * (0.75 + 0.25 * blot),
-                Glow::Coals => {
+                MarkGlow::Pool => 0.2 + 0.8 * pool * (0.75 + 0.25 * blot),
+                MarkGlow::Coals => {
                     let spots = smooth(0.55, 0.72, value_noise(px * 7.0, py * 7.0, 5));
                     spots * (0.3 + 0.7 * pool) + 0.1 * pool
                 }
-                Glow::Veins => 0.15 + 0.85 * veins(px, py, r) * (0.3 + 0.7 * pool),
+                MarkGlow::Veins => 0.15 + 0.85 * veins(px, py, r) * (0.3 + 0.7 * pool),
             };
             let g = if r > 1.02 { 0.0 } else { g };
             let c = (g.clamp(0.0, 1.0) * 255.0) as u8;
@@ -639,13 +639,13 @@ fn init_assets(
     let (mark, _) = mark_texture(&mut images, Pattern::Plain);
     let (scoured, scoured_glow) = mark_texture(&mut images, Pattern::Spiral);
     let (veined, _) = mark_texture(&mut images, Pattern::Veins);
-    let pool = glow_texture(&mut images, Glow::Pool);
-    let coals = glow_texture(&mut images, Glow::Coals);
-    let vein_glow = glow_texture(&mut images, Glow::Veins);
+    let pool = glow_texture(&mut images, MarkGlow::Pool);
+    let coals = glow_texture(&mut images, MarkGlow::Coals);
+    let vein_glow = glow_texture(&mut images, MarkGlow::Veins);
     // Fogged as if half as far off, as the Zone's other things are
     // (`MarkMaterial`). Matte, every one: a glossy disc gives back the sky
     // and reads as a puddle. Lit of itself as light on the ground is, or
-    // as coals are (`Glow`), never evenly.
+    // as coals are (`MarkGlow`), never evenly.
     let mut ground_with =
         |tex: &Handle<Image>, glow: &Handle<Image>, c: Color, emissive: LinearRgba, rough: f32| {
             marks.add(MarkMaterial {
