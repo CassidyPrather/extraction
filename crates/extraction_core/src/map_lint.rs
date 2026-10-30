@@ -417,6 +417,17 @@ pub const WAIT_IN: f32 = 1.2;
 /// How far settling a building in may lower ground the map declares (a
 /// plateau set to a height), metres.
 pub const TERRACE_CUT: f32 = 0.5;
+/// The truck's stops and rendezvous stand level under it: the ground
+/// at its front wheels and at its rear ones (`raid::truck::parked`, the
+/// front axle 3.9 m ahead of its middle, the rear 0.8 m behind) falls at
+/// most this, radians (3 degrees): steeper, it stands level with its
+/// wheels in the soil, or its loose kit slides in the bed.
+pub const TRUCK_LEVEL: f32 = 0.05;
+/// Valleys whose truck stands as it did, settled low (not levelled for,
+/// nor held to [`TRUCK_LEVEL`]): the Training Yard, whose own tests (the
+/// first look round the bed, the vault over the tailgate) are tuned to
+/// the truck as it stands there now; its owner (Onboarding) levels it.
+pub const TRUCK_AS_IT_WAS: &[&str] = &["Training Yard"];
 /// A rock big enough to crouch behind: horizontal radius and height.
 pub const BOULDER_RADIUS: f32 = 0.6;
 pub const BOULDER_HEIGHT: f32 = 0.8;
@@ -873,6 +884,22 @@ pub fn first_jobs(map: &MapDef, id: &str) -> Vec<(String, P2)> {
     out
 }
 
+/// The span inside the fence of the valley the distance rules were set
+/// for (Marrow Creek as it was: 640 m, its fence 38 m in), metres.
+pub const STANDARD_SPAN: f32 = 564.0;
+
+/// How a tight valley's span inside its fence compares with
+/// [`STANDARD_SPAN`], at most 1: a valley pulled in on purpose
+/// ([`crate::map_openness::TIGHT`]) keeps the rules' distances in proportion
+/// (`docs/MAP_DESIGN.md`, "Tight, broken, quiet between"). Any other
+/// valley keeps them as set, the Training Yard's small one too.
+pub fn valley_scale(map: &MapDef) -> f32 {
+    if !crate::map_openness::TIGHT.contains(&map.name.as_str()) {
+        return 1.0;
+    }
+    ((map.size - 2.0 * map.fence_inset) / STANDARD_SPAN).clamp(0.3, 1.0)
+}
+
 /// Every solid thing on the surface, placements first (in order: index
 /// `i < map.placements.len()` is placement `i`), then the sites' exit
 /// kiosks.
@@ -1054,7 +1081,7 @@ fn reached_near(g: &NavGrid, seen: &[bool], p: P2, r: f32) -> bool {
 }
 
 /// A path resampled every [`STEP`] metres.
-fn resample(path: &[P2]) -> Vec<P2> {
+pub(crate) fn resample(path: &[P2]) -> Vec<P2> {
     let mut out = vec![path[0]];
     let mut carry = 0.0;
     for w in path.windows(2) {
@@ -1185,6 +1212,10 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         find(&mut r, Rule::Reach, "no insertion".into(), [0.0, 0.0]);
         return r;
     };
+    // The distances the rules keep are for a valley of the standard span;
+    // a tighter one keeps them in proportion (the same walking, not the
+    // same metres).
+    let k = valley_scale(map);
     let walk = crate::map_nav::zone_grid(map, hm, crate::map_nav::MAX_SLOPE);
     let comfy = crate::map_nav::zone_grid(map, hm, COMFORT_SLOPE);
     let walk_seen = flood(&walk, ins);
@@ -1397,7 +1428,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             .fold((f32::INFINITY, ""), |a, b| if b.0 < a.0 { b } else { a });
         nn_min = nn_min.min(d);
         nn_max = nn_max.max(d);
-        if d < POI_MIN && i < pois.iter().position(|p| p.0 == other).unwrap_or(0) {
+        if d < POI_MIN * k && i < pois.iter().position(|p| p.0 == other).unwrap_or(0) {
             find(
                 &mut r,
                 Rule::Spacing,
@@ -2422,7 +2453,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 .map(|p| dist(*p, ins))
                 .fold(f32::INFINITY, f32::min);
             let inside = geom::point_in_polygon(&reg.polygon, ins);
-            if inside || d < DANGER_FAR {
+            if inside || d < DANGER_FAR * k {
                 find(
                     &mut r,
                     Rule::LootRisk,
@@ -2622,6 +2653,35 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             wrecks.0, wrecks.1
         ));
     }
+    // The truck stands on its wheels where it stops: at the base, its
+    // rear to the drop; at a rendezvous, its bed to the valley's middle
+    // (`raid::truck::base_pose`, `rv_pose`).
+    let mut worst_truck = 0.0f32;
+    let stands = if TRUCK_AS_IT_WAS.contains(&map.name.as_str()) {
+        Vec::new()
+    } else {
+        map.truck_stands()
+    };
+    for (what, at, yaw) in stands {
+        let fall = truck_fall(hm, at, yaw);
+        worst_truck = worst_truck.max(fall.abs());
+        if fall.abs() > TRUCK_LEVEL {
+            find(
+                &mut r,
+                Rule::Footing,
+                format!(
+                    "the truck at {what} stands on ground falling {:.1}° from cab to tail (at most {:.1}°): level its stop",
+                    fall.to_degrees(),
+                    TRUCK_LEVEL.to_degrees()
+                ),
+                at,
+            );
+        }
+    }
+    r.measures.push(format!(
+        "truck stops: the ground under the truck falls at most {:.1}°",
+        worst_truck.to_degrees()
+    ));
     // Kiosks stand on a levelled pad (`Heightmap::underground`; a site's
     // own placement is padded as any building), so what can go wrong is
     // under the exits' pads, and where their doors open: onto water or a
@@ -2796,7 +2856,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         .collect();
     let robots = map.regions.iter().any(|g| g.danger > 0);
     for g in &gates {
-        if robots && dist(*g, ins) < GATE_FROM_INSERTION {
+        if robots && dist(*g, ins) < GATE_FROM_INSERTION * k {
             find(
                 &mut r,
                 Rule::Patrol,
@@ -2810,7 +2870,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for g in gates.iter().filter(|_| robots) {
         for m in map.markers_of(&MarkerKind::Rendezvous) {
-            if dist(*g, m.at) < RV_FROM_GATE {
+            if dist(*g, m.at) < RV_FROM_GATE * k {
                 find(
                     &mut r,
                     Rule::Patrol,
@@ -2832,7 +2892,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 );
             }
         }
-        if dist(m.at, ins) < WORK_FROM_INSERTION {
+        if dist(m.at, ins) < WORK_FROM_INSERTION * k {
             find(
                 &mut r,
                 Rule::Patrol,
@@ -2935,9 +2995,105 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         ));
     }
 
+    // -- Tight, broken, quiet between (map_openness) -------------------------------
+    {
+        use crate::map_openness as mo;
+        let o = mo::openness(map, hm, &walk);
+        let pull = mo::pull(map, hm);
+        let mean = pull.iter().map(|p| p.2).sum::<usize>() as f32 / pull.len().max(1) as f32;
+        let places = mo::pull_at_places(map, hm);
+        let empty = mo::empty_walks(map, &comfy);
+        r.measures.push(format!(
+            "openness: a standing figure seen {:.0} m (median), {:.0} m (p90); {:.0}% of the open ground seen past a walker's {:.0} m; a fight at a hot spot heard by {mean:.1} others; places heard by: {}; longest empty walk {:.0} m",
+            o.median,
+            o.p90,
+            o.open_share * 100.0,
+            mo::OPEN_REACH,
+            places
+                .iter()
+                .map(|(n, _, k)| format!("{n} {k}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            empty.iter().map(|e| e.2).fold(0.0, f32::max)
+        ));
+        if mo::TIGHT.contains(&map.name.as_str()) {
+            if o.open_share > mo::OPEN_MAX {
+                find(
+                    &mut r,
+                    Rule::Landmark,
+                    format!(
+                        "{:.0}% of the open ground is seen past a walker's sight (at most {:.0}%): break the sightlines",
+                        o.open_share * 100.0,
+                        mo::OPEN_MAX * 100.0
+                    ),
+                    ins,
+                );
+            }
+            if mean > mo::PULL_MEAN {
+                find(
+                    &mut r,
+                    Rule::Patrol,
+                    format!(
+                        "a fight at a hot spot is heard by {mean:.1} others on average (at most {:.1}): put rises between them",
+                        mo::PULL_MEAN
+                    ),
+                    ins,
+                );
+            }
+            let danger = |p: P2| {
+                map.regions
+                    .iter()
+                    .filter(|reg| geom::point_in_polygon(&reg.polygon, p))
+                    .map(|reg| reg.danger)
+                    .max()
+                    .unwrap_or(0)
+            };
+            for (name, at, k) in &places {
+                if danger(*at) <= 1 && *k > mo::QUIET_PULL {
+                    find(
+                        &mut r,
+                        Rule::Patrol,
+                        format!(
+                            "a fight at {name}, a quiet place, is heard by {k} hot spots (at most {})",
+                            mo::QUIET_PULL
+                        ),
+                        *at,
+                    );
+                }
+            }
+            for reg in map.regions.iter().filter(|reg| reg.danger >= 2) {
+                if reg.notice.is_none_or(|n| n > mo::NOTICE_MAX) {
+                    find(
+                        &mut r,
+                        Rule::Patrol,
+                        format!(
+                            "{}, a hot zone, lets its machines notice you from any range: cap it (notice, at most {:.0} m)",
+                            reg.name,
+                            mo::NOTICE_MAX
+                        ),
+                        reg.polygon[0],
+                    );
+                }
+            }
+            for (a, b, len, at) in &empty {
+                if *len > mo::EMPTY_MAX {
+                    find(
+                        &mut r,
+                        Rule::Spacing,
+                        format!(
+                            "{len:.0} m of the walk from {a} to {b} has nothing to stop at (at most {:.0})",
+                            mo::EMPTY_MAX
+                        ),
+                        *at,
+                    );
+                }
+            }
+        }
+    }
+
     // -- Route choice ---------------------------------------------------------------
     for (name, at) in &rvs {
-        if dist(*at, ins) < RV_FAR {
+        if dist(*at, ins) < RV_FAR * k {
             find(
                 &mut r,
                 Rule::Choice,
@@ -2992,7 +3148,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     }
     for (i, (a, pa)) in rvs.iter().enumerate() {
         for (b, pb) in rvs.iter().skip(i + 1) {
-            if dist(*pa, *pb) < RV_APART {
+            if dist(*pa, *pb) < RV_APART * k {
                 find(
                     &mut r,
                     Rule::Choice,
@@ -3181,7 +3337,7 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
         // A kiosk is a building to draw like any other; a light prop isn't.
         let (light, n): (Vec<&Solid>, Vec<&Solid>) = solids
             .iter()
-            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE)
+            .filter(|q| dist(q.rect.at, p) <= VIEW_RANGE * k)
             .partition(|q| VIEW_LIGHT.contains(&q.prefab.as_str()));
         light_most = light_most.max(light.len());
         if n.len() > worst.0 {
@@ -3208,6 +3364,16 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
     r.routes = routes;
     r.findings.sort_by_key(|f| f.rule);
     r
+}
+
+/// The fall of the ground under a truck standing at `at` facing `yaw`:
+/// its front axle's ground less its rear axles', over their 4.7 m, as an
+/// angle (radians; `raid::truck::parked`).
+pub fn truck_fall(hm: &Heightmap, at: P2, yaw: f32) -> f32 {
+    let (s, c) = yaw.sin_cos();
+    let ground = |x: f32, z: f32| hm.height([at[0] + x * c + z * s, at[1] - x * s + z * c]);
+    let axle = |z: f32| (ground(-1.0, z) + ground(1.0, z)) * 0.5;
+    (axle(-3.9) - axle(0.8)).atan2(4.7)
 }
 
 #[cfg(test)]
@@ -3336,7 +3502,7 @@ mod tests {
         let rv = map.markers_of(&MarkerKind::Rendezvous).next().unwrap().at;
         map.markers.push(crate::map::Marker {
             kind: MarkerKind::Spotter,
-            at: [rv[0] + 30.0, rv[1] + 30.0],
+            at: [rv[0] + 20.0, rv[1] + 20.0],
             rot: 0.0,
             name: "Test spotter".into(),
             y: 0.0,
@@ -3357,13 +3523,13 @@ mod tests {
         );
     }
 
-    /// Take away the cover by the district road south of Marrow's creek
-    /// bridge and the first job's way to the radio mast runs in the open.
+    /// Take away the light cover round Marrow's creek bridge and the first
+    /// job's way to the radio mast runs in the open.
     #[test]
     fn a_first_job_walk_in_the_open_is_found() {
         let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         map.placements.retain(|p| {
-            !(dist(p.at, [8.0, -25.0]) < 30.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
+            !(dist(p.at, [0.0, -10.0]) < 45.0 && VIEW_LIGHT.contains(&p.prefab.as_str()))
         });
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
@@ -3374,6 +3540,54 @@ mod tests {
             "{}",
             r.text()
         );
+    }
+
+    /// The playtest of 28 October found Marrow "a couple of points in an
+    /// otherwise empty plane", seen from too far, its fights heard by every
+    /// machine. Undo each fix and its rule finds it: the rises by the
+    /// creek's banks, the ford and the Hollow's rim; the hot zones' capped
+    /// notice; the quiet places kept clear of work; the roofs and loot
+    /// between the places.
+    #[test]
+    fn marrow_undone_is_open_loud_and_empty() {
+        let mut map = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
+        map.features.retain(|f| {
+            !matches!(f, crate::map::TerrainFeature::Ridge { points, .. }
+                if [[-84.0, -54.0], [26.0, -36.0], [56.0, -14.0], [60.0, -64.0], [66.0, 46.0]]
+                    .contains(&points[0]))
+        });
+        for reg in &mut map.regions {
+            reg.notice = None;
+        }
+        let pois: Vec<P2> = map.markers_of(&MarkerKind::Poi).map(|m| m.at).collect();
+        for at in pois {
+            map.markers.push(crate::map::Marker {
+                kind: MarkerKind::WorkSite,
+                at: [at[0] + 25.0, at[1]],
+                rot: 0.0,
+                name: String::new(),
+                y: 0.0,
+            });
+        }
+        map.placements
+            .retain(|p| !crate::map_surge::roofed(&p.prefab));
+        map.markers
+            .retain(|m| !matches!(m.kind, MarkerKind::Loot { .. }));
+        let hm = Heightmap::build(&map);
+        let r = lint(&map, &hm);
+        for what in [
+            "seen past a walker's sight",
+            "others on average",
+            "a quiet place",
+            "nothing to stop at",
+            "notice you from any range",
+        ] {
+            assert!(
+                r.findings.iter().any(|f| f.what.contains(what)),
+                "{what}: {}",
+                r.text()
+            );
+        }
     }
 
     /// The designer's first raid in Marrow went up the road to the Village,
@@ -3401,7 +3615,7 @@ mod tests {
         let mut map = base.clone();
         map.placements.push(crate::map::Placement {
             prefab: "shed".into(),
-            at: [22.0, 224.0],
+            at: [4.0, 102.5],
             rot: 90.0,
             y: 0.0,
             absolute: false,
@@ -3567,7 +3781,9 @@ mod tests {
             name: "test ditch".into(),
             points: vec![[exit[0] - 20.0, exit[1]], [exit[0] + 20.0, exit[1]]],
             width: 6.0,
-            depth: 0.7,
+            // The exit's pad is levelled into a hillside: deep enough to
+            // stand over it.
+            depth: 4.0,
         });
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
@@ -3600,12 +3816,12 @@ mod tests {
         let house = map
             .placements
             .iter()
-            .find(|p| p.prefab == "house_plank" && p.at == [-18.0, 95.0] && p.rot == 90.0)
+            .find(|p| p.prefab == "house_plank" && p.at == [-20.2, 63.5] && p.rot == 90.0)
             .expect("the village's north house moved");
         let face = [house.at[0] + 3.59, house.at[1]];
         map.placements.push(fence([face[0] + 2.125, face[1]], 90.0));
         // Across the district road in the village, which runs north-south.
-        map.placements.push(fence([3.75, 50.0], 0.0));
+        map.placements.push(fence([0.3, 28.5], 0.0));
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         let found = |rule: Rule, s: &str| {
@@ -3656,10 +3872,10 @@ mod tests {
         let bare = MapDef::from_ron(crate::map::MARROW_CREEK).unwrap();
         let mut map = bare.clone();
         // On the district road in the village, which runs north-south.
-        map.placements.push(wreck("wreck_lada", [3.5, 50.0], 0.0));
-        // Across the side of the radio mast's hill, 18° there.
+        map.placements.push(wreck("wreck_lada", [0.3, 28.5], 0.0));
+        // Across the side of the radio mast's hill, 17° there.
         map.placements
-            .push(wreck("wreck_lorry", [-120.0, -220.0], 90.0));
+            .push(wreck("wreck_lorry", [-47.0, -125.0], 90.0));
         let hm = Heightmap::build(&map);
         let r = lint(&map, &hm);
         let found = |rule: Rule, s: &str| {
@@ -3673,12 +3889,12 @@ mod tests {
             r.text()
         );
         assert!(
-            found(Rule::Footing, "the wreck_lorry at (-120, -220) has ground"),
+            found(Rule::Footing, "the wreck_lorry at (-47, -125) has ground"),
             "{}",
             r.text()
         );
         let was = Heightmap::build(&bare);
-        for at in [[-120.0, -220.0], [-120.0, -226.0], [-110.0, -220.0]] {
+        for at in [[-47.0, -125.0], [-47.0, -131.0], [-37.0, -125.0]] {
             assert_eq!(hm.height(at), was.height(at), "the ground moved at {at:?}");
         }
     }

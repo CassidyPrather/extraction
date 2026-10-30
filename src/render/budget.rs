@@ -1804,6 +1804,40 @@ pub(crate) mod tests {
                     .or_default() += 1;
             }
             count!(StandardMaterial, "StandardMaterial");
+            // And whose: a material modified is every mesh wearing it
+            // re-specialised (`check_entities_needing_specialization`).
+            let ids: Vec<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                let users: Vec<Entity> = w
+                    .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                    .iter(w)
+                    .filter(|(_, m)| m.0.id() == id)
+                    .map(|(e, _)| e)
+                    .collect();
+                let name = users.first().map_or("(none)".to_string(), |e| {
+                    let mut at = *e;
+                    for _ in 0..8 {
+                        if let Some(n) = w.get::<Name>(at) {
+                            return n.as_str().to_string();
+                        }
+                        match w.get::<ChildOf>(at) {
+                            Some(p) => at = p.parent(),
+                            None => break,
+                        }
+                    }
+                    "(unnamed)".into()
+                });
+                *mods
+                    .entry(format!("material, {} users, {name}", users.len()))
+                    .or_default() += 1;
+            }
             count!(
                 crate::anomaly::visuals::ParticleMaterial,
                 "ParticleMaterial"
@@ -1929,6 +1963,188 @@ pub(crate) mod tests {
         for (name, mean, p99) in stats.iter().take(4) {
             println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
         }
+    }
+
+    /// Mesh entities in a settled valley by what they belong to (their
+    /// root's name), and how many of those roots move or can be handled:
+    /// what merging static props per material could save
+    /// (`cargo test --lib mesh_census -- --ignored --nocapture`,
+    /// `BUDGET_MAP` for another valley).
+    #[test]
+    #[ignore = "census: prints, asserts nothing"]
+    fn mesh_census() {
+        let _counting = counted();
+        let map = std::env::var("BUDGET_MAP").unwrap_or("marrow_creek".into());
+        let mut app = client_threads(&map, "clearing", None);
+        settle(&mut app);
+        let w = app.world_mut();
+        let meshes: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
+        let mut by_root: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut roots: HashMap<String, std::collections::HashSet<Entity>> = HashMap::new();
+        // An unnamed root's meshes by their own (or nearest) name.
+        let mut unnamed: HashMap<String, usize> = HashMap::new();
+        let mut moving = 0;
+        for e in &meshes {
+            let mut root = *e;
+            let mut dynamic = false;
+            loop {
+                if w.get::<avian3d::prelude::RigidBody>(root)
+                    .is_some_and(|b| !b.is_static())
+                {
+                    dynamic = true;
+                }
+                match w.get::<ChildOf>(root) {
+                    Some(p) => root = p.parent(),
+                    None => break,
+                }
+            }
+            let name = w
+                .get::<Name>(root)
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            roots.entry(name.clone()).or_default().insert(root);
+            if name == "(unnamed)" && std::env::var_os("CENSUS_COMPONENTS").is_some() {
+                let names: Vec<String> = w
+                    .inspect_entity(*e)
+                    .map(|it| {
+                        it.map(|c| {
+                            c.name()
+                                .to_string()
+                                .rsplit("::")
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                        .collect()
+                    })
+                    .unwrap_or_default();
+                *unnamed.entry(names.join(",")).or_default() += 1;
+                let path = w
+                    .get::<Mesh3d>(*e)
+                    .and_then(|m| w.resource::<AssetServer>().get_path(m.0.id()))
+                    .map_or("(made in code)".to_string(), |p| {
+                        p.path().to_string_lossy().to_string()
+                    });
+                *unnamed.entry(format!("mesh from {path}")).or_default() += 1;
+            }
+            if name == "(unnamed)" {
+                let mut at = *e;
+                let mut own = format!(
+                    "(no name; {} components)",
+                    w.entity(at).archetype().component_count()
+                );
+                for _ in 0..8 {
+                    if let Some(n) = w.get::<Name>(at) {
+                        own = n.to_string();
+                        break;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => break,
+                    }
+                }
+                *unnamed.entry(own).or_default() += 1;
+            }
+            let entry = by_root.entry(name).or_default();
+            entry.0 += 1;
+            if dynamic {
+                entry.1 += 1;
+                moving += 1;
+            }
+        }
+        let mut v: Vec<_> = by_root.into_iter().collect();
+        v.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        println!(
+            "{map}: {} mesh entities, {moving} under a moving body; by root (meshes, moving):",
+            meshes.len()
+        );
+        for (name, (n, m)) in v.iter().take(60) {
+            println!(
+                "  {n:6} {m:6}  {name} ({} roots)",
+                roots.get(name).map_or(0, |r| r.len())
+            );
+        }
+        let mut u: Vec<_> = unnamed.into_iter().collect();
+        u.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("unnamed roots' meshes by their own name:");
+        for (name, n) in u.iter().take(40) {
+            println!("  {n:6}  {name}");
+        }
+    }
+
+    /// No material many meshes wear is rewritten (nearly) every frame in
+    /// a busy moment: each write is every one of them re-specialised on the
+    /// main thread. The robots' shared shell was, as the day's light crept
+    /// (1.4 ms a frame of `check_entities_needing_specialization` in
+    /// Marrow Creek's busy moment, with tracing).
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_no_shared_material_rewritten_each_frame() {
+        let _counting = counted();
+        let mut app = busy_scene("marrow_creek");
+        let keep_alive = crate::perf::fight::keep_alive;
+        let frames = 20;
+        let mut writes: HashMap<AssetId<StandardMaterial>, usize> = HashMap::new();
+        // What a rewritten material's write changed (its fields, as Debug
+        // shows them), for the failure to say which writer it is.
+        let mut before: HashMap<AssetId<StandardMaterial>, String> = HashMap::new();
+        let mut what: HashMap<AssetId<StandardMaterial>, std::collections::BTreeSet<String>> =
+            HashMap::new();
+        for _ in 0..frames {
+            keep_alive(&mut app);
+            app.update();
+            let w = app.world_mut();
+            for (id, m) in w.resource::<Assets<StandardMaterial>>().iter() {
+                let now = format!("{m:?}");
+                if let Some(old) = before.get(&id).filter(|o| **o != now) {
+                    let diff = now
+                        .split(", ")
+                        .filter(|f| !old.split(", ").any(|g| g == *f))
+                        .map(|f| f.split(':').next().unwrap_or(f).trim().to_string());
+                    what.entry(id).or_default().extend(diff);
+                }
+                before.insert(id, now);
+            }
+            let ids: std::collections::HashSet<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                *writes.entry(id).or_default() += 1;
+            }
+        }
+        let w = app.world_mut();
+        let mut wrong = Vec::new();
+        for (id, n) in writes {
+            if n * 4 < frames * 3 {
+                continue;
+            }
+            let users: Vec<Entity> = w
+                .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                .iter(w)
+                .filter(|(_, m)| m.0.id() == id)
+                .map(|(e, _)| e)
+                .collect();
+            if users.len() < 4 {
+                continue;
+            }
+            let name = w
+                .get::<Name>(users[0])
+                .or_else(|| {
+                    w.get::<ChildOf>(users[0])
+                        .and_then(|p| w.get::<Name>(p.parent()))
+                })
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            wrong.push(format!(
+                "{name}'s material ({} meshes) written in {n} of {frames} frames, changing {:?}",
+                users.len(),
+                what.get(&id)
+            ));
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     /// A busy moment in Marrow Creek holds its CPU budget: the frame in

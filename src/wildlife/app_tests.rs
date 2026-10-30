@@ -35,6 +35,7 @@ fn app() -> (App, Entity, Zone) {
 /// [`app`] on a valley of its own (`None`: the default, Marrow Creek).
 fn app_on(map: Option<&str>) -> (App, Entity, Zone) {
     let mut opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         ..Default::default()
     };
@@ -311,6 +312,27 @@ fn a_stone_onto_their_roof_sends_a_walker_to_look_there() {
     );
     let aware = app.world().get::<crate::robots::Awareness>(walker).unwrap();
     assert_ne!(aware.target, Some(player), "it's onto you");
+    // And down again somewhere, said for the sound of it.
+    #[derive(Resource, Default)]
+    struct Down(Vec<super::Alighted>);
+    app.init_resource::<Down>().add_systems(
+        Last,
+        |mut a: MessageReader<super::Alighted>, mut d: ResMut<Down>| d.0.extend(a.read().copied()),
+    );
+    for _ in 0..90 * 120 {
+        app.update();
+        if !app.world().resource::<Down>().0.is_empty() {
+            break;
+        }
+    }
+    let down = app
+        .world()
+        .resource::<Down>()
+        .0
+        .first()
+        .copied()
+        .expect("never came down");
+    assert!(down.birds > 0);
 }
 
 /// Sitting and flying, no bird is ever inside any collider in the valley

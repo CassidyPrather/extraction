@@ -2841,9 +2841,14 @@ pub fn site_under(zone: &Zone, p: Vec3) -> Option<(String, f32)> {
     None
 }
 
-/// How far past a cell's edge a point still stands on it: a body's
-/// radius, so one against a wall (its centre past the open cells) is in.
-const BODY_REACH: f32 = 0.35;
+/// How far past its open cells a point still stands on a site's floor: a
+/// body against a wall has its centre a hair past them (a crawler in the
+/// gallery, 0.1 m). No further: an open cell can reach half a cell past
+/// its wall's face, and the wall's only `WALL` thick, so past this a point
+/// is out in the rock with nothing under it (a body's radius, 0.35, took
+/// in 5 cm of rock past the bunker hall's wall, and a watch let go there
+/// fell for ever: `site_floors_and_colliders_agree`).
+const BODY_REACH: f32 = ug::WALL - ug::CELL * 0.5 - 0.005;
 
 /// The Depot's site id.
 pub const DEPOT: &str = "depot_marrow";
@@ -3094,6 +3099,136 @@ mod tests {
     use super::*;
     use crate::launch::LaunchOptions;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Down every site, the plan's floors (`floor_under`) and the colliders
+    /// agree, both ways: under every point the plan calls floored there's a
+    /// collider at that floor (or the point is in a wall, the wall round it),
+    /// and round the rooms there's no collider floor the plan doesn't know.
+    /// (Soak: a watch let go 5 cm past the bunker hall's wall, out in the
+    /// rock, read as on the hall's floor, and fell for ever.)
+    #[test]
+    fn site_floors_and_colliders_agree() {
+        use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
+        // Known, and written up (docs/UNDERGROUND.md, "Floors and
+        // colliders"): where a room meets a pit at a different floor, its
+        // wall run stops at the junction and leaves a sliver at the corner
+        // with nothing under it. (site, site-local point, radius.)
+        const KNOWN: [(&str, [f32; 2], f32); 1] = [("cellars_cinder", [4.0, 40.0], 0.3)];
+        let mut known_seen = 0;
+        let mut bad = Vec::new();
+        let mut checked = 0usize;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..5 {
+                app.update();
+            }
+            let zone = app.world().resource::<Zone>().clone();
+            let (found, n) = app
+                .world_mut()
+                .run_system_once(move |q: SpatialQuery| {
+                    let mut out: Vec<String> = Vec::new();
+                    let mut n = 0usize;
+                    let filter = SpatialQueryFilter::default();
+                    for site in ug::placed(&zone.map) {
+                        let r = ug::raster(&site.id).unwrap();
+                        let footing = zone.hm.footing(&site.id, site.at, site.rot);
+                        let mut seen = std::collections::HashSet::new();
+                        let (x0, z0) = (r.origin[0], r.origin[1]);
+                        let (w, h) = (r.nx as f32 * ug::CELL, r.nz as f32 * ug::CELL);
+                        let step = ug::CELL * 0.5;
+                        let mut z = z0 + step * 0.5;
+                        while z < z0 + h {
+                            let mut x = x0 + step * 0.5;
+                            while x < x0 + w {
+                                let local = [x, z];
+                                x += step;
+                                // The floor it'd be on: its own, or the
+                                // nearest within half a metre (the wall's
+                                // far side).
+                                let near = std::iter::once([0.0f32, 0.0])
+                                    .chain((0..8).map(|k| {
+                                        let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                                        [a.cos() * 0.5, a.sin() * 0.5]
+                                    }))
+                                    .find_map(|d| r.floor_at([local[0] + d[0], local[1] + d[1]]));
+                                let Some(fc) = near else {
+                                    continue;
+                                };
+                                if r.in_kiosk(local) {
+                                    continue;
+                                }
+                                let wp = site.to_world(local);
+                                let floor = footing + fc;
+                                // A stair's top, at the surface: not "under".
+                                if floor > zone.ground(wp[0], wp[1]) - 0.6 {
+                                    continue;
+                                }
+                                let from = Vec3::new(wp[0], floor + 1.0, wp[1]);
+                                let hit = q
+                                    .cast_ray(from, Dir3::NEG_Y, 1.4, true, &filter)
+                                    .map(|h| from.y - h.distance);
+                                n += 1;
+                                let key = (site.id.clone(), local[0].round() as i32, local[1].round() as i32);
+                                let known = KNOWN.iter().any(|(id, c, rad)| {
+                                    *id == site.id
+                                        && (local[0] - c[0]).hypot(local[1] - c[1]) < *rad
+                                });
+                                match floor_under(&zone, from) {
+                                    Some(_) if known && hit.is_none() => {
+                                        out.push("KNOWN".into());
+                                    }
+                                    Some(f) if hit.is_none_or(|y| y < f - 0.2) => {
+                                        if seen.insert(key) {
+                                            out.push(format!(
+                                                "{} at {:.2?} (world {:.1?}): floored at {f:.2} by the plan, nothing under it (first hit {hit:.2?})",
+                                                site.id, local, wp
+                                            ));
+                                        }
+                                    }
+                                    None if hit.is_some_and(|y| (y - floor).abs() < 0.2) => {
+                                        if seen.insert(key) {
+                                            out.push(format!(
+                                                "{} at {:.2?} (world {:.1?}): a collider floor at {floor:.2} the plan doesn't have",
+                                                site.id, local, wp
+                                            ));
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            z += step;
+                        }
+                    }
+                    (out, n)
+                })
+                .unwrap();
+            checked += n;
+            known_seen += found.iter().filter(|s| *s == "KNOWN").count();
+            bad.extend(
+                found
+                    .into_iter()
+                    .filter(|s| s != "KNOWN")
+                    .map(|s| format!("{map} {s}")),
+            );
+        }
+        // Fixed? Then take it off the list.
+        assert!(known_seen > 0, "the known gap's gone: drop it from KNOWN");
+        assert!(checked > 1000, "only {checked} points checked");
+        let shown: Vec<_> = bad.iter().take(40).cloned().collect();
+        assert!(
+            bad.is_empty(),
+            "{} of {checked} points disagree:\n{}",
+            bad.len(),
+            shown.join("\n")
+        );
+    }
 
     /// Loot lies at a reach, not at your feet: every spot at least 0.3 m
     /// over its floor (a shelf, a crate's top, a table, a filled bin), as

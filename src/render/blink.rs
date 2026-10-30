@@ -1,6 +1,10 @@
 //! A blink over the eyes when the comfort setting moves you at once
 //! (`interact::hand_climb::ClimbedOver` with `teleport`): the view goes
 //! black and opens again on where you are, rather than jumping.
+//!
+//! The eyes also close while the head is inside something solid (leant
+//! into a wall, a bench's top, a crate): the room never moves to keep the
+//! head out (`player`), so what's inside isn't seen instead.
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
@@ -10,6 +14,10 @@ use crate::rig::{LocalPlayer, RigHead};
 
 /// How long the view takes to open again, seconds.
 const OPEN: f32 = 0.4;
+/// How long it takes to close as the head goes into something, seconds.
+const CLOSE: f32 = 0.12;
+/// The head's size against solid things (m).
+const HEAD_R: f32 = 0.09;
 
 pub struct BlinkPlugin;
 
@@ -37,6 +45,7 @@ fn add_blink(
         if !locals.contains(parent.parent()) {
             continue;
         }
+        // At the eye, not out in the air: no fog to take.
         let material = materials.add(StandardMaterial {
             base_color: Color::srgba(0.0, 0.0, 0.0, 0.0),
             alpha_mode: AlphaMode::Blend,
@@ -61,23 +70,31 @@ fn add_blink(
 
 /// Shut at once on a comfort move of the local player's, then open.
 fn blink(
-    mut blinks: Query<(&mut Blink, &mut Visibility)>,
+    mut blinks: Query<(&mut Blink, &mut Visibility, &ChildOf)>,
+    heads: Query<&GlobalTransform, With<RigHead>>,
     mut over: MessageReader<ClimbedOver>,
     locals: Query<(), With<LocalPlayer>>,
+    spatial: avian3d::prelude::SpatialQuery,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
     let moved = over.read().any(|o| o.teleport && locals.contains(o.player));
-    for (mut b, mut vis) in &mut blinks {
+    let dt = time.delta_secs();
+    for (mut b, mut vis, head) in &mut blinks {
+        let inside = heads
+            .get(head.parent())
+            .is_ok_and(|h| head_in_solid(&spatial, h.translation()));
         // Open and staying open: nothing to write (a material written
         // re-prepares every frame).
-        if !moved && b.shut <= 0.0 {
+        if !moved && !inside && b.shut <= 0.0 {
             continue;
         }
         b.shut = if moved {
             1.0
+        } else if inside {
+            (b.shut + dt / CLOSE).min(1.0)
         } else {
-            (b.shut - time.delta_secs() / OPEN).max(0.0)
+            (b.shut - dt / OPEN).max(0.0)
         };
         vis.set_if_neq(if b.shut > 0.0 {
             Visibility::Inherited
@@ -88,4 +105,13 @@ fn blink(
             m.base_color = Color::srgba(0.0, 0.0, 0.0, b.shut);
         }
     }
+}
+
+/// Whether a head at `at` is inside the world's solid things.
+pub fn head_in_solid(spatial: &avian3d::prelude::SpatialQuery, at: Vec3) -> bool {
+    use avian3d::prelude::*;
+    let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+    !spatial
+        .shape_intersections(&Collider::sphere(HEAD_R), at, Quat::IDENTITY, &filter)
+        .is_empty()
 }

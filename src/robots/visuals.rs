@@ -71,7 +71,7 @@ struct RobotMats {
     /// Cyan running lights on weak points (rotors, knees, vents): brighter
     /// than the kit's `Glow`, to carry through fog at 30-80 m.
     glow: Handle<StandardMaterial>,
-    /// Drone beacons: amber, one material for them all, blinked by
+    /// Drone beacons: cool white, one material for them all, blinked by
     /// `blink_beacons`.
     beacon: Handle<StandardMaterial>,
     /// The soft additive glow round a drone's beacon, flashing with it.
@@ -166,7 +166,7 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             ..default()
         }),
         beacon: materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.75, 0.4),
+            base_color: Color::srgb(0.85, 0.9, 1.0),
             emissive: BEACON_ON * BEACON_REST,
             ..default()
         }),
@@ -258,7 +258,7 @@ fn robot_material(
                 mat.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
             })
         }
-        Some(name) => model_mats.get(name, lib, server, materials),
+        Some(name) => model_mats.get(super::weak_points::paint(name), lib, server, materials),
         None => m.dark.clone(),
     }
 }
@@ -1222,13 +1222,14 @@ fn scan_beams(
 }
 
 /// A beacon at full flash, and how much of it glows between flashes.
-const BEACON_ON: LinearRgba = LinearRgba::rgb(40.0, 24.0, 8.0);
+/// (A cool white: orange is a weak point's, `weak_points::SHOOT_HERE`.)
+const BEACON_ON: LinearRgba = LinearRgba::rgb(30.0, 34.0, 44.0);
 const BEACON_REST: f32 = 0.06;
 /// Seconds between flashes, and how long each lasts.
 const BEACON_PERIOD: f32 = 1.3;
 const BEACON_FLASH: f32 = 0.18;
-/// The halo's colour (amber, like the beacon).
-const HALO: Color = Color::LinearRgba(LinearRgba::new(2.4, 1.3, 0.45, 1.0));
+/// The halo's colour (white, like the beacon).
+const HALO: Color = Color::LinearRgba(LinearRgba::new(1.6, 1.8, 2.4, 1.0));
 
 /// How bright a beacon is `t` seconds in: a short flash each period, a
 /// faint glow between (a blink in the corner of the eye finds a drone in
@@ -1255,13 +1256,28 @@ fn blink_beacons(
         return;
     };
     let level = beacon_level(time.elapsed_secs());
-    if let Some(mut mat) = materials.get_mut(&m.beacon) {
-        mat.emissive = BEACON_ON * level;
+    // Written only when it changes: between flashes the level holds, and
+    // each write (same value or not) is every drone's beacon, or halo,
+    // re-specialised (`budget`'s shared-material gauge).
+    let beacon = BEACON_ON * level;
+    if materials
+        .get(&m.beacon)
+        .is_some_and(|mat| mat.emissive != beacon)
+    {
+        if let Some(mut mat) = materials.get_mut(&m.beacon) {
+            mat.emissive = beacon;
+        }
     }
-    if let Some(mut mat) = materials.get_mut(&m.halo) {
-        // Only the flash has a halo.
-        let k = ((level - BEACON_REST) / (1.0 - BEACON_REST)).max(0.0);
-        mat.base_color = HALO.with_alpha(0.3 * k);
+    // Only the flash has a halo.
+    let k = ((level - BEACON_REST) / (1.0 - BEACON_REST)).max(0.0);
+    let halo = HALO.with_alpha(0.3 * k);
+    if materials
+        .get(&m.halo)
+        .is_some_and(|mat| mat.base_color != halo)
+    {
+        if let Some(mut mat) = materials.get_mut(&m.halo) {
+            mat.base_color = halo;
+        }
     }
 }
 
@@ -2058,10 +2074,14 @@ fn shell_by_light(
     let (Some(c), Some(m)) = (conditions, mats) else {
         return;
     };
-    if *done == Some(c.light) {
+    // In 64ths: the light moves a little every frame as the day goes, and
+    // the shell is one material every robot wears, so each write was every
+    // robot's shell re-specialised (`budget`'s shared-material gauge).
+    let light = (c.light * 64.0).round() / 64.0;
+    if *done == Some(light) {
         return;
     }
-    *done = Some(c.light);
+    *done = Some(light);
     let shell = robot_material(
         Some("Shell"),
         &m,
@@ -2074,8 +2094,8 @@ fn shell_by_light(
         super::weathering::Valley::of_map(&z.map.name)
     });
     // After dark the shell keeps none of it: the eyes are the tell then.
-    let dusk = (c.light / 0.25).clamp(0.0, 1.0);
-    let k = 0.22 * c.light.sqrt() * dusk * valley.shell_glow();
+    let dusk = (light / 0.25).clamp(0.0, 1.0);
+    let k = 0.22 * light.sqrt() * dusk * valley.shell_glow();
     if let Some(mut mat) = materials.get_mut(&shell) {
         mat.emissive = LinearRgba::rgb(k, k, k * 1.05);
         // A clear moon glints off the shell: right, but it mustn't out-read

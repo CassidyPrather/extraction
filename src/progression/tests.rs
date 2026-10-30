@@ -152,6 +152,7 @@ fn a_career_from_before_jobs_loads_and_is_credited() {
             rounds: 0,
             charge_wh: 0.0,
             local: [0.0, 0.05, -0.5 + i as f32 * 0.016],
+            turn: [0.0, 0.0, 0.0, 1.0],
             gun: None,
             inserted: Vec::new(),
             loads: Default::default(),
@@ -326,11 +327,24 @@ fn stepping_off_the_truck_without_kit_is_told_once() {
         .next()
         .unwrap()
         .translation();
-    // Off the steps with the kit all in the crate.
+    // In the bed, then off the steps with the kit all in the crate. (Off
+    // the truck before ever being on it, a session's first frames, is the
+    // first-hour bots' to show: no line at camp.)
     for id in ["pm_pistol", "radio", "map_case"] {
         stash(&mut app, id, 1);
     }
+    // Put straight at camp (a session opening): nothing.
+    go(&mut app, [truck.x, truck.z]);
     go(&mut app, [truck.x, truck.z + 6.0]);
+    assert!(
+        said(&app).is_empty(),
+        "not put off the truck, only stepping off"
+    );
+    // Stepped off, a stride at a time.
+    go(&mut app, [truck.x, truck.z]);
+    for z in [1.5, 2.3, 3.1, 3.9, 4.7] {
+        go(&mut app, [truck.x, truck.z + z]);
+    }
     assert_eq!(app.world().resource::<Raid>().phase, Phase::AtBase);
     let lines = said(&app);
     assert_eq!(lines.len(), 1, "{:?}", app.world().resource::<Raid>().log);

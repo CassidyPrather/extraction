@@ -33,23 +33,23 @@ pub const PLACES: &[Place] = &[
     by(
         "marrow_creek",
         "tape_practice",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         0.45,
     ),
     by(
         "marrow_creek",
         "cassette_player",
-        [-17.30, 93.70],
+        [-19.60, 62.20],
         208.3,
         -0.5,
     ),
     // The south gate booth: the soldier's mix and his player.
-    by("marrow_creek", "tape_duty", [47.50, 284.40], 153.4, 0.3),
+    by("marrow_creek", "tape_duty", [29.50, 162.90], 153.4, 0.3),
     by(
         "marrow_creek",
         "cassette_player",
-        [47.50, 284.40],
+        [29.50, 162.90],
         153.4,
         -0.35,
     ),
@@ -105,7 +105,7 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "marrow_creek",
         what: Standing::Piano,
-        at: [-18.21, 19.08, 95.00],
+        at: [-20.41, 18.96, 63.50],
         rot: 90.0,
     },
     // Fiala's gramophone, on the lodge floor against the windowless log
@@ -182,8 +182,22 @@ pub const SURFACE: f32 = 0.3;
 
 /// A surface by the note to lay a thing on: beside it as asked, the other
 /// side, then round it further out. Never the floor (Story's rule for
-/// scenes and loot alike).
-pub fn surface_near(zone: &crate::world::Zone, p: &Place, yaw: Quat) -> Option<(f32, f32, f32)> {
+/// scenes and loot alike), and never on what's already laid there
+/// (`taken`: where and how far each reaches, as `reach` is this one's): a
+/// player that found no table on its side lay on its own tape, their
+/// faces fighting (the 28 October playtest, 0:39:21).
+pub fn surface_near(
+    zone: &crate::world::Zone,
+    p: &Place,
+    yaw: Quat,
+    reach: f32,
+    taken: &[(Vec3, f32)],
+) -> Option<(f32, f32, f32)> {
+    let clear = |x: f32, z: f32| {
+        taken
+            .iter()
+            .all(|(t, r)| Vec2::new(t.x - x, t.z - z).length() >= r + reach + GAP)
+    };
     let mut tries = vec![Vec3::X * p.aside, Vec3::X * -p.aside];
     for r in [0.6f32, 0.9, 1.2, 1.5] {
         for k in 0..12 {
@@ -195,8 +209,17 @@ pub fn surface_near(zone: &crate::world::Zone, p: &Place, yaw: Quat) -> Option<(
         let off = yaw * o;
         let (x, z) = (p.at[0] + off.x, p.at[1] + off.z);
         let y = crate::world::notes::rest_height(zone, x, z, 2.2);
-        (y - zone.ground(x, z) >= SURFACE).then_some((x, y, z))
+        (y - zone.ground(x, z) >= SURFACE && clear(x, z)).then_some((x, y, z))
     })
+}
+
+/// How far apart two laid things keep, edge to edge (m).
+pub const GAP: f32 = 0.03;
+
+/// How far a laid thing reaches from its middle, across the surface.
+pub fn reach(def: &extraction_core::items::ItemDef) -> f32 {
+    let s = def.size_m();
+    0.5 * s[0].hypot(s[2])
 }
 
 /// Lays this valley's tapes and players: part of the zone's loot roll
@@ -210,16 +233,19 @@ pub fn lay_tapes(
     catalog: &crate::items::Catalog,
     map: &str,
 ) {
+    let mut taken = Vec::new();
     for p in PLACES.iter().filter(|p| p.map == map) {
         let Some(kind) = catalog.kind(p.item) else {
             warn!("no item {}", p.item);
             continue;
         };
         let yaw = Quat::from_rotation_y(-p.rot.to_radians());
-        let Some((x, y, z)) = surface_near(zone, p, yaw) else {
+        let r = reach(catalog.get(kind));
+        let Some((x, y, z)) = surface_near(zone, p, yaw, r, &taken) else {
             warn!("{}: no surface by {:?}", p.item, p.at);
             continue;
         };
+        taken.push((Vec3::new(x, y, z), r));
         let half = catalog.get(kind).size_m()[1] * 0.5;
         let e = spawn_item(
             commands,
@@ -242,6 +268,38 @@ mod tests {
 
     /// Everything laid finds a table, shelf or crate by its note: none of
     /// it lies on the floor.
+    /// The first music you meet is in the valley's mood: no tape lying
+    /// within [`FIRST_REACH`] of a map's insertion plays a bright tune
+    /// (`tapes::BRIGHT`).
+    #[test]
+    fn the_first_music_you_meet_is_in_the_mood() {
+        use extraction_core::music::tapes::{BRIGHT, TAPES};
+        const FIRST_REACH: f32 = 150.0;
+        let mut checked = 0;
+        for p in PLACES.iter().filter(|p| p.item.starts_with("tape_")) {
+            let zone = crate::world::Zone::load(p.map);
+            let near = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Insertion)
+                .any(|m| Vec2::from(m.at).distance(Vec2::from(p.at)) < FIRST_REACH);
+            if !near {
+                continue;
+            }
+            checked += 1;
+            let tape = TAPES.iter().find(|t| t.item == p.item).unwrap();
+            for take in tape.sides.iter().flat_map(|s| s.iter()) {
+                assert!(
+                    !BRIGHT.contains(&take.tune),
+                    "{} by {}'s insertion plays {}",
+                    p.item,
+                    p.map,
+                    take.tune
+                );
+            }
+        }
+        assert!(checked > 0, "no tape near an insertion was checked");
+    }
+
     #[test]
     fn everything_lies_on_a_surface() {
         let catalog =
@@ -251,12 +309,26 @@ mod tests {
         maps.dedup();
         for map in maps {
             let zone = crate::world::Zone::load(map);
+            let mut taken: Vec<(Vec3, f32, &str)> = Vec::new();
             for p in PLACES.iter().filter(|p| p.map == map) {
-                assert!(catalog.kind(p.item).is_some(), "{}", p.item);
+                let kind = catalog.kind(p.item).unwrap_or_else(|| panic!("{}", p.item));
                 let yaw = Quat::from_rotation_y(-p.rot.to_radians());
-                let (x, y, z) = surface_near(&zone, p, yaw)
+                let r = reach(catalog.get(kind));
+                let spots: Vec<(Vec3, f32)> = taken.iter().map(|t| (t.0, t.1)).collect();
+                let (x, y, z) = surface_near(&zone, p, yaw, r, &spots)
                     .unwrap_or_else(|| panic!("{} in {map}: no surface", p.item));
                 assert!(y - zone.ground(x, z) >= SURFACE, "{}", p.item);
+                // Nothing laid on anything else laid.
+                let at = Vec3::new(x, y, z);
+                for (t, tr, what) in &taken {
+                    let d = Vec2::new(t.x - x, t.z - z).length();
+                    assert!(
+                        d >= tr + r || (t.y - y).abs() > 0.3,
+                        "{} in {map} lies on {what} ({d:.2} m apart)",
+                        p.item
+                    );
+                }
+                taken.push((at, r, p.item));
             }
         }
     }

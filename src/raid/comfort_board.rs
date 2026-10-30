@@ -95,8 +95,9 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
                     size: Vec2::new(0.26, 0.14),
                     style: ScreenStyle::Card,
                 },
-                // Left canvas wall, facing in, toward the front.
-                Transform::from_xyz(-1.12, FLOOR + y, z)
+                // Left canvas wall, facing in, toward the front: in front of
+                // the side slat (its face at 1.1125), not behind it.
+                Transform::from_xyz(-1.105, FLOOR + y, z)
                     .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
                 Visibility::default(),
                 ChildOf(truck),
@@ -258,7 +259,8 @@ mod tests {
             ComfortCard::Handed => c.left_handed,
             ComfortCard::Seated => c.seated,
             ComfortCard::OneHanded => c.one_handed,
-            ComfortCard::Body => !c.body,
+            // The body starts hidden (only what's backed up is drawn).
+            ComfortCard::Body => c.body,
             _ => !c.captions,
         };
         for (which, on_word) in [
@@ -266,7 +268,7 @@ mod tests {
             (ComfortCard::Seated, "seated"),
             (ComfortCard::OneHanded, "one"),
             (ComfortCard::Captions, "off"),
-            (ComfortCard::Body, "hidden"),
+            (ComfortCard::Body, "shown"),
         ] {
             let card = app
                 .world_mut()

@@ -3,6 +3,8 @@
 // four corners share a base point (position) and differ in uv: x picks the
 // side, y the end. Streaks face the camera about their own (wind-slanted)
 // axis.
+// No fog: additive streaks, fading with distance themselves (fog's colour
+// added onto everything behind them would be wrong).
 
 #import bevy_pbr::{
     mesh_view_bindings::{view, globals},

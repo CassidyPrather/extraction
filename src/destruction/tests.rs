@@ -15,6 +15,7 @@ use crate::world::buildings::{Door, DoorLeaf};
 
 fn app(save: Option<std::path::PathBuf>) -> App {
     let opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         save,
         ..Default::default()
@@ -922,7 +923,7 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
 fn knife_facing(target: Vec3, out: Vec3, back: f32) -> (crate::vr_harness::Vr, Vec3, Quat) {
     use crate::interact::GripRole;
     use crate::rig::Side;
-    let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+    let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
     let zone = vr.app.world().resource::<crate::world::Zone>().clone();
     let flat = out.with_y(0.0).normalize();
     let stand = target + flat * back;
@@ -2076,4 +2077,133 @@ fn a_wheels_nuts_undone_take_it_off_and_the_surge_bolts_it_back() {
     run(&mut app, 2);
     assert_eq!(wheels(&mut app).len(), 4, "four wheels again");
     assert_eq!(nuts_near(&mut app), 4 * WHEEL_NUTS, "every nut back");
+}
+
+#[test]
+fn what_rested_on_a_crate_falls_when_it_breaks() {
+    // The playtest's "googly eyes": loot asleep on a supply crate's lid
+    // hung in the air where the lid had been once the crate was smashed.
+    let mut app = app(None);
+    run(&mut app, 3);
+    let (crate_e, top) = app
+        .world_mut()
+        .query_filtered::<(Entity, &GlobalTransform), (With<SupplyCrate>, With<Timber>)>()
+        .iter(app.world())
+        .map(|(e, g)| {
+            (
+                e,
+                g.translation() + Vec3::Y * crate::items::loot::SUPPLY_CRATE.y * 0.5,
+            )
+        })
+        .next()
+        .expect("a supply crate");
+    let catalog = app.world().resource::<crate::items::Catalog>().clone();
+    let item = crate::items::spawn_item(
+        &mut app.world_mut().commands(),
+        &catalog,
+        crate::items::SpawnItem {
+            kind: catalog.kind("scrap_metal").unwrap(),
+            transform: Transform::from_translation(top + Vec3::new(0.05, 0.05, -0.04)),
+            condition: 1.0,
+        },
+    );
+    app.world_mut().flush();
+    // Settled, and asleep, on the lid.
+    let mut slept = false;
+    for _ in 0..900 {
+        run(&mut app, 1);
+        if app.world().get::<Sleeping>(item).is_some() {
+            slept = true;
+            break;
+        }
+    }
+    assert!(
+        slept,
+        "it went to sleep on the lid (else the test proves nothing)"
+    );
+    let y0 = app
+        .world()
+        .get::<GlobalTransform>(item)
+        .unwrap()
+        .translation()
+        .y;
+    assert!((y0 - top.y).abs() < 0.15, "on the lid ({y0} vs {})", top.y);
+    // Smashed.
+    for _ in 0..8 {
+        if app.world().get_entity(crate_e).is_err() {
+            break;
+        }
+        app.world_mut().write_message(Hit {
+            entity: crate_e,
+            point: top - Vec3::Y * 0.1,
+            normal: Vec3::Y,
+            velocity: Vec3::NEG_Y * 6.0,
+            damage: 80.0,
+            shooter: None,
+            mass_g: 0.0,
+            load: Default::default(),
+            blow: Some(extraction_core::melee::Blow::Blunt),
+        });
+        run(&mut app, 1);
+    }
+    assert!(app.world().get_entity(crate_e).is_err(), "the crate broke");
+    run(&mut app, 90);
+    let y1 = app
+        .world()
+        .get::<GlobalTransform>(item)
+        .unwrap()
+        .translation()
+        .y;
+    assert!(
+        y1 < top.y - 0.3,
+        "it fell when the crate went ({y1:.2}, the lid was at {:.2})",
+        top.y
+    );
+}
+
+/// Not a check: where Marrow Creek's counters' drawers and cabinet doors
+/// are, and which way they face, for the shots.
+#[test]
+#[ignore]
+fn list_counters() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for (n, m) in app
+        .world_mut()
+        .query::<(&Name, &crate::world::hinge::Moving)>()
+        .iter(app.world())
+    {
+        let front = m.rest.rotation * Vec3::NEG_Z;
+        println!(
+            "counter {n} at {:.2} front {:.2}",
+            m.rest.translation, front
+        );
+    }
+}
+
+#[test]
+fn counters_drawers_and_doors_are_drawn_where_they_hang() {
+    // Each moving part's node is drawn from the part's own space back into
+    // its model's: the node's origin (a door's or a window leaf's hinge, a
+    // drawer's middle) lands on the part itself, shut, in every counter
+    // and window.
+    let mut app = app(None);
+    run(&mut app, 3);
+    let mut checked = 0;
+    for (m, d) in app
+        .world_mut()
+        .query::<(&crate::world::hinge::Moving, &super::wood::Drawn)>()
+        .iter(app.world())
+    {
+        let name = d.model.expect("a moving part draws its node");
+        let origin = crate::world::hinge::node_origin(name).expect("a node we move");
+        let drawn = (m.rest * d.at).transform_point(origin);
+        assert!(
+            drawn.distance(m.rest.translation) < 1e-3,
+            "{name} is drawn {:.3} m off where it hangs",
+            drawn.distance(m.rest.translation)
+        );
+        checked += 1;
+    }
+    assert!(checked >= 10, "Marrow's counters' parts ({checked})");
 }

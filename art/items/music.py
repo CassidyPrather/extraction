@@ -105,9 +105,13 @@ def cassette_player():
     # Slots for the keys.
     for _, x in KEYS:
         cut.box((KEY_W + 0.0008, 0.014, KEY_D + 0.0008), (x, top - 0.005, 0.0), "Rotor")
-    # Battery cover's pocket on the back (3.5 mm: shallower, the cover's
-    # face and the pocket's floor would z-fight).
-    cut.box((0.1004, 0.0604, 0.0074), (0.0, -0.005, -PD / 2), "Rotor")
+    # Battery cover's pocket on the back (1.7 mm, the cover 1.5: the cell
+    # behind it is 19.8 mm across, and the well's floor is 22.5 mm in).
+    cut.box((0.1004, 0.0604, 0.0034), (0.0, -0.005, -PD / 2), "Rotor")
+    # Under it, the cell's compartment: the power cell lies along X at
+    # (0, -0.02, -0.008) (`radio::deck`'s cell mount), so it isn't through
+    # the plastic when the cover's off.
+    cut.box((0.066, 0.024, 0.0226), (0.0, -0.02, -PD / 2 + 0.0113), "Rotor")
     # The thumbwheel's slot in the +X side.
     cut.box((0.03, 0.0228, 0.0058), (PW / 2, 0.012, 0.0), "Rotor")
     # Headphone socket on top, behind the keys.
@@ -224,7 +228,7 @@ def cassette_player():
     # The battery cover: a plug in its pocket, ridges to push it by.
     cz = -PD / 2 + 0.0003
     cell = Part("cell_door", origin=(0.0, -0.005, cz))
-    cell.prism(fillet(rect(-0.05, 0.05, -0.035, 0.025), 0.004, 3), cz, cz + 0.0035, "Rotor",
+    cell.prism(fillet(rect(-0.05, 0.05, -0.035, 0.025), 0.004, 3), cz, cz + 0.0015, "Rotor",
                axis="z", bevel=0.0008, segs=1)
     for j in range(5):
         cell.box((0.03, 0.0012, 0.0012), (0.0, -0.03 + j * 0.0028, cz - 0.0002), "Rotor",

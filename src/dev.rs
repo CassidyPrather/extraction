@@ -31,6 +31,8 @@ impl Plugin for DevPlugin {
                     fight_for_gallery,
                     treat_for_gallery,
                     spall_for_gallery,
+                    plate_hits_for_gallery,
+                    present_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -63,6 +65,7 @@ fn screenshot_when_ready(
     mut count: ResMut<FrameCount>,
     world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
+    loading: Option<Res<crate::rig::loading::LoadingView>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
@@ -70,7 +73,13 @@ fn screenshot_when_ready(
     if count.requested || count.frames < opts.frames {
         return;
     }
-    if !(world.materials() && world.props()) {
+    // In a headset, the world once the loading view has lifted
+    // (`EXTRACTION_SHOT_LOADING=1`: the loading view itself).
+    let shown = loading.is_none_or(|l| {
+        l.lifted_at
+            .is_some_and(|t| crate::render::timeline::since_start() - t > 2.0)
+    }) || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
+    if !(world.materials() && world.props() && shown) {
         if time.elapsed_secs() < SHOT_WAIT_MAX {
             return;
         }
@@ -175,7 +184,9 @@ fn gallery(
         let first = first
             .replace("+grime", "")
             .replace("+wet", "")
-            .replace("+fog", "");
+            .replace("+fog", "")
+            // `+present`: the mag release held (`present_for_gallery`).
+            .replace("+present", "");
         let first = first.as_str();
         // `pm_pistol+dry`: run dry, the slide held back on an empty
         // magazine (`weapons::stoppages`).
@@ -1314,6 +1325,111 @@ fn spall_for_gallery(
     }
 }
 
+/// `--gallery pm_pistol+present`: the gun with its mag release held, the
+/// magazine out of its catch and hanging out of the well for the other
+/// hand (`weapons::reload::Presented`).
+fn present_for_gallery(
+    opts: Res<LaunchOptions>,
+    guns: Query<(Entity, &crate::weapons::Gun)>,
+    mut present: MessageWriter<crate::weapons::reload::PresentMagazine>,
+    mut frames: Local<u32>,
+) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|g| g.contains("+present"))
+    {
+        return;
+    }
+    *frames += 1;
+    // Once the gallery's magazine is seated.
+    if *frames == 12 {
+        for (e, g) in &guns {
+            if g.firearm.magazine.is_some() {
+                present.write(crate::weapons::reload::PresentMagazine { gun: e });
+            }
+        }
+    }
+}
+
+/// `--gallery plate`: five pistol rounds from the camera into the steel
+/// plate of the range target nearest it, one a frame, spread over its
+/// face: the sparks and the marks they leave (or, on a plate with no
+/// collider, nothing).
+fn plate_hits_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    targets: Query<(&crate::world::buildings::Building, &GlobalTransform)>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    if opts.gallery.as_deref() != Some("plate") {
+        return;
+    }
+    for im in impacts.read() {
+        info!(
+            "gallery plate: {:?} at {} (marked: {})",
+            im.kind, im.point, im.decal
+        );
+    }
+    let (Some((cam, ..)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y == 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    state.0 += 1;
+    if state.0 == 3 {
+        state.1 = Some(commands.spawn(Name::new("Gallery pistol")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    let Some(plate) = targets
+        .iter()
+        .filter(|(b, _)| b.prefab == "target")
+        .min_by(|a, b| {
+            a.1.translation()
+                .distance(eye)
+                .total_cmp(&b.1.translation().distance(eye))
+        })
+    else {
+        return;
+    };
+    const ON_FACE: [(f32, f32); 5] = [
+        (0.0, 0.0),
+        (0.15, 0.1),
+        (-0.12, 0.14),
+        (-0.1, -0.15),
+        (0.14, -0.12),
+    ];
+    let i = state.0 as usize;
+    // Late enough that the yard's colliders are in.
+    const FROM: usize = 60;
+    if (FROM..FROM + ON_FACE.len()).contains(&i) {
+        let (x, y) = ON_FACE[i - FROM];
+        let at = plate.1.transform_point(Vec3::new(x, 1.2 + y, 0.08));
+        // From in front of the camera's own body, which would take them.
+        let dir = (at - eye).normalize();
+        shots.write(crate::weapons::ballistics::Shot {
+            gun,
+            shooter: Some(gun),
+            origin: eye + dir * 0.6,
+            direction: dir,
+            speed: 315.0,
+            damage: 20.0,
+            projectiles: 1,
+            spread: 0.0,
+            recoil: 0.0,
+            seed: i as u64,
+        });
+    }
+}
+
 /// `--gallery treat` (with `side` or `down`, `pose_body_for_gallery`):
 /// a body hurt and treated (`interact::wounds`, drawn by
 /// `render::wounds`). An open wound on the right thigh and the left
@@ -1427,6 +1543,7 @@ fn treat_for_gallery(
 /// `--camera` put it.
 fn pose_body_for_gallery(
     opts: Res<LaunchOptions>,
+    comfort: Option<ResMut<crate::rig::comfort::Comfort>>,
     mut players: Query<(&Transform, &mut crate::rig::RigInput), With<crate::rig::LocalPlayer>>,
     mut cams: Query<
         &mut Transform,
@@ -1440,6 +1557,14 @@ fn pose_body_for_gallery(
     let Some(spec) = opts.gallery.as_deref() else {
         return;
     };
+    // A gallery of the body (or of wounds on it) draws it, whatever the
+    // setting (off by default).
+    if let Some(mut c) = comfort
+        && (spec.contains("body") || spec.contains("treat"))
+        && !c.body
+    {
+        c.body = true;
+    }
     let (stoop, behind, above) = (
         spec.contains("stoop"),
         spec.contains("behind"),

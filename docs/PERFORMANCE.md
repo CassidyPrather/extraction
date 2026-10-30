@@ -1094,3 +1094,59 @@ and 11-19 M of 64.8 M fragments. That's what the gauge fails on.
 `XR=1 scripts/stress.sh` runs it in Monado, both eyes at 640x720. In
 Marrow Creek the opaque pass was 96% of the GPU, and its worst frames
 4% over typical.
+
+## Next: the 28 October playtest's CPU side
+
+Last night's playtest (RTX 3080 and i7-8700K, a Beyond 2 at 75 Hz;
+`docs/playtests/2026-10-28/ANALYSIS.md` §4) ran at 25–37 fps. The eye
+governor's faults are fixed above ("Holding the frame rate"). The
+content's own cost isn't fixed yet. It splits two ways:
+
+- **GPU, the far forest:** Visual design's (the walk to the logging
+  camp, p50 37.9 ms). Hold it to the auto eye size, 1800 px, which the
+  governor can settle near. Its floor is about 58% of 2980.
+- **CPU, Performance's, not started:**
+  - Marrow Creek's main thread runs 12.1 ms a frame (1%: 15.1). That is
+    over the 11.3 ms a 75 Hz frame leaves; physics is 2.5 ms of it.
+    Split it by system with `cpu::ScheduleTimes` on the logging camp
+    walk and the Village, and cut what runs per frame but needn't.
+  - The render world runs 10–16 ms (1%: 19), on its own thread.
+    Pipelined, it bounds the frame with the main thread. Frame time
+    correlates r = 0.87–0.96 with it. Find what's extracted or prepared
+    each frame that doesn't change: the 1,800+ meshes, the lights, the
+    warm-up shelf's leftovers.
+  - The yard's burner: p50 33.1 ms. Split it the same way.
+  - The mirror is a third render. The window card ("In the headset") is
+    the default without `--mirror`, and costs next to nothing.
+  - Bevy doesn't time shadow passes (no diagnostic span). Count their
+    draws per view before judging the GPU's share.
+
+### Marrow's main thread, profiled (30 October)
+
+The busy moment by system (`system_profile`, with tracing, one thread,
+after Map design's ford rises and birch belt): main schedule 44.6 ms,
+Update 14.0, PostUpdate 12.7, FixedPostUpdate 7.0. The named costs are
+Bevy's own, and each grows with the valley's mesh entities (11,136):
+
+| system | ms a frame |
+|---|---|
+| `check_visibility_cpu_culling` | 2.3 |
+| `check_entities_needing_specialization<StandardMaterial>` | 1.45 |
+| `propagate_parent_transforms` + `mark_dirty_trees` | 2.1 |
+| `check_visibility_ranges` | 0.7 |
+| `calculate_bounds` | 0.5 |
+
+Update's 14 ms is spread over hundreds of small systems, inflated by
+the tracing spans.
+
+Found on the way: the drones' beacon and halo were rewritten every
+frame with the same value, and the shell's glow followed the light's
+creep. Each write re-specialises every mesh wearing the material. These
+are now written only on a change, and the light is stepped in 64ths.
+`budget`'s `gauge_no_shared_material_rewritten_each_frame` holds every
+material worn by four or more meshes to that, and names the fields a
+write changed. It didn't move the 1.45 ms: that's the check's
+per-entity baseline.
+
+The lever is fewer mesh entities. Merge static props per material at
+load, as the guns were (`weapons`' merged parts).

@@ -64,7 +64,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "nagant", dims: Some((0.035, 0.185, 0.215)),
+            id: "nagant", dims: Some((0.03, 0.181, 0.235)),
             name: "Nagant revolver",
             description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,
@@ -185,7 +185,7 @@
         // ---------------------------------------------------------------
         // Grenades and blades
         (
-            id: "rgd5", dims: Some((0.066, 0.112, 0.062)), name: "RGD-5 grenade",
+            id: "rgd5", dims: Some((0.078, 0.133, 0.073)), name: "RGD-5 grenade",
             description: "Smooth-bodied, about four seconds once the spoon goes. Pull the ring with your other hand; it's safe while your grip holds the spoon.",
             category: Gadget, size: Small, mass: 0.31, bulk: 0.3,
             grenade: Some((fuse: 3.6, fragments: 300, fragment_g: 0.45, fragment_speed: 1100.0,
@@ -193,7 +193,7 @@
             tags: ["steel", "powder"],
         ),
         (
-            id: "f1", dims: Some((0.064, 0.12, 0.06)), name: "F-1 grenade",
+            id: "f1", dims: Some((0.077, 0.143, 0.071)), name: "F-1 grenade",
             description: "The pineapple: a cast body that throws heavy fragments a long way. Throw it from cover.",
             category: Gadget, size: Small, mass: 0.6, bulk: 0.3,
             grenade: Some((fuse: 3.8, fragments: 260, fragment_g: 0.8, fragment_speed: 900.0,
@@ -201,12 +201,12 @@
             tags: ["steel", "powder"],
         ),
         (
-            id: "grenade_pin", dims: Some((0.048, 0.023, 0.002)), name: "Grenade pin",
+            id: "grenade_pin", dims: Some((0.057, 0.028, 0.002)), name: "Grenade pin",
             category: Curio, size: Tiny, mass: 0.004, bulk: 0.001,
             tags: ["metal"],
         ),
         (
-            id: "grenade_spoon", dims: Some((0.012, 0.076, 0.03)), name: "Grenade spoon",
+            id: "grenade_spoon", dims: Some((0.014, 0.092, 0.036)), name: "Grenade spoon",
             category: Curio, size: Tiny, mass: 0.01, bulk: 0.002,
             tags: ["metal"],
         ),
@@ -714,23 +714,23 @@
             tags: ["metal"],
         ),
         (
-            id: "climbing_kit", name: "Climbing kit",
+            id: "climbing_kit", dims: Some((0.307, 0.213, 0.283)), name: "Climbing kit",
             description: "Rope, a grapnel and a harness.",
             category: Gadget, size: Large, mass: 2.4, bulk: 4.0,
             tags: ["metal"],
         ),
         (
-            id: "zipline_kit", name: "Zipline kit",
+            id: "zipline_kit", dims: Some((0.288, 0.283, 0.305)), name: "Zipline kit",
             description: "Two anchors, a trolley, sixty metres of cable.",
             category: Gadget, size: Large, mass: 3.0, bulk: 4.5,
             tags: ["metal"],
         ),
         (
-            id: "matches", dims: Some((0.036, 0.019, 0.055)), name: "Matches",
+            id: "matches", dims: Some((0.045, 0.023, 0.068)), name: "Matches",
             category: Gadget, size: Tiny, mass: 0.02, bulk: 0.02,
         ),
         (
-            id: "door_wedge", dims: Some((0.048, 0.031, 0.052)), name: "Door wedge",
+            id: "door_wedge", dims: Some((0.096, 0.037, 0.146)), name: "Door wedge",
             description: "Jams a door shut. Robots have to go around, or through.",
             category: Gadget, size: Small, mass: 0.25, bulk: 0.15,
             tags: ["polymer"],
@@ -740,7 +740,7 @@
         // Medical
         // ---------------------------------------------------------------
         (
-            id: "field_dressing", dims: Some((0.045, 0.025, 0.045)), name: "Field dressing",
+            id: "field_dressing", dims: Some((0.133, 0.04, 0.085)), name: "Field dressing",
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
@@ -759,20 +759,20 @@
         // Food. Cosmetic: there is no hunger meter. Tags map to cooking::Food.
         // ---------------------------------------------------------------
         (id: "water_bottle", dims: Some((0.07, 0.24, 0.07)), name: "Canteen", description: "A canteen of water. Twist the cap off before you drink.", category: Food, size: Small, mass: 0.55, bulk: 0.6, tags: ["food:Water"]),
-        (id: "condensed_milk", name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
-        (id: "egg_powder", name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
-        (id: "carrot", name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
-        (id: "onion", name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
-        (id: "canned_tomato", dims: Some((0.075, 0.11, 0.075)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal", "can"]),
-        (id: "flour_sack", name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
-        (id: "rice_bag", name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
-        (id: "canned_beans", dims: Some((0.075, 0.11, 0.075)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal", "can"]),
-        (id: "sugar_cubes", name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
-        (id: "tea_tin", name: "Tea tin", category: Food, size: Small, mass: 0.12, bulk: 0.2, tags: ["food:TeaLeaf", "metal"]),
-        (id: "spice_jar", name: "Spice jar", category: Food, size: Tiny, mass: 0.06, bulk: 0.05, tags: ["food:Spice", "glass"]),
-        (id: "salt_packet", name: "Salt", category: Food, size: Tiny, mass: 0.05, bulk: 0.04, tags: ["food:Salt"]),
-        (id: "canned_stew", dims: Some((0.09, 0.07, 0.09)), name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal", "can"]),
-        (id: "crackers", name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
+        (id: "condensed_milk", dims: Some((0.09, 0.068, 0.091)), name: "Condensed milk", category: Food, size: Small, mass: 0.4, bulk: 0.35, tags: ["food:Milk"]),
+        (id: "egg_powder", dims: Some((0.07, 0.093, 0.048)), name: "Egg powder", category: Food, size: Small, mass: 0.25, bulk: 0.3, tags: ["food:Egg"]),
+        (id: "carrot", dims: Some((0.189, 0.115, 0.126)), name: "Carrots", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Carrot"]),
+        (id: "onion", dims: Some((0.088, 0.092, 0.083)), name: "Onion", category: Food, size: Small, mass: 0.15, bulk: 0.15, tags: ["food:Onion"]),
+        (id: "canned_tomato", dims: Some((0.083, 0.126, 0.086)), name: "Canned tomatoes", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Tomato", "metal", "can"]),
+        (id: "flour_sack", dims: Some((0.228, 0.248, 0.185)), name: "Flour sack", category: Food, size: Medium, mass: 1.0, bulk: 1.2, tags: ["food:Wheat"]),
+        (id: "rice_bag", dims: Some((0.178, 0.198, 0.133)), name: "Rice", category: Food, size: Small, mass: 0.5, bulk: 0.5, tags: ["food:Rice"]),
+        (id: "canned_beans", dims: Some((0.083, 0.126, 0.085)), name: "Canned beans", category: Food, size: Small, mass: 0.45, bulk: 0.4, tags: ["food:Beans", "metal", "can"]),
+        (id: "sugar_cubes", dims: Some((0.105, 0.115, 0.09)), name: "Sugar cubes", category: Food, size: Small, mass: 0.25, bulk: 0.2, tags: ["food:Sugar"]),
+        (id: "tea_tin", dims: Some((0.085, 0.112, 0.086)), name: "Tea tin", category: Food, size: Small, mass: 0.12, bulk: 0.2, tags: ["food:TeaLeaf", "metal"]),
+        (id: "spice_jar", dims: Some((0.079, 0.091, 0.08)), name: "Spice jar", category: Food, size: Tiny, mass: 0.06, bulk: 0.05, tags: ["food:Spice", "glass"]),
+        (id: "salt_packet", dims: Some((0.105, 0.113, 0.059)), name: "Salt", category: Food, size: Tiny, mass: 0.05, bulk: 0.04, tags: ["food:Salt"]),
+        (id: "canned_stew", dims: Some((0.116, 0.091, 0.116)), name: "Canned stew", description: "Tushonka. The label has peeled.", category: Food, size: Small, mass: 0.5, bulk: 0.4, tags: ["food:BeanStew", "metal", "can"]),
+        (id: "crackers", dims: Some((0.114, 0.081, 0.138)), name: "Army crackers", category: Food, size: Small, mass: 0.2, bulk: 0.3, tags: ["food:Flatbread"]),
 
         // Cooked and prepared (made at the camp kitchen; see raid/kitchen.rs).
         (id: "cook_flour", dims: Some((0.063, 0.034, 0.063)), name: "Flour", category: Food, size: Small, mass: 0.3, bulk: 0.3, tags: ["food:Flour", "prepared"]),
@@ -818,17 +818,17 @@
             tags: ["metal"],
         ),
         (
-            id: "gun_oil", name: "Gun oil",
+            id: "gun_oil", dims: Some((0.074, 0.091, 0.074)), name: "Gun oil",
             category: Tool, size: Small, mass: 0.15, bulk: 0.12,
         ),
         (
-            id: "spare_parts", dims: Some((0.053, 0.03, 0.042)), name: "Firearm spare parts",
+            id: "spare_parts", dims: Some((0.111, 0.063, 0.088)), name: "Firearm spare parts",
             description: "Springs, pins, an extractor. Brings a worn gun back toward its best.",
             category: Tool, size: Small, mass: 0.3, bulk: 0.2,
             tags: ["metal"],
         ),
         (
-            id: "multitool", dims: Some((0.068, 0.016, 0.1)), name: "Multitool",
+            id: "multitool", dims: Some((0.078, 0.018, 0.115)), name: "Multitool",
             category: Tool, size: Small, mass: 0.25, bulk: 0.1,
             tags: ["metal"],
         ),
@@ -911,7 +911,7 @@
         (id: "scrap_metal", dims: Some((0.072, 0.038, 0.057)), name: "Scrap metal", category: Material, size: Small, mass: 0.4, bulk: 0.4, tags: ["metal"]),
         (id: "electronics", name: "Salvaged electronics", category: Material, size: Small, mass: 0.2, bulk: 0.3, tags: ["electronics"]),
         (id: "polymer", dims: Some((0.068, 0.029, 0.052)), name: "Polymer stock", category: Material, size: Small, mass: 0.3, bulk: 0.4, tags: ["polymer"]),
-        (id: "powder", dims: Some((0.045, 0.058, 0.026)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
+        (id: "powder", dims: Some((0.054, 0.069, 0.03)), name: "Powder tin", category: Material, size: Small, mass: 0.3, bulk: 0.2, tags: ["powder"]),
         (id: "brass", name: "Brass cases", category: Material, size: Small, mass: 0.25, bulk: 0.15, tags: ["brass"]),
         (id: "bolt", dims: Some((0.016, 0.016, 0.07)), name: "Bolt", description: "A rusty M10 bolt with its nut run on. Worth nothing; throw it ahead of you where the air looks wrong.", category: Material, size: Tiny, mass: 0.06, bulk: 0.02, tags: ["metal"]),
         (
@@ -1100,26 +1100,26 @@
         // The valley keys: the Quarantine Authority's depot keys, one per
         // valley. Bring all three to a robot Gate's lock (see `capstone`).
         (
-            id: "key_marrow", dims: Some((0.09, 0.03, 0.14)), name: "Depot key M",
+            id: "key_marrow", dims: Some((0.1, 0.032, 0.156)), name: "Depot key M",
             description: "A heavy grey cartridge stencilled KEY-M MARROW. The Hollow survey post's, by the tag on it.",
             category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
         ),
         (
-            id: "key_kettle", dims: Some((0.09, 0.03, 0.14)), name: "Depot key K",
+            id: "key_kettle", dims: Some((0.1, 0.027, 0.156)), name: "Depot key K",
             description: "A heavy grey cartridge stencilled KEY-K KETTLE, scorched along one edge.",
             category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
         ),
         (
-            id: "key_cinder", dims: Some((0.09, 0.03, 0.14)), name: "Depot key C",
+            id: "key_cinder", dims: Some((0.1, 0.028, 0.156)), name: "Depot key C",
             description: "A heavy grey cartridge stencilled KEY-C CINDER, gritty with ash.",
             category: Curio, size: Small, mass: 0.5, bulk: 0.15, tags: ["metal", "electronics"],
         ),
 
         // Curios: no use but to keep, or to offer.
         // ---------------------------------------------------------------
-        (id: "wristwatch", name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
-        (id: "old_photo", dims: Some((0.088, 0.01, 0.123)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
-        (id: "chess_piece", name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
+        (id: "wristwatch", dims: Some((0.036, 0.047, 0.039)), name: "Stopped wristwatch", description: "Stopped at twenty to seven. A lot of watches in the valleys did, one October evening.", category: Curio, size: Tiny, mass: 0.05, bulk: 0.02, tags: ["metal"]),
+        (id: "old_photo", dims: Some((0.106, 0.002, 0.148)), name: "Faded photograph", description: "A family on a bench by a well, squinting into the sun. Names on the back, too faded to read.", category: Curio, size: Tiny, mass: 0.01, bulk: 0.01),
+        (id: "chess_piece", dims: Some((0.057, 0.068, 0.057)), name: "Wooden chess knight", description: "Carved by hand, the paint worn off its ears. The rest of the set is somewhere in the Zone.", category: Curio, size: Tiny, mass: 0.03, bulk: 0.02, tags: ["wood"]),
         // The first deep job after the ladder: the depot's ledger (`progression`).
         (
             id: "intake_ledger", dims: Some((0.24, 0.05, 0.32)), name: "Intake ledger",

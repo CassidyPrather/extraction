@@ -146,6 +146,7 @@ impl Plugin for ClientPlugin {
             (
                 world::structures::blockout_visuals,
                 world::structures::fence_visuals,
+                world::structures::merge_fence_posts,
                 world::buildings::building_visuals,
                 world::bridges::bridge_visuals,
                 log_frame_times,
@@ -401,6 +402,18 @@ fn log_file_layer(_app: &mut App) -> Option<bevy::log::BoxedLayer> {
 fn capture_panics() {
     let default = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        // The GPU going: one line and out, before the panics it sets off
+        // in whatever else held the device (the playtest had four).
+        let message = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or("");
+        let file = info.location().map_or("", |l| l.file());
+        if render::gpu_lost::is_gpu_loss(message, file) {
+            render::gpu_lost::stop(&format!("{message} ({file})"));
+        }
         let dir = log_dir();
         let _ = std::fs::create_dir_all(&dir);
         let text = format!("{info}\n\n{}", std::backtrace::Backtrace::force_capture());

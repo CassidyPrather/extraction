@@ -71,7 +71,7 @@ impl Plugin for ProgressionPlugin {
                     place_letter,
                     place_ledger,
                     // The job out there: its place seen, which way it is.
-                    (scout, nudge, restate_after_fall, tailgate),
+                    (scout, nudge, restate_after_fall, tailgate, new_career),
                     contracts::place_bring,
                     contracts::watch_plant,
                     contracts::photograph,
@@ -347,8 +347,8 @@ fn spawn_order_card(mut commands: Commands, trucks: Query<Entity, Added<Truck>>)
                 size: Vec2::new(0.3, 0.12),
                 style: crate::raid::bench::ScreenStyle::Card,
             },
-            // Under the request card.
-            Transform::from_xyz(-1.12, FLOOR + 1.42, 1.32)
+            // Under the request card, in front of the side slat.
+            Transform::from_xyz(-1.105, FLOOR + 1.42, 1.32)
                 .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
             Visibility::Hidden,
             ChildOf(truck),
@@ -789,7 +789,8 @@ fn nudge(
     if raid.phase == Phase::AtBase || drift.1.as_ref() != job {
         *drift = (Default::default(), job.cloned());
     }
-    if raid.phase != Phase::Out {
+    // (`SIM_NO_NUDGE=1`: as before it was said, to compare runs.)
+    if raid.phase != Phase::Out || std::env::var_os("SIM_NO_NUDGE").is_some() {
         return;
     }
     let (Some(job), Some((player, at))) = (job, players.iter().next()) else {
@@ -863,6 +864,27 @@ fn restate_after_fall(
     }
 }
 
+/// A new career's first camp (no raid yet, at camp): the driver says the
+/// yard's kit stayed at the yard, once, when the camp's up. The career
+/// starts from its own crate (`persist::fresh_save`) by design; the yard
+/// saves nothing.
+fn new_career(
+    mut raid: ResMut<Raid>,
+    opts: Res<LaunchOptions>,
+    time: Res<Time>,
+    mut said: Local<bool>,
+) {
+    if *said || raid.raids > 0 || !crate::camp::camp_wanted(&opts) {
+        return;
+    }
+    // When the camp's up, not in the load.
+    if time.elapsed_secs() < 2.0 {
+        return;
+    }
+    *said = true;
+    raid.say(lines::NEW_CAREER_KIT);
+}
+
 /// Off the truck's steps at base, the raid not yet begun (that's 14 m
 /// off, `raid::leave_base`).
 const OFF_THE_TRUCK: f32 = 3.0;
@@ -880,22 +902,32 @@ fn tailgate(
     items: Query<(Entity, &Item, Option<&CarriedBy>, &GlobalTransform)>,
     stash: Query<&Backpack, With<Stash>>,
     catalog: Res<Catalog>,
-    mut said: Local<bool>,
+    // Said this time home; and how far off the truck you were last frame
+    // (a step off it counts, not a session putting you at camp).
+    mut said: Local<(bool, Option<f32>)>,
 ) {
     if raid.phase != Phase::AtBase {
-        *said = false;
+        *said = (false, None);
         return;
     }
-    if *said || opts.map == crate::camp::TRAINING_YARD {
+    // (`SIM_NO_TAILGATE=1`: as before it was said, to compare runs.)
+    if said.0
+        || opts.map == crate::camp::TRAINING_YARD
+        || std::env::var_os("SIM_NO_TAILGATE").is_some()
+    {
         return;
     }
     let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {
         return;
     };
-    if at.translation().xz().distance(truck.translation().xz()) < OFF_THE_TRUCK {
+    let d = at.translation().xz().distance(truck.translation().xz());
+    let was = said.1.replace(d);
+    // Walked off the steps: from on the truck to off it, a step at a time.
+    let stepped = was.is_some_and(|w| w < OFF_THE_TRUCK && d - w < 1.0);
+    if d < OFF_THE_TRUCK || !stepped {
         return;
     }
-    *said = true;
+    said.0 = true;
     let in_crate = |e: Entity| stash.iter().any(|b| b.contents.contains(&e));
     let near_truck = |g: &GlobalTransform| g.translation().distance(truck.translation()) < 3.0;
     let is = |it: &Item, want: &str| {

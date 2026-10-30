@@ -376,7 +376,7 @@ fn shoot(
     mut state: ResMut<Shots>,
     buildings: Query<(Entity, &Building, &GlobalTransform)>,
     mut vis: Query<&mut Visibility>,
-    mut cams: Query<(&mut Transform, &mut Projection, &Camera), With<FreeCamera>>,
+    mut cams: Query<(Entity, &mut Transform, &mut Projection, &Camera), With<FreeCamera>>,
     mut time: ResMut<Time<Virtual>>,
     windows: Query<&Window>,
     mut adapt: ResMut<super::grade::Adaptation>,
@@ -498,7 +498,7 @@ fn shoot(
         exit.write(AppExit::Success);
         return;
     };
-    let Ok((mut cam, mut proj, camera)) = cams.single_mut() else {
+    let Ok((cam_e, mut cam, mut proj, camera)) = cams.single_mut() else {
         return;
     };
     let Ok(window) = windows.single() else {
@@ -518,9 +518,13 @@ fn shoot(
     let want = Transform::from_translation(Vec3::from_array(view.eye))
         .looking_at(Vec3::from_array(view.look), Vec3::Y);
     let fov = (window.height() / eye_px_per_deg()).to_radians();
+    // Held (`capture::Lens`), not set once: the flat optic zoom eases every
+    // camera back to 75 degrees each frame, and which ran last was the
+    // scheduler's choice (the gauges shot at 75 once a system was added).
     if let Projection::Perspective(p) = &mut *proj {
         if (p.fov - fov).abs() > 1e-4 {
             p.fov = fov;
+            commands.entity(cam_e).insert(crate::capture::Lens(fov));
         }
     }
     if *cam != want {

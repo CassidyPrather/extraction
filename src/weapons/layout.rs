@@ -555,9 +555,10 @@ fn nagant() -> GunLayout {
         parts: vec![
             // Frame and grip.
             part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
+            // The grip, raked back below the palm (the model's `RAKE`).
             part(
                 bx(0.026, 0.085, 0.032),
-                Transform::from_xyz(0.0, -0.04, 0.012).with_rotation(Quat::from_rotation_x(-0.2)),
+                Transform::from_xyz(0.0, -0.04, 0.022).with_rotation(Quat::from_rotation_x(-0.4)),
                 Wood,
                 Static,
             ),

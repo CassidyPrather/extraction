@@ -28,7 +28,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from _kit import Wear, board, bolt, prop, rod  # noqa: E402
-from common import RX, RY, RZ, Part, T, fillet  # noqa: E402
+from common import RX, RY, RZ, S, Part, T, empty, fillet  # noqa: E402
 
 UP_Z = RX(-math.pi / 2)  # a cylinder's axis (Z) -> +Y
 
@@ -58,10 +58,14 @@ def door_leaf():
     ang = math.atan2(b[1] - a[1], b[0] - a[0])
     board(p, (L - 0.06, 0.1, 0.025), ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.0135), "Planks",
           roll=ang, bevel=0.004)
-    # Strap hinges on the front (-Z), pinned on pintles at the hinge line.
+    # Strap hinges on the front (-Z), each curled round its knuckle on the
+    # hinge line itself (x 0, z 0: the game swings the leaf about it). The
+    # knuckles stood 34 mm out in front of it, so an open door's hinges hung
+    # off the jamb (the 28 October playtest, 0:41:50).
     for y in ys:
         p.box((0.52, 0.045, 0.004), (0.26, y, -0.027), "Iron", bevel=0.001, segs=1)
-        rod(p, (0.0, y - 0.05, -0.034), (0.0, y + 0.05, -0.034), 0.011, "Iron", segs=8)
+        p.box((0.022, 0.045, 0.018), (0.009, y, -0.018), "Iron", bevel=0.001, segs=1)
+        rod(p, (0.0, y - 0.05, 0.0), (0.0, y + 0.05, 0.0), 0.011, "Iron", segs=8)
         for x in (0.12, 0.26, 0.4):
             bolt(p, (x, y, -0.029), (0, 0, -1), r=0.008, h=0.004)
     # A bent bar handle and a latch plate on the front, a knob behind.
@@ -83,8 +87,18 @@ SW, SH = 1.0, 1.1
 def window_sash(broken=False):
     """A window's frame and casements; `broken`, the panes smashed out,
     shards left in the sashes' corners, one casement swung open."""
-    p = Part("static")
+    p = Part("frame")
     w = Wear(77)
+    xin_, yin_ = SW / 2 - 0.06, SH / 2 - 0.06
+    ty_ = SH / 2 - 0.3
+    # The moving leaves, each its own node, its origin on its hinge line
+    # (its outer stile, the room side's face: the room is +Z, the casing's
+    # side -Z) at its mid-height; a leaf opens about its origin's Y into the
+    # room. `leaf_r`'s free edge is toward -X (its node isn't turned).
+    # Destruction swings them (`world::hinge`).
+    leaf_l = Part("leaf_l", origin=(-xin_, (-yin_ + ty_ - 0.025) / 2, 0.01))
+    leaf_r = Part("leaf_r", origin=(xin_, (-yin_ + ty_ - 0.025) / 2, 0.01))
+    vent = Part("fortochka", origin=(-xin_, (ty_ + 0.025 + yin_) / 2, 0.01))
     # The frame round the opening.
     f, d = 0.06, 0.07
     for sx in (-1, 1):
@@ -101,7 +115,7 @@ def window_sash(broken=False):
     p.box((0.04, SH / 2 - f - ty - 0.025 + 0.004, d - 0.02),
           (0.1, (SH / 2 - f + ty + 0.025) / 2, 0.0), "Timber", bevel=0.003, segs=1)
     # Casement sashes inside the frame, set back, each a bar across.
-    def sash(x0, x1, y0, y1, bar=True, xf=None):
+    def sash(p, x0, x1, y0, y1, bar=True, xf=None):
         s = 0.04
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         for xx in (x0 + s / 2, x1 - s / 2):
@@ -129,20 +143,35 @@ def window_sash(broken=False):
             pts = [(px, py), (px + a, py), m, (px, py + b)]
             p.prism(pts, -0.012, -0.008, "Glass", axis="z", xf=xf)
     xin, yin = SW / 2 - f, SH / 2 - f
-    sash(-xin, -0.025, -yin, ty - 0.025)
+    sash(leaf_l, -xin, -0.025, -yin, ty - 0.025)
+    swung = None
     if broken:
         # The right casement swung in on its hinge (at its outer stile).
         hinge = (xin, 0.0, -0.03)
-        sash(0.025, xin, -yin, ty - 0.025,
-             xf=T(*hinge) @ RY(-0.9) @ T(*(-v for v in hinge)))
-    else:
-        sash(0.025, xin, -yin, ty - 0.025)
-    sash(-xin, 0.08, ty + 0.025, yin, bar=False)
-    sash(0.12, xin, ty + 0.025, yin, bar=False)
-    # Latch handles on the casements' meeting stiles.
-    for sx in (-1, 1):
-        p.box((0.012, 0.06, 0.008), (sx * 0.04, -0.05, -0.034), "Iron")
-    return [p]
+        swung = T(*hinge) @ RY(-0.9) @ T(*(-v for v in hinge))
+    sash(leaf_r, 0.025, xin, -yin, ty - 0.025, xf=swung)
+    sash(vent, -xin, 0.08, ty + 0.025, yin, bar=False)
+    # The fixed light beside the vent is the frame's.
+    sash(p, 0.12, xin, ty + 0.025, yin, bar=False)
+    # Latch handles on the casements' meeting stiles, each on its own
+    # casement (the right one's stayed where the casement shut when it
+    # swung open: the 28 October playtest, 0:22:34).
+    for sx, leaf in ((-1, leaf_l), (1, leaf_r)):
+        leaf.box((0.012, 0.06, 0.008), (sx * 0.04, -0.05, -0.034), "Iron",
+                 xf=swung if sx > 0 else None)
+    # A point at each glazed opening's middle, scaled to it, on the leaf
+    # (or frame) that carries it: where Destruction hangs its panes.
+    s_ = 0.04
+    for name, (x0, x1, y0, y1) in (
+            ("glass_leaf_l_0", (-xin, -0.025, -yin, ty - 0.025)),
+            ("glass_leaf_r_0", (0.025, xin, -yin, ty - 0.025)),
+            ("glass_fortochka_0", (-xin, 0.08, ty + 0.025, yin)),
+            ("glass_frame_0", (0.12, xin, ty + 0.025, yin))):
+        if broken and name == "glass_leaf_r_0":
+            continue
+        empty(name, ((x0 + x1) / 2, (y0 + y1) / 2, -0.01),
+              S(x1 - x0 - 2 * s_, y1 - y0 - 2 * s_, 1.0))
+    return [p, leaf_l, leaf_r, vent]
 
 
 def window_casing():

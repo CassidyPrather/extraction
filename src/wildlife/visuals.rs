@@ -26,6 +26,12 @@ pub const HIDE: f32 = 380.0;
 /// Beyond this from a flock's middle, the whole flock is one mesh (one
 /// draw: the budget counts meshes), rebuilt from its birds' far poses.
 pub const FLOCK_FAR: f32 = 60.0;
+/// A bird's body is never pitched steeper than this along its flight
+/// (rad)...
+pub const PITCH: f32 = 0.6;
+/// ...and coming in this slowly (m/s: its last metre or two) it flares,
+/// nose up at that and beating hard.
+pub const FLARE: f32 = 3.0;
 /// Wingbeats a second, easy and flat out.
 pub const BEAT_EASY: f32 = 3.2;
 pub const BEAT_HARD: f32 = 6.0;
@@ -98,12 +104,19 @@ pub struct FarParts {
     pub parts: Vec<(Handle<Mesh>, Transform, LinearRgba)>,
     /// The last build's parts, to skip rebuilding a still scene.
     built: Vec<(AssetId<Mesh>, [f32; 4])>,
-    entity: Option<(Entity, Handle<Mesh>)>,
-    since: u32,
+    entity: Option<Entity>,
+    /// The meshes built lately, oldest first: the one drawn is
+    /// [`FAR_LAG`] frames old (on the GPU by then), the rest kept until
+    /// they've been drawn.
+    queue: std::collections::VecDeque<Handle<Mesh>>,
 }
 
-/// The far mesh is rebuilt at most every this many frames.
-pub const FAR_REBUILD: u32 = 6;
+/// The far mesh drawn is the one built this many frames ago: a new mesh
+/// takes a frame or two to reach the GPU, and one swapped in the frame it's
+/// built is never drawn. It's rebuilt every frame all the same (a flock
+/// moving in steps 15 times a second is plain to see, even 300 m off:
+/// the 28 October playtest, "very jumpy, low frame rate").
+pub const FAR_LAG: usize = 2;
 
 pub struct VisualsPlugin;
 
@@ -360,11 +373,28 @@ fn pose_birds(
                     v.roll += (bank - v.roll) * (dt * 4.0).min(1.0);
                 }
                 v.heading = heading;
+                // Coming in the last metre or two (slowing under FLARE):
+                // flared, nose up and beating, braking onto its spot.
+                let flare = matches!(b.state, BirdState::Landing(_)) && b.vel.length() < FLARE;
                 if b.vel.length_squared() > 0.01 {
-                    tf.rotation = Transform::IDENTITY.looking_to(b.vel, Vec3::Y).rotation
+                    // Along its flight, never steeper than PITCH: off a
+                    // roof it's up and away, not a rocket.
+                    let flat = b.vel.xz().length().max(0.05);
+                    let pitch = if flare {
+                        PITCH
+                    } else {
+                        b.vel.y.atan2(flat).clamp(-PITCH, PITCH)
+                    };
+                    let dir = Vec3::new(b.vel.x, 0.0, b.vel.z).normalize_or(Vec3::X) * pitch.cos()
+                        + Vec3::Y * pitch.sin();
+                    tf.rotation = Transform::IDENTITY.looking_to(dir, Vec3::Y).rotation
                         * Quat::from_rotation_z(-v.roll);
                 }
-                if b.flap < 0.22 {
+                if flare && !far {
+                    v.phase = (v.phase + BEAT_HARD * dt).fract();
+                    let k = (v.phase * 4.0) as usize;
+                    &poses.beat[[0, 1, 2, 1][k.min(3)]]
+                } else if b.flap < 0.22 {
                     // Gliding; finish the beat to the glide.
                     v.phase = 0.0;
                     if far { &poses.fly_far } else { &poses.glide }
@@ -463,7 +493,7 @@ pub(crate) fn build_far(
         })
         .collect();
     let parts = std::mem::take(&mut far.parts);
-    let (e, handle) = far.entity.get_or_insert_with(|| {
+    let e = *far.entity.get_or_insert_with(|| {
         let mesh = meshes.add(keep(Mesh::from(Cuboid::new(0.01, 0.01, 0.01))));
         let mat = materials.add(StandardMaterial {
             base_color: Color::WHITE,
@@ -484,9 +514,9 @@ pub(crate) fn build_far(
                 bevy::camera::visibility::NoFrustumCulling,
             ))
             .id();
-        (e, mesh)
+        e
     });
-    let Ok((mut v, mut mesh3d)) = vis.get_mut(*e) else {
+    let Ok((mut v, mut mesh3d)) = vis.get_mut(e) else {
         return;
     };
     {
@@ -496,31 +526,98 @@ pub(crate) fn build_far(
             Visibility::Inherited
         });
     }
-    // Every few frames at most: a new mesh takes a frame or two to reach
-    // the GPU, and one replaced every frame is never drawn. (At 90 Hz
-    // that's 15 times a second; from this far off nobody sees the steps.)
-    far.since += 1;
-    if parts.is_empty() || sig == far.built || far.since < FAR_REBUILD {
-        return;
+    // Every frame that anything in it moved: a new mesh (rewriting one in
+    // place with another layout left it undrawn), drawn FAR_LAG frames on.
+    if !parts.is_empty() && sig != far.built {
+        let mut built = StandIn::default();
+        for (m, at, tint) in &parts {
+            if let Some(mesh) = meshes.get(m) {
+                built.add(&mesh.clone().transformed_by(*at), *tint);
+            }
+        }
+        if let Some(m) = built.build() {
+            far.queue.push_back(meshes.add(keep(m)));
+        }
+        far.built = sig;
+    } else if let Some(last) = far.queue.back().cloned() {
+        // Still: the newest again, so the one drawn catches up to it.
+        far.queue.push_back(last);
     }
-    far.since = 0;
-    let mut built = StandIn::default();
-    for (m, at, tint) in &parts {
-        if let Some(mesh) = meshes.get(m) {
-            built.add(&mesh.clone().transformed_by(*at), *tint);
+    while far.queue.len() > FAR_LAG + 1 {
+        if let Some(old) = far.queue.pop_front()
+            && !far.queue.contains(&old)
+            && mesh3d.0 != old
+        {
+            meshes.remove(&old);
         }
     }
-    // A new mesh each time (rewriting one in place with another layout
-    // left it undrawn), the old one dropped.
-    if let Some(m) = built.build() {
-        let new = meshes.add(keep(m));
-        meshes.remove(&*handle);
-        *handle = new.clone();
-        mesh3d.0 = new;
+    if let Some(show) = far.queue.front()
+        && mesh3d.0 != *show
+    {
+        let old = std::mem::replace(&mut mesh3d.0, show.clone());
+        if !far.queue.contains(&old) {
+            meshes.remove(&old);
+        }
         // Its bounds are worked out again from the new mesh.
         commands
-            .entity(*e)
+            .entity(e)
             .remove::<bevy::camera::primitives::Aabb>();
     }
-    far.built = sig;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The class from the 28 October playtest: no motion far off goes in
+    /// steps. A flock moving far off changes the far mesh drawn every
+    /// frame, the one drawn built FAR_LAG frames before, and the old ones
+    /// go (no mesh left behind each frame).
+    #[test]
+    fn the_far_mesh_moves_every_frame() {
+        let mut app = App::new();
+        app.add_plugins(AssetPlugin::default())
+            .init_asset::<Mesh>()
+            .init_asset::<StandardMaterial>()
+            .init_resource::<FarParts>()
+            .add_systems(Update, build_far);
+        let bird = app
+            .world_mut()
+            .resource_mut::<Assets<Mesh>>()
+            .add(Mesh::from(Cuboid::new(0.3, 0.1, 0.4)));
+        let mut drawn = Vec::new();
+        for frame in 0..30 {
+            let at = Transform::from_xyz(200.0 + frame as f32 * 0.1, 30.0, 0.0);
+            app.world_mut().resource_mut::<FarParts>().parts.push((
+                bird.clone(),
+                at,
+                LinearRgba::WHITE,
+            ));
+            app.update();
+            let e = app.world().resource::<FarParts>().entity.unwrap();
+            let shown = app.world().get::<Mesh3d>(e).unwrap().0.id();
+            let x = app
+                .world()
+                .resource::<Assets<Mesh>>()
+                .get(shown)
+                .and_then(|m| m.attribute(Mesh::ATTRIBUTE_POSITION))
+                .and_then(|a| a.as_float3())
+                .map(|p| p[0][0])
+                .unwrap();
+            drawn.push((shown, x));
+        }
+        // (The first frame only makes the far mesh's entity.)
+        for frame in FAR_LAG + 2..30 {
+            let (now, x) = drawn[frame];
+            assert_ne!(now, drawn[frame - 1].0, "frame {frame}: the same far mesh");
+            // Built FAR_LAG frames ago: where the bird was then.
+            let then = 200.0 + (frame - FAR_LAG) as f32 * 0.1 - 0.15;
+            assert!(
+                (x - then).abs() < 1e-3,
+                "frame {frame}: drawn at {x}, built at {then}"
+            );
+        }
+        let meshes = app.world().resource::<Assets<Mesh>>().len();
+        assert!(meshes <= FAR_LAG + 3, "{meshes} meshes kept");
+    }
 }

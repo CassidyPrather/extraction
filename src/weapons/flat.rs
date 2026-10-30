@@ -37,6 +37,9 @@ pub enum Step {
     Break(bool),
     DropMag,
     InsertBestMag,
+    /// The magazine this macro took out, back in (a double feed's
+    /// clearance: strip it, rack, seat it again).
+    ReseatMag,
     SlideStop,
     LoadRound,
     Mode,
@@ -64,6 +67,8 @@ pub struct GunMacro {
     gun: Option<Entity>,
     steps: VecDeque<(f32, Step)>,
     wait: f32,
+    /// The magazine its last DropMag took out (for ReseatMag).
+    stripped: Option<Entity>,
 }
 
 impl GunMacro {
@@ -75,6 +80,7 @@ impl GunMacro {
         self.gun = Some(gun);
         self.steps = steps.into();
         self.wait = 0.0;
+        self.stripped = None;
     }
 }
 
@@ -100,10 +106,11 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             } else if gun.firearm.malfunction == Some(Malfunction::DoubleFeed)
                 && action != ActionKind::Pump
             {
-                // Strip the magazine, rack the pair out, reload, rack.
+                // Strip the magazine, rack the pair out, seat it again,
+                // rack.
                 steps.push((0.05, Step::DropMag));
                 steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.25, s)));
-                steps.push((0.5, Step::InsertBestMag));
+                steps.push((0.5, Step::ReseatMag));
                 steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.05, s)));
             } else if action == ActionKind::SemiAuto {
                 // Tap-rack: harmless when nothing is wrong.
@@ -244,7 +251,7 @@ fn start_macros(
     }
     if keys.just_pressed(KeyCode::KeyT) {
         if let (Some(a), Some(b)) = (right, left) {
-            combine.write(Combine { a, b });
+            combine.write(Combine::all(a, b));
         }
     }
     let Some(gun_e) = right else {
@@ -340,10 +347,14 @@ fn run_macros(
             Step::Rotate => gun.firearm.rotate_cylinder(),
             Step::EjectGate => gun.firearm.eject_at_gate(),
             Step::DropMag => {
+                mac.stripped = gun
+                    .magwell
+                    .and_then(|w| sockets.get(w).ok())
+                    .and_then(|s| s.occupant);
                 drop.write(DropMagazine { gun: e });
                 Vec::new()
             }
-            Step::InsertBestMag => {
+            Step::ReseatMag | Step::InsertBestMag => {
                 // The fullest fitting magazine on the body or in the bag.
                 let family = gun.firearm.def.magazine_family.clone().unwrap_or_default();
                 let mine = |m: &(
@@ -360,12 +371,20 @@ fn run_macros(
                     on_body || in_bag
                 };
                 let mut best: Option<(u32, Entity)> = None;
-                for m in &mut mags {
-                    if m.2.family != family || !mine(&m) {
-                        continue;
-                    }
-                    if best.is_none_or(|b| m.1.rounds > b.0) {
-                        best = Some((m.1.rounds, m.0));
+                if matches!(step, Step::ReseatMag) {
+                    // The one it took out, wherever it fell.
+                    best = mac
+                        .stripped
+                        .take()
+                        .and_then(|m| mags.get(m).ok().map(|m| (m.1.rounds, m.0)));
+                } else {
+                    for m in &mut mags {
+                        if m.2.family != family || !mine(&m) {
+                            continue;
+                        }
+                        if best.is_none_or(|b| m.1.rounds > b.0) {
+                            best = Some((m.1.rounds, m.0));
+                        }
                     }
                 }
                 if let (Some((_, mag_e)), Some(well)) = (best, gun.magwell) {
@@ -491,6 +510,20 @@ fn load_one_round(world: &mut World, player: Entity, gun_e: Entity) {
 pub struct Combine {
     pub a: Entity,
     pub b: Entity,
+    /// At most this many rounds go from a box into a magazine (a hand's
+    /// VR feed is a round at a time: [`FILL_EVERY`]).
+    pub rounds: u32,
+}
+
+impl Combine {
+    /// Everything that goes: a magazine filled from the box at once.
+    pub fn all(a: Entity, b: Entity) -> Self {
+        Self {
+            a,
+            b,
+            rounds: u32::MAX,
+        }
+    }
 }
 
 pub fn apply_combines(
@@ -513,7 +546,7 @@ pub fn apply_combines(
             if let (Some(cart), Some(mag)) = (&dx.cartridge, &dy.magazine) {
                 if dx.category == Category::Ammo && *cart == mag.cartridge {
                     let room = mag.capacity.saturating_sub(iy.rounds);
-                    let moved = room.min(ix.rounds);
+                    let moved = room.min(ix.rounds).min(c.rounds);
                     // A round at a time off the ammo, on top of what's in.
                     let mut taken = Vec::new();
                     if let Ok((mut a, _)) = items.get_mut(x) {
@@ -573,8 +606,13 @@ pub fn apply_combines(
 }
 
 /// How close (m) a box of rounds and a magazine held in your two hands
-/// have to come for the rounds to go in.
-pub const TOUCH: f32 = 0.12;
+/// have to come for the rounds to go in: to the magazine's middle or its
+/// lips, whichever's nearer (generous: the first playtest found lining up
+/// fussy).
+pub const TOUCH: f32 = 0.16;
+/// Seconds between rounds pressed in from a box held at a magazine (VR):
+/// a round at a time, each heard and seen in the magazine.
+pub const FILL_EVERY: f32 = 0.15;
 /// How close a cleaning kit, oil or parts must come to a gun's receiver.
 pub const TOUCH_GUN: f32 = 0.2;
 
@@ -620,21 +658,51 @@ fn touch_to_combine(
     in_socket: Query<&InSocket>,
     owners: Query<&SocketOwner>,
     bots: Query<(), With<crate::bot::Bot>>,
+    mags: Query<&Mag>,
     catalog: Res<Catalog>,
+    time: Res<Time>,
     mut combine: MessageWriter<Combine>,
-    mut touching: Local<std::collections::HashSet<(Entity, Entity)>>,
+    // Pairs touching, and when a round last went in (a box at a magazine).
+    mut touching: Local<std::collections::HashMap<(Entity, Entity), f32>>,
 ) {
     let one_handed = comfort.is_some_and(|c| c.one_handed);
     let xr = *driver == crate::rig::RigDriver::Xr;
     if !xr && !(one_handed && !bots.is_empty()) {
         return;
     }
-    let mut now = std::collections::HashSet::new();
+    let t = time.elapsed_secs();
+    let mut now = std::collections::HashMap::new();
+    // A magazine's lips, where a box's rounds go in, and its middle.
+    let near = |m: Entity, gm: &GlobalTransform, other: Vec3| -> f32 {
+        let d = gm.translation().distance(other);
+        mags.get(m).map_or(d, |mag| {
+            let lips = gm.translation() + gm.up().as_vec3() * (mag.height * 0.5);
+            d.min(lips.distance(other))
+        })
+    };
     let mut touch = |a: Entity, b: Entity, ga: &GlobalTransform, gb: &GlobalTransform, reach| {
-        if ga.translation().distance(gb.translation()) < reach {
-            now.insert((a, b));
-            if !touching.contains(&(a, b)) {
-                combine.write(Combine { a, b });
+        let d = near(a, ga, gb.translation()).min(near(b, gb, ga.translation()));
+        if d >= reach {
+            return;
+        }
+        let feeds = mags.contains(a) || mags.contains(b);
+        match touching.get(&(a, b)) {
+            // A box at a magazine: a round at a time while it's held there.
+            Some(&last) if feeds => {
+                if t - last >= FILL_EVERY {
+                    combine.write(Combine { a, b, rounds: 1 });
+                    now.insert((a, b), t);
+                } else {
+                    now.insert((a, b), last);
+                }
+            }
+            Some(&last) => {
+                now.insert((a, b), last);
+            }
+            None => {
+                let rounds = if feeds { 1 } else { u32::MAX };
+                combine.write(Combine { a, b, rounds });
+                now.insert((a, b), t);
             }
         }
     };

@@ -673,7 +673,103 @@ turn and the village was the gap); Cinder's North sidings route 93% and
 30 m, now 98% and 12 m (the lorry in the works yard); Kettle's pass
 route 98% and 10 m, now 99% and 4 m.
 
+## Tight, broken, quiet between
+
+The playtest of 28 October (`docs/playtests/2026-10-28/TRANSCRIPT.md`,
+P1): Marrow Creek was "a couple of points in an otherwise empty plane",
+its places "too far apart", its machines seeing you "from as far away",
+and a gunfight anywhere drawing "the entirety of the robots to your front
+door". The tester's ask: designed, busy places with the machines' activity
+broken up by big patches of near nothing, and sightlines broken by the
+land. `map_openness` measures it for every valley (the map lint's
+`openness:` line); `TIGHT` lists the valleys held to it (Marrow Creek, the
+prototype; the others join as they're reworked).
+
+- **Close enough to walk.** Each place's walk to its nearest neighbour,
+  on the gentle grid, is about 40-45 s at a walking pace (2.4 m/s),
+  100-110 m: the next place is in reach before the last is out of mind.
+  Pull the places in, don't add filler between them. Marrow was pulled
+  in by script, every place moved by name and kept whole, the ground
+  between squeezed, the valley 640 -> 388 m. The lint's distance rules
+  (gate and rendezvous spacing, danger and view ranges, `POI_MIN`) scale
+  with a tight valley's span (`map_lint::valley_scale`, against the
+  564 m Marrow had inside its fence). Twin landmarks
+  (`UNIQUE_SIGHT`) don't: how far a landmark is seen depends on its
+  height, not the valley's width. A tight valley has every landmark in
+  view of nearly every other, so it has one of each kind (Marrow's
+  kiln chimney became a steeple; its farm's water tower, pump
+  standpipe and checkpoint mast went).
+- **Break the sightlines.** From the open ground (out of the woods),
+  sixteen bearings each, a standing figure is followed over the land and
+  past what stands on it (buildings and rocks block, a wood wears a line
+  out over 30 m of it). No more than 16% of the open ground may be seen
+  past the longest-sighted ground machine's sight (a drone's or a
+  pylon's, 70 m) along half its bearings (`OPEN_MAX`, `OPEN_REACH`).
+  Landforms first: a rise costs no frame time, hides you, and stops a
+  shot's sound too (below). Then tree belts on the rises and hedges
+  along field edges, and ruins; woods are the dearest thing in a frame.
+- **Quiet between the hot zones.** A hot spot is where the machines work,
+  watch or come in (work sites, sentries, spotters, the Gate). A gunshot
+  carries 150 m to a machine's ear in the open (a pistol's about 105 m),
+  45% as far past a rise or a wall standing 1.2 m over its line
+  (`map_openness::GUNSHOT`, the one number `robots::senses` reads too). A fight at a
+  hot spot is heard by at most 1.5 others on average, hot spots within
+  60 m of each other counting as one zone (`PULL_MEAN`, `ZONE`), and a
+  fight at a quiet place (danger 1) by at most two (`QUIET_PULL`). Put
+  the rise between a quiet place and the work sites round it, not the
+  distance: Marrow's Village had three sites within 120 m and was heard
+  by four hot spots. Rises round it made it none; pulled in, with the
+  sites moved out to the hot zones and rises on the creek's banks, it is
+  one.
+- **Something to stop at.** "Too far apart" is empty walking, not
+  distance: on each place's walk to its nearest neighbour, no more than
+  100 m with nothing to stop at, a roof, a kiosk or loot, within 40 m
+  (`EMPTY_MAX`, `STOP_NEAR`). A hut on a long walk is a stop and a roof
+  both. Mind what a stop holds: a shed's toolbox has matches, and a shed
+  by the wrong road sent the first fetch job into the drones.
+- **Hot zones see their own ground.** Every hot region (danger 2 or
+  more) caps how far a machine standing in it notices you
+  (`Region::notice`, at most 50 m, `NOTICE_MAX`; Robot minds' senses take
+  the smaller of it and the machine's own sight). Marrow's hot regions
+  are capped at 45 m; the quiet ground between carries no cap, so a
+  machine that wanders out of its zone sees as far as it ever did.
+
+Marrow, before and after (the lint's measures, at today's 70 m sight and
+150 m gunshot), as it was / with its rises / pulled in:
+
+| | as it was | rises | pulled in |
+|---|---|---|---|
+| nearest-place walk, mean | 169 m (70 s) | 169 m | 106 m (44 s) |
+| open ground seen past 70 m | 25% | 15% | 13% |
+| sightline, 90th percentile | 86 m | 74 m | 72 m |
+| a fight in the Village heard by | 3 | 0 | 1 |
+| longest empty walk | 135 m | 70 m | 70 m |
+
+A fight at a hot spot is now heard by 0.6 other zones on average; the
+Radio mast's by three, the most. The rises: the creek's banks
+east and west of the bridge, the spur and the rise either side of the
+ford, the Hollow's south rim. The hot zones sit together in the north-west
+(the Gate, the Depot and the bank's spotter; the north bank's site
+stands off by the Bus depot, 188 m from the Gate, so the Gate's
+response isn't on a fight there at once), with the
+Village, the farms and the logging camp quiet round the drop.
+
+A tight valley has no spare field for a test to stage a fight on. A test
+that needs open ground and no particular place loads the test field
+(`extraction_core::map::TEST_FIELD_ID`, `assets/test/test_field.ron`):
+Marrow's ground as it was, 640 m, its meadow round (100, 200), served
+to the game's own tests only. A test about a valley's own places, sites
+or patrols stays on that valley, and moves with it when it changes.
+
 ## Terraces
+
+The truck's stands are levelled for it: its base stop and each
+rendezvous, flat under the truck as the game parks it (rear to the drop,
+or bed to the valley's middle) and a margin round it, then back to the
+land at a quarter metre per metre (`terrain::level_trucks`, after the
+rim the base stops stand on). The map lint holds each to 3 degrees from
+cab to tail (`TRUCK_LEVEL`); steeper, the truck stands with its wheels
+in the soil or its loose kit slides in the bed.
 
 A plateau with a `height` is ground the map declares: a terrace, a
 ledge, a dam's crest, a stepped street. Fitting a building in

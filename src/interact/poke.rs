@@ -39,6 +39,13 @@ pub struct PokeButton {
     pub down: bool,
 }
 
+/// A button with a look of its own (a modelled key that moves itself, a
+/// crank): no generic collar and cap (`render::props::dress_buttons`),
+/// which stood over the cassette deck's keys and hid them (playtest
+/// 2026-10-28, F4). Every button but a card's has one.
+#[derive(Component, Debug)]
+pub struct OwnLook;
+
 /// Cards that do nothing (the camp's title, the career sheet) get none.
 pub(super) fn mount_button(
     add: On<Add, Pressable>,
@@ -84,6 +91,7 @@ pub(super) fn poke_buttons(
     players: Query<(Entity, &RigInput, &Children), With<LocalPlayer>>,
     hands: Query<(&RigHand, &Hand)>,
     mut buttons: Query<(&GlobalTransform, &mut PokeButton)>,
+    targets: Query<&Visibility>,
     driver: Res<RigDriver>,
     mut events: MessageWriter<InteractEvent>,
 ) {
@@ -104,6 +112,13 @@ pub(super) fn poke_buttons(
         }
     }
     for (gt, mut button) in &mut buttons {
+        // A card put out of sight (the training yard folds what it isn't
+        // teaching yet) has nothing to push.
+        if targets.get(button.target) == Ok(&Visibility::Hidden) {
+            button.depth = 0.0;
+            button.down = false;
+            continue;
+        }
         let to_local = gt.affine().inverse();
         let mut depth = 0.0f32;
         let mut by = None;

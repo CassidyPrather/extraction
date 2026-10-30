@@ -14,12 +14,14 @@ pub mod census;
 #[cfg(test)]
 mod chaos;
 pub mod drive;
+pub mod floors;
 pub mod ledges;
 #[cfg(test)]
 mod physics;
 pub mod quiet;
 #[cfg(test)]
 mod save_fuzz;
+pub mod stowed;
 
 #[cfg(test)]
 mod tests {
@@ -111,6 +113,7 @@ mod tests {
                 "players' bodies, packs, buttons: a fixed few",
             ),
             ("src/rig/haptics.rs", "was", "screen buttons, made once"),
+            ("src/raid/truck.rs", "fitted", "the truck: one per world"),
             ("src/render/props.rs", "lit", "keyed by hand"),
             ("src/render/props.rs", "made", "keyed by hand"),
             ("src/weapons/faults.rs", "last", "keyed by hand"),

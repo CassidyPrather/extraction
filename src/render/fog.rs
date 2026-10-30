@@ -103,6 +103,24 @@ pub const SNOW_CODE: f32 = 0.01;
 pub const NO_SNOW: f32 = 1.0e5;
 
 const WET_WGSL: &str = r#"
+// The room the eye is in (`render::grade::dim_indoors`): how far its walls
+// cut the sky's light (1 out of doors) and how far it reaches (m), off the
+// ambient's alpha, which the lighting never reads.
+fn extraction_room() -> vec2<f32> {
+    let a = view_bindings::lights.ambient_color.a;
+    if (a >= 0.0) {
+        return vec2<f32>(1.0, 0.0);
+    }
+    let reach = floor(-a / 4.0);
+    return vec2<f32>(max(-a - reach * 4.0, 0.05), reach);
+}
+
+// How much of the room's cut past it (`at`, from the eye) is given back:
+// the outdoors seen from a room keeps the sky's light.
+fn extraction_outdoors(room: vec2<f32>, at: vec3<f32>) -> f32 {
+    return smoothstep(room.y, room.y + 3.0, distance(at, view_bindings::view.world_position.xyz));
+}
+
 fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
     var o = p;
     let alpha_mode = p.material.flags & pbr_types::STANDARD_MATERIAL_FLAGS_ALPHA_MODE_RESERVED_BITS;
@@ -124,6 +142,16 @@ fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
     let open = select(1.0, clamp(p.material.base_color.a, 0.0, 1.0), opaque);
     if (opaque) {
         o.material.base_color.a = 1.0;
+    }
+    // From a room, what's under the sky past its walls keeps the sky's
+    // light (the ambient is the room's: `grade::dim_indoors`). What's under
+    // a roof stays the room's dark, this one's or the next house's.
+    let room = extraction_room();
+    if (room.x < 0.999) {
+        // (The terrain's alpha is below zero: under the sky, wet already.)
+        let sky = select(open, 1.0, opaque && p.material.base_color.a < -0.5);
+        let back = extraction_outdoors(room, p.world_position.xyz) * smoothstep(0.8, 0.95, sky);
+        o.diffuse_occlusion = p.diffuse_occlusion * mix(1.0, 1.0 / room.x, back);
     }
 #ifdef DISTANCE_FOG
     if (snow > 0.002 && HF_SNOW_LINE < 1.0e4) {
@@ -192,6 +220,7 @@ fn height_fog_wgsl(f: &HeightFog) -> String {
     format!(
         r#"{MARKER}
 const HF_DENSITY: f32 = {density:.6};
+const HF_AIR: f32 = 0.6;
 const HF_BASE: f32 = {base:.3};
 const HF_FALLOFF: f32 = {falloff:.5};
 const HF_PATCHY: f32 = {patchy:.3};
@@ -241,6 +270,11 @@ fn extraction_height_fog(
     if (abs(k) > 1e-3) {{
         depth = start * len * (1.0 - exp(-k)) / k;
     }}
+    // One atmosphere: a ray climbing out of the ground mist still crosses
+    // at least HF_AIR of the air at the eye. Without it a tall thing's top
+    // (Marrow's chimney, 30 m up) came out of the fog crisp while the trees
+    // round its foot were half gone: it read as drawn through the fog.
+    depth = max(depth, start * len * HF_AIR);
     // The cap: density * exp(rise * (y - cap base)), the same integral
     // the other way up (a few ALU; nothing when the valley has none).
     if (HF_CAP > 0.0) {{
@@ -253,8 +287,12 @@ fn extraction_height_fog(
         depth = depth + cd;
     }}
     let amount = 1.0 - exp(-max(depth, 0.0));
-    let fog_color = fog_params.base_color.rgb * 1.06
-        + scattering * fog_params.directional_light_color.rgb * fog_params.directional_light_color.a;
+    // The air in the room is the room's (dimmed with it); the air out past
+    // it, the sky's.
+    let room = extraction_room();
+    let lit = mix(1.0, 1.0 / room.x, extraction_outdoors(room, frag));
+    let fog_color = (fog_params.base_color.rgb * 1.06
+        + scattering * fog_params.directional_light_color.rgb * fog_params.directional_light_color.a) * lit;
     return vec4<f32>(mix(color.rgb, fog_color, amount), color.a);
 }}
 
@@ -373,6 +411,77 @@ fn patch_pbr_functions(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every material out in the world takes the fog: the world reads as
+    /// one atmosphere (a building once stood crisp in the fog, playtest
+    /// 2026-10-28). A material that turns fog off must be additive or
+    /// multiplied (fog's colour added onto, or multiplied into, everything
+    /// behind it is wrong), or say why within 20 lines above (a fog of its
+    /// own, an overlay at the eye); a fragment shader of our own must fog
+    /// or say why not.
+    #[test]
+    fn every_material_takes_the_fog_or_says_why() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut bad = Vec::new();
+        let mut stack = vec![root.join("src")];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                let lines: Vec<&str> = text.lines().collect();
+                for (n, l) in lines.iter().enumerate() {
+                    if !l.contains("fog_enabled: false") || l.trim_start().starts_with("//") {
+                        continue;
+                    }
+                    // The material's own lines, and the 20 above it.
+                    let from = n.saturating_sub(20);
+                    let near = &lines[from..(n + 6).min(lines.len())];
+                    let blended = near
+                        .iter()
+                        .any(|l| l.contains("AlphaMode::Add") || l.contains("AlphaMode::Multiply"));
+                    let said = lines[from..n].iter().any(|l| {
+                        let t = l.trim_start();
+                        t.starts_with("//") && t.to_lowercase().contains("fog")
+                    });
+                    if !blended && !said {
+                        bad.push(format!(
+                            "{}:{}",
+                            p.strip_prefix(root).unwrap().display(),
+                            n + 1
+                        ));
+                    }
+                }
+            }
+        }
+        for e in std::fs::read_dir(root.join("assets/shaders"))
+            .unwrap()
+            .flatten()
+        {
+            let p = e.path();
+            let text = std::fs::read_to_string(&p).unwrap_or_default();
+            if !text.contains("fn fragment") {
+                continue;
+            }
+            let fogs = [
+                "fog",
+                "main_pass_post_lighting_processing",
+                "apply_pbr_lighting",
+            ]
+            .iter()
+            .any(|w| text.to_lowercase().contains(w));
+            if !fogs {
+                bad.push(p.strip_prefix(root).unwrap().display().to_string());
+            }
+        }
+        assert!(bad.is_empty(), "fog off with no reason given: {bad:#?}");
+    }
 
     const SAMPLE: &str = "fn other() {}\nfn apply_fog(a: f32) {\n    if x {\n        return bevy_pbr::fog::exponential_squared_fog(fog_params, input_color, distance, scattering);\n    }\n}\n";
 

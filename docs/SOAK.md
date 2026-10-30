@@ -78,6 +78,86 @@ such cycles and holds each reset to the size of the one before.
   of the raider's career (with the wreck and map fixes): no leaks, memory
   flat at 185-210 MB, frame time flat.
 
+### The second night's long runs (28 October, main after round 8)
+
+- **Career, Marrow Creek, 30 minutes, 5 raids:** no leaks. Memory went
+  from 237 to 274 MB, with frame time and the save flat. What piles up
+  within a Surge cycle (wrecks, debris capped at 72, salvage bolts that
+  follow their wreck) is swept at the Surge.
+- **Client, Kettle Pass, 10 minutes:** no leaks by the gauge. The one
+  steady growth, about a pair of entities a second, is GPU readbacks that
+  never finish without a GPU. The census now counts them (`readbacks`),
+  and they rise in step with that pair: the harness, not the game. With
+  `SOAK_NO_AUDIO=1` the same growth shows, so it isn't sound.
+- **Wildlife's carcass map** kept every animal ever killed. It's fixed,
+  and the entity-map lint now reads tuple keys (`HashMap<(Entity, ..)>`)
+  too.
+- **Underground floors:** `soak::floors` probes every open raster cell of
+  every site, and finds the colliders' floor wherever the raster has one.
+
+## Stowed things (B1, the first headset night's "the backpack doesn't work")
+
+The rule: a thing put in a pack, a pouch or the crate stays there, as it
+was put in, through every move of the pack, pulling it out, snapping it
+back, walking, and a save and load. Nothing falls through a container or
+comes to rest under one. `soak::stowed` holds it:
+- `what_goes_in_the_pack_stays_where_it_was_put`: the headset's hands put
+  five things of every size into the open pack at an angle. Then the pack
+  is swung, flipped, let hang, walked off with, taken back, snapped on
+  and walked with.
+- `what_is_in_a_pouch_stays_seated`.
+- `a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay`.
+- `nothing_dropped_on_the_crate_goes_through_or_under_it`.
+
+What was wrong:
+- **Things drifted out of a moving pack.** A stowed thing is a child of
+  its bag with its body switched off. But the physics still writes a child
+  body's place back from its own position, against the parent's physics
+  pose, and a held pack is a moving body. So each frame put its contents a
+  little elsewhere: one swing and flip had a thing 0.93 m out of the pack,
+  hidden. That's where the rounds, the radio and the cassette went. A
+  stowed thing's pose in its bag (`StowedPose`, taken as it goes in) and a
+  pouch's seat are now put back each frame before anything is drawn or
+  saved.
+- **Things stood themselves upright.** Stowing kept only where a thing
+  went in. It now keeps how it lay (`stow_posed`), and the save keeps that
+  too (`SavedItem::turn`; older saves load upright).
+- **The crate had no collider at all.** Things dropped over it fell
+  through to the bed, and one came to rest under its stand. It's solid now,
+  on a new `Container` layer: the stand and lower half are one block, with
+  walls round the shelf. Loose things collide with it; the body, hands,
+  lines of sight and a held thing's leash don't. Its first walls, on the
+  World layer, kept the body from the cord in the narrow bed and stopped
+  every grab of the kit at its wall.
+- **Something dropped into an open crate, tray or pack lay there loose.**
+  Now a thing that comes to rest inside one is put in it, as it lies
+  (`settle_into_containers`). A dead raider's bag doesn't take what lands
+  on it.
+
+### After the fix (30 October, main d0db1fb9)
+
+- **A move to another valley.** `a_map_change_keeps_what_is_put_away_as_it_lay`
+  drives the truck from Marrow Creek to Kettle Pass. Things tilted in the
+  pack and the crate, and things seated in pouches, all arrive where they
+  were put. On load the crate lifts anything lower than 5 cm onto its shelf,
+  which is on purpose for older saves.
+- **Every census checks what's stowed.** `stowed::audit` reports anything
+  in a pack that its pack doesn't list or that isn't attached to it, a
+  stowed thing whose physics is awake or that has moved, a pack listing
+  something it hasn't got, a pouch that doesn't hold or seat what's in it,
+  and anything fallen out of the world. The soak report prints these as
+  `ASTRAY`. Tests: raid after raid with robots on and posed things in the
+  crate (none astray, each where it was put), and the zone-reset soak.
+- **The long runs.** Two 30-minute runs: Marrow Creek with 4 raids standing
+  about, and Kettle Pass with 5 raids played by the sim's raider. Neither
+  reported anything astray or any leak. (Kettle Pass's knee-actuator debris
+  went 0 -> 18 as walkers broke; the gauge reads it as debris that comes
+  and goes, not a pile-up.)
+- **Same mistake, elsewhere.** Lev set his gifts down with their centre a
+  few centimetres above the ledge or floor, whatever their size. A PPSh,
+  25 cm tall, started 7 cm inside the bed and got thrown across it. Each
+  gift now rests its bottom on its place (`lev::slot` takes the height).
+
 ## A quiet log
 
 `soak::quiet::tests::no_session_logs_a_warning` plays four sessions, each

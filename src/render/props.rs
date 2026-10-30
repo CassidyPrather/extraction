@@ -25,6 +25,9 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 (dress_truck, dress_containers, finish_models).chain(),
+                droop_wheels,
+                swing_ladder,
+                dress_ladder,
                 spawn_hand_visuals,
                 dress_gloves,
                 dress_camp,
@@ -44,7 +47,6 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
-                (ghost_through_walls, fade_ghosts).chain(),
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -179,28 +181,124 @@ fn finish_models(
             model_mats.get(name.unwrap_or("Paint"), &mut lib, &server, &mut materials)
         };
         for node in &model {
-            let at: Vec<Transform> = if node.name == "wheel" {
+            let at: Vec<(Transform, Option<usize>)> = if node.name == "wheel" {
                 WHEELS
                     .iter()
-                    .map(|w| {
+                    .enumerate()
+                    .map(|(i, w)| {
                         let turn = if w.x < 0.0 {
                             Quat::from_rotation_y(std::f32::consts::PI)
                         } else {
                             Quat::IDENTITY
                         };
-                        Transform::from_translation(*w)
-                            .with_rotation(turn * node.transform.rotation)
+                        let t = Transform::from_translation(*w)
+                            .with_rotation(turn * node.transform.rotation);
+                        (t, Some(i))
                     })
                     .collect()
             } else {
-                vec![node.transform]
+                vec![(node.transform, None)]
             };
-            for t in at {
+            for (t, wheel) in at {
                 let holder = commands
                     .spawn((t, Visibility::default(), ChildOf(truck)))
                     .id();
+                if let Some(i) = wheel {
+                    commands.entity(holder).insert(TruckWheel(i));
+                }
+                if node.name == "ladder" {
+                    commands.entity(holder).insert(TruckLadder);
+                }
                 spawn_primitives(&mut commands, holder, node, &mut mat);
             }
+        }
+    }
+}
+
+/// One of the truck model's road wheels: `WHEELS[i]`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TruckWheel(pub usize);
+
+/// The truck model's rear ladder: hangs plumb from its hinge
+/// (`raid::truck::ladder_swing`), as its steps' colliders do.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TruckLadder;
+
+fn swing_ladder(
+    trucks: Query<&Transform, (With<Truck>, Without<TruckLadder>)>,
+    mut ladders: Query<(&ChildOf, &mut Transform), With<TruckLadder>>,
+) {
+    for (parent, mut t) in &mut ladders {
+        let Ok(pose) = trucks.get(parent.parent()) else {
+            continue;
+        };
+        let swing = crate::raid::truck::ladder_swing(pose);
+        if t.rotation.angle_between(swing) > 1e-4 {
+            t.rotation = swing;
+        }
+    }
+}
+
+/// Each wheel hangs on its springs down to the ground under it
+/// (`raid::truck::wheel_droop`), wherever the truck stands.
+fn droop_wheels(
+    zone: Option<Res<crate::world::Zone>>,
+    trucks: Query<&Transform, (With<Truck>, Without<TruckWheel>)>,
+    mut wheels: Query<(&TruckWheel, &ChildOf, &mut Transform)>,
+) {
+    let Some(zone) = zone else { return };
+    for (w, parent, mut t) in &mut wheels {
+        let Ok(pose) = trucks.get(parent.parent()) else {
+            continue;
+        };
+        let y = WHEELS[w.0].y - crate::raid::truck::wheel_droop(&zone, pose, w.0);
+        if (t.translation.y - y).abs() > 1e-4 {
+            t.translation.y = y;
+        }
+    }
+}
+
+/// The truck's boarding ramp (`raid::truck::ladder_steps`): a plank deck
+/// with cleats across it, hooked over the lowest step.
+fn dress_ladder(
+    mut commands: Commands,
+    steps: Query<(Entity, &crate::raid::truck::LadderStep), Added<crate::raid::truck::LadderStep>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut lib: ResMut<MaterialLibrary>,
+    server: Res<AssetServer>,
+) {
+    use crate::render::materials::{Mat, metric_box};
+    for (e, step) in &steps {
+        let size = step.0;
+        let planks = lib.get(Mat::Planks, &server, &mut materials);
+        let iron = lib.get(Mat::DarkMetal, &server, &mut materials);
+        let mut part = |size: Vec3, at: Vec3, m: &Handle<StandardMaterial>| {
+            commands.spawn((
+                Mesh3d(meshes.add(metric_box(size))),
+                MeshMaterial3d(m.clone()),
+                Transform::from_translation(at),
+                ChildOf(e),
+            ));
+        };
+        part(size, Vec3::ZERO, &planks);
+        let top = size.y * 0.5;
+        let n = (size.z / 0.25).floor() as i32;
+        for k in 1..n {
+            let z = -size.z * 0.5 + k as f32 * 0.25;
+            part(
+                Vec3::new(0.8, 0.025, 0.03),
+                Vec3::new(0.0, top + 0.0125, z),
+                &planks,
+            );
+        }
+        // The hooks over the step's edge.
+        for x in [-0.35, 0.35] {
+            part(
+                Vec3::new(0.05, 0.06, 0.04),
+                Vec3::new(x, top + 0.03, -size.z * 0.5 + 0.02),
+                &iron,
+            );
         }
     }
 }
@@ -428,9 +526,6 @@ pub(crate) struct HandVisual {
     /// glove and how far its last joint bends (radians); `None` swings it
     /// by its curl.
     thumb: Option<(Vec3, f32)>,
-    /// The faint glove at the tracked pose, shown when the real hand has
-    /// gone where the glove can't (into a wall).
-    pub(crate) ghost: bool,
 }
 
 /// One joint of one finger: `finger` 0..3 index to little, 4 the thumb;
@@ -482,30 +577,12 @@ fn spawn_hand_visuals(
                 curl: [0.0; 5],
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
-                ghost: false,
             },
             PlayerGlove,
         ));
-        // The ghost: where your real hand is when a wall stops the glove
-        // (`interact::physics_hands`), faint, hidden otherwise.
-        let ghost = spawn_hand(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            rh.side,
-            [0.0; 5],
-        );
-        commands.entity(ghost).insert((
-            HandVisual {
-                hand: e,
-                side: rh.side,
-                curl: [0.0; 5],
-                spread: std::array::from_fn(rest_spread),
-                thumb: None,
-                ghost: true,
-            },
-            Visibility::Hidden,
-        ));
+        // No ghost of the real hand when a wall stops the glove: seen
+        // apart from the glove, it read as tracking gone wrong (the 28
+        // October playtest). The glove stops; the hand's buzz says why.
     }
 }
 
@@ -528,14 +605,17 @@ fn tint_gloves(
         let Ok(hand) = hands.get(v.hand) else {
             continue;
         };
-        let on = hand.hover.is_some();
+        // Only an empty hand says what it would take: a hand holding a gun
+        // lit up by whatever it passed was a distraction (the 28 October
+        // playtest).
+        let on = hand.hover.is_some() && hand.holding.is_none();
         if lit.insert(v.hand, on) == Some(on) {
             continue;
         }
         for h in &glove.0 {
             if let Some(mut m) = materials.get_mut(h) {
                 m.emissive = if on {
-                    LinearRgba::rgb(0.06, 0.16, 0.08)
+                    LinearRgba::rgb(0.03, 0.08, 0.04)
                 } else {
                     LinearRgba::BLACK
                 };
@@ -548,10 +628,17 @@ fn tint_gloves(
 #[derive(Component)]
 struct ButtonCap;
 
-/// A dark collar on the wall and an amber cap standing proud of it.
+/// A dark collar on the wall and an amber cap standing proud of it, on a
+/// button with no look of its own (`interact::poke::OwnLook`).
 fn dress_buttons(
     mut commands: Commands,
-    buttons: Query<Entity, Added<crate::interact::poke::PokeButton>>,
+    buttons: Query<
+        Entity,
+        (
+            Added<crate::interact::poke::PokeButton>,
+            Without<crate::interact::poke::OwnLook>,
+        ),
+    >,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut looks: Local<
@@ -563,13 +650,20 @@ fn dress_buttons(
         )>,
     >,
 ) {
-    use crate::interact::poke::{BUTTON_R, CAP};
+    use crate::interact::poke::{BUTTON_R, CAP, TRAVEL};
     for e in &buttons {
         let (collar, cap, dark, amber) = looks
             .get_or_insert_with(|| {
                 (
-                    meshes.add(Cylinder::new(BUTTON_R + 0.008, 0.008)),
-                    meshes.add(Cylinder::new(BUTTON_R, CAP)),
+                    // A bezel ring as deep as the cap's travel, and the cap:
+                    // its back on the bezel's front at rest, on the panel's
+                    // face when it's in (14 mm deep, it went 10 mm through
+                    // the card behind: the 28 October playtest, 0:30:47).
+                    meshes.add(Extrusion::new(
+                        Annulus::new(BUTTON_R + 0.001, BUTTON_R + 0.008),
+                        TRAVEL,
+                    )),
+                    meshes.add(Cylinder::new(BUTTON_R, CAP - TRAVEL)),
                     mat(&mut materials, Color::srgb(0.06, 0.06, 0.06), 0.6, 0.6),
                     materials.add(StandardMaterial {
                         base_color: Color::srgb(0.85, 0.45, 0.08),
@@ -585,17 +679,23 @@ fn dress_buttons(
         commands.spawn((
             Mesh3d(collar),
             MeshMaterial3d(dark),
-            Transform::from_xyz(0.0, 0.0, 0.004).with_rotation(face),
+            Transform::from_xyz(0.0, 0.0, TRAVEL * 0.5),
             ChildOf(e),
         ));
         commands.spawn((
             ButtonCap,
             Mesh3d(cap),
             MeshMaterial3d(amber),
-            Transform::from_xyz(0.0, 0.0, CAP * 0.5).with_rotation(face),
+            Transform::from_xyz(0.0, 0.0, cap_z(0.0)).with_rotation(face),
             ChildOf(e),
         ));
     }
+}
+
+/// A button cap's middle, `depth` in (its front at `CAP` at rest).
+pub fn cap_z(depth: f32) -> f32 {
+    use crate::interact::poke::{CAP, TRAVEL};
+    (CAP + TRAVEL) * 0.5 - depth.clamp(0.0, TRAVEL)
 }
 
 fn push_caps(
@@ -605,7 +705,7 @@ fn push_caps(
     for (button, children) in &buttons {
         for c in children.iter() {
             if let Ok(mut t) = caps.get_mut(c) {
-                t.translation.z = crate::interact::poke::CAP * 0.5 - button.depth;
+                t.translation.z = cap_z(button.depth);
             }
         }
     }
@@ -617,9 +717,12 @@ fn push_caps(
 #[derive(Component)]
 struct FarCue;
 
+#[allow(clippy::too_many_arguments)]
 fn far_cue(
     mut commands: Commands,
     hands: Query<(Entity, &Hand)>,
+    eyes: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
     items: Query<(&GlobalTransform, Option<&avian3d::prelude::ColliderAabb>)>,
     mut cues: Query<
         (
@@ -632,29 +735,28 @@ fn far_cue(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Entity>>,
-    // The ring for a far target, and a dimmer one for what's in reach: up
-    // close the glove's tint already says "this one", and a full ring
-    // round everything in a cluttered crate would be busy.
-    mut looks: Local<Option<(Handle<StandardMaterial>, Handle<StandardMaterial>)>>,
-    time: Res<Time>,
+    mut ring: Local<Option<Handle<StandardMaterial>>>,
 ) {
-    let (far_look, near_look) = looks
+    let far_look = ring
         .get_or_insert_with(|| {
-            let ring = |k: f32| StandardMaterial {
-                base_color: Color::srgba(0.3, 0.9, 0.4, 0.5 * k),
-                emissive: LinearRgba::rgb(0.3 * k, 0.9 * k, 0.4 * k),
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.3, 0.9, 0.4, 0.5),
+                emissive: LinearRgba::rgb(0.3, 0.9, 0.4),
                 unlit: true,
                 alpha_mode: AlphaMode::Add,
                 ..default()
-            };
-            (materials.add(ring(1.0)), materials.add(ring(0.6)))
+            })
         })
         .clone();
+    let eye = eyes
+        .iter()
+        .find(|(_, p)| locals.contains(p.parent()))
+        .map(|(gt, _)| gt.translation());
     for (hand_e, hand) in &hands {
-        // What a pointed hand would pull in, else what the hand would take
-        // where it is: the near hover lit only the glove, faintly, and the
-        // thing itself never showed it could be taken.
-        let target = hand.far.or(hand.hover).and_then(|e| items.get(e).ok());
+        // What a pointed hand would pull in. What's in reach has the
+        // glove's tint: a ring round it too (round the pack, a hoop) was
+        // more than it needed (the 28 October playtest).
+        let target = hand.far.and_then(|e| items.get(e).ok());
         let cue = match made.get(&hand_e) {
             Some(c) => *c,
             None if target.is_some() => {
@@ -677,13 +779,8 @@ fn far_cue(
         let Ok((mut t, mut vis, mut look)) = cues.get_mut(cue) else {
             continue;
         };
-        let want = if hand.far.is_some() {
-            &far_look
-        } else {
-            &near_look
-        };
-        if look.0 != *want {
-            look.0 = want.clone();
+        if look.0 != far_look {
+            look.0 = far_look.clone();
         }
         let Some((gt, aabb)) = target else {
             *vis = Visibility::Hidden;
@@ -691,11 +788,12 @@ fn far_cue(
         };
         let at = gt.translation();
         let size = aabb.map_or(0.15, |a| (a.max - a.min).max_element());
-        let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 6.0).sin();
+        // Flat to the eyes, still: turned to the hand, it swung about as the
+        // hand moved, a hula hoop round the thing.
+        let to_eye = eye.map_or(Vec3::Y, |e| (e - at).normalize_or(Vec3::Y));
         t.translation = at;
-        t.rotation =
-            Quat::from_rotation_arc(Vec3::Y, (hand.world.translation - at).normalize_or(Vec3::Y));
-        t.scale = Vec3::splat((size * 0.65 + 0.04).clamp(0.08, 0.6) * pulse);
+        t.rotation = Quat::from_rotation_arc(Vec3::Y, to_eye);
+        t.scale = Vec3::splat((size * 0.65 + 0.04).clamp(0.08, 0.6));
         *vis = Visibility::Visible;
     }
 }
@@ -708,8 +806,8 @@ struct GloveModel;
 /// Where a glove's modelled parts go, and the boxes it wears until (or
 /// unless) its model is in.
 #[derive(Component)]
-struct GloveParts {
-    model: Entity,
+pub(crate) struct GloveParts {
+    pub(crate) model: Entity,
     joints: Vec<((usize, usize), Entity)>,
     boxes: Vec<Entity>,
 }
@@ -755,12 +853,13 @@ fn finger_aim_spread(side: Side, finger: usize, c: f32, spread: f32) -> Quat {
     let curl = Quat::from_rotation_x(-JOINT_BEND[0] * c);
     if finger == 4 {
         // The thumb swings rather than bends at its root: out beside the
-        // index when open, down along the far side of a grip, across the
-        // fingers in a fist; its pad turned toward them.
+        // index when open, forward along its own side of a grip (a pistol's
+        // frame: aimed across it, it went through it), across the fingers
+        // in a fist; its pad turned toward them.
         let t = |x: f32, y: f32, z: f32| Vec3::new(x * thumb_side, y, z);
         let (open, grip, fist) = (
             t(0.45, -0.25, -0.86),
-            t(-0.15, -0.55, -0.82),
+            t(0.1, -0.32, -0.94),
             t(-0.75, -0.45, -0.5),
         );
         let d = if c < THUMB_ON_GRIP {
@@ -798,12 +897,34 @@ pub(crate) fn glove_frame(side: Side) -> Transform {
 /// left's mirrored, its text turned round to read the same way (the
 /// forearm across the chest points the other way).
 pub(crate) fn wrist_mount(side: Side) -> Transform {
+    glove_frame(side) * wrist_on_glove(side)
+}
+
+/// A player's glove, as `spawn_hand_visuals` makes one, for tests.
+#[cfg(test)]
+pub(crate) fn player_glove(world: &mut World, side: Side) -> Entity {
+    world.resource_scope(|world, mut meshes: Mut<Assets<Mesh>>| {
+        world.resource_scope(|world, mut materials: Mut<Assets<StandardMaterial>>| {
+            let mut commands = world.commands();
+            let root = spawn_hand(&mut commands, &mut meshes, &mut materials, side, [0.0; 5]);
+            commands.entity(root).insert(PlayerGlove);
+            world.flush();
+            root
+        })
+    })
+}
+
+/// The wrist display in the glove model's own frame (`GloveParts::model`),
+/// 4 mm over its housing's top face: carried by the glove, so the two can
+/// never part (on the tracked hand while the glove was stopped by a wall
+/// or a step behind, the housing covered it or it floated off; playtest
+/// 2026-10-28, F4).
+pub(crate) fn wrist_on_glove(side: Side) -> Transform {
     let axes = match side {
         Side::Left => Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
         Side::Right => Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y),
     };
-    let on_glove = Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes));
-    glove_frame(side) * on_glove
+    Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes))
 }
 
 /// A joint's turn, its finger curled `c`.
@@ -822,90 +943,6 @@ fn joint_rotation_spread(side: Side, finger: usize, joint: usize, c: f32, spread
         JOINT_BEND[joint]
     };
     Quat::from_rotation_x(-bend * c)
-}
-
-/// The ghost glove shows through whatever stopped the hand you see: your
-/// real hand is in the wall, so a ghost drawn behind its face would never
-/// be seen. Its meshes swap to the glass eye's material once dressed: a
-/// faint rim, additive, with no depth test. (Without that material, in
-/// tests, it keeps its plain translucent one.)
-fn ghost_through_walls(
-    mut commands: Commands,
-    ghosts: Query<(Entity, &HandVisual, Option<&GhostLook>)>,
-    children: Query<&Children>,
-    plain: Query<(), With<MeshMaterial3d<StandardMaterial>>>,
-    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-) {
-    let Some(mut xray) = xray else {
-        return;
-    };
-    for (e, v, look) in &ghosts {
-        if !v.ghost {
-            continue;
-        }
-        // Each ghost its own, so each fades on its own.
-        let m = match look {
-            Some(l) => l.0.clone(),
-            None => {
-                let m = xray.add(crate::anomaly::visuals::XrayMaterial {
-                    color: LinearRgba::BLACK,
-                });
-                commands.entity(e).try_insert(GhostLook(m.clone()));
-                m
-            }
-        };
-        for d in children.iter_descendants(e) {
-            if !plain.contains(d) {
-                continue;
-            }
-            // `try_`: a glove's boxes go the frame its model comes in,
-            // which can be this one.
-            commands
-                .entity(d)
-                .try_remove::<MeshMaterial3d<StandardMaterial>>()
-                .try_insert((MeshMaterial3d(m.clone()), bevy::light::NotShadowCaster));
-        }
-    }
-}
-
-/// A ghost glove's own x-ray material.
-#[derive(Component)]
-struct GhostLook(Handle<crate::anomaly::visuals::XrayMaterial>);
-
-/// The ghost at full strength (its rim's colour).
-const GHOST_RIM: LinearRgba = LinearRgba::rgb(0.11, 0.12, 0.13);
-
-/// How strongly the ghost shows for a gap between the glove you see and
-/// your real hand (m): nothing within 2 cm, fading up to full at 8.
-pub(crate) fn ghost_fade(gap: f32) -> f32 {
-    let t = ((gap - 0.02) / 0.06).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
-}
-
-/// The ghost brightens as your real hand goes further into what stopped
-/// the glove, and fades as they come back together.
-fn fade_ghosts(
-    ghosts: Query<(&HandVisual, &GhostLook)>,
-    hands: Query<&crate::interact::Hand>,
-    xray: Option<ResMut<Assets<crate::anomaly::visuals::XrayMaterial>>>,
-) {
-    let Some(mut xray) = xray else {
-        return;
-    };
-    for (v, look) in &ghosts {
-        let Ok(hand) = hands.get(v.hand) else {
-            continue;
-        };
-        let k = hand.felt.map_or(0.0, |f| {
-            ghost_fade(f.translation.distance(hand.world.translation))
-        });
-        let want = GHOST_RIM * k;
-        if let Some(mut m) = xray.get_mut(&look.0)
-            && m.color != want
-        {
-            m.color = want;
-        }
-    }
 }
 
 /// A glove: the palm at the root, joints below it. Without a tracked hand
@@ -928,7 +965,6 @@ pub(crate) fn spawn_hand(
                 curl,
                 spread: std::array::from_fn(rest_spread),
                 thumb: None,
-                ghost: false,
             },
             GloveMaterial(vec![glove.clone()]),
             Transform::default(),
@@ -1042,10 +1078,6 @@ fn dress_gloves(
         };
         commands.entity(e).remove::<GloveParts>();
         let Some(model) = model else {
-            // A ghost of boxes would read as solid hands: none at all.
-            if v.ghost {
-                commands.entity(e).despawn();
-            }
             continue;
         };
         let Some(palm) = find_node(&model, "palm") else {
@@ -1053,18 +1085,7 @@ fn dress_gloves(
             continue;
         };
         let mut own: Vec<(String, Handle<StandardMaterial>)> = Vec::new();
-        let ghost = v.ghost.then(|| {
-            materials.add(StandardMaterial {
-                base_color: Color::srgba(0.8, 0.84, 0.86, 0.2),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
-                ..default()
-            })
-        });
         let mut mat = |name: Option<&str>| {
-            if let Some(g) = &ghost {
-                return g.clone();
-            }
             let name = name.unwrap_or("Glove");
             if let Some((_, h)) = own.iter().find(|(n, _)| n == name) {
                 return h.clone();
@@ -1351,7 +1372,7 @@ fn curl_targets(
 /// gun is blocked by a wall), otherwise on the tracked pose.
 fn pose_hands(
     time: Res<Time>,
-    mut visuals: Query<(&mut HandVisual, &mut Transform, Option<&mut Visibility>), Without<Finger>>,
+    mut visuals: Query<(&mut HandVisual, &mut Transform), Without<Finger>>,
     mut fingers: Query<(&Finger, &ChildOf, &mut Transform), Without<HandVisual>>,
     hands: Query<(&Hand, &Transform, &ChildOf), (Without<HandVisual>, Without<Finger>)>,
     roots_t: Query<&Transform, (Without<Hand>, Without<HandVisual>, Without<Finger>)>,
@@ -1362,9 +1383,10 @@ fn pose_hands(
     models: Query<&ChildOf, With<GloveModel>>,
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     guns: Query<&crate::weapons::Gun>,
+    supports: Query<&crate::interact::Supported>,
 ) {
     let ease = 1.0 - (-time.delta_secs() * 18.0).exp();
-    for (mut v, mut t, mut vis) in &mut visuals {
+    for (mut v, mut t) in &mut visuals {
         let Ok((hand, local, parent)) = hands.get(v.hand) else {
             continue;
         };
@@ -1384,21 +1406,24 @@ fn pose_hands(
                 }
             }
         }
-        // A wall stops the glove where the hand's body stopped; the ghost
-        // stays on the real hand and shows only when the two are apart.
-        let tracked = pose;
-        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none() && !v.ghost) {
-            pose = felt;
+        // The other hand on a gun's support (the handguard, a palm cupped
+        // under a pistol's grip) sits on it as the grip hand sits on the
+        // grip: left at the controller, two hands on a pistol never looked
+        // like two hands on it (the 28 October playtest).
+        let mut on_support = false;
+        if let Some(item) = hand.supporting
+            && let (Ok((_, igt, g)), Ok(s)) = (held.get(item), supports.get(item))
+            && let Some(p) = g
+                .points
+                .get(s.point)
+                .filter(|p| p.role == GripRole::Support)
+        {
+            pose = igt.mul_transform(p.local);
+            on_support = true;
         }
-        if let (true, Some(vis)) = (v.ghost, vis.as_mut()) {
-            let apart = hand
-                .felt
-                .is_some_and(|f| ghost_fade(f.translation.distance(tracked.translation)) > 0.0);
-            vis.set_if_neq(if apart && hand.holding.is_none() {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            });
+        // A wall stops the glove where the hand's body stopped.
+        if let Some(felt) = hand.felt.filter(|_| hand.holding.is_none() && !on_support) {
+            pose = felt;
         }
         *t = pose;
         let thumb_rest = input.is_ok_and(|i| i.thumb_rest);
@@ -1446,7 +1471,7 @@ fn pose_hands(
         if let Ok(p) = models.get(up) {
             up = p.parent();
         }
-        let Ok((v, _, _)) = visuals.get(up) else {
+        let Ok((v, _)) = visuals.get(up) else {
             continue;
         };
         let spread = v.spread.get(f.finger).copied().unwrap_or(0.0);
@@ -1467,7 +1492,8 @@ fn pose_hands(
 /// propped at its back, and the post the yard's skip card hangs on.
 fn dress_camp(
     mut commands: Commands,
-    props: Query<(Entity, &crate::camp::CampProps), Added<crate::camp::CampProps>>,
+    props: Query<(Entity, &crate::camp::CampProps, &Transform), Added<crate::camp::CampProps>>,
+    zone: Option<Res<crate::world::Zone>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut lib: ResMut<MaterialLibrary>,
@@ -1475,16 +1501,13 @@ fn dress_camp(
 ) {
     use crate::camp::{BOARD, CampProps, POST_HEIGHT, TABLE};
     use crate::render::materials::{Mat, metric_box};
-    for (e, p) in &props {
+    for (e, p, pose) in &props {
         // Boxes until the models are in (`art/props/outdoor.py`).
         let models = match p {
-            CampProps::Table => vec![
-                ("camp_table", Transform::IDENTITY),
-                (
-                    "lantern",
-                    Transform::from_translation(Vec3::new(-0.48, TABLE.y, 0.12)),
-                ),
-            ],
+            CampProps::Table => crate::camp::models(zone.as_deref(), pose)
+                .into_iter()
+                .filter(|(n, _)| *n != "camp_board")
+                .collect(),
             CampProps::Board => vec![("camp_board", Transform::IDENTITY)],
             CampProps::Post => vec![("camp_post", Transform::IDENTITY)],
         };
@@ -1846,22 +1869,6 @@ mod glove_tests {
         );
     }
 
-    /// The ghost isn't there while the glove and your hand agree, comes
-    /// up smoothly as they part, and is at full strength by 8 cm.
-    #[test]
-    fn the_ghost_fades_in_with_the_gap() {
-        assert_eq!(ghost_fade(0.0), 0.0);
-        assert_eq!(ghost_fade(0.02), 0.0);
-        assert_eq!(ghost_fade(0.08), 1.0);
-        assert_eq!(ghost_fade(0.5), 1.0);
-        let mut last = 0.0;
-        for i in 0..=100 {
-            let k = ghost_fade(i as f32 * 0.001);
-            assert!(k >= last, "the ghost dims as the hand goes in");
-            last = k;
-        }
-    }
-
     #[test]
     fn the_right_wrist_display_is_the_left_mirrored_and_reads() {
         let m = |v: Vec3| Vec3::new(-v.x, v.y, v.z);
@@ -1873,6 +1880,129 @@ mod glove_tests {
         assert!(close(r.rotation * Vec3::Y, m(l.rotation * Vec3::Y)));
         // ...and reading left to right, not mirrored.
         assert!(close(r.rotation * Vec3::X, -m(l.rotation * Vec3::X)));
+    }
+
+    /// The wrist display lies on its housing (the glove model's Padding, on
+    /// the back of the cuff): facing out of it, a few millimetres over its
+    /// top face (not in it, not floating), and inside its footprint, on
+    /// both gloves (playtest 2026-10-28, F4: the housing covered it).
+    #[test]
+    fn the_wrist_display_lies_on_its_housing() {
+        let size = crate::render::comfort::WRIST_SIZE;
+        for side in [Side::Left, Side::Right] {
+            let (lo, hi) = housing(side);
+            let t = wrist_on_glove(side);
+            let normal = t.rotation * Vec3::Z;
+            assert!(normal.dot(Vec3::Y) > 0.999, "{side:?} faces {normal}");
+            for (x, y) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                let p = t.transform_point(Vec3::new(x * size.x * 0.5, y * size.y * 0.5, 0.0));
+                let gap = p.y - hi.y;
+                assert!(
+                    (0.002..=0.006).contains(&gap),
+                    "{side:?} corner {p} is {:.1} mm over the housing",
+                    gap * 1000.0
+                );
+                assert!(
+                    (lo.x..=hi.x).contains(&p.x) && (lo.z..=hi.z).contains(&p.z),
+                    "{side:?} corner {p} overhangs the housing {lo}..{hi}"
+                );
+            }
+        }
+    }
+
+    /// The housing's box in the glove model's frame: the palm's primitive
+    /// in the Padding material, through the palm node's own transform.
+    fn housing(side: Side) -> (Vec3, Vec3) {
+        let path = crate::asset_root_path().join(glove_model(side));
+        let bytes = std::fs::read(&path).unwrap();
+        let len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+        let json: serde_json::Value = serde_json::from_slice(&bytes[20..20 + len]).unwrap();
+        let v3 = |v: &serde_json::Value| {
+            let a = v.as_array().unwrap();
+            Vec3::new(
+                a[0].as_f64().unwrap() as f32,
+                a[1].as_f64().unwrap() as f32,
+                a[2].as_f64().unwrap() as f32,
+            )
+        };
+        let nodes = glb_nodes(side);
+        let palm = nodes.iter().position(|n| n.name == "palm").unwrap();
+        let mesh = json["nodes"][palm]["mesh"].as_u64().unwrap() as usize;
+        let prim = json["meshes"][mesh]["primitives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| {
+                p["material"].as_u64().is_some_and(|m| {
+                    json["materials"][m as usize]["name"].as_str() == Some("Padding")
+                })
+            })
+            .expect("the housing (Padding) on the palm");
+        let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64().unwrap() as usize];
+        let (lo, hi) = (v3(&acc["min"]), v3(&acc["max"]));
+        let at = nodes[palm].local;
+        let corners = (0..8).map(|i| {
+            at.transform_point(Vec3::new(
+                if i & 1 == 0 { lo.x } else { hi.x },
+                if i & 2 == 0 { lo.y } else { hi.y },
+                if i & 4 == 0 { lo.z } else { hi.z },
+            ))
+        });
+        corners.fold((Vec3::MAX, Vec3::MIN), |(a, b), p| (a.min(p), b.max(p)))
+    }
+
+    /// A card's button gets the generic collar and cap; a modelled key
+    /// (`OwnLook`) gets nothing over it.
+    #[test]
+    fn a_modelled_key_gets_no_cap_over_it() {
+        use crate::interact::poke::{OwnLook, PokeButton};
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .add_systems(Update, dress_buttons);
+        let button = || PokeButton {
+            target: Entity::PLACEHOLDER,
+            depth: 0.0,
+            down: false,
+        };
+        let card = app.world_mut().spawn(button()).id();
+        let key = app.world_mut().spawn((button(), OwnLook)).id();
+        app.update();
+        let kids = |e: Entity| app.world().get::<Children>(e).map_or(0, |c| c.len());
+        assert_eq!(kids(card), 2, "a card's button: collar and cap");
+        assert_eq!(kids(key), 0, "a modelled key: nothing over it");
+    }
+
+    /// Every push button but a card's (`interact::poke::mount_button`) is on
+    /// something modelled, and says it has its own look: a new one without
+    /// would get a generic cap stood over its keys.
+    #[test]
+    fn every_modelled_button_keeps_its_own_look() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![src];
+        let mut bad = Vec::new();
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                if p.extension().is_none_or(|x| x != "rs") || p.ends_with("interact/poke.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                // The code, not its tests.
+                let code = text.split("#[cfg(test)]\nmod ").next().unwrap_or("");
+                let made = code.matches("PokeButton {").count();
+                let own = code.matches("OwnLook").count();
+                if made > own {
+                    bad.push(format!("{}: {made} buttons, {own} OwnLook", p.display()));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// A node of a .glb: its name, local transform, children and, for a
@@ -2046,7 +2176,6 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
-                    ghost: false,
                 },
                 Transform::default(),
             ))
@@ -2153,7 +2282,6 @@ mod glove_tests {
                     curl: [0.0; 5],
                     spread: std::array::from_fn(rest_spread),
                     thumb: None,
-                    ghost: false,
                 },
                 Transform::default(),
             ))
@@ -2220,6 +2348,27 @@ mod glove_tests {
             assert!(
                 (curl[f] - wrap[f]).abs() < 0.02,
                 "held curl {curl:?} vs {wrap:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod button_tests {
+    use super::*;
+
+    /// A pressed button's cap stops on its panel's face, however far the
+    /// finger goes; at rest its front is `CAP` out.
+    #[test]
+    fn a_pressed_button_cap_stays_in_front_of_its_panel() {
+        use crate::interact::poke::{CAP, TRAVEL};
+        let half = (CAP - TRAVEL) * 0.5;
+        assert!((cap_z(0.0) + half - CAP).abs() < 1e-6);
+        for d in [0.0, TRAVEL * 0.5, TRAVEL, TRAVEL * 3.0] {
+            assert!(
+                cap_z(d) - half >= -1e-6,
+                "{d}: its back at {}",
+                cap_z(d) - half
             );
         }
     }

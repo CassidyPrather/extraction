@@ -456,8 +456,13 @@ fn sentry_mind(
     minds: Query<&super::senses::MindSeed>,
     others: Query<(&Brain, &Awareness, &Robot), (Without<Sentry>, Without<super::heavy::Heavy>)>,
     time: Res<Time>,
+    (mut voice, mut log): (
+        MessageWriter<super::search::MindShift>,
+        ResMut<super::search::MindLog>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     let heard: Vec<(Vec3, f32, Option<Entity>)> =
         noises.read().map(|n| (n.at, n.radius, n.source)).collect();
     let engaged: Vec<Entity> = others
@@ -575,6 +580,8 @@ fn sentry_mind(
         let armed = gun.is_some_and(|(_, part)| part.alive());
         match s.gun.step(in_view && armed, dt) {
             GunAct::Chirp => {
+                // It has you: said as every machine says it.
+                log.shift(&mut voice, e, super::search::Mind::Noticed, head, now);
                 out.write(SentryEvent {
                     sentry: e,
                     at: head,
@@ -752,6 +759,7 @@ pub(crate) mod tests {
 
     pub(crate) fn world_with_sentry(at: [f32; 2], centre: f32, arc: f32) -> (App, Entity) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -827,7 +835,7 @@ pub(crate) mod tests {
     /// comes round it chirps, and only then, a second later, fires.
     /// The same player behind it is never seen, never shot.
     fn stand_and_watch(behind: bool, cut: bool) -> (bool, bool, f32) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<Acts>()
             .init_resource::<Hurts>()
@@ -914,7 +922,7 @@ pub(crate) mod tests {
             out.0.extend(shots.read().map(|s| s.seed));
         }
         let run = |pad: usize| {
-            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
             vr.app.init_resource::<Seeds>().add_systems(Update, seeds);
             for k in 0..pad {
                 vr.app.world_mut().spawn(Name::new(format!("pad {k}")));
@@ -965,7 +973,7 @@ pub(crate) mod tests {
         use crate::interact::GripRole;
         use crate::interact::tools::cutters::{JAWS, LEFT};
         use crate::rig::Side;
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         let e = {
             let mut c = vr.app.world_mut().commands();
@@ -1085,7 +1093,7 @@ pub(crate) mod tests {
     /// heavy.
     #[test]
     fn a_heavy_walks_into_its_fire() {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app
             .init_resource::<RobotHits>()
             .add_systems(Update, count_robot_hits);
@@ -1112,16 +1120,26 @@ pub(crate) mod tests {
             vr.app.world_mut().flush();
             (s, h)
         };
+        // Standing in the line of fire (not off round a search of its post,
+        // whose tour goes wherever the post's surroundings send it).
+        *vr.app.world_mut().get_mut::<Brain>(heavy).unwrap() = Brain::Working {
+            at: zone.on_ground(40.0, 223.0),
+            left: 999.0,
+        };
         vr.stand(zone.on_ground(40.0, 214.0), 0.0);
-        vr.step(90 * 15);
-        let fired = vr
-            .app
-            .world()
-            .get::<Sentry>(sentry)
-            .unwrap()
-            .gun
-            .warned
-            .is_some();
+        // Opened up at any time in it (its warning lapses once it's lost you).
+        let mut fired = false;
+        for _ in 0..15 {
+            vr.step(90);
+            fired |= vr
+                .app
+                .world()
+                .get::<Sentry>(sentry)
+                .unwrap()
+                .gun
+                .warned
+                .is_some();
+        }
         let hits = vr.app.world().resource::<RobotHits>().0;
         assert!(fired, "it opened up on you");
         assert!(hits > 0, "and the heavy in the way took {hits} rounds");

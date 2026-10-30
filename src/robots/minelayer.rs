@@ -63,6 +63,20 @@ pub struct Minelayer {
     pub flee_cooldown: f32,
 }
 
+impl Minelayer {
+    /// Laying a field: seconds until the next mine drops. It counts down
+    /// only once it's stopped over the spot (it's `rules::LAY_TIME` while
+    /// it drives there), so below that it's stopped and about to lay: the
+    /// moment for the chute's hiss (`audio_machines`). `None` when it isn't
+    /// laying.
+    pub fn laying_in(&self) -> Option<f32> {
+        match self.doing {
+            Doing::Lay { wait, .. } => Some(wait.max(0.0)),
+            _ => None,
+        }
+    }
+}
+
 /// What it's about.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Doing {
@@ -330,8 +344,13 @@ fn minelayer_mind(
     mut out: MessageWriter<MineEvent>,
     mut counters: ResMut<crate::bot::Counters>,
     time: Res<Time>,
+    (mut minds, mut log): (
+        MessageWriter<super::search::MindShift>,
+        ResMut<super::search::MindLog>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let now = time.elapsed_secs();
     let mut dropped: Vec<Vec3> = Vec::new();
     let mut fled: Vec<Vec3> = Vec::new();
     for (e, mut m, mut t, aware, robot, children, stunned) in &mut layers {
@@ -362,8 +381,16 @@ fn minelayer_mind(
             .and_then(|p| targets.get(p).ok())
             .map(|g| g.translation())
             .filter(|p| p.distance(here) < FLEE_NEAR);
+        // What it's about, said as every machine says it (`robot_voice`):
+        // it's seen you; it's turning tail; it's back about its sowing.
+        use super::search::Mind;
+        let noticed = aware.can_see_target && aware.suspicion >= 0.5;
+        if noticed && !matches!(m.doing, Doing::Flee { .. }) {
+            log.shift(&mut minds, e, Mind::Noticed, here, now);
+        }
         if let Some(p) = seen {
             if m.flee_cooldown <= 0.0 && !matches!(m.doing, Doing::Flee { .. }) {
+                log.shift(&mut minds, e, Mind::Retreating, here, now);
                 let c = chute(&t);
                 drop_mine(&mut m, &mut commands, c);
                 m.doing = Doing::Flee {
@@ -454,6 +481,7 @@ fn minelayer_mind(
                 if left > 0.0 {
                     Doing::Flee { from, left }
                 } else {
+                    log.shift(&mut minds, e, super::search::Mind::Idle, here, now);
                     match m.sites.first().copied() {
                         Some(s) if m.hopper > 0 => Doing::Travel {
                             path: route(&nav.0, here, s),
@@ -992,7 +1020,7 @@ mod tests {
     }
 
     fn harness() -> (crate::vr_harness::Vr, Zone) {
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         vr.app.init_resource::<Acts>().add_systems(Update, collect);
         let zone = vr.app.world().resource::<Zone>().clone();
         (vr, zone)

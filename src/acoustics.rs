@@ -213,6 +213,20 @@ fn material(built: &Query<(&GlobalTransform, &Surfaces)>, hit: Entity, at: Vec3)
     built.get(hit).ok().and_then(|(gt, s)| s.at(gt, at))
 }
 
+/// A wall counts within this of the head (m), or three times the roof's
+/// height over it if that's more (a hall).
+pub const WALL_REACH: f32 = 6.0;
+/// Under a roof, walled round on at least this share of its sides it's a
+/// room; less (a porch, an open shed, an overhang in the woods) and it's
+/// out of doors with a roof over it: the rain and the wind all round.
+pub const ROOM_WALLS: f32 = 0.6;
+
+/// Whether a roofed place walled round by `walls` (share of its sides) is
+/// a room.
+pub fn is_room(walls: f32) -> bool {
+    walls >= ROOM_WALLS
+}
+
 /// Looks round from `head`.
 pub fn probe(
     spatial: &SpatialQuery,
@@ -224,15 +238,24 @@ pub fn probe(
     let mut n = 0;
     let mut votes = [0u32; 5];
     let mut hits = Vec::with_capacity(16);
+    let up = spatial.cast_ray(head, Dir3::Y, PROBE_RANGE, true, &world);
+    // Walls: the level rays that meet something built close round (not a
+    // roof overhead, not trunks, not the next house across the yard).
+    let reach = up.map_or(WALL_REACH, |h| (h.distance * 3.0).max(WALL_REACH));
+    let (mut level, mut walled) = (0, 0);
     for dir in rays() {
         n += 1;
+        let flat = dir.y.abs() < 0.1;
+        level += usize::from(flat);
         if let Some(h) = spatial.cast_ray(head, dir, PROBE_RANGE, true, &world) {
             hits.push(h.distance);
             let s = material(built, h.entity, head + *dir * h.distance)
                 .map_or(Surface::Soft, surface_of);
             votes[s as usize] += 1;
+            walled += usize::from(flat && h.distance <= reach && s != Surface::Soft);
         }
     }
+    let walls = walled as f32 / level.max(1) as f32;
     let size = if hits.is_empty() {
         PROBE_RANGE
     } else {
@@ -245,7 +268,6 @@ pub fn probe(
         let k = hits.len().min(3);
         hits.iter().take(k).sum::<f32>() / k as f32
     };
-    let up = spatial.cast_ray(head, Dir3::Y, PROBE_RANGE, true, &world);
     let underground = lighting.is_some_and(|l| l.in_dark(head));
     let roof = up.map(|h| {
         material(built, h.entity, head + Vec3::Y * h.distance).map_or(Roof::Solid, roof_of)
@@ -270,7 +292,7 @@ pub fn probe(
     };
     let kind = if underground {
         SpaceKind::Underground
-    } else if roof.is_some() && enclosed >= 0.5 {
+    } else if roof.is_some() && is_room(walls) {
         if size > 8.0 {
             SpaceKind::Hall
         } else {
@@ -316,6 +338,20 @@ pub fn rain_under(space: &Space) -> (f32, f32, Option<&'static str>) {
         _ => (-3.0, 8_000.0, drum),
     }
 }
+
+/// How loud a roof's drumming plays (0..1 of its cue): full walled in
+/// under it; under a roof that isn't walled round (a porch, an eave, an
+/// open shed) the open rain all round is what you hear, the drumming
+/// [`PORCH_DRUM_DB`] under it. Its loops were recorded inside: at full
+/// level under an eave they're the "indoor" rain the playtest of 28
+/// October heard outdoors.
+pub fn drum_level(space: &Space) -> f32 {
+    match space.kind {
+        SpaceKind::Room | SpaceKind::Hall => 1.0,
+        _ => 10f32.powf(PORCH_DRUM_DB / 20.0),
+    }
+}
+pub const PORCH_DRUM_DB: f32 = -10.0;
 
 /// How a sound gets from `from` to `to`.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -785,6 +821,90 @@ mod tests {
         assert!(round * 10 >= cut * 7, "{round} of {cut} bent round");
     }
 
+    /// Indoors is walled round, not just roofed: over every roofed spot
+    /// under every structure on Marrow Creek, the open ones (the sawmill's
+    /// shed, the towers' platforms) sound out of doors (the
+    /// wind, the open rain), and the shut ones (houses, cabins, the pump
+    /// station) sound like rooms. The playtest of 28 October heard indoor
+    /// rain under the sawmill's roof and in the guard booth.
+    #[test]
+    fn under_a_roof_is_not_indoors_unless_walled_round() {
+        let mut app = app("marrow_creek");
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let mut by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+        for p in &zone.map.placements {
+            if extraction_core::underground::is_site(&p.prefab) {
+                continue;
+            }
+            let [fw, _, fd] = extraction_core::map::prefab_footprint(&p.prefab);
+            let xf = crate::world::buildings::placement_transform(&zone, p);
+            let (hx, hz) = (fw * 0.5, fd * 0.5);
+            let steps = |h: f32| ((2.0 * h / 1.5).ceil() as i32).clamp(1, 24);
+            for i in 0..=steps(hx) {
+                for j in 0..=steps(hz) {
+                    let at = xf.transform_point(Vec3::new(
+                        -hx + 2.0 * hx * i as f32 / steps(hx) as f32,
+                        0.0,
+                        -hz + 2.0 * hz * j as f32 / steps(hz) as f32,
+                    ));
+                    // Standing on what's under foot there (a floor, the ground).
+                    let floor = zone.ground(at.x, at.z).max(xf.translation.y);
+                    let space = probe_at(&mut app, Vec3::new(at.x, floor + 1.6, at.z));
+                    if space.roof.is_none() || space.kind == SpaceKind::Underground {
+                        continue;
+                    }
+                    let e = by.entry(p.prefab.clone()).or_default();
+                    if crate::audio::indoor_space(&space) {
+                        e.0 += 1;
+                    } else {
+                        e.1 += 1;
+                    }
+                }
+            }
+        }
+        eprintln!("roofed spots, (room, open) by structure: {by:?}");
+        let share_open = |id: &str| {
+            let (r, o) = by.get(id).copied().unwrap_or_default();
+            o as f32 / (r + o).max(1) as f32
+        };
+        for id in ["sawmill", "ranger_tower", "survey_tower"] {
+            assert!(by.contains_key(id), "{id} not swept");
+            assert!(
+                share_open(id) >= 0.5,
+                "{id} sounds indoors: {:?}",
+                by.get(id)
+            );
+        }
+        for id in [
+            "house_plank",
+            "house_brick",
+            "farmhouse",
+            "cabin_log",
+            "pump_station",
+        ] {
+            assert!(
+                share_open(id) <= 0.1,
+                "{id} sounds outdoors: {:?}",
+                by.get(id)
+            );
+        }
+    }
+
+    /// Where the playtest of 28 October heard "the indoor noise when I'm
+    /// outside but under the roof" (raid second 666, under the eave of the
+    /// log cabin at the logging camp): out of doors, the roof's drumming
+    /// well under the open rain.
+    #[test]
+    fn under_the_cabin_eave_is_out_of_doors() {
+        let mut app = app("marrow_creek");
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let (x, z) = (-74.9, 112.5);
+        let space = probe_at(&mut app, Vec3::new(x, zone.ground(x, z) + 1.6, z));
+        assert!(space.roof.is_some(), "under the eave: {space:?}");
+        assert!(!crate::audio::indoor_space(&space), "{space:?}");
+        assert!(drum_level(&space) < 0.5, "{space:?}");
+    }
+
     /// Rain is loudest in the open, duller under a roof, gone underground.
     #[test]
     fn rain_is_heard_through_the_roof() {
@@ -807,6 +927,16 @@ mod tests {
         let (t, _, _) = rain_under(&tunnel);
         assert!(o > s && s > t && sc < oc);
         assert_eq!(drum, Some("ambience/rain_tin"));
+        // Under the same roof, not walled round (a porch, an eave): the
+        // open rain, the drumming well under it.
+        let porch = Space {
+            kind: SpaceKind::Sheltered,
+            enclosed: 0.4,
+            ..shed
+        };
+        let (p, pc, _) = rain_under(&porch);
+        assert!(p > s && pc > sc, "a porch hears the open rain");
+        assert!(drum_level(&porch) < 0.5 * drum_level(&shed));
     }
 
     #[test]

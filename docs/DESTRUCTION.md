@@ -194,11 +194,67 @@ No joints and no disabled bodies, ever: a piece can be despawned at any
 moment (mid-flight, asleep, the tick it was thrown) without leaving the
 solver an island to trip on.
 
+## What rested on it falls
+
+A body asleep on a support doesn't wake when the support goes, so loot
+on a supply crate's lid hung in the air once the crate was smashed (the
+playtest's "googly eyes", 0:52:37). Whenever a breakable goes (`Cleared`:
+a crate, a door, a board, a wreck's part, a floor hole) `wake_what_rested`
+wakes every sleeping body in its space or a hand's breadth over it, and
+it falls. `crate_loot_on_lid.png` (Marrow's footbridge cache, its loot on
+the lid) and `crate_loot_fallen.png` (smashed, the loot down in the
+grass); the playtest's own frame of the fault is
+`docs/playtests/2026-10-28/transcript/screenshots/05237_broken-crate-googly-eyes.jpg`.
+
+## Doors in the hand (`world::hinge`)
+
+In VR a grip on a door's leaf takes hold of it (playtest F5: a grip used
+to toggle it, so it jittered, wouldn't hold part-way, and flung):
+
+- held, the leaf turns about its hinge to follow the hand round, within
+  its range and no faster than `hinge::MOST` (4 rad/s), from any grip
+  point; let go, it stays where it was left (`Resting`) till something
+  toggles it;
+- a quick squeeze (under `hinge::TAP`, the leaf hardly moved) still
+  toggles it, swinging over a second as a press does;
+- a palm on a door that's held or was let go of in the last
+  `hinge::LET_GO` isn't a push (`physics_hands::push_doors`), so the hand
+  that left it can't shove it back;
+- flat-screen and bots press, as before.
+
+Anything else that moves in the hand is a `hinge::Moving` part: a leaf
+that turns about its rest frame's +Y up to `most`, or a drawer that slides
+out along its -Z up to `travel`. Held, it follows the hand (clamped, no
+faster than `MOST` or `SLIDE_MOST`); let go part-way it stays; a quick
+squeeze, or a press flat or a bot's, sends it to its other end.
+
+- Counters: Model correctness split `counter_drawers` and `counter_cabinet`
+  into a `carcass` and moving nodes. `Builder::counter` draws only the
+  carcass; `hinge::fit_counters` puts each drawer (0.4 m) and cabinet door
+  (1.9 rad; the right-hand one turned over so it opens the same way) up as
+  a part, its node drawn on it. Their origins and boxes are the models'
+  own (`COUNTER_NODES`).
+- Windows: `window_sash` is split too (`frame`, `leaf_l`, `leaf_r`,
+  `fortochka`, each leaf with its latch). An intact sash is drawn by its
+  `frame` (`dress_buildings`; a weathered one stays `window_sash_broken`,
+  shut, and a boarded one is always weathered), and `glass::glaze` hangs
+  its three leaves (`hinge::fit_sash`, `SASH_LEAVES`) on their hinges,
+  turned over so each swings into the room, up to `hinge::WINDOW_LEAF`
+  (100°). A leaf has no collider (a round or a thrown thing must reach
+  its glass): it's taken hold of within its half-diagonal of its middle.
+  Its pane rides on it: `Pane::rest` is where it hangs shut and
+  `Pane::leaf` its leaf; `glass::carry_panes` moves `world`/`inv` as the
+  leaf swings (without marking the pane changed), so rounds, fists and
+  blasts find it where it is now, while its key (`Pane::key`), the
+  `PaneGrid` cell and the glitter it leaves on the floor stay where it
+  hangs shut. The fixed top-right light stays in the frame.
+
 ## Drawing it
 
 One mesh per building draws all its panes whole (`Mat::Glass`), and one its
 broken panes' teeth in a paler, glinting shard material, rebuilt when a
-pane changes. Under each broken pane a scatter of small flat shards lies
+pane changes; a window's leaf has its own two, hung from it, so they
+swing with it. Under each broken pane a scatter of small flat shards lies
 on the floor (or the ground) on the side the glass fell (`Break::fell`;
 a restored pane's fell in), a few millimetres proud: what tells a window
 was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass
@@ -258,7 +314,14 @@ door's crash).
   nothing we spawn is drawn without its model or its texture on disk; a
   Lada's wheel's nuts turned out (a half turn holds; the crowbar takes
   the nuts with the wheel; the Surge bolts it back), and the same through
-  a spanner in a tracked hand (`vr_harness` `wheel_nuts`).
+  a spanner in a tracked hand (`vr_harness` `wheel_nuts`); loot asleep
+  on a crate's lid falls when the crate's smashed; and (`vr_harness`
+  `door_hinge`) two doors in every valley gripped at the latch, the
+  middle and near the hinge and pulled round 80°: the leaf follows with
+  no step back, no jump past the rate, no stop short, and stays when let
+  go; two drawers and two cabinet doors in every valley, pulled out
+  0.3 m and swung round 80° the same way; and a casement and a drawer in
+  the yard, and a press running a drawer shut.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

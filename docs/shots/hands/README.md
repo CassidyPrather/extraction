@@ -83,3 +83,46 @@ splint's two slats strapped along the right shin. From the eye: the left
 glove turned palm up, bloody from touching a wound (it fades over a
 minute), an open wound on the left forearm, and a dressing wound round
 the right upper arm as a white band.
+`20_bleeding.jpg` (28 October playtest, item 12; `--gallery treat+side`,
+then `treat+down+wrist`): before and after a bound limb that still
+bleeds. Left, before: every open wound drawn alike. Middle, after: the
+bleeding thigh wound wet and brighter (a stopped one draws dark and dry).
+Right, after: the right upper arm bound, the wrist raised; it reads BLEED
+and pages through the line said when the dressing went on, "That one's
+bound. You're still bleeding: the right thigh." (the old line was "The
+bleeding stops.").
+`21_body_and_thumb.jpg` (28 October playtest, transcript M1 and M2). Top,
+looking down (`--gallery kit+down`): before (left, `--body`, as the
+headset showed it whatever the setting) the sleeves, the jacket and the
+harness's straps, placed by guessing from a head and two hands; after
+(right, the default) the gloves and what you reach for on yourself (the
+pouches, the compass), nothing the IK can't back up. Bottom, the PM in
+the right glove from its left side (`fp:pm_pistol,1.6,90`): before, the
+thumb hooked across and into the frame; after, it lies forward along the
+frame under the slide.
+`22_gloves.jpg` (28 October playtest, M2: the hands are the most-seen
+model; `fp:open,2.4,90` and `fp:open,2.4,0`): top before, bottom after
+the first pass on `art/hands/gloves.py`. Rounder fingers (16 sides, fuller
+caps) and a finer palm; a leather patch over each fingertip; a moulded pad
+over each knuckle; the leather a shade lighter than the olive nylon, so
+palm and back read apart. Still to come: the back of the hand's panels
+and stitching, the thumb's shape, and the cuff.
+`23_glove_back.jpg` (`fp:open,2.4,270`, the back of the hand, the side
+you see most): left the glove before this wave, right after its second
+pass. A padded panel over the back of the hand with dark seams down its
+sides, a moulded pad on each knuckle, leather fingertips. (The block at
+the wrist is the display's housing, on each glove.)
+
+`24_glove_cuff.jpg` (`kit+down`, the default view, the cuff end to the
+eye as when reaching forward): left the third pass's first try, right
+after. The dome meant to close the cuff was scaled about a point back in
+the hand, so it ran in as a funnel and read as a hole; it now closes
+over the arm's end in leather. The third pass also tapers the thumb.
+
+`25_side_opening_pack.jpg` (`--gallery pack`, `pack+side`, flat mode):
+the pack swung off the left shoulder and held in front. Before, it hung
+with its straps to you and opened at the top, the lid thrown back at
+you. Now it's a panel loader: it hangs with its outer face to you,
+tipped up toward the eyes, and opens there. The cavity is lined a shade
+off the canvas, the dressing shows inside, and the front panel (with the
+big pocket on it) folds down from its bottom edge.

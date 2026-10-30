@@ -20,6 +20,8 @@ pub mod dirigible;
 pub mod disturbed;
 pub mod doors;
 pub mod drone;
+#[cfg(test)]
+mod drone_drill;
 pub mod flee;
 pub mod flight;
 pub mod fx;
@@ -33,6 +35,8 @@ pub mod heavy_mind;
 pub mod hound;
 pub mod hound_mind;
 pub mod indoor;
+#[cfg(test)]
+mod intent_roster;
 pub mod memory;
 pub mod mender;
 pub mod mender_look;
@@ -64,6 +68,7 @@ pub mod subjects;
 pub mod tracks;
 pub mod visuals;
 pub mod walker;
+pub mod weak_points;
 pub mod weathering;
 pub mod wreck;
 
@@ -313,7 +318,7 @@ impl Plugin for RobotsPlugin {
                 search::SearchPlugin,
                 indoor::IndoorPlugin,
             ))
-            .add_plugins(hazard_look::HazardLookPlugin)
+            .add_plugins((hazard_look::HazardLookPlugin, weak_points::WeakPointsPlugin))
             .add_systems(
                 FixedUpdate,
                 (damage_parts, senses::door_noise, perceive, wreck_loot)
