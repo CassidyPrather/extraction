@@ -506,14 +506,17 @@ fn tint_gloves(
         let Ok(hand) = hands.get(v.hand) else {
             continue;
         };
-        let on = hand.hover.is_some();
+        // Only an empty hand says what it would take: a hand holding a gun
+        // lit up by whatever it passed was a distraction (the 28 October
+        // playtest).
+        let on = hand.hover.is_some() && hand.holding.is_none();
         if lit.insert(v.hand, on) == Some(on) {
             continue;
         }
         for h in &glove.0 {
             if let Some(mut m) = materials.get_mut(h) {
                 m.emissive = if on {
-                    LinearRgba::rgb(0.06, 0.16, 0.08)
+                    LinearRgba::rgb(0.03, 0.08, 0.04)
                 } else {
                     LinearRgba::BLACK
                 };
@@ -595,9 +598,12 @@ fn push_caps(
 #[derive(Component)]
 struct FarCue;
 
+#[allow(clippy::too_many_arguments)]
 fn far_cue(
     mut commands: Commands,
     hands: Query<(Entity, &Hand)>,
+    eyes: Query<(&GlobalTransform, &ChildOf), With<crate::rig::RigHead>>,
+    locals: Query<(), With<crate::rig::LocalPlayer>>,
     items: Query<(&GlobalTransform, Option<&avian3d::prelude::ColliderAabb>)>,
     mut cues: Query<
         (
@@ -610,29 +616,28 @@ fn far_cue(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut made: Local<std::collections::HashMap<Entity, Entity>>,
-    // The ring for a far target, and a dimmer one for what's in reach: up
-    // close the glove's tint already says "this one", and a full ring
-    // round everything in a cluttered crate would be busy.
-    mut looks: Local<Option<(Handle<StandardMaterial>, Handle<StandardMaterial>)>>,
-    time: Res<Time>,
+    mut ring: Local<Option<Handle<StandardMaterial>>>,
 ) {
-    let (far_look, near_look) = looks
+    let far_look = ring
         .get_or_insert_with(|| {
-            let ring = |k: f32| StandardMaterial {
-                base_color: Color::srgba(0.3, 0.9, 0.4, 0.5 * k),
-                emissive: LinearRgba::rgb(0.3 * k, 0.9 * k, 0.4 * k),
+            materials.add(StandardMaterial {
+                base_color: Color::srgba(0.3, 0.9, 0.4, 0.5),
+                emissive: LinearRgba::rgb(0.3, 0.9, 0.4),
                 unlit: true,
                 alpha_mode: AlphaMode::Add,
                 ..default()
-            };
-            (materials.add(ring(1.0)), materials.add(ring(0.6)))
+            })
         })
         .clone();
+    let eye = eyes
+        .iter()
+        .find(|(_, p)| locals.contains(p.parent()))
+        .map(|(gt, _)| gt.translation());
     for (hand_e, hand) in &hands {
-        // What a pointed hand would pull in, else what the hand would take
-        // where it is: the near hover lit only the glove, faintly, and the
-        // thing itself never showed it could be taken.
-        let target = hand.far.or(hand.hover).and_then(|e| items.get(e).ok());
+        // What a pointed hand would pull in. What's in reach has the
+        // glove's tint: a ring round it too (round the pack, a hoop) was
+        // more than it needed (the 28 October playtest).
+        let target = hand.far.and_then(|e| items.get(e).ok());
         let cue = match made.get(&hand_e) {
             Some(c) => *c,
             None if target.is_some() => {
@@ -655,13 +660,8 @@ fn far_cue(
         let Ok((mut t, mut vis, mut look)) = cues.get_mut(cue) else {
             continue;
         };
-        let want = if hand.far.is_some() {
-            &far_look
-        } else {
-            &near_look
-        };
-        if look.0 != *want {
-            look.0 = want.clone();
+        if look.0 != far_look {
+            look.0 = far_look.clone();
         }
         let Some((gt, aabb)) = target else {
             *vis = Visibility::Hidden;
@@ -669,11 +669,12 @@ fn far_cue(
         };
         let at = gt.translation();
         let size = aabb.map_or(0.15, |a| (a.max - a.min).max_element());
-        let pulse = 1.0 + 0.08 * (time.elapsed_secs() * 6.0).sin();
+        // Flat to the eyes, still: turned to the hand, it swung about as the
+        // hand moved, a hula hoop round the thing.
+        let to_eye = eye.map_or(Vec3::Y, |e| (e - at).normalize_or(Vec3::Y));
         t.translation = at;
-        t.rotation =
-            Quat::from_rotation_arc(Vec3::Y, (hand.world.translation - at).normalize_or(Vec3::Y));
-        t.scale = Vec3::splat((size * 0.65 + 0.04).clamp(0.08, 0.6) * pulse);
+        t.rotation = Quat::from_rotation_arc(Vec3::Y, to_eye);
+        t.scale = Vec3::splat((size * 0.65 + 0.04).clamp(0.08, 0.6));
         *vis = Visibility::Visible;
     }
 }
