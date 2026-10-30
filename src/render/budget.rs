@@ -2350,7 +2350,10 @@ pub(crate) mod tests {
             ours.sort_by(|a, b| b.1.total_cmp(&a.1));
             println!("{map}: main schedule {frame:.2} ms; the heaviest game systems:");
             for (name, ms) in ours.iter().take(6) {
-                println!("    {ms:7.3} ms ({:4.1}%)  {name}", 100.0 * ms / frame.max(1e-9));
+                println!(
+                    "    {ms:7.3} ms ({:4.1}%)  {name}",
+                    100.0 * ms / frame.max(1e-9)
+                );
             }
             for (name, ms) in &ours {
                 if *ms > frame * SYSTEM_SHARE {
