@@ -133,13 +133,15 @@ fsb = fillet([(-0.618, BORE - 0.012), (-0.585, BORE - 0.012), (-0.585, 0.086), (
 barrel.prism(fsb, -0.0125, 0.0125, "Blued", axis="x", bevel=0.0015, segs=2)
 # Protective ears around the post.
 for sx in (-1, 1):
-    barrel.prism(fillet([(-0.609, 0.090), (-0.594, 0.090), (-0.596, 0.1075), (-0.606, 0.1075)],
+    barrel.prism(fillet([(-0.609, 0.090), (-0.594, 0.090), (-0.596, 0.1098), (-0.606, 0.1098)],
                         0.002, 2), sx * 0.0105 - 0.002, sx * 0.0105 + 0.002, "Blued", axis="x",
                  bevel=0.0006, segs=1)
 # The post screws into a drum across the block; the drum's ends show
-# below the ears, the post's flat-topped blade above.
-barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1042),
-              (0.0012, 0.1045), (0.0, 0.1045)], "Blued", segs=14,
+# below the ears, the post's flat-topped blade above. Its top is level
+# with the rear notch's floor (y 0.1066), on the eye line (`pt_sight`)
+# the game zeroes along: it stood 2 mm under it.
+barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1065),
+              (0.0012, 0.1068), (0.0, 0.1068)], "Blued", segs=14,
              xf=T(0, 0, -0.601) @ RX(-math.pi / 2))
 barrel.cyl(0.0046, -0.0128, 0.0128, "Blued", segs=20, xf=T(0, 0.084, -0.6015) @ RY(math.pi / 2),
            chamfer=0.0006)
@@ -372,7 +374,7 @@ for p in (carrier, selector, trig):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, -0.69))
-empty("pt_sight", (0.0, 0.104, 0.0))
+empty("pt_sight", (0.0, 0.1068, 0.0))
 empty("magwell", (0.0, 0.0265, -0.1415))
 
 # Where a sling attaches: the front swivel on the gas block's left, the loop on the stock's left.
