@@ -1696,6 +1696,7 @@ pub(crate) mod tests {
         senses: bool,
     ) -> (App, Entity) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -2105,7 +2106,7 @@ pub(crate) mod tests {
     #[test]
     fn a_hand_pulls_the_cell() {
         use crate::rig::Side;
-        let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         let catalog = vr.app.world().resource::<Catalog>().clone();
         let at = zone.on_ground(40.0, 230.0);
@@ -2203,7 +2204,7 @@ pub(crate) mod tests {
     #[test]
     fn its_blow_lands_unless_you_move() {
         let run = |dodge: bool| -> (f32, bool) {
-            let mut vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+            let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
             let zone = vr.app.world().resource::<Zone>().clone();
             let catalog = vr.app.world().resource::<Catalog>().clone();
             let at = zone.on_ground(40.0, 230.0);

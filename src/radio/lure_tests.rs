@@ -18,6 +18,7 @@ fn flat(v: Vec3) -> f32 {
 fn a_tape_playing_draws_a_walker() {
     let mut app = crate::headless_app(
         crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         },

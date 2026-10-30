@@ -763,6 +763,7 @@ mod tests {
     #[test]
     fn a_crawlers_carcass_is_stepped_over_a_walkers_isnt() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -860,6 +861,7 @@ mod tests {
     #[test]
     fn a_wrecked_walker_comes_apart_and_settles() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -948,6 +950,7 @@ mod tests {
     #[test]
     fn a_wrecked_drone_spirals_down() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -1029,6 +1032,7 @@ mod tests {
     /// its entity id differs).
     fn how_it_breaks(filler: usize) -> (u32, Vec<[i32; 3]>) {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -1089,6 +1093,7 @@ mod tests {
     #[test]
     fn jointed_wrecks_despawn_cleanly() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
