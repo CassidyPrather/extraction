@@ -102,8 +102,20 @@ fn start_drawing(commands: &mut Commands, view: &ScreenView, text: &str) -> Draw
         },
         UiTargetCamera(camera),
     ));
+    // The sheet under the words: the whole panel, padding and all, drawn
+    // first (as the root's own image it came out a box inset in it).
     if let Some(paper) = &view.paper {
-        root.insert(ImageNode::new(paper.clone()));
+        root.with_child((
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0.0),
+                top: px(0.0),
+                width: percent(100),
+                height: percent(100),
+                ..default()
+            },
+            ImageNode::new(paper.clone()).with_mode(NodeImageMode::Stretch),
+        ));
     }
     let ui = root
         .with_children(|ui| {
