@@ -209,7 +209,17 @@ fn grow_arms(
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     for (glove, v) in &gloves {
-        let jacket = model_mats.get("Canvas", &mut lib, &server, &mut materials);
+        // The jacket's cloth, both faces drawn: a sleeve seen from inside
+        // (the cuff turned toward the eye) is cloth, not a hole.
+        let canvas = model_mats.get("Canvas", &mut lib, &server, &mut materials);
+        let jacket = match materials.get(&canvas).cloned() {
+            Some(mut m) => {
+                m.cull_mode = None;
+                m.double_sided = true;
+                materials.add(m)
+            }
+            None => canvas,
+        };
         let mut part = |commands: &mut Commands, mesh: Mesh| {
             commands
                 .spawn((
@@ -284,7 +294,10 @@ fn pose_arms(
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     stances: Query<&crate::rig::stance::Stance>,
 ) {
-    let watch = comfort.map_or(crate::rig::Side::Left, |c| c.gun_side().other());
+    let watch = comfort
+        .as_deref()
+        .map_or(crate::rig::Side::Left, |c| c.gun_side().other());
+    let body = comfort.as_deref().is_none_or(|c| c.body);
     for arm in &arms {
         let Ok((v, glove, glove_vis)) = gloves.get(arm.glove) else {
             continue;
@@ -321,6 +334,9 @@ fn pose_arms(
         } else {
             Visibility::Inherited
         };
+        // The sleeves only with the body drawn (`Comfort::body`): an arm the
+        // IK can only guess at is worse than none. Their shadow stays.
+        let sleeves = if body { show } else { Visibility::Hidden };
         // A bone from `a` toward `b`: the sleeve's -Z along it, its up kept
         // near the glove's so the folds don't spin.
         let bone = |a: Vec3, b: Vec3| {
@@ -339,7 +355,11 @@ fn pose_arms(
         ] {
             if let Ok((mut pt, mut vis)) = parts.get_mut(e) {
                 *pt = t;
-                *vis = show;
+                *vis = if arm.shadow.contains(&e) {
+                    show
+                } else {
+                    sleeves
+                };
             }
         }
     }
@@ -528,7 +548,7 @@ fn pose_body_shadow(
 
 /// A piece of a sleeve.
 #[derive(Component)]
-struct ArmPart;
+pub(crate) struct ArmPart;
 
 #[cfg(test)]
 mod tests {

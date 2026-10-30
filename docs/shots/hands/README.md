@@ -91,3 +91,12 @@ Right, after: the right upper arm bound, the wrist raised; it reads BLEED
 and pages through the line said when the dressing went on, "That one's
 bound. You're still bleeding: the right thigh." (the old line was "The
 bleeding stops.").
+`21_body_and_thumb.jpg` (28 October playtest, transcript M1 and M2). Top,
+looking down (`--gallery kit+down`): before (left, `--body`, as the
+headset showed it whatever the setting) the sleeves, the jacket and the
+harness's straps, placed by guessing from a head and two hands; after
+(right, the default) the gloves and what you reach for on yourself (the
+pouches, the compass), nothing the IK can't back up. Bottom, the PM in
+the right glove from its left side (`fp:pm_pistol,1.6,90`): before, the
+thumb hooked across and into the frame; after, it lies forward along the
+frame under the slide.
