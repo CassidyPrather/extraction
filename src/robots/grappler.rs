@@ -2,7 +2,13 @@
 //! logistics job grapplers stand guard round a dirigible's cargo pod. They
 //! don't shoot: they spear you with a tether and reel, so you're slow and
 //! dragged toward them while their friends come: the line sings as it
-//! bites ([`REEL_NOISE`]), a noise at you that robots round about hear.
+//! bites ([`REEL_NOISE`]), a noise at you that robots round about hear,
+//! and it calls them (its "calling" voice, `search::Mind::Calling`).
+//!
+//! **One grappler's line at a time.** The first to spear you has you
+//! ([`CLAIM`] after each throw); the others close in, and throw only if
+//! it's down, stunned or gone. Two that took turns pulled you back and
+//! forth, with no goal you could read (playtest, 28 October, 1:03:28).
 
 use bevy::prelude::*;
 
@@ -23,6 +29,9 @@ pub struct Grappler {
 pub const WINDUP: f32 = 0.6;
 /// A line that bites sings this far (m): its friends come.
 pub const REEL_NOISE: f32 = 60.0;
+/// A grappler that's thrown at you has you this long (s): a throw's
+/// cooldown and a little; another grappler waits it out.
+pub const CLAIM: f32 = 12.0;
 
 /// A grappler began winding up a throw at `to` (for its tell).
 #[derive(Message, Clone, Copy, Debug)]
@@ -98,7 +107,20 @@ fn harpoons(
     mut noise: MessageWriter<super::Noise>,
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
+    (mut claims, mut voice, mut log): (
+        Local<std::collections::HashMap<Entity, (Entity, f32)>>,
+        MessageWriter<super::search::MindShift>,
+        ResMut<super::search::MindLog>,
+    ),
 ) {
+    let now = time.elapsed_secs();
+    // Whose you are: a claim lapses with its time, or its grappler.
+    let alive: std::collections::HashSet<Entity> = grapplers
+        .iter()
+        .filter(|(e, _, _, _, r, ..)| !r.wrecked && !stunned.contains(*e))
+        .map(|(e, ..)| e)
+        .collect();
+    claims.retain(|_, (by, until)| *until > now && alive.contains(by));
     let dt = time.delta_secs();
     for (e, mut g, brain, aware, robot, gt, children) in &mut grapplers {
         g.cooldown -= dt;
@@ -127,6 +149,11 @@ fn harpoons(
             g.windup = 0.0;
             continue;
         }
+        // Another grappler has them: leave them to it.
+        if claims.get(&target).is_some_and(|(by, _)| *by != e) {
+            g.windup = 0.0;
+            continue;
+        }
         // Tell first: it rears back, then throws.
         if g.windup < WINDUP {
             if g.windup == 0.0 {
@@ -140,6 +167,7 @@ fn harpoons(
         }
         g.windup = 0.0;
         g.cooldown = 9.0;
+        claims.insert(target, (e, now + CLAIM));
         // Most throws land; some don't.
         *seed = super::senses::shot_seed(&minds, e, &time);
         let hit = (*seed >> 33) % 100 < 70;
@@ -148,6 +176,14 @@ fn harpoons(
                 by: e,
                 left: TETHER_TIME,
             });
+            // It has you: it calls the others in.
+            log.shift(
+                &mut voice,
+                e,
+                super::search::Mind::Calling,
+                gt.translation(),
+                time.elapsed_secs(),
+            );
             // The line sings as it bites: the others hear where you are.
             if let Ok(at) = players.get(target) {
                 noise.write(super::Noise {
@@ -266,5 +302,75 @@ mod tests {
         assert!(speared, "the grappler got a line into the player");
         app.update();
         assert!(app.world().resource::<Sung>().0, "and the line sang");
+    }
+
+    /// Two grapplers either side of you, both in reach: one line, from one
+    /// of them, the whole while (they took turns, and pulled you back and
+    /// forth); and when it bites, it calls the others.
+    #[test]
+    fn two_grapplers_dont_pull_you_back_and_forth() {
+        let opts = crate::LaunchOptions {
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let zone = app.world().resource::<Zone>().clone();
+        let at = zone.on_ground(40.0, 255.0);
+        #[derive(Resource, Default)]
+        struct Called(usize);
+        app.init_resource::<Called>().add_systems(
+            Last,
+            |mut m: MessageReader<super::super::search::MindShift>, mut c: ResMut<Called>| {
+                c.0 += m
+                    .read()
+                    .filter(|m| m.state == super::super::search::Mind::Calling)
+                    .count();
+            },
+        );
+        for side in [-1.0, 1.0] {
+            let spot = zone.on_ground(at.x + 12.0 * side, at.z);
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            spawn_grappler(
+                &mut c,
+                &zone,
+                spot,
+                super::super::Job {
+                    kind: super::super::JobKind::Response,
+                    site: at,
+                    duration: 999.0,
+                    exit: spot,
+                },
+            );
+            q.apply(app.world_mut());
+        }
+        let mut by = std::collections::HashSet::new();
+        for _ in 0..90 * 40 {
+            // Held where they stand (the line's drag aside): both stay
+            // in reach.
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at;
+            app.update();
+            if let Some(t) = app.world().get::<Tethered>(player) {
+                by.insert(t.by);
+            }
+        }
+        assert!(!by.is_empty(), "speared");
+        assert_eq!(by.len(), 1, "one grappler's line, not turns: {by:?}");
+        assert!(
+            app.world().resource::<Called>().0 > 0,
+            "it called the others"
+        );
     }
 }

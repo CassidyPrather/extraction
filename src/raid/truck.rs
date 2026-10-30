@@ -177,7 +177,10 @@ pub fn rv_pose(zone: &Zone, rv: usize) -> Transform {
 
 /// The truck standing at `at` facing `yaw`, settled low enough that its
 /// rear steps reach the ground where the ground falls away behind it
-/// (otherwise the bed is out of reach on a slope).
+/// (otherwise the bed is out of reach on a slope). That sinks its wheels
+/// where the ground falls away (the 28 October playtest, 0:12:57;
+/// `capture::footing` lists it): standing it on its wheels waits on a rear
+/// ladder that reaches the ground.
 fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let rot = Quat::from_rotation_y(yaw);
     let mut t = Transform::from_translation(zone.on_ground(at[0], at[1])).with_rotation(rot);
@@ -185,6 +188,17 @@ fn parked(zone: &Zone, at: [f32; 2], yaw: f32) -> Transform {
     let drop = t.translation.y - zone.ground(foot.x, foot.z);
     t.translation.y -= drop.clamp(0.0, 0.8);
     t
+}
+
+/// How far a wheel drops on its springs to meet the ground (m).
+pub const WHEEL_DROOP: f32 = 0.16;
+
+/// How far wheel `i` hangs below its place in `WHEELS` to meet the ground
+/// under it (the truck is rigid, the ground under six wheels isn't flat).
+pub fn wheel_droop(zone: &Zone, pose: &Transform, i: usize) -> f32 {
+    let w = WHEELS[i];
+    let bottom = pose.transform_point(w) - pose.rotation * Vec3::Y * w.y;
+    (bottom.y - zone.ground(bottom.x, bottom.z)).clamp(0.0, WHEEL_DROOP)
 }
 
 fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
@@ -221,28 +235,83 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
         ));
     });
     // The stash: a big crate bolted to the bed floor.
-    commands.spawn((
-        Name::new("Stash crate"),
-        Stash,
-        Backpack {
-            owner: Entity::PLACEHOLDER,
-            open: true,
-            model: inventory::Backpack {
-                capacity: extraction_core::progression::STASH_BASE,
-                mass: 0.0,
+    commands
+        .spawn((
+            Name::new("Stash crate"),
+            Stash,
+            Backpack {
+                owner: Entity::PLACEHOLDER,
+                open: true,
+                model: inventory::Backpack {
+                    capacity: extraction_core::progression::STASH_BASE,
+                    mass: 0.0,
+                },
+                contents: Vec::new(),
+                carried: false,
+                half: Vec3::new(0.45, 0.3, 0.6),
             },
-            contents: Vec::new(),
-            carried: false,
-            half: Vec3::new(0.45, 0.3, 0.6),
-        },
-        // Up on a stand, the kit on a shelf in its top: waist height for
-        // someone standing in the bed (it sat on the floor; the first
-        // playtest found most things to pick up were on the floor).
-        Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
-        Visibility::default(),
-        ChildOf(truck),
-    ));
+            // Up on a stand, the kit on a shelf in its top: waist height for
+            // someone standing in the bed (it sat on the floor; the first
+            // playtest found most things to pick up were on the floor).
+            Transform::from_xyz(-0.55, FLOOR + STASH_RAISE + 0.35, -1.0),
+            Visibility::default(),
+            ChildOf(truck),
+        ))
+        .with_children(|c| {
+            // Solid, as it's drawn: the stand and the crate's lower half one
+            // block from the bed up to the shelf, and four walls round the
+            // shelf, open on top. It had no collider at all: things dropped
+            // over it fell through, and one came to rest under it, out of
+            // sight and reach.
+            let (w, d) = STASH_OUTER;
+            let floor = -(STASH_RAISE + 0.35);
+            let solid = -floor;
+            c.spawn((
+                Name::new("Stash crate body"),
+                Collider::cuboid(w, solid, d),
+                stash_layers(),
+                Transform::from_xyz(0.0, floor + solid * 0.5, 0.0),
+            ));
+            let (wall, high) = (0.03, STASH_WALL);
+            for (size, at) in [
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new(-(w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(wall, high, d),
+                    Vec3::new((w - wall) * 0.5, high * 0.5, 0.0),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, -(d - wall) * 0.5),
+                ),
+                (
+                    Vec3::new(w, high, wall),
+                    Vec3::new(0.0, high * 0.5, (d - wall) * 0.5),
+                ),
+            ] {
+                c.spawn((
+                    Name::new("Stash crate wall"),
+                    Collider::cuboid(size.x, size.y, size.z),
+                    stash_layers(),
+                    Transform::from_translation(at),
+                ));
+            }
+        });
 }
+
+/// The crate stops loose things, and nothing else: a crate the body
+/// couldn't pass kept it from the cord in the narrow bed, and one a held
+/// thing's leash took for a wall kept the kit in it.
+fn stash_layers() -> CollisionLayers {
+    CollisionLayers::new(Layer::Container, [Layer::Item])
+}
+
+/// The stash crate's outside, width and depth (as drawn).
+pub const STASH_OUTER: (f32, f32) = (0.95, 1.25);
+/// How high its walls stand over the shelf.
+pub const STASH_WALL: f32 = 0.325;
 
 /// How high the stash crate's stand lifts it off the bed.
 pub const STASH_RAISE: f32 = 0.3;
@@ -332,20 +401,47 @@ pub fn rv_pose_clear(zone: &Zone, rv: usize, people: &[Vec3]) -> Transform {
     base
 }
 
-/// The truck appears at the rendezvous when it arrives, and goes home after.
+/// Arrived, the truck pulls in out of your sight, up to this long (s)
+/// after it's due: never popping in where you're looking (playtest 28
+/// October: "it just spawns in"). Its engine's heard coming
+/// (`audio::truck_sounds`).
+pub const UNSEEN_FOR: f32 = 8.0;
+/// Where you're looking: this far either side of the head's line, this
+/// near.
+const SIGHT_CONE: f32 = 0.9;
+const SIGHT_RANGE: f32 = 150.0;
+
+/// Whether a head sees `at`.
+pub fn sees(head: &GlobalTransform, at: Vec3) -> bool {
+    let to = at - head.translation();
+    let d = to.length();
+    d < SIGHT_RANGE && (d < 1.0 || head.forward().as_vec3().angle_between(to) < SIGHT_CONE)
+}
+
+/// The truck appears at the rendezvous when it arrives (where you're not
+/// looking, [`UNSEEN_FOR`]), and goes home after.
 fn drive_truck(
     raid: Res<Raid>,
     zone: Res<Zone>,
     mut trucks: Query<(&mut Truck, &mut Transform), Without<Player>>,
     people: Query<&GlobalTransform, With<Player>>,
+    heads: Query<&GlobalTransform, With<crate::rig::RigHead>>,
 ) {
     for (mut truck, mut t) in &mut trucks {
         match raid.phase {
             // The short exfil: it never left.
             Phase::TruckWaiting { rv, .. } if rv == super::SHORT_EXFIL => {}
-            Phase::TruckWaiting { rv, .. } if truck.at_base => {
+            Phase::TruckWaiting { rv, left } if truck.at_base => {
                 let people: Vec<Vec3> = people.iter().map(|p| p.translation()).collect();
-                *t = rv_pose_clear(&zone, rv, &people);
+                let at = rv_pose_clear(&zone, rv, &people);
+                let due_for = super::TRUCK_WAIT - left;
+                let watched = heads
+                    .iter()
+                    .any(|h| sees(h, at.translation + Vec3::Y * 1.5));
+                if watched && due_for < UNSEEN_FOR {
+                    continue;
+                }
+                *t = at;
                 truck.at_base = false;
             }
             Phase::Out | Phase::TruckCalled { .. } if !truck.at_base => {
@@ -356,6 +452,9 @@ fn drive_truck(
         }
     }
 }
+
+/// Woken in the truck after going down.
+pub const WOKE_LINE: &str = "You went down. You wake in the back of the truck.";
 
 /// End of a raid: drive home with whatever you're carrying, or wake up in
 /// the truck with nothing.
@@ -414,7 +513,9 @@ fn finish_raid(
     // Home whole, the driver has his say (`raid::lev`, it sees what you
     // carry).
     if died {
-        raid.say("You wake in the back of the truck. Your kit is gone.");
+        // What happened, as the eyes open (the fade: `render::upgrades`):
+        // the kit's where you fell, as the driver says next.
+        raid.say(WOKE_LINE);
     }
 }
 
@@ -467,7 +568,11 @@ mod park_tests {
             .translation = spot + Vec3::Y;
         app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
         app.update();
-        app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting { rv: 0, left: 1.0e6 };
+        // (Past the wait for you to look away: `UNSEEN_FOR`.)
+        app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+            rv: 0,
+            left: crate::raid::TRUCK_WAIT - UNSEEN_FOR - 2.0,
+        };
         app.update();
         app.update();
         let truck = app
@@ -480,5 +585,72 @@ mod park_tests {
         let d = truck.xz().distance(spot.xz());
         assert!(d > PARK_CLEAR, "parked on them: {d:.1} m");
         assert!(d < 20.0, "and still at the rendezvous: {d:.1} m");
+    }
+
+    /// Playtest 28 October: "it just spawns in". Watched, the truck holds
+    /// off pulling in; looked away from, or after a while, it's there.
+    #[test]
+    fn the_truck_never_pops_in_where_you_are_looking() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                map: "marrow_creek".into(),
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        for _ in 0..3 {
+            app.update();
+        }
+        let zone = app.world().resource::<Zone>().clone();
+        let spot = rv_pose(&zone, 0).translation;
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        // 40 m off, facing it.
+        let from = zone.on_ground(spot.x + 40.0, spot.z) + Vec3::Y * 0.1;
+        let face = |app: &mut App, toward: Vec3| {
+            let mut t = app.world_mut().get_mut::<Transform>(player).unwrap();
+            t.translation = from;
+            t.look_at(Vec3::new(toward.x, from.y, toward.z), Vec3::Y);
+        };
+        face(&mut app, spot);
+        app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        app.update();
+        let at_rv = |app: &mut App| {
+            let t = app
+                .world_mut()
+                .query_filtered::<&Transform, With<Truck>>()
+                .iter(app.world())
+                .next()
+                .unwrap()
+                .translation;
+            t.xz().distance(spot.xz()) < 25.0
+        };
+        app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+            rv: 0,
+            left: crate::raid::TRUCK_WAIT,
+        };
+        for _ in 0..5 {
+            face(&mut app, spot);
+            app.update();
+        }
+        assert!(!at_rv(&mut app), "popped in while watched");
+        // Looked away: it pulls in.
+        let away = from + (from - spot);
+        for _ in 0..3 {
+            face(&mut app, away);
+            app.update();
+        }
+        assert!(at_rv(&mut app), "there once you look away");
+        assert!(sees(
+            &GlobalTransform::from(Transform::IDENTITY.looking_at(Vec3::NEG_Z, Vec3::Y)),
+            Vec3::new(0.0, 0.0, -20.0)
+        ));
     }
 }

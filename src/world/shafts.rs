@@ -113,6 +113,11 @@ struct Cards {
     nrm: Vec<[f32; 3]>,
     uv: Vec<[f32; 2]>,
     idx: Vec<u32>,
+    /// Each vertex's floor height (world y) in UV1.x: the shader fades the
+    /// light out just above it (`f32::NEG_INFINITY`: no floor).
+    floor: Vec<[f32; 2]>,
+    /// The floor height the next cards stand on.
+    floor_y: f32,
 }
 
 impl Cards {
@@ -130,6 +135,7 @@ impl Cards {
             self.pos.push(p.to_array());
             self.nrm.push(n.to_array());
             self.uv.push(uv);
+            self.floor.push([self.floor_y, 0.0]);
         }
         self.idx
             .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -154,10 +160,14 @@ impl Cards {
             .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
             .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nrm)
             .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
+            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.floor)
             .with_inserted_indices(Indices::U32(self.idx))
         })
     }
 }
+
+/// A window's sill above the floor (m), for where its shaft lands.
+const SILL: f32 = 0.85;
 
 /// A window's shaft: the pane's rectangle swept along the light into the
 /// room, as three cards (across its width, its height, and a diagonal).
@@ -194,6 +204,14 @@ fn window_shaft_to(
         return;
     }
     let sweep = light * (ROOM_DEPTH / (-light.dot(out)).max(0.4)).min(depth);
+    // The floor it lands on: under a window its sill (the pane's lowest
+    // edge, less a sill's height); a roof hole's is `depth` down.
+    let low = [u * hu, v * hv].iter().map(|d| d.y.abs()).sum::<f32>();
+    cards.floor_y = if depth.is_finite() {
+        c.y + sweep.y
+    } else {
+        c.y - low - SILL
+    };
     cards.card(c - u * hu, c + u * hu, sweep);
     cards.card(c - v * hv, c + v * hv, sweep);
     cards.card(c - u * hu - v * hv, c + u * hu + v * hv, sweep);
@@ -365,6 +383,7 @@ fn build_shafts(
             let c = chunks
                 .entry(((g.x / CHUNK).floor() as i32, (g.z / CHUNK).floor() as i32))
                 .or_default();
+            c.floor_y = g.y;
             c.round(g - sweep, sweep, width);
         }
         for (_, c) in chunks {

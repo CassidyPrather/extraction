@@ -123,7 +123,9 @@ fn dress(
             };
             for p in &node.primitives {
                 let m = match p.material.as_deref() {
-                    Some(n) => model_mats.get(n, &mut lib, &server, materials),
+                    Some(n) => {
+                        model_mats.get(super::weak_points::paint(n), &mut lib, &server, materials)
+                    }
                     None => model_mats.get("Dark", &mut lib, &server, materials),
                 };
                 let mut ec =

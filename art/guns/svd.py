@@ -327,7 +327,7 @@ empty("pt_support", (0.0, 0.03, -0.40))
 empty("pt_handle", (0.047, 0.0645, -0.2))
 # The magazine's box centre sits under here, its top level with this point:
 # its feed lips' centre lands at z -0.12.
-empty("magwell", (0.0, 0.025, -0.124))
+empty("magwell", (0.0, 0.019, -0.124))
 empty("pt_sling_front", (-0.0162, 0.043, -0.543))
 empty("pt_sling_rear", (-0.0237, -0.074, 0.222))
 # Where the PSO-1's clamp seats on the side rail's outer face.

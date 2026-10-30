@@ -116,6 +116,7 @@ pub fn spawn(commands: &mut Commands, at: Transform) -> Entity {
             depth: 0.0,
             down: false,
         },
+        crate::interact::poke::OwnLook,
     ));
     // The arm's soundbox, pushed from above to swing it over.
     let arm = commands
@@ -134,6 +135,7 @@ pub fn spawn(commands: &mut Commands, at: Transform) -> Entity {
             depth: 0.0,
             down: false,
         },
+        crate::interact::poke::OwnLook,
     ));
     g
 }

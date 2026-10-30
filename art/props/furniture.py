@@ -147,6 +147,48 @@ def shelf_metal():
 
 # --- Bed --------------------------------------------------------------------------------------
 
+def pillow(p, at, hx, hz, h, mat="Ticking", nu=14, nv=10):
+    """A stuffed pillow lying on `at` (its underside's middle): `hx` by
+    `hz` half size, `h` thick in the middle, puffed in the middle and
+    pinched to its four corners, piped round its seam. (A squashed sphere
+    read as a capsule: the 28 October playtest, 0:24:17.)"""
+    bm = p.bm
+    cx, cy, cz = at
+
+    def surf(u, v, side):
+        # The outline draws in a little between the corners.
+        x = hx * u * (1.0 - 0.07 * v * v)
+        z = hz * v * (1.0 - 0.09 * u * u)
+        puff = (max(0.0, 1.0 - u * u) * max(0.0, 1.0 - v * v)) ** 0.6
+        y = h * (0.3 + 0.7 * side * puff) if side > 0 else h * 0.3 * (1.0 - puff) ** 2
+        return (cx + x, cy + y, cz + z)
+
+    grid = {}
+    for side in (1, -1):
+        for i in range(nu + 1):
+            for j in range(nv + 1):
+                rim = i in (0, nu) or j in (0, nv)
+                key = (0 if rim else side, i, j)
+                if key not in grid:
+                    u, v = -1 + 2 * i / nu, -1 + 2 * j / nv
+                    grid[key] = bm.verts.new(surf(u, v, 0.0001 if rim else side))
+    faces = []
+    for side in (1, -1):
+        for i in range(nu):
+            for j in range(nv):
+                vs = [grid[(0 if (a in (0, nu) or b in (0, nv)) else side, a, b)]
+                      for a, b in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))]
+                faces.append(bm.faces.new(vs if side < 0 else vs[::-1]))
+    p._finish_piece(list(grid.values()), faces, mat)
+    # The piping round the seam.
+    edge = [surf(-1 + 2 * i / nu, -1, 0.0001) for i in range(nu)]
+    edge += [surf(1, -1 + 2 * j / nv, 0.0001) for j in range(nv)]
+    edge += [surf(1 - 2 * i / nu, 1, 0.0001) for i in range(nu)]
+    edge += [surf(-1, 1 - 2 * j / nv, 0.0001) for j in range(nv)]
+    for k in range(len(edge)):
+        rod(p, edge[k], edge[(k + 1) % len(edge)], 0.005, mat, segs=6)
+
+
 def bed():
     p = Part("static")
     r = 0.016
@@ -174,7 +216,7 @@ def bed():
     # Mattress, pillow, a folded blanket over the foot.
     prof = fillet([(-0.42, 0.432), (0.42, 0.432), (0.42, 0.56), (-0.42, 0.56)], 0.045, 3)
     p.prism(prof, -0.935, 0.935, "Ticking", axis="z", bevel=0.03, segs=2)
-    p.sphere(0.2, (0.0, 0.592, 0.72), "Ticking", segs=14, rings=8, scale=(1.0, 0.24, 0.55))
+    pillow(p, (0.0, 0.56, 0.71), 0.27, 0.17, 0.13)
     prof = fillet([(-0.445, 0.5), (0.445, 0.5), (0.445, 0.578), (-0.445, 0.578)], 0.03, 3)
     p.prism(prof, -0.92, -0.3, "Wool", axis="z", bevel=0.02, segs=2)
     p.cyl(0.032, -0.43, 0.43, "Wool", segs=10, xf=T(0.0, 0.56, -0.3) @ ALONG_X)

@@ -579,7 +579,9 @@ fn cut_near_detail(
     if eyes.is_empty() {
         return;
     }
-    let cut = super::impostors::NEAR;
+    // Out to the band's far edge: across it the cards dither out as the
+    // impostor dithers in (`impostors::LOD_BAND`).
+    let cut = super::impostors::NEAR + super::impostors::LOD_BAND;
     for (gt, detail) in &trees {
         let p = gt.translation().xz();
         let d = eyes
@@ -884,12 +886,13 @@ pub const ATTRIBUTE_CARD_CENTRE: bevy::mesh::MeshVertexAttribute =
     );
 
 /// A card shrinks toward its centre from this far from the eye...
-pub const CARD_SHRINK_FROM: f32 = 2.0;
-/// ...and is gone by this near: in a headset a card at arm's length is a
-/// flat blurred sheet across the view, and under a spruce clump the cards
-/// within 2 m were a quarter of the view's overdraw. The trunks and the
+pub const CARD_SHRINK_FROM: f32 = 0.5;
+/// ...and is gone by this near: only a card in your face, where it would
+/// be a flat blurred sheet across the view. Leaves that shrank away from
+/// 2 m as you walked up to them read as fake (playtest 2026-10-28,
+/// 0:43:10), so a leaf stays whole to half a metre. The trunks and the
 /// dark core stay; so do the cards' shadows.
-pub const CARD_GONE_AT: f32 = 1.2;
+pub const CARD_GONE_AT: f32 = 0.3;
 
 /// How much of a card is left `d` metres from the eye (the shader's
 /// `smoothstep`, for the overdraw gauge).
@@ -900,6 +903,10 @@ pub fn card_scale(d: f32) -> f32 {
 
 impl bevy::pbr::MaterialExtension for TreeSway {
     fn vertex_shader() -> bevy::shader::ShaderRef {
+        "shaders/tree_sway.wgsl".into()
+    }
+
+    fn fragment_shader() -> bevy::shader::ShaderRef {
         "shaders/tree_sway.wgsl".into()
     }
 
@@ -918,6 +925,15 @@ impl bevy::pbr::MaterialExtension for TreeSway {
                 buffer.attributes.extend(centre.attributes);
                 descriptor.vertex.shader_defs.push("CARD_CENTRE".into());
             }
+        }
+        // The fragment reads its tree's place (the instance's transform)
+        // for the cards-to-impostor dither.
+        descriptor
+            .vertex
+            .shader_defs
+            .push("VERTEX_OUTPUT_INSTANCE_INDEX".into());
+        if let Some(f) = descriptor.fragment.as_mut() {
+            f.shader_defs.push("VERTEX_OUTPUT_INSTANCE_INDEX".into());
         }
         Ok(())
     }
@@ -1697,16 +1713,46 @@ mod card_shrink_tests {
         }
     }
 
-    /// Whole from 2 m, gone by 1.2 m, smoothly between.
+    /// The cards and the impostor hand over across the same band, by the
+    /// same dither: the shaders' constants and patterns are the Rust ones
+    /// (a band out of step leaves a ring where a tree is drawn twice or
+    /// not at all).
     #[test]
-    fn a_card_shrinks_near_the_eye() {
-        assert_eq!(card_scale(0.5), 0.0);
+    fn cards_and_impostors_dither_across_the_same_band() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/shaders");
+        let cards = std::fs::read_to_string(dir.join("tree_sway.wgsl")).unwrap();
+        let imp = std::fs::read_to_string(dir.join("impostor.wgsl")).unwrap();
+        assert!(cards.contains(&format!(
+            "const LOD_NEAR: f32 = {:.1};",
+            super::super::impostors::NEAR
+        )));
+        assert!(cards.contains(&format!(
+            "const LOD_BAND: f32 = {:.1};",
+            super::super::impostors::LOD_BAND
+        )));
+        let pattern = |s: &str| {
+            let i = s.find("fn lod_dither").expect("a dither");
+            s[i..i + s[i..].find('}').unwrap()].to_string()
+        };
+        assert_eq!(pattern(&cards), pattern(&imp));
+        // One keeps a pixel where the other drops it.
+        assert!(cards.contains("lod_dither(in.position.xy) < f"));
+        assert!(imp.contains("lod_dither(in.position.xy) >= f"));
+    }
+
+    /// Whole until it's in your face (from half a metre), gone by 0.3 m,
+    /// smoothly between: no leaf shrinks away at arm's length.
+    #[test]
+    fn a_card_shrinks_only_in_your_face() {
+        assert_eq!(card_scale(0.2), 0.0);
         assert_eq!(card_scale(CARD_GONE_AT), 0.0);
         assert_eq!(card_scale(CARD_SHRINK_FROM), 1.0);
+        // An arm's length off, a leaf is whole.
+        assert_eq!(card_scale(0.7), 1.0);
         assert_eq!(card_scale(10.0), 1.0);
         let mut last = 0.0;
         for i in 0..=40 {
-            let s = card_scale(1.2 + 0.02 * i as f32);
+            let s = card_scale(0.3 + 0.005 * i as f32);
             assert!(s >= last && s - last < 0.06, "no jump at {i}: {last} > {s}");
             last = s;
         }

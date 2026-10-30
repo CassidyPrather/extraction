@@ -58,10 +58,14 @@ def door_leaf():
     ang = math.atan2(b[1] - a[1], b[0] - a[0])
     board(p, (L - 0.06, 0.1, 0.025), ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.0135), "Planks",
           roll=ang, bevel=0.004)
-    # Strap hinges on the front (-Z), pinned on pintles at the hinge line.
+    # Strap hinges on the front (-Z), each curled round its knuckle on the
+    # hinge line itself (x 0, z 0: the game swings the leaf about it). The
+    # knuckles stood 34 mm out in front of it, so an open door's hinges hung
+    # off the jamb (the 28 October playtest, 0:41:50).
     for y in ys:
         p.box((0.52, 0.045, 0.004), (0.26, y, -0.027), "Iron", bevel=0.001, segs=1)
-        rod(p, (0.0, y - 0.05, -0.034), (0.0, y + 0.05, -0.034), 0.011, "Iron", segs=8)
+        p.box((0.022, 0.045, 0.018), (0.009, y, -0.018), "Iron", bevel=0.001, segs=1)
+        rod(p, (0.0, y - 0.05, 0.0), (0.0, y + 0.05, 0.0), 0.011, "Iron", segs=8)
         for x in (0.12, 0.26, 0.4):
             bolt(p, (x, y, -0.029), (0, 0, -1), r=0.008, h=0.004)
     # A bent bar handle and a latch plate on the front, a knob behind.
@@ -130,18 +134,20 @@ def window_sash(broken=False):
             p.prism(pts, -0.012, -0.008, "Glass", axis="z", xf=xf)
     xin, yin = SW / 2 - f, SH / 2 - f
     sash(-xin, -0.025, -yin, ty - 0.025)
+    swung = None
     if broken:
         # The right casement swung in on its hinge (at its outer stile).
         hinge = (xin, 0.0, -0.03)
-        sash(0.025, xin, -yin, ty - 0.025,
-             xf=T(*hinge) @ RY(-0.9) @ T(*(-v for v in hinge)))
-    else:
-        sash(0.025, xin, -yin, ty - 0.025)
+        swung = T(*hinge) @ RY(-0.9) @ T(*(-v for v in hinge))
+    sash(0.025, xin, -yin, ty - 0.025, xf=swung)
     sash(-xin, 0.08, ty + 0.025, yin, bar=False)
     sash(0.12, xin, ty + 0.025, yin, bar=False)
-    # Latch handles on the casements' meeting stiles.
+    # Latch handles on the casements' meeting stiles, each on its own
+    # casement (the right one's stayed where the casement shut when it
+    # swung open: the 28 October playtest, 0:22:34).
     for sx in (-1, 1):
-        p.box((0.012, 0.06, 0.008), (sx * 0.04, -0.05, -0.034), "Iron")
+        p.box((0.012, 0.06, 0.008), (sx * 0.04, -0.05, -0.034), "Iron",
+              xf=swung if sx > 0 else None)
     return [p]
 
 

@@ -152,12 +152,14 @@ pub enum TextSource {
     TrainingList,
     /// The yard's first board, hung in the truck over the crate.
     TruckBoard,
+    /// The headset's loading view: the valley's name, or where to.
+    Loading,
     /// A dev mock-up (screenshot poses): not in the game.
     Dev,
 }
 
 impl TextSource {
-    pub const ALL: [TextSource; 22] = [
+    pub const ALL: [TextSource; 23] = [
         TextSource::Wrist,
         TextSource::Radio,
         TextSource::BenchDisplay,
@@ -179,6 +181,7 @@ impl TextSource {
         TextSource::StationBoard,
         TextSource::TrainingList,
         TextSource::TruckBoard,
+        TextSource::Loading,
         TextSource::Dev,
     ];
 
@@ -215,6 +218,7 @@ impl TextSource {
             TextSource::TruckBoard => {
                 read(MustRead, 1.2, 10.0, "standing in the bed, at the crate")
             }
+            TextSource::Loading => read(MustRead, 2.0, 0.0, "in the headset, between valleys"),
             TextSource::Dev => read(Incidental, 0.4, 0.0, "screenshots only"),
         }
     }
@@ -840,6 +844,124 @@ mod tests {
             after > day * 0.95,
             "the ambient ran down from {day:.0} to {after:.0}"
         );
+    }
+
+    /// Nothing in the truck covers a panel or fights it: no housing (a
+    /// slat, the cork's face) and no other panel within 5 cm in front of
+    /// one where they overlap, and no two parallel surfaces that overlap
+    /// closer than 3 mm (they z-fight). Playtest 2026-10-28, F4: the
+    /// driver's note shared the comfort cards' plane, the side slat ran
+    /// over the cards' edges, the column heads lay 2 mm off the cork.
+    /// The slats are `art/vehicles/truck.py`'s; the cork's face is
+    /// `story_props.py`'s, 1 cm out.
+    #[test]
+    fn nothing_covers_a_panel_in_the_truck_or_fights_it() {
+        use crate::raid::bench::ScreenText;
+        use crate::raid::truck::{FLOOR, Truck};
+        let mut app = crate::headless_app(Default::default(), false);
+        if !app.world().contains_resource::<Assets<Image>>() {
+            app.init_asset::<Image>();
+        }
+        if !app.world().contains_resource::<Assets<Mesh>>() {
+            app.init_asset::<Mesh>();
+        }
+        if !app.world().contains_resource::<Assets<StandardMaterial>>() {
+            app.init_asset::<StandardMaterial>();
+        }
+        app.init_resource::<crate::render::materials::MaterialLibrary>()
+            .add_plugins(crate::render::memorial::MemorialBoardPlugin);
+        app.finish();
+        app.cleanup();
+        for _ in 0..6 {
+            app.update();
+        }
+        // (what, truck-space pose of its face (+Z out), its size, written)
+        let mut faces: Vec<(String, Transform, Vec2, bool)> = Vec::new();
+        let w = app.world_mut();
+        let truck = w
+            .query_filtered::<&GlobalTransform, With<Truck>>()
+            .iter(w)
+            .next()
+            .expect("the truck")
+            .affine()
+            .inverse();
+        let local = |g: &GlobalTransform| Transform::from_matrix((truck * g.affine()).into());
+        for (text, g, name) in w
+            .query::<(&ScreenText, &GlobalTransform, Option<&Name>)>()
+            .iter(w)
+        {
+            let at = local(g);
+            if at.translation.x.abs() > 1.3 || at.translation.z.abs() > 2.0 {
+                continue;
+            }
+            let what = format!(
+                "{} {:?}",
+                name.map_or("?".into(), |n| n.to_string()),
+                text.text.lines().next().unwrap_or("")
+            );
+            faces.push((what, at, text.size, true));
+        }
+        for g in w
+            .query_filtered::<&GlobalTransform, With<crate::raid::board::CorkBoard>>()
+            .iter(w)
+        {
+            let at = local(g) * Transform::from_xyz(0.0, 0.0, 0.01);
+            faces.push(("the cork".into(), at, crate::raid::board::BOARD, false));
+        }
+        for sx in [-1.0f32, 1.0] {
+            // A side slat's inside face, facing into the bed.
+            let at = Transform::from_xyz(sx * 1.1125, FLOOR + 1.35, 0.0)
+                .with_rotation(Quat::from_rotation_y(-sx * std::f32::consts::FRAC_PI_2));
+            faces.push(("a side slat".into(), at, Vec2::new(3.6, 0.07), false));
+        }
+        assert!(faces.iter().filter(|f| f.3).count() >= 13);
+        let mut bad = Vec::new();
+        for (i, a) in faces.iter().enumerate() {
+            for (j, b) in faces.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+                let n = a.1.rotation * Vec3::Z;
+                if n.dot(b.1.rotation * Vec3::Z).abs() < 0.99 {
+                    continue;
+                }
+                // b's rect, in a's plane: do they overlap (by more than a
+                // millimetre)?
+                let into = a.1.compute_affine().inverse();
+                let (lo, hi) = (0..4).fold((Vec2::MAX, Vec2::MIN), |(lo, hi), k| {
+                    let c = Vec3::new(
+                        if k & 1 == 0 { -0.5 } else { 0.5 } * b.2.x,
+                        if k & 2 == 0 { -0.5 } else { 0.5 } * b.2.y,
+                        0.0,
+                    );
+                    let p = into.transform_point3(b.1.transform_point(c)).truncate();
+                    (lo.min(p), hi.max(p))
+                });
+                let half = a.2 * 0.5;
+                let overlap = (hi.x.min(half.x) - lo.x.max(-half.x))
+                    .min(hi.y.min(half.y) - lo.y.max(-half.y));
+                if overlap <= 0.001 {
+                    continue;
+                }
+                let d = (b.1.translation - a.1.translation).dot(n);
+                if i < j && d.abs() < 0.003 {
+                    bad.push(format!(
+                        "{} and {} are {:.1} mm apart: they fight",
+                        a.0,
+                        b.0,
+                        d.abs() * 1000.0
+                    ));
+                } else if a.3 && d >= 0.003 && d < 0.05 {
+                    bad.push(format!(
+                        "{} is covered by {}, {:.1} mm in front of it",
+                        a.0,
+                        b.0,
+                        d * 1000.0
+                    ));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     /// Nothing in a staged scene lies on its note: a lantern or a photo on

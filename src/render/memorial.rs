@@ -60,7 +60,9 @@ fn hang_board(
             Visibility::default(),
             ChildOf(truck),
         ));
-        // The driver's note, pinned on the left canvas wall by the stash.
+        // The driver's note, pinned on the left canvas wall by the stash,
+        // clear of the comfort cards (it shared their plane) and in front
+        // of the side slat.
         commands.spawn((
             Name::new("Driver's note"),
             crate::render::legibility::TextSource::DriversNote,
@@ -70,7 +72,7 @@ fn hang_board(
                 size: Vec2::new(0.36, 0.5),
                 style: crate::raid::bench::ScreenStyle::Paper,
             },
-            Transform::from_xyz(-1.12, FLOOR + 1.72, -0.2).with_rotation(
+            Transform::from_xyz(-1.105, FLOOR + 1.72, 0.3).with_rotation(
                 Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) * Quat::from_rotation_z(-0.04),
             ),
             Visibility::default(),
