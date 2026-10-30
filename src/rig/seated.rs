@@ -5,6 +5,11 @@
 //! brings the view down to the floor instead: what a seated player can't
 //! do by squatting.
 //!
+//! Standing in the headset, the crouch toggle brings the view down too
+//! ([`STAND_CROUCH_DROP`]): it was only slower, and nobody could tell they
+//! were crouched (playtest 28 October). The tracked space sinks, view and
+//! hands together, as the seated crouch does.
+//!
 //! The lift is applied to [`RigInput`] after the drivers write it (they
 //! write raw, unlifted poses and zero `RigInput::lifted`); the headset's
 //! tracking root rides up by the same amount (`xr`), so what's seen
@@ -21,6 +26,8 @@ pub const STAND_EYE: f32 = 1.65;
 /// chair, at shin height and without leaning, reaches the ground (and a
 /// little below it, on a slope).
 pub const SEATED_CROUCH_EYE: f32 = 0.7;
+/// Crouched standing in the headset: the view this much lower (m).
+pub const STAND_CROUCH_DROP: f32 = 0.35;
 /// How fast the lift moves when the crouch button goes (m/s): quick, but
 /// not a jump.
 pub const LIFT_RATE: f32 = 3.0;
@@ -66,7 +73,9 @@ pub fn seat_lift(
     time: Res<Time>,
 ) {
     let seated = comfort.is_some_and(|c| c.seated);
-    let flat = driver.is_some_and(|d| *d == RigDriver::Flat);
+    let driver = driver.map(|d| *d);
+    let flat = driver == Some(RigDriver::Flat);
+    let headset = driver == Some(RigDriver::Xr);
     let dt = time.delta_secs();
     for (e, mut input, seat, bot) in &mut players {
         let Some(mut seat) = seat else {
@@ -89,7 +98,12 @@ pub fn seat_lift(
             seat.window[0] = seat.window[0].max(raw);
             seat.high = seat.window.iter().copied().fold(0.0, f32::max);
         } else {
-            *seat = Seat::default();
+            // Not seated: no seated height (the lift eases on, for a
+            // standing crouch, or back to none).
+            *seat = Seat {
+                lift: seat.lift,
+                ..Default::default()
+            };
         }
         let target = if on {
             let eye = if input.crouch {
@@ -98,6 +112,8 @@ pub fn seat_lift(
                 STAND_EYE
             };
             (eye - seat.high).clamp(-1.0, 1.2)
+        } else if headset && input.crouch {
+            -STAND_CROUCH_DROP
         } else {
             0.0
         };
@@ -111,5 +127,43 @@ pub fn seat_lift(
             }
             input.lifted = seat.lift;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Standing in the headset, crouched: the view comes down (eased), and
+    /// back up on standing. It was only slower before, and you couldn't
+    /// tell (playtest 28 October).
+    #[test]
+    fn crouching_standing_in_the_headset_lowers_the_view() {
+        let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+        let at = vr.feet();
+        vr.stand(at, 0.0);
+        vr.step(20);
+        let p = vr.player;
+        let set = |vr: &mut crate::vr_harness::Vr, crouch: bool, frames: usize| {
+            for _ in 0..frames {
+                vr.app.world_mut().get_mut::<RigInput>(p).unwrap().crouch = crouch;
+                vr.step(1);
+            }
+        };
+        set(&mut vr, false, 10);
+        let lift = |vr: &crate::vr_harness::Vr| vr.app.world().get::<RigInput>(p).unwrap().lifted;
+        assert_eq!(lift(&vr), 0.0, "standing: no drop");
+        // Eased, not a jump.
+        set(&mut vr, true, 3);
+        let early = lift(&vr);
+        assert!(early < 0.0 && early > -STAND_CROUCH_DROP, "easing: {early}");
+        set(&mut vr, true, 60);
+        assert!(
+            (lift(&vr) + STAND_CROUCH_DROP).abs() < 1e-3,
+            "down: {}",
+            lift(&vr)
+        );
+        set(&mut vr, false, 60);
+        assert!(lift(&vr).abs() < 1e-3, "back up: {}", lift(&vr));
     }
 }

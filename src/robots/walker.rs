@@ -196,19 +196,135 @@ impl Plugin for WalkerPlugin {
     }
 }
 
+/// A walker keeps this far off a building or anything big (m): its feet
+/// stand 1.05 m out from its middle (`anim::FOOT_RADIUS`), and its path
+/// cuts between the grid's 2 m cells. Kept to the people's 0.6, one walked
+/// through a house wall (playtest, 28 October, 0:57:47; the gap is
+/// `walkers_keep_their_feet_out_of_walls`).
+pub const WALL_CLEARANCE: f32 = 1.6;
+/// ...for any building, and anything else this big across at its
+/// narrowest (m).
+pub const BIG: f32 = 3.0;
+/// The grid's cells are 2 m: a path between open ones can still pass
+/// nearer a wall than its cells' middles. Its corners are pushed out to
+/// this off every building ([`keep_off_walls`]) (m).
+pub const WALL_GAP: f32 = 1.3;
+
+/// How far `p` is off the building `s`'s walls (0 inside), and which way is
+/// out.
+fn off_shell(s: &super::doors::Shell, p: Vec2) -> (f32, Vec2) {
+    let inv = s.xf.compute_affine().inverse();
+    let l = inv.transform_point3(Vec3::new(p.x, s.xf.translation.y, p.y));
+    let near = Vec3::new(
+        l.x.clamp(-s.half.x, s.half.x),
+        l.y,
+        l.z.clamp(-s.half.y, s.half.y),
+    );
+    let d = Vec2::new(l.x - near.x, l.z - near.z).length();
+    let out_local = if d > 1e-3 {
+        Vec3::new(l.x - near.x, 0.0, l.z - near.z) / d
+    } else if s.half.x - l.x.abs() < s.half.y - l.z.abs() {
+        Vec3::X * l.x.signum()
+    } else {
+        Vec3::Z * l.z.signum()
+    };
+    let out = s.xf.rotation * out_local;
+    (d, Vec2::new(out.x, out.z).normalize_or(Vec2::X))
+}
+
+/// A walker's path out of doors, with any stretch that passes within
+/// [`WALL_GAP`] of a building bent out round it (a corner pushed out at the
+/// nearest pass, and any waypoint too near pushed out): its feet stay out
+/// of the walls.
+pub fn keep_off_walls(path: Vec<Vec3>, from: Vec3, shells: &[super::doors::Shell]) -> Vec<Vec3> {
+    let off = |p: Vec2| {
+        shells
+            .iter()
+            .map(|s| off_shell(s, p))
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .unwrap_or((f32::MAX, Vec2::X))
+    };
+    let push = |p: Vec2| {
+        let (d, out) = off(p);
+        if d < WALL_GAP {
+            p + out * (WALL_GAP - d)
+        } else {
+            p
+        }
+    };
+    let mut bent = Vec::with_capacity(path.len() + 2);
+    let mut last = from.xz();
+    for q in path {
+        let to = q.xz();
+        let n = (last.distance(to) / 0.5).ceil() as usize;
+        let worst = (1..n)
+            .map(|k| last.lerp(to, k as f32 / n as f32))
+            .map(|p| (off(p).0, p))
+            .filter(|(d, _)| *d < WALL_GAP)
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, p)) = worst {
+            let c = push(p);
+            bent.push(Vec3::new(c.x, q.y, c.y));
+        }
+        let to = push(to);
+        bent.push(Vec3::new(to.x, q.y, to.y));
+        last = to;
+    }
+    bent
+}
+
+/// The ground robots' grid: the map's (`extraction_core::map_nav`, which
+/// the map lint checks routes on too), with buildings and big things kept
+/// [`WALL_CLEARANCE`] off.
+pub fn walker_grid(
+    map: &extraction_core::map::MapDef,
+    hm: &extraction_core::terrain::Heightmap,
+) -> extraction_core::nav::NavGrid {
+    let mut g = extraction_core::map_nav::zone_grid(map, hm, extraction_core::map_nav::MAX_SLOPE);
+    for p in map
+        .placements
+        .iter()
+        .filter(|p| !extraction_core::underground::is_site(&p.prefab))
+    {
+        let f = extraction_core::map::prefab_footprint(&p.prefab);
+        // A building of any size (walls, a way in), or anything big.
+        let building = !extraction_core::map::prefab_walls(&p.prefab).is_empty()
+            || !extraction_core::map::prefab_entrances(&p.prefab).is_empty();
+        if !building && f[0].min(f[2]) < BIG {
+            continue;
+        }
+        g.block(
+            extraction_core::nav::Obstacle::Rect {
+                at: p.at,
+                half: [f[0] * 0.5, f[2] * 0.5],
+                yaw: p.rot.to_radians(),
+            },
+            WALL_CLEARANCE,
+        );
+    }
+    // Underground sites' kiosks (their only walls up top).
+    for (at, rot) in extraction_core::underground::kiosks(map) {
+        g.block(
+            extraction_core::nav::Obstacle::Rect {
+                at,
+                half: extraction_core::underground::SHELL_HALF,
+                yaw: rot.to_radians(),
+            },
+            WALL_CLEARANCE,
+        );
+    }
+    g
+}
+
 /// Navigation for ground robots: terrain, structures and tree trunks
-/// (`extraction_core::map_nav`, which the map lint checks routes on too).
+/// ([`walker_grid`]).
 pub fn build_nav(
     mut commands: Commands,
     zone: Res<Zone>,
     opts: Option<Res<crate::launch::LaunchOptions>>,
 ) {
     let started = std::time::Instant::now();
-    let mut g = extraction_core::map_nav::zone_grid(
-        &zone.map,
-        &zone.hm,
-        extraction_core::map_nav::MAX_SLOPE,
-    );
+    let mut g = walker_grid(&zone.map, &zone.hm);
     // Story's scenes stand where the map doesn't say (a row of buses).
     let map = opts.map_or("", |o| o.into_inner().map.as_str());
     for ob in crate::world::scenes::nav_obstacles(&zone, map) {
@@ -275,9 +391,9 @@ fn reopen_nav(
             !gone.placements.contains(&(k - 1))
         });
         let hm = zone.hm.clone();
-        gone.building = Some(bevy::tasks::AsyncComputeTaskPool::get().spawn(async move {
-            extraction_core::map_nav::zone_grid(&map, &hm, extraction_core::map_nav::MAX_SLOPE)
-        }));
+        gone.building = Some(
+            bevy::tasks::AsyncComputeTaskPool::get().spawn(async move { walker_grid(&map, &hm) }),
+        );
     }
 }
 
@@ -357,7 +473,7 @@ pub fn spawn_walker_sized(
             Intent::default(),
             LegPoses::default(),
             Senses {
-                sight: 75.0,
+                sight: 60.0,
                 fov_deg: 200.0,
                 hearing: 1.2,
                 eye: Vec3::new(0.0, 0.15, -0.3),
@@ -1053,6 +1169,10 @@ fn walker_brain(
                 w.goal = goal;
                 w.repath = 3.0;
                 w.path = goal.and_then(|g| navr.path(pos, g)).unwrap_or_default();
+                // Out of doors, a walker's feet keep out of the walls.
+                if matches!(navr, NavRef::Zone(_)) && !is_hound && !crawler {
+                    w.path = keep_off_walls(std::mem::take(&mut w.path), pos, &entrances.shells);
+                }
             }
         }
     }

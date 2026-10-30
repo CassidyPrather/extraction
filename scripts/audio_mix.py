@@ -37,6 +37,16 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 # How far off a signal must still be heard, metres, over the calm and the
 # downpour beds (by the masking model): a threat's warning reaches about as
 # far as the threat does.
+# The farthest a machine's own sound should carry in calm (m): about as far
+# as it can see you, not much further, or the valley's one warning becomes
+# a far-off rumble you stop listening for ("maybe heard from too far",
+# the playtest of 28 October, 0:58:24). A walker sees 75 m
+# (robots::walker, sight).
+RANGE_MOST = {"walker.step": 90,
+              # a minelayer is heard as you near it (it turns tail at 30 m),
+              # not across the valley
+              "minelayer.grind": 75}
+
 RANGE_TARGETS = {
     "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8), "anomaly.frost": (4, 2),
     "drone.rotor": (120, 40), "drone.lock": (60, 40), "walker.step": (60, 30),
@@ -50,6 +60,9 @@ RANGE_TARGETS = {
     "walker.scan": (30, 15),
     # a robot struck where it tells (audio_machines::struck_sounds)
     "hit.telling": (30, 15),
+    # a minelayer crawling (audio_machines::grind_sounds)
+    # (a quiet crawler: a downpour hides it by 10 m)
+    "minelayer.grind": (30, 8),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),
@@ -487,6 +500,10 @@ def run(sets, out):
         if want and (r["calm"] < want[0] or r["downpour"] < want[1]):
             next(c for c in mix if c["name"] == n)["flags"].append(
                 f"heard to {r['calm']}/{r['downpour']} m, wants {want[0]}/{want[1]}")
+        most = RANGE_MOST.get(n)
+        if most and r["calm"] > most:
+            next(c for c in mix if c["name"] == n)["flags"].append(
+                f"heard to {r['calm']} m in calm, wants at most {most}")
     # Your kit (src/foley.rs): at its cue's gain a part is one robots hear
     # to GEAR_REACH_REF; your ears should hear it about as far.
     gear_ref = float(re.search(r"GEAR_REACH_REF: f32 = ([\d.]+)",

@@ -74,6 +74,39 @@ fn cleared(
     }
 }
 
+/// What rested on something now gone (loot on a crate's lid, a can on a
+/// board, splinters on a door) falls: a body asleep on a support doesn't
+/// wake when the support goes, so it'd hang in the air where the top was.
+fn wake_what_rested(
+    mut cleared: MessageReader<Cleared>,
+    spatial: avian3d::prelude::SpatialQuery,
+    colliders: Query<&avian3d::prelude::ColliderOf>,
+    sleepers: Query<
+        (),
+        (
+            With<avian3d::prelude::Sleeping>,
+            With<avian3d::prelude::RigidBody>,
+        ),
+    >,
+    mut commands: Commands,
+) {
+    for c in cleared.read() {
+        // Its space, and a hand's breadth over its top.
+        let around = avian3d::prelude::ColliderAabb::new(
+            (c.min + c.max) * 0.5 + Vec3::Y * 0.3,
+            (c.max - c.min) * 0.5 + Vec3::new(0.05, 0.35, 0.05),
+        );
+        let mut woken = Vec::new();
+        for e in spatial.aabb_intersections_with_aabb(around) {
+            let body = colliders.get(e).map_or(e, |c| c.body);
+            if sleepers.contains(body) && !woken.contains(&body) {
+                woken.push(body);
+                commands.queue(avian3d::prelude::WakeBody(body));
+            }
+        }
+    }
+}
+
 /// How far a robot hears a break, metres: glass carries further than
 /// any wood but a door going down.
 pub fn noise_radius(stuff: Stuff, size: f32) -> f32 {
@@ -112,7 +145,10 @@ impl Plugin for DestructionPlugin {
                 FixedUpdate,
                 DestructionSystems.after(crate::weapons::ballistics::BallisticsSystems),
             )
-            .add_systems(FixedUpdate, make_noise.after(DestructionSystems))
+            .add_systems(
+                FixedUpdate,
+                (make_noise, wake_what_rested).after(DestructionSystems),
+            )
             .add_plugins((
                 debris::DebrisPlugin,
                 glass::GlassPlugin,

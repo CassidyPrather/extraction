@@ -407,7 +407,7 @@ fn shoot_for_screenshot(
     player: Query<Entity, With<crate::rig::LocalPlayer>>,
     spatial: avian3d::prelude::SpatialQuery,
     mut breaches: MessageWriter<super::hooks::Breach>,
-    parts: Query<(), With<super::strip::Strippable>>,
+    parts: Query<(), With<super::wood::Timber>>,
     names: Query<NameOrEntity>,
     mut frame: Local<u32>,
 ) {
@@ -440,9 +440,14 @@ fn shoot_for_screenshot(
             });
         }
     }
-    // `EXTRACTION_STRIP=1`: twenty frames before the capture, the part
-    // the view meets (a shutter, a bus panel) comes off, as to a crowbar.
-    if std::env::var("EXTRACTION_STRIP").is_ok() && *frame + 20 == opts.frames {
+    // `EXTRACTION_STRIP=1`: twenty frames (or `EXTRACTION_STRIP_AT`)
+    // before the capture, the breakable the view meets (a shutter, a bus
+    // panel, a crate) goes, as to a crowbar or a boot.
+    let strip_at = std::env::var("EXTRACTION_STRIP_AT")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(20);
+    if std::env::var("EXTRACTION_STRIP").is_ok() && *frame + strip_at == opts.frames {
         let ground = zone.ground(cam.x, cam.z);
         let eye = Vec3::new(
             cam.x,
@@ -468,7 +473,7 @@ fn shoot_for_screenshot(
         }
         match hits.iter().find(|h| parts.contains(h.entity)) {
             Some(h) => commands.entity(h.entity).despawn(),
-            None => warn!("EXTRACTION_STRIP: the view meets no wreck part"),
+            None => warn!("EXTRACTION_STRIP: the view meets nothing breakable"),
         }
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
