@@ -20,6 +20,7 @@ pub mod fell_sounds;
 pub mod furnace;
 pub mod glow;
 pub mod halos;
+pub mod hinge;
 pub mod impostors;
 pub mod live;
 pub mod lockdown;
@@ -170,7 +171,15 @@ impl Plugin for WorldPlugin {
             cold::ColdPlugin,
         ))
         .add_systems(PreStartup, init_zone)
-        .add_systems(Update, buildings::swing_doors)
+        .add_systems(
+            Update,
+            (
+                hinge::take_hold,
+                hinge::swing_by_hand,
+                buildings::swing_doors,
+            )
+                .chain(),
+        )
         .add_systems(Update, minefields::lay_for_gallery)
         .add_systems(
             Startup,
