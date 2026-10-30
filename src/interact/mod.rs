@@ -581,9 +581,11 @@ fn grip_from_input(
     driver: Res<crate::rig::RigDriver>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     spatial: SpatialQuery,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
 ) {
+    let terrain = terrain.iter().next();
     for (player, input, children) in &players {
         let torso = torsos
             .iter()
@@ -627,6 +629,7 @@ fn grip_from_input(
                     &parents,
                     &seats,
                     &spatial,
+                    terrain,
                 )
                 .map(|(e, _)| e)
             };
@@ -650,6 +653,7 @@ fn grip_from_input(
                         &parents,
                         &seats,
                         &spatial,
+                        terrain,
                     ) {
                         actions.write(HandAction::Grab {
                             player,
@@ -700,6 +704,7 @@ fn grip_from_input(
                         &parents,
                         &seats,
                         &spatial,
+                        terrain,
                     ) {
                         hand.handle_by_trigger = true;
                         actions.write(HandAction::Grab {
@@ -758,6 +763,7 @@ fn find_grab(
     parents: &Query<&ChildOf>,
     (owners, mags, presented): &Seats,
     spatial: &SpatialQuery,
+    terrain: Option<Entity>,
 ) -> Option<(Entity, usize)> {
     let reach = Collider::sphere(0.07);
     let mut touching = spatial.shape_intersections(
@@ -772,7 +778,11 @@ fn find_grab(
             hand.translation,
             Quat::IDENTITY,
             // (A wreck's limbs are the robot's parts: `carry::Draggable`.)
-            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot]),
+            // Not the terrain: nothing on it is grabbed, and a sphere's
+            // test against the map's heightfield is 28 ms
+            // (`world::sphere_in_world`).
+            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
+                .with_excluded_entities(terrain),
         ) {
             let mut up = hit;
             for _ in 0..4 {
