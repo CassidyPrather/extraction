@@ -75,7 +75,8 @@ def suitcase_open():
     p.box((0.08, 0.01, 0.22), (L / 2 + 0.03, 0.08, -0.05), "Cream", bevel=0.003, segs=1,
           xf=T(L / 2, 0.11, 0) @ RZ(-0.9) @ T(-L / 2, -0.11, 0))
     for x in (-0.18, 0.18):
-        p.box((0.05, 0.03, 0.02), (x, 0.07, -D / 2 - 0.012), "Brass")
+        # On the front's face (2 mm off it).
+        p.box((0.05, 0.03, 0.02), (x, 0.07, -D / 2 - 0.009), "Brass")
     return [p]
 
 
@@ -85,9 +86,11 @@ def suitcase_shut():
     p.box((0.62, 0.2, 0.42), (0, 0.1, 0), "Leather", bevel=0.02, segs=2)
     for x in (-0.17, 0.17):
         p.box((0.04, 0.21, 0.43), (x, 0.1, 0), "Canvas", bevel=0.004, segs=1)
-    p.box((0.16, 0.025, 0.03), (0, 0.205, -0.235), "Leather", bevel=0.008, segs=1)
+    # The handle on its lugs, the lugs on the face below its rounded edge
+    # (they stood 2 mm off it).
+    p.box((0.16, 0.025, 0.03), (0, 0.185, -0.235), "Leather", bevel=0.008, segs=1)
     for x in (-0.06, 0.06):
-        p.box((0.02, 0.03, 0.02), (x, 0.195, -0.222), "Brass")
+        p.box((0.02, 0.03, 0.02), (x, 0.175, -0.219), "Brass")
     p.box((0.06, 0.05, 0.004), (0.25, 0.12, -0.212), "Cream")
     return [p]
 
@@ -117,7 +120,8 @@ def belongings_box():
     blob(p, (0.22, 0.08, 0.13), (-0.08, 0.3, 0.03), "Wool")
     p.cyl(0.09, 0.0, 0.13, "Enamel", segs=12, xf=T(0.15, 0.2, -0.05) @ UP)
     rod(p, (0.05, 0.33, -0.05), (0.26, 0.33, -0.05), 0.008, "Iron", segs=5)
-    p.cyl(0.035, 0.0, 0.16, "Glass", segs=8, xf=T(0.17, 0.3, 0.1) @ UP)
+    # The lamp stood up on the box's bottom (it hung beside the pot).
+    p.cyl(0.035, 0.0, 0.16, "Glass", segs=8, xf=T(0.17, 0.012, 0.1) @ UP)
     p.box((0.18, 0.02, 0.14), (-0.1, 0.39, -0.05), "Timber", bevel=0.004, segs=1,
           xf=T(-0.1, 0.39, -0.05) @ RX(-0.2) @ T(0.1, -0.39, 0.05))
     return [p]
@@ -314,14 +318,20 @@ def dishes_broken():
     """Plates in pieces on the floor, a cup on its side: 0.5 across."""
     p = Part("static")
     w = Wear(45)
+    laid = []
     for k in range(9):
         a = w.rng.random() * 2 * math.pi
         r = 0.05 + w.rng.random() * 0.2
         size = 0.03 + w.rng.random() * 0.05
-        # Each a little higher than the last: overlapping, they'd fight.
+        # On the floor, or on a shard it overlaps, a little into it (in one
+        # plane they'd fight; stepped up 4 mm each, the last stood 3 cm
+        # over the floor).
+        x, z = r * math.cos(a), r * math.sin(a)
+        y = max([yj + 0.0055 for xj, zj, sj, yj in laid
+                 if math.hypot(x - xj, z - zj) < size + sj], default=0.0)
+        laid.append((x, z, size, y))
         p.prism([(-size, -size * 0.6), (size, -size * 0.4), (size * 0.2, size)], 0.0, 0.006,
-                "Enamel", axis="y",
-                xf=T(r * math.cos(a), 0.004 * k, r * math.sin(a)) @ RY(a))
+                "Enamel", axis="y", xf=T(x, y, z) @ RY(a))
     p.lathe([(0.0, 0.0), (0.035, 0.0), (0.042, 0.075), (0.038, 0.075), (0.03, 0.005),
              (0.0, 0.005)], "Enamel", segs=12, xf=T(0.12, 0.04, 0.05) @ RZ(1.57) @ UP)
     return [p]
@@ -337,9 +347,11 @@ def books_charred():
         board(p, (0.16 + w.j(0.02), t, 0.22 + w.j(0.02)), (w.j(0.02), y + t / 2, w.j(0.02)),
               "Char", wear=w, bevel=0.006, yaw=w.j(0.3))
         y += t
+    # Ash flakes on the floor round them (21 cm apart: they never overlap,
+    # and stepped up 4 mm each, the last stood 2 cm over the floor).
     for k in range(6):
         a = k * 1.1
-        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015 + 0.004 * k, 0.2 * math.sin(a)),
+        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015, 0.2 * math.sin(a)),
               "Paper" if k % 3 == 0 else "Char", xf=RY(a))
     return [p]
 

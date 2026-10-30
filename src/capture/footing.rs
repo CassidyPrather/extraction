@@ -838,12 +838,6 @@ mod tests {
 
     /// Faults waiting on their owners, by text in their line.
     const KNOWN: &[&str] = &[
-        // The truck's stops fall away (the base stops 1 to 1.4 m from cab
-        // to tail): stood on its wheels there, its bed tilts and loose kit
-        // slides, so it's settled low as before, its wheels in the soil
-        // (`raid::truck::parked`). Level pads at the stops (Map design) let
-        // it stand on its wheels.
-        " truck: ",
         // Rime's quarantine gate stands on a slope; its posts' footings go
         // 0.4 m into the high side (Map design: level its spot).
         "quarantine_gate: gate_post",

@@ -158,7 +158,9 @@ mod tests {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let a = scatter_trees(&map, &hm);
-            assert!(a.len() > 1000, "{}: {} trees", map.name, a.len());
+            // A thousand to the standard valley's area (640 m a side).
+            let full = 1000.0 * (map.size / 640.0).powi(2);
+            assert!(a.len() as f32 > full, "{}: {} trees", map.name, a.len());
             for t in &a {
                 let p = [t.pos[0], t.pos[2]];
                 assert!(hm.water_level(p).is_none());

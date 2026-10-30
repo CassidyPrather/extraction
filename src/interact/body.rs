@@ -42,9 +42,19 @@ pub const CHEST_BELOW_EYES: f32 = 0.38;
 const BEND: f32 = 0.45;
 /// Bending over, the hips stay where they are while the head goes forward
 /// and down: the anchor (and the belt on it) may trail the neck by this
-/// much per metre the head has dropped, up to [`HINGE_MOST`].
-const HINGE: f32 = 1.3;
+/// much per metre the head has dropped past [`HINGE_FROM`], up to
+/// [`HINGE_MOST`].
+const HINGE: f32 = 1.8;
 const HINGE_MOST: f32 = 0.45;
+/// A head this little lower than standing isn't bending: walking's bob, a
+/// glance down at the legs. The hips come along under it (the 28 October
+/// playtest: walking round the room, the hips stayed put and the body
+/// looked tilted).
+const HINGE_FROM: f32 = 0.1;
+/// How fast the anchor closes on where it should be, per second: quick
+/// enough to keep up with a walk (at 12 the hips trailed a walking pace by
+/// 7 cm), slow enough to smooth the tracking.
+const FOLLOW: f32 = 30.0;
 
 /// Index of a body socket in the default slot layout (1-9 keys in flat mode).
 #[derive(Component, Clone, Copy, Debug)]
@@ -539,6 +549,17 @@ fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
     }
 }
 
+/// Where the head turns on the neck (in the head's own frame, below and
+/// behind the eyes): looking down swings the eyes forward round it, and the
+/// body stays where it is. The torso anchor hangs under it and the drawn
+/// spine runs up to it (`rig::stance`), so the two agree.
+pub fn neck_pivot(head: &Transform) -> Vec3 {
+    head.translation + head.rotation * NECK_PIVOT
+}
+
+/// The neck's pivot from the eyes, in the head's frame.
+const NECK_PIVOT: Vec3 = Vec3::new(0.0, -0.1, 0.09);
+
 /// The torso trails the head: always under it, turning when the head has
 /// looked far enough away or the player is walking.
 fn follow_head(
@@ -579,15 +600,15 @@ fn follow_head(
             let y = torso.standing - CHEST_BELOW_EYES - drop + input.lifted;
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
-            let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
+            let neck = neck_pivot(&head);
             // Upright, under the neck; bending over, the hips stay put (up
             // to a point) and the chest leans out over them (`rig::stance`).
-            let bent = ((torso.standing - raw) * HINGE).clamp(0.0, HINGE_MOST);
+            let bent = ((torso.standing - raw - HINGE_FROM) * HINGE).clamp(0.0, HINGE_MOST);
             let under = Vec2::new(neck.x, neck.z);
             let was = Vec2::new(t.translation.x, t.translation.z);
             let at = under + (was - under).clamp_length_max(bent);
             let want = Vec3::new(at.x, y, at.y);
-            let ease = (12.0 * dt).min(1.0);
+            let ease = (FOLLOW * dt).min(1.0);
             t.translation = if t.translation.distance(want) > 0.5 {
                 want
             } else {
@@ -601,10 +622,15 @@ fn follow_head(
 /// How far under the hand a held pack hangs (its middle), metres.
 pub const HANG: f32 = 0.3;
 
+/// How far a held pack's top leans away from you (radians), so its opening
+/// looks up at the eyes.
+const HANG_TILT: f32 = 0.5;
+
 /// Your pack swung off a shoulder and held: it hangs from the hand by its
-/// top strap, upright, its back to you, and while it's in front of you it's
-/// open, what's in it showing, for the other hand to reach in and take;
-/// taken back over the shoulder it closes (and let go there, it's on).
+/// top strap, its opening (the outer face: it's a panel loader) to you and
+/// tipped up toward the eyes, and while it's in front of you it's open,
+/// what's in it showing, for the other hand to reach in and take; taken
+/// back over the shoulder it closes (and let go there, it's on).
 #[allow(clippy::type_complexity)]
 fn hang_held_pack(
     mut packs: Query<(
@@ -633,7 +659,7 @@ fn hang_held_pack(
         };
         let torso = torso.compute_transform();
         let want = Transform::from_translation(hand.world.translation - Vec3::Y * HANG)
-            .with_rotation(torso.rotation * Quat::from_rotation_y(std::f32::consts::PI));
+            .with_rotation(torso.rotation * Quat::from_rotation_x(-HANG_TILT));
         lin.0 = ((want.translation - pos.0) / dt).clamp_length_max(8.0);
         let (axis, mut angle) = (want.rotation * rot.0.inverse()).to_axis_angle();
         if angle > std::f32::consts::PI {

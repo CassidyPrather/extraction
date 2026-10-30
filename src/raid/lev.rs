@@ -99,14 +99,18 @@ impl Handovers {
     }
 }
 
-/// Where the `n`th thing goes, truck space: small things side by side on
-/// the ledge; a long gun laid on the floor below the hatch, along the bed.
-pub fn slot(n: usize, long: bool) -> Vec3 {
+/// Where the `n`th thing goes, truck space, `height` tall as it's held:
+/// small things side by side on the ledge; a long gun laid on the floor
+/// below the hatch, along the bed. Each is set down resting on what's under
+/// it, never in it (a PPSh set down 5 cm over the floor was 7 cm in it, and
+/// the floor threw it out across the bed).
+pub fn slot(n: usize, long: bool, height: f32) -> Vec3 {
+    let rest = Vec3::Y * (height * 0.5 + 0.005);
     if long {
-        return Vec3::new(0.35, FLOOR + 0.05, -1.2) + Vec3::X * 0.08 * (n % 3) as f32;
+        return Vec3::new(0.35, FLOOR, -1.2) + Vec3::X * 0.08 * (n % 3) as f32 + rest;
     }
     let x = [0.0, -0.08, 0.08, -0.04, 0.04][n % 5];
-    LEDGE_AT + Vec3::new(x, LEDGE.y * 0.5 + 0.04, 0.0)
+    LEDGE_AT + Vec3::new(x, 0.0, 0.0) + rest
 }
 
 /// Where the thing he holds sits, in his hand's frame (`lev_hand`'s
@@ -198,9 +202,9 @@ fn hand_over(
                 && let Some(next) = s.queue.pop_front()
             {
                 if let Some(kind) = catalog.kind(&next.id) {
-                    let long =
-                        catalog.get(kind).category == extraction_core::items::Category::Firearm;
-                    s.target = slot(s.placed, long);
+                    let def = catalog.get(kind);
+                    let long = def.category == extraction_core::items::Category::Firearm;
+                    s.target = slot(s.placed, long, def.size_m()[1]);
                     let e = spawn_item(
                         &mut commands,
                         &catalog,
@@ -490,6 +494,24 @@ mod tests {
             super::super::lines::coming_home_with(3, false, art, None),
             super::super::lines::coming_home(3, false)
         );
+    }
+
+    /// Each thing he hands over is set down resting on the ledge or the
+    /// floor, its bottom on it, never inside it.
+    #[test]
+    fn what_he_sets_down_rests_on_its_place() {
+        for (long, top) in [(false, LEDGE_AT.y), (true, FLOOR)] {
+            for height in [0.015, 0.1, 0.214, 0.25] {
+                for n in 0..6 {
+                    let bottom = slot(n, long, height).y - height * 0.5;
+                    assert!(
+                        bottom >= top && bottom < top + 0.02,
+                        "{height} m tall, set down {:.3} m from its place",
+                        bottom - top
+                    );
+                }
+            }
+        }
     }
 
     /// Every gift Progression's fittings give, and Hana's photograph, come

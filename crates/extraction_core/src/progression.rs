@@ -244,7 +244,7 @@ pub const STASH_RACK: f32 = 100.0;
 pub const LETTER_ITEM: &str = "hana_letter";
 pub const LETTER_MAP: &str = "marrow_creek";
 /// The "Village note" on that table.
-pub const LETTER_AT: [f32; 2] = [-17.3, 93.7];
+pub const LETTER_AT: [f32; 2] = [-19.6, 62.2];
 
 /// The tier index from which nights come (after "Runs").
 pub const NIGHTS_FROM: u32 = 3;
@@ -256,7 +256,7 @@ pub const LEDGER_ITEM: &str = "intake_ledger";
 pub const DEPOT_PREFAB: &str = "depot_marrow";
 pub const LEDGER_MAP: &str = "marrow_creek";
 /// World (x, y, z): the bay's floor, clear of its crates.
-pub const LEDGER_AT: [f32; 3] = [-262.0, 11.31, -179.4];
+pub const LEDGER_AT: [f32; 3] = [-154.0, 8.21, -68.5];
 
 /// Raids the driver waits on a fetch before asking for something else.
 pub const FETCH_PATIENCE: u32 = 3;

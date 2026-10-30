@@ -222,16 +222,44 @@ to toggle it, so it jittered, wouldn't hold part-way, and flung):
   that left it can't shove it back;
 - flat-screen and bots press, as before.
 
-Windows (their sashes) and drawers (`counter_drawers`) don't move yet:
-they're drawn and collided as part of their building, with no separate
-moving part. They need their own nodes in the models (World models, Kit)
-before a hand can take hold of them.
+Anything else that moves in the hand is a `hinge::Moving` part: a leaf
+that turns about its rest frame's +Y up to `most`, or a drawer that slides
+out along its -Z up to `travel`. Held, it follows the hand (clamped, no
+faster than `MOST` or `SLIDE_MOST`); let go part-way it stays; a quick
+squeeze, or a press flat or a bot's, sends it to its other end.
+
+- Counters: Model correctness split `counter_drawers` and `counter_cabinet`
+  into a `carcass` and moving nodes. `Builder::counter` draws only the
+  carcass; `hinge::fit_counters` puts each drawer (0.4 m) and cabinet door
+  (1.9 rad; the right-hand one turned over so it opens the same way) up as
+  a part, its node drawn on it. Their origins and boxes are the models'
+  own (`COUNTER_NODES`).
+- Windows: `window_sash` is split too (`frame`, `leaf_l`, `leaf_r`,
+  `fortochka`, each leaf with its latch). An intact sash is drawn by its
+  `frame` (`dress_buildings`; a weathered one stays `window_sash_broken`,
+  shut, and a boarded one is always weathered), and `glass::glaze` hangs
+  its three leaves (`hinge::fit_sash`, `SASH_LEAVES`) on their hinges,
+  turned over so each swings into the room, up to `hinge::WINDOW_LEAF`
+  (100°). A leaf has no collider (a round or a thrown thing must reach
+  its glass): it's taken hold of within its half-diagonal of its middle.
+  Its pane rides on it: `Pane::rest` is where it hangs shut and
+  `Pane::leaf` its leaf; `glass::carry_panes` moves `world`/`inv` as the
+  leaf swings (without marking the pane changed), so rounds, fists and
+  blasts find it where it is now, while its key (`Pane::key`), the
+  `PaneGrid` cell and the glitter it leaves on the floor stay where it
+  hangs shut. The fixed top-right light stays in the frame. Shots:
+  `window_shut.png` and `window_open.png` (a workshop on Marrow, its
+  leaves swung in with `EXTRACTION_OPEN=8`: on a `--screenshot` run,
+  ninety frames before the capture, everything that moves within that
+  many metres of the camera, 12 by default, opens, and is logged with
+  where it hangs).
 
 ## Drawing it
 
 One mesh per building draws all its panes whole (`Mat::Glass`), and one its
 broken panes' teeth in a paler, glinting shard material, rebuilt when a
-pane changes. Under each broken pane a scatter of small flat shards lies
+pane changes; a window's leaf has its own two, hung from it, so they
+swing with it. Under each broken pane a scatter of small flat shards lies
 on the floor (or the ground) on the side the glass fell (`Break::fell`;
 a restored pane's fell in), a few millimetres proud: what tells a window
 was broken after the flying pieces are cleared away. `buildings::dress_buildings` leaves the sash models' glass
@@ -296,7 +324,9 @@ door's crash).
   `door_hinge`) two doors in every valley gripped at the latch, the
   middle and near the hinge and pulled round 80°: the leaf follows with
   no step back, no jump past the rate, no stop short, and stays when let
-  go.
+  go; two drawers and two cabinet doors in every valley, pulled out
+  0.3 m and swung round 80° the same way; and a casement and a drawer in
+  the yard, and a press running a drawer shut.
 - `cargo test -p extraction_core fracture` — cells tile the pane, shards
   are convex and crowd the impact, teeth hang from the frame, boards split
   into long pieces.

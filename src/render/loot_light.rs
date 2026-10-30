@@ -173,7 +173,9 @@ mod tests {
                       rooms: Query<(&RoomLight, &Transform)>| {
                     (
                         light_at(at(1.5, -2.9), &e, &rooms),
-                        light_at(at(-3.5, 3.0), &e, &rooms),
+                        // The kitchen's back corner by the partition (its
+                        // -X one has the shelf in it).
+                        light_at(at(-0.4, 3.1), &e, &rooms),
                         light_at(at(9.0, 0.0), &e, &rooms),
                     )
                 },

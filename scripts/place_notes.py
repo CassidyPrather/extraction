@@ -68,7 +68,7 @@ def ron_str(s):
 # note names exists.
 NOTES = {
     "marrow_creek": [
-        ("guard_booth", (47.8, 285.0), "Note", """SOUTH GATE - DUTY LOG, 14 OCT
+        ("guard_booth", (29.8, 163.5), "Note", """SOUTH GATE - DUTY LOG, 14 OCT
 
 0600. Buses out of the depot, 9 of 9.
 
@@ -79,7 +79,7 @@ NOTES = {
 1300. A dog barking in the village all afternoon.
 
 2200. Lights by the well. Not ours.""", "Gate log"),
-        ("house_plank", (-18.0, 95.0), "Note", """Anna -
+        ("house_plank", (-20.2, 63.5), "Note", """Anna -
 
 They said three days. That was three weeks ago. Lev drove the four and
 wouldn't look at me, so I stayed for the dog.
@@ -92,7 +92,7 @@ Keep still when the little flying one looks at you. It sees you move.
 Tell Lev I'm not angry. I've written to him as well, for when he comes.
 
 - Mum""", "Village note"),
-        ("house_brick", (-20.0, 65.0), "Note", """POST OFFICE - UNDELIVERED
+        ("house_brick", (-22.2, 33.5), "Note", """POST OFFICE - UNDELIVERED
 
 To O. Vey, station chief, Hollow survey post.
 
@@ -102,7 +102,7 @@ keys at the review.
 
 P. Rus, Inspector
 Quarantine Authority, valley office, 20 Nov.""", "Post office letter"),
-        ("shop", (-16.0, 35.0), "Note", """CREDIT BOOK
+        ("shop", (-18.2, 3.5), "Note", """CREDIT BOOK
 
 Holm - bread, paraffin. 3.40
 
@@ -115,7 +115,7 @@ Brabec - nails, tea. 1.95
 Vey (survey) - batteries x12, chalk. Paid.
 
 13 Oct. Shut till further notice. Pay me when you're back.""", "Credit book"),
-        ("cabin_log", (-185.0, 190.0), "Note", """Walkers:
+        ("cabin_log", (-110.8, 113.5), "Note", """Walkers:
 
 Don't waste rounds on the shell. The eye under the front plate, or the
 knees. They go down like a felled tree.
@@ -125,7 +125,7 @@ The flyers are glass and wire. One good hit.
 And never shoot near the well. It doesn't like it.
 
 - J., logging camp""", "Foreman's note"),
-        ("pump_station", (-200.0, 22.0), "Note", """PUMP LOG - O. Brabec
+        ("pump_station", (-110.0, 12.1), "Note", """PUMP LOG - O. Brabec
 
 The Authority says the Surge is theirs: "scheduled discharge". It was
 here first. 9 Oct, before any machine, the sky went the colour of a
@@ -137,7 +137,7 @@ a quiet hour, a word about where the stones are.
 My grandmother fed it bread. It was slower then.
 
 Don't give it your gun.""", "Pump station note"),
-        ("bus_depot", (25.0, -225.0), "Terminal", [
+        ("bus_depot", (13.8, -117.0), "Terminal", [
             """QUARANTINE AUTHORITY
 CUSTODIAN NETWORK - MARROW
 
@@ -177,7 +177,7 @@ Last login: P.RUS (Cinder)
 Custodian continues SWEEP until
 recalled.""",
         ], "Depot office terminal"),
-        ("mast_hut", (-112.0, -160.0), "Terminal", [
+        ("mast_hut", (-46.0, -63.8), "Terminal", [
             """RELAY LOG - MAST M1
 
 Pylons extend the Custodian's
@@ -208,7 +208,7 @@ Nobody else is going to keep it.
 Going down at first light to read the centre stakes. Taking the box.
 
 - O.V.""", "Survey log"),
-        ("ranger_tower", (-240.0, -138.0), "Note", """From up here you can see the Hollow
+        ("ranger_tower", (-146.0, -82.0), "Note", """From up here you can see the Hollow
 glow after dark. The survey team went in with the chief's lockbox and
 came back without the chief. The box is still down there, where the
 ground lifts. Bring a light. Don't run.
@@ -216,7 +216,7 @@ ground lifts. Bring a light. Don't run.
 Lamp to Kettle tower, 2100: no answer from Emil three nights now.
 
 - M. Sedlak""", "Ranger's note"),
-        ("cabin_log", (-145.0, 190.0), "Note", """Crew tally, on the wall by the bed:
+        ("cabin_log", (-70.8, 113.5), "Note", """Crew tally, on the wall by the bed:
 
 Mon 14 logs   Tue 16   Wed 15
 Thu - buses

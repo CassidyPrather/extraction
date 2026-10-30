@@ -1963,6 +1963,271 @@ pub(crate) mod tests {
         for (name, mean, p99) in stats.iter().take(4) {
             println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
         }
+        // How the frame's systems spread: many near-free ones are the
+        // executor's and their empty queries' cost, not work.
+        let ours: Vec<f64> = v
+            .iter()
+            .filter(|(n, _)| n.starts_with("extraction::"))
+            .map(|(_, ms)| ms / frames)
+            .collect();
+        for (lo, hi) in [(0.0, 0.005), (0.005, 0.02), (0.02, 0.1), (0.1, f64::MAX)] {
+            let n: Vec<&f64> = ours.iter().filter(|m| **m >= lo && **m < hi).collect();
+            println!(
+                "  game systems {:>5.3}..{:<5} ms: {:4} of them, {:6.2} ms a frame",
+                lo,
+                if hi == f64::MAX {
+                    "".to_string()
+                } else {
+                    format!("{hi}")
+                },
+                n.len(),
+                n.iter().copied().sum::<f64>()
+            );
+        }
+    }
+
+    /// Mesh entities in a settled valley by what they belong to (their
+    /// root's name), and how many of those roots move or can be handled:
+    /// what merging static props per material could save
+    /// (`cargo test --lib mesh_census -- --ignored --nocapture`,
+    /// `BUDGET_MAP` for another valley).
+    #[test]
+    #[ignore = "census: prints, asserts nothing"]
+    fn mesh_census() {
+        let _counting = counted();
+        let map = std::env::var("BUDGET_MAP").unwrap_or("marrow_creek".into());
+        let mut app = client_threads(&map, "clearing", None);
+        settle(&mut app);
+        let w = app.world_mut();
+        let meshes: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
+        let mut by_root: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut roots: HashMap<String, std::collections::HashSet<Entity>> = HashMap::new();
+        // An unnamed root's meshes by their own (or nearest) name.
+        let mut unnamed: HashMap<String, usize> = HashMap::new();
+        let mut moving = 0;
+        for e in &meshes {
+            let mut root = *e;
+            let mut dynamic = false;
+            loop {
+                if w.get::<avian3d::prelude::RigidBody>(root)
+                    .is_some_and(|b| !b.is_static())
+                {
+                    dynamic = true;
+                }
+                match w.get::<ChildOf>(root) {
+                    Some(p) => root = p.parent(),
+                    None => break,
+                }
+            }
+            let name = w
+                .get::<Name>(root)
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            roots.entry(name.clone()).or_default().insert(root);
+            if name == "(unnamed)" && std::env::var_os("CENSUS_COMPONENTS").is_some() {
+                let names: Vec<String> = w
+                    .inspect_entity(*e)
+                    .map(|it| {
+                        it.map(|c| {
+                            c.name()
+                                .to_string()
+                                .rsplit("::")
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                        .collect()
+                    })
+                    .unwrap_or_default();
+                *unnamed.entry(names.join(",")).or_default() += 1;
+                let path = w
+                    .get::<Mesh3d>(*e)
+                    .and_then(|m| w.resource::<AssetServer>().get_path(m.0.id()))
+                    .map_or("(made in code)".to_string(), |p| {
+                        p.path().to_string_lossy().to_string()
+                    });
+                *unnamed.entry(format!("mesh from {path}")).or_default() += 1;
+            }
+            if name == "(unnamed)" {
+                let mut at = *e;
+                let mut own = format!(
+                    "(no name; {} components)",
+                    w.entity(at).archetype().component_count()
+                );
+                for _ in 0..8 {
+                    if let Some(n) = w.get::<Name>(at) {
+                        own = n.to_string();
+                        break;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => break,
+                    }
+                }
+                *unnamed.entry(own).or_default() += 1;
+            }
+            let entry = by_root.entry(name).or_default();
+            entry.0 += 1;
+            if dynamic {
+                entry.1 += 1;
+                moving += 1;
+            }
+        }
+        let mut v: Vec<_> = by_root.into_iter().collect();
+        v.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        println!(
+            "{map}: {} mesh entities, {moving} under a moving body; by root (meshes, moving):",
+            meshes.len()
+        );
+        for (name, (n, m)) in v.iter().take(60) {
+            println!(
+                "  {n:6} {m:6}  {name} ({} roots)",
+                roots.get(name).map_or(0, |r| r.len())
+            );
+        }
+        let mut u: Vec<_> = unnamed.into_iter().collect();
+        u.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("unnamed roots' meshes by their own name:");
+        for (name, n) in u.iter().take(40) {
+            println!("  {n:6}  {name}");
+        }
+    }
+
+    /// What `blink::head_in_solid` costs at the busy moment's head (it
+    /// runs every frame): under a millisecond. A sphere tested against the
+    /// whole map's heightfield was 28 ms (blink alone was 25 ms of a 78 ms
+    /// main schedule); `world::sphere_in_world` asks the heightmap for the
+    /// ground instead. Prints what each query costs there, and which
+    /// colliders' boxes reach the head.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_head_test_is_cheap() {
+        use avian3d::prelude::*;
+        let _one_at_a_time = heavy();
+        let mut app = busy_scene("marrow_creek");
+        app.update();
+        let w = app.world_mut();
+        let at = w
+            .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>()
+            .iter(w)
+            .next()
+            .map(|g| g.translation())
+            .expect("a head");
+        let zone = w.resource::<crate::world::Zone>().clone();
+        let terrain = w
+            .query_filtered::<Entity, With<crate::world::TerrainCollider>>()
+            .iter(w)
+            .next();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(w);
+        let spatial = state.get(w).expect("the spatial query");
+        let n = 50;
+        let t0 = std::time::Instant::now();
+        let mut hits = 0;
+        for _ in 0..n {
+            hits += usize::from(super::super::blink::head_in_solid(
+                &spatial, &zone, terrain, at,
+            ));
+        }
+        let full = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.shape_intersections_callback(
+                &Collider::sphere(0.09),
+                at,
+                Quat::IDENTITY,
+                &filter,
+                |_| {
+                    any = true;
+                    false
+                },
+            );
+            hits += usize::from(any);
+        }
+        let early = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.point_intersections_callback(at, &filter, |_| {
+                any = true;
+                false
+            });
+            hits += usize::from(any);
+        }
+        let point = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
+             a point {point:.3} ms ({hits} hits)"
+        );
+        assert!(
+            full < 1.0,
+            "head_in_solid {full:.3} ms a call: it runs every frame"
+        );
+        // Which colliders a head-sized box reaches, and the sphere test's
+        // cost against each alone.
+        let r = Vec3::splat(0.09);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let _ = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        }
+        let boxes = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        let mut near_hits = 0;
+        for _ in 0..n {
+            if spatial
+                .project_point(at, true, &filter)
+                .is_some_and(|p| p.is_inside || p.point.distance(at) < 0.09)
+            {
+                near_hits += 1;
+            }
+        }
+        let project = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "  a box query {boxes:.3} ms; project_point {project:.3} ms ({near_hits} within 9 cm); \
+             Collider::sphere's own box {:?}",
+            Collider::sphere(0.09).aabb(at, Quat::IDENTITY)
+        );
+        let near = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        println!("  {} colliders' boxes reach the head's", near.len());
+        let names: Vec<(Entity, String)> = near
+            .iter()
+            .map(|e| {
+                let n = w
+                    .get::<Name>(*e)
+                    .map_or("(unnamed)".to_string(), |n| n.to_string());
+                let kind = w
+                    .get::<Collider>(*e)
+                    .map_or("?".to_string(), |c| format!("{:?}", c.shape().shape_type()));
+                (*e, format!("{n} [{kind}]"))
+            })
+            .collect();
+        for (e, name) in names {
+            let (Some(c), Some(p), Some(r)) = (
+                w.get::<Collider>(e),
+                w.get::<Position>(e),
+                w.get::<Rotation>(e),
+            ) else {
+                println!("    {name}: no collider pose");
+                continue;
+            };
+            let sphere = Collider::sphere(0.09);
+            let t0 = std::time::Instant::now();
+            for _ in 0..10 {
+                let _ = avian3d::collision::collider::contact_query::intersection_test(
+                    c,
+                    p.0,
+                    *r,
+                    &sphere,
+                    at,
+                    Quat::IDENTITY,
+                );
+            }
+            let ms = t0.elapsed().as_secs_f64() * 100.0;
+            println!(
+                "    {name}: {ms:.3} ms a test, layers {:?}",
+                w.get::<CollisionLayers>(e).map(|l| l.memberships)
+            );
+        }
     }
 
     /// No material many meshes wear is rewritten (nearly) every frame in

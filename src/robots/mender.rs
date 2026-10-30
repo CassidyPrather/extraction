@@ -538,7 +538,7 @@ mod tests {
     use super::*;
 
     fn world() -> (crate::vr_harness::Vr, Zone) {
-        let vr = crate::vr_harness::Vr::new(&crate::LaunchOptions::default().map);
+        let vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<Zone>().clone();
         (vr, zone)
     }

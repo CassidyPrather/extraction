@@ -127,11 +127,14 @@ fn pos_len_after(
 #[derive(Component)]
 pub struct WindowGlass;
 
-/// Rebuild the glass of each building whose panes changed.
+/// Rebuild the glass of each building whose panes changed. A window's
+/// leaf has its own (hung from it, so it swings with it); the litter on
+/// the floor is the building's.
 fn glaze_buildings(
     mut commands: Commands,
     changed: Query<&Pane, Changed<Pane>>,
     panes: Query<(&Pane, &Transform)>,
+    leaves: Query<&crate::world::hinge::Moving>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut library: ResMut<MaterialLibrary>,
@@ -139,12 +142,20 @@ fn glaze_buildings(
     mut shards: ResMut<ShardMaterial>,
     spatial: avian3d::prelude::SpatialQuery,
     undressed: Query<(), With<crate::world::buildings::PropsPending>>,
-    mut waiting: Local<Vec<Entity>>,
+    mut waiting: Local<Vec<(Entity, Entity)>>,
     mut drawn: Local<HashMap<(Entity, usize), Entity>>,
 ) {
     // A building gone (the zone left), or its glass: forget them.
     drawn.retain(|(b, _), e| commands.get_entity(*b).is_ok() && commands.get_entity(*e).is_ok());
-    let mut dirty: Vec<Entity> = changed.iter().map(|p| p.building).collect();
+    // (what it hangs from, its building)
+    let mut dirty: Vec<(Entity, Entity)> = changed
+        .iter()
+        .flat_map(|p| {
+            [(p.building, p.building)]
+                .into_iter()
+                .chain(p.leaf.map(|l| (l, p.building)))
+        })
+        .collect();
     dirty.append(&mut waiting);
     if dirty.is_empty() {
         return;
@@ -153,8 +164,9 @@ fn glaze_buildings(
     dirty.dedup();
     // Not before the building's own walls are drawn (its shading bakes in
     // the background): glass hanging in the air on a valley's arrival.
-    let (now, later): (Vec<Entity>, Vec<Entity>) =
-        dirty.into_iter().partition(|b| !undressed.contains(*b));
+    let (now, later): (Vec<(Entity, Entity)>, Vec<(Entity, Entity)>) = dirty
+        .into_iter()
+        .partition(|(_, b)| !undressed.contains(*b));
     *waiting = later;
     let dirty = now;
     if dirty.is_empty() {
@@ -163,13 +175,36 @@ fn glaze_buildings(
     // Per building, two meshes: the whole panes, and the broken ones'
     // teeth (paler and glinting, so a broken window reads as broken).
     type Buf = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>);
-    let mut by: HashMap<Entity, [Buf; 2]> =
-        dirty.iter().map(|b| (*b, Default::default())).collect();
+    let mut by: HashMap<Entity, [Buf; 2]> = dirty
+        .iter()
+        .map(|(g, _)| (*g, Default::default()))
+        .collect();
     for (p, local) in &panes {
-        let Some(bufs) = by.get_mut(&p.building) else {
+        // In its leaf's space, or its building's.
+        let (group, xf) = match p.leaf.and_then(|l| Some((l, leaves.get(l).ok()?))) {
+            Some((l, m)) => (
+                l,
+                m.rest.compute_affine().inverse() * p.rest.compute_affine(),
+            ),
+            None => (p.building, local.compute_affine()),
+        };
+        // The building's own space, for what lies on its floor.
+        let to_building = (p.rest.compute_affine() * local.compute_affine().inverse()).inverse();
+        if let (Some(b), true) = (p.broken.filter(|b| !b.weathered), group != p.building)
+            && let Some(bufs) = by.get_mut(&p.building)
+        {
+            let (pos, nrm, uv, idx) = &mut bufs[1];
+            for (at, poly) in litter(&spatial, p, b) {
+                let flat = Affine3A::from_rotation_translation(
+                    Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
+                    at,
+                );
+                append_slab(pos, nrm, uv, idx, &poly, 0.002, to_building * flat);
+            }
+        }
+        let Some(bufs) = by.get_mut(&group) else {
             continue;
         };
-        let xf = local.compute_affine();
         match p.broken {
             None => {
                 let (pos, nrm, uv, idx) = &mut bufs[0];
@@ -193,8 +228,10 @@ fn glaze_buildings(
                 }
                 // And glitter on the floor where it fell, the room's side
                 // or the street's: what tells a window was broken after
-                // the pieces are swept away.
-                let to_building = (p.world.compute_affine() * xf.inverse()).inverse();
+                // the pieces are swept away. (A leaf's: above.)
+                if group != p.building {
+                    continue;
+                }
                 for (at, poly) in litter(&spatial, p, b) {
                     let flat = Affine3A::from_rotation_translation(
                         Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2),
@@ -266,13 +303,14 @@ fn litter(
     use avian3d::prelude::SpatialQueryFilter;
     let mut rng = extraction_core::noise::Rng::new(b.seed ^ 0x1177);
     let n = (5.0 + p.area() * 25.0).min(14.0) as usize;
-    let normal = p.world.rotation * Vec3::Z * b.fell;
+    // Under the window shut, wherever its leaf is now.
+    let normal = p.rest.rotation * Vec3::Z * b.fell;
     let filter = SpatialQueryFilter::from_mask(crate::world::Layer::World);
     (0..n)
         .filter_map(|_| {
             let across = rng.range(-p.half.x, p.half.x) * 0.9;
             let out = rng.range(0.06, 0.7);
-            let start = p.world.transform_point(Vec3::new(across, -p.half.y, 0.0))
+            let start = p.rest.transform_point(Vec3::new(across, -p.half.y, 0.0))
                 + normal * out
                 + Vec3::Y * 0.05;
             let hit = spatial.cast_ray(start, Dir3::NEG_Y, 3.0, true, &filter)?;
@@ -409,6 +447,7 @@ fn shoot_for_screenshot(
     mut breaches: MessageWriter<super::hooks::Breach>,
     parts: Query<(), With<super::wood::Timber>>,
     names: Query<NameOrEntity>,
+    mut moving: Query<(NameOrEntity, &mut crate::world::hinge::Moving)>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -475,6 +514,27 @@ fn shoot_for_screenshot(
             Some(h) => commands.entity(h.entity).despawn(),
             None => warn!("EXTRACTION_STRIP: the view meets nothing breakable"),
         }
+    }
+    // `EXTRACTION_OPEN=1`: ninety frames before the capture, every window
+    // leaf, drawer and cabinet door within 12 m of the camera (or as many
+    // metres as it says, past 1) swings open, as to a squeeze.
+    let open = std::env::var("EXTRACTION_OPEN")
+        .ok()
+        .map(|v| v.parse::<f32>().ok().filter(|r| *r > 1.0).unwrap_or(12.0));
+    if let Some(reach) = open
+        && *frame + 90 == opts.frames
+    {
+        let eye = Vec3::new(cam.x, cam.y, cam.z);
+        let mut n = 0;
+        for (name, mut m) in &mut moving {
+            if m.rest.translation.xz().distance(eye.xz()) < reach {
+                m.open = true;
+                m.left = false;
+                n += 1;
+                info!("EXTRACTION_OPEN: {name} at {:.1}", m.rest.translation);
+            }
+        }
+        info!("EXTRACTION_OPEN: {n} opened");
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
         .ok()
@@ -607,6 +667,10 @@ fn dress_crates(
                     }
                 }
                 for (mesh, t, mat) in prims {
+                    // A sash's leaf: its glass is a pane's to draw.
+                    if super::glass::drawn_by_panes(model, &mat) {
+                        continue;
+                    }
                     let material = props.material(&mat, &mut materials);
                     let mut m = commands.spawn((
                         Mesh3d(mesh),
