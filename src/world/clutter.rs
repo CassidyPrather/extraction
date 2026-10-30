@@ -783,9 +783,10 @@ fn kit(prefab: &str, kettle: bool) -> Vec<(&'static str, Transform)> {
                 facing("wall_clock", Vec3::new(3.44, 0.3 + 2.4, -3.2), nx),
                 facing("gauge_board", Vec3::new(0.0, 0.3 + 1.5, z), nz),
                 facing("wall_telephone", Vec3::new(x, 0.3 + 1.5, -2.4), nx),
-                // On the office table (`pump_station`'s, at x 5.5: at 4.95
-                // the ledger lay off its end in the air).
-                on("ledger_open", Vec3::new(5.4, 0.3 + 0.785, -3.0), 0.2),
+                // On the office table's -X end (`pump_station`'s, 1.2 long
+                // at x 5.5: at 4.95 the ledger lay off its end in the air),
+                // clear of the loot in its middle.
+                on("ledger_open", Vec3::new(5.13, 0.3 + 0.785, -3.0), 0.0),
                 against("oil_cans", Vec3::new(-3.9, f, -z), pz, cans),
                 against("toolbox", Vec3::new(-x, f, 2.2), px, tools),
                 on(lamp, Vec3::new(-6.2, 0.3 + 0.94, -3.5), 0.0),
