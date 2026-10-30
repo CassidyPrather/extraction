@@ -327,6 +327,7 @@ fn press_camp(
     mut exit: MessageWriter<AppExit>,
     mut slot: Option<ResMut<crate::persist::SaveSlot>>,
     onboarding: Option<Res<crate::onboarding::Onboarding>>,
+    mut leaving: Option<ResMut<crate::rig::loading::Leaving>>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, .. } = ev else {
@@ -357,7 +358,13 @@ fn press_camp(
             CampCard::Title | CampCard::Career => {}
             CampCard::Training => {
                 raid.say("The driver nods at the yard. \"Take your time.\"");
-                leave(&opts, TRAINING_YARD, false, &mut exit);
+                leave(
+                    &opts,
+                    TRAINING_YARD,
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
             CampCard::NewCareer => {
                 let now = time.elapsed_secs();
@@ -371,7 +378,13 @@ fn press_camp(
                     if crate::persist::owns_profile(&opts) {
                         crate::persist::burn_career(&opts);
                     }
-                    leave(&opts, TRAINING_YARD, true, &mut exit);
+                    leave(
+                        &opts,
+                        TRAINING_YARD,
+                        true,
+                        &mut exit,
+                        leaving.as_deref_mut(),
+                    );
                 }
             }
             CampCard::PackUp => {
@@ -402,14 +415,27 @@ fn press_camp(
                     crate::persist::mark_trained(&opts);
                 }
                 raid.say("\"Right then.\" The engine turns over.");
-                leave(&opts, &crate::persist::next_valley(&opts), false, &mut exit);
+                leave(
+                    &opts,
+                    &crate::persist::next_valley(&opts),
+                    false,
+                    &mut exit,
+                    leaving.as_deref_mut(),
+                );
             }
         }
     }
 }
 
-/// End this session and open the game again in `map`.
-fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<AppExit>) {
+/// End this session and open the game again in `map` (in a headset,
+/// after the loading view has said where to: `rig::loading::Leaving`).
+fn leave(
+    opts: &LaunchOptions,
+    map: &str,
+    fresh: bool,
+    exit: &mut MessageWriter<AppExit>,
+    leaving: Option<&mut crate::rig::loading::Leaving>,
+) {
     info!(
         "camp: on to {map}{}",
         if fresh { " (new career)" } else { "" }
@@ -424,8 +450,14 @@ fn leave(opts: &LaunchOptions, map: &str, fresh: bool, exit: &mut MessageWriter<
     } else {
         crate::request_restart(map);
     }
-    if !opts.headless {
-        exit.write(AppExit::Success);
+    if opts.headless {
+        return;
+    }
+    match leaving {
+        Some(leaving) => leaving.go(map),
+        None => {
+            exit.write(AppExit::Success);
+        }
     }
 }
 

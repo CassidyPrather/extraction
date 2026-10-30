@@ -152,12 +152,14 @@ pub enum TextSource {
     TrainingList,
     /// The yard's first board, hung in the truck over the crate.
     TruckBoard,
+    /// The headset's loading view: the valley's name, or where to.
+    Loading,
     /// A dev mock-up (screenshot poses): not in the game.
     Dev,
 }
 
 impl TextSource {
-    pub const ALL: [TextSource; 22] = [
+    pub const ALL: [TextSource; 23] = [
         TextSource::Wrist,
         TextSource::Radio,
         TextSource::BenchDisplay,
@@ -179,6 +181,7 @@ impl TextSource {
         TextSource::StationBoard,
         TextSource::TrainingList,
         TextSource::TruckBoard,
+        TextSource::Loading,
         TextSource::Dev,
     ];
 
@@ -215,6 +218,7 @@ impl TextSource {
             TextSource::TruckBoard => {
                 read(MustRead, 1.2, 10.0, "standing in the bed, at the crate")
             }
+            TextSource::Loading => read(MustRead, 2.0, 0.0, "in the headset, between valleys"),
             TextSource::Dev => read(Incidental, 0.4, 0.0, "screenshots only"),
         }
     }

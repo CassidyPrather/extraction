@@ -70,6 +70,7 @@ if grep -E "Suggested Path Unsupported|PATH_UNSUPPORTED|Failed to initialize ope
     echo "FAIL: see above"; fail=1
 fi
 [ -f "$SHOT" ] || { echo "FAIL: no screenshot"; fail=1; }
+grep -q "loading view: lifted" "$LOG" || { echo "FAIL: the loading view never lifted (the world never shown)"; fail=1; }
 grep -q "^exit 0" "$LOG" || { echo "FAIL: the game didn't end cleanly ($(grep '^exit' "$LOG"))"; fail=1; }
 if [ "$MIR" = --headset ]; then
     grep -q "window: a card" "$LOG" || { echo "FAIL: no card on the window"; fail=1; }
@@ -77,7 +78,7 @@ fi
 if [ "${SIMULATED_HANDS:-0}" = 1 ]; then
     grep -q "fingers tracked" "$LOG" || { echo "FAIL: no tracked fingers"; fail=1; }
 fi
-grep -E "Loaded OpenXR runtime|Using system|XrCamera resolution|entered XR state|fingers tracked|Handtracking|hand_tracking" "$LOG" | sed 's/^.*INFO[^ ]* //' | sort -u
+grep -E "Loaded OpenXR runtime|Using system|XrCamera resolution|entered XR state|fingers tracked|Handtracking|hand_tracking|loading view" "$LOG" | sed 's/^.*INFO[^ ]* //' | sort -u
 echo "logs: $WORK (game.log, monado.log); window: $SHOT"
 rm -rf "${RUN:?}"
 }

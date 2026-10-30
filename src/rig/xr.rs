@@ -49,6 +49,7 @@ pub struct XrDriverPlugin;
 impl Plugin for XrDriverPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SessionGate>()
+            .add_plugins(super::loading::LoadingPlugin)
             .add_systems(PreUpdate, handle_session)
             .add_systems(Startup, create_actions.run_if(session_available))
             .add_systems(Update, (headset_missing, give_up_on_the_session))
@@ -89,36 +90,24 @@ impl Plugin for XrDriverPlugin {
     }
 }
 
-/// Longest the headset waits for the load before the session starts
-/// anyway (a stream that never finishes mustn't leave the player in the
-/// runtime's loader).
-pub const SESSION_WAIT_MAX: f32 = 20.0;
-
-/// Seconds the headset's been waiting for the load, once the runtime is
-/// ready for a session (`None`: not waiting).
+/// Marks a headset game (the XR driver's in): the warm-up keeps its
+/// proxy eye for the headset's eyes, and the shelf never goes on a view
+/// the player sees.
 #[derive(Resource, Default)]
-pub struct SessionGate {
-    pub waiting: Option<f32>,
-}
+pub struct SessionGate;
 
-/// `bevy_mod_xr`'s `auto_handle_session` (switched off in `lib.rs`), but
-/// the session is only created once the load has settled: no building
-/// still waiting on its props, the forest built and its impostors taken,
-/// every drawn thing's material ready (`timeline::WorldReady`), or
-/// [`SESSION_WAIT_MAX`] seconds on. Until then the runtime shows its
-/// own loader, and the first frame the player sees is a steady one (the
-/// load's own frames ran 60-100 ms each for a second, docs/PERFORMANCE.md
-/// "Hitches").
-#[allow(clippy::too_many_arguments)]
+/// `bevy_mod_xr`'s `auto_handle_session` (switched off in `lib.rs`): the
+/// session is created as soon as the runtime has a headset. The eyes show
+/// the loading view (`rig::loading`) until the world is in, ready and
+/// warm, where they used to wait in the runtime's own loader: on the
+/// playtest the player stood 23 s in SteamVR's empty room between valleys
+/// and took it for a crash.
 pub fn handle_session(
     mut state_changed: MessageReader<bevy_mod_xr::session::XrStateChanged>,
     mut create: MessageWriter<bevy_mod_xr::session::XrCreateSessionMessage>,
     mut begin: MessageWriter<bevy_mod_xr::session::XrBeginSessionMessage>,
     mut end: MessageWriter<bevy_mod_xr::session::XrEndSessionMessage>,
     mut destroy: MessageWriter<bevy_mod_xr::session::XrDestroySessionMessage>,
-    mut gate: ResMut<SessionGate>,
-    world: crate::render::timeline::WorldReady,
-    time: Res<Time<Real>>,
     mut no_auto_restart: Local<bool>,
 ) {
     use bevy_mod_xr::session::{XrState, XrStateChanged};
@@ -126,7 +115,9 @@ pub fn handle_session(
         match state {
             XrState::Available => {
                 if !*no_auto_restart {
-                    gate.waiting = Some(0.0);
+                    info!("headset: starting the session (the loading view until the world is in)");
+                    crate::render::timeline::mark("headset session asked for");
+                    create.write_default();
                 }
             }
             XrState::Ready => {
@@ -141,25 +132,6 @@ pub fn handle_session(
             }
             _ => (),
         }
-    }
-    let Some(waited) = gate.waiting.as_mut() else {
-        return;
-    };
-    *waited += time.delta_secs();
-    let settled = world.ready();
-    if settled || *waited >= SESSION_WAIT_MAX {
-        info!(
-            "headset: starting the session after {:.1} s ({})",
-            *waited,
-            if settled {
-                "the load has settled"
-            } else {
-                "gave up waiting on the load"
-            }
-        );
-        crate::render::timeline::mark("headset session asked for");
-        create.write_default();
-        gate.waiting = None;
     }
 }
 
@@ -317,10 +289,10 @@ fn report_input(
     }
 }
 
-/// Longest the words wait on a headset that was asked for (the load's
-/// own wait, [`SESSION_WAIT_MAX`], and some): after it, a window it is
-/// (the yard says its opening again if a headset does start later).
-pub const DRIVER_WAIT_MAX: f32 = SESSION_WAIT_MAX + 40.0;
+/// Longest the words wait on a headset that was asked for: after it, a
+/// window it is (the yard says its opening again if a headset does start
+/// later).
+pub const DRIVER_WAIT_MAX: f32 = 60.0;
 
 fn give_up_on_the_session(
     mut commands: Commands,
@@ -770,7 +742,7 @@ fn dress_eyes(
 /// `--mirror`: a window view of what the left eye sees, for whoever is
 /// watching the player (and for screenshots of the headset's view).
 #[derive(Component)]
-struct Mirror;
+pub(crate) struct Mirror;
 
 fn follow_mirror(
     mut commands: Commands,
@@ -1170,54 +1142,25 @@ mod tests {
         app.world().resource::<Created>().0
     }
 
-    /// The headset waits while a building waits on its props or the forest
-    /// isn't built, and starts its session once both are done.
+    /// The session is asked for as soon as the runtime has a headset,
+    /// load or no load (the loading view covers it), and once.
     #[test]
-    fn the_session_waits_for_the_load() {
+    fn the_session_starts_at_once() {
         let mut app = app();
-        let building = app
-            .world_mut()
-            .spawn(crate::world::buildings::PropsPending(0))
-            .id();
-        for _ in 0..5 {
-            app.update();
-            assert_eq!(created(&app), 0, "not while a building waits on props");
-        }
-        app.world_mut().despawn(building);
-        for _ in 0..5 {
-            app.update();
-            assert_eq!(created(&app), 0, "not before the forest is built");
-        }
         app.world_mut()
-            .insert_resource(crate::world::trees::ForestBuilt);
+            .spawn(crate::world::buildings::PropsPending(0));
         app.update();
-        assert_eq!(created(&app), 1, "settled: the session starts");
+        assert_eq!(
+            created(&app),
+            1,
+            "at once, a building still waiting on props"
+        );
         for _ in 0..5 {
             app.update();
             assert_eq!(created(&app), 1, "once");
         }
     }
 
-    /// A load that never settles still lets the player in.
-    #[test]
-    fn the_session_gives_up_waiting() {
-        let mut app = app();
-        app.world_mut()
-            .spawn(crate::world::buildings::PropsPending(0));
-        app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
-            std::time::Duration::from_secs(1),
-        ));
-        let mut at = None;
-        for i in 0..40 {
-            app.update();
-            if created(&app) > 0 {
-                at = Some(i);
-                break;
-            }
-        }
-        let at = at.expect("the session started in the end");
-        assert!(at >= 19, "not before {SESSION_WAIT_MAX} s (frame {at})");
-    }
     /// Cameras drawing to the window (the eyes draw to the swapchain).
     fn on_window(app: &mut App) -> usize {
         let w = app.world_mut();
