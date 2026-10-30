@@ -1172,6 +1172,7 @@ mod tests {
     #[test]
     fn a_wrecks_loot_lies_in_reach() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -1284,6 +1285,7 @@ mod tests {
         use crate::bot::{Bot, Task};
         use crate::rig::Side;
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
