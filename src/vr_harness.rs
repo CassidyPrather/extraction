@@ -4821,6 +4821,37 @@ mod body {
         );
     }
 
+    /// Walking round the room, the hips come with you: the head bobs a
+    /// little and looks down at the legs, and the body stays upright over
+    /// them instead of leaning from hips left behind (the 28 October
+    /// playtest: "as I am moving my legs around the space the hips of the
+    /// character model are staying in place and it looks like I am instead
+    /// tilting around").
+    #[test]
+    fn walking_round_the_room_the_hips_come_along() {
+        let (mut vr, _) = standing();
+        let mut worst = 0.0f32;
+        let frames = 135;
+        for i in 0..=frames {
+            let t = i as f32 / 90.0;
+            let along = 1.2 * i as f32 / frames as f32;
+            let bob = 0.02 * (t * std::f32::consts::TAU * 1.8).sin();
+            look(
+                &mut vr,
+                Vec3::new(0.3 * along, 1.62 + bob, -along),
+                -0.25,
+                -0.5,
+            );
+            vr.step(1);
+            if i > 20 {
+                let st = stance(&vr);
+                let off = (st.neck - st.pelvis.translation).with_y(0.0).length();
+                worst = worst.max(off);
+            }
+        }
+        assert!(worst < 0.06, "the hips trailed the neck by {worst} m");
+    }
+
     /// Straight out at arm's length and a little beyond: the shoulder
     /// comes forward (no further than a shoulder goes) and the drawn arm
     /// reaches the hand from it, not from somewhere off the body.
