@@ -737,13 +737,11 @@ fn tether_sounds(
     mut loops: Query<(Entity, &WinchLoop, &mut Transform, &mut PlaybackSettings)>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
-    mut by: Local<std::collections::HashMap<Entity, Entity>>,
 ) {
     for (player, t) in &held {
         let Ok(at) = places.get(t.by).map(|g| g.translation() + Vec3::Y * 1.0) else {
             continue;
         };
-        by.insert(player, t.by);
         let strain = winch_speed(t.left);
         match loops.iter_mut().find(|(_, l, ..)| l.0 == player) {
             Some((_, _, mut tf, mut settings)) => {
@@ -788,7 +786,6 @@ fn tether_sounds(
                 );
             }
         }
-        by.remove(&player);
     }
 }
 

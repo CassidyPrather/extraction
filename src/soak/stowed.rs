@@ -229,7 +229,7 @@ fn what_goes_in_the_pack_stays_where_it_was_put() {
 /// it lay: everything came back stood upright).
 #[test]
 fn a_save_keeps_what_is_in_the_pack_and_the_crate_as_it_lay() {
-    use crate::raid::truck::{STASH_OUTER, Stash};
+    use crate::raid::truck::Stash;
     let dir = std::env::temp_dir().join(format!("extraction-stowed-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
