@@ -71,7 +71,7 @@ struct RobotMats {
     /// Cyan running lights on weak points (rotors, knees, vents): brighter
     /// than the kit's `Glow`, to carry through fog at 30-80 m.
     glow: Handle<StandardMaterial>,
-    /// Drone beacons: amber, one material for them all, blinked by
+    /// Drone beacons: cool white, one material for them all, blinked by
     /// `blink_beacons`.
     beacon: Handle<StandardMaterial>,
     /// The soft additive glow round a drone's beacon, flashing with it.
@@ -166,7 +166,7 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
             ..default()
         }),
         beacon: materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.75, 0.4),
+            base_color: Color::srgb(0.85, 0.9, 1.0),
             emissive: BEACON_ON * BEACON_REST,
             ..default()
         }),
@@ -258,7 +258,7 @@ fn robot_material(
                 mat.emissive = LinearRgba::rgb(0.22, 0.22, 0.23);
             })
         }
-        Some(name) => model_mats.get(name, lib, server, materials),
+        Some(name) => model_mats.get(super::weak_points::paint(name), lib, server, materials),
         None => m.dark.clone(),
     }
 }
@@ -1222,13 +1222,14 @@ fn scan_beams(
 }
 
 /// A beacon at full flash, and how much of it glows between flashes.
-const BEACON_ON: LinearRgba = LinearRgba::rgb(40.0, 24.0, 8.0);
+/// (A cool white: orange is a weak point's, `weak_points::SHOOT_HERE`.)
+const BEACON_ON: LinearRgba = LinearRgba::rgb(30.0, 34.0, 44.0);
 const BEACON_REST: f32 = 0.06;
 /// Seconds between flashes, and how long each lasts.
 const BEACON_PERIOD: f32 = 1.3;
 const BEACON_FLASH: f32 = 0.18;
-/// The halo's colour (amber, like the beacon).
-const HALO: Color = Color::LinearRgba(LinearRgba::new(2.4, 1.3, 0.45, 1.0));
+/// The halo's colour (white, like the beacon).
+const HALO: Color = Color::LinearRgba(LinearRgba::new(1.6, 1.8, 2.4, 1.0));
 
 /// How bright a beacon is `t` seconds in: a short flash each period, a
 /// faint glow between (a blink in the corner of the eye finds a drone in

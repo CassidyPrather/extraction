@@ -109,7 +109,12 @@ fn finish_dressing(
             continue;
         };
         let mut mat = |name: Option<&str>| {
-            model_mats.get(name.unwrap_or("Dark"), &mut lib, &server, &mut materials)
+            model_mats.get(
+                crate::robots::weak_points::paint(name.unwrap_or("Dark")),
+                &mut lib,
+                &server,
+                &mut materials,
+            )
         };
         for node in &model {
             let holder = commands
