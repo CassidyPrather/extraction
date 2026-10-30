@@ -411,6 +411,25 @@ themselves; a radio you carry hears the chatter. Each step is a
 message (`Noticed`, `Investigating`, `Searching`, `LostYou`, `CalledOut`)
 for sound and the wrist.
 
+**Every machine says what it's about toward you** (playtest F3, "what is this machine doing to me?"). Every machine sends the shared `search::MindShift` that `robot_voice` speaks:
+- the minelayer: `Noticed` when it sees you, `Retreating` when it turns tail, `Idle` back at its sowing;
+- the sentry: `Noticed` at its chirp;
+- the spotter: `Noticed` when it starts fixing you, `Calling` at its klaxon;
+- the grappler: `Calling` when its line bites, since it's holding you for the others.
+
+A grappler's line is **one at a time**. The first to spear you has you for 12 s after each throw; the others close in and wait. Two used to take turns and pulled the tester back and forth (1:03:28).
+
+`intent_roster` holds every `spawn_*` in `robots/` to this. Spawned in front of you, each says it's seen you within 12 s, or it's excused on the roster with a reason (the mender mends machines; the plough keeps its lane).
+
+**A walker keeps its feet out of the walls** (0:57:47). Its feet stand 1.05 m from its middle, and it's kinematic, so nothing pushes it out of a wall. The grid kept it 0.6 m off. Walkers now path on `walker::walker_grid`, where buildings and anything 2 m or more across are kept 1.6 m off. Every outdoor path is then bent out to 1.3 m (`keep_off_walls`), because a path between 2 m cells cuts nearer than the cells' middles. `walkers_keep_their_feet_out_of_walls` checks paths round houses in all five valleys against the building boxes.
+
+**How far they notice you, and how far a fight pulls** (P1, with Map design):
+- sight: walker 60 m (was 75), drone 70 (90), pylon 70 (85);
+- a gunshot carries 90–190 m (was 120–280): a pistol about 105 m, a rifle 150;
+- Map design caps notice per region in its hot zones, and keeps those zones further apart than a fight's pull.
+
+A sim run logs `pulled` (from how far a machine left to go and look) for counting it.
+
 **One that lost you, coming back, is heard and told** (`search::ComingBack`). Say a machine that was fighting you is now out of your sight, and coming your way within 55 m. That covers two cases:
 - it's looking where it lost you;
 - it's walking back past you to its post, having given up.
@@ -436,6 +455,30 @@ In the replay of that return (`a_walker_walking_back_past_you_is_told_well_befor
 The time is there: a runner's hard to hit (`CROSSING_SPREAD`). The driver's old advice wasn't. "Run across it, to cover" sent people looking for cover, and the bots stopped behind a wall. A wall or a tree hides no one from 10 m up, and a roof is most often 60 m off. The line now names what works in the open: "Don't stop. Sprint across it. A runner's hard to hit." Then: "Only a roof stops it. Walls and trees don't. Keep going."
 
 The lock's tells are a placed chirp with a hard tick, and a red light under the drone for the 0.9 s lock. The light reaches 8 m, and the drone sits 20 m off and 10 m up, so in daylight it's the sound that reads. Whether it reads in the headset is for the playtest transcript.
+
+**A drone a pistol in a headset can fight** (playtest, 28 October, 1:05:24: "moving way too fast for somebody in VR to possibly have a shot … have the drone hold still"). `drone_drill`'s shooter models a VR pistol shot:
+- aiming where it saw the drone 0.25 s ago;
+- a 1.2° wobble;
+- a round every 0.45 s, eight to a magazine, 2.5 s to change, three magazines;
+- each round through the real ballistics.
+
+The drone's fight was:
+- circling at 0.35 rad/s, and 0.9 rad/s while you aim at it: 20 and 52° a second across your view;
+- a 0.9 s lock.
+
+Now it fights like this:
+- It **holds still** while it locks on (1.5 s, the chirp's lead), through each burst, and for 1.2 s after (`drone::holding`).
+- It circles at 0.15 rad/s, and 0.25 while you aim at it (9 and 14° a second).
+- It flies at 0.6 of its push.
+
+| 8 spots a valley | Before (Marrow Creek) | Now (Marrow Creek, Kettle Pass) |
+|---|---|---|
+| Shooting it: rounds that did any harm | 0 of 192 | hit in 14 of 16 fights |
+| Shooting it: out of the fight (wrecked, a rotor or its gun gone) | 0 of 8 | 10 of 16, median 9 s, 9–21 rounds |
+| Shooting it: the shooter down | 0 of 8 | 0 of 16 |
+| Standing still | 8 of 8 down, 11–26 s | 16 of 16 down, 10–25 s |
+
+It's still deadly to someone who stands in the open and does nothing. Fought, it's a fair fight. Robot bodies' bigger rotor and eye hit volumes (F2) make it fairer again.
 
 **Every attack has a tell.** Drones chirp and settle 0.9 s; walkers'
 turrets settle 0.7 s (`WalkerAim`); grapplers rear back 0.6 s before a

@@ -41,10 +41,16 @@ impl Shell {
     /// The shell of `building`, a `prefab` placed at `xf`.
     pub fn of(building: Entity, prefab: &str, xf: Transform) -> Self {
         let size = extraction_core::map::prefab_footprint(prefab);
+        // An underground site's only walls up top are its entrance kiosk's.
+        let half = if extraction_core::underground::is_site(prefab) {
+            Vec2::from(extraction_core::underground::SHELL_HALF)
+        } else {
+            Vec2::new(size[0], size[2]) * 0.5
+        };
         Self {
             building,
             xf,
-            half: Vec2::new(size[0], size[2]) * 0.5,
+            half,
             height: size[1],
             cover: crate::world::buildings::roof_cover(prefab),
         }

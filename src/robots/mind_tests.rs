@@ -5222,3 +5222,98 @@ fn a_walker_walking_back_past_you_is_told_well_before() {
     assert!(firsts.met(crate::onboarding::firsts::First::ComingToLook));
     assert!(said_coming_back(&app), "the wrist says it's coming back");
 }
+
+/// Playtest, 28 October, 0:57:47: a walker through a house wall. Its feet
+/// stand `anim::FOOT_RADIUS` out from its middle; in every valley, a walker's
+/// paths round the buildings keep its middle at least that (and a hand's
+/// breadth) off every building's walls.
+#[test]
+fn walkers_keep_their_feet_out_of_walls() {
+    const GAP: f32 = super::anim::FOOT_RADIUS + 0.1;
+    let mut worst: Vec<String> = vec![];
+    for map in [
+        "marrow_creek",
+        "cinder_works",
+        "kettle_pass",
+        "rime_fell",
+        "sallow_reservoir",
+    ] {
+        let (app, _, zone) = app_with(crate::LaunchOptions {
+            robots: false,
+            map: map.into(),
+            ..Default::default()
+        });
+        let nav = app.world().resource::<super::walker::Nav>().0.clone();
+        let shells = app
+            .world()
+            .resource::<super::doors::Entrances>()
+            .shells
+            .clone();
+        // From the middle of each box: (local point, half extents).
+        let off_wall = |p: Vec2| {
+            shells
+                .iter()
+                .map(|s| {
+                    let l = s.xf.compute_affine().inverse().transform_point3(Vec3::new(
+                        p.x,
+                        s.xf.translation.y,
+                        p.y,
+                    ));
+                    let dx = (l.x.abs() - s.half.x).max(0.0);
+                    let dz = (l.z.abs() - s.half.y).max(0.0);
+                    Vec2::new(dx, dz).length()
+                })
+                .fold(f32::MAX, f32::min)
+        };
+        let mut rng = extraction_core::noise::Rng::new(28);
+        let mut least = (f32::MAX, Vec2::ZERO);
+        // Round each house: from one side of it to the other.
+        for s in shells.iter().take(60) {
+            let c = s.xf.translation.xz();
+            let r = s.half.length() + 8.0;
+            for _ in 0..2 {
+                let a = rng.range(0.0, std::f32::consts::TAU);
+                let from = c + Vec2::new(a.cos(), a.sin()) * r;
+                let to = c - Vec2::new(a.cos(), a.sin()) * r;
+                if !nav.walkable(from.to_array()) || !nav.walkable(to.to_array()) {
+                    continue;
+                }
+                let Some(path) = nav.path(from.to_array(), to.to_array()) else {
+                    continue;
+                };
+                // As a walker follows it (`walker_brain`).
+                let path = super::walker::keep_off_walls(
+                    path.iter()
+                        .skip(1)
+                        .map(|q| Vec3::new(q[0], 0.0, q[1]))
+                        .collect(),
+                    Vec3::new(from.x, 0.0, from.y),
+                    &shells,
+                );
+                let mut last = from;
+                for q in path.iter().map(|q| q.xz()) {
+                    let n = (last.distance(q) / 0.25).ceil().max(1.0) as usize;
+                    for k in 0..=n {
+                        let p = last.lerp(q, k as f32 / n as f32);
+                        let d = off_wall(p);
+                        if d < least.0 {
+                            least = (d, p);
+                        }
+                    }
+                    last = q;
+                }
+            }
+        }
+        let _ = &zone;
+        if least.0 < GAP {
+            worst.push(format!(
+                "{map}: {:.2} m off a wall at {:.0}",
+                least.0, least.1
+            ));
+        }
+    }
+    assert!(
+        worst.is_empty(),
+        "walker paths closer than {GAP:.2} m to a building: {worst:?}"
+    );
+}

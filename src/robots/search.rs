@@ -211,6 +211,7 @@ impl Plugin for SearchPlugin {
                 (call_out, forget_the_downed).after(super::perceive),
             )
             .add_systems(FixedPostUpdate, (announce, coming_back).chain())
+            .add_systems(Update, log_pulled)
             .add_systems(Update, wrist_lines);
     }
 }
@@ -707,6 +708,32 @@ fn announce(
     looked.retain(|e, _| seen.contains(e));
     log.last.retain(|e, _| seen.contains(e));
     log.hurt.retain(|e, _| seen.contains(e));
+}
+
+/// A sim run's telemetry: a machine left what it was doing to go and look
+/// at something (a shot, a call, a line's song), and from how far (`pulled`;
+/// Map design counts a fight's pull with it, playtest P1).
+fn log_pulled(
+    log: Option<ResMut<crate::sim::telemetry::SimLog>>,
+    mut looking: MessageReader<Investigating>,
+    robots: Query<(&Robot, Option<&super::Breed>)>,
+) {
+    let Some(mut log) = log else {
+        looking.clear();
+        return;
+    };
+    for l in looking.read() {
+        let Ok((robot, breed)) = robots.get(l.robot) else {
+            continue;
+        };
+        log.event(
+            "pulled",
+            serde_json::json!({"robot": super::robot_name(robot.kind, breed),
+                "from": crate::sim::telemetry::round(flat(l.toward - l.at), 1),
+                "x": crate::sim::telemetry::round(l.at.x, 1),
+                "z": crate::sim::telemetry::round(l.at.z, 1)}),
+        );
+    }
 }
 
 /// How each robot stands with the local player, for [`coming_back`].

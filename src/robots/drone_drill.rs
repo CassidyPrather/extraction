@@ -58,7 +58,26 @@ pub enum Go {
     Roof,
     /// Sprint across its line, and keep going (no roof).
     Across,
+    /// Stand and shoot it with a pistol, as a person in a headset does
+    /// ([`AIM_LAG`], [`AIM_JITTER`], [`SHOT_EVERY`]).
+    Shoot,
 }
+
+/// The shooter aims where they saw it this long ago (s): eye to hand to
+/// trigger, tracking a moving thing.
+pub const AIM_LAG: f32 = 0.25;
+/// ...give or take this (radians, one sigma each way): a pistol held out
+/// in a headset.
+pub const AIM_JITTER: f32 = 0.021;
+/// An aimed shot this often (s)...
+pub const SHOT_EVERY: f32 = 0.45;
+/// ...eight to a magazine, this long to change it (s), three magazines.
+pub const MAG: u32 = 8;
+pub const RELOAD: f32 = 2.5;
+pub const MAGS: u32 = 3;
+/// The pistol's round (the PM's: `items.ron`).
+const ROUND_SPEED: f32 = 315.0;
+const ROUND_DAMAGE: f32 = 34.0;
 
 #[derive(Clone, Debug)]
 pub struct Run {
@@ -72,6 +91,24 @@ pub struct Run {
     /// In under the roof, before it was down (s).
     pub in_at: Option<f32>,
     pub hp: f32,
+    /// Shooting it: rounds fired, and when it was brought down (s, from
+    /// when it came at you).
+    pub shots: u32,
+    pub killed: Option<f32>,
+    /// What the rounds did to its parts (hp).
+    pub dealt: f32,
+    /// Out of the fight: wrecked, a rotor gone (it sinks) or its gun gone
+    /// (s, from when it came at you).
+    pub crippled: Option<f32>,
+    /// When it locked on, from when it came at you (s).
+    pub locked_at: Option<f32>,
+}
+
+/// One normal draw.
+fn normal(rng: &mut Rng) -> f32 {
+    let u = rng.range(1e-6, 1.0);
+    let v = rng.range(0.0, std::f32::consts::TAU);
+    (-2.0 * u.ln()).sqrt() * v.cos()
 }
 
 /// Every open-ground spot in a valley, and how far its nearest roof is.
@@ -221,7 +258,16 @@ fn run(
         down: None,
         in_at: None,
         hp: 100.0,
+        shots: 0,
+        killed: None,
+        dealt: 0.0,
+        crippled: None,
+        locked_at: None,
     };
+    // Where it was, for the shooter's lag.
+    let mut seen: std::collections::VecDeque<(f32, Vec3)> = Default::default();
+    let mut next_shot = 1.0;
+    let mut in_mag = MAG;
     let t0 = app.world().resource::<Time>().elapsed_secs();
     let mut lock: Option<f32> = None;
     for _ in 0..((RUN_TIME + 10.0) * HZ) as usize {
@@ -230,6 +276,80 @@ fn run(
             lock = app.world().resource::<Locked>().0;
         }
         let since = lock.map(|l| now - l);
+        if out.locked_at.is_none() {
+            out.locked_at = lock.map(|l| l - t0);
+        }
+        if out.crippled.is_none() {
+            let mut parts = app.world_mut().query::<&super::RobotPart>();
+            let out_of_it = app
+                .world()
+                .get::<super::Robot>(drone)
+                .is_none_or(|r| r.wrecked)
+                || parts.iter(app.world()).any(|p| {
+                    p.robot == drone
+                        && !p.alive()
+                        && matches!(p.role, super::PartRole::Rotor(_) | super::PartRole::Weapon)
+                });
+            if out_of_it {
+                out.crippled = Some(now - t0);
+            }
+        }
+        // Shooting it.
+        if go == Go::Shoot && out.killed.is_none() && out.crippled.is_none() {
+            let them = app
+                .world()
+                .get::<GlobalTransform>(drone)
+                .map(|g| g.translation());
+            let wrecked = app
+                .world()
+                .get::<super::Robot>(drone)
+                .is_none_or(|r| r.wrecked);
+            if wrecked {
+                out.killed = Some(now - t0);
+            } else if let Some(them) = them {
+                seen.push_back((now, them));
+                while seen.len() > 2 && seen[1].0 <= now - AIM_LAG {
+                    seen.pop_front();
+                }
+                let aim = seen.front().map_or(them, |s| s.1);
+                let eye = at + Vec3::Y * 1.6;
+                // Looking at it, down the sights (the drone sees that).
+                if let Some(mut r) = app.world_mut().get_mut::<RigInput>(player) {
+                    let to = (aim - eye).normalize_or(Vec3::NEG_Z);
+                    r.head.rotation = Transform::IDENTITY.looking_to(to, Vec3::Y).rotation;
+                }
+                let left = MAG * MAGS - out.shots;
+                if now - t0 >= next_shot && left > 0 && eye.distance(aim) < 50.0 {
+                    let dir = (aim - eye).normalize_or(Vec3::NEG_Z);
+                    let right = dir.cross(Vec3::Y).normalize_or(Vec3::X);
+                    let up = right.cross(dir);
+                    let dir = (dir
+                        + right * (normal(rng) * AIM_JITTER).tan()
+                        + up * (normal(rng) * AIM_JITTER).tan())
+                    .normalize();
+                    app.world_mut()
+                        .write_message(crate::weapons::ballistics::Shot {
+                            gun: player,
+                            shooter: Some(player),
+                            origin: eye + dir * 0.4,
+                            direction: dir,
+                            speed: ROUND_SPEED,
+                            damage: ROUND_DAMAGE,
+                            projectiles: 1,
+                            spread: 0.0,
+                            recoil: 0.0,
+                            seed: rng.next_u64(),
+                        });
+                    out.shots += 1;
+                    in_mag -= 1;
+                    next_shot += SHOT_EVERY;
+                    if in_mag == 0 {
+                        in_mag = MAG;
+                        next_shot += RELOAD;
+                    }
+                }
+            }
+        }
         // The driver's word comes at the lock; a beat to take it in.
         let going = go != Go::Stand && since.is_some_and(|s| s > 0.5) && out.in_at.is_none();
         let mut v = Vec2::ZERO;
@@ -266,18 +386,37 @@ fn run(
                 out.down = Some(s);
                 break;
             }
-            if s > RUN_TIME {
+            if s > RUN_TIME || out.killed.is_some() || out.crippled.is_some() {
                 break;
             }
-        } else if now - t0 > 15.0 {
+        } else if now - t0 > 15.0 || out.killed.is_some() || out.crippled.is_some() {
             break;
         }
     }
+    let mut parts = app.world_mut().query::<&super::RobotPart>();
+    out.dealt = parts
+        .iter(app.world())
+        .filter(|p| p.robot == drone)
+        .map(|p| p.max_hp - p.hp.max(0.0))
+        .sum();
     app.world_mut().despawn(drone);
     for _ in 0..3 {
         app.update();
     }
     out
+}
+
+/// The arms a batch runs (`SIM_DRONE_ARMS`, e.g. "Stand,Shoot"; all by
+/// default).
+fn arms() -> Vec<Go> {
+    let all = [Go::Stand, Go::Roof, Go::Across, Go::Shoot];
+    match std::env::var("SIM_DRONE_ARMS") {
+        Ok(v) => all
+            .into_iter()
+            .filter(|g| v.split(',').any(|a| a.trim() == format!("{g:?}")))
+            .collect(),
+        Err(_) => all.to_vec(),
+    }
 }
 
 pub fn drill(valley: &'static str, seed: u64) -> (Vec<(Vec2, f32)>, Vec<Run>) {
@@ -295,7 +434,7 @@ pub fn drill(valley: &'static str, seed: u64) -> (Vec<(Vec2, f32)>, Vec<Run>) {
             .map(|w| w.1)
             .unwrap_or(p);
         let seed_rng = rng.next_u64();
-        for go in [Go::Stand, Go::Roof, Go::Across] {
+        for go in arms() {
             let mut r = Rng::new(seed_rng);
             runs.push(run(
                 &mut app, player, &zone, valley, p, roof, inside, go, &mut r,
@@ -311,7 +450,11 @@ fn drone_drill() {
     use std::io::Write;
     let path = std::env::var("SIM_DRILL_OUT").unwrap_or_else(|_| "target/drone_drill.jsonl".into());
     let mut f = std::fs::File::create(&path).unwrap();
+    let only = std::env::var("SIM_DRONE_VALLEYS").ok();
     for v in VALLEYS {
+        if only.as_ref().is_some_and(|o| !o.split(',').any(|x| x == v)) {
+            continue;
+        }
         let (ground, runs) = drill(v, 1);
         let mut d: Vec<f32> = ground.iter().map(|g| g.1).collect();
         d.sort_by(f32::total_cmp);
@@ -329,7 +472,8 @@ fn drone_drill() {
                 f,
                 "{}",
                 serde_json::json!({"valley": r.valley, "go": format!("{:?}", r.go), "roof": r.roof,
-                    "first_hit": r.first_hit, "down": r.down, "in_at": r.in_at, "hp": r.hp})
+                    "first_hit": r.first_hit, "down": r.down, "in_at": r.in_at, "hp": r.hp,
+                    "shots": r.shots, "killed": r.killed, "dealt": r.dealt, "crippled": r.crippled, "locked_at": r.locked_at})
             )
             .unwrap();
             println!("{r:?}");
@@ -384,4 +528,102 @@ fn in_the_open_a_runner_outlasts_a_drone() {
     assert!(stood.first_hit.is_some(), "it fires: {stood:?}");
     assert!(stood.down.is_some(), "stood still, down: {stood:?}");
     assert!(ran.down.is_none(), "running across it, still up: {ran:?}");
+}
+
+/// The drill's rounds go where they're aimed: ten at a drone hovering
+/// still, 20 m off, bring it down (or the shooter's misses would be the
+/// model's, not the drone's).
+#[test]
+fn the_drills_rounds_land_on_a_still_drone() {
+    let (mut app, player, zone) = valley_app("marrow_creek");
+    let at = zone.on_ground(40.0, 255.0);
+    put(&mut app, player, at, Vec2::ZERO);
+    let from = at + Vec3::new(0.0, 8.0, 20.0);
+    let mut queue = CommandQueue::default();
+    let drone = {
+        let mut c = Commands::new(&mut queue, app.world());
+        super::drone::spawn_drone(
+            &mut c,
+            from,
+            Job {
+                kind: JobKind::Watch,
+                site: from,
+                duration: 999.0,
+                exit: from,
+            },
+        )
+    };
+    queue.apply(app.world_mut());
+    for _ in 0..90 {
+        app.update();
+    }
+    for i in 0..10 {
+        let them = app
+            .world()
+            .get::<GlobalTransform>(drone)
+            .unwrap()
+            .translation();
+        let eye = at + Vec3::Y * 1.6;
+        let dir = (them - eye).normalize();
+        app.world_mut()
+            .write_message(crate::weapons::ballistics::Shot {
+                gun: player,
+                shooter: Some(player),
+                origin: eye + dir * 0.4,
+                direction: dir,
+                speed: ROUND_SPEED,
+                damage: ROUND_DAMAGE,
+                projectiles: 1,
+                spread: 0.0,
+                recoil: 0.0,
+                seed: i,
+            });
+        for _ in 0..20 {
+            app.update();
+        }
+    }
+    let mut parts = app.world_mut().query::<&super::RobotPart>();
+    let dealt: f32 = parts
+        .iter(app.world())
+        .filter(|p| p.robot == drone)
+        .map(|p| p.max_hp - p.hp.max(0.0))
+        .sum();
+    let wrecked = app
+        .world()
+        .get::<super::Robot>(drone)
+        .is_none_or(|r| r.wrecked);
+    assert!(dealt > 0.0 && wrecked, "dealt {dealt}, wrecked {wrecked}");
+}
+
+/// Playtest, 28 October, 1:05:24: "way too fast for somebody in VR to
+/// possibly have a shot". With a pistol, as a person in a headset aims
+/// ([`AIM_LAG`], [`AIM_JITTER`]), a drone on you in the open is brought out
+/// of the fight in most fights (it holds still to lock and to fire; it
+/// circles slowly enough to follow). It was in none.
+#[test]
+fn a_pistol_in_a_headset_can_take_a_drone_out() {
+    let (mut app, player, zone) = valley_app("marrow_creek");
+    app.init_resource::<Locked>().add_systems(Last, locked);
+    let ground = open_ground(&app, &zone);
+    let mut rng = Rng::new(31);
+    let mut out = 0;
+    let mut runs = vec![];
+    for _ in 0..3 {
+        let (p, roof) = ground[rng.below(ground.len())];
+        let mut r = Rng::new(rng.next_u64());
+        let run = run(
+            &mut app,
+            player,
+            &zone,
+            "marrow_creek",
+            p,
+            roof,
+            p,
+            Go::Shoot,
+            &mut r,
+        );
+        out += run.crippled.is_some() as u32;
+        runs.push(run);
+    }
+    assert!(out >= 2, "out of the fight in {out} of 3: {runs:?}");
 }
