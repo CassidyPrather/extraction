@@ -290,8 +290,11 @@ mod tests {
             let map = MapDef::from_ron(src).unwrap();
             let hm = Heightmap::build(&map);
             let rocks = scatter_rocks(&map, &hm);
+            // A thousand at least to the standard valley's area (640 m a
+            // side).
+            let least = (1000.0 * (map.size / 640.0).powi(2)) as usize;
             assert!(
-                (1000..20000).contains(&rocks.len()),
+                (least..20000).contains(&rocks.len()),
                 "{}: {} rocks",
                 map.name,
                 rocks.len()

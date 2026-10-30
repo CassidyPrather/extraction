@@ -242,6 +242,7 @@ mod tests {
     #[test]
     fn a_grappler_spears_a_player_in_reach() {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };
@@ -310,6 +311,7 @@ mod tests {
     fn two_grapplers_dont_pull_you_back_and_forth() {
         let opts = crate::LaunchOptions {
             robots: false,
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);

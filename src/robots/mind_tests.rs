@@ -18,6 +18,7 @@ fn listen(mut s: MessageReader<Searching>, mut heard: ResMut<Heard>) {
 
 fn app(weather: Option<&str>) -> (App, Entity, Zone) {
     app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         weather: weather.map(Into::into),
         ..Default::default()
@@ -350,7 +351,13 @@ fn crouched_in_grass_in_fog_at_30m_you_are_not_seen() {
 /// walls, not just open field.
 #[test]
 fn a_search_takes_in_doorways_and_cover() {
-    let (app, _, _) = app(None);
+    // A valley's own doors (the test field gets none of the valleys'
+    // dressing, and its first door is the depot's ramp).
+    let (app, _, _) = app_with(crate::LaunchOptions {
+        robots: false,
+        map: "marrow_creek".into(),
+        ..Default::default()
+    });
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
     // Every door with open ground before it, whichever the valley's
@@ -983,6 +990,7 @@ fn lit_torch(app: &mut App, me: Vec3) -> Entity {
 #[test]
 fn at_night_you_are_unseen_until_you_light_a_torch() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         hour: Some("night".into()),
         ..Default::default()
@@ -3155,6 +3163,7 @@ fn watchers_near(app: &mut App, at: Vec3) -> usize {
 #[test]
 fn a_fresh_career_is_unaffected_by_memory() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3247,6 +3256,7 @@ fn a_raid_is_remembered() {
 #[test]
 fn a_walker_is_left_watching_where_you_killed_one() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3288,6 +3298,7 @@ fn a_walker_is_left_watching_where_you_killed_one() {
 #[test]
 fn a_sentry_minds_your_favourite_rendezvous() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
