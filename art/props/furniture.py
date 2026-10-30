@@ -147,6 +147,48 @@ def shelf_metal():
 
 # --- Bed --------------------------------------------------------------------------------------
 
+def pillow(p, at, hx, hz, h, mat="Ticking", nu=14, nv=10):
+    """A stuffed pillow lying on `at` (its underside's middle): `hx` by
+    `hz` half size, `h` thick in the middle, puffed in the middle and
+    pinched to its four corners, piped round its seam. (A squashed sphere
+    read as a capsule: the 28 October playtest, 0:24:17.)"""
+    bm = p.bm
+    cx, cy, cz = at
+
+    def surf(u, v, side):
+        # The outline draws in a little between the corners.
+        x = hx * u * (1.0 - 0.07 * v * v)
+        z = hz * v * (1.0 - 0.09 * u * u)
+        puff = (max(0.0, 1.0 - u * u) * max(0.0, 1.0 - v * v)) ** 0.6
+        y = h * (0.3 + 0.7 * side * puff) if side > 0 else h * 0.3 * (1.0 - puff) ** 2
+        return (cx + x, cy + y, cz + z)
+
+    grid = {}
+    for side in (1, -1):
+        for i in range(nu + 1):
+            for j in range(nv + 1):
+                rim = i in (0, nu) or j in (0, nv)
+                key = (0 if rim else side, i, j)
+                if key not in grid:
+                    u, v = -1 + 2 * i / nu, -1 + 2 * j / nv
+                    grid[key] = bm.verts.new(surf(u, v, 0.0001 if rim else side))
+    faces = []
+    for side in (1, -1):
+        for i in range(nu):
+            for j in range(nv):
+                vs = [grid[(0 if (a in (0, nu) or b in (0, nv)) else side, a, b)]
+                      for a, b in ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))]
+                faces.append(bm.faces.new(vs if side < 0 else vs[::-1]))
+    p._finish_piece(list(grid.values()), faces, mat)
+    # The piping round the seam.
+    edge = [surf(-1 + 2 * i / nu, -1, 0.0001) for i in range(nu)]
+    edge += [surf(1, -1 + 2 * j / nv, 0.0001) for j in range(nv)]
+    edge += [surf(1 - 2 * i / nu, 1, 0.0001) for i in range(nu)]
+    edge += [surf(-1, 1 - 2 * j / nv, 0.0001) for j in range(nv)]
+    for k in range(len(edge)):
+        rod(p, edge[k], edge[(k + 1) % len(edge)], 0.005, mat, segs=6)
+
+
 def bed():
     p = Part("static")
     r = 0.016
@@ -174,7 +216,7 @@ def bed():
     # Mattress, pillow, a folded blanket over the foot.
     prof = fillet([(-0.42, 0.432), (0.42, 0.432), (0.42, 0.56), (-0.42, 0.56)], 0.045, 3)
     p.prism(prof, -0.935, 0.935, "Ticking", axis="z", bevel=0.03, segs=2)
-    p.sphere(0.2, (0.0, 0.592, 0.72), "Ticking", segs=14, rings=8, scale=(1.0, 0.24, 0.55))
+    pillow(p, (0.0, 0.56, 0.71), 0.27, 0.17, 0.13)
     prof = fillet([(-0.445, 0.5), (0.445, 0.5), (0.445, 0.578), (-0.445, 0.578)], 0.03, 3)
     p.prism(prof, -0.92, -0.3, "Wool", axis="z", bevel=0.02, segs=2)
     p.cyl(0.032, -0.43, 0.43, "Wool", segs=10, xf=T(0.0, 0.56, -0.3) @ ALONG_X)
@@ -205,30 +247,56 @@ def handle(p, x, y, z, vertical=True):
 
 
 def counter_cabinet():
+    """The carcass (`carcass`) and two doors, each its own node (`door_l`,
+    `door_r`): its origin on its hinge (its outer edge, the front face's
+    plane), mid-height; a door swings about its origin's Y out to the room
+    (-Z). `door_r`'s free edge is toward -X (its node isn't turned).
+    Destruction swings them (`world::hinge`)."""
     w = Wear(31)
-    p = Part("static")
+    p = Part("carcass")
     carcass(p, w)
-    # Two doors.
+    doors = []
     for sx in (-1, 1):
         x = sx * 0.1435
-        board(p, (0.281, 0.7, 0.018), (x, 0.455, -0.289), "Painted", bevel=0.003,
+        d = Part("door_l" if sx < 0 else "door_r", origin=(sx * 0.284, 0.455, -0.298))
+        board(d, (0.281, 0.7, 0.018), (x, 0.455, -0.289), "Painted", bevel=0.003,
               yaw=w.j(0.01))
-        handle(p, sx * 0.03, 0.68, -0.298)
-    return [p]
+        handle(d, sx * 0.03, 0.68, -0.298)
+        doors.append(d)
+    return [p] + doors
+
+
+# How far a counter's drawer pulls out (m): 80% of its depth.
+DRAWER_TRAVEL = 0.4
 
 
 def counter_drawers():
+    """The carcass (`carcass`) and three drawers (`drawer_0`..`drawer_2`,
+    top to bottom), each its own node: its origin at the drawer's middle
+    shut, pulling out along -Z (the front) up to `DRAWER_TRAVEL`. Each is a
+    box behind its front, so it's a drawer when it's out. Destruction slides
+    them."""
     w = Wear(37)
-    p = Part("static")
+    p = Part("carcass")
     carcass(p, w)
     hs = [0.2, 0.25, 0.25]
     y = 0.105
-    for h in hs:
-        board(p, (0.566, h - 0.006, 0.018), (w.j(0.002), y + h / 2, -0.289), "Painted",
+    drawers = []
+    for k, h in enumerate(hs):
+        cy = y + h / 2
+        d = Part(f"drawer_{len(hs) - 1 - k}", origin=(0.0, cy, -0.04))
+        board(d, (0.566, h - 0.006, 0.018), (w.j(0.002), cy, -0.289), "Painted",
               bevel=0.003)
-        handle(p, 0.0, y + h - 0.06, -0.298, vertical=False)
+        handle(d, 0.0, y + h - 0.06, -0.298, vertical=False)
+        # The box: sides, back and bottom, 0.5 deep behind the front.
+        dh = h - 0.05
+        for sx in (-1, 1):
+            d.box((0.012, dh, 0.5), (sx * 0.264, cy - 0.01, -0.03), "Timber")
+        d.box((0.54, dh, 0.012), (0.0, cy - 0.01, 0.214), "Timber")
+        d.box((0.54, 0.008, 0.5), (0.0, cy - 0.01 - dh / 2, -0.03), "Timber")
+        drawers.append(d)
         y += h
-    return [p]
+    return [p] + drawers
 
 
 def counter_top():
@@ -294,7 +362,8 @@ def workbench():
     # Steel angle frame: legs, rails under the top and over the shelf.
     for sx in (-1, 1):
         for sz in (-1, 1):
-            angle_iron(p, top0 - 0.011, (sx * 0.95, (top0 + 0.001) / 2, sz * 0.35), "y",
+            # Up to the top's underside (they stopped 5 mm short of it).
+            angle_iron(p, top0 - 0.006, (sx * 0.95, (top0 + 0.006) / 2, sz * 0.35), "y",
                        "Rusty", w=0.045, t=0.005, flip=(-sx, -sz))
             p.box((0.07, 0.006, 0.07), (sx * 0.925, 0.003, sz * 0.325), "Rusty")
     for sz in (-1, 1):

@@ -175,9 +175,10 @@ def holster_flap(open_):
         p.box((0.04, 0.05, 0.007), (0.0, -0.009, -0.106), "Leather", bevel=0.0025, segs=2)
         p.cyl(0.005, 0.0, 0.004, "Iron", segs=10, xf=T(0.0, -0.025, -0.109) @ RX(math.pi))
     else:
-        # Thrown forward off the mouth, hanging down the front.
-        p.box((0.04, 0.11, 0.006), (0.0, -0.035, -0.113), "Leather", bevel=0.0025, segs=2,
-              xf=RX(0.12, about=(0.0, 0.016, -0.1)))
+        # Thrown forward off the mouth and lying flat down the front, on the
+        # welt (it stood out from it: the 28 October playtest, 0:35:26).
+        p.box((0.04, 0.006, 0.012), (0.0, 0.016, -0.1), "Leather", bevel=0.0025, segs=2)
+        p.box((0.04, 0.11, 0.006), (0.0, -0.039, -0.11), "Leather", bevel=0.0025, segs=2)
     return p
 
 
@@ -204,9 +205,10 @@ def pouch_flap(open_):
         p.box((0.044, 0.04, 0.006), (0.0, PH[1] - 0.016, -0.057), "Canvas", bevel=0.002, segs=1)
         p.cyl(0.004, 0.0, 0.003, "Iron", segs=10, xf=T(0.0, PH[1] - 0.026, -0.0605) @ RX(math.pi))
     else:
-        # Open, hanging down the front.
-        p.box((0.044, 0.07, 0.005), (0.0, PH[1] - 0.033, -0.059), "Canvas", bevel=0.002, segs=1,
-              xf=RX(0.1, about=(0.0, PH[1], -0.055)))
+        # Open, folded back down the pouch's back, against the belt: from
+        # the front the pouch looks the same full as empty (its front
+        # popped out when it held something: the playtest, 0:35:45).
+        p.box((0.044, 0.07, 0.005), (0.0, PH[1] - 0.033, 0.0535), "Canvas", bevel=0.002, segs=1)
     return p
 
 
@@ -225,8 +227,8 @@ def pocket_flap(open_):
         p.box((0.068, 0.006, 0.038), (0.0, 0.0145, -0.0005), "Canvas", bevel=0.002, segs=1)
         p.box((0.06, 0.03, 0.006), (0.0, 0.0, -0.0205), "Canvas", bevel=0.002, segs=1)
     else:
-        p.box((0.064, 0.05, 0.005), (0.0, -0.012, -0.022), "Canvas", bevel=0.002, segs=1,
-              xf=RX(0.12, about=(0.0, 0.012, -0.018)))
+        # Folded back behind its loop, against the belt (as the pouch's).
+        p.box((0.064, 0.05, 0.005), (0.0, -0.012, 0.0235), "Canvas", bevel=0.002, segs=1)
     return p
 
 

@@ -87,6 +87,9 @@ struct Slots {
 
 fn slots(w: f32, d: f32) -> Slots {
     let f = 0.5;
+    // The floorboards' top (`Builder::plinth`'s 3 cm floor): what stands
+    // on the floor stood 3 cm into it (`capture::footing`).
+    let floor = f + 0.03;
     let (x, z) = (w * 0.5, d * 0.5);
     let pz = z - d * 0.42;
     let table = Vec3::new(-x * 0.4, f + 0.785, -z * 0.2);
@@ -114,14 +117,14 @@ fn slots(w: f32, d: f32) -> Slots {
         ],
         bed: Vec3::new(x - 0.6, f + 0.56, z - 1.4),
         door_floor: [
-            Vec3::new(-0.95, f, -z + 0.45),
-            Vec3::new(0.95, f, -z + 0.45),
+            Vec3::new(-0.95, floor, -z + 0.45),
+            Vec3::new(0.95, floor, -z + 0.45),
         ],
         door_wall: [
             Vec3::new(-1.1, f + 1.7, -z + 0.09),
             Vec3::new(1.1, f + 1.7, -z + 0.09),
         ],
-        room_floor: Vec3::new(x * 0.25, f, -z * 0.45),
+        room_floor: Vec3::new(x * 0.25, floor, -z * 0.45),
         partition: Vec3::new(0.0, f + 1.05, pz - 0.05),
         sills,
     }
@@ -282,7 +285,9 @@ pub fn dress(
                         Vec3::new(-x + 0.09, f + 1.75, -z * 0.55),
                         Vec3::X,
                     ));
-                    out.push(on("ice_axe", s.table[1], 0.4));
+                    // On the floor by the door (on the table's slot it hung
+                    // in the air where the house has no table).
+                    out.push(on("ice_axe", s.door_floor[1], 0.4));
                     out.push(on("hurricane_lamp", s.kitchen[1], 0.5));
                 }
                 Valley::Cinder => {
@@ -1209,13 +1214,13 @@ pub fn yard(
             if !site.clear(c, half) {
                 continue;
             }
-            let Some(y) = site.level(c, half, ground) else {
+            let Some((y, tilt)) = site.level(c, half, ground) else {
                 continue;
             };
             placed.push((c, half));
             out.push((
                 t.model,
-                Transform::from_xyz(c.x, y, c.y).with_rotation(Quat::from_rotation_y(yaw)),
+                Transform::from_xyz(c.x, y, c.y).with_rotation(tilt * Quat::from_rotation_y(yaw)),
             ));
             break;
         }
@@ -1392,22 +1397,53 @@ impl<'a> YardSite<'a> {
         !self.scenes.iter().any(|s| s.distance(at) < 3.0 + r)
     }
 
-    /// The thing's height (building-local) to stand on the ground at its
-    /// lowest corner, or `None` if the spot is under water or too steep.
-    fn level(&self, c: Vec2, half: Vec2, ground: &dyn Fn(Vec2) -> Option<f32>) -> Option<f32> {
+    /// The thing's height (building-local) and tilt to stand on the ground
+    /// under it, tilted to it (set at its lowest corner and level, a bed
+    /// or a pump on a slope stood into the hill on its high side:
+    /// `capture::footing`), or `None` if the spot is under water or too
+    /// steep.
+    fn level(
+        &self,
+        c: Vec2,
+        half: Vec2,
+        ground: &dyn Fn(Vec2) -> Option<f32>,
+    ) -> Option<(f32, Quat)> {
         let (mut lo, mut hi) = (f32::INFINITY, f32::NEG_INFINITY);
-        for k in [
+        let mut h = [0.0f32; 5];
+        for (i, k) in [
             Vec2::ZERO,
             Vec2::new(-1.0, -1.0),
             Vec2::new(1.0, -1.0),
             Vec2::new(1.0, 1.0),
             Vec2::new(-1.0, 1.0),
-        ] {
-            let h = ground(self.to_map(c + half * k))?;
-            lo = lo.min(h);
-            hi = hi.max(h);
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            h[i] = ground(self.to_map(c + half * k))? - self.xf.translation.y;
+            lo = lo.min(h[i]);
+            hi = hi.max(h[i]);
         }
-        (hi - lo < 0.35).then_some(lo - self.xf.translation.y - 0.02)
+        if hi - lo >= 0.35 {
+            return None;
+        }
+        // The ground's plane under it (building-local slopes along x, z).
+        let dx = ((h[2] + h[3]) - (h[1] + h[4])) / (4.0 * half.x.max(0.01));
+        let dz = ((h[3] + h[4]) - (h[1] + h[2])) / (4.0 * half.y.max(0.01));
+        let mean = h.iter().sum::<f32>() / 5.0;
+        let tilt = Quat::from_rotation_arc(Vec3::Y, Vec3::new(-dx, 1.0, -dz).normalize());
+        // Settled a little, and no corner standing off the ground.
+        let worst = [
+            Vec2::new(-1.0, -1.0),
+            Vec2::new(1.0, -1.0),
+            Vec2::new(1.0, 1.0),
+            Vec2::new(-1.0, 1.0),
+        ]
+        .iter()
+        .zip(&h[1..])
+        .map(|(k, g)| mean + dx * half.x * k.x + dz * half.y * k.y - g)
+        .fold(0.0f32, f32::max);
+        Some((mean - worst - 0.01, tilt))
     }
 }
 

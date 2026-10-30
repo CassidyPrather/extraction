@@ -487,6 +487,90 @@ pub fn pose(zone: &Zone, scene: &Scene) -> Transform {
         .with_rotation(Quat::from_rotation_y(yaw(scene.rot)))
 }
 
+/// Each of an outdoor scene's things set down on the ground under it and
+/// tilted to it, its boxes with it. A scene stands at one height
+/// ([`pose`]), so on a slope its chairs and crates floated (the 28 October
+/// playtest, 0:33:38; `capture::footing`). `t` is where the scene stands.
+pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
+    if by_id(id).is_none_or(|s| s.floor.is_some()) {
+        return;
+    }
+    let ground = |p: Vec3| {
+        let w = t.transform_point(p);
+        zone.ground(w.x, w.z) - t.translation.y
+    };
+    for d in 0..geo.props.len() {
+        let range = geo.props[d].pieces.clone();
+        // Its feet, in the scene's frame: its boxes' bottom corners, or
+        // round each model's place.
+        let mut feet: Vec<Vec3> = Vec::new();
+        for i in range.clone() {
+            if let Shape::Box(s) = geo.pieces[i].shape {
+                let h = s * 0.5;
+                for (x, z) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                    feet.push(
+                        geo.pieces[i]
+                            .at
+                            .transform_point(Vec3::new(x * h.x, -h.y, z * h.z)),
+                    );
+                }
+            }
+        }
+        if feet.is_empty() {
+            for (_, at) in &geo.props[d].models {
+                for (x, z) in [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)] {
+                    feet.push(at.transform_point(Vec3::new(x, 0.0, z)));
+                }
+            }
+        }
+        let Some(base) = feet.iter().map(|f| f.y).reduce(f32::min) else {
+            continue;
+        };
+        feet.retain(|f| f.y < base + 0.03);
+        let pts: Vec<Vec3> = feet
+            .iter()
+            .map(|f| Vec3::new(f.x, ground(*f), f.z))
+            .collect();
+        // The ground's plane under them (least squares, y = a x + b z + c).
+        let n = pts.len() as f32;
+        let m = pts.iter().fold(Vec3::ZERO, |a, p| a + *p) / n;
+        let (mut sxx, mut sxz, mut szz, mut sxy, mut szy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for p in &pts {
+            let q = *p - m;
+            sxx += q.x * q.x;
+            sxz += q.x * q.z;
+            szz += q.z * q.z;
+            sxy += q.x * q.y;
+            szy += q.z * q.y;
+        }
+        let det = sxx * szz - sxz * sxz;
+        let (a, b) = if det.abs() > 1e-6 {
+            ((sxy * szz - szy * sxz) / det, (szy * sxx - sxy * sxz) / det)
+        } else {
+            (0.0, 0.0)
+        };
+        let tilt = Quat::from_rotation_arc(Vec3::Y, Vec3::new(-a, 1.0, -b).normalize());
+        let pivot = Vec3::new(m.x, base, m.z);
+        let mut moved = Transform::from_translation(Vec3::new(m.x, m.y, m.z))
+            * Transform::from_rotation(tilt)
+            * Transform::from_translation(-pivot);
+        // Down until its highest-floating foot is on the ground, and no
+        // further than that.
+        let worst = feet
+            .iter()
+            .zip(&pts)
+            .map(|(f, g)| moved.transform_point(*f).y - g.y)
+            .fold(f32::MIN, f32::max);
+        moved.translation.y -= worst;
+        for i in range.clone() {
+            geo.pieces[i].at = moved * geo.pieces[i].at;
+        }
+        for (_, at) in &mut geo.props[d].models {
+            *at = moved * *at;
+        }
+    }
+}
+
 /// Whether a scene has something to stand on: the ground, or for one
 /// below (`floor`), a site's floor under it. A site that isn't built in
 /// this map yet leaves its scenes out, things and all.
@@ -555,10 +639,11 @@ fn unlock_scenes(
 
 /// Puts up one scene: its furniture (as a building) and its note.
 fn stage(commands: &mut Commands, zone: &Zone, id: &str, scene: &Scene, recalled: bool) {
-    let Some(geo) = geo(id) else {
+    let Some(mut geo) = geo(id) else {
         return;
     };
     let t = pose(zone, scene);
+    settle(&mut geo, zone, id, &t);
     let mut colliders = Vec::new();
     let mut surfaces = Vec::new();
     for piece in &geo.pieces {

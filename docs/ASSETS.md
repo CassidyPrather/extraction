@@ -275,6 +275,19 @@ deploy). Each
   turns copies of it to face out at the other corners. Leg segments run
   along +Y from the near joint (0.8 m and 0.95 m). Their hinge axis is X,
   and `pose_leg_visuals` points it along the leg plane's normal.
+- **The truck stands on its wheels** (`raid::truck::parked`), pitched up
+  to 12 degrees and rolled to the ground under them. On a steeper stop,
+  the low wheels hang down to the ground on their springs, up to 0.4 m
+  (`wheel_droop`, drawn by `render::props::droop_wheels`). The rear ladder
+  is its own node, `ladder`, hinged at the bed's tail
+  (`LADDER_HINGE`), and it hangs plumb, colliders and all (`ladder_swing`).
+  Pitched with the truck, its steps' faces leaned over a body pressing on
+  them, and a body can't step up under an overhang. Where the ground falls
+  away behind it, a cleated plank ramp hangs from the lowest tread down to
+  the ground (`ladder_steps`). It used to be lowered up to 0.8 m so its
+  steps reached the ground, which sank its wheels (the 28 October
+  playtest, 0:12:57). `capture::footing` and
+  `the_trucks_steps_reach_the_ground_at_every_stop` hold both.
 - **The truck** is built round its gameplay boxes (`TRUCK_PARTS` in
   `src/raid/truck.rs`), which stay as they are: the bed floor's top is
   `FLOOR`, the canvas walls sit just outside the side colliders, the
@@ -457,3 +470,35 @@ Empties:
 The body boxes include mirrors and bumpers. For a collider, shrink them
 a little. The lorry's bed floor is at y 1.18 (`pt_bed`), well below the
 box's top.
+
+## Model correctness
+
+The 28 October playtest's classes M3 (seams, gaps, parts through parts,
+things floating or sunk) and M4 (props at the wrong scale) are held by
+lints in `src/capture/`. Each runs over every model, or every placed one
+in every valley and the yard, as a `cargo test`:
+
+```bash
+cargo test --profile fast --lib capture:: -- --nocapture   # all of them, with their tallies
+```
+
+| Lint | Test | What it holds |
+| - | - | - |
+| Footing (`footing.rs`) | `placed_props_stand_on_what_is_under_them` | Every model a valley places (buildings' furniture and fittings, clutter, yards, staged scenes, the camp) as the game places it. Its feet (the clusters of vertices within 6 mm of its lowest point) against the nearest surface under them: the terrain, a drawn box's top, another model. A foot floats past 15 mm; a wide one sinks past 40 mm into the ground or 12 mm into a floor; a leg or post past 0.5 m. Wall fittings (windows, doors, hooks, boards) are left to the attach lint. The truck's six wheels at every stop, hanging on their springs (`raid::truck::wheel_droop`). |
+| Seated (`seated.rs`) | `magazines_sit_in_their_guns`, `mounted_things_sit_in_their_mounts` | Every magazine in every gun it fits, where the model's `magwell` puts it; every item's own sockets (cell bays, the deck's tape well and cell, rails, cradles, the muzzle) with every item that fits, from a headless game. Nothing through anything deeper than 1.5 mm (generalised winding number), no faces fighting between the two, and an insert (a cell, a tape) inside its holder's outline. |
+| Attach (`attach.rs`) | `model_pieces_touch_what_holds_them`, `buildings_have_no_cracks_and_doors_hang_in_their_jambs`, `rig_flaps_lie_against_their_pieces` | Every model's connected pieces touch (within 2 mm, or crossing) a chain of pieces back to its floor; no two boxes of a building face each other across a 2 to 40 mm crack (a gable's underside counts); every door's hinge is in a jamb and its leaf reaches the other; the rig's flaps touch their slot pieces and an open one doesn't stand out in front. |
+| Scale (`scale.rs`) | `items_are_drawn_near_their_real_size` | Every item's real size (`REAL`: its largest side, with what it is), and the drawn model held to its rule: `Fit` (a round, a magazine, a cassette) 0.9 to 1.12 times; `Hand` (held and looked at) 0.9 to 1.4, or 1.1 to 1.6 under 15 cm, since small things read smaller in a headset; `Made` (the Zone's machines and artifacts) 0.6 to 1.7. Cooking's dishes are set aside with the cooking table. |
+
+Small items drawn bigger than they were modelled are in `art/items/_kit.py`'s
+`SCALE` (centred and scaled at export); `python3 art/items/dims.py --write`
+puts their new bounds in `items.ron` as their `dims`.
+
+Each lint's test has a `KNOWN` list: what it found that isn't fixed yet,
+by model, prefab or placement. Anything new fails, and the test prints
+the lines nothing matches any more (`fixed, out of KNOWN`): take those
+out. On 30 October, after the second round, the lists held:
+- cracks in about 20 prefabs, mostly the depots, towers and ruins;
+- gaps of 2 to 3 mm between pieces in about 90 models;
+- a few clutter and scene things;
+- the scopes bedding 2 to 3 mm onto the receivers;
+- the PPSh drum, 4 mm into its well.

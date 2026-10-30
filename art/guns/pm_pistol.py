@@ -18,6 +18,9 @@ from _kit import text  # noqa: E402
 main_guard()
 
 BORE_Y = 0.062
+# Where the magazine seats (its top, along its rake): the lips just under
+# the slide.
+MAGWELL = (0.0, 0.0445, -0.002)
 SLIDE_Z0, SLIDE_Z1 = -0.132, 0.026  # muzzle end, rear
 SLIDE_Y0, SLIDE_Y1 = 0.048, 0.077
 SLIDE_HW = 0.014
@@ -90,7 +93,15 @@ frame_prof = [
 ]
 frame_prof = fillet(frame_prof, [0.001, 0.002, 0.004, 0.003, 0.004, 0.0, 0.0, 0.004, 0.006, 0.002,
                                  0.002, 0.003, 0.006, 0.003, 0.002], 6)
-static.prism(frame_prof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0018, segs=3)
+frame = Part("frame")
+frame.prism(frame_prof, -0.0112, 0.0112, "Blued", axis="x", bevel=0.0018, segs=3)
+# The magazine's well up the grip, along the `magwell` seat (below): the
+# frame and grip were solid, and the magazine stood through them (the 28
+# October playtest, 0:08:31). Its body is 12.4 x 28.7 mm; 0.6 mm clear.
+WELL = T(*MAGWELL) @ RX(-0.216)
+well = Part("cut")
+well.box((0.0136, 0.125, 0.0299), (0.0, -0.06, -0.0001), "Blued", xf=WELL)
+frame.cut(well)
 # Pin heads through the frame: the guard's hinge, the trigger bar's, the
 # sear's; on the right, the slide stop's pivot.
 for z, y, sides in ((-0.09, 0.040, (-1, 1)), (-0.03, 0.038, (-1, 1)), (0.014, 0.040, (-1, 1)),
@@ -219,15 +230,16 @@ for i in range(3):
 # --- Build ------------------------------------------------------------------------
 for p in (slide, trig, safety):
     make(p, worn={})
+grip_cut.box((0.0136, 0.125, 0.0299), (0.0, -0.06, -0.0001), "Bakelite", xf=WELL)
 grip.cut(grip_cut)
-join("static_frame", static, grip, grip_check, worn={})
+join("static_frame", static, frame, grip, grip_check, worn={})
 make(hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
 empty("pt_muzzle", (0.0, BORE_Y, -0.13))
 empty("pt_sight", (0.0, 0.079, 0.03))
 empty("pt_port", (0.012, 0.068, -0.045))
-empty("magwell", (0.0, 0.0475, -0.002), RX(-0.216))
+empty("magwell", MAGWELL, RX(-0.216))
 
 report()
 export("assets/models/guns/pm_pistol.glb")
