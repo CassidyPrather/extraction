@@ -168,8 +168,11 @@ impl GunLayout {
 }
 
 /// Where the other hand's palm cups a handgun's grip from below, in the
-/// grip's frame: under the butt of the grip, wrapping the gun hand.
-pub const CUP: Vec3 = Vec3::new(0.0, -0.065, 0.02);
+/// grip's frame: under the back of the butt, its fingers curled up round
+/// the front of the gun hand's. (At 0.065 down and 0.02 back the cupping
+/// fingers went into the gun hand's: `render::props`
+/// `a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand`.)
+pub const CUP: Vec3 = Vec3::new(0.0, -0.08, 0.04);
 
 /// A handgun's cup (gun space): a gun with no place for a second hand on
 /// it is steadied by one under its grip.
@@ -178,6 +181,12 @@ pub fn cup(layout: &GunLayout) -> Option<Vec3> {
         .support
         .is_none()
         .then(|| layout.grip.transform_point(CUP))
+}
+
+/// The cup as a hand's pose (gun space): where the cupping palm is, turned
+/// as the gun is.
+pub fn cup_pose(layout: &GunLayout) -> Option<Transform> {
+    cup(layout).map(Transform::from_translation)
 }
 
 pub fn layout(id: &str) -> Option<GunLayout> {

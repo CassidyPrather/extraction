@@ -1437,7 +1437,10 @@ fn run_tasks(
                     } else {
                         bot.progress.1 += dt;
                     }
-                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 {
+                    // (Not underground: a step aside in a cellar is into
+                    // its wall, and the walk slides along it as it is.)
+                    let below = zone.ground(pos.x, pos.y) - root.translation.y > 1.5;
+                    if bot.progress.1 > 1.5 && bot.sidesteps < 4 && !below {
                         let ahead = (flat - pos).normalize_or(Vec2::X);
                         let side = if bot.sidesteps % 2 == 0 { 1.0 } else { -1.0 };
                         let step = pos + ahead.perp() * side * 1.8 + ahead * 0.6;
@@ -1773,6 +1776,91 @@ mod tests {
             at = *p;
         }
         assert!(round_about(Vec2::new(5.0, 0.0), Vec2::new(5.0, 6.0), c, 3.0).is_empty());
+    }
+
+    /// Underground, a grab that's up against a wall doesn't step aside:
+    /// in a cellar the step is into the next wall, and it stood there
+    /// stepping (Marrow sims, 30 October: four stucks 6 m down in the
+    /// village bunker's dorm). Staged in that dorm, reaching for a thing
+    /// in the room past its wall.
+    #[test]
+    fn underground_a_grab_doesnt_step_aside_into_the_wall() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+        let plan = vr
+            .app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+                 d: Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>| {
+                    crate::sim::indoor::plan_buildings(&b, &d)
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .find(|p| p.name == "bunker_marrow")
+            .expect("the bunker");
+        let g = &plan.grid;
+        let cells: Vec<Vec2> = (0..g.n)
+            .flat_map(|j| (0..g.n).map(move |i| (i, j)))
+            .map(|(i, j)| Vec2::from_array(g.centre(i, j)))
+            .filter(|c| g.walkable(c.to_array()))
+            .collect();
+        // In the dorm (x -9..-1, z 28..34), a few metres from a thing
+        // with a wall between.
+        let (a, b) = cells
+            .iter()
+            .filter(|a| (-9.0..-1.0).contains(&a.x) && (28.0..34.0).contains(&a.y))
+            .find_map(|a| {
+                cells
+                    .iter()
+                    .find(|b| {
+                        (2.5..4.5).contains(&a.distance(**b))
+                            && !g.line_clear(a.to_array(), b.to_array())
+                    })
+                    .map(|b| (*a, *b))
+            })
+            .expect("a dorm cell with a wall between it and the next room");
+        let world = |p: Vec2, up: f32| {
+            plan.xf
+                .transform_point(Vec3::new(p.x, plan.floor_at(p) + up, p.y))
+        };
+        let catalog = vr.app.world().resource::<crate::items::Catalog>().clone();
+        let item = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(vr.app.world_mut());
+            let mut c = q.get_mut(vr.app.world_mut()).unwrap();
+            let e = crate::items::spawn_item(
+                &mut c,
+                &catalog,
+                crate::items::SpawnItem {
+                    kind: catalog.kind("servo").unwrap(),
+                    transform: Transform::from_translation(world(b, 0.3)),
+                    condition: 0.6,
+                },
+            );
+            q.apply(vr.app.world_mut());
+            e
+        };
+        let player = vr.player;
+        let at = world(a, 0.05);
+        vr.app
+            .world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at;
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        assert!(zone.ground(at.x, at.z) - at.y > 1.5, "not underground");
+        vr.step(30);
+        vr.app
+            .world_mut()
+            .entity_mut(player)
+            .insert(Bot::new(vec![Task::Grab {
+                item,
+                side: Side::Left,
+            }]));
+        vr.step(90 * 8);
+        let bot = vr.app.world().get::<Bot>(player).unwrap();
+        assert_eq!(bot.sidesteps, 0, "stepped aside underground: {:?}", bot.log);
     }
 }
 

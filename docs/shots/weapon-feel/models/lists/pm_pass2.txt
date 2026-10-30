@@ -1,0 +1,4 @@
+before 45ac1caf
+after  b2e75828
+pm_side | Weapon feel | Blued steel as a satin grain, not speckled stone | --camera 40,0,262,0,0 --gallery pm_pistol,0,0.3
+pm_quarter | Weapon feel | The same from the quarter | --camera 40,0,262,0,0 --gallery pm_pistol,40,0.3

@@ -276,13 +276,18 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
     swing = RX(math.radians(105), about=hinge) if open_ else T()
     lid.box((W + 0.01, LID, D + 0.01), (0.0, H - LID / 2 + 0.03, 0.0), "Shell", bevel=0.01,
             segs=1, xf=swing)
+    # Hinge knuckles on the axis, through the body's back edge and the
+    # lid's (swung open, the lid met the body along a line only).
+    for x in (-W * 0.3, W * 0.3):
+        b.cyl(0.012, -0.04, 0.04, "Steel", segs=8, xf=T(x, hinge[1], hinge[2]) @ RY(math.pi / 2))
     for z in strap_z:
-        lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.033, z), "Black", segs=1, xf=swing)
+        # A hair into the lid's top (it lay on it, no deeper).
+        lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.0325, z), "Black", segs=1, xf=swing)
         if open_:
             # Unbuckled: the buckle's half hangs loose down the crate's
-            # right end.
-            bar(b, (0.006, 0.16, 0.05), (W / 2 + 0.006, H - 0.1, z), "Black")
-            bar(b, (0.012, 0.05, 0.065), (W / 2 + 0.009, H - 0.2, z), "Steel")
+            # right end, against it (3 mm off it).
+            bar(b, (0.006, 0.16, 0.05), (W / 2 + 0.0025, H - 0.1, z), "Black")
+            bar(b, (0.012, 0.05, 0.065), (W / 2 + 0.0055, H - 0.2, z), "Steel")
         else:
             lid.box((0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel", segs=1)
     write(name, [b, lid], {
