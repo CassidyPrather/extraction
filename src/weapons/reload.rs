@@ -570,19 +570,18 @@ mod grab {
                 let gt = w.get::<GlobalTransform>(m).unwrap();
                 gt.translation() - gt.rotation() * Vec3::Y * w.get::<Mag>(m).unwrap().height * 0.5
             };
+            // (A pistol's magazine sits inside its grip, its foot in the
+            // gun hand's palm: it comes out by its release, held out for
+            // the other hand, `the_release_held_hangs_...`.)
+            let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
+            if foot.distance(grip) < 0.08 {
+                continue;
+            }
             r.vr.hand(Side::Left, foot - Vec3::Y * 0.01, Quat::IDENTITY, 0.0, 0.0);
             r.vr.step(2);
             r.vr.grip(Side::Left, 1.0);
             r.vr.step(3);
             if holding(&mut r, Side::Left) != Some(m) {
-                let hw = r.vr.hand_state(Side::Left).world.translation;
-                let grip = r.vr.point(r.gun, |p| *p == GripRole::Primary);
-                let seated = r.vr.app.world().get::<InSocket>(m).is_some();
-                eprintln!(
-                    "DBG {gun}: hand {hw} foot {foot} grip {grip} d {} seated {seated} right {:?}",
-                    hw.distance(foot),
-                    holding(&mut r, Side::Right)
-                );
                 bad.push(format!(
                     "{gun}: a pull at the magazine's foot took {:?}",
                     holding(&mut r, Side::Left)

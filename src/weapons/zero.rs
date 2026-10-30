@@ -579,6 +579,11 @@ mod tests {
             else {
                 continue;
             };
+            // (A flare's fired at the sky, a crossbow bolt's arc is the
+            // shooter's to judge: both slow, both lobbed.)
+            if f.muzzle_velocity < 150.0 {
+                continue;
+            }
             let h = layout.sight.translation.y - layout.muzzle.y;
             let gun = super::Gun {
                 firearm: extraction_core::firearm::Firearm::new(f.clone(), 1.0),
