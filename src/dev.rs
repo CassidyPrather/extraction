@@ -32,6 +32,7 @@ impl Plugin for DevPlugin {
                     treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery,
+                    present_for_gallery,
                 )
                     .chain()
                     .after(crate::rig::RigDriverSystems),
@@ -183,7 +184,9 @@ fn gallery(
         let first = first
             .replace("+grime", "")
             .replace("+wet", "")
-            .replace("+fog", "");
+            .replace("+fog", "")
+            // `+present`: the mag release held (`present_for_gallery`).
+            .replace("+present", "");
         let first = first.as_str();
         // `pm_pistol+dry`: run dry, the slide held back on an empty
         // magazine (`weapons::stoppages`).
@@ -1318,6 +1321,33 @@ fn spall_for_gallery(
                 recoil: 0.0,
                 seed: u64::from(state.0) << 4 | i as u64,
             });
+        }
+    }
+}
+
+/// `--gallery pm_pistol+present`: the gun with its mag release held, the
+/// magazine out of its catch and hanging out of the well for the other
+/// hand (`weapons::reload::Presented`).
+fn present_for_gallery(
+    opts: Res<LaunchOptions>,
+    guns: Query<(Entity, &crate::weapons::Gun)>,
+    mut present: MessageWriter<crate::weapons::reload::PresentMagazine>,
+    mut frames: Local<u32>,
+) {
+    if !opts
+        .gallery
+        .as_deref()
+        .is_some_and(|g| g.contains("+present"))
+    {
+        return;
+    }
+    *frames += 1;
+    // Once the gallery's magazine is seated.
+    if *frames == 12 {
+        for (e, g) in &guns {
+            if g.firearm.magazine.is_some() {
+                present.write(crate::weapons::reload::PresentMagazine { gun: e });
+            }
         }
     }
 }
