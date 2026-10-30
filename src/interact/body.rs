@@ -79,6 +79,108 @@ pub struct InBackpack {
     pub bag: Entity,
 }
 
+/// The pose a stowed item was put in, in its bag: where it stays.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct StowedPose(pub Transform);
+
+/// A loose item slower than this inside an open container has come to
+/// rest in it, m/s.
+const AT_REST: f32 = 0.3;
+
+/// A thing that comes to rest inside an open crate, tray or pack is in it:
+/// dropped in from above rather than let go inside, it used to lie there
+/// loose (and before the crate had walls, fell through it). It's stowed as
+/// it lies, if there's room. (Not a dead raider's bag: what lands on one
+/// isn't theirs.)
+#[allow(clippy::type_complexity)]
+fn settle_into_containers(
+    mut commands: Commands,
+    loose: Query<
+        (Entity, &Item, &GlobalTransform, Option<&LinearVelocity>),
+        (
+            Without<Held>,
+            Without<InBackpack>,
+            Without<super::InSocket>,
+            Without<RigidBodyDisabled>,
+            Without<Backpack>,
+        ),
+    >,
+    mut bags: Query<(Entity, &mut Backpack, &GlobalTransform), Without<crate::raid::Remains>>,
+    kinds: Query<&Item>,
+    catalog: Res<Catalog>,
+    mut events: MessageWriter<super::InteractEvent>,
+) {
+    for (e, item, gt, v) in &loose {
+        if v.is_some_and(|v| v.0.length() > AT_REST) {
+            continue;
+        }
+        let p = gt.translation();
+        for (be, mut bag, bgt) in &mut bags {
+            if !bag.open {
+                continue;
+            }
+            let inv = bgt.affine().inverse();
+            let local = inv.transform_point3(p);
+            if !local.abs().cmple(bag.half).all() {
+                continue;
+            }
+            let def = catalog.get(item.kind());
+            let held: Vec<ItemKind> = bag
+                .contents
+                .iter()
+                .filter_map(|c| kinds.get(*c).ok().map(|i| i.kind()))
+                .collect();
+            let used = bag.used(&catalog, &held);
+            if bag.fits(used, def.size, def.bulk) {
+                let pose = Transform::from_matrix((inv * gt.affine()).into());
+                stow_posed(&mut commands, e, be, &mut bag, pose);
+                events.write(super::InteractEvent::Stowed { item: e });
+            }
+            break;
+        }
+    }
+}
+
+/// A stowed item's pose is taken as it goes in (`stow_posed`, or whatever
+/// else put it there).
+fn remember_stowed_poses(
+    mut commands: Commands,
+    stowed: Query<(Entity, &Transform), Changed<InBackpack>>,
+) {
+    for (e, t) in &stowed {
+        commands.entity(e).insert(StowedPose(*t));
+    }
+}
+
+/// What's in a bag or a pouch stays where it was put, whatever the bag
+/// does. A stowed thing is a child of its bag with its body switched off,
+/// but the physics still writes a child body's place back from its own
+/// position, against the parent's physics pose: a held pack is a moving
+/// body, so each frame put its contents a little elsewhere, until the
+/// first headset night's rounds, radio and cassette were simply gone from
+/// it. The pose it went in at (or the pouch's seat) is put back before
+/// anything is drawn or saved.
+fn keep_stowed_poses(
+    mut stowed: Query<(&StowedPose, &mut Transform), With<InBackpack>>,
+    mut pocketed: Query<(&super::InSocket, &mut Transform), Without<InBackpack>>,
+    sockets: Query<&super::Socket>,
+) {
+    for (pose, mut t) in &mut stowed {
+        if *t != pose.0 {
+            *t = pose.0;
+        }
+    }
+    for (inside, mut t) in &mut pocketed {
+        let Ok(socket) = sockets.get(inside.socket) else {
+            continue;
+        };
+        // Body slots only: a gun's well and mounts seat their own.
+        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != socket.seat {
+            *t = socket.seat;
+        }
+    }
+}
+
 /// Request to open or close the local backpack (flat mode's Tab).
 #[derive(Message, Clone, Copy, Debug)]
 pub struct ToggleBackpack {
@@ -112,6 +214,16 @@ impl Plugin for BodyPlugin {
                         .after(toggle_backpacks)
                         .after(backpack_released),
                 ),
+            )
+            .add_systems(
+                PostUpdate,
+                (
+                    settle_into_containers,
+                    remember_stowed_poses,
+                    keep_stowed_poses,
+                )
+                    .chain()
+                    .before(bevy::transform::TransformSystems::Propagate),
             )
             .add_systems(FixedUpdate, carried_mass.in_set(CarriedMassSystems))
             .add_systems(
@@ -456,16 +568,19 @@ fn follow_head(
             let dt = time.delta_secs();
             torso.yaw += diff * (rate * dt).min(1.0);
             // Standing height: the tallest lately (a headset recentred lower
-            // brings it down a centimetre a minute).
-            torso.standing = torso.standing.max(head.translation.y) - dt * 0.01 / 60.0;
-            let drop = (torso.standing - head.translation.y - BEND).max(0.0);
-            let y = torso.standing - CHEST_BELOW_EYES - drop;
+            // brings it down a centimetre a minute). Measured on the head as
+            // tracked: a lift (`rig::seated`: sitting, a crouch toggled) moves
+            // the whole body, one for one, and isn't a bend.
+            let raw = head.translation.y - input.lifted;
+            torso.standing = torso.standing.max(raw) - dt * 0.01 / 60.0;
+            let drop = (torso.standing - raw - BEND).max(0.0);
+            let y = torso.standing - CHEST_BELOW_EYES - drop + input.lifted;
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
             let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
             // Upright, under the neck; bending over, the hips stay put (up
             // to a point) and the chest leans out over them (`rig::stance`).
-            let bent = ((torso.standing - head.translation.y) * HINGE).clamp(0.0, HINGE_MOST);
+            let bent = ((torso.standing - raw) * HINGE).clamp(0.0, HINGE_MOST);
             let under = Vec2::new(neck.x, neck.z);
             let was = Vec2::new(t.translation.x, t.translation.z);
             let at = under + (was - under).clamp_length_max(bent);
@@ -544,12 +659,37 @@ pub fn stow_in_backpack(
     bag: &mut Backpack,
     local: Vec3,
 ) {
-    bag.contents.push(item);
-    let local = local.clamp(-bag.half, bag.half);
+    stow_posed(
+        commands,
+        item,
+        bag_e,
+        bag,
+        Transform::from_translation(local),
+    );
+}
+
+/// Puts an item inside a bag at a local pose: as it was put in, at an
+/// angle if it went in at one (the first headset night's things stood
+/// themselves upright in the pack).
+pub fn stow_posed(
+    commands: &mut Commands,
+    item: Entity,
+    bag_e: Entity,
+    bag: &mut Backpack,
+    local: Transform,
+) {
+    if !bag.contents.contains(&item) {
+        bag.contents.push(item);
+    }
+    let local = Transform {
+        translation: local.translation.clamp(-bag.half, bag.half),
+        rotation: local.rotation.normalize(),
+        scale: Vec3::ONE,
+    };
     commands.entity(item).remove::<(Held, Supported)>().insert((
         InBackpack { bag: bag_e },
         ChildOf(bag_e),
-        Transform::from_translation(local),
+        local,
         RigidBodyDisabled,
         ColliderDisabled,
         if bag.open {

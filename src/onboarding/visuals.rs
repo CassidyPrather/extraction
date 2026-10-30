@@ -16,7 +16,10 @@ pub struct OnboardingVisualsPlugin;
 
 impl Plugin for OnboardingVisualsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (dress_posts, dress_props, light_lamps).chain());
+        app.add_systems(
+            Update,
+            (dress_posts, dress_props, light_lamps, ring_marked).chain(),
+        );
     }
 }
 
@@ -328,6 +331,34 @@ fn dress_props(
                     ChildOf(e),
                 ));
             }
+            Prop::SnareFlags => {
+                // Six survey flags round it, red, knee high: where to throw.
+                let red = materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.85, 0.08, 0.06),
+                    perceptual_roughness: 0.8,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                });
+                let pole = lib.get(Mat::Timber, &server, &mut materials);
+                for k in 0..6 {
+                    let a = k as f32 * std::f32::consts::TAU / 6.0;
+                    let at = Vec3::new(a.cos(), 0.0, a.sin()) * (super::SNARE_R + 0.15);
+                    commands.spawn((
+                        Mesh3d(meshes.add(metric_box(Vec3::new(0.02, 0.9, 0.02)))),
+                        MeshMaterial3d(pole.clone()),
+                        Transform::from_translation(at + Vec3::Y * 0.45),
+                        ChildOf(e),
+                    ));
+                    commands.spawn((
+                        Mesh3d(meshes.add(metric_box(Vec3::new(0.24, 0.15, 0.004)))),
+                        MeshMaterial3d(red.clone()),
+                        Transform::from_translation(at + Vec3::new(0.12, 0.8, 0.0))
+                            .with_rotation(Quat::from_rotation_y(-a)),
+                        ChildOf(e),
+                    ));
+                }
+            }
             Prop::BoardPost => {
                 part(
                     Mat::Timber,
@@ -346,5 +377,74 @@ fn dress_props(
                 );
             }
         }
+    }
+}
+
+/// The ring round what the step names (`Marked`).
+#[derive(Component)]
+struct MarkRing;
+
+#[derive(Resource)]
+struct MarkMat(Handle<StandardMaterial>);
+
+/// A thin steady amber ring round what the step names: what to reach for,
+/// at a glance, without words. Steady, and nothing like the hands' green
+/// reach glow or the far-grab ring, so it reads as "this one" and not as
+/// "in reach".
+#[allow(clippy::type_complexity)]
+fn ring_marked(
+    mut commands: Commands,
+    added: Query<
+        (
+            Entity,
+            Option<&avian3d::prelude::ColliderAabb>,
+            Option<&crate::anomaly::Anomaly>,
+            &GlobalTransform,
+        ),
+        Added<super::Marked>,
+    >,
+    mut removed: RemovedComponents<super::Marked>,
+    rings: Query<(Entity, &ChildOf), With<MarkRing>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mat: Option<Res<MarkMat>>,
+) {
+    let handle = match mat {
+        Some(m) => m.0.clone(),
+        None => {
+            let h = materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.8, 0.35, 0.8),
+                emissive: LinearRgba::rgb(3.0, 2.0, 0.6),
+                unlit: true,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            });
+            commands.insert_resource(MarkMat(h.clone()));
+            h
+        }
+    };
+    for e in removed.read() {
+        for (ring, parent) in &rings {
+            if parent.parent() == e {
+                commands.entity(ring).despawn();
+            }
+        }
+    }
+    for (e, aabb, anomaly, gt) in &added {
+        // Round it, a little wider than it is across (an anomaly: its
+        // edge, on the ground).
+        let r = match (anomaly, aabb) {
+            (Some(a), _) => a.radius,
+            (_, Some(a)) => ((a.max - a.min).xz().length() * 0.5 + 0.04).clamp(0.08, 0.6),
+            _ => 0.15,
+        };
+        let scale = gt.compute_transform().scale.max_element().max(1e-3);
+        commands.spawn((
+            MarkRing,
+            Mesh3d(meshes.add(Torus::new(r - 0.006, r + 0.006))),
+            MeshMaterial3d(handle.clone()),
+            Transform::from_scale(Vec3::splat(1.0 / scale)),
+            ChildOf(e),
+        ));
     }
 }
