@@ -838,8 +838,8 @@
       },
       "gun_wood": {
         "source": "ph:lacquered_cherry_wood",
-        "note": "dark lacquered wood for stocks",
-        "brightness": 2.2
+        "note": "dark lacquered wood for stocks (bright enough that the grain reads in the gloom)",
+        "brightness": 2.6
       },
       "polymer_plum": {
         "source": "acg:Plastic003",
