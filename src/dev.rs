@@ -73,8 +73,10 @@ fn screenshot_when_ready(
     }
     // In a headset, the world once the loading view has lifted
     // (`EXTRACTION_SHOT_LOADING=1`: the loading view itself).
-    let shown = loading.is_none_or(|l| l.lifted_at.is_some())
-        || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
+    let shown = loading.is_none_or(|l| {
+        l.lifted_at
+            .is_some_and(|t| crate::render::timeline::since_start() - t > 2.0)
+    }) || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
     if !(world.materials() && world.props() && shown) {
         if time.elapsed_secs() < SHOT_WAIT_MAX {
             return;

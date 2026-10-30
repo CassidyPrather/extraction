@@ -30,7 +30,14 @@ impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<LoadingView>()
             .init_resource::<Leaving>()
-            .add_systems(PostUpdate, (hold_views, place_card).chain());
+            // Before visibility's worked out: the frame the world shows is
+            // drawn whole, not with last frame's loading-layer lists.
+            .add_systems(
+                PostUpdate,
+                (hold_views, place_card)
+                    .chain()
+                    .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+            );
     }
 }
 
@@ -122,7 +129,7 @@ fn hold_views(
                 LoadingCard(words.clone()),
                 ScreenText {
                     text: words,
-                    size: Vec2::new(1.4, 0.35),
+                    size: Vec2::new(1.8, 0.45),
                     style: ScreenStyle::Lcd,
                 },
                 crate::render::legibility::TextSource::Loading,
@@ -172,19 +179,21 @@ fn place_card(
         return;
     };
     let pos = eye.translation();
-    let mut ahead = eye.forward().as_vec3();
-    ahead.y = 0.0;
-    let ahead = ahead.try_normalize().unwrap_or(Vec3::NEG_Z);
+    // Where the eyes look, within 25 degrees of level.
+    let look = eye.forward().as_vec3();
+    let level = Vec3::new(look.x, 0.0, look.z)
+        .try_normalize()
+        .unwrap_or(Vec3::NEG_Z);
+    let pitch = look.y.clamp(-1.0, 1.0).asin().clamp(-0.44, 0.44);
+    let ahead = level * pitch.cos() + Vec3::Y * pitch.sin();
     for (mut t, children) in &mut cards {
         let to_card = t.translation - pos;
-        let flat = Vec3::new(to_card.x, 0.0, to_card.z);
-        let off = flat
+        let off = to_card
             .try_normalize()
             .map_or(f32::MAX, |d| d.angle_between(ahead));
-        if off > 40f32.to_radians() || !(1.0..4.0).contains(&flat.length()) {
-            let at = pos + ahead * 2.0;
+        if off > 35f32.to_radians() || !(1.0..4.0).contains(&to_card.length()) {
             // The quad faces +Z: turned so that +Z looks back at the eye.
-            *t = Transform::from_translation(at).looking_to(ahead, Vec3::Y);
+            *t = Transform::from_translation(pos + ahead * 2.0).looking_to(ahead, Vec3::Y);
         }
         for c in children.into_iter().flatten() {
             if !layered.contains(*c) {
