@@ -2689,16 +2689,28 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        // Wound round the left forearm (`interact::first_aid`).
+        // Wound round the left forearm (`interact::first_aid`), round the
+        // forearm the body has: from the wrist back toward its elbow.
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        let centre = wrist + Vec3::Z * 0.12;
+        vr.step(5);
+        let st = vr
+            .app
+            .world()
+            .get::<crate::rig::stance::Stance>(vr.player)
+            .unwrap()
+            .clone();
+        let forearm = crate::interact::wounds::segments(&st, eye, [Some(wrist), None])
+            .into_iter()
+            .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+            .unwrap();
+        let axis = (forearm.a - forearm.b).normalize();
+        let centre = wrist + axis * 0.12;
+        let u = axis.any_orthonormal_vector();
+        let v = axis.cross(u);
         for i in 0..=48 {
             let a = std::f32::consts::TAU * i as f32 / 24.0;
-            vr.move_hand(
-                Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
-            );
+            vr.move_hand(Side::Right, centre + (u * a.cos() + v * a.sin()) * 0.06);
             vr.step(1);
         }
         vr.step(3);
