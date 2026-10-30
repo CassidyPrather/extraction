@@ -1984,6 +1984,26 @@ pub(crate) mod tests {
                 n.iter().copied().sum::<f64>()
             );
         }
+        // The near-free ones by module: where run conditions would pay.
+        let mut groups: std::collections::BTreeMap<String, (usize, f64)> = default();
+        for (name, ms) in &v {
+            let ms = ms / frames;
+            if !name.starts_with("extraction::") || ms >= 0.02 {
+                continue;
+            }
+            let module: Vec<&str> = name.split("::").take(3).collect();
+            let g = groups
+                .entry(module[..module.len().min(2)].join("::"))
+                .or_default();
+            g.0 += 1;
+            g.1 += ms;
+        }
+        let mut groups: Vec<_> = groups.into_iter().collect();
+        groups.sort_by(|a, b| b.1.1.total_cmp(&a.1.1));
+        println!("  near-free game systems by module (count, ms a frame):");
+        for (module, (n, ms)) in groups.iter().take(30) {
+            println!("    {n:4} {ms:6.3}  {module}");
+        }
     }
 
     /// Mesh entities in a settled valley by what they belong to (their
