@@ -138,10 +138,10 @@ for sx in (-1, 1):
                  bevel=0.0006, segs=1)
 # The post screws into a drum across the block; the drum's ends show
 # below the ears, the post's flat-topped blade above. Its top is level
-# with the rear notch's floor (y 0.1066), on the eye line (`pt_sight`)
-# the game zeroes along: it stood 2 mm under it.
-barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1065),
-              (0.0012, 0.1068), (0.0, 0.1068)], "Blued", segs=14,
+# with the eye line (`pt_sight`, y 0.1071) the game zeroes along, 0.4 mm
+# over the rear notch's floor (its fillet's bottom, 0.1067) (`capture::sightline`): it stood 2 mm under.
+barrel.lathe([(0.0, 0.089), (0.0024, 0.089), (0.0024, 0.0935), (0.0016, 0.095), (0.0016, 0.1068),
+              (0.0012, 0.1071), (0.0, 0.1071)], "Blued", segs=14,
              xf=T(0, 0, -0.601) @ RX(-math.pi / 2))
 barrel.cyl(0.0046, -0.0128, 0.0128, "Blued", segs=20, xf=T(0, 0.084, -0.6015) @ RY(math.pi / 2),
            chamfer=0.0006)
@@ -374,7 +374,7 @@ for p in (carrier, selector, trig):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, -0.69))
-empty("pt_sight", (0.0, 0.1068, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("magwell", (0.0, 0.0265, -0.1415))
 
 # Where a sling attaches: the front swivel on the gas block's left, the loop on the stock's left.

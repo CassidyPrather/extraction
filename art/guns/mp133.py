@@ -125,7 +125,9 @@ barrel.lathe([(0.0093, BREECH), (0.0128, BREECH), (0.0128, -0.262), (0.0119, -0.
               (0.0110, -0.45), (0.0106, MUZZLE + 0.004), (0.0101, MUZZLE), (0.0093, MUZZLE)],
              "Blued", segs=24, xf=T(0, BORE, 0), closed=True)
 # The rib: a flat strip on posts, its top level with the receiver's.
-RIB_R, RIB_F = 0.0635, 0.0610
+# The bead's top on the eye line just over the receiver (`pt_sight`,
+# `capture::sightline`): the rib's front was 2 mm lower.
+RIB_R, RIB_F = 0.0635, 0.0632
 barrel.prism([(RX_Z0 + 0.002, RIB_R - 0.003), (MUZZLE + 0.002, RIB_F - 0.003),
               (MUZZLE + 0.002, RIB_F), (RX_Z0 + 0.002, RIB_R)],
              -0.004, 0.004, "Blued", axis="x", bevel=0.0007, segs=1)
@@ -272,7 +274,7 @@ make(trig, worn={})
 make(crossbolt, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.068, -0.03))
+empty("pt_sight", (0.0, 0.0665, -0.03))
 empty("pt_port", (0.022, 0.05, -0.12))
 empty("pt_load_port", (0.0, 0.0, -0.13))
 empty("pt_support", (0.0, 0.012, -0.42))

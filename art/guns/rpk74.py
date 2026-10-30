@@ -140,10 +140,11 @@ fsb = fillet([(FS_Z, BORE - 0.0135), (FS_Z + 0.034, BORE - 0.0135), (FS_Z + 0.03
              [0.002, 0.002, 0.004, 0.006, 0.0025, 0.0025, 0.006, 0.004], 2)
 barrel.prism(fsb, -0.0125, 0.0125, "Blued", axis="x", bevel=0.0015, segs=2)
 for sx in (-1, 1):
-    barrel.prism(fillet([(FS_Z + 0.006, 0.092), (FS_Z + 0.020, 0.092), (FS_Z + 0.0185, 0.1085),
-                         (FS_Z + 0.0085, 0.1085)], 0.002, 2), sx * 0.0105 - 0.002,
+    barrel.prism(fillet([(FS_Z + 0.006, 0.092), (FS_Z + 0.020, 0.092), (FS_Z + 0.0185, 0.1105),
+                         (FS_Z + 0.0085, 0.1105)], 0.002, 2), sx * 0.0105 - 0.002,
                  sx * 0.0105 + 0.002, "Blued", axis="x", bevel=0.0006, segs=1)
-barrel.cyl(0.0016, 0.092, 0.1045, "Blued", segs=8, xf=T(0, 0, FS_Z + 0.013) @ RX(-math.pi / 2))
+# (Its top on the eye line, `pt_sight`: `capture::sightline`.)
+barrel.cyl(0.0016, 0.092, 0.1071, "Blued", segs=8, xf=T(0, 0, FS_Z + 0.013) @ RX(-math.pi / 2))
 # Lightening hole through the column.
 fc = Part("cut")
 fc.cyl(0.0042, -0.02, 0.02, "Blued", segs=12, xf=T(0, 0.0805, FS_Z + 0.014) @ RY(math.pi / 2))
@@ -349,7 +350,7 @@ print(f"  bipod: BIPOD_DEPLOY {BIPOD_DEPLOY:+.4f} rad ({math.degrees(BIPOD_DEPLO
       f"deployed feet tips at x +-{tip_r.x:.4f}, y {dep.y:+.4f}, z {dep.z:+.4f}; folded {tip_r}")
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.104, 0.0))
+empty("pt_sight", (0.0, 0.1071, 0.0))
 empty("pt_port", (0.025, 0.07, -0.13))
 empty("pt_support", (0.0, 0.03, -0.34))
 empty("pt_handle", (0.045, 0.062, -0.17))
