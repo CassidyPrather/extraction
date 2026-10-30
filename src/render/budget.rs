@@ -2151,6 +2151,27 @@ pub(crate) mod tests {
         // Which colliders a head-sized box reaches, and the sphere test's
         // cost against each alone.
         let r = Vec3::splat(0.09);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let _ = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        }
+        let boxes = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        let mut near_hits = 0;
+        for _ in 0..n {
+            if spatial
+                .project_point(at, true, &filter)
+                .is_some_and(|p| p.is_inside || p.point.distance(at) < 0.09)
+            {
+                near_hits += 1;
+            }
+        }
+        let project = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "  a box query {boxes:.3} ms; project_point {project:.3} ms ({near_hits} within 9 cm); \
+             Collider::sphere's own box {:?}",
+            Collider::sphere(0.09).aabb(at, Quat::IDENTITY)
+        );
         let near = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
         println!("  {} colliders' boxes reach the head's", near.len());
         let names: Vec<(Entity, String)> = near
