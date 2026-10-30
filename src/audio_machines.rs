@@ -70,6 +70,7 @@ impl Plugin for MachineSoundsPlugin {
                     scan_sounds,
                     struck_sounds,
                     grind_sounds,
+                    tether_sounds,
                 ),
             );
     }
@@ -719,6 +720,84 @@ fn grind_sounds(
     }
 }
 
+/// A grappler's line on you (`grappler::Tethered`, its goal to hold you
+/// for the others): its winch straining at the grappler the whole time
+/// the line holds (`grapple.winch`), harder as it nears its end; let go
+/// (the hold run out, the grappler wrecked or stunned), the line whips
+/// slack and the winch clanks (`grapple.slack`, `grapple.clank`). The
+/// playtest of 28 October couldn't tell what grapplers wanted of it.
+#[derive(Component)]
+struct WinchLoop(Entity);
+
+fn tether_sounds(
+    mut commands: Commands,
+    held: Query<(Entity, &crate::robots::grappler::Tethered)>,
+    mut gone: RemovedComponents<crate::robots::grappler::Tethered>,
+    places: Query<&GlobalTransform>,
+    mut loops: Query<(Entity, &WinchLoop, &mut Transform, &mut PlaybackSettings)>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut by: Local<std::collections::HashMap<Entity, Entity>>,
+) {
+    for (player, t) in &held {
+        let Ok(at) = places.get(t.by).map(|g| g.translation() + Vec3::Y * 1.0) else {
+            continue;
+        };
+        by.insert(player, t.by);
+        let strain = winch_speed(t.left);
+        match loops.iter_mut().find(|(_, l, ..)| l.0 == player) {
+            Some((_, _, mut tf, mut settings)) => {
+                tf.translation = at;
+                if (settings.speed - strain).abs() > 0.02 {
+                    settings.speed = strain;
+                }
+            }
+            None => {
+                let Some(sample) = bank.pick("machines/servo", &mut rng.0) else {
+                    continue;
+                };
+                commands.spawn((
+                    WinchLoop(player),
+                    SamplePlayer::new(sample)
+                        .looping()
+                        .with_volume(Volume::Decibels(crate::audio_mix::db("grapple.winch"))),
+                    PlaybackSettings::default().with_speed(strain),
+                    Transform::from_translation(at),
+                    sample_effects![
+                        crate::audio_mix::spatial("grapple.winch"),
+                        reverb_send("grapple.winch")
+                    ],
+                ));
+            }
+        }
+    }
+    for player in gone.read() {
+        for (l, w, tf, _) in &loops {
+            if w.0 == player {
+                let at = tf.translation;
+                commands.entity(l).despawn();
+                layers(
+                    &mut commands,
+                    &bank,
+                    &mut rng,
+                    at,
+                    &[
+                        ("physical/whoosh", "grapple.slack", 1.4),
+                        ("machines/clank", "grapple.clank", 1.2),
+                    ],
+                );
+            }
+        }
+        by.remove(&player);
+    }
+}
+
+/// The winch's pitch with `left` s of the hold to go: rising as it strains
+/// toward the end of its 4 s.
+pub fn winch_speed(left: f32) -> f64 {
+    0.6 + 0.25 * (1.0 - (left / 4.0).clamp(0.0, 1.0)) as f64
+}
+
 /// The least between two hurts heard (s): a frost's or a fire's steady
 /// harm would otherwise stutter.
 const HURT_EVERY: f32 = 0.6;
@@ -1052,6 +1131,21 @@ mod tests {
             .iter()
             .find(|c| c.name == "minelayer.grind");
         assert_eq!(c.map(|c| c.set), Some("drag/metal"));
+    }
+
+    /// A grappler's hold is heard while it lasts, straining harder toward
+    /// its end, and its letting go is heard; all in the mix.
+    #[test]
+    fn a_grapplers_hold_is_heard() {
+        assert!(winch_speed(0.5) > winch_speed(3.5));
+        for (set, cue) in [
+            ("machines/servo", "grapple.winch"),
+            ("physical/whoosh", "grapple.slack"),
+            ("machines/clank", "grapple.clank"),
+        ] {
+            let c = crate::audio_mix::MIX.iter().find(|c| c.name == cue);
+            assert_eq!(c.map(|c| c.set), Some(set), "{cue}");
+        }
     }
 
     /// A walker hunting you is never silent: standing to look, it sweeps

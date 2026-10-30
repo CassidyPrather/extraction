@@ -313,7 +313,7 @@ pub const MIX: &[Cue] = &[
     cue!("mine.cookoff", "device/crackle", -6.0, 90.0, 10.0, Action, 5.0),
     cue!("mine.flee", "machines/servo", -8.0, 75.0, 10.0, Detail, 5.0),
     // A minelayer crawling (`audio_machines::grind_sounds`), heard to 30 m.
-    cue!("minelayer.grind", "drag/metal", -23.0, 75.0, 15.0, Signal, 5.0),
+    cue!("minelayer.grind", "drag/metal", -22.0, 75.0, 15.0, Signal, 5.0),
     cue!("mender.called", "machines/servo", -10.0, 70.0, 8.0, Detail, 4.0),
     cue!("mender.weld", "device/crackle", -5.0, 85.0, 10.0, Action, 5.0),
     cue!("mender.mended", "machines/clank", -4.0, 80.0, 8.0, Detail, 4.0),
@@ -443,6 +443,11 @@ pub const MIX: &[Cue] = &[
     cue!("hazard.distress", "machines/servo", -9.3, 75.0, 20.0, Detail, 8.0),
     cue!("harpoon.fire", "machines/clank", 1.0, 100.0, 15.0, Action, 7.0),
     cue!("harpoon.hit", "impacts/metal", -6.0, 100.0, 1.0, Action),
+    // A grappler's line holding you (`audio_machines::tether_sounds`): its
+    // winch straining, then the line whipping slack and the winch's clank.
+    cue!("grapple.winch", "machines/servo", -10.0, 80.0, 10.0, Signal, 8.0),
+    cue!("grapple.slack", "physical/whoosh", -6.0, 80.0, 10.0, Action, 6.0),
+    cue!("grapple.clank", "machines/clank", -6.0, 90.0, 10.0, Action, 6.0),
     cue!("pylon.work", "machines/servo", -9.5, 75.0, 30.0, Detail, 15.0),
     cue!("robot.part", "machines/clank", 1.0, 100.0, 15.0, Action, 10.0),
     cue!("robot.glass", "physical/glass_break", -1.0, 90.0, 15.0, Action, 8.0),
