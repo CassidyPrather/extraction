@@ -456,16 +456,19 @@ fn follow_head(
             let dt = time.delta_secs();
             torso.yaw += diff * (rate * dt).min(1.0);
             // Standing height: the tallest lately (a headset recentred lower
-            // brings it down a centimetre a minute).
-            torso.standing = torso.standing.max(head.translation.y) - dt * 0.01 / 60.0;
-            let drop = (torso.standing - head.translation.y - BEND).max(0.0);
-            let y = torso.standing - CHEST_BELOW_EYES - drop;
+            // brings it down a centimetre a minute). Measured on the head as
+            // tracked: a lift (`rig::seated`: sitting, a crouch toggled) moves
+            // the whole body, one for one, and isn't a bend.
+            let raw = head.translation.y - input.lifted;
+            torso.standing = torso.standing.max(raw) - dt * 0.01 / 60.0;
+            let drop = (torso.standing - raw - BEND).max(0.0);
+            let y = torso.standing - CHEST_BELOW_EYES - drop + input.lifted;
             // Under the neck (behind and below the eyes), so looking down
             // doesn't swing the belt forward; eased, so it doesn't jitter.
             let neck = head.translation + head.rotation * Vec3::new(0.0, -0.1, 0.09);
             // Upright, under the neck; bending over, the hips stay put (up
             // to a point) and the chest leans out over them (`rig::stance`).
-            let bent = ((torso.standing - head.translation.y) * HINGE).clamp(0.0, HINGE_MOST);
+            let bent = ((torso.standing - raw) * HINGE).clamp(0.0, HINGE_MOST);
             let under = Vec2::new(neck.x, neck.z);
             let was = Vec2::new(t.translation.x, t.translation.z);
             let at = under + (was - under).clamp_length_max(bent);

@@ -1550,6 +1550,41 @@ mod tests {
 
     /// Bend down to reach your hip: the holster stays at your hip. Crouch
     /// right down: it comes down with you.
+    /// The crouch toggle, standing (`rig::seated`: the view comes down
+    /// 0.35 m): the belt comes down with it. It's the whole body going
+    /// down, not a bend over a table that leaves the belt behind.
+    #[test]
+    fn a_crouch_brings_the_belt_down_with_the_view() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(60);
+        let head_y = |vr: &Vr| {
+            vr.app
+                .world()
+                .get::<RigInput>(vr.player)
+                .unwrap()
+                .head
+                .translation
+                .y
+        };
+        let standing = holster_y(&mut vr) - head_y(&vr);
+        vr.app
+            .world_mut()
+            .get_mut::<RigInput>(vr.player)
+            .unwrap()
+            .crouch = true;
+        vr.step(90);
+        let lifted = vr.app.world().get::<RigInput>(vr.player).unwrap().lifted;
+        assert!(lifted < -0.3, "the view's down: {lifted}");
+        let crouched = holster_y(&mut vr) - head_y(&vr);
+        assert!(
+            (crouched - standing).abs() < 0.02,
+            "the holster under the head: {standing:.2} -> {crouched:.2}"
+        );
+    }
+
     #[test]
     fn bending_leaves_the_belt_where_it_is() {
         let mut vr = Vr::new("training_yard");
