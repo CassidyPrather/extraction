@@ -18,6 +18,7 @@ fn listen(mut s: MessageReader<Searching>, mut heard: ResMut<Heard>) {
 
 fn app(weather: Option<&str>) -> (App, Entity, Zone) {
     app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         weather: weather.map(Into::into),
         ..Default::default()
@@ -350,34 +351,48 @@ fn crouched_in_grass_in_fog_at_30m_you_are_not_seen() {
 /// walls, not just open field.
 #[test]
 fn a_search_takes_in_doorways_and_cover() {
-    let (app, _, _) = app(None);
+    // A valley's own doors (the test field gets none of the valleys'
+    // dressing, and its first door is the depot's ramp).
+    let (app, _, _) = app_with(crate::LaunchOptions {
+        robots: false,
+        map: "marrow_creek".into(),
+        ..Default::default()
+    });
     let e = app.world().resource::<super::doors::Entrances>();
     let nav = app.world().resource::<super::walker::Nav>().0.clone();
-    // A door with open ground before it (which comes first in the list
-    // depends on the valley's buildings).
+    // Every door with open ground before it, whichever the valley's
+    // buildings are (one picked by its place in the list broke each time
+    // they changed).
     let walkable = |p: Vec3| nav.walkable([p.x, p.z]);
-    let door = e
-        .doors
-        .iter()
-        .find(|d| {
-            (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
-                && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
-        })
-        .expect("a door with open ground before it");
-    let at = door.mid + door.out * 6.0;
-    let spots = plan_search(
-        at,
-        10.0,
-        at + Vec3::X * 20.0,
-        super::indoor::NavRef::Zone(&nav),
-        e,
-    );
-    assert!(spots.len() >= 2, "{spots:?}");
+    let mut tried = 0;
+    let mut short = vec![];
+    for door in e.doors.iter().filter(|d| {
+        (1..=8).all(|k| walkable(d.mid + d.out * (k as f32 + 1.0)))
+            && walkable(d.mid + d.out * 6.0 + Vec3::X * 10.0)
+    }) {
+        tried += 1;
+        let at = door.mid + door.out * 6.0;
+        let spots = plan_search(
+            at,
+            10.0,
+            at + Vec3::X * 20.0,
+            super::indoor::NavRef::Zone(&nav),
+            e,
+        );
+        // A doorway: this one, or a nearer one (a row of houses).
+        let doorway = spots.iter().any(|s| {
+            e.doors
+                .iter()
+                .any(|d| flat(*s - (d.mid + d.out * 1.8)) < 0.5)
+        });
+        if spots.len() < 2 || !doorway {
+            short.push(format!("{:.0}: {spots:?}", door.mid));
+        }
+    }
+    assert!(tried >= 5, "doors with open ground before them: {tried}");
     assert!(
-        spots
-            .iter()
-            .any(|s| flat(*s - (door.mid + door.out * 1.8)) < 0.5),
-        "the doorway: {spots:?}"
+        short.is_empty(),
+        "searches that missed the doorway or its cover: {short:#?}"
     );
 }
 
@@ -975,6 +990,7 @@ fn lit_torch(app: &mut App, me: Vec3) -> Entity {
 #[test]
 fn at_night_you_are_unseen_until_you_light_a_torch() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         hour: Some("night".into()),
         ..Default::default()
@@ -3147,6 +3163,7 @@ fn watchers_near(app: &mut App, at: Vec3) -> usize {
 #[test]
 fn a_fresh_career_is_unaffected_by_memory() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3239,6 +3256,7 @@ fn a_raid_is_remembered() {
 #[test]
 fn a_walker_is_left_watching_where_you_killed_one() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });
@@ -3280,6 +3298,7 @@ fn a_walker_is_left_watching_where_you_killed_one() {
 #[test]
 fn a_sentry_minds_your_favourite_rendezvous() {
     let (mut app, player, zone) = app_with(crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: true,
         ..Default::default()
     });

@@ -75,15 +75,19 @@ fn blink(
     mut over: MessageReader<ClimbedOver>,
     locals: Query<(), With<LocalPlayer>>,
     spatial: avian3d::prelude::SpatialQuery,
+    zone: Option<Res<crate::world::Zone>>,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
+    let terrain = terrain.iter().next();
     let moved = over.read().any(|o| o.teleport && locals.contains(o.player));
     let dt = time.delta_secs();
     for (mut b, mut vis, head) in &mut blinks {
-        let inside = heads
-            .get(head.parent())
-            .is_ok_and(|h| head_in_solid(&spatial, h.translation()));
+        let inside = heads.get(head.parent()).is_ok_and(|h| {
+            zone.as_ref()
+                .is_some_and(|z| head_in_solid(&spatial, z, terrain, h.translation()))
+        });
         // Open and staying open: nothing to write (a material written
         // re-prepares every frame).
         if !moved && !inside && b.shut <= 0.0 {
@@ -107,11 +111,13 @@ fn blink(
     }
 }
 
-/// Whether a head at `at` is inside the world's solid things.
-pub fn head_in_solid(spatial: &avian3d::prelude::SpatialQuery, at: Vec3) -> bool {
-    use avian3d::prelude::*;
-    let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
-    !spatial
-        .shape_intersections(&Collider::sphere(HEAD_R), at, Quat::IDENTITY, &filter)
-        .is_empty()
+/// Whether a head at `at` is inside the world's solid things (the ground
+/// from the heightmap: `world::sphere_in_world`).
+pub fn head_in_solid(
+    spatial: &avian3d::prelude::SpatialQuery,
+    zone: &crate::world::Zone,
+    terrain: Option<Entity>,
+    at: Vec3,
+) -> bool {
+    crate::world::sphere_in_world(spatial, zone, terrain, at, HEAD_R)
 }

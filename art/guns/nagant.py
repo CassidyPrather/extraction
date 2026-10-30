@@ -123,19 +123,25 @@ static.lathe([(0.0039, MUZZLE + 0.003), (0.0045, MUZZLE + 0.001), (0.0068, MUZZL
               (0.0, -0.09)], "Blued", segs=40, xf=T(0, BORE, 0))
 # The front sight blade near the muzzle; the rear notch in the top strap.
 static.prism(fillet([(MUZZLE + 0.006, BORE + 0.006), (MUZZLE + 0.016, BORE + 0.006),
-                     (MUZZLE + 0.014, BORE + 0.0135), (MUZZLE + 0.0075, BORE + 0.0135)],
+                     (MUZZLE + 0.014, BORE + 0.0095), (MUZZLE + 0.0075, BORE + 0.0095)],
                     0.0008, 1), -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
 # The blade's base, a saddle on the barrel.
 static.prism(fillet([(MUZZLE + 0.004, BORE + 0.0062), (MUZZLE + 0.019, BORE + 0.0062),
                      (MUZZLE + 0.017, BORE + 0.0088), (MUZZLE + 0.006, BORE + 0.0088)],
                     0.0007, 2), -0.0026, 0.0026, "Blued", axis="x", bevel=0.0005, segs=2)
-# The rear sight: a hump on the top strap with a U notch.
+# The rear sight: a hump on the top strap, its U notch cut through it
+# (drawn in its outline, the caps were filled across the notch and the eye
+# saw no notch: `capture::sightline`). Its floor 0.4 mm under the eye line.
 rs = [(-0.0047, BORE + 0.0078), (0.0047, BORE + 0.0078), (0.0047, BORE + 0.0102),
-      (0.0038, BORE + 0.0116), (0.0017, BORE + 0.0116), (0.0015, BORE + 0.0098),
-      (0.0, BORE + 0.0091), (-0.0015, BORE + 0.0098), (-0.0017, BORE + 0.0116),
-      (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
-static.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0003, 0.0006, 0.0, 0.0006, 0.0003, 0.0006,
-                         0.0006], 3), 0.0, 0.0062, "Blued", axis="z", bevel=0.0003, segs=2)
+      (0.0038, BORE + 0.0116), (-0.0038, BORE + 0.0116), (-0.0047, BORE + 0.0102)]
+rsight = Part("rear_sight")
+rsight.prism(fillet(rs, [0, 0, 0.0006, 0.0006, 0.0006, 0.0006], 3), 0.0, 0.0062, "Blued",
+             axis="z", bevel=0.0003, segs=2)
+rsc = Part("cut")
+rsc.prism(fillet([(-0.0015, BORE + 0.0091), (0.0015, BORE + 0.0091), (0.0015, BORE + 0.013),
+                  (-0.0015, BORE + 0.013)], [0.0006, 0.0006, 0.0, 0.0], 3),
+          -0.001, 0.0072, "Blued", axis="z")
+rsight.cut(rsc)
 # The ejector rod's housing under the barrel, a tube on a lug, and the
 # cylinder axis pin's head at the front of the frame.
 static.tube(0.0042, 0.0028, -0.165, -0.075, "Blued", segs=24, xf=T(0, CYL_Y - 0.004, 0),
@@ -152,10 +158,19 @@ guard = catmull([(-0.033, 0.004), (-0.038, -0.006), (-0.034, -0.017), (-0.02, -0
 static.sweep(guard, section_rect(0.0065, 0.003, 0.001, 3), "Blued")
 
 # Grip: smooth walnut panels on a bird's-head frame, the lanyard ring at
-# the butt.
-grip_prof = catmull([(0.0005, 0.006), (-0.008, -0.03), (-0.008, -0.06), (0.003, -0.08),
-                     (0.02, -0.084), (0.031, -0.075), (0.031, -0.05), (0.022, -0.012),
-                     (0.016, 0.006)], samples=4)
+# the butt. Below the heel of the palm the grip rakes back (RAKE metres
+# back per metre down from RAKE_Y), as an M1895's does, to its 235 mm:
+# the palm's part of it, and so the hold and the aim, stay put.
+RAKE, RAKE_Y = 0.42, -0.025
+
+
+def raked(pts):
+    return [(z + RAKE * max(0.0, RAKE_Y - y), y) for z, y in pts]
+
+
+grip_prof = catmull(raked([(0.0005, 0.006), (-0.008, -0.03), (-0.008, -0.06), (0.003, -0.08),
+                           (0.02, -0.084), (0.031, -0.075), (0.031, -0.05), (0.022, -0.012),
+                           (0.016, 0.006)]), samples=4)
 
 
 def grip_w(z, y):
@@ -181,19 +196,20 @@ def grip_x(z, y):
     return grip_w(z, y)[1]
 
 
-grip_check.checkering(gc, grip_x, None, None, (-0.006, 0.026, -0.07, -0.012), pitch=0.0022,
+grip_check.checkering(gc, grip_x, None, None, (-0.006, 0.046, -0.07, -0.012), pitch=0.0022,
                       depth=0.0005, mat="Wood")
 grip.cut(gc)
 # The grip's frame strap down the back, the butt cap, and the lanyard ring.
-static.prism(fillet([(0.016, 0.006), (0.031, -0.05), (0.031, -0.075), (0.02, -0.0845),
-                     (0.019, -0.081), (0.027, -0.074), (0.027, -0.052), (0.013, 0.006)],
+static.prism(fillet(raked([(0.016, 0.006), (0.031, -0.05), (0.031, -0.075), (0.02, -0.0845),
+                           (0.019, -0.081), (0.027, -0.074), (0.027, -0.052), (0.013, 0.006)]),
                     [0.002, 0.006, 0.006, 0.003, 0.0, 0.004, 0.006, 0.002], 3),
              -0.004, 0.004, "Blued", axis="x")
-static.sweep([(0.024 + 0.0055 * math.cos(a), -0.088 + 0.0055 * math.sin(a))
+BUTT_Z = 0.024 + RAKE * (RAKE_Y + 0.088)
+static.sweep([(BUTT_Z + 0.0055 * math.cos(a), -0.088 + 0.0055 * math.sin(a))
               for a in [2 * math.pi * i / 24 for i in range(24)]],
              section_rect(0.0018, 0.0018, 0.0006, 3), "Steel", closed=True)
-static.box((0.004, 0.006, 0.004), (0, -0.0835, 0.024), "Steel", bevel=0.001, segs=3)
-static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, -0.0825, 0.024) @ RY(math.pi / 2))
+static.box((0.004, 0.006, 0.004), (0, -0.0835, BUTT_Z), "Steel", bevel=0.001, segs=3)
+static.cyl(0.0012, -0.0028, 0.0028, "Steel", segs=10, xf=T(0, -0.0825, BUTT_Z) @ RY(math.pi / 2))
 
 # --- Cylinder (turns about its axis) --------------------------------------------------
 cyl = Part("cylinder", origin=(0.0, CYL_Y, 0.0))
@@ -273,14 +289,14 @@ trig = Part("trigger", origin=(0.0, 0.006, -0.02))
 trig.sweep(catmull([(-0.022, 0.004), (-0.026, -0.004), (-0.025, -0.012), (-0.021, -0.016)], 6,
                    closed=False), section_rect(0.0045, 0.003, 0.0011, 3), "Blued")
 
-join("static_frame", frame, static, grip, grip_check, worn={})
+join("static_frame", frame, static, rsight, grip, grip_check, worn={})
 for p in [cyl, hammer, gate, rod, trig]:
     make(p, worn={})
 for p in rounds:
     make(p)
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, BORE + 0.012, 0.012))
+empty("pt_sight", (0.0, BORE + 0.0095, 0.012))
 empty("pt_load_port", (0.016, gy, -0.012))
 
 report()

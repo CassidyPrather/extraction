@@ -169,7 +169,7 @@ barrel.lathe([(0.0042, MUZZLE + 0.002), (0.0095, MUZZLE), (0.0105, MUZZLE + 0.00
               (0.0145, -0.205), (0.0, -0.205)], "Blued", segs=28, xf=T(0, BORE, 0))
 # Front sight: a ring base, the post and its hood.
 barrel.cyl(0.0122, -0.972, -0.952, "Blued", segs=32, xf=T(0, BORE, 0), chamfer=0.0015)
-barrel.prism(fillet([(-0.968, 0.054), (-0.956, 0.054), (-0.958, 0.0805), (-0.964, 0.0805)],
+barrel.prism(fillet([(-0.968, 0.054), (-0.956, 0.054), (-0.958, 0.084), (-0.964, 0.084)],
                     0.001, 1), -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
 barrel.tube(0.0118, 0.0104, -0.971, -0.951, "Blued", segs=32, xf=T(0, 0.0645, 0))
 # Cleaning rod, ahead of the nose cap.
@@ -350,7 +350,7 @@ for p in (bolt, cock, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.085, -0.02))
+empty("pt_sight", (0.0, 0.084, -0.02))
 empty("pt_load_port", (0.0, 0.07, -0.09))
 empty("pt_bayonet_tip", (0.0, SPIKE_Y, SPIKE_TIP))
 

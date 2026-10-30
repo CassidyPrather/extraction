@@ -96,8 +96,9 @@ def car_door():
         # corners their faces don't share a plane.)
         p.box((L + fw, fw, 0.03 - 0.008 * (k % 2)), (0.0, 0.0, 0.0), "Blue", bevel=0.004, segs=1,
               xf=T((x0 + x1) / 2, (y0 + y1) / 2, -0.02) @ RZ(a))
+    # (Their feet down in the belt, where the glass stood.)
     for x, h, lean in ((-0.25, 0.07, 0.2), (-0.05, 0.12, -0.15), (0.2, 0.05, 0.1)):
-        p.prism([(x - 0.03, yt + 0.01), (x + 0.035, yt + 0.01), (x + 0.005 + lean * h, yt + h)],
+        p.prism([(x - 0.03, yt - 0.01), (x + 0.035, yt - 0.01), (x + 0.005 + lean * h, yt + h)],
                 -0.022, -0.018, "Glass", axis="z")
     return [p]
 
@@ -110,11 +111,14 @@ def car_bonnet():
     W, H, D, t = 1.3, 1.0, 0.02, 0.003
     for y0, y1, mat in ((-0.5, -0.42, "Rusty"), (-0.42, 0.5, "Blue")):
         sheet(p, y0, y1, -W / 2 + 0.02, W / 2 - 0.02, H, D, t, mat, n=max(2, int((y1 - y0) / 0.08)))
-    # The bracing: an X of pressed ribs and a rim behind the skin.
+    # The bracing: an X of pressed ribs and a rim behind the skin, the
+    # X's arms out into the rim's corners, their fronts against the skin
+    # toward its ends (behind it where it bows out, never through it).
     # (The two arms of the X a little apart in depth, so they don't share
     # faces where they cross.)
-    for a, z in ((0.62, 0.025), (-0.62, 0.031)):
-        p.box((1.2, 0.05, 0.02), (0.0, 0.0, 0.0), "Dark", segs=1, xf=T(0.0, 0.0, z) @ RZ(a))
+    for a, front, d in ((0.62, -0.005, 0.04), (-0.62, -0.0045, 0.045)):
+        p.box((1.45, 0.05, d), (0.0, 0.0, 0.0), "Dark", segs=1,
+              xf=T(0.0, 0.0, front + d / 2) @ RZ(a))
     for y in (-0.44, 0.44):
         p.box((W - 0.1, 0.05, 0.02), (0.0, y, 0.016), "Dark", segs=1)
     for x in (-W / 2 + 0.07, W / 2 - 0.07):
@@ -122,7 +126,7 @@ def car_bonnet():
     # Hinge brackets along the top edge, one torn and bent.
     for x, bend in ((-0.45, 0.0), (0.45, 0.5)):
         p.box((0.04, 0.12, 0.012), (0.0, 0.0, 0.0), "Steel", segs=1,
-              xf=T(x, 0.46, 0.034) @ RX(bend))
+              xf=T(x, 0.46, 0.028) @ RX(bend))
     # Two creases pressed along it.
     for x in (-0.3, 0.3):
         p.box((0.012, H - 0.12, 0.006), (x, 0.0, bow(0.0, H, D) - t / 2 - 0.001), "Blue", segs=1)

@@ -414,6 +414,15 @@ pub struct Firearm {
     pub fault_dice: u64,
     pub mode: usize,
     pub malfunction: Option<Malfunction>,
+    /// The next cycle jams this way, whatever the dice say: for a test or
+    /// a staged scene to meet a stoppage where it would come, in the
+    /// state the gun's own jam leaves it.
+    #[serde(default)]
+    pub jam_next: Option<Malfunction>,
+    /// The next round struck is a dud, whatever the dice say (as
+    /// [`Self::jam_next`]).
+    #[serde(default)]
+    pub dud_next: bool,
     /// The magazine has slipped down in the well (a failure to feed): the
     /// bolt can't strip from it until it's tapped home.
     #[serde(default)]
@@ -509,6 +518,8 @@ impl Firearm {
             fault_dice: 0,
             mode: 0,
             malfunction: None,
+            jam_next: None,
+            dud_next: false,
             mag_unseated: false,
             mag_half: false,
             struck: None,
@@ -831,7 +842,7 @@ impl Firearm {
                         0.0
                     };
                 let (dud, hang) = self.primer(load);
-                if roll() < dud_chance + dud {
+                if std::mem::take(&mut self.dud_next) || roll() < dud_chance + dud {
                     self.struck = Some(c);
                     events.push(Event::Dud);
                     return events;
@@ -910,7 +921,7 @@ impl Firearm {
             return events;
         }
         let dud_chance = 0.002 + 0.02 * (1.0 - self.condition);
-        if roll() < dud_chance {
+        if std::mem::take(&mut self.dud_next) || roll() < dud_chance {
             // A dud stays chambered under a closed bolt: rack it out.
             self.chambers[0] = Some(Round::Live);
             self.set_chamber_load(0, self.fed);
@@ -931,7 +942,8 @@ impl Firearm {
             self.stroke_cleared = false;
             return events;
         }
-        if roll() < self.malfunction_chance() {
+        // (Asked for or rolled, an open bolt's jam is the one it has.)
+        if self.jam_next.take().is_some() || roll() < self.malfunction_chance() {
             // Blowback catches the case: a stovepipe, the bolt short of
             // the sear.
             self.chambers[0] = Some(Round::Spent);
@@ -1124,7 +1136,8 @@ impl Firearm {
     /// lock open).
     fn auto_cycle(&mut self, roll: &mut impl FnMut() -> f32) -> Vec<Event> {
         let mut events = Vec::new();
-        if roll() < self.malfunction_chance() {
+        let forced = self.jam_next.take();
+        if forced.is_some() || roll() < self.malfunction_chance() {
             // Stovepipes are the common one; double feeds need two rounds
             // to jam together, failures to feed a magazine to slip.
             let r = roll();
@@ -1133,7 +1146,9 @@ impl Firearm {
             } else {
                 0
             };
-            let kind = if r < 0.45 || feed == 0 {
+            let kind = if let Some(k) = forced {
+                k
+            } else if r < 0.45 || feed == 0 {
                 Malfunction::FailureToEject
             } else if r < 0.85 || feed < 2 {
                 Malfunction::FailureToFeed
@@ -2199,6 +2214,71 @@ mod tests {
         let ev = rack(&mut gun);
         assert!(ev.contains(&Event::Chambered), "{ev:?}");
         assert!(gun.magazine.is_some());
+    }
+
+    /// A jam asked for comes on the next cycle, whatever the dice, as the
+    /// dice's own jam of that kind would leave it; then it's spent.
+    #[test]
+    fn a_jam_asked_for_comes_on_the_next_shot_as_the_dice_would_leave_it() {
+        for kind in [
+            Malfunction::FailureToEject,
+            Malfunction::FailureToFeed,
+            Malfunction::DoubleFeed,
+        ] {
+            let mut gun = Firearm::new(rifle(), 1.0);
+            gun.insert_magazine(Magazine {
+                family: "ak545".into(),
+                capacity: 30,
+                rounds: 10,
+                ..Default::default()
+            })
+            .unwrap();
+            rack(&mut gun);
+            gun.cycle_mode();
+            gun.cycle_mode();
+            gun.jam_next = Some(kind);
+            let ev = shoot(&mut gun);
+            assert!(fired(&ev), "{kind:?}: the shot goes");
+            assert!(ev.contains(&Event::Malfunctioned(kind)), "{kind:?}: {ev:?}");
+            assert_eq!(gun.malfunction, Some(kind));
+            assert!(gun.jam_next.is_none(), "{kind:?}: spent");
+            // The dice's jam of the same kind leaves the same gun.
+            let roll = match kind {
+                Malfunction::FailureToEject => 0.1,
+                Malfunction::FailureToFeed => 0.6,
+                _ => 0.95,
+            };
+            let (dice, _) = jam(roll);
+            assert_eq!(gun.bolt_travel, dice.bolt_travel, "{kind:?}");
+            assert_eq!(gun.mag_unseated, dice.mag_unseated, "{kind:?}");
+            assert_eq!(gun.chambers, dice.chambers, "{kind:?}");
+        }
+    }
+
+    /// A dud asked for is the next round struck, and racking it out
+    /// clears it.
+    #[test]
+    fn a_dud_asked_for_is_the_next_round_struck() {
+        let mut gun = Firearm::new(rifle(), 1.0);
+        gun.insert_magazine(Magazine {
+            family: "ak545".into(),
+            capacity: 30,
+            rounds: 10,
+            ..Default::default()
+        })
+        .unwrap();
+        rack(&mut gun);
+        gun.cycle_mode();
+        gun.cycle_mode();
+        gun.dud_next = true;
+        let ev = shoot(&mut gun);
+        assert!(ev.contains(&Event::Dud), "{ev:?}");
+        assert!(!fired(&ev));
+        assert_eq!(gun.struck, Some(0));
+        assert!(!gun.dud_next, "spent");
+        rack(&mut gun);
+        assert_eq!(gun.struck, None, "racked out");
+        assert!(fired(&shoot(&mut gun)));
     }
 
     #[test]

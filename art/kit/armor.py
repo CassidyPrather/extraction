@@ -151,6 +151,10 @@ def helmets():
 # chest panel's is (PANEL_Z, so the pouches stay put), the back's 0.125
 # behind the origin (where the pack's straps meet it).
 FRONT_Z, BACK_Z, VEST_T = -0.076, 0.097, 0.028
+# The cummerbund's ellipse: its ends at x CUMMER_X, inside the panels' side
+# edges (PANEL_W / 2), and mid-thickness in each panel there.
+CUMMER_X = 0.135
+CUMMER_R = (BACK_Z - FRONT_Z) / 2 - CUMMER_X ** 2 / 0.6 + VEST_T / 2
 PANEL_W, PANEL_Y0, PANEL_Y1 = 0.29, -0.31, 0.05
 
 
@@ -198,14 +202,15 @@ def vest(p, detail=True):
                Vector((x, 0.09, 0.105)), Vector((x, PANEL_Y1 - 0.01, BACK_Z + VEST_T / 2))]
         strap_path(p, pts, 0.06, 0.012, "Canvas")
     # The cummerbund: a band round the ribs from the front panel's sides to
-    # the back's (an ellipse, the front and back stretches inside the panels).
+    # the back's (an ellipse, its ends inside the panels' side edges and
+    # thickness: they stood 6 mm past the edges and 12 mm proud).
     n = 10 if detail else 4
     for sx in (-1, 1):
         rings = []
         for k in range(n + 1):
             a = -math.pi / 2 + math.pi * k / n          # front (-pi/2) to back
-            x = sx * (0.155 + 0.035 * math.cos(a))
-            z = (FRONT_Z + BACK_Z) / 2 + math.sin(a) * ((BACK_Z - FRONT_Z) / 2 + 0.005)
+            x = sx * (CUMMER_X + 0.035 * math.cos(a))
+            z = (FRONT_Z + BACK_Z) / 2 + math.sin(a) * CUMMER_R
             c = Vector((x, -0.2, z))
             out = Vector((sx * math.cos(a), 0, math.sin(a))).normalized()
             rings.append([c - out * 0.004 + Vector((0, -0.07, 0)),
@@ -222,17 +227,17 @@ def vest(p, detail=True):
     # the back.
     for k in range(4):
         y = PANEL_Y0 + 0.05 + 0.045 * k
-        p.box((0.25, 0.022, 0.004), (0.0, y, zf - 0.002), "Olive", segs=1)
+        p.box((0.25, 0.022, 0.004), (0.0, y, zf - 0.001), "Olive", segs=1)
     for z, out in ((zf, -1), (zb, 1)):
-        p.box((0.22, 0.05, 0.006), (0.0, PANEL_Y1 - 0.035, z + out * 0.003), "Olive",
+        p.box((0.22, 0.05, 0.006), (0.0, PANEL_Y1 - 0.035, z + out * 0.002), "Olive",
               bevel=0.002, segs=1)
         p.box((0.06, 0.02, 0.006), (0.0, PANEL_Y1 - 0.045, z + out * 0.0075), "Black", segs=1)
     strap_path(p, [Vector((0.0, 0.04, zb + 0.002)), Vector((0.0, 0.065, zb + 0.02)),
                    Vector((0.0, 0.085, zb + 0.004))], 0.05, 0.006, "Olive")
-    # Side release buckles on the cummerbund.
+    # Side release buckles on the cummerbund's outer face at its widest.
     for sx in (-1, 1):
-        p.box((0.008, 0.045, 0.03), (sx * 0.192, -0.2, (FRONT_Z + BACK_Z) / 2 - 0.06), "Black",
-              bevel=0.002, segs=1)
+        p.box((0.008, 0.045, 0.03), (sx * (CUMMER_X + 0.035 + 0.007), -0.2,
+                                     (FRONT_Z + BACK_Z) / 2), "Black", bevel=0.002, segs=1)
 
 
 def vests():

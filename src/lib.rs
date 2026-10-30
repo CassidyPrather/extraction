@@ -146,6 +146,7 @@ impl Plugin for ClientPlugin {
             (
                 world::structures::blockout_visuals,
                 world::structures::fence_visuals,
+                world::structures::merge_fence_posts,
                 world::buildings::building_visuals,
                 world::bridges::bridge_visuals,
                 log_frame_times,
@@ -252,6 +253,11 @@ impl GpuPasses {
 pub fn run(opts: LaunchOptions) -> AppExit {
     if opts.headless {
         return run_headless(opts);
+    }
+    // A capture with textures missing would shoot flat fallbacks.
+    if let Err(e) = capture::assets::ready_for(&opts) {
+        eprintln!("ERROR {e}");
+        std::process::exit(2);
     }
     let mut app = App::new();
     let window = Window {

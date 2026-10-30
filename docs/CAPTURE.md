@@ -105,6 +105,20 @@ Things that have bitten captures, and what now guards against them:
   trailer's bot must start in the truck, as a headless sim's does. The
   trailer takes no `--camera`; it spawns its own chase camera instead.
 
+## Textures first
+
+Materials, foliage cards, terrain and sky are made by
+`scripts/fetch_assets.py` and gitignored. Without them (or without a set
+added to the manifest since) the game draws flat fallback colours: guns
+with no gun metal. So a capture (`--cinematic`, `--sweep`, `--trailer`)
+or a `--screenshot` checks first, against `scripts/assets_manifest.json`,
+and stops with the missing files and the command that makes them
+(`capture::assets`). `scripts/build_at.sh`, and so the visual diff and
+the before/after rig, checks the same way with `scripts/check_textures.py`
+before it builds, because an old build predates the game's check but
+takes its textures from this checkout. `EXTRACTION_ALLOW_FALLBACK=1`
+shoots the fallback on purpose.
+
 ## Cinematics: `--cinematic FILE`
 
 The free camera flies each shot's spline. The spline is a centripetal

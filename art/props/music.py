@@ -155,7 +155,8 @@ def gramophone():
             case.box((sx, sy, 0.005), (cx, cy, -D / 2 - 0.0025), "Wood", bevel=0.0015, segs=1,
                      xf=RY(k * math.pi / 2))
     # The maker's plate on the front.
-    case.box((0.07, 0.022, 0.004), (0.0, 0.086, -D / 2 - 0.007), "Brass", bevel=0.001, segs=1)
+    # On the box's face inside the moulding (it stood 5 mm off it).
+    case.box((0.07, 0.022, 0.004), (0.0, 0.086, -D / 2 - 0.0015), "Brass", bevel=0.001, segs=1)
     # Motor board fittings: the swivel's pillar at the back right, the
     # arm's rest at the front right, the speed lever, the needle cups.
     pv = (0.11, 0.245, 0.13)

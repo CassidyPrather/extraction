@@ -42,6 +42,8 @@ pub struct Director {
     /// The station the last goal was at (a newcomer's habits start at each
     /// new one).
     station: Option<usize>,
+    /// Holding the mag release for its step.
+    releasing: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -95,8 +97,14 @@ pub(super) fn direct(
         }
     }
     // The gun hand's A (flat: B) for the magazine release, likewise.
+    // Held for its step, let go once after; past that the button is the
+    // tasks' own (a one-handed reload presses it itself: held down here
+    // every frame, its presses never reached the gun).
     let release = ob.next_goal() == Some(Goal::DropMag) && bot.elapsed > 0.3;
-    bot.hold(crate::bot::Btn::Primary, release);
+    if release || state.releasing {
+        bot.hold(crate::bot::Btn::Primary, release);
+        state.releasing = release;
+    }
     // Only when the bot has nothing left but to idle, and a moment after
     // its last task, so what it did has had time to register.
     let idling =
@@ -260,6 +268,7 @@ pub(super) struct DirectorWorld<'w, 's> {
     doors: Query<'w, 's, (Entity, &'static DoorLeaf, &'static GlobalTransform)>,
     buildings: Query<'w, 's, (&'static Building, &'static GlobalTransform)>,
     hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
+    guns: Query<'w, 's, &'static crate::weapons::Gun>,
     doorway: Option<Res<'w, super::Doorway>>,
     hot: Query<'w, 's, (), With<crate::anomaly::harvest::Hot>>,
     comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
@@ -350,6 +359,13 @@ impl DirectorWorld<'_, '_> {
                     .total_cmp(&b.2.translation().xz().distance(near))
             })
             .map(|(e, ..)| e)
+    }
+
+    /// The gun in that hand is on safe.
+    fn on_safe(&self, side: Side) -> bool {
+        self.holding(side)
+            .and_then(|e| self.guns.get(e).ok())
+            .is_some_and(|g| g.firearm.fire_mode() == extraction_core::firearm::FireMode::Safe)
     }
 
     fn holding(&self, side: Side) -> Option<Entity> {
@@ -461,6 +477,7 @@ impl DirectorWorld<'_, '_> {
             Goal::FillMag
             | Goal::SeatMag
             | Goal::Rack
+            | Goal::DeadTrigger
             | Goal::Safety
             | Goal::HitPlate
             | Goal::RunDry
@@ -546,12 +563,22 @@ impl DirectorWorld<'_, '_> {
                             let shots = match goal {
                                 // Till the slide stays back.
                                 Goal::RunDry => 20,
-                                Goal::FireAgain => 1,
+                                Goal::FireAgain | Goal::DeadTrigger => 1,
                                 _ => {
                                     t.push(Expect(crate::bot::Expect::GunRounds(1, 9)));
                                     3
                                 }
                             };
+                            // (A one-handed reload can end with the gun
+                            // put away: in hand first.)
+                            if self.holding(Side::Right).is_none() {
+                                t.push(DrawGun);
+                            }
+                            // Back on safe since (a reload can leave it so):
+                            // off, unless the step is the dead trigger.
+                            if goal != Goal::DeadTrigger && self.on_safe(Side::Right) {
+                                t.push(Gun(crate::weapons::flat::MacroKind::Mode));
+                            }
                             t.push(Fire { at: p, shots });
                         }
                     }

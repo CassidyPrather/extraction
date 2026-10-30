@@ -218,7 +218,9 @@ fn pm() -> GunLayout {
         muzzle: Vec3::new(0.0, 0.062, -0.13),
         port: Vec3::new(0.012, 0.068, -0.045),
         eject: Vec3::new(1.0, 0.6, 0.15),
-        sight: at(0.0, 0.079, 0.03),
+        // The eye line: through the rear notch (its floor 79.8 mm) onto the
+        // front blade's top.
+        sight: at(0.0, 0.0805, 0.03),
         // The well's mouth, at the top of the grip; magazines hang from it,
         // raked back with the grip.
         magwell: Some(
@@ -314,7 +316,9 @@ fn ak74() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.69),
         port: Vec3::new(0.025, 0.07, -0.13),
         eject: Vec3::new(1.0, 0.35, 0.1),
-        sight: at(0.0, 0.104, 0.0),
+        // The eye line: over the rear notch's floor onto the front post's
+        // top (`capture::sightline`; it ran 2.6 mm under the notch).
+        sight: at(0.0, 0.1071, 0.0),
         magwell: Some(
             Transform::from_xyz(0.0, 0.02, -0.12).with_rotation(Quat::from_rotation_x(-0.12)),
         ),
@@ -405,7 +409,7 @@ fn mosin() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.98),
         port: Vec3::new(0.0, 0.07, -0.09),
         eject: Vec3::new(0.7, 0.8, 0.2),
-        sight: at(0.0, 0.085, -0.02),
+        sight: at(0.0, 0.084, -0.02),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::TurnBolt,
@@ -482,7 +486,7 @@ fn sks() -> GunLayout {
         // The open top of the receiver, between the rear sight and the cover.
         port: Vec3::new(0.0, 0.068, -0.19),
         eject: Vec3::new(0.6, 0.9, 0.1),
-        sight: at(0.0, 0.0875, -0.02),
+        sight: at(0.0, 0.086, -0.02),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
@@ -555,7 +559,7 @@ fn nagant() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
         eject: Vec3::new(1.0, -0.2, 0.3),
-        sight: at(0.0, 0.086, 0.012),
+        sight: at(0.0, 0.0835, 0.012),
         magwell: None,
         handle: None,
         load_port: gate,
@@ -563,9 +567,10 @@ fn nagant() -> GunLayout {
         parts: vec![
             // Frame and grip.
             part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
+            // The grip, raked back below the palm (the model's `RAKE`).
             part(
                 bx(0.026, 0.085, 0.032),
-                Transform::from_xyz(0.0, -0.04, 0.012).with_rotation(Quat::from_rotation_x(-0.2)),
+                Transform::from_xyz(0.0, -0.04, 0.022).with_rotation(Quat::from_rotation_x(-0.4)),
                 Wood,
                 Static,
             ),
@@ -662,7 +667,7 @@ fn mp133() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.795),
         port: Vec3::new(0.022, 0.05, -0.12),
         eject: Vec3::new(1.0, 0.5, 0.1),
-        sight: at(0.0, 0.068, -0.03),
+        sight: at(0.0, 0.0665, -0.03),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::Pump,
@@ -725,7 +730,7 @@ fn svd() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.955),
         port: Vec3::new(0.0175, 0.0705, -0.148),
         eject: Vec3::new(1.0, 0.4, 0.1),
-        sight: at(0.0, 0.1068, 0.0),
+        sight: at(0.0, 0.1071, 0.0),
         magwell: Some(Transform::from_xyz(0.0, 0.025, -0.124)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
@@ -926,7 +931,7 @@ fn crossbow() -> GunLayout {
         muzzle: Vec3::new(0.0, rail, -0.46),
         port: Vec3::new(0.0, 0.07, -0.2),
         eject: Vec3::new(0.0, 1.0, 0.0),
-        sight: at(0.0, 0.085, -0.027),
+        sight: at(0.0, 0.095, -0.027),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::String,
@@ -974,7 +979,7 @@ fn toz() -> GunLayout {
         muzzle: Vec3::new(0.0, 0.035, -0.82),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
-        sight: at(0.0, 0.07, -0.05),
+        sight: at(0.0, 0.0534, -0.05),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::BreakBarrels,

@@ -14,6 +14,7 @@
 use bevy::prelude::*;
 use std::path::PathBuf;
 
+pub mod assets;
 pub mod attach;
 pub mod checks;
 pub mod cinematic;
@@ -24,6 +25,7 @@ pub mod landmarks;
 pub mod path;
 pub mod scale;
 pub mod seated;
+pub mod sightline;
 pub mod sweep;
 pub mod trailer;
 

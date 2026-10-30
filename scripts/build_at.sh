@@ -11,6 +11,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 ROOT="$(pwd)"
 VD="$ROOT/target/vdiff"
+# Every build takes its generated textures from this checkout: with any
+# missing, its shots would be flat fallback colours (scripts/check_textures.py).
+python3 "$ROOT/scripts/check_textures.py" || exit 1
 SHA="$(git rev-parse --short=8 "$1")"
 OUT="$VD/bin/$SHA"
 if [ ! -x "$OUT/extraction" ]; then

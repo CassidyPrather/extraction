@@ -137,15 +137,20 @@ impl Plugin for GadgetsPlugin {
 /// Where each gun takes a scope (or rail) and an adapter, gun space.
 fn gun_mount_points(id: &str, muzzle: Vec3) -> Vec<(Mount, Transform)> {
     let mut v = Vec::new();
+    // A dovetail's height puts a scope's optical axis where every scope
+    // that fits clears the receiver and its rear sight by a millimetre:
+    // their bells 20.5 mm under the axis, their brackets' bases 24.5 mm
+    // (the same on each, so one height seats them all). `capture::seated`
+    // holds each scope against each gun.
     match id {
-        "ak74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
+        "ak74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1305, -0.12))),
         "mosin" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.112, -0.1))),
         // Over the receiver cover, clear of the rear sight.
-        "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.1, -0.08))),
+        "sks" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.109, -0.08))),
         // The RPK's is the AK's; the SVD's scope sits over the bore off
         // the rail on its left; the TOZ-8's receiver has a dovetail.
-        "rpk74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.12))),
-        "svd" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.125, -0.1))),
+        "rpk74" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.133, -0.12))),
+        "svd" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.13, -0.1))),
         "toz8" => v.push((Mount::Dovetail, Transform::from_xyz(0.0, 0.085, -0.11))),
         _ => {}
     }
@@ -740,6 +745,7 @@ mod tests {
 
     fn app() -> App {
         let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         };

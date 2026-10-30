@@ -76,7 +76,8 @@ def till():
         for c in range(5):
             p.cyl(0.012, 0.0, 0.01, "Cream", segs=8,
                   xf=T(-0.12 + c * 0.06, 0.13 + r * 0.025, -0.1 + r * 0.05) @ RX(-1.2))
-    p.box((0.3, 0.08, 0.01), (0, 0.27, 0.1), "Black")
+    # Standing on the top's high end (it hung 1 to 4 cm over the slope).
+    p.box((0.3, 0.08, 0.01), (0, 0.255, 0.1), "Black")
     p.box((0.05, 0.02, 0.02), (0.2, 0.06, -0.05), "Black")
     return [p]
 
@@ -240,8 +241,10 @@ def charcoal_sack():
     0.45 x 0.4."""
     p = Part("static")
     w = Wear(73)
-    blob(p, (0.22, 0.2, 0.18), (0.0, 0.18, 0.0), "Canvas")
-    blob(p, (0.12, 0.08, 0.1), (0.0, 0.38, 0.03), "Canvas")
+    # On the floor (2 cm into it: its spilled lumps, on the floor, stood
+    # off its foot).
+    blob(p, (0.22, 0.2, 0.18), (0.0, 0.2, 0.0), "Canvas")
+    blob(p, (0.12, 0.08, 0.1), (0.0, 0.4, 0.03), "Canvas")
     for k in range(6):
         p.box((0.04, 0.03, 0.035), (0.22 + w.j(0.08), 0.015, w.j(0.12)), "Black", bevel=0.008,
               segs=1, xf=T(0.22, 0, 0) @ RY(k * 1.1) @ T(-0.22, 0, 0))
@@ -314,7 +317,8 @@ def bow_saw():
            for k in range(n + 1)]
     for a, b in zip(pts, pts[1:]):
         rod(p, a, b, 0.012, "Red", segs=6)
-    p.box((0.72, 0.03, 0.002), (0.0, -0.02, -0.03), "Steel")
+    # The blade's back on the nail (2 mm under it).
+    p.box((0.72, 0.03, 0.002), (0.0, -0.0175, -0.03), "Steel")
     return [p]
 
 
@@ -382,7 +386,8 @@ def landing_net():
     """A landing net leaning on the wall: its rim on the wall's face (z 0),
     its handle's end 0.3 out on the floor 1.5 below."""
     p = Part("static")
-    rod(p, (0.0, -1.5, -0.3), (0.0, -0.3, -0.06), 0.012, "Timber", segs=6)
+    # Up into the rim (its end stopped short of it).
+    rod(p, (0.0, -1.5, -0.3), (0.0, -0.27, -0.054), 0.012, "Timber", segs=6)
     c = (0.0, -0.12, -0.03)
     p.lathe([(0.17, -0.005), (0.18, -0.005), (0.18, 0.005), (0.17, 0.005)], "Steel", segs=16,
             closed=True, xf=T(*c) @ RX(0.2))
@@ -416,7 +421,7 @@ def armchair():
     for sx in (-1, 1):
         p.box((0.13, 0.22, 0.7), (sx * 0.31, 0.53, 0.02), "Wool", bevel=0.05, segs=1)
     p.box((0.62, 0.12, 0.56), (0, 0.48, -0.05), "Wool", bevel=0.04, segs=1)
-    p.box((0.4, 0.3, 0.004), (0, 0.82, 0.215), "Cream")
+    p.box((0.4, 0.3, 0.004), (0, 0.82, 0.2195), "Cream")  # on the back's face (3 mm off)
     return [p]
 
 

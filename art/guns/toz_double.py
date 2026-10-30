@@ -28,14 +28,16 @@ for sx in (-1, 1):
                (0.0114, BREECH - 0.16), (0.0109, MUZZLE + 0.004), (0.0103, MUZZLE),
                (0.0093, MUZZLE)], "Blued", segs=22, xf=T(sx * BX, BY, 0), closed=True)
 # Top rib, a slightly concave strip that tapers towards the muzzle.
-rib = [(BREECH - 0.002, 0.0455), (MUZZLE + 0.001, 0.0425), (MUZZLE + 0.001, 0.0478),
+# Its front raised so the bead on it tops the eye line, over the breech
+# (`pt_sight`, `capture::sightline`).
+rib = [(BREECH - 0.002, 0.0455), (MUZZLE + 0.001, 0.0443), (MUZZLE + 0.001, 0.0496),
        (BREECH - 0.002, 0.0515)]
 bar.prism(rib, -0.0052, 0.0052, "Blued", axis="x", bevel=0.0008, segs=1)
 # Bottom rib between the barrels.
 bar.prism([(BREECH - 0.05, 0.0225), (MUZZLE + 0.001, 0.0255), (MUZZLE + 0.001, 0.031),
            (BREECH - 0.05, 0.028)], -0.004, 0.004, "Blued", axis="x", bevel=0.0006, segs=1)
 # Front bead.
-bar.sphere(0.0019, (0.0, 0.049, MUZZLE + 0.008), "Steel", segs=10, rings=6)
+bar.sphere(0.0019, (0.0, 0.0515, MUZZLE + 0.008), "Steel", segs=10, rings=6)
 # Lumps under the breech, hooking onto the hinge pin.
 lump = fillet([(BREECH, 0.024), (BREECH - 0.058, 0.024), (BREECH - 0.058, 0.014),
                (-0.122, 0.002), (-0.110, 0.0005), (-0.1005, 0.008), (BREECH, 0.016)],
@@ -223,7 +225,7 @@ join("barrels", bar, fe_check)
 make(trig)
 
 empty("pt_muzzle", (0.0, 0.035, -0.82))
-empty("pt_sight", (0.0, 0.07, -0.05))
+empty("pt_sight", (0.0, 0.0534, -0.05))
 empty("pt_hinge", HINGE)
 
 # Where a sling attaches: the swivels under the barrels' rib and the butt.
