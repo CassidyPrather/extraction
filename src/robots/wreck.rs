@@ -1237,41 +1237,47 @@ mod tests {
         // reach of it, and it no higher than a standing hand.
         let out = app
             .world_mut()
-            .run_system_once(move |spatial: SpatialQuery| {
-                let body = Collider::capsule(0.28, 1.75 - 0.56);
-                let mut out = vec![];
-                for (at, p) in &drops {
-                    let stands = [0.3, 0.6, 0.9, crate::bot::REACH - 0.1].iter().any(|r| {
-                        (0..16).any(|k| {
-                            let a = k as f32 * std::f32::consts::TAU / 16.0;
-                            let (x, z) = (p.x + a.cos() * r, p.z + a.sin() * r);
-                            let g = zone.ground(x, z);
-                            p.y - g < crate::bot::STAND_REACH
-                                && spatial
-                                    .shape_intersections(
-                                        &body,
-                                        Vec3::new(x, g + 0.05 + 1.75 / 2.0, z),
-                                        Quat::IDENTITY,
-                                        &SpatialQueryFilter::from_mask([
-                                            Layer::World,
-                                            Layer::Robot,
-                                        ]),
-                                    )
-                                    .is_empty()
-                        })
-                    });
-                    if !stands {
-                        out.push(format!(
-                            "({:.1}, {:.2} up, {:.1}) {:.2} m off the core",
-                            p.x,
-                            p.y - zone.ground(p.x, p.z),
-                            p.z,
-                            p.xz().distance(at.xz())
-                        ));
+            .run_system_once(
+                move |spatial: SpatialQuery,
+                      terrain: Query<Entity, With<crate::world::TerrainCollider>>| {
+                    // The ground is the zone's own; the heightfield is no obstacle.
+                    let terrain = terrain.iter().next();
+                    let body = Collider::capsule(0.28, 1.75 - 0.56);
+                    let mut out = vec![];
+                    for (at, p) in &drops {
+                        let stands = [0.3, 0.6, 0.9, crate::bot::REACH - 0.1].iter().any(|r| {
+                            (0..16).any(|k| {
+                                let a = k as f32 * std::f32::consts::TAU / 16.0;
+                                let (x, z) = (p.x + a.cos() * r, p.z + a.sin() * r);
+                                let g = zone.ground(x, z);
+                                p.y - g < crate::bot::STAND_REACH
+                                    && spatial
+                                        .shape_intersections(
+                                            &body,
+                                            Vec3::new(x, g + 0.05 + 1.75 / 2.0, z),
+                                            Quat::IDENTITY,
+                                            &SpatialQueryFilter::from_mask([
+                                                Layer::World,
+                                                Layer::Robot,
+                                            ])
+                                            .with_excluded_entities(terrain),
+                                        )
+                                        .is_empty()
+                            })
+                        });
+                        if !stands {
+                            out.push(format!(
+                                "({:.1}, {:.2} up, {:.1}) {:.2} m off the core",
+                                p.x,
+                                p.y - zone.ground(p.x, p.z),
+                                p.z,
+                                p.xz().distance(at.xz())
+                            ));
+                        }
                     }
-                }
-                out
-            })
+                    out
+                },
+            )
             .unwrap();
         assert!(out.is_empty(), "loot nobody can stand to reach: {out:?}");
     }
