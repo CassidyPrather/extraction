@@ -461,6 +461,7 @@ impl DirectorWorld<'_, '_> {
             Goal::FillMag
             | Goal::SeatMag
             | Goal::Rack
+            | Goal::DeadTrigger
             | Goal::Safety
             | Goal::HitPlate
             | Goal::RunDry
@@ -546,7 +547,7 @@ impl DirectorWorld<'_, '_> {
                             let shots = match goal {
                                 // Till the slide stays back.
                                 Goal::RunDry => 20,
-                                Goal::FireAgain => 1,
+                                Goal::FireAgain | Goal::DeadTrigger => 1,
                                 _ => {
                                     t.push(Expect(crate::bot::Expect::GunRounds(1, 9)));
                                     3
