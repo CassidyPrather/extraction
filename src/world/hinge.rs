@@ -18,6 +18,11 @@ pub const PER_UNIT: f32 = 1.75;
 pub const MOST: f32 = 4.0;
 /// A hand nearer the hinge than this (m) can't lever the leaf round.
 const NEAR_HINGE: f32 = 0.12;
+/// A squeeze shorter than this (seconds) that hardly moves the leaf is a
+/// tap: it toggles the door, which swings over a second
+/// (`swing_doors`), as a press does.
+pub const TAP: f32 = 0.5;
+const TAP_TURN: f32 = 0.05;
 
 /// A door a hand has hold of: the hand, and where round the hinge it and
 /// the leaf were when it took hold.
@@ -26,6 +31,7 @@ pub struct Swinging {
     pub hand: Entity,
     hand_from: f32,
     leaf_from: f32,
+    since: f32,
 }
 
 /// A door left where a hand let it go: `swing_doors` doesn't drive it to
@@ -70,6 +76,7 @@ pub fn take_hold(
         ),
     >,
     parents: Query<&GlobalTransform>,
+    time: Res<Time>,
 ) {
     for ev in events.read() {
         let InteractEvent::Pressed { item, player } = ev else {
@@ -105,6 +112,7 @@ pub fn take_hold(
             hand,
             hand_from,
             leaf_from: door.angle,
+            since: time.elapsed_secs(),
         });
     }
 }
@@ -129,12 +137,18 @@ pub fn swing_by_hand(
     for (e, mut door, mut t, leaf, held, parent) in &mut doors {
         let hand = hands.get(held.hand).ok().filter(|h| h.grip_down);
         let Some(hand) = hand else {
-            // Let go: where it is is where it rests.
-            door.open = door.angle > 0.5;
-            commands
-                .entity(e)
-                .remove::<Swinging>()
-                .insert(Resting { open: door.open });
+            let mut e = commands.entity(e);
+            e.remove::<Swinging>();
+            let tap = time.elapsed_secs() - held.since < TAP
+                && (door.angle - held.leaf_from).abs() * PER_UNIT < TAP_TURN;
+            if tap {
+                // A squeeze and let go: it swings to the other end.
+                door.open = held.leaf_from < 0.5;
+            } else {
+                // Let go: where it is is where it rests.
+                door.open = door.angle > 0.5;
+                e.insert(Resting { open: door.open });
+            }
             continue;
         };
         let Ok(to_parent) = parents.get(parent.parent()).map(|g| g.affine().inverse()) else {
