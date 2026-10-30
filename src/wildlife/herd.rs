@@ -848,8 +848,10 @@ mod tests {
                 let mut at = herd.home + dir * 120.0;
                 let (mut alerted, mut bolted) = (None, None);
                 for _ in 0..(300.0 / DT) as usize {
-                    at -= dir * speed * DT;
+                    // Coming on at the leader where it is now (grazing,
+                    // they wander round home: a fixed line can pass them by).
                     let lead = herd.leader().unwrap().pos;
+                    at += (lead.xz() - at).normalize_or(-dir) * speed * DT;
                     let me = zone.on_ground(at.x, at.y);
                     let ctx = Ctx {
                         zone: &zone,
@@ -1063,7 +1065,9 @@ mod tests {
         ] {
             let (zone, nav, mut herd) = herd_in(map, kind);
             let mut rng = Rng::new(4);
-            let mut at = herd.home + Vec2::new(60.0, 0.0);
+            // From the herd's most open side ("east of it" is no sure field
+            // in a tight valley).
+            let mut at = herd.home + approach(&zone, &nav, herd.home) * 60.0;
             let mut runs = 0;
             let mut furthest = 0.0f32;
             for step in 0..(360.0 / DT) as usize {
