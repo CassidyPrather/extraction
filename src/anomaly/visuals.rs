@@ -984,6 +984,9 @@ struct Arcs {
 }
 
 const ARC_SEGMENTS: usize = 7;
+/// How far past its edge the yard's snare reaches for metal in a hand
+/// (only to show it: it strikes from `SNARE_METAL_REACH`), metres.
+const BECKON: f32 = 2.0;
 const ARCS: usize = 5;
 
 struct System {
@@ -1361,11 +1364,14 @@ pub fn flicker(kind: AnomalyKind, t: f32, charge: f32, seed: f32) -> f32 {
                 + 0.15 * (t * 13.0).sin() * (t * 7.3).sin()
                 + 0.05 * (t * 31.0).sin()
         }
-        // Steady, with a crackle now and then.
+        // Steady, with a crackle now and then; spent, it goes dark and
+        // quiet, and its crackle comes back as it charges (what a thrown
+        // part did to it, and how long you have).
         AnomalyKind::Snare => {
             let tick = (t * 12.0).floor();
             let crack = ((tick * 12.9898).sin() * 43758.545).fract().abs();
-            0.55 + 0.3 * charge + if crack > 0.93 { 0.4 } else { 0.0 }
+            let crackle = if crack > 0.93 { 0.4 } else { 0.0 };
+            0.1 + 0.75 * charge + crackle * smooth(0.4, 0.8, charge)
         }
         // A slow, heavy throb.
         AnomalyKind::Well => 0.35 + 0.65 * (0.5 + 0.5 * (t * 1.1).sin()).powi(4),
@@ -1568,9 +1574,12 @@ fn jag(rng: &mut extraction_core::noise::Rng, from: Vec3, to: Vec3, rough: f32) 
 /// it discharges they reach out to its full radius, and to whatever it
 /// struck.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn snare_arcs(
     mut arcs: Query<(&mut Arcs, &Mesh3d, &ChildOf, &GlobalTransform)>,
-    anomalies: Query<(&Anomaly, &Look)>,
+    anomalies: Query<(&Anomaly, &Look, Has<crate::onboarding::Probed>)>,
+    held: Query<(&GlobalTransform, &Item), With<crate::interact::Held>>,
+    catalog: Res<Catalog>,
     mut meshes: ResMut<Assets<Mesh>>,
     heads: Query<(&GlobalTransform, &ChildOf), With<RigHead>>,
     locals: Query<(), With<LocalPlayer>>,
@@ -1581,7 +1590,7 @@ fn snare_arcs(
     let dt = time.delta_secs();
     let eye = eye_position(&heads, &locals, &cams);
     for (mut a, mesh, parent, gt) in &mut arcs {
-        let Ok((anomaly, look)) = anomalies.get(parent.parent()) else {
+        let Ok((anomaly, look, beckons)) = anomalies.get(parent.parent()) else {
             continue;
         };
         for r in &mut a.reaching {
@@ -1606,7 +1615,8 @@ fn snare_arcs(
         });
         let width = thin * (1.0 + 2.5 * look.flash);
         for _ in 0..ARCS {
-            if !rng.chance(0.25 + 0.75 * hot) {
+            // None at all while it's spent: dark and still until it charges.
+            if !rng.chance(((hot - 0.25) / 0.75).max(0.0)) {
                 continue;
             }
             let dir = Vec3::new(
@@ -1623,6 +1633,19 @@ fn snare_arcs(
                 paths.push((jag(&mut rng, from, fork, 0.15), width * 0.6));
             }
             paths.push((main, width));
+        }
+        // The yard's snare, charged, reaches for metal in a hand from
+        // further off than it can strike: this is the one to throw it at.
+        if beckons && anomaly.charge >= 1.0 {
+            for (g, item) in &held {
+                let to = g.translation() - gt.translation();
+                if to.length() < anomaly.radius + BECKON
+                    && catalog.get(item.kind()).tags.iter().any(|t| t == "metal")
+                    && rng.chance(0.5)
+                {
+                    paths.push((jag(&mut rng, Vec3::ZERO, to * 0.6, 0.14), thin * 1.2));
+                }
+            }
         }
         for (to, _) in a.reaching.clone() {
             paths.push((jag(&mut rng, Vec3::ZERO, to, 0.1), thin * 2.0));
