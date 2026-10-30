@@ -1095,9 +1095,13 @@ fn triggers(
     mut shots: MessageWriter<ballistics::Shot>,
     catalog: Res<Catalog>,
     spatial: SpatialQuery,
+    scopes: Query<&crate::gadgets::MountedOn, With<zero::Turret>>,
 ) {
     let dt = time.delta_secs();
     for (e, mut gun, held, gt, item) in &mut guns {
+        // Iron sights are zeroed to the bore (`zero::iron_up`); a scope on
+        // it carries its own zero.
+        let scoped = scopes.iter().any(|m| m.0 == e);
         let trigger = held
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
@@ -1119,7 +1123,7 @@ fn triggers(
                     gun: e,
                     shooter: held.map(|h| h.player),
                     origin,
-                    direction: gt.rotation() * Vec3::NEG_Z,
+                    direction: zero::shot_dir(&gun, gt.rotation(), scoped),
                     speed: def.muzzle_velocity,
                     damage: def.damage,
                     projectiles: def.projectiles,
