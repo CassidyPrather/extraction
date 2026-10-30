@@ -2915,49 +2915,51 @@ fn break_sounds(
     }
 }
 
-/// A flock coming down to land (`flock::Phase::Landing`): the wings
-/// braking over the perch, a few birds' worth, softer and slower than
-/// going up (`flock.land`). Every flight is heard both ways.
+/// A flock settling back on a roof (`wildlife::Alighted`, as the last
+/// bird sits): the wings braking over the perch, a few birds' worth,
+/// softer and slower than going up (`flock.land`), and one call. Every
+/// flight is heard both ways (the playtest of 28 October wanted wings on
+/// takeoff and landing).
 fn flock_landing(
     mut commands: Commands,
-    flocks: Query<(Entity, &crate::wildlife::flock::Flock)>,
-    perches: Option<Res<crate::wildlife::perches::Perches>>,
+    mut alighted: MessageReader<crate::wildlife::Alighted>,
+    flocks: Query<&crate::wildlife::flock::Flock>,
     bank: Res<SoundBank>,
     mut rng: ResMut<AudioRng>,
-    mut was: Local<HashMap<Entity, bool>>,
 ) {
-    use crate::wildlife::flock::Phase;
-    was.retain(|e, _| flocks.contains(*e));
-    for (e, f) in &flocks {
-        let landing = matches!(f.phase, Phase::Landing { .. });
-        let before = was.insert(e, landing).unwrap_or(landing);
-        let Phase::Landing { to } = f.phase else {
-            continue;
-        };
-        if before {
-            continue;
-        }
-        let Some(at) = perches
-            .as_ref()
-            .and_then(|p| p.sites.get(to))
-            .map(|s| s.centre)
-        else {
-            continue;
-        };
-        let n = (f.birds.len() as f32 / 6.0).clamp(1.0, 3.0) as usize;
+    use crate::wildlife::flock::Species;
+    for a in alighted.read() {
+        let n = (a.birds as f32 / 6.0).clamp(1.0, 3.0) as usize;
         for _ in 0..n {
             play_at_speed(
                 &mut commands,
                 &bank,
                 &mut rng.0,
                 "wildlife/wings",
-                Some(at + Vec3::Y * 1.0),
+                Some(a.at + Vec3::Y * 1.0),
                 "flock.land",
                 0.0,
                 0.85,
                 0.12,
             );
         }
+        let (calls, cue) = match flocks.get(a.flock).map(|f| f.species) {
+            Ok(Species::Raven) => ("ambience/raven", "flock.call"),
+            Ok(Species::Jackdaw) => ("ambience/jackdaw", "flock.call"),
+            Ok(Species::Heron) => ("wildlife/heron", "flock.heron"),
+            Ok(Species::Chough) => ("wildlife/chough", "flock.chough"),
+            _ => ("ambience/crow", "flock.call"),
+        };
+        play(
+            &mut commands,
+            &bank,
+            &mut rng.0,
+            calls,
+            Some(a.at + Vec3::Y * 1.0),
+            cue,
+            -6.0,
+            0.1,
+        );
     }
 }
 
