@@ -2090,17 +2090,28 @@ mod onboarding {
         let pistol = stash_item(&mut vr, "pm_pistol");
         take(&mut vr, Side::Right, pistol);
         assert!(done(&vr, Goal::TakePistol));
-        assert!(!done(&vr, Goal::TakeRadio));
+        // The radio before the pistol's holstered doesn't count: hands
+        // aren't both filled before pockets are shown.
         let radio = stash_item(&mut vr, "radio");
         take(&mut vr, Side::Left, radio);
         vr.step(2);
+        assert!(!done(&vr, Goal::TakeRadio), "the radio before the holster");
+        vr.grip(Side::Left, 0.0);
+        vr.step(20);
+        {
+            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+            o.done.push(Goal::PutAway);
+        }
+        take(&mut vr, Side::Left, radio);
+        vr.step(2);
         assert!(done(&vr, Goal::TakeRadio));
+        {
+            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
+            o.done.push(Goal::Pocket);
+        }
+        vr.step(2);
         let l = lamps(&mut vr);
         assert_eq!((l[0], l[1]), (Lamp::Done, Lamp::Lit), "{l:?}");
-        assert!(
-            said(&vr, "Next: the lamp off the back of the truck"),
-            "the driver sends you on"
-        );
     }
 
     /// Station 2: the right stick sideways turns you, pulled down crouches
@@ -2108,10 +2119,7 @@ mod onboarding {
     #[test]
     fn station_getting_about() {
         let mut vr = Vr::first_run();
-        {
-            let mut o = vr.app.world_mut().resource_mut::<Onboarding>();
-            o.done = vec![Goal::TakePistol, Goal::TakeRadio];
-        }
+        at_station(&mut vr, crate::onboarding::station_of(Goal::Turn), &[]);
         let feet = ground(&vr, [-3.5, 91.0]);
         vr.stand(feet, 0.0);
         vr.step(10);
@@ -2156,7 +2164,11 @@ mod onboarding {
     #[test]
     fn station_put_it_away() {
         let mut vr = Vr::first_run();
-        at_station(&mut vr, crate::onboarding::station_of(Goal::PutAway), &[]);
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::PutAway),
+            &[Goal::TakePistol, Goal::PutAway, Goal::TakeRadio],
+        );
         let feet = ground(&vr, [3.0, 70.0]);
         vr.stand(feet, 0.0);
         vr.head(Vec3::new(0.0, 1.7, 0.0));
@@ -2200,8 +2212,14 @@ mod onboarding {
         }
         vr.grip(Side::Right, 0.0);
         vr.step(4);
-        assert!(done(&vr, Goal::PutAway), "pocketed");
+        assert!(done(&vr, Goal::Pocket), "pocketed");
         assert!(!done(&vr, Goal::Pack));
+        // The pack comes with the far box.
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Pack),
+            &[Goal::FarGrab],
+        );
 
         let kit = vr.spawn(
             "cleaning_kit",
@@ -2972,6 +2990,68 @@ mod onboarding {
         assert!(!safety_said(&vr), "not told again once you know");
     }
 
+    /// One thing to read: in the truck at the start, the only words in
+    /// view are the step you're on and the SETTINGS card (the playtest's
+    /// truck: a dozen settings cards, the logbook, the bench, a note and
+    /// the list, "completely overwhelming"). Boards ahead are blank.
+    #[test]
+    fn one_thing_to_read_in_the_truck() {
+        let mut vr = Vr::first_run();
+        in_the_bed(&mut vr);
+        vr.step(10);
+        let head = vr.root().transform_point(Vec3::new(0.0, 1.65, 0.0));
+        let mut q = vr.app.world_mut().query::<(
+            Entity,
+            &crate::raid::bench::ScreenText,
+            &GlobalTransform,
+            Option<&Visibility>,
+            Option<&crate::onboarding::StationSign>,
+            Option<&OnboardCard>,
+        )>();
+        let shown: Vec<String> = q
+            .iter(vr.app.world())
+            .filter(|(e, t, g, v, ..)| {
+                !t.text.is_empty()
+                    && g.translation().distance(head) < 4.0
+                    && v.is_none_or(|v| *v != Visibility::Hidden)
+                    && vr
+                        .app
+                        .world()
+                        .get::<crate::onboarding::Folded>(*e)
+                        .is_none()
+            })
+            .map(|(_, t, _, _, sign, card)| match (sign, card) {
+                (Some(s), _) => format!("board {}", s.0),
+                (_, Some(c)) => format!("{c:?}"),
+                _ => t.text.lines().next().unwrap_or("").to_string(),
+            })
+            .collect();
+        let mut shown = shown;
+        shown.sort();
+        assert_eq!(
+            shown,
+            // (And ON TO THE ZONE by the tailgate: the one way out of the
+            // yard for someone who's been through it.)
+            vec![
+                "ON TO THE ZONE".to_string(),
+                "Push".to_string(),
+                "board 0".to_string()
+            ],
+            "in view: {shown:?}"
+        );
+        let ahead = vr
+            .app
+            .world_mut()
+            .query::<(
+                &crate::onboarding::StationSign,
+                &crate::raid::bench::ScreenText,
+            )>()
+            .iter(vr.app.world())
+            .filter(|(s, t)| s.0 > 0 && !t.text.is_empty())
+            .count();
+        assert_eq!(ahead, 0, "boards ahead are blank");
+    }
+
     /// The driver names the next station once: stepping out of the truck
     /// doesn't say it again (the playtest heard "Next: the lamp by the
     /// pen." twice in 28 s).
@@ -3010,8 +3090,10 @@ mod onboarding {
     #[test]
     fn skip_start_over_and_the_prompts() {
         let mut vr = Vr::first_run();
-        vr.step(5);
         let far = crate::onboarding::station_of(Goal::FarGrab);
+        // (A SKIP card shows at its own station.)
+        at_station(&mut vr, far, &[]);
+        vr.step(5);
         let skip = card(&mut vr, OnboardCard::Skip(far));
         take_card(&mut vr, skip);
         assert!(done(&vr, Goal::FarGrab) && ob(&vr).skipped.contains(&Goal::FarGrab));
