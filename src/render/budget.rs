@@ -78,7 +78,10 @@ pub const SHADOW_MAP: usize = 1024;
 /// frame twice today's.
 pub const CPU_FRAME_UNITS: f64 = 160.0;
 pub const CPU_SHARE: [(&str, f64); 6] = [
-    ("PostUpdate", 0.5),
+    // A larger share since the main world went to one thread: its
+    // culling and transforms are the frame's biggest fixed work, where the
+    // executor's overhead was mostly Update's (44-48% at 5 ms).
+    ("PostUpdate", 0.6),
     ("Update", 0.4),
     ("FixedUpdate", 0.3),
     ("FixedPostUpdate", 0.35),
@@ -1545,19 +1548,21 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
-    /// The game's own executor again (`client_flash` gives the count
-    /// gauges one thread): the timing gauges measure the frame as it runs,
-    /// schedule shares and all (PostUpdate's culling and transforms side
-    /// by side read 79% of a one-thread frame).
+    /// The game's own executor (`crate::single_threaded`): the timing
+    /// gauges measure the frame as it runs, schedule shares and all.
+    /// `BUDGET_EXECUTOR=multi` puts Bevy's multi-threaded one back on the
+    /// busy moment and `BUDGET_THREADS=all` gives it every core, to weigh
+    /// the two again on another machine.
     pub(crate) fn as_the_game_runs(app: &mut App) {
-        let mut schedules = app.world_mut().resource_mut::<Schedules>();
-        for (_, schedule) in schedules.iter_mut() {
-            schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
-        }
+        crate::single_threaded(app);
     }
 
     pub(crate) fn busy_scene(map: &str) -> App {
-        let mut app = client_threads(map, "downpour", Some(1));
+        // `BUDGET_THREADS=all` (or a count): the game's own pool.
+        let threads = std::env::var("BUDGET_THREADS")
+            .ok()
+            .map_or(Some(1), |n| n.parse().ok());
+        let mut app = client_threads(map, "downpour", threads);
         as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
@@ -1602,6 +1607,12 @@ pub(crate) mod tests {
     /// `busy_moment`, calling `measuring` as the measured frames begin.
     fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
         let mut app = busy_scene(map);
+        if std::env::var("BUDGET_EXECUTOR").is_ok_and(|k| k == "multi") {
+            let mut schedules = app.world_mut().resource_mut::<Schedules>();
+            for (_, s) in schedules.iter_mut() {
+                s.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
+            }
+        }
         let keep_alive = crate::perf::fight::keep_alive;
         let skip = app
             .world()
@@ -1997,6 +2008,13 @@ pub(crate) mod tests {
                 .or_default();
             g.0 += 1;
             g.1 += ms;
+        }
+        if let Ok(out) = std::env::var("SYSTEMS_OUT") {
+            let lines: Vec<String> = v
+                .iter()
+                .map(|(n, ms)| format!("{:.4} {n}", ms / frames))
+                .collect();
+            std::fs::write(out, lines.join("\n")).unwrap();
         }
         let mut groups: Vec<_> = groups.into_iter().collect();
         groups.sort_by(|a, b| b.1.1.total_cmp(&a.1.1));

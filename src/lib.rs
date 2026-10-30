@@ -322,6 +322,9 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .insert_resource(Time::<Fixed>::from_hz(90.0))
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
+    // The main world's systems one after another (the renderer's keep
+    // their threads): see `single_threaded`.
+    single_threaded(&mut app);
     app.run()
 }
 
@@ -583,14 +586,17 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     app
 }
 
-/// Every schedule runs its systems one at a time, in one fixed order. Every
-/// headless app runs this way: on many threads, systems that touch the
-/// same things run in either order and two runs of one seed part within
-/// seconds, and a one-player world gains nothing from them. Headless apps
-/// run side by side (sims a process a core, tests four at a time), and one
-/// thread each is two to three times faster than each spreading over all
-/// the cores. A sim also gets a one-thread task pool, so it replays from
-/// its seed.
+/// Every schedule runs its systems one at a time, in one fixed order, on
+/// the thread that runs the frame. The game and every headless app run
+/// this way. The game has some 1,500 systems, most a few microseconds of
+/// work, and Bevy's multi-threaded executor spends more handing each to a
+/// thread (1 to 2.5 ms a thousand, `executor_tests`) than the cores give back:
+/// Marrow's busy moment took 21 ms a frame on four cores so, 12 ms on one.
+/// Systems that iterate in parallel (`par_iter`, the physics solver) still
+/// use the task pool, and the renderer keeps its own threads. On many
+/// threads, too, systems that touch the same things run in either order,
+/// and two runs of one seed part within seconds. A sim also gets a
+/// one-thread task pool, so it replays from its seed.
 pub fn single_threaded(app: &mut App) {
     let mut schedules = app.world_mut().resource_mut::<Schedules>();
     for (_, schedule) in schedules.iter_mut() {
@@ -697,6 +703,57 @@ mod client_tests {
         let mut v: Vec<_> = by.into_iter().collect();
         v.sort_by(|a, b| b.1.cmp(&a.1));
         eprintln!("census by root: {:?}", &v[..v.len().min(12)]);
+    }
+}
+
+#[cfg(test)]
+mod executor_tests {
+    use super::*;
+
+    #[derive(Component)]
+    struct Idle;
+
+    fn idle(q: Query<&Idle>) {
+        for _ in &q {}
+    }
+
+    /// A frame's cost doesn't grow with the systems that have nothing to
+    /// do: a thousand of them cost under half a millisecond (on many
+    /// threads, 1 to 2.5 ms: the executor's, not theirs).
+    #[test]
+    fn a_thousand_idle_systems_cost_the_frame_little() {
+        let mut app = App::new();
+        app.add_plugins(bevy::app::TaskPoolPlugin::default());
+        for _ in 0..1000 {
+            app.add_systems(Update, idle);
+        }
+        single_threaded(&mut app);
+        for _ in 0..20 {
+            app.update();
+        }
+        let mut ms: Vec<f64> = (0..60)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                app.update();
+                t.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        ms.sort_by(f64::total_cmp);
+        let median = ms[ms.len() / 2];
+        assert!(median < 0.5, "a frame of idle systems: {median:.3} ms");
+    }
+
+    /// The game's own app runs that way (`run` builds it with a window, so
+    /// this reads it).
+    #[test]
+    fn the_game_runs_its_schedules_on_one_thread() {
+        let src = include_str!("lib.rs");
+        let run = &src[src.find("pub fn run(").unwrap()..];
+        let run = &run[..run.find("\n}\n").unwrap()];
+        let at = run
+            .find("single_threaded(&mut app);")
+            .expect("run sets the executors");
+        assert!(at < run.find("app.run()").unwrap(), "before the app runs");
     }
 }
 
