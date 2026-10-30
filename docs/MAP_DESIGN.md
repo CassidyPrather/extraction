@@ -685,6 +685,20 @@ land. `map_openness` measures it for every valley (the map lint's
 `openness:` line); `TIGHT` lists the valleys held to it (Marrow Creek, the
 prototype; the others join as they're reworked).
 
+- **Close enough to walk.** Each place's walk to its nearest neighbour,
+  on the gentle grid, is about 40-45 s at a walking pace (2.4 m/s),
+  100-110 m: the next place is in reach before the last is out of mind.
+  Pull the places in, don't add filler between them. Marrow was pulled
+  in by script, every place moved by name and kept whole, the ground
+  between squeezed, the valley 640 -> 388 m. The lint's distance rules
+  (gate and rendezvous spacing, danger and view ranges, `POI_MIN`) scale
+  with a tight valley's span (`map_lint::valley_scale`, against the
+  564 m Marrow had inside its fence). Twin landmarks
+  (`UNIQUE_SIGHT`) don't: how far a landmark is seen depends on its
+  height, not the valley's width. A tight valley has every landmark in
+  view of nearly every other, so it has one of each kind (Marrow's
+  kiln chimney became a steeple; its farm's water tower, pump
+  standpipe and checkpoint mast went).
 - **Break the sightlines.** From the open ground (out of the woods),
   sixteen bearings each, a standing figure is followed over the land and
   past what stands on it (buildings and rocks block, a wood wears a line
@@ -699,11 +713,13 @@ prototype; the others join as they're reworked).
   carries 150 m to a machine's ear in the open (a pistol's about 105 m),
   45% as far past a rise or a wall standing 1.2 m over its line
   (`map_openness::GUNSHOT`, the one number `robots::senses` reads too). A fight at a
-  hot spot is heard by at most 1.5 others on average (`PULL_MEAN`), and a
+  hot spot is heard by at most 1.5 others on average, hot spots within
+  60 m of each other counting as one zone (`PULL_MEAN`, `ZONE`), and a
   fight at a quiet place (danger 1) by at most two (`QUIET_PULL`). Put
   the rise between a quiet place and the work sites round it, not the
   distance: Marrow's Village had three sites within 120 m and was heard
-  by four hot spots; the bank, ford and clearing rises round it make it
+  by four hot spots. Rises round it made it none; pulled in, with the
+  sites moved out to the hot zones and rises on the creek's banks, it is
   one.
 - **Something to stop at.** "Too far apart" is empty walking, not
   distance: on each place's walk to its nearest neighbour, no more than
@@ -719,13 +735,22 @@ prototype; the others join as they're reworked).
   machine that wanders out of its zone sees as far as it ever did.
 
 Marrow, before and after (the lint's measures, at today's 70 m sight and
-150 m gunshot): open ground seen past a drone's sight 25% -> 15%, the
-90th-percentile sightline 86 -> 74 m, a fight in the Village heard by
-3 -> 0 hot spots (a hot spot's by 1.1 others on average, the shorter
-gunshot doing most of that), the longest empty walk 135 -> 70 m (the ford-keeper's hut between the Old farm and
-the Hollow). Rises: the bank, ford and clearing rises round the Village,
-the spotter's rise by the district road north of the creek, the lane
-bank south of the Village, the rail yard's spoil heap.
+150 m gunshot), as it was / with its rises / pulled in:
+
+| | as it was | rises | pulled in |
+|---|---|---|---|
+| nearest-place walk, mean | 169 m (70 s) | 169 m | 106 m (44 s) |
+| open ground seen past 70 m | 25% | 15% | 14% |
+| sightline, 90th percentile | 86 m | 74 m | 72 m |
+| a fight in the Village heard by | 3 | 0 | 1 |
+| longest empty walk | 135 m | 70 m | 70 m |
+
+A fight at a hot spot is now heard by 0.7 other zones on average; the
+Radio mast's by three, the most. The rises: the creek's banks
+east and west of the bridge, the spur and the rise either side of the
+ford, the Hollow's south rim. The hot zones sit together in the north-west
+(the Gate, the Depot, the north bank's site and its spotter), with the
+Village, the farms and the logging camp quiet round the drop.
 
 ## Terraces
 
