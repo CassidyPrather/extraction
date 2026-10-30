@@ -376,11 +376,7 @@ mod tests {
     }
 
     /// Faults waiting on their owners, by the start of their line.
-    const KNOWN: &[&str] = &[
-        // The drum's body beds 4 mm into the stock's well (Models, next
-        // round).
-        "ppsh_drum through ppsh",
-    ];
+    const KNOWN: &[&str] = &[];
 
     /// Every magazine sits in every gun it fits without going through it
     /// or fighting it.
