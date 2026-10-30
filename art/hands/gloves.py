@@ -54,7 +54,7 @@ RADII = [
     [0.0084, 0.0077, 0.0071, 0.0066],
     [0.0112, 0.0103, 0.0094],
 ]
-SIDES = 10
+SIDES = 16
 
 
 def finger_root(f, ts):
@@ -88,7 +88,7 @@ def segment(f, j):
     r0, r1 = RADII[f][j], RADII[f][j + 1]
     c1 = -(L - r1) if last else -L
     p = Part(f"finger_{f}_{j}")
-    n = 3
+    n = 5
     prof = [(r0 * math.sin(math.pi / 2 * k / n), r0 * math.cos(math.pi / 2 * k / n))
             for k in range(n + 1)]
     # A glove's finger is a touch fuller over the middle of a segment.
@@ -97,6 +97,14 @@ def segment(f, j):
              for k in range(n + 1)]
     _, faces = p.lathe(prof, "Glove", segs=SIDES, start=360.0 / SIDES / 2)
     by_normal(p, faces, "Leather", lambda nm: nm.y < -0.25)
+    # Work gloves wear through at the fingertips first: the outer half of
+    # each last segment is leather all round, a patch you can see from the
+    # back of the hand.
+    if last:
+        mi = p._mi("Leather")
+        for fc in faces:
+            if fc.calc_center_median().z < c1 * 0.5:
+                fc.material_index = mi
     # Pads over the back of the first two segments (the thumb's first).
     if j < 2 and not (f == 4 and j == 1):
         rm = (r0 + r1) * 0.5
@@ -170,8 +178,8 @@ def tube(p, pts, r, mat, sides=6):
 
 def palm(ts):
     p = Part("palm")
-    segs = 20
-    stations = 16
+    segs = 32
+    stations = 24
     rings = []
     for i in range(stations + 1):
         # Bunched toward the rounded knuckle end.
@@ -205,15 +213,41 @@ def palm(ts):
                         + Vector((0, 0, 1)) * half * math.cos(ang))
         bar.append(ring)
     p.loft(bar, "Padding")
-    # Seams down the back of the hand, from the guard to the cuff, and the
+    # A moulded pad over each knuckle, standing proud of the bar: the
+    # hand's own knuckles, armoured, rather than one flat strip.
+    for f in range(4):
+        x = (0.03 - f * 0.02) * ts
+        y, nrm = palm_top(x, zg - 0.003)
+        p.sphere(1.0, (0, 0, 0), "Padding", segs=12, rings=6,
+                 xf=T(x, y + 0.0028, zg - 0.003) @ S(0.0078, 0.0036, 0.0068))
+    # A padded panel over the back of the hand, between the knuckle guard
+    # and the cuff: tactical gloves are built in panels, and a plain back
+    # read as a mannequin's hand (the 28 October playtest).
+    panel = []
+    pz = [zg + 0.009 + (0.040 - zg - 0.009) * k / 10 for k in range(11)]
+    px = [-0.024 + 0.048 * k / 12 for k in range(13)]
+    for z in pz:
+        top, base = [], []
+        for x in px:
+            y, nrm = palm_top(x, z)
+            # Thickest in the middle, feathered toward its edges.
+            ex = 1.0 - (abs(x) / 0.024) ** 4
+            ez = 1.0 - (abs(z - (pz[0] + pz[-1]) / 2) / ((pz[-1] - pz[0]) / 2)) ** 4
+            top.append(Vector((x, y, z)) + nrm * (0.0004 + 0.0016 * max(0.0, ex * ez)))
+            base.append(Vector((x, y, z)) - nrm * 0.0004)
+        # A closed section: along the raised top, back along the surface.
+        panel.append(top + base[::-1])
+    p.loft(panel, "Padding")
+    # Seams down the back of the hand along the panel's sides, from the
+    # guard to the cuff, dark against the nylon so the build reads; and the
     # welt along each side where the leather palm meets the fabric back.
-    for x in (-0.013, 0.013):
+    for x in (-0.0255, 0.0255):
         pts = []
         for k in range(10):
-            z = zg + 0.008 + (0.042 - zg - 0.008) * k / 9
+            z = zg + 0.006 + (0.044 - zg - 0.006) * k / 9
             y, nrm = palm_top(x, z)
-            pts.append(Vector((x, y, z)) + nrm * 0.0002)
-        tube(p, pts, 0.0011, "Glove", sides=5)
+            pts.append(Vector((x, y, z)) + nrm * 0.0004)
+        tube(p, pts, 0.0008, "Padding", sides=5)
     for sx in (-1, 1):
         pts = []
         for k in range(12):
