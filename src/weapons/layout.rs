@@ -210,7 +210,9 @@ fn pm() -> GunLayout {
         muzzle: Vec3::new(0.0, 0.062, -0.13),
         port: Vec3::new(0.012, 0.068, -0.045),
         eject: Vec3::new(1.0, 0.6, 0.15),
-        sight: at(0.0, 0.079, 0.03),
+        // The eye line: through the rear notch (its floor 79.8 mm) onto the
+        // front blade's top.
+        sight: at(0.0, 0.0805, 0.03),
         // The well's mouth, at the top of the grip; magazines hang from it,
         // raked back with the grip.
         magwell: Some(
@@ -555,9 +557,10 @@ fn nagant() -> GunLayout {
         parts: vec![
             // Frame and grip.
             part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
+            // The grip, raked back below the palm (the model's `RAKE`).
             part(
                 bx(0.026, 0.085, 0.032),
-                Transform::from_xyz(0.0, -0.04, 0.012).with_rotation(Quat::from_rotation_x(-0.2)),
+                Transform::from_xyz(0.0, -0.04, 0.022).with_rotation(Quat::from_rotation_x(-0.4)),
                 Wood,
                 Static,
             ),

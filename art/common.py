@@ -785,9 +785,10 @@ def box_uv(me, origin_b):
     bm.free()
 
 
-def wear(me, mats=("Blued",), width=0.0028, turn=35.0, amount=0.45, seed=0.0):
+def wear(me, mats=("Blued",), width=0.0028, turn=25.0, amount=0.45, seed=0.0):
     """Edge wear: the narrow faces of bevels and roundings on `mats`, where
-    a face turns more than `turn` degrees from a neighbour, go to bare
+    a face turns more than `turn` degrees from a neighbour (a quarter
+    round in three segments turns 30 a step: at 35 no bevel wore), go to bare
     `Worn` steel in noisy patches (`amount` of the length), the way bluing
     rubs off a gun's edges in the hand and the holster."""
     from mathutils import noise

@@ -37,6 +37,9 @@ pub enum Step {
     Break(bool),
     DropMag,
     InsertBestMag,
+    /// The magazine this macro took out, back in (a double feed's
+    /// clearance: strip it, rack, seat it again).
+    ReseatMag,
     SlideStop,
     LoadRound,
     Mode,
@@ -64,6 +67,8 @@ pub struct GunMacro {
     gun: Option<Entity>,
     steps: VecDeque<(f32, Step)>,
     wait: f32,
+    /// The magazine its last DropMag took out (for ReseatMag).
+    stripped: Option<Entity>,
 }
 
 impl GunMacro {
@@ -75,6 +80,7 @@ impl GunMacro {
         self.gun = Some(gun);
         self.steps = steps.into();
         self.wait = 0.0;
+        self.stripped = None;
     }
 }
 
@@ -100,10 +106,11 @@ pub fn macro_steps(kind: MacroKind, gun: &Gun) -> Vec<(f32, Step)> {
             } else if gun.firearm.malfunction == Some(Malfunction::DoubleFeed)
                 && action != ActionKind::Pump
             {
-                // Strip the magazine, rack the pair out, reload, rack.
+                // Strip the magazine, rack the pair out, seat it again,
+                // rack.
                 steps.push((0.05, Step::DropMag));
                 steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.25, s)));
-                steps.push((0.5, Step::InsertBestMag));
+                steps.push((0.5, Step::ReseatMag));
                 steps.extend(rack_steps(action).into_iter().map(|(t, s)| (t + 0.05, s)));
             } else if action == ActionKind::SemiAuto {
                 // Tap-rack: harmless when nothing is wrong.
@@ -340,10 +347,14 @@ fn run_macros(
             Step::Rotate => gun.firearm.rotate_cylinder(),
             Step::EjectGate => gun.firearm.eject_at_gate(),
             Step::DropMag => {
+                mac.stripped = gun
+                    .magwell
+                    .and_then(|w| sockets.get(w).ok())
+                    .and_then(|s| s.occupant);
                 drop.write(DropMagazine { gun: e });
                 Vec::new()
             }
-            Step::InsertBestMag => {
+            Step::ReseatMag | Step::InsertBestMag => {
                 // The fullest fitting magazine on the body or in the bag.
                 let family = gun.firearm.def.magazine_family.clone().unwrap_or_default();
                 let mine = |m: &(
@@ -360,12 +371,20 @@ fn run_macros(
                     on_body || in_bag
                 };
                 let mut best: Option<(u32, Entity)> = None;
-                for m in &mut mags {
-                    if m.2.family != family || !mine(&m) {
-                        continue;
-                    }
-                    if best.is_none_or(|b| m.1.rounds > b.0) {
-                        best = Some((m.1.rounds, m.0));
+                if matches!(step, Step::ReseatMag) {
+                    // The one it took out, wherever it fell.
+                    best = mac
+                        .stripped
+                        .take()
+                        .and_then(|m| mags.get(m).ok().map(|m| (m.1.rounds, m.0)));
+                } else {
+                    for m in &mut mags {
+                        if m.2.family != family || !mine(&m) {
+                            continue;
+                        }
+                        if best.is_none_or(|b| m.1.rounds > b.0) {
+                            best = Some((m.1.rounds, m.0));
+                        }
                     }
                 }
                 if let (Some((_, mag_e)), Some(well)) = (best, gun.magwell) {

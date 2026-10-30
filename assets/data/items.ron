@@ -64,7 +64,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "nagant", dims: Some((0.035, 0.185, 0.215)),
+            id: "nagant", dims: Some((0.03, 0.181, 0.235)),
             name: "Nagant revolver",
             description: "Seven shots, and the cylinder slides forward to seal the gap: quiet for a revolver. Open the gate, push the empties out one by one, thumb rounds in one by one. Slow, sure.",
             category: Firearm, size: Medium, mass: 0.8, bulk: 0.6,

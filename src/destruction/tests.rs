@@ -15,6 +15,7 @@ use crate::world::buildings::{Door, DoorLeaf};
 
 fn app(save: Option<std::path::PathBuf>) -> App {
     let opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         save,
         ..Default::default()
@@ -922,7 +923,7 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
 fn knife_facing(target: Vec3, out: Vec3, back: f32) -> (crate::vr_harness::Vr, Vec3, Quat) {
     use crate::interact::GripRole;
     use crate::rig::Side;
-    let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+    let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
     let zone = vr.app.world().resource::<crate::world::Zone>().clone();
     let flat = out.with_y(0.0).normalize();
     let stand = target + flat * back;

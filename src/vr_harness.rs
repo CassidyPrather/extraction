@@ -835,7 +835,7 @@ mod tests {
     /// your head went.)
     #[test]
     fn duck_under_a_beam() {
-        let mut vr = Vr::new("marrow_creek");
+        let mut vr = Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<crate::world::Zone>().clone();
         let start = zone.on_ground(0.0, 200.0);
         vr.stand(start + Vec3::Y * 0.05, 0.0);
@@ -939,7 +939,7 @@ mod tests {
     /// stopped (the first playtest crept downhill for good).
     #[test]
     fn stopping_on_a_slope_stays_put() {
-        let mut vr = Vr::new("marrow_creek");
+        let mut vr = Vr::new(extraction_core::map::TEST_FIELD_ID);
         let (at, deg) = slope_near(&vr, Vec2::new(40.0, 280.0));
         assert!(deg > 8.0, "a slope ({deg} deg)");
         let n = vr
@@ -5096,6 +5096,46 @@ mod carry {
             "it stayed in the hand through a step: off {worst}"
         );
         assert_eq!(vr.hand_state(Side::Left).holding, Some(bag), "still held");
+    }
+
+    /// Held open in front of you, the pack's opening (its outer face, +Z in
+    /// its space) faces you, tipped up toward the eyes, so you look into it
+    /// rather than at its straps (the playtest asked twice: "opening from the
+    /// side, facing you, with a visible cavity").
+    #[test]
+    fn a_held_open_pack_opens_toward_you() {
+        use crate::interact::body::Backpack;
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        vr.step(4);
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.hand(Side::Left, shoulder, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        assert!(vr.app.world().get::<Backpack>(bag).unwrap().open);
+        let t = vr.app.world().get::<GlobalTransform>(bag).unwrap();
+        let eye = feet + Vec3::new(0.0, 1.7, 0.0);
+        let facing = (t.rotation() * Vec3::Z).dot((eye - t.translation()).normalize());
+        assert!(facing > 0.6, "the opening faces the eyes: {facing}");
     }
 
     /// Your pack off the left shoulder into the left hand: it hangs open in

@@ -35,6 +35,7 @@ fn app() -> (App, Entity, Zone) {
 /// [`app`] on a valley of its own (`None`: the default, Marrow Creek).
 fn app_on(map: Option<&str>) -> (App, Entity, Zone) {
     let mut opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         ..Default::default()
     };
