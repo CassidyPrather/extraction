@@ -391,6 +391,11 @@ mod tests {
                 .flatten()
                 .collect();
             for (e, t) in traits(w) {
+                // Folded away by the training yard till it's taught
+                // (`onboarding::Folded`): out of sight and reach on purpose.
+                if w.get::<crate::onboarding::Folded>(e).is_some() {
+                    continue;
+                }
                 let what = w.get::<Name>(e).map_or(format!("{e}"), |n| n.to_string());
                 let kind = match kind_of(&t) {
                     Ok(Some(k)) => k,

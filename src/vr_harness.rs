@@ -1057,27 +1057,71 @@ mod tests {
 
     /// No button sits on another panel: each is beside its own card, clear
     /// of its neighbours' faces (in the truck, by the yard's tailgate).
+    /// The training yard folds the settings cards till its SETTINGS card's
+    /// been pushed (`onboarding::yard_shows`): past that.
+    fn settings_out(vr: &mut Vr) {
+        let at = crate::onboarding::station_of(crate::onboarding::Goal::Button);
+        let mut o = vr
+            .app
+            .world_mut()
+            .resource_mut::<crate::onboarding::Onboarding>();
+        o.done = crate::onboarding::all_goals()
+            .filter(|g| crate::onboarding::station_of(*g) <= at)
+            .collect();
+    }
+
     #[test]
     fn buttons_sit_clear_of_other_panels() {
-        use crate::interact::poke::{BUTTON_R, PokeButton};
+        use crate::interact::poke::PokeButton;
         use crate::raid::bench::ScreenText;
         let mut vr = Vr::new("training_yard");
         vr.step(5);
-        let world = vr.app.world_mut();
-        let buttons: Vec<(Entity, Vec3)> = world
-            .query::<(&PokeButton, &GlobalTransform)>()
-            .iter(world)
-            .map(|(b, gt)| (b.target, gt.translation()))
-            .collect();
-        let panels: Vec<(Entity, GlobalTransform, Vec2)> = world
-            .query::<(Entity, &GlobalTransform, &ScreenText)>()
-            .iter(world)
-            .map(|(e, gt, s)| (e, *gt, s.size))
-            .collect();
-        assert!(buttons.len() >= 5, "buttons: {}", buttons.len());
+        // The training yard folds what it isn't teaching (`onboarding::
+        // Folded`): what's shown together mustn't clash. At the settings
+        // step, and after it, when the settings cards are out.
+        let at_settings = crate::onboarding::station_of(crate::onboarding::Goal::Button);
         let mut clashes = Vec::new();
-        for (target, at) in &buttons {
-            for (e, gt, size) in &panels {
+        let mut most = 0;
+        for done_to in [at_settings, at_settings + 1] {
+            {
+                let mut o = vr
+                    .app
+                    .world_mut()
+                    .resource_mut::<crate::onboarding::Onboarding>();
+                o.done = crate::onboarding::all_goals()
+                    .filter(|g| crate::onboarding::station_of(*g) < done_to)
+                    .collect();
+            }
+            vr.step(3);
+            let world = vr.app.world_mut();
+            let shown = |w: &World, e: Entity| w.get::<Visibility>(e) != Some(&Visibility::Hidden);
+            let buttons: Vec<(Entity, Vec3)> = world
+                .query::<(&PokeButton, &GlobalTransform)>()
+                .iter(world)
+                .filter(|(b, _)| shown(world, b.target))
+                .map(|(b, gt)| (b.target, gt.translation()))
+                .collect();
+            let panels: Vec<(Entity, GlobalTransform, Vec2)> = world
+                .query::<(Entity, &GlobalTransform, &ScreenText)>()
+                .iter(world)
+                .filter(|(e, ..)| shown(world, *e))
+                .map(|(e, gt, s)| (e, *gt, s.size))
+                .collect();
+            most = most.max(buttons.len());
+            clashes.extend(clash(&buttons, &panels));
+        }
+        assert!(most >= 5, "buttons: {most}");
+        assert!(clashes.is_empty(), "{clashes:#?}");
+    }
+
+    fn clash(
+        buttons: &[(Entity, Vec3)],
+        panels: &[(Entity, GlobalTransform, Vec2)],
+    ) -> Vec<String> {
+        use crate::interact::poke::BUTTON_R;
+        let mut clashes = Vec::new();
+        for (target, at) in buttons {
+            for (e, gt, size) in panels {
                 if e == target {
                     continue;
                 }
@@ -1091,7 +1135,7 @@ mod tests {
                 }
             }
         }
-        assert!(clashes.is_empty(), "{clashes:#?}");
+        clashes
     }
 
     /// A finger on the VIGNETTE card's button: held just short of the cap
@@ -1101,6 +1145,7 @@ mod tests {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         use crate::raid::comfort_board::ComfortCard;
         let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
         vr.step(5);
         let card = vr
             .app
@@ -1440,6 +1485,7 @@ mod tests {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         use crate::raid::comfort_board::ComfortCard;
         let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
         vr.step(5);
         *vr.app
             .world_mut()
