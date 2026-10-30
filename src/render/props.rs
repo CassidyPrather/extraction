@@ -47,6 +47,7 @@ impl Plugin for PropVisualsPlugin {
             Update,
             (
                 tint_gloves,
+                handed_housing,
                 far_cue,
                 body_casts_no_shadow,
                 dress_buttons,
@@ -924,7 +925,7 @@ pub(crate) fn wrist_on_glove(side: Side) -> Transform {
         Side::Left => Mat3::from_cols(Vec3::NEG_Z, Vec3::NEG_X, Vec3::Y),
         Side::Right => Mat3::from_cols(Vec3::Z, Vec3::X, Vec3::Y),
     };
-    Transform::from_xyz(0.0, 0.0295, 0.0625).with_rotation(Quat::from_mat3(&axes))
+    Transform::from_xyz(0.0, 0.0235, 0.0625).with_rotation(Quat::from_mat3(&axes))
 }
 
 /// A joint's turn, its finger curled `c`.
@@ -1045,6 +1046,28 @@ fn find_node<'a>(
     })
 }
 
+/// The wrist display's housing on a glove (`art/hands/gloves.py`): only
+/// on the hand the display shows on, the one that isn't the gun hand. A
+/// watch body on the gun hand was clutter (the 28 October playtest, M1).
+#[derive(Component)]
+pub(crate) struct WristHousing(pub Side);
+
+/// Shows each housing on the display's hand only, as `handed_wrist` does
+/// the display (right-handed without a `Comfort`).
+fn handed_housing(
+    comfort: Option<Res<crate::rig::comfort::Comfort>>,
+    mut housings: Query<(&WristHousing, &mut Visibility)>,
+) {
+    let watch = comfort.map_or(Side::Right, |c| c.gun_side()).other();
+    for (h, mut vis) in &mut housings {
+        vis.set_if_neq(if h.0 == watch {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
+    }
+}
+
 /// Swaps a glove's boxes for its model once it's loaded: the palm onto the
 /// glove, each segment onto its joint (the joints keep their own
 /// transforms; the model's are only its rest pose). The glove gets its own
@@ -1096,6 +1119,19 @@ fn dress_gloves(
             own.push((name.to_owned(), h.clone()));
             h
         };
+        // The display's housing rides the palm too, but on its own, to be
+        // shown on the display's hand only (`handed_housing`).
+        if let Some(node) = find_node(&model, "wrist_housing") {
+            let holder = commands
+                .spawn((
+                    WristHousing(v.side),
+                    Transform::IDENTITY,
+                    Visibility::Hidden,
+                    ChildOf(parts.model),
+                ))
+                .id();
+            crate::models::spawn_primitives(&mut commands, holder, node, &mut mat);
+        }
         // Every piece with the joint it rides on: the palm, then each
         // finger segment.
         let mut on: Vec<(Entity, &crate::models::ModelNode)> = vec![(parts.model, palm)];
@@ -1910,8 +1946,50 @@ mod glove_tests {
         }
     }
 
-    /// The housing's box in the glove model's frame: the palm's primitive
-    /// in the Padding material, through the palm node's own transform.
+    /// The display's housing is a watch, not a box: its own node (so the
+    /// gun hand can go without it), no thicker than 8 mm (13 mm dominated
+    /// the two-hand shot).
+    #[test]
+    fn the_wrist_housing_is_a_watch_on_its_own_node() {
+        for side in [Side::Left, Side::Right] {
+            let (lo, hi) = housing(side);
+            let thick = hi.y - lo.y;
+            assert!(
+                thick <= 0.008,
+                "{side:?} housing {:.1} mm thick",
+                thick * 1000.0
+            );
+        }
+    }
+
+    /// The housing shows on the display's hand only: the left for a
+    /// right-handed player, the right for a left-handed one.
+    #[test]
+    fn the_wrist_housing_is_only_on_the_display_hand() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<crate::rig::comfort::Comfort>()
+            .add_systems(Update, handed_housing);
+        let left = app
+            .world_mut()
+            .spawn((WristHousing(Side::Left), Visibility::Hidden))
+            .id();
+        let right = app
+            .world_mut()
+            .spawn((WristHousing(Side::Right), Visibility::Hidden))
+            .id();
+        let shown = |app: &App, e| app.world().get::<Visibility>(e) != Some(&Visibility::Hidden);
+        app.update();
+        assert!(shown(&app, left) && !shown(&app, right), "right-handed");
+        app.world_mut()
+            .resource_mut::<crate::rig::comfort::Comfort>()
+            .left_handed = true;
+        app.update();
+        assert!(!shown(&app, left) && shown(&app, right), "left-handed");
+    }
+
+    /// The housing's box in the glove model's frame: the `wrist_housing`
+    /// node's mesh, through its own transform and the palm's it rides on.
     fn housing(side: Side) -> (Vec3, Vec3) {
         let path = crate::asset_root_path().join(glove_model(side));
         let bytes = std::fs::read(&path).unwrap();
@@ -1927,20 +2005,18 @@ mod glove_tests {
         };
         let nodes = glb_nodes(side);
         let palm = nodes.iter().position(|n| n.name == "palm").unwrap();
-        let mesh = json["nodes"][palm]["mesh"].as_u64().unwrap() as usize;
-        let prim = json["meshes"][mesh]["primitives"]
-            .as_array()
-            .unwrap()
+        let node = nodes
             .iter()
-            .find(|p| {
-                p["material"].as_u64().is_some_and(|m| {
-                    json["materials"][m as usize]["name"].as_str() == Some("Padding")
-                })
-            })
-            .expect("the housing (Padding) on the palm");
-        let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64().unwrap() as usize];
-        let (lo, hi) = (v3(&acc["min"]), v3(&acc["max"]));
-        let at = nodes[palm].local;
+            .position(|n| n.name == "wrist_housing")
+            .unwrap_or_else(|| panic!("{side:?} glove has no wrist_housing node"));
+        let mesh = json["nodes"][node]["mesh"].as_u64().unwrap() as usize;
+        let (mut lo, mut hi) = (Vec3::MAX, Vec3::MIN);
+        for prim in json["meshes"][mesh]["primitives"].as_array().unwrap() {
+            let acc = &json["accessors"][prim["attributes"]["POSITION"].as_u64().unwrap() as usize];
+            lo = lo.min(v3(&acc["min"]));
+            hi = hi.max(v3(&acc["max"]));
+        }
+        let at = nodes[palm].local * nodes[node].local;
         let corners = (0..8).map(|i| {
             at.transform_point(Vec3::new(
                 if i & 1 == 0 { lo.x } else { hi.x },
