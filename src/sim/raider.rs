@@ -749,6 +749,8 @@ pub struct Scene<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+    /// What a stuck raider is up against, by name (telemetry).
+    names: Query<'w, 's, (&'static Name, Option<&'static ChildOf>)>,
     vent_levers: Query<
         'w,
         's,
@@ -862,6 +864,47 @@ impl Scene<'_, '_> {
     /// lower (a window sill lets you see what you can't shoot).
     fn visible(&self, from: Vec3, to: Vec3) -> bool {
         self.ray_clear(from, to) && self.ray_clear(from - Vec3::Y * 0.25, to)
+    }
+
+    /// What's in the way walking from `from` toward `to`, within 1.5 m,
+    /// at the knee or the chest: its name and its parent's, for the
+    /// stuck event. Empty if a ray meets nothing.
+    fn in_the_way(&self, from: Vec3, to: Vec2) -> String {
+        let flat = Vec3::new(to.x - from.x, 0.0, to.y - from.z);
+        let Ok(dir) = Dir3::new(flat) else {
+            return String::new();
+        };
+        let name = |e: Entity| {
+            self.names.get(e).ok().map(|(n, p)| {
+                let up = p
+                    .and_then(|p| self.names.get(p.parent()).ok())
+                    .map(|(n, _)| n.as_str().to_string())
+                    .unwrap_or_default();
+                format!("{n}<{up}")
+            })
+        };
+        [0.1, 0.25, 0.4, 0.8, 1.2]
+            .iter()
+            .filter_map(|h| {
+                self.spatial
+                    .cast_ray(
+                        from + Vec3::Y * *h,
+                        dir,
+                        1.5,
+                        true,
+                        &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot, Layer::Item]),
+                    )
+                    .map(|hit| (h, hit))
+            })
+            .map(|(h, hit)| {
+                format!(
+                    "{} @{:.2} h{h}",
+                    name(hit.entity).unwrap_or_else(|| format!("{:?}", hit.entity)),
+                    hit.distance
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
     }
 
     /// Nothing solid between the two points, all the way.
@@ -1001,8 +1044,12 @@ pub fn think(
                 log.event(
                     "stuck",
                     json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
-                           "ground": round(scene.zone.ground(here.x, here.y), 1),
-                           "doing": r.doing(), "task": format!("{:?}", bot.tasks.front())}),
+                    "ground": round(scene.zone.ground(here.x, here.y), 1),
+                    "doing": r.doing(), "task": format!("{:?}", bot.tasks.front()),
+                    "by": match bot.tasks.front() {
+                        Some(Task::WalkTo { to, .. }) => scene.in_the_way(pos, *to),
+                        _ => String::new(),
+                    }}),
                 );
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
