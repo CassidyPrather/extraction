@@ -7363,10 +7363,10 @@ mod door_hinge {
                 })
                 .collect();
             leaves.sort_by_key(|l| crate::destruction::key(l.1.rest.translation));
-            assert!(
-                !leaves.is_empty(),
-                "{map}: windows to open within reach of the ground"
-            );
+            // (The training yard has no houses.)
+            if leaves.is_empty() {
+                println!("{map}: no windows to open");
+            }
             for (leaf, m, pane, p) in leaves.into_iter().take(2) {
                 checked += 1;
                 let what = format!("{map} window leaf {leaf}");
@@ -7451,7 +7451,7 @@ mod door_hinge {
                 }
             }
         }
-        assert!(checked >= 6, "windows opened ({checked})");
+        assert!(checked >= 10, "windows opened ({checked})");
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
