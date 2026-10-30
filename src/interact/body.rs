@@ -266,11 +266,11 @@ fn build_body(add: On<Add, Player>, mut commands: Commands) {
         },
         // Reach over either shoulder, behind the head, and it's the bag you
         // take (bag space: it rides 0.5 m below the eyes; +Z is behind).
-        // Not in front of the shoulders: a hand there was taking the pack
-        // by accident (the 28 October playtest).
+        // Not as far forward as the ears: a hand at the headset was taking
+        // the pack by accident (the 28 October playtest).
         super::ReachZone {
-            centre: Vec3::new(0.0, 0.32, 0.1),
-            half: Vec3::new(0.38, 0.3, 0.2),
+            centre: Vec3::new(0.0, 0.3, 0.05),
+            half: Vec3::new(0.4, 0.3, 0.25),
         },
         Transform::from_translation(BACK),
         Visibility::default(),

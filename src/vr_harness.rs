@@ -4907,9 +4907,9 @@ mod carry {
             .map(|(e, _)| e)
             .unwrap();
         vr.step(4);
-        // A hand beside the head, in front of the shoulder, squeezes: not
+        // A hand at the ear (the headset's strap, an itch) squeezes: not
         // the pack.
-        let strap = feet + Vec3::new(-0.18, 1.62, -0.08);
+        let strap = feet + Vec3::new(-0.12, 1.68, 0.0);
         vr.hand(Side::Left, strap, Quat::IDENTITY, 0.0, 0.0);
         vr.step(3);
         vr.grip(Side::Left, 1.0);
