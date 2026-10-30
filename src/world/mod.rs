@@ -308,7 +308,11 @@ mod tests {
         let file = format!("{TEST_FIELD_ID}.ron");
         assert!(!crate::asset_root_path().join("maps").join(&file).exists());
         assert!(!std::path::Path::new("assets/maps").join(&file).exists());
-        assert!(load_map_def(TEST_FIELD_ID).name.starts_with("Test field"));
+        assert!(
+            load_map_def(TEST_FIELD_ID)
+                .description
+                .starts_with("Tests only")
+        );
     }
 
     /// The heightfield collider must agree with the heightmap it was built

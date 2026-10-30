@@ -1,6 +1,7 @@
 // Marrow Creek — the first Zone.
 //
-// A forested river valley, 640 m on a side. The truck drops you at the
+// A forested river valley, 388 m on a side, its places pulled in close
+// (docs/MAP_DESIGN.md, "Close enough to walk"). The truck drops you at the
 // south fence; the rendezvous points are all across the creek on the north
 // side. The creek is the spine of the map: three ways across (the road
 // bridge in the village, the ford below the farm, the rail trestle in the
@@ -295,7 +296,7 @@
         (prefab: "cabin_log", at: (-70.8, 113.5), rot: 180.0),
 
         // The old farm.
-        (prefab: "farmhouse", at: (109.0, 79.8), rot: 270.0),
+        (prefab: "farmhouse", at: (109.0, 80.0), rot: 270.0),
         (prefab: "barn", at: (84.0, 64.8), rot: 0.0),
         (prefab: "shed", at: (114.0, 99.8), rot: 90.0),
 

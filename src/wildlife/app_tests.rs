@@ -405,7 +405,6 @@ fn animals_can_be_shot_and_their_carcasses_collected() {
     struct Deaths(Vec<Killed>);
     let mut app = crate::headless_app(
         crate::LaunchOptions {
-            map: extraction_core::map::TEST_FIELD_ID.into(),
             robots: false,
             ..Default::default()
         },

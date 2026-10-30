@@ -298,7 +298,9 @@ mod tests {
 
     #[test]
     fn cover_grows_in_the_open_and_under_trees_but_not_on_roads_or_floors() {
-        let map = MapDef::from_ron(MARROW_CREEK).unwrap();
+        // The rules, on the test field's wide meadows (a tight valley is
+        // mostly its places and their ways).
+        let map = MapDef::from_ron(crate::map::TEST_FIELD).unwrap();
         let hm = Heightmap::build(&map);
         let cover = CoverMap::new(&map, &hm);
         let size = 24.0;
