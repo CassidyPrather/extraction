@@ -291,11 +291,26 @@ def books():
 def rug():
     """A rag rug in stripes, a corner turned up: 1.4 x 0.9."""
     p = Part("static")
-    mats = ("Red", "Cream", "Olive", "Wool", "Blue", "Cream", "Red")
-    n = len(mats)
-    for k, m in enumerate(mats):
-        x = -0.7 + (k + 0.5) * 1.4 / n
-        p.box((1.4 / n, 0.008, 0.9), (x, 0.004, 0.0), m)
+    w = Wear(48)
+    # Stripes of torn rag woven across, each its own width and a little
+    # thicker or thinner (braided, not cut from one sheet), their edges
+    # softened; a knotted fringe at both ends.
+    mats = ("Red", "Cream", "Olive", "Wool", "Blue", "Cream", "Red", "Olive", "Red")
+    ws = [1.0 + w.j(0.35) for _ in mats]
+    total = sum(ws)
+    x = -0.7
+    for m, f in zip(mats, ws):
+        sw = 1.4 * f / total
+        t = 0.008 + w.j(0.002)
+        # Each a hair into the last (side by side they'd only touch).
+        p.box((sw + 0.002, t, 0.9), (x + sw / 2, t / 2, 0.0), m, bevel=0.002, segs=1)
+        x += sw
+    for sx in (-1, 1):
+        for k in range(18):
+            z = -0.425 + k * 0.05 + w.j(0.006)
+            L = 0.05 + w.j(0.012)
+            p.box((L, 0.004, 0.012), (sx * (0.7 + L / 2 - 0.003), 0.002, z), "Cream",
+                  xf=T(sx * 0.7, 0, z) @ RY(w.j(0.25)) @ T(-sx * 0.7, 0, -z))
     p.box((0.22, 0.008, 0.3), (0.62, 0.03, 0.33), "Red",
           xf=T(0.6, 0.0, 0.33) @ RZ(0.35) @ T(-0.6, 0.0, -0.33))
     return [p]
@@ -305,10 +320,21 @@ def broom():
     """A broom leaning on the wall by the door (the wall's face at z 0)."""
     p = Part("static")
     lean = 0.12
-    rod(p, (0.0, 0.25, -0.02 - lean), (0.0, 1.35, -0.025), 0.013, "Timber", segs=6)
-    p.lathe([(0.0, 0.0), (0.09, 0.0), (0.05, 0.25), (0.0, 0.27)], "Straw", segs=10,
+    w = Wear(49)
+    rod(p, (0.0, 0.25, -0.02 - lean), (0.0, 1.35, -0.025), 0.013, "Timber", segs=8)
+    # A birch-twig head: a splayed core, bunches of twigs standing out of
+    # it to a ragged worn end, two bindings round its neck.
+    p.lathe([(0.0, 0.07), (0.07, 0.07), (0.05, 0.25), (0.0, 0.27)], "Straw", segs=14,
             xf=T(0, 0.0, -0.03 - lean) @ S(1.0, 1.0, 0.5) @ UP)
-    p.cyl(0.03, 0.22, 0.27, "Rope", segs=8, xf=T(0, 0, -0.02 - lean * 0.85) @ UP)
+    for k in range(18):
+        a = 2 * math.pi * k / 18 + w.j(0.15)
+        r0, r1 = 0.03, 0.095 + w.j(0.012)
+        top = (r0 * math.cos(a), 0.2, -0.03 - lean + 0.5 * r0 * math.sin(a))
+        foot = (r1 * math.cos(a), 0.005 + abs(w.j(0.01)), -0.03 - lean + 0.5 * r1 * math.sin(a))
+        rod(p, top, foot, 0.006, "Straw", segs=4)
+    for y in (0.2, 0.245):
+        p.cyl(0.03, y, y + 0.018, "Rope", segs=10, xf=T(0, 0, -0.02 - lean * 0.85) @ UP)
+    p.cyl(0.017, 1.3, 1.36, "Iron", segs=8, xf=T(0, 0, -0.025) @ UP)
     return [p]
 
 
@@ -318,14 +344,20 @@ def dishes_broken():
     """Plates in pieces on the floor, a cup on its side: 0.5 across."""
     p = Part("static")
     w = Wear(45)
+    laid = []
     for k in range(9):
         a = w.rng.random() * 2 * math.pi
         r = 0.05 + w.rng.random() * 0.2
         size = 0.03 + w.rng.random() * 0.05
-        # Each a little higher than the last: overlapping, they'd fight.
+        # On the floor, or on a shard it overlaps, a little into it (in one
+        # plane they'd fight; stepped up 4 mm each, the last stood 3 cm
+        # over the floor).
+        x, z = r * math.cos(a), r * math.sin(a)
+        y = max([yj + 0.0055 for xj, zj, sj, yj in laid
+                 if math.hypot(x - xj, z - zj) < size + sj], default=0.0)
+        laid.append((x, z, size, y))
         p.prism([(-size, -size * 0.6), (size, -size * 0.4), (size * 0.2, size)], 0.0, 0.006,
-                "Enamel", axis="y",
-                xf=T(r * math.cos(a), 0.004 * k, r * math.sin(a)) @ RY(a))
+                "Enamel", axis="y", xf=T(x, y, z) @ RY(a))
     p.lathe([(0.0, 0.0), (0.035, 0.0), (0.042, 0.075), (0.038, 0.075), (0.03, 0.005),
              (0.0, 0.005)], "Enamel", segs=12, xf=T(0.12, 0.04, 0.05) @ RZ(1.57) @ UP)
     return [p]
@@ -341,9 +373,11 @@ def books_charred():
         board(p, (0.16 + w.j(0.02), t, 0.22 + w.j(0.02)), (w.j(0.02), y + t / 2, w.j(0.02)),
               "Char", wear=w, bevel=0.006, yaw=w.j(0.3))
         y += t
+    # Ash flakes on the floor round them (21 cm apart: they never overlap,
+    # and stepped up 4 mm each, the last stood 2 cm over the floor).
     for k in range(6):
         a = k * 1.1
-        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015 + 0.004 * k, 0.2 * math.sin(a)),
+        p.box((0.06, 0.003, 0.05), (0.2 * math.cos(a), 0.0015, 0.2 * math.sin(a)),
               "Paper" if k % 3 == 0 else "Char", xf=RY(a))
     return [p]
 

@@ -447,6 +447,7 @@ fn shoot_for_screenshot(
     mut breaches: MessageWriter<super::hooks::Breach>,
     parts: Query<(), With<super::wood::Timber>>,
     names: Query<NameOrEntity>,
+    mut moving: Query<(NameOrEntity, &mut crate::world::hinge::Moving)>,
     mut frame: Local<u32>,
 ) {
     let (Some(_), Some((cam, yaw, pitch)), Some(zone)) = (&opts.screenshot, opts.camera, zone)
@@ -513,6 +514,27 @@ fn shoot_for_screenshot(
             Some(h) => commands.entity(h.entity).despawn(),
             None => warn!("EXTRACTION_STRIP: the view meets nothing breakable"),
         }
+    }
+    // `EXTRACTION_OPEN=1`: ninety frames before the capture, every window
+    // leaf, drawer and cabinet door within 12 m of the camera (or as many
+    // metres as it says, past 1) swings open, as to a squeeze.
+    let open = std::env::var("EXTRACTION_OPEN")
+        .ok()
+        .map(|v| v.parse::<f32>().ok().filter(|r| *r > 1.0).unwrap_or(12.0));
+    if let Some(reach) = open
+        && *frame + 90 == opts.frames
+    {
+        let eye = Vec3::new(cam.x, cam.y, cam.z);
+        let mut n = 0;
+        for (name, mut m) in &mut moving {
+            if m.rest.translation.xz().distance(eye.xz()) < reach {
+                m.open = true;
+                m.left = false;
+                n += 1;
+                info!("EXTRACTION_OPEN: {name} at {:.1}", m.rest.translation);
+            }
+        }
+        info!("EXTRACTION_OPEN: {n} opened");
     }
     let Some(n) = std::env::var("EXTRACTION_SHOOT")
         .ok()

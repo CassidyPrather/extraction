@@ -747,3 +747,28 @@ thing at a time." In the headset, the truck showed all of these at once, before 
 - **The cooking table**: Model correctness removes it, and nothing goes through it.
 - **Model problems** (the dressing's size, the magazine's look): Model correctness owns them.
   The mark and the name carry the step meanwhile.
+
+## TRANSCRIPT O1–O3, instance by instance (against main, 30 October)
+
+Each row says what was lost at the time, its status, and what shows it: a test, a bot check or a
+shot. Where minutes were lost, they come from the video's clock.
+
+| Class | Instance (video) | Lost | Status | Shown by |
+| - | - | - | - | - |
+| O1 | The truck's boards a wall of text (0:01:03) | the start | **Fixed**: one step in view; the rest folds till taught | `one_thing_to_read_in_the_truck` (3 panels; 24 without); `yard_truck_before_after.jpg` |
+| O1 | Text z-fighting on the truck boards (0:01:00) | | **Fixed** (Legibility: the cards off the slat) | Legibility's own test |
+| O1 | The sign in front of the crate (0:06:00) | | **Fixed**: the board is on the cab wall, clear of the crate | `yard_truck_before_after.jpg` |
+| O1 | No settings, no menu (0:06:28) | | **Fixed** for settings: SETTINGS is the second step, and the cards fold out. **Open**: a title screen and a menu button (features; not this wave) | `a_skill_is_taught_before_it_is_needed` |
+| O1 | "Let the player have some fun" (1:06:27) | | **In hand**: each station ends on something happening; the next lamp flares; a cut to dress; a trigger that won't | `yard_firstaid_…`, `yard_rangestep_before_after.jpg` |
+| O2 | "Next, the lit lamp" meant leave the truck (0:10:28–0:12:45) | ~2 min | **Fixed**: done boards don't say it; the driver says "off the back of the truck, the lamp on your left"; that lamp flares | `done_in_the_truck_you_are_told_to_get_off_it` |
+| O2 | "Throw a part in": which target? (0:27:40–0:30:04) | ~2.5 min | **Fixed**: "the sparks", six red flags, a ring at its edge; once it's set off, "See it go dark? Spent…" | `the_step_marks_what_it_names`; `yard_snare_before_after.jpg` |
+| O2 | "Take the radio": which one? (0:08:45) | ~10 s | **Fixed**: the radio is ringed in the crate; "the green radio, ringed in the crate" | `the_step_marks_what_it_names` |
+| O2 | "Safety off" without how (0:16:44–0:17:55) | ~1 min | **Fixed**: the board shows the step's how; first you squeeze and it's dead, then "That's the safety. Click the stick…" | the range test; `yard_rangestep_before_after.jpg` |
+| O2 | The wrong gun and ammo, a second gun (0:19:31–0:20:47) | ~1 min | **Fixed**: the table's pistol and its empty magazine are ringed and named; the kit pistol stays holstered | `the_step_marks_what_it_names`; `yard_range_before_after.jpg` |
+| O2 | A brown block on the table (0:19:32) | | **Fixed**: it's the empty magazine, now ringed and named "the ringed mag" | `yard_range_before_after.jpg` |
+| O2 | "Push the button" should come first (0:30:43) | | **Fixed**: the second step, in the truck | `a_skill_is_taught_before_it_is_needed` |
+| O2 | The dressing didn't read as one (0:27:20) | ~20 s | **Fixed** for finding it: ringed, "the white roll". Its look (too small) is Model correctness's (M4) | `the_step_marks_what_it_names` |
+| O3 | Both hands full, no pocket shown (0:09:03) | ~30 s | **Fixed**: holster before the radio, the radio pocketed, the pack with the far box | `a_skill_is_taught_before_it_is_needed`; the kit test |
+
+Open, in order of what they cost: none from O1–O3 that this wave can close. The title screen
+and a menu button are features the designer set aside ("the basics first").

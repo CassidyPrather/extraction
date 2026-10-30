@@ -182,12 +182,14 @@ def depot_conveyor():
             bar(s, (0.06, yc - 0.082, 0.06), (x, 0.012 + (yc - 0.082) / 2, z), "Zinc")
             bar(s, (0.14, 0.012, 0.12), (x, 0.006, z), "Steel")
         bar(s, (0.05, 0.05, W - 0.1), (x, 0.18, 0.0), "Zinc")
-    # The drive at the +X end: a motor box under the rollers, a stencil
-    # and an orange guard over the chain.
-    bar(s, (0.5, 0.35, 0.4), (2.55, 0.45, 0.0), "Shell")
-    s.cyl(0.11, -0.212, -0.19, "Zinc", segs=12, xf=T(2.55, 0.45, 0.0))
+    # The drive at the +X end: a motor box under the rollers on the legs'
+    # brace (it hung 7 cm over it), a stencil and an orange guard over the
+    # chain.
+    my = 0.205 + 0.175
+    bar(s, (0.5, 0.35, 0.4), (2.55, my, 0.0), "Shell")
+    s.cyl(0.11, -0.212, -0.19, "Zinc", segs=12, xf=T(2.55, my, 0.0))
     bar(s, (0.42, 0.18, 0.02), (2.6, yc - 0.14, W / 2 + 0.005), "Orange")
-    text(s, "C-2", 0.08, "Black", T(2.55, 0.48, -0.201) @ RY(math.pi), depth=0.002)
+    text(s, "C-2", 0.08, "Black", T(2.55, my + 0.03, -0.201) @ RY(math.pi), depth=0.002)
     # End stops.
     for sx in (-1, 1):
         bar(s, (0.02, 0.1, W - 0.06), (sx * (L / 2 + 0.01), H + 0.01, 0.0), "Zinc")
@@ -196,7 +198,8 @@ def depot_conveyor():
     for k in range(n):
         x = -L / 2 + 0.125 + 0.25 * k
         r = Part(f"roller_{k}", origin=(x, yc, 0.0))
-        r.cyl(R, -W / 2 + 0.06, W / 2 - 0.06, "Zinc", segs=10, xf=T(x, yc, 0.0),
+        # Into the channels either end (5 mm short of them).
+        r.cyl(R, -W / 2 + 0.053, W / 2 - 0.053, "Zinc", segs=10, xf=T(x, yc, 0.0),
               chamfer=0.004)
         parts.append(r)
     write("depot_conveyor", parts, {
@@ -273,13 +276,18 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
     swing = RX(math.radians(105), about=hinge) if open_ else T()
     lid.box((W + 0.01, LID, D + 0.01), (0.0, H - LID / 2 + 0.03, 0.0), "Shell", bevel=0.01,
             segs=1, xf=swing)
+    # Hinge knuckles on the axis, through the body's back edge and the
+    # lid's (swung open, the lid met the body along a line only).
+    for x in (-W * 0.3, W * 0.3):
+        b.cyl(0.012, -0.04, 0.04, "Steel", segs=8, xf=T(x, hinge[1], hinge[2]) @ RY(math.pi / 2))
     for z in strap_z:
-        lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.033, z), "Black", segs=1, xf=swing)
+        # A hair into the lid's top (it lay on it, no deeper).
+        lid.box((W + 0.03, 0.006, 0.05), (0.0, H + 0.0325, z), "Black", segs=1, xf=swing)
         if open_:
             # Unbuckled: the buckle's half hangs loose down the crate's
-            # right end.
-            bar(b, (0.006, 0.16, 0.05), (W / 2 + 0.006, H - 0.1, z), "Black")
-            bar(b, (0.012, 0.05, 0.065), (W / 2 + 0.009, H - 0.2, z), "Steel")
+            # right end, against it (3 mm off it).
+            bar(b, (0.006, 0.16, 0.05), (W / 2 + 0.0025, H - 0.1, z), "Black")
+            bar(b, (0.012, 0.05, 0.065), (W / 2 + 0.0055, H - 0.2, z), "Steel")
         else:
             lid.box((0.05, 0.012, 0.065), (W * 0.32, H + 0.039, z), "Steel", segs=1)
     write(name, [b, lid], {

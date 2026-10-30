@@ -126,3 +126,20 @@ you. Now it's a panel loader: it hangs with its outer face to you,
 tipped up toward the eyes, and opens there. The cavity is lined a shade
 off the canvas, the dressing shows inside, and the front panel (with the
 big pocket on it) folds down from its bottom edge.
+
+`26_hips_upright.jpg` (`--gallery body+down+side`, BODY on): standing
+and looking down, from beside. The hips stay under the neck, and the
+belt, harness and pack sit over the planted feet. Before, the drawn
+spine ran up to a neck that followed the eyes forward when looking down,
+and walking let the hips hang back by up to 19 cm, so the body leaned
+(the 28 October playtest). The jacket isn't drawn here because it lies
+between the eyes and the floor (`render::clear_eyes`).
+
+`27_two_hand_pistol.jpg` (`fp:pm_pistol,1.6,0`, `,90`, `,300`): the PM
+in both hands (28 October playtest, M2: "I can't use both hands on the
+gun"). The left palm is cupped under the grip, drawn on the gun's cup
+point as the right is drawn on the grip, not at its controller a few
+centimetres off (`render::props` test
+`a_palm_cupping_a_pistol_is_drawn_on_its_cup`). From the eye, from the
+left, and from below right. Still rough: the left glove's fingertips
+pass a little into the right hand's at the front of the grip.

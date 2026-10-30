@@ -708,37 +708,19 @@ mod tests {
         // The first run's tally (30 October), to work down: mostly pieces
         // 2-3 mm off what holds them, and parts shut inside shells (an
         // eye's iris in its glass). Take a model out when it's clean.
-        "guns/mp133:",
-        "guns/pm_pistol:",
-        "guns/rpk74:",
-        "guns/sks:",
-        "guns/svd:",
-        "items/car_bonnet:",
-        "items/car_door:",
-        "items/stock_sks:",
-        "props/bar_rack:",
+        // Loose by design: checked into blocks a little off true, the gaps black.
         "props/beam_charred:",
-        "props/books_charred:",
-        "props/cellar_vent:",
-        "props/charcoal_sack:",
+        // Loose by design: split pieces on the ground beside a block dug 15 cm in (the lint's floor
+        // is the block's buried foot).
         "props/chopping_block:",
-        "props/clothes_line:",
-        "props/counter_drawers:",
-        "props/depot_conveyor:",
-        "props/depot_crate_long_open:",
-        "props/depot_crate_small_open:",
-        "props/dishes_broken:",
-        "props/filter_unit:",
-        "props/kept_bicycle:",
-        "props/rope_coil:",
-        "props/snowshoes:",
+        // Loose by design: fallen legs and boards on the floor; the ash heap sinks below it, so the
+        // lint's floor is under the debris.
         "props/table_burnt:",
-        "props/washstand:",
+        // Loose by design: round logs resting on each other touch along lines the vertex test can't
+        // see.
         "props/woodpile:",
+        // Loose by design: as the woodpile, logs resting on logs.
         "props/woodpile_lean:",
-        "vehicles/bench:",
-        "vehicles/stash_crate:",
-        "vehicles/truck:",
     ];
 
     /// No building has a crack between its boxes, and every door hangs in

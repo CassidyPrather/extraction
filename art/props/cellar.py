@@ -156,9 +156,10 @@ def vent():
     lever = Part("lever", origin=piv)
     lever.box((0.03, 0.55, 0.02), (0.0, piv[1] + 0.275, piv[2] - 0.012), "Iron", bevel=0.004,
               segs=1)
-    lever.cyl(0.02, piv[2] - 0.01, piv[2] - 0.035, "Steel", segs=10, xf=T(0, piv[1], 0))
+    # On the boss's end (1 cm off it), the handle from inside the arm.
+    lever.cyl(0.02, piv[2] + 0.001, piv[2] - 0.035, "Steel", segs=10, xf=T(0, piv[1], 0))
     lever.cyl(0.018, 0.0, 0.12, "Blued", segs=10,
-              xf=T(0.0, piv[1] + 0.55, piv[2] - 0.022) @ RX(math.pi), chamfer=0.004)
+              xf=T(0.0, piv[1] + 0.55, piv[2] - 0.015) @ RX(math.pi), chamfer=0.004)
     write("cellar_vent", [v, lever])
 
 

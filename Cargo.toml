@@ -43,6 +43,9 @@ path = "src/main.rs"
 default = ["xr"]
 # OpenXR support. The game still runs flat when no XR runtime is present.
 xr = ["dep:bevy_mod_openxr", "dep:bevy_mod_xr", "dep:openxr"]
+# Per-system tracing spans, for the system ceilings gauge
+# (`budget::tests::gauge_game_systems_hold_their_share`).
+systime = ["bevy/trace"]
 
 [dependencies]
 extraction_core = { path = "crates/extraction_core" }

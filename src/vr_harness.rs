@@ -2509,6 +2509,12 @@ mod onboarding {
         vr.move_hand(Side::Left, feet + Vec3::new(-0.3, 1.0, -0.2));
         vr.step(10);
         assert!(done(&vr, Goal::Rack), "racked");
+        // A squeeze on safe: nothing (that's the safety, felt).
+        vr.trigger(Side::Right, 1.0);
+        vr.step(4);
+        vr.trigger(Side::Right, 0.0);
+        vr.step(4);
+        assert!(done(&vr, Goal::DeadTrigger), "the dead trigger");
         // Safety off: click the stick on the gun hand.
         vr.stick_click(Side::Right, true);
         vr.step(2);
@@ -2644,6 +2650,47 @@ mod onboarding {
         vr.step(20);
         take(&mut vr, Side::Right, find);
         assert!(done(&vr, Goal::Search), "the find counted");
+    }
+
+    /// Taking the dressing in the house, the crate catches your watch arm:
+    /// a cut on that forearm, bleeding till it's dressed (not wearing off
+    /// on its own), so first aid has something to find and to wrap.
+    #[test]
+    fn the_house_crate_scratches_and_first_aid_has_a_cut_to_dress() {
+        use crate::interact::wounds::{Limb, Wounds};
+        let mut vr = Vr::first_run();
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Search),
+            &[Goal::OpenDoor],
+        );
+        let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
+        let find = placed(&mut vr, Placed::HouseFind);
+        let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
+        let inside = doorway + inward * 0.4;
+        vr.stand(Vec3::new(inside.x, doorway.y, inside.z), 0.0);
+        vr.step(20);
+        take(&mut vr, Side::Right, find);
+        assert!(done(&vr, Goal::Search));
+        vr.step(5);
+        let cut = |vr: &Vr| {
+            let w = vr.app.world().get::<Wounds>(vr.player).expect("wounds");
+            w.0.iter()
+                .find(|w| w.limb == Limb::Forearm(Side::Left))
+                .copied()
+        };
+        let c = cut(&vr).expect("a cut on the watch arm");
+        assert!(!c.dressed);
+        assert!(said(&vr, "got your arm"));
+        // Half a minute on, still bleeding: it waits for the dressing.
+        vr.step(90 * 30);
+        let h = vr
+            .app
+            .world()
+            .get::<crate::health::Health>(vr.player)
+            .unwrap();
+        assert!(h.bleeding > 0.0, "the cut stopped by itself");
+        assert!(h.hp > 90.0, "a scratch, not a wound: {}", h.hp);
     }
 
     /// First aid: raise the left hand and look at the back of it (the
@@ -3243,6 +3290,25 @@ mod onboarding {
             .filter(|(s, t)| s.0 > 0 && !t.text.is_empty())
             .count();
         assert_eq!(ahead, 0, "boards ahead are blank");
+    }
+
+    /// Done in the truck, the driver says to get off it, plainly, and the
+    /// next lamp lights (the playtest read "Next: the lit lamp" as a lamp
+    /// in the truck and stood there two minutes).
+    #[test]
+    fn done_in_the_truck_you_are_told_to_get_off_it() {
+        let mut vr = Vr::first_run();
+        let settings = crate::onboarding::station_of(Goal::Button);
+        at_station(&mut vr, settings, &[]);
+        vr.step(5);
+        let card = card(&mut vr, OnboardCard::Push);
+        take_card(&mut vr, card);
+        vr.step(3);
+        assert!(done(&vr, Goal::Button));
+        assert!(said(&vr, "off the back of the truck"), "told to get off");
+        assert!(!said(&vr, "lit lamp"), "not \"the lit lamp\"");
+        let l = lamps(&mut vr);
+        assert_eq!(l[settings + 1], Lamp::Lit, "{l:?}");
     }
 
     /// The driver names the next station once: stepping out of the truck

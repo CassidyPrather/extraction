@@ -190,14 +190,24 @@ def hide_frame():
     """A fox's pelt stretched on a wooden frame, leaning on its nail: the
     wall's face at z 0, 0.4 x 0.75."""
     p = Part("static")
-    # The frame: a long narrow board, tapered.
+    # The frame: a long narrow board, tapered, a crosspiece wedged near its
+    # foot to hold the skin out.
     p.prism([(-0.12, -0.38), (0.12, -0.38), (0.06, 0.38), (-0.06, 0.38)], -0.02, -0.005,
             "Timber", axis="z")
-    # The pelt over it: a flat tapered shape, the tail hanging.
-    p.prism([(-0.15, -0.3), (0.15, -0.3), (0.08, 0.3), (0.0, 0.36), (-0.08, 0.3)], -0.03,
-            -0.02, "Leather", axis="z")
-    p.prism([(-0.03, -0.3), (0.03, -0.3), (0.02, -0.62), (0.0, -0.66), (-0.02, -0.62)],
-            -0.028, -0.02, "Red", axis="z")
+    p.box((0.3, 0.025, 0.012), (0.0, -0.2, -0.026), "Timber", bevel=0.003, segs=1)
+    # The pelt over it, fur out: the head's point at the top, the
+    # forelegs' and hind legs' flaps out to the sides, the brush hanging
+    # below; a pale belly line down its middle.
+    pelt = [(0.0, 0.37), (0.035, 0.33), (0.06, 0.26), (0.12, 0.22), (0.1, 0.18), (0.08, 0.16),
+            (0.11, -0.12), (0.17, -0.2), (0.14, -0.26), (0.12, -0.3), (-0.12, -0.3),
+            (-0.14, -0.26), (-0.17, -0.2), (-0.11, -0.12), (-0.08, 0.16), (-0.1, 0.18),
+            (-0.12, 0.22), (-0.06, 0.26), (-0.035, 0.33)]
+    p.prism(pelt, -0.031, -0.019, "Leather", axis="z")
+    p.prism([(-0.02, 0.25), (0.02, 0.25), (0.03, -0.28), (-0.03, -0.28)], -0.033, -0.029,
+            "Cream", axis="z")
+    p.prism([(-0.03, -0.29), (0.03, -0.29), (0.035, -0.45), (0.02, -0.62), (0.0, -0.66),
+             (-0.02, -0.62), (-0.035, -0.45)], -0.028, -0.02, "Red", axis="z")
+    p.prism([(-0.012, -0.6), (0.012, -0.6), (0.0, -0.665)], -0.029, -0.019, "Cream", axis="z")
     rod(p, (0, 0.37, 0.0), (0, 0.37, -0.025), 0.003, "Iron", segs=5)
     return [p]
 
