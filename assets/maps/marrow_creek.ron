@@ -28,6 +28,15 @@
     fence_inset: 38.0,
 
     features: [
+        // Rises between the quiet places and the machines' ground
+        // (map_openness; the playtest of 28 October, P1): the bank rise
+        // north of the creek's paths in two, the district road through the gap;
+        Ridge(points: [(-78.0, -54.0), (-50.0, -52.0), (-30.0, -50.0)], width: 16.0, height: 6.0),
+        Ridge(points: [(26.0, -36.0), (50.0, -30.0), (66.0, -18.0)], width: 20.0, height: 4.5),
+        // the ford spur between the Village and the ford;
+        Ridge(points: [(66.0, -14.0), (70.0, 0.0), (74.0, 14.0)], width: 18.0, height: 6.0),
+        // and the ford rise along the Old farm's south edge.
+        Ridge(points: [(66.0, 46.0), (100.0, 42.0), (132.0, 44.0)], width: 14.0, height: 3.5),
         // The valley falls gently from north-west to south-east.
         Tilt(dir: (1.0, 0.6), rise_per_100m: -1.6),
 
@@ -117,7 +126,7 @@
         // Service road from the bus depot to the radio mast.
         (
             name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
-            points: [(6.0, -70.0), (-17.2, -66.7), (-28.0, -46.0), (-44.0, -40.0), (-60.0, -54.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
+            points: [(8.0, -80.0), (-17.2, -70.0), (-30.0, -52.0), (-44.0, -42.0), (-60.0, -54.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
         ),
         // The ranger's path: off the forest path at the footbridge, north
         // under the ridge to the tower. With the logging road and the forest
@@ -125,8 +134,7 @@
         // pumping station, tower.
         (
             name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-91.2, -20.3), (-94.3, -45.1), (-106.1, -56.1), (-110.5, -74.3), (-126.5, -84.3),
-                     (-140.5, -87.3)],
+            points: [(-91.2, -20.3), (-94.3, -45.1), (-106.1, -56.1), (-112.0, -68.0), (-122.0, -78.0), (-134.0, -82.0), (-142.0, -82.0)],
         ),
         // The haulers' track: from the Gate down to the Depot's intake ramp,
         // worn by the convoys.
@@ -162,7 +170,7 @@
         ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.0, -13.5), (-88.5, -25.5), (-87.0, -37.5), (-77.6, -49.1), (-56.2, -41.7), (-38.6, -26.3)],
+            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.0, -13.5), (-88.5, -25.5), (-87.0, -37.5), (-72.0, -38.0), (-56.0, -35.0), (-38.6, -26.3)],
             bridges: [(at: (-88.0, -28.0), length: 32.0)],
         ),
     ],
@@ -320,7 +328,7 @@
         // a drone has locked onto: the station's tool shed where the Ranger's
         // path leaves it, and the rangers' store on the path below the mast road.
         (prefab: "shed", at: (-74.0, -34.0), rot: 270.0, tag: "pump_tool_shed"),
-        (prefab: "shed", at: (-99.2, -65.6), rot: 270.0, tag: "rangers_store"),
+        (prefab: "shed", at: (-120.0, -44.0), rot: 135.0, tag: "rangers_store"),
         // And the road-menders' hut on the district road, the mast relay's
         // other way, half way from the creek bridge to the mast road.
         (prefab: "shed", at: (-1.7, -50.6), rot: 90.0, tag: "road_menders_hut"),
@@ -354,7 +362,7 @@
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // Behind the north house, open to the south.
-        (prefab: "fence_garden", at: (-29.6, 60.3), rot: 180.0),
+        (prefab: "fence_garden", at: (-29.6, 61.0), rot: 180.0),
         (prefab: "fence_garden", at: (-34.0, 63.8), rot: 90.0),
         // Behind the house over the road, open to the south.
         (prefab: "fence_garden", at: (29.1, 49.6), rot: 0.0),
@@ -404,7 +412,7 @@
         // depot and the yard: an alarm, not a gun, where nothing else
         // watches (map_spotter). Cut its tether at the winch, timing its
         // turn.
-        (kind: Spotter, at: (-45.0, -85.0), name: "Bank spotter"),
+        (kind: Spotter, at: (-110.0, -100.0), name: "Bank spotter"),
         (kind: ArtifactField, at: (82.5, -22.0), name: "The Hollow"),
         (kind: ArtifactField, at: (-54.0, -78.8), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
@@ -412,10 +420,10 @@
         (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-78.0, -102.7), name: "Mast summit mirror"),
         (kind: Anomaly(kind: "Hush", radius: 3.0), at: (68.5, 11.0), name: "Hollow hush"),
         (kind: Offering, at: (-32.2, 78.5), name: "The well"),
-        (kind: Offering, at: (134.4, -67.6), name: "The stone ring"),
-        (kind: WorkSite, at: (-22.0, -33.0), name: "North bank site"),
-        (kind: WorkSite, at: (65.0, 39.5), name: "Ford field site"),
-        (kind: WorkSite, at: (-48.1, 65.1), name: "Forest clearing site"),
+        (kind: Offering, at: (120.0, -52.0), name: "The stone ring"),
+        (kind: WorkSite, at: (-35.0, -78.0), name: "North bank site"),
+        (kind: WorkSite, at: (112.0, -2.0), name: "Ford field site"),
+        (kind: WorkSite, at: (-138.0, -20.0), name: "Forest clearing site"),
         (kind: Poi, at: (-90.8, 93.5), name: "Logging camp"),
         (kind: Poi, at: (99.0, 79.8), name: "Old farm"),
         (kind: Poi, at: (2.8, 38.5), name: "Village"),

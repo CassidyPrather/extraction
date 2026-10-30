@@ -527,6 +527,9 @@ mod probe_file {
                 }
             }
         }
+        for (n, at, k) in &p {
+            eprintln!("  pull {n} ({:.0}, {:.0}): {k}", at[0], at[1]);
+        }
         let r = crate::map_lint::lint(&map, &hm);
         for f in &r.findings {
             eprintln!(
