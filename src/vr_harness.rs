@@ -2689,16 +2689,28 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        // Wound round the left forearm (`interact::first_aid`).
+        // Wound round the left forearm (`interact::first_aid`), round the
+        // forearm the body has: from the wrist back toward its elbow.
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        let centre = wrist + Vec3::Z * 0.12;
+        vr.step(5);
+        let st = vr
+            .app
+            .world()
+            .get::<crate::rig::stance::Stance>(vr.player)
+            .unwrap()
+            .clone();
+        let forearm = crate::interact::wounds::segments(&st, eye, [Some(wrist), None])
+            .into_iter()
+            .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+            .unwrap();
+        let axis = (forearm.a - forearm.b).normalize();
+        let centre = wrist + axis * 0.12;
+        let u = axis.any_orthonormal_vector();
+        let v = axis.cross(u);
         for i in 0..=48 {
             let a = std::f32::consts::TAU * i as f32 / 24.0;
-            vr.move_hand(
-                Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
-            );
+            vr.move_hand(Side::Right, centre + (u * a.cos() + v * a.sin()) * 0.06);
             vr.step(1);
         }
         vr.step(3);
@@ -4821,6 +4833,37 @@ mod body {
         );
     }
 
+    /// Walking round the room, the hips come with you: the head bobs a
+    /// little and looks down at the legs, and the body stays upright over
+    /// them instead of leaning from hips left behind (the 28 October
+    /// playtest: "as I am moving my legs around the space the hips of the
+    /// character model are staying in place and it looks like I am instead
+    /// tilting around").
+    #[test]
+    fn walking_round_the_room_the_hips_come_along() {
+        let (mut vr, _) = standing();
+        let mut worst = 0.0f32;
+        let frames = 135;
+        for i in 0..=frames {
+            let t = i as f32 / 90.0;
+            let along = 1.2 * i as f32 / frames as f32;
+            let bob = 0.02 * (t * std::f32::consts::TAU * 1.8).sin();
+            look(
+                &mut vr,
+                Vec3::new(0.3 * along, 1.62 + bob, -along),
+                -0.25,
+                -0.5,
+            );
+            vr.step(1);
+            if i > 20 {
+                let st = stance(&vr);
+                let off = (st.neck - st.pelvis.translation).with_y(0.0).length();
+                worst = worst.max(off);
+            }
+        }
+        assert!(worst < 0.06, "the hips trailed the neck by {worst} m");
+    }
+
     /// Straight out at arm's length and a little beyond: the shoulder
     /// comes forward (no further than a shoulder goes) and the drawn arm
     /// reaches the hand from it, not from somewhere off the body.
@@ -5545,8 +5588,10 @@ mod vault {
             .next()
             .expect("a truck in the yard")
             .compute_transform();
-        // Facing the truck's front from behind it, a little off its steps.
-        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        // Facing the truck's front from behind it, a little off its steps,
+        // on the left: the bench stands just in on the right, and a climb
+        // there ends on its top.
+        let behind = truck.transform_point(Vec3::new(-0.75, 0.0, 2.25));
         let ground = vr
             .app
             .world()

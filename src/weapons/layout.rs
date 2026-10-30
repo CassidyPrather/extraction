@@ -308,7 +308,9 @@ fn ak74() -> GunLayout {
         muzzle: Vec3::new(0.0, bore, -0.69),
         port: Vec3::new(0.025, 0.07, -0.13),
         eject: Vec3::new(1.0, 0.35, 0.1),
-        sight: at(0.0, 0.104, 0.0),
+        // The eye line: over the rear notch's floor onto the front post's
+        // top, both at 106.8 mm (it ran 2.6 mm under the notch).
+        sight: at(0.0, 0.1068, 0.0),
         magwell: Some(
             Transform::from_xyz(0.0, 0.02, -0.12).with_rotation(Quat::from_rotation_x(-0.12)),
         ),

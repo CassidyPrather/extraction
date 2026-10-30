@@ -135,9 +135,10 @@ def depot_bin():
         for sx in (-1, 1):
             x = sx * (W - f) / 2
             wire(b, (x, y, -(D - f) / 2), (x, y, (D - f) / 2))
-    # An orange tag wired to the front rim.
+    # An orange tag wired to the front's mesh, against its wires (it hung
+    # 4 mm off them).
     b.box((0.07, 0.1, 0.004), (0.0, 0.0, 0.0), "Orange", segs=1,
-          xf=T(0.42, H - 0.09, -D / 2 - 0.006) @ RZ(0.12))
+          xf=T(0.42, H - 0.09, -(D - f) / 2 - 0.0055) @ RZ(0.12))
 
     # The lid: a white sheet with a black stencil plate, hinged on the back
     # top edge and raised (100 degrees, leaning back).
@@ -263,9 +264,9 @@ def crate(name, W, H, D, points_extra, strap_z, disc=False, open_=False):
     # The hook a tag hangs on, right of the plate.
     bar(b, (0.015, 0.03, 0.02), (W * 0.3, H * 0.62, -D / 2 - 0.008), "Steel")
     if disc:
-        # The wire loop a collar disc hangs from.
+        # The wire loop a collar disc hangs from, on the face (2.5 mm off).
         b.lathe([(0.012, -0.0015), (0.0135, 0.0), (0.012, 0.0015), (0.0105, 0.0)], "Zinc",
-                segs=6, xf=T(W * 0.3, H * 0.4, -D / 2 - 0.004), closed=True)
+                segs=6, xf=T(W * 0.3, H * 0.4, -D / 2 - 0.001), closed=True)
     hinge = (0.0, H - LID + 0.03, D / 2)
     lid = Part("lid", origin=hinge)
     # Open, the lid turns 105 degrees back about its hinge.
@@ -297,7 +298,7 @@ def depot_crate_long(open_=False):
 def depot_crate_small(open_=False):
     W, H, D = 0.8, 0.5 - 0.03, 0.6
     crate("depot_crate_small" + ("_open" if open_ else ""), W, H, D,
-          {"pt_disc": (W * 0.3, H * 0.4 - 0.014, -D / 2 - 0.004)}, (0.0,), disc=True,
+          {"pt_disc": (W * 0.3, H * 0.4 - 0.014, -D / 2 - 0.001)}, (0.0,), disc=True,
           open_=open_)
 
 

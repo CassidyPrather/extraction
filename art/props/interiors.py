@@ -84,7 +84,7 @@ def winch():
         rod(p, (x, hy, hz), (x + sx * 0.18, hy, hz), 0.018, "Timber", segs=6)
     p.cyl(0.17, 0.46, 0.49, "Iron", segs=16, xf=T(0, 0.75, 0) @ ALONG_X)
     rod(p, (0.475, 0.98, -0.3), (0.475, 0.9, -0.12), 0.015, "Iron", segs=5)
-    bolt(p, (0.5, 0.98, -0.3), (1, 0, 0))
+    bolt(p, (0.489, 0.98, -0.3), (1, 0, 0))  # the pawl's pivot, on its face (8 mm off)
     _ = w
     return [p]
 
@@ -180,8 +180,9 @@ def control_stand():
     p.box((0.8, 0.45, 0.04), (0.0, 1.2, 0.27), "Timber", bevel=0.006, segs=1)
     p.cyl(0.11, 0.0, 0.04, "Brass", segs=16, xf=T(-0.2, 1.22, 0.25) @ RY(math.pi))
     p.cyl(0.095, 0.04, 0.045, "Cream", segs=16, xf=T(-0.2, 1.22, 0.25) @ RY(math.pi))
-    p.box((0.01, 0.07, 0.004), (-0.2, 1.25, 0.2), "Black",
-          xf=T(-0.2, 1.22, 0.2) @ RZ(0.6) @ T(0.2, -1.22, -0.2))
+    # The needle on the dial's face (3 mm before it).
+    p.box((0.01, 0.07, 0.004), (-0.2, 1.25, 0.2035), "Black",
+          xf=T(-0.2, 1.22, 0.2035) @ RZ(0.6) @ T(0.2, -1.22, -0.2035))
     p.box((0.3, 0.06, 0.01), (0.17, 1.3, 0.247), "Cream")
     p.box((0.02, 0.05, 0.012), (0.1, 1.3, 0.24), "Red")
     for k in range(4):
@@ -259,7 +260,8 @@ def gate_valve():
         p.cyl(0.42, x - 0.03, x + 0.03, "Cast", segs=20, xf=ax)
         for k in range(8):
             a = 2 * math.pi * (k + 0.5) / 8
-            bolt(p, (x + (0.035 if x > 0 else -0.035), 0.75 + 0.37 * math.sin(a),
+            # Heads on the flange's face (3 mm off it).
+            bolt(p, (x + (0.031 if x > 0 else -0.031), 0.75 + 0.37 * math.sin(a),
                      0.37 * math.cos(a)), (1 if x > 0 else -1, 0, 0), r=0.018, h=0.02)
     p.box((0.5, 0.6, 0.75), (0.0, 0.75, 0.0), "Cast", bevel=0.04, segs=2)
     p.box((0.34, 0.7, 0.4), (0.0, 1.35, 0.0), "Cast", bevel=0.03, segs=2)
