@@ -377,17 +377,6 @@ mod tests {
 
     /// Faults waiting on their owners, by the start of their line.
     const KNOWN: &[&str] = &[
-        // The scopes' bodies sit 2-3 mm down over the receivers' rear
-        // sights: their mount heights (`gadgets::gun_mount_points`) and
-        // models together (Models, next round).
-        "ak74 through pso_scope",
-        "rpk74 through pu_scope",
-        "ak74 through pu_scope",
-        "rpk74 through pso_scope",
-        "sks through pso_scope",
-        "svd through pso_scope",
-        "pu_scope in ak74: faces fight",
-        "pu_scope in rpk74: faces fight",
         // The drum's body beds 4 mm into the stock's well (Models, next
         // round).
         "ppsh_drum through ppsh",
