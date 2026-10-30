@@ -3233,9 +3233,11 @@ fn hall(b: &mut Builder, w: f32, d: f32, h: f32, wall: Mat, roof: Mat, office: b
         Mat::Concrete,
         false,
     );
+    // Its top under the walls' feet (2 cm below them, light showed under
+    // every wall: `capture::attach`).
     b.bx(
         Vec3::new(w + 0.4, 1.0, d + 0.4),
-        Vec3::new(0.0, f - 0.52, 0.0),
+        Vec3::new(0.0, f - 0.5, 0.0),
         Mat::Concrete,
     );
     b.shell(
@@ -4776,11 +4778,14 @@ pub(super) fn wrecked_bus(b: &mut Builder, floor: Vec3) {
 
 fn ranger_tower(b: &mut Builder) {
     let top = tower_legs(b);
+    // On the deck's top (`tower_legs`: top + 0.075); 5 mm over it, the
+    // walls' feet showed a slit all round.
+    let deck = top + 0.075;
     b.shell(
         4.0,
         4.0,
-        top + 0.08,
-        2.4,
+        deck,
+        2.405,
         0.08,
         Mat::Planks,
         [
@@ -4791,7 +4796,7 @@ fn ranger_tower(b: &mut Builder) {
         ],
     );
     b.gable_roof(4.3, 4.3, top + 2.5, 25.0, 0.3, Mat::Corrugated, Mat::Planks);
-    b.table(Vec3::new(0.0, top + 0.08, 0.6), 0.0, Some("gadgets"));
+    b.table(Vec3::new(0.0, deck, 0.6), 0.0, Some("gadgets"));
 }
 
 /// The survey post: the ranger tower's legs, stair and platform, but open
@@ -5054,12 +5059,14 @@ fn target(b: &mut Builder) {
         Vec3::new(0.0, 1.2, 0.05),
         Mat::Canvas,
     );
+    // The steel plate: solid, so a round rings off it with a spark and
+    // leaves its mark (a plate drawn but not there let rounds through).
     b.piece(
         Shape::Cylinder(0.3, 0.01),
         Transform::from_xyz(0.0, 1.2, 0.07)
             .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
         Mat::DarkMetal,
-        false,
+        true,
     );
     b.piece(
         Shape::Cylinder(0.12, 0.01),

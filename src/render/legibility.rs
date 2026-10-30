@@ -692,6 +692,22 @@ mod tests {
             style: ScreenStyle::Lcd,
         };
         check("radio, full", &radio, Some(TextSource::Radio));
+        // A yard station's board, as it is when it's the station (the yard
+        // blanks the ones ahead, so at the start none is written).
+        {
+            use crate::onboarding::{Goal, Onboarding, SIGN, all_goals, sign_text, station_of};
+            let i = station_of(Goal::Turn);
+            let ob = Onboarding {
+                done: all_goals().filter(|g| station_of(*g) < i).collect(),
+                ..Default::default()
+            };
+            let board = ScreenText {
+                text: sign_text(&ob, i, false, &crate::rig::comfort::Comfort::default()),
+                size: SIGN,
+                style: ScreenStyle::Paper,
+            };
+            check("yard station board", &board, Some(TextSource::StationBoard));
+        }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
         assert!(seen.len() >= 15, "sources seen: {seen:?}");
     }

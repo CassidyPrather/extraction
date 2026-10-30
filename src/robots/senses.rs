@@ -180,8 +180,8 @@ pub const HEARD_SPREAD_MIN: f32 = 1.5;
 /// it heard roughly where, so a still shooter isn't walked straight onto.
 pub const HEARD_MISS: f32 = 0.35;
 /// A rifle's report (AK-74: 900 m/s, 48 damage) carries this far (it was
-/// 220).
-pub const GUNSHOT: f32 = 150.0;
+/// 220): the map lint's own (`map_openness`), so the two can't drift.
+pub const GUNSHOT: f32 = extraction_core::map_openness::GUNSHOT;
 /// Walking pace footsteps (1.4 m/s) on firm ground carry this far.
 pub const FOOTSTEP: f32 = 7.0;
 /// A door swinging.
