@@ -216,6 +216,7 @@ pub struct BraceChecks {
 fn touching(
     spatial: &avian3d::prelude::SpatialQuery,
     statics: &Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
+    zone: Option<&crate::world::Zone>,
     terrain: Option<Entity>,
     gt: &GlobalTransform,
     layout: &super::GunLayout,
@@ -228,15 +229,18 @@ fn touching(
     checks.looked += 1;
     // A deployed bipod's feet rest on anything, the bare ground too: it's
     // what they're for (`armoury::Bipod`).
-    if bipod_feet.is_some_and(|feet| {
-        !spatial
+    // (The ground from the heightmap: `world::sphere_in_world`.)
+    if bipod_feet.is_some_and(|feet| match zone {
+        Some(zone) => crate::world::sphere_in_world(spatial, zone, terrain, feet, BRACE_REACH),
+        None => !spatial
             .shape_intersections(
                 &Collider::sphere(BRACE_REACH),
                 feet,
                 Quat::IDENTITY,
-                &SpatialQueryFilter::from_mask(crate::world::Layer::World),
+                &SpatialQueryFilter::from_mask(crate::world::Layer::World)
+                    .with_excluded_entities(terrain),
             )
-            .is_empty()
+            .is_empty(),
     }) {
         return true;
     }
@@ -558,7 +562,10 @@ fn handle_guns(
     sockets: Query<&crate::interact::Socket>,
     mags: Query<(&GlobalTransform, &super::Mag)>,
     statics: Query<Option<&avian3d::prelude::CollisionLayers>, With<avian3d::prelude::Collider>>,
-    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
+    (terrain, zone): (
+        Query<Entity, With<crate::world::TerrainCollider>>,
+        Option<Res<crate::world::Zone>>,
+    ),
     mut checks: ResMut<BraceChecks>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     scoped: Query<&crate::gadgets::MountedOn, With<crate::gadgets::Optic>>,
@@ -603,6 +610,7 @@ fn handle_guns(
         let touching = touching(
             &spatial,
             &statics,
+            zone.as_deref(),
             terrain,
             gt,
             &gun.layout,
