@@ -23,11 +23,11 @@
 (
     name: "Cinder Works",
     description: "A burnt-out works on a canal. Brick, slag and standing dead wood, and the chimney over all of it.",
-    size: 640.0,
+    size: 472.0,
     cell: 1.0,
     base_height: 22.0,
     noise: (seed: 61, amplitude: 3.0, scale: 110.0, octaves: 5, detail: 0.3),
-    rim: (width: 70.0, height: 14.0),
+    rim: (width: 49.0, height: 14.0),
     fence_inset: 38.0,
     // Ash-brown air, and ash still drifting down when it isn't raining.
     haze: Some((1.18, 0.96, 0.76)),
@@ -43,43 +43,43 @@
         Tilt(dir: (0.0, -1.0), rise_per_100m: 1.5),
 
         // The slag heaps, tipped over decades.
-        Hill(at: (200.0, -150.0), radius: 62.0, height: 12.0),
-        Hill(at: (245.0, -105.0), radius: 30.0, height: 9.0),
-        Hill(at: (155.0, -195.0), radius: 30.0, height: 10.0),
+        Hill(at: (140.0, -105.0), radius: 43.4, height: 8.4),
+        Hill(at: (183.4, -61.6), radius: 21.0, height: 6.3),
+        Hill(at: (97.1, -148.1), radius: 21.0, height: 7.0),
         // The ash pit: where the works dumped its ash, a sunken bowl.
-        Hill(at: (-200.0, 0.0), radius: 42.0, height: -6.0),
+        Hill(at: (-140.0, 0.0), radius: 29.4, height: -4.2),
         // A low rise the lookout stands on.
-        Hill(at: (-175.0, -165.0), radius: 55.0, height: 7.0),
+        Hill(at: (-123.5, -113.5), radius: 38.5, height: 4.9),
         // Valley sides.
-        Ridge(points: [(-300.0, 220.0), (-285.0, 0.0), (-295.0, -200.0)], width: 100.0, height: 14.0),
-        Ridge(points: [(300.0, 220.0), (290.0, 60.0), (300.0, -60.0)], width: 90.0, height: 12.0),
+        Ridge(points: [(-210.0, 154.0), (-199.5, 0.0), (-206.5, -140.0)], width: 70.0, height: 9.8),
+        Ridge(points: [(210.0, 154.0), (214.1, 53.8), (210.6, -42.7)], width: 63.0, height: 8.4),
 
         // The canal's cut, then its bed.
-        Channel(points: [(-330.0, 65.0), (-150.0, 60.0), (0.0, 56.0), (150.0, 51.0), (330.0, 45.0)],
-                width: 40.0, depth: 1.2),
-        Channel(points: [(-330.0, 65.0), (-150.0, 60.0), (0.0, 56.0), (150.0, 51.0), (330.0, 45.0)],
-                width: 16.0, depth: 2.5),
+        Channel(points: [(-231.0, 45.5), (-105.0, 42.0), (-1.2, 44.1), (97.5, 42.0), (231.7, 31.8)],
+                width: 28.0, depth: 0.8),
+        Channel(points: [(-231.0, 45.5), (-105.0, 42.0), (-1.2, 44.1), (97.5, 42.0), (231.7, 31.8)],
+                width: 11.2, depth: 1.8),
 
         // Building pads.
-        Plateau(polygon: [(-120.0, 110.0), (12.0, 110.0), (12.0, 200.0), (-120.0, 200.0)], blend: 15.0),
-        Plateau(polygon: [(-45.0, -60.0), (120.0, -60.0), (120.0, 22.0), (-45.0, 22.0)], blend: 18.0),
-        Plateau(polygon: [(125.0, -15.0), (200.0, -15.0), (200.0, 40.0), (125.0, 40.0)], blend: 12.0),
-        Plateau(polygon: [(-265.0, 80.0), (-190.0, 80.0), (-190.0, 145.0), (-265.0, 145.0)], blend: 15.0),
-        Plateau(polygon: [(40.0, -275.0), (115.0, -275.0), (115.0, -225.0), (40.0, -225.0)], blend: 14.0),
-        Plateau(polygon: [(222.0, -12.0), (275.0, -12.0), (275.0, 30.0), (222.0, 30.0)], blend: 12.0),
-        Plateau(polygon: [(-285.0, -285.0), (-215.0, -285.0), (-215.0, -225.0), (-285.0, -225.0)], blend: 15.0),
-        Plateau(polygon: [(215.0, -285.0), (285.0, -285.0), (285.0, -225.0), (215.0, -225.0)], blend: 15.0),
+        Plateau(polygon: [(-85.4, 64.8), (16.6, 71.1), (16.6, 145.9), (-82.6, 133.3)], blend: 10.5),
+        Plateau(polygon: [(-42.1, -47.7), (88.5, -46.5), (76.4, 22.5), (-37.5, 19.8)], blend: 12.6),
+        Plateau(polygon: [(84.3, -11.3), (137.0, -21.3), (137.0, 33.7), (74.3, 33.0)], blend: 8.4),
+        Plateau(polygon: [(-196.6, 44.0), (-121.6, 44.0), (-133.3, 96.2), (-196.6, 109.0)], blend: 10.5),
+        Plateau(polygon: [(17.0, -200.8), (92.0, -200.8), (92.0, -150.8), (17.0, -150.8)], blend: 9.8),
+        Plateau(polygon: [(158.4, -18.2), (201.5, -15.6), (201.5, 26.4), (159.0, 23.7)], blend: 8.4),
+        Plateau(polygon: [(-199.5, -199.5), (-150.5, -199.5), (-163.4, -173.6), (-199.5, -157.5)], blend: 10.5),
+        Plateau(polygon: [(140.0, -208.5), (210.0, -208.5), (210.0, -148.5), (144.6, -158.2)], blend: 10.5),
         // The railway's cutting through the valley side, level with the
         // works yard.
-        Plateau(polygon: [(262.0, -12.0), (330.0, -12.0), (330.0, 2.0), (262.0, 2.0)], height: Some(24.1), blend: 14.0),
+        Plateau(polygon: [(188.5, -15.6), (232.9, -8.9), (234.6, 1.0), (189.0, -1.7)], height: Some(24.1), blend: 9.8),
         // Clinker tipped along the north bank west of the works: low
         // mounds to duck behind on the way to the ash pit.
-        Hill(at: (-95.0, 5.0), radius: 24.0, height: 4.0),
-        Hill(at: (-118.0, -22.0), radius: 16.0, height: 3.0),
+        Hill(at: (-66.5, 3.5), radius: 16.8, height: 2.8),
+        Hill(at: (-82.6, -15.4), radius: 11.2, height: 2.1),
         // The sluice house's pad on the ash pit's canal side.
-        Plateau(polygon: [(-182.0, 24.0), (-162.0, 24.0), (-162.0, 40.0), (-182.0, 40.0)], blend: 10.0),
+        Plateau(polygon: [(-127.4, 16.8), (-113.4, 16.8), (-113.4, 28.0), (-127.2, 27.7)], blend: 7.0),
         // Pads for the woodward's cabin and the engine shed.
-        Plateau(polygon: [(-84.0, -168.0), (-66.0, -168.0), (-66.0, -150.0), (-84.0, -150.0)], blend: 12.0),
+        Plateau(polygon: [(-55.7, -119.3), (-43.5, -120.3), (-43.5, -102.3), (-57.7, -101.6)], blend: 8.4),
     ],
 
     roads: [
@@ -87,79 +87,79 @@
         // past the works and on north to the old sidings.
         (
             name: "Works road", kind: Asphalt, width: 7.0, smoothing: 20.0,
-            points: [(-110.0, 330.0), (-110.0, 270.0), (-95.0, 210.0), (-60.0, 160.0), (-10.0, 110.0),
-                     (15.0, 75.0), (25.0, 40.0), (35.0, 0.0), (30.0, -80.0), (10.0, -150.0),
-                     (-10.0, -210.0), (-20.0, -260.0), (-20.0, -330.0)],
-            bridges: [(at: (20.0, 56.0), length: 24.0)],
+            points: [(-77.0, 248.2), (-71.0, 198.7), (-61.9, 145.3), (-38.2, 110.1), (4.4, 64.1),
+                     (10.5, 52.5), (18.8, 44.3), (24.6, 8.5), (19.3, -71.4), (10.6, -104.6),
+                     (-3.6, -150.1), (-14.0, -182.0), (-14.0, -231.0)],
+            bridges: [(at: (14.0, 46.0), length: 24.0)],
         ),
         // To the north sidings.
         (
             name: "Sidings lane", kind: Gravel, width: 5.0, smoothing: 20.0,
-            points: [(30.0, -80.0), (65.0, -150.0), (80.0, -215.0), (80.0, -245.0)],
+            points: [(19.3, -71.4), (45.4, -104.1), (57.0, -140.8), (57.0, -170.8)],
         ),
         // The slag road, out to the heaps.
         (
             name: "Slag road", kind: Dirt, width: 5.0, smoothing: 15.0,
-            points: [(32.0, -60.0), (110.0, -100.0), (150.0, -126.0)],
+            points: [(17.3, -50.5), (78.5, -86.5), (90.3, -81.3)],
         ),
         // The yard road along the north bank to the works yard.
         (
             name: "Yard road", kind: Gravel, width: 5.0, smoothing: 20.0,
-            points: [(35.0, 0.0), (100.0, 20.0), (180.0, 22.0), (245.0, 15.0)],
+            points: [(24.6, 8.5), (61.4, 25.4), (118.0, 15.4), (179.6, 9.3)],
         ),
         // Through the dead wood to the fire lookout.
         (
             name: "Lookout track", kind: Gravel, width: 4.0, smoothing: 20.0,
-            points: [(5.0, -180.0), (-70.0, -178.0), (-150.0, -165.0)],
+            points: [(8.6, -127.2), (-47.5, -130.3), (-104.3, -114.3)],
         ),
         // Out to Cutter's farm.
         (
             name: "Farm lane", kind: Dirt, width: 4.0,
-            points: [(-62.0, 166.0), (-95.0, 148.0), (-140.0, 128.0), (-205.0, 112.0)],
+            points: [(-37.6, 114.8), (-65.2, 94.1), (-93.4, 68.3), (-138.3, 74.1)],
         ),
         // The works railway, in from the east (it runs out under the fence)
         // to the rail shed.
         (
             name: "Works railway", kind: Rail, width: 3.0, smoothing: 80.0,
-            points: [(286.0, -5.0), (250.0, -5.0), (190.0, 2.0), (152.0, 5.0)],
+            points: [(212.5, -8.6), (180.3, -9.6), (127.0, -4.3), (108.3, 5.5)],
         ),
         // The lock-keeper's way: off the towpath over the old lock gates
         // and up through the dead wood to the lookout.
         (
             name: "Lock path", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
-            points: [(-150.0, 71.0), (-150.0, 60.0), (-148.0, 30.0), (-138.0, -20.0), (-145.0, -80.0),
-                     (-150.0, -130.0), (-152.0, -163.0)],
-            bridges: [(at: (-150.0, 58.0), length: 26.0)],
+            points: [(-104.7, 49.5), (-105.0, 42.0), (-103.6, 21.0), (-96.6, -14.0), (-101.5, -55.9),
+                     (-102.3, -79.0), (-105.6, -112.2)],
+            bridges: [(at: (-105.0, 40.6), length: 26.0)],
         ),
         // The keeper's path: from the gate through the spruce, over the
         // pumps' footbridge to the works yard. The hidden way east.
         (
             name: "Keeper's path", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
-            points: [(-95.0, 240.0), (-20.0, 222.0), (60.0, 190.0), (130.0, 150.0), (185.0, 112.0),
-                     (196.0, 76.0), (195.0, 50.0), (194.0, 21.0)],
-            bridges: [(at: (195.0, 50.0), length: 26.0)],
+            points: [(-56.0, 168.8), (-9.0, 166.6), (42.0, 133.0), (91.0, 105.0), (130.2, 84.0),
+                     (138.7, 68.2), (132.5, 43.6), (131.0, 14.7)],
+            bridges: [(at: (132.5, 43.6), length: 26.0)],
         ),
         // Off the slag road to the chimney and its strongbox.
         (
             name: "Chimney path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(82.0, -84.0), (94.0, -66.0), (102.0, -51.0)],
+            points: [(53.6, -71.2), (66.2, -53.4), (73.4, -38.2)],
         ),
         // From the lookout track's end up to the tower's door.
         (
             name: "Lookout path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-150.0, -165.0), (-158.0, -160.0), (-168.0, -161.0), (-174.0, -166.0)],
+            points: [(-104.3, -114.3), (-109.4, -108.9), (-116.7, -109.6), (-122.5, -114.5)],
         ),
         // The towpath along the south bank.
         (
             name: "Towpath", kind: Path, width: 1.6, shoulder: 0.8, smoothing: 4.0,
-            points: [(-250.0, 74.0), (-150.0, 70.0), (-40.0, 67.0), (8.0, 72.0)],
+            points: [(-181.6, 38.0), (-104.8, 48.9), (-27.8, 45.1), (5.6, 50.4)],
         ),
     ],
 
     water: [
         (
             name: "The canal", width: 11.0, depth: 1.4,
-            points: [(-330.0, 65.0), (-150.0, 60.0), (0.0, 56.0), (150.0, 51.0), (330.0, 45.0)],
+            points: [(-231.0, 45.5), (-105.0, 42.0), (-1.2, 44.1), (97.5, 42.0), (231.7, 31.8)],
         ),
     ],
 
@@ -167,65 +167,65 @@
         // Boundary stands.
         (name: "South boundary", seed: 71, density: 1.6, undergrowth: 0.6,
          mix: [(Spruce, 0.5), (Birch, 0.3), (Pine, 0.2)],
-         polygon: [(-320.0, 320.0), (320.0, 320.0), (320.0, 275.0), (-320.0, 275.0)]),
+         polygon: [(-224.0, 224.0), (224.0, 224.0), (224.0, 192.5), (-224.0, 192.5)]),
         (name: "North boundary", seed: 72, density: 1.3, undergrowth: 0.3,
          mix: [(Snag, 0.5), (Pine, 0.5)],
-         polygon: [(-320.0, -320.0), (320.0, -320.0), (320.0, -282.0), (-320.0, -282.0)]),
+         polygon: [(-224.0, -224.0), (224.0, -224.0), (234.5, -201.4), (-224.0, -197.4)]),
         (name: "West boundary", seed: 73, density: 1.6, undergrowth: 0.5,
          mix: [(Snag, 0.4), (Spruce, 0.4), (Pine, 0.2)],
-         polygon: [(-320.0, -282.0), (-282.0, -282.0), (-282.0, 275.0), (-320.0, 275.0)]),
+         polygon: [(-224.0, -197.4), (-197.4, -197.4), (-197.4, 192.5), (-224.0, 192.5)]),
         (name: "East boundary", seed: 74, density: 1.6, undergrowth: 0.5,
          mix: [(Spruce, 0.5), (Pine, 0.3), (Birch, 0.2)],
-         polygon: [(282.0, -282.0), (320.0, -282.0), (320.0, 275.0), (282.0, 275.0)]),
+         polygon: [(207.0, -205.5), (234.5, -201.4), (224.0, 192.5), (197.4, 192.5)]),
 
         // The burned wood: standing dead, long sightlines, no cover low.
         (
             name: "Cinder wood", seed: 75, density: 0.9, undergrowth: 0.08,
             mix: [(Snag, 0.85), (Pine, 0.15)],
-            polygon: [(-280.0, -280.0), (-30.0, -280.0), (-40.0, -200.0), (-60.0, -120.0),
-                      (-110.0, -60.0), (-280.0, -40.0)],
+            polygon: [(-196.0, -196.0), (-21.0, -196.0), (-17.5, -152.3), (-37.5, -72.3),
+                      (-77.0, -42.0), (-196.0, -28.0)],
         ),
         // Alder and birch along the canal's west reach.
         (
             name: "Canal birches", seed: 76, density: 0.9, undergrowth: 0.6,
             mix: [(Birch, 0.7), (Spruce, 0.3)],
-            polygon: [(-280.0, 80.0), (-130.0, 78.0), (-130.0, 95.0), (-280.0, 105.0)],
+            polygon: [(-208.9, 46.1), (-91.0, 54.6), (-90.9, 65.9), (-211.6, 69.0)],
         ),
         // Alders thick along the canal either side of the bridge.
         (
             name: "Bridge alders", seed: 82, density: 1.1, undergrowth: 0.6,
             mix: [(Birch, 0.7), (Spruce, 0.3)],
-            polygon: [(-48.0, 110.0), (34.0, 104.0), (42.0, 76.0), (-44.0, 80.0)],
+            polygon: [(-33.0, 63.5), (23.8, 72.8), (29.4, 53.2), (-29.9, 45.0)],
         ),
         (
             name: "North bank alders", seed: 83, density: 1.0, undergrowth: 0.5,
             mix: [(Birch, 0.6), (Spruce, 0.4)],
-            polygon: [(-2.0, 46.0), (52.0, 42.0), (54.0, 14.0), (0.0, 18.0)],
+            polygon: [(-4.9, 43.4), (41.5, 40.0), (40.9, 23.2), (-6.0, 25.5)],
         ),
         (
             name: "Ash Row birches", seed: 77, density: 0.3, undergrowth: 0.3,
             mix: [(Birch, 0.8), (Spruce, 0.2)],
-            polygon: [(-125.0, 105.0), (15.0, 105.0), (15.0, 205.0), (-125.0, 205.0)],
+            polygon: [(-86.8, 66.5), (15.3, 69.8), (15.3, 147.2), (-85.9, 135.4)],
         ),
         (
             name: "Gate spruce", seed: 78, density: 1.2, undergrowth: 0.5,
             mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
-            polygon: [(-60.0, 270.0), (275.0, 270.0), (275.0, 120.0), (40.0, 110.0), (-40.0, 210.0)],
+            polygon: [(-26.7, 189.5), (192.5, 189.0), (192.5, 84.0), (28.0, 77.0), (-23.6, 162.5)],
         ),
         (
             name: "Slag scrub", seed: 79, density: 0.35, undergrowth: 0.15,
             mix: [(Snag, 0.6), (Birch, 0.4)],
-            polygon: [(120.0, -90.0), (275.0, -60.0), (275.0, -220.0), (110.0, -230.0)],
+            polygon: [(88.5, -76.5), (196.0, -50.4), (200.0, -143.5), (87.0, -155.8)],
         ),
         (
             name: "North pines", seed: 80, density: 0.8, undergrowth: 0.3,
             mix: [(Pine, 0.7), (Snag, 0.3)],
-            polygon: [(0.0, -275.0), (40.0, -275.0), (40.0, -110.0), (0.0, -110.0)],
+            polygon: [(-12.0, -196.6), (17.0, -200.8), (28.3, -79.8), (0.5, -78.7)],
         ),
         (
             name: "Farm windbreak", seed: 81, density: 1.1, undergrowth: 0.5,
             mix: [(Spruce, 0.6), (Birch, 0.4)],
-            polygon: [(-275.0, 150.0), (-180.0, 150.0), (-180.0, 165.0), (-275.0, 165.0)],
+            polygon: [(-206.6, 114.0), (-123.3, 101.2), (-124.5, 115.0), (-204.4, 126.9)],
         ),
     ],
 
@@ -233,182 +233,176 @@
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The burnt chapel's tower, standing over what the fire left.
-        (prefab: "steeple", at: (-108.0, -252.0), rot: 0.0),
-        // The charcoal burners' kiln chimney in Cinder wood.
-        (prefab: "chimney", at: (-220.0, -180.0), rot: 0.0),
+        (prefab: "steeple", at: (-75.6, -176.4), rot: 0.0),
         // The relay mast over the mast hut.
-        (prefab: "radio_mast", at: (-170.0, -80.0), rot: 0.0),
+        (prefab: "radio_mast", at: (-118.8, -54.1), rot: 0.0),
         // The sidings' water tower, for the engines.
-        (prefab: "water_tower", at: (120.0, -200.0), rot: 0.0),
+        (prefab: "water_tower", at: (97.1, -126.1), rot: 0.0),
         // The ore shaft's headframe by the slag heap.
-        (prefab: "headframe", at: (240.0, -80.0), rot: 0.0),
-        // The chapel by Cutter's farm.
-        (prefab: "steeple", at: (-200.0, 80.0), rot: 0.0),
+        (prefab: "headframe", at: (171.5, -50.2), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 51% -> 34%).
-        (prefab: "blast_furnace", at: (-150.0, 205.0), rot: 90.0),
+        (prefab: "blast_furnace", at: (-108.7, 137.4), rot: 90.0),
         // South gate.
-        (prefab: "quarantine_gate", at: (-110.0, 285.0), rot: 0.0),
-        (prefab: "guard_booth", at: (-102.2, 285.0), rot: 90.0),
+        (prefab: "quarantine_gate", at: (-72.0, 212.0), rot: 0.0),
+        (prefab: "guard_booth", at: (-64.3, 211.1), rot: 90.0),
 
         // Ash Row: the workers' houses, either side of the works road. Long
         // since picked over; the works themselves are another matter.
-        (prefab: "house_plank_burnt", at: (-70.0, 150.0), rot: 90.0),
-        (prefab: "house_brick_damaged", at: (-40.0, 175.0), rot: 0.0),
-        (prefab: "house_brick", at: (-110.0, 175.0), rot: 90.0, tag: "foreman"),
-        (prefab: "house_plank_damaged", at: (0.0, 150.0), rot: 270.0),
-        (prefab: "shop", at: (-5.0, 165.0), rot: 270.0),
-        (prefab: "shed", at: (-55.0, 120.0), rot: 0.0),
+        (prefab: "house_plank_burnt", at: (-46.1, 99.0), rot: 90.0),
+        (prefab: "house_brick_damaged", at: (-24.9, 128.5), rot: 0.0),
+        (prefab: "house_brick", at: (-73.0, 120.6), rot: 90.0, tag: "foreman"),
+        (prefab: "house_plank_damaged", at: (15.0, 103.5), rot: 270.0),
+        (prefab: "shop", at: (10.0, 118.5), rot: 270.0),
+        (prefab: "shed", at: (-40.0, 73.5), rot: 0.0),
 
         // Cutter's farm, out west.
-        (prefab: "farmhouse_damaged", at: (-225.0, 112.0), rot: 90.0),
-        (prefab: "barn", at: (-245.0, 130.0), rot: 0.0),
-        (prefab: "shed", at: (-205.0, 130.0), rot: 0.0),
+        (prefab: "farmhouse_damaged", at: (-156.6, 76.0), rot: 90.0),
+        (prefab: "barn", at: (-176.6, 94.0), rot: 0.0),
+        (prefab: "shed", at: (-145.1, 84.7), rot: 0.0),
 
         // The works.
-        (prefab: "factory_hall", at: (75.0, -20.0), rot: 0.0),
+        (prefab: "factory_hall", at: (56.2, -9.5), rot: 0.0),
         // The service tunnel and pump room under the works (assets/underground).
-        (prefab: "tunnel_cinder", at: (73.0, -2.0), rot: 180.0),
+        (prefab: "tunnel_cinder", at: (54.2, 8.5), rot: 180.0),
         // The furnace cellars, beside the blast furnace (assets/underground).
-        (prefab: "cellars_cinder", at: (-154.0, 168.0), rot: 90.0),
-        (prefab: "bus_depot", at: (-20.0, -30.0), rot: 90.0, tag: "works_garage"),
-        (prefab: "chimney", at: (105.0, -45.0), rot: 0.0),
-        (prefab: "rail_shed", at: (140.0, 5.0), rot: 0.0),
-        (prefab: "pump_station", at: (175.0, 34.0), rot: 0.0),
-        (prefab: "boxcar", at: (215.1, -1.1), rot: 82.7),
-        (prefab: "boxcar", at: (158.61, 4.53), rot: 86.14),
-        (prefab: "shed", at: (250.0, 22.0), rot: 0.0),
+        (prefab: "cellars_cinder", at: (-107.3, 108.3), rot: 90.0),
+        (prefab: "bus_depot", at: (-26.0, -22.5), rot: 90.0, tag: "works_garage"),
+        (prefab: "chimney", at: (75.7, -32.0), rot: 0.0),
+        (prefab: "rail_shed", at: (97.7, 6.9), rot: 0.0),
+        (prefab: "pump_station", at: (115.0, 26.9), rot: 0.0),
+        (prefab: "boxcar", at: (152.1, -7.4), rot: 82.7),
+        (prefab: "boxcar", at: (119.0, 3.6), rot: 86.14),
+        (prefab: "shed", at: (183.3, 16.6), rot: 0.0),
         // A lone shed out on the south-east flats: the only roof in a
         // minute's run of that corner when the Surge is called.
-        (prefab: "shed", at: (215.0, 210.0), rot: 0.0),
+        (prefab: "shed", at: (150.5, 147.0), rot: 0.0),
 
         // The fire lookout in the dead wood.
-        (prefab: "ranger_tower", at: (-178.0, -168.0), rot: 0.0),
-        (prefab: "mast_hut", at: (-190.0, -150.0), rot: 110.0),
+        (prefab: "ranger_tower", at: (-126.5, -116.5), rot: 0.0),
+        (prefab: "mast_hut", at: (-138.6, -98.5), rot: 110.0),
         // The woodward's cabin by the lookout track, burnt and standing.
-        (prefab: "cabin_log", at: (-75.0, -159.0), rot: 10.0),
+        (prefab: "cabin_log", at: (-51.9, -111.2), rot: 10.0),
 
         // The sluice house that washed the works' ash into the pit.
-        (prefab: "pump_station", at: (-172.0, 32.0), rot: 0.0),
+        (prefab: "pump_station", at: (-120.4, 22.4), rot: 0.0),
 
         // The north sidings: a wagon left on the spur, a hut, and the
         // engine shed you can see from the works.
-        (prefab: "boxcar", at: (60.0, -240.0), rot: 15.0),
-        (prefab: "rail_shed", at: (51.5, -261.0), rot: 195.0),
-        (prefab: "mast_hut", at: (95.0, -238.0), rot: 350.0),
-        (prefab: "signal_box", at: (100.0, -262.0), rot: 0.0),
+        (prefab: "boxcar", at: (37.0, -165.8), rot: 15.0),
+        (prefab: "rail_shed", at: (28.5, -186.8), rot: 195.0),
+        (prefab: "mast_hut", at: (72.0, -163.8), rot: 350.0),
+        (prefab: "signal_box", at: (77.0, -187.8), rot: 0.0),
         // A linesman's hut by the sidings pickup: a roof to wait under for the
         // truck while the drones circle the yard.
-        (prefab: "shed", at: (88.0, -246.0), rot: 312.0, tag: "linesmans_hut"),
+        (prefab: "shed", at: (65.0, -171.8), rot: 312.0, tag: "linesmans_hut"),
 
         // The thing in the slag.
-        (prefab: "anomaly_core", at: (200.0, -150.0), rot: 0.0),
+        (prefab: "anomaly_core", at: (140.0, -105.0), rot: 0.0),
 
         // Where the robots come and go.
-        (prefab: "robot_gate", at: (250.0, -255.0), rot: 315.0),
+        (prefab: "robot_gate", at: (175.0, -178.5), rot: 315.0),
         // Car wrecks (Destruction strips their doors, bonnets, boots and
         // wheels): cover on the verges, never on the road.
         // A works lorry in the yard between the garage and the hall: the
         // cover on the works road's open stretch past the yard.
-        (prefab: "wreck_lorry", at: (45.0, -18.0), rot: 350.0),
+        (prefab: "wreck_lorry", at: (34.0, -8.2), rot: 350.0),
         // Turned back from the gate and left on the verge, facing it.
-        (prefab: "wreck_lada", at: (-100.4, 208.2), rot: 204.0),
+        (prefab: "wreck_lada", at: (-66.7, 143.0), rot: 204.0),
         // The woodward's jeep, on the lookout track through the dead wood.
-        (prefab: "wreck_uaz", at: (-54.2, -183.3), rot: 267.0),
+        (prefab: "wreck_uaz", at: (-31.7, -135.6), rot: 267.0),
         // Pulled over on the works road out north, past the sidings lane.
-        (prefab: "wreck_lada", at: (-6.7, -219.4), rot: 345.0),
+        (prefab: "wreck_lada", at: (-14.9, -150.9), rot: 345.0),
 
         // Cover within a four-second sprint of every step of the first jobs
         // (map_lint FIRST_RUN): cars abandoned on the verges in the
         // evacuation, and log piles stacked by the ways across the open.
-        (prefab: "wreck_lada", at: (-27.0, 116.0), rot: 23.0),
-        (prefab: "wreck_uaz", at: (1.5, 82.7), rot: 90.0),
-        (prefab: "log_pile", at: (9.5, 69.3), rot: 157.0),
-        (prefab: "log_pile", at: (27.8, 63.8), rot: 224.0),
-        (prefab: "wreck_uaz", at: (39.0, 20.0), rot: 291.0),
-        (prefab: "wreck_lorry", at: (25.8, 8.2), rot: 358.0),
-        (prefab: "wreck_lada", at: (26.7, -17.5), rot: 65.0),
-        (prefab: "wreck_uaz", at: (43.0, -40.0), rot: 132.0),
-        (prefab: "wreck_lorry", at: (63.0, 20.0), rot: 199.0),
-        (prefab: "wreck_lada", at: (99.0, 12.0), rot: 266.0),
-        (prefab: "log_pile", at: (191.0, 60.0), rot: 333.0),
-        (prefab: "log_pile", at: (-140.0, 76.0), rot: 40.0),
-        (prefab: "log_pile", at: (-131.0, -12.0), rot: 107.0),
-        (prefab: "wreck_uaz", at: (-133.0, -32.0), rot: 174.0),
-        (prefab: "wreck_lorry", at: (-133.0, -48.0), rot: 241.0),
-        (prefab: "wreck_lada", at: (-137.0, -60.0), rot: 308.0),
-        (prefab: "log_pile", at: (17.3, -25.5), rot: 15.0),
-        (prefab: "log_pile", at: (-133.0, 40.0), rot: 82.0),
+        (prefab: "wreck_lada", at: (-12.0, 69.5), rot: 23.0),
+        (prefab: "wreck_uaz", at: (-2.3, 54.2), rot: 90.0),
+        (prefab: "log_pile", at: (20.7, 57.1), rot: 224.0),
+        (prefab: "wreck_uaz", at: (32.7, 27.6), rot: 291.0),
+        (prefab: "wreck_lorry", at: (13.0, 14.6), rot: 358.0),
+        (prefab: "wreck_lada", at: (16.2, -8.9), rot: 65.0),
+        (prefab: "wreck_uaz", at: (32.6, -30.1), rot: 132.0),
+        (prefab: "wreck_lada", at: (63.7, 19.2), rot: 266.0),
+        (prefab: "log_pile", at: (130.6, 53.0), rot: 333.0),
+        (prefab: "log_pile", at: (-97.8, 56.4), rot: 40.0),
+        (prefab: "log_pile", at: (-91.7, -8.4), rot: 107.0),
+        (prefab: "wreck_uaz", at: (-93.1, -22.4), rot: 174.0),
+        (prefab: "wreck_lorry", at: (-93.1, -33.6), rot: 241.0),
+        (prefab: "wreck_lada", at: (-95.9, -42.0), rot: 308.0),
+        (prefab: "log_pile", at: (10.2, -17.7), rot: 15.0),
+        (prefab: "log_pile", at: (-93.1, 28.0), rot: 82.0),
         // And on the ways home from them, to the nearest rendezvous.
-        (prefab: "log_pile", at: (119.0, -15.0), rot: 31.0),
-        (prefab: "log_pile", at: (202.7, 28.5), rot: 98.0),
+        (prefab: "log_pile", at: (79.5, -10.1), rot: 31.0),
+        (prefab: "log_pile", at: (139.7, 22.2), rot: 98.0),
     ],
 
     markers: [
-        (kind: Insertion, at: (-110.0, 270.0), rot: 0.0, name: "South gate"),
-        (kind: TruckStop, at: (-110.0, 300.0), rot: 0.0, name: "South gate"),
-        (kind: ShortExfil, at: (-104.0, 276.0), name: "South gate (fuel)"),
-        (kind: Rendezvous, at: (-165.0, -175.0), name: "Fire lookout"),
-        (kind: Rendezvous, at: (78.0, -255.0), name: "North sidings"),
-        (kind: Rendezvous, at: (245.0, 12.0), name: "Works yard"),
-        (kind: RobotGate, at: (250.0, -255.0), rot: 315.0, name: "The Gate"),
+        (kind: Insertion, at: (-71.0, 198.7), rot: 0.0, name: "South gate"),
+        (kind: TruckStop, at: (-74.9, 222.4), rot: 0.0, name: "South gate"),
+        (kind: ShortExfil, at: (-65.5, 204.0), name: "South gate (fuel)"),
+        (kind: Rendezvous, at: (-113.9, -123.6), name: "Fire lookout"),
+        (kind: Rendezvous, at: (55.0, -180.8), name: "North sidings"),
+        (kind: Rendezvous, at: (179.4, 6.4), name: "Works yard"),
+        (kind: RobotGate, at: (175.0, -178.5), rot: 315.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 140.0, power: Some((253.1, -252.6))), at: (239.6, -249.0), rot: -45.0, name: "Gate sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((133.6, -70.5))), at: (121.5, -63.5), rot: -30.0, name: "Chimney sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((178.1, -176.1))), at: (164.6, -172.5), rot: -45.0, name: "Gate sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((102.1, -57.0))), at: (90.0, -50.0), rot: -30.0, name: "Chimney sentry"),
         // A spotter over the open ground the west way crosses to the fire
         // lookout: the east ways have the chimney's sentry (map_spotter).
-        (kind: Spotter, at: (-170.0, -10.0), name: "Ash pit spotter"),
-        (kind: ArtifactField, at: (200.0, -150.0), name: "The slag heaps"),
-        (kind: ArtifactField, at: (-200.0, 0.0), name: "The ash pit"),
+        (kind: Spotter, at: (-119.0, -7.0), name: "Ash pit spotter"),
+        (kind: ArtifactField, at: (140.0, -105.0), name: "The slag heaps"),
+        (kind: ArtifactField, at: (-140.0, 0.0), name: "The ash pit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
-        (kind: Anomaly(kind: "Well", radius: 2.2), at: (234.0, -129.0), name: "Slag heap well"),
-        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-233.0, -9.0), name: "Ash pit mirror"),
-        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (171.0, -172.0), name: "Slag heap hush"),
-        (kind: Offering, at: (-20.0, 200.0), name: "The memorial plinth"),
-        (kind: Offering, at: (-120.0, -230.0), name: "The burnt chapel"),
-        (kind: WorkSite, at: (-45.0, 30.0), name: "Canal bank site"),
-        (kind: WorkSite, at: (120.0, -105.0), name: "Slag road site"),
-        (kind: WorkSite, at: (-120.0, -110.0), name: "Cinder wood site"),
-        (kind: Poi, at: (-50.0, 155.0), name: "Ash Row"),
-        (kind: Poi, at: (-228.0, 120.0), name: "Cutter's farm"),
-        (kind: Poi, at: (20.0, -25.0), name: "The works"),
-        (kind: Poi, at: (105.0, -45.0), name: "The chimney"),
-        (kind: Poi, at: (175.0, 30.0), name: "Canal pumps"),
-        (kind: Poi, at: (200.0, -150.0), name: "The slag heaps"),
-        (kind: Poi, at: (-178.0, -168.0), name: "Fire lookout"),
-        (kind: Poi, at: (75.0, -240.0), name: "North sidings"),
-        (kind: Poi, at: (-75.0, -159.0), name: "Woodward's cabin"),
-        (kind: ValleyKey(item: "key_cinder"), at: (108.5, -41.0), rot: 0.0, name: "Chimney strongbox"),
+        (kind: Anomaly(kind: "Well", radius: 2.2), at: (174.0, -84.0), name: "Slag heap well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-163.1, -6.3), name: "Ash pit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (111.0, -127.0), name: "Slag heap hush"),
+        (kind: Offering, at: (-5.0, 153.5), name: "The memorial plinth"),
+        (kind: Offering, at: (-75.0, -178.5), name: "The burnt chapel"),
+        (kind: WorkSite, at: (-34.5, 23.5), name: "Canal bank site"),
+        (kind: WorkSite, at: (87.7, -89.9), name: "Slag road site"),
+        (kind: WorkSite, at: (-85.3, -60.6), name: "Cinder wood site"),
+        (kind: Poi, at: (-34.5, 108.2), name: "Ash Row"),
+        (kind: Poi, at: (-159.6, 84.0), name: "Cutter's farm"),
+        (kind: Poi, at: (11.8, -17.0), name: "The works"),
+        (kind: Poi, at: (75.7, -32.0), name: "The chimney"),
+        (kind: Poi, at: (114.6, 23.0), name: "Canal pumps"),
+        (kind: Poi, at: (140.0, -105.0), name: "The slag heaps"),
+        (kind: Poi, at: (-126.5, -116.5), name: "Fire lookout"),
+        (kind: Poi, at: (52.0, -165.8), name: "North sidings"),
+        (kind: Poi, at: (-51.9, -111.2), name: "Woodward's cabin"),
+        (kind: ValleyKey(item: "key_cinder"), at: (78.1, -27.8), rot: 0.0, name: "Chimney strongbox"),
         // Caches worth the detour: the lookout's ammunition, a driver's cache
         // at the north sidings, the woodward's tools, and the farm's
         // workshop out west.
-        (kind: Loot(table: "ammo_common"), at: (-170.0, -158.0), name: "Lookout ammo box"),
-        (kind: Loot(table: "driver_cache"), at: (92.0, -252.0), name: "Sidings driver's cache"),
-        (kind: Loot(table: "tools"), at: (-66.0, -150.0), name: "Woodward's tools"),
-        (kind: Loot(table: "workshop"), at: (-232.0, 140.0), name: "Cutter's workshop"),
+        (kind: Loot(table: "ammo_common"), at: (-118.5, -106.5), name: "Lookout ammo box"),
+        (kind: Loot(table: "driver_cache"), at: (69.0, -177.8), name: "Sidings driver's cache"),
+        (kind: Loot(table: "tools"), at: (-43.5, -102.3), name: "Woodward's tools"),
+        (kind: Loot(table: "workshop"), at: (-166.9, 100.4), name: "Cutter's workshop"),
         // notes:begin (generated by scripts/place_notes.py)
-        (kind: Note(text: "SOUTH GATE, CINDER - DUTY LOG\n19 Feb. Fire in the north-west wood since the 12th. The works still burning loads; machines in from the Gate every hour.\n26 Feb. Wind turned. Ash on everything. The rations taste of it.\n1 Apr. Review postponed. We stand down. The inspector stays: says he'll wait for them in the works garage."), at: (-102.80, 285.30), rot: 63.4, name: "Gate log"),
-        (kind: Terminal(pages: ["WORKS LOG - R. KRAL\n\nAuthority contract: burn all\nmaterial the machines deliver.\n\nNov: cars, bedding, furniture.\nDec: more. Toys. A piano.\nJan: we stopped asking.", "12 Feb. Furnace three blew\nback into the yard. The wood\ncaught by evening.\n\nThe machines kept delivering\nall through the fire.", "The inspector locked the\nCinder depot key in the\nstrongbox at the foot of the\nchimney, and kept our keys.\n\nKEY-C is down there still.\nHe sits in the garage with\nthe radio, waiting."]), at: (62.80, -13.00), rot: -119.8, name: "Foreman's terminal"),
-        (kind: Terminal(pages: ["CUSTODIAN NETWORK - CINDER\n\nDepot GATE-C: ACTIVE\nMode: SWEEP (heat damage)\n\nRecall requires KEY-M, KEY-K,\nKEY-C at any depot lock.", "SESSION LOG\n\nP.RUS   status       ACTIVE\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   recall       KEYS 0/3\n\nNo session since 9 JUN."]), at: (-26.50, -17.80), rot: -152.0, name: "Garage terminal"),
-        (kind: Note(text: "Ruben says the ash is from the fire. The fire was out by March. I sweep the step every morning, and every morning there's more, and it isn't coming down. It's coming up, out of the cracks, worst by the slag heaps.\nThe chimney is the best landmark: walk toward it in the fog and you'll find the road.\n- V."), at: (-109.20, 173.30), rot: 205.2, name: "Foreman's house note"),
-        (kind: Note(text: "Came in on the driver's truck, same as you, I expect. He's all right. He won't come past the fence. I asked him why once. He said he tried, the first day, and they turned him back, and now he's used to it.\nPull the cord in the back when you want out. Don't be late for the Surge.\nHe keeps a count of us. Don't add to it."), at: (-0.70, 151.30), rot: 28.3, name: "House note"),
-        (kind: Note(text: "FIRE LOOKOUT - CINDER, 12 FEB\n1540. Black smoke, works yard.\n1610. Flame in the north-west wood. Phoned the works. No answer.\n1700. Wind south-east. Lamp to Marrow and Kettle: three short.\n2300. Machines walking into the fire with their arms full, and out empty.\nMarta answered. Kettle didn't."), at: (-177.70, -167.40), rot: 333.4, y: 8.5, name: "Lookout log"),
-        (kind: Note(text: "SLUICE HOUSE - ASH PIT\nWorks order: drain the pit to the canal.\nThe pit won't drain. The ash floats. It drifts against the current, back toward the slag heaps.\nSluice shut. I'm not opening it again."), at: (-166.20, 29.00), rot: 242.7, name: "Sluice house note"),
-        (kind: Terminal(pages: ["RELAY LOG - MAST C3\n\nHeat damage: housing, cabling.\nPylon reports: degraded.\nRepair requested: 1 FEB.\nRepair requested: 1 MAR.\nRepair requested: 1 APR.\n...\n\nRequests held for uplink."]), at: (96.03, -236.76), rot: 140.3, name: "Mast terminal"),
-        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches by the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-74.80, -158.41), rot: 341.4, name: "Woodward's book"),
+        (kind: Note(text: "SOUTH GATE, CINDER - DUTY LOG\n19 Feb. Fire in the north-west wood since the 12th. The works still burning loads; machines in from the Gate every hour.\n26 Feb. Wind turned. Ash on everything. The rations taste of it.\n1 Apr. Review postponed. We stand down. The inspector stays: says he'll wait for them in the works garage."), at: (-64.90, 211.40), rot: 63.4, name: "Gate log"),
+        (kind: Terminal(pages: ["WORKS LOG - R. KRAL\n\nAuthority contract: burn all\nmaterial the machines deliver.\n\nNov: cars, bedding, furniture.\nDec: more. Toys. A piano.\nJan: we stopped asking.", "12 Feb. Furnace three blew\nback into the yard. The wood\ncaught by evening.\n\nThe machines kept delivering\nall through the fire.", "The inspector locked the\nCinder depot key in the\nstrongbox at the foot of the\nchimney, and kept our keys.\n\nKEY-C is down there still.\nHe sits in the garage with\nthe radio, waiting."]), at: (44.00, -2.50), rot: -119.8, name: "Foreman's terminal"),
+        (kind: Terminal(pages: ["CUSTODIAN NETWORK - CINDER\n\nDepot GATE-C: ACTIVE\nMode: SWEEP (heat damage)\n\nRecall requires KEY-M, KEY-K,\nKEY-C at any depot lock.", "SESSION LOG\n\nP.RUS   status       ACTIVE\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   recall       KEYS 0/3\n\nNo session since 9 JUN."]), at: (-32.50, -10.30), rot: -152.0, name: "Garage terminal"),
+        (kind: Note(text: "Ruben says the ash is from the fire. The fire was out by March. I sweep the step every morning, and every morning there's more, and it isn't coming down. It's coming up, out of the cracks, worst by the slag heaps.\nThe chimney is the best landmark: walk toward it in the fog and you'll find the road.\n- V."), at: (-72.20, 118.90), rot: 205.2, name: "Foreman's house note"),
+        (kind: Note(text: "Came in on the driver's truck, same as you, I expect. He's all right. He won't come past the fence. I asked him why once. He said he tried, the first day, and they turned him back, and now he's used to it.\nPull the cord in the back when you want out. Don't be late for the Surge.\nHe keeps a count of us. Don't add to it."), at: (14.30, 104.80), rot: 28.3, name: "House note"),
+        (kind: Note(text: "FIRE LOOKOUT - CINDER, 12 FEB\n1540. Black smoke, works yard.\n1610. Flame in the north-west wood. Phoned the works. No answer.\n1700. Wind south-east. Lamp to Marrow and Kettle: three short.\n2300. Machines walking into the fire with their arms full, and out empty.\nMarta answered. Kettle didn't."), at: (-126.20, -115.90), rot: 333.4, y: 8.5, name: "Lookout log"),
+        (kind: Note(text: "SLUICE HOUSE - ASH PIT\nWorks order: drain the pit to the canal.\nThe pit won't drain. The ash floats. It drifts against the current, back toward the slag heaps.\nSluice shut. I'm not opening it again."), at: (-114.60, 19.40), rot: 242.7, name: "Sluice house note"),
+        (kind: Terminal(pages: ["RELAY LOG - MAST C3\n\nHeat damage: housing, cabling.\nPylon reports: degraded.\nRepair requested: 1 FEB.\nRepair requested: 1 MAR.\nRepair requested: 1 APR.\n...\n\nRequests held for uplink."]), at: (73.03, -162.56), rot: 140.3, name: "Mast terminal"),
+        (kind: Note(text: "Woodward's book, last page.\nThe works' smoke came down the valley at noon and didn't lift. I've wet the roof and the woodpile and I'm stopping here.\nMatches by the stove. The door sticks, kick it at the bottom, then wedge it.\n- T. Vesely, woodward"), at: (-51.70, -110.61), rot: 341.4, name: "Woodward's book"),
         // notes:end
     ],
 
     regions: [
-        (name: "South gate", danger: 0, loot: Some(0.3), polygon: [(-170.0, 320.0), (-50.0, 320.0), (-50.0, 255.0), (-170.0, 255.0)]),
-        (name: "Ash Row", danger: 1, loot: Some(0.4), polygon: [(-125.0, 105.0), (15.0, 105.0), (15.0, 205.0), (-125.0, 205.0)]),
-        (name: "Cutter's farm", danger: 1, loot: Some(0.5), polygon: [(-270.0, 75.0), (-185.0, 75.0), (-185.0, 150.0), (-270.0, 150.0)]),
-        (name: "The works", danger: 2, loot: Some(1.6), polygon: [(-45.0, -65.0), (125.0, -65.0), (125.0, 25.0), (-45.0, 25.0)]),
-        (name: "Works yard", danger: 2, loot: Some(1.3), polygon: [(125.0, -20.0), (280.0, -20.0), (280.0, 45.0), (125.0, 45.0)]),
-        (name: "The slag heaps", danger: 3, loot: Some(1.7), polygon: [(120.0, -230.0), (280.0, -230.0), (280.0, -70.0), (120.0, -70.0)]),
-        (name: "The ash pit", danger: 2, polygon: [(-245.0, -38.0), (-155.0, -38.0), (-155.0, 45.0), (-245.0, 45.0)]),
-        (name: "Cinder wood", danger: 2, polygon: [(-280.0, -280.0), (-30.0, -280.0), (-60.0, -120.0), (-110.0, -60.0), (-280.0, -40.0)]),
-        (name: "North sidings", danger: 2, loot: Some(1.5), polygon: [(30.0, -285.0), (120.0, -285.0), (120.0, -215.0), (30.0, -215.0)]),
-        (name: "The Gate", danger: 3, polygon: [(200.0, -300.0), (300.0, -300.0), (300.0, -200.0), (200.0, -200.0)]),
+        (name: "South gate", danger: 0, loot: Some(0.3), polygon: [(-125.9, 229.8), (-28.1, 229.8), (-17.9, 174.6), (-130.8, 184.1)]),
+        (name: "Ash Row", danger: 1, loot: Some(0.4), polygon: [(-86.8, 66.5), (15.3, 69.8), (15.3, 147.2), (-85.9, 135.4)]),
+        (name: "Cutter's farm", danger: 1, loot: Some(0.5), polygon: [(-200.7, 40.0), (-117.7, 40.2), (-128.3, 101.2), (-201.6, 114.0)]),
+        (name: "The works", danger: 2, notice: Some(45.0), loot: Some(1.6), polygon: [(-40.3, -50.9), (93.5, -51.5), (80.2, 24.3), (-36.3, 21.2)]),
+        (name: "Works yard", danger: 2, notice: Some(45.0), loot: Some(1.3), polygon: [(85.2, -15.4), (206.5, -23.6), (206.5, 41.4), (72.8, 36.3)]),
+        (name: "The slag heaps", danger: 3, notice: Some(45.0), loot: Some(1.7), polygon: [(97.0, -155.8), (205.0, -153.5), (196.6, -50.4), (88.5, -56.5)]),
+        (name: "The ash pit", danger: 2, notice: Some(45.0), polygon: [(-171.5, -26.6), (-108.5, -26.6), (-108.5, 31.5), (-173.7, 21.9)]),
+        (name: "Cinder wood", danger: 2, notice: Some(45.0), polygon: [(-196.0, -196.0), (-21.0, -196.0), (-37.5, -72.3), (-77.0, -42.0), (-196.0, -28.0)]),
+        (name: "North sidings", danger: 2, notice: Some(45.0), loot: Some(1.5), polygon: [(7.0, -210.6), (97.0, -210.6), (97.1, -140.8), (7.1, -140.9)]),
+        (name: "The Gate", danger: 3, notice: Some(45.0), polygon: [(128.4, -220.5), (221.6, -220.5), (217.9, -131.3), (134.8, -144.2)]),
     ],
 )
