@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 0862204 | 2026-10-31 03:30 (gate 92, the one-thread executor) | 40/40 exit 0, no timeouts, 21 extracted (Rime 7/8, Cinder 4/8, Marrow 4/8, Kettle 3/8, Sallow 3/8); stucks 113; 10 of 16 Marrow/Kettle raids identical to 2ea48de; Sallow seeds 1 and 5 now die early to hounds at (207-224, 35-122) | fast-profile workspace suite: 1231 lib, 353 core, 0 FAILED | gauges 19/19 in 1942 s |
 | 2ea48de | 2026-10-30 22:00 | Marrow and Kettle seeds 1-8: 16/16 exit 0, no timeouts; Marrow 4/8 extracted (stucks 30 → 3), Kettle 4/8 (stucks 69 → 55; seed 5 on to_rv at (-55, 170-175), seed 7 underground at (-80, 25-30)) | fast-profile workspace suite: 1227 lib, 353 core, 0 FAILED | Marrow and every-valley gauges 7/7 green (b619140e) |
 | cc4d02c | 2026-10-30 (wave 3 final release check) | 40/40 exit 0, no timeouts, 24 extracted (Cinder 6/8, Rime 6/8, Kettle 5/8, Sallow 5/8, Marrow 2/8); stucks 137 (84 on 887612e; Kettle 69, underground taking); 13/13 contract scenarios; `--check-buildings` 42 checked, 0 flagged, 3 skipped | fast-profile workspace suite: 1217 lib, 353 core, 0 FAILED (51 min). Wave 3's mains c930fa8, 957e6d1, f9543d6, 801a952 green on the same suite | gauges 12/17: the Marrow five (m05_spruce overdraw and fragments after the warp, trees after_a_jump) |
 | 887612e | 2026-10-28 (final release check) | 40/40 exit 0, no timeouts, 23 extracted (Cinder 7/8, Sallow 6/8, Marrow 4/8, Kettle 3/8, Rime 3/8); stucks 84 (65 on 2798e45); 13/13 contract scenarios; `--check-buildings` 46 checked, 0 flagged, 3 skipped; visual_diff from 2798e45: 2 of 10 changed (Marrow's lift grooves back), buildings 18/18 | 1119 lib tests, 0 FAILED, all within budget, 46 min; extraction_core 349 passed; bin and doc tests pass | gauges 17/17 in 758 s |
@@ -68,12 +69,13 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 2ea48de.
+As of 0862204.
 
 | test / run | class | owner | status |
 | - | - | - | - |
 | Sim: Kettle stucks: underground taking at (-80..-95, 25-30) across shas; seed 5 on to_rv at (-55, 170-175); all recover | | Underground (routed by the coordinator) | open |
 | Sim: Rime seed 1 dies to the plough (cc4d02c) | | routed by the coordinator | open |
+| Sim: Sallow seeds 1 and 5 die early to hounds (333 s, 299 s, loot 0) since 0862204 | likely the herd-stall fixes | Wildlife / Fourth valley | reported |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
