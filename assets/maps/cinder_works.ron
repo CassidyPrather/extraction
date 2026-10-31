@@ -376,7 +376,7 @@
 
     markers: [
         (kind: Insertion, at: (-71.0, 198.7), rot: 0.0, name: "South gate"),
-        (kind: TruckStop, at: (-74.9, 222.4), rot: 0.0, name: "South gate"),
+        (kind: TruckStop, at: (-74.4, 228.0), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (-65.5, 204.0), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (-113.9, -123.6), name: "Fire lookout"),
         (kind: Rendezvous, at: (55.0, -180.8), name: "North sidings"),
