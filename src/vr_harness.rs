@@ -2429,7 +2429,7 @@ mod onboarding {
             .entity_mut(radio)
             .insert(RigidBody::Static);
         take(&mut vr, Side::Right, radio);
-        // The nearest free body slot that takes it.
+        // The chest mount: the radio's sleeve (it fits no pocket or pouch).
         let slots: Vec<Vec3> = {
             let mut q = vr.app.world_mut().query::<(
                 &crate::interact::Socket,
@@ -2443,15 +2443,14 @@ mod onboarding {
                         && matches!(
                             s.kind,
                             crate::interact::SocketKind::Body(
-                                extraction_core::inventory::SlotKind::Pocket
-                                    | extraction_core::inventory::SlotKind::Pouch
+                                extraction_core::inventory::SlotKind::Mount
                             )
                         )
                 })
                 .map(|(_, _, g)| g.translation())
                 .collect()
         };
-        assert!(!slots.is_empty(), "a pocket");
+        assert!(!slots.is_empty(), "a chest mount");
         let from = at(&vr, radio);
         for i in 0..=12 {
             vr.move_hand(Side::Right, from.lerp(slots[0], i as f32 / 12.0));
@@ -2459,7 +2458,7 @@ mod onboarding {
         }
         vr.grip(Side::Right, 0.0);
         vr.step(4);
-        assert!(done(&vr, Goal::Pocket), "pocketed");
+        assert!(done(&vr, Goal::Pocket), "on the chest");
         assert!(!done(&vr, Goal::Pack));
         // The pack comes with the far box.
         at_station(
