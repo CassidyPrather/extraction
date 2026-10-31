@@ -808,6 +808,10 @@ crosses square now.
 | two landmarks in sight, day / fog | 94% / 93% | 99% / 98% |
 | night fix | 98.5% | 99.7% |
 
+Kettle's cloud cap (`sky::valley_air`, from 52 m up) hides the valley
+from a camera over it, so these are `scripts/map_preview.py`'s design
+previews, each to its own scale (the 100 m bar):
+
 ![Kettle Pass from overhead, as it was](shots/map-design/kettle_warp_before.jpg)
 ![Kettle Pass from overhead, pulled in](shots/map-design/kettle_warp_after.jpg)
 
