@@ -1832,6 +1832,13 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
     let (x, z) = (w * 0.5, d * 0.5);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     // Damaged: the front +X corner fallen in to a stub (both its walls'
     // ends), and a breach knocked through the +X wall.
     let stub = 0.5;
@@ -2423,6 +2430,13 @@ fn cabin_ruin(b: &mut Builder, ruin: Ruin) {
     let (x, z) = (w * 0.5, d * 0.5);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     // Damaged: the corner's two walls fallen to a stub (the front's clear
     // of its window's shutter).
     let stub = 0.5;
@@ -2640,6 +2654,13 @@ fn shop_ruin(b: &mut Builder, ruin: Ruin) {
     let (w, d, f, h) = (9.0, 7.0, 0.3, 3.1);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     b.glass_out = true;
     b.shell(
         w,
