@@ -246,10 +246,29 @@ impl Among {
     }
 }
 
+/// An animal's body reaches this far from where it stands (m): half a
+/// deer's length.
+const BODY_REACH: f32 = 0.5;
+
 /// The walkers' nav grid as the animals have it: water blocked too (a
-/// deer doesn't wade the reservoir), so a way round never goes through it.
+/// deer doesn't wade the reservoir), so a way round never goes through it;
+/// and every rock solid enough to have a collider out to its longest side
+/// and a body's reach (the walkers' grid takes its round radius: a deer
+/// stood there had its flank in the rock).
 pub fn herd_grid(zone: &Zone, nav: &NavGrid) -> NavGrid {
     let mut grid = nav.clone();
+    for r in extraction_core::rocks::scatter_rocks(&zone.map, &zone.hm)
+        .iter()
+        .filter(|r| r.radius >= extraction_core::rocks::SOLID_RADIUS)
+    {
+        grid.block(
+            extraction_core::nav::Obstacle::Circle {
+                at: [r.pos[0], r.pos[2]],
+                radius: r.radius * r.stretch.max(1.0 / r.stretch),
+            },
+            BODY_REACH,
+        );
+    }
     // Any water in the cell (its middle or near a corner) and it's shut:
     // a way the grid calls clear is then clear to `open` too.
     let h = grid.cell * 0.49;
@@ -746,7 +765,7 @@ pub(crate) fn herds(
         *spawned = true;
         let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
         if let (Some(kind), false) = (Kind::for_map(&opts.map), off) {
-            if let Some(home) = pick_home(&zone, &nav.0, opts.seed, kind) {
+            if let Some(home) = pick_home(&zone, walk, opts.seed, kind) {
                 let mut rng = Rng::new(opts.seed ^ 0x4E2D);
                 let herd = new_herd(kind, home, &zone, &mut rng);
                 info!("{} {kind:?}s about {home:.0}", herd.beasts.len());
@@ -1070,9 +1089,16 @@ mod tests {
             let a = k as f32 / 48.0 * std::f32::consts::TAU;
             (60..=150).step_by(15).find_map(|d| {
                 let p = from + Vec2::from_angle(a) * d as f32;
+                // Round the corner, not round the valley: a way at most
+                // twice the straight one.
+                let way = nav.path([from.x, from.y], [p.x, p.y]).map(|w| {
+                    w.windows(2)
+                        .map(|s| Vec2::from(s[0]).distance(Vec2::from(s[1])))
+                        .sum::<f32>()
+                });
                 (open(nav, zone, p)
                     && !nav.line_clear([from.x, from.y], [p.x, p.y])
-                    && nav.path([from.x, from.y], [p.x, p.y]).is_some())
+                    && way.is_some_and(|l| l <= 2.0 * d as f32))
                 .then_some(p)
             })
         });
