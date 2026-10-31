@@ -1306,6 +1306,65 @@ pub(crate) mod vr_tests {
         assert!(on <= off + 0.15, "{on:.3} s steadied against {off:.3} s");
     }
 
+    /// Where the bore points, each tick for `ticks`.
+    fn bore_track(r: &mut Range, ticks: usize) -> Vec<Vec3> {
+        (0..ticks)
+            .map(|_| {
+                r.vr.step(1);
+                let gt = r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+                gt.rotation() * Vec3::NEG_Z
+            })
+            .collect()
+    }
+
+    /// The most a track turns in one tick (degrees).
+    fn worst_tick(track: &[Vec3]) -> f32 {
+        track
+            .windows(2)
+            .map(|w| w[0].angle_between(w[1]).to_degrees())
+            .fold(0.0, f32::max)
+    }
+
+    /// A rifle in one hand, the hands still: the other hand taking its
+    /// handguard (3 cm off the bore's line, as a hand lands) turns it onto
+    /// the line between the hands over a few ticks, and letting go hands it
+    /// back to the one wrist as smoothly: never a jump. (Measured: the AK's
+    /// worst tick is 0.9 deg turning 5 deg; what goes on moving after is the
+    /// one-handed sway coming and going, by design.)
+    #[test]
+    fn a_support_hand_takes_and_leaves_the_aim_without_a_jump() {
+        let mut bad = Vec::new();
+        for id in ["ak74", "mosin", "mp133", "svd"] {
+            let mut r = hold(id, false, false);
+            let support = r.vr.point(r.gun, |p| *p == GripRole::Support);
+            bore_track(&mut r, 10);
+            r.vr.hand(
+                Side::Left,
+                support + Vec3::new(0.0, 0.03, 0.0),
+                Quat::IDENTITY,
+                1.0,
+                0.0,
+            );
+            let on = bore_track(&mut r, 45);
+            if r.vr.hand_state(Side::Left).supporting != Some(r.gun) {
+                bad.push(format!("{id}: the support hand didn't take it"));
+            }
+            r.vr.grip(Side::Left, 0.0);
+            let off = bore_track(&mut r, 45);
+            for (way, track) in [("taken", &on), ("let go", &off)] {
+                let step = worst_tick(track);
+                if step > STEP_MAX {
+                    bad.push(format!("{id} {way}: jumped {step:.2} deg in a tick"));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// The most a held gun may turn in a tick while the hands are still
+    /// (degrees): a snap would be several.
+    const STEP_MAX: f32 = 1.5;
+
     pub(crate) fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {
         r.vr.app.world_mut().get_mut::<Gun>(r.gun).unwrap()
     }
