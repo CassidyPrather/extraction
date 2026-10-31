@@ -53,11 +53,11 @@ At (-39.4, 120.3), 20.4 m; looking 24 deg along the way, and 256 deg to blast_fu
 
 ### s04: 98 m, job (the career's first (Ash Row))
 
-At (-34.5, 108.2), 20.4 m; looking 41 deg along the way, and 249 deg to blast_furnace (80 m).
+At (-34.5, 108.2), 20.4 m; looking 22 deg along the way, and 249 deg to blast_furnace (80 m).
 
 ![s04 ahead](s04_ahead.jpg) ![s04 side](s04_side.jpg)
 
-- **Vista.** The job's point is on the road, with the Row off to the left in haze, trees and a woodpile to the right. No subject ahead.
+- **Vista.** Arriving, you stand on the road with Ash Row off to the left in haze, trees and a woodpile on the right, the works far ahead. No subject.
 - **Draws the eye.** Side: the furnace a fourth time.
 - **For.** nothing: It should be 'you're there': Ash Row. You're on a road beside it.
 
@@ -123,13 +123,13 @@ At (127.7, 14.5), 22.2 m; looking 81 deg along the way, and 237 deg to Canal pum
 
 ### s11: 361 m, rendezvous (Works yard)
 
-At (179.4, 6.4), 22.5 m; looking 0 deg along the way, and 256 deg to Canal pumps (67 m).
+At (179.4, 6.4), 22.5 m; looking 81 deg along the way, and 352 deg to headframe (57 m).
 
 ![s11 ahead](s11_ahead.jpg) ![s11 side](s11_side.jpg)
 
-- **Vista.** The green beacon's post right ahead, a boxcar and the headframe: you're at the way out.
-- **Draws the eye.** Side: back across the yard to the chimney and the works.
-- **For.** relief: The end of the first raid, and it reads as one.
+- **Vista.** Arriving the way you came, you face a grassy bank with pines and fence posts; the yard and its beacon are off to the left.
+- **Draws the eye.** Side: the green beacon's post, a boxcar and the headframe's lamp: the way out, plainly.
+- **For.** relief: Relief, but only once you turn: the beacon should be ahead as you come in.
 
 ## What's wrong
 
@@ -137,3 +137,4 @@ At (179.4, 6.4), 22.5 m; looking 0 deg along the way, and 256 deg to Canal pumps
 - A wreck in the way (s08): the route passes within 2 m of a car wreck, which fills the frame where the yard should open.
 - Dead stretch (s02 to s04, 40 to 100 m): three calms, the same straight road, the same furnace in every side view, and the Row only ever in haze. The walk's first beat after the drop is the canal bridge at 160 m.
 - The furnace is in every side view of the first four stops: a good landmark, but it crowds out discovery on the near side.
+- The rendezvous faces a bank as you come in (s11); the beacon is to the left. Minor beside the three above.

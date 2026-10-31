@@ -4,21 +4,81 @@
   "The career's first job (scout the Old farm), then on to the nearest way out, the Rail yard: 343 m from the truck, in the valley's reference weather (drizzle by day). Walked by the procedure in `docs/craft/WALK_REVIEW.md`; shots from `walk.stills`, stops from `stops.json`."
  ],
  "stops": {
-  "s01": {"beat": "threshold", "vista": "A farm track runs off the road into flat, misted meadow; three or four roofs float in the haze ahead, a woodpile by the verge. Grey, but it has depth.", "discover": "An anomaly sparking in the grass right by the track, 10 m off; behind you the gate, the guard booth and the truck. The lamp on the ranger tower to the right.", "for": "The drop: what's this place, and where do I go. The roofs ahead answer the second; the sparks answer the first."},
-  "s02": {"beat": "approach", "vista": "The farm resolves: a barn and a house in the mist, a shed on a hummock to the right, a tower lamp on the left skyline.", "discover": "The shed on its mound, close; the ranger tower's lamp and its stair. Something white glints by the far house.", "for": "Walking toward the job with it in view; the shed is the first 'could go in there' for a newcomer."},
-  "s03": {"beat": "calm", "vista": "The barn and house at a middle distance down a muddy track, pines behind. The best composed frame of the walk so far.", "discover": "Side: the shed's ivy-covered back wall. Its door faces away from the track, so it reads as a box, not a room.", "for": "Calm walking; the shed should be the small first discovery, and isn't, because its door is round the back."},
-  "s04": {"beat": "arrival", "vista": "At the fork the farmhouse with green shutters stands square ahead, the barn's wall filling the left; a proper farmyard frame.", "discover": "Side: a jeep with a trailer, the ranger tower and a factory chimney with lamps on them both. Plenty to look at.", "for": "Arrival at the farm: this frame is the job's real reveal, 15 m before the job's own point."},
-  "s05": {"beat": "nothing", "vista": "The job's point is in the field behind the house: a house wall on the left and an empty slope ahead to a bank. No subject.", "discover": "Side: the shed and jeep you just passed, lamps on the skyline.", "for": "It should be 'you're there': the scout job's moment. It's a field."},
-  "s06": {"beat": "threshold", "vista": "A cut through a bank with lamps and a mast beyond it: the way on, framed by the farmhouse's corner.", "discover": "Side: the farmhouse's door and shuttered windows; the mast to the right.", "for": "Leaving the farm: the gap in the bank is a good threshold."},
-  "s07": {"beat": "tension", "vista": "A low wet hollow: puddle, rocks, a single tall spruce, sparks in the grass.", "discover": "Side: the Hollow's anomalies (a burner's sparks, a purple disc), a concrete wall on the rise. It looks wrong, and you want to look closer.", "for": "Tension: the danger-3 ground you skirt, seen, not entered."},
-  "s08": {"beat": "climb", "vista": "The path climbs past poles toward roofs on the skyline (the depot), firs either side.", "discover": "Side: back down into the Hollow, sparks and a steeple's lamp beyond. A bird lifting.", "for": "Leaving the danger behind and up; it works."},
-  "s09": {"beat": "nothing", "vista": "The crest: a grey concrete block fills the left half of the frame, a grass bank the right. The steeple, a shed and the depot sit in the gap between them.", "discover": "Side: the grass bank and a fir, nothing else.", "for": "A crest should be a reveal (the rail yard, the way out). This one is a corridor between a block and a bank."},
-  "s10": {"beat": "discovery", "vista": "The rail shed's long wall on the left, the water tower with its lamp on the rise ahead.", "discover": "Side: the shed's open doors, lit inside. The best 'go in' of the walk.", "for": "A discovery right on the way out: tempting with the clock running."},
-  "s11": {"beat": "approach", "vista": "Open grass to a fence, a green lamp on a post, a small hut: the way out, plainly.", "discover": "Side: the shed's red wall down a gravel track to more roofs.", "for": "The last approach: the green lamp does its job."},
-  "s12": {"beat": "nothing", "vista": "At the rendezvous you face pines and a fence: no truck, no lamp, no road in frame.", "discover": "Side: the rail shed and the depot's sheds in the mist, a green lamp beside them.", "for": "It should be relief (I made it). Facing into the trees, it reads as a dead end."}
+  "s01": {
+   "beat": "threshold",
+   "vista": "A farm track runs off the road into flat, misted meadow; three or four roofs float in the haze ahead, a woodpile by the verge. Grey, but it has depth.",
+   "discover": "An anomaly sparking in the grass right by the track, 10 m off; behind you the gate, the guard booth and the truck. The lamp on the ranger tower to the right.",
+   "for": "The drop: what's this place, and where do I go. The roofs ahead answer the second; the sparks answer the first."
+  },
+  "s02": {
+   "beat": "approach",
+   "vista": "The farm resolves: a barn and a house in the mist, a shed on a hummock to the right, a tower lamp on the left skyline.",
+   "discover": "The shed on its mound, close; the ranger tower's lamp and its stair. Something white glints by the far house.",
+   "for": "Walking toward the job with it in view; the shed is the first 'could go in there' for a newcomer."
+  },
+  "s03": {
+   "beat": "calm",
+   "vista": "The barn and house at a middle distance down a muddy track, pines behind. The best composed frame of the walk so far.",
+   "discover": "Side: the shed's ivy-covered back wall. Its door faces away from the track, so it reads as a box, not a room.",
+   "for": "Calm walking; the shed should be the small first discovery, and isn't, because its door is round the back."
+  },
+  "s04": {
+   "beat": "arrival",
+   "vista": "At the fork the farmhouse with green shutters stands square ahead, the barn's wall filling the left; a proper farmyard frame.",
+   "discover": "Side: a jeep with a trailer, the ranger tower and a factory chimney with lamps on them both. Plenty to look at.",
+   "for": "Arrival at the farm: this frame is the job's real reveal, 15 m before the job's own point."
+  },
+  "s05": {
+   "beat": "arrival",
+   "vista": "Arriving, you stand at the farmhouse's corner: its door and shuttered window close on the right, an empty slope and the mist on the left.",
+   "discover": "The door, close and plain. Side: the shed and jeep you passed, lamps on the skyline.",
+   "for": "'You're there', the scout job's moment, and half of it works: the door says go in; the empty left half of the frame says nothing."
+  },
+  "s06": {
+   "beat": "threshold",
+   "vista": "A cut through a bank with lamps and a mast beyond it: the way on, framed by the farmhouse's corner.",
+   "discover": "Side: the farmhouse's door and shuttered windows; the mast to the right.",
+   "for": "Leaving the farm: the gap in the bank is a good threshold."
+  },
+  "s07": {
+   "beat": "tension",
+   "vista": "A low wet hollow: puddle, rocks, a single tall spruce, sparks in the grass.",
+   "discover": "Side: the Hollow's anomalies (a burner's sparks, a purple disc), a concrete wall on the rise. It looks wrong, and you want to look closer.",
+   "for": "Tension: the danger-3 ground you skirt, seen, not entered."
+  },
+  "s08": {
+   "beat": "climb",
+   "vista": "The path climbs past poles toward roofs on the skyline (the depot), firs either side.",
+   "discover": "Side: back down into the Hollow, sparks and a steeple's lamp beyond. A bird lifting.",
+   "for": "Leaving the danger behind and up; it works."
+  },
+  "s09": {
+   "beat": "nothing",
+   "vista": "The crest: a grey concrete block fills the left half of the frame, a grass bank the right. The steeple, a shed and the depot sit in the gap between them.",
+   "discover": "Side: the grass bank and a fir, nothing else.",
+   "for": "A crest should be a reveal (the rail yard, the way out). This one is a corridor between a block and a bank."
+  },
+  "s10": {
+   "beat": "discovery",
+   "vista": "The rail shed's long wall on the left, the water tower with its lamp on the rise ahead.",
+   "discover": "Side: the shed's open doors, lit inside. The best 'go in' of the walk.",
+   "for": "A discovery right on the way out: tempting with the clock running."
+  },
+  "s11": {
+   "beat": "approach",
+   "vista": "Open grass to a fence, a green lamp on a post, a small hut: the way out, plainly.",
+   "discover": "Side: the shed's red wall down a gravel track to more roofs.",
+   "for": "The last approach: the green lamp does its job."
+  },
+  "s12": {
+   "beat": "nothing",
+   "vista": "Arriving the way you came, you face a rise with pines and a fence: no truck, no lamp, no road in frame.",
+   "discover": "Side: the rail shed and the depot's sheds in the mist, the green lamp beside them.",
+   "for": "It should be relief (I made it). Facing into the trees, it reads as a dead end."
+  }
  },
  "notes": [
-  "Muddy arrival (s05): the job's point is in a field behind the farmhouse. The farm's best frame is 15 m earlier at the fork (s04); the job should be there, or the field should have a subject.",
+  "Muddy arrival (s05): the job's point is at the farmhouse's corner, with an empty slope beside it. The farm's best frame is 15 m earlier at the fork (s04); the job should be there, or the slope should have a subject.",
   "A crest with no reveal (s09): the climb out of the Hollow ends between a concrete block and a grass bank. It's the walk's one rise and it shows nothing.",
   "A rendezvous facing into trees (s12): the last stop of the first raid has no subject ahead. The way out should read as a place: the truck's road, a lamp, an opening.",
   "A discovery facing away (s03): the shed by the track has its door round the back.",

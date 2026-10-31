@@ -79,10 +79,13 @@ notable += [(p["prefab"], tuple(p["at"])) for p in d["placements"] if p["prefab"
 lines, out = [], []
 for n, st in enumerate(merged, 1):
     k = at(st["s"]); p = pts[k]
-    ahead = pts[at(min(total, st["s"] + 15))]
-    if math.dist(ahead[:2], p[:2]) < 3:
-        ahead = pts[-1]
-    fwd = yaw_to(p, ahead) if math.dist(ahead[:2], p[:2]) > 1 else 0.0
+    # An arrival (the job, the rendezvous) faces the way you came in; any
+    # other stop, the way on.
+    if st["kind"] in ("job", "rendezvous"):
+        fwd = yaw_to(pts[at(max(0.0, st["s"] - 15))], p)
+    else:
+        ahead = pts[at(min(total, st["s"] + 15))]
+        fwd = yaw_to(p, ahead) if math.dist(ahead[:2], p[:2]) > 1 else 0.0
     side, why = None, ""
     if st["kind"] == "door":
         door = min(d["doors"], key=lambda dd: math.dist(dd["face"], p[:2]))

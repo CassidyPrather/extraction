@@ -76,3 +76,6 @@ the answers, the sheet, the page and the fixes.
 - The stop picker's side view picks the nearest named thing off the way
   ahead, which is often a building you're beside. Look at the frame, not
   the label.
+- An arrival faces the way you came in, not the way on: the first walks'
+  rendezvous looked due north into the trees, because a route's end has
+  no way on, and that read as a dead end that wasn't there.

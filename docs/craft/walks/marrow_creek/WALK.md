@@ -10,7 +10,7 @@ flowchart LR
     s01 --> s02["s02 40 m<br/>approach"]
     s02 --> s03["s03 53 m<br/>calm"]
     s03 --> s04["s04 88 m<br/>arrival"]
-    s04 --> s05["s05 103 m<br/>nothing"]
+    s04 --> s05["s05 103 m<br/>arrival"]
     s05 --> s06["s06 123 m<br/>threshold"]
     s06 --> s07["s07 160 m<br/>tension"]
     s07 --> s08["s08 200 m<br/>climb"]
@@ -64,13 +64,13 @@ At (87.8, 90.0), 18.3 m; looking 48 deg along the way, and 177 deg to ranger_tow
 
 ### s05: 103 m, job (the career's first (Old farm))
 
-At (99.0, 79.8), 18.2 m; looking 349 deg along the way, and 187 deg to ranger_tower (65 m).
+At (99.0, 79.8), 18.2 m; looking 48 deg along the way, and 187 deg to ranger_tower (65 m).
 
 ![s05 ahead](s05_ahead.jpg) ![s05 side](s05_side.jpg)
 
-- **Vista.** The job's point is in the field behind the house: a house wall on the left and an empty slope ahead to a bank. No subject.
-- **Draws the eye.** Side: the shed and jeep you just passed, lamps on the skyline.
-- **For.** nothing: It should be 'you're there': the scout job's moment. It's a field.
+- **Vista.** Arriving, you stand at the farmhouse's corner: its door and shuttered window close on the right, an empty slope and the mist on the left.
+- **Draws the eye.** The door, close and plain. Side: the shed and jeep you passed, lamps on the skyline.
+- **For.** arrival: 'You're there', the scout job's moment, and half of it works: the door says go in; the empty left half of the frame says nothing.
 
 ### s06: 123 m, door (barn)
 
@@ -134,17 +134,17 @@ At (113.5, -113.9), 21.2 m; looking 30 deg along the way, and 270 deg to Rail ya
 
 ### s12: 343 m, rendezvous (Rail yard)
 
-At (125.0, -133.8), 19.8 m; looking 0 deg along the way, and 236 deg to Rail yard (36 m).
+At (125.0, -133.8), 19.8 m; looking 30 deg along the way, and 236 deg to Rail yard (36 m).
 
 ![s12 ahead](s12_ahead.jpg) ![s12 side](s12_side.jpg)
 
-- **Vista.** At the rendezvous you face pines and a fence: no truck, no lamp, no road in frame.
-- **Draws the eye.** Side: the rail shed and the depot's sheds in the mist, a green lamp beside them.
+- **Vista.** Arriving the way you came, you face a rise with pines and a fence: no truck, no lamp, no road in frame.
+- **Draws the eye.** Side: the rail shed and the depot's sheds in the mist, the green lamp beside them.
 - **For.** nothing: It should be relief (I made it). Facing into the trees, it reads as a dead end.
 
 ## What's wrong
 
-- Muddy arrival (s05): the job's point is in a field behind the farmhouse. The farm's best frame is 15 m earlier at the fork (s04); the job should be there, or the field should have a subject.
+- Muddy arrival (s05): the job's point is at the farmhouse's corner, with an empty slope beside it. The farm's best frame is 15 m earlier at the fork (s04); the job should be there, or the slope should have a subject.
 - A crest with no reveal (s09): the climb out of the Hollow ends between a concrete block and a grass bank. It's the walk's one rise and it shows nothing.
 - A rendezvous facing into trees (s12): the last stop of the first raid has no subject ahead. The way out should read as a place: the truck's road, a lamp, an opening.
 - A discovery facing away (s03): the shed by the track has its door round the back.

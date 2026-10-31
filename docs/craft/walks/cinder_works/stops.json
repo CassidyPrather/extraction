@@ -55,7 +55,7 @@
    108.2
   ],
   "h": 20.4,
-  "fwd": 41,
+  "fwd": 22,
   "side": 249,
   "side_what": "blast_furnace (80 m)"
  },
@@ -160,8 +160,8 @@
    6.4
   ],
   "h": 22.5,
-  "fwd": 0,
-  "side": 256,
-  "side_what": "Canal pumps (67 m)"
+  "fwd": 81,
+  "side": 352,
+  "side_what": "headframe (57 m)"
  }
 ]

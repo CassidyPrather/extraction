@@ -4,22 +4,78 @@
   "The career's first job (scout Ash Row), then on to the nearest way out, the Works yard: 361 m from the truck, in the valley's reference weather (ash haze by day). Walked by the procedure in `docs/craft/WALK_REVIEW.md`; shots from `walk.stills`, stops from `stops.json`."
  ],
  "stops": {
-  "s01": {"beat": "reveal", "vista": "The blast furnace stands over the road on the left, silos and gantry black against the haze; a scatter of boulders, houses low in the distance. The strongest opening of any valley.", "discover": "The furnace's lamp on its chimney; a rifle-shaped bit of junk by the verge; the row of roofs ahead.", "for": "Arrival in the valley: the furnace says what this place is before you've taken a step."},
-  "s02": {"beat": "calm", "vista": "A long road on, a house with a blue car on the left, Ash Row's roofs in haze ahead.", "discover": "Side: the furnace again, silos and gantry, from a new angle.", "for": "Walking on with the landmark at your shoulder. Fine, if long."},
-  "s03": {"beat": "calm", "vista": "At the fork a burnt-out house, its roof timbers bare, on the left; the road runs on into haze.", "discover": "Side: the furnace and its sheds a third time.", "for": "The fork should be a choice, and it is (the farm lane), but nothing down it is shown."},
-  "s04": {"beat": "nothing", "vista": "The job's point is on the road, with the Row off to the left in haze, trees and a woodpile to the right. No subject ahead.", "discover": "Side: the furnace a fourth time.", "for": "It should be 'you're there': Ash Row. You're on a road beside it."},
-  "s05": {"beat": "calm", "vista": "The road runs on toward the works: a hall, a chimney with a lamp, a spire, haze.", "discover": "Side: Ash Row's houses close at last, brick and timber, the furnace behind.", "for": "The Row is seen best after you've passed its point."},
-  "s06": {"beat": "threshold", "vista": "The canal bridge, its rails, the works hall and its lit chimney square ahead across the water.", "discover": "Side: back at the Row and the furnace, a blue car.", "for": "Crossing into the works: the walk's best threshold."},
-  "s07": {"beat": "reveal", "vista": "The works hall and chimney fill the middle, deer crossing in front, a lorry and a truck beside it.", "discover": "Side: the lorry park and garage.", "for": "The works revealed, alive with the deer; a good beat."},
-  "s08": {"beat": "nothing", "vista": "A blue wrecked car fills the lower half of the frame, 2 m in front; a red shed and a low bank beyond.", "discover": "Side: the hall's wall and a lit doorway (the garage), the car's bonnet in the corner.", "for": "Should be the way on through the yard. It's a car's front."},
-  "s09": {"beat": "approach", "vista": "The yard road between the hall's brick wall and a line of boxcars; a headframe lamp and a green lamp far ahead. A strong leading line.", "discover": "Side: the rail shed's door.", "for": "Leading you to the way out."},
-  "s10": {"beat": "choice", "vista": "The green beacon, the headframe, a boxcar and logs: the yard opens.", "discover": "Side: the pump house, brick with a chimney.", "for": "Two ways (the keeper's path, the yard road), both shown."},
-  "s11": {"beat": "relief", "vista": "The green beacon's post right ahead, a boxcar and the headframe: you're at the way out.", "discover": "Side: back across the yard to the chimney and the works.", "for": "The end of the first raid, and it reads as one."}
+  "s01": {
+   "beat": "reveal",
+   "vista": "The blast furnace stands over the road on the left, silos and gantry black against the haze; a scatter of boulders, houses low in the distance. The strongest opening of any valley.",
+   "discover": "The furnace's lamp on its chimney; a rifle-shaped bit of junk by the verge; the row of roofs ahead.",
+   "for": "Arrival in the valley: the furnace says what this place is before you've taken a step."
+  },
+  "s02": {
+   "beat": "calm",
+   "vista": "A long road on, a house with a blue car on the left, Ash Row's roofs in haze ahead.",
+   "discover": "Side: the furnace again, silos and gantry, from a new angle.",
+   "for": "Walking on with the landmark at your shoulder. Fine, if long."
+  },
+  "s03": {
+   "beat": "calm",
+   "vista": "At the fork a burnt-out house, its roof timbers bare, on the left; the road runs on into haze.",
+   "discover": "Side: the furnace and its sheds a third time.",
+   "for": "The fork should be a choice, and it is (the farm lane), but nothing down it is shown."
+  },
+  "s04": {
+   "beat": "nothing",
+   "vista": "Arriving, you stand on the road with Ash Row off to the left in haze, trees and a woodpile on the right, the works far ahead. No subject.",
+   "discover": "Side: the furnace a fourth time.",
+   "for": "It should be 'you're there': Ash Row. You're on a road beside it."
+  },
+  "s05": {
+   "beat": "calm",
+   "vista": "The road runs on toward the works: a hall, a chimney with a lamp, a spire, haze.",
+   "discover": "Side: Ash Row's houses close at last, brick and timber, the furnace behind.",
+   "for": "The Row is seen best after you've passed its point."
+  },
+  "s06": {
+   "beat": "threshold",
+   "vista": "The canal bridge, its rails, the works hall and its lit chimney square ahead across the water.",
+   "discover": "Side: back at the Row and the furnace, a blue car.",
+   "for": "Crossing into the works: the walk's best threshold."
+  },
+  "s07": {
+   "beat": "reveal",
+   "vista": "The works hall and chimney fill the middle, deer crossing in front, a lorry and a truck beside it.",
+   "discover": "Side: the lorry park and garage.",
+   "for": "The works revealed, alive with the deer; a good beat."
+  },
+  "s08": {
+   "beat": "nothing",
+   "vista": "A blue wrecked car fills the lower half of the frame, 2 m in front; a red shed and a low bank beyond.",
+   "discover": "Side: the hall's wall and a lit doorway (the garage), the car's bonnet in the corner.",
+   "for": "Should be the way on through the yard. It's a car's front."
+  },
+  "s09": {
+   "beat": "approach",
+   "vista": "The yard road between the hall's brick wall and a line of boxcars; a headframe lamp and a green lamp far ahead. A strong leading line.",
+   "discover": "Side: the rail shed's door.",
+   "for": "Leading you to the way out."
+  },
+  "s10": {
+   "beat": "choice",
+   "vista": "The green beacon, the headframe, a boxcar and logs: the yard opens.",
+   "discover": "Side: the pump house, brick with a chimney.",
+   "for": "Two ways (the keeper's path, the yard road), both shown."
+  },
+  "s11": {
+   "beat": "relief",
+   "vista": "Arriving the way you came, you face a grassy bank with pines and fence posts; the yard and its beacon are off to the left.",
+   "discover": "Side: the green beacon's post, a boxcar and the headframe's lamp: the way out, plainly.",
+   "for": "Relief, but only once you turn: the beacon should be ahead as you come in."
+  }
  },
  "notes": [
   "Muddy arrival (s04): the job's point is on the road beside Ash Row, which you see best after passing it (s05). The job should stand in the Row.",
   "A wreck in the way (s08): the route passes within 2 m of a car wreck, which fills the frame where the yard should open.",
   "Dead stretch (s02 to s04, 40 to 100 m): three calms, the same straight road, the same furnace in every side view, and the Row only ever in haze. The walk's first beat after the drop is the canal bridge at 160 m.",
-  "The furnace is in every side view of the first four stops: a good landmark, but it crowds out discovery on the near side."
+  "The furnace is in every side view of the first four stops: a good landmark, but it crowds out discovery on the near side.",
+  "The rendezvous faces a bank as you come in (s11); the beacon is to the left. Minor beside the three above."
  ]
 }
