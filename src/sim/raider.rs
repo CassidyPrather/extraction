@@ -4490,13 +4490,11 @@ mod run_tests {
     }
 
     /// Buildings with loot nobody can stand in arm's reach of (furniture or
-    /// walls crowd every floor cell near it): the buildings' own geometry,
-    /// Models: world's (`buildings::blast_furnace`, `mill_race`), handed
-    /// over on 31 October. The blast furnace's 7 on its charging floor,
-    /// furnace-local about (±11, ±19) and (0, ±23); the mill
-    /// race's 1, Marrow's (-11, 123) as placed then. Off this list as
-    /// they're moved.
-    const OUT_OF_REACH: &[&str] = &["blast_furnace", "mill_race"];
+    /// walls crowd every floor cell near it). Empty: the blast furnace and
+    /// the mill race were on it (31 October), their plans' floors at the
+    /// ground under a cast house's and a hut's raised floor, a body never
+    /// fitting on the slab; their recipes give their floors now.
+    const OUT_OF_REACH: &[&str] = &[];
 
     /// Everything to take in a building can be taken from where a raider
     /// stops for it: somewhere within its route's last stop of the cell it

@@ -3772,6 +3772,10 @@ fn mill_race(b: &mut Builder) {
     // doorway on +X, a ceiling under the girts; his winch for hauling up
     // to the deck, a bench, rope, a lantern.
     let (hs, y0, hh) = (2.25, 0.2, 2.6);
+    // What's walked on inside is the hut's floor: its doorway has no door
+    // to take it from (`sim::indoor`'s plan put it at the ground and found
+    // no room for a body by the workbench).
+    b.geo.floor = Some(y0);
     let at = |x: f32, z: f32| Vec2::new(x, z + MR_SHIFT);
     b.bx(
         Vec3::new(2.0 * hs, 0.2, 2.0 * hs),
@@ -4455,6 +4459,10 @@ fn blast_furnace(b: &mut Builder) {
         Some("workshop"),
     );
     b.crate_box(Vec3::new(5.5, 0.2, -12.0) + BF_SHIFT, 0.8, Some("tools"));
+    // What's walked on inside is the cast house's floor (0.2 up). With no
+    // door to take it from, the raiders' plan put it at the ground and
+    // found no room for a body anywhere on the slab (`sim::indoor`).
+    b.geo.floor = Some(0.2);
 }
 
 /// A railway signal box: an enterable brick ground floor (its lever frame,
