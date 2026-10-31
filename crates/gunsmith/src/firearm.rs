@@ -471,7 +471,7 @@ pub struct Firearm {
     pub hang: Option<Hang>,
     /// What it's been made into at the vice (`gunsmith`).
     #[serde(default)]
-    pub build: crate::gunsmith::Build,
+    pub build: crate::build::Build,
     trigger_down: bool,
     /// Semi-auto needs the trigger released before the next shot.
     trigger_reset: bool,
@@ -533,7 +533,7 @@ impl Firearm {
             stiff: 0.0,
             ammo_cold: 0.0,
             hang: None,
-            build: crate::gunsmith::Build::default(),
+            build: crate::build::Build::default(),
             trigger_down: false,
             trigger_reset: true,
             told: false,
@@ -988,7 +988,7 @@ impl Firearm {
 
     /// A roll from the gun's own dice.
     fn own_roll(&mut self) -> f32 {
-        let mut r = crate::noise::Rng::new(self.fault_dice);
+        let mut r = crate::dice::Rng::new(self.fault_dice);
         let v = r.f32();
         self.fault_dice = r.next_u64();
         v
@@ -2391,7 +2391,7 @@ mod tests {
         while gun.fire_mode() != FireMode::Semi {
             gun.cycle_mode();
         }
-        let mut rng = crate::noise::Rng::new(7);
+        let mut rng = crate::dice::Rng::new(7);
         let mut roll = || rng.f32();
         let (mut shots, mut jams, mut presses) = (0u32, 0u32, 0u32);
         while shots < n {
@@ -2476,7 +2476,7 @@ mod tests {
         while gun.fire_mode() != FireMode::Semi {
             gun.cycle_mode();
         }
-        let mut rng = crate::noise::Rng::new(11);
+        let mut rng = crate::dice::Rng::new(11);
         let mut roll = || rng.f32();
         let (mut shots, mut duds, mut hangs, mut longest) = (0u32, 0u32, 0u32, 0.0f32);
         let mut hung_at: Option<f32> = None;

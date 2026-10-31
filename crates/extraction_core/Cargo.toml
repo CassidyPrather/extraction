@@ -9,6 +9,7 @@ description = "Engine-free rules for the extraction game: items, inventory, fire
 publish = false
 
 [dependencies]
+gunsmith = { path = "../gunsmith" }
 serde = { version = "1", features = ["derive"] }
 ron = "0.10"
 # Only the unity-export tool uses these; both are already in the workspace.

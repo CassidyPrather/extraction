@@ -18,55 +18,8 @@ pub enum Mat {
     Black,
 }
 
-/// What a piece of geometry does when the mechanism moves.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Moves {
-    Static,
-    /// Slides back along +Z with the bolt travel.
-    WithBolt,
-    /// Turns with the bolt-handle lift (around the bore), and slides.
-    TurnBolt,
-    /// Tips down around the hinge as the action breaks open.
-    Barrels,
-    /// Pivots with the trigger pull.
-    Trigger,
-    /// Rotates through the selector positions.
-    Selector,
-    /// A crossbolt safety (the MP-133's): pushed through to the right on
-    /// safe, slid left along -X to fire, baring its red band.
-    Crossbolt,
-    /// A door-bolt safety (the crossbow's): shot forward on safe, drawn back
-    /// along +Z to fire.
-    SafetyBolt,
-    /// An exposed hammer: tips back about its pin (the origin, local X)
-    /// when cocked.
-    Hammer,
-    /// A revolver's cylinder: turns about its axis (the origin, local Z) a
-    /// chamber at a time.
-    Cylinder,
-    /// A revolver's loading gate: swings about its upright hinge (the
-    /// origin, local Y) out to the right when open.
-    Gate,
-    /// A revolver's ejector rod: strokes back along +Z as it pushes a case.
-    Rod,
-    /// A bayonet: a folding one turns about its pin (the origin, local X)
-    /// from folded to fixed; a fixed one stays as modelled.
-    Bayonet,
-    /// A folding bipod: turns about its pivot (the origin, local X) from
-    /// folded to deployed.
-    Bipod,
-    /// A turn-bolt's cocking piece: rides with the bolt, and stands back
-    /// from it while the striker is cocked (the tell a bolt gun gives).
-    CockingPiece,
-    /// A cocking indicator pin over barrel N's lock: proud while it's
-    /// cocked, flush when not.
-    Indicator(u8),
-    /// A crossbow's string at rest: shown until the draw starts.
-    StringRest,
-    /// A crossbow's string drawn into a V: its origin on the line through
-    /// the prod's tips, stretched along Z with the draw.
-    StringDrawn,
-}
+/// What a piece of geometry does when the mechanism moves (the gunsmith's).
+pub use ::gunsmith::parts::Moves;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Shape {
@@ -1053,6 +1006,26 @@ mod tests {
             if def.firearm.is_some() {
                 assert!(layout(&def.id).is_some(), "{} has no layout", def.id);
             }
+        }
+    }
+
+    /// The gunsmith's bench works each gun as the game does: the same
+    /// handle travel and hinge (`gunsmith::spec`), and a gun for every one.
+    #[test]
+    fn the_bench_works_each_gun_as_the_game_does() {
+        let cat =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        for (_, def) in cat.iter() {
+            if def.firearm.is_none() {
+                continue;
+            }
+            let l = layout(&def.id).unwrap();
+            let s = ::gunsmith::spec::spec(&def.id)
+                .unwrap_or_else(|| panic!("{} isn't on the bench", def.id));
+            let travel = l.handle.as_ref().map_or(0.0, |h| h.travel);
+            assert_eq!(s.travel, travel, "{}: travel", def.id);
+            assert_eq!(s.hinge, l.hinge.to_array(), "{}: hinge", def.id);
         }
     }
 
