@@ -18,6 +18,52 @@ pub fn on() -> bool {
     std::env::var_os("EXTRACTION_ITEM_CENSUS").is_some()
 }
 
+/// `EXTRACTION_ITEM_CENSUS=map`: once, a few seconds in, every building's
+/// kinds (what a newcomer meets in each house), `census house: ...`.
+pub fn houses(
+    items: Query<(&Item, &GlobalTransform), (Without<Held>, Without<InSocket>)>,
+    entrances: Option<Res<crate::robots::doors::Entrances>>,
+    buildings: Query<(&crate::world::buildings::Building, &GlobalTransform)>,
+    catalog: Res<Catalog>,
+    time: Res<Time>,
+    mut done: Local<bool>,
+) {
+    if *done
+        || time.elapsed_secs() < 5.0
+        || std::env::var("EXTRACTION_ITEM_CENSUS").ok().as_deref() != Some("map")
+    {
+        return;
+    }
+    let Some(en) = entrances else {
+        return;
+    };
+    *done = true;
+    let mut by: std::collections::BTreeMap<Entity, Vec<String>> = Default::default();
+    for (item, gt) in &items {
+        if let Some(b) = en.building_at(gt.translation() + Vec3::Y * 0.1) {
+            let id = catalog.get(item.kind()).id.clone();
+            let v = by.entry(b).or_default();
+            if !v.contains(&id) {
+                v.push(id);
+            }
+        }
+    }
+    for (b, kinds) in by {
+        let Ok((bl, gt)) = buildings.get(b) else {
+            continue;
+        };
+        let p = gt.translation();
+        info!(
+            "census house: {} at ({:.0}, {:.0}): {} kinds: {}",
+            bl.prefab,
+            p.x,
+            p.z,
+            kinds.len(),
+            kinds.join(" ")
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn census(
     players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,

@@ -749,7 +749,10 @@ impl Plugin for OnboardingPlugin {
                 )
                     .chain(),
             )
-            .add_systems(Update, census::census.run_if(|| census::on()))
+            .add_systems(
+                Update,
+                (census::census, census::houses).run_if(|| census::on()),
+            )
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
