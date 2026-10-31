@@ -8,6 +8,8 @@ import math
 import os
 import sys
 
+import bmesh
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from common import (Part, RX, RY, T, catmull, empty, export, fillet, join, main_guard, make, report,
                     section_rect)
@@ -35,7 +37,7 @@ slide.prism(sec, SLIDE_Z0, SLIDE_Z1, "Blued", axis="z", bevel=0.0022, segs=3)
 slide.prism(fillet([(0.012, 0.0755), (0.024, 0.0755), (0.0235, 0.0815), (0.0145, 0.0815)], 0.0008, 3),
             -0.007, 0.007, "Blued", axis="x", bevel=0.0005, segs=2)
 # Front sight: a ramped blade.
-slide.prism(fillet([(-0.1295, 0.0755), (-0.117, 0.0755), (-0.1215, 0.0805), (-0.1275, 0.0805)],
+slide.prism(fillet([(-0.1295, 0.0735), (-0.117, 0.0735), (-0.1215, 0.0805), (-0.1275, 0.0805)],
                    0.0006, 3), -0.0016, 0.0016, "Blued", axis="x", bevel=0.0004, segs=2)
 # The extractor, let into the right of the slide behind the port, and its pin.
 slide.prism(fillet([(-0.0302, 0.0662), (-0.015, 0.0665), (-0.0145, 0.0702), (-0.0302, 0.0705)],
@@ -44,6 +46,15 @@ slide.prism(fillet([(-0.0302, 0.0662), (-0.015, 0.0665), (-0.0145, 0.0702), (-0.
 slide.cyl(0.0009, 0.0, 0.0011, "Steel", segs=10, xf=T(0.0139, 0.0684, -0.0185) @ RY(math.pi / 2))
 
 cut = Part("cut")
+# The nose: the slide's front rounds over into its top, as the real one's
+# does (it was cut square, a block's end).
+# Its underside's front corner rounds too, less.
+for r, y, up in ((0.009, SLIDE_Y1, 1), (0.004, SLIDE_Y0, -1)):
+    c = (SLIDE_Z0 + r, y - up * r)
+    arc_ = [(c[0] - r * math.sin(math.pi / 2 * i / 10), c[1] + up * r * math.cos(math.pi / 2 * i / 10))
+            for i in range(11)]
+    cut.prism([(SLIDE_Z0 - 0.003, y - up * r), (SLIDE_Z0 - 0.003, y + up * 0.003),
+               (SLIDE_Z0 + r, y + up * 0.003)] + arc_[1:-1], -0.02, 0.02, "Blued", axis="x")
 # Muzzle opening around the barrel.
 cut.cyl(0.0069, SLIDE_Z0 - 0.01, SLIDE_Z0 + 0.03, "Blued", segs=36, xf=T(0, BORE_Y, 0))
 # Ejection port, right side.
@@ -170,11 +181,12 @@ grip_check.checkering(grip_cut, grip_x, None, None, (-0.008, 0.034, -0.0405, 0.0
                       pitch=0.0019, depth=0.0007, mat="Bakelite")
 
 # Trigger guard: a large rounded loop (it hinges down for stripping).
+guard = Part("guard")
 guard_path = catmull([
     (-0.084, 0.0355), (-0.0885, 0.026), (-0.086, 0.0135), (-0.0765, 0.0055), (-0.060, 0.0025),
     (-0.036, 0.003), (-0.022, 0.0065), (-0.0135, 0.0125),
 ], samples=8, closed=False)
-static.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012, 3), "Blued")
+guard.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012, 3), "Blued")
 
 # Hammer: a rounded spur behind the slide.
 hammer = fillet([(0.0205, 0.0485), (0.0295, 0.0495), (0.0365, 0.0585), (0.0372, 0.0675),
@@ -206,7 +218,8 @@ for i in range(3):
     y = -0.0488 + i * 0.0016
     catch += [(0.0435, y), (0.0429, y + 0.0004), (0.0435, y + 0.0008)]
 catch += [(0.0435, -0.044), (0.0375, -0.044)]
-static.prism(catch, -0.005, 0.005, "Blued", axis="x")
+heel = Part("mag_catch_heel", origin=(0.0, -0.047, 0.0405))
+heel.prism(catch, -0.005, 0.005, "Blued", axis="x")
 # Lanyard loop on the left of the butt.
 loop = [(0.031 + 0.0045 * math.cos(a), -0.044 + 0.0045 * math.sin(a))
         for a in [2 * math.pi * i / 24 for i in range(24)]]
@@ -230,18 +243,53 @@ safety.prism(fillet([(0.006, 0.0615), (0.0215, 0.064), (0.0225, 0.0705), (0.007,
 for i in range(3):
     safety.box((0.0012, 0.0055, 0.0008), (-0.0176, 0.0665, 0.0165 + i * 0.0018), "Blued")
 
+# --- Proportion --------------------------------------------------------------------
+# Against the manual (161 mm long, a 93.5 mm barrel, a 130 mm sight line):
+# everything above the grip was 9% long (175 mm, a 102.5 mm barrel, a
+# 141.5 mm sight line). It shrinks along the bore by ABOVE about the grip's
+# origin; the grip, which holds the magazine, stays as it was, and the
+# frame blends from one to the other through the top of the grip. The
+# magazine well's cutters keep their size.
+ABOVE = 0.917
+
+
+def along(y):
+    k = min(max((y - 0.028) / (0.034 - 0.028), 0.0), 1.0)
+    return 1.0 + (ABOVE - 1.0) * k
+
+
+def shorten(part, keep=()):
+    for v in part.bm.verts:
+        v.co.z *= along(v.co.y)
+    part.origin.z *= along(part.origin.y)
+    for c in part.cutters:
+        if c not in keep:
+            shorten(c)
+
+
+# (The grip's cutter before its share of the well goes in, below.)
+for p in (slide, static, frame, grip, grip_check, grip_cut, hammer_p, trig, safety):
+    shorten(p, keep=(well,))
+# The guard as a whole, about where it meets the front strap, so it stays
+# one smooth loop.
+for v in guard.bm.verts:
+    v.co.z = -0.0135 + (v.co.z + 0.0135) * ABOVE
+
 # --- Build ------------------------------------------------------------------------
-for p in (slide, trig, safety):
+for p in (slide, trig, safety, heel):
     make(p, worn={})
-grip_cut.box((0.0136, 0.125, 0.0299), (0.0, -0.06, -0.0001), "Bakelite", xf=WELL)
+# The grip's own well cut 4 mm wider all round than the frame's, so its
+# walls lie hidden inside the frame's instead of in the same planes
+# (`art/check.py` saw them z-fight).
+grip_cut.box((0.0216, 0.125, 0.0379), (0.0, -0.06, -0.0001), "Bakelite", xf=WELL)
 grip.cut(grip_cut)
-join("static_frame", static, frame, grip, grip_check, worn={})
+join("static_frame", static, guard, frame, grip, grip_check, worn={})
 make(hammer_p, worn={})
 
 # Named points (the layout's, for reference) and the modelled magazine seat.
-empty("pt_muzzle", (0.0, BORE_Y, -0.13))
-empty("pt_sight", (0.0, 0.0805, 0.03))
-empty("pt_port", (0.012, 0.068, -0.045))
+empty("pt_muzzle", (0.0, BORE_Y, -0.13 * ABOVE))
+empty("pt_sight", (0.0, 0.0805, 0.03 * ABOVE))
+empty("pt_port", (0.012, 0.068, -0.045 * ABOVE))
 empty("magwell", MAGWELL, RX(-0.216))
 
 report()
