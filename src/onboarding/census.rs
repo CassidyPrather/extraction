@@ -67,13 +67,17 @@ pub fn houses(
 #[allow(clippy::too_many_arguments)]
 pub fn census(
     players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
-    items: Query<(
-        &Item,
-        &GlobalTransform,
-        Option<&Held>,
-        Option<&InSocket>,
-        Option<&InBackpack>,
-    )>,
+    // (Not what the yard has folded away out of sight.)
+    items: Query<
+        (
+            &Item,
+            &GlobalTransform,
+            Option<&Held>,
+            Option<&InSocket>,
+            Option<&InBackpack>,
+        ),
+        Without<super::Folded>,
+    >,
     owners: Query<&SocketOwner>,
     bags: Query<&Backpack>,
     catalog: Res<Catalog>,
