@@ -224,8 +224,10 @@ bolt.box((0.003, 0.007, 0.012), (0.0150, 0.047, BZ0 + 0.0115), "Steel", bevel=0.
 # The action bars, both sides of the tube, from inside the forend back to
 # the slide under the bolt that they drive (they stopped 75 mm short:
 # `capture::attach`).
+# (At 15 mm out, not 13: their inner faces lay 1 mm off the loading port's
+# walls, and z-fought them, `art/check.py`.)
 for sx in (-1, 1):
-    bolt.box((0.0018, 0.008, 0.375), (sx * 0.0131, TUBE, -0.3125), "Blued", bevel=0.0005, segs=1)
+    bolt.box((0.0018, 0.008, 0.375), (sx * 0.0150, TUBE, -0.3125), "Blued", bevel=0.0005, segs=1)
 bolt.box((0.028, 0.025, 0.02), (0.0, 0.0275, -0.135), "Blued", bevel=0.001, segs=1)
 # The forend: ribbed birch round the tube, rounded at the nose.
 FZ0, FZ1 = -0.515, -0.330
