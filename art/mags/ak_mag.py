@@ -21,8 +21,14 @@ from _kit import text  # noqa: E402
 main_guard()
 
 TOP = 0.1
-rear = [(0.044, TOP - 0.006), (0.041, 0.05), (0.031, -0.01), (0.015, -0.064), (0.003, -0.094)]
-front = [(-0.052, -0.090), (-0.042, -0.06), (-0.026, -0.005), (-0.017, 0.05), (-0.0155, TOP - 0.008)]
+# The curve taken off a side photograph of an AK-74 (docs/craft/guns/ak74):
+# 157 mm deep below the receiver, its front edge 55 mm forward by 127 mm
+# down. (It was modelled near straight and 190 mm deep.) The floor plate
+# square to the body at its foot.
+rear = [(0.044, TOP - 0.006), (0.0415, 0.064), (0.0305, 0.035), (0.0195, 0.007), (0.0075, -0.021),
+        (-0.005, -0.045), (-0.020, -0.065)]
+front = [(-0.0775, -0.045), (-0.0615, -0.021), (-0.0435, 0.007), (-0.0315, 0.035), (-0.0225, 0.064),
+         (-0.0155, TOP - 0.008)]
 spine = catmull(rear, 4, closed=False)
 belly = catmull(front, 4, closed=False)
 outline = [(-0.0165, TOP - 0.002), (0.040, TOP - 0.002)] + spine + belly
@@ -53,7 +59,8 @@ for sx in (-1, 1):
 follower = Part("static_follower")
 follower.box((0.0084, 0.006, 0.042), (0.0, TOP - 0.0125, 0.013), "Black", bevel=0.0008, segs=1)
 # Floor plate with its tab at the back.
-fp = fillet([(-0.056, -0.096), (0.006, -0.1), (0.008, -0.094), (-0.054, -0.088)], 0.0015, 2)
+fp = fillet([(-0.0805, -0.0475), (-0.0215, -0.0695), (-0.019, -0.0645), (-0.0775, -0.0425)],
+            0.0015, 2)
 body.prism(fp, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
 
 # The mouth between the lips, down to the follower, and the moulding
@@ -61,7 +68,7 @@ body.prism(fp, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
 mouth = Part("cut")
 mouth.box((0.0084, 0.03, 0.05), (0.0, TOP - 0.0125 + 0.015, 0.013), "Polymer")
 side = T(0.0118 - 0.0006, 0, 0) @ RY(math.pi / 2)
-text(mouth, "6Л23", 0.0052, "Polymer", side @ T(0.013, -0.062, 0.0), depth=0.0012)
+text(mouth, "6Л23", 0.0052, "Polymer", side @ T(0.013, 0.0, 0.0), depth=0.0012)
 body.cut(mouth)
 
 # The top two rounds, staggered, bullets forward. The game shows round N

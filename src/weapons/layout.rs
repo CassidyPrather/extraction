@@ -271,11 +271,14 @@ fn ak74() -> GunLayout {
     use Moves::*;
     let rake = Quat::from_rotation_x(0.3);
     let bore = 0.058;
+    // Measured against the real gun (docs/craft/guns/ak74): the receiver
+    // 32 mm further back than it was modelled, the barrel 53 mm shorter. The
+    // support hand on the middle of the lower handguard.
     GunLayout {
         grip: Transform::IDENTITY,
-        support: Some(Vec3::new(0.0, 0.03, -0.33)),
-        muzzle: Vec3::new(0.0, bore, -0.69),
-        port: Vec3::new(0.025, 0.07, -0.13),
+        support: Some(Vec3::new(0.0, 0.03, -0.29)),
+        muzzle: Vec3::new(0.0, bore, -0.637),
+        port: Vec3::new(0.025, 0.07, -0.105),
         eject: Vec3::new(1.0, 0.35, 0.1),
         // The eye line: over the rear notch's floor onto the front post's
         // top (`capture::sightline`; it ran 2.6 mm under the notch).
@@ -285,10 +288,10 @@ fn ak74() -> GunLayout {
         ),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
-            grab: Vec3::new(0.045, 0.062, -0.17),
+            grab: Vec3::new(0.045, 0.062, -0.138),
             travel: 0.11,
         }),
-        load_port: Vec3::new(0.0, 0.07, -0.13),
+        load_port: Vec3::new(0.0, 0.07, -0.105),
         hinge: Vec3::ZERO,
         parts: vec![
             // Pistol grip.
@@ -817,6 +820,13 @@ fn rpk74() -> GunLayout {
     let bore = 0.058;
     l.muzzle = Vec3::new(0.0, bore, -0.82);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
+    // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
+    // was before the AK was measured.
+    l.port = Vec3::new(0.025, 0.07, -0.13);
+    l.load_port = Vec3::new(0.0, 0.07, -0.13);
+    if let Some(h) = l.handle.as_mut() {
+        h.grab = Vec3::new(0.045, 0.062, -0.17);
+    }
     for p in &mut l.parts {
         // The barrel and its front sight and brake go further out.
         if p.at.translation.z < -0.55 {
