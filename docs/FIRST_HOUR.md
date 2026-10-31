@@ -772,3 +772,55 @@ shot. Where minutes were lost, they come from the video's clock.
 
 Open, in order of what they cost: none from O1–O3 that this wave can close. The title screen
 and a menu button are features the designer set aside ("the basics first").
+
+# The first hour on the pulled-in valleys (31 October)
+
+After Map design pulled Marrow Creek in to 388 m and Cinder Works to 472 m,
+each newcomer did the yard, then a first raid. A career's first job is
+always Marrow Creek's, so for Cinder Works the raid is seeded with the first
+job that valley deals a new career (`--job scout`): the card reads "Go up to
+the ash Row and look round ... From the drop: north, 100 m."
+
+| Newcomer | Marrow Creek (main 48c1e298) | Cinder Works (main c9b36623) |
+| - | - | - |
+| cautious | paid | paid |
+| reckless | paid | paid |
+| lost | paid | paid (after the furnace fix) |
+| hoarder | paid | down at 106 s: a drone on the way back, every hit warned |
+| one-handed | paid (after the mag-release fix) | down at 278 s: drones, every hit warned |
+| wanderer | paid; nudged "The old farm's east, 140 m" | paid and nudged ("The ash Row's west, 140 m") when it gets out that far; a drone on the way can cut the walk short, and then nothing's said and it comes home without the place |
+| empty-handed | paid | down at 261 s: drones, every hit warned |
+
+On both maps the first job is the obvious way from the drop, and the
+nudge names a place that's there.
+
+Fixed on the way, all in the newcomer bot:
+- one-handed, the yard's mag-release step: the release held only for its
+  step, and the gun taken off safe before a step that fires;
+- wanderer: the short walk is a share of the way (the new first jobs are
+  ~100 m off); it walks away along a road, but not one that passes the
+  place (Cinder's track runs by Ash Row);
+- lost, on Cinder: it walked into the blast furnace's stoves and stood
+  there twenty minutes. Outdoors, a stretch the machines' walking grid
+  says isn't clear now follows the grid's path (it went round only
+  buildings with doors before);
+- "keep still" waited exactly the bot's 30 s give-up, so a frame past it
+  was a failure;
+- the wanderer goes out past the nudge's distance from where it turned
+  (on Cinder the nearest named place past 1.3 times the way was short of
+  it), and up to the place, not in at its door;
+- under a roof from a drone: a building it got stuck going into isn't
+  tried again (Cinder's shop has a way in on a wall with only a window),
+  and the rest of that plan is dropped.
+
+Open, for others:
+- Cinder: three of seven die on the first job to drones between Ash Row
+  and the gate, each hit after a warning. In a career a player reaches
+  Cinder after Marrow's jobs, so they're less new than this test makes
+  them.
+- Cinder: the newcomer brushes a burner on the straight way to Ash Row at
+  (-50, 151), warned as it's reached (under 10 hp).
+- "the ash Row": `raid::lines::the` lowercases a place's first letter
+  ("the old farm"), wrong for a name like Ash Row.
+- Cinder's shop at (10, 118.5): a way in (`robots::doors::Entrances`) on
+  its south wall, where there's only a window; its door is on the east.

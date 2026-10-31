@@ -1016,6 +1016,9 @@ pub(super) struct World2<'w, 's> {
     pub(super) robot_at: Query<'w, 's, &'static GlobalTransform, With<crate::robots::Robot>>,
     pub(super) parts: Query<'w, 's, (&'static crate::robots::RobotPart, &'static GlobalTransform)>,
     pub(super) lit: Query<'w, 's, (), With<crate::gadgets::Powered>>,
+    /// The machines' walking grid: round what isn't a building with doors
+    /// (a blast furnace's stoves, a wall, a slag heap).
+    pub(super) nav: Option<Res<'w, crate::robots::walker::Nav>>,
 }
 
 /// Down a site's stair: outside its kiosk, in at the door, the top step
