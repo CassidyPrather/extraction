@@ -670,6 +670,36 @@ Rime Fell is now the slowest, and the preload decides it.
 What's left is the 213 models decoding. The relaunch around it is 0.9 s
 to close and about 0.2 s to start again.
 
+#### The ceiling, in units
+
+The ceiling used to be absolute seconds, and it failed the Verifier's
+runs on a container about 1.3x slower than this one. It is now in units
+of `perf::fight::reference_load_ms` (`first_contact::LOAD_UNITS`),
+timed just before each valley loads (median of 9). `LOAD_SLACK` still
+scales it on top.
+
+The yardstick is a fixed piece of work, timed two ways:
+
+- on one thread;
+- shared over every thread.
+
+It takes the geometric mean of the two, because a load is part serial,
+part spread over the task pools. Held to two cores of four
+(`taskset -c 0,1`), the every-thread timing doubled but the loads grew
+only 1.3-1.5x. Units against the every-thread timing alone fell by a
+quarter there. Against the mean, the five valleys held within 8%:
+
+| valley | 4 cores | 2 cores | ceiling |
+| - | - | - | - |
+| Marrow Creek | 231 | 242 | 320 |
+| Kettle Pass | 307 | 284 | 400 |
+| Cinder Works | 206 | 213 | 280 |
+| Sallow Reservoir | 254 | 255 | 330 |
+| Rime Fell | 316 | 291 | 410 |
+
+The gauge prints each valley's units and reference, so a slow run says
+whether the machine was slow or the valley heavier.
+
 ## Textures
 
 What a valley loads and holds, before:
