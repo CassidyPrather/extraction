@@ -44,7 +44,18 @@ impl Plugin for DevPlugin {
 struct FrameCount {
     frames: u32,
     requested: bool,
+    /// The frame everything was first in (`timeline::Loaded`) with the
+    /// world ready; the shot waits [`SHOT_SETTLE`] frames on from it.
+    ready_at: Option<u32>,
 }
+
+/// Frames a screenshot waits after everything's in. On the software
+/// renderer a shot 5 frames after "everything in" had no ground, trees
+/// or gallery subject near the camera (a far truck and lamps only); 9
+/// frames after, all of it. Fixed `--frames` raced that, so a gun
+/// close-up came out empty in one half of a before/after and not the
+/// other.
+const SHOT_SETTLE: u32 = 15;
 
 fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
@@ -55,10 +66,11 @@ fn count_frames(mut count: ResMut<FrameCount>) {
 /// hang a shot).
 const SHOT_WAIT_MAX: f32 = 180.0;
 
-/// `--screenshot`: after `--frames` frames, and once the ground's and the
-/// buildings' materials are on the GPU and the buildings dressed
-/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
-/// had trees floating over no ground.
+/// `--screenshot`: after `--frames` frames, and once everything's in
+/// (`timeline::Loaded`, the world ready) and has been for [`SHOT_SETTLE`]
+/// frames: taken at a fixed frame, a slow machine's shot had trees
+/// floating over no ground, and one just after everything was in had no
+/// ground at all.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -66,11 +78,21 @@ fn screenshot_when_ready(
     world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
     loading: Option<Res<crate::rig::loading::LoadingView>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
-    if count.requested || count.frames < opts.frames {
+    if count.requested {
+        return;
+    }
+    if count.ready_at.is_none() && loaded.is_some() && world.ready() {
+        count.ready_at = Some(count.frames);
+    }
+    let settled = count
+        .ready_at
+        .is_some_and(|at| count.frames >= at + SHOT_SETTLE);
+    if count.frames < opts.frames {
         return;
     }
     // In a headset, the world once the loading view has lifted
@@ -79,13 +101,13 @@ fn screenshot_when_ready(
         l.lifted_at
             .is_some_and(|t| crate::render::timeline::since_start() - t > 2.0)
     }) || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
-    if !(world.materials() && world.props() && shown) {
+    if !(settled && world.materials() && world.props() && shown) {
         if time.elapsed_secs() < SHOT_WAIT_MAX {
             return;
         }
         warn!(
             "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
-             (materials ready: {}, buildings dressed: {})",
+             (materials ready: {}, buildings dressed: {}, settled: {settled})",
             world.materials(),
             world.props()
         );
