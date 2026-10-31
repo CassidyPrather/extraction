@@ -70,6 +70,7 @@ impl Plugin for MachineSoundsPlugin {
                     scan_sounds,
                     struck_sounds,
                     grind_sounds,
+                    hiss_sounds,
                     tether_sounds,
                 ),
             );
@@ -720,6 +721,58 @@ fn grind_sounds(
     }
 }
 
+/// A minelayer stopped over a spot, about to lay: its chute charging, a
+/// hiss (`minelayer.hiss`) the length of the stop (`rules::LAY_TIME`)
+/// before the mine drops with a chunk (`mine.laid`). The playtest's
+/// transcript (F3) walked into a field being laid with nothing to say a
+/// mine was coming: this is the warning, and where.
+fn hiss_sounds(
+    mut commands: Commands,
+    layers: Query<(
+        Entity,
+        &GlobalTransform,
+        &crate::robots::Robot,
+        &crate::robots::minelayer::Minelayer,
+    )>,
+    bank: Res<SoundBank>,
+    mut rng: ResMut<AudioRng>,
+    mut was: Local<std::collections::HashMap<Entity, f32>>,
+) {
+    was.retain(|e, _| layers.contains(*e));
+    for (e, gt, robot, m) in &layers {
+        let now = m.laying_in().filter(|_| !robot.wrecked);
+        let before = match now {
+            Some(t) => was.insert(e, t),
+            None => was.remove(&e),
+        };
+        if hiss_due(before, now) {
+            play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "machines/chute_hiss",
+                Some(gt.translation()),
+                "minelayer.hiss",
+                0.0,
+                1.0,
+                0.06,
+            );
+        }
+    }
+}
+
+/// Whether the chute hisses now, from a minelayer's `laying_in` last frame
+/// and this: once a spot, as it stops over it (the countdown starting
+/// below `LAY_TIME`, from driving there, from not laying, or from the
+/// last mine).
+pub fn hiss_due(before: Option<f32>, now: Option<f32>) -> bool {
+    use extraction_core::minelayer::LAY_TIME;
+    match now {
+        Some(t) if t < LAY_TIME => before.is_none_or(|b| b >= LAY_TIME || b < t),
+        _ => false,
+    }
+}
+
 /// A grappler's line on you (`grappler::Tethered`, its goal to hold you
 /// for the others): its winch straining at the grappler the whole time
 /// the line holds (`grapple.winch`), harder as it nears its end; let go
@@ -1129,6 +1182,37 @@ mod tests {
             .iter()
             .find(|c| c.name == "minelayer.grind");
         assert_eq!(c.map(|c| c.set), Some("drag/metal"));
+    }
+
+    /// A minelayer's chute hisses once a spot, as it stops over it, never
+    /// while it drives there or isn't laying; in the mix with its set.
+    #[test]
+    fn a_minelayer_hisses_before_it_lays() {
+        use extraction_core::minelayer::LAY_TIME;
+        // Driving to the spot, then stopped and counting down, then the
+        // next spot.
+        let frames = [
+            None,
+            Some(LAY_TIME),
+            Some(LAY_TIME),
+            Some(LAY_TIME - 0.02),
+            Some(1.0),
+            Some(0.0),
+            Some(LAY_TIME - 0.02),
+            Some(0.5),
+            None,
+        ];
+        let hissed: Vec<bool> = frames.windows(2).map(|w| hiss_due(w[0], w[1])).collect();
+        assert_eq!(
+            hissed,
+            [false, false, true, false, false, true, false, false]
+        );
+        // Starting already stopped (spawned mid-field) hisses too.
+        assert!(hiss_due(None, Some(1.0)));
+        let c = crate::audio_mix::MIX
+            .iter()
+            .find(|c| c.name == "minelayer.hiss");
+        assert_eq!(c.map(|c| c.set), Some("machines/chute_hiss"));
     }
 
     /// A grappler's hold is heard while it lasts, straining harder toward

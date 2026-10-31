@@ -668,6 +668,26 @@ pump?
      and is it ever in the way?
    - `--snow 0.3`: a first dusting, in patches.
 
+### 4g. Depth prepass, a frame-time test (10 minutes)
+
+Inside a wood the GPU may shade each pixel ten times over, once for every
+card of needles in front of it. A depth prepass is an experiment against
+that, and it needs a real GPU to judge. It's off unless you ask for it.
+The picture should look the same either way, except that leaves have
+hard edges in both runs. Run the same walk twice:
+
+1. Hard leaves, no prepass:
+   `cargo run --release -- --map marrow_creek --a2c 0`
+2. Hard leaves with the prepass. In PowerShell:
+   `$env:EXTRACTION_PREPASS=1; cargo run --release -- --map marrow_creek`
+   (in bash: `EXTRACTION_PREPASS=1 cargo run --release -- --map marrow_creek`).
+
+Each time, walk into the spruce west of the road, stand still a minute
+looking into the trees, then a minute looking out across the meadow.
+Note the session log's `gpu: ... ms a frame` lines from each run, and
+anything that looks wrong in the second: trees with holes in them,
+grass flickering, or shadows that jump.
+
 ### 5. Between raids
 
 - Hand the driver what they ask for (stash it, press their card). Their
@@ -732,6 +752,7 @@ pump?
 | `--render-scale 0.6` | Render each eye at this fraction of the headset's size (the SHARPNESS card) |
 | `--msaa 2` | Smoothing samples a pixel, 4, 2 or 0 (off) (the SMOOTHING card) |
 | `--a2c 0` | Hard leaves: the trees' leaves cut sharp, not smoothed (`--a2c 1`, the default, smooths them) |
+| `EXTRACTION_PREPASS=1` (environment) | The depth prepass experiment (4g): leaves are hard while it's on |
 | `--smooth-turn`, `--vignette 0.5`, `--narrow-dynamics`, `--finger-grab`, `--no-binaural`, `--no-score` | Settings, without the cards |
 | `--left-handed`, `--seated`, `--one-handed`, `--no-captions`, `--no-machine-tick` | How you play, without the cards |
 | `--no-record` | Don't record raids |

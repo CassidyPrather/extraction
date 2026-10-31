@@ -161,6 +161,45 @@ spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
 the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
 one or two trees within 10 m.
 
+### Depth prepass (headset experiment, off by default)
+
+`EXTRACTION_PREPASS=1` gives every player view a depth prepass: both
+eyes, the flat camera, the mirror, and the warm-up proxy, so its
+pipelines are warmed too (`render::prepass`). Without it, a pixel behind
+stacked cards is shaded for every card in front of it. Marrow's spruce
+view is 10 layers a pixel, 7.5 of them cards. With it, every layer's
+alpha is tested once in a depth-only pass, and the main pass shades only
+what's in front. That costs a second geometry pass an eye. The software
+renderer can't say whether it pays, so it waits for a headset:
+`docs/PLAYTEST.md` 4g has the run.
+
+What it takes to draw right:
+- The materials whose vertex shaders move their geometry give the
+  prepass their own vertex (and fragment) shaders, so the depth is where
+  the picture is. Those are the cards (sway, the near shrink, the dither
+  to the impostor), the impostors (turned to the eye, cut near), and the
+  ground cover (blown). `tree_sway.wgsl`, `impostor.wgsl` and `sway.wgsl`
+  serve both pipelines (`#ifdef PREPASS_PIPELINE`). Off, they return
+  Bevy's default prepass shaders, so nothing else, the sun's shadows
+  included, changes.
+- Leaves are a hard alpha test while it's on (`trees::foliage_alpha`).
+  The prepass has no colour for alpha to coverage to read, so a
+  coverage-cut card wrote its whole outline into the depth and hid the
+  world behind its gaps.
+- The ground cover's widening needs the normals the prepass doesn't
+  have, so its depth is slightly thinner than its picture. That is never
+  wider, so it hides nothing.
+- A `discard` in a WGSL function of our own, called from the fragment,
+  dropped cards that should have drawn (on lavapipe at least). The
+  dithers are written out in each entry point.
+
+Checked on the software renderer: with the prepass, all 13 of Marrow's
+lookbook views differ from the same views with hard leaves and no
+prepass by no more than two runs of either differ from each other. That
+is 0-6% of pixels past 24 levels: wind, rain, and whether the near trees'
+cards had streamed in by the shot's frame 60, which a lookbook shot
+sometimes catches before they have.
+
 ## Where it stands
 
 Without the game's own textures (`scripts/fetch_assets.py` not run) the

@@ -916,6 +916,14 @@ impl bevy::pbr::MaterialExtension for TreeSway {
         "shaders/tree_sway.wgsl".into()
     }
 
+    fn prepass_vertex_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/tree_sway.wgsl")
+    }
+
+    fn prepass_fragment_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/tree_sway.wgsl")
+    }
+
     fn specialize(
         _pipeline: &bevy::pbr::MaterialExtensionPipeline,
         descriptor: &mut bevy::render::render_resource::RenderPipelineDescriptor,
@@ -1010,9 +1018,14 @@ struct TreeAssets {
 /// test at `cutoff`, next launch; `EXTRACTION_A2C=1` / `=0` overrides.
 /// If the headset measures more than 0.5 ms an eye for it in the spruce
 /// view, hard leaves become the default (`docs/PLAYTEST.md`).
+/// With the depth prepass (`EXTRACTION_PREPASS=1`) it's always the test:
+/// the prepass draws depth only, with no colour for coverage to come from,
+/// so a coverage-cut leaf wrote its whole card into the depth and hid
+/// what was behind its gaps.
 pub fn foliage_alpha(cutoff: f32) -> AlphaMode {
     static SOFT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let soft = *SOFT.get_or_init(|| match std::env::var("EXTRACTION_A2C").as_deref() {
+        _ if crate::render::prepass::on() => false,
         Ok("1") => true,
         Ok("0") => false,
         _ => crate::rig::comfort::soft_leaves_at_launch(),

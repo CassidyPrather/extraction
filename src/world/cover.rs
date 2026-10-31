@@ -170,6 +170,10 @@ impl bevy::pbr::MaterialExtension for Sway {
     fn vertex_shader() -> bevy::shader::ShaderRef {
         "shaders/sway.wgsl".into()
     }
+
+    fn prepass_vertex_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/sway.wgsl")
+    }
 }
 
 /// The wind as the weather has it (still in thick fog, hard in a

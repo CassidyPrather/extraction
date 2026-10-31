@@ -7,12 +7,22 @@
 
 #import bevy_pbr::{
     mesh_functions,
-    pbr_fragment::pbr_input_from_standard_material,
-    forward_io::{Vertex, VertexOutput, FragmentOutput},
-    pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
     mesh_view_bindings::view,
     view_transformations::position_world_to_clip,
 }
+// Also the depth prepass's (`render::prepass`): turned and cut as drawn.
+#ifdef PREPASS_PIPELINE
+#import bevy_pbr::{
+    prepass_io::{Vertex, VertexOutput, FragmentOutput},
+    pbr_prepass_functions::prepass_alpha_discard,
+}
+#else
+#import bevy_pbr::{
+    forward_io::{Vertex, VertexOutput, FragmentOutput},
+    pbr_fragment::pbr_input_from_standard_material,
+    pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
+}
+#endif
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var<uniform> cut: vec4<f32>;
 
@@ -49,6 +59,10 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 #endif
 #endif
     out.position = position_world_to_clip(out.world_position.xyz);
+#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+    out.unclipped_depth = out.position.z;
+    out.position.z = min(out.position.z, 1.0);
+#endif
 #endif
 #ifdef VERTEX_UVS_A
     out.uv = vertex.uv;
@@ -85,6 +99,31 @@ fn lod_dither(px: vec2<f32>) -> f32 {
     return fract(52.9829189 * fract(dot(floor(px), vec2<f32>(0.06711056, 0.00583715))));
 }
 
+// (The dither is written out in each entry point: see `tree_sway.wgsl`.)
+#ifdef PREPASS_PIPELINE
+#ifdef PREPASS_FRAGMENT
+@fragment
+fn fragment(in: VertexOutput) -> FragmentOutput {
+#else
+@fragment
+fn fragment(in: VertexOutput) {
+#endif
+#ifdef VERTEX_UVS_B
+    let f = smoothstep(cut.x - cut.y, cut.x + cut.y, distance(view.world_position.xz, in.uv_b));
+    if (lod_dither(in.position.xy) >= f) {
+        discard;
+    }
+#endif
+    prepass_alpha_discard(in);
+#ifdef PREPASS_FRAGMENT
+    var out: FragmentOutput;
+#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+    out.frag_depth = in.unclipped_depth;
+#endif
+    return out;
+#endif
+}
+#else
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
 #ifdef VERTEX_UVS_B
@@ -102,3 +141,4 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }
+#endif
