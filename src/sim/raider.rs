@@ -324,6 +324,8 @@ pub struct Raider {
     scan: f32,
     clock: f32,
     retreat_until: f32,
+    /// Off a plough's road till then, waiting for it to go by.
+    aside_until: f32,
     /// When it last ducked into cover (a drone's lock-on, or hurt).
     ducked_at: f32,
     /// Its gun, once it has one.
@@ -607,6 +609,7 @@ pub fn attach_raider(
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
+                aside_until: 0.0,
                 ducked_at: -99.0,
                 gun: None,
                 refusals: 0,
@@ -746,6 +749,15 @@ pub struct Scene<'w, 's> {
         (
             Entity,
             &'static crate::world::underground::PowerSwitch,
+            &'static GlobalTransform,
+        ),
+    >,
+    ploughs: Query<
+        'w,
+        's,
+        (
+            &'static crate::robots::plough::Plough,
+            &'static Robot,
             &'static GlobalTransform,
         ),
     >,
@@ -1001,6 +1013,43 @@ pub fn think(
                 bot.replace(tasks);
                 bot.sprint = true;
             }
+        }
+
+        // A plough coming up its road with it in the lane: off the road.
+        if r.clock > r.aside_until
+            && let Some((off, wait)) = scene.ploughs.iter().find_map(|(p, robot, gt)| {
+                let running = !robot.wrecked
+                    && p.jammed <= 0.0
+                    && matches!(
+                        p.run.leg,
+                        extraction_core::plough::Leg::Up(_) | extraction_core::plough::Leg::Down(_)
+                    );
+                running
+                    .then(|| {
+                        plough_aside(
+                            &r.grid,
+                            here,
+                            gt.translation().xz(),
+                            gt.forward().as_vec3().xz(),
+                        )
+                    })
+                    .flatten()
+            })
+        {
+            r.aside_until = r.clock + wait;
+            log.event(
+                "plough_aside",
+                json!({"x": round(here.x, 1), "z": round(here.y, 1), "to_x": round(off.x, 1), "to_z": round(off.y, 1)}),
+            );
+            r.interrupted = true;
+            bot.sprint = true;
+            bot.replace([
+                Task::WalkTo {
+                    to: off,
+                    within: 0.6,
+                },
+                Task::Wait(wait),
+            ]);
         }
 
         // --- React: robots. -------------------------------------------
@@ -3518,6 +3567,32 @@ fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
+/// Off a plough's road, if `here` is in its lane ahead (where it sounds
+/// its horn: it doesn't stop, and its auger takes what's there; Rime sims,
+/// 30 October, a raider walking the pass road to the RV went under one):
+/// where to stand clear of its blade, to the side it's on (away from the
+/// chute's side if it's in the middle), on open ground; and how long to
+/// wait there for it to go by. None if it's not in the way.
+fn plough_aside(grid: &NavGrid, here: Vec2, plough: Vec2, forward: Vec2) -> Option<(Vec2, f32)> {
+    use extraction_core::plough as rules;
+    let fwd = forward.normalize_or_zero();
+    // (Its chute throws to its right.)
+    let right = Vec2::new(-fwd.y, fwd.x);
+    let d = here - plough;
+    let (ahead, side) = (d.dot(fwd), d.dot(right));
+    if !rules::in_lane_ahead(ahead, side) {
+        return None;
+    }
+    let first = if side > 0.3 { 1.0 } else { -1.0 };
+    let wait = (ahead + rules::MOUTH + 4.0) / rules::SPEED;
+    [first, -first]
+        .into_iter()
+        .flat_map(|s| [3.0, 5.0].map(move |m| (s, m)))
+        .map(|(s, m)| here - right * side + right * s * (rules::BLADE * 0.5 + m))
+        .find(|p| grid.walkable(p.to_array()))
+        .map(|p| (p, wait))
+}
+
 /// Away from a robot at `at` in a hurry, about `metres` off: inside a
 /// building or down a site, out by its nearest way out first (the open
 /// ground's grid has none of their walls, and a run on it went into them:
@@ -4313,6 +4388,62 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
 mod run_tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// A raider in a plough's lane ahead gets off its road, clear of its
+    /// blade, and waits for it to go by; to its side, or behind it, it
+    /// carries on (Rime sims, 30 October: a raider walking the pass road
+    /// to the RV went under the plough).
+    #[test]
+    fn a_raider_gets_off_a_ploughs_road() {
+        use extraction_core::plough as rules;
+        let open = NavGrid {
+            n: 100,
+            cell: 1.0,
+            origin: -50.0,
+            cost: vec![1; 100 * 100],
+            lanes: Vec::new(),
+        };
+        // The plough at the origin heading -z (the game's forward).
+        let (at, fwd) = (Vec2::ZERO, Vec2::NEG_Y);
+        for (here, why) in [
+            (Vec2::new(0.0, -10.0), "dead ahead"),
+            (Vec2::new(1.2, -15.0), "ahead, by its chute"),
+            (Vec2::new(-1.5, -4.0), "close ahead"),
+        ] {
+            let (off, wait) =
+                plough_aside(&open, here, at, fwd).unwrap_or_else(|| panic!("{why}: stayed"));
+            let side = (off - at).dot(Vec2::X).abs();
+            assert!(
+                side > rules::BLADE * 0.5 + 2.0,
+                "{why}: only {side:.1} m off its line"
+            );
+            // Long enough there for it to have gone by.
+            let ahead = (here - at).dot(fwd);
+            assert!(
+                wait * rules::SPEED > ahead + rules::MOUTH,
+                "{why}: back too soon"
+            );
+        }
+        for (here, why) in [
+            (Vec2::new(5.0, -10.0), "beside its lane"),
+            (Vec2::new(0.0, 6.0), "behind it"),
+            (Vec2::new(0.0, -40.0), "far up the road"),
+        ] {
+            assert!(
+                plough_aside(&open, here, at, fwd).is_none(),
+                "{why}: stepped off"
+            );
+        }
+        // A drop one side (the pass road's edge): the other side.
+        let mut ledge = open.clone();
+        for j in 0..100 {
+            for i in 50..100 {
+                ledge.cost[j * 100 + i] = extraction_core::nav::BLOCKED;
+            }
+        }
+        let (off, _) = plough_aside(&ledge, Vec2::new(0.5, -10.0), at, fwd).expect("off");
+        assert!(off.x < 0.0, "over the edge: {off}");
+    }
 
     /// Running from a robot down a site, or in a building, goes out by
     /// the site's own ways, never the open ground's straight line through
