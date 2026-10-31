@@ -80,9 +80,10 @@ impl Plugin for GrapplerPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                haul_to_friends
-                    .after(super::perceive)
-                    .before(super::walker::walker_brain),
+                // (Only before the walkers think: tying it after `perceive`
+                // as well put every walker's thinking after its seeing, and
+                // walkers saw a tick sooner than their tests hold them to.)
+                haul_to_friends.before(super::walker::walker_brain),
             );
     }
 }
