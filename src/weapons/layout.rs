@@ -233,35 +233,40 @@ fn pm() -> GunLayout {
             ),
             // Barrel (visible at the muzzle) and the slide over it.
             part(
-                Shape::Cylinder(0.006, 0.09),
-                at(0.0, 0.062, -0.085),
+                Shape::Cylinder(0.006, 0.083),
+                at(0.0, 0.062, -0.078),
                 Blued,
                 Static,
             ),
             part(
-                bx(0.028, 0.029, 0.158),
-                at(0.0, 0.0625, -0.053),
+                bx(0.028, 0.029, 0.145),
+                at(0.0, 0.0625, -0.0485),
                 Blued,
                 WithBolt,
             ),
             // Sights.
             part(
                 bx(0.004, 0.006, 0.006),
-                at(0.0, 0.079, -0.125),
+                at(0.0, 0.079, -0.1146),
                 Blued,
                 WithBolt,
             ),
             part(
                 bx(0.014, 0.006, 0.005),
-                at(0.0, 0.079, 0.02),
+                at(0.0, 0.079, 0.0183),
                 Blued,
                 WithBolt,
             ),
             // Hammer and safety lever.
-            part(bx(0.008, 0.014, 0.008), at(0.0, 0.062, 0.03), Blued, Static),
+            part(
+                bx(0.008, 0.014, 0.008),
+                at(0.0, 0.062, 0.0275),
+                Blued,
+                Static,
+            ),
             part(
                 bx(0.003, 0.006, 0.014),
-                at(-0.016, 0.066, 0.012),
+                at(-0.016, 0.066, 0.011),
                 Blued,
                 Selector,
             ),
@@ -317,15 +322,17 @@ fn ak74() -> GunLayout {
             ),
             // Barrel, front sight block, muzzle brake.
             part(
-                Shape::Cylinder(0.0105, 0.48),
-                at(0.0, bore, -0.46),
+                Shape::Cylinder(0.0105, 0.42),
+                at(0.0, bore, -0.43),
                 Blued,
                 Static,
             ),
-            part(bx(0.025, 0.05, 0.03), at(0.0, 0.08, -0.6), Blued, Static),
+            // (The barrel ahead of the gas block 53 mm shorter, as the
+            // model's: the collider ends at the brake's face.)
+            part(bx(0.025, 0.05, 0.03), at(0.0, 0.08, -0.547), Blued, Static),
             part(
                 Shape::Cylinder(0.014, 0.08),
-                at(0.0, bore, -0.655),
+                at(0.0, bore, -0.602),
                 Blued,
                 Static,
             ),
@@ -831,9 +838,10 @@ fn rpk74() -> GunLayout {
         h.grab = Vec3::new(0.045, 0.062, -0.17);
     }
     for p in &mut l.parts {
-        // The barrel and its front sight and brake go further out.
-        if p.at.translation.z < -0.55 {
-            p.at.translation.z -= 0.13;
+        // The barrel and its front sight and brake go further out (from
+        // the AK's, which is 53 mm shorter there than this model's).
+        if p.at.translation.z < -0.5 {
+            p.at.translation.z -= 0.183;
         }
     }
     // The bipod, folded under the barrel (its pivot at the clamp).
