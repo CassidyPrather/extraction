@@ -794,11 +794,13 @@ their old offsets from their houses, woodpiles thinned where they ran
 into each other, and the deep kettle's way down moved to where its exit
 67 m off stands its layout's 2.4 m over it. Trees don't come down with
 the land: the pass's pines were thinned so its beacon is seen from 81%
-of the way in.
+of the way in. Water doesn't either: where the pass road met the beck at
+a slant it ran 15 m along the falling water, its deck under it; it
+crosses square now.
 
 | Kettle Pass | as it was | pulled in |
 |---|---|---|
-| nearest-place walk, mean | 139 m (58 s) | 101 m (42 s) |
+| nearest-place walk, mean | 139 m (58 s) | 99 m (41 s) |
 | open ground seen past 70 m | 16% | 9% |
 | sightline, 90th percentile | 78 m | 68 m |
 | longest empty walk | 44 m | 22 m |
