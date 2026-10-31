@@ -273,8 +273,18 @@ mod tests {
     #[test]
     fn a_first_raids_houses_draw_from_a_starter_set() {
         let first = house_kinds(Some(0));
-        assert!(first.len() <= 14, "{} kinds on raid 0: {first:?}", first.len());
-        for id in ["canned_stew", "field_dressing", "ammo_9x18", "power_cell", "bolt"] {
+        assert!(
+            first.len() <= 14,
+            "{} kinds on raid 0: {first:?}",
+            first.len()
+        );
+        for id in [
+            "canned_stew",
+            "field_dressing",
+            "ammo_9x18",
+            "power_cell",
+            "bolt",
+        ] {
             assert!(first.contains(id), "no {id} on raid 0");
         }
         for id in ["ak74", "ammo_545", "pu_scope", "tape_duty", "emp_grenade"] {
@@ -304,10 +314,18 @@ mod tests {
                 .min()
         };
         for (id, ..) in crate::progression::WANTS[0] {
-            assert!(soonest(id).is_some_and(|r| r <= 1), "{id}: {:?}", soonest(id));
+            assert!(
+                soonest(id).is_some_and(|r| r <= 1),
+                "{id}: {:?}",
+                soonest(id)
+            );
         }
         for id in ["radio", "electronics"] {
-            assert!(soonest(id).is_some_and(|r| r <= 3), "{id}: {:?}", soonest(id));
+            assert!(
+                soonest(id).is_some_and(|r| r <= 3),
+                "{id}: {:?}",
+                soonest(id)
+            );
         }
     }
 
