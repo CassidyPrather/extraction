@@ -42,6 +42,13 @@ const SILL_STEP: f32 = 0.45;
 const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
 pub const MAX_REACH_UP: f32 = 2.1;
+/// How far under a surface building's floor a point stops being in it:
+/// an underground site can run under one (Cinder's tunnel, 6.5 m under
+/// the works hall), and a raider in the tunnel counted as in the hall
+/// and walked for the hall's way out, into the tunnel's wall (Cinder
+/// sims, 31 October). Deeper than the ground round a building falls
+/// across its grid's margin on a slope.
+const UNDER_FLOOR: f32 = 4.0;
 /// The most one cell's floor may stand over its neighbour's and still be
 /// walked between (a stair's riser is 0.2): under the body's own step
 /// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
@@ -216,7 +223,9 @@ impl BuildingPlan {
                     .level(l)
                     .is_some_and(|y| l.y > y - 0.6 && l.y < y + MAX_REACH_UP + 0.5);
         }
-        l.x.abs() <= self.half.x + pad && l.z.abs() <= self.half.y + pad
+        l.y > self.floor - UNDER_FLOOR
+            && l.x.abs() <= self.half.x + pad
+            && l.z.abs() <= self.half.y + pad
     }
 
     /// Whether a world point is within the indoor grid.
@@ -225,7 +234,7 @@ impl BuildingPlan {
         if self.levels.is_some() {
             return self.level(l).is_some_and(|y| (l.y - y).abs() < 2.5);
         }
-        self.grid.cell_of([l.x, l.z]).is_some()
+        l.y > self.floor - UNDER_FLOOR && self.grid.cell_of([l.x, l.z]).is_some()
     }
 
     /// Whether loot at this world point can be reached from the floor.
@@ -2134,6 +2143,59 @@ mod tests {
             }
         }
         assert!(pockets.is_empty(), "pockets:\n{}", pockets.join("\n"));
+    }
+
+    /// Nowhere on an underground site's floor is in a surface building's
+    /// plan, though the site runs under it: Cinder's tunnel under the
+    /// works hall was, and a raider in the tunnel walked for the hall's
+    /// way out into the tunnel's wall (seed 11, 31 October: 40 stucks).
+    #[test]
+    fn a_site_under_a_building_isnt_in_it() {
+        let (mut under, mut failed) = (0, Vec::new());
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            for site in plans.iter().filter(|p| p.levels.is_some()) {
+                let g = &site.grid;
+                for k in (0..g.n * g.n).filter(|k| g.cost[*k] != BLOCKED) {
+                    let [cx, cz] = g.centre(k % g.n, k / g.n);
+                    let Some(y) = site.level(Vec3::new(cx, 0.0, cz)) else {
+                        continue;
+                    };
+                    let at = site.xf.transform_point(Vec3::new(cx, y + 0.1, cz));
+                    for p in plans.iter().filter(|p| p.levels.is_none()) {
+                        let l = p.to_local(at);
+                        // Well under its floor (a scene set on the site's
+                        // own floor is in the site, and that's right).
+                        if l.y > p.floor - 5.0 || l.x.abs() > p.half.x || l.z.abs() > p.half.y {
+                            continue;
+                        }
+                        under += 1;
+                        if p.in_grid(at) || p.contains(at, 0.0) {
+                            failed.push(format!(
+                                "{map} {} at {at:.1?} is in {} at {:.0?}",
+                                site.name, p.name, p.xf.translation
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(under > 0, "no site runs under a building");
+        assert!(
+            failed.is_empty(),
+            "{} points:\n{}",
+            failed.len(),
+            failed[..failed.len().min(8)].join("\n")
+        );
     }
 
     #[test]
