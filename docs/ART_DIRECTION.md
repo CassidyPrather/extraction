@@ -258,6 +258,23 @@ Layers a pixel by kind, from `gauge_marrow_creek_holds_the_budget`
 In the forest, the cost is the near, alpha-tested cards, not the far
 forest: the impostors stay under 1.7 layers even at the edge.
 
+The spruce's core (2026-10-31). Settled close up (m05, the tester's
+"ugly as sin"), the near spruces were black cones behind sparse
+cards. The core was the far crown shrunk inside the cards, and the
+cards' shadow left it ambient light only. It drew at about an eighth of
+the needles' green. Now it:
+
+- wears the needle atlas, opaque, a sprig to each skirt point (about
+  a metre);
+- is shaded grey at 0.55 by the crown's own light and dark
+  (`trees::core_of`);
+- takes no shadow (`NotShadowReceiver`).
+
+On the centre spruce of m05, the near-black share went from 58% to
+27%. Narrower too (0.55 of the crown across, not 0.62), so its whorl
+tips stay inside the cards. It costs one texture sample on a draw that
+was there, and saves the shadow lookups.
+
 Open, next steps:
 
 - Time the near cards on the headset machine with and without the
