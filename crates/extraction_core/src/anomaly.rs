@@ -622,17 +622,40 @@ pub fn clear_of_rendezvous(map: &MapDef, p: [f32; 2], reach: f32) -> bool {
         .all(|m| geom::dist(m.at, p) >= reach + RV_CLEAR)
 }
 
+/// Margin an anomaly keeps from the first way, metres: past its warning,
+/// a newcomer walking it doesn't step in.
+pub const FIRST_WAY_CLEAR: f32 = 6.0;
+
+/// A valley's first way: the straight line from its drop to its first
+/// job's place (`progression::first_job`), the line a newcomer walks with
+/// the field map in hand on their first raid there.
+pub fn first_way(map: &MapDef) -> Option<([f32; 2], [f32; 2])> {
+    let ins = map.markers_of(&MarkerKind::Insertion).next()?.at;
+    let (_, at) = crate::progression::first_job("", map)?
+        .mark()
+        .map(|(m, a)| (m.to_owned(), a))?;
+    Some((ins, at))
+}
+
+/// Whether something reaching `reach` at `p` keeps off the first way:
+/// a burner on it met newcomers just as its warning came, and put them
+/// under 10 hp on their first raid (Cinder Works).
+pub fn clear_of_first_way(way: Option<([f32; 2], [f32; 2])>, p: [f32; 2], reach: f32) -> bool {
+    way.is_none_or(|(a, b)| geom::polyline_closest(&[a, b], p).0 >= reach + FIRST_WAY_CLEAR)
+}
+
 /// Somewhere a run-time bloom (the director's, the Surge's) may open: the
 /// same ground as the Surge's own layout, `placeable` (dry, not steep,
 /// clear of every building by its footprint), `clear_of_roads`,
-/// `clear_of_buildings` and `clear_of_rendezvous` for how far the kind
-/// reaches.
+/// `clear_of_buildings`, `clear_of_rendezvous` and `clear_of_first_way`
+/// for how far the kind reaches.
 pub fn bloom_ok(map: &MapDef, hm: &Heightmap, p: [f32; 2], kind: AnomalyKind, radius: f32) -> bool {
     let reach = kind.danger_radius(radius);
     placeable(map, hm, p)
         && clear_of_roads(hm, p, reach)
         && clear_of_buildings(map, p, reach)
         && clear_of_rendezvous(map, p, reach)
+        && clear_of_first_way(first_way(map), p, reach)
 }
 
 /// Cycles between the Surge's great scatters. In between, what it scattered
@@ -772,6 +795,7 @@ pub fn migrate(
     standing: usize,
 ) {
     let mut rng = Rng::new(seed ^ 0x316A ^ (cycle as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
+    let way = first_way(map);
     for i in standing..out.len() {
         let a = out[i].clone();
         let h = |dx: f32, dz: f32| hm.height([a.at[0] + dx, a.at[1] + dz]);
@@ -799,6 +823,7 @@ pub fn migrate(
                 && placeable(map, hm, p)
                 && clear_of_roads(hm, p, a.radius)
                 && clear_of_buildings(map, p, a.kind.danger_radius(a.radius))
+                && clear_of_first_way(way, p, a.kind.danger_radius(a.radius))
             {
                 out[i].at = p;
                 break;
@@ -822,6 +847,7 @@ fn scatter(
         out.iter()
             .all(|a| geom::dist(a.at, p) > a.kind.danger_radius(a.radius) + r + 2.5)
     };
+    let way = first_way(map);
     let place = |rng: &mut Rng,
                  out: &mut Vec<AnomalySpec>,
                  chances: &mut Vec<f32>,
@@ -839,6 +865,7 @@ fn scatter(
                 || !clear_of_roads(hm, p, radius)
                 || !fits(out, p, radius)
                 || !clear_of_buildings(map, p, kind.danger_radius(radius))
+                || !clear_of_first_way(way, p, kind.danger_radius(radius))
             {
                 continue;
             }
@@ -1384,6 +1411,31 @@ mod tests {
         assert_eq!(&after[1..], &before[..]);
         assert!(AnomalyKind::from_name("Mirror").is_some());
         assert!(AnomalyKind::from_name("Teapot").is_none());
+    }
+
+    #[test]
+    fn nothing_lies_on_a_valleys_first_way() {
+        // Cinder Works' first way passed within a burner's warning of one
+        // at (-50, 151): newcomers walked into it on their first raid.
+        for (id, src) in crate::map::VALLEYS {
+            let map = MapDef::from_ron(src).unwrap();
+            let hm = Heightmap::build(&map);
+            let way = first_way(&map);
+            assert!(way.is_some(), "{id}: no first way");
+            for seed in 1..=8 {
+                for cycle in 0..SURGE_EPOCH * 2 {
+                    for a in layout(&map, &hm, seed, cycle) {
+                        let reach = a.kind.danger_radius(a.radius);
+                        assert!(
+                            clear_of_first_way(way, a.at, reach),
+                            "{id} seed {seed} cycle {cycle}: a {:?} at {:?} reaches the first way {way:?}",
+                            a.kind,
+                            a.at
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[test]
