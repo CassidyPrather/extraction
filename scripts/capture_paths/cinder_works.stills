@@ -1,26 +1,26 @@
 # cinder_works press-kit stills: name x,y,z,yaw,pitch (as --camera; y 0 = eye height).
-c01_gate        -110,0,255,10,-2     # from the insertion, up the valley
-c02_ash_row     -55,0,190,0,-3       # Ash Row
-c03_canal       -60,0,72,90,-6       # along the canal
-c04_works       0,0,40,53,4          # the works and the chimney
-c05_dead_wood   -150,0,-150,0,-2     # inside the burnt wood
-c06_wood_edge   -120,0,-220,315,0    # toward the fire lookout
-c07_slag        170,0,-60,18,-3      # the slag heaps
-c08_ash_pit     -170,0,0,270,-6      # the ash pit
-c09_sidings     75,0,-200,0,-3       # north sidings
-c10_chimney     -20,0,-100,115,6     # the chimney from the north-west
-c11_aerial      -110,45,300,15,-8    # over the gate, toward the chimney
+c01_gate        -71,0,184,10,-2     # from the insertion, up the valley
+c02_ash_row     -40,0,144,0,-3       # Ash Row
+c03_canal       -43,0,45,90,-6       # along the canal
+c04_works       -5,0,43,53,4          # the works and the chimney
+c05_dead_wood   -104,0,-99,0,-2     # inside the burnt wood
+c06_wood_edge   -77,0,-169,315,0    # toward the fire lookout
+c07_slag        134,0,-47,18,-3      # the slag heaps
+c08_ash_pit     -119,0,0,270,-6      # the ash pit
+c09_sidings     52,0,-126,0,-3       # north sidings
+c10_chimney     -11,0,-68,115,6     # the chimney from the north-west
+c11_aerial      -72,45,227,15,-8    # over the gate, toward the chimney
 
 # Hero views of the landmarks: low from the south-east, high from the south-west.
-h_blast_furnace_low   -127,0,228,315,8
-h_blast_furnace_high  -184,~14,239,45,-12
-h_factory_hall_low   98,0,3,315,8
-h_factory_hall_high  41,~14,14,45,-12
-h_chimney_low   128,0,-22,315,8
-h_chimney_high  71,~14,-11,45,-12
-h_signal_box_low   123,0,-239,315,8
-h_signal_box_high  66,~14,-228,45,-12
-h_ranger_tower_low   -155,0,-145,315,8
-h_ranger_tower_high  -212,~14,-134,45,-12
-h_bus_depot_low   3,0,-7,315,8
-h_bus_depot_high  -54,~14,4,45,-12
+h_blast_furnace_low   -88,0,157,315,8
+h_blast_furnace_high  -142,~14,173,45,-12
+h_factory_hall_low   67,0,12,315,8
+h_factory_hall_high  33,~14,22,45,-12
+h_chimney_low   88,0,-18,315,8
+h_chimney_high  52,~14,-0,45,-12
+h_signal_box_low   100,0,-165,315,8
+h_signal_box_high  43,~14,-154,45,-12
+h_ranger_tower_low   -107,0,-94,315,8
+h_ranger_tower_high  -160,~14,-83,45,-12
+h_bus_depot_low   -3,0,0,315,8
+h_bus_depot_high  -45,~14,6,45,-12
