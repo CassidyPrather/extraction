@@ -243,6 +243,13 @@ scores. Then the next gun.
   shows that; the overlay shows it at once.
 - **The catalog knew.** `items.ron`'s box for the AK was the real gun's
   all along (943 x 240 mm). Check the model against it first.
+- **A model is held by more tests than the guns'.** Re-curving the AK's
+  magazine and re-drawing its stock broke the item-box and stowing tests
+  (`models::tests::every_item_model_fits_its_box`,
+  `capture::stowed::tests::origin_offsets_are_the_models`), which the
+  weapons filter doesn't run. After changing a model's size, run the whole
+  suite (`cargo test --profile fast --workspace`), and keep the catalog's
+  box and `kit_cavities::ORIGIN_OFFSET` in step.
 - **Welded parts.** A part that moves on the real gun but was joined into
   `static` (the AK's dust cover and magazine catch) can't be worked. Look
   for them in the exploded view: what doesn't fly off isn't a part.

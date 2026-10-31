@@ -20,14 +20,18 @@ from _kit import text  # noqa: E402
 
 main_guard()
 
-TOP = 0.1
+# Its box (items.ron) 0.17 high and 0.13 long, the curved magazine centred
+# in it: the top at +0.085, so it hangs that far from the gun's seat. DY
+# moves the outline's figures (taken with the top at 0.1) down with it.
+TOP = 0.085
+DY = -0.015
 # The curve taken off a side photograph of an AK-74 (docs/craft/guns/ak74):
 # 157 mm deep below the receiver, its front edge 55 mm forward by 127 mm
 # down. (It was modelled near straight and 190 mm deep.) The floor plate
 # square to the body at its foot.
-rear = [(0.044, TOP - 0.006), (0.0415, 0.064), (0.0305, 0.035), (0.0195, 0.007), (0.0075, -0.021),
-        (-0.005, -0.045), (-0.020, -0.065)]
-front = [(-0.0775, -0.045), (-0.0615, -0.021), (-0.0435, 0.007), (-0.0315, 0.035), (-0.0225, 0.064),
+rear = [(0.044, TOP - 0.006), (0.0415, 0.0490), (0.0305, 0.0200), (0.0195, -0.0080), (0.0075, -0.0360),
+        (-0.005, -0.0600), (-0.020, -0.0800)]
+front = [(-0.0775, -0.0600), (-0.0615, -0.0360), (-0.0435, -0.0080), (-0.0315, 0.0200), (-0.0225, 0.0490),
          (-0.0155, TOP - 0.008)]
 spine = catmull(rear, 4, closed=False)
 belly = catmull(front, 4, closed=False)
@@ -41,7 +45,7 @@ body.prism(outline, -0.0118, 0.0118, "Polymer", axis="x", bevel=0.0022, segs=2)
 spine_rib = [(z + 0.0012, y) for z, y in spine]
 rib = spine_rib + [(z - 0.008, y) for z, y in reversed(spine_rib)]
 body.prism(rib, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
-for y0 in (0.058, 0.074):
+for y0 in (0.058 + DY, 0.074 + DY):
     band = fillet([(-0.018, y0), (0.042, y0), (0.042, y0 + 0.006), (-0.018, y0 + 0.006)], 0.0015, 2)
     body.prism(band, -0.0125, 0.0125, "Polymer", axis="x", bevel=0.0008, segs=1)
 # Front locking lug and the rear catch lug.
@@ -59,7 +63,7 @@ for sx in (-1, 1):
 follower = Part("static_follower")
 follower.box((0.0084, 0.006, 0.042), (0.0, TOP - 0.0125, 0.013), "Black", bevel=0.0008, segs=1)
 # Floor plate with its tab at the back.
-fp = fillet([(-0.0805, -0.0475), (-0.0215, -0.0695), (-0.019, -0.0645), (-0.0775, -0.0425)],
+fp = fillet([(-0.0805, -0.0625), (-0.0215, -0.0845), (-0.019, -0.0795), (-0.0775, -0.0575)],
             0.0015, 2)
 body.prism(fp, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
 
@@ -68,7 +72,7 @@ body.prism(fp, -0.0128, 0.0128, "Polymer", axis="x", bevel=0.0012, segs=1)
 mouth = Part("cut")
 mouth.box((0.0084, 0.03, 0.05), (0.0, TOP - 0.0125 + 0.015, 0.013), "Polymer")
 side = T(0.0118 - 0.0006, 0, 0) @ RY(math.pi / 2)
-text(mouth, "6Л23", 0.0052, "Polymer", side @ T(0.013, 0.0, 0.0), depth=0.0012)
+text(mouth, "6Л23", 0.0052, "Polymer", side @ T(0.013, DY, 0.0), depth=0.0012)
 body.cut(mouth)
 
 # The top two rounds, staggered, bullets forward. The game shows round N
