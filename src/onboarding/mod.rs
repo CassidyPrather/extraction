@@ -1051,6 +1051,8 @@ fn the_rooks(
     }
 }
 
+/// The practice house's prefab: the one in the yard that always has rats.
+pub const RATS_HOUSE: &str = "house_plank";
 pub const RATS_LINE: &str = "Driver: \"Only rats. Sat quiet, they'd mean nobody's been in.\"";
 
 /// THE HOUSE with something in it: the practice house always has rats
