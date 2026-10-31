@@ -38,6 +38,7 @@
     ),
 
     features: [
+        Plateau(polygon: [(-31.0, 46.0), (-13.0, 46.0), (-13.0, 64.0), (-31.0, 64.0)], blend: 6.0),
         Hill(at: (-48.0, -58.0), radius: 12.0, height: 5.0),
         Plateau(polygon: [(-98.0, -27.5), (-91.0, -27.5), (-91.0, -23.5), (-98.0, -23.5)], height: Some(27.6), blend: 3.0),
         // The whole valley climbs north.
@@ -96,7 +97,7 @@
         // the beck, through Miners' Row and up the switchbacks to the pass.
         (
             name: "Pass road", kind: Asphalt, width: 6.5, smoothing: 20.0,
-            points: [(89.5, 260.6), (92.6, 204.5), (76.9, 140.2), (49.2, 107.2), (20.0, 83.8),
+            points: [(89.5, 260.6), (92.6, 204.5), (76.9, 140.2), (45.0, 120.0), (40.0, 103.7), (35.0, 88.0), (20.0, 83.8),
                      (-12.1, 42.9), (22.9, 14.1), (-6.8, -28.3), (30.0, -60.0), (10.0, -97.5),
                      (19.9, -128.7), (9.6, -190.0), (7.5, -260.3)],
             bridges: [(at: (40.0, 103.7), length: 32.0)],
@@ -244,6 +245,8 @@
     ],
 
     placements: [
+        (prefab: "log_pile", at: (-2.0, 74.0), rot: 38.0),
+        (prefab: "log_pile", at: (79.0, -60.0), rot: 40.0),
         (prefab: "log_pile", at: (64.0, -86.0), rot: 40.0),
         (prefab: "log_pile", at: (147.0, 52.0), rot: 70.0),
         (prefab: "log_pile", at: (157.0, 140.0), rot: 30.0),
@@ -289,7 +292,7 @@
         // Logging camp by the beck.
         (prefab: "sawmill", at: (157.5, 180.5), rot: 0.0),
         (prefab: "log_pile", at: (137.0, 161.6), rot: 80.0),
-        (prefab: "cabin_log", at: (185.5, 168.5), rot: 270.0),
+        (prefab: "cabin_log", at: (185.5, 169.0), rot: 270.0),
         // The sawmill's boiler stack: the one tall thing in the south, so
         // you can find the gate again.
         (prefab: "chimney", at: (179.5, 192.5), rot: 0.0),
@@ -298,7 +301,7 @@
         (prefab: "house_plank", at: (-74.2, 115.5), rot: 0.0),
         // The gatekeeper's cottage on the pass road above the gate.
         (prefab: "house_plank", at: (49.0, 157.7), rot: 90.0),
-        (prefab: "shed", at: (44.4, 151.9), rot: 0.0),
+        (prefab: "shed", at: (55.2, 150.4), rot: 0.0),
         // The road-menders' hut on the switchbacks.
         (prefab: "mast_hut", at: (-30.0, -95.5), rot: 80.0),
         (prefab: "log_pile", at: (-36.0, -105.5), rot: 10.0),
@@ -374,12 +377,11 @@
         (prefab: "wreck_uaz", at: (76.8, 178.8), rot: 90.0),
         (prefab: "wreck_lorry", at: (73.8, 166.7), rot: 157.0),
         (prefab: "wreck_lada", at: (68.8, 145.9), rot: 224.0),
-        (prefab: "wreck_uaz", at: (50.0, 118.0), rot: 291.0),
+        (prefab: "wreck_uaz", at: (56.0, 119.0), rot: 291.0),
         (prefab: "log_pile", at: (36.4, -53.9), rot: 65.0),
         (prefab: "log_pile", at: (96.8, 185.8), rot: 132.0),
         (prefab: "log_pile", at: (85.1, -1.2), rot: 199.0),
         (prefab: "log_pile", at: (100.9, -87.0), rot: 266.0),
-        (prefab: "log_pile", at: (38.4, 120.3), rot: 63.0),
         (prefab: "log_pile", at: (-11.9, 143.1), rot: 241.0),
         (prefab: "log_pile", at: (-48.2, 133.5), rot: 308.0),
         (prefab: "log_pile", at: (32.1, 157.0), rot: 15.0),

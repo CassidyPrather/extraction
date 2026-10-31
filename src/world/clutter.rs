@@ -1600,7 +1600,7 @@ mod tests {
             &map,
             "cabin_log",
             "",
-            &Transform::from_xyz(119.0, 0.0, -138.0),
+            &Transform::from_xyz(89.2, 0.0, -103.5),
             false,
         );
         assert!(mirek.iter().any(|(m, _)| *m == "bed_name_mirek"));
