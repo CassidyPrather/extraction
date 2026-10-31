@@ -117,7 +117,7 @@ fn read_gestures(
             if p.distance(mouth) < OVER_MOUTH {
                 hush = Some(rh.side);
             }
-            let open = input.hand(rh.side).grip < 0.3;
+            let open = !hand.grip_down;
             let up = (hand.world.rotation * Vec3::NEG_Z).dot(Vec3::Y) > 0.6;
             if open && up && p.y > head.translation().y + RAISED {
                 palm = Some(rh.side);

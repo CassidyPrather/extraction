@@ -366,7 +366,7 @@ Bed's dry. My name's on the frame so you know whose it was.
 - Mirek Hajek, burner""", "Burner's note"),
     ],
     "cinder_works": [
-        ("guard_booth", (-102.2, 285.0), "Note", """SOUTH GATE, CINDER - DUTY LOG
+        ("guard_booth", (-61.8, 211.1), "Note", """SOUTH GATE, CINDER - DUTY LOG
 
 19 Feb. Fire in the north-west wood since the 12th. The works still
 burning loads; machines in from the Gate every hour.
@@ -375,7 +375,7 @@ burning loads; machines in from the Gate every hour.
 
 1 Apr. Review postponed. We stand down. The inspector stays: says he'll
 wait for them in the works garage.""", "Gate log"),
-        ("factory_hall", (75.0, -20.0), "Terminal", [
+        ("factory_hall", (56.2, -9.5), "Terminal", [
             """WORKS LOG - R. KRAL
 
 Authority contract: burn all
@@ -399,7 +399,7 @@ KEY-C is down there still.
 He sits in the garage with
 the radio, waiting.""",
         ], "Foreman's terminal"),
-        ("bus_depot", (-20.0, -30.0), "Terminal", [
+        ("bus_depot", (-26.0, -22.5), "Terminal", [
             """CUSTODIAN NETWORK - CINDER
 
 Depot GATE-C: ACTIVE
@@ -417,7 +417,7 @@ P.RUS   recall       KEYS 0/3
 
 No session since 9 JUN.""",
         ], "Garage terminal"),
-        ("house_brick", (-110.0, 175.0), "Note", """Ruben says the ash is from the fire.
+        ("house_brick", (-73.0, 120.6), "Note", """Ruben says the ash is from the fire.
 The fire was out by March. I sweep the step every morning, and every
 morning there's more, and it isn't coming down. It's coming up, out of
 the cracks, worst by the slag heaps.
@@ -426,7 +426,7 @@ The chimney is the best landmark: walk toward it in the fog and you'll
 find the road.
 
 - V.""", "Foreman's house note"),
-        ("house_plank_damaged", (0.0, 150.0), "Note", """Came in on the driver's truck, same as
+        ("house_plank_damaged", (15.0, 103.5), "Note", """Came in on the driver's truck, same as
 you, I expect. He's all right. He won't come past the fence. I asked
 him why once. He said he tried, the first day, and they turned him back,
 and now he's used to it.
@@ -435,7 +435,7 @@ Pull the cord in the back when you want out. Don't be late for the
 Surge.
 
 He keeps a count of us. Don't add to it.""", "House note"),
-        ("ranger_tower", (-178.0, -168.0), "Note", """FIRE LOOKOUT - CINDER, 12 FEB
+        ("ranger_tower", (-126.5, -116.5), "Note", """FIRE LOOKOUT - CINDER, 12 FEB
 
 1540. Black smoke, works yard.
 
@@ -447,7 +447,7 @@ He keeps a count of us. Don't add to it.""", "House note"),
 empty.
 
 Marta answered. Kettle didn't.""", "Lookout log"),
-        ("pump_station", (-172.0, 32.0), "Note", """SLUICE HOUSE - ASH PIT
+        ("pump_station", (-120.4, 22.4), "Note", """SLUICE HOUSE - ASH PIT
 
 Works order: drain the pit to the canal.
 
@@ -455,7 +455,7 @@ The pit won't drain. The ash floats. It drifts against the current, back
 toward the slag heaps.
 
 Sluice shut. I'm not opening it again.""", "Sluice house note"),
-        ("mast_hut", (95.0, -238.0), "Terminal", [
+        ("mast_hut", (72.0, -163.8), "Terminal", [
             """RELAY LOG - MAST C3
 
 Heat damage: housing, cabling.
@@ -467,7 +467,7 @@ Repair requested: 1 APR.
 
 Requests held for uplink.""",
         ], "Mast terminal"),
-        ("cabin_log", (-75.0, -159.0), "Note", """Woodward's book, last page.
+        ("cabin_log", (-51.9, -111.2), "Note", """Woodward's book, last page.
 
 The works' smoke came down the valley at noon and didn't lift. I've wet
 the roof and the woodpile and I'm stopping here.

@@ -68,6 +68,9 @@ pub struct Gun {
     pub magwell: Option<Entity>,
     /// Last trigger value seen, for the trigger-part animation.
     pub trigger: f32,
+    /// The trigger past its break, until it's let back past its reset
+    /// ([`trigger_pulled`]).
+    pub pulled: bool,
     /// The gun's own dice (jams, duds, spread, its kick's yaw), seeded from
     /// what it is and where it first lay ([`gun_seed`]): what happens to
     /// one gun never hangs on how many others are lying about, nor on the
@@ -353,6 +356,7 @@ fn setup_gun_items(
         layout,
         magwell,
         trigger: 0.0,
+        pulled: false,
         dice: Rng::new(seed),
         mass: None,
     });
@@ -1082,6 +1086,13 @@ fn muzzle_clear(spatial: &SpatialQuery, gt: &GlobalTransform, grip: Vec3, muzzle
     }
 }
 
+/// Whether the trigger is pulled, from the finger's reading (0..1) and
+/// whether it was: it breaks and resets as every analog press does
+/// ([`crate::rig::pressed`]).
+pub fn trigger_pulled(was: bool, value: f32) -> bool {
+    crate::rig::pressed(was, value)
+}
+
 fn triggers(
     players: Query<&RigInput, With<Player>>,
     mut guns: Query<(Entity, &mut Gun, Option<&Held>, &GlobalTransform, &Item)>,
@@ -1102,9 +1113,15 @@ fn triggers(
             .and_then(|h| players.get(h.player).ok().map(|i| i.hand(h.side).trigger))
             .unwrap_or(0.0);
         gun.trigger = trigger;
+        gun.pulled = trigger_pulled(gun.pulled, trigger);
         let events = {
-            let Gun { firearm, dice, .. } = &mut *gun;
-            firearm.update(dt, trigger > 0.55, &mut || dice.f32())
+            let Gun {
+                firearm,
+                dice,
+                pulled,
+                ..
+            } = &mut *gun;
+            firearm.update(dt, *pulled, &mut || dice.f32())
         };
         let name = catalog.get(item.kind()).id.clone();
         for ev in &events {
@@ -1456,6 +1473,105 @@ pub fn held_gun<'a>(hands: &'a Query<(&RigHand, &Hand)>, side: crate::rig::Side)
         .iter()
         .find(|(rh, _)| rh.side == side)
         .and_then(|(_, h)| h.holding)
+}
+
+#[cfg(test)]
+mod trigger_tests {
+    use super::*;
+    use crate::items::Catalog;
+    use extraction_core::ammo::Load;
+    use extraction_core::firearm::FireMode;
+
+    /// A finger's reading round `at`, wavering by up to `by` (a controller's
+    /// noise and a hand's tremor), tick by tick: fixed, so a run replays.
+    fn finger(at: f32, by: f32, ticks: usize) -> impl Iterator<Item = f32> {
+        (0..ticks).map(move |k| {
+            let k = k as f32;
+            let w = (k * 1.7).sin() * 0.6 + (k * 4.3).cos() * 0.4;
+            (at + by * w).clamp(0.0, 1.0)
+        })
+    }
+
+    /// Ticks of 1/90 s through the gun, the trigger as `trace` reads, with
+    /// the pulled state as the game keeps it; the tick of each shot.
+    fn shots(g: &mut Firearm, trace: impl Iterator<Item = f32>) -> Vec<usize> {
+        let mut pulled = false;
+        let mut out = Vec::new();
+        let mut never = || 1.0;
+        for (k, v) in trace.enumerate() {
+            pulled = trigger_pulled(pulled, v);
+            let ev = g.update(1.0 / 90.0, pulled, &mut never);
+            if ev.iter().any(|e| matches!(e, FireEvent::Fired { .. })) {
+                out.push(k);
+            }
+        }
+        out
+    }
+
+    /// Every gun, loaded and off safe, fed a trigger the way a finger and a
+    /// controller give it: a finger resting on it (a wavering half
+    /// pressure) never fires; a squeeze, wavering as it's held, is one shot
+    /// on semi and an unbroken burst on auto; let go and squeezed again, it
+    /// fires again.
+    #[test]
+    fn a_wavering_finger_fires_once_per_squeeze() {
+        let catalog = Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            let Some(f) = def.firearm.as_ref() else {
+                continue;
+            };
+            let id = def.id.as_str();
+            for mode in [FireMode::Semi, FireMode::Auto] {
+                if !f.modes.contains(&mode) {
+                    continue;
+                }
+                let mut g = stoppages::loaded(f, Load::Standard);
+                while g.fire_mode() != mode {
+                    g.cycle_mode();
+                }
+                // Resting: 0.38..0.58.
+                let rest = shots(&mut g.clone(), finger(0.48, 0.1, 90));
+                if !rest.is_empty() {
+                    bad.push(format!(
+                        "{id} {mode:?}: a resting finger fired {}",
+                        rest.len()
+                    ));
+                }
+                // Squeezed, wavering 0.5..0.8, for 0.4 s.
+                let held = shots(&mut g.clone(), finger(0.65, 0.15, 36));
+                match mode {
+                    FireMode::Auto => {
+                        let gap = held.windows(2).map(|w| w[1] - w[0]).max().unwrap_or(0);
+                        let cyclic = (90.0 * 60.0 / f.rpm.max(1.0)).ceil() as usize + 1;
+                        if held.len() < 2 || gap > cyclic {
+                            bad.push(format!(
+                                "{id} Auto: the burst broke ({} shots, a gap of {gap} ticks, cyclic {cyclic})",
+                                held.len()
+                            ));
+                        }
+                    }
+                    _ => {
+                        if held.len() != 1 {
+                            bad.push(format!("{id} Semi: one squeeze fired {}", held.len()));
+                        }
+                    }
+                }
+                // Squeezed, let right off, squeezed again (a bolt or a
+                // single barrel worked between: only the repeaters).
+                if f.action == extraction_core::firearm::ActionKind::SemiAuto {
+                    let twice = finger(0.7, 0.05, 20)
+                        .chain(finger(0.1, 0.05, 20))
+                        .chain(finger(0.7, 0.05, 20));
+                    let n = shots(&mut g.clone(), twice).len();
+                    if mode == FireMode::Semi && n != 2 {
+                        bad.push(format!("{id} Semi: two squeezes fired {n}"));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
 }
 
 #[cfg(test)]

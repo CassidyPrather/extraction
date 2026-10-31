@@ -50,7 +50,7 @@ pub const WALK: f32 = 2.4;
 /// The valleys held to the rules below (by `MapDef::name`): Marrow
 /// Creek, the prototype; the others join as they're reworked
 /// (`docs/MAP_DESIGN.md`, "Tight, broken, quiet between").
-pub const TIGHT: &[&str] = &["Marrow Creek"];
+pub const TIGHT: &[&str] = &["Marrow Creek", "Cinder Works"];
 /// No more than this share of the open ground is seen past a walker's
 /// sight along half its bearings ([`OPEN_REACH`])...
 pub const OPEN_MAX: f32 = 0.16;

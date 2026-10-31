@@ -101,10 +101,10 @@ fn on_safe(
 ) {
     let mut squeezed = false;
     for (gun, held) in &guns {
-        let Ok(input) = inputs.get(held.player) else {
+        if !inputs.contains(held.player) {
             continue;
-        };
-        if input.hand(held.side).trigger > 0.8 && gun.firearm.fire_mode() == FireMode::Safe {
+        }
+        if gun.pulled && gun.firearm.fire_mode() == FireMode::Safe {
             squeezed = true;
         }
     }
