@@ -2867,8 +2867,9 @@ fn barn(b: &mut Builder) {
     // By the end window, on the boards (not sunk in them).
     b.crate_box(Vec3::new(5.1, f + 0.015, 6.3), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
-    b.barrel(Vec3::new(5.2, f, 6.9));
-    b.barrel(Vec3::new(4.6, f, 7.2));
+    // Behind the crate, clear of it (the first stood 7 cm into it).
+    b.barrel(Vec3::new(5.25, f, 7.05));
+    b.barrel(Vec3::new(4.55, f, 7.2));
 }
 
 fn sawmill(b: &mut Builder) {
