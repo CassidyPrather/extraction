@@ -501,7 +501,7 @@ fn lean_with_chest(
 
 /// Where each slot sits on the torso (origin mid-chest), how its occupant
 /// is seated, and its snap radius.
-fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
+pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32) {
     use std::f32::consts::FRAC_PI_2;
     match slot {
         SlotKind::Sling => {
