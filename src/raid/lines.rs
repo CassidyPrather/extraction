@@ -6,11 +6,27 @@
 //! Everything here is said on the wrist, which shows three lines of 26:
 //! the tests hold every line to that, with the longest place name in.
 
-/// "the bus depot", "the pass": a place name as it sits in a sentence.
+/// Places that are names on their own, a village or a town: no "the".
+pub const NO_ARTICLE: &[&str] = &["Coldharbour", "New Sallow", "Old Sallow"];
+
+/// A place name as it sits in a sentence: "the bus depot", "the pass",
+/// "the Gate", "the Ash Row", "Coldharbour". A common name ("Bus depot")
+/// drops its capital; a proper one (a capital past its first word, or
+/// written "The Gate") keeps every capital it has.
 pub fn the(name: &str) -> String {
-    let rest = name.strip_prefix("The ").unwrap_or(name);
-    let mut c = rest.chars();
+    if NO_ARTICLE.contains(&name) {
+        return name.to_string();
+    }
+    if let Some(rest) = name.strip_prefix("The ") {
+        return format!("the {rest}");
+    }
+    let proper = name
+        .split_whitespace()
+        .skip(1)
+        .any(|w| w.starts_with(char::is_uppercase));
+    let mut c = name.chars();
     match c.next() {
+        Some(_) if proper => format!("the {name}"),
         Some(f) => format!("the {}{}", f.to_lowercase(), c.as_str()),
         None => "the gate".into(),
     }
@@ -738,6 +754,9 @@ mod tests {
     fn places_read_as_places() {
         assert_eq!(the("The pass"), "the pass");
         assert_eq!(the("Bus depot"), "the bus depot");
+        assert_eq!(the("Ash Row"), "the Ash Row");
+        assert_eq!(the("The Gate"), "the Gate");
+        assert_eq!(the("Coldharbour"), "Coldharbour");
         assert_eq!(
             fill_time(
                 &fill("Truck: \"{rv}, {b}. {t}.\"", "The pass", 0.0, "east, 300 m"),
@@ -765,5 +784,54 @@ mod tests {
         assert!(said.iter().any(|l| SMALL_TALK.contains(l)));
         assert!(COMING_HOME.windows(2).all(|w| w[0].0 < w[1].0));
         assert!(COMING_HOME_QUIET.contains(&coming_home(3, true)));
+    }
+
+    /// Every place in every valley reads right in a line: its proper
+    /// names keep their capitals ("the Ash Row", never "the ash Row"),
+    /// a common name drops only its first ("the bus depot"), and a line
+    /// leading with it starts with a capital.
+    #[test]
+    fn every_place_keeps_its_capitals() {
+        use extraction_core::map::{MapDef, VALLEYS};
+        let mut names: Vec<String> = Vec::new();
+        for (_, text) in VALLEYS {
+            let map = MapDef::from_ron(text).unwrap();
+            for m in &map.markers {
+                if m.kind.names_a_place() && !m.name.is_empty() && !names.contains(&m.name) {
+                    names.push(m.name.clone());
+                }
+            }
+        }
+        for bare in NO_ARTICLE {
+            assert!(names.iter().any(|n| n == bare), "{bare} isn't a place");
+        }
+        for name in &names {
+            let said = the(name);
+            let core = name.strip_prefix("The ").unwrap_or(name);
+            let words: Vec<&str> = core.split_whitespace().collect();
+            // Every capital past the first letter is kept as written.
+            assert!(
+                said.ends_with(&core[core.chars().next().unwrap().len_utf8()..]),
+                "{name:?} -> {said:?}"
+            );
+            let proper = name.starts_with("The ")
+                || NO_ARTICLE.contains(&name.as_str())
+                || words[1..].iter().any(|w| w.starts_with(char::is_uppercase));
+            if proper {
+                assert!(said.ends_with(core), "{name:?} loses a capital: {said:?}");
+            } else {
+                assert!(
+                    said.starts_with("the ") && said[4..].starts_with(char::is_lowercase),
+                    "{name:?} -> {said:?}"
+                );
+            }
+            let lead = fill("Truck: \"{rv}, {b}.\"", name, 0.0, "east");
+            assert!(
+                lead.starts_with("Truck: \"") && lead[8..].starts_with(char::is_uppercase),
+                "{lead}"
+            );
+            let mid = fill("Truck: \"At {rv}.\"", name, 0.0, "");
+            assert!(mid.contains(&said), "{mid}");
+        }
     }
 }
