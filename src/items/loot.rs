@@ -65,10 +65,12 @@ pub fn roll_zone_loot(world: &mut World) {
 pub const ROLL_STEPS: usize = 5;
 
 /// Which raid of a career this is, for the loot's `from_raid` (the first is
-/// raid 0: raids set off before it, every valley's), or `None` for a sim or
-/// a run with no career (every entry rolls, as before).
+/// raid 0: raids set off before it, every valley's), or `None` with no
+/// career in play: a sim, a test's world, a gallery (every entry rolls, as
+/// before; a test app counted as a career's raid 0 rolled other loot, and
+/// the gate failed on two bugs that loot showed up).
 fn career_raid(world: &World, opts: &LaunchOptions) -> Option<u32> {
-    if opts.sim_run.is_some() {
+    if opts.sim_run.is_some() || crate::persist::career_path(opts).is_none() {
         return None;
     }
     let p = world.get_resource::<crate::progression::Progression>()?;
