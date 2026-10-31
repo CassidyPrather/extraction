@@ -395,10 +395,18 @@ enum Leg {
 }
 
 /// `--job KIND`: the career's job, so a kind that seldom comes up on the
-/// ladder runs live (the place it's put is the game's own).
-pub fn seeded_job(kind: &str) -> Option<Job> {
+/// ladder runs live (the place it's put is the game's own). `scout` is the
+/// first job the valley `here` deals a new career: a first hour in a valley
+/// the ladder only reaches later.
+pub fn seeded_job(kind: &str, here: &str) -> Option<Job> {
     let map = "marrow_creek".to_owned();
     Some(match kind {
+        "scout" => {
+            let (id, def) = crate::progression::valleys()
+                .iter()
+                .find(|(id, _)| *id == here)?;
+            return extraction_core::progression::first_job(id, def);
+        }
         "recover" => Job::Recover {
             map,
             region: "Village".into(),
@@ -432,7 +440,7 @@ pub(super) fn seed_job(
         return;
     }
     *done = true;
-    match seeded_job(kind) {
+    match seeded_job(kind, &opts.map) {
         Some(job) => {
             info!("first raid: seeded job {job:?}");
             progression.0.job = Some(job);
@@ -796,7 +804,9 @@ pub(super) fn direct_raid(
                     f.flee_until = 0.0;
                 }
                 state.low_until = now + 30.0;
-                vec![Task::Wait(30.0)]
+                // (Under the bot's 30 s give-up, or a frame past it is a
+                // failure.)
+                vec![Task::Wait(29.0)]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
