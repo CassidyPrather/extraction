@@ -366,7 +366,7 @@ Bed's dry. My name's on the frame so you know whose it was.
 - Mirek Hajek, burner""", "Burner's note"),
     ],
     "cinder_works": [
-        ("guard_booth", (-64.3, 211.1), "Note", """SOUTH GATE, CINDER - DUTY LOG
+        ("guard_booth", (-61.8, 211.1), "Note", """SOUTH GATE, CINDER - DUTY LOG
 
 19 Feb. Fire in the north-west wood since the 12th. The works still
 burning loads; machines in from the Gate every hour.
