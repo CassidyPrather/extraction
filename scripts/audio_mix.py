@@ -45,7 +45,7 @@ SIGNAL_OVER_BED = 10.0   # LU an unplaced signal should clear the loudest bed by
 RANGE_MOST = {"walker.step": 90,
               # a minelayer is heard as you near it (it turns tail at 30 m),
               # not across the valley
-              "minelayer.grind": 75}
+              "minelayer.grind": 75, "minelayer.hiss": 75}
 
 RANGE_TARGETS = {
     "ug.cage_bell": (35, 20), "ug.klaxon": (50, 30), "crawler.step": (15, 8), "anomaly.frost": (4, 2),
@@ -63,6 +63,9 @@ RANGE_TARGETS = {
     # a minelayer crawling (audio_machines::grind_sounds)
     # (a quiet crawler: a downpour hides it by 10 m)
     "minelayer.grind": (30, 8),
+    # and stopping to lay (audio_machines::hiss_sounds): the warning (as
+    # quiet; heard only 5 m off in a downpour)
+    "minelayer.hiss": (30, 5),
     # the machines' plan (squad::CHIRP_REACH 40 m) and a relay filing you
     "squad.pin": (40, 20), "squad.flank": (40, 20), "squad.cutoff": (40, 20),
     "squad.spot": (40, 20), "squad.call": (40, 20), "relay.filed": (30, 15),

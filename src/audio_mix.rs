@@ -314,6 +314,8 @@ pub const MIX: &[Cue] = &[
     cue!("mine.flee", "machines/servo", -8.0, 75.0, 10.0, Detail, 5.0),
     // A minelayer crawling (`audio_machines::grind_sounds`), heard to 30 m.
     cue!("minelayer.grind", "drag/metal", -22.0, 75.0, 15.0, Signal, 5.0),
+    // Its chute charging as it stops to lay (`audio_machines::hiss_sounds`).
+    cue!("minelayer.hiss", "machines/chute_hiss", -23.0, 75.0, 10.0, Signal, 5.0),
     cue!("mender.called", "machines/servo", -10.0, 70.0, 8.0, Detail, 4.0),
     cue!("mender.weld", "device/crackle", -5.0, 85.0, 10.0, Action, 5.0),
     cue!("mender.mended", "machines/clank", -4.0, 80.0, 8.0, Detail, 4.0),

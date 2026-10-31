@@ -923,6 +923,18 @@ groan and a hit; dazzled, its sensor stuttering and its lock clicking
 out; stunned, its servos winding down; hurt by what makes its own sound,
 a short distress note. Deafened by a hush, nothing: the hush is heard.
 
+A minelayer crawling grinds, its treads labouring, louder and quicker
+the faster it goes, silent standing (`audio_machines::grind_sounds`,
+`minelayer.grind`). Stopped over a spot to lay, its chute charges with a
+hiss for the stop's two seconds before the mine drops with a chunk
+(`hiss_sounds` on `Minelayer::laying_in`, `minelayer.hiss`, then
+`mine.laid`). It's a breathy, low hiss, so a shower doesn't wash it out.
+Both are heard as you near it, 30 m in calm and at most 75, but a
+downpour hides them within 10 m (`RANGE_TARGETS`, `RANGE_MOST`). A
+grappler's line on you strains at its winch the whole time it holds,
+harder near the end (`grapple.winch`). Let go, it whips slack with a
+clank (`grapple.slack`, `grapple.clank`).
+
 ## Underground's sites
 
 The signature sites under the map (`world::underground`, `::workings`,
