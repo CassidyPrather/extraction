@@ -260,13 +260,15 @@ radii[2] = 0.0
 stock_prof = fillet(stock_prof, radii, 4)
 
 
-def stock_w(z, y):
-    k = 0.0168 + (z - 0.02) / 0.28 * 0.0052 - max(0.0, -0.06 - y) * 0.03
-    return (-k, k)
+def stock_w(z, yc, h):
+    # Half widths at the belly (narrowing into the foot) and the comb.
+    k = 0.0168 + (z - 0.02) / 0.28 * 0.0052
+    return (k - max(0.0, -0.06 - (yc - h)) * 0.03, k * 0.85)
 
 
+# Rounded across (as the AK's): the extruded outline read as a plank.
 stock = Part("stock")
-stock.prism(stock_prof, 0, 0, "Wood", axis="x", bevel=0.008, segs=4, width=stock_w)
+stock.stock(stock_prof, 0.0192, 0.2958, "Wood", stock_w, stations=90, segs=28, power=2.8)
 butt = Part("butt")
 butt_prof = fillet([(0.2955, 0.0425), (0.306, 0.0425), (0.306, -0.1175), (0.2955, -0.1175)],
                    [0.002, 0.004, 0.004, 0.002], 2)
@@ -277,6 +279,9 @@ butt.cyl(0.0022, 0.306, 0.3085, "Steel", segs=8, xf=T(0, -0.104, 0))
 # Sling loop on the left of the stock, ahead of the foot.
 loop = catmull([(0.205, -0.054), (0.211, -0.04), (0.225, -0.04), (0.231, -0.054)], 3, closed=False)
 butt.sweep(loop, section_rect(0.003, 0.003, 0.0008), "Steel", xf=T(-0.0205, -0.008, 0.0))
+# Its two studs into the wood, where the rounded stock falls away under it.
+for z in (0.205, 0.231):
+    butt.cyl(0.0016, -0.022, -0.010, "Steel", segs=10, xf=T(0, -0.062, z) @ RY(math.pi / 2))
 
 # --- Moving parts -------------------------------------------------------------------------
 carrier = Part("bolt_carrier", origin=(0.0, 0.07, -0.14))

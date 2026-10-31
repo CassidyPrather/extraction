@@ -310,7 +310,8 @@ fn gallery(
                     }
                     _ => {
                         let at = eye + flat * dist.unwrap_or(4.0);
-                        let at = Vec3::new(at.x, zone.ground(at.x, at.z) + 0.45, at.z);
+                        let y = crate::robots::dirigible::pod_rest(|x, z| zone.ground(x, z), at);
+                        let at = Vec3::new(at.x, y, at.z);
                         commands.spawn((
                             crate::robots::dirigible::CargoPod {
                                 carrier: Entity::PLACEHOLDER,

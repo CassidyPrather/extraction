@@ -1,0 +1,5 @@
+before b2e75828
+after  0b59d5c8
+ak_sights | Weapon feel | From the cheek: the eye over the rear notch onto the post (before, under the notch plate) | --camera 40,0,262,0,0 --gallery sights:ak74
+ak_receiver | Weapon feel | Unchanged but for the taller front post | --camera 40,0,262,0,0 --gallery ak74,25,0.4,0.05
+ak_front | Weapon feel | The front post 2.3 mm taller | --camera 40,0,262,0,0 --gallery ak74,25,0.4,-0.35

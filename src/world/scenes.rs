@@ -516,6 +516,19 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
                 }
             }
         }
+        // A model's floor is its origin: its boxes (colliders, tilted to
+        // follow a body) can dip below what's drawn, and the drawn remains
+        // stood 10 cm over the ground on them. Their footprint, at its floor.
+        if let Some(y) = geo.props[d]
+            .models
+            .iter()
+            .map(|(_, at)| at.translation.y)
+            .reduce(f32::min)
+        {
+            for f in &mut feet {
+                f.y = y;
+            }
+        }
         if feet.is_empty() {
             for (_, at) in &geo.props[d].models {
                 for (x, z) in [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)] {

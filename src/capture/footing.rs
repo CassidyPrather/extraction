@@ -81,6 +81,8 @@ pub fn exempt(name: &str) -> bool {
         "stove_pipe_rack",
         "drying_line",
         "cloth_pinned",
+        // Nailed on its bed's foot (Mirek's name), not standing.
+        "bed_name_",
         "med_cabinet",
         // Held by its gate post.
         "barrier_arm",
@@ -841,18 +843,10 @@ mod tests {
         // Rime's quarantine gate stands on a slope; its posts' footings go
         // 0.4 m into the high side (Map design: level its spot).
         "quarantine_gate: gate_post",
-        // What the first rounds left (Models, next round): a ledger with
-        // no table under it in the pump stations, lying remains in three
-        // scenes, a bed and a tub a little high, a barrel on the ropeway
-        // station's own floor.
-        "pump_station (gauge_house): ledger_open",
-        "pump_station: ledger_open",
-        "scene The shelter door: remains_lying",
-        "scene Last fire in the dead wood: remains_lying",
-        "scene Farm barricade: remains_lying",
-        "cabin_log: bed_name_mirek",
+        // By design: a tub's wheel flanges hang inside the rails, 3 cm
+        // below the treads on the rails' heads, so its lowest points are
+        // over the floor between them.
         "ore_mill (ore_mill): mine_tub",
-        "ropeway_station: barrel",
     ];
 }
 

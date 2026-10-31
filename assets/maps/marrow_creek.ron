@@ -198,7 +198,7 @@
          mix: [(Spruce, 0.55), (Birch, 0.3), (Pine, 0.15)],
          polygon: [(144.1, 144.1), (176.0, 144.1), (176.0, -144.1), (165.8, -156.6)]),
         (
-            name: "Western spruce", seed: 1, density: 1.6, undergrowth: 0.6,
+            name: "Western spruce", seed: 1, density: 1.5, undergrowth: 0.6,
             mix: [(Spruce, 0.7), (Pine, 0.2), (Birch, 0.08), (Snag, 0.02)],
             polygon: [(-165.0, 165.0), (-33.0, 165.0), (-22.0, 110.0), (-40.3, 71.6), (-34.0, 57.7),
                       (-60.0, 20.1), (-150.0, 20.1), (-189.4, 34.3)],

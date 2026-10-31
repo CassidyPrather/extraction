@@ -1843,7 +1843,9 @@ mod after_a_jump {
         let _counting = counted();
         let mut app = client_threads("marrow_creek", "clearing", None);
         settle(&mut app);
-        // A stand of trees 250-400 m from the camera.
+        // The farthest stand of trees from the camera, whatever the
+        // valley's size: a jump well past what streams in round it (Marrow,
+        // pulled in, is 388 m across).
         let (from, target) = {
             let w = app.world_mut();
             let cam = w
@@ -1859,8 +1861,13 @@ mod after_a_jump {
                 .map(|k| &grid.cells[k])
                 .filter(|trees| trees.len() >= 6)
                 .map(|trees| trees[0].2)
-                .find(|p| (250.0..400.0).contains(&p.distance(cam)))
-                .expect("a stand of trees 250-400 m off");
+                .max_by(|a, b| a.distance(cam).total_cmp(&b.distance(cam)))
+                .expect("a stand of trees");
+            assert!(
+                p.distance(cam) > 150.0,
+                "a stand far off: {:.0} m",
+                p.distance(cam)
+            );
             (cam, p)
         };
         let zone = app.world().resource::<crate::world::Zone>().clone();
