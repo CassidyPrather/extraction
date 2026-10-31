@@ -152,6 +152,15 @@ Shared tools for the next ones (in `render::budget`):
   (a `VisibilityRange` can't do this: the cascades use the camera's).
 - Items get a range from their catalogue size by themselves.
 
+Tried and left (31 October): card outlines cut band by band (twelve
+bands, 26 points) instead of the 8-sided hull. The polygon follows a
+sprig's notches, so Marrow's spruce view went 64.5M > 53.3M fragments
+both eyes, with the same picture. But a card became 24 triangles where it
+was 6, and cards within 30 m draw into the sun's cascades too: the
+spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
+the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
+one or two trees within 10 m.
+
 ## Where it stands
 
 Without the game's own textures (`scripts/fetch_assets.py` not run) the
