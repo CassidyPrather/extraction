@@ -86,9 +86,7 @@ BEDS = {
 # Masked, and not a gain's to fix (the sample or its filter is wrong for
 # it; with Audio, the mix's owners): reported, not failed. One that
 # clears is flagged until it's taken off.
-KNOWN = {
-    "Nagant cylinder turned": "guns/dry_fire at x1.6 and -10 dB: a quiet ratchet by design, 6 dB short in rain",
-}
+KNOWN = {}
 CLEAR = gs.CLEAR
 LISTEN = gs.LISTEN
 AT = 0.5  # s: the action lands with the bed's first shot, its worst
