@@ -623,6 +623,14 @@ impl bevy::pbr::MaterialExtension for ImpostorCut {
     fn fragment_shader() -> bevy::shader::ShaderRef {
         "shaders/impostor.wgsl".into()
     }
+
+    fn prepass_vertex_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/impostor.wgsl")
+    }
+
+    fn prepass_fragment_shader() -> bevy::shader::ShaderRef {
+        crate::render::prepass::shader("shaders/impostor.wgsl")
+    }
 }
 
 pub fn material(image: Handle<Image>, tint: Color) -> ImpostorMaterial {

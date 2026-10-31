@@ -7,11 +7,32 @@
 
 #import bevy_pbr::{
     mesh_functions,
-    forward_io::{Vertex, VertexOutput, FragmentOutput},
     view_transformations::position_world_to_clip,
-    mesh_view_bindings::{globals, view},
+    mesh_view_bindings::view,
+}
+// Also the depth prepass's, when `EXTRACTION_PREPASS=1` asks for one
+// (`render::prepass`): the cards moved and cut as they're drawn, so the
+// depth matches the picture. Its view group has the globals at 1.
+#ifdef PREPASS_PIPELINE
+#import bevy_pbr::{
+    prepass_io::{Vertex, VertexOutput, FragmentOutput},
+    pbr_prepass_functions::prepass_alpha_discard,
+}
+#import bevy_render::globals::Globals
+@group(0) @binding(1) var<uniform> globals: Globals;
+#else
+#import bevy_pbr::{
+    forward_io::{Vertex, VertexOutput, FragmentOutput},
+    mesh_view_bindings::globals,
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::{alpha_discard, apply_pbr_lighting, main_pass_post_lighting_processing},
+}
+#endif
+
+// Whether this is the sun's view (a shadow cascade: orthographic), where
+// nothing is cut by its distance from the eye.
+fn sun_view() -> bool {
+    return view.clip_from_view[3][3] == 1.0;
 }
 
 // Where the cards hand over to the impostor: `impostors::NEAR` and
@@ -118,9 +139,15 @@ fn vertex(
     ).xyz;
     centre = centre + offset(centre, card_centre, world_from_local[3].xyz);
     let left = smoothstep(0.3, 0.5, distance(centre, view.world_position.xyz));
-    out.world_position = vec4<f32>(mix(centre, out.world_position.xyz, left), 1.0);
+    if (!sun_view()) {
+        out.world_position = vec4<f32>(mix(centre, out.world_position.xyz, left), 1.0);
+    }
 #endif
     out.position = position_world_to_clip(out.world_position.xyz);
+#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+    out.unclipped_depth = out.position.z;
+    out.position.z = min(out.position.z, 1.0);
+#endif
 #endif
 
 #ifdef VERTEX_UVS_A
@@ -160,6 +187,33 @@ fn lod_dither(px: vec2<f32>) -> f32 {
     return fract(52.9829189 * fract(dot(floor(px), vec2<f32>(0.06711056, 0.00583715))));
 }
 
+// (The dither is written out in each entry point: a `discard` in a
+// function of our own, called from the fragment, dropped cards that should
+// have drawn, on the software renderer at least.)
+#ifdef PREPASS_PIPELINE
+#ifdef PREPASS_FRAGMENT
+@fragment
+fn fragment(in: VertexOutput) -> FragmentOutput {
+#else
+@fragment
+fn fragment(in: VertexOutput) {
+#endif
+    // Not in the sun's view: a shadow's cards aren't cut by distance.
+    let base = mesh_functions::get_world_from_local(in.instance_index)[3].xz;
+    let f = smoothstep(LOD_NEAR - LOD_BAND, LOD_NEAR + LOD_BAND, distance(view.world_position.xz, base));
+    if (!sun_view() && lod_dither(in.position.xy) < f) {
+        discard;
+    }
+    prepass_alpha_discard(in);
+#ifdef PREPASS_FRAGMENT
+    var out: FragmentOutput;
+#ifdef UNCLIPPED_DEPTH_ORTHO_EMULATION
+    out.frag_depth = in.unclipped_depth;
+#endif
+    return out;
+#endif
+}
+#else
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> FragmentOutput {
 #ifdef VERTEX_OUTPUT_INSTANCE_INDEX
@@ -178,3 +232,4 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     return out;
 }
+#endif
