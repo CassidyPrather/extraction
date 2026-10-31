@@ -1305,6 +1305,9 @@ pub(super) fn direct_raid(
                     state.told_back = true;
                     return;
                 };
+                // Up to it, not into it (a named place is often a building:
+                // in at its door was a walk the bot got stuck on).
+                let off = outside(&world, &view, short, off);
                 tasks.extend(route(&world, &view, from, short));
                 tasks.extend(by_road(&world, &view, short, off, at));
                 state.wandered_at = Some(now);
@@ -2016,6 +2019,26 @@ fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2, keep_off: Vec2
         at = p;
     }
     t
+}
+
+/// `to`, or if that's inside a building, a couple of metres short of its
+/// wall on the way from `from`.
+fn outside(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec2 {
+    let Some(en) = view.entrances.as_deref() else {
+        return to;
+    };
+    let inside = |p: Vec2| {
+        en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y)
+            .is_some()
+    };
+    if !inside(to) {
+        return to;
+    }
+    let back = (from - to).normalize_or_zero();
+    (1..60)
+        .map(|k| to + back * k as f32)
+        .find(|p| !inside(*p))
+        .map_or(to, |p| p + back * 2.0)
 }
 
 /// A blocked stretch this long on the walking grid is something solid to go
