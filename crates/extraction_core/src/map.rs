@@ -965,6 +965,21 @@ pub fn under_stepped(map: &MapDef, q: P2) -> bool {
     })
 }
 
+/// A prefab's ground contacts where they're a few posts or blocks with
+/// open ground between (a road through a gate), in its own space: each
+/// one's middle and half extents, x and z. The whole footprint can't take a
+/// pad ([`prefab_wants_pad`]: it would terrace the road), so the terrain
+/// levels a small one under each contact at the prefab's footing
+/// (`terrain::Heightmap::level_posts`).
+pub fn prefab_post_pads(id: &str) -> &'static [([f32; 2], [f32; 2])] {
+    match id {
+        // Each side's road block (x 5.2, 1.4 m square) and the gate post
+        // beside it (x 4.3): `buildings::quarantine_gate`.
+        "quarantine_gate" => &[([-5.04, 0.0], [0.87, 0.7]), ([5.04, 0.0], [0.87, 0.7])],
+        _ => &[],
+    }
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
