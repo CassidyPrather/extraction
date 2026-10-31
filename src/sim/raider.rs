@@ -1080,7 +1080,7 @@ pub fn think(
             if r.stage == Stage::Done {
                 continue;
             }
-            spot_anomalies(&mut bot, r, &scene, here);
+            spot_anomalies(&mut bot, r, &scene, here, pos);
             spot_sealed(&mut bot, r, &scene, &mut log);
             spot_held(&mut bot, r, &scene);
             sneak(
@@ -2339,7 +2339,43 @@ fn fight_on(
 /// up to a waypoint's reach (1.2 m), and still keeps out.
 const BURNED_BERTH: f32 = 2.0;
 
-fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
+/// The building's plan `pos` is in, if any (inside its walls, or down a
+/// site).
+fn plan_at(plans: &[BuildingPlan], pos: Vec3) -> Option<usize> {
+    plans
+        .iter()
+        .position(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)))
+}
+
+/// Walks no nearer an anomaly at `at` than `berth`: each waypoint inside
+/// it moved to the ring outside, on the side of `here`. Out of doors only:
+/// indoors the route goes by the building's plan, and a ring point
+/// straight out from the anomaly lies through a wall as often as not (a
+/// Lift in the drift out of Kettle mine's refuge moved the walk out on to
+/// a point behind the refuge's wall, and the raider stuck at it till the
+/// raid ran out: Kettle sims, 31 October). There the plan's way is the
+/// only way, and it was walked through once already.
+fn keep_off(
+    tasks: &mut std::collections::VecDeque<Task>,
+    indoors: bool,
+    here: Vec2,
+    at: Vec2,
+    berth: f32,
+) {
+    if indoors {
+        return;
+    }
+    let ring = at + (here - at).normalize_or(Vec2::X) * (berth + 0.5);
+    for t in tasks.iter_mut() {
+        if let Task::WalkTo { to, .. } = t
+            && to.distance(at) < berth
+        {
+            *to = ring;
+        }
+    }
+}
+
+fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2, pos: Vec3) {
     // In one it didn't mean to walk into: out the way it came, and never
     // that one again, reckless or not (a dive ends when it leaves).
     if !r.diving {
@@ -2369,20 +2405,14 @@ fn spot_anomalies(bot: &mut Bot, r: &mut Raider, scene: &Scene, here: Vec2) {
     }
     // Whatever it was going to (often the thing it was caught on the way
     // to), it goes no nearer one that's caught it than the ring outside.
+    let indoors = plan_at(&r.plans, pos).is_some();
     for (e, a, gt) in &scene.anomalies {
         if !r.burned.contains(&e) {
             continue;
         }
         let at = gt.translation().xz();
         let danger = a.kind.danger_radius(a.radius);
-        let ring = at + (here - at).normalize_or(Vec2::X) * (danger + BURNED_BERTH + 0.5);
-        for t in bot.tasks.iter_mut() {
-            if let Task::WalkTo { to, .. } = t {
-                if to.distance(at) < danger + BURNED_BERTH {
-                    *to = ring;
-                }
-            }
-        }
+        keep_off(&mut bot.tasks, indoors, here, at, danger + BURNED_BERTH);
     }
     let mut new = Vec::new();
     for (e, a, gt) in &scene.anomalies {
@@ -3618,10 +3648,7 @@ fn give_up_waypoint(
     wide: bool,
 ) {
     let scale = if wide { 2.5 } else { 1.0 };
-    let inside = plans
-        .iter_mut()
-        .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
-    if let Some(plan) = inside {
+    if let Some(plan) = plan_at(plans, pos).map(|k| &mut plans[k]) {
         let at = plan.to_local(Vec3::new(to.x, pos.y, to.y)).xz();
         let radius = STUCK_BLOCK_INDOORS * scale;
         let by_door = plan
@@ -4486,6 +4513,74 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
 mod run_tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Keeping off an anomaly that's caught it moves no waypoint of an
+    /// indoor route through a wall: the Lift in the drift out of Kettle
+    /// mine's refuge moved the walk out on to a point behind the refuge's
+    /// wall (seed 8, 31 October: stuck there till the raid ran out). Out of
+    /// doors, the waypoint goes round to the ring.
+    #[test]
+    fn keeping_off_an_anomaly_indoors_keeps_to_the_plan() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let mine = &plans[plans.iter().position(|p| p.name == "mine_kettle").unwrap()];
+        // From the refuge's table, out by its door and along the drift,
+        // past the Lift at (-88, 24) that caught it on the way in.
+        let from = Vec3::new(-96.4, 15.5, 30.8);
+        let exit = mine.to_local(Vec3::new(-79.875, from.y, 24.375)).xz();
+        let mut tasks: std::collections::VecDeque<Task> =
+            indoor_route(mine, from, exit, 0.35).unwrap().into();
+        let (lift, berth) = (Vec2::new(-88.0, 24.0), 3.0);
+        assert!(
+            tasks
+                .iter()
+                .any(|t| matches!(t, Task::WalkTo { to, .. } if to.distance(lift) < berth)),
+            "the route doesn't pass the Lift"
+        );
+        keep_off(
+            &mut tasks,
+            plan_at(&plans, from).is_some(),
+            from.xz(),
+            lift,
+            berth,
+        );
+        let mut at = from.xz();
+        for t in &tasks {
+            let Task::WalkTo { to, .. } = t else { continue };
+            let n = (at.distance(*to) / 0.1).ceil() as usize;
+            for k in 0..=n {
+                let p = at.lerp(*to, k as f32 / n.max(1) as f32);
+                let l = mine.to_local(Vec3::new(p.x, from.y, p.y)).xz();
+                assert!(
+                    mine.grid.walkable(l.to_array()),
+                    "the leg {at:.2?} -> {to:.2?} goes through {p:.2?}, not the mine's floor"
+                );
+            }
+            at = *to;
+        }
+        // Out of doors, round to the ring.
+        let mut out: std::collections::VecDeque<Task> = [Task::WalkTo {
+            to: lift,
+            within: 0.6,
+        }]
+        .into();
+        keep_off(&mut out, false, lift + Vec2::new(10.0, 0.0), lift, berth);
+        assert!(matches!(out[0], Task::WalkTo { to, .. } if to.distance(lift) > berth));
+    }
 
     /// A waypoint a raider keeps sticking short of indoors is given up in
     /// the plan it routes by, not only the open ground's grid (a Sorter's
