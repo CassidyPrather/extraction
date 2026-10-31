@@ -650,6 +650,10 @@ pub(super) struct RaidView<'w, 's> {
 /// before giving it up. Shares, not metres: Marrow's warp brought the job
 /// from 188 m to 103 m, and 130 m short of it was behind the gate.
 const WANDER_SHARE: f32 = 0.6;
+/// The place it wanders to is this much past the nudge's distance (m): on
+/// Cinder the nearest past 1.3 times the way was short of it, and nothing
+/// was said.
+const WANDER_MARGIN: f32 = 25.0;
 const WANDER_OFF: f32 = 1.3;
 const WANDER_WAIT: f32 = 240.0;
 
@@ -1298,7 +1302,16 @@ pub(super) fn direct_raid(
                     .map
                     .markers_of(&MarkerKind::Poi)
                     .map(|m| Vec2::from(m.at))
-                    .filter(|m| m.distance(at) > way * WANDER_OFF)
+                    // Far enough out that the driver would say (past where
+                    // it turned by the nudge's distance, and a margin).
+                    .filter(|m| {
+                        m.distance(at)
+                            > (way * WANDER_OFF).max(
+                                short.distance(at)
+                                    + extraction_core::progression::NUDGE_AWAY
+                                    + WANDER_MARGIN,
+                            )
+                    })
                     .min_by(|a, b| a.distance(short).total_cmp(&b.distance(short)))
                 else {
                     state.wandered_at = Some(now);
