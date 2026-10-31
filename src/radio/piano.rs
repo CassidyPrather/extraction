@@ -209,7 +209,11 @@ pub(super) fn play_pianos(
                     continue;
                 };
                 let h = input.hand(rh.side);
-                if h.tracked && h.trigger < 0.5 && hand.holding.is_none() && hand.handle.is_none() {
+                if h.tracked
+                    && !hand.trigger_down
+                    && hand.holding.is_none()
+                    && hand.handle.is_none()
+                {
                     tips.push(((player, i), hand.world.transform_point(FINGERTIP)));
                 }
             }
