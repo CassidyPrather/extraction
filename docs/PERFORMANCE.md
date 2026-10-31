@@ -143,6 +143,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 | ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
+| Breakable parts (shutters, boards, crates, panels, sash leaves, drawers) merged per 16 m cell per material while nothing's near or changing them; the cell is parts again the frame a hand, tool, hit, swing, pane or the Surge reaches one (`EXTRACTION_PART_REST=0`: off) | `render::part_rest` | One eye: Marrow gate 1013 > 591 draws, village 1032 > 648, spruce 940 > 661, aerial 1038 > 806; triangles the same. In a real render, Marrow's gate view merged 1132 part meshes into 224 before the shot, and the picture is the same |
 
 Shared tools for the next ones (in `render::budget`):
 
@@ -668,6 +669,36 @@ Rime Fell is now the slowest, and the preload decides it.
 
 What's left is the 213 models decoding. The relaunch around it is 0.9 s
 to close and about 0.2 s to start again.
+
+#### The ceiling, in units
+
+The ceiling used to be absolute seconds, and it failed the Verifier's
+runs on a container about 1.3x slower than this one. It is now in units
+of `perf::fight::reference_load_ms` (`first_contact::LOAD_UNITS`),
+timed just before each valley loads (median of 9). `LOAD_SLACK` still
+scales it on top.
+
+The yardstick is a fixed piece of work, timed two ways:
+
+- on one thread;
+- shared over every thread.
+
+It takes the geometric mean of the two, because a load is part serial,
+part spread over the task pools. Held to two cores of four
+(`taskset -c 0,1`), the every-thread timing doubled but the loads grew
+only 1.3-1.5x. Units against the every-thread timing alone fell by a
+quarter there. Against the mean, the five valleys held within 8%:
+
+| valley | 4 cores | 2 cores | ceiling |
+| - | - | - | - |
+| Marrow Creek | 231 | 242 | 320 |
+| Kettle Pass | 307 | 284 | 400 |
+| Cinder Works | 206 | 213 | 280 |
+| Sallow Reservoir | 254 | 255 | 330 |
+| Rime Fell | 316 | 291 | 410 |
+
+The gauge prints each valley's units and reference, so a slow run says
+whether the machine was slow or the valley heavier.
 
 ## Textures
 

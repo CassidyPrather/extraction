@@ -33,6 +33,7 @@ pub mod memorial;
 pub mod offering;
 #[cfg(test)]
 pub mod overdraw;
+pub mod part_rest;
 pub mod prepass;
 pub mod props;
 pub mod pry_cue;
@@ -109,6 +110,7 @@ impl Plugin for RenderPlugin {
         .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
+        .add_plugins(part_rest::PartRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)

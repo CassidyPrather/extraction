@@ -577,6 +577,9 @@ pub struct Onboarding {
     /// The rooks by the truck have gone up, and you've been told why that
     /// matters (`the_rooks`).
     pub rooks: bool,
+    /// The house's rats have run, and you've been told what they mean
+    /// (`the_rats`).
+    pub rats: bool,
 }
 
 impl Onboarding {
@@ -766,6 +769,7 @@ impl Plugin for OnboardingPlugin {
                     announce.after(crate::items::usage::UsageSystems),
                     the_scratch,
                     the_rooks,
+                    the_rats,
                     (lamps, signs, checklist, one_thing_to_read, mark_the_step),
                     warn_near_anomalies,
                     hurry_the_truck,
@@ -1044,6 +1048,26 @@ fn the_rooks(
             ob.rooks = true;
             raid.say(ROOKS_LINE);
         }
+    }
+}
+
+/// The practice house's prefab: the one in the yard that always has rats.
+pub const RATS_HOUSE: &str = "house_plank";
+pub const RATS_LINE: &str = "Driver: \"Only rats. Sat quiet, they'd mean nobody's been in.\"";
+
+/// THE HOUSE with something in it: the practice house always has rats
+/// (`wildlife::rats`), along the walls, and they bolt squeaking for the
+/// corners as you come in. Opening a door and looking round was two ticks;
+/// now the first door has something behind it, and the driver says what
+/// rats tell you out there.
+fn the_rats(
+    mut scurried: MessageReader<crate::wildlife::rats::Scurried>,
+    mut ob: ResMut<Onboarding>,
+    mut raid: ResMut<Raid>,
+) {
+    if scurried.read().count() > 0 && !ob.rats {
+        ob.rats = true;
+        raid.say(RATS_LINE);
     }
 }
 

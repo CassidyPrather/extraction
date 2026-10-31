@@ -12,7 +12,8 @@
         (id: "cage_landing", at: (0.0, 17.0), size: (6.0, 4.0), height: 2.8, props: [
             (kind: SmallCrate, at: (2.2, 1.4), loot: Some("gadgets")),
             (kind: Workbench, at: (-2.2, 0.6), rot: 90.0),
-            (kind: Barrel, at: (2.4, 1.3)),
+            // Beside the crate, not in it (it stood 20 cm into it).
+            (kind: Barrel, at: (2.55, 0.5)),
         ]),
         // The main haulage, the rail down its length.
         (id: "haulage", at: (0.0, 31.0), size: (3.0, 20.0), height: 2.6, props: [

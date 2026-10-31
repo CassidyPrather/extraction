@@ -42,6 +42,13 @@ const SILL_STEP: f32 = 0.45;
 const OPEN_SWING: f32 = 1.75;
 /// Loot higher than this above the floor is out of reach (upper floors).
 pub const MAX_REACH_UP: f32 = 2.1;
+/// How far under a surface building's floor a point stops being in it:
+/// an underground site can run under one (Cinder's tunnel, 6.5 m under
+/// the works hall), and a raider in the tunnel counted as in the hall
+/// and walked for the hall's way out, into the tunnel's wall (Cinder
+/// sims, 31 October). Deeper than the ground round a building falls
+/// across its grid's margin on a slope.
+const UNDER_FLOOR: f32 = 4.0;
 /// The most one cell's floor may stand over its neighbour's and still be
 /// walked between (a stair's riser is 0.2): under the body's own step
 /// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
@@ -216,7 +223,9 @@ impl BuildingPlan {
                     .level(l)
                     .is_some_and(|y| l.y > y - 0.6 && l.y < y + MAX_REACH_UP + 0.5);
         }
-        l.x.abs() <= self.half.x + pad && l.z.abs() <= self.half.y + pad
+        l.y > self.floor - UNDER_FLOOR
+            && l.x.abs() <= self.half.x + pad
+            && l.z.abs() <= self.half.y + pad
     }
 
     /// Whether a world point is within the indoor grid.
@@ -225,7 +234,7 @@ impl BuildingPlan {
         if self.levels.is_some() {
             return self.level(l).is_some_and(|y| (l.y - y).abs() < 2.5);
         }
-        self.grid.cell_of([l.x, l.z]).is_some()
+        l.y > self.floor - UNDER_FLOOR && self.grid.cell_of([l.x, l.z]).is_some()
     }
 
     /// Whether loot at this world point can be reached from the floor.
@@ -418,7 +427,12 @@ pub(crate) fn plan_buildings_with(
             {
                 continue;
             }
-            if let Some(ob) = obstacle(piece.shape, piece.at, under, geo.floor.is_some()) {
+            // The sill rule is a drowned house's (its silt a floor over
+            // the ground), not every building that says how high its floor
+            // is: setting a ruin's floor made its low walls a climb, and
+            // Cinder's damaged houses lost every way in (Models, 31 October).
+            let drowned = b.prefab.ends_with("_drowned");
+            if let Some(ob) = obstacle(piece.shape, piece.at, under, drowned) {
                 grid.block(ob, CLEARANCE);
             }
         }
@@ -1120,6 +1134,88 @@ mod tests {
     use crate::launch::LaunchOptions;
     use crate::rig::LocalPlayer;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Every recipe's plan floor (its lowest door's sill, else its
+    /// `Geo::floor`, else the ground: `plan_buildings`) is the height of
+    /// what's walked on inside it, the top of its widest flat floor slab
+    /// under 1.2 m. A building with no door that left `Geo::floor` unset was
+    /// planned on the ground under a raised floor: the blast furnace's cast
+    /// house and the mill race's hut (31 October), where no raider found
+    /// room for a body by the loot.
+    #[test]
+    fn every_plan_floor_is_its_floor() {
+        use crate::world::buildings::{self, Shape};
+        let ids = buildings::PREFABS
+            .iter()
+            .chain(crate::world::dam::PREFABS.iter())
+            .chain(crate::world::fell::PREFABS.iter());
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for id in ids {
+            // Stepped down a slope: each cell has its own floor. Not walked
+            // into: a wreck's body, the robots' gate.
+            if crate::world::fell::stepped_floor(id, Vec2::ZERO).is_some()
+                || id.starts_with("wreck_")
+                || *id == "robot_gate"
+            {
+                continue;
+            }
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            // No way in (the headframe, the steeple): nothing walked on.
+            if geo.entrances.is_empty() && geo.doors.is_empty() {
+                continue;
+            }
+            let plan = geo
+                .doors
+                .iter()
+                .map(|d| d.hinge.y)
+                .min_by(|a, b| a.total_cmp(b))
+                .or(geo.floor)
+                .unwrap_or(0.0);
+            let slabs: Vec<(f32, f32)> = geo
+                .pieces
+                .iter()
+                .filter(|p| p.collide)
+                .filter_map(|p| {
+                    let Shape::Box(s) = p.shape else {
+                        return None;
+                    };
+                    if (p.at.rotation * Vec3::Y).y < 0.999 {
+                        return None;
+                    }
+                    let s = s * p.at.scale;
+                    let top = p.at.translation.y + s.y * 0.5;
+                    (top > -0.05 && top < 1.2 && s.x >= 1.5 && s.z >= 1.5)
+                        .then_some((s.x * s.z, top))
+                })
+                .collect();
+            // The highest of its wide slabs (a drowned house's silt over its
+            // footing, a floor on its plinth).
+            let widest = slabs.iter().map(|s| s.0).fold(0.0, f32::max);
+            let Some(floor) = slabs
+                .iter()
+                .filter(|s| s.0 >= widest * 0.4)
+                .map(|s| s.1)
+                .reduce(f32::max)
+            else {
+                continue;
+            };
+            seen += 1;
+            if (floor - plan).abs() > 0.1 {
+                bad.push(format!(
+                    "{id}: planned at {plan:.2}, its floor at {floor:.2}"
+                ));
+            }
+        }
+        assert!(seen >= 30, "only {seen} recipes with a floor");
+        assert!(
+            bad.is_empty(),
+            "plans off their floors:\n{}",
+            bad.join("\n")
+        );
+    }
 
     /// A route down a site with a mine cart on its rail goes round the
     /// cart, not through it (Kettle sims, 31 October: raiders walking the
@@ -2047,6 +2143,59 @@ mod tests {
             }
         }
         assert!(pockets.is_empty(), "pockets:\n{}", pockets.join("\n"));
+    }
+
+    /// Nowhere on an underground site's floor is in a surface building's
+    /// plan, though the site runs under it: Cinder's tunnel under the
+    /// works hall was, and a raider in the tunnel walked for the hall's
+    /// way out into the tunnel's wall (seed 11, 31 October: 40 stucks).
+    #[test]
+    fn a_site_under_a_building_isnt_in_it() {
+        let (mut under, mut failed) = (0, Vec::new());
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            let plans = plans(&mut app);
+            for site in plans.iter().filter(|p| p.levels.is_some()) {
+                let g = &site.grid;
+                for k in (0..g.n * g.n).filter(|k| g.cost[*k] != BLOCKED) {
+                    let [cx, cz] = g.centre(k % g.n, k / g.n);
+                    let Some(y) = site.level(Vec3::new(cx, 0.0, cz)) else {
+                        continue;
+                    };
+                    let at = site.xf.transform_point(Vec3::new(cx, y + 0.1, cz));
+                    for p in plans.iter().filter(|p| p.levels.is_none()) {
+                        let l = p.to_local(at);
+                        // Well under its floor (a scene set on the site's
+                        // own floor is in the site, and that's right).
+                        if l.y > p.floor - 5.0 || l.x.abs() > p.half.x || l.z.abs() > p.half.y {
+                            continue;
+                        }
+                        under += 1;
+                        if p.in_grid(at) || p.contains(at, 0.0) {
+                            failed.push(format!(
+                                "{map} {} at {at:.1?} is in {} at {:.0?}",
+                                site.name, p.name, p.xf.translation
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(under > 0, "no site runs under a building");
+        assert!(
+            failed.is_empty(),
+            "{} points:\n{}",
+            failed.len(),
+            failed[..failed.len().min(8)].join("\n")
+        );
     }
 
     #[test]

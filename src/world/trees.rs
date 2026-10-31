@@ -24,6 +24,7 @@ impl Plugin for TreesPlugin {
             MaterialPlugin::<TreeSwayMaterial>::default(),
             super::impostors::ImpostorPlugin,
         ))
+        .init_resource::<NearStreamed>()
         .add_systems(Update, blow_trees)
         .add_systems(
             PostUpdate,
@@ -733,17 +734,47 @@ struct ForestAssets(TreeAssets);
 #[derive(Resource)]
 pub struct ForestBuilt;
 
+/// Where the near detail was last streamed round: the eyes then.
+#[derive(Resource, Default)]
+pub struct NearStreamed(Vec<Vec3>);
+
 /// Whether the forest is done arriving: built, and every impostor's
-/// picture taken (each a capture rig until its readback comes in).
+/// picture taken (each a capture rig until its readback comes in). For a
+/// shot, also its near trees' cards streamed in round where every eye is
+/// now ([`ForestSettled::near_streamed`]): a lookbook view shot before
+/// them had the spruces' dark cores and no needles.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct ForestSettled<'w, 's> {
     built: Option<Res<'w, ForestBuilt>>,
     captures: Query<'w, 's, (), With<super::impostors::Capture>>,
+    streamed: Option<Res<'w, NearStreamed>>,
+    cams: Query<
+        'w,
+        's,
+        (
+            &'static GlobalTransform,
+            Option<&'static bevy::camera::RenderTarget>,
+        ),
+        crate::render::EyeCamera,
+    >,
 }
 
 impl ForestSettled<'_, '_> {
     pub fn settled(&self) -> bool {
         self.built.is_some() && self.captures.is_empty()
+    }
+
+    /// The near detail streamed round every eye where it is (no eye, or
+    /// no streaming at all: no near detail to wait for).
+    pub fn near_streamed(&self) -> bool {
+        let Some(streamed) = &self.streamed else {
+            return true;
+        };
+        let at = &streamed.0;
+        crate::render::eyes(&self.cams).all(|g| {
+            let e = g.translation();
+            at.iter().any(|a| a.xz().distance(e.xz()) < 1.0)
+        })
     }
 }
 
@@ -767,6 +798,7 @@ fn stream_near_detail(
     time: Res<Time<Real>>,
     mut timer: Local<f32>,
     mut looked: Local<Vec<Vec3>>,
+    mut streamed: ResMut<NearStreamed>,
 ) {
     let (Some(grid), Some(assets)) = (grid, assets) else {
         return;
@@ -851,6 +883,7 @@ fn stream_near_detail(
             }
         }
     }
+    streamed.0 = eyes;
 }
 
 /// Near trees' foliage cards: standard PBR whose crowns lean with the
@@ -1968,5 +2001,47 @@ mod after_a_jump {
             "{} near trunk meshes drawn later than the jump's frame",
             missing.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod near_stream_tests {
+    use super::*;
+
+    fn streamed(app: &mut App) -> bool {
+        let mut s = bevy::ecs::system::SystemState::<ForestSettled>::new(app.world_mut());
+        s.get(app.world()).unwrap().near_streamed()
+    }
+
+    /// A shot waits for the near trees' cards round where the eye is now:
+    /// streamed round the last place, a jump to the next view isn't yet.
+    #[test]
+    fn a_shot_waits_for_the_near_cards_where_the_eye_is() {
+        let mut app = App::new();
+        app.add_plugins(TransformPlugin);
+        let eye = app
+            .world_mut()
+            .spawn((Camera3d::default(), Transform::from_xyz(10.0, 2.0, 10.0)))
+            .id();
+        app.update();
+        assert!(
+            streamed(&mut app),
+            "no streaming at all: nothing to wait for"
+        );
+        app.world_mut()
+            .insert_resource(NearStreamed(vec![Vec3::new(10.0, 2.0, 10.0)]));
+        assert!(streamed(&mut app), "streamed where the eye is");
+        app.world_mut()
+            .get_mut::<Transform>(eye)
+            .unwrap()
+            .translation = Vec3::new(60.0, 2.0, 10.0);
+        app.update();
+        assert!(
+            !streamed(&mut app),
+            "the next view: not until it's streamed there"
+        );
+        app.world_mut()
+            .insert_resource(NearStreamed(vec![Vec3::new(60.0, 2.0, 10.0)]));
+        assert!(streamed(&mut app));
     }
 }

@@ -395,10 +395,18 @@ enum Leg {
 }
 
 /// `--job KIND`: the career's job, so a kind that seldom comes up on the
-/// ladder runs live (the place it's put is the game's own).
-pub fn seeded_job(kind: &str) -> Option<Job> {
+/// ladder runs live (the place it's put is the game's own). `scout` is the
+/// first job the valley `here` deals a new career: a first hour in a valley
+/// the ladder only reaches later.
+pub fn seeded_job(kind: &str, here: &str) -> Option<Job> {
     let map = "marrow_creek".to_owned();
     Some(match kind {
+        "scout" => {
+            let (id, def) = crate::progression::valleys()
+                .iter()
+                .find(|(id, _)| *id == here)?;
+            return extraction_core::progression::first_job(id, def);
+        }
         "recover" => Job::Recover {
             map,
             region: "Village".into(),
@@ -432,7 +440,7 @@ pub(super) fn seed_job(
         return;
     }
     *done = true;
-    match seeded_job(kind) {
+    match seeded_job(kind, &opts.map) {
         Some(job) => {
             info!("first raid: seeded job {job:?}");
             progression.0.job = Some(job);
@@ -513,6 +521,11 @@ pub(super) struct Newcomer {
     done_home: Option<u32>,
     /// Keeping low till then (backing off behind cover).
     low_until: f32,
+    /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
+    /// has one on a wall with only a window), and the one it's making for
+    /// with the bot's failures then.
+    no_roof: Vec<Entity>,
+    roof_try: Option<(Entity, u32, f32)>,
     /// When it last did as a machine's tell says (not more than every 15 s).
     tell_at: f32,
     /// When it got home (the truck back at base, it in the bed).
@@ -642,6 +655,10 @@ pub(super) struct RaidView<'w, 's> {
 /// before giving it up. Shares, not metres: Marrow's warp brought the job
 /// from 188 m to 103 m, and 130 m short of it was behind the gate.
 const WANDER_SHARE: f32 = 0.6;
+/// The place it wanders to is this much past the nudge's distance (m): on
+/// Cinder the nearest past 1.3 times the way was short of it, and nothing
+/// was said.
+const WANDER_MARGIN: f32 = 25.0;
 const WANDER_OFF: f32 = 1.3;
 const WANDER_WAIT: f32 = 240.0;
 
@@ -684,6 +701,26 @@ pub(super) fn direct_raid(
     let Some((player, mut bot, root, mut input)) = bots.iter_mut().next() else {
         return;
     };
+    // Stuck on the way under a roof: the rest of that way is no good either
+    // (in, wait, out the way it came), and nor is that roof.
+    // (There, in, its wait and out: on Cinder the first stuck came 75 s
+    // after the plan was made.)
+    if state
+        .roof_try
+        .is_some_and(|(_, _, t)| time.elapsed_secs() - t > 150.0)
+    {
+        state.roof_try = None;
+    }
+    if let Some((b, failed, _)) = state.roof_try {
+        if bot.failed > failed {
+            bot.tasks.clear();
+            // (Idle, so the next leg's planned: an empty list is the end.)
+            bot.tasks.push_back(Task::Wait(IDLE));
+            bot.walk = None;
+            state.no_roof.push(b);
+            state.roof_try = None;
+        }
+    }
     let now = time.elapsed_secs();
     let here = root.translation.xz();
     // A cautious newcomer creeps once it's out.
@@ -784,10 +821,16 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
-                overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here))
-                    .flatten()
-                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
+                let roof = overhead
+                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
+                    .flatten();
+                match roof {
+                    Some((tasks, b)) => {
+                        state.roof_try = Some((b, bot.failed, now));
+                        tasks
+                    }
+                    None => run_for_cover(&world.zone, here, from, 0.0),
+                }
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
@@ -796,7 +839,9 @@ pub(super) fn direct_raid(
                     f.flee_until = 0.0;
                 }
                 state.low_until = now + 30.0;
-                vec![Task::Wait(30.0)]
+                // (Under the bot's 30 s give-up, or a frame past it is a
+                // failure.)
+                vec![Task::Wait(29.0)]
             }
             First::Bleeding => {
                 let dressing = world.items.iter().find(|(_, it, _, held, sock, _)| {
@@ -1288,15 +1333,27 @@ pub(super) fn direct_raid(
                     .map
                     .markers_of(&MarkerKind::Poi)
                     .map(|m| Vec2::from(m.at))
-                    .filter(|m| m.distance(at) > way * WANDER_OFF)
+                    // Far enough out that the driver would say (past where
+                    // it turned by the nudge's distance, and a margin).
+                    .filter(|m| {
+                        m.distance(at)
+                            > (way * WANDER_OFF).max(
+                                short.distance(at)
+                                    + extraction_core::progression::NUDGE_AWAY
+                                    + WANDER_MARGIN,
+                            )
+                    })
                     .min_by(|a, b| a.distance(short).total_cmp(&b.distance(short)))
                 else {
                     state.wandered_at = Some(now);
                     state.told_back = true;
                     return;
                 };
+                // Up to it, not into it (a named place is often a building:
+                // in at its door was a walk the bot got stuck on).
+                let off = outside(&world, &view, short, off);
                 tasks.extend(route(&world, &view, from, short));
-                tasks.extend(by_road(&world, &view, short, off));
+                tasks.extend(by_road(&world, &view, short, off, at));
                 state.wandered_at = Some(now);
                 state.note(
                     now,
@@ -1766,11 +1823,13 @@ fn under_a_roof(
     entrances: Option<&crate::robots::doors::Entrances>,
     plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
-) -> Option<Vec<Task>> {
+    skip: &[Entity],
+) -> Option<(Vec<Task>, Entity)> {
     let entrances = entrances?;
     let d = entrances
         .doors
         .iter()
+        .filter(|d| !skip.contains(&d.building))
         .filter(|d| {
             // A way in from outside: its far side is under that roof.
             let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
@@ -1812,7 +1871,7 @@ fn under_a_roof(
         .map(|s| inside + s)
         .find(|p| standable(*p))
         .unwrap_or(inside);
-    Some(vec![
+    let tasks = vec![
         Task::WalkTo {
             to: d.mid.xz() + out * 1.3,
             within: 0.6,
@@ -1836,7 +1895,8 @@ fn under_a_roof(
             to: d.mid.xz() + out * 1.5,
             within: 0.8,
         },
-    ])
+    ];
+    Some((tasks, d.building))
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest
@@ -1966,8 +2026,11 @@ fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
 
 /// From `from` to `to` by a road that runs near both (as someone walks off
 /// somewhere they've no reason to go: the way that's there), else straight.
-fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2, keep_off: Vec2) -> Vec<Task> {
     const NEAR: f32 = 70.0;
+    // Not a road past the place it's wandering off from (Cinder's track
+    // runs by Ash Row: walked, the place was seen).
+    const OFF: f32 = 40.0;
     let nearest = |pts: &[Vec2], p: Vec2| {
         pts.iter()
             .enumerate()
@@ -1983,7 +2046,9 @@ fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
             let pts: Vec<Vec2> = r.points.iter().map(|p| Vec2::from(*p)).collect();
             let (i, a) = nearest(&pts, from)?;
             let (j, b) = nearest(&pts, to)?;
-            (a < NEAR && b < NEAR && i != j).then_some((pts, i, j, a + b))
+            let along = &pts[i.min(j)..=i.max(j)];
+            let clear = along.iter().all(|p| p.distance(keep_off) > OFF);
+            (a < NEAR && b < NEAR && i != j && clear).then_some((pts, i, j, a + b))
         })
         .min_by(|a, b| a.3.total_cmp(&b.3));
     let Some((pts, i, j, _)) = best else {
@@ -2003,12 +2068,76 @@ fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     t
 }
 
+/// `to`, or if that's inside a building, a couple of metres short of its
+/// wall on the way from `from`.
+fn outside(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec2 {
+    let Some(en) = view.entrances.as_deref() else {
+        return to;
+    };
+    let inside = |p: Vec2| {
+        en.building_at(world.zone.on_ground(p.x, p.y) + Vec3::Y)
+            .is_some()
+    };
+    if !inside(to) {
+        return to;
+    }
+    let back = (from - to).normalize_or_zero();
+    (1..60)
+        .map(|k| to + back * k as f32)
+        .find(|p| !inside(*p))
+        .map_or(to, |p| p + back * 2.0)
+}
+
+/// A blocked stretch this long on the walking grid is something solid to go
+/// round, not a gate a body walks through (m). Measured: the South gates'
+/// openings read 6 and 8 m blocked; Cinder's blast furnace, 50.
+const SOLID_RUN: f32 = 12.0;
+
+/// The longest run of blocked ground on the grid along `a`..`b` (m).
+fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
+    let step = nav.cell * 0.5;
+    let n = (a.distance(b) / step).ceil().max(1.0) as usize;
+    let (mut run, mut best) = (0.0f32, 0.0f32);
+    for k in 0..=n {
+        if nav.walkable(a.lerp(b, k as f32 / n as f32).to_array()) {
+            run = 0.0;
+        } else {
+            run += step;
+            best = best.max(run);
+        }
+    }
+    best
+}
+
 /// `legs`, round the buildings in the way.
 fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
     for p in round_buildings(view, from, to) {
-        t.extend(world.legs(at, p));
+        // Something solid in the way that has no doors (the stoves at Cinder
+        // Works' blast furnace held a newcomer twenty minutes): the
+        // machines' grid's way round it.
+        let round = world
+            .nav
+            .as_ref()
+            // (Outdoors to outdoors: indoors is `round_buildings`' and the
+            // rooms' plans'.)
+            .filter(|n| n.0.walkable(at.to_array()) && n.0.walkable(p.to_array()))
+            // A post or a gate's narrow way isn't worth a detour (the
+            // grid's clearance shuts what a body walks through, and its way
+            // round Marrow's gate went into the fence): only a long solid.
+            .filter(|n| blocked_run(&n.0, at, p) > SOLID_RUN)
+            .and_then(|n| n.0.path(at.to_array(), p.to_array()));
+        match round {
+            Some(way) => {
+                for q in way.into_iter().skip(1).map(Vec2::from) {
+                    t.extend(world.legs(at, q));
+                    at = q;
+                }
+                t.extend(world.legs(at, p));
+            }
+            None => t.extend(world.legs(at, p)),
+        }
         at = p;
     }
     t
@@ -2499,8 +2628,9 @@ pub(super) fn first_fight(
         // from a drone.
         fight.flee_until = now + 12.0;
         (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), &[], here))
+            .then(|| under_a_roof(entrances.as_deref(), &[], here, &[]))
             .flatten()
+            .map(|(t, _)| t)
             .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
     if !answer.is_empty() {

@@ -261,9 +261,9 @@ pub struct Placed {
     pub at: Transform,
     pub shape: Arc<Shape3>,
     /// World triangles and bounds.
-    tris: Vec<[Vec3; 3]>,
-    lo: Vec3,
-    hi: Vec3,
+    pub(crate) tris: Vec<[Vec3; 3]>,
+    pub(crate) lo: Vec3,
+    pub(crate) hi: Vec3,
 }
 
 impl Placed {
@@ -854,6 +854,10 @@ mod tests {
         // below the treads on the rails' heads, so its lowest points are
         // over the floor between them.
         "ore_mill (ore_mill): mine_tub",
+        // By design: the pile's lowest point is one book's sagging corner,
+        // and on the charging queue's pallet it lies over a gap between
+        // two slats; the rest bear on them.
+        "scene The charging queue: books",
     ];
 }
 
