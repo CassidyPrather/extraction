@@ -59,16 +59,44 @@ use crate::launch::LaunchOptions;
 pub struct Zone {
     pub map: Arc<MapDef>,
     pub hm: Arc<Heightmap>,
+    /// Each forest polygon's bounds (`forest_cover` skips the far ones).
+    forest_bounds: Arc<Vec<([f32; 2], [f32; 2])>>,
+    /// The rocks, scattered the first time they're asked for (`rocks`).
+    rocks: Arc<std::sync::OnceLock<Arc<Vec<extraction_core::rocks::RockSpot>>>>,
 }
+
+/// How far outside a forest its cover can reach: 2 m past its edge, which
+/// wanders up to 6 m either way (`fbm` stays within 1), so 12 m out it's
+/// nothing.
+const FOREST_REACH: f32 = 12.0;
 
 impl Zone {
     pub fn load(name: &str) -> Self {
         let map = load_map_def(name);
         let hm = Heightmap::build(&map);
+        Self::new(Arc::new(map), Arc::new(hm))
+    }
+
+    pub fn new(map: Arc<MapDef>, hm: Arc<Heightmap>) -> Self {
+        let forest_bounds = map
+            .forests
+            .iter()
+            .map(|f| extraction_core::geom::bounds(&f.polygon))
+            .collect();
         Self {
-            map: Arc::new(map),
-            hm: Arc::new(hm),
+            map,
+            hm,
+            forest_bounds: Arc::new(forest_bounds),
+            rocks: Default::default(),
         }
+    }
+
+    /// The map's rocks (`scatter_rocks`), scattered once: the colliders and
+    /// the meshes each scattered them (Rime Fell's 3,253 took 240 ms).
+    pub fn rocks(&self) -> Arc<Vec<extraction_core::rocks::RockSpot>> {
+        self.rocks
+            .get_or_init(|| Arc::new(extraction_core::rocks::scatter_rocks(&self.map, &self.hm)))
+            .clone()
     }
 
     /// Ground height under a world x/z.
@@ -104,13 +132,26 @@ impl Zone {
     /// inside a forest, easing out over a few metres across the edge, and
     /// the edge itself wandering a few metres either way. (Taken straight
     /// from the polygon, the leaf litter met the grass in a ruled line.)
+    /// A forest whose bounds are farther than `FOREST_REACH` gives none,
+    /// so isn't measured: the terrain asks this of every vertex at load
+    /// (Kettle Pass's 13 forests were 0.6 s of it).
     pub fn forest_cover(&self, x: f32, z: f32) -> f32 {
         use extraction_core::geom::{point_in_polygon, polygon_edge_distance, smoothstep};
-        let wander = extraction_core::noise::fbm(x * 0.045, z * 0.045, 0xF0E5, 3, 0.5) * 6.0;
+        let mut wander = None;
         self.map
             .forests
             .iter()
-            .map(|f| {
+            .zip(self.forest_bounds.iter())
+            .filter(|(_, (lo, hi))| {
+                x > lo[0] - FOREST_REACH
+                    && x < hi[0] + FOREST_REACH
+                    && z > lo[1] - FOREST_REACH
+                    && z < hi[1] + FOREST_REACH
+            })
+            .map(|(f, _)| {
+                let wander = *wander.get_or_insert_with(|| {
+                    extraction_core::noise::fbm(x * 0.045, z * 0.045, 0xF0E5, 3, 0.5) * 6.0
+                });
                 let d = polygon_edge_distance(&f.polygon, [x, z]);
                 let inside = point_in_polygon(&f.polygon, [x, z]);
                 smoothstep(-2.0, 3.0, if inside { d } else { -d } + wander)
@@ -481,5 +522,49 @@ mod terrain_queries {
             wrong.is_empty(),
             "World-layer shape queries that test the terrain: {wrong:#?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod forest_cover_tests {
+    use super::Zone;
+
+    /// What every forest gives, measured: what `forest_cover` was before
+    /// it skipped the far ones.
+    fn every_forest(zone: &Zone, x: f32, z: f32) -> f32 {
+        use extraction_core::geom::{point_in_polygon, polygon_edge_distance, smoothstep};
+        let wander = extraction_core::noise::fbm(x * 0.045, z * 0.045, 0xF0E5, 3, 0.5) * 6.0;
+        zone.map
+            .forests
+            .iter()
+            .map(|f| {
+                let d = polygon_edge_distance(&f.polygon, [x, z]);
+                let inside = point_in_polygon(&f.polygon, [x, z]);
+                smoothstep(-2.0, 3.0, if inside { d } else { -d } + wander)
+            })
+            .fold(0.0, f32::max)
+    }
+
+    /// Skipping the forests out of reach changes no point's cover, in any
+    /// valley.
+    #[test]
+    fn forest_cover_skips_only_what_gives_none() {
+        for map in ["marrow_creek", "kettle_pass", "rime_fell"] {
+            let zone = Zone::load(map);
+            let hm = &zone.hm;
+            let mut covered = 0;
+            for j in (0..hm.n).step_by(5) {
+                for i in (0..hm.n).step_by(5) {
+                    let p = hm.pos(i, j);
+                    let (fast, all) = (
+                        zone.forest_cover(p[0], p[1]),
+                        every_forest(&zone, p[0], p[1]),
+                    );
+                    assert_eq!(fast.to_bits(), all.to_bits(), "{map} at {p:?}");
+                    covered += usize::from(all > 0.0);
+                }
+            }
+            assert!(covered > 0, "{map} has forest");
+        }
     }
 }

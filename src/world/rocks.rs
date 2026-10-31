@@ -6,7 +6,7 @@ use avian3d::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use extraction_core::rocks::{ROCK_VARIANTS, RockSpot, SOLID_RADIUS, scatter_rocks};
+use extraction_core::rocks::{ROCK_VARIANTS, RockSpot, SOLID_RADIUS};
 
 use super::{Layer, Zone};
 use crate::render::materials::{Mat, MaterialLibrary};
@@ -24,8 +24,8 @@ const CULL: f32 = 420.0;
 const STONES_NEAR: f32 = 40.0;
 const STONES: f32 = 90.0;
 
-pub fn rocks(zone: &Zone) -> Vec<RockSpot> {
-    scatter_rocks(&zone.map, &zone.hm)
+pub fn rocks(zone: &Zone) -> std::sync::Arc<Vec<RockSpot>> {
+    zone.rocks()
 }
 
 fn scale_of(r: &RockSpot) -> Vec3 {
@@ -107,12 +107,23 @@ pub fn rock_points(variant: usize, detail: u32) -> (Vec<Vec3>, Vec<[u32; 3]>) {
 /// colour (multiplying the texture).
 type RockFaces = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>);
 
+/// Every variant's shape at each detail (`[detail][variant]`), made once:
+/// each rock is one of them, placed (made for each rock, they were most
+/// of the rocks' load).
+type Shapes = Vec<Vec<(Vec<Vec3>, Vec<[u32; 3]>)>>;
+
+fn shapes() -> Shapes {
+    (0..=2)
+        .map(|d| (0..ROCK_VARIANTS).map(|v| rock_points(v, d)).collect())
+        .collect()
+}
+
 /// A faceted mesh for one rock placed in the world: flat-shaded faces,
 /// each textured by the axis it faces most. No two rocks are quite the
 /// same tone, and the faces that look at the sky carry moss (or, in a
 /// burnt valley, soot).
-fn rock_mesh(r: &RockSpot, detail: u32, burnt: bool) -> RockFaces {
-    let (pts, tris) = rock_points(r.variant, detail);
+fn rock_mesh(r: &RockSpot, shapes: &Shapes, detail: u32, burnt: bool) -> RockFaces {
+    let (pts, tris) = &shapes[detail as usize][r.variant];
     let xf = Transform::from_xyz(r.pos[0], r.pos[1], r.pos[2])
         .with_rotation(Quat::from_rotation_y(r.yaw))
         .with_scale(scale_of(r));
@@ -219,8 +230,9 @@ fn spawn_rock_meshes(
     }
     *done = true;
     let mat = library.get(Mat::Boulder, &server, &mut materials);
-    let spots: Vec<RockSpot> = rocks(&zone)
-        .into_iter()
+    let all = rocks(&zone);
+    let spots: Vec<&RockSpot> = all
+        .iter()
         // Lower detail thins the field stones (they're only looks).
         .filter(|r| {
             r.radius >= SOLID_RADIUS
@@ -266,15 +278,16 @@ fn spawn_rock_meshes(
         }
     }
     // The meshes on every core (each chunk's its own); spawned after.
+    let shapes = shapes();
     let built: Vec<(Mesh, VisibilityRange, bool)> =
         bevy::tasks::ComputeTaskPool::get().scope(|scope| {
             for (rocks, detail, range, shadow) in &jobs {
-                let zone = &zone;
+                let (zone, shapes) = (&zone, &shapes);
                 scope.spawn(async move {
                     let (mut pos, mut nrm, mut uv, mut col) =
                         (Vec::new(), Vec::new(), Vec::new(), Vec::new());
                     for r in rocks {
-                        let (p, n, u, c) = rock_mesh(r, *detail, zone.map.ash > 0.0);
+                        let (p, n, u, c) = rock_mesh(r, shapes, *detail, zone.map.ash > 0.0);
                         pos.extend(p);
                         nrm.extend(n);
                         uv.extend(u);

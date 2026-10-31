@@ -97,6 +97,11 @@ fn profile() {
 
 /// This frame's systems, slowest first (the schedule runners left out).
 fn systems() -> Vec<(String, f64)> {
+    systems_top(4)
+}
+
+/// This frame's `n` slowest systems.
+fn systems_top(n: usize) -> Vec<(String, f64)> {
     let Some(p) = PROFILE.get() else {
         return Vec::new();
     };
@@ -111,7 +116,7 @@ fn systems() -> Vec<(String, f64)> {
         .map(|(k, ms)| (k.rsplit("::").next().unwrap_or(&k).to_string(), ms))
         .collect();
     v.sort_by(|a, b| b.1.total_cmp(&a.1));
-    v.truncate(4);
+    v.truncate(n);
     v
 }
 
@@ -153,9 +158,30 @@ fn loaded_app(map: &str, settled: bool) -> (App, Loading) {
     );
     let (mut preload, mut props, mut warm) = (None, None, None);
     let mut frames = 0;
+    // `FIRST_LOADS=1`: each load frame (with `FIRST_PROFILE=1` and the
+    // tracing features, its slowest systems, sixteen of the first), and
+    // the last assets to arrive.
+    let timed = std::env::var_os("FIRST_LOADS").is_some();
+    let mut arrived: Vec<(f64, String)> = Vec::new();
     while (preload.is_none() || props.is_none() || warm.is_none()) && frames < 3000 {
+        systems();
+        let f = Instant::now();
         app.update();
         frames += 1;
+        if timed {
+            let at = t.elapsed().as_secs_f64();
+            let ms = f.elapsed().as_secs_f64() * 1000.0;
+            let top: Vec<String> = systems_top(if frames == 1 { 16 } else { 4 })
+                .into_iter()
+                .map(|(n, ms)| format!("{n} {ms:.0}"))
+                .collect();
+            println!(
+                "  frame {frames:3} at {at:5.2} s: {ms:6.0} ms  {}",
+                top.join(", ")
+            );
+            let mut a = app.world_mut().resource_mut::<Arrivals>();
+            arrived.extend(a.loads.drain(..).map(|p| (at, p)));
+        }
         let mut q = bevy::ecs::system::SystemState::<(
             super::timeline::WorldReady,
             Res<crate::models::Models>,
@@ -180,6 +206,15 @@ fn loaded_app(map: &str, settled: bool) -> (App, Loading) {
         }
         if warm.is_none() && world.materials() {
             warm = now;
+        }
+    }
+    if timed {
+        let root = crate::asset_root_path();
+        println!("{map}: {} assets arrived; the last:", arrived.len());
+        for (at, path) in arrived.iter().rev().take(25).rev() {
+            let file = path.split('#').next().unwrap_or(path);
+            let kb = std::fs::metadata(root.join(file)).map_or(0, |m| m.len() / 1024);
+            println!("    {at:5.2} s  {kb:7} KB  {path}");
         }
     }
     let loading = Loading {
