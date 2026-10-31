@@ -367,7 +367,7 @@ If any of this fails, stop and send the log: everything else depends on it.
 
   | # | Station | Do |
   | - | - | - |
-  | 1 | Your kit (in the truck) | reach into the crate and squeeze GRIP on the pistol; hold it at your hip and open your hand (the holster); squeeze GRIP on the radio; hold it to a chest pocket and open your hand |
+  | 1 | Your kit (in the truck) | reach into the crate and squeeze GRIP on the pistol; hold it at your hip and open your hand (the holster); squeeze GRIP on the radio; hold it to your chest (its sleeve) and open your hand |
   | 2 | Settings (in the truck) | push the SETTINGS card's amber button with a fingertip (a finger pointed, TRIGGER off): the settings cards fold out, to change any time |
   | 3 | Getting about | off the back of the truck: turn (push the right stick sideways); crouch (squat, or pull the right stick down; again to stand); run (push the left stick forward and click it) |
   | 4 | Out of reach | a box on a crate in a fenced pen: point at it, squeeze GRIP, flick your hand back; then the box over your shoulder, open your hand (the pack) |
