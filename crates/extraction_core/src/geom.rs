@@ -237,13 +237,26 @@ pub fn point_in_polygon(poly: &[P2], p: P2) -> bool {
     inside
 }
 
-/// Distance from `p` to a polygon's boundary (positive outside and inside).
+/// Distance from `p` to a polygon's boundary (positive outside and inside):
+/// `polyline_closest`'s over the closed ring, without copying it.
 pub fn polygon_edge_distance(poly: &[P2], p: P2) -> f32 {
-    let mut closed = poly.to_vec();
-    if let Some(first) = poly.first() {
-        closed.push(*first);
+    match poly.len() {
+        0 => f32::INFINITY,
+        1 => dist(p, poly[0]),
+        n => (0..n)
+            .map(|i| {
+                let (a, b) = (poly[i], poly[(i + 1) % n]);
+                let ab = sub(b, a);
+                let l2 = dot(ab, ab);
+                let t = if l2 > 0.0 {
+                    (dot(sub(p, a), ab) / l2).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                dist(p, add(a, scale(ab, t)))
+            })
+            .fold(f32::INFINITY, f32::min),
     }
-    polyline_closest(&closed, p).0
 }
 
 /// Axis-aligned bounds of a point set: `(min, max)`.
@@ -260,6 +273,29 @@ pub fn bounds(points: &[P2]) -> (P2, P2) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ring's distance is the closed polyline's, to the bit.
+    #[test]
+    fn polygon_edge_distance_is_the_closed_lines() {
+        let poly = [
+            [0.0, 0.0],
+            [10.0, 1.0],
+            [12.0, 9.0],
+            [3.0, 11.0],
+            [-2.0, 5.0],
+        ];
+        let mut closed = poly.to_vec();
+        closed.push(poly[0]);
+        for k in 0..400 {
+            let p = [(k % 20) as f32 * 1.7 - 8.0, (k / 20) as f32 * 1.3 - 6.0];
+            assert_eq!(
+                polygon_edge_distance(&poly, p).to_bits(),
+                polyline_closest(&closed, p).0.to_bits()
+            );
+        }
+        assert_eq!(polygon_edge_distance(&[[1.0, 1.0]], [4.0, 5.0]), 5.0);
+        assert_eq!(polygon_edge_distance(&[], [0.0, 0.0]), f32::INFINITY);
+    }
 
     #[test]
     fn spline_passes_through_its_points() {
