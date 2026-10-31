@@ -44,7 +44,18 @@ impl Plugin for DevPlugin {
 struct FrameCount {
     frames: u32,
     requested: bool,
+    /// The frame everything was first in (`timeline::Loaded`) with the
+    /// world ready; the shot waits [`SHOT_SETTLE`] frames on from it.
+    ready_at: Option<u32>,
 }
+
+/// Frames a screenshot waits after everything's in. On the software
+/// renderer a shot 5 frames after "everything in" had no ground, trees
+/// or gallery subject near the camera (a far truck and lamps only); 9
+/// frames after, all of it. Fixed `--frames` raced that, so a gun
+/// close-up came out empty in one half of a before/after and not the
+/// other.
+const SHOT_SETTLE: u32 = 15;
 
 fn count_frames(mut count: ResMut<FrameCount>) {
     count.frames += 1;
@@ -55,10 +66,17 @@ fn count_frames(mut count: ResMut<FrameCount>) {
 /// hang a shot).
 const SHOT_WAIT_MAX: f32 = 180.0;
 
-/// `--screenshot`: after `--frames` frames, and once the ground's and the
-/// buildings' materials are on the GPU and the buildings dressed
-/// (`timeline::WorldReady`): taken at a fixed frame, a slow machine's shot
-/// had trees floating over no ground.
+/// Whether a shot at `frame` comes [`SHOT_SETTLE`] frames or more after
+/// the world was first all in (`ready_at`).
+fn settled(frame: u32, ready_at: Option<u32>) -> bool {
+    ready_at.is_some_and(|at| frame >= at + SHOT_SETTLE)
+}
+
+/// `--screenshot`: after `--frames` frames, and once everything's in
+/// (`timeline::Loaded`, the world ready) and has been for [`SHOT_SETTLE`]
+/// frames: taken at a fixed frame, a slow machine's shot had trees
+/// floating over no ground, and one just after everything was in had no
+/// ground at all.
 fn screenshot_when_ready(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -66,11 +84,19 @@ fn screenshot_when_ready(
     world: crate::render::timeline::WorldReady,
     time: Res<Time<Real>>,
     loading: Option<Res<crate::rig::loading::LoadingView>>,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
 ) {
     let Some(path) = &opts.screenshot else {
         return;
     };
-    if count.requested || count.frames < opts.frames {
+    if count.requested {
+        return;
+    }
+    if count.ready_at.is_none() && loaded.is_some() && world.ready() {
+        count.ready_at = Some(count.frames);
+    }
+    let settled = settled(count.frames, count.ready_at);
+    if count.frames < opts.frames {
         return;
     }
     // In a headset, the world once the loading view has lifted
@@ -79,13 +105,13 @@ fn screenshot_when_ready(
         l.lifted_at
             .is_some_and(|t| crate::render::timeline::since_start() - t > 2.0)
     }) || std::env::var_os("EXTRACTION_SHOT_LOADING").is_some();
-    if !(world.materials() && world.props() && shown) {
+    if !(settled && world.materials() && world.props() && shown) {
         if time.elapsed_secs() < SHOT_WAIT_MAX {
             return;
         }
         warn!(
             "screenshot: taken after {SHOT_WAIT_MAX} s with the world not all in \
-             (materials ready: {}, buildings dressed: {})",
+             (materials ready: {}, buildings dressed: {}, settled: {settled})",
             world.materials(),
             world.props()
         );
@@ -641,9 +667,18 @@ fn first_person_hands(
         .nth(3)
         .and_then(|z| z.parse().ok())
         .unwrap_or(0.0);
+    // `fp:WHAT,ZOOM,TURN,TRIGGER,TILT` then tips it TILT degrees about the
+    // view's left-right axis, its underside up to the eye (a supporting
+    // hand under a handguard).
+    let tilt: f32 = spec
+        .split(',')
+        .nth(4)
+        .and_then(|z| z.parse().ok())
+        .unwrap_or(0.0);
     let pivot = eye + (flat * 0.42 + right * 0.1 - Vec3::Y * 0.22) / zoom;
     let view = move |t: Transform| {
-        let q = Quat::from_rotation_y(turn.to_radians());
+        let q = Quat::from_axis_angle(right, tilt.to_radians())
+            * Quat::from_rotation_y(turn.to_radians());
         Transform::from_translation(pivot + q * (t.translation - pivot))
             .with_rotation(q * t.rotation)
     };
@@ -745,8 +780,13 @@ fn first_person_hands(
             Some(handle) => glove(
                 &mut commands,
                 Side::Right,
-                Transform::from_translation((item_at * handle.local).translation)
-                    .with_rotation(level.rotation),
+                match guns.get(item).ok().and_then(|g| g.layout.handle.as_ref()) {
+                    Some(h) => {
+                        item_at * crate::render::props::handle_pose(h, 0.0, 0.0, Side::Right)
+                    }
+                    None => Transform::from_translation((item_at * handle.local).translation)
+                        .with_rotation(level.rotation),
+                },
                 hold_curl(Some(handle.role), 0.0, 0.0),
             ),
             None => glove(&mut commands, Side::Right, level, curl),
@@ -755,8 +795,16 @@ fn first_person_hands(
             Some(support) => glove(
                 &mut commands,
                 Side::Left,
-                item_at * support.local,
-                hold_curl(Some(GripRole::Support), 0.0, 0.0),
+                item_at
+                    * support.local
+                    * guns.get(item).map_or(Transform::IDENTITY, |g| {
+                        crate::render::props::support_pose(&g.layout, Side::Left)
+                    }),
+                if guns.get(item).is_ok_and(|g| g.layout.support.is_none()) {
+                    crate::render::props::CUP_CURL
+                } else {
+                    hold_curl(Some(GripRole::Support), 0.0, 0.0)
+                },
             ),
             None => glove(&mut commands, Side::Left, rest(Side::Left), [0.15; 5]),
         }
@@ -1638,5 +1686,22 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A screenshot is never taken in the frames just after everything's
+    /// in, however few `--frames` asked for: a gun close-up shot 5 frames
+    /// after came out as fog with no gun.
+    #[test]
+    fn a_screenshot_waits_for_the_world_to_settle() {
+        assert!(!settled(30, None), "not before everything's in");
+        assert!(!settled(25, Some(25)));
+        assert!(!settled(30, Some(25)), "5 frames after: the empty shot");
+        assert!(settled(25 + SHOT_SETTLE, Some(25)));
+        assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
     }
 }

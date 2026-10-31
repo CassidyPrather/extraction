@@ -262,9 +262,9 @@ def palm(ts):
     # its tab, open at the arm's end.
     # Closed at the arm's end by a low dome, right to its middle: an open
     # cuff showed a black hole whenever the hand pointed away from the eye,
-    # and a dome stopped short left a dark ring there. The dome is leather:
-    # in the nylon it read as a hole all the same, being dark and facing the
-    # eye.
+    # and a dome stopped short left a dark ring there. (Leather there drew
+    # the eye: with the arms hidden it's the cuff's end you see, holding
+    # anything out in front.)
     prof = [  # (z, grow over the wrist's shape, scale about its centre)
         (0.030, 0.0008, 1), (0.040, 0.0020, 1), (0.050, 0.0026, 1), (0.056, 0.0028, 1),
         (0.0565, 0.0050, 1), (0.0585, 0.0056, 1), (0.0765, 0.0058, 1), (0.0785, 0.0052, 1),
@@ -281,19 +281,23 @@ def palm(ts):
         c = f.calc_center_median()
         if 0.0563 < c.z < 0.0787 and f.normal.z * f.normal.z < 0.5:
             f.material_index = p._mi("Padding")
-        elif c.z > 0.0905:
-            f.material_index = p._mi("Leather")
     # The strap's tab on the little finger's side, sewn down at its end.
     w, yc, h = palm_shape(zw)
     x = -ts * (w * 0.97 + 0.0055)
     p.box((0.0055, 0.016, 0.02), (x - ts * 0.0012, yc + 0.003, 0.0675), "Padding",
           bevel=0.0018, segs=2)
-    # Each wrist carries the display's housing (`wrist_mount` in
-    # src/render/props.rs: the panel lies 4 mm over this housing's top,
-    # y 0.0255), strapped over the cuff's back; the panel shows on the
-    # hand that isn't the gun hand.
-    p.box((0.052, 0.013, 0.082), (0.0, 0.019, 0.0625), "Padding", bevel=0.003, segs=2)
-    p.box((0.058, 0.004, 0.012), (0.0, 0.0165, 0.0625), "Padding", bevel=0.0015, segs=1)
+    return p
+
+
+def housing():
+    """The wrist display's housing, strapped over the cuff's back: its own
+    node (`wrist_housing`), drawn only on the hand that isn't the gun hand,
+    the one the display shows on (`render::props`). As long and wide as the
+    panel needs (`render::comfort::WRIST_SIZE`), only as thick as a watch:
+    the panel lies 4 mm over its top, y 0.0195 (`wrist_on_glove`)."""
+    p = Part("wrist_housing")
+    p.box((0.052, 0.007, 0.082), (0.0, 0.016, 0.0625), "Padding", bevel=0.0025, segs=2)
+    p.box((0.058, 0.004, 0.012), (0.0, 0.0155, 0.0625), "Padding", bevel=0.0015, segs=1)
     return p
 
 
@@ -308,6 +312,7 @@ def glove(side):
     main_guard()
     ts = 1.0 if side == "left" else -1.0
     palm_obj = make(palm(ts))
+    parent(make(housing()), palm_obj)
     for f in range(5):
         prev, chain = palm_obj, T(*finger_root(f, ts)) @ finger_aim(f, ts)
         bones = [b for b in FINGER_BONES[f] if b > 0]

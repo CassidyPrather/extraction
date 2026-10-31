@@ -192,10 +192,13 @@ recv.sweep(guard, section_rect(0.009, 0.003, 0.001, 3), "Blued")
 jacket = Part("jacket")
 jacket.tube(0.0175, 0.0155, -0.545, -0.2, "Blued", segs=40, xf=T(0, BORE, 0), chamfer=0.0008)
 jc = Part("cut")
-# Rows of long cooling slots round the jacket (not along its bottom).
+# Rows of long cooling slots round the jacket: on its top, its upper
+# quarters and both sides, none along its bottom. (Each slot is drawn
+# pointing up and turned by `a`: the old turns put them on the left and
+# underneath, and the right side, the one a player looks at, was bare.)
 for k in range(7):
     z = -0.255 - k * 0.032
-    for a in (90, 140, 40, 200, -20):
+    for a in (0, -45, 45, -90, 90):
         rot = RZ(math.radians(a), about=(0, BORE, 0))
         jc.box((0.012, 0.04, 0.02), (0.0, BORE + 0.02, z), "Blued", bevel=0.005, segs=2,
                xf=rot)

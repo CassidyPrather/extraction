@@ -47,6 +47,11 @@ pub const MAX_REACH_UP: f32 = 2.1;
 /// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
 /// where it stands 0.42 over the ground and the body can't.
 const STEP_UP: f32 = 0.35;
+/// A door's steps reaching out at least this far (m) are a flight, its
+/// flanks kept off (`plan_buildings`); slack either side of the doorway
+/// in its lane.
+const FLIGHT_MIN: f32 = 0.5;
+const FLIGHT_LANE: f32 = 0.15;
 
 #[derive(Clone, Debug)]
 pub struct DoorInfo {
@@ -415,6 +420,33 @@ pub(crate) fn plan_buildings_with(
             }
             if let Some(ob) = obstacle(piece.shape, piece.at, under, geo.floor.is_some()) {
                 grid.block(ob, CLEARANCE);
+            }
+        }
+        // A door's flight of steps (`buildings::door_steps`, each step a
+        // tread wider either side than the one above) is climbed straight
+        // on, in the door's lane. Along its flanks a route hugging the wall
+        // takes each step from its side with the wall at its shoulder, and
+        // the step up meets the wall and fails (Marrow sims, 30 October:
+        // raiders stood at a house's door steps a metre short of the
+        // doorway). The flanks are kept off; the lane stays open.
+        if !b.prefab.ends_with("_drowned") {
+            for en in &geo.entrances {
+                let steps = en.clear - 1.0;
+                if steps < FLIGHT_MIN {
+                    continue;
+                }
+                let (at, out) = (Vec2::from(en.at), Vec2::from(en.out));
+                let along = out.perp();
+                let lane = en.width * 0.5 + FLIGHT_LANE;
+                for j in 0..n {
+                    for i in 0..n {
+                        let l = Vec2::from(grid.centre(i, j)) - at;
+                        let (o, s) = (l.dot(out), l.dot(along).abs());
+                        if o > 0.0 && o < steps && s > lane && s < en.width * 0.5 + steps + 0.3 {
+                            grid.cost[j * n + i] = BLOCKED;
+                        }
+                    }
+                }
             }
         }
         // Where one floor meets another more than a step up or down (a
@@ -1074,6 +1106,79 @@ mod tests {
     use crate::launch::LaunchOptions;
     use crate::rig::LocalPlayer;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// A route in at a door with steps up to it comes onto the flight
+    /// in the door's lane, square on, never along its flanks (Marrow sims,
+    /// 30 October: raiders walking the wall took a house's steps from
+    /// their sides, the wall at their shoulder, and stood a metre short of
+    /// the doorway). From along the wall either side, on every map.
+    #[test]
+    fn a_route_takes_door_steps_square_on() {
+        let mut flanked = vec![];
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app) {
+                if plan.name.ends_with("_drowned") {
+                    continue;
+                }
+                let Some(geo) = prefab(&plan.name) else {
+                    continue;
+                };
+                for en in &geo.entrances {
+                    let steps = en.clear - 1.0;
+                    if steps < FLIGHT_MIN {
+                        continue;
+                    }
+                    let (at, out) = (Vec2::from(en.at), Vec2::from(en.out));
+                    let along = out.perp();
+                    let lane = en.width * 0.5 + FLIGHT_LANE + 1e-3;
+                    let half = en.width * 0.5 + steps;
+                    let inside = at - out * 1.5;
+                    for (side, off, from) in [-1.0f32, 1.0].into_iter().flat_map(|s| {
+                        [
+                            (s, 0.4, half + 0.5),
+                            (s, 1.1, half + 0.8),
+                            (s, 0.6, half + 1.5),
+                        ]
+                    }) {
+                        let start = at + along * side * from + out * off;
+                        let Some(path) = plan.path(start, inside) else {
+                            continue;
+                        };
+                        tried += 1;
+                        let on_flank = path.windows(2).any(|w| {
+                            (0..=20).any(|k| {
+                                let l = w[0].lerp(w[1], k as f32 / 20.0) - at;
+                                let (o, s) = (l.dot(out), l.dot(along).abs());
+                                o > 0.05 && o < steps && s > lane && s < half
+                            })
+                        });
+                        if on_flank {
+                            flanked.push(format!(
+                                "{map} {} at {:.1}: from {side} {from:.1} along {off} out",
+                                plan.name,
+                                plan.xf.translation.xz()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tried >= 20, "tried {tried}");
+        assert!(
+            flanked.is_empty(),
+            "up a door's steps from the side: {flanked:#?}"
+        );
+    }
 
     fn plans(app: &mut App) -> Vec<BuildingPlan> {
         app.world_mut()
