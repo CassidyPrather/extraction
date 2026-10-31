@@ -137,7 +137,7 @@ CUE_LOWPASS = {"gun.shot_suppressed": 2200.0, "gear.slosh": 900.0, "gun.squib": 
                "heavy.slam": 600.0, "heavy.stall": 2500.0, "echo.slap": 2500.0,
                "thunder.crack": 8000.0, "thunder.roll": 4000.0,
                # src/audio.rs fault_layers: each stoppage its own.
-               "gun.ftf": 2500.0, "gun.short_stroke": 2500.0, "gun.dud": 4000.0,
+               "gun.ftf": 2500.0, "gun.short_stroke": 2500.0, "gun.dud": 12000.0,
                "gun.hang_fizz": 5000.0, "gun.trigger_block": 2500.0, "gun.trigger_dead": 10000.0,
                "gun.action_open": 3000.0,
                "gun.double_feed": 1200.0,

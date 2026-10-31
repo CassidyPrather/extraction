@@ -87,13 +87,7 @@ BEDS = {
 # it; with Audio, the mix's owners): reported, not failed. One that
 # clears is flagged until it's taken off.
 KNOWN = {
-    "Nagant gate opened": "guns/safety is 10-14 dB under physical/switch in the highs a click is heard in",
-    "Nagant gate shut": "guns/safety, as the gate opened",
-    "slam-fire's snap": "guns/safety, as the gate",
     "Nagant cylinder turned": "guns/dry_fire at x1.6 and -10 dB: a quiet ratchet by design, 6 dB short in rain",
-    "crossbow string let go short": "impacts/wood's energy is at 125-400 Hz, under wind, rain and gunfire",
-    "crossbow loosed dry": "impacts/wood, as the string let go short",
-    "dud": "its 4 kHz low-pass takes dry fire's highs, where it's heard",
 }
 CLEAR = gs.CLEAR
 LISTEN = gs.LISTEN
