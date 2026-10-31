@@ -395,16 +395,20 @@ pub(crate) mod tests {
         }
     }
 
-    /// The worst frame after an event, at most this many times the busy
-    /// moment's median frame (measured in the same run, so a loaded
-    /// machine moves both). The truck's homecoming was 3.6-4.2x before the
-    /// collider trees were optimised in place.
-    const EVENT_CEILING: f64 = 3.0;
+    /// The worst frame after an event, in units of the reference workload
+    /// timed in the same run (`perf::fight::reference_ms`, so a loaded
+    /// machine moves both): the frame budget's (`CPU_FRAME_UNITS`). Once
+    /// three times the busy moment's median, which was 53 units; the
+    /// median halved when the main world went to one thread, and a
+    /// ceiling on it would have tightened by as much. The truck's
+    /// homecoming was 190-220 units before the collider trees were
+    /// optimised in place, 113 on one thread.
+    const EVENT_UNITS: f64 = super::super::budget::CPU_FRAME_UNITS;
     /// A valley loading: every frame after the first two (the startup
-    /// systems, then the first frame's text and screens) at most this
-    /// many times the moment's median. Dressing the Depot was 57x before
+    /// systems, then the first frame's text and screens) at most this many
+    /// units (ten of the old median). Dressing the Depot was 3000 before
     /// its shading was baked in the background.
-    const LOAD_CEILING: f64 = 10.0;
+    const LOAD_UNITS: f64 = 530.0;
 
     /// The raid's one-off events and a valley loading hold their worst
     /// frame to a ceiling (`SPIKE_MAP` for another valley;
@@ -512,7 +516,6 @@ pub(crate) mod tests {
         let (frames, worst) = load(map);
         let (base, spikes, reference) = spikes(map);
         report(&base, &spikes, reference);
-        let p50 = spread(&base).0;
         let (lp50, lp99, lmax) = spread(&frames[1..]);
         let at = frames.iter().skip(1).position(|f| *f == lmax).unwrap_or(0) + 1;
         println!(
@@ -543,13 +546,13 @@ pub(crate) mod tests {
         let mut over = Vec::new();
         for s in &spikes {
             let max = spread(&s.frames).2;
-            if max > EVENT_CEILING * p50 {
+            if max > EVENT_UNITS * reference {
                 over.push((
                     s.name.clone(),
                     format!(
-                        "{}: {max:.1} ms, {:.1}x the moment's median > {EVENT_CEILING}x",
+                        "{}: {max:.1} ms, {:.0} units > {EVENT_UNITS}",
                         s.name,
-                        max / p50
+                        max / reference
                     ),
                 ));
             }
@@ -563,13 +566,12 @@ pub(crate) mod tests {
             &base, &moments,
         ));
         if let Some((i, f)) = long.iter().find(|(i, _)| *i > 2) {
-            if *f > LOAD_CEILING * p50 {
+            if *f > LOAD_UNITS * reference {
                 over.push((
                     "loading".into(),
                     format!(
-                        "loading, frame {i}: {f:.0} ms, {:.0}x the moment's median > \
-                         {LOAD_CEILING}x",
-                        f / p50
+                        "loading, frame {i}: {f:.0} ms, {:.0} units > {LOAD_UNITS}",
+                        f / reference
                     ),
                 ));
             }
