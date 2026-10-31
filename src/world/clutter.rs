@@ -279,9 +279,11 @@ pub fn dress(
                 Valley::Marrow if story != Some(Story::Hana) => {
                     out.push(on("suitcase_open", s.bed, 0.1));
                     out.push(on("suitcase_shut", s.door_floor[0], 0.15));
+                    // Behind the suitcase, off the doorway (beside it, the
+                    // bundle went 10 cm into the case).
                     out.push(on(
                         "bundle",
-                        s.door_floor[0] + Vec3::new(0.45, 0.0, 0.1),
+                        s.door_floor[0] + Vec3::new(-0.05, 0.0, 0.52),
                         0.0,
                     ));
                     out.push(on("belongings_box", s.room_floor + Vec3::X * 0.6, 0.3));
@@ -375,6 +377,9 @@ pub fn dress(
             out.push(wall("coat_hook", s.door_wall[0]));
         }
         Some(Story::ShotFirer) => {
+            // His helmet where the dishes were (both, they went through
+            // each other).
+            out.retain(|(n, _)| *n != "dishes");
             out.push(on("helmet_lamp", s.table[0] + Vec3::Z * 0.2, -0.4));
             out.push(wall("tally_board", s.door_wall[1] + Vec3::Y * 0.1));
         }
@@ -567,7 +572,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             nz,
         )]),
         // The scavenger off Lev's truck: a bedroll, a tin, lately.
-        ("cinder", "house_plank_damaged") if here(0.0, 150.0) => house(
+        ("cinder", "house_plank_damaged") if here(15.0, 103.5) => house(
             |_| {
                 vec![
                     on("bedroll", Vec3::new(-4.0 + 0.95, 0.5, -3.5 + 1.1), PI * 0.5),
@@ -577,7 +582,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // T. Veselý, the woodward.
-        ("cinder", "cabin_log") if here(-75.0, -159.0) => things(vec![
+        ("cinder", "cabin_log") if here(-51.9, -111.2) => things(vec![
             facing("axe_pegs", Vec3::new(-0.4, cf + 1.5, -cz), pz),
             facing("bow_saw", Vec3::new(0.45, cf + 1.75, -cz), pz),
         ]),
@@ -1566,8 +1571,8 @@ mod tests {
             ("kettle", "cabin_log", 205.0, -205.0),
             ("kettle", "cabin_log", 119.0, -138.0),
             ("kettle", "chapel", -8.0, 150.0),
-            ("cinder", "house_plank_damaged", 0.0, 150.0),
-            ("cinder", "cabin_log", -75.0, -159.0),
+            ("cinder", "house_plank_damaged", 15.0, 103.5),
+            ("cinder", "cabin_log", -51.9, -111.2),
             ("sallow", "house_brick", -58.0, 206.0),
             ("sallow", "shop", -180.0, -222.0),
             ("sallow", "cabin_log", -160.0, 112.0),

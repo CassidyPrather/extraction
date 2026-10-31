@@ -47,6 +47,11 @@ pub const MAX_REACH_UP: f32 = 2.1;
 /// (`player::STEP_HEIGHT`, 0.4), or a route goes up a silt bank's flank
 /// where it stands 0.42 over the ground and the body can't.
 const STEP_UP: f32 = 0.35;
+/// A door's steps reaching out at least this far (m) are a flight, its
+/// flanks kept off (`plan_buildings`); slack either side of the doorway
+/// in its lane.
+const FLIGHT_MIN: f32 = 0.5;
+const FLIGHT_LANE: f32 = 0.15;
 
 #[derive(Clone, Debug)]
 pub struct DoorInfo {
@@ -417,6 +422,33 @@ pub(crate) fn plan_buildings_with(
                 grid.block(ob, CLEARANCE);
             }
         }
+        // A door's flight of steps (`buildings::door_steps`, each step a
+        // tread wider either side than the one above) is climbed straight
+        // on, in the door's lane. Along its flanks a route hugging the wall
+        // takes each step from its side with the wall at its shoulder, and
+        // the step up meets the wall and fails (Marrow sims, 30 October:
+        // raiders stood at a house's door steps a metre short of the
+        // doorway). The flanks are kept off; the lane stays open.
+        if !b.prefab.ends_with("_drowned") {
+            for en in &geo.entrances {
+                let steps = en.clear - 1.0;
+                if steps < FLIGHT_MIN {
+                    continue;
+                }
+                let (at, out) = (Vec2::from(en.at), Vec2::from(en.out));
+                let along = out.perp();
+                let lane = en.width * 0.5 + FLIGHT_LANE;
+                for j in 0..n {
+                    for i in 0..n {
+                        let l = Vec2::from(grid.centre(i, j)) - at;
+                        let (o, s) = (l.dot(out), l.dot(along).abs());
+                        if o > 0.0 && o < steps && s > lane && s < en.width * 0.5 + steps + 0.3 {
+                            grid.cost[j * n + i] = BLOCKED;
+                        }
+                    }
+                }
+            }
+        }
         // Where one floor meets another more than a step up or down (a
         // retaining wall, a stair's open side), neither edge is a way
         // across.
@@ -674,6 +706,20 @@ fn plan_site(
         if let Some(ob) = obstacle(piece.shape, piece.at, floor, false) {
             grid.block(ob, clearance);
         }
+    }
+    // Its carts on their rails (`world::workings`): bodies of their own,
+    // not the site's pieces, so the raster hasn't them; a raider walking
+    // the deep kettle's haulage down its rail met one (Kettle sims, 31
+    // October). Where they're set down: nobody the plan's for pushes them.
+    for (at, half, yaw) in crate::world::workings::cart_footprints(&b.prefab) {
+        grid.block(
+            Obstacle::Rect {
+                at: at.to_array(),
+                half: half.to_array(),
+                yaw: -yaw,
+            },
+            clearance,
+        );
     }
     for (_, leaf) in mine {
         let def = leaf.0;
@@ -1074,6 +1120,203 @@ mod tests {
     use crate::launch::LaunchOptions;
     use crate::rig::LocalPlayer;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// Every recipe's plan floor (its lowest door's sill, else its
+    /// `Geo::floor`, else the ground: `plan_buildings`) is the height of
+    /// what's walked on inside it, the top of its widest flat floor slab
+    /// under 1.2 m. A building with no door that left `Geo::floor` unset was
+    /// planned on the ground under a raised floor: the blast furnace's cast
+    /// house and the mill race's hut (31 October), where no raider found
+    /// room for a body by the loot.
+    #[test]
+    fn every_plan_floor_is_its_floor() {
+        use crate::world::buildings::{self, Shape};
+        let ids = buildings::PREFABS
+            .iter()
+            .chain(crate::world::dam::PREFABS.iter())
+            .chain(crate::world::fell::PREFABS.iter());
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for id in ids {
+            // Stepped down a slope: each cell has its own floor. Not walked
+            // into: a wreck's body, the robots' gate.
+            if crate::world::fell::stepped_floor(id, Vec2::ZERO).is_some()
+                || id.starts_with("wreck_")
+                || *id == "robot_gate"
+            {
+                continue;
+            }
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            // No way in (the headframe, the steeple): nothing walked on.
+            if geo.entrances.is_empty() && geo.doors.is_empty() {
+                continue;
+            }
+            let plan = geo
+                .doors
+                .iter()
+                .map(|d| d.hinge.y)
+                .min_by(|a, b| a.total_cmp(b))
+                .or(geo.floor)
+                .unwrap_or(0.0);
+            let slabs: Vec<(f32, f32)> = geo
+                .pieces
+                .iter()
+                .filter(|p| p.collide)
+                .filter_map(|p| {
+                    let Shape::Box(s) = p.shape else {
+                        return None;
+                    };
+                    if (p.at.rotation * Vec3::Y).y < 0.999 {
+                        return None;
+                    }
+                    let s = s * p.at.scale;
+                    let top = p.at.translation.y + s.y * 0.5;
+                    (top > -0.05 && top < 1.2 && s.x >= 1.5 && s.z >= 1.5)
+                        .then_some((s.x * s.z, top))
+                })
+                .collect();
+            // The highest of its wide slabs (a drowned house's silt over its
+            // footing, a floor on its plinth).
+            let widest = slabs.iter().map(|s| s.0).fold(0.0, f32::max);
+            let Some(floor) = slabs
+                .iter()
+                .filter(|s| s.0 >= widest * 0.4)
+                .map(|s| s.1)
+                .reduce(f32::max)
+            else {
+                continue;
+            };
+            seen += 1;
+            if (floor - plan).abs() > 0.1 {
+                bad.push(format!(
+                    "{id}: planned at {plan:.2}, its floor at {floor:.2}"
+                ));
+            }
+        }
+        assert!(seen >= 30, "only {seen} recipes with a floor");
+        assert!(
+            bad.is_empty(),
+            "plans off their floors:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// A route down a site with a mine cart on its rail goes round the
+    /// cart, not through it (Kettle sims, 31 October: raiders walking the
+    /// deep kettle's haulage down its rail stood pressed to the cart):
+    /// from either side of every cart, along its rail.
+    #[test]
+    fn a_route_goes_round_a_mine_cart() {
+        let opts = LaunchOptions {
+            robots: false,
+            map: "kettle_pass".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let mut tried = 0;
+        let mut through = vec![];
+        for plan in plans(&mut app) {
+            for (at, half, yaw) in crate::world::workings::cart_footprints(&plan.name) {
+                let along = Vec2::new(yaw.sin(), yaw.cos());
+                let across = along.perp();
+                let inside = |q: Vec2| {
+                    let d = q - at;
+                    d.dot(across).abs() < half.x && d.dot(along).abs() < half.y
+                };
+                let (a, b) = (at - along * 3.0, at + along * 3.0);
+                let Some(path) = plan.path(a, b) else {
+                    continue;
+                };
+                tried += 1;
+                let hit = path
+                    .windows(2)
+                    .any(|w| (0..=20).any(|k| inside(w[0].lerp(w[1], k as f32 / 20.0))));
+                if hit {
+                    through.push(format!("{} cart at {at}", plan.name));
+                }
+            }
+        }
+        assert!(tried >= 1, "no cart tried");
+        assert!(through.is_empty(), "through a cart: {through:?}");
+    }
+
+    /// A route in at a door with steps up to it comes onto the flight
+    /// in the door's lane, square on, never along its flanks (Marrow sims,
+    /// 30 October: raiders walking the wall took a house's steps from
+    /// their sides, the wall at their shoulder, and stood a metre short of
+    /// the doorway). From along the wall either side, on every map.
+    #[test]
+    fn a_route_takes_door_steps_square_on() {
+        let mut flanked = vec![];
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            app.update();
+            for plan in plans(&mut app) {
+                if plan.name.ends_with("_drowned") {
+                    continue;
+                }
+                let Some(geo) = prefab(&plan.name) else {
+                    continue;
+                };
+                for en in &geo.entrances {
+                    let steps = en.clear - 1.0;
+                    if steps < FLIGHT_MIN {
+                        continue;
+                    }
+                    let (at, out) = (Vec2::from(en.at), Vec2::from(en.out));
+                    let along = out.perp();
+                    let lane = en.width * 0.5 + FLIGHT_LANE + 1e-3;
+                    let half = en.width * 0.5 + steps;
+                    let inside = at - out * 1.5;
+                    for (side, off, from) in [-1.0f32, 1.0].into_iter().flat_map(|s| {
+                        [
+                            (s, 0.4, half + 0.5),
+                            (s, 1.1, half + 0.8),
+                            (s, 0.6, half + 1.5),
+                        ]
+                    }) {
+                        let start = at + along * side * from + out * off;
+                        let Some(path) = plan.path(start, inside) else {
+                            continue;
+                        };
+                        tried += 1;
+                        let on_flank = path.windows(2).any(|w| {
+                            (0..=20).any(|k| {
+                                let l = w[0].lerp(w[1], k as f32 / 20.0) - at;
+                                let (o, s) = (l.dot(out), l.dot(along).abs());
+                                o > 0.05 && o < steps && s > lane && s < half
+                            })
+                        });
+                        if on_flank {
+                            flanked.push(format!(
+                                "{map} {} at {:.1}: from {side} {from:.1} along {off} out",
+                                plan.name,
+                                plan.xf.translation.xz()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(tried >= 20, "tried {tried}");
+        assert!(
+            flanked.is_empty(),
+            "up a door's steps from the side: {flanked:#?}"
+        );
+    }
 
     fn plans(app: &mut App) -> Vec<BuildingPlan> {
         app.world_mut()

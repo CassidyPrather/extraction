@@ -118,7 +118,7 @@
         map: "cinder_works",
         name: "The inspector",
         // In the works garage, by the office: he said he'd wait.
-        at: (-25.5, -24.5),
+        at: (-31.5, -17.0),
         rot: 90.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -141,7 +141,7 @@
         map: "cinder_works",
         name: "Last fire in the dead wood",
         // Someone who sat out a Surge in the open, by the woodward's cabin.
-        at: (-66.0, -167.0),
+        at: (-42.9, -119.2),
         rot: 10.0,
         pieces: [
             Pallet(at: (0.0, 0.0), rot: 20.0),
@@ -195,7 +195,7 @@
         map: "cinder_works",
         name: "Engine shed tea break",
         // Two cups and the crib table in the north sidings' engine shed.
-        at: (47.5, -258.0),
+        at: (24.5, -183.8),
         rot: 195.0,
         pieces: [
             Table(at: (0.0, 0.0), rot: 0.0),
@@ -240,7 +240,7 @@
         name: "Stone pickers",
         // Someone who went into the ash pit for the stones and didn't come
         // up: their mate's kit at the rim.
-        at: (-160.0, 45.0),
+        at: (-108.0, 4.0),
         rot: 270.0,
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.7),
@@ -310,9 +310,9 @@
         name: "Valve three",
         // Under the works, in the valve chamber off the pump room (room
         // "valve_chamber", site tunnel_cinder): a fitter's last job.
-        at: (81.4, -37.8),
+        at: (62.6, -27.3),
         rot: 0.0,
-        floor: Some(15.88),
+        floor: Some(15.93),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.6),
             Chair(at: (0.0, 0.7), rot: 0.0),
@@ -528,7 +528,7 @@
         map: "cinder_works",
         name: "Fitter's bench",
         // By the canal pumps: the fitter's own book.
-        at: (166.0, 40.0),
+        at: (106.0, 32.9),
         rot: 0.0,
         after: Some(Visits(1)),
         pieces: [
@@ -550,7 +550,7 @@
         map: "cinder_works",
         name: "Letters by hand",
         // The inspector's satchel, left in the works yard.
-        at: (228.0, 4.0),
+        at: (164.8, -2.3),
         rot: 90.0,
         after: Some(Visits(3)),
         pieces: [
@@ -568,7 +568,7 @@
         map: "cinder_works",
         name: "The far stair",
         // Where the service tunnel comes up behind the works.
-        at: (67.0, -60.0),
+        at: (48.1, -49.5),
         rot: 0.0,
         after: Some(Visits(5)),
         pieces: [
@@ -723,10 +723,11 @@
             Bedroll(at: (0.4, 0.6), rot: 90.0),
             Bedroll(at: (0.4, -0.6), rot: 90.0),
             Lantern(at: (1.2, 0.0, 0.0)),
-            Crate(at: (1.0, 0.9), size: 0.4),
+            // Clear of the bedroll's end (it stood 3 cm into it).
+            Crate(at: (1.0, 1.35), size: 0.4),
         ],
         items: [
-            (id: "old_photo", at: (1.0, 0.4, 0.9), condition: 0.5),
+            (id: "old_photo", at: (1.0, 0.4, 1.35), condition: 0.5),
         ],
         note: Some((
             name: "Novakova's note",
@@ -740,9 +741,9 @@
         name: "Sorting ledge",
         // The cellars' far ledge, over the ash pit (room "far_ledge", site
         // cellars_cinder): where the furnace's charge was sorted.
-        at: (-208.0, 168.0),
+        at: (-161.3, 108.3),
         rot: 0.0,
-        floor: Some(11.47),
+        floor: Some(13.38),
         pieces: [
             Crate(at: (0.0, 0.0), size: 0.5),
         ],
@@ -765,14 +766,15 @@
             Prop(model: "suitcase_shut", at: (-3.2, 0.0, -0.6), rot: 10.0, size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-3.2, 0.22, -0.6), rot: -5.0, size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-2.4, 0.0, -0.9), rot: 35.0, size: (0.62, 0.22, 0.47)),
-            Prop(model: "belongings_box", at: (-1.6, 0.0, -0.5), rot: -10.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-1.6, 0.0, -0.5), rot: -10.0, size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (-1.0, 0.0, -0.9), rot: 20.0, size: (0.49, 0.39, 0.4)),
-            Prop(model: "belongings_box", at: (-0.4, 0.0, -0.4), rot: 5.0, size: (0.56, 0.46, 0.4)),
-            Prop(model: "bundle", at: (-0.4, 0.46, -0.4), rot: -30.0, size: (0.49, 0.39, 0.4), collide: false),
+            Prop(model: "belongings_box", at: (-0.4, 0.0, -0.4), rot: 5.0, size: (0.56, 0.413, 0.4)),
+            // On the box's lid (0.413 up; at 0.46 it floated over it).
+            Prop(model: "bundle", at: (-0.4, 0.413, -0.4), rot: -30.0, size: (0.49, 0.39, 0.4), collide: false),
             Prop(model: "suitcase_shut", at: (0.3, 0.0, -0.8), rot: 80.0, size: (0.62, 0.22, 0.47)),
             Crate(at: (1.2, -0.6), size: 0.5),
             Prop(model: "suitcase_open", at: (1.2, 0.5, -0.6), rot: -15.0, size: (0.68, 0.12, 0.64)),
-            Prop(model: "picture_frame", at: (-1.6, 0.46, -0.5), rot: 15.0, size: (0.3, 0.03, 0.24), collide: false),
+            Prop(model: "picture_frame", at: (-1.6, 0.413, -0.5), rot: 15.0, size: (0.3, 0.03, 0.24), collide: false),
             Crate(at: (2.4, -0.5), size: 0.7),
         ],
         items: [
@@ -816,17 +818,18 @@
         name: "The charging queue",
         // By the blast furnace: the carts of the last charge, held when the
         // fire got out into the north wood on 26 Feb, and never fed.
-        at: (-150.0, 178.0),
+        at: (-103.3, 118.3),
         rot: 0.0,
         pieces: [
             Pallet(at: (-6.0, 0.0), rot: 0.0),
-            Prop(model: "belongings_box", at: (-6.2, 0.144, 0.0), size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-6.2, 0.144, 0.0), size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (-5.7, 0.144, 0.1), rot: 25.0, size: (0.49, 0.39, 0.4)),
             Pallet(at: (-3.5, 0.0), rot: 0.0),
             Prop(model: "suitcase_shut", at: (-3.5, 0.144, 0.0), size: (0.62, 0.22, 0.47)),
             Prop(model: "suitcase_shut", at: (-3.5, 0.364, 0.0), rot: 15.0, size: (0.62, 0.22, 0.47)),
-            Pallet(at: (-1.0, 0.0), rot: 0.0),
-            Prop(model: "bed", at: (-1.0, 0.144, 0.0), rot: 90.0, size: (0.91, 0.9, 1.96)),
+            // The bed on its legs on the ground (on a pallet half its
+            // length, its legs hung off it).
+            Prop(model: "bed", at: (-1.0, 0.0, 0.0), rot: 90.0, size: (0.91, 0.9, 1.96)),
             Pallet(at: (1.5, 0.0), rot: 0.0),
             Prop(model: "books", at: (1.3, 0.144, 0.0), rot: 10.0, size: (0.5, 0.12, 0.27), collide: false),
             Prop(model: "dishes", at: (1.8, 0.144, 0.1), rot: -20.0, size: (0.45, 0.1, 0.35), collide: false),
@@ -887,9 +890,10 @@
         rot: 0.0,
         pieces: [
             Pallet(at: (0.0, 0.0), rot: 15.0),
-            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.46, 0.4)),
+            Prop(model: "belongings_box", at: (-0.25, 0.144, 0.0), rot: 15.0, size: (0.56, 0.413, 0.4)),
             Prop(model: "bundle", at: (0.3, 0.144, 0.1), rot: -20.0, size: (0.49, 0.39, 0.4)),
-            Prop(model: "lantern", at: (-0.25, 0.604, 0.0), size: (0.12, 0.27, 0.12), collide: false),
+            // On the box's lid (0.413 up; it floated 5 cm over it).
+            Prop(model: "lantern", at: (-0.25, 0.557, 0.0), size: (0.12, 0.27, 0.12), collide: false),
             Prop(model: "boots", at: (0.9, 0.0, 0.7), rot: 40.0, size: (0.22, 0.25, 0.34), collide: false),
         ],
         items: [
@@ -934,7 +938,7 @@
         // Below the fire lookout, at the edge of the north-west wood: the
         // butts and the charred beam where the works and Ash Row held the
         // fire on 26 Feb till the wind went round.
-        at: (-160.0, -116.0),
+        at: (-108.5, -64.6),
         rot: 135.0,
         pieces: [
             Barrel(at: (-3.5, 0.0)),

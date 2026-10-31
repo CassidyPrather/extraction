@@ -1832,6 +1832,13 @@ fn house_ruin(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, ruin: Ruin)
     let (x, z) = (w * 0.5, d * 0.5);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     // Damaged: the front +X corner fallen in to a stub (both its walls'
     // ends), and a breach knocked through the +X wall.
     let stub = 0.5;
@@ -2423,6 +2430,13 @@ fn cabin_ruin(b: &mut Builder, ruin: Ruin) {
     let (x, z) = (w * 0.5, d * 0.5);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     // Damaged: the corner's two walls fallen to a stub (the front's clear
     // of its window's shutter).
     let stub = 0.5;
@@ -2640,6 +2654,13 @@ fn shop_ruin(b: &mut Builder, ruin: Ruin) {
     let (w, d, f, h) = (9.0, 7.0, 0.3, 3.1);
     let damaged = ruin == Ruin::Damaged;
     b.plinth(w, d, f, Mat::Concrete, Mat::WoodFloor);
+    // Walked on: its floor. Burnt, its doors are gone, and the raiders'
+    // plan took the ground under it (`sim::indoor`). (Not damaged: its
+    // doors give it, and a floor set also reads as a drowned house's silt,
+    // its low walls a climb.)
+    if ruin == Ruin::Burnt {
+        b.geo.floor = Some(f);
+    }
     b.glass_out = true;
     b.shell(
         w,
@@ -2846,8 +2867,9 @@ fn barn(b: &mut Builder) {
     // By the end window, on the boards (not sunk in them).
     b.crate_box(Vec3::new(5.1, f + 0.015, 6.3), 0.8, Some("food_common"));
     b.crate_box(Vec3::new(-4.5, f, -5.5), 0.6, Some("tools"));
-    b.barrel(Vec3::new(5.2, f, 6.9));
-    b.barrel(Vec3::new(4.6, f, 7.2));
+    // Behind the crate, clear of it (the first stood 7 cm into it).
+    b.barrel(Vec3::new(5.25, f, 7.05));
+    b.barrel(Vec3::new(4.55, f, 7.2));
 }
 
 fn sawmill(b: &mut Builder) {
@@ -3772,6 +3794,10 @@ fn mill_race(b: &mut Builder) {
     // doorway on +X, a ceiling under the girts; his winch for hauling up
     // to the deck, a bench, rope, a lantern.
     let (hs, y0, hh) = (2.25, 0.2, 2.6);
+    // What's walked on inside is the hut's floor: its doorway has no door
+    // to take it from (`sim::indoor`'s plan put it at the ground and found
+    // no room for a body by the workbench).
+    b.geo.floor = Some(y0);
     let at = |x: f32, z: f32| Vec2::new(x, z + MR_SHIFT);
     b.bx(
         Vec3::new(2.0 * hs, 0.2, 2.0 * hs),
@@ -4455,6 +4481,10 @@ fn blast_furnace(b: &mut Builder) {
         Some("workshop"),
     );
     b.crate_box(Vec3::new(5.5, 0.2, -12.0) + BF_SHIFT, 0.8, Some("tools"));
+    // What's walked on inside is the cast house's floor (0.2 up). With no
+    // door to take it from, the raiders' plan put it at the ground and
+    // found no room for a body anywhere on the slab (`sim::indoor`).
+    b.geo.floor = Some(0.2);
 }
 
 /// A railway signal box: an enterable brick ground floor (its lever frame,
@@ -6161,10 +6191,16 @@ pub fn dress_buildings(
             let site = super::underground::ids().any(|id| id == b.prefab);
             let f = extraction_core::map::prefab_footprint(&b.prefab);
             let walls = Vec2::new(f[0], f[2]) * 0.5;
-            Bake::Baking(
-                bevy::tasks::AsyncComputeTaskPool::get()
-                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) }),
-            )
+            let job = async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) };
+            // While the valley loads, on every core: the async pool is a
+            // quarter of them (one on four), and a valley's prefabs baked
+            // one after another were most of its buildings' wait. In a
+            // raid (a breach's rebuild), off the frame's threads.
+            Bake::Baking(if loaded.is_some() {
+                bevy::tasks::AsyncComputeTaskPool::get().spawn(job)
+            } else {
+                bevy::tasks::ComputeTaskPool::get().spawn(job)
+            })
         });
         if let Bake::Baking(task) = bake {
             match bevy::tasks::futures::check_ready(task) {

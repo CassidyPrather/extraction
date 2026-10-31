@@ -127,7 +127,7 @@ fn tris(path: &std::path::Path) -> Vec<glb::Tri> {
 
 /// How far into `solid` the deepest of `pts` lies, and how many lie in
 /// deeper than [`DEPTH`]: (depth, count, a point).
-fn through(solid: &[[Vec3; 3]], pts: &[Vec3]) -> (f32, usize, Vec3) {
+pub(crate) fn through(solid: &[[Vec3; 3]], pts: &[Vec3]) -> (f32, usize, Vec3) {
     let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     for t in solid {
         for p in t {

@@ -106,7 +106,9 @@ pub(super) fn poke_buttons(
                 continue;
             };
             let h = input.hand(rh.side);
-            if h.tracked && h.trigger < 0.5 && hand.holding.is_none() && hand.handle.is_none() {
+            // The index finger out: the trigger let go (as every analog
+            // press is read, `rig::pressed`).
+            if h.tracked && !hand.trigger_down && hand.holding.is_none() && hand.handle.is_none() {
                 tips.push((player, hand.world.transform_point(FINGERTIP)));
             }
         }

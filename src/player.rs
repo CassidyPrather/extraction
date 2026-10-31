@@ -809,10 +809,10 @@ mod tests {
             .iter(app.world())
             .next()
             .unwrap();
-        // The deepest spot across the canal at x = -100.
-        let (at, w) = (40..80)
+        // The deepest spot across the canal at x = -70.
+        let (at, w) = (25..60)
             .filter_map(|z| {
-                let p = [-100.0, z as f32];
+                let p = [-70.0, z as f32];
                 zone.hm
                     .water_level(p)
                     .map(|w| (p, w, w - zone.hm.height(p)))

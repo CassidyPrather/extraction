@@ -105,6 +105,11 @@ pub struct Supported {
     pub point: usize,
 }
 
+/// The turn (radians, half a degree) at which a held item's steadying
+/// (`HoldFeel::steady`) is down to half: a tremor is well inside it, a
+/// swing far outside.
+pub const STEADY_GATE: f32 = 0.0087;
+
 /// How a held item handles, set by whoever owns its feel (the weapons
 /// module: recoil, sway, a heavy gun's lag). The hand's target is smoothed
 /// in the player's space (so walking or riding never trails it), then
@@ -114,6 +119,9 @@ pub struct HoldFeel {
     pub offset: Transform,
     /// Seconds: how softly the item follows the hand (0 snaps).
     pub lag: f32,
+    /// Seconds more of it in its turning only: a hold that steadies the
+    /// hand's tremor (a second hand, a stock), not where it goes.
+    pub steady: f32,
     /// The smoothed target, player space.
     pub smoothed: Option<Transform>,
 }
@@ -612,9 +620,10 @@ fn grip_from_input(
             let finger_grab =
                 comfort.as_ref().is_some_and(|c| c.finger_grab) && wrapped && !hand.fingers_closed;
             hand.fingers_closed = wrapped;
-            let pressed = !hand.grip_down && (grip > 0.6 || finger_grab);
+            let pressed = !hand.grip_down && (crate::rig::pressed(false, grip) || finger_grab);
             let holds = hand.holding.is_some() || hand.supporting.is_some();
-            let released = hand.grip_down && grip < 0.35 && !(holds && wrapped);
+            let released =
+                hand.grip_down && !crate::rig::pressed(true, grip) && !(holds && wrapped);
             // What the grip would take: the glove tints and the controller
             // ticks as something comes into reach.
             let hover = if busy || !locals.contains(player) || *driver != crate::rig::RigDriver::Xr
@@ -691,8 +700,8 @@ fn grip_from_input(
                     });
                 }
             }
-            let t_pressed = !hand.trigger_down && trigger > 0.6;
-            let t_released = hand.trigger_down && trigger < 0.35;
+            let t_pressed = !hand.trigger_down && crate::rig::pressed(false, trigger);
+            let t_released = hand.trigger_down && !crate::rig::pressed(true, trigger);
             if t_pressed {
                 hand.trigger_down = true;
                 if !busy {
@@ -1665,14 +1674,24 @@ pub(crate) fn follow_hands(
             let local = Transform::from_matrix(
                 (root.compute_affine().inverse() * target.compute_affine()).into(),
             );
-            let k = if feel.lag > 0.0 {
-                1.0 - (-dt / feel.lag).exp()
-            } else {
-                1.0
+            let follow = |tau: f32| {
+                if tau > 0.0 {
+                    1.0 - (-dt / tau).exp()
+                } else {
+                    1.0
+                }
             };
+            // Steadying gives way as the hands turn further from where the
+            // item points: a tremor's few tenths of a degree are damped, a
+            // deliberate swing goes through (`STEADY_GATE`).
+            let gap = feel
+                .smoothed
+                .map_or(0.0, |s| s.rotation.angle_between(local.rotation));
+            let steady = feel.steady / (1.0 + (gap / STEADY_GATE).powi(2));
+            let (k, k_turn) = (follow(feel.lag), follow(feel.lag + steady));
             let s = feel.smoothed.map_or(local, |s| Transform {
                 translation: s.translation.lerp(local.translation, k),
-                rotation: s.rotation.slerp(local.rotation, k),
+                rotation: s.rotation.slerp(local.rotation, k_turn),
                 scale: Vec3::ONE,
             });
             feel.smoothed = Some(s);

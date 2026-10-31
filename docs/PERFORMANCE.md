@@ -142,6 +142,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
+| ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
 
 Shared tools for the next ones (in `render::budget`):
 
@@ -150,6 +151,15 @@ Shared tools for the next ones (in `render::budget`):
 - `ShadowReach(m)` on a mesh: it casts the sun's shadow only within `m`
   (a `VisibilityRange` can't do this: the cascades use the camera's).
 - Items get a range from their catalogue size by themselves.
+
+Tried and left (31 October): card outlines cut band by band (twelve
+bands, 26 points) instead of the 8-sided hull. The polygon follows a
+sprig's notches, so Marrow's spruce view went 64.5M > 53.3M fragments
+both eyes, with the same picture. But a card became 24 triangles where it
+was 6, and cards within 30 m draw into the sun's cascades too: the
+spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
+the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
+one or two trees within 10 m.
 
 ## Where it stands
 
@@ -1150,3 +1160,41 @@ per-entity baseline.
 
 The lever is fewer mesh entities. Merge static props per material at
 load, as the guns were (`weapons`' merged parts).
+
+### One thread for the main world (30 October)
+
+"Update's 14 ms spread over hundreds of small systems" was mostly
+Bevy's multi-threaded executor. The main world has about 1,500
+systems, and most do a few microseconds of work. Handing each one to a
+thread costs more than the work: a thousand idle systems take 1 to
+2.5 ms a frame on that executor and 0.02 ms on the single-threaded
+one (`executor_tests`).
+
+The game now loads on every core, then switches the main world to one
+thread (`one_thread_once_loaded` in `lib.rs`). The switch comes once
+the forest is built and every building's props are in. A load on one
+thread was slower, because the load's building and decoding systems do
+share the cores: Sallow took 11.5 s against 5.4. The renderer keeps
+its own threads, and `par_iter` and the physics solver still use the
+task pool.
+
+Measured on four cores, multi-threaded against one thread:
+
+| | multi-threaded | one thread |
+|---|---|---|
+| Marrow's busy moment (every core) | 20.5-21.9 ms | 11.7-13.7 ms |
+| Update in it | 4.4-4.6 ms | 1.9-2.2 ms |
+| worst minute, CPU p99 (units of 160) | 73-94 | 31-40 |
+| homecoming's worst frame | 77-102 ms | 60-63 ms |
+| a valley's load | unchanged | unchanged |
+
+To weigh the two executors again on another machine, such as a
+headset PC with more cores, run
+`BUDGET_EXECUTOR=multi BUDGET_THREADS=all cargo test --lib -- --ignored
+--nocapture gauge_a_busy_moment`. That keeps the multi-threaded
+executor after the load and gives it every core.
+
+The hitch ceilings were once multiples of the busy moment's median, so
+they tightened by half when it halved. They are now in reference
+units: an event's worst frame is held to the frame budget's 160, and a
+load's frames to 530.

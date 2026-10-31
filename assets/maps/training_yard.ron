@@ -52,6 +52,9 @@
         (prefab: "target", at: (-10.0, -20.0), rot: 0.0),
         (prefab: "house_plank", at: (28.0, 18.0), rot: 270.0),
         (prefab: "shed", at: (24.0, -12.0), rot: 270.0),
+        // Rooks on its roof (`onboarding::ROOKS_AT`): far enough from the
+        // first station that walking leaves them be; run, and they go up.
+        (prefab: "shed", at: (-30.0, 95.0), rot: 90.0),
         (prefab: "log_pile", at: (-12.0, -32.0), rot: 90.0),
     ],
 
