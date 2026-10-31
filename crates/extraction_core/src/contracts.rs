@@ -429,7 +429,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Cutter's farm",
             item: "charging_manifest",
             // The far ledge, in the furnace cellars.
-            near: Some([-207.0, 166.0]),
+            near: Some([-160.3, 106.3]),
         }],
         kit: &[],
         pay: &[("steel_plate", 1), ("ammo_762r_ap", 2)],

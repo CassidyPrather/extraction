@@ -274,8 +274,8 @@ fn report_input(
     for side in [Side::Left, Side::Right] {
         let h = input.hand(side);
         for (name, on) in [
-            ("grip", h.grip > 0.6),
-            ("trigger", h.trigger > 0.6),
+            ("grip", super::pressed(false, h.grip)),
+            ("trigger", super::pressed(false, h.trigger)),
             ("primary", h.primary),
             ("secondary", h.secondary),
             ("stick", h.stick.length() > 0.5),
