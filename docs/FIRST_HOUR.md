@@ -788,7 +788,7 @@ the ash Row and look round ... From the drop: north, 100 m."
 | lost | paid | paid (after the furnace fix) |
 | hoarder | paid | down at 106 s: a drone on the way back, every hit warned |
 | one-handed | paid (after the mag-release fix) | down at 278 s: drones, every hit warned |
-| wanderer | paid; nudged "The old farm's east, 140 m" | paid; nudged "The ash Row's east, 140 m" |
+| wanderer | paid; nudged "The old farm's east, 140 m" | paid and nudged ("The ash Row's west, 140 m") when it gets out that far; a drone on the way can cut the walk short, and then nothing's said and it comes home without the place |
 | empty-handed | paid | down at 261 s: drones, every hit warned |
 
 On both maps the first job is the obvious way from the drop, and the
@@ -805,7 +805,13 @@ Fixed on the way, all in the newcomer bot:
   says isn't clear now follows the grid's path (it went round only
   buildings with doors before);
 - "keep still" waited exactly the bot's 30 s give-up, so a frame past it
-  was a failure.
+  was a failure;
+- the wanderer goes out past the nudge's distance from where it turned
+  (on Cinder the nearest named place past 1.3 times the way was short of
+  it), and up to the place, not in at its door;
+- under a roof from a drone: a building it got stuck going into isn't
+  tried again (Cinder's shop has a way in on a wall with only a window),
+  and the rest of that plan is dropped.
 
 Open, for others:
 - Cinder: three of seven die on the first job to drones between Ash Row
@@ -816,3 +822,5 @@ Open, for others:
   (-50, 151), warned as it's reached (under 10 hp).
 - "the ash Row": `raid::lines::the` lowercases a place's first letter
   ("the old farm"), wrong for a name like Ash Row.
+- Cinder's shop at (10, 118.5): a way in (`robots::doors::Entrances`) on
+  its south wall, where there's only a window; its door is on the east.
