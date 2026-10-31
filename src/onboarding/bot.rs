@@ -123,6 +123,14 @@ pub(super) fn direct(
                 if ob.ducked {
                     bot.log.push("ducked under the beam (noticed)".into());
                 }
+                // The stations' moments: the run put the rooks up, the
+                // house's rats ran.
+                if ob.rooks {
+                    bot.log.push("the rooks went up at the run".into());
+                }
+                if ob.rats {
+                    bot.log.push("the house's rats ran".into());
+                }
                 bot.log.push(format!(
                     "the yard took {:.0} s and {:.0} m on foot",
                     time.elapsed_secs(),
