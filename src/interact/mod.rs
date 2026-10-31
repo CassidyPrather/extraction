@@ -620,9 +620,10 @@ fn grip_from_input(
             let finger_grab =
                 comfort.as_ref().is_some_and(|c| c.finger_grab) && wrapped && !hand.fingers_closed;
             hand.fingers_closed = wrapped;
-            let pressed = !hand.grip_down && (grip > 0.6 || finger_grab);
+            let pressed = !hand.grip_down && (crate::rig::pressed(false, grip) || finger_grab);
             let holds = hand.holding.is_some() || hand.supporting.is_some();
-            let released = hand.grip_down && grip < 0.35 && !(holds && wrapped);
+            let released =
+                hand.grip_down && !crate::rig::pressed(true, grip) && !(holds && wrapped);
             // What the grip would take: the glove tints and the controller
             // ticks as something comes into reach.
             let hover = if busy || !locals.contains(player) || *driver != crate::rig::RigDriver::Xr
@@ -699,8 +700,8 @@ fn grip_from_input(
                     });
                 }
             }
-            let t_pressed = !hand.trigger_down && trigger > 0.6;
-            let t_released = hand.trigger_down && trigger < 0.35;
+            let t_pressed = !hand.trigger_down && crate::rig::pressed(false, trigger);
+            let t_released = hand.trigger_down && !crate::rig::pressed(true, trigger);
             if t_pressed {
                 hand.trigger_down = true;
                 if !busy {

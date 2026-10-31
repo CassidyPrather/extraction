@@ -2405,6 +2405,7 @@ mod glove_tests {
             layout: crate::weapons::layout::layout("pm_pistol").unwrap(),
             magwell: None,
             trigger: 0.0,
+            pulled: false,
             dice: extraction_core::noise::Rng::new(0),
             mass: None,
         }
