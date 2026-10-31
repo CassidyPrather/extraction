@@ -327,6 +327,9 @@ pub fn run(opts: LaunchOptions) -> AppExit {
         .insert_resource(Time::<Fixed>::from_hz(90.0))
         .add_plugins(PhysicsPlugins::default())
         .add_plugins((GamePlugin, ClientPlugin));
+    // Loading on every core, then the main world's systems one after
+    // another (the renderer's keep their threads).
+    one_thread_once_loaded(&mut app);
     app.run()
 }
 
@@ -588,14 +591,18 @@ pub fn headless_app(mut opts: LaunchOptions, log: bool) -> App {
     app
 }
 
-/// Every schedule runs its systems one at a time, in one fixed order. Every
-/// headless app runs this way: on many threads, systems that touch the
-/// same things run in either order and two runs of one seed part within
-/// seconds, and a one-player world gains nothing from them. Headless apps
-/// run side by side (sims a process a core, tests four at a time), and one
-/// thread each is two to three times faster than each spreading over all
-/// the cores. A sim also gets a one-thread task pool, so it replays from
-/// its seed.
+/// Every schedule runs its systems one at a time, in one fixed order, on
+/// the thread that runs the frame. Every headless app runs this way, and
+/// the game once its valley is in (`one_thread_once_loaded`). The game has
+/// some 1,500 systems, most a few microseconds of work, and Bevy's
+/// multi-threaded executor spends more handing each to a thread (1 to 2.5
+/// ms a thousand, `executor_tests`) than the cores give back: Marrow's busy
+/// moment took 21 ms a frame on four cores so, 12 ms on one. Systems that
+/// iterate in parallel (`par_iter`, the physics solver) still use the task
+/// pool, and the renderer keeps its own threads. On many threads, too,
+/// systems that touch the same things run in either order, and two runs of
+/// one seed part within seconds. A sim also gets a one-thread task pool, so
+/// it replays from its seed.
 pub fn single_threaded(app: &mut App) {
     let mut schedules = app.world_mut().resource_mut::<Schedules>();
     for (_, schedule) in schedules.iter_mut() {
@@ -702,6 +709,146 @@ mod client_tests {
         let mut v: Vec<_> = by.into_iter().collect();
         v.sort_by(|a, b| b.1.cmp(&a.1));
         eprintln!("census by root: {:?}", &v[..v.len().min(12)]);
+    }
+}
+
+/// The game's executors: Bevy's multi-threaded one while the valley loads
+/// (its building, decoding and uploading systems do share the cores: a
+/// one-thread load took Sallow 11.5 s against 5.4), then `single_threaded`
+/// from the frame the main world's part of the load is done: the forest
+/// built and every building's props in. What's left of the load then
+/// (impostor pictures, pipelines) is the GPU's, on the renderer's threads.
+/// A map change starts a new process, so it switches once.
+pub fn one_thread_once_loaded(app: &mut App) {
+    app.init_resource::<OneThread>()
+        .add_systems(First, to_one_thread)
+        .add_systems(Last, to_one_thread);
+}
+
+/// Whether the main world's schedules have gone to one thread: `Some` the
+/// frame they did (a schedule can't be changed while it runs, so `Last`
+/// switches the rest and the next `First` switches `Last`), `done` after.
+#[derive(Resource, Default)]
+pub struct OneThread {
+    pub since: Option<u64>,
+    pub done: bool,
+}
+
+fn to_one_thread(
+    forest: Option<Res<world::trees::ForestBuilt>>,
+    props: Query<(), With<world::buildings::PropsPending>>,
+    mut state: ResMut<OneThread>,
+    mut schedules: ResMut<Schedules>,
+    frame: Res<bevy::diagnostic::FrameCount>,
+) {
+    if state.done || forest.is_none() || !props.is_empty() {
+        return;
+    }
+    if state.since.is_some_and(|f| f != frame.0 as u64) {
+        state.done = true;
+    } else if state.since.is_none() {
+        info!("executors: the valley's in, the main world on one thread");
+        state.since = Some(frame.0 as u64);
+    }
+    for (_, schedule) in schedules.iter_mut() {
+        schedule.set_executor(bevy::ecs::schedule::SingleThreadedExecutor::new());
+    }
+}
+
+#[cfg(test)]
+mod executor_tests {
+    use super::*;
+
+    #[derive(Component)]
+    struct Idle;
+
+    fn idle(q: Query<&Idle>) {
+        for _ in &q {}
+    }
+
+    /// A frame's cost doesn't grow with the systems that have nothing to
+    /// do: a thousand of them cost under half a millisecond (on many
+    /// threads, 1 to 2.5 ms: the executor's, not theirs).
+    #[test]
+    fn a_thousand_idle_systems_cost_the_frame_little() {
+        let mut app = App::new();
+        app.add_plugins(bevy::app::TaskPoolPlugin::default());
+        for _ in 0..1000 {
+            app.add_systems(Update, idle);
+        }
+        single_threaded(&mut app);
+        for _ in 0..20 {
+            app.update();
+        }
+        let mut ms: Vec<f64> = (0..60)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                app.update();
+                t.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        ms.sort_by(f64::total_cmp);
+        let median = ms[ms.len() / 2];
+        assert!(median < 0.5, "a frame of idle systems: {median:.3} ms");
+    }
+
+    /// Loading, the schedules keep their threads; the frame the world's
+    /// ready they go to one, and a frame of idle systems is cheap from then.
+    #[test]
+    fn the_game_goes_to_one_thread_once_loaded() {
+        let mut app = App::new();
+        app.add_plugins((
+            bevy::app::TaskPoolPlugin::default(),
+            bevy::diagnostic::FrameCountPlugin,
+        ));
+        for _ in 0..1000 {
+            app.add_systems(Update, idle);
+        }
+        one_thread_once_loaded(&mut app);
+        let building = app
+            .world_mut()
+            .spawn(crate::world::buildings::PropsPending(0))
+            .id();
+        app.world_mut()
+            .insert_resource(crate::world::trees::ForestBuilt);
+        for _ in 0..5 {
+            app.update();
+        }
+        assert!(
+            app.world().resource::<OneThread>().since.is_none(),
+            "loading"
+        );
+        app.world_mut().despawn(building);
+        for _ in 0..3 {
+            app.update();
+        }
+        assert!(app.world().resource::<OneThread>().done);
+        let mut ms: Vec<f64> = (0..60)
+            .map(|_| {
+                let t = std::time::Instant::now();
+                app.update();
+                t.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        ms.sort_by(f64::total_cmp);
+        let median = ms[ms.len() / 2];
+        assert!(
+            median < 0.5,
+            "a frame of idle systems once loaded: {median:.3} ms"
+        );
+    }
+
+    /// The game's own app is built that way (`run` builds it with a
+    /// window, so this reads it).
+    #[test]
+    fn the_game_sets_its_executors_before_it_runs() {
+        let src = include_str!("lib.rs");
+        let run = &src[src.find("pub fn run(").unwrap()..];
+        let run = &run[..run.find("\n}\n").unwrap()];
+        let at = run
+            .find("one_thread_once_loaded(&mut app);")
+            .expect("run sets the executors");
+        assert!(at < run.find("app.run()").unwrap(), "before the app runs");
     }
 }
 
