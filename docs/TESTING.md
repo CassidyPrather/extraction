@@ -9,6 +9,7 @@ Verifier runs the rest on every main push (`docs/HEALTH.md`).
 | Scenarios | `cargo run --profile fast -- --headless --scenario all` | a few min | the bot plays each scenario in a fresh process |
 | Suite | `cargo test --workspace -- --test-threads=4` | ~25 min | every test not `#[ignore]`d |
 | Gauges | `cargo test --lib -- --ignored gauge_` | ~12 min (at 2 test threads), target 25 | the render budgets, stereo budgets, warm-up shelf, resting guns, first sight, the worst minute: whole valleys through the client (below) |
+| System ceilings | `cargo test --lib --features systime -- --ignored gauge_game_systems` | ~10 min (a tracing build of Bevy the first time) | no game system over 2% of the main schedule at any valley's busy moment, by Bevy's per-system spans (`budget`) |
 | Smoke | `SIM_NO_JOB=1 target/fast/extraction --sim-run smoke --map M --seed S --sim-out DIR --headless` | ~5 min a raid | a bot's whole raid in each valley, from a copied binary, four at a time |
 
 Run the suite and sims apart, never at once, and never rebuild a binary

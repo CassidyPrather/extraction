@@ -1963,6 +1963,27 @@ pub(crate) mod tests {
         for (name, mean, p99) in stats.iter().take(4) {
             println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
         }
+        // How the frame's systems spread: many near-free ones are the
+        // executor's and their empty queries' cost, not work.
+        let ours: Vec<f64> = v
+            .iter()
+            .filter(|(n, _)| n.starts_with("extraction::"))
+            .map(|(_, ms)| ms / frames)
+            .collect();
+        for (lo, hi) in [(0.0, 0.005), (0.005, 0.02), (0.02, 0.1), (0.1, f64::MAX)] {
+            let n: Vec<&f64> = ours.iter().filter(|m| **m >= lo && **m < hi).collect();
+            println!(
+                "  game systems {:>5.3}..{:<5} ms: {:4} of them, {:6.2} ms a frame",
+                lo,
+                if hi == f64::MAX {
+                    "".to_string()
+                } else {
+                    format!("{hi}")
+                },
+                n.len(),
+                n.iter().copied().sum::<f64>()
+            );
+        }
     }
 
     /// Mesh entities in a settled valley by what they belong to (their
@@ -2071,6 +2092,144 @@ pub(crate) mod tests {
         }
     }
 
+    /// What `blink::head_in_solid` costs at the busy moment's head (it
+    /// runs every frame): under a millisecond. A sphere tested against the
+    /// whole map's heightfield was 28 ms (blink alone was 25 ms of a 78 ms
+    /// main schedule); `world::sphere_in_world` asks the heightmap for the
+    /// ground instead. Prints what each query costs there, and which
+    /// colliders' boxes reach the head.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_head_test_is_cheap() {
+        use avian3d::prelude::*;
+        let _one_at_a_time = heavy();
+        let mut app = busy_scene("marrow_creek");
+        app.update();
+        let w = app.world_mut();
+        let at = w
+            .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>()
+            .iter(w)
+            .next()
+            .map(|g| g.translation())
+            .expect("a head");
+        let zone = w.resource::<crate::world::Zone>().clone();
+        let terrain = w
+            .query_filtered::<Entity, With<crate::world::TerrainCollider>>()
+            .iter(w)
+            .next();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(w);
+        let spatial = state.get(w).expect("the spatial query");
+        let n = 50;
+        let t0 = std::time::Instant::now();
+        let mut hits = 0;
+        for _ in 0..n {
+            hits += usize::from(super::super::blink::head_in_solid(
+                &spatial, &zone, terrain, at,
+            ));
+        }
+        let full = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.shape_intersections_callback(
+                &Collider::sphere(0.09),
+                at,
+                Quat::IDENTITY,
+                &filter,
+                |_| {
+                    any = true;
+                    false
+                },
+            );
+            hits += usize::from(any);
+        }
+        let early = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.point_intersections_callback(at, &filter, |_| {
+                any = true;
+                false
+            });
+            hits += usize::from(any);
+        }
+        let point = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
+             a point {point:.3} ms ({hits} hits)"
+        );
+        assert!(
+            full < 1.0,
+            "head_in_solid {full:.3} ms a call: it runs every frame"
+        );
+        // Which colliders a head-sized box reaches, and the sphere test's
+        // cost against each alone.
+        let r = Vec3::splat(0.09);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let _ = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        }
+        let boxes = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        let mut near_hits = 0;
+        for _ in 0..n {
+            if spatial
+                .project_point(at, true, &filter)
+                .is_some_and(|p| p.is_inside || p.point.distance(at) < 0.09)
+            {
+                near_hits += 1;
+            }
+        }
+        let project = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "  a box query {boxes:.3} ms; project_point {project:.3} ms ({near_hits} within 9 cm); \
+             Collider::sphere's own box {:?}",
+            Collider::sphere(0.09).aabb(at, Quat::IDENTITY)
+        );
+        let near = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        println!("  {} colliders' boxes reach the head's", near.len());
+        let names: Vec<(Entity, String)> = near
+            .iter()
+            .map(|e| {
+                let n = w
+                    .get::<Name>(*e)
+                    .map_or("(unnamed)".to_string(), |n| n.to_string());
+                let kind = w
+                    .get::<Collider>(*e)
+                    .map_or("?".to_string(), |c| format!("{:?}", c.shape().shape_type()));
+                (*e, format!("{n} [{kind}]"))
+            })
+            .collect();
+        for (e, name) in names {
+            let (Some(c), Some(p), Some(r)) = (
+                w.get::<Collider>(e),
+                w.get::<Position>(e),
+                w.get::<Rotation>(e),
+            ) else {
+                println!("    {name}: no collider pose");
+                continue;
+            };
+            let sphere = Collider::sphere(0.09);
+            let t0 = std::time::Instant::now();
+            for _ in 0..10 {
+                let _ = avian3d::collision::collider::contact_query::intersection_test(
+                    c,
+                    p.0,
+                    *r,
+                    &sphere,
+                    at,
+                    Quat::IDENTITY,
+                );
+            }
+            let ms = t0.elapsed().as_secs_f64() * 100.0;
+            println!(
+                "    {name}: {ms:.3} ms a test, layers {:?}",
+                w.get::<CollisionLayers>(e).map(|l| l.memberships)
+            );
+        }
+    }
+
     /// No material many meshes wear is rewritten (nearly) every frame in
     /// a busy moment: each write is every one of them re-specialised on the
     /// main thread. The robots' shared shell was, as the day's light crept
@@ -2145,6 +2304,71 @@ pub(crate) mod tests {
             ));
         }
         assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// No game system takes more than `SYSTEM_SHARE` of the main
+    /// schedule at any valley's busy moment, timed by Bevy's own
+    /// per-system spans: a share, which survives a busy machine and the
+    /// spans' own cost, where milliseconds don't. One system at 25 ms (the
+    /// eyes' head test, 32% of the frame) reached a playtest build; this
+    /// fails it, and names the system and its valley. Today's biggest game
+    /// system is about 1% (`wildlife::visuals::build_far`). Needs the
+    /// spans: `cargo test --lib --features systime -- --ignored
+    /// gauge_game_systems`.
+    #[cfg(feature = "systime")]
+    #[test]
+    #[ignore = "gauge: cargo test --lib --features systime -- --ignored gauge_game_systems"]
+    fn gauge_game_systems_hold_their_share() {
+        use bevy::log::tracing_subscriber::layer::SubscriberExt;
+        const SYSTEM_SHARE: f64 = 0.02;
+        let _one_at_a_time = heavy();
+        let times = SystemTimes::default();
+        let subscriber = bevy::log::tracing_subscriber::registry().with(times.clone());
+        bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
+        let mut wrong = Vec::new();
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let t = times.clone();
+            let stats = busy_moment_with(map, move || t.0.lock().unwrap().clear());
+            let frame = stats
+                .iter()
+                .find(|(n, _, _)| *n == "main schedule")
+                .map_or(0.0, |s| s.1);
+            let mut ours: Vec<(String, f64)> = times
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(n, _)| n.starts_with("extraction::"))
+                .map(|(n, ms)| (n.clone(), ms / 450.0))
+                .collect();
+            ours.sort_by(|a, b| b.1.total_cmp(&a.1));
+            println!("{map}: main schedule {frame:.2} ms; the heaviest game systems:");
+            for (name, ms) in ours.iter().take(6) {
+                println!(
+                    "    {ms:7.3} ms ({:4.1}%)  {name}",
+                    100.0 * ms / frame.max(1e-9)
+                );
+            }
+            for (name, ms) in &ours {
+                if *ms > frame * SYSTEM_SHARE {
+                    wrong.push(format!(
+                        "{map}: {name} {ms:.2} ms a frame, {:.0}% of {frame:.1}",
+                        100.0 * ms / frame
+                    ));
+                }
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "game systems over {}% of the frame: {wrong:#?}",
+            SYSTEM_SHARE * 100.0
+        );
     }
 
     /// A busy moment in Marrow Creek holds its CPU budget: the frame in

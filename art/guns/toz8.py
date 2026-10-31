@@ -163,7 +163,8 @@ plate = fillet([(-0.2585, 0.0560), (-0.2525, 0.0560), (-0.2525, 0.0640), (-0.258
                0.0006, 1)
 barrel.prism(plate, -0.0060, 0.0060, "Blued", axis="x", bevel=0.0004, segs=1)
 nc = Part("cut")
-nc.box((0.0022, 0.004, 0.02), (0.0, SIGHT_Y + 0.002, -0.2555), "Blued")
+# (Its floor half a millimetre under the line: `capture::sightline`.)
+nc.box((0.0022, 0.004, 0.02), (0.0, SIGHT_Y + 0.0015, -0.2555), "Blued")
 barrel.cut(nc)
 
 # --- Receiver -----------------------------------------------------------------------------

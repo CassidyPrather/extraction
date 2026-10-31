@@ -135,6 +135,10 @@ for z0, y0, xs in ((0.16, -0.075, -0.021), (-0.474, 0.0, -0.0195)):
     loop = [(z0 + 0.011 * math.cos(a), y0 + 0.011 * math.sin(a))
             for a in [math.pi * 0.5 + math.pi * i / 16 for i in range(17)]]
     (butt_furn if z0 > 0 else furn).sweep(loop, section_rect(0.0028, 0.0028, 0.0008, segs=3), "Blued", xf=T(xs, 0, 0))
+# The rear swivel's two studs, from its loop's ends into the wood (the loop
+# hung 2 mm off the stock: `capture::attach`).
+for y in (-0.064, -0.086):
+    butt_furn.cyl(0.0017, -0.0225, -0.012, "Blued", segs=10, xf=T(0, y, 0.16) @ RY(math.pi / 2))
 
 # --- Receiver ----------------------------------------------------------------------
 recv = Part("receiver")
@@ -209,8 +213,9 @@ barrel.lathe([(0.0044, MUZZLE + 0.002), (0.0095, MUZZLE), (0.0105, MUZZLE + 0.00
               (0.0105, -0.6), (0.0115, -0.45), (0.0128, -0.28), (0.0145, -0.262),
               (0.0, -0.262)], "Blued", segs=36, xf=T(0, BORE, 0))
 # Gas block and the tube running back to the rear sight.
-gb = fillet([(-0.618, 0.036), (-0.585, 0.036), (-0.585, 0.083), (-0.596, 0.088), (-0.612, 0.088),
-             (-0.618, 0.082)], [0.002, 0.002, 0.003, 0.004, 0.004, 0.003], 2)
+# (Its crown under the eye line: it stood 2.5 mm over it, `capture::sightline`.)
+gb = fillet([(-0.618, 0.036), (-0.585, 0.036), (-0.585, 0.08), (-0.596, 0.0845), (-0.612, 0.0845),
+             (-0.618, 0.079)], [0.002, 0.002, 0.003, 0.004, 0.004, 0.003], 2)
 barrel.prism(gb, -0.0125, 0.0125, "Blued", axis="x", bevel=0.0015, segs=2)
 barrel.cyl(0.0095, -0.6, -0.468, "Blued", segs=32, xf=T(0, 0.073, 0))
 barrel.lathe([(0.0, -0.615), (0.0062, -0.6152), (0.0075, -0.6148), (0.0085, -0.611),
@@ -225,9 +230,9 @@ for z, y, hw in ((-0.6015, 0.042, 0.0131), (-0.718, 0.04, 0.0098)):
 barrel.cyl(0.012, -0.73, -0.705, "Blued", segs=32, xf=T(0, BORE, 0), chamfer=0.0015)
 barrel.prism(fillet([(-0.727, 0.058), (-0.709, 0.058), (-0.711, 0.0835), (-0.722, 0.0835)],
                     0.0012, 2), -0.009, 0.009, "Blued", axis="x", bevel=0.0006, segs=1)
-barrel.prism(fillet([(-0.721, 0.07), (-0.715, 0.07), (-0.716, 0.083), (-0.72, 0.083)], 0.0008, 1),
+barrel.prism(fillet([(-0.721, 0.07), (-0.715, 0.07), (-0.716, 0.086), (-0.72, 0.086)], 0.0008, 1),
              -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
-barrel.tube(0.0115, 0.0101, -0.727, -0.71, "Blued", segs=32, xf=T(0, 0.0735, 0))
+barrel.tube(0.0115, 0.0101, -0.727, -0.71, "Blued", segs=32, xf=T(0, 0.077, 0))
 # The post's windage drum in the base, its index line on the right.
 barrel.cyl(0.0034, -0.0094, 0.0094, "Blued", segs=16, xf=T(0, 0.062, -0.7175) @ RY(math.pi / 2),
            chamfer=0.0005)
@@ -313,7 +318,7 @@ for p in (carrier, trig, bayonet, safety):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
-empty("pt_sight", (0.0, 0.0875, -0.02))
+empty("pt_sight", (0.0, 0.086, -0.02))
 empty("pt_load_port", (0.0, 0.075, -0.2))
 # The point with the bayonet fixed (the folded point, -0.405, turned
 # through pi about the pin).

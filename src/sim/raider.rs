@@ -464,7 +464,10 @@ pub fn attach_raider(
         .unwrap_or_default();
     for (i, plan) in plans.iter().enumerate() {
         let n = spots.iter().filter(|s| plan.contains(**s, 0.5)).count();
-        if n == 0 || plan.entries.is_empty() {
+        // A boxcar's floor is a climb up from the ground, which the indoor
+        // grid doesn't walk (as `indoor`'s reach check skips it): not a
+        // site, or it stands at the door reaching in.
+        if n == 0 || plan.entries.is_empty() || plan.name == "boxcar" {
             continue;
         }
         site_of_plan[i] = Some(sites.len());
@@ -482,6 +485,13 @@ pub fn attach_raider(
         match &m.kind {
             MarkerKind::Loot { .. } => {
                 let p = zone.on_ground(m.at[0], m.at[1]);
+                // (Up in a boxcar: no more a spot than the boxcar's a site.)
+                if plans
+                    .iter()
+                    .any(|pl| pl.name == "boxcar" && pl.contains(p, 0.5))
+                {
+                    continue;
+                }
                 if let Some(s) = plans
                     .iter()
                     .position(|pl| pl.contains(p, 0.5))
@@ -2095,7 +2105,12 @@ fn fight_on(
         if outcome == "wrecked" {
             *log.stats.kills.entry(c.kind.clone()).or_default() += 1;
             if r.traits.salvage {
-                if let Ok((_, _, gt, ..)) = scene.robots.get(target) {
+                if let Ok((_, _, gt, ..)) = scene.robots.get(target)
+                    // Come down inside a building (a drone in the Bus
+                    // depot's hall): no walk from outside reaches it, and
+                    // its loot is the building's, for searching the building.
+                    && !r.plans.iter().any(|p| p.contains(gt.translation(), 0.0))
+                {
                     r.sites.push(Site {
                         name: format!("{} wreck", c.kind),
                         kind: SiteKind::Wreck(target),

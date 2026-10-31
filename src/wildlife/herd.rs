@@ -154,6 +154,8 @@ pub struct Beast {
     /// waypoints left, and where they lead.
     route: Vec<Vec2>,
     route_to: Option<Vec2>,
+    /// Ticks since the route was worked out.
+    route_age: u16,
 }
 
 /// A beast more than this from its waypoint goes straight there; within
@@ -161,6 +163,10 @@ pub struct Beast {
 const WAYPOINT: f32 = 1.5;
 /// A target moved this far is a new one, routed afresh (m).
 const REROUTE: f32 = 4.0;
+/// Its next waypoint out of reach from where it's got to (pushed off the
+/// line, slid along a corner), it's worked out again from there, at most
+/// this often (ticks).
+const REROUTE_EVERY: u16 = 45;
 
 impl Beast {
     pub fn alive(&self) -> bool {
@@ -240,6 +246,37 @@ impl Among {
     }
 }
 
+/// The walkers' nav grid as the animals have it: water blocked too (a
+/// deer doesn't wade the reservoir), so a way round never goes through it.
+pub fn herd_grid(zone: &Zone, nav: &NavGrid) -> NavGrid {
+    let mut grid = nav.clone();
+    // Any water in the cell (its middle or near a corner) and it's shut:
+    // a way the grid calls clear is then clear to `open` too.
+    let h = grid.cell * 0.49;
+    for j in 0..grid.n {
+        for i in 0..grid.n {
+            let c = grid.centre(i, j);
+            let wet = [[0.0, 0.0], [h, h], [h, -h], [-h, h], [-h, -h]]
+                .iter()
+                .any(|o| {
+                    zone.hm.surface([c[0] + o[0], c[1] + o[1]], false)
+                        == extraction_core::terrain::Surface::Water
+                });
+            if wet {
+                grid.cost[j * grid.n + i] = extraction_core::nav::BLOCKED;
+            }
+        }
+    }
+    grid
+}
+
+/// Is the straight way from `a` to `b` all ground an animal can stand on
+/// (every metre)?
+fn clear_way(nav: &NavGrid, zone: &Zone, a: Vec2, b: Vec2) -> bool {
+    let n = (a.distance(b) as usize).max(1);
+    (1..=n).all(|k| open(nav, zone, a.lerp(b, k as f32 / n as f32)))
+}
+
 /// Is `p` somewhere an animal can stand?
 pub fn open(nav: &NavGrid, zone: &Zone, p: Vec2) -> bool {
     nav.walkable([p.x, p.y])
@@ -315,6 +352,7 @@ pub fn new_herd(kind: Kind, home: Vec2, zone: &Zone, rng: &mut Rng) -> Herd {
                 slot,
                 route: Vec::new(),
                 route_to: None,
+                route_age: 0,
             }
         })
         .collect();
@@ -644,18 +682,24 @@ fn step(b: &mut Beast, ctx: &Ctx, want: Option<Vec2>, speed: f32, dt: f32) {
 /// else the next waypoint of a path round (a fence, a rock, a building in
 /// the way: a deer walked into one and stood there for good).
 fn route(b: &mut Beast, ctx: &Ctx, here: Vec2, w: Vec2) -> Vec2 {
-    if ctx.nav.line_clear([here.x, here.y], [w.x, w.y]) {
+    if clear_way(ctx.nav, ctx.zone, here, w) {
         b.route.clear();
         b.route_to = None;
         return w;
     }
-    if b.route_to.is_none_or(|t| t.distance(w) > REROUTE) {
+    b.route_age = b.route_age.saturating_add(1);
+    let stale = b.route_age >= REROUTE_EVERY
+        && b.route
+            .first()
+            .is_none_or(|&p| !clear_way(ctx.nav, ctx.zone, here, p));
+    if b.route_to.is_none_or(|t| t.distance(w) > REROUTE) || stale {
         b.route = ctx
             .nav
             .path([here.x, here.y], [w.x, w.y])
             .map(|p| p.into_iter().skip(1).map(Vec2::from).collect())
             .unwrap_or_default();
         b.route_to = Some(w);
+        b.route_age = 0;
     }
     while b.route.len() > 1 && b.route[0].distance(here) < WAYPOINT {
         b.route.remove(0);
@@ -681,11 +725,16 @@ pub(crate) fn herds(
     mut startled: MessageWriter<Startled>,
     opts: Res<crate::LaunchOptions>,
     mut spawned: Local<bool>,
+    mut grid: Local<Option<std::sync::Arc<NavGrid>>>,
     time: Res<Time>,
 ) {
     let Some(nav) = nav else {
         return;
     };
+    if grid.is_none() || nav.is_changed() {
+        *grid = Some(std::sync::Arc::new(herd_grid(&zone, &nav.0)));
+    }
+    let walk = grid.as_deref().unwrap();
     if !*spawned {
         *spawned = true;
         let off = std::env::var("EXTRACTION_WILDLIFE").is_ok_and(|v| v == "off");
@@ -722,7 +771,7 @@ pub(crate) fn herds(
         .collect();
     let ctx = Ctx {
         zone: &zone,
-        nav: &nav.0,
+        nav: walk,
         threats: &threats.0,
         loud: &loud,
         hounds: &hounds,
@@ -786,6 +835,7 @@ mod tests {
             &zone.hm,
             extraction_core::map_nav::MAX_SLOPE,
         );
+        let nav = herd_grid(&zone, &nav);
         (zone, nav)
     }
 
@@ -981,56 +1031,78 @@ mod tests {
     }
 
     /// Bait with something in the straight way (a fence, a rock, a
-    /// building): every animal finds its way round to it, in every valley.
+    /// building, water): every animal finds its way round to it, from
+    /// eight homes in every valley.
     #[test]
     fn they_go_round_whats_in_the_way() {
         for map in extraction_core::map::VALLEYS.map(|v| v.0) {
             let Some(kind) = Kind::for_map(map) else {
                 continue;
             };
-            let (zone, nav, mut herd) = herd_in(map, kind);
-            let from = herd.home;
-            // A walkable spot 60-150 m off with the line to it blocked.
-            let to = (0..48).find_map(|k| {
-                let a = k as f32 / 48.0 * std::f32::consts::TAU;
-                (60..=150).step_by(15).find_map(|d| {
-                    let p = from + Vec2::from_angle(a) * d as f32;
-                    (open(&nav, &zone, p)
-                        && !nav.line_clear([from.x, from.y], [p.x, p.y])
-                        && nav.path([from.x, from.y], [p.x, p.y]).is_some())
-                    .then_some(p)
-                })
-            });
-            let Some(to) = to else {
-                continue;
-            };
-            let ctx = Ctx {
-                zone: &zone,
-                nav: &nav,
-                threats: &[],
-                loud: &[],
-                hounds: &[],
-            };
-            for _ in 0..(600.0 / DT) as usize {
-                herd.lure(to);
-                herd.tick(&ctx, DT);
-                if herd
-                    .beasts
-                    .iter()
-                    .all(|b| b.pos.xz().distance(to) < AMONG_NEAR)
-                {
-                    break;
+            let (zone, nav) = valley(map);
+            // Eight homes a valley: one home's way in proves little (a
+            // home moved by a map change found a deer stuck 81 m off).
+            for seed in 1..=8u64 {
+                let Some(home) = pick_home(&zone, &nav, seed, kind) else {
+                    continue;
+                };
+                let mut rng = Rng::new(9 + seed);
+                let herd = new_herd(kind, home, &zone, &mut rng);
+                if let Err(e) = round_to_bait(&zone, &nav, herd) {
+                    panic!("{map}, seed {seed}: {kind:?} {e}");
                 }
             }
-            for (i, b) in herd.beasts.iter().enumerate() {
-                let d = b.pos.xz().distance(to);
-                assert!(
-                    d < AMONG_NEAR,
-                    "{map}: {kind:?} {i} stuck {d:.0} m off at {:.0}",
-                    b.pos
-                );
+        }
+    }
+
+    /// Bait 60-150 m off with the straight line to it blocked: every
+    /// animal there within ten minutes, or which one wasn't, and where.
+    fn round_to_bait(zone: &Zone, nav: &NavGrid, mut herd: Herd) -> Result<(), String> {
+        let from = herd.home;
+        let to = (0..48).find_map(|k| {
+            let a = k as f32 / 48.0 * std::f32::consts::TAU;
+            (60..=150).step_by(15).find_map(|d| {
+                let p = from + Vec2::from_angle(a) * d as f32;
+                (open(nav, zone, p)
+                    && !nav.line_clear([from.x, from.y], [p.x, p.y])
+                    && nav.path([from.x, from.y], [p.x, p.y]).is_some())
+                .then_some(p)
+            })
+        });
+        let Some(to) = to else {
+            return Ok(());
+        };
+        let ctx = Ctx {
+            zone,
+            nav,
+            threats: &[],
+            loud: &[],
+            hounds: &[],
+        };
+        for _ in 0..(600.0 / DT) as usize {
+            herd.lure(to);
+            herd.tick(&ctx, DT);
+            if herd
+                .beasts
+                .iter()
+                .all(|b| b.pos.xz().distance(to) < AMONG_NEAR)
+            {
+                return Ok(());
             }
         }
+        for (i, b) in herd.beasts.iter().enumerate() {
+            let d = b.pos.xz().distance(to);
+            if d >= AMONG_NEAR {
+                return Err(format!(
+                    "{i} stuck {d:.0} m off at {:.0} ({:?}, route {:?}, bait at {to:.0}, leader at {:.0})",
+                    b.pos,
+                    b.state,
+                    b.route,
+                    herd.leader().unwrap().pos
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// A stone into the thicket they're grazing in puts them to flight

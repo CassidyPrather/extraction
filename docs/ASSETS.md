@@ -498,7 +498,9 @@ Each lint's test has a `KNOWN` list: what it found that isn't fixed yet,
 by model, prefab or placement. Anything new fails, and the test prints
 the lines nothing matches any more (`fixed, out of KNOWN`): take those
 out. On 30 October, after the second round, the lists held:
-- cracks in about 20 prefabs, mostly the depots, towers and ruins;
+- no cracks in any prefab (closed in the third round: the cornice under
+  the eaves, the shop's foot, the sawmill's purlins, the towers' landings,
+  the ruins' partitions and rafters, the boxcar);
 - gaps of 2 to 3 mm between pieces in about 90 models;
 - a few clutter and scene things;
 - the scopes bedding 2 to 3 mm onto the receivers;
