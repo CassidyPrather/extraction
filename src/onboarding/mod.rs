@@ -574,6 +574,9 @@ pub struct Onboarding {
     pub told_mark: bool,
     /// The house's crate has scratched your watch arm (`the_scratch`).
     pub scratched: bool,
+    /// The rooks by the truck have gone up, and you've been told why that
+    /// matters (`the_rooks`).
+    pub rooks: bool,
 }
 
 impl Onboarding {
@@ -762,6 +765,7 @@ impl Plugin for OnboardingPlugin {
                     ),
                     announce.after(crate::items::usage::UsageSystems),
                     the_scratch,
+                    the_rooks,
                     (lamps, signs, checklist, one_thing_to_read, mark_the_step),
                     warn_near_anomalies,
                     hurry_the_truck,
@@ -1018,6 +1022,30 @@ fn the_scratch(
 /// How fast the yard's scratch bleeds, hp/s.
 pub const SCRATCH_BLEED: f32 = 0.08;
 pub const SCRATCH_LINE: &str = "Driver: \"That crate's nail got your arm. Look at your watch.\"";
+
+/// Where the yard's rooks sit: a shed's roof west of GETTING ABOUT
+/// (`wildlife::flock::spawn_flocks`), out of a walker's flushing reach
+/// from the truck and the station, inside a runner's.
+pub const ROOKS_AT: [f32; 2] = [-30.0, 95.0];
+pub const ROOKS_LINE: &str = "Driver: \"Hear them go? Out there the machines hear that too. \
+Crouch and walk, and they let you nearer.\"";
+
+/// Getting about with something to get about near: the run that puts the
+/// rooks up off the shed. Turning, crouching and running were three ticks
+/// on a board; now the run has a sound, a sky full of birds, and a reason
+/// to crouch out there. Said once, the first time you put them up.
+fn the_rooks(
+    mut flushed: MessageReader<crate::wildlife::Flushed>,
+    mut ob: ResMut<Onboarding>,
+    mut raid: ResMut<Raid>,
+) {
+    for f in flushed.read() {
+        if f.cause == crate::wildlife::FlushCause::Player && !ob.rooks {
+            ob.rooks = true;
+            raid.say(ROOKS_LINE);
+        }
+    }
+}
 
 /// The stations in the truck's bed (the kit, the settings): no post of
 /// their own, no SKIP card.
@@ -2254,6 +2282,73 @@ pub mod bot;
 mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
+
+    /// The rooks by the truck sit where walking off the tailgate to
+    /// GETTING ABOUT leaves them be, standing up or crouched, and a run
+    /// from the station's lamp puts them up.
+    #[test]
+    fn the_rooks_go_up_for_a_run_not_a_walk() {
+        use crate::wildlife::{Threat, ThreatKind, flock::flush_radius};
+        let zone = crate::world::Zone::load(TRAINING_YARD);
+        let (_, perches) = crate::wildlife::perches::survey(&zone);
+        let site = perches
+            .sites
+            .iter()
+            .min_by(|a, b| {
+                let d = |s: &crate::wildlife::perches::PerchSite| {
+                    s.centre.xz().distance(Vec2::from(ROOKS_AT))
+                };
+                d(a).total_cmp(&d(b))
+            })
+            .expect("a perch in the yard");
+        assert!(
+            site.centre.xz().distance(Vec2::from(ROOKS_AT)) < 3.0,
+            "no roof at ROOKS_AT: the nearest is {} at {}",
+            site.prefab,
+            site.centre
+        );
+        // Room for the whole flock (birds left over circle for ever).
+        let species = crate::wildlife::flock::Species::for_map(TRAINING_YARD);
+        assert!(
+            site.spots.len() >= species.flock_size().0,
+            "{} perches on the {} for a flock of at least {}",
+            site.spots.len(),
+            site.prefab,
+            species.flock_size().0
+        );
+        let near = |p: Vec2| {
+            site.spots
+                .iter()
+                .map(|s| s.0.xz().distance(p))
+                .fold(f32::MAX, f32::min)
+        };
+        let reach = |speed: f32, crouched: bool| {
+            flush_radius(&Threat {
+                entity: Entity::PLACEHOLDER,
+                at: Vec3::ZERO,
+                speed,
+                kind: ThreatKind::Player { crouched },
+            })
+        };
+        let walk = reach(crate::player::WALK_SPEED, false);
+        let run = reach(crate::player::SPRINT_SPEED, false);
+        let station = Vec2::from(STATIONS[station_of(Goal::Run)].at);
+        // Off the back of the truck and along to the lamp, walking.
+        let tailgate = Vec2::new(0.0, 92.0);
+        for i in 0..=20 {
+            let p = tailgate.lerp(station, i as f32 / 20.0);
+            assert!(
+                near(p) > walk + 1.0,
+                "walking at {p} is {:.1} m from the rooks, inside {walk:.1}",
+                near(p)
+            );
+        }
+        assert!(
+            near(station) < run - 3.0,
+            "a run from the lamp is {:.1} m off, outside {run:.1}",
+            near(station)
+        );
+    }
 
     /// A headset whose session starts 10 s in (the playtest's took 3 to
     /// 19) hears only headset words: no line is said and no board names a
