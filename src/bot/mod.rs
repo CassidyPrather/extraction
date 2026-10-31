@@ -240,7 +240,7 @@ pub const SEATED_HAND_LOW: f32 = 0.35;
 const GRAB_SLACK: f32 = 0.15;
 /// A step to the side round something in the way: how near it needs to
 /// get (and how a step is told from a walk).
-const SIDESTEP: f32 = 1.01;
+pub const SIDESTEP: f32 = 1.01;
 /// How quickly a bot's body swings onto its aim point, per second.
 const AIM_RATE: f32 = 14.0;
 
