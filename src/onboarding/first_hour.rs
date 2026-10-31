@@ -521,6 +521,11 @@ pub(super) struct Newcomer {
     done_home: Option<u32>,
     /// Keeping low till then (backing off behind cover).
     low_until: f32,
+    /// Roofs it couldn't get under (a way in it stuck at: Cinder's shop
+    /// has one on a wall with only a window), and the one it's making for
+    /// with the bot's failures then.
+    no_roof: Vec<Entity>,
+    roof_try: Option<(Entity, u32)>,
     /// When it last did as a machine's tell says (not more than every 15 s).
     tell_at: f32,
     /// When it got home (the truck back at base, it in the bed).
@@ -796,10 +801,22 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
-                overhead
-                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here))
-                    .flatten()
-                    .unwrap_or_else(|| run_for_cover(&world.zone, here, from, 0.0))
+                // Stuck on the way under the last roof: not that one again.
+                if let Some((b, failed)) = state.roof_try.take() {
+                    if bot.failed > failed {
+                        state.no_roof.push(b);
+                    }
+                }
+                let roof = overhead
+                    .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
+                    .flatten();
+                match roof {
+                    Some((tasks, b)) => {
+                        state.roof_try = Some((b, bot.failed));
+                        tasks
+                    }
+                    None => run_for_cover(&world.zone, here, from, 0.0),
+                }
             }
             // "Low behind it, and keep still": a still shape behind cover
             // isn't glimpsed; a moving one is, and found.
@@ -1792,11 +1809,13 @@ fn under_a_roof(
     entrances: Option<&crate::robots::doors::Entrances>,
     plans: &[crate::sim::indoor::BuildingPlan],
     here: Vec2,
-) -> Option<Vec<Task>> {
+    skip: &[Entity],
+) -> Option<(Vec<Task>, Entity)> {
     let entrances = entrances?;
     let d = entrances
         .doors
         .iter()
+        .filter(|d| !skip.contains(&d.building))
         .filter(|d| {
             // A way in from outside: its far side is under that roof.
             let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
@@ -1838,7 +1857,7 @@ fn under_a_roof(
         .map(|s| inside + s)
         .find(|p| standable(*p))
         .unwrap_or(inside);
-    Some(vec![
+    let tasks = vec![
         Task::WalkTo {
             to: d.mid.xz() + out * 1.3,
             within: 0.6,
@@ -1862,7 +1881,8 @@ fn under_a_roof(
             to: d.mid.xz() + out * 1.5,
             within: 0.8,
         },
-    ])
+    ];
+    Some((tasks, d.building))
 }
 
 /// Into cover from a machine at `from`: round the far side of the nearest
@@ -2594,8 +2614,9 @@ pub(super) fn first_fight(
         // from a drone.
         fight.flee_until = now + 12.0;
         (kind == "drone")
-            .then(|| under_a_roof(entrances.as_deref(), &[], here))
+            .then(|| under_a_roof(entrances.as_deref(), &[], here, &[]))
             .flatten()
+            .map(|(t, _)| t)
             .unwrap_or_else(|| run_for_cover(&zone, here, from, 0.0))
     };
     if !answer.is_empty() {
