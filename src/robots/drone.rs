@@ -234,6 +234,29 @@ pub const STANDOFF: f32 = 20.0;
 /// ...this high over the ground (m), higher when it has lost sight of you
 /// (to look over what you're behind)...
 pub const FIGHT_ALTITUDE: (f32, f32) = (8.0, 13.0);
+/// Clear of a roof under a goal, at least this (m): over a building, a
+/// drone's height is over its top, not the ground round it.
+pub const OVER_ROOF: f32 = 4.0;
+
+/// Where a drone flies to for `p` at `h` over what's under it: the
+/// ground there or under the drone (`ground`), whichever is higher, and
+/// any building's top there, `OVER_ROOF` clear (Robot bodies' flyer sweep,
+/// 31 October: a goal over a house put the drone pressed to its wall,
+/// trying to fly into it).
+pub fn cruise_at(
+    zone: &Zone,
+    entrances: &super::doors::Entrances,
+    p: Vec3,
+    ground: f32,
+    h: f32,
+) -> Vec3 {
+    let under = zone.ground(p.x, p.z).max(ground);
+    let y = match entrances.top_at(p.x, p.z, 2.0) {
+        Some(top) => (under + h).max(top + OVER_ROOF),
+        None => under + h,
+    };
+    Vec3::new(p.x, y, p.z)
+}
 /// ...circling (rad/s), faster while you're looking at it: it slides out
 /// of your aim, round to your flank. Across your view at its standoff
 /// that's about 9 and 14 degrees a second: a moving target a pistol in a
@@ -294,7 +317,7 @@ fn drone_brain(
             intent.look = Some(f.from);
             continue;
         }
-        let cruise = |p: Vec3, h: f32| Vec3::new(p.x, zone.ground(p.x, p.z).max(ground) + h, p.z);
+        let cruise = |p: Vec3, h: f32| cruise_at(&zone, &entrances, p, ground, h);
         // Someone indoors: hover outside a doorway, low, and look in
         // (further back from one that's shut, waiting for it to open).
         let peek = |at: Vec3| {
@@ -603,6 +626,48 @@ fn drone_guns(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A drone's goal over a building is over its roof, clear, in every
+    /// valley: never inside it, where the drone would press against its
+    /// wall trying to get there (Robot bodies' flyer sweep, 31 October).
+    #[test]
+    fn a_drones_goal_clears_every_roof() {
+        let mut inside = vec![];
+        let mut tried = 0;
+        for (id, _) in extraction_core::map::VALLEYS {
+            let opts = crate::LaunchOptions {
+                robots: false,
+                map: id.to_string(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            let zone = app.world().resource::<Zone>().clone();
+            let entrances = app.world().resource::<super::super::doors::Entrances>();
+            for s in &entrances.shells {
+                let c = s.xf.translation;
+                let top = c.y + s.height;
+                tried += 1;
+                let g = cruise_at(&zone, entrances, c, zone.ground(c.x, c.z), FIGHT_ALTITUDE.0);
+                if g.y < top + OVER_ROOF - 1e-3 {
+                    inside.push(format!(
+                        "{id} at ({:.0}, {:.0}): goal {:.1} under its top {:.1}",
+                        c.x, c.z, g.y, top
+                    ));
+                }
+            }
+        }
+        assert!(tried >= 20, "tried {tried}");
+        assert!(
+            inside.is_empty(),
+            "{} goals in a building: {inside:#?}",
+            inside.len()
+        );
+    }
 
     #[derive(Resource, Default)]
     struct Heard {

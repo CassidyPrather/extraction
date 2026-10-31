@@ -4490,10 +4490,12 @@ mod run_tests {
     }
 
     /// Buildings with loot nobody can stand in arm's reach of (furniture or
-    /// walls crowd every floor cell near it), handed to Map design on 31
-    /// October with their positions: Cinder's blast furnace (7, by its
-    /// charging floor at (-131, 194) and (-127, 205)) and Marrow's mill race
-    /// (1, at (-11, 123)). Off this list as they're moved.
+    /// walls crowd every floor cell near it): the buildings' own geometry,
+    /// Models: world's (`buildings::blast_furnace`, `mill_race`), handed
+    /// over on 31 October. The blast furnace's 7 on its charging floor,
+    /// furnace-local about (±11, ±19) and (0, ±23); the mill
+    /// race's 1, Marrow's (-11, 123) as placed then. Off this list as
+    /// they're moved.
     const OUT_OF_REACH: &[&str] = &["blast_furnace", "mill_race"];
 
     /// Everything to take in a building can be taken from where a raider
