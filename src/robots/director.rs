@@ -63,7 +63,7 @@ pub struct Director {
 /// of the room (Marrow, 30 October: 6 on 0.085 km² against 6 on 0.28,
 /// and its raiders died at its Gate). No valley gets more than a full one.
 pub const FULL_ACTIVE: usize = 6;
-pub const FEWEST_ACTIVE: usize = 2;
+pub const FEWEST_ACTIVE: usize = 3;
 /// A full valley's walkable ground inside its fence (km²: Kettle, Cinder,
 /// Sallow, Rime measure 0.278..0.287).
 pub const REFERENCE_KM2: f32 = 0.28;
