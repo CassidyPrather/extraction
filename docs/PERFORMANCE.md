@@ -142,6 +142,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
+| ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
 
 Shared tools for the next ones (in `render::budget`):
 
@@ -150,6 +151,15 @@ Shared tools for the next ones (in `render::budget`):
 - `ShadowReach(m)` on a mesh: it casts the sun's shadow only within `m`
   (a `VisibilityRange` can't do this: the cascades use the camera's).
 - Items get a range from their catalogue size by themselves.
+
+Tried and left (31 October): card outlines cut band by band (twelve
+bands, 26 points) instead of the 8-sided hull. The polygon follows a
+sprig's notches, so Marrow's spruce view went 64.5M > 53.3M fragments
+both eyes, with the same picture. But a card became 24 triangles where it
+was 6, and cards within 30 m draw into the sun's cascades too: the
+spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
+the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
+one or two trees within 10 m.
 
 ## Where it stands
 

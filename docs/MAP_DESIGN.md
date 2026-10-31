@@ -683,7 +683,7 @@ door". The tester's ask: designed, busy places with the machines' activity
 broken up by big patches of near nothing, and sightlines broken by the
 land. `map_openness` measures it for every valley (the map lint's
 `openness:` line); `TIGHT` lists the valleys held to it (Marrow Creek, the
-prototype; the others join as they're reworked).
+prototype, and Cinder Works; the others join as they're reworked).
 
 - **Close enough to walk.** Each place's walk to its nearest neighbour,
   on the gentle grid, is about 40-45 s at a walking pace (2.4 m/s),
@@ -753,6 +753,30 @@ ford, the Hollow's south rim. The hot zones sit together in the north-west
 stands off by the Bus depot, 188 m from the Gate, so the Gate's
 response isn't on a fight there at once), with the
 Village, the farms and the logging camp quiet round the drop.
+
+Cinder Works was next (the measures across the valleys put it the most
+open, 26%, and its walks second longest). It was pulled in the same way,
+by 0.7 (`R:` holds the furnace works rigid while the ground round it
+squeezes, so the hall, garage and houses keep their spacing), 640 -> 472
+m. Pulling in opens a valley up (its rises shrink with it, and Cinder's
+stood at 31% after): low rises along the canal's banks and between the
+works and the ash pit, and three thin belts of birch along the yard
+road, the railway and the lock path, brought it back. Ash Row's farm
+steeple and the kiln chimney went (twin landmarks); every hot region's
+notice is capped at 45 m.
+
+| Cinder Works | as it was | pulled in |
+|---|---|---|
+| nearest-place walk, mean | 149 m (62 s) | 105 m (44 s) |
+| open ground seen past 70 m | 26% | 15% |
+| sightline, 90th percentile | 94 m | 74 m |
+| longest empty walk | 144 m | 74 m |
+| a hot spot's fight heard by, on average | 0.3 | 1.4 |
+| two landmarks in sight, day / fog | 92% / 85% | 94% / 93% |
+| night fix | 93% | 96% |
+
+![Cinder Works from overhead, as it was](shots/map-design/cinder_warp_before.jpg)
+![Cinder Works from overhead, pulled in](shots/map-design/cinder_warp_after.jpg)
 
 A tight valley has no spare field for a test to stage a fight on. A test
 that needs open ground and no particular place loads the test field
