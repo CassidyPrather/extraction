@@ -79,6 +79,23 @@ pub struct Entrances {
 }
 
 impl Entrances {
+    /// The highest top of any building over (x, z), `pad` round its
+    /// footprint (world y), if one's there: what a flyer's height is over.
+    pub fn top_at(&self, x: f32, z: f32, pad: f32) -> Option<f32> {
+        self.shells
+            .iter()
+            .filter(|s| {
+                let l = s.xf.compute_affine().inverse().transform_point3(Vec3::new(
+                    x,
+                    s.xf.translation.y,
+                    z,
+                ));
+                l.x.abs() < s.half.x + pad && l.z.abs() < s.half.y + pad
+            })
+            .map(|s| s.xf.translation.y + s.height)
+            .reduce(f32::max)
+    }
+
     /// The building `p` is inside (under its roof), if any.
     pub fn building_at(&self, p: Vec3) -> Option<Entity> {
         self.shells
