@@ -219,13 +219,16 @@ fn wake_handled(
 
 /// Whether a mesh can be merged (`world_props::for_merge` takes it):
 /// without building the merge, which generates tangents and cost a frame
-/// its 31 ms a gun when asked every time.
-fn mergeable(m: &Mesh) -> bool {
+/// its 31 ms a gun when asked every time. A mesh whose data went to the
+/// GPU only (`RENDER_WORLD` usage) can't be: asked for its attributes it
+/// panicked, a valley's first frames in (`part_rest`).
+pub(crate) fn mergeable(m: &Mesh) -> bool {
+    let has = |a| m.try_attribute_option(a).is_ok_and(|v| v.is_some());
     m.primitive_topology() == bevy::mesh::PrimitiveTopology::TriangleList
-        && m.attribute(Mesh::ATTRIBUTE_POSITION).is_some()
-        && m.attribute(Mesh::ATTRIBUTE_NORMAL).is_some()
-        && m.attribute(Mesh::ATTRIBUTE_UV_0).is_some()
-        && m.indices().is_some()
+        && has(Mesh::ATTRIBUTE_POSITION)
+        && has(Mesh::ATTRIBUTE_NORMAL)
+        && has(Mesh::ATTRIBUTE_UV_0)
+        && m.try_indices_option().is_ok_and(|i| i.is_some())
 }
 
 /// A gun whose merged meshes are being built off the main thread (a

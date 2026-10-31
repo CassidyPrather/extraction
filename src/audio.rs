@@ -1150,7 +1150,7 @@ pub fn fault_layers(
         FireEvent::Malfunctioned(ShortStroke) => {
             &[("guns/bolt_open", "gun.short_stroke", 0.8, Some(2500.0))]
         }
-        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(4000.0))],
+        FireEvent::Dud => &[("guns/dry_fire", "gun.dud", 0.8, Some(12000.0))],
         FireEvent::TriggerBlocked => &[(
             "physical/handle_metal",
             "gun.trigger_block",
@@ -1177,7 +1177,7 @@ pub fn fault_layers(
             ("impacts/metal", "gun.bolt_freed", 1.25, None),
             ("guns/bolt_open", "gun.bolt_open", 1.0, None),
         ],
-        FireEvent::SlamFire => &[("guns/safety", "gun.slam_snap", 1.4, None)],
+        FireEvent::SlamFire => &[("physical/switch", "gun.slam_snap", 1.4, None)],
         // A hang-fire: the hammer's fall, and the primer fizzing; the shot
         // it owes comes as a `Fired` of its own.
         FireEvent::HangFire => &[
@@ -1270,7 +1270,7 @@ pub fn handling_sound(
         // A crossbow loosed with no bolt on it: the string slams home on
         // nothing, hard enough to hurt the bow. Not a hammer's click, and
         // heavier than a string let go short.
-        (FireEvent::DryFire, Some(Crossbow)) => ("impacts/wood", "gun.dry_loose"),
+        (FireEvent::DryFire, Some(Crossbow)) => ("physical/drop_wood", "gun.dry_loose"),
         (FireEvent::DryFire, _) => ("guns/dry_fire", "gun.dry_fire"),
         (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert"),
         (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release"),
@@ -1303,11 +1303,11 @@ pub fn handling_sound(
         (FireEvent::OpenBoltSlam, _) => ("guns/bolt_close", "gun.open_bolt"),
         // A Nagant's loading gate flicked open and shut, its cylinder
         // clicking round a chamber under the thumb.
-        (FireEvent::BoltLocked, Some(Revolver)) => ("guns/safety", "gun.gate_open"),
-        (FireEvent::BoltClosed, Some(Revolver)) => ("guns/safety", "gun.gate_shut"),
+        (FireEvent::BoltLocked, Some(Revolver)) => ("physical/switch", "gun.gate_open"),
+        (FireEvent::BoltClosed, Some(Revolver)) => ("physical/switch", "gun.gate_shut"),
         (FireEvent::Cocked, Some(Revolver)) => ("guns/dry_fire", "gun.cylinder"),
         // A crossbow's string let go short of the latch: it slaps home.
-        (FireEvent::BoltClosed, Some(Crossbow)) => ("impacts/wood", "gun.string_slap"),
+        (FireEvent::BoltClosed, Some(Crossbow)) => ("physical/drop_wood", "gun.string_slap"),
         // A crossbow's string caught on the latch.
         (FireEvent::Cocked, Some(Crossbow)) => ("guns/dry_fire", "gun.latch"),
         // Brass sliding off the magazine's lips into the chamber, under

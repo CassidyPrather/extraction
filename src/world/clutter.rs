@@ -279,9 +279,11 @@ pub fn dress(
                 Valley::Marrow if story != Some(Story::Hana) => {
                     out.push(on("suitcase_open", s.bed, 0.1));
                     out.push(on("suitcase_shut", s.door_floor[0], 0.15));
+                    // Behind the suitcase, off the doorway (beside it, the
+                    // bundle went 10 cm into the case).
                     out.push(on(
                         "bundle",
-                        s.door_floor[0] + Vec3::new(0.45, 0.0, 0.1),
+                        s.door_floor[0] + Vec3::new(-0.05, 0.0, 0.52),
                         0.0,
                     ));
                     out.push(on("belongings_box", s.room_floor + Vec3::X * 0.6, 0.3));
@@ -375,6 +377,9 @@ pub fn dress(
             out.push(wall("coat_hook", s.door_wall[0]));
         }
         Some(Story::ShotFirer) => {
+            // His helmet where the dishes were (both, they went through
+            // each other).
+            out.retain(|(n, _)| *n != "dishes");
             out.push(on("helmet_lamp", s.table[0] + Vec3::Z * 0.2, -0.4));
             out.push(wall("tally_board", s.door_wall[1] + Vec3::Y * 0.1));
         }

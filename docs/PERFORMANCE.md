@@ -143,6 +143,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
 | ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
+| Breakable parts (shutters, boards, crates, panels, sash leaves, drawers) merged per 16 m cell per material while nothing's near or changing them; the cell is parts again the frame a hand, tool, hit, swing, pane or the Surge reaches one (`EXTRACTION_PART_REST=0`: off) | `render::part_rest` | One eye: Marrow gate 1013 > 591 draws, village 1032 > 648, spruce 940 > 661, aerial 1038 > 806; triangles the same. In a real render, Marrow's gate view merged 1132 part meshes into 224 before the shot, and the picture is the same |
 
 Shared tools for the next ones (in `render::budget`):
 
@@ -160,6 +161,45 @@ was 6, and cards within 30 m draw into the sun's cascades too: the
 spruce view went 534k > 718k triangles and its shadows 402k > 839k, over
 the 700k budget. Most of that view's card layers (4.1 of 7.5) are the
 one or two trees within 10 m.
+
+### Depth prepass (headset experiment, off by default)
+
+`EXTRACTION_PREPASS=1` gives every player view a depth prepass: both
+eyes, the flat camera, the mirror, and the warm-up proxy, so its
+pipelines are warmed too (`render::prepass`). Without it, a pixel behind
+stacked cards is shaded for every card in front of it. Marrow's spruce
+view is 10 layers a pixel, 7.5 of them cards. With it, every layer's
+alpha is tested once in a depth-only pass, and the main pass shades only
+what's in front. That costs a second geometry pass an eye. The software
+renderer can't say whether it pays, so it waits for a headset:
+`docs/PLAYTEST.md` 4g has the run.
+
+What it takes to draw right:
+- The materials whose vertex shaders move their geometry give the
+  prepass their own vertex (and fragment) shaders, so the depth is where
+  the picture is. Those are the cards (sway, the near shrink, the dither
+  to the impostor), the impostors (turned to the eye, cut near), and the
+  ground cover (blown). `tree_sway.wgsl`, `impostor.wgsl` and `sway.wgsl`
+  serve both pipelines (`#ifdef PREPASS_PIPELINE`). Off, they return
+  Bevy's default prepass shaders, so nothing else, the sun's shadows
+  included, changes.
+- Leaves are a hard alpha test while it's on (`trees::foliage_alpha`).
+  The prepass has no colour for alpha to coverage to read, so a
+  coverage-cut card wrote its whole outline into the depth and hid the
+  world behind its gaps.
+- The ground cover's widening needs the normals the prepass doesn't
+  have, so its depth is slightly thinner than its picture. That is never
+  wider, so it hides nothing.
+- A `discard` in a WGSL function of our own, called from the fragment,
+  dropped cards that should have drawn (on lavapipe at least). The
+  dithers are written out in each entry point.
+
+Checked on the software renderer: with the prepass, all 13 of Marrow's
+lookbook views differ from the same views with hard leaves and no
+prepass by no more than two runs of either differ from each other. That
+is 0-6% of pixels past 24 levels: wind, rain, and whether the near trees'
+cards had streamed in by the shot's frame 60, which a lookbook shot
+sometimes catches before they have.
 
 ## Where it stands
 

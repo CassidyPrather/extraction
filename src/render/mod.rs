@@ -33,6 +33,8 @@ pub mod memorial;
 pub mod offering;
 #[cfg(test)]
 pub mod overdraw;
+pub mod part_rest;
+pub mod prepass;
 pub mod props;
 pub mod pry_cue;
 pub mod readback;
@@ -104,9 +106,11 @@ impl Plugin for RenderPlugin {
         .add_plugins(hold_rate::HoldRatePlugin)
         .add_plugins(gpu_lost::GpuLostPlugin)
         .add_plugins(eye_projection::EyeProjectionPlugin)
+        .add_plugins(prepass::PrepassPlugin)
         .add_plugins(textures::TexturesPlugin)
         .add_plugins(first_sight::EverythingPlugin)
         .add_plugins(gun_rest::GunRestPlugin)
+        .add_plugins(part_rest::PartRestPlugin)
         .add_plugins(wounds::WoundMarksPlugin)
         .add_plugins(clear_eyes::ClearEyesPlugin)
         .add_plugins(legibility_shots::LegibilityShotsPlugin)
@@ -259,6 +263,7 @@ pub fn camera_look(weather: &Weather) -> impl Bundle {
         // The valley's grade arrives with the weather (`sky::apply_weather`).
         bevy::render::view::ColorGrading::default(),
         Msaa::Sample4,
+        prepass::PlayerLook,
     )
 }
 
