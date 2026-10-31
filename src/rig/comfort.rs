@@ -7,7 +7,7 @@
 //! ```
 //!
 //! `--smooth-turn`, `--snap-turn`, `--vignette 0..1`, `--narrow-dynamics`,
-//! `--finger-grab`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
+//! `--finger-grab`, `--no-steady-aim`, `--climb-teleport`, `--no-binaural`, `--no-score`, `--no-machine-tick`,
 //! `--no-post-blur`, `--no-body`, `--left-handed`, `--seated`, `--one-handed`, `--no-captions`,
 //! `--render-scale 0.3..1` (0 or absent: auto), `--msaa 4|2|0`,
 //! `--a2c 1|0` (soft or hard leaves), `--hold-rate 1|0`.
@@ -38,6 +38,10 @@ pub struct Comfort {
     /// takes it, as the squeeze does. Off by default: an unmeant grab is
     /// worse than a missed one.
     pub finger_grab: bool,
+    /// A second hand on a gun, or its stock at the shoulder, steadies the
+    /// hand's tremor as they do a real one: the muzzle turns a little more
+    /// slowly (`weapons::feel::Hold::steady`). Nothing aims it.
+    pub steady_aim: bool,
     /// Climbing (ladders, ledges): a grip on the ladder or both palms on
     /// the ledge puts you at the top, for those that pulling yourself up
     /// makes sick.
@@ -98,6 +102,7 @@ impl Default for Comfort {
             narrow_dynamics: false,
             render_scale: 0.0,
             finger_grab: false,
+            steady_aim: true,
             climb_teleport: false,
             binaural: true,
             score: true,
@@ -317,6 +322,14 @@ impl Comfort {
         }
     }
 
+    pub fn steady_aim_label(&self) -> String {
+        if self.steady_aim {
+            "STEADY AIM\ntwo hands, a stock".into()
+        } else {
+            "STEADY AIM\noff".into()
+        }
+    }
+
     pub fn finger_grab_label(&self) -> String {
         if self.finger_grab {
             "GRAB\nsqueeze or fingers".into()
@@ -394,6 +407,7 @@ impl Comfort {
                 "--snap-turn" => c.smooth_turn = false,
                 "--narrow-dynamics" => c.narrow_dynamics = true,
                 "--finger-grab" => c.finger_grab = true,
+                "--no-steady-aim" => c.steady_aim = false,
                 "--climb-teleport" => c.climb_teleport = true,
                 "--no-binaural" => c.binaural = false,
                 "--no-score" => c.score = false,

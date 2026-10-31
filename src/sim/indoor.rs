@@ -707,6 +707,20 @@ fn plan_site(
             grid.block(ob, clearance);
         }
     }
+    // Its carts on their rails (`world::workings`): bodies of their own,
+    // not the site's pieces, so the raster hasn't them; a raider walking
+    // the deep kettle's haulage down its rail met one (Kettle sims, 31
+    // October). Where they're set down: nobody the plan's for pushes them.
+    for (at, half, yaw) in crate::world::workings::cart_footprints(&b.prefab) {
+        grid.block(
+            Obstacle::Rect {
+                at: at.to_array(),
+                half: half.to_array(),
+                yaw: -yaw,
+            },
+            clearance,
+        );
+    }
     for (_, leaf) in mine {
         let def = leaf.0;
         let open = Quat::from_rotation_y(def.yaw + OPEN_SWING);
@@ -1106,6 +1120,48 @@ mod tests {
     use crate::launch::LaunchOptions;
     use crate::rig::LocalPlayer;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// A route down a site with a mine cart on its rail goes round the
+    /// cart, not through it (Kettle sims, 31 October: raiders walking the
+    /// deep kettle's haulage down its rail stood pressed to the cart):
+    /// from either side of every cart, along its rail.
+    #[test]
+    fn a_route_goes_round_a_mine_cart() {
+        let opts = LaunchOptions {
+            robots: false,
+            map: "kettle_pass".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let mut tried = 0;
+        let mut through = vec![];
+        for plan in plans(&mut app) {
+            for (at, half, yaw) in crate::world::workings::cart_footprints(&plan.name) {
+                let along = Vec2::new(yaw.sin(), yaw.cos());
+                let across = along.perp();
+                let inside = |q: Vec2| {
+                    let d = q - at;
+                    d.dot(across).abs() < half.x && d.dot(along).abs() < half.y
+                };
+                let (a, b) = (at - along * 3.0, at + along * 3.0);
+                let Some(path) = plan.path(a, b) else {
+                    continue;
+                };
+                tried += 1;
+                let hit = path
+                    .windows(2)
+                    .any(|w| (0..=20).any(|k| inside(w[0].lerp(w[1], k as f32 / 20.0))));
+                if hit {
+                    through.push(format!("{} cart at {at}", plan.name));
+                }
+            }
+        }
+        assert!(tried >= 1, "no cart tried");
+        assert!(through.is_empty(), "through a cart: {through:?}");
+    }
 
     /// A route in at a door with steps up to it comes onto the flight
     /// in the door's lane, square on, never along its flanks (Marrow sims,

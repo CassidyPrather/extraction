@@ -160,6 +160,7 @@ pub const MIX: &[Cue] = &[
     cue!("gun.hang_fizz", "physical/zip", -16.0, 45.0, 0.5, Signal),
     cue!("gun.trigger_block", "physical/handle_metal", -14.0, 45.0, 0.5, Detail),
     cue!("gun.string_slap", "impacts/wood", -6.0, 75.0, 0.5, Detail),
+    cue!("gun.dry_loose", "impacts/wood", -1.0, 80.0, 0.5, Signal),
     cue!("gun.action_open", "guns/bolt_open", -4.0, 50.0, 0.5, Signal),
     cue!("gun.trigger_dead", "guns/dry_fire", 0.0, 65.0, 0.5, Signal),
     cue!("flare.pop", "guns/pistol_shot", -12.0, 85.0, 0.5, Detail),

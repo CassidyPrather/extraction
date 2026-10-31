@@ -754,6 +754,100 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// Every gun's every action is heard, each as itself: the safety on
+    /// and off (where it has one), the trigger on an empty chamber, a
+    /// magazine in and out, the action worked, and each stoppage's clear.
+    /// None is silent, and the safety, dry fire, magazine and rack of one
+    /// gun don't sound alike, so an ear knows what the hands just did.
+    /// (The reload's steps: `reload::tests`; a stoppage's moment and every
+    /// pull on it: above.)
+    #[test]
+    fn every_gun_action_is_heard_as_itself() {
+        let catalog = Catalog::load();
+        let mut bad = Vec::new();
+        for (_, def) in catalog.iter() {
+            let Some(f) = def.firearm.as_ref() else {
+                continue;
+            };
+            let id = def.id.as_str();
+            let mut acts: Vec<(String, Vec<FireEvent>)> = Vec::new();
+            // The selector, round every position: a new gun is on its
+            // first (safe, where it has a safety).
+            let mut g = Firearm::new(f.clone(), 1.0);
+            if f.modes.contains(&FireMode::Safe) {
+                for _ in 0..f.modes.len() {
+                    let ev = g.cycle_mode();
+                    let to = g.fire_mode();
+                    let name = if to == FireMode::Safe {
+                        "safety on".to_string()
+                    } else {
+                        format!("selector to {to:?}")
+                    };
+                    acts.push((name, ev));
+                }
+            }
+            // Off safe, the action worked on nothing, the trigger pulled.
+            let mut g = Firearm::new(f.clone(), 1.0);
+            while g.fire_mode() == FireMode::Safe {
+                g.cycle_mode();
+            }
+            cycle(&mut g);
+            let dry = pull(&mut g, &[]);
+            // Worked again from there (a gun already cocked, an open bolt
+            // on its sear or a string on its latch, doesn't move); a bolt
+            // held open on the empty feed is let go off its stop.
+            let held = dry.contains(&FireEvent::ActionOpen);
+            acts.push(("dry fire".into(), dry));
+            let work = if held {
+                g.release_slide_stop()
+            } else {
+                cycle(&mut g)
+            };
+            acts.push(("action worked".into(), work));
+            if f.magazine_family.is_some() {
+                let mut g = Firearm::new(f.clone(), 1.0);
+                acts.push((
+                    "magazine in".into(),
+                    g.insert_magazine(mag(f, 5, Load::Standard)).unwrap(),
+                ));
+                g.remove_magazine();
+                acts.push(("magazine out".into(), vec![FireEvent::MagazineRemoved]));
+            }
+            for s in stoppages(id, f) {
+                let mut g = s.gun.clone();
+                acts.push((format!("{} cleared", s.name), (s.clear.1)(&mut g)));
+            }
+            let sounds: Vec<_> = acts
+                .iter()
+                .map(|(n, ev)| (n, heard(f.action, id, ev), shot(ev)))
+                .collect();
+            for (n, h, fired) in &sounds {
+                println!("{id} {n}: {h:?}{}", if *fired { " +shot" } else { "" });
+                if h.is_empty() && !fired {
+                    let ev = &acts.iter().find(|a| &a.0 == *n).unwrap().1;
+                    bad.push(format!("{id} {n}: silent ({ev:?})"));
+                }
+            }
+            // A clear is the action worked a certain way, and the
+            // selector's fire positions one detent: those may share.
+            let own = |n: &str| !n.ends_with("cleared") && !n.starts_with("selector");
+            for (i, (a, ha, _)) in sounds.iter().enumerate() {
+                for (b, hb, _) in &sounds[i + 1..] {
+                    if own(a) && own(b) && ha == hb {
+                        bad.push(format!("{id}: {a} and {b} sound alike {ha:?}"));
+                    }
+                }
+            }
+            if let Some((_, off, _)) = sounds.iter().find(|s| s.0.starts_with("selector")) {
+                let on = &sounds.iter().find(|s| s.0 == "safety on").unwrap().1;
+                if on == off {
+                    bad.push(format!("{id}: the safety on and off sound alike {on:?}"));
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
     /// How often a gun stops is its condition and dirt: a worn, filthy one
     /// jams and sticks far more than one fresh off the bench.
     #[test]

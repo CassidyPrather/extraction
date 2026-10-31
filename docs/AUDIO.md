@@ -883,6 +883,23 @@ masking by 6 dB. The slide-lock is the slide's half of a rack, the safety
 a switch, the dead trigger a dulled dry-fire click. (The slide-lock lands
 with your own last shot: the press after, `gun.action_open`, is the tell.)
 
+**Every gun action, heard where you do it** (`scripts/audio_handling.py`):
+`weapons::stoppages::tests::every_gun_action_is_heard_as_itself` proves
+each action has a sound of its own; this proves it's heard. Every
+handling and fault cue (each `gun.*` cue but the shots, the bump and the
+state cues above, which are judged there; a new one must be added or the
+pass flags it) is played in the hand under a downpour, a heavy idling 8 m
+off, and a walker suppressing at 20 m, in its loudest 0.15 s. A tell (a
+stoppage, a crossbow loosed dry) must clear the masking by 6 dB, as the
+state cues must; routine handling, heard because you're doing it, is
+flagged under 3 dB and called faint under 6. A fault heard as layers is
+heard if one clears. Its `KNOWN` list
+holds the ones a gain can't fix (the sample or its filter is wrong for
+it: the Nagant's gate and the slam-fire's snap on `guns/safety`, the
+crossbow's string on `impacts/wood`, the dud's 4 kHz low-pass, the
+Nagant's quiet cylinder), reported, not failed, and flagged once they
+clear.
+
 **A robot struck** (`audio_machines::struck_sounds`, `RobotStruck`): by
 what the hit did. Shrugged off, a thin tink; a wound, the impact and a
 low thud; telling (a weak spot, a part giving way), a crunch and an
