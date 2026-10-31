@@ -2547,7 +2547,7 @@ pub fn indoor_route(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> O
 /// To something to take: stand where it can be reached.
 fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
-    indoor_to(plan, from, goal, stand_within(goal, to, within))
+    indoor_to(plan, from, goal, within)
 }
 
 /// How near the cell it's making for a bot reaching for something at
