@@ -100,7 +100,7 @@ impl Vr {
         self.step(2);
     }
 
-    fn root(&self) -> Transform {
+    pub(crate) fn root(&self) -> Transform {
         *self.app.world().get::<Transform>(self.player).unwrap()
     }
 

@@ -5381,10 +5381,7 @@ fn a_hot_zones_guards_see_their_own_ground() {
                     notice: Some(cap),
                 },
             );
-            app.insert_resource(Zone {
-                map: std::sync::Arc::new(map),
-                hm: zone.hm.clone(),
-            });
+            app.insert_resource(Zone::new(std::sync::Arc::new(map), zone.hm.clone()));
         }
         put(&mut app, player, spot);
         let walker = walker_at(&mut app, &zone, post);
