@@ -157,6 +157,30 @@ review.
 - **Markings**: the selector's letters, the serial, the year, the factory
   mark, where they really are.
 
+#### Finishes
+
+The model's material names (`art/common.py`, mapped in `src/models.rs`
+and the bench) are the finishes. Judge a finish across the whole
+line-up, not on one gun: take every gun's `threeq_30cm` into one sheet
+(`docs/craft/finishes/`).
+
+| Name | What it is | On |
+| - | - | - |
+| `Blued` | machined steel, polished and blued: the gun-metal scan at a 75 mm tile, a little glossy | barrels, sight blocks, bolts, slides, milled receivers |
+| `Stamped` | stamped sheet under black lacquer over phosphate: near black, little metal, the scan's relief only | the AK-74's and RPK-74's receivers and dust covers |
+| `Steel` | bright steel, in the white | carriers, pins, springs |
+| `Black` | blackened steel, matt | butt plates, small fittings |
+| `Worn` | bare steel where the finish has rubbed off | edges, by `wear` |
+
+First pass (31 October): every gun wore the same scan at a 150 mm tile,
+which at 30 cm read as a casting's grain on everything. Blued is now at
+half that tile; the stamped receivers have their own finish. Both sit at
+the art direction's value floor (median about 20-22 at 30 cm on the
+bench): lifting either further takes a decision on the whole line-up's
+values, not one gun's.
+
+![](finishes/lineup_after.jpg)
+
 ### 5. Hands
 
 - Where does the firing hand's thumb fall, and what does it find there

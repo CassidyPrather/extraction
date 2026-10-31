@@ -330,6 +330,9 @@ fn scanned(
     m
 }
 
+/// The scan's tile on blued and stamped gun steel (the game's).
+const BLUED_TILE: f32 = 0.075;
+
 fn flat(color: Color, metallic: f32, rough: f32) -> StandardMaterial {
     StandardMaterial {
         base_color: color,
@@ -351,7 +354,23 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
         )
     };
     match name {
-        "Blued" => gun_metal(),
+        // As the game's (src/models.rs): the scan at a finer tile, glossier.
+        "Blued" => {
+            let mut m = gun_metal();
+            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
+            m.perceptual_roughness *= 0.8;
+            m
+        }
+        "Stamped" => {
+            let mut m = gun_metal();
+            m.base_color_texture = None;
+            m.base_color = Color::srgb(0.065, 0.065, 0.068);
+            m.metallic = 0.2;
+            m.metallic_roughness_texture = None;
+            m.perceptual_roughness = 0.5;
+            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
+            m
+        }
         "Wood" => scanned(
             "gun_wood",
             0.25,

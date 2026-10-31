@@ -36,30 +36,30 @@ recv = Part("receiver")
 recv_prof = fillet([(RX_Z0, RX_Y0 + 0.006), (RX_Z0 + 0.012, RX_Y0), (RX_Z1 - 0.004, RX_Y0),
                     (RX_Z1, RX_Y0 + 0.004), (RX_Z1, RX_Y1), (RX_Z0, RX_Y1)],
                    [0.002, 0.003, 0.002, 0.002, 0.001, 0.001], 2)
-recv.prism(recv_prof, -RX_HW, RX_HW, "Blued", axis="x", bevel=0.0012, segs=2)
+recv.prism(recv_prof, -RX_HW, RX_HW, "Stamped", axis="x", bevel=0.0012, segs=2)
 # Top rails the dust cover rides on.
 for sx in (-1, 1):
     recv.box((0.0025, 0.003, RX_Z1 - RX_Z0 - 0.03), (sx * (RX_HW + 0.0005), RX_Y1 - 0.0045, -0.105 + R),
-             "Blued", bevel=0.0006, segs=1)
+             "Stamped", bevel=0.0006, segs=1)
 rc = Part("cut")
 # Ejection port and charging slot (right side).
-rc.box((0.02, 0.0175, 0.078), (RX_HW, 0.0695, -0.124 + 0.025), "Blued", bevel=0.002, segs=1)
-rc.box((0.02, 0.0085, 0.13), (RX_HW, 0.0625, -0.115 + R), "Blued")
+rc.box((0.02, 0.0175, 0.078), (RX_HW, 0.0695, -0.124 + 0.025), "Stamped", bevel=0.002, segs=1)
+rc.box((0.02, 0.0085, 0.13), (RX_HW, 0.0625, -0.115 + R), "Stamped")
 # Magazine-well dimples, both sides.
 for sx in (-1, 1):
-    rc.sphere(0.03, (sx * (RX_HW + 0.0278), 0.040, -0.128), "Blued", segs=20, rings=10,
+    rc.sphere(0.03, (sx * (RX_HW + 0.0278), 0.040, -0.128), "Stamped", segs=20, rings=10,
               scale=(1, 0.42, 1.25))
 # Magazine opening underneath.
-rc.box((0.026, 0.02, 0.064), (0, RX_Y0, -0.124), "Blued")
+rc.box((0.026, 0.02, 0.064), (0, RX_Y0, -0.124), "Stamped")
 # Stampings cut 0.4 mm into the steel: the selector's АВ (auto) and ОД
 # (single) on the right, under its lever's travel, and the serial and
 # year on the left above the magazine well.
 RIGHT = T(RX_HW - 0.0004, 0, 0) @ RY(math.pi / 2)
 LEFT = T(-RX_HW + 0.0004, 0, 0) @ RY(-math.pi / 2)
-text(rc, "АВ", 0.0042, "Blued", RIGHT @ T(0.1035, 0.037, 0.0), depth=0.0008)
-text(rc, "ОД", 0.0042, "Blued", RIGHT @ T(0.083, 0.0275, 0.0), depth=0.0008)
-text(rc, "ВЛ 3317", 0.0034, "Blued", LEFT @ T(-0.05, 0.063, 0.0), depth=0.0008)
-text(rc, "1984", 0.0034, "Blued", LEFT @ T(-0.05, 0.057, 0.0), depth=0.0008)
+text(rc, "АВ", 0.0042, "Stamped", RIGHT @ T(0.1035, 0.037, 0.0), depth=0.0008)
+text(rc, "ОД", 0.0042, "Stamped", RIGHT @ T(0.083, 0.0275, 0.0), depth=0.0008)
+text(rc, "ВЛ 3317", 0.0034, "Stamped", LEFT @ T(-0.05, 0.063, 0.0), depth=0.0008)
+text(rc, "1984", 0.0034, "Stamped", LEFT @ T(-0.05, 0.057, 0.0), depth=0.0008)
 recv.cut(rc)
 
 parts_static = Part("static_misc")
@@ -67,7 +67,7 @@ parts_static = Part("static_misc")
 for sx in (-1, 1):
     for z, y in ((-0.226, 0.03), (-0.226, 0.048), (-0.212, 0.03), (-0.212, 0.048), (-0.172, 0.029),
                  (0.012, 0.03), (0.012, 0.05)):
-        parts_static.sphere(0.0022, (sx * RX_HW, y, z + R), "Blued", segs=10, rings=5,
+        parts_static.sphere(0.0022, (sx * RX_HW, y, z + R), "Stamped", segs=10, rings=5,
                             scale=(0.45, 1, 1))
     # Trigger, hammer and disconnector pins: flat heads, the left ones held
     # by the retaining spring's hooked wire.
@@ -86,14 +86,25 @@ cover = Part("dust_cover", origin=(0.0, 0.081, 0.02 + R))
 # Its crown 14 mm over the rails (it stood 10 mm higher than the real one).
 cover_sec = fillet([(-0.018, 0.0745), (0.018, 0.0745), (0.018, 0.083), (0.0, 0.0885),
                     (-0.018, 0.083)], [0.0013, 0.0013, 0.006, 0.010, 0.006], 5)
-cover.prism(cover_sec, -0.208 + R, 0.024 + R, "Blued", axis="z", bevel=0.0012, segs=2)
+cover.prism(cover_sec, -0.208 + R, 0.024 + R, "Stamped", axis="z", bevel=0.0012, segs=2)
 # AK-74 stiffening ribs.
 for z in (-0.06 + R, -0.035 + R, -0.01 + R, 0.012 + R):
     rib = [(x * 1.06, 0.0745 + (y - 0.0745) * 1.09) for x, y in cover_sec]
-    cover.prism(rib, z - 0.002, z + 0.002, "Blued", axis="z", bevel=0.0008, segs=1)
+    cover.prism(rib, z - 0.002, z + 0.002, "Stamped", axis="z", bevel=0.0008, segs=1)
 # Recoil spring guide button at the rear, its face dished.
 parts_static.lathe([(0.0, 0.0275), (0.0022, 0.0283), (0.0034, 0.029), (0.0042, 0.0282),
                     (0.0042, 0.024), (0.0, 0.024)], "Steel", segs=20, xf=T(0, 0.081, R))
+# Under the cover: the recoil spring on its guide rod, from the button
+# forward into the carrier (seen with the cover off). The rod is the
+# guide's; the spring, 26 coils of 1.4 mm wire, stays put (on the real gun
+# it closes up as the carrier comes back over it).
+SPRING_Y = 0.0745
+parts_static.cyl(0.0021, -0.064, 0.025 + R, "Steel", segs=12, xf=T(0, SPRING_Y, 0))
+for k in range(26):
+    zk = -0.060 + k * (0.048 + R - 0.031 + 0.060) / 25
+    parts_static.lathe([(0.0042 + 0.0007 * math.cos(t), zk + 0.0007 * math.sin(t))
+                        for t in [2 * math.pi * j / 6 for j in range(6)]], "Steel", segs=12,
+                       xf=T(0, SPRING_Y, 0), closed=True)
 
 # --- Pistol grip -----------------------------------------------------------------------
 # Below the receiver, 18% shorter and raked further back than first
@@ -422,11 +433,15 @@ trig.sweep(catmull([(-0.031, 0.024), (-0.0345, 0.016), (-0.0345, 0.010), (-0.031
 bmesh.ops.translate(carrier.bm, vec=(0.0, 0.0, R), verts=carrier.bm.verts)
 
 # --- Build --------------------------------------------------------------------------------
-join("static", recv, parts_static, grip, barrel, leaf, gas, brake, lower, upper, tang, worn={})
+# The stamped receiver and cover are lacquered (`Stamped`), the machined
+# parts blued; both wear to bare steel at the edges.
+STEEL_WEAR = {"mats": ("Blued", "Stamped")}
+join("static", recv, parts_static, grip, barrel, leaf, gas, brake, lower, upper, tang,
+     worn=STEEL_WEAR)
 # The butt, off its tang screws at the vice (`weapons::gunsmith`).
 join("static_butt", stock, butt, worn={})
 for p in (carrier, selector, trig, cover, catch):
-    make(p, worn={})
+    make(p, worn=STEEL_WEAR)
 
 empty("pt_muzzle", (0.0, BORE, -0.69 + F))
 empty("pt_sight", (0.0, 0.1071, 0.0))

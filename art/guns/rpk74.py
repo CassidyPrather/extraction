@@ -52,25 +52,25 @@ recv = Part("receiver")
 recv_prof = fillet([(RX_Z0, RX_Y0 + 0.006), (RX_Z0 + 0.012, RX_Y0), (RX_Z1 - 0.004, RX_Y0),
                     (RX_Z1, RX_Y0 + 0.004), (RX_Z1, RX_Y1), (RX_Z0, RX_Y1)],
                    [0.002, 0.003, 0.002, 0.002, 0.001, 0.001], 2)
-recv.prism(recv_prof, -RX_HW, RX_HW, "Blued", axis="x", bevel=0.0012, segs=2)
+recv.prism(recv_prof, -RX_HW, RX_HW, "Stamped", axis="x", bevel=0.0012, segs=2)
 for sx in (-1, 1):
     recv.box((0.0025, 0.003, RX_Z1 - RX_Z0 - 0.03), (sx * (RX_HW + 0.0005), RX_Y1 - 0.0045, -0.105),
-             "Blued", bevel=0.0006, segs=1)
+             "Stamped", bevel=0.0006, segs=1)
 rc = Part("cut")
-rc.box((0.02, 0.0175, 0.078), (RX_HW, 0.0695, -0.124), "Blued", bevel=0.002, segs=1)
-rc.box((0.02, 0.0085, 0.13), (RX_HW, 0.0625, -0.115), "Blued")
+rc.box((0.02, 0.0175, 0.078), (RX_HW, 0.0695, -0.124), "Stamped", bevel=0.002, segs=1)
+rc.box((0.02, 0.0085, 0.13), (RX_HW, 0.0625, -0.115), "Stamped")
 for sx in (-1, 1):
-    rc.sphere(0.03, (sx * (RX_HW + 0.0278), 0.040, -0.128), "Blued", segs=20, rings=10,
+    rc.sphere(0.03, (sx * (RX_HW + 0.0278), 0.040, -0.128), "Stamped", segs=20, rings=10,
               scale=(1, 0.42, 1.25))
-rc.box((0.026, 0.02, 0.064), (0, RX_Y0, -0.124), "Blued")
+rc.box((0.026, 0.02, 0.064), (0, RX_Y0, -0.124), "Stamped")
 # Stampings 0.4 mm into the steel: АВ / ОД under the selector's travel on
 # the right, serial and year on the left above the magazine well.
 RIGHT = T(RX_HW - 0.0004, 0, 0) @ RY(math.pi / 2)
 LEFT = T(-RX_HW + 0.0004, 0, 0) @ RY(-math.pi / 2)
-text(rc, "АВ", 0.0042, "Blued", RIGHT @ T(0.1035, 0.037, 0.0), depth=0.0008)
-text(rc, "ОД", 0.0042, "Blued", RIGHT @ T(0.083, 0.0275, 0.0), depth=0.0008)
-text(rc, "ДМ 4127", 0.0034, "Blued", LEFT @ T(-0.05, 0.063, 0.0), depth=0.0008)
-text(rc, "1986", 0.0034, "Blued", LEFT @ T(-0.05, 0.057, 0.0), depth=0.0008)
+text(rc, "АВ", 0.0042, "Stamped", RIGHT @ T(0.1035, 0.037, 0.0), depth=0.0008)
+text(rc, "ОД", 0.0042, "Stamped", RIGHT @ T(0.083, 0.0275, 0.0), depth=0.0008)
+text(rc, "ДМ 4127", 0.0034, "Stamped", LEFT @ T(-0.05, 0.063, 0.0), depth=0.0008)
+text(rc, "1986", 0.0034, "Stamped", LEFT @ T(-0.05, 0.057, 0.0), depth=0.0008)
 recv.cut(rc)
 
 parts_static = Part("static_misc")
@@ -91,10 +91,10 @@ for sx in (-1, 1):
 # --- Dust cover --------------------------------------------------------------------
 cover_sec = fillet([(-0.018, 0.0745), (0.018, 0.0745), (0.018, 0.090), (0.0, 0.0975),
                     (-0.018, 0.090)], [0.0013, 0.0013, 0.007, 0.012, 0.007], 4)
-parts_static.prism(cover_sec, -0.208, 0.024, "Blued", axis="z", bevel=0.0012, segs=1)
+parts_static.prism(cover_sec, -0.208, 0.024, "Stamped", axis="z", bevel=0.0012, segs=1)
 for z in (-0.06, -0.035, -0.01, 0.012):
     rib = [(x * 1.06, 0.0745 + (y - 0.0745) * 1.09) for x, y in cover_sec]
-    parts_static.prism(rib, z - 0.002, z + 0.002, "Blued", axis="z", bevel=0.0008, segs=1)
+    parts_static.prism(rib, z - 0.002, z + 0.002, "Stamped", axis="z", bevel=0.0008, segs=1)
 parts_static.cyl(0.0042, 0.024, 0.029, "Steel", segs=12, xf=T(0, 0.088, 0), chamfer=0.001)
 
 # --- Pistol grip (the AK-74's) -------------------------------------------------------
@@ -336,7 +336,9 @@ bipod.cyl(0.0022, -0.016, 0.016, "Steel", segs=8,
           xf=T(0, py - 0.0005, pz - 0.0255) @ RY(math.pi / 2))
 
 # --- Build --------------------------------------------------------------------------------
-join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper, worn={})
+# The stamped receiver and cover lacquered, as the AK's.
+join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper,
+     worn={"mats": ("Blued", "Stamped")})
 # The butt, off its tang screws at the vice (`weapons::gunsmith`).
 join("static_butt", stock, butt, worn={})
 for p in (carrier, selector, trig):

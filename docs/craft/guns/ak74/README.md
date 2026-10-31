@@ -89,15 +89,16 @@ against the real actions.
 1. **Nothing inside the dust cover.** With it off the carrier's top shows,
    but no recoil spring and guide rod; the port, with the bolt back,
    shows no bolt face, extractor or chamber.
-2. **The trigger slides 6 mm back** instead of pivoting about its pin
-   (`Moves::Trigger`). Every gun shares this.
+2. ~~**The trigger slides**~~: fixed in the second pass; it turns on its
+   pin (every gun's does now).
 3. **The game doesn't work the magazine catch or strip the dust cover.**
    The parts are separate now (`mag_catch`, `dust_cover`) and the bench
    moves them; the hands' reload could press the catch as the magazine
    rocks out.
-4. **Finish at 30 cm**: the gun-metal scan's grain is a casting's, not a
-   stamped receiver's satin. It's the material every gun shares
-   (`Mat::GunMetal`), so a change is for all of them, judged together.
+4. ~~**Finish at 30 cm**~~: fixed in the second pass. The receiver and
+   dust cover are `Stamped` (black lacquer over phosphate), the machined
+   parts `Blued` at a finer grain (GUNSMITHING.md, "Finishes";
+   `docs/craft/finishes/close.jpg`).
 5. **The charging handle's knob is bright steel**: on most AK-74s it's
    blued or parkerized like the carrier's visible face.
 6. **The trigger guard** sits about 10 mm high and short against the
