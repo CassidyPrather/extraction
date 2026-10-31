@@ -1740,10 +1740,10 @@ impl Firearm {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    fn pistol() -> FirearmDef {
+    pub(crate) fn pistol() -> FirearmDef {
         FirearmDef {
             action: ActionKind::SemiAuto,
             cartridge: "9x18".into(),

@@ -22,7 +22,8 @@ pub enum Moves {
     TurnBolt,
     /// Tips down around the hinge as the action breaks open.
     Barrels,
-    /// Pivots with the trigger pull.
+    /// Turns about its pin (the origin, local X) with the pull, its blade
+    /// back.
     Trigger,
     /// Rotates through the selector positions.
     Selector,
@@ -122,8 +123,9 @@ pub const HAMMER_BACK: f32 = 0.5;
 pub const GATE_OPEN: f32 = 1.4;
 /// A revolver's ejector rod's stroke, metres.
 pub const ROD_STROKE: f32 = 0.042;
-/// How far a trigger moves back at full pull, metres.
-pub const TRIGGER_TRAVEL: f32 = 0.006;
+/// How far a trigger turns about its pin at full pull, radians (about
+/// 10 degrees: a blade 30-40 mm under its pin comes back 5-7 mm).
+pub const TRIGGER_TURN: f32 = 0.18;
 /// How far a selector turns per step from safe, radians.
 pub const SELECTOR_STEP: f32 = 0.5;
 /// How far a break action's barrels tip at full open, radians.
@@ -317,7 +319,8 @@ pub fn delta(moves: Moves, rest: [f32; 3], pivot: [f32; 3], m: &Motion) -> Delta
             }
         }
         Moves::Barrels => Delta::turn(m.hinge, Axis::X, -BARRELS_OPEN * f.bolt_travel),
-        Moves::Trigger => Delta::shift([0.0, 0.0, m.trigger * TRIGGER_TRAVEL]),
+        // Negative about +X: what hangs below the pin swings back (+Z).
+        Moves::Trigger => Delta::turn(rest, Axis::X, -TRIGGER_TURN * m.trigger),
         Moves::Selector => {
             let k = match f.fire_mode() {
                 FireMode::Safe => 0.0,
@@ -343,6 +346,27 @@ pub fn delta(moves: Moves, rest: [f32; 3], pivot: [f32; 3], m: &Motion) -> Delta
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A pulled trigger's blade, under its pin, comes back toward the grip
+    /// and doesn't move the pin.
+    #[test]
+    fn a_trigger_turns_back_about_its_pin() {
+        let def = crate::firearm::tests::pistol();
+        let f = Firearm::new(def, 1.0);
+        let m = Motion {
+            trigger: 1.0,
+            ..Motion::new(&f, 0.0)
+        };
+        let pin = [0.0, 0.034, -0.042];
+        let d = delta(Moves::Trigger, pin, pin, &m);
+        let (axis, a) = d.turn.unwrap();
+        assert_eq!(axis, Axis::X);
+        // A point 30 mm under the pin: z' = y sin a + z cos a about it.
+        let (y, z) = (-0.03f32, 0.0f32);
+        let z2 = y * a.sin() + z * a.cos();
+        assert!(z2 > 0.004 && z2 < 0.008, "{z2}");
+        assert_eq!(d.shift, [0.0; 3]);
+    }
 
     #[test]
     fn names_find_their_motions() {

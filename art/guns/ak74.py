@@ -411,7 +411,8 @@ for k in range(4):
     selector.box((0.0008, 0.0072, 0.0009), (RX_HW + 0.0032, 0.0624, -0.107 + k * 0.0024), "Blued",
                  bevel=0.0003, segs=1)
 
-trig = Part("trigger", origin=(0.0, 0.02, -0.03))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.034, -0.042))
 trig.sweep(catmull([(-0.031, 0.024), (-0.0345, 0.016), (-0.0345, 0.010), (-0.031, 0.0045),
                     (-0.027, 0.0025)], 4, closed=False),
            section_rect(0.0048, 0.0032, 0.0012), "Blued")

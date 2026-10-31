@@ -263,7 +263,8 @@ for z, k in stations:
 bolt.loft(frings, "Wood")
 
 # --- Trigger --------------------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, 0.0, -0.047))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.007, -0.0465))
 trig.sweep(catmull([(-0.0465, 0.001), (-0.0485, -0.010), (-0.0505, -0.019), (-0.0495, -0.026),
                     (-0.0455, -0.031)], 3, closed=False), section_rect(0.0045, 0.0032, 0.0012),
            "Blued")
