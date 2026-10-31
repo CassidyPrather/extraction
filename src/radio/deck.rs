@@ -171,7 +171,10 @@ pub(super) fn deck_parts(
             kind: SocketKind::Mount(Mount::Cell),
             occupant: None,
             radius: 0.09,
-            seat: Transform::from_rotation(Quat::from_rotation_z(FRAC_PI_2)),
+            // (The cell's model lies along Z: stood up, then laid across.)
+            seat: Transform::from_rotation(
+                Quat::from_rotation_z(FRAC_PI_2) * Quat::from_rotation_x(-FRAC_PI_2),
+            ),
         },
         SocketOwner(e),
         Transform::from_xyz(0.0, -0.02, -BODY.z * 0.5 + 0.012),
