@@ -36,6 +36,8 @@ TO_BLENDER = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
 MATERIALS = {
     "Steel": ((0.42, 0.42, 0.43), 1.0, 0.35, None),
     "Blued": ((0.05, 0.055, 0.065), 0.9, 0.38, None),
+    # Black lacquer over phosphate: a stamped receiver's (AK-74, RPK-74).
+    "Stamped": ((0.065, 0.065, 0.068), 0.2, 0.5, None),
     "Wood": ((0.30, 0.13, 0.05), 0.0, 0.5, None),
     "Polymer": ((0.24, 0.08, 0.09), 0.0, 0.55, None),
     "Bakelite": ((0.17, 0.06, 0.035), 0.0, 0.42, None),

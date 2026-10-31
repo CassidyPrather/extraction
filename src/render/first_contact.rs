@@ -424,22 +424,51 @@ fn maps() -> Vec<String> {
     )
 }
 
-/// What a valley may take to load on the CPU here (seconds; a 4-core
-/// container), below what each took with every texture RGBA8 and the
-/// buildings dressed 3 a frame (Marrow Creek 9.6, Kettle Pass 8.5, Cinder
-/// Works 7.0, Sallow Reservoir 5.9, Rime Fell 8.7). `LOAD_SLACK` scales
-/// them for a slower machine.
-/// With BC7 textures they took 4.7, 3.7, 4.0, 3.3 and 4.3 s: these leave
-/// about a third over that. Sallow's grew with its content (a pump
-/// station, sheds for cover, a mast: 4.4 s by round 45), to Cinder's,
-/// which carries as much.
-const LOAD_BUDGET: [(&str, f64); 5] = [
-    ("marrow_creek", 6.0),
-    ("kettle_pass", 5.0),
-    ("cinder_works", 5.5),
-    ("sallow_reservoir", 5.5),
-    ("rime_fell", 6.0),
+/// What a valley may take to load, in units of
+/// `perf::fight::reference_load_ms` (a fixed piece of work timed on one
+/// thread and shared over every thread, as a load is part each): a
+/// container with slower cores, fewer of them or a CPU quota gets a
+/// ceiling as much longer as its loads take, where an absolute one in seconds
+/// failed the Verifier's runs on a container about 1.3x slower than
+/// this one. `LOAD_SLACK` still scales them on top.
+///
+/// Calibrated on a 4-core container (reference 15.6-17.7 ms) and on it
+/// held to two cores (`taskset -c 0,1`: 20.6-22.0 ms), where the valleys
+/// loaded in 231/242, 307/284, 206/213, 254/255 and 316/291 units (3.6
+/// to 5.4 s, then 4.4 to 6.4 s): each ceiling is about 30% over the
+/// larger. Kettle Pass and Rime Fell are the heaviest, their preload
+/// most of it.
+const LOAD_UNITS: [(&str, f64); 5] = [
+    ("marrow_creek", 320.0),
+    ("kettle_pass", 400.0),
+    ("cinder_works", 280.0),
+    ("sallow_reservoir", 330.0),
+    ("rime_fell", 410.0),
 ];
+
+/// A valley's load ceiling in seconds: its units at this machine's
+/// reference (ms), times `slack`. A valley without its own takes the
+/// largest.
+fn load_ceiling(map: &str, reference_ms: f64, slack: f64) -> f64 {
+    let units = LOAD_UNITS.iter().find(|(m, _)| *m == map).map_or_else(
+        || LOAD_UNITS.iter().map(|b| b.1).fold(0.0, f64::max),
+        |b| b.1,
+    );
+    units * reference_ms / 1000.0 * slack
+}
+
+/// A machine half as fast (its reference twice as long) gets twice the
+/// time to load; the slack scales on top; a valley without its own
+/// ceiling takes the largest, not none.
+#[test]
+fn a_load_ceiling_scales_with_the_machine() {
+    let here = load_ceiling("kettle_pass", 10.0, 1.0);
+    assert!(here > 0.0);
+    assert_eq!(load_ceiling("kettle_pass", 20.0, 1.0), here * 2.0);
+    assert_eq!(load_ceiling("kettle_pass", 10.0, 1.5), here * 1.5);
+    let most = LOAD_UNITS.iter().map(|b| b.1).fold(0.0, f64::max);
+    assert_eq!(load_ceiling("a_new_valley", 1000.0, 1.0), most);
+}
 
 /// Every valley, one game each: it loads within its budget and holds
 /// under its VRAM budget (`vram`). Marrow Creek (`FIRST_WALK=all`: every
@@ -479,15 +508,16 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
         // Settled either way: the VRAM count wants what streams in after
         // the load (ground cover, the forest's pieces: a third of the
         // meshes).
+        // Timed just before, with nothing else running (`heavy`): the
+        // machine as the load finds it.
+        let reference = crate::perf::fight::median_ms(9, crate::perf::fight::reference_load_ms);
         let (mut app, l) = loaded_app(&map, true);
-        let budget = LOAD_BUDGET
-            .iter()
-            .find(|(m, _)| *m == map)
-            .map_or(9.0, |b| b.1)
-            * slack;
+        let budget = load_ceiling(&map, reference, slack);
         println!(
-            "{map}: loaded in {:.2} s of {budget:.1} (preload {:.2}, buildings {:.2}, warm {:.2}; {} frames)",
+            "{map}: loaded in {:.2} s of {budget:.1} ({:.0} units at a reference of {reference:.2} ms; \
+             preload {:.2}, buildings {:.2}, warm {:.2}; {} frames)",
             l.seconds(),
+            l.seconds() * 1000.0 / reference,
             l.preload,
             l.props,
             l.warm,

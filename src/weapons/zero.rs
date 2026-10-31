@@ -591,6 +591,7 @@ mod tests {
                 magwell: None,
                 trigger: 0.0,
                 pulled: false,
+                catch: false,
                 dice: extraction_core::noise::Rng::new(1),
                 mass: None,
             };

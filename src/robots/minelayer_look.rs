@@ -1,8 +1,8 @@
 //! How a minelayer and its mines look (client only): dressed from
 //! `assets/models/robots/minelayer.glb` (`art/robots/minelayer.py`) in
 //! three LODs. Its amber lamp turns while it crawls. A laid mine sits in a
-//! ring of turned earth and blinks red every couple of seconds
-//! (`extraction_core::minelayer::lit`): look for it.
+//! ring of turned earth, dark; with someone near it blinks red every
+//! couple of seconds (`extraction_core::minelayer::lit_near`): look for it.
 
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::light::NotShadowCaster;
@@ -231,10 +231,19 @@ fn dress(
     }
 }
 
-fn blink_mines(mines: Query<(&LaidMine, &Led)>, mut vis: Query<&mut Visibility>) {
-    for (m, led) in &mines {
+fn blink_mines(
+    mines: Query<(&LaidMine, &Led, &GlobalTransform)>,
+    people: Query<&GlobalTransform, With<crate::player::Player>>,
+    mut vis: Query<&mut Visibility>,
+) {
+    for (m, led, gt) in &mines {
         if let Ok(mut v) = vis.get_mut(led.0) {
-            let on = rules::lit(m.mine.age, m.phase) || m.mine.clicked.is_some();
+            // Dark till someone's near (`rules::WAKE`).
+            let nearest = people
+                .iter()
+                .map(|p| p.translation().xz().distance(gt.translation().xz()))
+                .fold(f32::INFINITY, f32::min);
+            let on = rules::lit_near(m.mine.age, m.phase, nearest) || m.mine.clicked.is_some();
             let want = if on {
                 Visibility::Inherited
             } else {

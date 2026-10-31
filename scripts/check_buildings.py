@@ -20,9 +20,12 @@ instead, with the reason, never passed, where:
 - something nearer stands in the way: under MIN_SEEN of the points
   through its box in frame are in line of sight from the eye (`seen`,
   raycast in the game, `capture::cinematic::line_of_sight`);
-- its patch is too dark or fogged to show anything: under MIN_CONTRAST
-  levels between the 5th and 95th percentile of its box's brightness
-  (Rime's insertion at night, black fog).
+- too little of it can show: the share of it in line of sight times its
+  box's contrast (levels between the 5th and 95th percentile of its
+  brightness) is under MIN_CONTRAST. All in sight, that's a patch too
+  dark or fogged to show anything (Rime's insertion at night, black fog);
+  partly hidden, a dim one too (Cinder's cellars at night, 41% in sight
+  behind the brick shed, 12 levels: 5).
 A building whose meshes were lost (the furnace) still stands where it
 was placed, collider and all, in a frame with something to see, so it is
 still judged and still fails: `--self-test` holds that, on the missing
@@ -52,8 +55,9 @@ SLIVER = 0.15
 # Measured, seed 7, five valleys at dusk and night: every building judged
 # had 0.48 or more of its points in line of sight, the missing furnace 1.0.
 MIN_SEEN = 0.25
-# Levels, 0-255. Rime's black-fog log pile 3; the missing furnace's box 47
-# at night (82 at dusk).
+# Levels, 0-255, times the share in sight. Rime's black-fog log pile 3;
+# Cinder's cellars at night 0.41 x 12 = 5 (at dusk 0.41 x 38 = 16, and
+# there to see); the missing furnace 1.0 x 47 at night (82 at dusk).
 MIN_CONTRAST = 8
 
 
@@ -89,8 +93,13 @@ def skips(still, p):
         why.append(f"behind something nearer ({seen:.0%} in line of sight)")
     lum = luma(still, p["rect"])
     contrast = float(np.percentile(lum, 95) - np.percentile(lum, 5))
-    if contrast < MIN_CONTRAST:
-        why.append(f"too dark or fogged to show (contrast {contrast:.0f} levels)")
+    sight = 1.0 if seen is None else seen
+    if sight * contrast < MIN_CONTRAST:
+        if sight < 1.0:
+            why.append(f"too little of it to show ({sight:.0%} in line of sight x "
+                       f"{contrast:.0f} levels of contrast)")
+        else:
+            why.append(f"too dark or fogged to show (contrast {contrast:.0f} levels)")
     return why
 
 
@@ -140,6 +149,8 @@ def self_test():
     lit = (rng.normal(60, 15, (54, 96, 3))).clip(0, 255).astype(np.uint8)
     # Black fog: everything within a level or two.
     fog = (26 + rng.integers(0, 3, (54, 96, 3))).astype(np.uint8)
+    # Night: about 12 levels between the 5th and 95th percentile.
+    dim = (28 + rng.normal(0, 3.6, (54, 96, 3))).clip(0, 255).astype(np.uint8)
     cases = [
         # Cinder's blast furnace, its meshes left at the origin: the whole
         # frame its box, in line of sight, hiding it changing nothing.
@@ -152,6 +163,10 @@ def self_test():
         ("behind", lit, lit, {"rect": [0.3, 0.3, 0.6, 0.6], "seen": 0.1}, "SKIPPED"),
         # Rime's log pile in black fog.
         ("fog", fog, fog, {"rect": [0.37, 0.41, 0.51, 0.49], "seen": 1.0}, "SKIPPED"),
+        # Cinder's cellars at night: 41% in sight behind the shed, dim.
+        ("cellars", dim, dim, {"rect": [0.0, 0.7, 0.13, 0.84], "seen": 0.41}, "SKIPPED"),
+        # The same share hidden in a lit frame: a lost building still fails.
+        ("half_hidden_lit", lit, lit, {"rect": [0.3, 0.3, 0.6, 0.6], "seen": 0.41}, "ERROR"),
         # A narrow building mid-frame (a mast) is no sliver.
         ("mast", lit, lit, {"rect": [0.49, 0.17, 0.51, 0.85], "seen": 1.0}, "ERROR"),
     ]

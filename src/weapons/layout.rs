@@ -18,55 +18,8 @@ pub enum Mat {
     Black,
 }
 
-/// What a piece of geometry does when the mechanism moves.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Moves {
-    Static,
-    /// Slides back along +Z with the bolt travel.
-    WithBolt,
-    /// Turns with the bolt-handle lift (around the bore), and slides.
-    TurnBolt,
-    /// Tips down around the hinge as the action breaks open.
-    Barrels,
-    /// Pivots with the trigger pull.
-    Trigger,
-    /// Rotates through the selector positions.
-    Selector,
-    /// A crossbolt safety (the MP-133's): pushed through to the right on
-    /// safe, slid left along -X to fire, baring its red band.
-    Crossbolt,
-    /// A door-bolt safety (the crossbow's): shot forward on safe, drawn back
-    /// along +Z to fire.
-    SafetyBolt,
-    /// An exposed hammer: tips back about its pin (the origin, local X)
-    /// when cocked.
-    Hammer,
-    /// A revolver's cylinder: turns about its axis (the origin, local Z) a
-    /// chamber at a time.
-    Cylinder,
-    /// A revolver's loading gate: swings about its upright hinge (the
-    /// origin, local Y) out to the right when open.
-    Gate,
-    /// A revolver's ejector rod: strokes back along +Z as it pushes a case.
-    Rod,
-    /// A bayonet: a folding one turns about its pin (the origin, local X)
-    /// from folded to fixed; a fixed one stays as modelled.
-    Bayonet,
-    /// A folding bipod: turns about its pivot (the origin, local X) from
-    /// folded to deployed.
-    Bipod,
-    /// A turn-bolt's cocking piece: rides with the bolt, and stands back
-    /// from it while the striker is cocked (the tell a bolt gun gives).
-    CockingPiece,
-    /// A cocking indicator pin over barrel N's lock: proud while it's
-    /// cocked, flush when not.
-    Indicator(u8),
-    /// A crossbow's string at rest: shown until the draw starts.
-    StringRest,
-    /// A crossbow's string drawn into a V: its origin on the line through
-    /// the prod's tips, stretched along Z with the draw.
-    StringDrawn,
-}
+/// What a piece of geometry does when the mechanism moves (the gunsmith's).
+pub use ::gunsmith::parts::Moves;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Shape {
@@ -220,15 +173,18 @@ fn pm() -> GunLayout {
     use Moves::*;
     // The grip's bottom sits back toward the shooter (+Z).
     let rake = Quat::from_rotation_x(-0.28);
+    // Above the grip the model is 8.3% shorter along the bore than first
+    // made (docs/craft/guns/pm_pistol): the muzzle, port, sights and slide
+    // come in with it.
     GunLayout {
         grip: Transform::IDENTITY,
         support: None,
-        muzzle: Vec3::new(0.0, 0.062, -0.13),
-        port: Vec3::new(0.012, 0.068, -0.045),
+        muzzle: Vec3::new(0.0, 0.062, -0.1192),
+        port: Vec3::new(0.012, 0.068, -0.0413),
         eject: Vec3::new(1.0, 0.6, 0.15),
         // The eye line: through the rear notch (its floor 79.8 mm) onto the
         // front blade's top.
-        sight: at(0.0, 0.0805, 0.03),
+        sight: at(0.0, 0.0805, 0.0275),
         // The well's mouth, at the top of the grip; magazines hang from it,
         // raked back with the grip.
         magwell: Some(
@@ -236,10 +192,10 @@ fn pm() -> GunLayout {
         ),
         handle: Some(HandleLayout {
             kind: HandleKind::Slide,
-            grab: Vec3::new(0.0, 0.064, 0.018),
+            grab: Vec3::new(0.0, 0.064, 0.0165),
             travel: 0.03,
         }),
-        load_port: Vec3::new(0.0, 0.066, -0.04),
+        load_port: Vec3::new(0.0, 0.066, -0.0367),
         hinge: Vec3::ZERO,
         parts: vec![
             // Grip frame with bakelite panels, raked back.
@@ -277,35 +233,40 @@ fn pm() -> GunLayout {
             ),
             // Barrel (visible at the muzzle) and the slide over it.
             part(
-                Shape::Cylinder(0.006, 0.09),
-                at(0.0, 0.062, -0.085),
+                Shape::Cylinder(0.006, 0.083),
+                at(0.0, 0.062, -0.078),
                 Blued,
                 Static,
             ),
             part(
-                bx(0.028, 0.029, 0.158),
-                at(0.0, 0.0625, -0.053),
+                bx(0.028, 0.029, 0.145),
+                at(0.0, 0.0625, -0.0485),
                 Blued,
                 WithBolt,
             ),
             // Sights.
             part(
                 bx(0.004, 0.006, 0.006),
-                at(0.0, 0.079, -0.125),
+                at(0.0, 0.079, -0.1146),
                 Blued,
                 WithBolt,
             ),
             part(
                 bx(0.014, 0.006, 0.005),
-                at(0.0, 0.079, 0.02),
+                at(0.0, 0.079, 0.0183),
                 Blued,
                 WithBolt,
             ),
             // Hammer and safety lever.
-            part(bx(0.008, 0.014, 0.008), at(0.0, 0.062, 0.03), Blued, Static),
+            part(
+                bx(0.008, 0.014, 0.008),
+                at(0.0, 0.062, 0.0275),
+                Blued,
+                Static,
+            ),
             part(
                 bx(0.003, 0.006, 0.014),
-                at(-0.016, 0.066, 0.012),
+                at(-0.016, 0.066, 0.011),
                 Blued,
                 Selector,
             ),
@@ -318,11 +279,14 @@ fn ak74() -> GunLayout {
     use Moves::*;
     let rake = Quat::from_rotation_x(0.3);
     let bore = 0.058;
+    // Measured against the real gun (docs/craft/guns/ak74): the receiver
+    // 32 mm further back than it was modelled, the barrel 53 mm shorter. The
+    // support hand on the middle of the lower handguard.
     GunLayout {
         grip: Transform::IDENTITY,
-        support: Some(Vec3::new(0.0, 0.03, -0.33)),
-        muzzle: Vec3::new(0.0, bore, -0.69),
-        port: Vec3::new(0.025, 0.07, -0.13),
+        support: Some(Vec3::new(0.0, 0.03, -0.29)),
+        muzzle: Vec3::new(0.0, bore, -0.637),
+        port: Vec3::new(0.025, 0.07, -0.105),
         eject: Vec3::new(1.0, 0.35, 0.1),
         // The eye line: over the rear notch's floor onto the front post's
         // top (`capture::sightline`; it ran 2.6 mm under the notch).
@@ -332,10 +296,10 @@ fn ak74() -> GunLayout {
         ),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
-            grab: Vec3::new(0.045, 0.062, -0.17),
+            grab: Vec3::new(0.045, 0.062, -0.138),
             travel: 0.11,
         }),
-        load_port: Vec3::new(0.0, 0.07, -0.13),
+        load_port: Vec3::new(0.0, 0.07, -0.105),
         hinge: Vec3::ZERO,
         parts: vec![
             // Pistol grip.
@@ -358,15 +322,17 @@ fn ak74() -> GunLayout {
             ),
             // Barrel, front sight block, muzzle brake.
             part(
-                Shape::Cylinder(0.0105, 0.48),
-                at(0.0, bore, -0.46),
+                Shape::Cylinder(0.0105, 0.42),
+                at(0.0, bore, -0.43),
                 Blued,
                 Static,
             ),
-            part(bx(0.025, 0.05, 0.03), at(0.0, 0.08, -0.6), Blued, Static),
+            // (The barrel ahead of the gas block 53 mm shorter, as the
+            // model's: the collider ends at the brake's face.)
+            part(bx(0.025, 0.05, 0.03), at(0.0, 0.08, -0.547), Blued, Static),
             part(
                 Shape::Cylinder(0.014, 0.08),
-                at(0.0, bore, -0.655),
+                at(0.0, bore, -0.602),
                 Blued,
                 Static,
             ),
@@ -864,10 +830,18 @@ fn rpk74() -> GunLayout {
     let bore = 0.058;
     l.muzzle = Vec3::new(0.0, bore, -0.82);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
+    // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
+    // was before the AK was measured.
+    l.port = Vec3::new(0.025, 0.07, -0.13);
+    l.load_port = Vec3::new(0.0, 0.07, -0.13);
+    if let Some(h) = l.handle.as_mut() {
+        h.grab = Vec3::new(0.045, 0.062, -0.17);
+    }
     for p in &mut l.parts {
-        // The barrel and its front sight and brake go further out.
-        if p.at.translation.z < -0.55 {
-            p.at.translation.z -= 0.13;
+        // The barrel and its front sight and brake go further out (from
+        // the AK's, which is 53 mm shorter there than this model's).
+        if p.at.translation.z < -0.5 {
+            p.at.translation.z -= 0.183;
         }
     }
     // The bipod, folded under the barrel (its pivot at the clamp).
@@ -1053,6 +1027,26 @@ mod tests {
             if def.firearm.is_some() {
                 assert!(layout(&def.id).is_some(), "{} has no layout", def.id);
             }
+        }
+    }
+
+    /// The gunsmith's bench works each gun as the game does: the same
+    /// handle travel and hinge (`gunsmith::spec`), and a gun for every one.
+    #[test]
+    fn the_bench_works_each_gun_as_the_game_does() {
+        let cat =
+            extraction_core::items::ItemCatalog::from_ron(extraction_core::items::BUILTIN_CATALOG)
+                .unwrap();
+        for (_, def) in cat.iter() {
+            if def.firearm.is_none() {
+                continue;
+            }
+            let l = layout(&def.id).unwrap();
+            let s = ::gunsmith::spec::spec(&def.id)
+                .unwrap_or_else(|| panic!("{} isn't on the bench", def.id));
+            let travel = l.handle.as_ref().map_or(0.0, |h| h.travel);
+            assert_eq!(s.travel, travel, "{}: travel", def.id);
+            assert_eq!(s.hinge, l.hinge.to_array(), "{}: hinge", def.id);
         }
     }
 

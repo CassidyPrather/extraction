@@ -567,7 +567,7 @@ fn walker_parts_destroyed(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn walker_brain(
+pub(super) fn walker_brain(
     mut commands: Commands,
     mut walkers: Query<(
         Entity,
@@ -587,7 +587,11 @@ fn walker_brain(
             Option<&super::anim::Gait>,
             Option<&mut super::hound_mind::HoundMind>,
             Option<&super::flee::Fleeing>,
-            (Has<super::indoor::Dormant>, Has<super::indoor::Warden>),
+            (
+                Has<super::indoor::Dormant>,
+                Has<super::indoor::Warden>,
+                Has<super::grappler::Hauling>,
+            ),
         ),
     )>,
     targets: Query<&GlobalTransform>,
@@ -660,7 +664,7 @@ fn walker_brain(
         mut intent,
         mut battering,
         grappler,
-        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden)),
+        (local, mut patrol, crawler, gait, mut hound, fleeing, (dormant, warden, hauling)),
     ) in &mut walkers
     {
         // (The heavy thinks for itself: `heavy_mind`.)
@@ -757,7 +761,9 @@ fn walker_brain(
         }
         // The collector has one job and is not to be distracted from it.
         let single_minded = job.kind == super::JobKind::Collect;
-        if !single_minded {
+        // (Hauling someone in on its line, a grappler's going where its
+        // haul says, seen or not: `grappler::haul_to_friends`.)
+        if !single_minded && !hauling {
             search::react(&mut brain, aware, ENGAGE_AT);
             // A lame walker doesn't give chase, and gives up sooner.
             let patience = if lame { PATIENCE * 0.5 } else { PATIENCE };
