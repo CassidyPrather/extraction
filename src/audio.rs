@@ -1267,6 +1267,10 @@ pub fn handling_sound(
 ) -> Option<(&'static str, &'static str)> {
     use extraction_core::firearm::ActionKind::*;
     Some(match (event, action) {
+        // A crossbow loosed with no bolt on it: the string slams home on
+        // nothing, hard enough to hurt the bow. Not a hammer's click, and
+        // heavier than a string let go short.
+        (FireEvent::DryFire, Some(Crossbow)) => ("impacts/wood", "gun.dry_loose"),
         (FireEvent::DryFire, _) => ("guns/dry_fire", "gun.dry_fire"),
         (FireEvent::MagazineInserted, _) => ("guns/mag_insert", "gun.mag_insert"),
         (FireEvent::MagazineRemoved, _) => ("guns/mag_release", "gun.mag_release"),
@@ -1336,6 +1340,7 @@ pub fn handling_speed(
         (FireEvent::Cocked, Some(Revolver)) => 1.6,
         (FireEvent::BoltLocked, Some(Revolver)) => 1.25,
         (FireEvent::BoltClosed, Some(Revolver)) => 0.85,
+        (FireEvent::DryFire, Some(extraction_core::firearm::ActionKind::Crossbow)) => 0.75,
         _ => handling_speed_of(event),
     }
 }

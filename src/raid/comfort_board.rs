@@ -36,6 +36,8 @@ pub enum ComfortCard {
     Climb,
     /// Your body drawn under you, or not.
     Body,
+    /// A second hand or a stock steadying the hand's tremor.
+    SteadyAim,
     /// MSAA: 4x, 2x or off.
     Smoothing,
     /// The eyes' size following the GPU's time (`render::hold_rate`).
@@ -79,6 +81,8 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Smoothing, 1.44, -0.15),
             // And under that, the eyes' size following the GPU's time.
             (ComfortCard::HoldRate, 1.26, -0.15),
+            // And under that, the gun's steadying.
+            (ComfortCard::SteadyAim, 1.08, -0.15),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
@@ -137,6 +141,7 @@ fn press_cards(
                 ComfortCard::Climb => comfort.climb_teleport = !comfort.climb_teleport,
                 ComfortCard::Smoothing => comfort.next_msaa(),
                 ComfortCard::HoldRate => comfort.hold_rate = !comfort.hold_rate,
+                ComfortCard::SteadyAim => comfort.steady_aim = !comfort.steady_aim,
             }
             // Tests and sims don't touch the player's settings.
             if !opts.headless {
@@ -175,6 +180,7 @@ fn card_text(
             ComfortCard::Climb => comfort.climb_label(),
             ComfortCard::Smoothing => comfort.msaa_label(),
             ComfortCard::HoldRate => comfort.hold_rate_label(),
+            ComfortCard::SteadyAim => comfort.steady_aim_label(),
         };
         if text.text != t {
             text.text = t;
@@ -261,6 +267,8 @@ mod tests {
             ComfortCard::OneHanded => c.one_handed,
             // The body starts hidden (only what's backed up is drawn).
             ComfortCard::Body => c.body,
+            // Steadying starts on.
+            ComfortCard::SteadyAim => !c.steady_aim,
             _ => !c.captions,
         };
         for (which, on_word) in [
@@ -269,6 +277,7 @@ mod tests {
             (ComfortCard::OneHanded, "one"),
             (ComfortCard::Captions, "off"),
             (ComfortCard::Body, "shown"),
+            (ComfortCard::SteadyAim, "off"),
         ] {
             let card = app
                 .world_mut()
