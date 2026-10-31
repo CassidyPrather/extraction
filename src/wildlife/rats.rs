@@ -68,9 +68,10 @@ fn rats_for(
     index: usize,
     seed: u64,
     spatial: &SpatialQuery,
+    always: bool,
 ) -> Option<Rats> {
     let mut rng = Rng::new(seed ^ 0x2A75 ^ (index as u64).wrapping_mul(0x9E37_79B9));
-    if !rng.chance(CHANCE) {
+    if !rng.chance(CHANCE) && !always {
         return None;
     }
     let world = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
@@ -88,6 +89,8 @@ fn rats_for(
     };
     let mid = floor_of(Vec3::ZERO)?;
     let n = 1 + rng.below(4);
+    // (The training yard's house always has a few: `onboarding::the_rats`.)
+    let n = if always { n.max(3) } else { n };
     let mut rats = Vec::new();
     for _ in 0..n * 3 {
         if rats.len() >= n {
@@ -230,7 +233,8 @@ pub(crate) fn rats(
                 .enumerate()
                 .find(|(_, s)| s.building == b)
             {
-                match rats_for(shell, i, opts.seed, &spatial) {
+                let yard = opts.map == crate::camp::TRAINING_YARD;
+                match rats_for(shell, i, opts.seed, &spatial, yard) {
                     Some(r) => {
                         commands.spawn((
                             Name::new("Rats"),
