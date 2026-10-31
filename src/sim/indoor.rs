@@ -418,7 +418,12 @@ pub(crate) fn plan_buildings_with(
             {
                 continue;
             }
-            if let Some(ob) = obstacle(piece.shape, piece.at, under, geo.floor.is_some()) {
+            // The sill rule is a drowned house's (its silt a floor over
+            // the ground), not every building that says how high its floor
+            // is: setting a ruin's floor made its low walls a climb, and
+            // Cinder's damaged houses lost every way in (Models, 31 October).
+            let drowned = b.prefab.ends_with("_drowned");
+            if let Some(ob) = obstacle(piece.shape, piece.at, under, drowned) {
                 grid.block(ob, CLEARANCE);
             }
         }
