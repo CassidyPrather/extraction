@@ -1206,6 +1206,9 @@ fn apply_hand_actions(
                 // Socket in reach?
                 let pos = gt.translation();
                 let mut target = None;
+                // A body slot in reach it doesn't fit (`body::slot_fit`).
+                let mut refused = false;
+                let def = it.map(|i| catalog.get(i.kind()));
                 for (se, sgt, socket, owner) in &sockets {
                     if socket.occupant.is_some()
                         || !accepts_item(&socket.kind, size, family.as_deref(), is_gun, mount)
@@ -1213,6 +1216,10 @@ fn apply_hand_actions(
                         continue;
                     }
                     if owner.is_some_and(|o| o.0 == item) {
+                        continue;
+                    }
+                    if def.is_some_and(|d| !fits_body_slot(&socket.kind, d)) {
+                        refused |= sgt.translation().distance(pos) < socket.radius;
                         continue;
                     }
                     let mut d = sgt.translation().distance(pos);
@@ -1267,6 +1274,19 @@ fn apply_hand_actions(
                 if stowed {
                     continue;
                 }
+                // Let go at a slot it doesn't fit, and nothing else to take
+                // it: it stays in the hand, with a tick, rather than drop at
+                // your feet (the slot would never have held it).
+                if refused && let Ok((_, _, Some(held), ..)) = items.get(item) {
+                    let held = *held;
+                    commands.entity(item).insert(held);
+                    if let Ok((_, _, mut h)) = hands.get_mut(hand_e) {
+                        h.holding = Some(item);
+                    }
+                    events.write(InteractEvent::Refused { item });
+                    continue;
+                }
+
                 commands.entity(item).insert((
                     GravityScale(1.0),
                     LinearVelocity(velocity),
@@ -1299,6 +1319,7 @@ fn apply_hand_actions(
                         o.is_some_and(|o| o.0 == player)
                             && s.occupant.is_none()
                             && accepts_item(&s.kind, def.size, None, def.firearm.is_some(), None)
+                            && fits_body_slot(&s.kind, def)
                     })
                     .map(|(e, _, s, _)| (slot_rank(&s.kind, def.magazine.is_some()), e))
                     .collect();
@@ -1436,6 +1457,16 @@ pub fn accepts_item(
         SocketKind::Body(slot) => slot.accepts(size),
         SocketKind::MagWell(family) => mag_family == Some(family.as_str()),
         SocketKind::Mount(m) => mount == Some(*m),
+    }
+}
+
+/// Whether a thing physically fits a socket: a body slot's pocket, pouch,
+/// holster or mount has room for it (`body::slot_fit`); anything else
+/// fits if it's taken (`accepts_item`).
+pub fn fits_body_slot(kind: &SocketKind, def: &extraction_core::items::ItemDef) -> bool {
+    match kind {
+        SocketKind::Body(slot) => body::slot_fit(*slot, 0, def).is_some(),
+        _ => true,
     }
 }
 

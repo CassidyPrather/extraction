@@ -93,6 +93,18 @@ pub struct InBackpack {
 #[derive(Component, Clone, Copy, Debug, PartialEq)]
 pub struct StowedPose(pub Transform);
 
+/// Where a thing in a body slot with a pocket, pouch, holster or mount
+/// sits (`slot_fit`): where it's kept (`keep_stowed_poses`), for it
+/// rather than the slot's own seat.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct SlotSeat(pub Transform);
+
+/// Where a thing in a socket belongs: its own seat in a body slot if it
+/// has one (`SlotSeat`), else the socket's.
+pub fn seat_of(own: Option<&SlotSeat>, socket: &Socket) -> Transform {
+    own.map_or(socket.seat, |s| s.0)
+}
+
 /// A loose item slower than this inside an open container has come to
 /// rest in it, m/s.
 const AT_REST: f32 = 0.3;
@@ -172,7 +184,7 @@ fn remember_stowed_poses(
 /// anything is drawn or saved.
 fn keep_stowed_poses(
     mut stowed: Query<(&StowedPose, &mut Transform), With<InBackpack>>,
-    mut pocketed: Query<(&super::InSocket, &mut Transform), Without<InBackpack>>,
+    mut pocketed: Query<(&super::InSocket, Option<&SlotSeat>, &mut Transform), Without<InBackpack>>,
     sockets: Query<&super::Socket>,
 ) {
     for (pose, mut t) in &mut stowed {
@@ -180,13 +192,14 @@ fn keep_stowed_poses(
             *t = pose.0;
         }
     }
-    for (inside, mut t) in &mut pocketed {
+    for (inside, own, mut t) in &mut pocketed {
         let Ok(socket) = sockets.get(inside.socket) else {
             continue;
         };
         // Body slots only: a gun's well and mounts seat their own.
-        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != socket.seat {
-            *t = socket.seat;
+        let seat = seat_of(own, socket);
+        if matches!(socket.kind, super::SocketKind::Body(_)) && *t != seat {
+            *t = seat;
         }
     }
 }
@@ -228,6 +241,7 @@ impl Plugin for BodyPlugin {
             .add_systems(
                 PostUpdate,
                 (
+                    fit_seated,
                     settle_into_containers,
                     remember_stowed_poses,
                     keep_stowed_poses,
@@ -523,7 +537,9 @@ pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32
         SlotKind::Pouch => {
             let k = index.saturating_sub(3) as f32;
             (
-                Vec3::new(-0.14 + k * 0.09, -0.16, -0.13),
+                // Out from the chest panel's face (-0.104) by the pouch's
+                // back: nearer, a magazine went through the panel.
+                Vec3::new(-0.14 + k * 0.09, -0.16, -0.155),
                 Transform::IDENTITY,
                 0.08,
             )
@@ -546,6 +562,107 @@ pub(crate) fn slot_layout(slot: SlotKind, index: usize) -> (Vec3, Transform, f32
             0.25,
         ),
         SlotKind::Head => (Vec3::new(0.0, 0.43, -0.02), Transform::IDENTITY, 0.2),
+    }
+}
+
+/// How much wider than its cavity a thing may sit (cloth gives), metres.
+pub const SLOT_GIVE: f32 = 0.004;
+
+/// How a thing sits in a body slot (its pose in the slot's space), or
+/// `None` if it doesn't fit there. A slot with a pocket, pouch, holster or
+/// mount (`kit_cavities`) stands what's put in it on its floor, turned so
+/// its longest side is up and its thinnest across the cavity's thinnest
+/// (a pistol hangs barrel down as the holster's made for it), centred in
+/// it; it may stand up out of the mouth, but not out through the sides. A
+/// slot without one seats what goes there as it's built to. (With every
+/// thing seated at the slot's origin, a can of stew went 42 mm through
+/// the chest mount and a knife 73 mm out of a mag pouch: `capture::stowed`.)
+pub fn slot_fit(
+    slot: SlotKind,
+    index: usize,
+    def: &extraction_core::items::ItemDef,
+) -> Option<Transform> {
+    let (_, seat, _) = slot_layout(slot, index);
+    let Some(cavity) = crate::kit_cavities::cavity(slot) else {
+        return Some(seat);
+    };
+    let size = Vec3::from(def.size_m());
+    let turn = if slot == SlotKind::Holster {
+        seat.rotation
+    } else {
+        // The thing's sides, shortest to longest, onto the cavity's.
+        let order = |v: Vec3| {
+            let mut i = [0usize, 1, 2];
+            i.sort_by(|a, b| v[*a].total_cmp(&v[*b]));
+            i
+        };
+        let (from, to) = (order(size), order(cavity.half));
+        let mut cols = [Vec3::ZERO; 3];
+        for k in 0..3 {
+            cols[from[k]] = Vec3::AXES[to[k]];
+        }
+        let m = Mat3::from_cols(cols[0], cols[1], cols[2]);
+        // A mirror isn't a turn: flip the shortest side.
+        let m = if m.determinant() < 0.0 {
+            let mut c = cols;
+            c[from[0]] = -c[from[0]];
+            Mat3::from_cols(c[0], c[1], c[2])
+        } else {
+            m
+        };
+        Quat::from_mat3(&m)
+    };
+    let half = (Mat3::from_quat(turn).abs() * size) * 0.5;
+    // Through the sides is out; up out of the mouth isn't (a holster's
+    // grip stands out of it, back as well as up, so only its thickness).
+    let wide = half.x > cavity.half.x + SLOT_GIVE;
+    let deep = slot != SlotKind::Holster && half.z > cavity.half.z + SLOT_GIVE;
+    if wide || deep {
+        return None;
+    }
+    // The open loop of a mount holds it round its middle; the rest stand
+    // it on their floor.
+    let mut middle = if slot == SlotKind::Mount {
+        cavity.centre()
+    } else {
+        cavity.floor + Vec3::Y * half.y
+    };
+    // A pistol's slide against the holster's front, its grip standing out
+    // of the mouth behind (centred, the slide went out through the front).
+    if slot == SlotKind::Holster {
+        middle.z = cavity.floor.z - cavity.half.z + half.z;
+    }
+    let at = middle - turn * crate::kit_cavities::origin_offset(&def.id);
+    Some(Transform::from_translation(at).with_rotation(turn))
+}
+
+/// Whatever's just been put in a body slot with a pocket, pouch, holster
+/// or mount sits in it as `slot_fit` has it, not at the slot's origin:
+/// however it got there (let go at it, stowed, drawn back, loaded from a
+/// save).
+fn fit_seated(
+    mut commands: Commands,
+    mut seated: Query<(Entity, &super::InSocket, &Item, &mut Transform), Added<super::InSocket>>,
+    slots: Query<(&Socket, &BodySlot)>,
+    catalog: Res<Catalog>,
+) {
+    for (e, on, item, mut t) in &mut seated {
+        let fitted = slots.get(on.socket).ok().and_then(|(socket, slot)| {
+            let SocketKind::Body(kind) = socket.kind else {
+                return None;
+            };
+            crate::kit_cavities::cavity(kind)?;
+            slot_fit(kind, slot.0, catalog.get(item.kind()))
+        });
+        match fitted {
+            Some(seat) => {
+                t.set_if_neq(seat);
+                commands.entity(e).insert(SlotSeat(seat));
+            }
+            None => {
+                commands.entity(e).remove::<SlotSeat>();
+            }
+        }
     }
 }
 

@@ -74,18 +74,10 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("pm_pistol", Vec3::new(-0.001, 0.015, -0.044)),
     ("nagant", Vec3::new(0.0, -0.004, -0.061)),
     ("flare_pistol", Vec3::new(0.0, 0.0, -0.074)),
-    ("rpk_mag", Vec3::new(0.0, 0.001, -0.026)),
     ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
     ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
     ("robot_ammo_belt", Vec3::new(0.0, -0.021, -0.002)),
     ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
-    ("map_case", Vec3::new(0.005, 0.003, 0.011)),
-    ("lead_case", Vec3::new(0.0, 0.009, 0.0)),
-    ("emp_trap", Vec3::new(0.0, -0.012, 0.0)),
-    ("electronics", Vec3::new(0.0, -0.017, 0.002)),
-    ("brass", Vec3::new(0.0, -0.01, 0.0)),
-    ("rotor_assembly", Vec3::new(-0.006, -0.006, 0.011)),
-    ("field_recorder", Vec3::new(0.0, 0.006, 0.0)),
 ];
 
 /// An item's model's middle off its origin (zero for most).
