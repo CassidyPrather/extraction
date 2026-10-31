@@ -81,6 +81,15 @@ pub const BRACE_SHOULDER: f32 = 6.0;
 pub const LAG_ONE: f32 = 0.012;
 pub const LAG_TWO: f32 = 0.005;
 pub const LAG_SHOULDER: f32 = 0.004;
+/// How much a hold steadies the hand's tremor, seconds of follow in the
+/// gun's turning only (`interact::HoldFeel::steady`): a hand alone none, a
+/// second hand on the handguard or cupping the grip some, a stock at the
+/// shoulder or cheek more, and a rest or a bipod most. It knows nothing of
+/// where a target is: it slows how fast the muzzle turns, as a second hand
+/// and a body behind the stock do (`Comfort::steady_aim`).
+pub const STEADY_TWO: f32 = 0.04;
+pub const STEADY_SHOULDER: f32 = 0.06;
+pub const STEADY_RESTED: f32 = 0.08;
 /// One-handed droop, radians per kg m of moment about the wrist.
 pub const DROOP: f32 = 0.1;
 /// One-handed sway, radians: a floor, plus this much per kg m.
@@ -188,6 +197,19 @@ impl Hold {
         } else {
             LAG_ONE
         } * if self.braced { BRACED_LAG } else { 1.0 }
+    }
+
+    /// Seconds of steadying in the gun's turning ([`STEADY_TWO`]).
+    pub fn steady(self) -> f32 {
+        if self.braced || self.bipod {
+            STEADY_RESTED
+        } else if self.shouldered {
+            STEADY_SHOULDER
+        } else if self.hands >= 2 {
+            STEADY_TWO
+        } else {
+            0.0
+        }
     }
 
     /// What's left of sway.
@@ -575,6 +597,7 @@ fn handle_guns(
     // Played one-handed, a gun rested on something is held as well as two
     // hands hold it: what the surface is for.
     let one_handed = comfort.as_ref().is_some_and(|c| c.one_handed);
+    let steady_aim = comfort.as_ref().is_none_or(|c| c.steady_aim);
     for (gun_e, gun, item, gt, mut handling, mut feel, held, support, bipod) in &mut guns {
         let Some(held) = held else {
             if handling.hold != Hold::default() || feel.smoothed.is_some() {
@@ -735,6 +758,7 @@ fn handle_guns(
         handling.at_eye += (if lined { 1.0 } else { 0.0 } - handling.at_eye) * ease;
         feel.offset = kick * about_front(handling.sight_fix);
         feel.lag = hold.lag(mass);
+        feel.steady = if steady_aim { hold.steady() } else { 0.0 };
     }
 }
 
@@ -1119,6 +1143,167 @@ pub(crate) mod vr_tests {
             assert!(vr.hand_state(Side::Left).supporting == Some(gun));
         }
         Range { vr, gun, feet }
+    }
+
+    /// The group a held gun's bore would make on a target `RANGE` ahead
+    /// while hands with the given tremor hold it (a fresh hold, so the
+    /// setting is the only thing different): the RMS radius of where the
+    /// bore points there, sampled every tick for two seconds, metres.
+    fn tremor_group(id: &str, two: bool, shoulder: bool, steady_aim: bool) -> f32 {
+        const RANGE: f32 = 25.0;
+        let mut r = hold(id, two, shoulder);
+        r.vr.app
+            .world_mut()
+            .insert_resource(crate::rig::comfort::Comfort {
+                steady_aim,
+                ..Default::default()
+            });
+        // The hands as the hold left them.
+        let base = |vr: &mut Vr, side: Side| {
+            let root = vr.root();
+            let input = vr
+                .app
+                .world()
+                .get::<crate::rig::RigInput>(vr.player)
+                .unwrap();
+            let h = input.hand(side);
+            (
+                root.transform_point(h.pose.translation),
+                root.rotation * h.pose.rotation,
+                h.grip,
+            )
+        };
+        let right = base(&mut r.vr, Side::Right);
+        let left = two.then(|| base(&mut r.vr, Side::Left));
+        // Physiological tremor, 8 to 12 Hz: a few tenths of a degree of
+        // turn and a millimetre of shake, each hand its own phases.
+        let shake = |t: f32, p: f32| {
+            let tau = std::f32::consts::TAU;
+            let turn = Quat::from_euler(
+                EulerRot::YXZ,
+                0.003 * (tau * 9.0 * t + p).sin() + 0.0015 * (tau * 11.7 * t + 2.0 * p).sin(),
+                0.004 * (tau * 8.3 * t + 1.3 * p).sin() + 0.002 * (tau * 12.1 * t + p).sin(),
+                0.0,
+            );
+            let at = Vec3::new(
+                (tau * 10.3 * t + p).sin(),
+                (tau * 8.7 * t + 0.5 * p).sin(),
+                0.0,
+            ) * 0.001;
+            (turn, at)
+        };
+        let dt = 1.0 / 64.0;
+        let mut points = Vec::new();
+        for i in 0..64 * 3 {
+            let t = i as f32 * dt;
+            let (turn, at) = shake(t, 0.0);
+            r.vr.hand(Side::Right, right.0 + at, turn * right.1, right.2, 0.0);
+            if let Some(l) = left {
+                let (turn, at) = shake(t, 2.4);
+                r.vr.hand(Side::Left, l.0 + at, turn * l.1, l.2, 0.0);
+            }
+            r.vr.step(1);
+            if i >= 64 {
+                let gt = *r.vr.app.world().get::<GlobalTransform>(r.gun).unwrap();
+                let fwd = gt.forward().as_vec3();
+                let p = gt.translation() + fwd * (RANGE / fwd.z.abs().max(0.2));
+                points.push(Vec2::new(p.x, p.y));
+            }
+        }
+        let mean = points.iter().copied().sum::<Vec2>() / points.len() as f32;
+        (points
+            .iter()
+            .map(|p| (*p - mean).length_squared())
+            .sum::<f32>()
+            / points.len() as f32)
+            .sqrt()
+    }
+
+    /// A second hand on the gun, or its stock at the cheek, steadies a hand's
+    /// tremor (`Comfort::steady_aim`): at 25 m, the group the bore makes
+    /// shrinks by at least a third with it, for the pistol cupped and the
+    /// rifle held in both hands and at the cheek. One hand alone is left as
+    /// it is. (The 28 October playtest: "I can't aim for crap", 0:55:18.)
+    #[test]
+    fn a_steadying_hold_shrinks_a_tremoring_hands_group_at_25_m() {
+        let mut bad = Vec::new();
+        for (id, two, shoulder, steadied) in [
+            ("pm_pistol", false, false, false),
+            ("pm_pistol", true, false, true),
+            ("ak74", true, false, true),
+            ("ak74", true, true, true),
+        ] {
+            let off = tremor_group(id, two, shoulder, false);
+            let on = tremor_group(id, two, shoulder, true);
+            println!(
+                "{id} two {two} shoulder {shoulder}: {:.1} cm off, {:.1} cm on ({:.0}%)",
+                off * 100.0,
+                on * 100.0,
+                on / off * 100.0
+            );
+            if steadied && on > off * 0.67 {
+                bad.push(format!(
+                    "{id} two {two} shoulder {shoulder}: {on:.3} of {off:.3}"
+                ));
+            }
+            if !steadied && (on - off).abs() > off * 0.05 {
+                bad.push(format!("{id} one hand changed: {on:.3} of {off:.3}"));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// Seconds for the gun to come within a degree of where a deliberate
+    /// swing puts it: the support hand stepped 10 cm across, the rifle at
+    /// the cheek in both hands.
+    fn swing_settles(steady_aim: bool) -> f32 {
+        let mut r = hold("ak74", true, true);
+        r.vr.app
+            .world_mut()
+            .insert_resource(crate::rig::comfort::Comfort {
+                steady_aim,
+                ..Default::default()
+            });
+        r.vr.step(30);
+        let left = {
+            let root = r.vr.root();
+            let input =
+                r.vr.app
+                    .world()
+                    .get::<crate::rig::RigInput>(r.vr.player)
+                    .unwrap();
+            root.transform_point(input.hand(Side::Left).pose.translation)
+        };
+        r.vr.move_hand(Side::Left, left + Vec3::X * 0.1);
+        let mut dirs = Vec::new();
+        for _ in 0..64 {
+            r.vr.step(1);
+            dirs.push(
+                r.vr.app
+                    .world()
+                    .get::<GlobalTransform>(r.gun)
+                    .unwrap()
+                    .forward()
+                    .as_vec3(),
+            );
+        }
+        let last = *dirs.last().unwrap();
+        let settled = dirs
+            .iter()
+            .position(|d| d.angle_between(last) < 1f32.to_radians());
+        settled.map_or(1.0, |i| (i + 1) as f32 / 64.0)
+    }
+
+    /// Steadying slows tremor, not aim: a deliberate swing still arrives
+    /// within a quarter second or so, and no more than 0.15 s later than
+    /// without it.
+    #[test]
+    fn a_steadied_gun_still_swings_where_its_hands_turn_it() {
+        let off = swing_settles(false);
+        let on = swing_settles(true);
+        println!("swing settles: {:.3} s off, {:.3} s on", off, on);
+        assert!(on < 0.3, "steadied, a swing takes {on:.3} s");
+        assert!(on <= off + 0.15, "{on:.3} s steadied against {off:.3} s");
     }
 
     pub(crate) fn gun_mut(r: &mut Range) -> Mut<'_, Gun> {

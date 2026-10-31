@@ -895,22 +895,26 @@ impl Scene<'_, '_> {
                 format!("{n}<{up}")
             })
         };
+        // Down its middle and at either shoulder.
+        let side = Vec3::new(-dir.z, 0.0, dir.x) * 0.25;
         [0.1, 0.25, 0.4, 0.8, 1.2]
             .iter()
-            .filter_map(|h| {
+            .flat_map(|h| [(*h, Vec3::ZERO), (*h, side), (*h, -side)])
+            .filter_map(|(h, off)| {
                 self.spatial
                     .cast_ray(
-                        from + Vec3::Y * *h,
+                        from + off + Vec3::Y * h,
                         dir,
                         1.5,
                         true,
                         &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot, Layer::Item]),
                     )
-                    .map(|hit| (h, hit))
+                    .map(|hit| (h, off.length() > 0.0, hit))
             })
-            .map(|(h, hit)| {
+            .map(|(h, shoulder, hit)| {
+                let at = if shoulder { "s" } else { "" };
                 format!(
-                    "{} @{:.2} h{h}",
+                    "{} @{:.2} h{h}{at}",
                     name(hit.entity).unwrap_or_else(|| format!("{:?}", hit.entity)),
                     hit.distance
                 )
@@ -1096,8 +1100,12 @@ pub fn think(
                     json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
                     "ground": round(scene.zone.ground(here.x, here.y), 1),
                     "doing": r.doing(), "task": format!("{:?}", bot.tasks.front()),
-                    "by": match bot.tasks.front() {
-                        Some(Task::WalkTo { to, .. }) => scene.in_the_way(pos, *to),
+                           "then": format!("{:?}", bot.tasks.get(1)),
+                    // (Toward the walk it's on, past a step aside.)
+                    "by": match (bot.tasks.front(), bot.tasks.get(1)) {
+                        (Some(Task::WalkTo { within, .. }), Some(Task::WalkTo { to, .. }))
+                            if *within == crate::bot::SIDESTEP => scene.in_the_way(pos, *to),
+                        (Some(Task::WalkTo { to, .. }), _) => scene.in_the_way(pos, *to),
                         _ => String::new(),
                     }}),
                 );

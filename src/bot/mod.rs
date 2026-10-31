@@ -227,6 +227,11 @@ pub fn round_about(from: Vec2, to: Vec2, centre: Vec2, r: f32) -> Vec<Vec2> {
         .collect()
 }
 
+/// Hits on a robot that don't touch its core before the aim moves round
+/// it, and before it gives up on that robot (`Task::Shoot`).
+pub const HITS_TO_SHIFT: u32 = 5;
+pub const HITS_NOT_HURTING: u32 = 20;
+
 /// How far a bot reaches for things, metres (horizontal, from the body).
 pub const REACH: f32 = 1.2;
 /// How high over its feet a standing bot's hand gets, arm up: what's higher
@@ -240,7 +245,7 @@ pub const SEATED_HAND_LOW: f32 = 0.35;
 const GRAB_SLACK: f32 = 0.15;
 /// A step to the side round something in the way: how near it needs to
 /// get (and how a step is told from a walk).
-const SIDESTEP: f32 = 1.01;
+pub const SIDESTEP: f32 = 1.01;
 /// How quickly a bot's body swings onto its aim point, per second.
 const AIM_RATE: f32 = 14.0;
 
@@ -325,6 +330,10 @@ pub struct Bot {
     reach_low: bool,
     /// The gun it last had in hand: the one to draw back.
     last_gun: Option<Entity>,
+    /// Shooting at a robot: its core's hit points when last they fell, and
+    /// [`Self::robot_hits`] then. Hits that don't touch the core (a part
+    /// shot dead in front of it still stops the rounds) move the aim.
+    core_watch: Option<(Entity, f32, u32)>,
 }
 
 impl Bot {
@@ -356,6 +365,7 @@ impl Bot {
             sidesteps: 0,
             reach_low: false,
             last_gun: None,
+            core_watch: None,
         }
     }
 
@@ -1612,11 +1622,48 @@ fn run_tasks(
                     .find(|(p, _)| {
                         p.robot == target && p.role == crate::robots::PartRole::Core && p.alive()
                     })
-                    .map(|(_, gt)| gt.translation());
+                    .map(|(p, gt)| (gt.translation(), p.hp));
                 bot.walk = None;
+                // Rounds that hit it and not its core (a part in front of
+                // the core, shot dead, still stops them: Sallow sims, 31
+                // October, 59 of 60 rounds into a crawler's dead gun): round
+                // the core, a hand's breadth at a time; and past
+                // [`HITS_NOT_HURTING`] of them, not another round into it.
+                let mut aside = 0;
+                if let Some((_, hp)) = core {
+                    let w = match bot.core_watch {
+                        Some((t, seen, _)) if t == target && hp >= seen - 0.01 => {
+                            bot.core_watch.unwrap()
+                        }
+                        _ => (target, hp, bot.robot_hits),
+                    };
+                    bot.core_watch = Some(w);
+                    aside = bot.robot_hits.saturating_sub(w.2);
+                    if aside >= HITS_NOT_HURTING {
+                        bot.note(format!(
+                            "FAIL {aside} hits on {target} not reaching its core"
+                        ));
+                        bot.failed += 1;
+                        bot.trigger = false;
+                        bot.aim = false;
+                        // (Kept: another round at it from here is wasted
+                        // too, till its core's hurt some other way.)
+                        bot.next();
+                        continue;
+                    }
+                }
                 // Lead a moving target: by the swing lag and the bullet's
                 // flight.
-                let at = core.unwrap_or(root_at);
+                let at = core.map_or(root_at, |(c, _)| {
+                    let k = aside / HITS_TO_SHIFT;
+                    if k == 0 {
+                        return c;
+                    }
+                    let to = (c - root.translation).normalize_or(Vec3::Z);
+                    let side = Vec3::Y.cross(to).normalize_or(Vec3::X);
+                    let step = [Vec3::Y * 0.2, side * 0.22, -side * 0.22, -Vec3::Y * 0.15];
+                    c + step[(k as usize - 1) % step.len()]
+                });
                 let now = bot.elapsed;
                 let vel = match bot.track {
                     Some((p, t)) if now > t + 1e-3 && now - t < 0.5 => (at - p) / (now - t),

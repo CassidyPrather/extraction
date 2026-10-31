@@ -6161,10 +6161,16 @@ pub fn dress_buildings(
             let site = super::underground::ids().any(|id| id == b.prefab);
             let f = extraction_core::map::prefab_footprint(&b.prefab);
             let walls = Vec2::new(f[0], f[2]) * 0.5;
-            Bake::Baking(
-                bevy::tasks::AsyncComputeTaskPool::get()
-                    .spawn(async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) }),
-            )
+            let job = async move { std::sync::Arc::new(bake_pieces(&geo, site, walls)) };
+            // While the valley loads, on every core: the async pool is a
+            // quarter of them (one on four), and a valley's prefabs baked
+            // one after another were most of its buildings' wait. In a
+            // raid (a breach's rebuild), off the frame's threads.
+            Bake::Baking(if loaded.is_some() {
+                bevy::tasks::AsyncComputeTaskPool::get().spawn(job)
+            } else {
+                bevy::tasks::ComputeTaskPool::get().spawn(job)
+            })
         });
         if let Bake::Baking(task) = bake {
             match bevy::tasks::futures::check_ready(task) {
