@@ -1135,6 +1135,88 @@ mod tests {
     use crate::rig::LocalPlayer;
     use bevy::ecs::system::RunSystemOnce;
 
+    /// Every recipe's plan floor (its lowest door's sill, else its
+    /// `Geo::floor`, else the ground: `plan_buildings`) is the height of
+    /// what's walked on inside it, the top of its widest flat floor slab
+    /// under 1.2 m. A building with no door that left `Geo::floor` unset was
+    /// planned on the ground under a raised floor: the blast furnace's cast
+    /// house and the mill race's hut (31 October), where no raider found
+    /// room for a body by the loot.
+    #[test]
+    fn every_plan_floor_is_its_floor() {
+        use crate::world::buildings::{self, Shape};
+        let ids = buildings::PREFABS
+            .iter()
+            .chain(crate::world::dam::PREFABS.iter())
+            .chain(crate::world::fell::PREFABS.iter());
+        let mut bad = Vec::new();
+        let mut seen = 0;
+        for id in ids {
+            // Stepped down a slope: each cell has its own floor. Not walked
+            // into: a wreck's body, the robots' gate.
+            if crate::world::fell::stepped_floor(id, Vec2::ZERO).is_some()
+                || id.starts_with("wreck_")
+                || *id == "robot_gate"
+            {
+                continue;
+            }
+            let Some(geo) = buildings::prefab(id) else {
+                continue;
+            };
+            // No way in (the headframe, the steeple): nothing walked on.
+            if geo.entrances.is_empty() && geo.doors.is_empty() {
+                continue;
+            }
+            let plan = geo
+                .doors
+                .iter()
+                .map(|d| d.hinge.y)
+                .min_by(|a, b| a.total_cmp(b))
+                .or(geo.floor)
+                .unwrap_or(0.0);
+            let slabs: Vec<(f32, f32)> = geo
+                .pieces
+                .iter()
+                .filter(|p| p.collide)
+                .filter_map(|p| {
+                    let Shape::Box(s) = p.shape else {
+                        return None;
+                    };
+                    if (p.at.rotation * Vec3::Y).y < 0.999 {
+                        return None;
+                    }
+                    let s = s * p.at.scale;
+                    let top = p.at.translation.y + s.y * 0.5;
+                    (top > -0.05 && top < 1.2 && s.x >= 1.5 && s.z >= 1.5)
+                        .then_some((s.x * s.z, top))
+                })
+                .collect();
+            // The highest of its wide slabs (a drowned house's silt over its
+            // footing, a floor on its plinth).
+            let widest = slabs.iter().map(|s| s.0).fold(0.0, f32::max);
+            let Some(floor) = slabs
+                .iter()
+                .filter(|s| s.0 >= widest * 0.4)
+                .map(|s| s.1)
+                .reduce(f32::max)
+            else {
+                continue;
+            };
+            seen += 1;
+            if (floor - plan).abs() > 0.1 {
+                bad.push(format!(
+                    "{id}: planned at {plan:.2}, its floor at {floor:.2}"
+                ));
+            }
+        }
+        assert!(seen >= 30, "only {seen} recipes with a floor");
+        assert!(
+            bad.is_empty(),
+            "plans off their floors:\n{}",
+            bad.join("\n")
+        );
+    }
+
     /// A route down a site with a mine cart on its rail goes round the
     /// cart, not through it (Kettle sims, 31 October: raiders walking the
     /// deep kettle's haulage down its rail stood pressed to the cart):
