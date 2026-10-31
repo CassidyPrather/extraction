@@ -142,6 +142,7 @@ Each landed as its own commit with the numbers; per eye, before > after.
 | Impostors of near trees collapse in the vertex shader, not discarded per fragment | `assets/shaders/impostor.wgsl` | Spruce view overdraw 14.2 > 10.0, summit 8.7 > 5.8, Training Yard belt 6.2 > 4.0 |
 | Impostors one eye-facing quad a tree, not three crossed | `world::impostors`, `impostor.wgsl` | Impostor layers -48%; open views -15..-25% (Marrow meadow 1.97 > 1.51, Kettle gate 2.06 > 1.63), edge p95 43 > 28 |
 | Forest impostors merged over 3x3 chunks | `world::trees` | About 250 fewer draws a forested view (Marrow Creek with the posts: gate 1267 > 851, spruce 1346 > 927) |
+| ...and over 6x6 (288 m) | `world::trees` | Both eyes: Kettle aerial 1786 > 1632, row 1774 > 1690; Marrow aerial 2076 > 1976; Cinder aerial 1702 > 1596. Fragments the same in clear weather, +0.05 layers at most in a storm. `docs/shots/performance/impostor_blocks_6x6_before_after.jpg` |
 
 Shared tools for the next ones (in `render::budget`):
 
