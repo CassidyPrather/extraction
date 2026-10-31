@@ -27,6 +27,7 @@ pub mod path;
 pub mod scale;
 pub mod seated;
 pub mod sightline;
+pub mod stowed;
 pub mod sweep;
 pub mod trailer;
 
