@@ -1843,7 +1843,9 @@ fn under_a_roof(
         })
         .filter(|d| d.mid.xz().distance(here) < 60.0)?;
     let out = d.out.xz().normalize_or(Vec2::Y);
-    let inside = d.mid.xz() - out * 2.5;
+    // Just in: under the roof (2.5 m in was through Cinder's shop's
+    // partition, from its back door).
+    let inside = d.mid.xz() - out * 1.2;
     // Off to one side of the doorway: not in a look through it, and
     // somewhere the body can stand (the rooms' plan says; the shop's shelves
     // are in the way of some).
