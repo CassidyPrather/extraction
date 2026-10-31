@@ -222,7 +222,9 @@ def stash_stand():
             p.box((0.004, 0.06, 0.07), (sx * 0.427, bed + 0.03, sz * 0.54), "Iron")
             p.box((0.06, 0.004, 0.07), (sx * 0.459, bed + 0.002, sz * 0.54), "Iron")
             bolt(p, (sx * 0.47, bed + 0.004, sz * 0.54), (0, 1, 0), r=0.008)
-        board(p, (0.05, 0.07, 1.04), (sx * 0.39, under - 0.022 - 0.035 - 0.004, 0.0), "Timber",
+        # Up to the boards (4 mm under them: the middle ones rested on
+        # nothing).
+        board(p, (0.05, 0.07, 1.04), (sx * 0.39, under - 0.022 - 0.035 + 0.001, 0.0), "Timber",
               bevel=0.004)
         board(p, (0.04, 0.05, 1.04), (sx * 0.39, bed + 0.08, 0.0), "Timber", bevel=0.004)
     for sz in (-1, 1):

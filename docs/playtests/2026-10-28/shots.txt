@@ -13,7 +13,7 @@
 #   name | owner | what to look for | game arguments [| before's arguments]
 #
 # - Game arguments are the game's own flags. The rig adds --screenshot,
-#   --size, --new-game, a fresh --data-dir, --frames 30 and --seed 7
+#   --size, --new-game, a fresh --data-dir, --frames 60 and --seed 7
 #   (unless you give your own --frames or --seed).
 # - Leading NAME=value words go into the game's environment
 #   (EXTRACTION_YARD_AT=5 starts the yard at station 5).
@@ -26,6 +26,11 @@
 # - A fix the rig can't stage (it needs a knob the old build hasn't got):
 #   `--picture docs/shots/...png` in place of the arguments, in each
 #   half, shows a pair you took yourself. Say how in what to look for.
+# - --dolly x,y,z,yaw,pitch:x,y,z[:seconds[:fps]] in place of --camera
+#   walks the camera between the two points and keeps every frame (one
+#   launch, `--cinematic`): for a fix that shows in motion (an LOD pop, a
+#   flicker). The sheet shows six frames down the walk; index.html plays
+#   the two walks side by side.
 # - Pick a still moment that shows the fix. Use --hour day --weather
 #   clearing unless the fix is about the light, and --no-robots unless
 #   it's about them.
@@ -67,6 +72,10 @@ walker_hits | Robot bodies | Four walkers at 15 m, each shot once with a pistol 
 # Visual design (#8): the far trees after a slow load. The software
 # renderer is too slow a frame to reproduce it (2798e450 captured all 9
 # here), so this pair is Visual design's own, from scripts/impostor_check.sh.
+# Visual design (M5): walking into the forest along Marrow's road, the
+# trees ahead crossing 62-74 m, where the near cards hand over to the far
+# impostor. Watch the pair video in index.html.
+treeline_walk | Visual design | Trees ahead of you on Marrow's forest road as you walk 20 m in (the pair video in index.html): watch the trees 60-75 m ahead change from far impostor to near cards: before, in one frame at 68 m; after, cross-dithered over 62-74 m. (In this light the two already look alike: the frame-to-frame numbers can't tell the builds apart, the swaying near branches swamp them) | --map marrow_creek --hour day --weather clearing --no-robots --dolly -58,0,170,270,-2:-78,0,170
 marrow_far_forest | Visual design | Marrow Creek's far forest after a load as slow as the headset's (Visual design's pair from scripts/impostor_check.sh marrow_creek, frames padded to 90 ms and the GPU held 120 s; not this rig): before, 0 of 9 impostors captured, so the trees past 68 m are bare trunks; after, all 9, with crowns | --picture docs/shots/visual-design/far_forest_slow_load_after.png | --picture docs/shots/visual-design/far_forest_slow_load_before.png
 
 # Map design and Onboarding (#5): the first job's walk from the gate,

@@ -241,7 +241,9 @@ pub fn check(pair: &Pair) -> Vec<String> {
         })
         .collect();
     let names = [pair.parent.clone(), pair.child.clone()];
-    for f in fighting::fights(&faces, &names, &[], |_, _| true) {
+    // Down to half a square centimetre: a seated thing is small and
+    // seen up close.
+    for f in fighting::fights_over(&faces, &names, &[], |_, _| true, 0.00005) {
         out.push(format!(
             "{} in {}: faces fight ({} / {}), {:.1} cm² at ({:.3}, {:.3}, {:.3})",
             pair.child,
@@ -374,20 +376,7 @@ mod tests {
     }
 
     /// Faults waiting on their owners, by the start of their line.
-    const KNOWN: &[&str] = &[
-        // The scopes' bodies sit 2-3 mm down over the receivers' rear
-        // sights: their mount heights (`gadgets::gun_mount_points`) and
-        // models together (Models, next round).
-        "ak74 through pso_scope",
-        "rpk74 through pu_scope",
-        "ak74 through pu_scope",
-        "rpk74 through pso_scope",
-        "sks through pso_scope",
-        "svd through pso_scope",
-        // The drum's body beds 4 mm into the stock's well (Models, next
-        // round).
-        "ppsh_drum through ppsh",
-    ];
+    const KNOWN: &[&str] = &[];
 
     /// Every magazine sits in every gun it fits without going through it
     /// or fighting it.

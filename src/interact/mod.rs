@@ -373,22 +373,45 @@ fn unheld_layers(remove: On<Remove, Held>, mut commands: Commands) {
     });
 }
 
+/// A magazine just pulled from a well (by its foot, or held out by the
+/// release): it doesn't seat back in that well until it's been drawn clear
+/// of it ([`CLEAR_OF_WELL`]).
+#[derive(Component, Debug)]
+pub struct Clearing(pub Entity);
+
+/// How far a pulled magazine's top must get from the well it left before
+/// it can seat there again, metres.
+pub const CLEAR_OF_WELL: f32 = 0.08;
+
 /// A magazine brought up into the well of the gun in your other hand seats
 /// as it arrives: in a headset you don't let go of it first.
 fn seat_on_contact(
     mut commands: Commands,
     mut hands: Query<(Entity, &RigHand, &mut Hand)>,
-    mags: Query<(Entity, &Held, &GlobalTransform, &crate::weapons::Mag)>,
+    mags: Query<(
+        Entity,
+        &Held,
+        &GlobalTransform,
+        &crate::weapons::Mag,
+        Option<&Clearing>,
+    )>,
     mut sockets: Query<(Entity, &mut Socket, &GlobalTransform, &SocketOwner)>,
     held: Query<&Held>,
     mut events: MessageWriter<InteractEvent>,
 ) {
-    for (mag_e, h, gt, mag) in &mags {
+    for (mag_e, h, gt, mag, clearing) in &mags {
         let top = gt.transform_point(Vec3::Y * mag.height * 0.5);
         for (socket_e, mut socket, sgt, owner) in &mut sockets {
             let SocketKind::MagWell(family) = &socket.kind else {
                 continue;
             };
+            // Just pulled from this well: not back in until drawn clear.
+            if clearing.is_some_and(|c| c.0 == socket_e) {
+                if top.distance(sgt.translation()) > CLEAR_OF_WELL {
+                    commands.entity(mag_e).remove::<Clearing>();
+                }
+                continue;
+            }
             if socket.occupant.is_some()
                 || *family != mag.family
                 || owner.0 == mag_e
@@ -466,6 +489,11 @@ fn seat_from_body(
     }
 }
 
+/// How far a thing taken by a free grip may be from the hand's middle, at
+/// its nearest side, and stay where it's taken (m); further, it's brought
+/// in to the hand.
+const PALM_REACH: f32 = 0.05;
+
 /// The fastest anything leaves a hand, m/s: a hard overarm throw. A
 /// controller's tracking jumping (or the playspace moving) while it holds
 /// something would otherwise let go of it at hundreds of m/s.
@@ -522,8 +550,19 @@ type GrabTargets<'w, 's> = Query<
         Option<&'static ReachZone>,
         // Clamped in a vice: its moving parts are worked without holding it.
         Has<crate::weapons::gunsmith::InVice>,
+        // Seated in something (a magazine in its well, a scope on its
+        // mount, a pistol in its holster): see `find_grab`.
+        Option<&'static InSocket>,
     ),
 >;
+
+/// How near a seated part's foot (a magazine's floorplate under the well)
+/// a hand must close to pull it from a host held in the other hand, metres.
+pub const SEATED_REACH: f32 = 0.06;
+/// What a seated part gives away to its host in a close call, metres: a
+/// hand on the gun's grip takes the gun, one right at the floorplate the
+/// magazine.
+pub const SEATED_BIAS: f32 = 0.025;
 
 /// VR path. The grip takes hold of things (and presses doors, cards,
 /// cords); the trigger works a moving part (bolt, slide, charging handle)
@@ -535,15 +574,18 @@ fn grip_from_input(
     mut hands: Query<(Entity, &RigHand, &mut Hand)>,
     grabbables: GrabTargets,
     parents: Query<&ChildOf>,
+    seats: Seats,
     torsos: Query<(&GlobalTransform, &ChildOf), With<body::Torso>>,
     bags: Query<(), With<body::Backpack>>,
     locals: Query<(), With<crate::rig::LocalPlayer>>,
     driver: Res<crate::rig::RigDriver>,
     comfort: Option<Res<crate::rig::comfort::Comfort>>,
     spatial: SpatialQuery,
+    terrain: Query<Entity, With<crate::world::TerrainCollider>>,
     mut actions: MessageWriter<HandAction>,
     mut events: MessageWriter<InteractEvent>,
 ) {
+    let terrain = terrain.iter().next();
     for (player, input, children) in &players {
         let torso = torsos
             .iter()
@@ -585,7 +627,9 @@ fn grip_from_input(
                     Reach::Hover,
                     &grabbables,
                     &parents,
+                    &seats,
                     &spatial,
+                    terrain,
                 )
                 .map(|(e, _)| e)
             };
@@ -607,7 +651,9 @@ fn grip_from_input(
                         Reach::Grip,
                         &grabbables,
                         &parents,
+                        &seats,
                         &spatial,
+                        terrain,
                     ) {
                         actions.write(HandAction::Grab {
                             player,
@@ -656,7 +702,9 @@ fn grip_from_input(
                         Reach::Handle,
                         &grabbables,
                         &parents,
+                        &seats,
                         &spatial,
+                        terrain,
                     ) {
                         hand.handle_by_trigger = true;
                         actions.write(HandAction::Grab {
@@ -698,13 +746,24 @@ pub(crate) enum Reach {
 /// Nearest grab point in reach of a hand. Points with a radius must be
 /// within it; free items are found by touching their collider, or a
 /// collider of theirs on a child (doors: the leaf is the world's).
+/// What a seated part is seated in: its socket's owner, and a magazine's
+/// height (its foot is where it's pulled from).
+type Seats<'w, 's> = (
+    Query<'w, 's, &'static SocketOwner>,
+    Query<'w, 's, &'static crate::weapons::Mag>,
+    // Held half out by the mag release: taken anywhere along it.
+    Query<'w, 's, (), With<crate::weapons::reload::Presented>>,
+);
+
 fn find_grab(
     hand: &Transform,
     player: Entity,
     reach_for: Reach,
     grabbables: &GrabTargets,
     parents: &Query<&ChildOf>,
+    (owners, mags, presented): &Seats,
     spatial: &SpatialQuery,
+    terrain: Option<Entity>,
 ) -> Option<(Entity, usize)> {
     let reach = Collider::sphere(0.07);
     let mut touching = spatial.shape_intersections(
@@ -719,7 +778,11 @@ fn find_grab(
             hand.translation,
             Quat::IDENTITY,
             // (A wreck's limbs are the robot's parts: `carry::Draggable`.)
-            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot]),
+            // Not the terrain: nothing on it is grabbed, and a sphere's
+            // test against the map's heightfield is 28 ms
+            // (`world::sphere_in_world`).
+            &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot])
+                .with_excluded_entities(terrain),
         ) {
             let mut up = hit;
             for _ in 0..4 {
@@ -735,7 +798,7 @@ fn find_grab(
         }
     }
     let mut best: Option<(f32, Entity, usize)> = None;
-    for (e, gt, g, held, disabled, vis, zone, vice) in grabbables.iter() {
+    for (e, gt, g, held, disabled, vis, zone, vice, seat) in grabbables.iter() {
         // Moving parts are worked on a gun already in your other hand, or
         // in a vice.
         if reach_for == Reach::Handle && !vice && held.is_none_or(|h| h.player != player) {
@@ -743,6 +806,41 @@ fn find_grab(
         }
         // Out of sight (in a closed bag) is out of reach.
         if vis == Some(&Visibility::Hidden) {
+            continue;
+        }
+        // A part seated in another thing (a magazine in its well, a scope
+        // on its mount) is never what a grab takes: the thing it's in is.
+        // It comes out by its own control (the mag release), or by a
+        // deliberate pull on a host already in the other hand, taken by
+        // its foot. (A pouch or holster is the player's, not a thing's.)
+        let host = seat
+            .and_then(|s| owners.get(s.socket).ok())
+            .map(|o| o.0)
+            .filter(|o| grabbables.contains(*o));
+        if let Some(host) = host {
+            let host_held = grabbables
+                .get(host)
+                .is_ok_and(|h| h.3.is_some_and(|h| h.player == player));
+            if !host_held || reach_for == Reach::Handle {
+                continue;
+            }
+            let foot = mags.get(e).map_or(gt.translation(), |m| {
+                gt.translation() - gt.rotation() * Vec3::Y * (m.height * 0.5)
+            });
+            let d = if presented.contains(e) {
+                foot.distance(hand.translation)
+                    .min(gt.translation().distance(hand.translation))
+            } else {
+                foot.distance(hand.translation)
+            };
+            if d <= SEATED_REACH && best.is_none_or(|b| d + SEATED_BIAS < b.0) {
+                let point = g
+                    .points
+                    .iter()
+                    .position(|p| p.role == GripRole::Free)
+                    .unwrap_or(0);
+                best = Some((d + SEATED_BIAS, e, point));
+            }
             continue;
         }
         // Nothing reaches more than an arm's length past its own middle
@@ -828,11 +926,16 @@ fn apply_hand_actions(
         Query<(), With<crate::anomaly::harvest::Scalded>>,
         Query<(), With<crate::weapons::gunsmith::InVice>>,
     ),
-    ropes: Query<&crate::gadgets::climbing::Rope>,
-    ladders: Query<(), With<hand_climb::Ladder>>,
+    // Things held where the hand is (a rope, a ladder).
+    holds: (
+        Query<&crate::gadgets::climbing::Rope>,
+        Query<(), With<hand_climb::Ladder>>,
+    ),
     time: Res<Time>,
     slot_places: Query<&Transform, With<body::BodySlot>>,
+    bounds: Query<&ColliderAabb>,
 ) {
+    let (ropes, ladders) = holds;
     for action in actions.read() {
         match *action {
             HandAction::Grab {
@@ -891,7 +994,7 @@ fn apply_hand_actions(
                     warn!("grab: player {player} has no {side:?} hand");
                     continue;
                 };
-                let Ok((gt, grabbable, held, in_socket, _, bulky)) = items.get(item) else {
+                let Ok((gt, grabbable, held, in_socket, is_item, bulky)) = items.get(item) else {
                     warn!("grab: {item} is not grabbable");
                     continue;
                 };
@@ -958,6 +1061,9 @@ fn apply_hand_actions(
                         if let Some(s) = in_socket {
                             if let Ok((_, _, mut socket, _)) = sockets.get_mut(s.socket) {
                                 socket.occupant = None;
+                                if matches!(socket.kind, SocketKind::MagWell(_)) {
+                                    commands.entity(item).insert(Clearing(s.socket));
+                                }
                             }
                             events.write(InteractEvent::Unsocketed {
                                 item,
@@ -975,7 +1081,28 @@ fn apply_hand_actions(
                             GripRole::Free => hand_world.compute_affine().inverse() * gt.affine(),
                             _ => gp.local.compute_affine().inverse(),
                         };
-                        let offset = Transform::from_matrix(offset.into());
+                        let mut offset = Transform::from_matrix(offset.into());
+                        // A thing held touches the hand. Taken from further
+                        // off (caught by a far grab, snatched as it flew
+                        // past), it comes in until its nearest side is at the
+                        // hand, as it's turned: held where it was caught, it
+                        // hung a foot ahead of the hand.
+                        if gp.role == GripRole::Free
+                            && is_item.is_some()
+                            && let Ok(aabb) = bounds.get(item)
+                        {
+                            // Its size from the bounds, its place from where
+                            // it is: a socketed or bagged thing's bounds are
+                            // stale (its collider was off), and from those it
+                            // was pulled anywhere.
+                            let half = ((aabb.max - aabb.min) * 0.5).min(Vec3::splat(1.0));
+                            let c = gt.translation();
+                            let at = hand_world.translation;
+                            let gap = at.clamp(c - half, c + half) - at;
+                            if gap.length() > PALM_REACH {
+                                offset.translation -= hand_world.rotation.inverse() * gap;
+                            }
+                        }
                         hand.holding = Some(item);
                         let world = hand_world.mul_transform(offset);
                         // Something bulky doesn't take on the hand's speed as
@@ -1470,6 +1597,8 @@ pub(crate) fn follow_hands(
         Has<carry::Bulky>,
         Has<carry::Draggable>,
     )>,
+    // The pack hangs from the hand by its own rule (`body::hang_held_pack`).
+    packs: Query<(), With<body::Backpack>>,
     roots: Query<&GlobalTransform, With<Player>>,
     blocked: Res<LeashBlocked>,
     time: Res<Time>,
@@ -1479,8 +1608,11 @@ pub(crate) fn follow_hands(
         &mut held
     {
         // One hand on something bulky drags it, and a wreck is only ever
-        // dragged (`carry`).
-        if (bulky && support.is_none()) || wreck {
+        // dragged (`carry`). A pack hangs under the hand: followed here as
+        // well, by the offset it was taken off the shoulder at, it was
+        // snapped back to that (turned with the wrist, or onto you on a
+        // step) whenever the two drew apart.
+        if (bulky && support.is_none()) || wreck || packs.contains(e) {
             continue;
         }
         let Ok(hand) = hands.get(h.hand) else {

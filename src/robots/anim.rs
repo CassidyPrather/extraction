@@ -421,6 +421,27 @@ pub fn step_walker(
     ground: &mut impl FnMut(Vec3) -> f32,
     landed: &mut impl FnMut(Vec3),
 ) {
+    step_walker_walled(w, g, t, drive, dt, ground, landed, &mut |_, to| to);
+}
+
+/// How far short of a wall a foot comes down (m, at a walker's size): its
+/// pad, and a little air.
+pub const FOOT_OFF_WALL: f32 = 0.14;
+
+/// [`step_walker`], with `clear(from, to)` saying how far toward `to` a
+/// foot can go from `from` (the body, at hip height) before a wall: a foot
+/// never comes down inside one, it plants short of it (`wall_clear`).
+#[allow(clippy::too_many_arguments)]
+pub fn step_walker_walled(
+    w: &mut Walker,
+    g: &mut Gait,
+    t: &mut Transform,
+    drive: &Drive,
+    dt: f32,
+    ground: &mut impl FnMut(Vec3) -> f32,
+    landed: &mut impl FnMut(Vec3),
+    clear: &mut impl FnMut(Vec3, Vec3) -> Vec3,
+) {
     if dt <= 0.0 {
         return;
     }
@@ -540,7 +561,7 @@ pub fn step_walker(
         if nt >= 0.5 && !g.retargeted[i] {
             g.retargeted[i] = true;
             if !drive.down {
-                let p = ideal_xz(i);
+                let p = clear(Vec3::new(next.x, probe_y, next.z), ideal_xz(i));
                 f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
             }
         }
@@ -644,7 +665,7 @@ pub fn step_walker(
                 break;
             };
             need[i] = 0.0;
-            let p = ideal_xz(i);
+            let p = clear(Vec3::new(next.x, probe_y, next.z), ideal_xz(i));
             let f = &mut w.feet[i];
             f.from = f.planted;
             f.to = Vec3::new(p.x, ground(Vec3::new(p.x, probe_y, p.z)), p.z);
@@ -809,6 +830,97 @@ pub fn step_walker(
     }
 }
 
+/// Where a foot aimed from `from` (the body, at hip height) at `to` can
+/// come down: short of the first wall in the way (`ray(from, dir, reach)`
+/// gives the distance and the normal of what it hits), [`FOOT_OFF_WALL`]
+/// off it. A floor-like hit (a slope rising under the ray) isn't a wall.
+pub fn wall_clear(
+    from: Vec3,
+    to: Vec3,
+    size: f32,
+    ray: impl FnOnce(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let flat = Vec3::new(to.x - from.x, 0.0, to.z - from.z);
+    let len = flat.length();
+    let Ok(dir) = Dir3::new(flat) else {
+        return to;
+    };
+    let off = FOOT_OFF_WALL * size;
+    match ray(from, dir, len + off) {
+        Some((d, n)) if n.y.abs() < 0.6 => {
+            let keep = (d - off).clamp(0.0, len);
+            Vec3::new(from.x + dir.x * keep, to.y, from.z + dir.z * keep)
+        }
+        _ => to,
+    }
+}
+
+/// How far a walker's body (its orb, the hips round it, plates proud of
+/// it) stands out from its middle, at a walker's size.
+pub const BODY_REACH: f32 = 0.45;
+/// How far its body keeps off a wall.
+const BODY_SKIN: f32 = 0.03;
+/// How much of the way out of a wall a body is eased each tick.
+const EASE_OUT: f32 = 0.25;
+
+/// Where a body moving from `before` to `after` this tick can get to: up
+/// to the first wall in its way (`cast(from, dir, reach)` gives the
+/// distance to it and its normal), then sliding along it. A floor-like hit
+/// (the ground rising) doesn't stop it; only its sideways motion is held.
+pub fn body_clear(
+    before: Vec3,
+    after: Vec3,
+    cast: impl FnOnce(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let flat = Vec3::new(after.x - before.x, 0.0, after.z - before.z);
+    let len = flat.length();
+    let Ok(dir) = Dir3::new(flat) else {
+        return after;
+    };
+    let Some((d, n)) = cast(before, dir, len + BODY_SKIN).filter(|(_, n)| n.y.abs() < 0.6) else {
+        return after;
+    };
+    let keep = (d - BODY_SKIN).clamp(0.0, len);
+    let stop = before + dir * keep;
+    // The rest of the way, along the wall (not into it).
+    let n = Vec3::new(n.x, 0.0, n.z).normalize_or_zero();
+    let rest = flat * (1.0 - keep / len);
+    let slide = rest - n * rest.dot(n).min(0.0);
+    // (Round a trunk or into a corner the slide may graze in by a hair:
+    // `body_out` eases it back, so it rounds a curve instead of sticking.)
+    let slid = stop + slide;
+    Vec3::new(slid.x, after.y, slid.z)
+}
+
+/// How far to move a body at `at`, `reach` round, out of the wall it's in
+/// (`ray(from, dir, reach)` gives the distance and normal of what's that
+/// way): rays all round find the nearest wall face, and it's pushed back
+/// to `reach` off it. Nothing near, nothing.
+pub fn body_out(
+    at: Vec3,
+    reach: f32,
+    mut ray: impl FnMut(Vec3, Dir3, f32) -> Option<(f32, Vec3)>,
+) -> Vec3 {
+    let mut push = Vec3::ZERO;
+    let mut deepest = 0.0f32;
+    for k in 0..12 {
+        let a = k as f32 * std::f32::consts::TAU / 12.0;
+        let Ok(dir) = Dir3::new(Vec3::new(a.cos(), 0.0, a.sin())) else {
+            continue;
+        };
+        if let Some((d, n)) = ray(at, dir, reach).filter(|(_, n)| n.y.abs() < 0.6) {
+            let n = Vec3::new(n.x, 0.0, n.z).normalize_or_zero();
+            // How far it's in, measured square to the face.
+            let into = reach - d * (-dir.dot(n)).max(0.0);
+            if into > deepest {
+                deepest = into;
+                push = n * into;
+            }
+        }
+    }
+    push
+}
+
 /// The walkable surface under `p` (probed from `p`, about hip height):
 /// steps, floors and kerbs by a ray down (`ray(from, reach)` gives the
 /// distance to what it hits), else the terrain. Below the terrain (an
@@ -877,8 +989,21 @@ pub(crate) fn walk(
     time: Res<Time>,
     mut steps: MessageWriter<WalkerStep>,
     snow: Option<Res<crate::world::snow::Snow>>,
+    bodies: Query<(Option<&RigidBody>, Option<&ColliderOf>)>,
 ) {
     let dt = time.delta_secs();
+    // What a walker's body stops at: what's built (static), not a door
+    // leaf (it swings, and a walker shoulders or batters it).
+    let built = |e: Entity| {
+        let body = bodies
+            .get(e)
+            .ok()
+            .and_then(|(_, of)| of.map(|o| o.body))
+            .unwrap_or(e);
+        bodies
+            .get(body)
+            .map_or(true, |(rb, _)| rb.is_none_or(|rb| *rb == RigidBody::Static))
+    };
     // Feet land on what's lying about too: rubble and shards
     // (`destruction`), wreckage, crates and loose things.
     let filter = SpatialQueryFilter::from_mask([Layer::World, Layer::Debris, Layer::Item]);
@@ -945,7 +1070,80 @@ pub(crate) fn walk(
         let mut landed = |at: Vec3| {
             steps.write(WalkerStep { at, by, yaw });
         };
-        step_walker(&mut w, &mut g, &mut t, &drive, dt, &mut ground, &mut landed);
+        // Walls: buildings, not rubble (a foot stands on that).
+        let walls = SpatialQueryFilter::from_mask([Layer::World]);
+        let mut clear = |from: Vec3, to: Vec3| {
+            wall_clear(from, to, size, |o, dir, reach| {
+                spatial
+                    .cast_ray(o, dir, reach, true, &walls)
+                    .map(|h| (h.distance, h.normal))
+            })
+        };
+        let before = t.translation;
+        step_walker_walled(
+            &mut w,
+            &mut g,
+            &mut t,
+            &drive,
+            dt,
+            &mut ground,
+            &mut landed,
+            &mut clear,
+        );
+        // A foot that's standing in a wall (it was stood there, or the
+        // wall's new) steps out of it.
+        let hip_y = t.translation.y;
+        for i in 0..LEGS {
+            let f = w.feet[i];
+            if !f.alive || f.t < 1.0 {
+                continue;
+            }
+            let from = Vec3::new(t.translation.x, hip_y, t.translation.z);
+            let c = clear(from, f.planted);
+            if Vec2::new(c.x - f.planted.x, c.z - f.planted.z).length() > 0.02 {
+                let to = Vec3::new(c.x, ground(Vec3::new(c.x, hip_y, c.z)), c.z);
+                let f = &mut w.feet[i];
+                f.from = f.planted;
+                f.to = to;
+                f.t = 0.0;
+                g.retargeted[i] = true;
+                g.dur[i] = g.dur[i].max(0.25);
+            }
+        }
+        // Its body stops at a wall and slides along it (it's kinematic:
+        // nothing else would stop it).
+        let orb = Collider::sphere(BODY_REACH * size);
+        let walls = SpatialQueryFilter::from_mask([Layer::World]);
+        t.translation = body_clear(before, t.translation, |from, dir, reach| {
+            spatial
+                .cast_shape_predicate(
+                    &orb,
+                    from,
+                    Quat::IDENTITY,
+                    dir,
+                    // (What it starts in, the ground under a crouched body
+                    // or a wall it was stood in, isn't in its way: it's
+                    // eased out of a wall below.)
+                    &ShapeCastConfig {
+                        ignore_origin_penetration: true,
+                        ..ShapeCastConfig::from_max_distance(reach)
+                    },
+                    &walls,
+                    &|e| built(e),
+                )
+                .map(|h| (h.distance, h.normal2))
+        });
+        // And one already in a wall (stood there, or knocked into it) is
+        // eased out of it.
+        // (A share a tick, not all at once: a body shouldered into a window
+        // is there long enough for the glass to give, `destruction::glass`.)
+        let here = t.translation;
+        t.translation += EASE_OUT
+            * body_out(here, BODY_REACH * size, |o, dir, reach| {
+                spatial
+                    .cast_ray_predicate(o, dir, reach, true, &walls, &|e| built(e))
+                    .map(|h| (h.distance, h.normal))
+            });
         if let Some(snow) = snow.as_ref().filter(|s| s.cover > 0.05) {
             // Lying snow packs to ice under it: steep ground is treacherous.
             let ice = |p: Vec3| {
@@ -960,6 +1158,16 @@ pub(crate) fn walk(
             slip_feet(&mut w, &mut g, dt, ice, &mut ground);
         }
         poses.0 = leg_poses(&w, &g, &t);
+        // A knee that would bend out into a wall bends in instead, toward
+        // the body (which is clear of it).
+        let middle = t.translation;
+        for [hip, knee, foot] in poses.0.iter_mut() {
+            let c = clear(*hip, *knee);
+            if Vec2::new(c.x - knee.x, c.z - knee.z).length() > 0.01 {
+                let inward = Vec3::new(middle.x - hip.x, 0.0, middle.z - hip.z).normalize_or_zero();
+                *knee = solve_knee_sized(*hip, *foot, inward + Vec3::Y * 0.3, size);
+            }
+        }
         // Leg colliders follow the lower segments (local to the root).
         // Built from parts rather than a matrix, so the scale stays exactly
         // one: a capsule scaled by 0.9999999 is rebuilt as a convex hull,
@@ -1355,6 +1563,230 @@ mod tests {
     /// Feet meet what's lying about: walking over a block of rubble
     /// (Destruction's debris layer), every foot that comes down on it
     /// stands on its top, neither floating nor sunk.
+    /// How deep a sphere at `c` of radius `r` is into the box at `at`
+    /// with half-extents `half` (axis-aligned), m; 0 if clear.
+    fn into_box(c: Vec3, r: f32, at: Vec3, half: Vec3) -> f32 {
+        let d = (c - at).abs() - half;
+        let outside = d.max(Vec3::ZERO).length();
+        if outside > 0.0 {
+            (r - outside).max(0.0)
+        } else {
+            r - d.max_element()
+        }
+    }
+
+    /// The playtest's walker seen through a wall (0:57:47): walkers swept
+    /// along a wall closer than their legs reach, walked straight at one,
+    /// and turned beside one. No part of the body, its orb or any leg from
+    /// hip to knee to foot, goes more than a few cm into the wall.
+    #[test]
+    fn no_part_of_a_walker_passes_into_a_wall() {
+        // (offset of its path from the wall face, the path's turns, size)
+        let cases: [(&str, f32, Vec<Vec3>, f32); 5] = [
+            (
+                "along, 0.55 m off",
+                0.55,
+                vec![Vec3::new(6.0, 0.0, 0.0)],
+                1.0,
+            ),
+            ("along, 0.3 m off", 0.3, vec![Vec3::new(6.0, 0.0, 0.0)], 1.0),
+            ("straight at it", 2.5, vec![Vec3::new(0.0, 0.0, 4.0)], 1.0),
+            (
+                "turning beside it",
+                0.7,
+                vec![Vec3::new(2.5, 0.0, 0.0), Vec3::new(2.5, 0.0, -4.0)],
+                1.0,
+            ),
+            (
+                "a crawler along it",
+                0.3,
+                vec![Vec3::new(5.0, 0.0, 0.0)],
+                0.6,
+            ),
+        ];
+        let mut worst = Vec::new();
+        for (name, off, turns, size) in cases {
+            let mut app = crate::headless_app(
+                crate::LaunchOptions {
+                    robots: false,
+                    ..Default::default()
+                },
+                false,
+            );
+            app.finish();
+            app.cleanup();
+            app.update();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let at = zone.on_ground(40.0, 230.0);
+            // The wall along +x, its near face `off` from the path, on +z.
+            let half = Vec3::new(8.0, 1.6, 0.15);
+            let wall = Vec3::new(
+                at.x + 2.0,
+                zone.ground(at.x, at.z + off) + half.y - 0.4,
+                at.z + off + half.z,
+            );
+            app.world_mut().spawn((
+                RigidBody::Static,
+                Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+                CollisionLayers::new(Layer::World, LayerMask::ALL),
+                Transform::from_translation(wall),
+            ));
+            let walker = {
+                let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+                let mut c = q.get_mut(app.world_mut()).unwrap();
+                let job = super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                };
+                let e = super::super::walker::spawn_walker_sized(
+                    &mut c, &zone, at, job, false, 1.0e6, size, None,
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                q.apply(app.world_mut());
+                e
+            };
+            for _ in 0..20 {
+                app.update();
+            }
+            app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+                turns.iter().map(|d| at + *d).collect();
+            let mut deepest = (0.0f32, "");
+            for tick in 0..(90 * 7) {
+                app.update();
+                // (Where it was stood is spawning's: from its first steps.)
+                if tick < 90 {
+                    continue;
+                }
+                let t = *app.world().get::<Transform>(walker).unwrap();
+                let poses = app.world().get::<LegPoses>(walker).unwrap().0;
+                let orb = into_box(t.translation, 0.4 * size, wall, half);
+                if orb > deepest.0 {
+                    deepest = (orb, "orb");
+                }
+                for [hip, knee, foot] in poses {
+                    for (a, b, part) in [(hip, knee, "thigh"), (knee, foot, "shin")] {
+                        for k in 0..=8 {
+                            let p = a.lerp(b, k as f32 / 8.0);
+                            let d = into_box(p, 0.05 * size, wall, half);
+                            if d > deepest.0 {
+                                deepest = (d, part);
+                            }
+                        }
+                    }
+                }
+            }
+            worst.push((name, deepest));
+        }
+        eprintln!("{worst:?}");
+        for (name, (d, part)) in worst {
+            assert!(d < 0.05, "{name}: its {part} went {d:.2} m into the wall");
+        }
+    }
+
+    /// A foot aimed through a wall comes down short of it; a slope under
+    /// the ray isn't a wall; nothing in the way, it goes where it was aimed.
+    #[test]
+    fn a_foot_stops_short_of_a_wall() {
+        let from = Vec3::new(0.0, 1.0, 0.0);
+        let to = Vec3::new(1.05, 0.0, 0.0);
+        let wall = |_: Vec3, _: Dir3, _: f32| Some((0.7, Vec3::NEG_X));
+        let p = wall_clear(from, to, 1.0, wall);
+        assert!((p.x - (0.7 - FOOT_OFF_WALL)).abs() < 1e-4, "{p:?}");
+        assert_eq!(p.y, to.y);
+        let slope = |_: Vec3, _: Dir3, _: f32| Some((0.9, Vec3::new(-0.5, 0.86, 0.0)));
+        assert_eq!(wall_clear(from, to, 1.0, slope), to);
+        assert_eq!(wall_clear(from, to, 1.0, |_, _, _| None), to);
+    }
+
+    /// The playtest's walker through a wall (0:57:47): walked along a house
+    /// wall closer than its legs reach (its path is Robot minds', kept off
+    /// walls; this is the body's own guard, for when it's shoved or knocked
+    /// there), no foot ever comes down inside the wall.
+    #[test]
+    fn feet_never_land_in_a_wall() {
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let at = zone.on_ground(40.0, 230.0);
+        // A wall 0.5 m off its centre, along its way: its feet reach 1.05
+        // (0.74 to the side, at rest).
+        let wall = Vec3::new(at.x, 0.0, at.z + 0.5 + 0.15);
+        let half = Vec3::new(6.0, 1.5, 0.15);
+        app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(2.0 * half.x, 2.0 * half.y, 2.0 * half.z),
+            CollisionLayers::new(Layer::World, LayerMask::ALL),
+            Transform::from_xyz(wall.x, zone.ground(wall.x, wall.z) + half.y - 0.3, wall.z),
+        ));
+        let walker = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let e = super::super::walker::spawn_walker(
+                &mut c,
+                &zone,
+                at,
+                super::super::Job {
+                    kind: super::super::JobKind::Survey,
+                    site: at,
+                    duration: 999.0,
+                    exit: at,
+                },
+            );
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            q.apply(app.world_mut());
+            e
+        };
+        for _ in 0..20 {
+            app.update();
+        }
+        app.world_mut().get_mut::<Walker>(walker).unwrap().path =
+            vec![Vec3::new(at.x + 5.0, 0.0, at.z)];
+        // (Where it was stood is spawning's; this is where it steps.)
+        let stood: Vec<Vec3> = app
+            .world()
+            .get::<Walker>(walker)
+            .unwrap()
+            .feet
+            .iter()
+            .map(|f| f.planted)
+            .collect();
+        let mut steps = 0;
+        for _ in 0..(90 * 6) {
+            app.update();
+            let w = app.world().get::<Walker>(walker).unwrap();
+            for f in w
+                .feet
+                .iter()
+                .filter(|f| f.alive && f.t >= 1.0 && !stood.contains(&f.planted))
+            {
+                let into = f.planted.z - (wall.z - half.z);
+                assert!(
+                    into < 0.0,
+                    "a foot came down {into:.2} m inside the wall at {:?}",
+                    f.planted
+                );
+                steps += 1;
+            }
+        }
+        let gone = app.world().get::<Transform>(walker).unwrap().translation.x - at.x;
+        assert!(gone > 2.0, "it walked along the wall ({gone:.1} m)");
+        assert!(steps > 100);
+    }
+
     #[test]
     fn feet_stand_on_rubble() {
         let mut app = crate::headless_app(

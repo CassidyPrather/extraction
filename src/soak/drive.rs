@@ -448,5 +448,10 @@ mod tests {
         grew("entities", a.entities, b.entities, 60 + 8 * more_items);
         grew("contact pairs", a.contacts, b.contacts, 80 + 4 * more_items);
         assert!(rec.leaks().is_empty(), "{}", rec.report());
+        assert!(
+            rec.censuses.iter().all(|c| c.astray.is_empty()),
+            "{}",
+            rec.report()
+        );
     }
 }

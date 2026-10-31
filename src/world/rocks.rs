@@ -6,7 +6,7 @@ use avian3d::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
-use extraction_core::rocks::{ROCK_VARIANTS, RockSpot, SOLID_RADIUS, scatter_rocks};
+use extraction_core::rocks::{ROCK_VARIANTS, RockSpot, SOLID_RADIUS};
 
 use super::{Layer, Zone};
 use crate::render::materials::{Mat, MaterialLibrary};
@@ -24,8 +24,8 @@ const CULL: f32 = 420.0;
 const STONES_NEAR: f32 = 40.0;
 const STONES: f32 = 90.0;
 
-pub fn rocks(zone: &Zone) -> Vec<RockSpot> {
-    scatter_rocks(&zone.map, &zone.hm)
+pub fn rocks(zone: &Zone) -> std::sync::Arc<Vec<RockSpot>> {
+    zone.rocks()
 }
 
 fn scale_of(r: &RockSpot) -> Vec3 {
@@ -36,8 +36,8 @@ fn scale_of(r: &RockSpot) -> Vec3 {
     )
 }
 
-fn chunk_of(p: [f32; 3]) -> (i32, i32) {
-    ((p[0] / CHUNK).floor() as i32, (p[2] / CHUNK).floor() as i32)
+fn chunk_of(p: [f32; 3], size: f32) -> (i32, i32) {
+    ((p[0] / size).floor() as i32, (p[2] / size).floor() as i32)
 }
 
 fn hash(v: u64) -> f32 {
@@ -107,12 +107,23 @@ pub fn rock_points(variant: usize, detail: u32) -> (Vec<Vec3>, Vec<[u32; 3]>) {
 /// colour (multiplying the texture).
 type RockFaces = (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<[f32; 4]>);
 
+/// Every variant's shape at each detail (`[detail][variant]`), made once:
+/// each rock is one of them, placed (made for each rock, they were most
+/// of the rocks' load).
+type Shapes = Vec<Vec<(Vec<Vec3>, Vec<[u32; 3]>)>>;
+
+fn shapes() -> Shapes {
+    (0..=2)
+        .map(|d| (0..ROCK_VARIANTS).map(|v| rock_points(v, d)).collect())
+        .collect()
+}
+
 /// A faceted mesh for one rock placed in the world: flat-shaded faces,
 /// each textured by the axis it faces most. No two rocks are quite the
 /// same tone, and the faces that look at the sky carry moss (or, in a
 /// burnt valley, soot).
-fn rock_mesh(r: &RockSpot, detail: u32, burnt: bool) -> RockFaces {
-    let (pts, tris) = rock_points(r.variant, detail);
+fn rock_mesh(r: &RockSpot, shapes: &Shapes, detail: u32, burnt: bool) -> RockFaces {
+    let (pts, tris) = &shapes[detail as usize][r.variant];
     let xf = Transform::from_xyz(r.pos[0], r.pos[1], r.pos[2])
         .with_rotation(Quat::from_rotation_y(r.yaw))
         .with_scale(scale_of(r));
@@ -168,7 +179,7 @@ pub fn spawn_rock_colliders(mut commands: Commands, zone: Res<Zone>) {
         let Some(hull) = Collider::convex_hull(pts) else {
             continue;
         };
-        let (cx, cz) = chunk_of(r.pos);
+        let (cx, cz) = chunk_of(r.pos, CHUNK);
         let origin = Vec3::new(cx as f32 * CHUNK, 0.0, cz as f32 * CHUNK);
         chunks.entry((cx, cz)).or_default().push((
             Position(Vec3::from_array(r.pos) - origin),
@@ -219,16 +230,15 @@ fn spawn_rock_meshes(
     }
     *done = true;
     let mat = library.get(Mat::Boulder, &server, &mut materials);
-    let mut chunks: std::collections::HashMap<(i32, i32), Vec<RockSpot>> = Default::default();
-    for r in rocks(&zone) {
+    let all = rocks(&zone);
+    let spots: Vec<&RockSpot> = all
+        .iter()
         // Lower detail thins the field stones (they're only looks).
-        if r.radius < SOLID_RADIUS
-            && hash((r.pos[0] * 7.0 + r.pos[2] * 131.0) as i64 as u64) > opts.detail
-        {
-            continue;
-        }
-        chunks.entry(chunk_of(r.pos)).or_default().push(r);
-    }
+        .filter(|r| {
+            r.radius >= SOLID_RADIUS
+                || hash((r.pos[0] * 7.0 + r.pos[2] * 131.0) as i64 as u64) <= opts.detail
+        })
+        .collect();
     use bevy::camera::visibility::VisibilityRange;
     let range = |from: f32, to: f32| VisibilityRange {
         start_margin: if from > 0.0 {
@@ -239,54 +249,64 @@ fn spawn_rock_meshes(
         end_margin: (to - 10.0)..(to + 10.0),
         use_aabb: true,
     };
+    // Boulders: three LODs. Field stones: two, and only near (they're
+    // grain in the ground, not landmarks). Shadows only from what's near
+    // enough to show one. Each tier in chunks as wide as its distance
+    // needs: a far LOD culled at 32 m grain was hundreds of entities for
+    // the main thread to cull, bound and specialise every frame, for
+    // nothing the eye could tell apart (`budget::mesh_census`).
+    let tiers = [
+        (true, 2, range(0.0, NEAR_LOD), true, 1),
+        (true, 1, range(NEAR_LOD, FAR_LOD), true, 2),
+        (true, 0, range(FAR_LOD, CULL), false, 4),
+        (false, 1, range(0.0, STONES_NEAR), false, 1),
+        (false, 0, range(STONES_NEAR, STONES), false, 2),
+    ];
+    let mut jobs: Vec<(Vec<&RockSpot>, u32, VisibilityRange, bool)> = Vec::new();
+    for (big, detail, range, shadow, chunks) in tiers {
+        let mut buckets: std::collections::HashMap<(i32, i32), Vec<&RockSpot>> = Default::default();
+        for r in spots.iter().filter(|r| (r.radius >= SOLID_RADIUS) == big) {
+            buckets
+                .entry(chunk_of(r.pos, CHUNK * chunks as f32))
+                .or_default()
+                .push(r);
+        }
+        let mut keys: Vec<_> = buckets.keys().copied().collect();
+        keys.sort();
+        for k in keys {
+            jobs.push((buckets.remove(&k).unwrap(), detail, range.clone(), shadow));
+        }
+    }
     // The meshes on every core (each chunk's its own); spawned after.
-    let built: Vec<Vec<(Mesh, VisibilityRange, bool)>> =
+    let shapes = shapes();
+    let built: Vec<(Mesh, VisibilityRange, bool)> =
         bevy::tasks::ComputeTaskPool::get().scope(|scope| {
-            for (_, list) in &chunks {
-                let zone = &zone;
-                let range = &range;
+            for (rocks, detail, range, shadow) in &jobs {
+                let (zone, shapes) = (&zone, &shapes);
                 scope.spawn(async move {
-                    let (small, big): (Vec<&RockSpot>, Vec<&RockSpot>) =
-                        list.iter().partition(|r| r.radius < SOLID_RADIUS);
-                    let mut out = Vec::new();
-                    // Boulders: three LODs. Field stones: two, and only
-                    // near (they're grain in the ground, not landmarks).
-                    // Shadows only from what's near enough to show one.
-                    for (rocks, detail, range, shadow) in [
-                        (&big, 2, range(0.0, NEAR_LOD), true),
-                        (&big, 1, range(NEAR_LOD, FAR_LOD), true),
-                        (&big, 0, range(FAR_LOD, CULL), false),
-                        (&small, 1, range(0.0, STONES_NEAR), false),
-                        (&small, 0, range(STONES_NEAR, STONES), false),
-                    ] {
-                        if rocks.is_empty() {
-                            continue;
-                        }
-                        let (mut pos, mut nrm, mut uv, mut col) =
-                            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-                        for r in rocks {
-                            let (p, n, u, c) = rock_mesh(r, detail, zone.map.ash > 0.0);
-                            pos.extend(p);
-                            nrm.extend(n);
-                            uv.extend(u);
-                            col.extend(c);
-                        }
-                        let mut mesh = Mesh::new(
-                            PrimitiveTopology::TriangleList,
-                            RenderAssetUsages::RENDER_WORLD,
-                        )
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-                        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
-                        let _ = mesh.generate_tangents();
-                        out.push((mesh, range, shadow));
+                    let (mut pos, mut nrm, mut uv, mut col) =
+                        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+                    for r in rocks {
+                        let (p, n, u, c) = rock_mesh(r, shapes, *detail, zone.map.ash > 0.0);
+                        pos.extend(p);
+                        nrm.extend(n);
+                        uv.extend(u);
+                        col.extend(c);
                     }
-                    out
+                    let mut mesh = Mesh::new(
+                        PrimitiveTopology::TriangleList,
+                        RenderAssetUsages::RENDER_WORLD,
+                    )
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+                    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
+                    let _ = mesh.generate_tangents();
+                    (mesh, range.clone(), *shadow)
                 });
             }
         });
-    for (mesh, range, shadow) in built.into_iter().flatten() {
+    for (mesh, range, shadow) in built {
         let mut e = commands.spawn((
             Name::new("Rock chunk"),
             crate::render::centred(&mut meshes, mesh),

@@ -372,9 +372,10 @@ latch.cyl(0.0018, -0.0148, 0.0148, "Steel", segs=10, chamfer=0.0004,
           xf=T(0, 0.0705, -0.050) @ RY(math.pi / 2))
 latch.box((0.017, 0.006, 0.004), (0.0, 0.070, -0.0345), "Worn", bevel=0.0006, segs=1)
 latch.cyl(0.0016, 0.050, 0.067, "Steel", segs=8, xf=T(0, 0, -0.0345) @ RX(-math.pi / 2))  # pushrod
-# The rear sight: a notched plate behind the latch.
-latch.prism([(-0.012, RAIL + 0.004), (0.012, RAIL + 0.004), (0.012, 0.0875), (0.003, 0.0875),
-             (0.0, 0.084), (-0.003, 0.0875), (-0.012, 0.0875)], -0.029, -0.025, "Iron", axis="z",
+# The rear sight: a notched plate behind the latch, its V's floor just
+# under the front bead's top (the eye line, `pt_sight`: `capture::sightline`).
+latch.prism([(-0.012, RAIL + 0.004), (0.012, RAIL + 0.004), (0.012, 0.098), (0.003, 0.098),
+             (0.0, 0.0945), (-0.003, 0.098), (-0.012, 0.098)], -0.029, -0.025, "Iron", axis="z",
             bevel=0.0005, segs=1)
 # The door bolt on the right: the safety.
 latch.prism(fillet([(-0.130, 0.035), (-0.085, 0.035), (-0.085, 0.051), (-0.130, 0.051)], 0.002, 2),
@@ -437,7 +438,7 @@ for p in (cradle, rest, drawn, trig, safety_bolt):
 join("static_rail_bolt", rb_body, rb_vanes)
 
 empty("pt_muzzle", (0.0, AXIS, MUZZLE))
-empty("pt_sight", (0.0, 0.085, -0.027))
+empty("pt_sight", (0.0, 0.095, -0.027))
 empty("pt_port", (0.0, 0.07, -0.2))
 empty("pt_load_port", (0.0, 0.07, -0.2))
 empty("pt_support", (0.0, 0.0, -0.28))

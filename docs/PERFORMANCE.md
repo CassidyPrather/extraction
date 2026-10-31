@@ -1120,3 +1120,71 @@ content's own cost isn't fixed yet. It splits two ways:
     the default without `--mirror`, and costs next to nothing.
   - Bevy doesn't time shadow passes (no diagnostic span). Count their
     draws per view before judging the GPU's share.
+
+### Marrow's main thread, profiled (30 October)
+
+The busy moment by system (`system_profile`, with tracing, one thread,
+after Map design's ford rises and birch belt): main schedule 44.6 ms,
+Update 14.0, PostUpdate 12.7, FixedPostUpdate 7.0. The named costs are
+Bevy's own, and each grows with the valley's mesh entities (11,136):
+
+| system | ms a frame |
+|---|---|
+| `check_visibility_cpu_culling` | 2.3 |
+| `check_entities_needing_specialization<StandardMaterial>` | 1.45 |
+| `propagate_parent_transforms` + `mark_dirty_trees` | 2.1 |
+| `check_visibility_ranges` | 0.7 |
+| `calculate_bounds` | 0.5 |
+
+Update's 14 ms is spread over hundreds of small systems, inflated by
+the tracing spans.
+
+Found on the way: the drones' beacon and halo were rewritten every
+frame with the same value, and the shell's glow followed the light's
+creep. Each write re-specialises every mesh wearing the material. These
+are now written only on a change, and the light is stepped in 64ths.
+`budget`'s `gauge_no_shared_material_rewritten_each_frame` holds every
+material worn by four or more meshes to that, and names the fields a
+write changed. It didn't move the 1.45 ms: that's the check's
+per-entity baseline.
+
+The lever is fewer mesh entities. Merge static props per material at
+load, as the guns were (`weapons`' merged parts).
+
+### One thread for the main world (30 October)
+
+"Update's 14 ms spread over hundreds of small systems" was mostly
+Bevy's multi-threaded executor. The main world has about 1,500
+systems, and most do a few microseconds of work. Handing each one to a
+thread costs more than the work: a thousand idle systems take 1 to
+2.5 ms a frame on that executor and 0.02 ms on the single-threaded
+one (`executor_tests`).
+
+The game now loads on every core, then switches the main world to one
+thread (`one_thread_once_loaded` in `lib.rs`). The switch comes once
+the forest is built and every building's props are in. A load on one
+thread was slower, because the load's building and decoding systems do
+share the cores: Sallow took 11.5 s against 5.4. The renderer keeps
+its own threads, and `par_iter` and the physics solver still use the
+task pool.
+
+Measured on four cores, multi-threaded against one thread:
+
+| | multi-threaded | one thread |
+|---|---|---|
+| Marrow's busy moment (every core) | 20.5-21.9 ms | 11.7-13.7 ms |
+| Update in it | 4.4-4.6 ms | 1.9-2.2 ms |
+| worst minute, CPU p99 (units of 160) | 73-94 | 31-40 |
+| homecoming's worst frame | 77-102 ms | 60-63 ms |
+| a valley's load | unchanged | unchanged |
+
+To weigh the two executors again on another machine, such as a
+headset PC with more cores, run
+`BUDGET_EXECUTOR=multi BUDGET_THREADS=all cargo test --lib -- --ignored
+--nocapture gauge_a_busy_moment`. That keeps the multi-threaded
+executor after the load and gives it every core.
+
+The hitch ceilings were once multiples of the busy moment's median, so
+they tightened by half when it halved. They are now in reference
+units: an event's worst frame is held to the frame budget's 160, and a
+load's frames to 530.

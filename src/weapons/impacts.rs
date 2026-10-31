@@ -1050,3 +1050,104 @@ mod tests {
         assert!(BIT_CAP + 2 * DECAL_CAP < crate::render::budget::BUDGET.draws / 4);
     }
 }
+
+#[cfg(test)]
+mod plate_tests {
+    use super::*;
+    use crate::rig::Side;
+    use crate::weapons::feel::vr_tests::*;
+    use extraction_core::firearm::FireMode;
+
+    #[derive(Resource, Default)]
+    struct Seen(Vec<Impact>);
+
+    fn see(mut impacts: MessageReader<Impact>, mut seen: ResMut<Seen>) {
+        seen.0.extend(impacts.read().copied());
+    }
+
+    /// Every range target in the yard stops a pistol round on its steel
+    /// plate, with a metal impact (the spark, the ring) and a mark, near
+    /// where the gun was pointed (the first playtest shot straight
+    /// through them, and couldn't tell a hit).
+    #[test]
+    fn every_range_plate_stops_and_marks_a_round() {
+        let mut r = hold("pm_pistol", false, false);
+        r.vr.app.init_resource::<Seen>().add_systems(Update, see);
+        load(&mut r, "pm", 8, FireMode::Semi);
+        let plates: Vec<(Entity, Vec3)> = {
+            let mut q =
+                r.vr.app
+                    .world_mut()
+                    .query::<(Entity, &crate::world::buildings::Building, &GlobalTransform)>();
+            q.iter(r.vr.app.world())
+                .filter(|(_, b, _)| b.prefab == "target")
+                .map(|(e, _, gt)| (e, gt.transform_point(Vec3::new(0.0, 1.2, 0.08))))
+                .collect()
+        };
+        assert!(!plates.is_empty(), "the yard has its range");
+        let mut bad = Vec::new();
+        for (i, (_, plate)) in plates.iter().enumerate() {
+            // Stand off 6 m in front of it and point the gun at its middle.
+            let gt =
+                r.vr.app
+                    .world()
+                    .get::<GlobalTransform>(r.gun)
+                    .unwrap()
+                    .compute_transform();
+            let hand = r.vr.hand_state(Side::Right).world;
+            let rel = hand.rotation.inverse() * gt.rotation;
+            let normal = {
+                let w = r.vr.app.world();
+                let b = plates[i].0;
+                w.get::<GlobalTransform>(b).unwrap().rotation() * Vec3::Z
+            };
+            let from = *plate + normal * 6.0;
+            let want = Transform::from_translation(from)
+                .looking_at(*plate, Vec3::Y)
+                .rotation;
+            let grip_off = gt.translation - hand.translation;
+            r.vr.hand(Side::Right, from - grip_off, want * rel.inverse(), 1.0, 0.0);
+            r.vr.step(10);
+            r.vr.app.world_mut().resource_mut::<Seen>().0.clear();
+            if fire(&mut r, 1, true).is_empty() {
+                bad.push(format!("target {i}: no shot"));
+                continue;
+            }
+            r.vr.step(20);
+            let seen = std::mem::take(&mut r.vr.app.world_mut().resource_mut::<Seen>().0);
+            let on_plate: Vec<_> = seen
+                .iter()
+                .filter(|im| im.point.distance(*plate) < 0.3)
+                .collect();
+            if !on_plate
+                .iter()
+                .any(|im| im.kind == ImpactKind::Metal && im.decal)
+            {
+                bad.push(format!(
+                    "target {i}: no marked metal hit on the plate ({seen:?})"
+                ));
+            }
+            // The mark is where you'd see it: a hit inside the painted
+            // centre (12 cm) on its front, not hidden behind it.
+            let hidden = |im: &&Impact| {
+                let off = im.point - *plate;
+                let along = off.dot(normal);
+                (off - normal * along).length() < 0.11 && along < 0.0
+            };
+            if let Some(first) = seen.iter().find(|im| im.decal)
+                && hidden(&first)
+            {
+                bad.push(format!(
+                    "target {i}: the mark is behind the face you see ({first:?})"
+                ));
+            }
+            if seen
+                .iter()
+                .any(|im| (im.point - *plate).dot(-normal) > 0.05)
+            {
+                bad.push(format!("target {i}: a round went on through"));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+}

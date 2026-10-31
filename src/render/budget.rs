@@ -78,7 +78,10 @@ pub const SHADOW_MAP: usize = 1024;
 /// frame twice today's.
 pub const CPU_FRAME_UNITS: f64 = 160.0;
 pub const CPU_SHARE: [(&str, f64); 6] = [
-    ("PostUpdate", 0.5),
+    // A larger share since the main world went to one thread: its
+    // culling and transforms are the frame's biggest fixed work, where the
+    // executor's overhead was mostly Update's (44-48% at 5 ms).
+    ("PostUpdate", 0.6),
     ("Update", 0.4),
     ("FixedUpdate", 0.3),
     ("FixedPostUpdate", 0.35),
@@ -1545,19 +1548,28 @@ pub(crate) mod tests {
     /// The busy moment's scene, warmed up: `map` in a downpour on one
     /// thread at 90 Hz, the player beside the anomaly nearest the middle
     /// with two guns, ten robots on them (`perf::fight`).
-    /// The game's own executor again (`client_flash` gives the count
-    /// gauges one thread): the timing gauges measure the frame as it runs,
-    /// schedule shares and all (PostUpdate's culling and transforms side
-    /// by side read 79% of a one-thread frame).
+    /// The game's own executors (`crate::one_thread_once_loaded`: every
+    /// core while loading, one thread once the world's in): the timing
+    /// gauges measure the load and the frame as they run, schedule shares
+    /// and all. `BUDGET_EXECUTOR=multi` keeps Bevy's multi-threaded one on
+    /// past the load and `BUDGET_THREADS=all` gives it every core, to weigh
+    /// the two again on another machine.
     pub(crate) fn as_the_game_runs(app: &mut App) {
         let mut schedules = app.world_mut().resource_mut::<Schedules>();
         for (_, schedule) in schedules.iter_mut() {
             schedule.set_executor(bevy::ecs::schedule::MultiThreadedExecutor::new());
         }
+        if !std::env::var("BUDGET_EXECUTOR").is_ok_and(|k| k == "multi") {
+            crate::one_thread_once_loaded(app);
+        }
     }
 
     pub(crate) fn busy_scene(map: &str) -> App {
-        let mut app = client_threads(map, "downpour", Some(1));
+        // `BUDGET_THREADS=all` (or a count): the game's own pool.
+        let threads = std::env::var("BUDGET_THREADS")
+            .ok()
+            .map_or(Some(1), |n| n.parse().ok());
+        let mut app = client_threads(map, "downpour", threads);
         as_the_game_runs(&mut app);
         app.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
             std::time::Duration::from_secs_f64(1.0 / 90.0),
@@ -1602,6 +1614,8 @@ pub(crate) mod tests {
     /// `busy_moment`, calling `measuring` as the measured frames begin.
     fn busy_moment_with(map: &str, measuring: impl Fn()) -> Vec<(&'static str, f64, f64)> {
         let mut app = busy_scene(map);
+        let one = app.world().get_resource::<crate::OneThread>();
+        println!("executors: one thread {:?}", one.map(|o| o.done));
         let keep_alive = crate::perf::fight::keep_alive;
         let skip = app
             .world()
@@ -1804,6 +1818,40 @@ pub(crate) mod tests {
                     .or_default() += 1;
             }
             count!(StandardMaterial, "StandardMaterial");
+            // And whose: a material modified is every mesh wearing it
+            // re-specialised (`check_entities_needing_specialization`).
+            let ids: Vec<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                let users: Vec<Entity> = w
+                    .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                    .iter(w)
+                    .filter(|(_, m)| m.0.id() == id)
+                    .map(|(e, _)| e)
+                    .collect();
+                let name = users.first().map_or("(none)".to_string(), |e| {
+                    let mut at = *e;
+                    for _ in 0..8 {
+                        if let Some(n) = w.get::<Name>(at) {
+                            return n.as_str().to_string();
+                        }
+                        match w.get::<ChildOf>(at) {
+                            Some(p) => at = p.parent(),
+                            None => break,
+                        }
+                    }
+                    "(unnamed)".into()
+                });
+                *mods
+                    .entry(format!("material, {} users, {name}", users.len()))
+                    .or_default() += 1;
+            }
             count!(
                 crate::anomaly::visuals::ParticleMaterial,
                 "ParticleMaterial"
@@ -1929,6 +1977,439 @@ pub(crate) mod tests {
         for (name, mean, p99) in stats.iter().take(4) {
             println!("  schedule {name}: {mean:.2} (1% {p99:.2})");
         }
+        // How the frame's systems spread: many near-free ones are the
+        // executor's and their empty queries' cost, not work.
+        let ours: Vec<f64> = v
+            .iter()
+            .filter(|(n, _)| n.starts_with("extraction::"))
+            .map(|(_, ms)| ms / frames)
+            .collect();
+        for (lo, hi) in [(0.0, 0.005), (0.005, 0.02), (0.02, 0.1), (0.1, f64::MAX)] {
+            let n: Vec<&f64> = ours.iter().filter(|m| **m >= lo && **m < hi).collect();
+            println!(
+                "  game systems {:>5.3}..{:<5} ms: {:4} of them, {:6.2} ms a frame",
+                lo,
+                if hi == f64::MAX {
+                    "".to_string()
+                } else {
+                    format!("{hi}")
+                },
+                n.len(),
+                n.iter().copied().sum::<f64>()
+            );
+        }
+        // The near-free ones by module: where run conditions would pay.
+        let mut groups: std::collections::BTreeMap<String, (usize, f64)> = default();
+        for (name, ms) in &v {
+            let ms = ms / frames;
+            if !name.starts_with("extraction::") || ms >= 0.02 {
+                continue;
+            }
+            let module: Vec<&str> = name.split("::").take(3).collect();
+            let g = groups
+                .entry(module[..module.len().min(2)].join("::"))
+                .or_default();
+            g.0 += 1;
+            g.1 += ms;
+        }
+        if let Ok(out) = std::env::var("SYSTEMS_OUT") {
+            let lines: Vec<String> = v
+                .iter()
+                .map(|(n, ms)| format!("{:.4} {n}", ms / frames))
+                .collect();
+            std::fs::write(out, lines.join("\n")).unwrap();
+        }
+        let mut groups: Vec<_> = groups.into_iter().collect();
+        groups.sort_by(|a, b| b.1.1.total_cmp(&a.1.1));
+        println!("  near-free game systems by module (count, ms a frame):");
+        for (module, (n, ms)) in groups.iter().take(30) {
+            println!("    {n:4} {ms:6.3}  {module}");
+        }
+    }
+
+    /// Mesh entities in a settled valley by what they belong to (their
+    /// root's name), and how many of those roots move or can be handled:
+    /// what merging static props per material could save
+    /// (`cargo test --lib mesh_census -- --ignored --nocapture`,
+    /// `BUDGET_MAP` for another valley).
+    #[test]
+    #[ignore = "census: prints, asserts nothing"]
+    fn mesh_census() {
+        let _counting = counted();
+        let map = std::env::var("BUDGET_MAP").unwrap_or("marrow_creek".into());
+        let mut app = client_threads(&map, "clearing", None);
+        settle(&mut app);
+        let w = app.world_mut();
+        let meshes: Vec<Entity> = w.query_filtered::<Entity, With<Mesh3d>>().iter(w).collect();
+        let mut by_root: HashMap<String, (usize, usize)> = HashMap::new();
+        let mut roots: HashMap<String, std::collections::HashSet<Entity>> = HashMap::new();
+        // An unnamed root's meshes by their own (or nearest) name.
+        let mut unnamed: HashMap<String, usize> = HashMap::new();
+        let mut moving = 0;
+        for e in &meshes {
+            let mut root = *e;
+            let mut dynamic = false;
+            loop {
+                if w.get::<avian3d::prelude::RigidBody>(root)
+                    .is_some_and(|b| !b.is_static())
+                {
+                    dynamic = true;
+                }
+                match w.get::<ChildOf>(root) {
+                    Some(p) => root = p.parent(),
+                    None => break,
+                }
+            }
+            let name = w
+                .get::<Name>(root)
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            roots.entry(name.clone()).or_default().insert(root);
+            if name == "(unnamed)" && std::env::var_os("CENSUS_COMPONENTS").is_some() {
+                let names: Vec<String> = w
+                    .inspect_entity(*e)
+                    .map(|it| {
+                        it.map(|c| {
+                            c.name()
+                                .to_string()
+                                .rsplit("::")
+                                .next()
+                                .unwrap_or("")
+                                .to_string()
+                        })
+                        .collect()
+                    })
+                    .unwrap_or_default();
+                *unnamed.entry(names.join(",")).or_default() += 1;
+                let path = w
+                    .get::<Mesh3d>(*e)
+                    .and_then(|m| w.resource::<AssetServer>().get_path(m.0.id()))
+                    .map_or("(made in code)".to_string(), |p| {
+                        p.path().to_string_lossy().to_string()
+                    });
+                *unnamed.entry(format!("mesh from {path}")).or_default() += 1;
+            }
+            if name == "(unnamed)" {
+                let mut at = *e;
+                let mut own = format!(
+                    "(no name; {} components)",
+                    w.entity(at).archetype().component_count()
+                );
+                for _ in 0..8 {
+                    if let Some(n) = w.get::<Name>(at) {
+                        own = n.to_string();
+                        break;
+                    }
+                    match w.get::<ChildOf>(at) {
+                        Some(p) => at = p.parent(),
+                        None => break,
+                    }
+                }
+                *unnamed.entry(own).or_default() += 1;
+            }
+            let entry = by_root.entry(name).or_default();
+            entry.0 += 1;
+            if dynamic {
+                entry.1 += 1;
+                moving += 1;
+            }
+        }
+        let mut v: Vec<_> = by_root.into_iter().collect();
+        v.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+        println!(
+            "{map}: {} mesh entities, {moving} under a moving body; by root (meshes, moving):",
+            meshes.len()
+        );
+        for (name, (n, m)) in v.iter().take(60) {
+            println!(
+                "  {n:6} {m:6}  {name} ({} roots)",
+                roots.get(name).map_or(0, |r| r.len())
+            );
+        }
+        let mut u: Vec<_> = unnamed.into_iter().collect();
+        u.sort_by(|a, b| b.1.cmp(&a.1));
+        println!("unnamed roots' meshes by their own name:");
+        for (name, n) in u.iter().take(40) {
+            println!("  {n:6}  {name}");
+        }
+    }
+
+    /// What `blink::head_in_solid` costs at the busy moment's head (it
+    /// runs every frame): under a millisecond. A sphere tested against the
+    /// whole map's heightfield was 28 ms (blink alone was 25 ms of a 78 ms
+    /// main schedule); `world::sphere_in_world` asks the heightmap for the
+    /// ground instead. Prints what each query costs there, and which
+    /// colliders' boxes reach the head.
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_head_test_is_cheap() {
+        use avian3d::prelude::*;
+        let _one_at_a_time = heavy();
+        let mut app = busy_scene("marrow_creek");
+        app.update();
+        let w = app.world_mut();
+        let at = w
+            .query_filtered::<&GlobalTransform, With<crate::rig::RigHead>>()
+            .iter(w)
+            .next()
+            .map(|g| g.translation())
+            .expect("a head");
+        let zone = w.resource::<crate::world::Zone>().clone();
+        let terrain = w
+            .query_filtered::<Entity, With<crate::world::TerrainCollider>>()
+            .iter(w)
+            .next();
+        let mut state = bevy::ecs::system::SystemState::<SpatialQuery>::new(w);
+        let spatial = state.get(w).expect("the spatial query");
+        let n = 50;
+        let t0 = std::time::Instant::now();
+        let mut hits = 0;
+        for _ in 0..n {
+            hits += usize::from(super::super::blink::head_in_solid(
+                &spatial, &zone, terrain, at,
+            ));
+        }
+        let full = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.shape_intersections_callback(
+                &Collider::sphere(0.09),
+                at,
+                Quat::IDENTITY,
+                &filter,
+                |_| {
+                    any = true;
+                    false
+                },
+            );
+            hits += usize::from(any);
+        }
+        let early = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let mut any = false;
+            spatial.point_intersections_callback(at, &filter, |_| {
+                any = true;
+                false
+            });
+            hits += usize::from(any);
+        }
+        let point = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "head at {at}: head_in_solid {full:.3} ms, early-out {early:.3} ms, \
+             a point {point:.3} ms ({hits} hits)"
+        );
+        assert!(
+            full < 1.0,
+            "head_in_solid {full:.3} ms a call: it runs every frame"
+        );
+        // Which colliders a head-sized box reaches, and the sphere test's
+        // cost against each alone.
+        let r = Vec3::splat(0.09);
+        let t0 = std::time::Instant::now();
+        for _ in 0..n {
+            let _ = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        }
+        let boxes = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        let t0 = std::time::Instant::now();
+        let mut near_hits = 0;
+        for _ in 0..n {
+            if spatial
+                .project_point(at, true, &filter)
+                .is_some_and(|p| p.is_inside || p.point.distance(at) < 0.09)
+            {
+                near_hits += 1;
+            }
+        }
+        let project = t0.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        println!(
+            "  a box query {boxes:.3} ms; project_point {project:.3} ms ({near_hits} within 9 cm); \
+             Collider::sphere's own box {:?}",
+            Collider::sphere(0.09).aabb(at, Quat::IDENTITY)
+        );
+        let near = spatial.aabb_intersections_with_aabb(ColliderAabb::new(at, r));
+        println!("  {} colliders' boxes reach the head's", near.len());
+        let names: Vec<(Entity, String)> = near
+            .iter()
+            .map(|e| {
+                let n = w
+                    .get::<Name>(*e)
+                    .map_or("(unnamed)".to_string(), |n| n.to_string());
+                let kind = w
+                    .get::<Collider>(*e)
+                    .map_or("?".to_string(), |c| format!("{:?}", c.shape().shape_type()));
+                (*e, format!("{n} [{kind}]"))
+            })
+            .collect();
+        for (e, name) in names {
+            let (Some(c), Some(p), Some(r)) = (
+                w.get::<Collider>(e),
+                w.get::<Position>(e),
+                w.get::<Rotation>(e),
+            ) else {
+                println!("    {name}: no collider pose");
+                continue;
+            };
+            let sphere = Collider::sphere(0.09);
+            let t0 = std::time::Instant::now();
+            for _ in 0..10 {
+                let _ = avian3d::collision::collider::contact_query::intersection_test(
+                    c,
+                    p.0,
+                    *r,
+                    &sphere,
+                    at,
+                    Quat::IDENTITY,
+                );
+            }
+            let ms = t0.elapsed().as_secs_f64() * 100.0;
+            println!(
+                "    {name}: {ms:.3} ms a test, layers {:?}",
+                w.get::<CollisionLayers>(e).map(|l| l.memberships)
+            );
+        }
+    }
+
+    /// No material many meshes wear is rewritten (nearly) every frame in
+    /// a busy moment: each write is every one of them re-specialised on the
+    /// main thread. The robots' shared shell was, as the day's light crept
+    /// (1.4 ms a frame of `check_entities_needing_specialization` in
+    /// Marrow Creek's busy moment, with tracing).
+    #[test]
+    #[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+    fn gauge_no_shared_material_rewritten_each_frame() {
+        let _counting = counted();
+        let mut app = busy_scene("marrow_creek");
+        let keep_alive = crate::perf::fight::keep_alive;
+        let frames = 20;
+        let mut writes: HashMap<AssetId<StandardMaterial>, usize> = HashMap::new();
+        // What a rewritten material's write changed (its fields, as Debug
+        // shows them), for the failure to say which writer it is.
+        let mut before: HashMap<AssetId<StandardMaterial>, String> = HashMap::new();
+        let mut what: HashMap<AssetId<StandardMaterial>, std::collections::BTreeSet<String>> =
+            HashMap::new();
+        for _ in 0..frames {
+            keep_alive(&mut app);
+            app.update();
+            let w = app.world_mut();
+            for (id, m) in w.resource::<Assets<StandardMaterial>>().iter() {
+                let now = format!("{m:?}");
+                if let Some(old) = before.get(&id).filter(|o| **o != now) {
+                    let diff = now
+                        .split(", ")
+                        .filter(|f| !old.split(", ").any(|g| g == *f))
+                        .map(|f| f.split(':').next().unwrap_or(f).trim().to_string());
+                    what.entry(id).or_default().extend(diff);
+                }
+                before.insert(id, now);
+            }
+            let ids: std::collections::HashSet<AssetId<StandardMaterial>> = w
+                .resource_mut::<Messages<AssetEvent<StandardMaterial>>>()
+                .iter_current_update_messages()
+                .filter_map(|e| match e {
+                    AssetEvent::Modified { id } => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            for id in ids {
+                *writes.entry(id).or_default() += 1;
+            }
+        }
+        let w = app.world_mut();
+        let mut wrong = Vec::new();
+        for (id, n) in writes {
+            if n * 4 < frames * 3 {
+                continue;
+            }
+            let users: Vec<Entity> = w
+                .query::<(Entity, &MeshMaterial3d<StandardMaterial>)>()
+                .iter(w)
+                .filter(|(_, m)| m.0.id() == id)
+                .map(|(e, _)| e)
+                .collect();
+            if users.len() < 4 {
+                continue;
+            }
+            let name = w
+                .get::<Name>(users[0])
+                .or_else(|| {
+                    w.get::<ChildOf>(users[0])
+                        .and_then(|p| w.get::<Name>(p.parent()))
+                })
+                .map_or("(unnamed)".to_string(), |n| n.to_string());
+            wrong.push(format!(
+                "{name}'s material ({} meshes) written in {n} of {frames} frames, changing {:?}",
+                users.len(),
+                what.get(&id)
+            ));
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// No game system takes more than `SYSTEM_SHARE` of the main
+    /// schedule at any valley's busy moment, timed by Bevy's own
+    /// per-system spans: a share, which survives a busy machine and the
+    /// spans' own cost, where milliseconds don't. One system at 25 ms (the
+    /// eyes' head test, 32% of the frame) reached a playtest build; this
+    /// fails it, and names the system and its valley. Today's biggest game
+    /// system is about 1% (`wildlife::visuals::build_far`). Needs the
+    /// spans: `cargo test --lib --features systime -- --ignored
+    /// gauge_game_systems`.
+    #[cfg(feature = "systime")]
+    #[test]
+    #[ignore = "gauge: cargo test --lib --features systime -- --ignored gauge_game_systems"]
+    fn gauge_game_systems_hold_their_share() {
+        use bevy::log::tracing_subscriber::layer::SubscriberExt;
+        const SYSTEM_SHARE: f64 = 0.02;
+        let _one_at_a_time = heavy();
+        let times = SystemTimes::default();
+        let subscriber = bevy::log::tracing_subscriber::registry().with(times.clone());
+        bevy::log::tracing::subscriber::set_global_default(subscriber).unwrap();
+        let mut wrong = Vec::new();
+        for map in [
+            "marrow_creek",
+            "kettle_pass",
+            "cinder_works",
+            "sallow_reservoir",
+            "rime_fell",
+        ] {
+            let t = times.clone();
+            let stats = busy_moment_with(map, move || t.0.lock().unwrap().clear());
+            let frame = stats
+                .iter()
+                .find(|(n, _, _)| *n == "main schedule")
+                .map_or(0.0, |s| s.1);
+            let mut ours: Vec<(String, f64)> = times
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(n, _)| n.starts_with("extraction::"))
+                .map(|(n, ms)| (n.clone(), ms / 450.0))
+                .collect();
+            ours.sort_by(|a, b| b.1.total_cmp(&a.1));
+            println!("{map}: main schedule {frame:.2} ms; the heaviest game systems:");
+            for (name, ms) in ours.iter().take(6) {
+                println!(
+                    "    {ms:7.3} ms ({:4.1}%)  {name}",
+                    100.0 * ms / frame.max(1e-9)
+                );
+            }
+            for (name, ms) in &ours {
+                if *ms > frame * SYSTEM_SHARE {
+                    wrong.push(format!(
+                        "{map}: {name} {ms:.2} ms a frame, {:.0}% of {frame:.1}",
+                        100.0 * ms / frame
+                    ));
+                }
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "game systems over {}% of the frame: {wrong:#?}",
+            SYSTEM_SHARE * 100.0
+        );
     }
 
     /// A busy moment in Marrow Creek holds its CPU budget: the frame in

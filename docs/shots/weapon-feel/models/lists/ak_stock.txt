@@ -1,0 +1,4 @@
+before 0b59d5c8
+after  5de61c40
+ak_stock_receiver | Weapon feel | The stock rounded across, shading from comb to belly | --camera 40,0,262,0,0 --gallery ak74,25,0.4,0.05
+ak_stock_side | Weapon feel | The same, side on | --camera 40,0,262,0,0 --gallery ak74,0,0.75

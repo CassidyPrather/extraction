@@ -15,6 +15,7 @@ use crate::world::buildings::{Door, DoorLeaf};
 
 fn app(save: Option<std::path::PathBuf>) -> App {
     let opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         save,
         ..Default::default()
@@ -922,7 +923,7 @@ fn a_heavy_tears_a_hole_in_a_wall_and_it_stays_until_the_surge() {
 fn knife_facing(target: Vec3, out: Vec3, back: f32) -> (crate::vr_harness::Vr, Vec3, Quat) {
     use crate::interact::GripRole;
     use crate::rig::Side;
-    let mut vr = crate::vr_harness::Vr::new("marrow_creek");
+    let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
     let zone = vr.app.world().resource::<crate::world::Zone>().clone();
     let flat = out.with_y(0.0).normalize();
     let stand = target + flat * back;
@@ -2158,4 +2159,51 @@ fn what_rested_on_a_crate_falls_when_it_breaks() {
         "it fell when the crate went ({y1:.2}, the lid was at {:.2})",
         top.y
     );
+}
+
+/// Not a check: where Marrow Creek's counters' drawers and cabinet doors
+/// are, and which way they face, for the shots.
+#[test]
+#[ignore]
+fn list_counters() {
+    let mut app = app(None);
+    run(&mut app, 3);
+    for (n, m) in app
+        .world_mut()
+        .query::<(&Name, &crate::world::hinge::Moving)>()
+        .iter(app.world())
+    {
+        let front = m.rest.rotation * Vec3::NEG_Z;
+        println!(
+            "counter {n} at {:.2} front {:.2}",
+            m.rest.translation, front
+        );
+    }
+}
+
+#[test]
+fn counters_drawers_and_doors_are_drawn_where_they_hang() {
+    // Each moving part's node is drawn from the part's own space back into
+    // its model's: the node's origin (a door's or a window leaf's hinge, a
+    // drawer's middle) lands on the part itself, shut, in every counter
+    // and window.
+    let mut app = app(None);
+    run(&mut app, 3);
+    let mut checked = 0;
+    for (m, d) in app
+        .world_mut()
+        .query::<(&crate::world::hinge::Moving, &super::wood::Drawn)>()
+        .iter(app.world())
+    {
+        let name = d.model.expect("a moving part draws its node");
+        let origin = crate::world::hinge::node_origin(name).expect("a node we move");
+        let drawn = (m.rest * d.at).transform_point(origin);
+        assert!(
+            drawn.distance(m.rest.translation) < 1e-3,
+            "{name} is drawn {:.3} m off where it hangs",
+            drawn.distance(m.rest.translation)
+        );
+        checked += 1;
+    }
+    assert!(checked >= 10, "Marrow's counters' parts ({checked})");
 }

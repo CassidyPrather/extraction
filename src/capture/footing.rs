@@ -36,8 +36,10 @@ pub const BAND: f32 = 0.006;
 pub const FLOAT: f32 = 0.015;
 /// How far a wide foot may sink into the ground (m).
 pub const SINK_WIDE: f32 = 0.04;
-/// How far a wide foot may sink into a floor or another model (m).
-pub const SINK_FLOOR: f32 = 0.012;
+/// How far a wide foot may sink into a floor or another model (m): the
+/// floorboards stand 3 cm proud of the plinth the furniture and the
+/// bodies stand on (`Builder::plinth`), so it beds evenly into them.
+pub const SINK_FLOOR: f32 = 0.035;
 /// How far a slender foot (a leg, a post) may go into the ground (m): a
 /// post is set in it.
 pub const SINK_SLENDER: f32 = 0.5;
@@ -79,7 +81,11 @@ pub fn exempt(name: &str) -> bool {
         "stove_pipe_rack",
         "drying_line",
         "cloth_pinned",
+        // Nailed on its bed's foot (Mirek's name), not standing.
+        "bed_name_",
         "med_cabinet",
+        // Held by its gate post.
+        "barrier_arm",
         "rubble",
         "ash_heap",
         "beam_fallen",
@@ -103,6 +109,16 @@ pub fn exempt(name: &str) -> bool {
     ]
     .iter()
     .any(|e| name.contains(e))
+}
+
+/// Things set into the ground (a raised bed's frame, a stump, a pump's
+/// pipe): a wide foot may go 15 cm in.
+pub fn dug_in(name: &str) -> bool {
+    // (A gate's posts are set in the ground: at a road's edge their pads
+    // can't cut into the road.)
+    ["garden_bed", "chopping_block", "hand_pump", "gate_post"]
+        .iter()
+        .any(|e| name.contains(e))
 }
 
 /// A model's feet and triangles, in its own space.
@@ -132,12 +148,23 @@ pub fn shape(path: &std::path::Path) -> Option<Shape3> {
     if tris.is_empty() {
         return None;
     }
-    let low: Vec<Vec3> = tris
+    // The lowest band's vertices, and points filling its faces (a box's
+    // underside is four corners: they'd be four tiny feet, not one).
+    let mut low: Vec<Vec3> = tris
         .iter()
         .flatten()
         .filter(|p| p.y < lo.y + BAND)
         .copied()
         .collect();
+    for t in tris.iter().filter(|t| t.iter().all(|p| p.y < lo.y + BAND)) {
+        let n = ((t[1] - t[0]).length().max((t[2] - t[0]).length()) / 0.03).ceil() as usize;
+        for i in 0..=n.min(40) {
+            for j in 0..=(n.min(40) - i) {
+                let (u, v) = (i as f32 / n as f32, j as f32 / n as f32);
+                low.push(t[0] + (t[1] - t[0]) * u + (t[2] - t[0]) * v);
+            }
+        }
+    }
     Some(Shape3 {
         feet: clusters(&low, 0.03),
         tris,
@@ -316,6 +343,35 @@ fn box_top(at: &Transform, half: Vec3, x: f32, z: f32, top: f32, bottom: f32) ->
 }
 
 impl Site {
+    /// Whether another model's upward face comes up to a wide foot
+    /// anywhere under it (its points' bounds), leaving model `skip` out.
+    fn under_area(&self, skip: usize, pts: &[(f32, Vec3, String)]) -> bool {
+        let (lo, hi) = pts.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(l, h), p| (l.min(p.1), h.max(p.1)),
+        );
+        let y = lo.y;
+        self.models.iter().enumerate().any(|(i, m)| {
+            i != skip
+                && m.lo.x <= hi.x
+                && m.hi.x >= lo.x
+                && m.lo.z <= hi.z
+                && m.hi.z >= lo.z
+                && m.tris.iter().any(|t| {
+                    let n = (t[1] - t[0]).cross(t[2] - t[0]);
+                    n.y > 0.0
+                        && t.iter().any(|p| {
+                            p.x >= lo.x
+                                && p.x <= hi.x
+                                && p.z >= lo.z
+                                && p.z <= hi.z
+                                && p.y >= y - FLOAT
+                                && p.y <= y + SINK_FLOOR
+                        })
+                })
+        })
+    }
+
     /// What's on the vertical through `p`, leaving model `skip` out: the
     /// surfaces under it that could hold it (height, what), and how deep
     /// it is in a solid (the terrain over it, a box round it), if it is.
@@ -326,6 +382,9 @@ impl Site {
         p: Vec3,
     ) -> (Vec<(f32, String)>, Option<(f32, String)>) {
         let (top, bottom) = (p.y + 0.5, p.y - 1.0);
+        // The terrain buries a foot however deep (only half a metre was
+        // seen: gate posts a metre under a road's bank passed).
+        let ground_top = p.y + 5.0;
         let mut below = Vec::new();
         let mut inside: Option<(f32, String)> = None;
         let mut deeper = |d: f32, what: &str| {
@@ -335,7 +394,7 @@ impl Site {
         };
         if self.terrain {
             let g = zone.ground(p.x, p.z);
-            if g > p.y && g < top {
+            if g > p.y && g < ground_top {
                 deeper(g - p.y, "ground");
             } else if g >= bottom && g <= p.y {
                 below.push((g, "ground".to_string()));
@@ -455,8 +514,11 @@ pub fn check_site(zone: &Zone, map: &str, site: &Site) -> Vec<Finding> {
         let mut worst: Option<Finding> = None;
         for (gaps, sunk, wide) in &feet {
             let fault = if let Some((d, w, on)) = sunk {
-                let limit = if !wide {
+                let limit = if !wide || site.name.contains("_drowned") {
+                    // (A drowned house's things stand in its silt.)
                     SINK_SLENDER
+                } else if on == "ground" && dug_in(&m.name) {
+                    0.15
                 } else if on == "ground" {
                     SINK_WIDE
                 } else {
@@ -464,10 +526,13 @@ pub fn check_site(zone: &Zone, map: &str, site: &Site) -> Vec<Finding> {
                 };
                 (*d > limit).then(|| (-*d, *w, on.clone()))
             } else {
-                // A foot touches if any of its points does.
+                // A foot touches if any of its points does, or (a wide
+                // one) if anything under it comes up to it: a counter
+                // top rests on its cabinets' thin sides.
                 gaps.iter()
                     .min_by(|a, b| a.0.total_cmp(&b.0))
                     .filter(|g| g.0 > FLOAT)
+                    .filter(|_| !(*wide && site.under_area(i, gaps)))
                     .cloned()
             };
             if let Some((gap, at, on)) = fault {
@@ -753,14 +818,22 @@ mod tests {
     fn placed_props_stand_on_what_is_under_them() {
         let mut shapes = Shapes::default();
         let mut bad = Vec::new();
+        let mut seen = Vec::new();
         for map in maps() {
             let all = findings(&map, &mut shapes);
             println!("{map}: {} faults", all.len());
             for f in all {
                 println!("    {f}");
                 if !KNOWN.iter().any(|k| f.contains(k)) {
-                    bad.push(f);
+                    bad.push(f.clone());
                 }
+                seen.push(f);
+            }
+        }
+        // Lines in KNOWN nothing matches any more: take them out.
+        for k in KNOWN {
+            if !seen.iter().any(|l| l.contains(k)) {
+                println!("fixed, out of KNOWN: {k}");
             }
         }
         assert!(
@@ -772,62 +845,15 @@ mod tests {
 
     /// Faults waiting on their owners, by text in their line.
     const KNOWN: &[&str] = &[
-        // The truck is lowered so its rear steps reach the ground behind
-        // it, which sinks its wheels where the ground falls away
-        // (`raid::truck::parked`); standing it on its wheels waits on a
-        // ladder that reaches the ground (Models, next round).
-        " truck: ",
-        // The hero landmarks' insides stand on the landmarks' own floors,
-        // which aren't boxes; the rest are what the first round left:
-        // clutter and the lying remains to set down (Models, next round).
-        "blast_furnace: mud_gun",
-        "bunker_marrow: counter_top",
-        "cabin_log (keepers_cabin): lunch_pail",
-        "cabin_log: bed_name_mirek",
-        "cabin_log: lunch_pail",
-        "depot_marrow: depot_intake_facade",
-        "factory_hall: crate_army",
-        "farmhouse: books",
-        "farmhouse: counter_top",
-        "farmhouse: lunch_pail",
-        "farmhouse_damaged: counter_top",
-        "funicular_lower (valley_station): counter_top",
-        "guard_booth (gate_booth): counter_top",
-        "guard_booth: counter_top",
-        "house_brick (barracks): books",
-        "house_brick (barracks): counter_top",
-        "house_brick (barracks): reading_glasses",
-        "house_brick (foreman): counter_top",
-        "house_brick (keeper): counter_top",
-        "house_brick (keeper): reading_glasses",
-        "house_brick (mine_office): books",
-        "house_brick (mine_office): counter_top",
-        "house_brick (post_office): books",
-        "house_brick (post_office): counter_top",
-        "house_brick: counter_top",
-        "house_brick_damaged: counter_top",
-        "house_plank (station_house): counter_top",
-        "house_plank: counter_top",
-        "house_plank: helmet_lamp",
-        "house_plank: lunch_pail",
-        "house_plank: reading_glasses",
-        "house_plank_damaged: counter_top",
-        "mast_hut (col_hut): counter_top",
-        "mast_hut (hairpin_hut): counter_top",
-        "mast_hut: counter_top",
-        "ore_mill (ore_mill): crate_army",
-        "ore_mill (ore_mill): crate_slat",
+        // Marrow's road climbs 0.2 m per metre through its gate: the +X
+        // post, on the road's cells, stands 26 mm over its downhill side
+        // (`terrain::level_posts` moves a road's cells 5 cm at most). An
+        // easier grade through the gate would put it down (Map design).
+        "marrow_creek quarantine_gate: gate_post",
+        // By design: a tub's wheel flanges hang inside the rails, 3 cm
+        // below the treads on the rails' heads, so its lowest points are
+        // over the floor between them.
         "ore_mill (ore_mill): mine_tub",
-        "pump_station (gauge_house): ledger_open",
-        "pump_station: ledger_open",
-        "quarantine_gate: barrier_arm",
-        "ropeway_station: barrel",
-        "ropeway_station: rope_coil",
-        "scene Farm barricade: remains_lying",
-        "scene Last fire in the dead wood: remains_lying",
-        "scene The shelter door: remains_lying",
-        "shop (canteen): counter_top",
-        "shop: counter_top",
     ];
 }
 
@@ -841,7 +867,19 @@ mod poses {
         for map in super::maps() {
             let zone = crate::world::Zone::load(&map);
             let truck = crate::raid::truck::base_pose(&zone);
-            print!("{map}: truck {:.2?}", truck.translation);
+            let at = zone
+                .marker(&extraction_core::map::MarkerKind::TruckStop)
+                .map_or([0.0, 0.0], |m| m.at);
+            let level = crate::raid::truck::level_frame(&truck);
+            let fall = |z: f32| {
+                let p = level.transform_point(bevy::math::Vec3::new(0.0, 0.0, z));
+                zone.ground(p.x, p.z)
+            };
+            print!(
+                "{map}: truck {:.2?} (stop {at:?}), ground fall cab to tail {:.2} m",
+                truck.translation,
+                fall(-3.9) - fall(0.8)
+            );
             if map != crate::camp::TRAINING_YARD {
                 let camp = crate::camp::camp_pose(&zone);
                 let (yaw, ..) = camp.rotation.to_euler(bevy::math::EulerRot::YXZ);
@@ -853,5 +891,64 @@ mod poses {
             }
             println!();
         }
+    }
+}
+
+#[cfg(test)]
+mod ladder {
+    use bevy::math::Vec3;
+
+    /// Wherever the truck stands on its wheels, the bed is in reach from
+    /// the ground behind it: the lowest tread at most a step over it, or
+    /// a ramp a body walks up from the tread down to it.
+    #[test]
+    fn the_trucks_steps_reach_the_ground_at_every_stop() {
+        let mut bad = Vec::new();
+        for map in super::maps() {
+            let zone = crate::world::Zone::load(&map);
+            let rvs = zone
+                .map
+                .markers_of(&extraction_core::map::MarkerKind::Rendezvous)
+                .count();
+            let poses = std::iter::once(("base".to_string(), crate::raid::truck::base_pose(&zone)))
+                .chain((0..rvs).map(|i| {
+                    (
+                        format!("rendezvous {i}"),
+                        crate::raid::truck::rv_pose(&zone, i),
+                    )
+                }));
+            for (name, pose) in poses {
+                // Steps and ramp stand level (`raid::truck::level_frame`).
+                let level = crate::raid::truck::level_frame(&pose);
+                let ground = |p: Vec3| {
+                    let w = level.transform_point(p);
+                    zone.ground(w.x, w.z) - level.translation.y
+                };
+                let edge = level
+                    .compute_affine()
+                    .inverse()
+                    .transform_point3(pose.transform_point(Vec3::new(0.0, 0.37, 2.4)));
+                match crate::raid::truck::ladder_steps(&zone, &pose).first() {
+                    None => {
+                        let rise = edge.y - ground(edge + Vec3::Z * 0.15);
+                        if rise > 0.38 {
+                            bad.push(format!("{map} {name}: the lowest tread {rise:.2} m up"));
+                        }
+                    }
+                    Some((size, centre, tilt)) => {
+                        let r = bevy::math::Quat::from_rotation_x(*tilt);
+                        let foot = *centre + r * Vec3::new(0.0, size.y * 0.5, size.z * 0.5);
+                        let gap = foot.y - ground(foot);
+                        if tilt.tan() > 0.65 || gap.abs() > 0.12 {
+                            bad.push(format!(
+                                "{map} {name}: a ramp at {:.0} degrees, its foot {gap:.2} m off the ground",
+                                tilt.to_degrees()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "the bed out of reach:\n{}", bad.join("\n"));
     }
 }

@@ -67,7 +67,9 @@ fn said(mut m: MessageReader<MindShift>, mut s: ResMut<Said>) {
     s.0.extend(m.read().map(|m| (m.robot, m.state)));
 }
 
-/// Every `spawn_*` in `robots/` is on the roster.
+/// Every `spawn_*` in `robots/` is on the roster. (This whole file is test
+/// code; marked here too for `asset_path_tests`.)
+#[cfg(test)]
 #[test]
 fn every_machine_is_on_the_intent_roster() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/robots");

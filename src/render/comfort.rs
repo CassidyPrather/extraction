@@ -165,9 +165,6 @@ fn add_wrist_panel(
     >,
 ) {
     for (glove, parts) in &gloves {
-        if glove.ghost {
-            continue;
-        }
         let side = glove.side;
         commands.entity(parts.model).with_child((
             WristPanel(side),

@@ -965,6 +965,21 @@ pub fn under_stepped(map: &MapDef, q: P2) -> bool {
     })
 }
 
+/// A prefab's ground contacts where they're a few posts or blocks with
+/// open ground between (a road through a gate), in its own space: each
+/// one's middle and half extents, x and z. The whole footprint can't take a
+/// pad ([`prefab_wants_pad`]: it would terrace the road), so the terrain
+/// levels a small one under each contact at the prefab's footing
+/// (`terrain::Heightmap::level_posts`).
+pub fn prefab_post_pads(id: &str) -> &'static [([f32; 2], [f32; 2])] {
+    match id {
+        // Each side's road block (x 5.2, 1.4 m square) and the gate post
+        // beside it (x 4.3): `buildings::quarantine_gate`.
+        "quarantine_gate" => &[([-5.04, 0.0], [0.87, 0.7]), ([5.04, 0.0], [0.87, 0.7])],
+        _ => &[],
+    }
+}
+
 /// Whether a prefab wants the ground levelled under it (buildings do;
 /// bridges, gates over roads and the anomaly don't, nor a garden fence:
 /// its posts follow the ground, and a pad levelled for a run that meets a
@@ -1008,6 +1023,37 @@ impl MapDef {
             .filter(move |m| std::mem::discriminant(&m.kind) == std::mem::discriminant(kind))
     }
 
+    /// Where the truck stands: its base stop (rear to the drop) and each
+    /// rendezvous (bed to the valley's middle), with its yaw as the game
+    /// turns it (`Quat::from_rotation_y(yaw)` turning its rear, +Z, that
+    /// way; `raid::truck::base_pose`, `rv_pose`).
+    pub fn truck_stands(&self) -> Vec<(String, P2, f32)> {
+        let ins = self
+            .markers_of(&MarkerKind::Insertion)
+            .next()
+            .map_or([0.0, 0.0], |m| m.at);
+        let yaw_to = |from: P2, to: P2| {
+            let d = crate::geom::sub(to, from);
+            if crate::geom::len(d) < 1e-3 {
+                0.0
+            } else {
+                d[0].atan2(d[1])
+            }
+        };
+        let mut out = Vec::new();
+        for m in self.markers_of(&MarkerKind::TruckStop) {
+            out.push((format!("its stop ({})", m.name), m.at, yaw_to(m.at, ins)));
+        }
+        for m in self.markers_of(&MarkerKind::Rendezvous) {
+            out.push((
+                format!("the rendezvous {}", m.name),
+                m.at,
+                yaw_to(m.at, [0.0, 0.0]),
+            ));
+        }
+        out
+    }
+
     /// Which region a point is in, if any (first match wins).
     /// Loot rolls per spot at `p` (1 outside any region).
     pub fn richness_at(&self, p: P2) -> f32 {
@@ -1032,6 +1078,13 @@ pub const SALLOW_RESERVOIR: &str = include_str!("../../../assets/maps/sallow_res
 /// The fifth (docs/FIFTH_VALLEY.md).
 pub const RIME_FELL: &str = include_str!("../../../assets/maps/rime_fell.ron");
 pub const TRAINING_YARD: &str = include_str!("../../../assets/maps/training_yard.ron");
+/// The test field's id: a valley only tests load, never on [`VALLEYS`],
+/// the career or the truck's way (the game serves it to its own tests
+/// alone). The ground Marrow Creek had before its places were pulled in,
+/// so the mechanics tests that staged scenes on its open meadow keep
+/// theirs.
+pub const TEST_FIELD_ID: &str = "test_field";
+pub const TEST_FIELD: &str = include_str!("../../../assets/test/test_field.ron");
 
 /// Every valley the truck drives to, (map id, map text), in the order a
 /// career meets them. Tests that hold "every valley" to something go over
@@ -1299,9 +1352,9 @@ mod tests {
     #[test]
     fn risk_pays_in_loot() {
         let map = MapDef::from_ron(MARROW_CREEK).unwrap();
-        let village = map.richness_at([5.0, 70.0]);
-        let hollow = map.richness_at([150.0, -40.0]);
-        let rail = map.richness_at([185.0, -215.0]);
+        let village = map.richness_at([-12.0, 45.0]);
+        let hollow = map.richness_at([82.5, -22.0]);
+        let rail = map.richness_at([95.0, -113.8]);
         assert!(village < 1.0, "the village is picked over ({village})");
         assert!(rail > 1.0 && hollow > rail, "{rail} {hollow}");
     }
@@ -1309,15 +1362,15 @@ mod tests {
     #[test]
     fn marrow_creek_parses_and_builds() {
         let map = MapDef::from_ron(MARROW_CREEK).expect("map parses");
-        assert_eq!(map.size, 640.0);
+        assert_eq!(map.size, 388.0);
         assert!(map.markers_of(&MarkerKind::Rendezvous).count() >= 2);
         let hm = Heightmap::build(&map);
         // The creek has water, and the village bridge leaves it alone.
         assert!(
-            hm.water_level([11.0, 10.0]).is_some(),
+            hm.water_level([8.6, -20.2]).is_some(),
             "creek under the bridge"
         );
-        assert!(hm.water_level([5.0, 70.0]).is_none(), "village is dry");
+        assert!(hm.water_level([-12.0, 45.0]).is_none(), "village is dry");
         // Every insertion and rendezvous is on walkable ground.
         for m in map
             .markers
@@ -1335,7 +1388,7 @@ mod tests {
         let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap();
         for rv in map.markers_of(&MarkerKind::Rendezvous) {
             assert!(
-                crate::geom::dist(ins.at, rv.at) > 350.0,
+                crate::geom::dist(ins.at, rv.at) > 350.0 * crate::map_lint::valley_scale(&map),
                 "{} is too close to the insertion",
                 rv.name
             );

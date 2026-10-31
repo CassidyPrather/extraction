@@ -1,6 +1,7 @@
 // Marrow Creek — the first Zone.
 //
-// A forested river valley, 640 m on a side. The truck drops you at the
+// A forested river valley, 388 m on a side, its places pulled in close
+// (docs/MAP_DESIGN.md, "Close enough to walk"). The truck drops you at the
 // south fence; the rendezvous points are all across the creek on the north
 // side. The creek is the spine of the map: three ways across (the road
 // bridge in the village, the ford below the farm, the rail trestle in the
@@ -19,7 +20,7 @@
 (
     name: "Marrow Creek",
     description: "A quarantined river valley. Spruce, birch, rain, and something in the Hollow.",
-    size: 640.0,
+    size: 388.0,
     cell: 1.0,
     base_height: 20.0,
     noise: (seed: 7, amplitude: 4.0, scale: 140.0, octaves: 5, detail: 0.3),
@@ -28,66 +29,71 @@
     fence_inset: 38.0,
 
     features: [
+        // Rises between the quiet places and the machines' ground
+        // (map_openness; the playtest of 28 October, P1): the bank rise
+        // north of the creek's paths in two, the district road through the gap;
+        Ridge(points: [(-84.0, -54.0), (-64.0, -52.0), (-48.0, -50.0)], width: 16.0, height: 6.0),
+        Ridge(points: [(26.0, -36.0), (50.0, -30.0), (66.0, -18.0)], width: 20.0, height: 4.5),
+        // the ford spur between the Village and the ford;
+        Ridge(points: [(56.0, -14.0), (58.0, 0.0), (60.0, 14.0)], width: 16.0, height: 6.0),
+        // and the ford rise along the Old farm's south edge.
+        Ridge(points: [(60.0, -64.0), (95.0, -66.0), (128.0, -70.0)], width: 16.0, height: 5.0),
+        // the Hollow's south rim, between it and the rail yard;
+        Ridge(points: [(66.0, 46.0), (100.0, 42.0), (132.0, 44.0)], width: 14.0, height: 3.5),
         // The valley falls gently from north-west to south-east.
         Tilt(dir: (1.0, 0.6), rise_per_100m: -1.6),
 
         // Radio-mast hill: the landmark you can see through the fog.
-        Hill(at: (-120.0, -175.0), radius: 120.0, height: 22.0),
-        Hill(at: (-60.0, -230.0), radius: 60.0, height: 12.0),
+        Hill(at: (-54.0, -78.8), radius: 66.0, height: 9.0),
+        Hill(at: (-31.0, -128.0), radius: 33.0, height: 6.6),
         // Western ridge above the pumping station.
-        Ridge(points: [(-270.0, 60.0), (-230.0, -20.0), (-235.0, -110.0)], width: 90.0, height: 16.0),
+        Ridge(points: [(-180.0, 50.1), (-140.4, -24.6), (-149.5, -66.3)], width: 49.5, height: 8.8),
         // Low hills around the farm fields, so they feel like a bowl.
-        Hill(at: (250.0, 170.0), radius: 80.0, height: 10.0),
-        Hill(at: (90.0, 220.0), radius: 50.0, height: 6.0),
+        Hill(at: (154.0, 99.4), radius: 44.0, height: 5.5),
+        Hill(at: (64.3, 106.2), radius: 27.5, height: 3.3),
         // Eastern high ground over the Hollow.
-        Hill(at: (262.0, -118.0), radius: 85.0, height: 18.0),
+        Hill(at: (144.1, -64.9), radius: 46.8, height: 9.9),
         // The Hollow: a bowl blown into the hillside.
-        Hill(at: (150.0, -40.0), radius: 55.0, height: -11.0),
+        Hill(at: (82.5, -22.0), radius: 30.3, height: -6.1),
         // Logging-camp knoll.
-        Hill(at: (-175.0, 185.0), radius: 70.0, height: 7.0),
+        Hill(at: (-100.8, 108.5), radius: 38.5, height: 3.9),
         // Rises round the Village that keep its fields out of the machines'
         // sight and its fights out of their hearing (map_openness; the
         // playtest of 28 October: "a couple of points in an otherwise
         // empty plane", "gunfights ... attract the entirety of the
         // robots"). The bank rise north of the creek, between the Village
         // and the north bank's work site and spotter;
-        Ridge(points: [(-120.0, -28.0), (-70.0, -36.0), (-25.0, -41.0)], width: 30.0, height: 5.5),
         // the ford rise east, between the Village and the ford field;
-        Ridge(points: [(78.0, 30.0), (84.0, 75.0), (86.0, 125.0)], width: 30.0, height: 5.0),
         // the clearing rise west, between the Village and the forest
         // clearing's site.
-        Ridge(points: [(-78.0, 58.0), (-75.0, 100.0), (-72.0, 140.0)], width: 22.0, height: 4.5),
         // The spotter's rise east of the district road north of the creek,
         // between the road and the Bank spotter;
-        Ridge(points: [(34.0, -10.0), (40.0, -40.0), (44.0, -70.0)], width: 22.0, height: 4.0),
         // the lane bank west of the road south of the Village, the fields
         // to the gate;
-        Ridge(points: [(-22.0, 118.0), (-20.0, 140.0), (-16.0, 165.0)], width: 20.0, height: 3.5),
         // and the rail yard's spoil heap, the ballast left in a hill.
-        Hill(at: (150.0, -205.0), radius: 26.0, height: 4.5),
 
         // The creek valley. Wide, gentle valley first, then the bed.
         Channel(
-            points: [(-330.0, -60.0), (-250.0, -25.0), (-170.0, -15.0), (-90.0, 10.0),
-                     (-20.0, 15.0), (40.0, 5.0), (110.0, 30.0), (190.0, 55.0), (330.0, 70.0)],
-            width: 110.0, depth: 4.0,
+            points: [(-181.5, -33.0), (-160.0, -34.7), (-80.0, -25.0), (-40.0, -14.0),
+                     (-21.7, -15.3), (30.6, -13.2), (55.2, 25.8), (104.7, 28.9), (181.5, 38.5)],
+            width: 60.5, depth: 2.2,
         ),
         Channel(
-            points: [(-330.0, -60.0), (-250.0, -25.0), (-170.0, -15.0), (-90.0, 10.0),
-                     (-20.0, 15.0), (40.0, 5.0), (110.0, 30.0), (190.0, 55.0), (330.0, 70.0)],
-            width: 16.0, depth: 2.2,
+            points: [(-181.5, -33.0), (-160.0, -34.7), (-80.0, -25.0), (-40.0, -14.0),
+                     (-21.7, -15.3), (30.6, -13.2), (55.2, 25.8), (104.7, 28.9), (181.5, 38.5)],
+            width: 16.0, depth: 1.6,
         ),
 
         // Building pads.
-        Plateau(polygon: [(-200.0, 140.0), (-130.0, 140.0), (-130.0, 200.0), (-200.0, 200.0)], blend: 30.0),
-        Plateau(polygon: [(140.0, 120.0), (210.0, 120.0), (210.0, 175.0), (140.0, 175.0)], blend: 20.0),
-        Plateau(polygon: [(-225.0, 4.0), (-175.0, 4.0), (-175.0, 40.0), (-225.0, 40.0)], blend: 30.0),
-        Plateau(polygon: [(120.0, -235.0), (250.0, -235.0), (250.0, -175.0), (120.0, -175.0)], blend: 25.0),
-        Plateau(polygon: [(-10.0, -245.0), (55.0, -245.0), (55.0, -200.0), (-10.0, -200.0)], blend: 20.0),
-        Plateau(polygon: [(-255.0, -150.0), (-225.0, -150.0), (-225.0, -120.0), (-255.0, -120.0)], blend: 20.0),
-        Plateau(polygon: [(-285.0, -285.0), (-215.0, -285.0), (-215.0, -225.0), (-285.0, -225.0)], blend: 15.0),
+        Plateau(polygon: [(-124.6, 68.5), (-55.8, 63.5), (-55.8, 123.5), (-125.8, 123.5)], blend: 16.5),
+        Plateau(polygon: [(59.0, 54.8), (129.0, 54.8), (129.0, 109.8), (59.0, 109.8)], blend: 11.0),
+        Plateau(polygon: [(-135.0, -5.9), (-85.0, -5.9), (-85.0, 30.1), (-135.0, 30.1)], blend: 16.5),
+        Plateau(polygon: [(44.0, -136.0), (159.0, -133.1), (158.5, -72.8), (52.8, -88.1)], blend: 13.8),
+        Plateau(polygon: [(-21.2, -137.0), (43.8, -137.0), (43.8, -92.3), (-21.2, -92.6)], blend: 11.0),
+        Plateau(polygon: [(-156.0, -92.0), (-136.0, -92.0), (-136.0, -72.0), (-156.0, -72.0)], blend: 20.0),
+        Plateau(polygon: [(-175.9, -173.1), (-107.0, -174.1), (-107.0, -114.1), (-177.0, -114.1)], blend: 8.2),
         // The survey post's pad on the Hollow's north rim.
-        Plateau(polygon: [(92.0, -10.0), (110.0, -10.0), (110.0, 6.0), (92.0, 6.0)], blend: 12.0),
+        Plateau(polygon: [(28.8, 5.8), (42.5, 8.0), (43.6, 22.8), (36.6, 14.4)], blend: 6.6),
     ],
 
     roads: [
@@ -95,39 +101,33 @@
         // into the village, over the bridge, north to the bus depot.
         (
             name: "District road", kind: Asphalt, width: 7.0, smoothing: 25.0,
-            points: [(40.0, 330.0), (40.0, 270.0), (30.0, 200.0), (10.0, 130.0), (0.0, 80.0),
-                     (5.0, 40.0), (12.0, 5.0), (15.0, -40.0), (5.0, -110.0), (15.0, -170.0),
-                     (25.0, -215.0), (25.0, -330.0)],
-            bridges: [(at: (11.0, 10.0), length: 28.0)],
+            points: [(22.0, 207.3), (22.0, 148.5), (17.0, 118.0), (6.0, 80.0), (-2.2, 48.5), (2.8, 8.5), (8.6, -21.8), (2.8, -60.5), (3.8, -67.1), (13.8, -107.0), (13.8, -198.4)],
+            bridges: [(at: (8.6, -20.2), length: 28.0)],
         ),
         // Farm lane east off the district road.
         (
             name: "Farm lane", kind: Dirt, width: 4.0,
-            points: [(28.0, 190.0), (80.0, 175.0), (140.0, 155.0), (175.0, 150.0)],
+            points: [(13.9, 94.2), (44.0, 96.3), (59.0, 89.8), (94.0, 84.8)],
         ),
         // Logging road west through the forest.
         (
             name: "Logging road", kind: Gravel, width: 5.0,
-            points: [(20.0, 160.0), (-40.0, 165.0), (-110.0, 175.0), (-165.0, 170.0)],
+            points: [(11.2, 89.0), (-22.0, 90.8), (-35.8, 98.5), (-90.8, 93.5)],
         ),
         // Village to pumping station along the south bank.
         (
             name: "Station road", kind: Gravel, width: 5.0,
-            points: [(2.0, 60.0), (-60.0, 45.0), (-120.0, 30.0), (-170.0, 25.0), (-187.0, 22.5)],
+            points: [(-0.2, 28.5), (-53.4, 16.9), (-30.0, 20.1), (-80.0, 15.1), (-97.0, 12.6)],
         ),
         // Farm track down to the ford and up the far side to the Hollow and the rail yard.
         (
             name: "Ford track", kind: Dirt, width: 3.5, smoothing: 10.0,
-            points: [(175.0, 140.0), (160.0, 90.0), (150.0, 45.0), (150.0, 15.0), (178.0, -12.0),
-                     (198.0, -60.0), (198.0, -110.0), (190.0, -160.0), (185.0, -190.0)],
+            points: [(94.0, 74.8), (88.0, 50.0), (100.0, 22.0), (116.0, -6.0), (128.0, -40.0), (112.4, -65.5), (95.0, -88.8)],
         ),
         // Service road from the bus depot to the radio mast.
         (
             name: "Mast road", kind: Gravel, width: 4.0, smoothing: 35.0,
-            points: [(15.0, -170.0), (-2.0, -165.0), (-47.0, -134.0), (-77.0, -117.0),
-                     (-106.0, -114.0), (-131.0, -121.0), (-148.0, -135.0), (-156.0, -153.0),
-                     (-156.0, -171.0), (-149.0, -184.0), (-138.0, -191.0), (-128.0, -191.0),
-                     (-120.0, -180.0)],
+            points: [(8.0, -80.0), (-6.0, -74.0), (-20.0, -66.0), (-30.0, -56.0), (-40.0, -46.0), (-50.0, -44.0), (-62.0, -56.0), (-74.0, -70.0), (-80.0, -84.0), (-70.0, -95.0), (-60.0, -94.0), (-54.0, -84.0)],
         ),
         // The ranger's path: off the forest path at the footbridge, north
         // under the ridge to the tower. With the logging road and the forest
@@ -135,21 +135,20 @@
         // pumping station, tower.
         (
             name: "Ranger's path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-179.0, -36.0), (-182.0, -62.0), (-192.0, -95.0), (-196.0, -118.0), (-212.0, -128.0),
-                     (-226.0, -131.0)],
+            points: [(-87.4, -42.0), (-94.3, -48.0), (-106.1, -56.1), (-114.0, -66.0), (-126.0, -72.0), (-138.0, -76.0), (-144.0, -78.0)],
         ),
         // The haulers' track: from the Gate down to the Depot's intake ramp,
         // worn by the convoys.
         (
             name: "Haulers' track", kind: Dirt, width: 4.0, smoothing: 10.0,
-            points: [(-246.0, -247.0), (-238.0, -243.0), (-231.0, -240.0)],
+            points: [(-140.0, -137.0), (-133.0, -134.0)],
         ),
         // Rail line across the north, past the rail yard and the robot
         // Gate, over the creek on a trestle in the far west.
         (
             name: "Rail line", kind: Rail, width: 4.0, smoothing: 90.0,
-            points: [(-330.0, -150.0), (-280.0, -165.0), (-200.0, -235.0), (-120.0, -255.0),
-                     (0.0, -258.0), (120.0, -245.0), (200.0, -215.0), (330.0, -200.0)],
+            points: [(-181.5, -82.5), (-155.6, -88.4), (-92.0, -124.1), (-62.2, -146.1),
+                     (-11.2, -150.0), (47.7, -143.2), (110.0, -113.8), (181.5, -110.0)],
         ),
         // Footpath from the logging camp up through the trees, over the
         // creek on the pumping station's footbridge, and on up through the
@@ -158,31 +157,29 @@
         // mast: the pumping station's second way home, to the Bus depot.
         // The Old farm's track to the checkpoint, across the field past its
         // wood stores and field shed: the first job's walk, where its cover
-        // stands, the farm's water tower ahead from the first step (the
+        // stands, the farm ahead from the first step (the
         // road north hid the farm lane's turn, and the designer's first
         // raid walked on past it to the Village).
         (
             name: "Farm track", kind: Dirt, width: 3.0, smoothing: 8.0,
-            points: [(49.0, 259.0), (70.0, 262.0), (100.0, 256.0), (120.0, 240.0), (128.0, 222.0),
-                     (133.0, 200.0), (142.0, 182.0), (155.0, 166.0), (166.0, 152.0)],
+            points: [(24.5, 146.5), (40.0, 136.0), (55.0, 124.0), (70.0, 104.0), (86.0, 90.0)],
         ),
         (
             name: "Pump path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-110.0, -108.0), (-85.0, -122.0), (-60.0, -134.0), (-35.0, -146.0), (-12.0, -158.0), (8.0, -168.0)],
+            points: [(-38.6, -26.3), (-22.2, -30.6), (-12.0, -50.0), (-4.0, -66.0), (6.0, -78.0)],
         ),
         (
             name: "Forest path", kind: Path, width: 1.6, shoulder: 1.0, smoothing: 4.0,
-            points: [(-160.0, 140.0), (-166.0, 122.0), (-175.0, 90.0), (-185.0, 45.0), (-180.0, 8.0),
-                     (-178.0, -16.0), (-178.0, -30.0), (-165.0, -70.0), (-140.0, -90.0), (-110.0, -108.0)],
-            bridges: [(at: (-178.0, -16.0), length: 24.0)],
+            points: [(-85.7, 63.5), (-90.0, 50.0), (-95.0, 35.1), (-90.0, -1.9), (-89.0, -13.5), (-88.5, -25.5), (-87.0, -37.5), (-72.0, -38.0), (-56.0, -35.0), (-38.6, -26.3)],
+            bridges: [(at: (-88.4, -26.0), length: 22.0)],
         ),
     ],
 
     water: [
         (
             name: "Marrow Creek", width: 8.0, depth: 0.7,
-            points: [(-330.0, -60.0), (-250.0, -25.0), (-170.0, -15.0), (-90.0, 10.0),
-                     (-20.0, 15.0), (40.0, 5.0), (110.0, 30.0), (190.0, 55.0), (330.0, 70.0)],
+            points: [(-181.5, -33.0), (-160.0, -34.7), (-80.0, -25.0), (-40.0, -14.0),
+                     (-21.7, -15.3), (30.6, -13.2), (55.2, 25.8), (104.7, 28.9), (181.5, 38.5)],
         ),
     ],
 
@@ -190,85 +187,78 @@
         // The boundary woods, thick beyond and around the fence.
         (name: "South boundary", seed: 11, density: 1.7, undergrowth: 0.6,
          mix: [(Spruce, 0.6), (Pine, 0.25), (Birch, 0.15)],
-         polygon: [(-320.0, 320.0), (320.0, 320.0), (320.0, 262.0), (-320.0, 262.0)]),
+         polygon: [(-176.0, 176.0), (176.0, 176.0), (176.0, 144.1), (-176.0, 144.1)]),
         (name: "North boundary", seed: 12, density: 1.7, undergrowth: 0.6,
          mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
-         polygon: [(-320.0, -262.0), (320.0, -262.0), (320.0, -320.0), (-320.0, -320.0)]),
+         polygon: [(-197.4, -146.3), (176.0, -144.1), (176.0, -176.0), (-176.0, -176.0)]),
         (name: "West boundary", seed: 13, density: 1.7, undergrowth: 0.6,
          mix: [(Spruce, 0.7), (Pine, 0.2), (Snag, 0.1)],
-         polygon: [(-320.0, 262.0), (-262.0, 262.0), (-262.0, -262.0), (-320.0, -262.0)]),
+         polygon: [(-176.0, 144.1), (-144.1, 144.1), (-154.0, -151.1), (-197.4, -146.3)]),
         (name: "East boundary", seed: 14, density: 1.7, undergrowth: 0.6,
          mix: [(Spruce, 0.55), (Birch, 0.3), (Pine, 0.15)],
-         polygon: [(262.0, 262.0), (320.0, 262.0), (320.0, -262.0), (262.0, -262.0)]),
+         polygon: [(144.1, 144.1), (176.0, 144.1), (176.0, -144.1), (165.8, -156.6)]),
         (
-            name: "Western spruce", seed: 1, density: 1.6, undergrowth: 0.6,
+            name: "Western spruce", seed: 1, density: 1.5, undergrowth: 0.6,
             mix: [(Spruce, 0.7), (Pine, 0.2), (Birch, 0.08), (Snag, 0.02)],
-            polygon: [(-300.0, 300.0), (-60.0, 300.0), (-40.0, 200.0), (-60.0, 120.0), (-120.0, 70.0),
-                      (-150.0, 30.0), (-240.0, 30.0), (-300.0, 50.0)],
+            polygon: [(-165.0, 165.0), (-33.0, 165.0), (-22.0, 110.0), (-40.3, 71.6), (-34.0, 57.7),
+                      (-60.0, 20.1), (-150.0, 20.1), (-189.4, 34.3)],
         ),
         (
             name: "Northern pines", seed: 2, density: 1.2, undergrowth: 0.4,
             mix: [(Pine, 0.55), (Spruce, 0.35), (Birch, 0.1)],
-            polygon: [(-300.0, -60.0), (-200.0, -60.0), (-100.0, -90.0), (-40.0, -120.0), (-40.0, -300.0),
-                      (-300.0, -300.0)],
+            polygon: [(-165.0, -33.0), (-112.3, -43.1), (-51.4, -44.0), (-22.0, -66.0), (-32.2, -172.1),
+                      (-182.6, -180.8)],
         ),
         (
             name: "Mast woods", seed: 3, density: 1.0, undergrowth: 0.5,
             mix: [(Spruce, 0.5), (Birch, 0.4), (Pine, 0.1)],
-            polygon: [(40.0, -60.0), (120.0, -100.0), (110.0, -170.0), (60.0, -190.0), (40.0, -140.0)],
+            polygon: [(22.0, -33.0), (55.5, -76.1), (57.4, -91.6), (48.8, -84.0), (22.8, -72.4)],
         ),
         (
             name: "Village birches", seed: 4, density: 0.35, undergrowth: 0.3,
             mix: [(Birch, 0.8), (Spruce, 0.2)],
-            polygon: [(-40.0, 120.0), (60.0, 120.0), (70.0, 30.0), (-50.0, 30.0)],
+            polygon: [(-37.7, 83.4), (46.0, 77.8), (51.7, 8.4), (-46.1, 3.0)],
         ),
         (
             name: "Dead stand by the Hollow", seed: 5, density: 0.5, undergrowth: 0.1,
             mix: [(Snag, 0.7), (Birch, 0.2), (Spruce, 0.1)],
-            polygon: [(90.0, 10.0), (220.0, 10.0), (230.0, -100.0), (90.0, -100.0)],
+            polygon: [(39.1, 14.2), (125.0, 8.4), (126.5, -55.0), (45.2, -59.3)],
         ),
         (
             name: "Eastern woods", seed: 6, density: 1.1, undergrowth: 0.5,
             mix: [(Spruce, 0.5), (Birch, 0.3), (Pine, 0.2)],
-            polygon: [(230.0, 30.0), (300.0, 40.0), (300.0, -170.0), (240.0, -170.0), (212.0, -125.0),
-                      (210.0, -70.0)],
+            polygon: [(126.5, 16.5), (165.0, 22.0), (165.0, -93.5), (149.7, -68.6), (116.6, -68.7),
+                      (136.6, -49.0)],
         ),
         (
             name: "Farm shelterbelt", seed: 7, density: 0.9, undergrowth: 0.4,
             mix: [(Birch, 0.6), (Spruce, 0.4)],
-            polygon: [(220.0, 300.0), (300.0, 300.0), (300.0, 200.0), (230.0, 210.0)],
+            polygon: [(121.0, 165.0), (165.0, 165.0), (165.0, 110.0), (132.1, 122.8)],
         ),
         // A spruce copse beside the district road north of the gate: the
         // first cover out of the truck.
         (
             name: "Gate road copse", seed: 9, density: 1.3, undergrowth: 0.6,
             mix: [(Spruce, 0.7), (Birch, 0.3)],
-            polygon: [(-8.0, 256.0), (36.0, 252.0), (31.0, 186.0), (-10.0, 194.0)],
+            polygon: [(-26.0, 134.5), (18.0, 130.5), (16.4, 95.8), (-6.1, 105.7)],
         ),
         (
             name: "Turn-off spruce", seed: 10, density: 1.1, undergrowth: 0.5,
             mix: [(Spruce, 0.6), (Pine, 0.2), (Birch, 0.2)],
-            polygon: [(32.0, 206.0), (76.0, 200.0), (78.0, 160.0), (28.0, 172.0)],
+            polygon: [(14.5, 88.6), (47.7, 98.6), (42.9, 88.0), (15.4, 94.6)],
         ),
         // On the knoll between the drop and the Old farm: newcomers cut
         // across this field to the first job, and Onboarding's first-fight
         // personas died in it with nothing in reach.
-        // A belt along the ford rise's crest, east of the Village: the rise
-        // reads as a field edge, and its trees break the line over it.
-        (
-            name: "Ford rise belt", seed: 21, density: 0.7, undergrowth: 0.5,
-            mix: [(Birch, 0.6), (Spruce, 0.4)],
-            polygon: [(79.0, 36.0), (88.0, 34.0), (92.0, 122.0), (83.0, 124.0)],
-        ),
         (
             name: "Knoll spinney", seed: 11, density: 1.4, undergrowth: 0.6,
             mix: [(Birch, 0.5), (Spruce, 0.5)],
-            polygon: [(82.0, 230.0), (102.0, 226.0), (104.0, 208.0), (84.0, 210.0)],
+            polygon: [(63.7, 108.8), (69.0, 115.2), (58.9, 112.8), (56.5, 101.4)],
         ),
         (
             name: "South gate stand", seed: 8, density: 1.2, undergrowth: 0.5,
             mix: [(Spruce, 0.6), (Pine, 0.3), (Birch, 0.1)],
-            polygon: [(60.0, 300.0), (200.0, 300.0), (200.0, 240.0), (110.0, 230.0), (60.0, 250.0)],
+            polygon: [(42.0, 178.5), (110.0, 165.0), (110.0, 132.0), (69.8, 121.2), (42.0, 128.5)],
         ),
     ],
 
@@ -276,250 +266,222 @@
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The machines' smelter stack behind the Gate: what they take, they melt.
-        (prefab: "chimney", at: (-240.0, -280.0), rot: 0.0),
-        // The pumping station's standpipe tower.
-        (prefab: "water_tower", at: (-212.0, -25.0), rot: 0.0),
+        (prefab: "chimney", at: (-132.0, -169.1), rot: 0.0),
         // The quarantine checkpoint's incinerator stack, outside the gate:
         // what came out of the Zone was burnt.
-        (prefab: "chimney", at: (85.0, 310.0), rot: 0.0),
+        (prefab: "chimney", at: (66.1, 187.7), rot: 0.0),
         // The checkpoint's watchtower over the south gate.
-        (prefab: "ranger_tower", at: (165.0, 262.0), rot: 0.0),
-        // The old farm's water tower.
-        (prefab: "water_tower", at: (175.0, 195.0), rot: 0.0),
-        // The brick kiln's chimney, all that stands of the works by the Hollow.
-        (prefab: "chimney", at: (120.0, -80.0), rot: 0.0),
-        // The checkpoint's radio mast at the south gate.
-        (prefab: "radio_mast", at: (135.0, 275.0), rot: 0.0),
+        (prefab: "ranger_tower", at: (90.8, 144.1), rot: 0.0),
+        // The old chapel's steeple, all that stands of the hamlet by the Hollow.
+        (prefab: "steeple", at: (52.5, -62.0), rot: 0.0),
         // Hero landmark (Map design's sightline audit: fog-blind 55% -> 32%).
-        (prefab: "mill_race", at: (-120.0, 118.0), rot: 270.0),
+        (prefab: "mill_race", at: (-30.0, 125.0), rot: 90.0),
         // The Old farm's wood stores across the field from the drop: cover
         // every 25 m or so on the way a newcomer walks to the first job.
         // A roof to get under on the first walks (only a roof hides you
         // from a drone): a field shed by the knoll on the way to the Old
         // farm, and one by the road north to the Village.
-        (prefab: "shed", at: (86.0, 240.0), rot: 237.0, tag: "field_shed"),
+        (prefab: "shed", at: (68.0, 118.5), rot: 237.0, tag: "field_shed"),
         // The ford-keeper's hut on the ford track, south of the creek: a
         // stop on the long walk from the Old farm to the Hollow (map_openness
         // empty walks), a roof before the Hollow's guns.
-        (prefab: "shed", at: (162.0, 30.0), rot: 270.0, tag: "ford_hut"),
-        (prefab: "shed", at: (40.0, 150.0), rot: 270.0, tag: "roadside_shed"),
-        (prefab: "log_pile", at: (63.0, 251.0), rot: 48.0),
-        (prefab: "log_pile", at: (112.0, 197.0), rot: 48.0),
-        (prefab: "log_pile", at: (131.0, 178.0), rot: 48.0),
+        (prefab: "shed", at: (23.5, 86.0), rot: 270.0, tag: "roadside_shed"),
         // South gate: the fence and the truck pull-in.
-        (prefab: "quarantine_gate", at: (40.0, 285.0), rot: 0.0),
-        (prefab: "guard_booth", at: (47.8, 285.0), rot: 90.0),
+        (prefab: "quarantine_gate", at: (22.0, 163.5), rot: 0.0),
+        (prefab: "guard_booth", at: (29.8, 163.5), rot: 90.0),
 
         // Logging camp.
-        (prefab: "sawmill", at: (-165.0, 165.0), rot: 90.0),
-        (prefab: "cabin_log", at: (-185.0, 190.0), rot: 0.0, tag: "foreman"),
-        (prefab: "cabin_log", at: (-145.0, 190.0), rot: 180.0),
-        (prefab: "log_pile", at: (-150.0, 150.0), rot: 15.0),
-        (prefab: "log_pile", at: (-140.0, 160.0), rot: 5.0),
+        (prefab: "sawmill", at: (-90.8, 88.5), rot: 90.0),
+        (prefab: "cabin_log", at: (-110.8, 113.5), rot: 0.0, tag: "foreman"),
+        (prefab: "cabin_log", at: (-70.8, 113.5), rot: 180.0),
 
         // The old farm.
-        (prefab: "farmhouse", at: (190.0, 145.0), rot: 270.0),
-        (prefab: "barn", at: (165.0, 130.0), rot: 0.0),
-        (prefab: "shed", at: (195.0, 165.0), rot: 90.0),
+        (prefab: "farmhouse", at: (109.0, 80.0), rot: 270.0),
+        (prefab: "barn", at: (84.0, 64.8), rot: 0.0),
+        (prefab: "shed", at: (114.0, 99.8), rot: 90.0),
 
         // Village: houses along the district road, south of the bridge.
-        (prefab: "house_plank", at: (-18.0, 95.0), rot: 90.0),
-        (prefab: "house_plank", at: (22.0, 85.0), rot: 270.0),
-        (prefab: "house_brick", at: (-20.0, 65.0), rot: 90.0, tag: "post_office"),
-        (prefab: "house_plank", at: (25.0, 55.0), rot: 270.0),
-        (prefab: "shop", at: (-16.0, 35.0), rot: 90.0),
-        (prefab: "house_plank", at: (-45.0, 75.0), rot: 0.0),
-        (prefab: "shed", at: (40.0, 70.0), rot: 0.0),
+        (prefab: "house_plank", at: (-20.2, 63.5), rot: 90.0),
+        (prefab: "house_plank", at: (19.8, 53.5), rot: 270.0),
+        (prefab: "house_brick", at: (-22.2, 33.5), rot: 90.0, tag: "post_office"),
+        (prefab: "house_plank", at: (22.8, 23.5), rot: 270.0),
+        (prefab: "shop", at: (-18.2, 3.5), rot: 90.0),
+        (prefab: "house_plank", at: (-47.2, 43.5), rot: 0.0),
+        (prefab: "shed", at: (37.8, 38.5), rot: 0.0),
         // The civil-defence shelter under the village (assets/underground).
-        (prefab: "bunker_marrow", at: (-10.0, 70.0), rot: 0.0),
+        (prefab: "bunker_marrow", at: (-12.2, 38.5), rot: 0.0),
         // The pumping station's drowned cellars (assets/underground).
-        (prefab: "pump_marrow", at: (-173.0, 3.0), rot: 0.0),
+        (prefab: "pump_marrow", at: (-83.0, -6.9), rot: 0.0),
         // The Depot, under the Gate: where the haulers take what they keep.
-        (prefab: "depot_marrow", at: (-230.0, -234.0), rot: 0.0),
+        (prefab: "depot_marrow", at: (-122.0, -123.1), rot: 0.0),
         
         // Pumping station on the south bank (the forest path's footbridge
         // crosses beside it).
-        (prefab: "pump_station", at: (-200.0, 22.0), rot: 0.0),
+        (prefab: "pump_station", at: (-110.0, 12.1), rot: 0.0),
         // Roofs on the mast relay's way past the pumping station, for a newcomer
         // a drone has locked onto: the station's tool shed where the Ranger's
         // path leaves it, and the rangers' store on the path below the mast road.
-        (prefab: "shed", at: (-171.0, -28.0), rot: 270.0, tag: "pump_tool_shed"),
-        (prefab: "shed", at: (-184.0, -111.0), rot: 270.0, tag: "rangers_store"),
+        (prefab: "shed", at: (-74.0, -34.0), rot: 270.0, tag: "pump_tool_shed"),
+        (prefab: "shed", at: (-120.0, -44.0), rot: 135.0, tag: "rangers_store"),
         // And the road-menders' hut on the district road, the mast relay's
         // other way, half way from the creek bridge to the mast road.
-        (prefab: "shed", at: (-3.0, -92.0), rot: 90.0, tag: "road_menders_hut"),
+        (prefab: "shed", at: (-1.7, -50.6), rot: 90.0, tag: "road_menders_hut"),
 
             // The Hollow: weird stuff in the bowl, and the survey team's tower on
         // its rim: the one thing you can see of it from the creek.
-        (prefab: "anomaly_core", at: (150.0, -40.0), rot: 0.0),
-        (prefab: "survey_tower", at: (101.0, -2.0), rot: 300.0, tag: "survey_post"),
+        (prefab: "anomaly_core", at: (82.5, -22.0), rot: 0.0),
+        (prefab: "survey_tower", at: (35.3, 14.6), rot: 300.0, tag: "survey_post"),
 
         // North: bus depot, radio mast, rail yard, ranger tower, robot Gate.
-        (prefab: "bus_depot", at: (25.0, -225.0), rot: 0.0),
+        (prefab: "bus_depot", at: (13.8, -117.0), rot: 0.0),
         // A shed by the depot rendezvous: a roof to wait under, out of the
         // drones' sight, while the truck comes.
-        (prefab: "shed", at: (6.0, -247.0), rot: 90.0),
+        (prefab: "shed", at: (-5.2, -139.0), rot: 90.0),
         // Somewhere to wait for the truck out of the depot drones' eye: the
         // old bus shelter by the yard gate, and the platelayers' hut by the
         // rail-yard pickup.
-        (prefab: "shed", at: (36.0, -247.0), rot: 306.0, tag: "bus_shelter"),
-        (prefab: "radio_mast", at: (-120.0, -175.0), rot: 0.0),
-        (prefab: "mast_hut", at: (-112.0, -160.0), rot: 30.0),
-        (prefab: "rail_shed", at: (185.0, -210.0), rot: 10.0),
-        (prefab: "shed", at: (223.5, -227.0), rot: 313.0, tag: "platelayers_hut"),
+        (prefab: "shed", at: (24.8, -139.0), rot: 306.0, tag: "bus_shelter"),
+        (prefab: "radio_mast", at: (-54.0, -78.8), rot: 0.0),
+        (prefab: "mast_hut", at: (-46.0, -63.8), rot: 30.0),
+        (prefab: "rail_shed", at: (95.0, -104.0), rot: 190.0),
+        (prefab: "shed", at: (133.5, -125.8), rot: 313.0, tag: "platelayers_hut"),
         // The yard's water tower: the landmark you see the yard by.
-        (prefab: "water_tower", at: (232.0, -196.0), rot: 0.0),
-        (prefab: "boxcar", at: (148.7, -235.3), rot: 114.6),
-        (prefab: "boxcar", at: (110.5, -246.9), rot: 100.5),
-        (prefab: "ranger_tower", at: (-240.0, -138.0), rot: 0.0),
-        (prefab: "robot_gate", at: (-250.0, -255.0), rot: 45.0),
+        (prefab: "water_tower", at: (142.0, -94.8), rot: 0.0),
+        (prefab: "boxcar", at: (61.0, -137.7), rot: 296.6),
+        (prefab: "ranger_tower", at: (-146.0, -82.0), rot: 0.0),
+        (prefab: "robot_gate", at: (-142.0, -144.1), rot: 45.0),
 
         // Gardens (Destruction's breakable fence_garden, four plank panels
         // a run): behind or beside the houses, never on the door side, each
         // an L with the house wall that's open on its fourth side. Each run
         // touches its house or the next run, so there's no squeeze.
         // Behind the north house, open to the south.
-        (prefab: "fence_garden", at: (-27.35, 91.10), rot: 180.0),
-        (prefab: "fence_garden", at: (-31.70, 95.25), rot: 90.0),
+        (prefab: "fence_garden", at: (-29.6, 59.0), rot: 180.0),
+        (prefab: "fence_garden", at: (-34.0, 63.8), rot: 90.0),
         // Behind the house over the road, open to the south.
-        (prefab: "fence_garden", at: (31.35, 81.10), rot: 0.0),
-        (prefab: "fence_garden", at: (35.70, 85.25), rot: 270.0),
+        (prefab: "fence_garden", at: (29.1, 49.6), rot: 0.0),
+        (prefab: "fence_garden", at: (33.5, 53.8), rot: 270.0),
         // Beside the south house, open to the west and the road.
-        (prefab: "fence_garden", at: (28.40, 64.85), rot: 270.0),
-        (prefab: "fence_garden", at: (24.25, 69.20), rot: 0.0),
+        (prefab: "fence_garden", at: (26.1, 33.3), rot: 270.0),
+        (prefab: "fence_garden", at: (22.0, 37.7), rot: 0.0),
         // Beside the house up the lane, open to the south.
-        (prefab: "fence_garden", at: (-54.85, 71.60), rot: 0.0),
-        (prefab: "fence_garden", at: (-59.20, 75.75), rot: 90.0),
+        (prefab: "fence_garden", at: (-57.0, 40.1), rot: 0.0),
+        (prefab: "fence_garden", at: (-57.4, 43.9), rot: 90.0),
         // Behind the foreman's cabin, open to the east.
-        (prefab: "fence_garden", at: (-188.40, 198.85), rot: 90.0),
-        (prefab: "fence_garden", at: (-184.25, 203.20), rot: 0.0),
+        (prefab: "fence_garden", at: (-114.2, 122.4), rot: 90.0),
+        (prefab: "fence_garden", at: (-109.6, 126.7), rot: 0.0),
         // The farm's paddock behind the house, open to the south and the shed.
-        (prefab: "fence_garden", at: (199.85, 140.10), rot: 0.0),
-        (prefab: "fence_garden", at: (208.35, 140.10), rot: 0.0),
-        (prefab: "fence_garden", at: (212.70, 144.25), rot: 270.0),
-        (prefab: "fence_garden", at: (212.70, 152.75), rot: 270.0),
+        (prefab: "fence_garden", at: (118.9, 74.8), rot: 0.0),
+        (prefab: "fence_garden", at: (127.4, 74.8), rot: 0.0),
+        (prefab: "fence_garden", at: (131.7, 79.0), rot: 270.0),
+        (prefab: "fence_garden", at: (131.7, 87.5), rot: 270.0),
 
         // Car wrecks (Destruction strips their doors, bonnets, boots and
         // wheels): cover on the verges, never on the road.
         // The queue for the gate, the morning it shut: three facing south,
         // run into each other and left on the west verge.
-        (prefab: "wreck_lada", at: (23.7, 207.7), rot: 177.0),
-        (prefab: "wreck_uaz", at: (23.9, 200.5), rot: 143.0),
-        (prefab: "wreck_lada", at: (21.7, 193.8), rot: 201.0),
         // Pulled over north of the logging-road turn: the one thing to
         // crouch behind between the turn and the village birches.
-        (prefab: "wreck_lada", at: (19.6, 140.1), rot: 14.0),
         // The farm's own jeep, in the yard by the shed.
-        (prefab: "wreck_uaz", at: (176.0, 160.0), rot: 75.0),
+        (prefab: "wreck_uaz", at: (95.0, 94.8), rot: 75.0),
 
         // Cover within a four-second sprint of every step of the first jobs
         // (map_lint FIRST_RUN): cars abandoned on the verges in the
         // evacuation, and log piles stacked by the ways across the open.
-        (prefab: "log_pile", at: (15.1, 176.9), rot: 23.0),
-        (prefab: "log_pile", at: (27.0, 160.0), rot: 90.0),
-        (prefab: "log_pile", at: (19.0, 120.0), rot: 157.0),
-        (prefab: "log_pile", at: (4.0, 171.0), rot: 224.0),
-        (prefab: "log_pile", at: (-2.5, 37.3), rot: 291.0),
-        (prefab: "log_pile", at: (5.0, -0.0), rot: 358.0),
-        (prefab: "log_pile", at: (5.5, -13.3), rot: 65.0),
-        (prefab: "log_pile", at: (5.0, -28.0), rot: 132.0),
-        (prefab: "log_pile", at: (-1.5, -40.0), rot: 109.0),
-        (prefab: "wreck_lada", at: (-2.7, -105.5), rot: 266.0),
-        (prefab: "log_pile", at: (-9.3, 170.5), rot: 333.0),
-        (prefab: "log_pile", at: (-59.1, 52.9), rot: 40.0),
-        (prefab: "log_pile", at: (-76.0, -101.0), rot: 107.0),
-        (prefab: "log_pile", at: (-169.0, -48.0), rot: 174.0),
-        (prefab: "log_pile", at: (-5.0, 212.0), rot: 241.0),
-        (prefab: "log_pile", at: (-17.3, 210.5), rot: 308.0),
-        (prefab: "log_pile", at: (23.0, -48.0), rot: 15.0),
-        (prefab: "log_pile", at: (-186.7, -49.5), rot: 82.0),
-        (prefab: "log_pile", at: (-33.0, 136.0), rot: 149.0),
-        (prefab: "log_pile", at: (-45.3, 134.5), rot: 216.0),
-        (prefab: "log_pile", at: (-93.0, 72.0), rot: 283.0),
-        (prefab: "log_pile", at: (-89.0, 20.0), rot: 57.0),
-        (prefab: "log_pile", at: (-101.0, 16.0), rot: 124.0),
-        (prefab: "log_pile", at: (-116.0, -6.0), rot: 211.0),
-        (prefab: "log_pile", at: (-105.3, 70.5), rot: 350.0),
-        (prefab: "wreck_lada", at: (-175.1, -59.1), rot: 191.0),
+
+        // Cover within a four-second sprint of every step of the first jobs
+        // (map_lint FIRST_RUN) on the tight valley's ground: the farms' and
+        // the village's wood, stacked by the ways.
+        (prefab: "log_pile", at: (28.3, 128.5), rot: 155.0),
+        (prefab: "log_pile", at: (48.0, 118.0), rot: 336.0),
+        (prefab: "log_pile", at: (59.0, 101.0), rot: 180.0),
+        (prefab: "log_pile", at: (7.3, 110.5), rot: 113.0),
+        (prefab: "log_pile", at: (10.5, 11.7), rot: 79.0),
+        (prefab: "log_pile", at: (-1.5, -7.7), rot: 62.0),
+        (prefab: "log_pile", at: (2.5, -23.7), rot: 26.0),
+        (prefab: "log_pile", at: (-12.4, -78.4), rot: 197.0),
+        (prefab: "log_pile", at: (-43.7, 9.5), rot: 92.0),
+        (prefab: "log_pile", at: (-66.5, 7.3), rot: 114.0),
+        (prefab: "log_pile", at: (-31.0, -21.5), rot: 80.0),
     ],
 
     markers: [
-        (kind: Insertion, at: (40.0, 270.0), rot: 0.0, name: "South gate"),
-        (kind: TruckStop, at: (40.0, 300.0), rot: 0.0, name: "South gate"),
-        (kind: ShortExfil, at: (46.0, 276.0), name: "South gate (fuel)"),
-        (kind: Rendezvous, at: (25.0, -255.0), name: "Bus depot"),
-        (kind: Rendezvous, at: (215.0, -235.0), name: "Rail yard"),
-        (kind: Rendezvous, at: (-190.0, -97.0), name: "Ranger tower"),
-        (kind: RobotGate, at: (-250.0, -255.0), rot: 45.0, name: "The Gate"),
+        (kind: Insertion, at: (22.0, 148.5), rot: 0.0, name: "South gate"),
+        (kind: TruckStop, at: (22.0, 178.5), rot: 0.0, name: "South gate"),
+        (kind: ShortExfil, at: (28.0, 154.5), name: "South gate (fuel)"),
+        (kind: Rendezvous, at: (13.8, -147.0), name: "Bus depot"),
+        (kind: Rendezvous, at: (125.0, -133.8), name: "Rail yard"),
+        (kind: Rendezvous, at: (-108.0, -50.0), name: "Ranger tower"),
+        (kind: RobotGate, at: (-142.0, -144.1), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
         // its junction box on that unseen ground (map_sentry).
-        (kind: Sentry(arc: 60.0, power: Some((-249.1, -257.2))), at: (-237.0, -250.2), rot: -20.0, name: "Depot sentry"),
-        (kind: Sentry(arc: 140.0, power: Some((148.9, -76.4))), at: (139.0, -66.5), rot: -15.0, name: "Hollow sentry"),
+        (kind: Sentry(arc: 60.0, power: Some((-133.1, -138.0))), at: (-121.0, -131.0), rot: -20.0, name: "Depot sentry"),
+        (kind: Sentry(arc: 140.0, power: Some((81.4, -58.4))), at: (71.5, -48.5), rot: -15.0, name: "Hollow sentry"),
         // A spotter over the open ground the road north crosses to the
         // depot and the yard: an alarm, not a gun, where nothing else
         // watches (map_spotter). Cut its tether at the winch, timing its
         // turn.
-        (kind: Spotter, at: (40.0, -85.0), name: "Bank spotter"),
-        (kind: ArtifactField, at: (150.0, -40.0), name: "The Hollow"),
-        (kind: ArtifactField, at: (-120.0, -175.0), name: "Mast summit"),
+        (kind: Spotter, at: (-110.0, -100.0), name: "Bank spotter"),
+        (kind: ArtifactField, at: (82.5, -22.0), name: "The Hollow"),
+        (kind: ArtifactField, at: (-54.0, -78.8), name: "Mast summit"),
         // Standing anomalies: they lie here every cycle (Anomalies).
-        (kind: Anomaly(kind: "Well", radius: 2.0), at: (158.0, -7.0), name: "The Hollow well"),
-        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-144.0, -199.0), name: "Mast summit mirror"),
-        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (136.0, -7.0), name: "Hollow hush"),
-        (kind: Offering, at: (-30.0, 110.0), name: "The well"),
-        (kind: Offering, at: (230.0, -150.0), name: "The stone ring"),
-        (kind: WorkSite, at: (-40.0, -60.0), name: "North bank site"),
-        (kind: WorkSite, at: (125.0, 80.0), name: "Ford field site"),
-        (kind: WorkSite, at: (-90.0, 120.0), name: "Forest clearing site"),
-        (kind: Poi, at: (-165.0, 170.0), name: "Logging camp"),
-        (kind: Poi, at: (180.0, 145.0), name: "Old farm"),
-        (kind: Poi, at: (5.0, 70.0), name: "Village"),
-        (kind: Poi, at: (-200.0, 22.0), name: "Pumping station"),
-        (kind: Poi, at: (150.0, -40.0), name: "The Hollow"),
-        (kind: Poi, at: (25.0, -225.0), name: "Bus depot"),
-        (kind: Poi, at: (-120.0, -175.0), name: "Radio mast"),
-        (kind: Poi, at: (185.0, -215.0), name: "Rail yard"),
+        (kind: Anomaly(kind: "Well", radius: 2.0), at: (90.5, 11.0), name: "The Hollow well"),
+        (kind: Anomaly(kind: "Mirror", radius: 1.5), at: (-78.0, -102.7), name: "Mast summit mirror"),
+        (kind: Anomaly(kind: "Hush", radius: 3.0), at: (68.5, 11.0), name: "Hollow hush"),
+        (kind: Offering, at: (-32.2, 78.5), name: "The well"),
+        (kind: Offering, at: (120.0, -52.0), name: "The stone ring"),
+        (kind: WorkSite, at: (40.0, -95.0), name: "North bank site"),
+        (kind: WorkSite, at: (105.0, -10.0), name: "Ford field site"),
+        (kind: WorkSite, at: (-138.0, -20.0), name: "Forest clearing site"),
+        (kind: Poi, at: (-90.8, 93.5), name: "Logging camp"),
+        (kind: Poi, at: (99.0, 79.8), name: "Old farm"),
+        (kind: Poi, at: (-12.0, 45.0), name: "Village"),
+        (kind: Poi, at: (-110.0, 12.1), name: "Pumping station"),
+        (kind: Poi, at: (82.5, -22.0), name: "The Hollow"),
+        (kind: Poi, at: (13.8, -117.0), name: "Bus depot"),
+        (kind: Poi, at: (-54.0, -78.8), name: "Radio mast"),
+        (kind: Poi, at: (95.0, -113.8), name: "Rail yard"),
         // The haulers' depot under the Gate's hill: its intake ramp.
-        (kind: Poi, at: (-230.0, -238.0), name: "The Depot"),
-        (kind: ValleyKey(item: "key_marrow"), at: (152.0, -44.0), rot: 20.0, name: "Hollow survey lockbox"),
+        (kind: Poi, at: (-122.0, -127.1), name: "The Depot"),
+        (kind: ValleyKey(item: "key_marrow"), at: (84.5, -26.0), rot: 20.0, name: "Hollow survey lockbox"),
         // Caches worth the walk to places off the straight line north: the
         // logging camp's lock-up, the pump keeper's store by the footbridge
         // (the forest path is the quiet way to the ranger tower), the
         // ranger's own box, and a driver's cache left in the rail yard.
-        (kind: Loot(table: "workshop"), at: (-178.0, 152.0), name: "Sawmill lock-up"),
-        (kind: Loot(table: "tools"), at: (-162.0, 182.0), name: "Logger's chest"),
-        (kind: Loot(table: "medical"), at: (-188.0, 34.0), name: "Pump keeper's store"),
-        (kind: Loot(table: "ammo_common"), at: (-172.0, -36.0), name: "Footbridge cache"),
+        (kind: Loot(table: "workshop"), at: (-103.8, 75.5), name: "Sawmill lock-up"),
+        (kind: Loot(table: "tools"), at: (-87.8, 105.5), name: "Logger's chest"),
+        (kind: Loot(table: "medical"), at: (-98.0, 24.1), name: "Pump keeper's store"),
+        (kind: Loot(table: "ammo_common"), at: (-66.0, -36.0), name: "Footbridge cache"),
         // Clear of the depot's service-stair kiosk just north of it.
-        (kind: Loot(table: "ammo_common"), at: (-246.0, -127.5), name: "Ranger's ammo box"),
-        (kind: Loot(table: "driver_cache"), at: (132.0, -232.0), name: "Driver's cache"),
+        (kind: Loot(table: "ammo_common"), at: (-157.4, -82.2), name: "Ranger's ammo box"),
+        (kind: Loot(table: "driver_cache"), at: (46.4, -133.7), name: "Driver's cache"),
         // notes:begin (generated by scripts/place_notes.py)
-        (kind: Note(text: "SOUTH GATE - DUTY LOG, 14 OCT\n0600. Buses out of the depot, 9 of 9.\n0655. Bus 4 back, empty. Driver asks to go in for his mother. Refused.\n0710. Driver still here. Refused again. Escorted to the road.\n1300. A dog barking in the village all afternoon.\n2200. Lights by the well. Not ours."), at: (47.20, 285.30), rot: 63.4, name: "Gate log"),
-        (kind: Note(text: "Anna -\nThey said three days. That was three weeks ago. Lev drove the four and wouldn't look at me, so I stayed for the dog.\nThe white machines came out of the new Gate this morning and started tidying. They took the bins. They took the bicycles. They took Mr Holm.\nKeep still when the little flying one looks at you. It sees you move.\nTell Lev I'm not angry. I've written to him as well, for when he comes.\n- Mum"), at: (-17.30, 93.70), rot: 208.3, name: "Village note"),
-        (kind: Note(text: "POST OFFICE - UNDELIVERED\nTo O. Vey, station chief, Hollow survey post.\nYour lockbox holds the depot key for Marrow (KEY-M). It is to stay with you. Do not leave it at the post. The Authority will collect all three keys at the review.\nP. Rus, Inspector Quarantine Authority, valley office, 20 Nov."), at: (-19.20, 63.30), rot: 205.2, name: "Post office letter"),
-        (kind: Note(text: "CREDIT BOOK\nHolm - bread, paraffin. 3.40\nSedlak - batteries x6, lamp oil. 5.10\nMarek H. - bread, dog biscuits x4, tea. 2.80\nBrabec - nails, tea. 1.95\nVey (survey) - batteries x12, chalk. Paid.\n13 Oct. Shut till further notice. Pay me when you're back."), at: (-15.60, 33.40), rot: 194.0, name: "Credit book"),
-        (kind: Note(text: "Walkers:\nDon't waste rounds on the shell. The eye under the front plate, or the knees. They go down like a felled tree.\nThe flyers are glass and wire. One good hit.\nAnd never shoot near the well. It doesn't like it.\n- J., logging camp"), at: (-184.70, 190.55), rot: 331.4, name: "Foreman's note"),
-        (kind: Note(text: "PUMP LOG - O. Brabec\nThe Authority says the Surge is theirs: \"scheduled discharge\". It was here first. 9 Oct, before any machine, the sky went the colour of a bruise and every needle in this station lay down.\nThe well in the village takes what you give it. Sometimes it gives back: a quiet hour, a word about where the stones are.\nMy grandmother fed it bread. It was slower then.\nDon't give it your gun."), at: (-194.20, 19.00), rot: 242.7, name: "Pump station note"),
-        (kind: Terminal(pages: ["QUARANTINE AUTHORITY\nCUSTODIAN NETWORK - MARROW\n\nDepot GATE-M: ACTIVE\nMode: SWEEP\nUnits: survey, haul, build,\n       recover\n\nThe Custodian keeps the valley\nclean until the review.", "KEPT PENDING REVIEW\n\nBuses                  9\nBicycles             212\nRefuse bins          340\nDomestic animals      58\nPersonnel             31\n\nCondition: kept.", "DEPOT ACCESS\n\nThe depots answer only to the\nAuthority. Recall needs the\nthree valley keys, presented\ntogether at any depot lock:\n\n  KEY-M  Marrow  (Hollow post)\n  KEY-K  Kettle  (quarry)\n  KEY-C  Cinder  (the works)", "REVIEW STATUS\n\nReview date: 1 APR (postponed)\nReview date: (not set)\nAuthority staff on site: 0\nLast login: P.RUS (Cinder)\n\nCustodian continues SWEEP until\nrecalled."]), at: (37.20, -218.50), rot: 118.0, name: "Depot office terminal"),
-        (kind: Terminal(pages: ["RELAY LOG - MAST M1\n\nPylons extend the Custodian's\neyes: each one reports what\nmoves near it, and the depot\nsends a team.\n\nPylon down = reports stop.", "SWEEP SCHEDULE\n\nField discharge (\"SURGE\") every\ncycle. Clears contamination.\nPersonnel: be under a roof or\nout of the valley. Loose\nmaterial is reset.\n\nSchedule source: OBSERVED."]), at: (-112.01, -158.39), rot: -179.7, name: "Mast terminal"),
-        (kind: Note(text: "SURVEY POST - HOLLOW\n21 Nov. Ground up 41 cm since spring. The glow is brighter the nights before a discharge; I can predict them now. Nobody at the Authority wants to hear it.\nThe inspector's letter never came, but I know what the lockbox is for. Nobody else is going to keep it.\nGoing down at first light to read the centre stakes. Taking the box.\n- O.V."), at: (101.65, -0.93), rot: 328.6, y: 8.5, name: "Survey log"),
-        (kind: Note(text: "From up here you can see the Hollow glow after dark. The survey team went in with the chief's lockbox and came back without the chief. The box is still down there, where the ground lifts. Bring a light. Don't run.\nLamp to Kettle tower, 2100: no answer from Emil three nights now.\n- M. Sedlak"), at: (-239.70, -137.40), rot: 333.4, y: 8.5, name: "Ranger's note"),
-        (kind: Note(text: "Crew tally, on the wall by the bed:\nMon 14 logs Tue 16 Wed 15 Thu - buses\nThere's a tin of beans under the bed for whoever's next. Wedge the door at night with the split log, the latch is no good.\n- Tomas, J.'s crew"), at: (-145.30, 189.45), rot: 151.4, name: "Cabin tally"),
+        (kind: Note(text: "SOUTH GATE - DUTY LOG, 14 OCT\n0600. Buses out of the depot, 9 of 9.\n0655. Bus 4 back, empty. Driver asks to go in for his mother. Refused.\n0710. Driver still here. Refused again. Escorted to the road.\n1300. A dog barking in the village all afternoon.\n2200. Lights by the well. Not ours."), at: (29.20, 163.80), rot: 63.4, name: "Gate log"),
+        (kind: Note(text: "Anna -\nThey said three days. That was three weeks ago. Lev drove the four and wouldn't look at me, so I stayed for the dog.\nThe white machines came out of the new Gate this morning and started tidying. They took the bins. They took the bicycles. They took Mr Holm.\nKeep still when the little flying one looks at you. It sees you move.\nTell Lev I'm not angry. I've written to him as well, for when he comes.\n- Mum"), at: (-19.50, 62.20), rot: 208.3, name: "Village note"),
+        (kind: Note(text: "POST OFFICE - UNDELIVERED\nTo O. Vey, station chief, Hollow survey post.\nYour lockbox holds the depot key for Marrow (KEY-M). It is to stay with you. Do not leave it at the post. The Authority will collect all three keys at the review.\nP. Rus, Inspector Quarantine Authority, valley office, 20 Nov."), at: (-21.40, 31.80), rot: 205.2, name: "Post office letter"),
+        (kind: Note(text: "CREDIT BOOK\nHolm - bread, paraffin. 3.40\nSedlak - batteries x6, lamp oil. 5.10\nMarek H. - bread, dog biscuits x4, tea. 2.80\nBrabec - nails, tea. 1.95\nVey (survey) - batteries x12, chalk. Paid.\n13 Oct. Shut till further notice. Pay me when you're back."), at: (-17.80, 1.90), rot: 194.0, name: "Credit book"),
+        (kind: Note(text: "Walkers:\nDon't waste rounds on the shell. The eye under the front plate, or the knees. They go down like a felled tree.\nThe flyers are glass and wire. One good hit.\nAnd never shoot near the well. It doesn't like it.\n- J., logging camp"), at: (-110.50, 114.05), rot: 331.4, name: "Foreman's note"),
+        (kind: Note(text: "PUMP LOG - O. Brabec\nThe Authority says the Surge is theirs: \"scheduled discharge\". It was here first. 9 Oct, before any machine, the sky went the colour of a bruise and every needle in this station lay down.\nThe well in the village takes what you give it. Sometimes it gives back: a quiet hour, a word about where the stones are.\nMy grandmother fed it bread. It was slower then.\nDon't give it your gun."), at: (-104.20, 9.10), rot: 242.7, name: "Pump station note"),
+        (kind: Terminal(pages: ["QUARANTINE AUTHORITY\nCUSTODIAN NETWORK - MARROW\n\nDepot GATE-M: ACTIVE\nMode: SWEEP\nUnits: survey, haul, build,\n       recover\n\nThe Custodian keeps the valley\nclean until the review.", "KEPT PENDING REVIEW\n\nBuses                  9\nBicycles             212\nRefuse bins          340\nDomestic animals      58\nPersonnel             31\n\nCondition: kept.", "DEPOT ACCESS\n\nThe depots answer only to the\nAuthority. Recall needs the\nthree valley keys, presented\ntogether at any depot lock:\n\n  KEY-M  Marrow  (Hollow post)\n  KEY-K  Kettle  (quarry)\n  KEY-C  Cinder  (the works)", "REVIEW STATUS\n\nReview date: 1 APR (postponed)\nReview date: (not set)\nAuthority staff on site: 0\nLast login: P.RUS (Cinder)\n\nCustodian continues SWEEP until\nrecalled."]), at: (26.00, -110.50), rot: 118.0, name: "Depot office terminal"),
+        (kind: Terminal(pages: ["RELAY LOG - MAST M1\n\nPylons extend the Custodian's\neyes: each one reports what\nmoves near it, and the depot\nsends a team.\n\nPylon down = reports stop.", "SWEEP SCHEDULE\n\nField discharge (\"SURGE\") every\ncycle. Clears contamination.\nPersonnel: be under a roof or\nout of the valley. Loose\nmaterial is reset.\n\nSchedule source: OBSERVED."]), at: (-46.01, -62.19), rot: -179.7, name: "Mast terminal"),
+        (kind: Note(text: "SURVEY POST - HOLLOW\n21 Nov. Ground up 41 cm since spring. The glow is brighter the nights before a discharge; I can predict them now. Nobody at the Authority wants to hear it.\nThe inspector's letter never came, but I know what the lockbox is for. Nobody else is going to keep it.\nGoing down at first light to read the centre stakes. Taking the box.\n- O.V."), at: (35.95, 15.67), rot: 328.6, y: 8.5, name: "Survey log"),
+        (kind: Note(text: "From up here you can see the Hollow glow after dark. The survey team went in with the chief's lockbox and came back without the chief. The box is still down there, where the ground lifts. Bring a light. Don't run.\nLamp to Kettle tower, 2100: no answer from Emil three nights now.\n- M. Sedlak"), at: (-145.70, -81.40), rot: 333.4, y: 8.5, name: "Ranger's note"),
+        (kind: Note(text: "Crew tally, on the wall by the bed:\nMon 14 logs Tue 16 Wed 15 Thu - buses\nThere's a tin of beans under the bed for whoever's next. Wedge the door at night with the split log, the latch is no good.\n- Tomas, J.'s crew"), at: (-71.10, 112.95), rot: 151.4, name: "Cabin tally"),
         // notes:end
     ],
 
     // The logging camp and the pumping station roll a little over their
     // danger's due: off the road north, they're worth the walk.
     regions: [
-        (name: "South gate", danger: 0, polygon: [(-20.0, 320.0), (120.0, 320.0), (120.0, 230.0), (-20.0, 230.0)]),
-        (name: "Logging camp", danger: 1, loot: Some(1.1), polygon: [(-230.0, 120.0), (-100.0, 120.0), (-100.0, 230.0), (-230.0, 230.0)]),
-        (name: "Old farm", danger: 1, polygon: [(110.0, 90.0), (260.0, 90.0), (260.0, 220.0), (110.0, 220.0)]),
-        (name: "Village", danger: 1, loot: Some(0.6), polygon: [(-70.0, 20.0), (70.0, 20.0), (70.0, 120.0), (-70.0, 120.0)]),
-        (name: "Pumping station", danger: 2, notice: Some(45.0), loot: Some(1.35), polygon: [(-240.0, -40.0), (-140.0, -40.0), (-140.0, 50.0), (-240.0, 50.0)]),
-        (name: "The Hollow", danger: 3, notice: Some(45.0), polygon: [(90.0, 10.0), (210.0, 10.0), (210.0, -95.0), (90.0, -95.0)]),
-        (name: "Radio mast", danger: 2, notice: Some(45.0), polygon: [(-190.0, -230.0), (-60.0, -230.0), (-60.0, -120.0), (-190.0, -120.0)]),
-        (name: "Bus depot", danger: 2, notice: Some(45.0), polygon: [(-20.0, -270.0), (70.0, -270.0), (70.0, -190.0), (-20.0, -190.0)]),
-        (name: "Rail yard", danger: 2, notice: Some(45.0), polygon: [(100.0, -270.0), (260.0, -270.0), (260.0, -170.0), (100.0, -170.0)]),
-        (name: "The Gate", danger: 3, notice: Some(45.0), polygon: [(-300.0, -300.0), (-200.0, -300.0), (-200.0, -200.0), (-300.0, -200.0)]),
+        (name: "South gate", danger: 0, polygon: [(-21.4, 184.7), (66.0, 176.0), (67.9, 125.6), (-27.4, 115.6)]),
+        (name: "Logging camp", danger: 1, loot: Some(1.1), polygon: [(-141.8, 86.6), (-47.7, 60.4), (-52.9, 128.4), (-128.6, 128.4)]),
+        (name: "Old farm", danger: 1, polygon: [(58.6, 48.0), (143.0, 49.5), (143.0, 121.0), (64.5, 118.1)]),
+        (name: "Village", danger: 1, loot: Some(0.6), polygon: [(-39.9, 10.1), (45.8, 5.4), (45.8, 71.6), (-39.9, 66.9)]),
+        (name: "Pumping station", danger: 2, notice: Some(45.0), loot: Some(1.35), polygon: [(-151.4, -32.8), (-51.4, -32.8), (-50.0, 40.1), (-150.0, 40.1)]),
+        (name: "The Hollow", danger: 3, notice: Some(45.0), polygon: [(39.1, 14.2), (125.9, 14.2), (122.7, -58.9), (42.3, -58.9)]),
+        (name: "Radio mast", danger: 2, notice: Some(45.0), polygon: [(-83.7, -119.9), (-31.0, -128.0), (-22.5, -54.7), (-105.6, -73.4)]),
+        (name: "Bus depot", danger: 2, notice: Some(45.0), polygon: [(-31.2, -161.6), (58.8, -161.6), (58.8, -85.2), (-31.2, -85.2)]),
+        (name: "Rail yard", danger: 2, notice: Some(45.0), polygon: [(73.1, -153.4), (163.3, -164.3), (153.2, -81.4), (55.2, -93.3)]),
+        (name: "The Gate", danger: 3, notice: Some(45.0), polygon: [(-182.6, -180.8), (-91.8, -188.9), (-97.9, -91.8), (-187.2, -91.4)]),
     ],
 )

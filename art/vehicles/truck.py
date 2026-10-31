@@ -167,12 +167,13 @@ for sx in (-1, 1):
     # (forward, up) offsets of a towing hook's side outline.
     hook = [(0.0, 0.0), (0.05, 0.0), (0.08, 0.04), (0.06, 0.1), (0.02, 0.11), (0.0, 0.08),
             (0.03, 0.07), (0.04, 0.04), (0.0, 0.03)]
-    ch.prism([(-5.12 - f, 0.66 + u) for f, u in hook], sx * 0.62 - 0.015, sx * 0.62 + 0.015,
+    # From 2 mm inside the bumper's face (they only met it).
+    ch.prism([(-5.118 - f, 0.66 + u) for f, u in hook], sx * 0.62 - 0.015, sx * 0.62 + 0.015,
              "Iron", axis="x")
 ch.box((0.3, 0.12, 0.06), (0.0, 0.74, -5.14), "Iron", bevel=0.01, segs=1)
 ch.cyl(0.12, -0.45, 0.45, "Iron", segs=16, xf=T(0, 0.72, -4.9) @ ALONG_X, chamfer=0.01)
 # Front number plate.
-ch.box((0.5, 0.11, 0.01), (0.55, 0.74, -5.127), "Cream", bevel=0.003, segs=1)
+ch.box((0.5, 0.11, 0.01), (0.55, 0.74, -5.124), "Cream", bevel=0.003, segs=1)  # into the bumper
 
 # Axles: banjo housings, differentials, leaf springs.
 for z in (-3.9, 0.2, 1.4):
@@ -204,7 +205,11 @@ for sx in (-1, 1):
     for z in (-2.95, -2.35):
         ch.prism([(sx * 0.82 + a * 1.06, 0.62 + b * 1.06) for a, b in tank], z - 0.02, z + 0.02,
                  "Iron", axis="z")
-    ch.cyl(0.04, 0.0, 0.03, "Iron", segs=10, xf=T(sx * 0.82, 0.82, -2.65) @ UP)
+    ch.cyl(0.04, 0.0, 0.03, "Iron", segs=10, xf=T(sx * 0.82, 0.815, -2.65) @ UP)  # into the tank
+    # Brackets from the rail's web out to the tank (tank, straps and step
+    # hung 15 cm out from the frame on nothing).
+    for z in (-2.95, -2.35):
+        ch.box((0.16, 0.06, 0.04), (sx * 0.575, 0.74, z), "Iron")
     # Step: a perforated tread on brackets.
     ch.box((0.32, 0.03, 0.55), (sx * 1.0, 0.92, -2.62), "Iron", bevel=0.006, segs=1)
     for z in (-2.85, -2.4):
@@ -218,16 +223,23 @@ for sx in (-1, 1):
 build_wheel(ch, T(0.93, 0.54, -1.18) @ S(0.95, 0.95, 0.95))
 for z in (-1.62, -0.74):
     ch.box((0.08, 0.5, 0.06), (0.68, 0.8, z), "Paint")
+    # Its arms off the rail (the carrier stood 14 cm out from it).
+    ch.box((0.15, 0.06, 0.06), (0.57, 0.8, z), "Paint")
 ch.box((0.06, 0.06, 1.0), (0.68, 0.55, -1.18), "Paint")
 # Toolbox and battery box on the left.
 ch.box((0.4, 0.34, 0.75), (-0.88, 0.73, -1.25), "Paint", bevel=0.015, segs=1)
 ch.box((0.41, 0.03, 0.76), (-0.88, 0.9, -1.25), "Paint", bevel=0.008, segs=1)
 for z in (-1.45, -1.05):
     ch.box((0.02, 0.06, 0.05), (-1.085, 0.84, z), "Iron")
+    # Its arms off the rail (it hung 18 cm out from it).
+    ch.box((0.19, 0.06, 0.06), (-0.59, 0.8, z), "Paint")
 ch.box((0.36, 0.28, 0.4), (-0.8, 0.72, -0.62), "Iron", bevel=0.01, segs=1)
+ch.box((0.13, 0.06, 0.06), (-0.56, 0.74, -0.62), "Paint")
 # Muffler and tailpipe, right side inboard.
 ch.cyl(0.1, -1.95, -1.25, "Iron", segs=14, xf=T(0.42, 0.42, 0), chamfer=0.02)
 ch.cyl(0.035, -1.25, -0.6, "Iron", segs=8, xf=T(0.42, 0.42, 0))
+# Its hanger up to the rail's lower flange (it hung under the frame).
+ch.box((0.04, 0.12, 0.04), (0.46, 0.57, -1.6), "Iron")
 
 # Rear: cross-member with tail lamps, a tow pintle, mud flaps.
 # (Its underside hangs 6 mm below the rails' top flanges: flush faces z-fight.)
@@ -239,19 +251,24 @@ for sx in (-1, 1):
     ch.box((0.4, 0.62, 0.012), (sx * 1.0, 0.57, 2.02), "Rubber")
     # The flap's bar, run forward onto the cross-member.
     ch.box((0.42, 0.04, 0.14), (sx * 1.0, 0.9, 1.96), "Paint")
-# Rear steps: a hanging ladder whose treads are the step colliders' tops.
+# Rear steps: a hanging ladder whose treads are the step colliders' tops,
+# its own object hinged at the bed's tail (`ladder`, origin on the hinge):
+# the game swings it plumb when the truck stands pitched on a slope.
+ladder = Part("ladder", origin=(0.0, 1.0, 1.85))
 # Each stringer is a straight slanted bar the treads' back ends sit on (a
 # stepped outline here once crossed itself, and its cap's triangles
 # z-fought in the headset).
 stringer = [(1.81, 1.0), (1.89, 1.0), (2.45, 0.30), (2.37, 0.30)]
 for sx in (-1, 1):
-    ch.prism(stringer, sx * 0.47 - 0.012, sx * 0.47 + 0.012, "Paint", axis="x")
+    ladder.prism(stringer, sx * 0.47 - 0.012, sx * 0.47 + 0.012, "Paint", axis="x")
 for y, z0, z1 in ((0.74, 1.8, 2.1), (0.37, 2.1, 2.4)):
-    ch.box((0.9, 0.025, z1 - z0), (0.0, y - 0.0125, (z0 + z1) / 2), "Iron", bevel=0.004, segs=1)
+    # Into the stringers either side (8 mm short of them).
+    ladder.box((0.918, 0.025, z1 - z0), (0.0, y - 0.0125, (z0 + z1) / 2), "Iron", bevel=0.004,
+               segs=1)
     # The nosing lip, a hair narrower and proud of the tread's edge.
-    ch.box((0.894, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.007), "Paint")
+    ladder.box((0.894, 0.04, 0.02), (0.0, y - 0.03, z1 - 0.007), "Paint")
     for k in range(5):
-        ch.box((0.1, 0.006, 0.012), (-0.32 + k * 0.16, y + 0.003, (z0 + z1) / 2), "Paint")
+        ladder.box((0.1, 0.006, 0.012), (-0.32 + k * 0.16, y + 0.0025, (z0 + z1) / 2), "Paint")
 
 # =============================================================================
 # Cab and bonnet
@@ -360,7 +377,8 @@ for sx in (-1, 1):
     cab2.cyl(0.1, -0.13, -0.11, "Iron", segs=20, xf=T(sx * 0.93, 1.3, -4.93))
     cab2.lathe([(0.0, -0.145), (0.06, -0.142), (0.095, -0.13), (0.0, -0.13)], "Lamp", segs=20,
                xf=T(sx * 0.93, 1.3, -4.93))
-    cab2.box((0.09, 0.05, 0.05), (sx * 0.93, 1.47, -4.98), "Lamp", bevel=0.012, segs=1)
+    # On the headlamp pod's top (it stood 2 cm over it).
+    cab2.box((0.09, 0.05, 0.05), (sx * 0.93, 1.443, -4.98), "Lamp", bevel=0.012, segs=1)
 # Grille: frame and vertical bars, radiator behind.
 cab2.box((1.12, 0.74, 0.04), (0.0, 1.33, -4.93), "Iron")
 cab2.box((1.2, 0.06, 0.06), (0.0, 1.73, -4.97), "Paint", bevel=0.01, segs=1)
@@ -421,7 +439,8 @@ for sx in (-1, 1):
 # Front board (behind the memorial board, inner face at z -1.78).
 for k in range(3):
     y = FLOOR + 0.09 + k * 0.18
-    bed.box((2.24, 0.17, 0.04), (0.0, y, -1.8), "Boards", bevel=0.005, segs=1)
+    # 2 mm into the side boards' ends (they met them face to face only).
+    bed.box((2.242, 0.17, 0.042), (0.0, y, -1.799), "Boards", bevel=0.005, segs=1)
 # (Thinner than the side caps it meets, so their faces don't coincide.)
 bed.box((2.3, 0.022, 0.06), (0.0, FLOOR + 0.55, -1.8), "Paint", bevel=0.005, segs=1)
 # Floor tie-down rings, recessed.
@@ -652,7 +671,7 @@ cv.lathe([(0.0, 0.0), (0.03, 0.0), (0.045, 0.06), (0.06, 0.08), (0.0, 0.08)], "B
          segs=16, xf=T(0.45, 2.9, -1.74) @ RX(math.pi / 2))
 cv.box((0.015, 0.015, 0.08), (0.45, 2.91, -1.78), "Iron")
 
-for p_ in (wheel, ch, cab2):
+for p_ in (wheel, ch, cab2, ladder):
     make(p_)
 join("canopy", cv, fw)
 # The bed's painted steel (stakes, the top cap, the tie-down rails) wears

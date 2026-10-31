@@ -18,8 +18,47 @@ impl Plugin for OnboardingVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (dress_posts, dress_props, light_lamps, ring_marked).chain(),
+            (
+                dress_posts,
+                dress_props,
+                light_lamps,
+                flare_lamps,
+                ring_marked,
+            )
+                .chain(),
         );
+    }
+}
+
+/// A lamp just lit: it flares three times as it comes on, so the eye
+/// finds the next station from the last one (the payoff of finishing a
+/// station, and the way on, in one).
+#[derive(Component)]
+struct Flare(f32);
+
+/// How long a lamp flares, s, and how bright at the top of a flare.
+const FLARE: f32 = 1.5;
+const LAMP_LIGHT: f32 = 30_000.0;
+
+fn flare_lamps(
+    mut commands: Commands,
+    mut lights: Query<(Entity, &mut PointLight, &mut Flare)>,
+    time: Res<Time>,
+) {
+    for (e, mut light, mut flare) in &mut lights {
+        flare.0 += time.delta_secs();
+        let t = flare.0;
+        if t >= FLARE {
+            light.intensity = LAMP_LIGHT;
+            light.range = 8.0;
+            commands.entity(e).remove::<Flare>();
+            continue;
+        }
+        // Three bright beats, fading.
+        let beat = 0.5 - 0.5 * (t / FLARE * 3.0 * std::f32::consts::TAU).cos();
+        let k = 1.0 + 6.0 * beat * (1.0 - t / FLARE);
+        light.intensity = LAMP_LIGHT * k;
+        light.range = 8.0 * k.sqrt();
     }
 }
 
@@ -197,9 +236,10 @@ fn light_lamps(
         if let (Lamp::Lit, Some(at)) = (post.lamp, at) {
             commands.spawn((
                 LampLight,
+                Flare(0.0),
                 PointLight {
                     color: Color::srgb(1.0, 0.82, 0.5),
-                    intensity: 30_000.0,
+                    intensity: LAMP_LIGHT,
                     range: 8.0,
                     shadow_maps_enabled: false,
                     ..default()

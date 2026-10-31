@@ -324,6 +324,8 @@ pub struct Raider {
     scan: f32,
     clock: f32,
     retreat_until: f32,
+    /// Off a plough's road till then, waiting for it to go by.
+    aside_until: f32,
     /// When it last ducked into cover (a drone's lock-on, or hurt).
     ducked_at: f32,
     /// Its gun, once it has one.
@@ -464,7 +466,10 @@ pub fn attach_raider(
         .unwrap_or_default();
     for (i, plan) in plans.iter().enumerate() {
         let n = spots.iter().filter(|s| plan.contains(**s, 0.5)).count();
-        if n == 0 || plan.entries.is_empty() {
+        // A boxcar's floor is a climb up from the ground, which the indoor
+        // grid doesn't walk (as `indoor`'s reach check skips it): not a
+        // site, or it stands at the door reaching in.
+        if n == 0 || plan.entries.is_empty() || plan.name == "boxcar" {
             continue;
         }
         site_of_plan[i] = Some(sites.len());
@@ -482,6 +487,13 @@ pub fn attach_raider(
         match &m.kind {
             MarkerKind::Loot { .. } => {
                 let p = zone.on_ground(m.at[0], m.at[1]);
+                // (Up in a boxcar: no more a spot than the boxcar's a site.)
+                if plans
+                    .iter()
+                    .any(|pl| pl.name == "boxcar" && pl.contains(p, 0.5))
+                {
+                    continue;
+                }
                 if let Some(s) = plans
                     .iter()
                     .position(|pl| pl.contains(p, 0.5))
@@ -597,6 +609,7 @@ pub fn attach_raider(
                 scan: 0.0,
                 clock: 0.0,
                 retreat_until: 0.0,
+                aside_until: 0.0,
                 ducked_at: -99.0,
                 gun: None,
                 refusals: 0,
@@ -739,6 +752,17 @@ pub struct Scene<'w, 's> {
             &'static GlobalTransform,
         ),
     >,
+    ploughs: Query<
+        'w,
+        's,
+        (
+            &'static crate::robots::plough::Plough,
+            &'static Robot,
+            &'static GlobalTransform,
+        ),
+    >,
+    /// What a stuck raider is up against, by name (telemetry).
+    names: Query<'w, 's, (&'static Name, Option<&'static ChildOf>)>,
     vent_levers: Query<
         'w,
         's,
@@ -854,6 +878,47 @@ impl Scene<'_, '_> {
         self.ray_clear(from, to) && self.ray_clear(from - Vec3::Y * 0.25, to)
     }
 
+    /// What's in the way walking from `from` toward `to`, within 1.5 m,
+    /// at the knee or the chest: its name and its parent's, for the
+    /// stuck event. Empty if a ray meets nothing.
+    fn in_the_way(&self, from: Vec3, to: Vec2) -> String {
+        let flat = Vec3::new(to.x - from.x, 0.0, to.y - from.z);
+        let Ok(dir) = Dir3::new(flat) else {
+            return String::new();
+        };
+        let name = |e: Entity| {
+            self.names.get(e).ok().map(|(n, p)| {
+                let up = p
+                    .and_then(|p| self.names.get(p.parent()).ok())
+                    .map(|(n, _)| n.as_str().to_string())
+                    .unwrap_or_default();
+                format!("{n}<{up}")
+            })
+        };
+        [0.1, 0.25, 0.4, 0.8, 1.2]
+            .iter()
+            .filter_map(|h| {
+                self.spatial
+                    .cast_ray(
+                        from + Vec3::Y * *h,
+                        dir,
+                        1.5,
+                        true,
+                        &SpatialQueryFilter::from_mask([Layer::World, Layer::Robot, Layer::Item]),
+                    )
+                    .map(|hit| (h, hit))
+            })
+            .map(|(h, hit)| {
+                format!(
+                    "{} @{:.2} h{h}",
+                    name(hit.entity).unwrap_or_else(|| format!("{:?}", hit.entity)),
+                    hit.distance
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
     /// Nothing solid between the two points, all the way.
     fn path_clear(&self, from: Vec3, to: Vec3) -> bool {
         let d = to - from;
@@ -950,6 +1015,43 @@ pub fn think(
             }
         }
 
+        // A plough coming up its road with it in the lane: off the road.
+        if r.clock > r.aside_until
+            && let Some((off, wait)) = scene.ploughs.iter().find_map(|(p, robot, gt)| {
+                let running = !robot.wrecked
+                    && p.jammed <= 0.0
+                    && matches!(
+                        p.run.leg,
+                        extraction_core::plough::Leg::Up(_) | extraction_core::plough::Leg::Down(_)
+                    );
+                running
+                    .then(|| {
+                        plough_aside(
+                            &r.grid,
+                            here,
+                            gt.translation().xz(),
+                            gt.forward().as_vec3().xz(),
+                        )
+                    })
+                    .flatten()
+            })
+        {
+            r.aside_until = r.clock + wait;
+            log.event(
+                "plough_aside",
+                json!({"x": round(here.x, 1), "z": round(here.y, 1), "to_x": round(off.x, 1), "to_z": round(off.y, 1)}),
+            );
+            r.interrupted = true;
+            bot.sprint = true;
+            bot.replace([
+                Task::WalkTo {
+                    to: off,
+                    within: 0.6,
+                },
+                Task::Wait(wait),
+            ]);
+        }
+
         // --- React: robots. -------------------------------------------
         r.scan -= dt;
         if r.scan <= 0.0 && r.stage != Stage::KitUp {
@@ -961,6 +1063,7 @@ pub fn think(
                 &scene,
                 &mut log,
                 eye,
+                pos,
                 gun,
                 health.since_hit < 4.0,
             );
@@ -991,8 +1094,12 @@ pub fn think(
                 log.event(
                     "stuck",
                     json!({"x": round(here.x, 1), "y": round(pos.y, 1), "z": round(here.y, 1),
-                           "ground": round(scene.zone.ground(here.x, here.y), 1),
-                           "doing": r.doing(), "task": format!("{:?}", bot.tasks.front())}),
+                    "ground": round(scene.zone.ground(here.x, here.y), 1),
+                    "doing": r.doing(), "task": format!("{:?}", bot.tasks.front()),
+                    "by": match bot.tasks.front() {
+                        Some(Task::WalkTo { to, .. }) => scene.in_the_way(pos, *to),
+                        _ => String::new(),
+                    }}),
                 );
                 // Stuck again and again in one place: the waypoint it's
                 // making for can't be reached from here, whatever the grid
@@ -1323,6 +1430,7 @@ fn react_to_robots(
     scene: &Scene,
     log: &mut SimLog,
     eye: Vec3,
+    pos: Vec3,
     gun: Option<Entity>,
     hurt: bool,
 ) {
@@ -1406,10 +1514,9 @@ fn react_to_robots(
         // Back off the way it came, out of sight.
         if r.clock > r.retreat_until {
             r.retreat_until = r.clock + 12.0;
-            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
-            let to = eye.xz() + away * 25.0;
             log.event("evade", json!({"robot": kind, "dist": round(d, 0)}));
-            if let Some(tasks) = travel(&r.grid, eye.xz(), to, 2.0) {
+            let shut = |d| scene.power_locked.contains(d);
+            if let Some(tasks) = run_from(&r.plans, &r.grid, pos, at, 25.0, &shut) {
                 r.interrupted = true;
                 bot.replace(tasks);
                 bot.sprint = true;
@@ -1425,9 +1532,9 @@ fn react_to_robots(
         }
         if r.clock > r.retreat_until {
             r.retreat_until = r.clock + 15.0;
-            let away = (eye.xz() - at.xz()).normalize_or(Vec2::X);
             log.event("flee", json!({"robot": kind, "dist": round(d, 0)}));
-            if let Some(tasks) = travel(&r.grid, eye.xz(), eye.xz() + away * 40.0, 2.0) {
+            let shut = |d| scene.power_locked.contains(d);
+            if let Some(tasks) = run_from(&r.plans, &r.grid, pos, at, 40.0, &shut) {
                 r.interrupted = true;
                 bot.replace(tasks);
                 bot.sprint = true;
@@ -2095,7 +2202,13 @@ fn fight_on(
         if outcome == "wrecked" {
             *log.stats.kills.entry(c.kind.clone()).or_default() += 1;
             if r.traits.salvage {
-                if let Ok((_, _, gt, ..)) = scene.robots.get(target) {
+                if let Ok((_, _, gt, ..)) = scene.robots.get(target)
+                    // Come down inside a building (a drone in the Bus
+                    // depot's hall) or down a site: no walk from outside
+                    // reaches it, and its loot is the building's, for
+                    // searching the building.
+                    && !wreck_inside(&r.plans, &scene.zone, gt.translation())
+                {
                     r.sites.push(Site {
                         name: format!("{} wreck", c.kind),
                         kind: SiteKind::Wreck(target),
@@ -3455,9 +3568,81 @@ fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
+/// Whether a wreck at `at` lies in one of `plans`: inside a building's
+/// walls, or anywhere over a site's floors below the ground, however high
+/// up its walls it was when it was killed (a crawler, wrecked on the deep
+/// kettle's wall, was made an outdoor site, and the walk to its loot went
+/// straight through the rock: Kettle sims, 30 October).
+fn wreck_inside(plans: &[BuildingPlan], zone: &crate::world::Zone, at: Vec3) -> bool {
+    let under = zone.ground(at.x, at.z) - at.y > 0.5;
+    plans.iter().any(|p| {
+        if p.levels.is_some() {
+            let l = p.to_local(at).xz();
+            under && p.grid.cell_of(l.to_array()).is_some() && p.indoors(l) || p.contains(at, 0.0)
+        } else {
+            p.contains(at, 0.0)
+        }
+    })
+}
+
+/// Off a plough's road, if `here` is in its lane ahead (where it sounds
+/// its horn: it doesn't stop, and its auger takes what's there; Rime sims,
+/// 30 October, a raider walking the pass road to the RV went under one):
+/// where to stand clear of its blade, to the side it's on (away from the
+/// chute's side if it's in the middle), on open ground; and how long to
+/// wait there for it to go by. None if it's not in the way.
+fn plough_aside(grid: &NavGrid, here: Vec2, plough: Vec2, forward: Vec2) -> Option<(Vec2, f32)> {
+    use extraction_core::plough as rules;
+    let fwd = forward.normalize_or_zero();
+    // (Its chute throws to its right.)
+    let right = Vec2::new(-fwd.y, fwd.x);
+    let d = here - plough;
+    let (ahead, side) = (d.dot(fwd), d.dot(right));
+    if !rules::in_lane_ahead(ahead, side) {
+        return None;
+    }
+    let first = if side > 0.3 { 1.0 } else { -1.0 };
+    let wait = (ahead + rules::MOUTH + 4.0) / rules::SPEED;
+    [first, -first]
+        .into_iter()
+        .flat_map(|s| [3.0, 5.0].map(move |m| (s, m)))
+        .map(|(s, m)| here - right * side + right * s * (rules::BLADE * 0.5 + m))
+        .find(|p| grid.walkable(p.to_array()))
+        .map(|p| (p, wait))
+}
+
+/// Away from a robot at `at` in a hurry, about `metres` off: inside a
+/// building or down a site, out by its nearest way out first (the open
+/// ground's grid has none of their walls, and a run on it went into them:
+/// Kettle sims, 30 October, raiders fleeing a crawler in the mine); on
+/// open ground, straight away.
+fn run_from(
+    plans: &[BuildingPlan],
+    grid: &NavGrid,
+    pos: Vec3,
+    at: Vec3,
+    metres: f32,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec<Task>> {
+    if let Some(out) = leave_plans(plans, pos, shut) {
+        return Some(out);
+    }
+    let away = (pos.xz() - at.xz()).normalize_or(Vec2::X);
+    travel(grid, pos.xz(), pos.xz() + away * metres, 2.0)
+}
+
 fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
-    let plan = r
-        .plans
+    leave_plans(&r.plans, pos, &|d| scene.power_locked.contains(d))
+}
+
+/// Out of whichever of `plans` `pos` is in, by its nearest way out (a
+/// door `shut` doesn't count). None if it's in none, or there's no way.
+fn leave_plans(
+    plans: &[BuildingPlan],
+    pos: Vec3,
+    shut: &dyn Fn(Entity) -> bool,
+) -> Option<Vec<Task>> {
+    let plan = plans
         .iter()
         .find(|p| p.in_grid(pos) && (p.indoors(p.to_local(pos).xz()) || p.contains(pos, -0.1)));
     let why = |what: &dyn Fn() -> String| {
@@ -3466,14 +3651,12 @@ fn leave_building(r: &Raider, scene: &Scene, pos: Vec3) -> Option<Vec<Task>> {
         }
     };
     let Some(plan) = plan else {
-        if r.plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
+        if plans.iter().any(|p| p.levels.is_some() && p.in_grid(pos)) {
             why(&|| "in an underground site's grid but not in it".into());
         }
         return None;
     };
-    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), &|d| {
-        scene.power_locked.contains(d)
-    }) else {
+    let Some(exit) = way_out(plan, plan.to_local(pos).xz(), shut) else {
         why(&|| format!("{}: no way out", plan.name));
         return None;
     };
@@ -4216,5 +4399,223 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
         SiteKind::Field => at.xz().distance(site.at) < 40.0,
         SiteKind::Anomaly => at.xz().distance(site.at) < 4.5,
         SiteKind::Wreck(_) => at.xz().distance(site.at) < 5.0,
+    }
+}
+
+#[cfg(test)]
+mod run_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    /// A machine wrecked down a site is the site's to search, wherever on
+    /// its walls it died (a crawler 3 m up the deep kettle's wall, made an
+    /// outdoor site, sent raiders straight through the rock: Kettle sims,
+    /// 30 October); one wrecked on the open ground beside it is its own.
+    #[test]
+    fn a_wreck_down_a_site_is_the_sites() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let mut tried = 0;
+        for plan in plans.iter().filter(|p| p.levels.is_some()) {
+            let g = &plan.grid;
+            let floors: Vec<Vec2> = (0..g.n * g.n)
+                .map(|k| Vec2::from(g.centre(k % g.n, k / g.n)))
+                .filter(|c| g.walkable(c.to_array()) && plan.indoors(*c))
+                .filter(|c| {
+                    let w = plan
+                        .xf
+                        .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                    zone.ground(w.x, w.z) - w.y > 4.0
+                })
+                .collect();
+            for c in floors.iter().step_by(37).take(6) {
+                let floor = plan
+                    .xf
+                    .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                for up in [0.3, 3.0] {
+                    tried += 1;
+                    assert!(
+                        wreck_inside(&plans, &zone, floor + Vec3::Y * up),
+                        "{}: a wreck {up} m over its floor at {c} made an outdoor site",
+                        plan.name
+                    );
+                }
+            }
+        }
+        assert!(tried >= 12, "tried {tried}");
+        // Out on the open ground, a valley's width from anything.
+        let open = zone.on_ground(0.0, 0.0) + Vec3::Y * 0.5;
+        if !plans.iter().any(|p| p.contains(open, 2.0)) {
+            assert!(
+                !wreck_inside(&plans, &zone, open),
+                "one in the open is the site's"
+            );
+        }
+    }
+
+    /// A raider in a plough's lane ahead gets off its road, clear of its
+    /// blade, and waits for it to go by; to its side, or behind it, it
+    /// carries on (Rime sims, 30 October: a raider walking the pass road
+    /// to the RV went under the plough).
+    #[test]
+    fn a_raider_gets_off_a_ploughs_road() {
+        use extraction_core::plough as rules;
+        let open = NavGrid {
+            n: 100,
+            cell: 1.0,
+            origin: -50.0,
+            cost: vec![1; 100 * 100],
+            lanes: Vec::new(),
+        };
+        // The plough at the origin heading -z (the game's forward).
+        let (at, fwd) = (Vec2::ZERO, Vec2::NEG_Y);
+        for (here, why) in [
+            (Vec2::new(0.0, -10.0), "dead ahead"),
+            (Vec2::new(1.2, -15.0), "ahead, by its chute"),
+            (Vec2::new(-1.5, -4.0), "close ahead"),
+        ] {
+            let (off, wait) =
+                plough_aside(&open, here, at, fwd).unwrap_or_else(|| panic!("{why}: stayed"));
+            let side = (off - at).dot(Vec2::X).abs();
+            assert!(
+                side > rules::BLADE * 0.5 + 2.0,
+                "{why}: only {side:.1} m off its line"
+            );
+            // Long enough there for it to have gone by.
+            let ahead = (here - at).dot(fwd);
+            assert!(
+                wait * rules::SPEED > ahead + rules::MOUTH,
+                "{why}: back too soon"
+            );
+        }
+        for (here, why) in [
+            (Vec2::new(5.0, -10.0), "beside its lane"),
+            (Vec2::new(0.0, 6.0), "behind it"),
+            (Vec2::new(0.0, -40.0), "far up the road"),
+        ] {
+            assert!(
+                plough_aside(&open, here, at, fwd).is_none(),
+                "{why}: stepped off"
+            );
+        }
+        // A drop one side (the pass road's edge): the other side.
+        let mut ledge = open.clone();
+        for j in 0..100 {
+            for i in 50..100 {
+                ledge.cost[j * 100 + i] = extraction_core::nav::BLOCKED;
+            }
+        }
+        let (off, _) = plough_aside(&ledge, Vec2::new(0.5, -10.0), at, fwd).expect("off");
+        assert!(off.x < 0.0, "over the edge: {off}");
+    }
+
+    /// Running from a robot down a site, or in a building, goes out by
+    /// the site's own ways, never the open ground's straight line through
+    /// its walls (Kettle sims, 30 October: raiders fleeing a crawler in
+    /// the mine ran into its rock). From deep in Kettle's mine and its
+    /// deep kettle, every leg of the run is clear on the site's own plan.
+    #[test]
+    fn a_run_from_a_robot_underground_keeps_to_the_site() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        // Open ground with nothing on it: what the raider's own grid knows
+        // of a site's walls underground.
+        let open = NavGrid {
+            n: 400,
+            cell: 2.0,
+            origin: -400.0,
+            cost: vec![1; 400 * 400],
+            lanes: Vec::new(),
+        };
+        let mut through = vec![];
+        let mut tried = 0;
+        for plan in plans.iter().filter(|p| p.levels.is_some()) {
+            let g = &plan.grid;
+            // The few floor cells furthest from its ways in.
+            let mut deep: Vec<Vec2> = (0..g.n * g.n)
+                .map(|k| Vec2::from(g.centre(k % g.n, k / g.n)))
+                .filter(|c| g.walkable(c.to_array()) && plan.contains(plan.to_world(*c), 0.0))
+                .collect();
+            let far = |c: &Vec2| {
+                plan.entries
+                    .iter()
+                    .map(|e| e.distance(*c))
+                    .fold(f32::INFINITY, f32::min)
+            };
+            deep.sort_by(|a, b| far(b).total_cmp(&far(a)));
+            for c in deep.iter().step_by(7).take(4) {
+                let feet = plan
+                    .xf
+                    .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                let robot = feet + Vec3::X * 3.0;
+                let Some(route) = run_from(&plans, &open, feet, robot, 40.0, &|_| false) else {
+                    continue;
+                };
+                tried += 1;
+                // Each leg sampled every quarter metre: inside the site,
+                // on its floor (or in a doorway).
+                let door = |q: Vec2| {
+                    plan.doors.iter().any(|d| {
+                        let t = (q - d.a).dot(d.b - d.a) / (d.b - d.a).length_squared();
+                        (q - d.a.lerp(d.b, t.clamp(0.0, 1.0))).length() < 1.0
+                    })
+                };
+                let mut at = feet.xz();
+                'legs: for t in &route {
+                    let Task::WalkTo { to, .. } = t else {
+                        continue;
+                    };
+                    let steps = (at.distance(*to) / 0.25).ceil().max(1.0) as usize;
+                    for k in 0..=steps {
+                        let w = at.lerp(*to, k as f32 / steps as f32);
+                        let q = plan.to_local(Vec3::new(w.x, feet.y, w.y)).xz();
+                        let inside = plan.contains(Vec3::new(w.x, feet.y, w.y), 0.0);
+                        // (Its ways out are where a run out of it ends.)
+                        let exit = plan.entries.iter().any(|e| e.distance(q) < 0.5);
+                        // (A path's smoothing may graze a corner: floor
+                        // within a cell of it is on its way.)
+                        let floor = [(0.0, 0.0), (0.3, 0.0), (-0.3, 0.0), (0.0, 0.3), (0.0, -0.3)]
+                            .iter()
+                            .any(|(x, z)| g.walkable([q.x + x, q.y + z]));
+                        if inside && !floor && !door(q) && !exit {
+                            through.push(format!("{}: from {at} to {to}, at {q}", plan.name));
+                            break 'legs;
+                        }
+                    }
+                    at = *to;
+                }
+            }
+        }
+        assert!(tried >= 4, "tried {tried}");
+        assert!(through.is_empty(), "ran through the rock: {through:#?}");
     }
 }

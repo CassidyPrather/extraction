@@ -272,10 +272,11 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.46, 0.46, 0.47);
                 m.metallic = 1.0;
             }),
-            // Phenolic grips: the polymer's relief in a deep red-brown.
+            // Phenolic grips: the polymer's relief in a deep red-brown
+            // (light enough that the checkering reads at arm's length).
             "Bakelite" => derive(Mat::Polymer, &|m| {
                 m.base_color_texture = None;
-                m.base_color = Color::srgb(0.2, 0.075, 0.04);
+                m.base_color = Color::srgb(0.27, 0.105, 0.055);
                 m.metallic = 0.0;
             }),
             "Black" => derive(Mat::GunMetal, &|m| {
@@ -340,7 +341,9 @@ impl ModelMaterials {
             "Glove" | "Leather" | "Padding" => {
                 let (c, rough) = match name {
                     "Glove" => (Color::srgb(0.30, 0.29, 0.23), 0.9),
-                    "Leather" => (Color::srgb(0.33, 0.27, 0.2), 0.7),
+                    // A shade lighter than the back, so palm and fingertip
+                    // patches read apart from the nylon.
+                    "Leather" => (Color::srgb(0.4, 0.31, 0.21), 0.68),
                     _ => (Color::srgb(0.17, 0.17, 0.16), 0.8),
                 };
                 derive(Mat::Canvas, &move |m| {

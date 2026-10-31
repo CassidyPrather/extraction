@@ -835,7 +835,7 @@ mod tests {
     /// your head went.)
     #[test]
     fn duck_under_a_beam() {
-        let mut vr = Vr::new("marrow_creek");
+        let mut vr = Vr::new(extraction_core::map::TEST_FIELD_ID);
         let zone = vr.app.world().resource::<crate::world::Zone>().clone();
         let start = zone.on_ground(0.0, 200.0);
         vr.stand(start + Vec3::Y * 0.05, 0.0);
@@ -939,7 +939,7 @@ mod tests {
     /// stopped (the first playtest crept downhill for good).
     #[test]
     fn stopping_on_a_slope_stays_put() {
-        let mut vr = Vr::new("marrow_creek");
+        let mut vr = Vr::new(extraction_core::map::TEST_FIELD_ID);
         let (at, deg) = slope_near(&vr, Vec2::new(40.0, 280.0));
         assert!(deg > 8.0, "a slope ({deg} deg)");
         let n = vr
@@ -1057,27 +1057,71 @@ mod tests {
 
     /// No button sits on another panel: each is beside its own card, clear
     /// of its neighbours' faces (in the truck, by the yard's tailgate).
+    /// The training yard folds the settings cards till its SETTINGS card's
+    /// been pushed (`onboarding::yard_shows`): past that.
+    fn settings_out(vr: &mut Vr) {
+        let at = crate::onboarding::station_of(crate::onboarding::Goal::Button);
+        let mut o = vr
+            .app
+            .world_mut()
+            .resource_mut::<crate::onboarding::Onboarding>();
+        o.done = crate::onboarding::all_goals()
+            .filter(|g| crate::onboarding::station_of(*g) <= at)
+            .collect();
+    }
+
     #[test]
     fn buttons_sit_clear_of_other_panels() {
-        use crate::interact::poke::{BUTTON_R, PokeButton};
+        use crate::interact::poke::PokeButton;
         use crate::raid::bench::ScreenText;
         let mut vr = Vr::new("training_yard");
         vr.step(5);
-        let world = vr.app.world_mut();
-        let buttons: Vec<(Entity, Vec3)> = world
-            .query::<(&PokeButton, &GlobalTransform)>()
-            .iter(world)
-            .map(|(b, gt)| (b.target, gt.translation()))
-            .collect();
-        let panels: Vec<(Entity, GlobalTransform, Vec2)> = world
-            .query::<(Entity, &GlobalTransform, &ScreenText)>()
-            .iter(world)
-            .map(|(e, gt, s)| (e, *gt, s.size))
-            .collect();
-        assert!(buttons.len() >= 5, "buttons: {}", buttons.len());
+        // The training yard folds what it isn't teaching (`onboarding::
+        // Folded`): what's shown together mustn't clash. At the settings
+        // step, and after it, when the settings cards are out.
+        let at_settings = crate::onboarding::station_of(crate::onboarding::Goal::Button);
         let mut clashes = Vec::new();
-        for (target, at) in &buttons {
-            for (e, gt, size) in &panels {
+        let mut most = 0;
+        for done_to in [at_settings, at_settings + 1] {
+            {
+                let mut o = vr
+                    .app
+                    .world_mut()
+                    .resource_mut::<crate::onboarding::Onboarding>();
+                o.done = crate::onboarding::all_goals()
+                    .filter(|g| crate::onboarding::station_of(*g) < done_to)
+                    .collect();
+            }
+            vr.step(3);
+            let world = vr.app.world_mut();
+            let shown = |w: &World, e: Entity| w.get::<Visibility>(e) != Some(&Visibility::Hidden);
+            let buttons: Vec<(Entity, Vec3)> = world
+                .query::<(&PokeButton, &GlobalTransform)>()
+                .iter(world)
+                .filter(|(b, _)| shown(world, b.target))
+                .map(|(b, gt)| (b.target, gt.translation()))
+                .collect();
+            let panels: Vec<(Entity, GlobalTransform, Vec2)> = world
+                .query::<(Entity, &GlobalTransform, &ScreenText)>()
+                .iter(world)
+                .filter(|(e, ..)| shown(world, *e))
+                .map(|(e, gt, s)| (e, *gt, s.size))
+                .collect();
+            most = most.max(buttons.len());
+            clashes.extend(clash(&buttons, &panels));
+        }
+        assert!(most >= 5, "buttons: {most}");
+        assert!(clashes.is_empty(), "{clashes:#?}");
+    }
+
+    fn clash(
+        buttons: &[(Entity, Vec3)],
+        panels: &[(Entity, GlobalTransform, Vec2)],
+    ) -> Vec<String> {
+        use crate::interact::poke::BUTTON_R;
+        let mut clashes = Vec::new();
+        for (target, at) in buttons {
+            for (e, gt, size) in panels {
                 if e == target {
                     continue;
                 }
@@ -1091,7 +1135,7 @@ mod tests {
                 }
             }
         }
-        assert!(clashes.is_empty(), "{clashes:#?}");
+        clashes
     }
 
     /// A finger on the VIGNETTE card's button: held just short of the cap
@@ -1101,6 +1145,7 @@ mod tests {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         use crate::raid::comfort_board::ComfortCard;
         let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
         vr.step(5);
         let card = vr
             .app
@@ -1440,6 +1485,7 @@ mod tests {
         use crate::interact::poke::{CAP, FINGERTIP, PokeButton};
         use crate::raid::comfort_board::ComfortCard;
         let mut vr = Vr::new("training_yard");
+        settings_out(&mut vr);
         vr.step(5);
         *vr.app
             .world_mut()
@@ -1545,6 +1591,57 @@ mod tests {
                 .get::<GlobalTransform>(item)
                 .unwrap()
                 .translation()
+        );
+        // In the hand, not a foot ahead of it (the 28 October playtest): it
+        // was caught 30 cm out and held there.
+        vr.step(10);
+        let palm = vr.hand_state(Side::Right).world.translation;
+        let aabb = *vr.app.world().get::<ColliderAabb>(item).unwrap();
+        let gap = palm.clamp(aabb.min, aabb.max).distance(palm);
+        assert!(gap < 0.06, "in the hand: its near side {gap} from it");
+    }
+
+    /// Lean far out over a table: the head goes where it goes, and the
+    /// rig's root (the room) never moves for it (the 28 October playtest:
+    /// leaning over a bench pushed the play space back).
+    #[test]
+    fn leaning_over_a_table_never_moves_the_room() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        vr.head(Vec3::new(0.0, 1.7, 0.0));
+        vr.step(60);
+        // A bench, waist high, its near edge 30 cm ahead.
+        vr.app.world_mut().spawn((
+            RigidBody::Static,
+            Collider::cuboid(1.2, 0.85, 0.8),
+            CollisionLayers::new(crate::world::Layer::World, LayerMask::ALL),
+            Transform::from_translation(feet + Vec3::new(0.0, 0.425, -0.7)),
+        ));
+        vr.step(10);
+        let root = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation;
+        // Bend out over it, further and further, then back.
+        for k in 1..=60 {
+            let f = k as f32 / 60.0;
+            vr.head(Vec3::new(0.0, 1.7 - 0.45 * f, -0.75 * f));
+            vr.step(1);
+        }
+        vr.step(30);
+        let moved = vr
+            .app
+            .world()
+            .get::<Transform>(vr.player)
+            .unwrap()
+            .translation
+            - root;
+        assert!(
+            Vec2::new(moved.x, moved.z).length() < 0.01,
+            "the room moved {moved} for a lean"
         );
     }
 
@@ -2412,6 +2509,12 @@ mod onboarding {
         vr.move_hand(Side::Left, feet + Vec3::new(-0.3, 1.0, -0.2));
         vr.step(10);
         assert!(done(&vr, Goal::Rack), "racked");
+        // A squeeze on safe: nothing (that's the safety, felt).
+        vr.trigger(Side::Right, 1.0);
+        vr.step(4);
+        vr.trigger(Side::Right, 0.0);
+        vr.step(4);
+        assert!(done(&vr, Goal::DeadTrigger), "the dead trigger");
         // Safety off: click the stick on the gun hand.
         vr.stick_click(Side::Right, true);
         vr.step(2);
@@ -2549,6 +2652,47 @@ mod onboarding {
         assert!(done(&vr, Goal::Search), "the find counted");
     }
 
+    /// Taking the dressing in the house, the crate catches your watch arm:
+    /// a cut on that forearm, bleeding till it's dressed (not wearing off
+    /// on its own), so first aid has something to find and to wrap.
+    #[test]
+    fn the_house_crate_scratches_and_first_aid_has_a_cut_to_dress() {
+        use crate::interact::wounds::{Limb, Wounds};
+        let mut vr = Vr::first_run();
+        at_station(
+            &mut vr,
+            crate::onboarding::station_of(Goal::Search),
+            &[Goal::OpenDoor],
+        );
+        let doorway = vr.app.world().resource::<crate::onboarding::Doorway>().0;
+        let find = placed(&mut vr, Placed::HouseFind);
+        let inward = (at(&vr, find) - doorway).with_y(0.0).normalize();
+        let inside = doorway + inward * 0.4;
+        vr.stand(Vec3::new(inside.x, doorway.y, inside.z), 0.0);
+        vr.step(20);
+        take(&mut vr, Side::Right, find);
+        assert!(done(&vr, Goal::Search));
+        vr.step(5);
+        let cut = |vr: &Vr| {
+            let w = vr.app.world().get::<Wounds>(vr.player).expect("wounds");
+            w.0.iter()
+                .find(|w| w.limb == Limb::Forearm(Side::Left))
+                .copied()
+        };
+        let c = cut(&vr).expect("a cut on the watch arm");
+        assert!(!c.dressed);
+        assert!(said(&vr, "got your arm"));
+        // Half a minute on, still bleeding: it waits for the dressing.
+        vr.step(90 * 30);
+        let h = vr
+            .app
+            .world()
+            .get::<crate::health::Health>(vr.player)
+            .unwrap();
+        assert!(h.bleeding > 0.0, "the cut stopped by itself");
+        assert!(h.hp > 90.0, "a scratch, not a wound: {}", h.hp);
+    }
+
     /// First aid: raise the left hand and look at the back of it (the
     /// wrist's screen); then a dressing in hand, the face button.
     #[test]
@@ -2592,16 +2736,28 @@ mod onboarding {
         );
         vr.app.world_mut().entity_mut(d).insert(RigidBody::Static);
         take(&mut vr, Side::Right, d);
-        // Wound round the left forearm (`interact::first_aid`).
+        // Wound round the left forearm (`interact::first_aid`), round the
+        // forearm the body has: from the wrist back toward its elbow.
         let wrist = feet + Vec3::new(-0.05, 1.15, -0.4);
         vr.hand(Side::Left, wrist, Quat::IDENTITY, 0.0, 0.0);
-        let centre = wrist + Vec3::Z * 0.12;
+        vr.step(5);
+        let st = vr
+            .app
+            .world()
+            .get::<crate::rig::stance::Stance>(vr.player)
+            .unwrap()
+            .clone();
+        let forearm = crate::interact::wounds::segments(&st, eye, [Some(wrist), None])
+            .into_iter()
+            .find(|s| s.limb == crate::interact::wounds::Limb::Forearm(Side::Left))
+            .unwrap();
+        let axis = (forearm.a - forearm.b).normalize();
+        let centre = wrist + axis * 0.12;
+        let u = axis.any_orthonormal_vector();
+        let v = axis.cross(u);
         for i in 0..=48 {
             let a = std::f32::consts::TAU * i as f32 / 24.0;
-            vr.move_hand(
-                Side::Right,
-                centre + Vec3::new(a.cos(), a.sin(), 0.0) * 0.06,
-            );
+            vr.move_hand(Side::Right, centre + (u * a.cos() + v * a.sin()) * 0.06);
             vr.step(1);
         }
         vr.step(3);
@@ -3134,6 +3290,25 @@ mod onboarding {
             .filter(|(s, t)| s.0 > 0 && !t.text.is_empty())
             .count();
         assert_eq!(ahead, 0, "boards ahead are blank");
+    }
+
+    /// Done in the truck, the driver says to get off it, plainly, and the
+    /// next lamp lights (the playtest read "Next: the lit lamp" as a lamp
+    /// in the truck and stood there two minutes).
+    #[test]
+    fn done_in_the_truck_you_are_told_to_get_off_it() {
+        let mut vr = Vr::first_run();
+        let settings = crate::onboarding::station_of(Goal::Button);
+        at_station(&mut vr, settings, &[]);
+        vr.step(5);
+        let card = card(&mut vr, OnboardCard::Push);
+        take_card(&mut vr, card);
+        vr.step(3);
+        assert!(done(&vr, Goal::Button));
+        assert!(said(&vr, "off the back of the truck"), "told to get off");
+        assert!(!said(&vr, "lit lamp"), "not \"the lit lamp\"");
+        let l = lamps(&mut vr);
+        assert_eq!(l[settings + 1], Lamp::Lit, "{l:?}");
     }
 
     /// The driver names the next station once: stepping out of the truck
@@ -4724,6 +4899,37 @@ mod body {
         );
     }
 
+    /// Walking round the room, the hips come with you: the head bobs a
+    /// little and looks down at the legs, and the body stays upright over
+    /// them instead of leaning from hips left behind (the 28 October
+    /// playtest: "as I am moving my legs around the space the hips of the
+    /// character model are staying in place and it looks like I am instead
+    /// tilting around").
+    #[test]
+    fn walking_round_the_room_the_hips_come_along() {
+        let (mut vr, _) = standing();
+        let mut worst = 0.0f32;
+        let frames = 135;
+        for i in 0..=frames {
+            let t = i as f32 / 90.0;
+            let along = 1.2 * i as f32 / frames as f32;
+            let bob = 0.02 * (t * std::f32::consts::TAU * 1.8).sin();
+            look(
+                &mut vr,
+                Vec3::new(0.3 * along, 1.62 + bob, -along),
+                -0.25,
+                -0.5,
+            );
+            vr.step(1);
+            if i > 20 {
+                let st = stance(&vr);
+                let off = (st.neck - st.pelvis.translation).with_y(0.0).length();
+                worst = worst.max(off);
+            }
+        }
+        assert!(worst < 0.06, "the hips trailed the neck by {worst} m");
+    }
+
     /// Straight out at arm's length and a little beyond: the shoulder
     /// comes forward (no further than a shoulder goes) and the drawn arm
     /// reaches the hand from it, not from somewhere off the body.
@@ -4913,6 +5119,132 @@ mod carry {
             (there.x - up.x - 0.5).abs() < 0.12,
             "and gets there: {there}"
         );
+    }
+
+    /// A pack held out in front stays hanging under the hand, upright,
+    /// through a turn of the wrist and a step forward; and a hand in front
+    /// of the shoulder (at the headset's strap) doesn't take it at all (the
+    /// 28 October playtest: it flipped on a wrist turn, snapped onto the
+    /// player on a step, and came off too easily).
+    #[test]
+    fn a_held_pack_hangs_still_and_isnt_taken_by_accident() {
+        use crate::interact::body::{Backpack, HANG};
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        vr.step(4);
+        // A hand at the ear (the headset's strap, an itch) squeezes: not
+        // the pack.
+        let strap = feet + Vec3::new(-0.12, 1.68, 0.0);
+        vr.hand(Side::Left, strap, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_ne!(
+            vr.hand_state(Side::Left).holding,
+            Some(bag),
+            "taken by accident"
+        );
+        vr.grip(Side::Left, 0.0);
+        vr.step(3);
+        // Over the shoulder, taken, round to the front.
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.move_hand(Side::Left, shoulder);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        let hanging = |vr: &Vr, hand: Vec3| {
+            let t = vr.app.world().get::<GlobalTransform>(bag).unwrap();
+            let off = t.translation().distance(hand - Vec3::Y * HANG);
+            let up = (t.rotation() * Vec3::Y).y;
+            (off, up)
+        };
+        // Turn the wrist half round, and back.
+        let mut worst = (0.0f32, 1.0f32);
+        for i in 0..=60 {
+            let roll = std::f32::consts::PI * (i as f32 / 30.0).min(2.0 - i as f32 / 30.0);
+            vr.hand(Side::Left, front, Quat::from_rotation_z(roll), 1.0, 0.0);
+            vr.step(1);
+            let (off, up) = hanging(&vr, front);
+            worst = (worst.0.max(off), worst.1.min(up));
+        }
+        assert!(
+            worst.0 < 0.12 && worst.1 > 0.8,
+            "it hung still through the wrist turn: off {} up {}",
+            worst.0,
+            worst.1
+        );
+        // A step forward, the hand going with you.
+        let mut worst = 0.0f32;
+        for i in 1..=30 {
+            let ahead = Vec3::NEG_Z * 0.5 * i as f32 / 30.0;
+            vr.head(Vec3::new(0.0, 1.7, 0.0) + ahead);
+            vr.move_hand(Side::Left, front + ahead);
+            vr.step(1);
+            worst = worst.max(hanging(&vr, front + ahead).0);
+        }
+        assert!(
+            worst < 0.15,
+            "it stayed in the hand through a step: off {worst}"
+        );
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag), "still held");
+    }
+
+    /// Held open in front of you, the pack's opening (its outer face, +Z in
+    /// its space) faces you, tipped up toward the eyes, so you look into it
+    /// rather than at its straps (the playtest asked twice: "opening from the
+    /// side, facing you, with a visible cavity").
+    #[test]
+    fn a_held_open_pack_opens_toward_you() {
+        use crate::interact::body::Backpack;
+        let (mut vr, feet, _) = with_a_door();
+        let bag = vr
+            .app
+            .world_mut()
+            .query_filtered::<(Entity, &GlobalTransform), With<Backpack>>()
+            .iter(vr.app.world())
+            .min_by(|a, b| {
+                a.1.translation()
+                    .distance(feet)
+                    .total_cmp(&b.1.translation().distance(feet))
+            })
+            .map(|(e, _)| e)
+            .unwrap();
+        vr.step(4);
+        let shoulder = feet + Vec3::new(-0.15, 1.6, 0.12);
+        vr.hand(Side::Left, shoulder, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Left, 1.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Left).holding, Some(bag));
+        let front = feet + Vec3::new(-0.1, 1.15, -0.45);
+        for i in 0..=20 {
+            vr.move_hand(Side::Left, shoulder.lerp(front, i as f32 / 20.0));
+            vr.step(1);
+        }
+        vr.step(40);
+        assert!(vr.app.world().get::<Backpack>(bag).unwrap().open);
+        let t = vr.app.world().get::<GlobalTransform>(bag).unwrap();
+        let eye = feet + Vec3::new(0.0, 1.7, 0.0);
+        let facing = (t.rotation() * Vec3::Z).dot((eye - t.translation()).normalize());
+        assert!(facing > 0.6, "the opening faces the eyes: {facing}");
     }
 
     /// Your pack off the left shoulder into the left hand: it hangs open in
@@ -5322,8 +5654,10 @@ mod vault {
             .next()
             .expect("a truck in the yard")
             .compute_transform();
-        // Facing the truck's front from behind it, a little off its steps.
-        let behind = truck.transform_point(Vec3::new(0.75, 0.0, 2.25));
+        // Facing the truck's front from behind it, a little off its steps,
+        // on the left: the bench stands just in on the right, and a climb
+        // there ends on its top.
+        let behind = truck.transform_point(Vec3::new(-0.75, 0.0, 2.25));
         let ground = vr
             .app
             .world()
@@ -6899,7 +7233,7 @@ mod wheel_nuts {
 mod door_hinge {
     use super::*;
     use crate::world::buildings::{Door, DoorLeaf};
-    use crate::world::hinge::{MOST, PER_UNIT, Swinging};
+    use crate::world::hinge::{MOST, Motion, Moving, PER_UNIT, Swinging};
 
     /// One door, gripped `along` its width at chest height, carried
     /// through `arc` radians round its hinge over a second: the leaf's
@@ -6946,6 +7280,330 @@ mod door_hinge {
         vr.step(45);
         angles.push(vr.app.world().get::<Door>(door).unwrap().angle);
         angles
+    }
+
+    /// A part (`hinge::Moving`) gripped at `grip` and carried to each of
+    /// `path` in turn, a tick apart, then let go: how far open it was each
+    /// tick, and after it was let go.
+    fn carry(vr: &mut Vr, part: Entity, grip: Vec3, path: &[Vec3]) -> (Vec<f32>, f32) {
+        vr.hand(Side::Right, grip, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(3);
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        assert!(
+            vr.app
+                .world()
+                .get::<crate::world::hinge::Gripped>(part)
+                .is_some(),
+            "the hand took hold"
+        );
+        let mut at = Vec::new();
+        for p in path {
+            vr.move_hand(Side::Right, *p);
+            vr.step(1);
+            at.push(vr.app.world().get::<Moving>(part).unwrap().at);
+        }
+        vr.grip(Side::Right, 0.0);
+        vr.hand(Side::Right, vr.feet() + Vec3::Y, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(45);
+        let left = vr.app.world().get::<Moving>(part).unwrap().at;
+        (at, left)
+    }
+
+    /// Smooth (never back, never past `most` a tick), as far as `reach`,
+    /// and still there after it was let go.
+    fn smooth(what: &str, at: &[f32], left: f32, most: f32, reach: f32) -> Vec<String> {
+        let mut bad = Vec::new();
+        for w in at.windows(2) {
+            if w[1] < w[0] - 1e-3 {
+                bad.push(format!(
+                    "{what}: it jittered back ({:.3} to {:.3})",
+                    w[0], w[1]
+                ));
+                break;
+            }
+            if w[1] - w[0] > most {
+                bad.push(format!("{what}: it jumped {:.3} in a tick", w[1] - w[0]));
+                break;
+            }
+        }
+        let end = *at.last().unwrap();
+        if end < reach {
+            bad.push(format!(
+                "{what}: it stopped at {end:.3}, short of {reach:.3}"
+            ));
+        }
+        if (left - end).abs() > 1e-3 {
+            bad.push(format!("{what}: let go at {end:.3}, it went to {left:.3}"));
+        }
+        println!("{what}: to {end:.3}, then {left:.3} let go");
+        bad
+    }
+
+    #[test]
+    fn a_casement_and_a_drawer_follow_the_hand() {
+        let mut vr = Vr::new("training_yard");
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let feet = zone.on_ground(0.0, 30.0);
+        vr.stand(feet, 0.0);
+        // A casement leaf in front of you, its hinge on your left, opening
+        // away (its +Y turns its free edge from +X toward -Z).
+        let rest = Transform::from_translation(feet + Vec3::new(-0.3, 1.2, -0.7));
+        let leaf = crate::world::hinge::spawn_moving(
+            &mut vr.app.world_mut().commands(),
+            "Casement",
+            rest,
+            Motion::Hinge { most: 1.6 },
+            Vec3::new(0.5, 0.8, 0.04),
+            Vec3::new(0.25, 0.0, 0.0),
+        );
+        // A drawer at waist height, its front toward you.
+        let drawer_rest = Transform::from_translation(feet + Vec3::new(0.4, 0.8, -0.6))
+            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI));
+        let drawer = crate::world::hinge::spawn_moving(
+            &mut vr.app.world_mut().commands(),
+            "Drawer",
+            drawer_rest,
+            Motion::Slide { travel: 0.4 },
+            Vec3::new(0.45, 0.15, 0.4),
+            Vec3::ZERO,
+        );
+        vr.app.world_mut().flush();
+        vr.step(3);
+        let tick = 1.0 / 90.0;
+        let mut bad = Vec::new();
+        // The leaf at its free edge, swung round 80 degrees over a second.
+        let on =
+            |a: f32| rest.transform_point(Quat::from_rotation_y(a) * Vec3::new(0.45, 0.0, -0.03));
+        let path: Vec<Vec3> = (1..=90).map(|i| on(1.4 * i as f32 / 90.0)).collect();
+        let (at, left) = carry(&mut vr, leaf, on(0.0), &path);
+        bad.extend(smooth("casement", &at, left, MOST * tick * 1.5, 1.3));
+        // The drawer by its front, drawn 0.3 m out over a second.
+        let front = |d: f32| drawer_rest.transform_point(Vec3::new(0.0, 0.02, -0.22 - d));
+        let path: Vec<Vec3> = (1..=90).map(|i| front(0.3 * i as f32 / 90.0)).collect();
+        let (at, left) = carry(&mut vr, drawer, front(0.0), &path);
+        bad.extend(smooth(
+            "drawer",
+            &at,
+            left,
+            crate::world::hinge::SLIDE_MOST * tick * 1.5,
+            0.28,
+        ));
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+        // Flat (or a bot), a press sends one to its other end.
+        vr.app.insert_resource(RigDriver::Flat);
+        let player = vr.player;
+        vr.app
+            .world_mut()
+            .write_message(crate::interact::InteractEvent::Pressed {
+                item: drawer,
+                player,
+            });
+        vr.step(90);
+        let d = vr.app.world().get::<Moving>(drawer).unwrap();
+        assert!(
+            !d.open && d.at < 1e-3,
+            "pressed, the drawer ran shut ({:.3})",
+            d.at
+        );
+    }
+
+    #[test]
+    fn counters_drawers_and_cabinet_doors_follow_the_hand_in_every_valley() {
+        let tick = 1.0 / 90.0;
+        let mut bad = Vec::new();
+        let (mut drawers, mut doors) = (0, 0);
+        for map in crate::test_maps() {
+            let mut vr = Vr::new(&map);
+            vr.step(5);
+            let mut parts: Vec<(Entity, Moving, [i32; 3])> = {
+                let mut q = vr.app.world_mut().query::<(Entity, &Moving, &Name)>();
+                q.iter(vr.app.world())
+                    .filter(|(_, _, n)| n.as_str().starts_with("counter_"))
+                    .map(|(e, m, _)| (e, *m, crate::destruction::key(m.rest.translation)))
+                    .collect()
+            };
+            parts.sort_by_key(|p| p.2);
+            let (mut d, mut c) = (0, 0);
+            for (e, m, _) in parts {
+                let rest = m.rest;
+                let front = rest.rotation * Vec3::NEG_Z;
+                let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+                let stand = rest.translation + front * 0.75;
+                let feet = zone.on_ground(stand.x, stand.z);
+                vr.stand(feet, front.x.atan2(front.z));
+                match m.motion {
+                    Motion::Slide { .. } if d < 2 => {
+                        d += 1;
+                        let at = |x: f32| rest.transform_point(Vec3::new(0.0, 0.02, -0.29 - x));
+                        let path: Vec<Vec3> = (1..=90).map(|i| at(0.3 * i as f32 / 90.0)).collect();
+                        let (a, left) = carry(&mut vr, e, at(0.0), &path);
+                        bad.extend(smooth(
+                            &format!("{map} drawer {e}"),
+                            &a,
+                            left,
+                            crate::world::hinge::SLIDE_MOST * tick * 1.5,
+                            0.28,
+                        ));
+                    }
+                    Motion::Hinge { .. } if c < 2 => {
+                        c += 1;
+                        let at = |a: f32| {
+                            rest.transform_point(
+                                Quat::from_rotation_y(a) * Vec3::new(0.24, 0.0, -0.03),
+                            )
+                        };
+                        let path: Vec<Vec3> = (1..=90).map(|i| at(1.4 * i as f32 / 90.0)).collect();
+                        let (a, left) = carry(&mut vr, e, at(0.0), &path);
+                        bad.extend(smooth(
+                            &format!("{map} cabinet door {e}"),
+                            &a,
+                            left,
+                            MOST * tick * 1.5,
+                            1.3,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            drawers += d;
+            doors += c;
+        }
+        assert!(
+            drawers >= 4 && doors >= 4,
+            "counters in the valleys ({drawers} drawers, {doors} doors)"
+        );
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// F5's windows: an intact sash's leaves swing into the room in the
+    /// hand, smooth and staying where they're left, their glass with them;
+    /// and the glass still breaks where it's swung to, known by where it
+    /// hangs shut (so the Surge and a reload find it).
+    #[test]
+    fn window_leaves_swing_in_with_their_glass_in_every_valley() {
+        use crate::destruction::glass::Pane;
+        let tick = 1.0 / 90.0;
+        let mut bad = Vec::new();
+        let mut checked = 0;
+        for map in crate::test_maps() {
+            let mut vr = Vr::new(&map);
+            vr.step(5);
+            let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+            let panes: Vec<(Entity, Pane)> = {
+                let mut q = vr.app.world_mut().query::<(Entity, &Pane)>();
+                q.iter(vr.app.world())
+                    .map(|(e, p)| (e, p.clone()))
+                    .collect()
+            };
+            // Leaves within reach of the ground, whole, in key order.
+            let mut leaves: Vec<(Entity, Moving, Entity, Pane)> = panes
+                .iter()
+                .filter(|(_, p)| p.broken.is_none())
+                .filter(|(_, p)| {
+                    let c = p.rest.translation;
+                    (0.8..1.8).contains(&(c.y - zone.ground(c.x, c.z)))
+                })
+                .filter_map(|(pe, p)| {
+                    let l = p.leaf?;
+                    let m = *vr.app.world().get::<Moving>(l)?;
+                    let n = vr.app.world().get::<Name>(l)?;
+                    n.as_str()
+                        .ends_with("#leaf_l")
+                        .then(|| (l, m, *pe, p.clone()))
+                })
+                .collect();
+            leaves.sort_by_key(|l| crate::destruction::key(l.1.rest.translation));
+            // (The training yard has no houses.)
+            if leaves.is_empty() {
+                println!("{map}: no windows to open");
+            }
+            for (leaf, m, pane, p) in leaves.into_iter().take(2) {
+                checked += 1;
+                let what = format!("{map} window leaf {leaf}");
+                let rest = m.rest;
+                let width = vr
+                    .app
+                    .world()
+                    .get::<crate::destruction::wood::Drawn>(leaf)
+                    .unwrap()
+                    .size
+                    .x;
+                // Stand in the room, facing the window.
+                let room = p.rest.rotation * Vec3::Z;
+                let stand = rest.translation + room * 0.8;
+                vr.stand(
+                    zone.on_ground(stand.x, stand.z),
+                    (-room).x.atan2(-room.z) + std::f32::consts::PI,
+                );
+                // By its free edge, swung in 80 degrees over a second.
+                let on = |a: f32| {
+                    rest.transform_point(
+                        Quat::from_rotation_y(a) * Vec3::new(width * 0.8, 0.0, -0.03),
+                    )
+                };
+                let path: Vec<Vec3> = (1..=90).map(|i| on(1.4 * i as f32 / 90.0)).collect();
+                let (a, left) = carry(&mut vr, leaf, on(0.0), &path);
+                bad.extend(smooth(&what, &a, left, MOST * tick * 1.5, 1.3));
+                // It swung in, not out.
+                let free = vr
+                    .app
+                    .world()
+                    .get::<Moving>(leaf)
+                    .unwrap()
+                    .pose()
+                    .transform_point(Vec3::X * width);
+                if (free - rest.translation).dot(room) < width * 0.5 {
+                    bad.push(format!("{what}: it didn't swing into the room"));
+                }
+                // Its glass went with it.
+                let now = vr.app.world().get::<Pane>(pane).unwrap().clone();
+                let carried = m.rest.compute_affine().inverse() * p.rest.compute_affine();
+                let want = vr
+                    .app
+                    .world()
+                    .get::<Moving>(leaf)
+                    .unwrap()
+                    .pose()
+                    .compute_affine()
+                    * carried;
+                if now.centre().distance(want.translation.into()) > 1e-3
+                    || now.centre().distance(p.rest.translation) < 0.1
+                {
+                    bad.push(format!(
+                        "{what}: its pane's at {:.2}, the leaf's put it at {:.2}",
+                        now.centre(),
+                        Vec3::from(want.translation)
+                    ));
+                }
+                // Struck where it is now, it breaks, known by where it hangs.
+                let normal = now.world.rotation * Vec3::Z;
+                let from = now.centre() + normal * 0.3;
+                vr.hand(Side::Right, from, Quat::IDENTITY, 0.0, 0.0);
+                vr.step(10);
+                for i in 1..=8 {
+                    vr.move_hand(Side::Right, from - normal * 0.075 * i as f32);
+                    vr.step(1);
+                }
+                vr.step(5);
+                let after = vr.app.world().get::<Pane>(pane).unwrap();
+                if after.broken.is_none() {
+                    bad.push(format!(
+                        "{what}: a fist through its glass, open, didn't break it"
+                    ));
+                } else if !vr
+                    .app
+                    .world()
+                    .resource::<crate::destruction::Broken>()
+                    .0
+                    .contains(&crate::destruction::key(p.rest.translation))
+                {
+                    bad.push(format!("{what}: broken, but not known where it hangs shut"));
+                }
+            }
+        }
+        assert!(checked >= 10, "windows opened ({checked})");
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
     #[test]

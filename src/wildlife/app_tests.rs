@@ -35,6 +35,7 @@ fn app() -> (App, Entity, Zone) {
 /// [`app`] on a valley of its own (`None`: the default, Marrow Creek).
 fn app_on(map: Option<&str>) -> (App, Entity, Zone) {
     let mut opts = crate::LaunchOptions {
+        map: extraction_core::map::TEST_FIELD_ID.into(),
         robots: false,
         ..Default::default()
     };
@@ -373,22 +374,39 @@ fn no_bird_is_ever_inside_a_collider() {
                 })
             })
             .collect();
+        let skip = ground(&mut app);
         let mut q = bevy::ecs::system::SystemState::<SpatialQuery>::new(app.world_mut());
         let spatial = q.get(app.world()).unwrap();
-        let filter = SpatialQueryFilter::from_mask([crate::world::Layer::World]);
+        // (A point query alone is blind inside a building's mesh: the
+        // physics' own queries every way, `inside_world`; a bird's centre
+        // is a point, grazing a surface isn't being in it.)
+        let ball = Collider::sphere(0.01);
         for p in birds {
-            if !spatial.point_intersections(p, &filter).is_empty() {
-                inside.push(p);
+            if let Some((e, how)) = inside_world(&spatial, p, &ball, Quat::IDENTITY, &skip) {
+                inside.push((p, how, e));
             }
         }
     }
     let flushes = app.world().resource::<Log>().flushed.len();
     assert!(flushes >= 2, "chased, the flock went up {flushes} times");
+    let named: Vec<String> = inside
+        .iter()
+        .take(5)
+        .map(|(p, how, e)| {
+            let w = app.world();
+            let own = w.get::<Name>(*e).map(|n| n.to_string()).unwrap_or_default();
+            let up = w
+                .get::<ChildOf>(*e)
+                .and_then(|c| w.get::<Name>(c.parent()))
+                .map(|n| n.to_string())
+                .unwrap_or_default();
+            format!("{p:.2} {how} {own} < {up}")
+        })
+        .collect();
     assert!(
         inside.is_empty(),
-        "{} bird positions inside colliders: {:?}",
-        inside.len(),
-        &inside[..inside.len().min(5)]
+        "{} bird positions inside colliders: {named:?}",
+        inside.len()
     );
 }
 
@@ -762,4 +780,132 @@ fn crossing_seen(map: &str, site: usize, post: Vec3, from: Vec3, to: Vec3, stone
         }
     }
     onto
+}
+
+/// Is `p` inside anything built or growing, by the physics' own queries:
+/// in a solid shape (a trunk's capsule), `body` cutting into any surface,
+/// or shut in by one collider every way round (inside a rock's or a
+/// building's mesh: a mesh is hollow to a point query). The ground itself
+/// (`skip`) doesn't count.
+fn inside_world(
+    s: &SpatialQuery,
+    p: Vec3,
+    body: &Collider,
+    rot: Quat,
+    skip: &[Entity],
+) -> Option<(Entity, &'static str)> {
+    let filter = SpatialQueryFilter::from_mask(crate::world::Layer::World)
+        .with_excluded_entities(skip.iter().copied());
+    if let Some(&e) = s.point_intersections(p, &filter).first() {
+        return Some((e, "in a solid"));
+    }
+    if let Some(&e) = s.shape_intersections(body, p, rot, &filter).first() {
+        return Some((e, "through a surface"));
+    }
+    let first = s.cast_ray(p, Dir3::X, 30.0, false, &filter)?;
+    [Dir3::NEG_X, Dir3::Z, Dir3::NEG_Z, Dir3::Y]
+        .iter()
+        .all(|&d| {
+            s.cast_ray(p, d, 30.0, false, &filter)
+                .is_some_and(|h| h.entity == first.entity)
+        })
+        .then_some((first.entity, "shut in"))
+}
+
+/// The ground's colliders, for [`inside_world`] to leave out.
+fn ground(app: &mut App) -> Vec<Entity> {
+    app.world_mut()
+        .query::<(Entity, &Name)>()
+        .iter(app.world())
+        .filter(|(_, n)| n.as_str().starts_with("Terrain"))
+        .map(|(e, _)| e)
+        .collect()
+}
+
+/// No deer, chamois or dog is put down inside anything solid (a rock, a
+/// trunk, a building, a fence): in every valley with a herd, three seeds
+/// each, by the physics' own queries at its body (not the nav grid: a
+/// Cinder dog once spawned inside a rock).
+#[test]
+fn no_herd_beast_spawns_inside_a_collider() {
+    use bevy::ecs::system::RunSystemOnce;
+    for map in extraction_core::map::VALLEYS.map(|v| v.0) {
+        let Some(kind) = super::herd::Kind::for_map(map) else {
+            continue;
+        };
+        for seed in 1..=3u64 {
+            let opts = crate::LaunchOptions {
+                map: map.into(),
+                seed,
+                robots: false,
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            // Until the herd's down (it waits for the walkers' nav grid),
+            // and the valley's solids are all built.
+            for _ in 0..360 {
+                app.update();
+            }
+            let beasts: Vec<(Vec3, f32)> = app
+                .world_mut()
+                .query::<&super::herd::Herd>()
+                .iter(app.world())
+                .flat_map(|h| h.beasts.iter().map(|b| (b.pos, b.yaw)))
+                .collect();
+            assert!(!beasts.is_empty(), "{map}, seed {seed}: no {kind:?}s");
+            let look = super::herd_look::build(kind);
+            // Its body, a little inside the one bullets find.
+            let (w, h, l) = match kind {
+                super::herd::Kind::Dog => (0.24, 0.35, 0.8),
+                _ => (0.3, 0.45, 1.0),
+            };
+            let body = Collider::cuboid(w * 0.8, h * 0.8, l * 0.8);
+            let skip = ground(&mut app);
+            let roof = app
+                .world()
+                .resource::<Perches>()
+                .sites
+                .iter()
+                .find(|s| !s.wading)
+                .map(|s| s.spots[0].0 - Vec3::Y * 0.05)
+                .unwrap();
+            let (control, inside) = app
+                .world_mut()
+                .run_system_once(move |s: SpatialQuery| {
+                    let ball = Collider::sphere(0.1);
+                    let control = inside_world(&s, roof, &ball, Quat::IDENTITY, &skip).is_some();
+                    let inside: Vec<(Vec3, Entity, &str)> = beasts
+                        .iter()
+                        .filter_map(|(p, yaw)| {
+                            let rot = Quat::from_rotation_y(-yaw - std::f32::consts::FRAC_PI_2);
+                            inside_world(&s, *p + Vec3::Y * look.ride, &body, rot, &skip)
+                                .map(|(e, how)| (*p, e, how))
+                        })
+                        .collect();
+                    (control, inside)
+                })
+                .unwrap();
+            assert!(control, "{map}: the queries don't find a roof at {roof:.1}");
+            let named = |e: Entity| {
+                let w = app.world();
+                let own = w.get::<Name>(e).map(|n| n.to_string()).unwrap_or_default();
+                let up = w
+                    .get::<ChildOf>(e)
+                    .and_then(|c| w.get::<Name>(c.parent()))
+                    .map(|n| n.to_string())
+                    .unwrap_or_default();
+                format!("{own} < {up}")
+            };
+            let inside: Vec<String> = inside
+                .iter()
+                .map(|(p, e, how)| format!("{p:.1} {how} {}", named(*e)))
+                .collect();
+            assert!(
+                inside.is_empty(),
+                "{map}, seed {seed}: {kind:?}s inside something: {inside:?}"
+            );
+        }
+    }
 }

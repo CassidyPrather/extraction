@@ -36,6 +36,9 @@ pub const OPEN_REACH: f32 = 70.0;
 /// the game's `robots::senses` and this lint share (a 5.45's; a pistol
 /// carries about 105 m, a Mosin 170)...
 pub const GUNSHOT: f32 = 150.0;
+/// The reach any one weapon's shot is held to, m: (quietest, loudest),
+/// the clamp `robots::senses` puts on a weapon's own figure.
+pub const GUNSHOT_REACH: (f32, f32) = (90.0, 190.0);
 /// ...and the share of it past a hill or a wall in the way
 /// (`robots::senses::OCCLUDED`) standing this high over the line
 /// (`robots::senses::HEARD_OVER`).
@@ -349,31 +352,70 @@ pub fn heard(hm: &Heightmap, a: P2, b: P2) -> bool {
     d <= if blocked { GUNSHOT * OCCLUDED } else { GUNSHOT }
 }
 
-/// For each point of interest, how many hot spots would hear a fight
+/// Hot spots within this of one another are one hot zone, metres: a
+/// zone hearing its own fight isn't the valley coming to it.
+pub const ZONE: f32 = 60.0;
+
+/// Each hot spot's zone: an index shared by spots within [`ZONE`] of one
+/// another (chained).
+fn zones(spots: &[(String, P2)]) -> Vec<usize> {
+    let mut zone: Vec<usize> = (0..spots.len()).collect();
+    fn root(z: &mut [usize], i: usize) -> usize {
+        let mut i = i;
+        while z[i] != i {
+            z[i] = z[z[i]];
+            i = z[i];
+        }
+        i
+    }
+    for i in 0..spots.len() {
+        for j in i + 1..spots.len() {
+            if dist(spots[i].1, spots[j].1) <= ZONE {
+                let (a, b) = (root(&mut zone, i), root(&mut zone, j));
+                zone[a] = b;
+            }
+        }
+    }
+    (0..spots.len()).map(|i| root(&mut zone, i)).collect()
+}
+
+/// For each point of interest, how many hot zones would hear a fight
 /// there (the tester's "the entirety of the robots to your front door").
 pub fn pull_at_places(map: &MapDef, hm: &Heightmap) -> Vec<(String, P2, usize)> {
     let spots = hot_spots(map);
+    let zone = zones(&spots);
     map.markers_of(&MarkerKind::Poi)
         .map(|m| {
-            let n = spots.iter().filter(|(_, b)| heard(hm, m.at, *b)).count();
-            (m.name.clone(), m.at, n)
+            let mut heard_by: Vec<usize> = spots
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, b))| heard(hm, m.at, *b))
+                .map(|(i, _)| zone[i])
+                .collect();
+            heard_by.sort_unstable();
+            heard_by.dedup();
+            (m.name.clone(), m.at, heard_by.len())
         })
         .collect()
 }
 
-/// For each hot spot, how many of the others would hear a fight there.
+/// For each hot spot, how many other hot zones would hear a fight there.
 pub fn pull(map: &MapDef, hm: &Heightmap) -> Vec<(String, P2, usize)> {
     let spots = hot_spots(map);
+    let zone = zones(&spots);
     spots
         .iter()
         .enumerate()
         .map(|(i, (name, at))| {
-            let n = spots
+            let mut heard_by: Vec<usize> = spots
                 .iter()
                 .enumerate()
-                .filter(|(j, (_, b))| *j != i && heard(hm, *at, *b))
-                .count();
-            (name.clone(), *at, n)
+                .filter(|(j, (_, b))| zone[*j] != zone[i] && heard(hm, *at, *b))
+                .map(|(j, _)| zone[j])
+                .collect();
+            heard_by.sort_unstable();
+            heard_by.dedup();
+            (name.clone(), *at, heard_by.len())
         })
         .collect()
 }
@@ -457,6 +499,9 @@ mod probe_file {
         let hm = Heightmap::build(&map);
         let walk = crate::map_nav::zone_grid(&map, &hm, crate::map_nav::MAX_SLOPE);
         let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        if std::env::var("LINT").is_ok() {
+            eprintln!("{}", crate::map_lint::lint(&map, &hm).text());
+        }
         let o = openness(&map, &hm, &walk);
         let w = walks(&map, &comfy);
         let mean = w.iter().map(|x| x.2).sum::<f32>() / w.len().max(1) as f32;
@@ -479,12 +524,59 @@ mod probe_file {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
+        if let Ok(place) = std::env::var("WHO_HEARS") {
+            if let Some(m) = map.markers_of(&MarkerKind::Poi).find(|m| m.name == place) {
+                for (n, at) in hot_spots(&map) {
+                    if heard(&hm, m.at, at) {
+                        eprintln!("  {place} heard at {n} ({:.0} m)", dist(m.at, at));
+                    }
+                }
+            }
+        }
+        for (n, at, k) in &p {
+            eprintln!("  pull {n} ({:.0}, {:.0}): {k}", at[0], at[1]);
+        }
         let r = crate::map_lint::lint(&map, &hm);
         for f in &r.findings {
             eprintln!(
                 "  FINDING {:?}: {} at ({:.0}, {:.0})",
                 f.rule, f.what, f.at[0], f.at[1]
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod probe_grid {
+    use super::*;
+    #[test]
+    #[ignore]
+    fn probe_grid() {
+        let text = std::fs::read_to_string(std::env::var("MAP_FILE").unwrap()).unwrap();
+        let map = MapDef::from_ron(&text).unwrap();
+        let hm = Heightmap::build(&map);
+        if let Ok(foot) = std::env::var("FOOT") {
+            let v: Vec<&str> = foot.split(',').collect();
+            let at = [v[1].parse().unwrap(), v[2].parse().unwrap()];
+            eprintln!("FOOTING {:.3}", hm.footing(v[0], at, v[3].parse().unwrap()));
+            return;
+        }
+        let v: Vec<f32> = std::env::var("GRID")
+            .unwrap()
+            .split(',')
+            .map(|s| s.parse().unwrap())
+            .collect();
+        let (x0, x1, z0, z1, st) = (v[0], v[1], v[2], v[3], v[4]);
+        let mut z = z0;
+        while z <= z1 {
+            let mut row = format!("{z:5.0}:");
+            let mut x = x0;
+            while x <= x1 {
+                row += &format!(" {:5.1}", hm.height([x, z]));
+                x += st;
+            }
+            eprintln!("{row}");
+            z += st;
         }
     }
 }
