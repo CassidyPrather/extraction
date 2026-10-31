@@ -284,6 +284,7 @@ fn animate_parts(
             bayonet_fixed: bayonet.is_some_and(|b| b.fixed),
             bipod: bipod.map_or(0.0, |b| b.swing),
             string_grab_z: gun.layout.handle.as_ref().map(|h| h.grab.z),
+            mag_catch: if gun.catch { 1.0 } else { 0.0 },
             ..Motion::new(f, travel)
         };
         for child in children.iter() {
@@ -466,6 +467,7 @@ mod tests {
                 magwell: None,
                 trigger: 0.0,
                 pulled: false,
+                catch: false,
                 dice: extraction_core::noise::Rng::new(0),
                 mass: None,
             })
