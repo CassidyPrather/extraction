@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod census;
 pub mod first_hour;
 pub mod firsts;
 pub mod hints;
@@ -748,6 +749,7 @@ impl Plugin for OnboardingPlugin {
                 )
                     .chain(),
             )
+            .add_systems(Update, census::census.run_if(|| census::on()))
             .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
