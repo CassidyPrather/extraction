@@ -525,7 +525,7 @@ pub(super) struct Newcomer {
     /// has one on a wall with only a window), and the one it's making for
     /// with the bot's failures then.
     no_roof: Vec<Entity>,
-    roof_try: Option<(Entity, u32)>,
+    roof_try: Option<(Entity, u32, f32)>,
     /// When it last did as a machine's tell says (not more than every 15 s).
     tell_at: f32,
     /// When it got home (the truck back at base, it in the bed).
@@ -701,6 +701,23 @@ pub(super) fn direct_raid(
     let Some((player, mut bot, root, mut input)) = bots.iter_mut().next() else {
         return;
     };
+    // Stuck on the way under a roof: the rest of that way is no good either
+    // (in, wait, out the way it came), and nor is that roof.
+    // (In, its wait and out are done within a minute.)
+    if state
+        .roof_try
+        .is_some_and(|(_, _, t)| time.elapsed_secs() - t > 60.0)
+    {
+        state.roof_try = None;
+    }
+    if let Some((b, failed, _)) = state.roof_try {
+        if bot.failed > failed {
+            bot.tasks.clear();
+            bot.walk = None;
+            state.no_roof.push(b);
+            state.roof_try = None;
+        }
+    }
     let now = time.elapsed_secs();
     let here = root.translation.xz();
     // A cautious newcomer creeps once it's out.
@@ -801,18 +818,12 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
-                // Stuck on the way under the last roof: not that one again.
-                if let Some((b, failed)) = state.roof_try.take() {
-                    if bot.failed > failed {
-                        state.no_roof.push(b);
-                    }
-                }
                 let roof = overhead
                     .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
                     .flatten();
                 match roof {
                     Some((tasks, b)) => {
-                        state.roof_try = Some((b, bot.failed));
+                        state.roof_try = Some((b, bot.failed, now));
                         tasks
                     }
                     None => run_for_cover(&world.zone, here, from, 0.0),
