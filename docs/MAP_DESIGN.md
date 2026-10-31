@@ -796,7 +796,12 @@ into each other, and the deep kettle's way down moved to where its exit
 the land: the pass's pines were thinned so its beacon is seen from 81%
 of the way in. Water doesn't either: where the pass road met the beck at
 a slant it ran 15 m along the falling water, its deck under it; it
-crosses square now.
+crosses square now. The valley's cloud cap is set in metres
+(`sky::valley_air`), so it came down with the tops: it lifts at 45 m,
+not 52, and the west summit (57 m) still goes into it while the pass
+(34 m) is in its skirts, as they were at 68 and 37 m under 52.
+
+![From the pass toward the west summit: the cap at 52 m (left) and 45 m (right)](shots/map-design/kettle_cap_from_pass.jpg)
 
 | Kettle Pass | as it was | pulled in |
 |---|---|---|
