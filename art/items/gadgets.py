@@ -55,17 +55,21 @@ def flashlight():
 # --- Power cell ------------------------------------------------------------------------------
 
 def power_cell():
+    """Lying along Z, on its side, as a cell rests on a shelf: a standing
+    cell read as a magazine from across a room (docs/craft/ITEM_READING.md).
+    Bays turn it to their own way (`gadgets`'s cell mounts)."""
     p = Part("body")
     p.lathe([(0.0, -0.027), (0.0085, -0.027), (0.0095, -0.026), (0.0095, 0.026), (0.0085, 0.027),
-             (0.0, 0.027)], "Black", segs=16, xf=UP)
+             (0.0, 0.027)], "Black", segs=16)
     # Contacts at both ends, a charge window, a copper band: power is a
     # dark body with a bright end (docs/craft/ITEM_READING.md), not
     # another dark upright beside a magazine.
-    p.cyl(0.004, 0.027, 0.03, "Brass", segs=10, xf=UP, chamfer=0.001)
-    p.cyl(0.006, -0.0285, -0.027, "Steel", segs=10, xf=UP)
+    p.cyl(0.004, 0.027, 0.03, "Brass", segs=10, chamfer=0.001)
+    p.cyl(0.006, -0.0285, -0.027, "Steel", segs=10)
+    # The charge window on top as it lies.
     p.lathe([(0.0096, -0.01), (0.0099, -0.009), (0.0099, 0.012), (0.0096, 0.013)], "Glow",
-            segs=6, xf=UP, start=-25, sweep=50, closed=True)
-    p.tube(0.0097, 0.009, 0.014, 0.026, "Copper", segs=16, xf=UP)
+            segs=6, start=65, sweep=50, closed=True)
+    p.tube(0.0097, 0.009, 0.014, 0.026, "Copper", segs=16)
     return [p]
 
 

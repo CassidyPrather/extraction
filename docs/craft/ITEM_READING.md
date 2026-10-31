@@ -80,6 +80,9 @@ Write down, for the set:
   across the room.
 - **How it rests**: an item that stands upright reads differently from
   one that lies flat. Use it.
+- **How it rests is part of its silhouette**: a cell lies, a magazine
+  stands. Set the model's rest pose and its catalog `dims` to the way the
+  thing lies on a shelf, and check a dropped one comes to rest that way.
 - **Small things need a flag**: anything under about 6 cm needs a bright
   or high-value feature to be found at all (a coloured cap, tape, a tag).
 
@@ -162,7 +165,11 @@ camera:
 - **Matches**: a blue label; no longer a second small pale box.
 - **Scrap metal**: a bigger blue-painted plate with bright edges; it reads
   from 3 m.
-- **Power cell**: dark with a copper band. Better at 1 m; at 3 m still a
-  thin dark upright, told from the PM mag mostly by its height. Open.
+- **Power cell**: dark with a copper band, and now lying on its side (its
+  model along Z; every bay's seat turned to match: `gadgets`'
+  `CELL_ALONG` and `CELL_UPRIGHT`, the radio deck's). A low round shape
+  with a bright end beside the magazine's tall dark one: they read apart
+  at 3 m in grey too. A dropped cell comes to rest lying down
+  (`vr_harness::tests::a_dropped_cell_comes_to_rest_lying_down`).
 - **Bolt, detector**: built in `src/anomaly/visuals.rs`; asked Anomalies
   (the bolt: orange flagging tape; the detector: a signal-yellow face).
