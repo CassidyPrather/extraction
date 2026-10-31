@@ -512,15 +512,34 @@ mod tests {
         app.world().get::<Visibility>(leaf) != Some(&Visibility::Hidden)
     }
 
+    /// Long enough quiet for a cell to merge, and then until no merge is
+    /// still being built: the build runs on the async pool, which under a
+    /// full test run (or a slow machine) can take any number of frames.
+    fn rest(app: &mut App) {
+        for _ in 0..(SETTLE + 20) {
+            app.update();
+        }
+        let t = std::time::Instant::now();
+        while app
+            .world()
+            .resource::<Cells>()
+            .cells
+            .values()
+            .any(|c| c.building.is_some())
+        {
+            assert!(t.elapsed().as_secs() < 30, "a merge never finished");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+            app.update();
+        }
+    }
+
     /// Four shutters along a wall, settled: merged, the parts hidden.
     fn settled() -> (App, Vec<(Entity, Entity)>) {
         let mut app = app();
         let parts: Vec<_> = (0..4)
             .map(|i| part(&mut app, Vec3::new(1.0 + i as f32 * 2.0, 1.0, 2.0)))
             .collect();
-        for _ in 0..(SETTLE + 20) {
-            app.update();
-        }
+        rest(&mut app);
         assert_eq!(resting(&mut app), 1, "one material: one merged mesh");
         for (_, leaf) in &parts {
             assert!(!shown(&app, *leaf), "a merged part's own mesh is hidden");
@@ -539,6 +558,25 @@ mod tests {
             if app.world().get_entity(*p).is_ok() {
                 assert!(shown(&app, *leaf), "{case}: a part left hidden");
             }
+        }
+    }
+
+    /// The async pool busy with other work (other tests, a valley's
+    /// bakes) while the cell rests: it still merges, however many frames
+    /// the build waits.
+    #[test]
+    fn a_busy_pool_still_merges() {
+        let pool = bevy::tasks::AsyncComputeTaskPool::get_or_init(Default::default);
+        let busy: Vec<_> = (0..pool.thread_num().max(1))
+            .map(|_| {
+                pool.spawn(async {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                })
+            })
+            .collect();
+        settled();
+        for b in busy {
+            bevy::tasks::block_on(b);
         }
     }
 
@@ -604,9 +642,7 @@ mod tests {
         });
         let (mut app, parts) = settled();
         app.world_mut().entity_mut(parts[0].0).despawn();
-        for _ in 0..(SETTLE + 20) {
-            app.update();
-        }
+        rest(&mut app);
         assert_eq!(resting(&mut app), 1, "the rest merged again");
     }
 
@@ -625,9 +661,7 @@ mod tests {
             let mesh = w.resource_mut::<Assets<Mesh>>().add(gone);
             w.entity_mut(parts[0].1).insert(Mesh3d(mesh));
         }
-        for _ in 0..(SETTLE + 20) {
-            app.update();
-        }
+        rest(&mut app);
         assert_eq!(resting(&mut app), 1, "the other three merged");
         assert!(shown(&app, parts[0].1), "the GPU-only one drawn as it is");
     }
@@ -639,9 +673,7 @@ mod tests {
         app.world_mut().get_mut::<Timber>(parts[0].0).unwrap().hp -= 1.0;
         app.update();
         assert_eq!(resting(&mut app), 0);
-        for _ in 0..(SETTLE + 20) {
-            app.update();
-        }
+        rest(&mut app);
         assert_eq!(resting(&mut app), 1);
     }
 }

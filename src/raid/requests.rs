@@ -438,13 +438,12 @@ pub fn describe_place(zone: &Zone, at: Vec3) -> String {
     };
     let into = if below.is_some() { "down in" } else { "in" };
     // Not "in the pump house by the Pump house".
-    match landmark.filter(|m| place != format!("the {}", m.name.to_lowercase())) {
+    let the = crate::raid::lines::the;
+    match landmark.filter(|m| place.to_lowercase() != the(&m.name).to_lowercase()) {
         Some(m) => {
             let d = extraction_core::geom::dist(m.at, here);
             let rel = if d < 60.0 { "by" } else { "out past" };
-            // Not "out past the The Hollow".
-            let name = m.name.strip_prefix("The ").unwrap_or(&m.name);
-            format!("{into} {place} {rel} the {name}.")
+            format!("{into} {place} {rel} {}.", the(&m.name))
         }
         None => format!("{into} {place}."),
     }
