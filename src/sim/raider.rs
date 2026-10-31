@@ -2547,8 +2547,21 @@ pub fn indoor_route(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> O
 /// To something to take: stand where it can be reached.
 fn indoor(plan: &BuildingPlan, from: Vec3, to: Vec2, within: f32) -> Option<Vec<Task>> {
     let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
-    indoor_to(plan, from, goal, within)
+    indoor_to(plan, from, goal, stand_within(goal, to, within))
 }
+
+/// How near the cell it's making for a bot reaching for something at
+/// `to` need get: anywhere it's still within arm's reach of it does, as a
+/// person leans over a chest or a bench (Cinder sims, 31 October: raiders
+/// stood at the works garage's benches and the charging queue's tool
+/// chest for 40 s each, 0.3 m short of a cell the furniture wouldn't let
+/// them onto).
+pub(crate) fn stand_within(goal: Vec2, to: Vec2, within: f32) -> f32 {
+    within.max(crate::bot::REACH - REACH_SPARE - goal.distance(to))
+}
+
+/// Short of arm's reach a stop leaves, for the hand's last lean.
+const REACH_SPARE: f32 = 0.15;
 
 /// As [`indoor`], through doors held shut on power: for a route that
 /// throws their switches first.
@@ -2559,7 +2572,7 @@ fn indoor_through_held(
     within: f32,
 ) -> Option<Vec<Task>> {
     let goal = reach_cell(plan, plan.to_local(from).xz(), to)?;
-    indoor_path(plan, from, goal, within, true)
+    indoor_path(plan, from, goal, stand_within(goal, to, within), true)
 }
 
 /// Out of the building: to the floor nearest the way out.
@@ -4474,6 +4487,126 @@ mod run_tests {
                 "one in the open is the site's"
             );
         }
+    }
+
+    /// Buildings with loot nobody can stand in arm's reach of (furniture or
+    /// walls crowd every floor cell near it), handed to Map design on 31
+    /// October with their positions: Cinder's blast furnace (7, by its
+    /// charging floor at (-131, 194) and (-127, 205)) and Marrow's mill race
+    /// (1, at (-11, 123)). Off this list as they're moved.
+    const OUT_OF_REACH: &[&str] = &["blast_furnace", "mill_race"];
+
+    /// Everything to take in a building can be taken from where a raider
+    /// stops for it: somewhere within its route's last stop of the cell it
+    /// makes for, a body has room to stand and the thing is in arm's reach
+    /// (Cinder sims, 31 October: raiders stood 0.3 m short of a cell beside
+    /// a tool chest and a garage's benches, the furniture in the way, and
+    /// never reached over). Every loot spot and loose thing in a building,
+    /// on every map.
+    #[test]
+    fn every_thing_in_a_building_is_taken_from_where_it_stops() {
+        let mut out = vec![];
+        let mut tried = 0;
+        for map in crate::test_maps() {
+            let opts = crate::launch::LaunchOptions {
+                robots: false,
+                map: map.clone(),
+                ..Default::default()
+            };
+            let mut app = crate::headless_app(opts, false);
+            app.finish();
+            app.cleanup();
+            for _ in 0..3 {
+                app.update();
+            }
+            let plans: Vec<BuildingPlan> = app
+                .world_mut()
+                .run_system_once(
+                    |b: Query<(Entity, &Building, &Transform)>,
+                     d: Query<(Entity, &DoorLeaf, &ChildOf)>| {
+                        plan_buildings(&b, &d)
+                    },
+                )
+                .unwrap();
+            let mut things: Vec<Vec3> = app
+                .world()
+                .resource::<BuildingLoot>()
+                .0
+                .iter()
+                .map(|s| s.at)
+                .collect();
+            things.extend(
+                app.world_mut()
+                    .query_filtered::<&GlobalTransform, With<crate::items::Item>>()
+                    .iter(app.world())
+                    .map(|g| g.translation()),
+            );
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let found: Vec<(String, Vec3)> = app
+                .world_mut()
+                .run_system_once(
+                    move |spatial: SpatialQuery,
+                          terrain: Query<Entity, With<crate::world::TerrainCollider>>| {
+                        let terrain = terrain.iter().next();
+                        let mut bad = vec![];
+                        let mut n = 0;
+                        for at in &things {
+                            // (Not up in a boxcar: no raider goes in. Nor the
+                            // places whose loot lies where no body stands
+                            // in reach of it: Map design's, `OUT_OF_REACH`.)
+                            let Some(plan) = plans.iter().find(|p| {
+                                p.levels.is_none()
+                                    && p.name != "boxcar"
+                                    && !OUT_OF_REACH.contains(&p.name.as_str())
+                                    && p.contains(*at, 0.0)
+                                    && p.reachable_height(*at)
+                                    && !p.entries.is_empty()
+                            }) else {
+                                continue;
+                            };
+                            let to = plan.to_local(*at).xz();
+                            let Some(goal) = reach_cell(plan, plan.entries[0], to) else {
+                                continue;
+                            };
+                            n += 1;
+                            let within = stand_within(goal, to, 0.3);
+                            // On the floor, or the ground where it's higher (a
+                            // scene staged on a slope stands on the slope).
+                            let fits = |p: Vec2| {
+                                let on = plan.xf.transform_point(Vec3::new(p.x, plan.floor_at(p), p.y));
+                                let feet = on.y.max(zone.ground(on.x, on.z));
+                                [0.35, 0.95, 1.5].iter().all(|h| {
+                                    let w = Vec3::new(on.x, feet + h, on.z);
+                                    !crate::world::sphere_in_world(&spatial, &zone, terrain, w, 0.26)
+                                })
+                            };
+                            let stands = (0..=8).any(|r| {
+                                let r = within * r as f32 / 8.0;
+                                (0..16).any(|k| {
+                                    let p = goal + Vec2::from_angle(k as f32 * std::f32::consts::TAU / 16.0) * r;
+                                    p.distance(to) <= crate::bot::REACH && fits(p)
+                                })
+                            });
+                            if !stands {
+                                bad.push((plan.name.clone(), *at));
+                            }
+                        }
+                        (bad, n)
+                    },
+                )
+                .map(|(bad, n)| {
+                    tried += n;
+                    bad.into_iter().map(|(name, at)| (name, at)).collect()
+                })
+                .unwrap();
+            out.extend(found.into_iter().map(|(n, at)| (format!("{map} {n}"), at)));
+        }
+        assert!(tried >= 50, "tried {tried}");
+        assert!(
+            out.is_empty(),
+            "{} can't be taken from where the raider stops: {out:?}",
+            out.len()
+        );
     }
 
     /// A raider in a plough's lane ahead gets off its road, clear of its
