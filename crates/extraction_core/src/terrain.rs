@@ -44,6 +44,25 @@ pub const ROAD_END_LEDGE: f32 = 0.35;
 /// How far past a road's edge its end blends into the land, metres.
 pub const ROAD_END_APRON: f32 = 6.0;
 
+// The truck's level stand (`Heightmap::level_trucks`), in its frame: x
+// across (wheels at 1 m), z along (the cab's front 5 m ahead of its middle,
+// the ladder's foot 3.5 m behind), and how far its ramp back to the land
+// reaches.
+const TRUCK_HALF_X: f32 = 2.0;
+const TRUCK_FRONT: f32 = -5.5;
+const TRUCK_BACK: f32 = 4.0;
+const TRUCK_REACH: f32 = 8.0;
+
+/// How far `q` is outside the truck's level stand at `at`, turned `yaw`.
+fn truck_out(at: P2, yaw: f32, q: P2) -> f32 {
+    let (s, c) = yaw.sin_cos();
+    let (dx, dz) = (q[0] - at[0], q[1] - at[1]);
+    let l = [dx * c - dz * s, dx * s + dz * c];
+    (l[0].abs() - TRUCK_HALF_X)
+        .max(0.0)
+        .hypot((l[1] - TRUCK_BACK).max(TRUCK_FRONT - l[1]).max(0.0))
+}
+
 /// Per-cell road paint: which kind of road, and how strongly (0..=255).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RoadPaint {
@@ -183,6 +202,7 @@ impl Heightmap {
         hm.level_trucks(map);
         if settled {
             hm.settle(map);
+            hm.level_posts(map);
         }
         hm.underground(map);
         hm
@@ -195,32 +215,17 @@ impl Heightmap {
     /// quarter metre per metre. After the rim, which the base stops stand
     /// on near the map's edge.
     fn level_trucks(&mut self, map: &MapDef) {
-        // Its frame: x across (wheels at 1 m), z along (the cab's front
-        // 5 m ahead of its middle, the ladder's foot 3.5 m behind).
-        const HALF_X: f32 = 2.0;
-        const FRONT: f32 = -5.5;
-        const BACK: f32 = 4.0;
         const RAMP: f32 = 0.25;
-        const REACH: f32 = 8.0;
         if crate::map_lint::TRUCK_AS_IT_WAS.contains(&map.name.as_str()) {
             return;
         }
         for (_, at, yaw) in map.truck_stands() {
-            let (s, c) = yaw.sin_cos();
-            let local = |q: P2| {
-                let (dx, dz) = (q[0] - at[0], q[1] - at[1]);
-                [dx * c - dz * s, dx * s + dz * c]
-            };
-            let out = |l: [f32; 2]| {
-                (l[0].abs() - HALF_X)
-                    .max(0.0)
-                    .hypot((l[1] - BACK).max(FRONT - l[1]).max(0.0))
-            };
-            let r = BACK.max(-FRONT) + HALF_X + REACH;
+            let out = |q: P2| truck_out(at, yaw, q);
+            let r = TRUCK_BACK.max(-TRUCK_FRONT) + TRUCK_HALF_X + TRUCK_REACH;
             let (lo, hi) = ([at[0] - r, at[1] - r], [at[0] + r, at[1] + r]);
             let (mut sum, mut n) = (0.0f32, 0.0f32);
             self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
-                if out(local(q)) == 0.0 {
+                if out(q) == 0.0 {
                     sum += hm.heights[k];
                     n += 1.0;
                 }
@@ -230,12 +235,129 @@ impl Heightmap {
             }
             let level = sum / n;
             self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
-                let o = out(local(q));
-                if o <= REACH {
+                let o = out(q);
+                if o <= TRUCK_REACH {
                     let lim = RAMP * o;
                     hm.heights[k] = level + (hm.heights[k] - level).clamp(-lim, lim);
                 }
             });
+        }
+    }
+
+    /// Small pads under the posts and blocks of a prefab that stands
+    /// across open ground (a gate over a road: [`crate::map::prefab_post_pads`]):
+    /// each flat at the prefab's footing out to a cell past the contact (the
+    /// ground between samples is interpolated), then back to the land at
+    /// most half a metre per metre: about 27 degrees, under the walking
+    /// grid's 32 (`nav::MAX_SLOPE`). The rest of its footprint keeps its
+    /// grade. Cells a road paints stay as the road graded them, and the
+    /// ramp's reach is measured from them too, so no step opens at a road's
+    /// edge; water and the truck's level stands are left alone. The prefab
+    /// stands at its footing, which the pads move (its corners are in the
+    /// ramps): levelled again until the two agree. A gate's posts went
+    /// 0.4 m into Rime's slope.
+    fn level_posts(&mut self, map: &MapDef) {
+        const RAMP: f32 = 0.5;
+        const REACH: f32 = 3.0;
+        let trucks = if crate::map_lint::TRUCK_AS_IT_WAS.contains(&map.name.as_str()) {
+            Vec::new()
+        } else {
+            map.truck_stands()
+        };
+        // Whether a point is under another placement's footprint (its pad
+        // stays as it was levelled: the ramps of Cinder's gate reached under
+        // its guard booth). Only just round it: the booths stand beside the
+        // gates' road blocks.
+        let under_other = |me: usize, q: P2| {
+            map.placements.iter().enumerate().any(|(i, o)| {
+                if i == me {
+                    return false;
+                }
+                let [w, _, d] = crate::map::prefab_footprint(&o.prefab);
+                let (s, c) = (-o.rot.to_radians()).sin_cos();
+                let (dx, dz) = (q[0] - o.at[0], q[1] - o.at[1]);
+                let l = [dx * c - dz * s, dx * s + dz * c];
+                l[0].abs() <= w * 0.5 + 0.2 && l[1].abs() <= d * 0.5 + 0.2
+            })
+        };
+        for (me, p) in map.placements.iter().enumerate() {
+            let pads = crate::map::prefab_post_pads(&p.prefab);
+            if p.absolute || pads.is_empty() {
+                continue;
+            }
+            // As `footing`: the game's Quat::from_rotation_y(-rot).
+            let (s, c) = p.rot.to_radians().sin_cos();
+            let local = |q: P2| {
+                let (dx, dz) = (q[0] - p.at[0], q[1] - p.at[1]);
+                [dx * c + dz * s, -dx * s + dz * c]
+            };
+            // How far a point is from the nearest pad's flat.
+            let margin = self.cell;
+            let out = |q: P2| {
+                let l = local(q);
+                pads.iter()
+                    .map(|(m, h)| {
+                        let dx = ((l[0] - m[0]).abs() - h[0] - margin).max(0.0);
+                        let dz = ((l[1] - m[1]).abs() - h[1] - margin).max(0.0);
+                        dx.hypot(dz)
+                    })
+                    .fold(f32::MAX, f32::min)
+            };
+            let [w, _, d] = crate::map::prefab_footprint(&p.prefab);
+            let r = w.max(d) * 0.5 + margin + REACH;
+            let (lo, hi) = ([p.at[0] - r, p.at[1] - r], [p.at[0] + r, p.at[1] + r]);
+            // The cells it may move: (index, height as it was, how far from
+            // a pad's flat), and the road's cells, which it may not.
+            let mut cells = Vec::new();
+            let mut road = Vec::new();
+            // A road's cells under a pad's flat may move a few centimetres
+            // (the road's own checks don't see that), no more.
+            const ROAD_GIVE: f32 = 0.05;
+            let mut on_road = Vec::new();
+            self.for_cells_in(lo, hi, 0.0, |hm, k, q| {
+                let o = out(q);
+                if hm.roads[k].kind.is_some() {
+                    road.push(q);
+                    if o == 0.0 {
+                        on_road.push((k, hm.heights[k]));
+                    }
+                    return;
+                }
+                let fixed = !hm.water[k].is_nan()
+                    || trucks
+                        .iter()
+                        .any(|(_, at, yaw)| truck_out(*at, *yaw, q) <= TRUCK_REACH)
+                    || under_other(me, q);
+                if o <= REACH && !fixed {
+                    cells.push((k, hm.heights[k], o, q));
+                }
+            });
+            let near_road = |q: P2| {
+                road.iter()
+                    .map(|r| (r[0] - q[0]).hypot(r[1] - q[1]))
+                    .fold(f32::MAX, f32::min)
+            };
+            let cells: Vec<(usize, f32, f32, f32)> = cells
+                .into_iter()
+                .map(|(k, h, o, q)| (k, h, o, near_road(q)))
+                .collect();
+            // Where it stands: its footing, and the map's lift over that.
+            let stands = |hm: &Self| hm.footing(&p.prefab, p.at, p.rot) + p.y;
+            let mut level = stands(self);
+            for _ in 0..8 {
+                for &(k, h, o, d) in &cells {
+                    let moved = level + (h - level).clamp(-RAMP * o, RAMP * o);
+                    self.heights[k] = h + (moved - h).clamp(-RAMP * d, RAMP * d);
+                }
+                for &(k, h) in &on_road {
+                    self.heights[k] = h + (level - h).clamp(-ROAD_GIVE, ROAD_GIVE);
+                }
+                let now = stands(self);
+                if (now - level).abs() < 1e-3 {
+                    break;
+                }
+                level = now;
+            }
         }
     }
 
@@ -767,6 +889,13 @@ impl Heightmap {
         }
         // The funicular's car is built on the grade through its middle.
         if prefab == "funicular_car" {
+            return self.height(at);
+        }
+        // A gate over a road stands on the road through its middle, its
+        // posts and blocks on pads levelled to it (`level_posts`): on its
+        // footprint's lowest corner it stood 1.3 m under Marrow's road,
+        // its posts buried.
+        if !crate::map::prefab_post_pads(prefab).is_empty() {
             return self.height(at);
         }
         let [w, _, d] = crate::map::prefab_footprint(prefab);
