@@ -2204,9 +2204,10 @@ fn fight_on(
             if r.traits.salvage {
                 if let Ok((_, _, gt, ..)) = scene.robots.get(target)
                     // Come down inside a building (a drone in the Bus
-                    // depot's hall): no walk from outside reaches it, and
-                    // its loot is the building's, for searching the building.
-                    && !r.plans.iter().any(|p| p.contains(gt.translation(), 0.0))
+                    // depot's hall) or down a site: no walk from outside
+                    // reaches it, and its loot is the building's, for
+                    // searching the building.
+                    && !wreck_inside(&r.plans, &scene.zone, gt.translation())
                 {
                     r.sites.push(Site {
                         name: format!("{} wreck", c.kind),
@@ -3567,6 +3568,23 @@ fn indoor_step(r: &Raider, pos: Vec3, to: Vec2, metres: f32) -> Option<Vec<Task>
 
 /// Indoors, out the nearest door first: the Zone grid knows nothing of
 /// walls, and a straight line from a back room goes through one.
+/// Whether a wreck at `at` lies in one of `plans`: inside a building's
+/// walls, or anywhere over a site's floors below the ground, however high
+/// up its walls it was when it was killed (a crawler, wrecked on the deep
+/// kettle's wall, was made an outdoor site, and the walk to its loot went
+/// straight through the rock: Kettle sims, 30 October).
+fn wreck_inside(plans: &[BuildingPlan], zone: &crate::world::Zone, at: Vec3) -> bool {
+    let under = zone.ground(at.x, at.z) - at.y > 0.5;
+    plans.iter().any(|p| {
+        if p.levels.is_some() {
+            let l = p.to_local(at).xz();
+            under && p.grid.cell_of(l.to_array()).is_some() && p.indoors(l) || p.contains(at, 0.0)
+        } else {
+            p.contains(at, 0.0)
+        }
+    })
+}
+
 /// Off a plough's road, if `here` is in its lane ahead (where it sounds
 /// its horn: it doesn't stop, and its auger takes what's there; Rime sims,
 /// 30 October, a raider walking the pass road to the RV went under one):
@@ -4388,6 +4406,67 @@ fn at_site(r: &Raider, site: &Site, at: Vec3) -> bool {
 mod run_tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+
+    /// A machine wrecked down a site is the site's to search, wherever on
+    /// its walls it died (a crawler 3 m up the deep kettle's wall, made an
+    /// outdoor site, sent raiders straight through the rock: Kettle sims,
+    /// 30 October); one wrecked on the open ground beside it is its own.
+    #[test]
+    fn a_wreck_down_a_site_is_the_sites() {
+        let opts = crate::launch::LaunchOptions {
+            map: "kettle_pass".into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let plans: Vec<BuildingPlan> = app
+            .world_mut()
+            .run_system_once(
+                |b: Query<(Entity, &Building, &Transform)>,
+                 d: Query<(Entity, &DoorLeaf, &ChildOf)>| plan_buildings(&b, &d),
+            )
+            .unwrap();
+        let mut tried = 0;
+        for plan in plans.iter().filter(|p| p.levels.is_some()) {
+            let g = &plan.grid;
+            let floors: Vec<Vec2> = (0..g.n * g.n)
+                .map(|k| Vec2::from(g.centre(k % g.n, k / g.n)))
+                .filter(|c| g.walkable(c.to_array()) && plan.indoors(*c))
+                .filter(|c| {
+                    let w = plan
+                        .xf
+                        .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                    zone.ground(w.x, w.z) - w.y > 4.0
+                })
+                .collect();
+            for c in floors.iter().step_by(37).take(6) {
+                let floor = plan
+                    .xf
+                    .transform_point(Vec3::new(c.x, plan.floor_at(*c), c.y));
+                for up in [0.3, 3.0] {
+                    tried += 1;
+                    assert!(
+                        wreck_inside(&plans, &zone, floor + Vec3::Y * up),
+                        "{}: a wreck {up} m over its floor at {c} made an outdoor site",
+                        plan.name
+                    );
+                }
+            }
+        }
+        assert!(tried >= 12, "tried {tried}");
+        // Out on the open ground, a valley's width from anything.
+        let open = zone.on_ground(0.0, 0.0) + Vec3::Y * 0.5;
+        if !plans.iter().any(|p| p.contains(open, 2.0)) {
+            assert!(
+                !wreck_inside(&plans, &zone, open),
+                "one in the open is the site's"
+            );
+        }
+    }
 
     /// A raider in a plough's lane ahead gets off its road, clear of its
     /// blade, and waits for it to go by; to its side, or behind it, it
