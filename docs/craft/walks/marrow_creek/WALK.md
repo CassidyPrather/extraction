@@ -166,9 +166,16 @@ The 'concrete block' that filled the crest's left half was a standing stone of t
 
 ![before](s09_ahead.jpg) ![after](fixes/s09_ahead_after.jpg)
 
-### 3. A rendezvous with something in front of it (s12)
+### 3. A rendezvous that shows the way out (s12)
 
-The rendezvous stood at the yard's far edge, so arriving you faced a rise with pines. It's now 20 m north, 11 m short of the yard's hut and still 8 m clear of it for the truck. Arriving, you face the hut and the gap in the fence beyond it, with the water tower and its lamp beside the gravel road to the right. The stop moved with the rendezvous. The after is the new arrival.
+The rendezvous stood at the yard's far edge, and arriving you faced a rise of pines. The beacon stands 7 m to one side of the truck's spot (map_landmarks::beacon_at), so no arrival faces its lamp, and the yard is always behind you coming from the crest. The yard's west side would face it, but there's no room there for the truck and it's too near the Bus depot's rendezvous. So the rendezvous moved 13 m north-west, off the rail line and 12 m from the platelayers' hut, and the truck's own track runs on from it through a new gate in the fence. Arriving, you look down the track and out, with the hut and its door beside it; the side view has the rail shed and the depot's sheds. The stop moved with the rendezvous, and the after is the new arrival.
 
 ![before](s12_ahead.jpg) ![after](fixes/rendezvous_ahead_after.jpg)
 ![before](s12_side.jpg) ![after](fixes/rendezvous_side_after.jpg)
+
+### 4. The shed's door (s03)
+
+The field shed by the track had its door round the back, so the walk's first small discovery read as a box. It's turned to face down the track toward the drop: you see the door from s02 as you come up, and the side view at s03 looks into it.
+
+![before](s02_ahead.jpg) ![after](fixes/s02_ahead_after.jpg)
+![before](s03_side.jpg) ![after](fixes/s03_side_after.jpg)

@@ -86,7 +86,10 @@ the answers, the sheet, the page and the fixes.
   block" was a standing stone of an offering's ring that the route walked
   through; nothing in the map's prefabs listed it.
 - A rendezvous keeps 8 m clear of buildings for the truck
-  (`map_lint::TRUCK_ROOM`), so it can't stand right at the thing you want
-  to face. Stand it 10 m short of it, on the way in.
+  (`map_lint::TRUCK_ROOM`), and its beacon stands 7 m to one side
+  (`map_landmarks::beacon_at`), so an arrival never faces the lamp, and
+  the place you crossed to get there is behind you. Give the arrival
+  something ahead instead: the truck's own track on out through the
+  fence (roads make the fence's gates) says "the way out" plainly.
 - A walk's fixes move its route: a job or rendezvous moved, the arrival
   stop moves with it. Show the new arrival beside the old, and say so.

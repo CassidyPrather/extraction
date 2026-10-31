@@ -139,6 +139,13 @@
         ),
         // The haulers' track: from the Gate down to the Depot's intake ramp,
         // worn by the convoys.
+        // The truck's way in to the Rail yard rendezvous, through its own
+        // gate in the fence: arriving, you look down it (the walk review,
+        // docs/craft/walks/marrow_creek).
+        (
+            name: "Truck track", kind: Dirt, width: 3.5, smoothing: 10.0,
+            points: [(122.0, -125.0), (134.0, -139.0), (147.0, -156.0), (158.0, -172.0)],
+        ),
         (
             name: "Haulers' track", kind: Dirt, width: 4.0, smoothing: 10.0,
             points: [(-140.0, -137.0), (-133.0, -134.0)],
@@ -280,8 +287,9 @@
         // every 25 m or so on the way a newcomer walks to the first job.
         // A roof to get under on the first walks (only a roof hides you
         // from a drone): a field shed by the knoll on the way to the Old
-        // farm, and one by the road north to the Village.
-        (prefab: "shed", at: (68.0, 118.5), rot: 237.0, tag: "field_shed"),
+        // farm (its door to the track, so you see in as you come up), and
+        // one by the road north to the Village.
+        (prefab: "shed", at: (68.0, 118.5), rot: 290.0, tag: "field_shed"),
         // The ford-keeper's hut on the ford track, south of the creek: a
         // stop on the long walk from the Old farm to the Hollow (map_openness
         // empty walks), a roof before the Hollow's guns.
@@ -410,7 +418,7 @@
         (kind: TruckStop, at: (22.0, 178.5), rot: 0.0, name: "South gate"),
         (kind: ShortExfil, at: (28.0, 154.5), name: "South gate (fuel)"),
         (kind: Rendezvous, at: (13.8, -147.0), name: "Bus depot"),
-        (kind: Rendezvous, at: (129.5, -115.0), name: "Rail yard"),
+        (kind: Rendezvous, at: (122.0, -125.0), name: "Rail yard"),
         (kind: Rendezvous, at: (-108.0, -50.0), name: "Ranger tower"),
         (kind: RobotGate, at: (-142.0, -144.1), rot: 45.0, name: "The Gate"),
         // Sentries: each guards something, with a way round behind it and
