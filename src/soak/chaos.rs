@@ -242,6 +242,9 @@ impl Monkey {
             let (grip, trigger) = self.controls(side);
             let h = self.hand(side);
             let busy = h.holding.is_some() || h.handle.is_some() || h.supporting.is_some();
+            // A thing a body slot refused stays in the open hand by design,
+            // until the hand closes and opens again (`interact::StowRefused`).
+            let busy = busy && !self.vr.stow_refused(side);
             if grip < 0.1 && trigger < 0.1 && busy {
                 self.open_for[i] += 1;
                 if self.open_for[i] == LET_GO {
