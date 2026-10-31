@@ -463,7 +463,7 @@
         map: "kettle_pass",
         name: "Top of the raise",
         // Where the mine's escape raise comes up on the west slope.
-        at: (-90.0, 31.1),
+        at: (-102.4, 31.7),
         rot: 90.0,
         after: Some(Visits(1)),
         pieces: [
