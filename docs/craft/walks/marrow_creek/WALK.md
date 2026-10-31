@@ -149,3 +149,26 @@ At (125.0, -133.8), 19.8 m; looking 30 deg along the way, and 236 deg to Rail ya
 - A rendezvous facing into trees (s12): the last stop of the first raid has no subject ahead. The way out should read as a place: the truck's road, a lamp, an opening.
 - A discovery facing away (s03): the shed by the track has its door round the back.
 - Dead stretch: none. Calm, arrival, threshold, tension, climb, discovery: the walk alternates. It has three 'nothing' moments, at the job, the crest and the end.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. The Old farm's arrival (s05)
+
+The job's point was at the farmhouse's corner, with the door close on the right and an empty slope on the left. It's now 13 m back, in the yard at the fork (s04's frame), so the arrival is the farm's best view: the farmhouse square ahead, the barn's wall on the left. The stop moved with the job's point. The after is the new arrival, looking the way you came in.
+
+![before](s05_ahead.jpg) ![after](fixes/job_ahead_after.jpg)
+
+### 2. A crest with a view (s09)
+
+The 'concrete block' that filled the crest's left half was a standing stone of the stone ring: the route walked through the ring's edge. The ring is now 10 m east, up the hill's flank, off the way. From the crest you see the steeple, the depot's sheds, the green lamp and the rail shed: the way out, revealed as you top the rise.
+
+![before](s09_ahead.jpg) ![after](fixes/s09_ahead_after.jpg)
+
+### 3. A rendezvous with something in front of it (s12)
+
+The rendezvous stood at the yard's far edge, so arriving you faced a rise with pines. It's now 20 m north, 11 m short of the yard's hut and still 8 m clear of it for the truck. Arriving, you face the hut and the gap in the fence beyond it, with the water tower and its lamp beside the gravel road to the right. The stop moved with the rendezvous. The after is the new arrival.
+
+![before](s12_ahead.jpg) ![after](fixes/rendezvous_ahead_after.jpg)
+![before](s12_side.jpg) ![after](fixes/rendezvous_side_after.jpg)

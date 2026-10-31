@@ -426,7 +426,7 @@ The chimney is the best landmark: walk toward it in the fog and you'll
 find the road.
 
 - V.""", "Foreman's house note"),
-        ("house_plank_damaged", (15.0, 103.5), "Note", """Came in on the driver's truck, same as
+        ("house_plank_damaged", (-13.0, 98.0), "Note", """Came in on the driver's truck, same as
 you, I expect. He's all right. He won't come past the fence. I asked
 him why once. He said he tried, the first day, and they turned him back,
 and now he's used to it.

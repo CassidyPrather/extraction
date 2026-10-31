@@ -572,7 +572,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             nz,
         )]),
         // The scavenger off Lev's truck: a bedroll, a tin, lately.
-        ("cinder", "house_plank_damaged") if here(15.0, 103.5) => house(
+        ("cinder", "house_plank_damaged") if here(-13.0, 98.0) => house(
             |_| {
                 vec![
                     on("bedroll", Vec3::new(-4.0 + 0.95, 0.5, -3.5 + 1.1), PI * 0.5),
@@ -1571,7 +1571,7 @@ mod tests {
             ("kettle", "cabin_log", 149.1, -152.2),
             ("kettle", "cabin_log", 89.2, -103.5),
             ("kettle", "chapel", -7.4, 123.4),
-            ("cinder", "house_plank_damaged", 15.0, 103.5),
+            ("cinder", "house_plank_damaged", -13.0, 98.0),
             ("cinder", "cabin_log", -51.9, -111.2),
             ("sallow", "house_brick", -58.0, 206.0),
             ("sallow", "shop", -180.0, -222.0),

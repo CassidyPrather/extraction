@@ -79,3 +79,14 @@ the answers, the sheet, the page and the fixes.
 - An arrival faces the way you came in, not the way on: the first walks'
   rendezvous looked due north into the trees, because a route's end has
   no way on, and that read as a dead end that wasn't there.
+- A muddy arrival is often fixed by moving the point, not the scenery: the
+  place's best frame tends to sit 10 to 20 m short of where its marker was
+  dropped. Look for it in the stops before the arrival.
+- Find out what's in a bad frame before moving it. Marrow's crest "concrete
+  block" was a standing stone of an offering's ring that the route walked
+  through; nothing in the map's prefabs listed it.
+- A rendezvous keeps 8 m clear of buildings for the truck
+  (`map_lint::TRUCK_ROOM`), so it can't stand right at the thing you want
+  to face. Stand it 10 m short of it, on the way in.
+- A walk's fixes move its route: a job or rendezvous moved, the arrival
+  stop moves with it. Show the new arrival beside the old, and say so.

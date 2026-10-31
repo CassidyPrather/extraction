@@ -138,3 +138,26 @@ At (179.4, 6.4), 22.5 m; looking 81 deg along the way, and 352 deg to headframe 
 - Dead stretch (s02 to s04, 40 to 100 m): three calms, the same straight road, the same furnace in every side view, and the Row only ever in haze. The walk's first beat after the drop is the canal bridge at 160 m.
 - The furnace is in every side view of the first four stops: a good landmark, but it crowds out discovery on the near side.
 - The rendezvous faces a bank as you come in (s11); the beacon is to the left. Minor beside the three above.
+
+## Fixes
+
+Before on the left, after on the right.
+
+### 1. Ash Row as a street (s04, the job's arrival)
+
+The Row's houses stood up to 50 m off the works road, so you arrived on an empty road with the Row in the haze. The plank house and the shop now stand either side of the road at the job's point (14 m off it, doors to the road), so you arrive in a street: the plank house ahead on the right, the burnt house on the left. The woodpile that was the first job's cover sits between the shop and the plank house. The scavenger's note and things went with the house.
+
+![before](s04_ahead.jpg) ![after](fixes/s04_ahead_after.jpg)
+
+### 2. The dead stretch from the drop (s02, s03)
+
+Three calms down the same straight road, with the furnace in every side view. The damaged brick house now stands at the road's edge 60 m from the drop, and the shop at the fork, so the Row begins at 60 m and the walk goes calm, approach, threshold at the fork, arrival, instead of calm, calm, calm, nothing.
+
+![before](s02_ahead.jpg) ![after](fixes/s02_ahead_after.jpg)
+![before](s03_ahead.jpg) ![after](fixes/s03_ahead_after.jpg)
+
+### 3. The wreck in the way (s08)
+
+The car wreck stood on the walking line 2 m in front of you where the yard opens. It's now 4 m south, on the same flat ground: the shed and the yard road are the frame, and the wreck is cover at its edge.
+
+![before](s08_ahead.jpg) ![after](fixes/s08_ahead_after.jpg)

@@ -5,7 +5,9 @@
 <walk-dir> holds `stops.json` (scripts/walk_stops.py), the shots as
 `<stop>_ahead.jpg` and `<stop>_side.jpg`, and `answers.json`:
 {"title": ..., "beats": [[stop, beat], ...] (optional), "stops": {"s01":
-{"vista": ..., "discover": ..., "for": ..., "beat": ...}}, "notes": [...]}.
+{"vista": ..., "discover": ..., "for": ..., "beat": ...}}, "notes": [...],
+"fixes": [{"title": ..., "what": ..., "pairs": [[before, after], ...]}]}
+(the fixes' shots as paths in <walk-dir>, the before from the walk).
 Writes `sheet.jpg` (a row a stop: the two views and the answers) and
 `WALK.md` (the same, as a page, with the beat chart)."""
 
@@ -82,5 +84,10 @@ for s in stops:
         "",
     ]
 md += ["## What's wrong", ""] + [f"- {n}" for n in ans.get("notes", [])] + [""]
+if ans.get("fixes"):
+    md += ["## Fixes", "", "Before on the left, after on the right.", ""]
+    for f in ans["fixes"]:
+        md += [f"### {f['title']}", "", f["what"], ""]
+        md += [f"![before]({b}) ![after]({a})" for b, a in f["pairs"]] + [""]
 open(os.path.join(d, "WALK.md"), "w").write("\n".join(md))
 print(os.path.join(d, "sheet.jpg"), len(rows), "stops")
