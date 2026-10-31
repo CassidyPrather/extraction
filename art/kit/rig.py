@@ -190,9 +190,10 @@ def holster_flap(open_):
 # --- Pouches ---------------------------------------------------------------
 
 # A magazine stands in it centred on its cavity (`src/kit_cavities.rs`,
-# POUCH): an AK's is 0.026 x 0.2 x 0.104 with its curve.
-PH = (-0.108, 0.025)  # bottom, mouth (slot y)
-PZ = -0.063  # its front (slot z); its back is on the chest panel
+# POUCH): an AK-74's curves forward, 130 mm front to back over what's in
+# the pouch (Gunsmith's, shaped from the gun). Deep enough for that.
+PH = (-0.118, 0.025)  # bottom, mouth (slot y)
+PZ = -0.090  # its front (slot z); its back is on the chest panel
 
 
 def pouch():
@@ -200,7 +201,8 @@ def pouch():
     prof = fillet([(PZ, PH[0]), (0.05, PH[0]), (0.05, PH[1]), (PZ, PH[1])], 0.008, 2)
     p.prism(prof, -0.021, 0.021, "Canvas", axis="x", bevel=0.005, segs=2)
     # A band of webbing round it, and a seam down its front.
-    p.box((0.052, 0.016, 0.122), (0.0, -0.07, -0.0065), "Olive", bevel=0.002, segs=1)
+    p.box((0.052, 0.016, 0.05 - PZ + 0.002), (0.0, -0.07, (0.05 + PZ) / 2), "Olive", bevel=0.002,
+          segs=1)
     p.box((0.003, 0.11, 0.004), (0.0, -0.04, PZ - 0.0015), "Canvas", bevel=0.001, segs=1)
     return p
 
@@ -208,7 +210,8 @@ def pouch():
 def pouch_flap(open_):
     p = Part("pouch_flap_open" if open_ else "pouch_flap_closed")
     if not open_:
-        p.box((0.046, 0.006, 0.116), (0.0, PH[1] + 0.0025, -0.0065), "Canvas", bevel=0.002, segs=1)
+        p.box((0.046, 0.006, 0.05 - PZ - 0.004), (0.0, PH[1] + 0.0025, (0.05 + PZ) / 2), "Canvas",
+              bevel=0.002, segs=1)
         p.box((0.044, 0.04, 0.006), (0.0, PH[1] - 0.016, PZ - 0.004), "Canvas", bevel=0.002, segs=1)
         p.cyl(0.004, 0.0, 0.003, "Iron", segs=10, xf=T(0.0, PH[1] - 0.026, PZ - 0.0075) @ RX(math.pi))
     else:

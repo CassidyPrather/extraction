@@ -2837,6 +2837,7 @@ dependencies = [
  "extraction_core",
  "fastrand",
  "firewheel",
+ "gunsmith",
  "hrtf",
  "log",
  "miniz_oxide 0.8.9",
@@ -2850,6 +2851,7 @@ dependencies = [
 name = "extraction_core"
 version = "0.1.0"
 dependencies = [
+ "gunsmith",
  "png",
  "ron 0.10.1",
  "serde",
@@ -3455,6 +3457,16 @@ checksum = "b62d5865c036cb1393e23c50693df631d3f5d7bcca4c04fe4cc0fd592e74a782"
 dependencies = [
  "euclid",
  "svg_fmt",
+]
+
+[[package]]
+name = "gunsmith"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "ron 0.10.1",
+ "serde",
+ "wayland-sys",
 ]
 
 [[package]]

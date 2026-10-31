@@ -285,7 +285,8 @@ for i in range(4):
 head += [(0.0055, -0.166), (0.0, -0.165)]
 rod.lathe(head, "Steel", segs=24, xf=T(0, ROD_Y, 0))
 
-trig = Part("trigger", origin=(0.0, 0.006, -0.02))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.012, -0.02))
 trig.sweep(catmull([(-0.022, 0.004), (-0.026, -0.004), (-0.025, -0.012), (-0.021, -0.016)], 6,
                    closed=False), section_rect(0.0045, 0.003, 0.0011, 3), "Blued")
 

@@ -2406,6 +2406,7 @@ mod glove_tests {
             magwell: None,
             trigger: 0.0,
             pulled: false,
+            catch: false,
             dice: extraction_core::noise::Rng::new(0),
             mass: None,
         }

@@ -80,7 +80,7 @@ pub const TRACER_MASS: f32 = 0.95;
 impl Load {
     /// The bullet's mass for this load in `cartridge`, grams.
     pub fn mass_g(self, cartridge: &str) -> f32 {
-        let ball = crate::firearm_terminal::bullet_mass_g(cartridge);
+        let ball = crate::cartridge::bullet_mass_g(cartridge);
         match self {
             Load::Slug => SLUG_MASS_G,
             Load::Tracer => ball * TRACER_MASS,

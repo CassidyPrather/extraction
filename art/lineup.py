@@ -78,50 +78,63 @@ def srgb(c):
 
 def proc(name):
     """The items `src/anomaly/visuals.rs` builds in code rather than loads,
-    built the same way (game space: x right, y up, -z forward)."""
-    parts = []  # (kind, size, game position, rotated along z, colour)
+    built the same way: each part a primitive placed, turned and scaled in
+    game space (x right, y up, -z forward). Keep in step with that file."""
+    from mathutils import Matrix
+
+    def q(axis, angle):
+        return Matrix.Rotation(angle, 4, axis)
+
+    along = q("X", math.pi / 2)  # a cylinder's axis (Y) laid along Z
+    parts = []  # (kind, size, position, turn, colour)
     if name == "bolt":
-        steel = (0.36, 0.3, 0.25)
-        parts += [("cyl", (0.005, 0.06), (0, 0, 0.004), True, steel),
-                  ("hex", (0.0085, 0.007), (0, 0, -0.0315), True, steel),
-                  ("hex", (0.0085, 0.008), (0, 0, 0.018), True, steel)]
+        steel, tape = (0.36, 0.3, 0.25), (0.95, 0.36, 0.04)
+        parts += [("cyl", (0.005, 0.06), (0, 0, 0.004), along, steel),
+                  ("hex", (0.0085, 0.007), (0, 0, -0.0315), along, steel),
+                  ("hex", (0.0085, 0.008), (0, 0, 0.018), along, steel),
+                  ("box", (0.013, 0.013, 0.007), (0, 0, 0), Matrix(), tape)]
+        for side in (-1, 1):
+            parts.append(("box", (0.006, 0.0015, 0.04), (side * 0.006, 0.006, 0.019),
+                          q("Y", side * 0.35) @ q("X", -0.25), tape))
     elif name == "detector":
         olive, face, black = (0.36, 0.4, 0.24), (0.85, 0.82, 0.7), (0.04, 0.04, 0.04)
-        parts += [("box", (0.07, 0.04, 0.11), (0, 0, 0.025), False, olive),
-                  ("cyl", (0.016, 0.003), (0.012, 0.021, 0.05), False, face),
-                  ("box", (0.03, 0.004, 0.03), (-0.015, 0.021, 0.005), False, black),
-                  ("box", (0.012, 0.012, 0.09), (-0.041, 0, 0.025), False, black),
-                  ("cyl", (0.004, 0.05), (0.018, 0, -0.055), True, black),
-                  ("sph", (0.006,), (0.018, 0, -0.078), False, black),
-                  ("sph", (0.005,), (-0.02, 0.021, -0.01), False, (0.15, 0.03, 0.02))]
+        parts += [("box", (0.07, 0.04, 0.11), (0, 0, 0.025), Matrix(), olive),
+                  ("box", (0.066, 0.002, 0.104), (0, 0.0205, 0.025), Matrix(), (0.93, 0.8, 0.25)),
+                  ("cyl", (0.016, 0.003), (0.012, 0.021, 0.05), Matrix(), face),
+                  ("box", (0.03, 0.004, 0.03), (-0.015, 0.021, 0.005), Matrix(), black),
+                  ("box", (0.012, 0.012, 0.09), (-0.041, 0, 0.025), Matrix(), black),
+                  ("cyl", (0.004, 0.05), (0.018, 0, -0.055), along, black),
+                  ("sph", (0.006,), (0.018, 0, -0.078), Matrix(), black),
+                  ("sph", (0.005,), (-0.02, 0.021, -0.01), Matrix(), (0.15, 0.03, 0.02))]
     else:
         raise SystemExit(f"no procedural look for {name}")
+    # Game space to Blender's: (x, y, z) -> (x, -z, y).
+    C = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
     root = bpy.data.objects.new("item_" + name, None)
     scene.collection.objects.link(root)
-    for kind, size, at, along, col in parts:
-        loc = (at[0], -at[2], at[1])
+    for kind, size, at, turn, col in parts:
         if kind == "box":
-            bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
-            o = bpy.context.object
-            o.scale = (size[0], size[2], size[1])
+            bpy.ops.mesh.primitive_cube_add(size=1)
+            scale = Matrix.Diagonal((*size, 1))
         elif kind in ("cyl", "hex"):
+            # Bevy's cylinders stand along their Y; Blender's along Z: made
+            # unit along Blender Z, which is game Y once turned back below.
+            bpy.ops.mesh.primitive_cylinder_add(vertices=6 if kind == "hex" else 16, radius=1,
+                                                depth=1)
             r, h = size
-            bpy.ops.mesh.primitive_cylinder_add(vertices=6 if kind == "hex" else 16, radius=r,
-                                                depth=h, location=loc)
-            o = bpy.context.object
-            # Bevy's cylinders stand along y (Blender z); `along` lays them
-            # along game z (Blender -y).
-            if along:
-                o.rotation_euler = (math.pi / 2, 0, 0)
+            scale = Matrix.Diagonal((r, h, r, 1))
         else:
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=size[0], location=loc, segments=12,
-                                                 ring_count=8)
-            o = bpy.context.object
+            bpy.ops.mesh.primitive_uv_sphere_add(radius=1, segments=12, ring_count=8)
+            scale = Matrix.Diagonal((size[0],) * 3 + (1,))
+        o = bpy.context.object
+        game = Matrix.Translation(at) @ turn @ scale
+        o.matrix_world = C @ game @ C.inverted()
         m = bpy.data.materials.new(name)
         m.use_nodes = True
         m.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (*srgb(col), 1)
         o.data.materials.append(m)
         o.parent = root
+        o.matrix_parent_inverse = root.matrix_world.inverted()
     bpy.context.view_layer.update()
     lo = Vector((1e9, 1e9, 1e9))
     hi = Vector((-1e9, -1e9, -1e9))
