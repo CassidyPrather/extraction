@@ -96,7 +96,7 @@ impl Goal {
             Goal::Crouch => "Crouch",
             Goal::Run => "Run",
             Goal::PutAway => "Holster the pistol",
-            Goal::Pocket => "Pocket the radio",
+            Goal::Pocket => "Radio on your chest",
             Goal::Pack => "Something in the pack",
             Goal::FarGrab => "Get the box in the pen",
             Goal::FillMag => "Rounds into the mag",
@@ -175,7 +175,7 @@ impl Goal {
             // shoulder (the pack).
             (Goal::PutAway, false) => &["hip", "open your hand"],
             (Goal::PutAway, true) => &["g"],
-            (Goal::Pocket, false) => &["pocket", "open your hand"],
+            (Goal::Pocket, false) => &["chest", "open your hand"],
             (Goal::Pocket, true) => &["g"],
             (Goal::Pack, false) => &["shoulder", "open your hand"],
             (Goal::Pack, true) => &["g"],
@@ -291,7 +291,7 @@ impl Goal {
             (Goal::Run, true) => "Hold Shift and W.",
             (Goal::PutAway, false) => "Hold it at your hip.\nOpen your hand.",
             (Goal::PutAway, true) => "Hold it. Press G.",
-            (Goal::Pocket, false) => "Hold it to a chest pocket.\nOpen your hand.",
+            (Goal::Pocket, false) => "Hold it to your chest.\nOpen your hand.",
             (Goal::Pocket, true) => "Hold it. Press G.",
             (Goal::Pack, false) => "The box: over your shoulder.\nOpen your hand.",
             (Goal::Pack, true) => "Hold something big (the\ncleaning kit). Press G.",
@@ -1650,7 +1650,8 @@ fn watch_hands(
                     if matches!(s.kind, SocketKind::Body(_))
                         && owner.is_some_and(|o| locals.contains(o.0))
                     {
-                        // The pistol holstered; the radio pocketed.
+                        // The pistol holstered; the radio in its sleeve on
+                        // the chest (it fits no pocket: `body::slot_fit`).
                         match id(*item) {
                             Some("pm_pistol") => complete(&mut ob, Goal::PutAway, &mut out),
                             Some("radio") => complete(&mut ob, Goal::Pocket, &mut out),

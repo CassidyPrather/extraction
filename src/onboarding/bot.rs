@@ -436,7 +436,7 @@ impl DirectorWorld<'_, '_> {
                     });
                 }
             }
-            // Into a pocket.
+            // Into its sleeve on the chest (quick-stow finds it).
             Goal::Pocket => t.push(Stow(Side::Right)),
             Goal::Turn => {
                 // A look over the shoulder and back.

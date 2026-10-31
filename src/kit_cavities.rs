@@ -42,14 +42,19 @@ pub const POCKET: Cavity = Cavity {
 /// back and up out of the mouth.
 pub const HOLSTER: Cavity = Cavity {
     floor: Vec3::new(0.0, -0.152, -0.0465),
-    half: Vec3::new(0.016, 0.082, 0.0505),
+    half: Vec3::new(0.0205, 0.082, 0.0505),
 };
 
-/// The chest mount: an open loop on the strap (a light or radio slides
-/// down through it; open at the bottom, so `floor` is only the loop's).
+/// The holster's back is cut away above this (slot y), over the trigger
+/// guard as a real one's is: a grip stands out of it there, back (+Z).
+pub const HOLSTER_BACK_MOUTH: f32 = -0.042;
+
+/// The chest mount: a webbing sleeve on the left strap, open top and
+/// bottom. The radio slides down into it, thin side out; a chemlight or a
+/// compass hangs in it (so `floor` is only the sleeve's foot).
 pub const MOUNT: Cavity = Cavity {
-    floor: Vec3::new(0.0, -0.05, -0.008),
-    half: Vec3::new(0.019, 0.026, 0.019),
+    floor: Vec3::new(0.0, -0.08, -0.015),
+    half: Vec3::new(0.036, 0.055, 0.025),
 };
 
 /// A slot's cavity (`None`: the slings, the vest and the head, which hold
@@ -78,6 +83,7 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
     ("robot_ammo_belt", Vec3::new(0.0, -0.021, -0.002)),
     ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
+    ("brass", Vec3::new(0.0, -0.01, 0.0)),
 ];
 
 /// An item's model's middle off its origin (zero for most).
