@@ -13,7 +13,9 @@ LIST names the two builds and the shots, one a line:
 
 Each build is made once (scripts/build_at.sh) and each shot taken with
 both, at `size` (1280x720 unless the list says), by `--screenshot` after
-`--frames` frames (30 unless the arguments give them). Every run gets a
+`--frames` frames (60 unless the arguments give them: a build from
+before the screenshot waited for the world to settle shot an empty view
+at 30). Every run gets a
 fresh `--data-dir` and `--new-game`, and `--seed 7` unless the arguments
 give one. Arguments may start with NAME=value words, set in the game's
 environment (`EXTRACTION_YARD_AT=5`). A fifth field, if there, is used by
@@ -195,7 +197,7 @@ def command(binary, args, png, size):
         args = args[1:]
     argv = [binary, "--screenshot", png, "--size", size, "--new-game"]
     if "--frames" not in args:
-        argv += ["--frames", "30"]
+        argv += ["--frames", "60"]
     if "--seed" not in args:
         argv += ["--seed", "7"]
     w, h = size.split("x")

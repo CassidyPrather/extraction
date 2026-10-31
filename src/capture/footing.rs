@@ -114,7 +114,9 @@ pub fn exempt(name: &str) -> bool {
 /// Things set into the ground (a raised bed's frame, a stump, a pump's
 /// pipe): a wide foot may go 15 cm in.
 pub fn dug_in(name: &str) -> bool {
-    ["garden_bed", "chopping_block", "hand_pump"]
+    // (A gate's posts are set in the ground: at a road's edge their pads
+    // can't cut into the road.)
+    ["garden_bed", "chopping_block", "hand_pump", "gate_post"]
         .iter()
         .any(|e| name.contains(e))
 }
@@ -380,6 +382,9 @@ impl Site {
         p: Vec3,
     ) -> (Vec<(f32, String)>, Option<(f32, String)>) {
         let (top, bottom) = (p.y + 0.5, p.y - 1.0);
+        // The terrain buries a foot however deep (only half a metre was
+        // seen: gate posts a metre under a road's bank passed).
+        let ground_top = p.y + 5.0;
         let mut below = Vec::new();
         let mut inside: Option<(f32, String)> = None;
         let mut deeper = |d: f32, what: &str| {
@@ -389,7 +394,7 @@ impl Site {
         };
         if self.terrain {
             let g = zone.ground(p.x, p.z);
-            if g > p.y && g < top {
+            if g > p.y && g < ground_top {
                 deeper(g - p.y, "ground");
             } else if g >= bottom && g <= p.y {
                 below.push((g, "ground".to_string()));
@@ -840,9 +845,11 @@ mod tests {
 
     /// Faults waiting on their owners, by text in their line.
     const KNOWN: &[&str] = &[
-        // Rime's quarantine gate stands on a slope; its posts' footings go
-        // 0.4 m into the high side (Map design: level its spot).
-        "quarantine_gate: gate_post",
+        // Marrow's road climbs 0.2 m per metre through its gate: the +X
+        // post, on the road's cells, stands 26 mm over its downhill side
+        // (`terrain::level_posts` moves a road's cells 5 cm at most). An
+        // easier grade through the gate would put it down (Map design).
+        "marrow_creek quarantine_gate: gate_post",
         // By design: a tub's wheel flanges hang inside the rails, 3 cm
         // below the treads on the rails' heads, so its lowest points are
         // over the floor between them.
