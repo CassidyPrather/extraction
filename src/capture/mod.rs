@@ -22,6 +22,7 @@ pub mod fighting;
 pub mod footing;
 pub mod glb;
 pub mod landmarks;
+pub mod overlap;
 pub mod path;
 pub mod scale;
 pub mod seated;

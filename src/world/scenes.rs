@@ -499,6 +499,12 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
         let w = t.transform_point(p);
         zone.ground(w.x, w.z) - t.translation.y
     };
+    // What stands on the ground: its footprint (the scene's frame, before
+    // settling) and how it was moved. A thing stacked on another (a case on
+    // a pallet, jars on a walker's back) moves with what's under it: set
+    // down on the ground itself, it went into it.
+    let mut grounded: Vec<(Vec2, Vec2, Transform)> = Vec::new();
+    let mut stacked: Vec<(usize, Vec2, f32)> = Vec::new();
     for d in 0..geo.props.len() {
         let range = geo.props[d].pieces.clone();
         // Its feet, in the scene's frame: its boxes' bottom corners, or
@@ -540,6 +546,11 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
             continue;
         };
         feet.retain(|f| f.y < base + 0.03);
+        if base > 0.05 {
+            let mid = feet.iter().fold(Vec2::ZERO, |a, f| a + f.xz()) / feet.len() as f32;
+            stacked.push((d, mid, base));
+            continue;
+        }
         let pts: Vec<Vec3> = feet
             .iter()
             .map(|f| Vec3::new(f.x, ground(*f), f.z))
@@ -576,6 +587,27 @@ pub fn settle(geo: &mut Geo, zone: &Zone, id: &str, t: &Transform) {
             .fold(f32::MIN, f32::max);
         moved.translation.y -= worst;
         for i in range.clone() {
+            geo.pieces[i].at = moved * geo.pieces[i].at;
+        }
+        for (_, at) in &mut geo.props[d].models {
+            *at = moved * *at;
+        }
+        let (lo, hi) = feet.iter().fold(
+            (Vec2::splat(f32::MAX), Vec2::splat(f32::MIN)),
+            |(lo, hi), f| (lo.min(f.xz()), hi.max(f.xz())),
+        );
+        grounded.push((lo, hi, moved));
+    }
+    for (d, mid, base) in stacked {
+        // On what's under it, or kept as high over the ground as it stood.
+        let moved = grounded
+            .iter()
+            .find(|(lo, hi, _)| mid.cmpge(*lo).all() && mid.cmple(*hi).all())
+            .map(|(_, _, m)| *m)
+            .unwrap_or_else(|| {
+                Transform::from_xyz(0.0, ground(Vec3::new(mid.x, base, mid.y)), 0.0)
+            });
+        for i in geo.props[d].pieces.clone() {
             geo.pieces[i].at = moved * geo.pieces[i].at;
         }
         for (_, at) in &mut geo.props[d].models {
