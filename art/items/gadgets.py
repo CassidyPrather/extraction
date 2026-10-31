@@ -57,13 +57,15 @@ def flashlight():
 def power_cell():
     p = Part("body")
     p.lathe([(0.0, -0.027), (0.0085, -0.027), (0.0095, -0.026), (0.0095, 0.026), (0.0085, 0.027),
-             (0.0, 0.027)], "Olive", segs=16, xf=UP)
-    # Contacts at both ends, a charge window, a printed band.
-    p.cyl(0.004, 0.027, 0.03, "Steel", segs=10, xf=UP, chamfer=0.001)
+             (0.0, 0.027)], "Black", segs=16, xf=UP)
+    # Contacts at both ends, a charge window, a copper band: power is a
+    # dark body with a bright end (docs/craft/ITEM_READING.md), not
+    # another dark upright beside a magazine.
+    p.cyl(0.004, 0.027, 0.03, "Brass", segs=10, xf=UP, chamfer=0.001)
     p.cyl(0.006, -0.0285, -0.027, "Steel", segs=10, xf=UP)
     p.lathe([(0.0096, -0.01), (0.0099, -0.009), (0.0099, 0.012), (0.0096, 0.013)], "Glow",
             segs=6, xf=UP, start=-25, sweep=50, closed=True)
-    p.tube(0.0097, 0.009, 0.018, 0.024, "Cream", segs=16, xf=UP)
+    p.tube(0.0097, 0.009, 0.014, 0.026, "Copper", segs=16, xf=UP)
     return [p]
 
 
@@ -562,7 +564,9 @@ def matches():
     t = 0.0006
     zc = (z0 + z1) / 2
     p.box((w, t, z1 - z0), (0.0, yb + t / 2, zc), "Boards")
-    panel(p, "y", -w / 2, w / 2, z0, z1, yb + h - t, yb + h, "Paper",
+    # Its label blue, yellow and red: not another pale box beside the
+    # rounds' (docs/craft/ITEM_READING.md).
+    panel(p, "y", -w / 2, w / 2, z0, z1, yb + h - t, yb + h, "Blue",
           [(-0.0068, 0.0068, -0.0045, 0.0115, "Yellow"), (-0.004, 0.004, -0.0005, 0.0075, "Red")])
     for sx in (-1, 1):
         p.box((t, h - 2 * t, z1 - z0), (sx * (w - t) / 2, yb + h / 2, zc), "Bakelite")

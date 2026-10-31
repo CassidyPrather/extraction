@@ -148,3 +148,21 @@ scrap metal.
 - **Barely there**: the power cell, a thin upright found by its glint.
 - **Reads well**: the canned stew, the water bottle (tall, white, a red
   cap), the splint (its ladder shape).
+
+### After the first fixes (31 October)
+
+`docs/shots/items/kit_crate_after.jpg`, `starter_set_after.jpg`, same
+camera:
+
+- **Field dressing**: pale, a red cross on top. Now the lightest thing in
+  either set; no twin.
+- **Crackers**: brown kraft paper. A warm box beside a white packet, food
+  beside medicine.
+- **Cleaning kit**: dark canvas roll, leather straps, steel showing.
+- **Matches**: a blue label; no longer a second small pale box.
+- **Scrap metal**: a bigger blue-painted plate with bright edges; it reads
+  from 3 m.
+- **Power cell**: dark with a copper band. Better at 1 m; at 3 m still a
+  thin dark upright, told from the PM mag mostly by its height. Open.
+- **Bolt, detector**: built in `src/anomaly/visuals.rs`; asked Anomalies
+  (the bolt: orange flagging tape; the detector: a signal-yellow face).
