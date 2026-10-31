@@ -24,6 +24,13 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 15eadf3 | 2026-10-31 20:30 (gate 112, release check) | 40/40 exit 0, no timeouts, 37 extracted (Kettle 8/8, Marrow 8/8, Cinder 7/8, Rime 7/8, Sallow 7/8); stucks 145 (Kettle seed 4: 25 at the (-95, 30) pocket); 13/13 scenarios; `--check-buildings` 1 flagged (the cellars false positive); sim_guards pass | fast-profile workspace suite: 1 FAILED (part_rest a_part_gone_leaves_no_ghost, a test race fixed in 0735b5e8); 1268 lib, 356 core | gauges 19/19 in 2779 s |
+| c9b3662 | 2026-10-31 15:00 (gate 105, release check) | 40/40 exit 0, no timeouts, 33 extracted (Cinder 8/8, Marrow 7/8, Rime 7/8, Kettle 6/8, Sallow 5/8); stucks 124 (Kettle seed 6 at the underground pocket (-95, 30)); 13/13 scenarios; `--check-buildings` 42 checked, 1 flagged (cellars_cinder at night, behind the shed and dark), 4 skipped | fast-profile workspace suite: 1254 lib, 354 core, 0 FAILED (63 min, a slow container) | gauges 18/19: first_contact Kettle 10.43 > 7.5 s, Rime 10.34 > 9.0 s |
+| be68fdf | 2026-10-31 09:30 (gate 101) | Kettle and Sallow seeds 1-8: 16/16 exit 0, no timeouts; Kettle 7/8 (stucks 37 → 11), Sallow 6/8 (the hound deaths gone) | fast-profile workspace suite: 1247 lib, 354 core, 0 FAILED | gauges 19/19 in 1941 s |
+| 4a7eaed | 2026-10-31 06:30 (gate 97) | 40/40 exit 0, no timeouts, 24 extracted (Rime 7/8, Kettle 5/8, Cinder 4/8, Marrow 4/8, Sallow 4/8); stucks 88 (113); the plough gone (Rime seed 1 extracts); Kettle seed 1 20 stucks on the surface at (-115..-120, 55-60) | fast-profile workspace suite: 1241 lib, 353 core, 0 FAILED | |
+| 0862204 | 2026-10-31 03:30 (gate 92, the one-thread executor) | 40/40 exit 0, no timeouts, 21 extracted (Rime 7/8, Cinder 4/8, Marrow 4/8, Kettle 3/8, Sallow 3/8); stucks 113; 10 of 16 Marrow/Kettle raids identical to 2ea48de; Sallow seeds 1 and 5 now die early to hounds at (207-224, 35-122) | fast-profile workspace suite: 1231 lib, 353 core, 0 FAILED | gauges 19/19 in 1942 s |
+| 2ea48de | 2026-10-30 22:00 | Marrow and Kettle seeds 1-8: 16/16 exit 0, no timeouts; Marrow 4/8 extracted (stucks 30 → 3), Kettle 4/8 (stucks 69 → 55; seed 5 on to_rv at (-55, 170-175), seed 7 underground at (-80, 25-30)) | fast-profile workspace suite: 1227 lib, 353 core, 0 FAILED | Marrow and every-valley gauges 7/7 green (b619140e) |
+| cc4d02c | 2026-10-30 (wave 3 final release check) | 40/40 exit 0, no timeouts, 24 extracted (Cinder 6/8, Rime 6/8, Kettle 5/8, Sallow 5/8, Marrow 2/8); stucks 137 (84 on 887612e; Kettle 69, underground taking); 13/13 contract scenarios; `--check-buildings` 42 checked, 0 flagged, 3 skipped | fast-profile workspace suite: 1217 lib, 353 core, 0 FAILED (51 min). Wave 3's mains c930fa8, 957e6d1, f9543d6, 801a952 green on the same suite | gauges 12/17: the Marrow five (m05_spruce overdraw and fragments after the warp, trees after_a_jump) |
 | 887612e | 2026-10-28 (final release check) | 40/40 exit 0, no timeouts, 23 extracted (Cinder 7/8, Sallow 6/8, Marrow 4/8, Kettle 3/8, Rime 3/8); stucks 84 (65 on 2798e45); 13/13 contract scenarios; `--check-buildings` 46 checked, 0 flagged, 3 skipped; visual_diff from 2798e45: 2 of 10 changed (Marrow's lift grooves back), buildings 18/18 | 1119 lib tests, 0 FAILED, all within budget, 46 min; extraction_core 349 passed; bin and doc tests pass | gauges 17/17 in 758 s |
 | 2798e45 | 2026-10-28 (release check) | 40/40 exit 0, no timeouts, 24 extracted; stucks 65 (145 on 844e46d; Rime 85 → 13, the ore mill); 13/13 scenarios; `--check-buildings` 0 flagged, 3 skipped; visual_diff from 844e46d: the anomaly mark's grooves gone (back in 887612e) | 1068 lib tests, 0 FAILED; 6 over budget (a container 1.38x slower; legibility a_trip_underground 41 → 203 s is real) | gauges 17/17 in 1228 s. lamp_check can't finish in software rendering (~4 h a valley) |
 | 844e46d | 21:00 (release check) | 40/40 exit 0 (five valleys, seeds 1-8), no timeouts, 26 extracted; stucks 135 against 130 on round 47's seeds; "plough" only on Rime seed 1 (the same raid). 12/12 contract scenarios. `--check-buildings` dusk + night in every valley: 46 checked, 3 flagged on Rime (quarantine_gate from inside the guard booth, a log pile in black fog: probe false positives). visual_diff --quick from fb959f9: 2 of 10 changed (Marrow's anomaly mark, intended), buildings 18/18 | 1056 lib tests, 0 FAILED, all within budget, 36 min; extraction_core 345 passed; bin and doc tests pass | gauges 17/17 in 1683 s |
@@ -66,18 +73,24 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 887612e (the final release check): nothing blocking.
+As of 15eadf3 (gate 112).
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| Sim stucks up on three seeds (all recover): Kettle 1 taking underground at (-95, 30), 10; Rime 8 in the adit going to the RV at (125-135, -45..-50), 21; Rime 5 boarding at (245, -30), 9 | | coordinator | noted |
-| `scripts/lamp_check.sh` not run: ~4 h a valley in software rendering, over its 1 h timeout | needs a GPU | Visual design (targeted views) | parked |
-| `scripts/xr_check.sh` not run: no Monado here | | Performance | parked |
+| `render::part_rest::tests::a_part_gone_leaves_no_ghost` (15eadf3): the merge on the async pool, the test waiting fixed frames | a test race | Performance | fixed in 0735b5e8 (gate 116) |
+| `--check-buildings`: cellars_cinder in Cinder's night landmark (1.3%; 41% in line of sight, behind the shed, dark) | probe false positive | Capture | reported |
+| Sim: Kettle's underground take pocket at (-80..-95, 25-30) (seed 6: 25 stucks); all recover | | Robot minds / Underground | open |
+| `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
+| `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
 ## Closed
 
 | test / run | fixed in | by |
 | - | - | - |
+| Kettle's stucks (69 on cc4d02c, 11 on be68fdf) and seed 1's surface stucks; Sallow's early hound deaths (the raider's ammo) | 4a7eaed / be68fdf | Robot minds |
+| Rime seed 1's plough death | 4a7eaed (c080fbc3) | Robot minds |
+| the Marrow five after the warp (m05_spruce overdraw and fragments, trees after_a_jump); Marrow's stucks and 2/8 extracts | 2ea48de (b619140e) | Map design |
+| wave 3: the logbook, affordance, legibility's 15th source, buttons_sit_clear, Lev's chair, the build-machine path lint, the cloak, Lev's gifts, the doorway search | c930fa8 | Onboarding, Model correctness, Robot minds, Soak |
 | Rime ore-mill take stucks (per-cell floors for stepped surface buildings), the three `--check-buildings` flags on Rime (probes now skip what they can't see), legibility's a_trip_underground time, the gauge tier's time (758 s) | 2798e45 / 887612e | coordinator, Capture, Legibility, Performance |
 | walkers_go_round_what_hurts_them (the wary grid now closes hazard cells), the Rime adit kiosk counted as indoors | 844e46d | Robot minds, Underground |
 | Rime seeds 2 and 4 timing out in adit_rime (no stand at the kiosk exit, then a straight line into the rock), the warm-up shelf race (resting guns' merged meshes), Sallow's first_contact budget, the gauge tier's time (first_sight 852 → 41 s) | 47c302b / fb959f9 | coordinator, Performance |
@@ -114,6 +127,12 @@ As of 887612e (the final release check): nothing blocking.
   `heavy()`, so one that queues behind the long gauges looks slow
   (gun_rest: 440 s in the tier, 9 s alone). The tier's wall time is
   about the sum of the heavy gauges' own times.
+- Release checks run `scripts/sim_guards.sh` after smoke from gate 112.
+- The release check is restartable (`final_r.sh <sha>` in the Verifier's
+  scratchpad): each step leaves a marker and smoke resumes run by run.
+- A fast-profile test build and the fast game build together fill the disk:
+  clear `target/fast` and `target/debug` between them (801a952's release
+  check lost its scenarios and smoke to it).
 - Without `etcpak` (pip) no BC7 copies are baked and the game loads the
   RGBA8 textures, so `first_contact`'s load and VRAM read 2-4x high (round
   36). `cloud-setup.sh` installs it now; in an older container run
