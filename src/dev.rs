@@ -44,9 +44,7 @@ impl Plugin for DevPlugin {
 struct FrameCount {
     frames: u32,
     requested: bool,
-    /// The frame everything was first in (`timeline::Loaded`) with the
-    /// world ready; the shot waits [`SHOT_SETTLE`] frames on from it.
-    ready_at: Option<u32>,
+    settle: ShotSettle,
 }
 
 /// Frames a screenshot waits after everything's in. On the software
@@ -66,10 +64,27 @@ fn count_frames(mut count: ResMut<FrameCount>) {
 /// hang a shot).
 const SHOT_WAIT_MAX: f32 = 180.0;
 
-/// Whether a shot at `frame` comes [`SHOT_SETTLE`] frames or more after
-/// the world was first all in (`ready_at`).
-fn settled(frame: u32, ready_at: Option<u32>) -> bool {
-    ready_at.is_some_and(|at| frame >= at + SHOT_SETTLE)
+/// One rule for every capture (`--screenshot`, the tour's views and so
+/// the lookbook): the world all in (`timeline::Loaded`, and
+/// `WorldReady`: the forest with the near trees' cards round the eye,
+/// the buildings dressed, every material and pipeline ready) for
+/// [`SHOT_SETTLE`] frames running, counted again from nothing whenever
+/// it isn't (a camera moved to the next view, new cards streaming in).
+#[derive(Default, Clone, Copy)]
+pub(crate) struct ShotSettle {
+    ready_for: u32,
+}
+
+impl ShotSettle {
+    /// This frame's: whether the shot can be taken.
+    pub(crate) fn tick(&mut self, ready: bool) -> bool {
+        self.ready_for = if ready { self.ready_for + 1 } else { 0 };
+        self.ready_for > SHOT_SETTLE
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.ready_for = 0;
+    }
 }
 
 /// `--screenshot`: after `--frames` frames, and once everything's in
@@ -92,10 +107,9 @@ fn screenshot_when_ready(
     if count.requested {
         return;
     }
-    if count.ready_at.is_none() && loaded.is_some() && world.ready() {
-        count.ready_at = Some(count.frames);
-    }
-    let settled = settled(count.frames, count.ready_at);
+    let settled = count
+        .settle
+        .tick(loaded.is_some() && world.ready_for_a_shot());
     if count.frames < opts.frames {
         return;
     }
@@ -1693,15 +1707,22 @@ fn pose_body_for_gallery(
 mod tests {
     use super::*;
 
-    /// A screenshot is never taken in the frames just after everything's
-    /// in, however few `--frames` asked for: a gun close-up shot 5 frames
-    /// after came out as fog with no gun.
+    /// A shot is never taken in the frames just after everything's in,
+    /// however few `--frames` asked for (a gun close-up shot 5 frames
+    /// after came out as fog with no gun), and not while anything's
+    /// arriving again (a lookbook view before its near trees' cards).
     #[test]
-    fn a_screenshot_waits_for_the_world_to_settle() {
-        assert!(!settled(30, None), "not before everything's in");
-        assert!(!settled(25, Some(25)));
-        assert!(!settled(30, Some(25)), "5 frames after: the empty shot");
-        assert!(settled(25 + SHOT_SETTLE, Some(25)));
+    fn a_shot_waits_for_the_world_to_settle() {
+        let mut s = ShotSettle::default();
+        assert!(!s.tick(false), "not before everything's in");
+        for i in 0..SHOT_SETTLE {
+            assert!(!s.tick(true), "{} frames after", i + 1);
+        }
+        assert!(s.tick(true));
+        assert!(!s.tick(false), "something arriving again");
+        assert!(!s.tick(true), "counted again from nothing");
+        s.reset();
+        assert!(!s.tick(true));
         assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
     }
 }

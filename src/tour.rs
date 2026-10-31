@@ -49,10 +49,17 @@ struct Tour {
     next: usize,
     wait: u32,
     shooting: bool,
+    /// The world all in at this view (`dev::ShotSettle`, the screenshot's
+    /// rule): a fixed count of frames shot one run in four before the
+    /// near trees' cards were drawn.
+    settle: crate::dev::ShotSettle,
 }
 
-/// Frames for a view to settle (streamed tree detail, the fog).
+/// Frames a view waits at least (the fog).
 const SETTLE: u32 = 6;
+/// Frames a view waits at most for the world to be all in: a material
+/// that never readies mustn't hang the tour.
+const SETTLE_MAX: u32 = 900;
 
 /// Prefabs you walk into.
 pub(crate) fn has_inside(prefab: &str) -> bool {
@@ -490,10 +497,13 @@ pub fn scripted_views(zone: &Zone, file: &std::path::Path) -> Vec<View> {
     out
 }
 
+#[allow(clippy::too_many_arguments)]
 fn tour(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
     zone: Option<Res<Zone>>,
+    world: crate::render::timeline::WorldReady,
+    loaded: Option<Res<crate::render::timeline::Loaded>>,
     mut state: ResMut<Tour>,
     mut cams: Query<&mut Transform, With<FreeCamera>>,
     mut frames: Local<u32>,
@@ -540,6 +550,7 @@ fn tour(
     if *cam != want {
         *cam = want;
         state.wait = 0;
+        state.settle.reset();
         at.view = None;
         return;
     }
@@ -555,8 +566,21 @@ fn tour(
     };
     // The benchmark holds each view longer, for steadier timings.
     let settle = settle.max(crate::render::budget::hold());
+    let all_in = state
+        .settle
+        .tick(loaded.is_some() && world.ready_for_a_shot());
     if state.wait < settle {
         return;
+    }
+    if !all_in {
+        if state.wait < SETTLE_MAX {
+            return;
+        }
+        warn!(
+            "tour: {} shot after {SETTLE_MAX} frames with the world not all in ({})",
+            view.file,
+            world.why()
+        );
     }
     state.shooting = true;
     let mut save = save_to_disk(dir.join(&view.file));
