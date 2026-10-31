@@ -472,16 +472,17 @@ def crackers():
     s = cube(0.3)
     yb = -s / 2
     p = Part("body")
-    # A packet of army hard-tack in olive wax paper, torn open at the
-    # front; a biscuit slid out on top.
+    # A packet of army hard-tack in brown kraft paper, torn open at the
+    # front; a biscuit slid out on top. Food is warm (it was olive, and
+    # read as a field dressing: docs/craft/ITEM_READING.md).
     zt = -0.008
     plan = fillet([(-0.0255, zt), (0.0255, zt), (0.0255, 0.0325), (-0.0255, 0.0325)],
                   [0.0025, 0.0025, 0.004, 0.004], 2)
-    p.prism(plan, yb, yb + 0.031, "Olive", axis="y", bevel=0.002, segs=1)
+    p.prism(plan, yb, yb + 0.031, "Straw", axis="y", bevel=0.002, segs=1)
     for y0, y1, sd in ((yb + 0.0302, yb + 0.031, 1), (yb, yb + 0.0008, 2)):
-        ragged(p, 0.05, zt + 0.001, 0.008, y0, y1, "Olive", seed=sd)
+        ragged(p, 0.05, zt + 0.001, 0.008, y0, y1, "Straw", seed=sd)
     for sx in (-1, 1):
-        ragged(p, 0.028, zt + 0.001, 0.007, -0.0004, 0.0004, "Olive", seed=3 + sx,
+        ragged(p, 0.028, zt + 0.001, 0.007, -0.0004, 0.0004, "Straw", seed=3 + sx,
                xf=T(sx * 0.0251, yb + 0.0155, 0.0) @ RZ(math.pi / 2))
     # The stack inside, showing only where it comes out of the paper.
     for k in range(4):

@@ -555,7 +555,7 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "power_cell", dims: Some((0.02, 0.06, 0.02)), name: "Power cell",
+            id: "power_cell", dims: Some((0.02, 0.02, 0.06)), name: "Power cell",
             description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
             category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0, mount: Some(Cell),
             tags: ["electronics"],

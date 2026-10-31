@@ -7,6 +7,9 @@ headset's sharpness. The review procedure is docs/craft/ITEM_READING.md.
 - DIST: metres from the eye to the shelf's front edge (1 and 3 for a
   review: a shelf in reach, a shelf across a room).
 - grey: render in greyscale (value and silhouette alone).
+- down: look down at the items from DIST away, 55 degrees below level
+  (a crate at your feet, a table you lean over), not across a room.
+  Flags combine: `1 grey down`.
 - an item `proc:bolt` or `proc:detector`: built as `src/anomaly/visuals.rs`
   builds it (those have no model file).
 
@@ -32,7 +35,11 @@ from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 out, dist = argv[0], float(argv[1])
-grey = len(argv) > 2 and argv[2] == "grey"
+flags = argv[2:argv.index("--")] if "--" in argv else argv[2:3]
+grey = "grey" in flags
+# Looking down into a crate or onto a table at your feet: the eye DIST
+# from the items, 55 degrees below level.
+down = "down" in flags
 paths = argv[argv.index("--") + 1:] if "--" in argv else argv[3 if grey else 2:]
 
 SHELF_Y = 0.9  # game y of the shelf's top
@@ -176,8 +183,12 @@ cam_data.sensor_fit = "HORIZONTAL"
 cam_data.angle = math.radians(100)
 cam = bpy.data.objects.new("eye", cam_data)
 scene.collection.objects.link(cam)
-cam.location = Vector((0, -dist, EYE))
 target = Vector((0, 0.05 + depth / 2, SHELF_Y + 0.05))
+if down:
+    a = math.radians(55)
+    cam.location = target + Vector((0, -dist * math.cos(a), dist * math.sin(a)))
+else:
+    cam.location = Vector((0, -dist, EYE))
 cam.rotation_euler = (target - cam.location).to_track_quat("-Z", "Y").to_euler()
 scene.camera = cam
 
