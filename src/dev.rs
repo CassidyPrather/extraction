@@ -66,6 +66,12 @@ fn count_frames(mut count: ResMut<FrameCount>) {
 /// hang a shot).
 const SHOT_WAIT_MAX: f32 = 180.0;
 
+/// Whether a shot at `frame` comes [`SHOT_SETTLE`] frames or more after
+/// the world was first all in (`ready_at`).
+fn settled(frame: u32, ready_at: Option<u32>) -> bool {
+    ready_at.is_some_and(|at| frame >= at + SHOT_SETTLE)
+}
+
 /// `--screenshot`: after `--frames` frames, and once everything's in
 /// (`timeline::Loaded`, the world ready) and has been for [`SHOT_SETTLE`]
 /// frames: taken at a fixed frame, a slow machine's shot had trees
@@ -89,9 +95,7 @@ fn screenshot_when_ready(
     if count.ready_at.is_none() && loaded.is_some() && world.ready() {
         count.ready_at = Some(count.frames);
     }
-    let settled = count
-        .ready_at
-        .is_some_and(|at| count.frames >= at + SHOT_SETTLE);
+    let settled = settled(count.frames, count.ready_at);
     if count.frames < opts.frames {
         return;
     }
@@ -1652,5 +1656,22 @@ fn pose_body_for_gallery(
             Transform::from_translation(at).looking_at(head.translation - Vec3::Y * 0.45, Vec3::Y);
     } else if *frames > 20 {
         *cam = head;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A screenshot is never taken in the frames just after everything's
+    /// in, however few `--frames` asked for: a gun close-up shot 5 frames
+    /// after came out as fog with no gun.
+    #[test]
+    fn a_screenshot_waits_for_the_world_to_settle() {
+        assert!(!settled(30, None), "not before everything's in");
+        assert!(!settled(25, Some(25)));
+        assert!(!settled(30, Some(25)), "5 frames after: the empty shot");
+        assert!(settled(25 + SHOT_SETTLE, Some(25)));
+        assert!(SHOT_SETTLE >= 10, "9 frames after was the first good shot");
     }
 }
