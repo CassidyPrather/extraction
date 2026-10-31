@@ -25,13 +25,16 @@ BORE_Y = 0.062
 MAGWELL = (0.0, 0.0445, -0.002)
 SLIDE_Z0, SLIDE_Z1 = -0.132, 0.026  # muzzle end, rear
 SLIDE_Y0, SLIDE_Y1 = 0.048, 0.077
-SLIDE_HW = 0.014
+# 25.4 mm across (it was 28: wider than the grip's frame by more than the
+# real one is). DX: how far its sides came in, for what sits on them.
+SLIDE_HW = 0.0127
+DX = 0.014 - SLIDE_HW
 
 # --- Slide (moves with the bolt) ---------------------------------------------
 slide = Part("bolt_slide", origin=(0.0, BORE_Y, 0.0))
 sec = fillet(
     [(-SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y0), (SLIDE_HW, SLIDE_Y1), (-SLIDE_HW, SLIDE_Y1)],
-    [0.0024, 0.0024, 0.0105, 0.0105], 8)  # (fillets no tighter than the bevel: see _slab)
+    [0.0024, 0.0024, 0.0118, 0.0118], 10)  # arched nearly across (fillets no tighter than the bevel)
 slide.prism(sec, SLIDE_Z0, SLIDE_Z1, "Blued", axis="z", bevel=0.0022, segs=3)
 # Rear sight: a block with a square notch, dovetailed into the slide.
 slide.prism(fillet([(0.012, 0.0755), (0.024, 0.0755), (0.0235, 0.0815), (0.0145, 0.0815)], 0.0008, 3),
@@ -42,8 +45,9 @@ slide.prism(fillet([(-0.1295, 0.0735), (-0.117, 0.0735), (-0.1215, 0.0805), (-0.
 # The extractor, let into the right of the slide behind the port, and its pin.
 slide.prism(fillet([(-0.0302, 0.0662), (-0.015, 0.0665), (-0.0145, 0.0702), (-0.0302, 0.0705)],
                    [0.0004, 0.0012, 0.0012, 0.0004], 2),
-            0.0134, 0.0146, "Blued", axis="x", bevel=0.0003, segs=1)
-slide.cyl(0.0009, 0.0, 0.0011, "Steel", segs=10, xf=T(0.0139, 0.0684, -0.0185) @ RY(math.pi / 2))
+            0.0134 - DX, 0.0146 - DX, "Blued", axis="x", bevel=0.0003, segs=1)
+slide.cyl(0.0009, 0.0, 0.0011, "Steel", segs=10,
+          xf=T(0.0139 - DX, 0.0684, -0.0185) @ RY(math.pi / 2))
 
 cut = Part("cut")
 # The nose: the slide's front rounds over into its top, as the real one's
@@ -125,10 +129,11 @@ for z, y, sides in ((-0.09, 0.040, (-1, 1)), (-0.03, 0.038, (-1, 1)), (0.014, 0.
                    xf=T(sx * 0.0111, y, z) @ RY(sx * math.pi / 2))
 
 # Wraparound bakelite grip: sides and back strap, inset from the frame edges.
+# (Its corners eased, top and heel, so the 7 mm rounding below doesn't fold.)
 grip_prof = catmull([
-    (-0.0135, 0.027), (-0.0105, 0.004), (-0.0065, -0.024), (-0.003, -0.0465),
-    (0.018, -0.047), (0.0392, -0.0465), (0.0322, -0.012), (0.0255, 0.018), (0.0235, 0.029),
-    (0.005, 0.0305),
+    (-0.0128, 0.0225), (-0.0105, 0.004), (-0.0065, -0.024), (-0.003, -0.0465),
+    (0.016, -0.0478), (0.029, -0.0476), (0.0365, -0.0438), (0.0385, -0.034), (0.0322, -0.012),
+    (0.0262, 0.014), (0.0235, 0.0245), (0.016, 0.0303), (-0.006, 0.0298),
 ], samples=4)
 
 
@@ -139,7 +144,9 @@ def grip_width(z, y):
 
 
 grip = Part("grip")
-grip.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.0035, segs=3, width=grip_width)
+# Its edges round 7 mm (they were 3.5): across, the real grip is a rounded
+# oblong, not a box (art/sections.py).
+grip.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.007, segs=6, width=grip_width)
 # The star medallion near the top of each panel, a five-pointed star
 # raised on it (its sides sunk in the dome).
 star = [(0.007 + (0.0032 if i % 2 == 0 else 0.0013) * math.sin(math.pi * i / 5),
@@ -164,7 +171,7 @@ def grip_span(y):
 # Checkered panels on both sides, inside a smooth border, under the star.
 def grip_x(z, y):
     zf, zb = grip_span(y)
-    if not zf + 0.004 < z < zb - 0.004:
+    if not zf + 0.009 < z < zb - 0.009:
         return None
     return grip_width(z, y)[1]
 
@@ -227,21 +234,22 @@ static.sweep(loop, [(x, n) for x, n in section_rect(0.0016, 0.0016, 0.0005, 3)],
              closed=True, xf=T(-0.0158, 0, 0))
 
 # --- Trigger --------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, 0.03, -0.035))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, 0.038, -0.03))
 trig_path = catmull([(-0.0345, 0.0345), (-0.0385, 0.027), (-0.0395, 0.0195), (-0.0365, 0.0125),
                      (-0.0325, 0.0095)], samples=6, closed=False)
 trig.sweep(trig_path, section_rect(0.0045, 0.0032, 0.0012, 3), "Blued")
 
 # --- Safety / decocker (left rear of the slide, rotates about X) ---------------
-PIVOT = (-0.0157, 0.0648, 0.007)
+PIVOT = (-0.0157 + DX, 0.0648, 0.007)
 safety = Part("selector_safety", origin=PIVOT)
 safety.cyl(0.0042, -0.0016, 0.0016, "Blued", segs=28, xf=T(*PIVOT) @ RY(math.pi / 2),
            chamfer=0.0006)
 safety.prism(fillet([(0.006, 0.0615), (0.0215, 0.064), (0.0225, 0.0705), (0.007, 0.0685)],
                     [0.002, 0.0015, 0.0015, 0.002], 2),
-             -0.0172, -0.0148, "Blued", axis="x", bevel=0.0005, segs=2)
+             -0.0172 + DX, -0.0148 + DX, "Blued", axis="x", bevel=0.0005, segs=2)
 for i in range(3):
-    safety.box((0.0012, 0.0055, 0.0008), (-0.0176, 0.0665, 0.0165 + i * 0.0018), "Blued")
+    safety.box((0.0012, 0.0055, 0.0008), (-0.0176 + DX, 0.0665, 0.0165 + i * 0.0018), "Blued")
 
 # --- Proportion --------------------------------------------------------------------
 # Against the manual (161 mm long, a 93.5 mm barrel, a 130 mm sight line):

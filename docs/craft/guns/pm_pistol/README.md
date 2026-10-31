@@ -37,6 +37,21 @@ Same commands before and after (`scripts/gun_bench.sh pm_pistol <dir>`):
 | Slide back | ![](shots/before/bolt_back_30cm.jpg) | ![](shots/after/bolt_back_30cm.jpg) |
 | Exploded | ![](shots/before/exploded_1m.jpg) | ![](shots/after/exploded_1m.jpg) |
 
+## Sections
+
+Cut across the bore at the nose and the ejection port, and across the grip
+at its top and low down (`art/sections.py`, 10 mm grid), in a second pass
+after the coordinator saw the PM still read as a box at 30 cm. Before: the
+slide 28 mm wide with a flat top between two small rounds; the grip a box
+with 3.5 mm corners. After: the slide 25.4 mm, arched nearly across; the
+grip a rounded oblong (7 mm rounds), its heel rounded. (The first pass
+scored the sections 2; seen cut, they were a 1, and the before total is
+re-scored to match.)
+
+| Before | After |
+| - | - |
+| ![](sections_before.png) | ![](sections_after.png) |
+
 ## Measured
 
 | | Real | Before | After |
@@ -45,7 +60,8 @@ Same commands before and after (`scripts/gun_bench.sh pm_pistol <dir>`):
 | Barrel | 93.5 | 102.5 (+10%) | 94 |
 | Sight line | 130 | 141.5 (+9%) | 130 |
 | Height (the drawn gun, magazine in) | 126.75 | 138 (+9%) | 138 (+9%) |
-| Width (the drawn gun) | 29.4 | 35 | 35 |
+| Width (the drawn gun) | 29.4 | 35 | 34 |
+| Slide's width | about 25 | 28 | 25.4 |
 
 Everything above the grip was 9% long along the bore. The grip, which
 holds the magazine, was left as it was; the frame blends between them
@@ -62,30 +78,29 @@ scored here (weapon feel owns them).
 
 | Row | Before | After | Notes |
 | - | - | - | - |
-| Silhouette | 1 | 2 | the nose now rounds over; the grip is still a slab with a square heel |
+| Silhouette | 1 | 2 | the nose now rounds over, the heel rounds |
 | Proportion | 1 | 2 | length, barrel and sight line right; height and width 9% and 20% over |
-| Sections | 2 | 2 | the slide's domed top is right; the grip's flat sides aren't |
+| Sections | 1 | 2 | the slide arched, the grip a rounded oblong; the frame's front strap still square-edged |
 | Parts present | 2 | 2 | no red dot under the safety; the slide stop's shape is a plain tab |
-| Parts move | 2 | 2 | the heel catch is its own part now; the guard can't swing down; the trigger slides |
+| Parts move | 2 | 2 | the heel catch is its own part, the trigger turns on its pin; the guard can't swing down |
 | Controls | 2 | 2 | |
 | Finish | 2 | 2 | as the AK's: the gun-metal scan reads as a casting at 30 cm |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 2 | 2 | serial and year on the left of the slide |
-| **Total (of 30)** | **18** | **20** | |
+| **Total (of 30)** | **17** | **20** | |
 
 ## What's still wrong, worst first
 
-1. **The grip is a slab.** The real wrap-around grip is rounded across
-   its back and has a rounded heel; this one has flat sides and a square
-   bottom, and looks bolted on. Needs a photograph to draw.
-2. **Height and width over** (see above).
+1. **Height and width over** (see above): the magazine's floor below the
+   grip and the grip's thickness; a photograph would settle both.
+2. **The frame's front strap and trigger guard** are square-edged steel
+   under rounded bakelite.
 3. **The trigger guard can't swing down**, so the gun can't be stripped
    as the real one is. It's welded into `static_frame`.
 4. **No red dot** on the frame under the safety, which shows when it's
    off safe: the one thing the eye checks on a PM.
-5. **The trigger slides** instead of pivoting (every gun shares it).
-6. **The finish** at 30 cm (shared with every gun).
+5. **The finish** at 30 cm (shared with every gun).
 
 ## What changed
 
@@ -95,5 +110,8 @@ scored here (weapon feel owns them).
   (`mag_catch_heel`, `Moves::HeelCatch`); the grip's share of the
   magazine well cut wider than the frame's so they no longer z-fight
   (`art/check.py` failed on it).
+- Second pass: the slide 25.4 mm wide (it was 28) and arched across its
+  top; the grip's edges rounded 7 mm, its outline's corners eased; the
+  trigger's origin on its pin.
 - `src/weapons/layout.rs` (`pm()`): the muzzle, port, sight, slide grab
   and load port moved with the model.

@@ -108,6 +108,20 @@ barrel, sight radius, length of pull, height, width (the bench prints the
 drawn size against `gunsmith::spec`'s). More than 2% off is a fault worth
 listing; more than 5% is one the eye sees without knowing why.
 
+Then the sections: a gun that's right in side view can still be a box in
+the hand. Cut it across the bore at the muzzle, the ejection port and the
+rear sight, and across the grip high and low:
+
+```bash
+blender -b --factory-startup --python art/sections.py -- \
+    assets/models/guns/pm_pistol.glb pm.png -0.112,-0.04,y0.0,y-0.035 "nose,port,grip top,grip low"
+scripts/draw_sections.py pm.png
+```
+
+Each object's outline is drawn in its own shade on a 10 mm grid. Look for
+flat tops that should arch, square corners that should round, a slide
+wider than the frame by more than the real one is.
+
 Then the relations no table gives: where the magazine sits against the
 trigger, the stock's drop, the grip's length and rake, how deep the
 handguard is. For these, lay the model over a side-on photograph:
