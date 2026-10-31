@@ -234,6 +234,18 @@ impl Vr {
             .expect("a hand")
     }
 
+    /// Whether the hand's last letting go was refused by a body slot
+    /// (`interact::StowRefused`).
+    pub fn stow_refused(&mut self, side: Side) -> bool {
+        let mut q = self
+            .app
+            .world_mut()
+            .query::<(&RigHand, Has<crate::interact::StowRefused>)>();
+        q.iter(self.app.world())
+            .find(|(rh, _)| rh.side == side)
+            .is_some_and(|(_, r)| r)
+    }
+
     pub fn spawn(&mut self, id: &str, at: Transform) -> Entity {
         let catalog = self.app.world().resource::<Catalog>().clone();
         let kind = catalog.kind(id).expect("an item id");
@@ -1365,6 +1377,17 @@ mod tests {
             at.distance(feet + Vec3::new(0.3, 1.2, -0.4)) < 0.15,
             "it didn't come with the hand: {at}"
         );
+        assert!(
+            vr.stow_refused(Side::Right),
+            "the hand isn't marked refused"
+        );
+        // Closed and opened again, away from the slots: it drops, as ever.
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, None, "it won't let go");
+        assert!(!vr.stow_refused(Side::Right));
     }
 
     /// One-handed: the pistol's empty well brought down onto a magazine in a

@@ -86,6 +86,13 @@ pub struct Grabbable {
     pub points: Vec<GrabPoint>,
 }
 
+/// On a hand whose last letting go was at a body slot that couldn't take
+/// what it held: it held on to it (with a tick) rather than drop it, and
+/// lets go as ever the next time it closes and opens. (Checks that an open
+/// hand holds nothing pass it over: `soak::chaos`.)
+#[derive(Component, Debug)]
+pub struct StowRefused;
+
 /// On an item while a hand holds it.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Held {
@@ -1141,9 +1148,11 @@ fn apply_hand_actions(
                 let Some((hand_e, hand_world)) = hand_of(&players, &hands, player, side) else {
                     continue;
                 };
-                commands
-                    .entity(hand_e)
-                    .remove::<(crate::gadgets::climbing::RopeGrip, hand_climb::HandHold)>();
+                commands.entity(hand_e).remove::<(
+                    crate::gadgets::climbing::RopeGrip,
+                    hand_climb::HandHold,
+                    StowRefused,
+                )>();
                 let Ok((_, _, mut hand)) = hands.get_mut(hand_e) else {
                     continue;
                 };
@@ -1280,6 +1289,7 @@ fn apply_hand_actions(
                 if refused && let Ok((_, _, Some(held), ..)) = items.get(item) {
                     let held = *held;
                     commands.entity(item).insert(held);
+                    commands.entity(hand_e).insert(StowRefused);
                     if let Ok((_, _, mut h)) = hands.get_mut(hand_e) {
                         h.holding = Some(item);
                     }

@@ -627,6 +627,12 @@ pub fn slot_fit(
     } else {
         cavity.floor + Vec3::Y * half.y
     };
+    // Standing with its middle out of the mouth, it would tip out (a
+    // crossbow bolt in a mag pouch); a mount's loop holds it round its
+    // middle, whatever its length.
+    if slot != SlotKind::Mount && middle.y > cavity.mouth() {
+        return None;
+    }
     // A pistol's slide against the holster's front, its grip standing out
     // of the mouth behind (centred, the slide went out through the front).
     if slot == SlotKind::Holster {
@@ -943,5 +949,35 @@ fn carried_mass(
             }
         }
         body.carried_kg = kg.max(0.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn def(id: &str) -> extraction_core::items::ItemDef {
+        let catalog = crate::items::Catalog::load();
+        catalog.get(catalog.kind(id).unwrap()).clone()
+    }
+
+    /// A thing long enough to stand with its middle above a slot's mouth
+    /// would tip out: a crossbow bolt (38 cm) isn't put in a mag pouch.
+    /// What a slot is made for still goes in.
+    #[test]
+    fn nothing_stands_in_a_slot_with_its_middle_out_of_the_mouth() {
+        for id in ["crossbow_bolt", "bolt_bundle"] {
+            assert!(
+                slot_fit(SlotKind::Pouch, 3, &def(id)).is_none(),
+                "{id} stands in a mag pouch"
+            );
+        }
+        assert!(slot_fit(SlotKind::Pouch, 3, &def("ak_mag")).is_some());
+        for id in ["pm_pistol", "nagant", "flare_pistol"] {
+            assert!(
+                slot_fit(SlotKind::Holster, 0, &def(id)).is_some(),
+                "{id} doesn't fit the holster"
+            );
+        }
     }
 }
