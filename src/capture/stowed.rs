@@ -260,4 +260,140 @@ mod tests {
     }
 
     const KNOWN: &[&str] = &[];
+
+    /// Each distinct body-slot item once: (id, model bounds).
+    fn items() -> Vec<(String, Vec3, Vec3)> {
+        let mut seen = std::collections::HashSet::new();
+        stowed()
+            .into_iter()
+            .filter(|s| seen.insert(s.item.clone()))
+            .map(|s| {
+                let (lo, hi) = glb::read(&s.path).unwrap().bounds().unwrap();
+                (s.item, lo, hi)
+            })
+            .collect()
+    }
+
+    /// What goes in a body slot has a catalog size its model's box agrees
+    /// with, axis by axis (its box about its origin, the model on its floor) (slots fit things by it: `kit_cavities`).
+    #[test]
+    fn body_slot_things_are_their_catalog_size() {
+        let catalog = crate::items::Catalog::load();
+        let mut bad = Vec::new();
+        for (id, lo, hi) in items() {
+            let def = catalog.get(catalog.kind(&id).unwrap());
+            // Its box is centred on its origin, the model resting on the
+            // box's floor (`models::every_item_model_fits_its_box`): its
+            // height may run from the model's to twice its depth under
+            // the origin. A gun's or an attachment's is placed by its
+            // mount, not its box.
+            let (m, d) = (hi - lo, Vec3::from(def.size_m()));
+            let tol = (d * 0.25).max(Vec3::splat(0.01));
+            let mut off = (m - d).abs().cmpgt(tol);
+            let boxed = def.firearm.is_none()
+                && def.category != extraction_core::items::Category::Attachment;
+            if boxed {
+                let (short, tall) = (m.y - tol.y, 2.0 * -lo.y + tol.y);
+                off = bevy::math::BVec3::new(off.x, d.y < short || d.y > tall, off.z);
+            }
+            if off.any() {
+                bad.push(format!(
+                    "{id}: model {:.3} {:.3} {:.3}, catalog {:.3} {:.3} {:.3}",
+                    m.x, m.y, m.z, d.x, d.y, d.z
+                ));
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "sizes off their models:\n{}",
+            bad.join("\n")
+        );
+    }
+
+    /// `kit_cavities::ORIGIN_OFFSET` is the models': every body-slot model
+    /// more than 5 mm off centre is in it, by its offset, and nothing else.
+    #[test]
+    fn origin_offsets_are_the_models() {
+        use crate::kit_cavities::ORIGIN_OFFSET;
+        let mut bad = Vec::new();
+        let all = items();
+        for (id, lo, hi) in &all {
+            let c = (*lo + *hi) / 2.0;
+            let listed = ORIGIN_OFFSET.iter().find(|(k, _)| k == id);
+            match listed {
+                Some((_, v)) if v.distance(c) > 0.002 => {
+                    bad.push(format!("{id}: listed {v:.3}, model {c:.3}"))
+                }
+                None if c.abs().max_element() > 0.005 => {
+                    bad.push(format!("{id}: {c:.3} off centre, not listed"))
+                }
+                _ => {}
+            }
+        }
+        for (k, _) in ORIGIN_OFFSET {
+            if !all.iter().any(|(id, ..)| id == k) {
+                bad.push(format!("{k}: listed, but goes in no body slot"));
+            }
+        }
+        assert!(bad.is_empty(), "origin offsets:\n{}", bad.join("\n"));
+    }
+
+    /// The rig's slot pieces hold the cavities `kit_cavities` gives logic:
+    /// each cavity's middle and its faces (2 mm in) are in its bag's solid
+    /// (the loop's hole, for the mount), and its walls and floor are no
+    /// thicker than [`WALL`].
+    #[test]
+    fn rig_holds_its_cavities() {
+        use super::super::seated::winding;
+        const WALL: f32 = 0.012;
+        let mut bad = Vec::new();
+        for slot in [
+            SlotKind::Pouch,
+            SlotKind::Pocket,
+            SlotKind::Holster,
+            SlotKind::Mount,
+        ] {
+            let cav = crate::kit_cavities::cavity(slot).unwrap();
+            let name = piece(slot).unwrap();
+            let tris = piece_tris(RIG, name);
+            assert!(!tris.is_empty(), "no {name} in the rig");
+            let c = cav.centre();
+            let h = cav.half;
+            // The faces round it: four walls and the floor (the mouth's open).
+            let faces = [Vec3::X, Vec3::NEG_X, Vec3::Z, Vec3::NEG_Z, Vec3::NEG_Y];
+            if slot == SlotKind::Mount {
+                // An open loop: its hole is empty, its ring just past it.
+                for f in &faces[..4] {
+                    let p = c + *f * h;
+                    let ring = c + *f * (h + Vec3::splat(0.0025));
+                    if winding(&tris, c) > 0.5 || winding(&tris, p - *f * 0.002) > 0.5 {
+                        bad.push(format!("{name}: its cavity's {f} side is in the loop"));
+                    }
+                    if winding(&tris, ring) < 0.5 {
+                        bad.push(format!("{name}: no loop just past its cavity's {f} side"));
+                    }
+                }
+                continue;
+            }
+            if winding(&tris, c) < 0.5 {
+                bad.push(format!("{name}: its cavity's middle is out of it"));
+            }
+            for f in faces {
+                let p = c + f * h;
+                if winding(&tris, p - f * 0.002) < 0.5 {
+                    bad.push(format!("{name}: its cavity's {f} face is out of it"));
+                }
+                if winding(&tris, p + f * WALL) > 0.5 {
+                    bad.push(format!(
+                        "{name}: its wall past the cavity's {f} face is over {WALL} m"
+                    ));
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "rig against kit_cavities:\n{}",
+            bad.join("\n")
+        );
+    }
 }

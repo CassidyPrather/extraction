@@ -27,6 +27,7 @@ pub mod hearing;
 pub mod hud;
 pub mod interact;
 pub mod items;
+pub mod kit_cavities;
 pub mod launch;
 pub mod models;
 pub mod onboarding;
