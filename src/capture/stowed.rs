@@ -88,7 +88,7 @@ pub fn stowed() -> Vec<Stowed> {
         if piece(*slot).is_none() || !done.insert(*slot) {
             continue;
         }
-        let (pos, seat, _) = crate::interact::body::slot_layout(*slot, index);
+        let (pos, _, _) = crate::interact::body::slot_layout(*slot, index);
         let place = Mat4::from_translation(pos);
         let kind = crate::interact::SocketKind::Body(*slot);
         let mut seen = std::collections::HashSet::new();
@@ -96,6 +96,10 @@ pub fn stowed() -> Vec<Stowed> {
             if !crate::interact::accepts_item(&kind, def.size, None, def.firearm.is_some(), None) {
                 continue;
             }
+            // As the game seats it, or not at all if it doesn't fit.
+            let Some(seat) = crate::interact::body::slot_fit(*slot, index, def) else {
+                continue;
+            };
             let Some(path) = model(def) else {
                 continue;
             };
@@ -238,7 +242,7 @@ mod tests {
     /// Everything stowed on the body sits in its slot's piece of the kit,
     /// and through none of it.
     #[test]
-    #[ignore = "body-slot seats are the slot's origin, not fitted: waiting on slot_fit (Hands, B1)"]
+    #[ignore = "seats fitted (interact::body::slot_fit); the holster's cavity and the 4 mm the cloth gives to settle with Models"]
     fn stowed_things_sit_in_their_kit() {
         let all = stowed();
         assert!(all.len() > 10, "only {} stowed", all.len());
