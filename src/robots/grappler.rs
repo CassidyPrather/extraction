@@ -61,6 +61,12 @@ pub const TETHER_TIME: f32 = 4.0;
 pub const TETHER_SLOW: f32 = 0.35;
 /// How hard the line drags you, m/s.
 pub const TETHER_PULL: f32 = 1.6;
+/// With its line on you, a grappler walks back to the nearest of its armed
+/// friends within this (m), hauling you in to them: what it's for, to read
+/// (playtest, 28 October, 1:03:34: "what are you gonna do when I get
+/// close?"). Within [`HAUL_NEAR`] of one, it holds.
+pub const HAUL_FROM: f32 = 45.0;
+pub const HAUL_NEAR: f32 = 5.0;
 
 pub struct GrapplerPlugin;
 
@@ -71,6 +77,13 @@ impl Plugin for GrapplerPlugin {
             .add_systems(
                 FixedUpdate,
                 (harpoons, tethers).chain().after(super::perceive),
+            )
+            .add_systems(
+                FixedUpdate,
+                // (Only before the walkers think: tying it after `perceive`
+                // as well put every walker's thinking after its seeing, and
+                // walkers saw a tick sooner than their tests hold them to.)
+                haul_to_friends.before(super::walker::walker_brain),
             );
     }
 }
@@ -235,9 +248,149 @@ fn tethers(
     }
 }
 
+/// A grappler with its line on someone makes for its nearest armed friend
+/// (a walker with a gun, not another grappler), hauling them along: it
+/// holds you for the guns. None near, it stands and reels.
+fn haul_to_friends(
+    mut commands: Commands,
+    mut grapplers: Query<
+        (Entity, &GlobalTransform, &mut Brain, &Robot, Has<Hauling>),
+        With<Grappler>,
+    >,
+    held: Query<&Tethered>,
+    friends: Query<
+        (Entity, &GlobalTransform, &Robot),
+        (With<super::walker::Walker>, Without<Grappler>),
+    >,
+    parts: Query<&super::RobotPart>,
+) {
+    for (e, gt, mut brain, robot, was) in &mut grapplers {
+        if robot.wrecked || !held.iter().any(|t| t.by == e) {
+            if was {
+                commands.entity(e).remove::<Hauling>();
+            }
+            continue;
+        }
+        let here = gt.translation();
+        // Armed: a gun on it still working.
+        let armed = |f: Entity| {
+            parts
+                .iter()
+                .any(|p| p.robot == f && p.role == super::PartRole::Weapon && p.alive())
+        };
+        let friend = friends
+            .iter()
+            .filter(|(f, _, r)| !r.wrecked && armed(*f))
+            .map(|(_, g, _)| g.translation())
+            .filter(|p| p.distance(here) < HAUL_FROM)
+            .min_by(|a, b| a.distance(here).total_cmp(&b.distance(here)));
+        match friend.filter(|to| to.distance(here) > HAUL_NEAR) {
+            Some(to) => {
+                *brain = Brain::Transit { to };
+                if !was {
+                    commands.entity(e).insert(Hauling);
+                }
+            }
+            None if was => {
+                commands.entity(e).remove::<Hauling>();
+            }
+            None => {}
+        }
+    }
+}
+
+/// A grappler hauling someone in to its friends (`haul_to_friends`): its
+/// brain goes where the haul says, not where its eyes would take it.
+#[derive(Component, Debug)]
+pub struct Hauling;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// With its line on you, a grappler walks back to its armed friend,
+    /// hauling you in to the gun: its goal, to read (playtest, 28 October,
+    /// 1:03:34, "what are you gonna do when I get close?": it reeled you in
+    /// to itself and did nothing).
+    #[test]
+    fn a_grappler_hauls_you_to_its_friends_gun() {
+        let opts = crate::LaunchOptions {
+            map: extraction_core::map::TEST_FIELD_ID.into(),
+            robots: false,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let player = app
+            .world_mut()
+            .query_filtered::<Entity, With<crate::rig::LocalPlayer>>()
+            .iter(app.world())
+            .next()
+            .unwrap();
+        let zone = app.world().resource::<Zone>().clone();
+        let at = zone.on_ground(40.0, 255.0);
+        app.world_mut()
+            .get_mut::<Transform>(player)
+            .unwrap()
+            .translation = at;
+        app.update();
+        let spot = zone.on_ground(at.x + 12.0, at.z);
+        let gun_at = zone.on_ground(at.x + 27.0, at.z);
+        let job = |site: Vec3, exit: Vec3| super::super::Job {
+            kind: super::super::JobKind::Response,
+            site,
+            duration: 999.0,
+            exit,
+        };
+        let (grappler, friend) = {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            let g = spawn_grappler(&mut c, &zone, spot, job(at, spot));
+            let f = super::super::walker::spawn_walker(&mut c, &zone, gun_at, job(gun_at, gun_at));
+            // It stands where it's put: the gun the grappler's for.
+            c.entity(f)
+                .remove::<Brain>()
+                .remove::<super::super::Senses>();
+            q.apply(app.world_mut());
+            (g, f)
+        };
+        let gap = |app: &App| {
+            let g = app
+                .world()
+                .get::<GlobalTransform>(grappler)
+                .unwrap()
+                .translation();
+            let f = app
+                .world()
+                .get::<GlobalTransform>(friend)
+                .unwrap()
+                .translation();
+            g.xz().distance(f.xz())
+        };
+        let mut bit = None;
+        for _ in 0..90 * 20 {
+            app.update();
+            if app.world().get::<Tethered>(player).is_some() {
+                bit = Some(gap(&app));
+                break;
+            }
+        }
+        let start = bit.expect("its line bit");
+        let mut least = start;
+        for _ in 0..(90.0 * (TETHER_TIME - 0.5)) as usize {
+            app.update();
+            if app.world().get::<Tethered>(player).is_none() {
+                break;
+            }
+            least = least.min(gap(&app));
+        }
+        assert!(
+            least < start - 1.0,
+            "it didn't make for its friend's gun: {start:.1} m off when its line bit, {least:.1} at nearest"
+        );
+    }
 
     #[test]
     fn a_grappler_spears_a_player_in_reach() {
