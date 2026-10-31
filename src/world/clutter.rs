@@ -509,7 +509,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             ])
         }
         // The crossing keeper: the railwayman, his flags.
-        ("kettle", "house_plank") if here(76.0, 222.0) => house(
+        ("kettle", "house_plank") if here(49.0, 157.7) => house(
             |s| {
                 let mut v = Resident::Railwayman.things(s, 8.0, 7.0);
                 v.push(on(
@@ -522,7 +522,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The weir book's keeper.
-        ("kettle", "house_plank") if here(-99.0, 154.0) => house(
+        ("kettle", "house_plank") if here(-74.2, 115.5) => house(
             |s| {
                 vec![
                     wall("waders", s.door_wall[1] + Vec3::Y * 0.1),
@@ -532,7 +532,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The Nováks, who hid in the deep mine: small boots, a drawing.
-        ("kettle", "house_plank") if here(-42.0, 125.0) => house(
+        ("kettle", "house_plank") if here(-30.5, 93.0) => house(
             |s| {
                 let mut v = Resident::Family.things(s, 8.0, 7.0);
                 v.push(on(
@@ -545,14 +545,14 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // Old Fiala's lodge.
-        ("kettle", "cabin_log") if here(205.0, -205.0) => things(vec![
+        ("kettle", "cabin_log") if here(149.1, -152.2) => things(vec![
             facing("traps_hook", Vec3::new(-0.4, cf + 1.6, -cz), pz),
             facing("antlers", Vec3::new(1.0, cf + 1.85, cz), nz),
             facing("hide_frame", Vec3::new(cx, cf + 1.3, -1.2), nx),
         ]),
         // Mirek Hájek, the charcoal burner: "my name's on the frame so you
         // know whose it was".
-        ("kettle", "cabin_log") if here(119.0, -138.0) => things(vec![
+        ("kettle", "cabin_log") if here(89.2, -103.5) => things(vec![
             on(
                 "bed_name_mirek",
                 Vec3::new(-2.8, cf + 0.32, 1.5 - 0.975 - 0.03),
@@ -561,7 +561,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             on("charcoal_sack", Vec3::new(-0.45, cf, -2.4), 0.5),
         ]),
         // The sexton's chapel: the hymns still up from the last Sunday.
-        ("kettle", "chapel") if here(-8.0, 150.0) => things(vec![facing(
+        ("kettle", "chapel") if here(-7.4, 123.4) => things(vec![facing(
             "hymn_board",
             Vec3::new(3.0, 0.5 + 1.9, 7.0 - 0.175),
             nz,
@@ -1032,7 +1032,7 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
         (_, _, "mine_office") => Some(Story::MineOffice),
         (_, _, "foreman") => Some(Story::Foreman),
         (Valley::Marrow, "house_plank", _) if here(-20.2, 63.5) => Some(Story::Hana),
-        (Valley::Kettle, "house_plank", _) if here(-30.0, 72.0) => Some(Story::ShotFirer),
+        (Valley::Kettle, "house_plank", _) if here(-22.1, 54.9) => Some(Story::ShotFirer),
         _ => None,
     }
 }
@@ -1560,12 +1560,12 @@ mod tests {
             ("marrow", "cabin_log", -110.8, 113.5),
             ("marrow", "cabin_log", -70.8, 113.5),
             ("marrow", "pump_station", -110.0, 12.1),
-            ("kettle", "house_plank", 76.0, 222.0),
-            ("kettle", "house_plank", -99.0, 154.0),
-            ("kettle", "house_plank", -42.0, 125.0),
-            ("kettle", "cabin_log", 205.0, -205.0),
-            ("kettle", "cabin_log", 119.0, -138.0),
-            ("kettle", "chapel", -8.0, 150.0),
+            ("kettle", "house_plank", 49.0, 157.7),
+            ("kettle", "house_plank", -74.2, 115.5),
+            ("kettle", "house_plank", -30.5, 93.0),
+            ("kettle", "cabin_log", 149.1, -152.2),
+            ("kettle", "cabin_log", 89.2, -103.5),
+            ("kettle", "chapel", -7.4, 123.4),
             ("cinder", "house_plank_damaged", 15.0, 103.5),
             ("cinder", "cabin_log", -51.9, -111.2),
             ("sallow", "house_brick", -58.0, 206.0),

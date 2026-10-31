@@ -1187,13 +1187,13 @@ mod tests {
         assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
         let hm = Heightmap::build(&map);
         assert!(
-            hm.water_level([40.0, 130.0]).is_some(),
+            hm.water_level([40.0, 103.7]).is_some(),
             "the beck under the bridge"
         );
-        assert!(hm.water_level([-42.0, 125.0]).is_none(), "the Row is dry");
+        assert!(hm.water_level([-30.5, 93.0]).is_none(), "the Row is dry");
         // It climbs: the pass is well above the gate.
-        let gate = hm.height([120.0, 270.0]);
-        let pass = hm.height([10.0, -250.0]);
+        let gate = hm.height([90.9, 202.4]);
+        let pass = hm.height([9.6, -190.0]);
         assert!(pass - gate > 15.0, "gate {gate:.1}, pass {pass:.1}");
         for m in map.markers.iter().filter(|m| {
             matches!(

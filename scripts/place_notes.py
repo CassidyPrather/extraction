@@ -227,7 +227,7 @@ at night with the split log, the latch is no good.
 - Tomas, J.'s crew""", "Cabin tally"),
     ],
     "kettle_pass": [
-        ("guard_booth", (127.8, 285.0), "Note", """SOUTH GATE, KETTLE - DUTY LOG
+        ("guard_booth", (98.7, 217.4), "Note", """SOUTH GATE, KETTLE - DUTY LOG
 
 3 Jan. Snow. Nothing in, nothing out.
 
@@ -237,7 +237,7 @@ says. He's been up here too long.
 12 Feb. Smoke over the hill from Cinder. Orders: none.
 
 1 Apr. Review postponed. Post to stand down. Leave the stove.""", "Gate log"),
-        ("house_brick", (-55.0, 60.0), "Note", """MINE OFFICE
+        ("house_brick", (-45.4, 44.8), "Note", """MINE OFFICE
 
 Inspector Rus took Karel's key to the quarry blast shelter and locked
 the Kettle depot key inside "for safe keeping". He signed for it in our
@@ -247,7 +247,7 @@ A week later the shelter started to burn without fire. Nobody goes up
 to the quarry now.
 
 - Irena, clerk""", "Mine office note"),
-        ("house_plank", (-30.0, 72.0), "Note", """K. Dusek, shot-firer.
+        ("house_plank", (-22.1, 54.9), "Note", """K. Dusek, shot-firer.
 
 Shelter: poured concrete, 30 cm. Steel door, one lock. My key, until
 the inspector took it.
@@ -260,7 +260,7 @@ I have fired four hundred shots up there. I know what a shelter is for.
 That one is keeping something in.
 
 Vey came up from Marrow to look. He went white.""", "Shot-firer's note"),
-        ("house_plank", (76.0, 222.0), "Note", """Last train out, 15 Oct, 1140.
+        ("house_plank", (49.0, 157.7), "Note", """Last train out, 15 Oct, 1140.
 Eleven wagons, people on the roofs.
 
 I closed the crossing gates behind it like always. Nobody told me to
@@ -270,12 +270,12 @@ Every morning since, I close them at 1140.
 
 The machines wait for the gates now. They stand at the barrier, very
 patient, till I lift it.""", "Crossing keeper's note"),
-        ("chapel", (-8.0, 150.0), "Note", """Sunday. Nobody came to the chapel
+        ("chapel", (-7.4, 123.4), "Note", """Sunday. Nobody came to the chapel
 but the machines. One of them stood at the back the whole service,
 very still, and then cleaned the windows.
 
 The pass road is the only way the trucks still come in.""", "Chapel note"),
-        ("pump_station", (-200.0, -100.0), "Terminal", [
+        ("pump_station", (-151.3, -86.5), "Terminal", [
             """CUSTODIAN NETWORK - KETTLE
 
 Depot GATE-K: ACTIVE
@@ -291,7 +291,7 @@ Note: field activity near the
 quarry. Unshielded personnel
 should not approach.""",
         ], "Pump station terminal"),
-        ("mast_hut", (75.0, -210.0), "Terminal", [
+        ("mast_hut", (63.6, -155.1), "Terminal", [
             """RELAY LOG - MAST K2
 
 Grapplers carry stock to the
@@ -309,7 +309,7 @@ AUTHORITY UPLINK    NO CARRIER
 
 Holding reports for uplink.""",
         ], "Mast terminal"),
-        ("ranger_tower", (-48.0, -233.0), "Note", """KETTLE TOWER
+        ("ranger_tower", (-43.2, -171.6), "Note", """KETTLE TOWER
 
 Marta's lamp from Marrow, 2100, three long: all well. Answered.
 
@@ -322,7 +322,7 @@ The lamp battery is nearly gone. If I stop answering, Marta, it's the
 battery.
 
 - Emil""", "Ranger's log"),
-        ("house_plank", (-99.0, 154.0), "Note", """WEIR BOOK - KETTLE BECK
+        ("house_plank", (-74.2, 115.5), "Note", """WEIR BOOK - KETTLE BECK
 
 Level 0.62. Clear.
 
@@ -332,14 +332,14 @@ Level 0.61. The water tastes of pennies the day after a Surge, then it
 doesn't.
 
 Level 0.58. Nobody to send these to. Writing them anyway.""", "Weir book"),
-        ("mast_hut", (-40.0, -128.0), "Note", """Lorry 12, 15 Oct.
+        ("mast_hut", (-30.0, -95.5), "Note", """Lorry 12, 15 Oct.
 
 Stuck on the third bend with forty from Miners' Row in the back. Walked
 them over the pass on foot, the old ones on the soldiers' shoulders.
 
 Left the lorry on the bend with the keys in. The machines had it by
 morning.""", "Lorry driver's note"),
-        ("pump_station", (125.0, -42.0), "Note", """QUARRY PUMPS
+        ("pump_station", (79.8, -28.5), "Note", """QUARRY PUMPS
 
 Pit dry at 0600. Pumps one and two running.
 
@@ -348,7 +348,7 @@ warm.
 
 Turned the pumps off. Whatever is down there, it wants to be under
 water. Let it.""", "Quarry pumps note"),
-        ("cabin_log", (205.0, -205.0), "Note", """Lodge book.
+        ("cabin_log", (149.1, -152.2), "Note", """Lodge book.
 
 Snow on the saddle again. The machines walked the fence line all
 night, very slowly, as if counting the posts.
@@ -356,7 +356,7 @@ night, very slowly, as if counting the posts.
 If you hear the hum, you're carrying too many of the bright stones. Put some down.
 
 - Fiala""", "Lodge book"),
-        ("cabin_log", (119.0, -138.0), "Note", """The kiln wants four days' watching, so it's getting four days.
+        ("cabin_log", (89.2, -103.5), "Note", """The kiln wants four days' watching, so it's getting four days.
 
 They say the buses are the last. Fine. If it's cold when you come, it went
 out without me and I walked down after all.
