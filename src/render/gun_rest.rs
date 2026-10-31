@@ -581,6 +581,24 @@ mod tests {
         (guns.len(), resting, on_player, hidden)
     }
 
+    /// The valley in (`settle`: no new meshes for a while), the guns'
+    /// time to settle, and every merge built (`Building`). The merges run
+    /// on Bevy's task pools, which are the process's: beside the rest of
+    /// the gauge tier, other valleys' loads queue ahead of them, and a
+    /// fixed count of frames found 16 of 17 guns resting, or none.
+    fn settled(app: &mut App) {
+        super::super::budget::tests::settle(app);
+        for frame in 0..6000 {
+            app.update();
+            let w = app.world_mut();
+            let building = w.query_filtered::<(), With<Building>>().iter(w).count();
+            if frame >= SETTLE as usize * 3 + 60 && building == 0 {
+                return;
+            }
+        }
+        panic!("guns' merges still building after 6000 frames");
+    }
+
     /// Guns lying in a valley rest; the drawn meshes under a resting gun
     /// are its merged ones only.
     #[test]
@@ -589,13 +607,16 @@ mod tests {
         // Counts: guns at rest, their meshes.
         let _counting = super::super::budget::tests::counted();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
-        for _ in 0..(SETTLE as usize * 3 + 60) {
-            app.update();
-        }
+        settled(&mut app);
         let (guns, resting, on_player, hidden) = census(&mut app);
         println!("{guns} guns: {resting} resting, {on_player} on the player, {hidden} hidden");
         assert!(guns > 0);
         assert!(resting > 0, "no gun rests");
+        assert_eq!(
+            resting,
+            guns - on_player - hidden,
+            "every gun lying in the valley rests"
+        );
         // Resting, a gun's own leaves are hidden and its merged meshes
         // stand in: fewer of them than the leaves.
         let w = app.world_mut();
@@ -653,9 +674,7 @@ mod tests {
     fn a_resting_gun_wakes() {
         let _one_at_a_time = super::super::budget::tests::heavy();
         let mut app = super::super::budget::tests::client_threads("marrow_creek", "clearing", None);
-        for _ in 0..(SETTLE as usize * 3 + 60) {
-            app.update();
-        }
+        settled(&mut app);
         // Taken in hand.
         let (gun, leaves) = a_resting_gun(&mut app);
         let hand = app.world_mut().spawn_empty().id();

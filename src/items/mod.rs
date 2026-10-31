@@ -98,7 +98,13 @@ pub fn physical_bundle(def: &ItemDef) -> impl Bundle {
         // Against the world (static and kinematic), not other loose
         // things: swept against each piece of a breach's rubble, the
         // worst minute's items took 6 ms a frame (Rime, its doors blown in).
-        SweptCcd::default().include_dynamic(false),
+        // And only moving: under 0.5 m/s an item goes 6 mm a tick, and
+        // under 3 rad/s a 30 cm rod's tip half a metre a second, which
+        // speculative contacts hold. A valley's loot settling after its
+        // load took 20 ms of every load frame sweeping (Rime Fell).
+        SweptCcd::default()
+            .include_dynamic(false)
+            .with_velocity_threshold(0.5, 3.0),
         // Nothing the game does moves an item faster (a hand lets go at
         // 25 m/s at most); a thin thing (a cleaning rod) struck end-on
         // spun up to hundreds of rad/s and blew up to 2 km/s without these.
