@@ -68,7 +68,7 @@ pub const PLACES: &[Place] = &[
     by(
         "cinder_works",
         "tape_birthday",
-        [-109.20, 173.30],
+        [-72.20, 118.90],
         205.2,
         0.3,
     ),

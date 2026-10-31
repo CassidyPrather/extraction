@@ -430,8 +430,9 @@ fn inject(
         let Ok(input) = inputs.get(held.player) else {
             continue;
         };
-        let pulled = input.hand(held.side).trigger > 0.6;
-        let was = last.insert(e, pulled).unwrap_or(false);
+        let was = last.get(&e).copied().unwrap_or(false);
+        let pulled = crate::rig::pressed(was, input.hand(held.side).trigger);
+        last.insert(e, pulled);
         if !pulled || was {
             continue;
         }

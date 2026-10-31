@@ -469,8 +469,9 @@ fn spawn_forests(
         chunk_count += 1;
     }
     // Impostors are only ever far, and their near cut is the shader's, per
-    // tree: merged over 3x3 chunks they are a ninth of the draws (they
-    // were two thirds of the forest's).
+    // tree: merged over `IMPOSTOR_BLOCK` chunks a side they are a few
+    // dozen draws a valley (a chunk each, they were two thirds of the
+    // forest's).
     for ((_, key), b) in impostors {
         if b.is_empty() {
             continue;
@@ -496,8 +497,13 @@ fn spawn_forests(
 
 /// Chunk size for merged forest meshes, metres.
 pub const CHUNK: f32 = 48.0;
-/// Impostors merge over this many chunks a side.
-const IMPOSTOR_BLOCK: i32 = 3;
+/// Impostors merge over this many chunks a side (288 m). An impostor is a
+/// quad a tree, cut near and dithered with the cards per tree in its
+/// shader, so a block's size changes no picture: only how much of it the
+/// fog's range keeps past the fog (in a storm, +0.05 layers at most).
+/// Over 3x3 chunks a forested view drew 50-150 more (Kettle Pass's aerial
+/// 1786 > 1632 both eyes).
+const IMPOSTOR_BLOCK: i32 = 6;
 /// A chunk (by its centre) switches to the coarse LOD this far away.
 const FAR_LOD: f32 = 130.0;
 /// Without the foliage textures (`scripts/fetch_assets.py` not run) there

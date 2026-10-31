@@ -611,6 +611,7 @@ mod tests {
                 layout: super::super::layout::layout("nagant").unwrap(),
                 magwell: None,
                 trigger: 0.0,
+                pulled: false,
                 dice: extraction_core::noise::Rng::new(0),
                 mass: None,
             })

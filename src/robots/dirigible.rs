@@ -455,8 +455,10 @@ mod tests {
 
     #[test]
     fn a_logistics_run_lands_a_full_pod() {
+        // A full valley's ground (its patrol strength: `director`).
         let opts = crate::LaunchOptions {
             robots: true,
+            map: extraction_core::map::TEST_FIELD_ID.into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);
