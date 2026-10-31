@@ -167,12 +167,19 @@ impl GunLayout {
     }
 }
 
-/// Where the other hand's palm cups a handgun's grip from below, in the
-/// grip's frame: under the back of the butt, its fingers curled up round
-/// the front of the gun hand's. (At 0.065 down and 0.02 back the cupping
-/// fingers went into the gun hand's: `render::props`
-/// `a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand`.)
-pub const CUP: Vec3 = Vec3::new(0.0, -0.08, 0.04);
+/// Where the other hand takes a handgun's grip from below, in the grip's
+/// frame: by the magazine's foot, so a hand closing there cups the gun
+/// rather than taking its magazine (`weapons::reload`
+/// `a_grab_takes_the_gun_never_the_magazine_in_it`, the playtest's B2).
+pub const CUP: Vec3 = Vec3::new(0.0, -0.065, 0.02);
+
+/// Where the cupping palm is drawn, in the grip's frame (`render::props`
+/// `support_pose`): palm up against the butt, its fingers forward and up
+/// the front, short of the gun hand's
+/// (`a_cupping_hand_keeps_its_fingers_out_of_the_gun_hand`). Not the grab
+/// point: a hand takes hold where the magazine can't win, and is drawn
+/// where a hand looks right.
+pub const CUP_DRAWN: Vec3 = Vec3::new(0.0, -0.05, -0.02);
 
 /// A handgun's cup (gun space): a gun with no place for a second hand on
 /// it is steadied by one under its grip.
