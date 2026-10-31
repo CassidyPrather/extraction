@@ -81,8 +81,8 @@ fn spawn_cards(mut commands: Commands, trucks: Query<Entity, Added<Truck>>) {
             (ComfortCard::Smoothing, 1.44, -0.15),
             // And under that, the eyes' size following the GPU's time.
             (ComfortCard::HoldRate, 1.26, -0.15),
-            // And under the "how you play" column, the gun's steadying.
-            (ComfortCard::SteadyAim, 1.08, -0.50),
+            // And under that, the gun's steadying.
+            (ComfortCard::SteadyAim, 1.08, -0.15),
         ] {
             commands.spawn((
                 Name::new("Comfort card"),
