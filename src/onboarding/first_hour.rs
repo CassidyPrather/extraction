@@ -703,16 +703,19 @@ pub(super) fn direct_raid(
     };
     // Stuck on the way under a roof: the rest of that way is no good either
     // (in, wait, out the way it came), and nor is that roof.
-    // (In, its wait and out are done within a minute.)
+    // (There, in, its wait and out: on Cinder the first stuck came 75 s
+    // after the plan was made.)
     if state
         .roof_try
-        .is_some_and(|(_, _, t)| time.elapsed_secs() - t > 60.0)
+        .is_some_and(|(_, _, t)| time.elapsed_secs() - t > 150.0)
     {
         state.roof_try = None;
     }
     if let Some((b, failed, _)) = state.roof_try {
         if bot.failed > failed {
             bot.tasks.clear();
+            // (Idle, so the next leg's planned: an empty list is the end.)
+            bot.tasks.push_back(Task::Wait(IDLE));
             bot.walk = None;
             state.no_roof.push(b);
             state.roof_try = None;
