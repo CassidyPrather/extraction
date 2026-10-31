@@ -2018,6 +2018,27 @@ fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2, keep_off: Vec2
     t
 }
 
+/// A blocked stretch this long on the walking grid is something solid to go
+/// round, not a gate a body walks through (m). Measured: the South gates'
+/// openings read 6 and 8 m blocked; Cinder's blast furnace, 50.
+const SOLID_RUN: f32 = 12.0;
+
+/// The longest run of blocked ground on the grid along `a`..`b` (m).
+fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
+    let step = nav.cell * 0.5;
+    let n = (a.distance(b) / step).ceil().max(1.0) as usize;
+    let (mut run, mut best) = (0.0f32, 0.0f32);
+    for k in 0..=n {
+        if nav.walkable(a.lerp(b, k as f32 / n as f32).to_array()) {
+            run = 0.0;
+        } else {
+            run += step;
+            best = best.max(run);
+        }
+    }
+    best
+}
+
 /// `legs`, round the buildings in the way.
 fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
@@ -2032,7 +2053,10 @@ fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
             // (Outdoors to outdoors: indoors is `round_buildings`' and the
             // rooms' plans'.)
             .filter(|n| n.0.walkable(at.to_array()) && n.0.walkable(p.to_array()))
-            .filter(|n| !n.0.line_clear(at.to_array(), p.to_array()))
+            // A post or a gate's narrow way isn't worth a detour (the
+            // grid's clearance shuts what a body walks through, and its way
+            // round Marrow's gate went into the fence): only a long solid.
+            .filter(|n| blocked_run(&n.0, at, p) > SOLID_RUN)
             .and_then(|n| n.0.path(at.to_array(), p.to_array()));
         match round {
             Some(way) => {
