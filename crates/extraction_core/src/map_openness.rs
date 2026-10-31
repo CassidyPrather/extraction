@@ -580,3 +580,50 @@ mod probe_grid {
         }
     }
 }
+
+/// The walk review's route (`docs/craft/WALK_REVIEW.md`): from the drop to
+/// the career's first job and on to the nearest way out, on the
+/// comfortable grid, with what stands along it, as JSON to `WALK_OUT`.
+/// `MAP_ID` names the valley.
+#[cfg(test)]
+mod probe_walk {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    #[ignore]
+    fn probe_walk() {
+        let id = std::env::var("MAP_ID").unwrap();
+        let text = crate::map::VALLEYS.iter().find(|v| v.0 == id).unwrap().1;
+        let map = MapDef::from_ron(text).unwrap();
+        let hm = Heightmap::build(&map);
+        let comfy = crate::map_nav::zone_grid(&map, &hm, crate::map_lint::COMFORT_SLOPE);
+        let ins = map.markers_of(&MarkerKind::Insertion).next().unwrap().at;
+        let (job, at) = crate::map_lint::first_jobs(&map, &id)
+            .into_iter()
+            .next()
+            .expect("a first job");
+        let rv = map
+            .markers_of(&MarkerKind::Rendezvous)
+            .min_by(|a, b| crate::geom::dist(a.at, at).total_cmp(&crate::geom::dist(b.at, at)))
+            .unwrap();
+        let leg = |a: P2, b: P2| comfy.path(a, b).unwrap_or_default();
+        let pts = |p: &[P2]| {
+            p.iter()
+                .map(|q| json!([q[0], q[1], hm.height(*q)]))
+                .collect::<Vec<_>>()
+        };
+        let out = json!({
+            "map": id,
+            "job": job, "job_at": at, "rv": rv.name, "rv_at": rv.at,
+            "to_job": pts(&leg(ins, at)),
+            "to_rv": pts(&leg(at, rv.at)),
+            "doors": crate::map_doors::doors(&map).iter().map(|d| json!({
+                "prefab": map.placements[d.placement].prefab, "face": d.face, "out": d.out})).collect::<Vec<_>>(),
+            "places": map.markers_of(&MarkerKind::Poi).map(|m| json!({"name": m.name, "at": m.at})).collect::<Vec<_>>(),
+            "rvs": map.markers_of(&MarkerKind::Rendezvous).map(|m| json!({"name": m.name, "at": m.at})).collect::<Vec<_>>(),
+            "placements": map.placements.iter().map(|p| json!({"prefab": p.prefab, "at": p.at, "rot": p.rot})).collect::<Vec<_>>(),
+            "roads": hm.road_lines.iter().map(|r| json!({"name": map.roads[r.road].name, "points": r.points})).collect::<Vec<_>>(),
+        });
+        std::fs::write(std::env::var("WALK_OUT").unwrap(), out.to_string()).unwrap();
+    }
+}

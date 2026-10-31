@@ -1,0 +1,167 @@
+[
+ {
+  "n": 1,
+  "name": "s01",
+  "s": 0,
+  "kind": "drop",
+  "note": "",
+  "at": [
+   -71.0,
+   198.7
+  ],
+  "h": 20.6,
+  "fwd": 22,
+  "side": 328,
+  "side_what": "blast_furnace (72 m)"
+ },
+ {
+  "n": 2,
+  "name": "s02",
+  "s": 40,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   -55.9,
+   161.4
+  ],
+  "h": 20.5,
+  "fwd": 22,
+  "side": 294,
+  "side_what": "blast_furnace (58 m)"
+ },
+ {
+  "n": 3,
+  "name": "s03",
+  "s": 85,
+  "kind": "fork",
+  "note": "Farm lane / Works road",
+  "at": [
+   -39.4,
+   120.3
+  ],
+  "h": 20.4,
+  "fwd": 24,
+  "side": 256,
+  "side_what": "blast_furnace (71 m)"
+ },
+ {
+  "n": 4,
+  "name": "s04",
+  "s": 98,
+  "kind": "job",
+  "note": "the career's first (Ash Row)",
+  "at": [
+   -34.5,
+   108.2
+  ],
+  "h": 20.4,
+  "fwd": 41,
+  "side": 249,
+  "side_what": "blast_furnace (80 m)"
+ },
+ {
+  "n": 5,
+  "name": "s05",
+  "s": 120,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   -19.9,
+   91.5
+  ],
+  "h": 20.4,
+  "fwd": 41,
+  "side": 221,
+  "side_what": "Ash Row (22 m)"
+ },
+ {
+  "n": 6,
+  "name": "s06",
+  "s": 160,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   6.6,
+   61.0
+  ],
+  "h": 20.4,
+  "fwd": 37,
+  "side": 221,
+  "side_what": "Ash Row (63 m)"
+ },
+ {
+  "n": 7,
+  "name": "s07",
+  "s": 200,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   27.0,
+   28.5
+  ],
+  "h": 21.8,
+  "fwd": 42,
+  "side": 341,
+  "side_what": "The works (48 m)"
+ },
+ {
+  "n": 8,
+  "name": "s08",
+  "s": 240,
+  "kind": "pace",
+  "note": "",
+  "at": [
+   60.0,
+   19.9
+  ],
+  "h": 22.1,
+  "fwd": 100,
+  "side": 17,
+  "side_what": "The chimney (54 m)"
+ },
+ {
+  "n": 9,
+  "name": "s09",
+  "s": 286,
+  "kind": "door",
+  "note": "rail_shed",
+  "at": [
+   105.8,
+   17.9
+  ],
+  "h": 22.1,
+  "fwd": 81,
+  "side": 347,
+  "side_what": "the rail_shed's door"
+ },
+ {
+  "n": 10,
+  "name": "s10",
+  "s": 308,
+  "kind": "fork",
+  "note": "Keeper's path / Yard road",
+  "at": [
+   127.7,
+   14.5
+  ],
+  "h": 22.2,
+  "fwd": 81,
+  "side": 237,
+  "side_what": "Canal pumps (16 m)"
+ },
+ {
+  "n": 11,
+  "name": "s11",
+  "s": 361,
+  "kind": "rendezvous",
+  "note": "Works yard",
+  "at": [
+   179.4,
+   6.4
+  ],
+  "h": 22.5,
+  "fwd": 0,
+  "side": 256,
+  "side_what": "Canal pumps (67 m)"
+ }
+]
