@@ -1306,7 +1306,7 @@ pub(super) fn direct_raid(
                     return;
                 };
                 tasks.extend(route(&world, &view, from, short));
-                tasks.extend(by_road(&world, &view, short, off));
+                tasks.extend(by_road(&world, &view, short, off, at));
                 state.wandered_at = Some(now);
                 state.note(
                     now,
@@ -1976,8 +1976,11 @@ fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
 
 /// From `from` to `to` by a road that runs near both (as someone walks off
 /// somewhere they've no reason to go: the way that's there), else straight.
-fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2, keep_off: Vec2) -> Vec<Task> {
     const NEAR: f32 = 70.0;
+    // Not a road past the place it's wandering off from (Cinder's track
+    // runs by Ash Row: walked, the place was seen).
+    const OFF: f32 = 40.0;
     let nearest = |pts: &[Vec2], p: Vec2| {
         pts.iter()
             .enumerate()
@@ -1993,7 +1996,9 @@ fn by_road(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
             let pts: Vec<Vec2> = r.points.iter().map(|p| Vec2::from(*p)).collect();
             let (i, a) = nearest(&pts, from)?;
             let (j, b) = nearest(&pts, to)?;
-            (a < NEAR && b < NEAR && i != j).then_some((pts, i, j, a + b))
+            let along = &pts[i.min(j)..=i.max(j)];
+            let clear = along.iter().all(|p| p.distance(keep_off) > OFF);
+            (a < NEAR && b < NEAR && i != j && clear).then_some((pts, i, j, a + b))
         })
         .min_by(|a, b| a.3.total_cmp(&b.3));
     let Some((pts, i, j, _)) = best else {
@@ -2018,7 +2023,27 @@ fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
     for p in round_buildings(view, from, to) {
-        t.extend(world.legs(at, p));
+        // Something solid in the way that has no doors (the stoves at Cinder
+        // Works' blast furnace held a newcomer twenty minutes): the
+        // machines' grid's way round it.
+        let round = world
+            .nav
+            .as_ref()
+            // (Outdoors to outdoors: indoors is `round_buildings`' and the
+            // rooms' plans'.)
+            .filter(|n| n.0.walkable(at.to_array()) && n.0.walkable(p.to_array()))
+            .filter(|n| !n.0.line_clear(at.to_array(), p.to_array()))
+            .and_then(|n| n.0.path(at.to_array(), p.to_array()));
+        match round {
+            Some(way) => {
+                for q in way.into_iter().skip(1).map(Vec2::from) {
+                    t.extend(world.legs(at, q));
+                    at = q;
+                }
+                t.extend(world.legs(at, p));
+            }
+            None => t.extend(world.legs(at, p)),
+        }
         at = p;
     }
     t
