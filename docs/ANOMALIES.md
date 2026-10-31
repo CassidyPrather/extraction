@@ -51,6 +51,16 @@ Shots, cycle 0 then cycle 1 (the Hollow's lift):
 `migration_cycle0.png`, `migration_cycle1.png`. Every cycle still grows
 its own stones. Rules: `anomaly::layout` and `migrate`.
 
+**Nothing lies on a valley's first way**: the straight line from its drop
+to its first job's place (`first_way`), the line a newcomer walks with the
+field map in hand. Laid, crept or bloomed mid-raid, an anomaly keeps its
+reach plus 6 m (`FIRST_WAY_CLEAR`) off it. In Onboarding's Cinder Works
+first hour, a burner at (-50, 151) on that line met newcomers just as its
+warning came and put them under 10 hp; the same could happen in every
+valley (a snare on Marrow's, seed 7). Test:
+`nothing_lies_on_a_valleys_first_way`, five valleys, eight seeds, two
+Surge epochs.
+
 ### Wells and bullets
 
 The lens is `K / (d² + s²)` toward the heart, summed along each tick's
