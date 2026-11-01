@@ -40,6 +40,7 @@ pub mod pry_cue;
 pub mod readback;
 pub mod rv_beacons;
 pub mod screen;
+pub mod sky_light;
 pub mod sound_meshes;
 pub mod spikes;
 pub mod stats;
@@ -77,6 +78,7 @@ impl Plugin for RenderPlugin {
         {
             app.add_plugins(stress::StressPlugin);
         }
+        app.add_plugins(sky_light::SkyLightPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
