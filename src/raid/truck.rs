@@ -145,7 +145,14 @@ impl Plugin for TruckPlugin {
             .add_systems(PostStartup, start_in_truck)
             .add_systems(
                 Update,
-                (press_things, drive_truck, finish_raid, fit_ladder).chain(),
+                (
+                    press_things,
+                    drive_truck,
+                    finish_raid,
+                    park_truck,
+                    fit_ladder,
+                )
+                    .chain(),
             );
     }
 }
@@ -400,9 +407,10 @@ fn spawn_truck(mut commands: Commands, zone: Res<Zone>) {
         .spawn((
             Name::new("Truck"),
             Truck { at_base: true },
+            Parked(pose),
             pose,
             Visibility::default(),
-            RigidBody::Kinematic,
+            RigidBody::Static,
         ))
         .id();
     commands.entity(truck).with_children(|c| {
@@ -648,6 +656,65 @@ fn drive_truck(
             }
             _ => {}
         }
+    }
+}
+
+/// Where the truck last stood still (`park_truck`).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Parked(pub Transform);
+
+/// The truck is static while it's parked and kinematic only while it moves.
+/// Parked kinematic, every body touching it shared one contact island, so
+/// the hands (never still) kept whatever lay in the bed awake for good.
+/// When it moves, whatever lies loose in the bed goes with it, the same
+/// turn and shift, so none of it hangs where the truck was.
+#[allow(clippy::type_complexity)]
+fn park_truck(
+    mut commands: Commands,
+    mut trucks: Query<(Entity, &Truck, &Transform, &mut Parked, &RigidBody)>,
+    mut loose: Query<
+        (
+            &mut Transform,
+            &RigidBody,
+            Option<&mut LinearVelocity>,
+            Option<&mut AngularVelocity>,
+        ),
+        (
+            With<crate::items::Item>,
+            Without<Truck>,
+            Without<ChildOf>,
+            Without<crate::interact::Held>,
+            Without<RigidBodyDisabled>,
+        ),
+    >,
+) {
+    for (e, truck, t, mut parked, body) in &mut trucks {
+        if *t == parked.0 {
+            if !body.is_static() {
+                // (Inserted, not written: avian takes the body out of its
+                // islands on an insert.)
+                commands.entity(e).insert(RigidBody::Static);
+            }
+            continue;
+        }
+        let was = GlobalTransform::from(parked.0);
+        let moved = t.to_matrix() * parked.0.to_matrix().inverse();
+        for (mut it, rb, v, w) in &mut loose {
+            if !rb.is_dynamic() || !truck.in_bed(&was, it.translation) {
+                continue;
+            }
+            *it = Transform::from_matrix(moved * it.to_matrix()).with_scale(it.scale);
+            if let Some(mut v) = v {
+                v.0 = Vec3::ZERO;
+            }
+            if let Some(mut w) = w {
+                w.0 = Vec3::ZERO;
+            }
+        }
+        if !body.is_kinematic() {
+            commands.entity(e).insert(RigidBody::Kinematic);
+        }
+        parked.0 = *t;
     }
 }
 
