@@ -26,7 +26,8 @@
 //! ambient), not open sky.
 //!
 //! `EXTRACTION_FLAT_AMBIENT=1` leaves Bevy's ambient as it was (the A/B
-//! for frame cost, `scripts/bench.sh`).
+//! for frame cost, `scripts/bench.sh`); `EXTRACTION_NEAR_FILL=0` leaves out
+//! only the near fill (what's in your hands in a room, [`NEAR_SHARE`]).
 //!
 //! A source edit against a pinned Bevy, like `render::fog`: if the anchors
 //! stop matching, it warns once and the ambient stays flat.
@@ -161,9 +162,21 @@ fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> 
     )
 }
 
-fn return_patched() -> String {
+/// Whether the near fill is on: `EXTRACTION_NEAR_FILL=0` leaves it out of
+/// the patched shader altogether (the A/B for its frame cost, on the
+/// headset's frame log).
+pub fn near_fill_enabled() -> bool {
+    std::env::var_os("EXTRACTION_NEAR_FILL").is_none_or(|v| v != "0")
+}
+
+fn return_patched(near_fill: bool) -> String {
+    let near = if near_fill {
+        " * extraction_near(world_position.xyz)"
+    } else {
+        ""
+    };
     format!(
-        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3} && dot(env, vec3<f32>(1.0)) > {DARK:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion * extraction_near(world_position.xyz);\n#else\n{RETURN_ANCHOR}#endif\n"
+        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3} && dot(env, vec3<f32>(1.0)) > {DARK:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion{near};\n#else\n{RETURN_ANCHOR}#endif\n"
     )
 }
 
@@ -180,7 +193,7 @@ fn patch(src: &str) -> Option<String> {
     out.push_str(&src[fn_at..]);
     Some(out.replacen(IMPORT_ANCHOR, IMPORT_PATCHED, 1).replacen(
         RETURN_ANCHOR,
-        &return_patched(),
+        &return_patched(near_fill_enabled()),
         1,
     ))
 }
@@ -289,6 +302,9 @@ fn ambient_light(
         // A view without fog (the impostors' capture) keeps Bevy's own line.
         assert!(out.contains(&format!("#else\n{RETURN_ANCHOR}#endif")));
         assert!(patch(&out).is_none(), "patched twice");
+        // The near fill's switch takes it out of the shader, not just to 1.
+        assert!(return_patched(true).contains("extraction_near(world_position"));
+        assert!(!return_patched(false).contains("extraction_near(world_position"));
     }
 
     /// Bevy's real `pbr_ambient.wgsl` is the one pinned in `UPSTREAM`:
