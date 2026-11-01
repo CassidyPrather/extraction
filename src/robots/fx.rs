@@ -63,10 +63,10 @@ struct FxAssets {
     /// A hit's flash: a small glowing ball.
     flash: Handle<Mesh>,
     smoke: Handle<StandardMaterial>,
+    /// Dark smoke (a wreck's, a falling drone's, a dead gun's column),
+    /// unlit as every other puff is (`weapons`' all are): lit, a few far,
+    /// small puffs of it came out as single pure-black pixels.
     soot: Handle<StandardMaterial>,
-    /// A dead gun's column: soot carrying no light of its own to work out
-    /// (lit, a few of its far, tiny puffs came out as single black pixels).
-    column: Handle<StandardMaterial>,
     /// Blue-white, for a crawler's arcs and crackle.
     arc: Handle<StandardMaterial>,
     /// Water thrown up by a foot.
@@ -119,13 +119,7 @@ fn assets(
             perceptual_roughness: 1.0,
             ..default()
         })),
-        column: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
-        soot: materials.add(puffs.soften(StandardMaterial {
-            base_color: Color::srgba(0.16, 0.15, 0.14, 0.2),
-            alpha_mode: AlphaMode::Blend,
-            perceptual_roughness: 1.0,
-            ..default()
-        })),
+        soot: materials.add(puffs.material(Color::srgba(0.13, 0.125, 0.12, 0.2), false)),
         arc: materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.9, 1.0),
             emissive: LinearRgba::rgb(30.0, 50.0, 120.0),
@@ -429,7 +423,7 @@ fn sputter(
                         a,
                         &mut dice,
                         at + Vec3::Y * 0.2,
-                        a.column.clone(),
+                        a.soot.clone(),
                         size,
                         COLUMN,
                     );
