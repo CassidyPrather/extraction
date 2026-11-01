@@ -242,7 +242,7 @@
         // Magazines and clips
         // ---------------------------------------------------------------
         (
-            id: "pm_mag", dims: Some((0.016, 0.1, 0.03)), name: "PM magazine",
+            id: "pm_mag", dims: Some((0.016, 0.0915, 0.03)), name: "PM magazine",
             category: Magazine, size: Small, mass: 0.09, bulk: 0.1,
             magazine: Some((fits: "pm", cartridge: "9x18", capacity: 8)),
             tags: ["metal"],
@@ -863,7 +863,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_mp133", dims: Some((0.04, 0.192, 0.358)), name: "MP-133 stock",
+            id: "stock_mp133", dims: Some((0.04, 0.176, 0.358)), name: "MP-133 stock",
             description: "The pump's polymer butt, unscrewed.",
             category: Material, size: Medium, mass: 0.55, bulk: 0.8,
             tags: ["wood", "gun_part"],

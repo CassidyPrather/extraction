@@ -92,13 +92,24 @@ static.box((0.008, 0.009, 0.03), (0.0, 0.052, -0.05), "Blued", bevel=0.001, segs
 static.box((0.0125, 0.010, 0.026), (0.0, 0.0655, -0.042), "Blued", bevel=0.0015)
 
 # --- Frame --------------------------------------------------------------------
+# Against a side photograph of a real PM (docs/craft/guns/pm_pistol): the
+# butt hung 8.5 mm low (the gun 132 mm high, the manual's 126.75), the
+# frame ran 20 mm too far under the slide, the guard and trigger hung low.
+# `lift` raises the butt, blending to nothing 20 mm under the origin.
+BUTT_UP = 0.0085
+
+
+def lift(y):
+    return y + BUTT_UP * min(max((-y - 0.02) / 0.0278, 0.0), 1.0)
+
+
 frame_prof = [
     (0.024, 0.0485),   # rear top, under the slide
-    (-0.118, 0.0485),  # front top
-    (-0.121, 0.044),
-    (-0.117, 0.0375),
-    (-0.100, 0.0345),
-    (-0.083, 0.0345),  # guard front attaches here
+    (-0.097, 0.0485),  # front top (it ran to -0.118)
+    (-0.100, 0.044),
+    (-0.096, 0.0375),
+    (-0.086, 0.0345),
+    (-0.079, 0.0345),  # guard front attaches here
     (-0.022, 0.0345),  # top of the trigger opening
     (-0.019, 0.032),   # front strap begins
     (-0.0045, -0.046),  # front strap bottom
@@ -109,6 +120,7 @@ frame_prof = [
     (0.027, 0.040),    # tang under the hammer
     (0.027, 0.0485),
 ]
+frame_prof = [(z, lift(y)) for z, y in frame_prof]
 frame_prof = fillet(frame_prof, [0.001, 0.002, 0.004, 0.003, 0.004, 0.0, 0.0, 0.004, 0.006, 0.002,
                                  0.002, 0.003, 0.006, 0.003, 0.002], 6)
 frame = Part("frame")
@@ -122,7 +134,7 @@ well.box((0.0136, 0.125, 0.0299), (0.0, -0.06, -0.0001), "Blued", xf=WELL)
 frame.cut(well)
 # Pin heads through the frame: the guard's hinge, the trigger bar's, the
 # sear's; on the right, the slide stop's pivot.
-for z, y, sides in ((-0.09, 0.040, (-1, 1)), (-0.03, 0.038, (-1, 1)), (0.014, 0.040, (-1, 1)),
+for z, y, sides in ((-0.083, 0.040, (-1, 1)), (-0.03, 0.038, (-1, 1)), (0.014, 0.040, (-1, 1)),
                     (-0.038, 0.044, (1,))):
     for sx in sides:
         static.cyl(0.0014, 0.0, 0.0005, "Steel", segs=12, chamfer=0.0002,
@@ -131,9 +143,9 @@ for z, y, sides in ((-0.09, 0.040, (-1, 1)), (-0.03, 0.038, (-1, 1)), (0.014, 0.
 # Wraparound bakelite grip: sides and back strap, inset from the frame edges.
 # (Its corners eased, top and heel, so the 7 mm rounding below doesn't fold.)
 grip_prof = catmull([
-    (-0.0128, 0.0225), (-0.0105, 0.004), (-0.0065, -0.024), (-0.003, -0.0465),
-    (0.016, -0.0478), (0.029, -0.0476), (0.0365, -0.0438), (0.0385, -0.034), (0.0322, -0.012),
-    (0.0262, 0.014), (0.0235, 0.0245), (0.016, 0.0303), (-0.006, 0.0298),
+    (-0.0128, lift(0.0225)), (-0.0105, lift(0.004)), (-0.0065, lift(-0.024)), (-0.003, lift(-0.0465)),
+    (0.016, lift(-0.0478)), (0.029, lift(-0.0476)), (0.0365, lift(-0.0438)), (0.0385, lift(-0.034)), (0.0322, lift(-0.012)),
+    (0.0262, lift(0.014)), (0.0235, lift(0.0245)), (0.016, lift(0.0303)), (-0.006, lift(0.0298)),
 ], samples=4)
 
 
@@ -149,10 +161,13 @@ grip = Part("grip")
 grip.prism(grip_prof, 0, 0, "Bakelite", axis="x", bevel=0.007, segs=6, width=grip_width)
 # The star medallion near the top of each panel, a five-pointed star
 # raised on it (its sides sunk in the dome).
-star = [(0.007 + (0.0032 if i % 2 == 0 else 0.0013) * math.sin(math.pi * i / 5),
-         0.017 + (0.0032 if i % 2 == 0 else 0.0013) * math.cos(math.pi * i / 5)) for i in range(10)]
+# The star in its smooth disc sits low on the grip, the checkering all
+# round it (it was near the top, over the checkering).
+STAR = (0.0125, -0.011)
+star = [(STAR[0] + (0.0032 if i % 2 == 0 else 0.0013) * math.sin(math.pi * i / 5),
+         STAR[1] + (0.0032 if i % 2 == 0 else 0.0013) * math.cos(math.pi * i / 5)) for i in range(10)]
 for sx in (-1, 1):
-    grip.sphere(0.0048, (sx * 0.0156, 0.017, 0.007), "Bakelite", segs=28, rings=14,
+    grip.sphere(0.0048, (sx * 0.0156, STAR[1], STAR[0]), "Bakelite", segs=28, rings=14,
                 scale=(0.25, 1, 1))
     grip.prism(star, *sorted((sx * 0.0164, sx * 0.0171)), "Bakelite", axis="x")
 
@@ -173,6 +188,8 @@ def grip_x(z, y):
     zf, zb = grip_span(y)
     if not zf + 0.009 < z < zb - 0.009:
         return None
+    if math.hypot(z - STAR[0], y - STAR[1]) < 0.0068:
+        return None
     return grip_width(z, y)[1]
 
 
@@ -184,15 +201,16 @@ grip.lathe([(0.0, gzb + 0.0012), (0.0017, gzb + 0.0011), (0.0027, gzb + 0.0006),
             (0.003, gzb), (0.003, gzb - 0.0015), (0.0, gzb - 0.0015)], "Steel", segs=18,
            xf=T(0, -0.025, 0))
 grip_cut.box((0.006, 0.0007, 0.0014), (0.0, -0.025, gzb + 0.0012), "Steel")
-grip_check.checkering(grip_cut, grip_x, None, None, (-0.008, 0.034, -0.0405, 0.009),
+grip_check.checkering(grip_cut, grip_x, None, None, (-0.008, 0.034, lift(-0.0405), 0.012),
                       pitch=0.0019, depth=0.0007, mat="Bakelite")
 
 # Trigger guard: a large rounded loop (it hinges down for stripping).
 guard = Part("guard")
-guard_path = catmull([
+# (Smaller and higher than first made: its foot 9 mm lower and its front
+# 8 mm further forward than the photograph's.)
+guard_path = catmull([(-0.0135 + (z + 0.0135) * 0.88, 0.0355 - (0.0355 - y) * 0.75) for z, y in [
     (-0.084, 0.0355), (-0.0885, 0.026), (-0.086, 0.0135), (-0.0765, 0.0055), (-0.060, 0.0025),
-    (-0.036, 0.003), (-0.022, 0.0065), (-0.0135, 0.0125),
-], samples=8, closed=False)
+    (-0.036, 0.003), (-0.022, 0.0065), (-0.0135, 0.0125)]], samples=8, closed=False)
 guard.sweep(guard_path, section_rect(0.0072, 0.0034, 0.0012, 3), "Blued")
 
 # Hammer: a rounded spur behind the slide.
@@ -220,15 +238,15 @@ static.prism(fillet([(-0.060, 0.041), (-0.034, 0.041), (-0.034, 0.047), (-0.058,
 for i in range(4):
     static.box((0.0006, 0.0048, 0.0007), (-0.0123, 0.0438, -0.0565 + i * 0.0017), "Blued")
 # Heel magazine catch, grooved across its back for the thumb.
-catch = [(0.0375, -0.050), (0.0435, -0.050)]
+catch = [(0.0375, -0.050 + BUTT_UP), (0.0435, -0.050 + BUTT_UP)]
 for i in range(3):
-    y = -0.0488 + i * 0.0016
+    y = -0.0488 + BUTT_UP + i * 0.0016
     catch += [(0.0435, y), (0.0429, y + 0.0004), (0.0435, y + 0.0008)]
-catch += [(0.0435, -0.044), (0.0375, -0.044)]
-heel = Part("mag_catch_heel", origin=(0.0, -0.047, 0.0405))
+catch += [(0.0435, -0.044 + BUTT_UP), (0.0375, -0.044 + BUTT_UP)]
+heel = Part("mag_catch_heel", origin=(0.0, -0.047 + BUTT_UP, 0.0405))
 heel.prism(catch, -0.005, 0.005, "Blued", axis="x")
 # Lanyard loop on the left of the butt.
-loop = [(0.031 + 0.0045 * math.cos(a), -0.044 + 0.0045 * math.sin(a))
+loop = [(0.031 + 0.0045 * math.cos(a), lift(-0.044) + 0.0045 * math.sin(a))
         for a in [2 * math.pi * i / 24 for i in range(24)]]
 static.sweep(loop, [(x, n) for x, n in section_rect(0.0016, 0.0016, 0.0005, 3)], "Steel",
              closed=True, xf=T(-0.0158, 0, 0))
@@ -236,8 +254,10 @@ static.sweep(loop, [(x, n) for x, n in section_rect(0.0016, 0.0016, 0.0005, 3)],
 # --- Trigger --------------------------------------------------------------------
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=(0.0, 0.038, -0.03))
-trig_path = catmull([(-0.0345, 0.0345), (-0.0385, 0.027), (-0.0395, 0.0195), (-0.0365, 0.0125),
-                     (-0.0325, 0.0095)], samples=6, closed=False)
+# (Its blade shortened with the guard, to hang inside it.)
+trig_path = catmull([(z, 0.0345 - (0.0345 - y) * 0.75) for z, y in [
+    (-0.0345, 0.0345), (-0.0385, 0.027), (-0.0395, 0.0195), (-0.0365, 0.0125), (-0.0325, 0.0095)]],
+    samples=6, closed=False)
 trig.sweep(trig_path, section_rect(0.0045, 0.0032, 0.0012, 3), "Blued")
 
 # --- Safety / decocker (left rear of the slide, rotates about X) ---------------

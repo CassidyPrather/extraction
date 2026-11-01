@@ -84,9 +84,18 @@ Before looking at the model, know the real gun.
   length of pull. The manual's figures where they can be found; cite each
   in `gunsmith::spec` and the gun's review. Mark what's unconfirmed.
 - **Pictures and drawings.** Public-domain manuals and diagrams where the
-  network allows (old military manuals are often in the public domain;
-  check). Look, measure from them, don't copy them into the repo. Any asset
-  that does come in is CC0 (`docs/ASSETS.md`) with a `CREDITS.md` row.
+  network allows (old military manuals and US government photographs are
+  often in the public domain; check). Any asset that comes in is CC0
+  (`docs/ASSETS.md`) with a `CREDITS.md` row.
+- **A reference you can't redistribute is for measuring only.** Most good
+  side views are someone's copyright (the PM's, the Australian War
+  Memorial's, is "all rights reserved"; the MP-133's is a gun site's).
+  Measure from them, overlay them on your own machine, and write the
+  numbers into the review. Never commit them, nor an overlay or crop that
+  contains them. Name the source so the next gunsmith can find it. Only a
+  public-domain or CC0 photograph (the AK's, a 1989 US Department of
+  Defense photograph) goes in the repo, overlays and all, credited in the
+  review.
 
 ### 2. The parts you can see and touch
 
@@ -178,6 +187,17 @@ half that tile; the stamped receivers have their own finish. Both sit at
 the art direction's value floor (median about 20-22 at 30 cm on the
 bench): lifting either further takes a decision on the whole line-up's
 values, not one gun's.
+
+Third pass (1 November): the coordinator saw every gun's steel go
+near-black at 30 cm, so the PM's arched slide didn't show. Two causes.
+The game has no environment light, so a metal reflects only the sun and
+the flat ambient. And the scan's albedo, which is a metal's reflectance,
+is 0.045: darker than charcoal, where blued steel is about 0.1-0.2. On
+the bench, blued steel at an even 0.1 and stamped steel as a glossy paint
+showed the form. But values tuned without an environment light are wrong
+once one lands, so they wait for Visual design's. The finishes'
+numbers are now in one table, `gunsmith::finish`, which the game
+(`models::steel`) and the bench both build from.
 
 ![](finishes/lineup_after.jpg)
 

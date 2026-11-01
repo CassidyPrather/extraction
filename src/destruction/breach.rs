@@ -167,6 +167,7 @@ fn index_hole(
                 building,
                 mid,
                 out,
+                outside: true,
             });
         }
     });

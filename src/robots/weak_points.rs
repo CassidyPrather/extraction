@@ -173,7 +173,13 @@ pub struct GoneHitVolume;
 fn gone_parts_let_rounds_by(
     mut commands: Commands,
     parts: Query<(Entity, &RobotPart, Has<GoneHitVolume>), Changed<RobotPart>>,
+    // (Something else switched it back on: a heavy's plate coming off
+    // uncovers what was behind it, dead or not.)
+    switched_on: Query<Entity, (With<GoneHitVolume>, Without<ColliderDisabled>)>,
 ) {
+    for e in &switched_on {
+        commands.entity(e).try_insert(ColliderDisabled);
+    }
     for (e, part, gone) in &parts {
         let dead = !part.alive() && part.role != PartRole::Core;
         if dead && !gone {
