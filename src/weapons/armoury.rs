@@ -12,7 +12,7 @@ use crate::items::{Catalog, Item};
 pub const BIPOD_HANDLE: u8 = 3;
 /// How far the legs swing from folded to deployed, radians about the
 /// pivot's X (art/guns/rpk74.py).
-pub const BIPOD_DEPLOY: f32 = -1.279;
+pub use ::gunsmith::parts::BIPOD_DEPLOY;
 /// How far a hand on the legs moves them down (or up) to swing them,
 /// metres along the gun's up.
 pub const BIPOD_SWING: f32 = 0.04;

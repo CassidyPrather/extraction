@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/extraction_core"]
+members = [".", "crates/extraction_core", "crates/gunsmith"]
 resolver = "3"
 
 [workspace.package]
@@ -49,6 +49,7 @@ systime = ["bevy/trace"]
 
 [dependencies]
 extraction_core = { path = "crates/extraction_core" }
+gunsmith = { path = "crates/gunsmith" }
 bevy = { version = "0.19", default-features = false, features = [
     "3d",
     "ui",

@@ -9,9 +9,10 @@
 //! model's magazine really seats, which magazines are drawn at (the
 //! layout's seat stays the gameplay one).
 
+use ::gunsmith::parts::{Axis, Delta, Motion, delta};
 use bevy::gltf::{Gltf, GltfMesh, GltfNode};
 use bevy::prelude::*;
-use extraction_core::firearm::{FireMode, Round};
+use extraction_core::firearm::Round;
 
 use super::feel::Handling;
 use super::layout::{Mat, Moves, Shape};
@@ -113,34 +114,7 @@ fn material(mat: Mat) -> StandardMaterial {
     }
 }
 
-pub(crate) fn moves_for(name: &str) -> Option<Moves> {
-    // `turnbolt` before `bolt`: neither is a prefix of the other, but keep
-    // the more specific names first anyway.
-    [
-        ("turnbolt", Moves::TurnBolt),
-        ("cocking_piece", Moves::CockingPiece),
-        ("indicator_0", Moves::Indicator(0)),
-        ("indicator_1", Moves::Indicator(1)),
-        ("bolt", Moves::WithBolt),
-        ("barrels", Moves::Barrels),
-        ("trigger", Moves::Trigger),
-        ("selector", Moves::Selector),
-        ("crossbolt", Moves::Crossbolt),
-        ("safety_bolt", Moves::SafetyBolt),
-        ("hammer", Moves::Hammer),
-        ("cylinder", Moves::Cylinder),
-        ("gate", Moves::Gate),
-        ("ejector", Moves::Rod),
-        ("bayonet", Moves::Bayonet),
-        ("bipod", Moves::Bipod),
-        ("string_rest", Moves::StringRest),
-        ("string_drawn", Moves::StringDrawn),
-        ("static", Moves::Static),
-    ]
-    .into_iter()
-    .find(|(p, _)| name.starts_with(p))
-    .map(|(_, m)| m)
-}
+pub(crate) use ::gunsmith::parts::moves_for;
 
 fn build_gun_meshes(
     mut commands: Commands,
@@ -271,21 +245,7 @@ fn finish_gun_models(
     }
 }
 
-/// How far a cocked turn-bolt's cocking piece stands back off the bolt,
-/// metres (a Mosin's, a TOZ-8's: a thumb's width you can see and feel).
-pub const COCKED_BACK: f32 = 0.012;
-/// How far a cocking indicator stands proud when its lock is cocked (m).
-pub const INDICATOR_UP: f32 = 0.003;
-/// How far a crossbolt safety slides left to fire, metres.
-pub const CROSSBOLT_PUSH: f32 = 0.008;
-/// How far a door-bolt safety draws back to fire, metres.
-pub const SAFETY_BOLT_DRAW: f32 = 0.014;
-/// How far back a cocked hammer tips, radians.
-const HAMMER_BACK: f32 = 0.5;
-/// How far a revolver's gate swings open, radians.
-const GATE_OPEN: f32 = 1.4;
-/// A revolver's ejector rod's stroke, metres.
-const ROD_STROKE: f32 = 0.042;
+pub use ::gunsmith::parts::{COCKED_BACK, CROSSBOLT_PUSH, INDICATOR_UP, SAFETY_BOLT_DRAW};
 
 fn animate_parts(
     guns: Query<(
@@ -317,155 +277,50 @@ fn animate_parts(
                 0.0
             }
         });
-        let bolt = f.bolt_travel.max(stroke);
+        let motion = Motion {
+            stroke,
+            trigger: gun.trigger,
+            hinge: gun.layout.hinge.to_array(),
+            bayonet_fixed: bayonet.is_some_and(|b| b.fixed),
+            bipod: bipod.map_or(0.0, |b| b.swing),
+            string_grab_z: gun.layout.handle.as_ref().map(|h| h.grab.z),
+            mag_catch: if gun.catch { 1.0 } else { 0.0 },
+            ..Motion::new(f, travel)
+        };
         for child in children.iter() {
             let Ok((part, mut t)) = parts.get_mut(child) else {
                 continue;
             };
-            *t = match part.moves {
-                Moves::Static => part.rest,
-                Moves::WithBolt => {
-                    let mut r = part.rest;
-                    r.translation.z += bolt * travel;
-                    r
-                }
-                Moves::Cylinder => {
-                    let n = f.chambers.len().max(1) as f32;
-                    let turn = f.cylinder as f32 * std::f32::consts::TAU / n;
-                    let mut r = part.rest;
-                    r.rotation = Quat::from_rotation_z(-turn) * r.rotation;
-                    r
-                }
-                Moves::Gate => {
-                    let mut r = part.rest;
-                    let open = if f.gate_open { GATE_OPEN } else { 0.0 };
-                    r.rotation = Quat::from_rotation_y(open) * r.rotation;
-                    r
-                }
-                Moves::Bayonet => {
-                    // A self-loader's (the SKS's) folds; a bolt gun's is fixed.
-                    let mut r = part.rest;
-                    let folding = f.def.action == extraction_core::firearm::ActionKind::SemiAuto;
-                    if folding && bayonet.is_some_and(|b| b.fixed) {
-                        r.rotation = Quat::from_rotation_x(std::f32::consts::PI) * r.rotation;
-                    }
-                    r
-                }
-                Moves::StringRest => {
-                    let mut r = part.rest;
-                    if f.bolt_travel > 0.02 {
-                        r.scale = Vec3::ZERO;
-                    }
-                    r
-                }
-                Moves::StringDrawn => {
-                    // Modelled drawn to the latch; stretched along Z about
-                    // the tips' line to wherever the string is.
-                    let mut r = part.rest;
-                    let rest = gun
-                        .layout
-                        .handle
-                        .as_ref()
-                        .map_or(0.0, |h| (h.grab.z - part.rest.translation.z).abs());
-                    let full = rest + travel;
-                    if f.bolt_travel <= 0.02 || full <= 0.0 {
-                        r.scale = Vec3::ZERO;
-                    } else {
-                        r.scale.z *= (rest + f.bolt_travel * travel) / full;
-                    }
-                    r
-                }
-                Moves::Bipod => {
-                    // About its pivot (the model's origin), down and forward.
-                    let mut r = part.rest;
-                    let swing = bipod.map_or(0.0, |b| b.swing);
-                    r.rotation =
-                        Quat::from_rotation_x(super::armoury::BIPOD_DEPLOY * swing) * r.rotation;
-                    r
-                }
-                Moves::Rod => {
-                    let mut r = part.rest;
-                    r.translation.z += f.rod * ROD_STROKE;
-                    r
-                }
-                Moves::CockingPiece => {
-                    // With the bolt, and back off it while cocked.
-                    let cocked = f.hammers_cocked.first() == Some(&true);
-                    let mut r = part.rest;
-                    r.translation.z +=
-                        f.bolt_travel * travel + if cocked { COCKED_BACK } else { 0.0 };
-                    r
-                }
-                Moves::Crossbolt | Moves::SafetyBolt => {
-                    let mut r = part.rest;
-                    if f.fire_mode() != FireMode::Safe {
-                        r.translation += if part.moves == Moves::Crossbolt {
-                            Vec3::NEG_X * CROSSBOLT_PUSH
-                        } else {
-                            Vec3::Z * SAFETY_BOLT_DRAW
-                        };
-                    }
-                    r
-                }
-                Moves::Indicator(i) => {
-                    let up = f.hammers_cocked.get(i as usize) == Some(&true);
-                    let mut r = part.rest;
-                    r.translation.y += if up { INDICATOR_UP } else { 0.0 };
-                    r
-                }
-                Moves::Hammer => {
-                    // Back with the slide's stroke too, as the slide rides
-                    // over it.
-                    let back = if f.hammers_cocked.first() == Some(&true) {
-                        1.0
-                    } else {
-                        stroke.min(1.0)
-                    };
-                    let mut r = part.rest;
-                    r.rotation = Quat::from_rotation_x(HAMMER_BACK * back) * r.rotation;
-                    r
-                }
-                Moves::TurnBolt => {
-                    // Rotate the handle up around the bolt's axis, then slide back.
-                    let axis = Vec3::new(part.pivot.x, part.pivot.y, 0.0);
-                    let turn = Quat::from_rotation_z(f.handle_lift * std::f32::consts::FRAC_PI_2);
-                    let mut r = part.rest;
-                    let rel = r.translation - axis;
-                    r.translation = axis + turn * Vec3::new(rel.x, rel.y, 0.0) + Vec3::Z * rel.z;
-                    r.rotation = turn * r.rotation;
-                    r.translation.z += f.bolt_travel * travel;
-                    r
-                }
-                Moves::Barrels => {
-                    let hinge = gun.layout.hinge;
-                    let angle = -0.6 * f.bolt_travel;
-                    let rot = Quat::from_rotation_x(angle);
-                    let mut r = part.rest;
-                    r.translation = hinge + rot * (r.translation - hinge);
-                    r.rotation = rot * r.rotation;
-                    r
-                }
-                Moves::Trigger => {
-                    let mut r = part.rest;
-                    r.translation.z += gun.trigger * 0.006;
-                    r
-                }
-                Moves::Selector => {
-                    let k = match f.fire_mode() {
-                        FireMode::Safe => 0.0,
-                        FireMode::Auto => 0.5,
-                        FireMode::Semi => 1.0,
-                    };
-                    let mut r = part.rest;
-                    r.rotation = Quat::from_rotation_x(-0.5 * k) * r.rotation;
-                    r
-                }
-            };
+            let d = delta(
+                part.moves,
+                part.rest.translation.to_array(),
+                part.pivot.to_array(),
+                &motion,
+            );
+            *t = apply(part.rest, &d);
             if let Some(sw) = swung {
                 *t = sw * *t;
             }
         }
     }
+}
+
+/// A part's rest pose moved by a gunsmith's [`Delta`].
+pub fn apply(rest: Transform, d: &Delta) -> Transform {
+    let mut r = rest;
+    if let Some((axis, angle)) = d.turn {
+        let turn = match axis {
+            Axis::X => Quat::from_rotation_x(angle),
+            Axis::Y => Quat::from_rotation_y(angle),
+            Axis::Z => Quat::from_rotation_z(angle),
+        };
+        let pivot = Vec3::from_array(d.pivot);
+        r.translation = pivot + turn * (r.translation - pivot);
+        r.rotation = turn * r.rotation;
+    }
+    r.translation += Vec3::from_array(d.shift);
+    r.scale *= Vec3::from_array(d.scale);
+    r
 }
 
 /// A seated magazine is placed by the layout's seat (gameplay); its drawn
@@ -612,6 +467,7 @@ mod tests {
                 magwell: None,
                 trigger: 0.0,
                 pulled: false,
+                catch: false,
                 dice: extraction_core::noise::Rng::new(0),
                 mass: None,
             })

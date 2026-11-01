@@ -26,10 +26,13 @@ impl Cavity {
     }
 }
 
-/// A chest pouch: a magazine stands in it, thin side across X.
+/// A chest pouch: a magazine stands in it, thin side across X; deep
+/// enough for an AK-74 magazine's curve (130 mm front to back), and
+/// taller than deep, so a magazine stands in it (`slot_fit` matches sides
+/// by size).
 pub const POUCH: Cavity = Cavity {
-    floor: Vec3::new(0.0, -0.105, -0.0065),
-    half: Vec3::new(0.018, 0.065, 0.0535),
+    floor: Vec3::new(0.0, -0.115, -0.02),
+    half: Vec3::new(0.018, 0.07, 0.067),
 };
 
 /// A hip pocket: rounds, a clip, a cell.
@@ -76,7 +79,9 @@ pub fn cavity(slot: SlotKind) -> Option<Cavity> {
 /// Everything else is centred on its origin. `capture::stowed` holds this
 /// to the models.
 pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
-    ("pm_pistol", Vec3::new(-0.001, 0.015, -0.044)),
+    ("pm_pistol", Vec3::new(0.0, 0.015, -0.039)),
+    // Its curve sweeps forward of its top (docs/craft/guns/ak74).
+    ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
     ("nagant", Vec3::new(0.0, -0.004, -0.061)),
     ("flare_pistol", Vec3::new(0.0, 0.0, -0.074)),
     ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
