@@ -3289,8 +3289,22 @@ mod indoor_tests {
         for (xf, half) in &boxes {
             let c = xf.translation.xz();
             let reach = half.length() + 6.0;
+            // (An end inside a solid has no way to it: two garden panels
+            // end to end, walked along their line.)
+            let inside = |q: Vec2| {
+                boxes.iter().any(|(bx, h)| {
+                    let l = bx
+                        .compute_affine()
+                        .inverse()
+                        .transform_point3(Vec3::new(q.x, 0.0, q.y));
+                    l.x.abs() < h.x + 1.0 && l.z.abs() < h.y + 1.0
+                })
+            };
             for dir in [Vec2::X, Vec2::Y, Vec2::new(1.0, 1.0).normalize()] {
                 let (from, to) = (c - dir * reach, c + dir * reach);
+                if inside(from) || inside(to) {
+                    continue;
+                }
                 let mut at = from;
                 for p in round_boxes(&boxes, from, to) {
                     let inv = xf.compute_affine().inverse();
