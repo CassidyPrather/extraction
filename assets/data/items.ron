@@ -129,7 +129,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "toz8", dims: Some((0.075, 0.17, 1.145)),
+            id: "toz8", dims: Some((0.075, 0.17, 1.115)),
             name: "TOZ-8M .22 rifle",
             description: "A club rifle: one .22 at a time, thumbed into the open chamber. Its crack doesn't carry far. Good for an eye or a rook; useless against plate. Rimfire misfires: lift the bolt and drop it to strike again.",
             category: Firearm, size: Bulky, mass: 2.9, bulk: 5.0,
