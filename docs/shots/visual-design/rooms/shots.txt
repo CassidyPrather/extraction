@@ -4,7 +4,7 @@
 #
 #   scripts/before_after.py docs/shots/visual-design/rooms/shots.txt
 
-before HEAD~1
+before 506615c9
 after HEAD
 size 1280x720
 
