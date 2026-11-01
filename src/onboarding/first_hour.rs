@@ -1869,7 +1869,7 @@ fn under_a_roof(
     let d = entrances
         .doors
         .iter()
-        .filter(|d| !skip.contains(&d.building))
+        .filter(|d| d.outside && !skip.contains(&d.building))
         .filter(|d| {
             // A way in from outside: its far side is under that roof.
             let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
@@ -2391,7 +2391,7 @@ fn way_to(
         let b = en.building_at(p)?;
         en.doors
             .iter()
-            .filter(|d| d.building == b)
+            .filter(|d| d.outside && d.building == b)
             .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
             .min_by(|a, c| a.mid.distance(p).total_cmp(&c.mid.distance(p)))
             .copied()
