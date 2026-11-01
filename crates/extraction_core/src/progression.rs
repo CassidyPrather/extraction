@@ -918,7 +918,7 @@ fn mean(points: &[[f32; 2]]) -> [f32; 2] {
 /// Prefabs with a roof and furniture (loot spots) in them.
 pub fn is_building(prefab: &str) -> bool {
     matches!(
-        crate::map::prefab_base(prefab),
+        crate::map::prefab_shell(prefab),
         "house_plank"
             | "house_brick"
             | "cabin_log"

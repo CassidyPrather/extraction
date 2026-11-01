@@ -12,6 +12,11 @@ Verifier runs the rest on every main push (`docs/HEALTH.md`).
 | System ceilings | `cargo test --lib --features systime -- --ignored gauge_game_systems` | ~10 min (a tracing build of Bevy the first time) | no game system over 2% of the main schedule at any valley's busy moment, by Bevy's per-system spans (`budget`) |
 | Smoke | `SIM_NO_JOB=1 target/fast/extraction --sim-run smoke --map M --seed S --sim-out DIR --headless` | ~5 min a raid | a bot's whole raid in each valley, from a copied binary, four at a time |
 
+The render and stereo budgets need the fetched textures
+(`python3 scripts/fetch_assets.py`, `docs/ASSETS.md`). A fresh checkout
+has none: it draws no sky, so the stereo budgets read about 12M fragments
+low and pass where they should fail.
+
 Run the suite and sims apart, never at once, and never rebuild a binary
 sims are running from: the container runs out of memory.
 
@@ -27,6 +32,13 @@ GPU-less gauges can't do:
 - `scripts/lamp_check.sh [map]`: every landmark lamp and beacon at night
   from 50, 150 and 300 m, bright and in its own colour. It takes about
   25 minutes a valley.
+
+- `scripts/held_check.py scripts/held_views.txt`: what's in your hand,
+  readable in the dimmest rooms. Each view (the Rime Fell mill, the
+  first jobs' dimmest rooms, the yard) is shot with its `--gallery` gun
+  at 30 cm and without: where they differ is the gun, and its median
+  brightness must reach 26 of 255 (the yard's PM is at 31). The exit
+  status is the number under. About 20 minutes.
 
 Run one at a time: two at once, with a build, run out of memory.
 

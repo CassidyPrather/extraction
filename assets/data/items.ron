@@ -71,7 +71,7 @@
             firearm: Some((
                 action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
                 modes: [Semi], double_action: true, gate_offset: 5,
-                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.9, walk: -0.3),
+                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.56, walk: -0.3, push: 2.2),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal", "wood"],
@@ -744,7 +744,7 @@
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
-            id: "splint", dims: Some((0.06, 0.03, 0.45)), name: "Splint",
+            id: "splint", dims: Some((0.062, 0.018, 0.45)), name: "Splint",
             description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
             category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood"],

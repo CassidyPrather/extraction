@@ -116,7 +116,8 @@ def car_bonnet():
     # toward its ends (behind it where it bows out, never through it).
     # (The two arms of the X a little apart in depth, so they don't share
     # faces where they cross.)
-    for a, front, d in ((0.62, -0.005, 0.04), (-0.62, -0.0045, 0.045)):
+    # (1.5 mm: half a millimetre fought where they cross, held in hand.)
+    for a, front, d in ((0.62, -0.005, 0.04), (-0.62, -0.0035, 0.045)):
         p.box((1.45, 0.05, d), (0.0, 0.0, 0.0), "Dark", segs=1,
               xf=T(0.0, 0.0, front + d / 2) @ RZ(a))
     for y in (-0.44, 0.44):

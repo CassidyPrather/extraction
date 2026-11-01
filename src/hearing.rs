@@ -1104,7 +1104,8 @@ mod gauge {
                 .world_mut()
                 .query::<(Entity, &Building)>()
                 .iter(app.world())
-                .find(|(_, b)| b.prefab == prefab)
+                // By its shell: Marrow's brick house is the post office.
+                .find(|(_, b)| extraction_core::map::prefab_shell(&b.prefab) == prefab)
                 .unwrap()
                 .0;
             app.world()
