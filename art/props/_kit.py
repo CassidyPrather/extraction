@@ -32,12 +32,7 @@ ALONG_X = RY(math.pi / 2)   # lathe/cyl axis (Z) -> +X
 _items_kit = None
 
 
-def lettering(p, s, h, mat, xf, depth=0.002, align="centre"):
-    """Stencil letters `h` high painted on a face: drawn in XY facing +Z,
-    then placed by `xf`. The items' glyphs (`art/items/_kit.py`), cut as a
-    stencil is: strokes a sixth of the height, each stopped short where it
-    meets another (the bridges that hold a stencil's centres in), so a
-    В isn't an 8 and the letters hold at a crate's reading distance."""
+def _glyphs():
     global _items_kit
     if _items_kit is None:
         import importlib.util
@@ -46,14 +41,26 @@ def lettering(p, s, h, mat, xf, depth=0.002, align="centre"):
             "items_kit_lettering", os.path.join(here, "..", "items", "_kit.py"))
         _items_kit = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(_items_kit)
+    return _items_kit.GLYPHS, _items_kit.LOOKALIKE
+
+
+def stencil_strokes(s, h, align="centre"):
+    """The strokes of `s` in stencil letters `h` high, in the XY plane:
+    (centre x, centre y, length, width, angle) each. The items' glyphs
+    (`art/items/_kit.py`) cut as a stencil is: strokes a sixth of the
+    height, each stopped short where it meets another (the bridges that
+    hold a stencil's centres in), free ends squared. `art/check_glyphs.py`
+    holds every glyph apart from every other through this."""
+    glyphs, lookalike = _glyphs()
     k = h / 4.0
     stroke = h * 0.16
     bridge = stroke * 0.8
     adv = 2.9 * k + stroke * 0.5
     width = adv * len(s) - 0.9 * k
     x0 = {"centre": -width / 2, "left": 0.0, "right": -width}[align]
+    out = []
     for i, ch in enumerate(s):
-        segs = _items_kit.GLYPHS.get(_items_kit.LOOKALIKE.get(ch, ch), [])
+        segs = glyphs.get(lookalike.get(ch, ch), [])
         ends = [pt for seg in segs for pt in seg]
         for (ax, ay), (bx, by) in segs:
             ax_, ay_ = x0 + i * adv + ax * k, ay * k - h / 2
@@ -70,9 +77,16 @@ def lettering(p, s, h, mat, xf, depth=0.002, align="centre"):
             if L2 < stroke * 0.5:
                 continue
             mid = (L * 0.5 + (cut[0] - cut[1]) * 0.5) / L
-            cx, cy = ax_ + (bx_ - ax_) * mid, ay_ + (by_ - ay_) * mid
-            p.box((L2, stroke, depth), (0.0, 0.0, depth / 2), mat,
-                  xf=xf @ T(cx, cy, 0.0) @ RZ(a))
+            out.append((ax_ + (bx_ - ax_) * mid, ay_ + (by_ - ay_) * mid, L2, stroke, a))
+    return out
+
+
+def lettering(p, s, h, mat, xf, depth=0.002, align="centre"):
+    """Stencil letters `h` high painted on a face: drawn in XY facing +Z,
+    then placed by `xf` (`stencil_strokes`: so a В isn't an 8 and the
+    letters hold at a crate's reading distance)."""
+    for cx, cy, L, w, a in stencil_strokes(s, h, align):
+        p.box((L, w, depth), (0.0, 0.0, depth / 2), mat, xf=xf @ T(cx, cy, 0.0) @ RZ(a))
 
 
 def prop(name, build):

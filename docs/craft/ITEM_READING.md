@@ -180,3 +180,16 @@ camera:
 
 Sheets re-shot on main 2ee65c62 (the same camera, `art/lineup.py` now
 building the bolt's and detector's new looks as the game does).
+
+### The shared lettering font (1 November)
+
+`docs/shots/items/water_bottle_label_before_after.png` (in hand, pixels
+x5): the font's В was the 8's strokes, so the water bottle read "8ОДА".
+The font's twins are fixed (`art/check_glyphs.py`, run with
+`art/check.py`); the labelled items rebuilt (only those whose geometry
+changed: the ammo boxes, tins, packets, tapes and records). At in-hand
+sharpness a 1.3 cm label is still soft: labels stay bonus legibility,
+never the only difference. Not rebuilt: the depot's conveyor and
+cradle (rebuilt here they lost their rollers' baked AO; their only
+change is the C in their codes) and the guns (Gunsmith's, mid-edit).
+The rice bag's and sugar box's label z-fighting predates this.
