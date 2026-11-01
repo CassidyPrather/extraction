@@ -2665,3 +2665,87 @@ mod bot_pose {
         }
     }
 }
+
+#[cfg(test)]
+mod macro_reload_tests {
+    use super::vr_tests::*;
+    use crate::interact::{InSocket, Socket, SocketKind, SocketOwner};
+    use crate::items::Item;
+    use crate::weapons::flat::{GunMacro, MacroKind, macro_steps};
+    use bevy::prelude::*;
+    use extraction_core::inventory::SlotKind;
+
+    /// The flat reload (the R key's macro, and the bots') out of a pouch on
+    /// the body: the empty magazine drops, the full one from the pouch goes
+    /// in, and the gun has its rounds. (first_jobs_reckless met machines
+    /// with an empty gun after its reload: the gun read no magazine while a
+    /// loaded one sat out of reach of it.)
+    #[test]
+    fn a_flat_reload_from_a_pouch_loads_the_gun() {
+        let mut r = hold("pm_pistol", false, false);
+        let empty = seat_mag(&mut r, "pm_mag", 0);
+        // A full one in a pouch on the body.
+        let full = r.vr.spawn(
+            "pm_mag",
+            Transform::from_translation(r.feet + Vec3::new(0.3, 1.0, 0.0)),
+        );
+        r.vr.app.world_mut().get_mut::<Item>(full).unwrap().rounds = 8;
+        let player = r.vr.player;
+        let pouch = {
+            let w = r.vr.app.world_mut();
+            let mut q = w.query::<(Entity, &Socket, &SocketOwner)>();
+            q.iter(w)
+                .find(|(_, s, o)| {
+                    o.0 == player
+                        && s.occupant.is_none()
+                        && matches!(s.kind, SocketKind::Body(SlotKind::Pouch))
+                })
+                .map(|(e, ..)| e)
+                .expect("a pouch on the body")
+        };
+        r.vr.app.world_mut().commands().queue(move |w: &mut World| {
+            let mut socket = w.get_mut::<Socket>(pouch).unwrap().clone();
+            {
+                let mut commands = w.commands();
+                crate::interact::seat_in_socket(&mut commands, full, pouch, &mut socket);
+            }
+            *w.get_mut::<Socket>(pouch).unwrap() = socket;
+        });
+        r.vr.step(4);
+        assert!(
+            r.vr.app.world().get::<InSocket>(full).is_some(),
+            "in the pouch"
+        );
+        // The reload, as R does it.
+        let gun = r.gun;
+        let steps = macro_steps(MacroKind::Reload, &gun_mut(&mut r));
+        r.vr.app
+            .world_mut()
+            .entity_mut(player)
+            .insert(GunMacro::default());
+        r.vr.app
+            .world_mut()
+            .get_mut::<GunMacro>(player)
+            .unwrap()
+            .start(gun, steps);
+        r.vr.step(240);
+        let g = gun_mut(&mut r);
+        let well = g.magwell.unwrap();
+        let rounds = g.firearm.live_rounds();
+        let mag = g.firearm.magazine.as_ref().map(|m| m.rounds);
+        let seated = r.vr.app.world().get::<Socket>(well).unwrap().occupant;
+        assert_eq!(
+            seated,
+            Some(full),
+            "the full one isn't in the well (the empty one: {empty:?})"
+        );
+        assert!(
+            mag.is_some(),
+            "a magazine in the well, none in the gun: {seated:?}"
+        );
+        assert!(
+            rounds >= 7,
+            "after the reload {rounds} rounds (magazine {mag:?})"
+        );
+    }
+}
