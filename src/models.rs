@@ -328,8 +328,14 @@ impl ModelMaterials {
             // World props (art/props).
             "Timber" => lib.get(Mat::Timber, server, materials),
             "Rusty" => lib.get(Mat::RustyMetal, server, materials),
-            // A trunk's bark: the spruce bark scan (a log stack).
-            "Bark" => lib.get(Mat::BarkSpruce, server, materials),
+            // A felled trunk's bark: the spruce bark scan, darker and its
+            // plates coarser than a standing tree's (a log stack). As the
+            // scan's own, at 1.2 m a tile and its tint, a stack lay pale
+            // and fine-streaked as straw bales: docs/craft/PROP_READING.md.
+            "Bark" => derive(Mat::BarkSpruce, &|m| {
+                m.base_color = Color::srgb(0.15, 0.12, 0.1);
+                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / 2.4));
+            }),
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
