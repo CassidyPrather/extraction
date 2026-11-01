@@ -625,7 +625,11 @@ pub(super) fn direct(
                     }
                 }
                 let ins = world.insertion();
-                tasks.extend(world.legs(here, ins + Vec2::new(0.0, -25.0)));
+                tasks.extend(super::first_hour::walk(
+                    &world,
+                    here,
+                    ins + Vec2::new(0.0, -25.0),
+                ));
             }
         }
         Step::Heard => {
@@ -706,7 +710,7 @@ pub(super) fn direct(
                 // door first.
                 let mut from = here;
                 for to in s.round.iter().chain([&s.outside]) {
-                    tasks.extend(world.legs(from, to.xz()));
+                    tasks.extend(super::first_hour::walk(&world, from, to.xz()));
                     from = to.xz();
                 }
                 run.walks += 1;
@@ -758,7 +762,7 @@ pub(super) fn direct(
                 // Round the kiosk to its door, in, and down the stair.
                 let mut from = here;
                 for to in w.round.iter().chain([&w.outside]) {
-                    tasks.extend(world.legs(from, *to));
+                    tasks.extend(super::first_hour::walk(&world, from, *to));
                     from = *to;
                 }
                 if let Some(d) = w.door.filter(|d| !world.door_open(*d)) {
@@ -798,7 +802,7 @@ pub(super) fn direct(
                 if let Some(k) = world.stair(here).filter(|k| k.centre.distance(here) < 15.0) {
                     let mut from = here;
                     for to in k.round.iter().chain([&k.outside]) {
-                        tasks.extend(world.legs(from, *to));
+                        tasks.extend(super::first_hour::walk(&world, from, *to));
                         from = *to;
                     }
                 }
@@ -869,7 +873,7 @@ pub(super) fn direct(
                 world.remains_item(player),
             ) {
                 (Some(at), Some(item)) if run.tries < 3 => {
-                    tasks.extend(world.legs(here, at.xz()));
+                    tasks.extend(super::first_hour::walk(&world, here, at.xz()));
                     tasks.push(Grab {
                         item,
                         side: Side::Right,
@@ -1022,6 +1026,15 @@ pub(super) struct World2<'w, 's> {
     pub(super) remains: Query<'w, 's, (&'static GlobalTransform, &'static crate::raid::Remains)>,
     pub(super) trucks: Query<'w, 's, &'static GlobalTransform, With<Truck>>,
     pub(super) entrances: Res<'w, crate::robots::doors::Entrances>,
+    /// Every building and where it stands (for the way round them).
+    pub(super) buildings: Query<
+        'w,
+        's,
+        (
+            &'static crate::world::buildings::Building,
+            &'static Transform,
+        ),
+    >,
     pub(super) comfort: Option<Res<'w, crate::rig::comfort::Comfort>>,
     pub(super) owners: Query<'w, 's, &'static crate::interact::SocketOwner>,
     pub(super) gun_ids: Query<'w, 's, (), With<crate::weapons::Gun>>,
@@ -1456,7 +1469,11 @@ impl World2<'_, '_> {
             .filter(|(e, _, gt, held, sock, bag)| {
                 held.is_none()
                     && sock.is_none()
-                    && bag.is_none()
+                    // Loose, or in a bag nobody's carrying: the truck's crate,
+                    // where the driver says it is after a fall ("On the
+                    // ledge"; set off without, the bot met its first jam
+                    // with an empty hand).
+                    && bag.is_none_or(|b| self.bags.get(b.bag).is_ok_and(|(bp, _)| !bp.carried))
                     && gt.translation().xz().distance(near) < 30.0
                     && matches!(self.id(*e), Some("ak74" | "pm_pistol" | "sks" | "mosin"))
             })

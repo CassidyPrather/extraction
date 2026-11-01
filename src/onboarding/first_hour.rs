@@ -2076,19 +2076,15 @@ const ROUND: f32 = 2.0;
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
 /// there): the waypoints after `from`.
-fn round_buildings(zone: &crate::world::Zone, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
-    let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(zone);
+fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
+    let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(&world.zone);
+    boxes.extend(world.entrances.shells.iter().map(|s| (s.xf, s.half)));
     boxes.extend(
-        view.entrances
-            .as_deref()
-            .map(|en| en.shells.iter().map(|s| (s.xf, s.half)).collect::<Vec<_>>())
-            .unwrap_or_default(),
-    );
-    boxes.extend(
-        view.buildings
+        world
+            .buildings
             .iter()
-            .filter(|(_, b, _)| solid(&b.prefab))
-            .map(|(_, b, xf)| {
+            .filter(|(b, _)| solid(&b.prefab))
+            .map(|(b, xf)| {
                 let s = crate::robots::doors::Shell::of(Entity::PLACEHOLDER, &b.prefab, *xf);
                 (s.xf, s.half)
             }),
@@ -2119,14 +2115,23 @@ fn fence_boxes(zone: &crate::world::Zone) -> Vec<(Transform, Vec2)> {
 /// (`SOLID_RUN`): a log pile, a wreck, the Custodian's stock, a staged
 /// scene's crates, a chimney or a mast. (A log pile on the way from the
 /// drop held the reckless newcomer a minute.) Not gates, fences, dams or
-/// gantries: those are walked through or under.
+/// gantries: those are walked through or under. A garden's fence is
+/// one (its panels stand till they're broken).
 fn solid(prefab: &str) -> bool {
     prefab.starts_with(crate::world::scenes::PREFIX)
         || prefab.starts_with("wreck_")
         || prefab.starts_with("stock_")
         || matches!(
             prefab,
-            "log_pile" | "chimney" | "radio_mast" | "water_tower" | "steeple" | "target"
+            "log_pile"
+                | "chimney"
+                | "radio_mast"
+                | "water_tower"
+                | "steeple"
+                | "target"
+                // A garden's fence panels: 1.3 m, over no step (the second
+                // hour walked into one and stayed).
+                | "fence_garden"
         )
 }
 
@@ -2422,10 +2427,18 @@ fn one_up<'a>(
 }
 
 /// `legs`, round the buildings in the way.
-fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+fn route(world: &World2, _view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+    walk(world, from, to)
+}
+
+/// The way on foot outdoors from `from` to `to`, as `legs`: round the
+/// buildings and solids in the way, through the fence's gaps, round the
+/// banks (`route`'s; the second hour's walked straight, into a garden's
+/// fence and the wire).
+pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
-    for p in round_buildings(&world.zone, view, from, to) {
+    for p in round_buildings(world, from, to) {
         // Something solid in the way that has no doors (the stoves at Cinder
         // Works' blast furnace held a newcomer twenty minutes): the
         // machines' grid's way round it.
