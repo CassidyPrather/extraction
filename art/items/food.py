@@ -18,7 +18,7 @@ import bmesh
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import (ALONG_X, FRONT, ON_TOP, UP, blob, cube, item, panel, ragged, ring, text,
+from _kit import (ALONG_X, FRONT, LIFT, ON_TOP, UP, blob, cube, item, panel, ragged, ring, text,
                   text_round, tube_path, wanted)
 from common import Part, RX, RY, RZ, T, S, fillet
 from mathutils import Vector
@@ -338,10 +338,11 @@ def rice_bag():
         y = yb + 0.06 + 0.0105 * (1.0 - t * t) - 0.0003
         p.sphere(0.0017, (0.0, 0.0, 0.0), "Paper", segs=6, rings=3,
                  xf=T(x, y, z) @ RY(rnd.uniform(0, math.pi)) @ S(2.0, 0.7, 0.85))
-    zf = -0.022 - 0.0003
-    p.box((0.044, 0.026, 0.0005), (0.0, yb + 0.03, zf + 0.0002), "Paper")
-    text(p, "РИС", 0.011, "Red", T(0.0, yb + 0.033, zf) @ FRONT, depth=0.0005)
-    p.box((0.044, 0.0025, 0.0006), (0.0, yb + 0.021, zf), "Red")
+    # The label stands LIFT off the bag; its print LIFT off the label.
+    zl = -0.022 - LIFT
+    p.box((0.044, 0.026, LIFT + 0.0003), (0.0, yb + 0.03, zl + (LIFT + 0.0003) / 2), "Paper")
+    text(p, "РИС", 0.011, "Red", T(0.0, yb + 0.033, zl) @ FRONT, depth=LIFT)
+    p.box((0.044, 0.0025, LIFT), (0.0, yb + 0.021, zl - LIFT / 2), "Red")
     return [p]
 
 
@@ -372,10 +373,11 @@ def sugar_cubes():
           xf=T(0.0, yb + h, d / 2 - wall / 2) @ RX(0.18))
     p.box((w + 0.0004, 0.004, 0.0004), (0.0, 0.016, -0.0008), "Red",
           xf=T(0.0, yb + h, d / 2 - wall / 2) @ RX(0.18))
-    zf = -d / 2 - 0.0002
-    text(p, "САХАР", 0.009, "Red", T(0.0, yb + 0.018, zf) @ FRONT, depth=0.0005)
+    zf = -d / 2
+    text(p, "САХАР", 0.009, "Red", T(0.0, yb + 0.018, zf) @ FRONT, depth=LIFT)
+    # Bands round the box, LIFT off its walls.
     for y in (yb + 0.006, yb + 0.03):
-        p.box((w + 0.0004, 0.0025, d + 0.0004), (0.0, y, 0.0), "Red")
+        p.box((w + 2 * LIFT, 0.0025, d + 2 * LIFT), (0.0, y, 0.0), "Red")
     return [p]
 
 

@@ -26,7 +26,8 @@
 //! ambient), not open sky.
 //!
 //! `EXTRACTION_FLAT_AMBIENT=1` leaves Bevy's ambient as it was (the A/B
-//! for frame cost, `scripts/bench.sh`).
+//! for frame cost, `scripts/bench.sh`); `EXTRACTION_NEAR_FILL=0` leaves out
+//! only the near fill (what's in your hands in a room, [`NEAR_SHARE`]).
 //!
 //! A source edit against a pinned Bevy, like `render::fog`: if the anchors
 //! stop matching, it warns once and the ambient stays flat.
@@ -73,6 +74,16 @@ pub const WALLS: f32 = 0.35;
 /// and from [`ROUGH_FLAT`] it isn't looked up at all.
 pub const ROUGH_FADE: f32 = 0.55;
 pub const ROUGH_FLAT: f32 = 0.7;
+/// In a room, what's in your hands keeps some of the light the room cuts
+/// (as a body's own bounce would give it): within [`NEAR_IN`] of the eye
+/// the cut is given back by [`NEAR_SHARE`] of its stops, fading out by
+/// [`NEAR_OUT`]. Out of doors (no room) nothing changes. On the Rime Fell
+/// mill's ground floor the PM at 30 cm all but vanished against the room
+/// (15 of 255, the yard's 31: `scripts/held_check.py`). At 0.75 it came to
+/// 43 but looked lit, and a bed at your knee glowed against the rest.
+pub const NEAR_IN: f32 = 0.55;
+pub const NEAR_OUT: f32 = 0.9;
+pub const NEAR_SHARE: f32 = 0.5;
 /// Under this much ambient (summed, cd/m²) there is no sky to reflect (deep
 /// in the workings, `world::underground::go_dark`): not looked up.
 pub const DARK: f32 = 0.5;
@@ -90,6 +101,22 @@ fn sky_wgsl() -> String {
 const XS_ZENITH: vec3<f32> = vec3<f32>({z0:.3}, {z1:.3}, {z2:.3});
 const XS_GROUND: f32 = {GROUND:.3};
 const XS_WALLS: f32 = {WALLS:.3};
+const XS_NEAR_IN: f32 = {NEAR_IN:.3};
+const XS_NEAR_OUT: f32 = {NEAR_OUT:.3};
+const XS_NEAR_SHARE: f32 = {NEAR_SHARE:.3};
+
+// What's in your hands in a room keeps some of the light the room cuts
+// (`NEAR_SHARE` of its stops): 1 out of doors, or past arm's length.
+fn extraction_near(at: vec3<f32>) -> f32 {{
+    let code = lights.ambient_color.a;
+    if (code >= 0.0) {{
+        return 1.0;
+    }}
+    let reach = floor(-code / 4.0);
+    let k = max(-code - reach * 4.0, 0.05);
+    let near = 1.0 - smoothstep(XS_NEAR_IN, XS_NEAR_OUT, distance(at, view.world_position.xyz));
+    return mix(1.0, pow(1.0 / k, XS_NEAR_SHARE), near);
+}}
 
 // The sky seen along `d`, in the lights' units (the fog's colour is the
 // dome's horizon as drawn, after the exposure).
@@ -135,9 +162,21 @@ fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> 
     )
 }
 
-fn return_patched() -> String {
+/// Whether the near fill is on: `EXTRACTION_NEAR_FILL=0` leaves it out of
+/// the patched shader altogether (the A/B for its frame cost, on the
+/// headset's frame log).
+pub fn near_fill_enabled() -> bool {
+    std::env::var_os("EXTRACTION_NEAR_FILL").is_none_or(|v| v != "0")
+}
+
+fn return_patched(near_fill: bool) -> String {
+    let near = if near_fill {
+        " * extraction_near(world_position.xyz)"
+    } else {
+        ""
+    };
     format!(
-        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3} && dot(env, vec3<f32>(1.0)) > {DARK:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion;\n#else\n{RETURN_ANCHOR}#endif\n"
+        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3} && dot(env, vec3<f32>(1.0)) > {DARK:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion{near};\n#else\n{RETURN_ANCHOR}#endif\n"
     )
 }
 
@@ -154,7 +193,7 @@ fn patch(src: &str) -> Option<String> {
     out.push_str(&src[fn_at..]);
     Some(out.replacen(IMPORT_ANCHOR, IMPORT_PATCHED, 1).replacen(
         RETURN_ANCHOR,
-        &return_patched(),
+        &return_patched(near_fill_enabled()),
         1,
     ))
 }
@@ -196,6 +235,15 @@ fn patch_ambient(
             *s = replacement;
         }
     }
+}
+
+/// The CPU twin of `extraction_near`: the ambient's multiplier `dist` m
+/// from the eye, in a room cutting it to `k` (None: out of doors).
+pub fn near(dist: f32, k: Option<f32>) -> f32 {
+    let Some(k) = k else { return 1.0 };
+    let t = ((dist - NEAR_IN) / (NEAR_OUT - NEAR_IN)).clamp(0.0, 1.0);
+    let near = 1.0 - t * t * (3.0 - 2.0 * t);
+    1.0 + ((1.0 / k.max(0.05)).powf(NEAR_SHARE) - 1.0) * near
 }
 
 /// The CPU twin of `extraction_sky` (for the tests and the gauges).
@@ -254,6 +302,9 @@ fn ambient_light(
         // A view without fog (the impostors' capture) keeps Bevy's own line.
         assert!(out.contains(&format!("#else\n{RETURN_ANCHOR}#endif")));
         assert!(patch(&out).is_none(), "patched twice");
+        // The near fill's switch takes it out of the shader, not just to 1.
+        assert!(return_patched(true).contains("extraction_near(world_position"));
+        assert!(!return_patched(false).contains("extraction_near(world_position"));
     }
 
     /// Bevy's real `pbr_ambient.wgsl` is the one pinned in `UPSTREAM`:
@@ -300,6 +351,21 @@ fn ambient_light(
             .expect("bevy_pbr in Cargo.lock");
         let rest = &lock[at + "name = \"bevy_pbr\"\nversion = \"".len()..];
         rest[..rest.find('"').unwrap()].to_owned()
+    }
+
+    /// In a room, a gun at 30 cm gets 1.6 times the room's light or more; the
+    /// room past arm's length nothing; out of doors (the yard) nothing at
+    /// all.
+    #[test]
+    fn in_a_room_what_you_hold_keeps_its_light_and_out_of_doors_nothing_changes() {
+        let k = crate::world::weather::INTERIOR_LIGHT;
+        assert!(near(0.3, Some(k)) >= 1.6, "{}", near(0.3, Some(k)));
+        assert_eq!(near(1.5, Some(k)), 1.0);
+        for d in [0.1, 0.3, 0.6, 2.0] {
+            assert_eq!(near(d, None), 1.0);
+        }
+        // Never brighter than the room's light uncut.
+        assert!(near(0.0, Some(k)) <= 1.0 / k);
     }
 
     /// Metal reflects the sky you see. Under the default sky at the
