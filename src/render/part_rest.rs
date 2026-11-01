@@ -577,7 +577,7 @@ mod tests {
                 })
             })
             .collect();
-        settled();
+        let _settled = settled();
         for b in busy {
             bevy::tasks::block_on(b);
         }

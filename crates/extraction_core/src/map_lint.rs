@@ -506,7 +506,8 @@ pub const VIEW_MAX: usize = 16;
 /// They stand by the roads in ones and twos; counted as buildings, every
 /// wreck on a road through a village would cost it a house.
 ///
-/// A log pile is one too: ten log cylinders, no roof, nothing inside.
+/// A log pile is one too: ten logs (their sawn ends) and four stakes, no
+/// roof, nothing inside.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
     "wreck_lada",

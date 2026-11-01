@@ -36,8 +36,8 @@ pub const KNIFE_TIP: Vec3 = Vec3::new(0.0, 0.0, -0.125);
 /// The point of a fixed bayonet in gun space (Kit's `pt_bayonet_tip`).
 pub fn bayonet_tip(gun: &str) -> Option<Vec3> {
     match gun {
-        "mosin" => Some(Vec3::new(0.0, 0.024, -1.425)),
-        "sks" => Some(Vec3::new(0.0, 0.0265, -0.975)),
+        "mosin" => Some(Vec3::new(0.0, 0.024, -1.332)),
+        "sks" => Some(Vec3::new(0.0, 0.0265, -0.935)),
         _ => None,
     }
 }

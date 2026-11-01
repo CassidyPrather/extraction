@@ -12,6 +12,7 @@
 
 pub mod anim;
 pub mod armour;
+pub mod broken;
 pub mod collector;
 pub mod damage;
 pub mod devices;
@@ -93,6 +94,42 @@ pub enum RobotKind {
     Pylon,
     /// The Depot's ceiling gantry (see `sorter`).
     Sorter,
+}
+
+/// No machine's tell before it does harm is shorter than this (s): long
+/// enough to see or hear and do something about (a newcomer was hit with
+/// nothing to read first: Onboarding's first_jobs_reckless).
+/// `tells_tests::every_machines_tell_is_long_enough_to_read` holds each to it.
+pub const MIN_TELL: f32 = 0.5;
+
+#[cfg(test)]
+mod tells_tests {
+    /// Each machine's tell before it hurts: the drone's lock, the walker's
+    /// aim and its fire through a wall, the sentry's chirp, the hound's
+    /// crouch, the crawler's charge, the heavy's raised arm, the grappler's
+    /// wind-up, the sorter's.
+    #[test]
+    fn every_machines_tell_is_long_enough_to_read() {
+        let tells = [
+            ("drone lock", super::drone::LOCK_TIME),
+            ("walker aim", super::walker::AIM_TIME),
+            ("walker through a wall", super::walker::BLIND_TELL),
+            ("sentry chirp", extraction_core::sentry::CHIRP),
+            ("hound crouch", super::hound_mind::CROUCH_TIME),
+            ("crawler charge", super::indoor::ZAP_CHARGE),
+            ("heavy's raised arm", super::heavy::RAISE_TIME),
+            ("grappler wind-up", super::grappler::WINDUP),
+            ("sorter wind-up", super::sorter::WINDUP),
+        ];
+        let short: Vec<_> = tells
+            .iter()
+            .filter(|(_, t)| *t < super::MIN_TELL)
+            .map(|(w, t)| format!("{w}: {t} s"))
+            .collect();
+        assert!(short.is_empty(), "under {} s: {short:?}", super::MIN_TELL);
+        // And a drone that goes quiet tells again before it fires.
+        assert!(super::drone::RETELL > super::drone::BURST_GAP);
+    }
 }
 
 #[derive(Component, Debug)]
@@ -288,6 +325,7 @@ impl Plugin for RobotsPlugin {
                 squad::SquadPlugin,
                 subjects::SubjectsPlugin,
                 hazards::HazardsPlugin,
+                broken::BrokenPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,

@@ -988,6 +988,16 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) guns: Query<'w, 's, (&'static crate::weapons::Gun, &'static Held)>,
+    /// Every gun on someone, and whether it's down in their pack.
+    pub(super) carried_guns: Query<
+        'w,
+        's,
+        (
+            &'static crate::weapons::Gun,
+            &'static crate::anomaly::artifacts::CarriedBy,
+            Has<crate::interact::body::InBackpack>,
+        ),
+    >,
     pub(super) hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     pub(super) anomalies:
         Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
