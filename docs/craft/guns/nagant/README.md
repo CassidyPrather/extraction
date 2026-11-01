@@ -115,3 +115,10 @@ palm from 74 mm to 60. With it, `weapons::signature`'s gauge found the
 Nagant's kick too like the PM's (1.3 apart), and at y 0.008 too like the
 IZh-43's (2.7). So the height stays at 0 until weapon feel gives the
 Nagant a kick of its own at the higher hold.
+
+### Third pass: the heel
+
+The build now fails a bevelled outline whose corner is tighter than its
+bevel, since the bevel folds over itself there. The grip's heel, at the
+butt's back corner, was one. It's now rounded over about 4 mm instead of 1,
+and the butt's length and depth are unchanged.

@@ -152,7 +152,11 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
     let pz = z - d * 0.42;
     // The furniture where the house's plan stood it (a ruin's is the
     // common plan).
-    let plan = HousePlan::of(prefab);
+    // (Plank B dresses as the common plan, mirrored afterwards: `dress`.)
+    let plan = match HousePlan::of(prefab) {
+        HousePlan::PlankB => HousePlan::Common,
+        plan => plan,
+    };
     let l = house_layout(plan, w, d);
     // The table's top, or the post office's counter's (`Builder::counter`
     // 0.9 high; its loot at 0.95), its two ends along it.
@@ -160,7 +164,7 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
         let (at, yaw) = l.table;
         let along = Quat::from_rotation_y(yaw) * Vec3::X;
         if plan == HousePlan::PostOffice {
-            (at + Vec3::Y * 0.92, along * 2.2)
+            (at + Vec3::Y * 0.9, along * 2.2)
         } else {
             (at + Vec3::Y * 0.785, along)
         }
@@ -224,7 +228,7 @@ pub fn dress(
     if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
         return Vec::new();
     }
-    let base = extraction_core::map::prefab_base(prefab);
+    let base = extraction_core::map::prefab_shell(prefab);
     // A drowned house was emptied sixty years before the water came: what
     // the silt holds is old and sparse.
     if prefab.ends_with("_drowned") {
@@ -427,6 +431,10 @@ pub fn dress(
         }
         Some(Story::PostOffice) => {
             out.push(on("pigeonholes", s.partition, 0.0));
+            // Its counter's (`buildings::HousePlan::PostOffice`): the
+            // parcel scales, not a family's dishes.
+            out.retain(|(m, _)| *m != "dishes");
+            out.push(on("shop_scales", s.table[0], 0.0));
         }
         Some(Story::MineOffice) => {
             out.push(on("ledger_open", s.kitchen[1] + Vec3::Z * 0.2, 0.3));
@@ -436,6 +444,16 @@ pub fn dress(
     if let Some(n) = named {
         out.retain(|(m, _)| !n.drop.contains(m));
         out.extend(n.things);
+    }
+    // Plank B is the common plan mirrored across the door's axis
+    // (`buildings::HousePlan::PlankB`): its things, set out as the common
+    // plan's, mirror with it (the residents' kits keep to their walls).
+    if super::buildings::HousePlan::of(prefab) == super::buildings::HousePlan::PlankB {
+        for (_, t) in &mut out {
+            t.translation.x = -t.translation.x;
+            let q = t.rotation;
+            t.rotation = Quat::from_xyzw(q.x, -q.y, -q.z, q.w);
+        }
     }
     clear_of_notes(map, xf, out)
 }
@@ -1231,7 +1249,7 @@ pub fn yard(
     if std::env::var("EXTRACTION_NO_CLUTTER").is_ok_and(|v| v == "1") {
         return Vec::new();
     }
-    let base = extraction_core::map::prefab_base(prefab);
+    let base = extraction_core::map::prefab_shell(prefab);
     let Some((w, d)) = plan(base) else {
         return Vec::new();
     };
@@ -1709,7 +1727,7 @@ mod tests {
         for name in ["marrow_creek", "kettle_pass", "cinder_works"] {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
-                let base = extraction_core::map::prefab_base(&p.prefab);
+                let base = extraction_core::map::prefab_shell(&p.prefab);
                 let Some((w, d)) = plan(base) else { continue };
                 let inner = Vec2::new(w * 0.5 - 0.09, d * 0.5 - 0.09);
                 let xf = Transform::from_xyz(p.at[0], 0.0, p.at[1]);
@@ -1784,7 +1802,7 @@ mod tests {
         ] {
             let map = crate::world::load_map_def(name);
             for p in &map.placements {
-                let base = extraction_core::map::prefab_base(&p.prefab);
+                let base = extraction_core::map::prefab_shell(&p.prefab);
                 if plan(base).is_none() {
                     continue;
                 }
@@ -2235,7 +2253,7 @@ mod tests {
             };
             let (mut houses, mut yards) = (0, 0);
             for p in &map.placements {
-                let base = extraction_core::map::prefab_base(&p.prefab);
+                let base = extraction_core::map::prefab_shell(&p.prefab);
                 if plan(base).is_none() {
                     continue;
                 }
