@@ -71,6 +71,9 @@ pub struct Gun {
     /// The trigger past its break, until it's let back past its reset
     /// ([`trigger_pulled`]).
     pub pulled: bool,
+    /// The magazine release held down (drawn: the catch pressed in,
+    /// `gunsmith::parts::Moves::MagCatch`).
+    pub catch: bool,
     /// The gun's own dice (jams, duds, spread, its kick's yaw), seeded from
     /// what it is and where it first lay ([`gun_seed`]): what happens to
     /// one gun never hangs on how many others are lying about, nor on the
@@ -357,6 +360,7 @@ fn setup_gun_items(
         magwell,
         trigger: 0.0,
         pulled: false,
+        catch: false,
         dice: Rng::new(seed),
         mass: None,
     });
@@ -936,6 +940,16 @@ fn buttons(
         let name = catalog.get(item.kind()).id.clone();
         let mut events = Vec::new();
         let revolver = gun.firearm.def.action == ActionKind::Revolver;
+        // The catch is pressed while the release is held, on a gun whose
+        // release is a magazine's.
+        let catch = p
+            && !matches!(
+                gun.firearm.def.action,
+                ActionKind::BreakAction | ActionKind::Pump | ActionKind::Revolver
+            );
+        if gun.catch != catch {
+            gun.catch = catch;
+        }
         if p && !p0 {
             match gun.firearm.def.action {
                 ActionKind::BreakAction => {

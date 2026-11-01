@@ -275,6 +275,9 @@ On the centre spruce of m05, the near-black share went from 58% to
 tips stay inside the cards. It costs one texture sample on a draw that
 was there, and saves the shadow lookups.
 
+Before and after, settled: `docs/shots/performance/spruce_core_m05_before_after.jpg`
+(m05) and `spruce_core_s4_step_before_after.jpg` (a few metres on).
+
 Open, next steps:
 
 - Time the near cards on the headset machine with and without the

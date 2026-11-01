@@ -675,7 +675,9 @@ to close and about 0.2 s to start again.
 The ceiling used to be absolute seconds, and it failed the Verifier's
 runs on a container about 1.3x slower than this one. It is now in units
 of `perf::fight::reference_load_ms` (`first_contact::LOAD_UNITS`),
-timed just before each valley loads (median of 9). `LOAD_SLACK` still
+timed just before each valley loads. It takes the median of 25:
+medians of 9 drifted 35% apart between runs, medians of 25 12%
+(`perf::tests::reference_load_noise`). `LOAD_SLACK` still
 scales it on top.
 
 The yardstick is a fixed piece of work, timed two ways:

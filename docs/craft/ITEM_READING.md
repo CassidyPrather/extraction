@@ -171,5 +171,12 @@ camera:
   with a bright end beside the magazine's tall dark one: they read apart
   at 3 m in grey too. A dropped cell comes to rest lying down
   (`vr_harness::tests::a_dropped_cell_comes_to_rest_lying_down`).
-- **Bolt, detector**: built in `src/anomaly/visuals.rs`; asked Anomalies
-  (the bolt: orange flagging tape; the detector: a signal-yellow face).
+- **Bolt** (Anomalies', `src/anomaly/visuals.rs`): orange flagging tape
+  knotted round it, tails trailing. At 3 m an orange fleck in colour;
+  in grey it's still tiny. It's found by colour, which is what a thrown
+  bolt in grass needs; its size stays as it is.
+- **Detector** (Anomalies'): a signal-yellow face plate on the survey
+  sets. No longer the radio's twin, in colour or grey.
+
+Sheets re-shot on main 2ee65c62 (the same camera, `art/lineup.py` now
+building the bolt's and detector's new looks as the game does).

@@ -5,14 +5,14 @@
 //! here so it can be unit-tested in milliseconds and reused by the headless
 //! simulations, the client, and (eventually) a server or a VRChat port.
 
-pub mod ammo;
+// The mechanism and its rounds live in the gunsmith's crate.
+pub use ::gunsmith::{ammo, firearm};
 pub mod anomaly;
 pub mod cold;
 pub mod contracts;
 pub mod cooking;
 pub mod cover;
 pub mod fabrication;
-pub mod firearm;
 pub mod firearm_terminal;
 pub mod fit;
 pub mod forest;
