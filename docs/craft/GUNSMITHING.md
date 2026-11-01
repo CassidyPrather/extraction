@@ -84,9 +84,18 @@ Before looking at the model, know the real gun.
   length of pull. The manual's figures where they can be found; cite each
   in `gunsmith::spec` and the gun's review. Mark what's unconfirmed.
 - **Pictures and drawings.** Public-domain manuals and diagrams where the
-  network allows (old military manuals are often in the public domain;
-  check). Look, measure from them, don't copy them into the repo. Any asset
-  that does come in is CC0 (`docs/ASSETS.md`) with a `CREDITS.md` row.
+  network allows (old military manuals and US government photographs are
+  often in the public domain; check). Any asset that comes in is CC0
+  (`docs/ASSETS.md`) with a `CREDITS.md` row.
+- **A reference you can't redistribute is for measuring only.** Most good
+  side views are someone's copyright (the PM's, the Australian War
+  Memorial's, is "all rights reserved"; the MP-133's is a gun site's).
+  Measure from them, overlay them on your own machine, and write the
+  numbers into the review. Never commit them, nor an overlay or crop that
+  contains them. Name the source so the next gunsmith can find it. Only a
+  public-domain or CC0 photograph (the AK's, a 1989 US Department of
+  Defense photograph) goes in the repo, overlays and all, credited in the
+  review.
 
 ### 2. The parts you can see and touch
 
