@@ -914,11 +914,18 @@ mod tests {
                     "the spot isn't in the post office: {me}"
                 );
             }
-            for _ in 0..90 * 40 {
+            for i in 0..90 * 40 {
+                // On the move (as anyone ducking in from a drone is): what
+                // it notices; held to the spot.
                 app.world_mut()
                     .get_mut::<Transform>(player)
                     .unwrap()
                     .translation = me;
+                let a = i as f32 / 90.0;
+                app.world_mut()
+                    .get_mut::<crate::player::Body>(player)
+                    .unwrap()
+                    .velocity = Vec3::new(a.cos(), 0.0, a.sin()) * 1.4;
                 let mut h = app
                     .world_mut()
                     .get_mut::<crate::health::Health>(player)
