@@ -705,7 +705,7 @@ fn svd() -> GunLayout {
         port: Vec3::new(0.0175, 0.0705, -0.148),
         eject: Vec3::new(1.0, 0.4, 0.1),
         sight: at(0.0, 0.1071, 0.0),
-        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.124)),
+        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.185)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
             grab: Vec3::new(0.047, 0.0645, -0.2),
@@ -730,7 +730,7 @@ fn svd() -> GunLayout {
                 Black,
                 Trigger,
             ),
-            part(bx(0.05, 0.05, 0.23), at(0.0, 0.055, -0.405), Wood, Static),
+            part(bx(0.05, 0.05, 0.275), at(0.0, 0.055, -0.425), Wood, Static),
             part(
                 Shape::Cylinder(0.01, 0.44),
                 at(0.0, bore, -0.735),
