@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _kit  # noqa: E402
-from _kit import ALONG_X, UP, Part, RY, RZ, T, Wear, fillet, prop  # noqa: E402
+from _kit import ALONG_X, UP, Part, RY, RZ, T, Wear, fillet, lettering, prop  # noqa: E402
 
 _kit.AO_SKY = True
 
@@ -164,8 +164,9 @@ def wheelie_bin():
     for z in (-0.26, 0.26):
         p.cyl(0.1, z - 0.03, z + 0.03, "Rubber", segs=14, xf=T(-0.24, 0.1, 0.0))
     p.cyl(0.012, -0.29, 0.29, "Iron", segs=8, xf=T(-0.24, 0.1, 0.0))
-    # A house number, and the tag on the lid.
-    p.box((0.12, 0.08, 0.004), (0.12, 0.75, -0.336), "Cream")
+    # The house's number painted on, and the tag on the lid (a blank
+    # pale plate read as a placeholder).
+    lettering(p, "14", 0.06, "Cream", T(0.12, 0.75, -0.336) @ RY(math.pi))
     p.box((0.22, 0.004, 0.14), (0.05, hi + 0.054, 0.0), "Paper")
     p.box((0.18, 0.004, 0.02), (0.05, hi + 0.058, 0.03), "Black")
     return [p]
