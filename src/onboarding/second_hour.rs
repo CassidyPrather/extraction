@@ -94,6 +94,8 @@ pub struct Run {
     salvage: bool,
     /// A magazine given for the shot that's heard.
     topped_up: bool,
+    /// A gun given for that shot, the last fall having taken its own.
+    rearmed: bool,
 }
 
 const COVER: &str = "get behind something (indoors, beside the door)";
@@ -564,7 +566,20 @@ pub(super) fn direct(
                     let away = world
                         .nearest_anomaly(here)
                         .map_or(Vec2::Y, |(_, at)| (here - at.xz()).normalize_or(Vec2::Y));
-                    let spot = here + away * 4.0;
+                    // Clear of every anomaly's edge as `bulky_near` takes
+                    // it (radius + 2 m): 4 m off, by the one it had just
+                    // met, it dropped them where it wouldn't pick them up,
+                    // and the pack was never full.
+                    let clear = |p: Vec2| {
+                        !world
+                            .anomalies
+                            .iter()
+                            .any(|(a, agt)| agt.translation().xz().distance(p) < a.radius + 3.0)
+                    };
+                    let spot = (4..30)
+                        .map(|k| here + away * k as f32)
+                        .find(|p| clear(*p))
+                        .unwrap_or(here + away * 4.0);
                     let at = Vec3::new(spot.x, world.zone.ground(spot.x, spot.y), spot.y);
                     let _ = world.drop_items(&mut commands, at, &["fuel_can"; 4]);
                     tasks.push(Wait(0.5));
@@ -637,7 +652,19 @@ pub(super) fn direct(
             }
         }
         Step::Heard => {
-            if !firsts.met(First::Heard) && !run.topped_up && world.rounds(player).unwrap_or(0) < 3
+            if !firsts.met(First::Heard) && !world.armed(player) && !run.rearmed {
+                // A gun to fire the shot with, if what it had went down with
+                // it at the last fall (it reloaded an empty hand), as the
+                // drone's step does.
+                run.rearmed = true;
+                let kit = world.drop_kit(&mut commands, root.translation);
+                tasks.push(Wait(0.5));
+                for (&item, side) in kit.iter().zip([Side::Right, Side::Left]) {
+                    tasks.push(GrabFromHere { item, side });
+                }
+            } else if !firsts.met(First::Heard)
+                && !run.topped_up
+                && world.rounds(player).unwrap_or(0) < 3
             {
                 // Rounds to fire the shot with: a magazine from the crate.
                 run.topped_up = true;
