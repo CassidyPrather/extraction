@@ -34,6 +34,7 @@ impl Plugin for DevPlugin {
                     treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery,
+                    impact_hits_for_gallery,
                     present_for_gallery,
                 )
                     .chain()
@@ -1638,6 +1639,63 @@ fn plate_hits_for_gallery(
             spread: 0.0,
             recoil: 0.0,
             seed: i as u64,
+        });
+    }
+}
+
+/// `--gallery impact`: three rifle rounds from the camera along its line
+/// of sight, a frame apart, into whatever it looks at (the ground, a
+/// wall): what each throws up as it flies. Shoot with `--frames` a few
+/// past 62 to catch it young, a dozen or more to see it spread.
+fn impact_hits_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    if opts.gallery.as_deref() != Some("impact") {
+        return;
+    }
+    for im in impacts.read() {
+        info!("gallery impact: {:?} at {}", im.kind, im.point);
+    }
+    let (Some((cam, yaw, pitch)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y <= 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    state.0 += 1;
+    if state.0 == 3 {
+        state.1 = Some(commands.spawn(Name::new("Gallery rifle")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    // The camera's own turn (`render`'s free camera).
+    let turn = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    const ON_LINE: [(f32, f32); 3] = [(0.0, 0.0), (0.012, 0.006), (-0.01, 0.01)];
+    // Late enough that the colliders are in.
+    const FROM: u32 = 60;
+    if (FROM..FROM + ON_LINE.len() as u32).contains(&state.0) {
+        let (x, y) = ON_LINE[(state.0 - FROM) as usize];
+        let dir = (turn * Vec3::new(x, y, -1.0)).normalize();
+        shots.write(crate::weapons::ballistics::Shot {
+            gun,
+            shooter: Some(gun),
+            // From in front of the camera's own body, which would take it.
+            origin: eye + dir * 0.6,
+            direction: dir,
+            speed: 715.0,
+            damage: 30.0,
+            projectiles: 1,
+            spread: 0.0,
+            recoil: 0.0,
+            seed: u64::from(state.0),
         });
     }
 }
