@@ -257,11 +257,13 @@ for sx in (-1, 1):
     lc.box((0.006, 0.006, 0.14), (sx * 0.0262, 0.050, -0.337), "Wood", bevel=0.0025, segs=2)
 lower.cut(lc)
 
-upper_sec = fillet([(-0.0155, 0.0755), (0.0155, 0.0755), (0.0155, 0.091), (0.0, 0.0985),
+# Its foot down on the lower one's top, a seam between (it stood 4.5 mm
+# clear, and read at 1 m as floating over a gap).
+upper_sec = fillet([(-0.0155, 0.072), (0.0155, 0.072), (0.0155, 0.091), (0.0, 0.0985),
                     (-0.0155, 0.091)], [0.0042, 0.0042, 0.008, 0.012, 0.008], 4)
 upper = Part("upper_hg")
 upper.prism(upper_sec, -0.392, -0.247, "Wood", axis="z", bevel=0.004, segs=2)
-upper.prism([(x * 1.05, y + (y - 0.0755) * 0.04) for x, y in upper_sec], -0.2465, -0.236, "Blued",
+upper.prism([(x * 1.05, y + (y - 0.072) * 0.04) for x, y in upper_sec], -0.2465, -0.236, "Blued",
             axis="z", bevel=0.0008, segs=1)
 
 # --- Club-foot buttstock ------------------------------------------------------------------

@@ -79,6 +79,9 @@ here (weapon feel owns them).
   - **Bipod**: its folded legs are 25 mm shorter, ending at the muzzle.
   - **Magazine catch**: its own part, `mag_catch` (the AK's paddle, tipping
     about its pin), so the hands find it from the model.
+  - **Upper handguard**: it stood 4.5 mm clear of the lower, a gap you
+    could see through side-on. On the real gun the two meet at a seam, as
+    on the AK, so its bottom came down to 1 mm over the lower's top.
 - **`src/weapons/layout.rs`** (`rpk74()`): the muzzle is at −0.795.
 - **`src/weapons/sling.rs`**: the rear point moved with the loop.
 - **`assets/data/items.ron`** and **`src/capture/scale.rs`**: the gun's box
