@@ -194,6 +194,21 @@ fn gone_parts_let_rounds_by(
     }
 }
 
+/// The weak-point marks' one material: "shoot here" orange.
+pub(super) fn mark_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: SHOOT_HERE,
+        // (Lit enough to carry through fog, not so much it washes out to
+        // white: it must read orange.)
+        emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
+        perceptual_roughness: 0.5,
+        // A signal lamp, like the eye: its true size, its brightness held
+        // through fog.
+        fog_enabled: false,
+        ..default()
+    }
+}
+
 #[derive(Resource, Clone)]
 struct MarkAssets {
     ball: Handle<Mesh>,
@@ -253,14 +268,7 @@ fn mark_weak_points(
             let m = MarkAssets {
                 ball: meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap()),
                 ring: meshes.add(Torus::new(0.5 - RING, 0.5)),
-                mat: materials.add(StandardMaterial {
-                    base_color: SHOOT_HERE,
-                    // (Lit enough to carry through fog, not so much it
-                    // washes out to white: it must read orange.)
-                    emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
-                    perceptual_roughness: 0.5,
-                    ..default()
-                }),
+                mat: materials.add(mark_material()),
             };
             commands.insert_resource(m.clone());
             m

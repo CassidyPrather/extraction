@@ -22,6 +22,7 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(lamps_reach_far)
             .add_observer(dirigible_tally)
             .add_systems(Update, scan_beams)
             .add_plugins((
@@ -148,6 +149,10 @@ fn mats(materials: &mut Assets<StandardMaterial>) -> RobotMats {
         eye: materials.add(StandardMaterial {
             base_color: Color::srgb(0.1, 0.02, 0.02),
             emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+            // A signal lamp: its true size, but as bright at 60 m in fog
+            // as at 5 (fog would wash it into the grey before the shell).
+            // Each robot's own eye is cloned from this one.
+            fog_enabled: false,
             ..default()
         }),
         eye_dead: materials.add(StandardMaterial {
@@ -2300,5 +2305,142 @@ mod scan_tests {
         let look = scan_colour(Reaction::Investigate);
         assert!(look.green > hunt.green * 4.0, "{look:?} vs {hunt:?}");
         assert!(hunt.red >= 1.0 && look.red >= 1.0);
+    }
+}
+
+/// How far a robot's lamps are drawn, metres: its eye, its weak-point
+/// marks, any mesh on it whose material the fog can't touch. Signal lamps
+/// keep their true size, so a 15 cm eye is a pixel or two at 60 m, but
+/// they stay in the picture as far as the machine does. (The render
+/// budget fades every mesh under a metre out at 200 times its size,
+/// `render::budget::small_range`: the eye went at about 30 m and a knee
+/// mark at 38, in clear air as in fog.)
+pub const LAMP_REACH: f32 = 150.0;
+
+/// Whether `mat` is a lamp's: the fog can't touch it.
+fn is_lamp(mat: &StandardMaterial) -> bool {
+    !mat.fog_enabled
+}
+
+/// Every lamp on a robot is drawn to [`LAMP_REACH`]: the render budget's
+/// own marker (`LodReach`), put on as its material goes on, so it's there
+/// before the budget ranges the mesh by its size (once its bounds are
+/// known, later in the frame).
+fn lamps_reach_far(
+    on: On<Insert, MeshMaterial3d<StandardMaterial>>,
+    mut commands: Commands,
+    lit: Query<&MeshMaterial3d<StandardMaterial>>,
+    parents: Query<&ChildOf>,
+    robots: Query<(), With<Robot>>,
+    materials: Res<Assets<StandardMaterial>>,
+) {
+    let e = on.event_target();
+    let lamp = lit
+        .get(e)
+        .ok()
+        .and_then(|m| materials.get(&m.0))
+        .is_some_and(is_lamp);
+    if lamp && parents.iter_ancestors(e).any(|a| robots.contains(a)) {
+        commands
+            .entity(e)
+            .try_insert(crate::render::budget::LodReach(LAMP_REACH));
+    }
+}
+
+#[cfg(test)]
+mod signal_lamp_tests {
+    use super::*;
+
+    /// A robot's eye and its weak-point marks are signal lamps: drawn at
+    /// their true size, and as bright through fog at 60 m as at 5, so the
+    /// fog can't wash them into the grey before the shell. This covers the
+    /// walker family's eye (each robot's own is cloned from it), the
+    /// models' `Eye` (the heavy's and the sentry's), and the marks.
+    #[test]
+    fn eyes_and_marks_hold_through_fog() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<StandardMaterial>()
+            .init_resource::<crate::render::materials::MaterialLibrary>()
+            .init_resource::<crate::models::ModelMaterials>();
+        let w = app.world_mut();
+        let mut q = bevy::ecs::system::SystemState::<(
+            ResMut<crate::models::ModelMaterials>,
+            ResMut<crate::render::materials::MaterialLibrary>,
+            Res<AssetServer>,
+            ResMut<Assets<StandardMaterial>>,
+        )>::new(w);
+        let (mut model_mats, mut lib, server, mut materials) = q.get_mut(w).unwrap();
+        let robot = mats(&mut materials);
+        let model_eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
+        let lamps = [
+            (
+                "the walker family's eye",
+                materials.get(&robot.eye).cloned(),
+            ),
+            ("the models' Eye", materials.get(&model_eye).cloned()),
+            (
+                "a weak-point mark",
+                Some(super::super::weak_points::mark_material()),
+            ),
+        ];
+        for (what, m) in lamps {
+            let m = m.unwrap_or_else(|| panic!("{what}: no material"));
+            assert!(!m.fog_enabled, "{what}: fog washes it out at range");
+            assert!(
+                m.emissive.red.max(m.emissive.green) > 1.0,
+                "{what}: a lamp has to be lit"
+            );
+        }
+        // A dead eye is no lamp: it goes into the fog with the shell.
+        assert!(materials.get(&robot.eye_dead).unwrap().fog_enabled);
+    }
+
+    /// A lamp on a robot is drawn as far as the machine is: it carries
+    /// the budget's `LodReach`, which the budget ranges it by (fading over
+    /// the last fifth) in place of its size, which would have it gone
+    /// under 40 m. The shell beside it, and a lamp on nothing, don't.
+    #[test]
+    fn a_robots_lamps_are_drawn_to_range() {
+        use crate::render::budget::{LodReach, small_range};
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<StandardMaterial>()
+            .add_observer(lamps_reach_far);
+        let (lamp, shell) = {
+            let mut materials = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
+            (
+                materials.add(super::super::weak_points::mark_material()),
+                materials.add(StandardMaterial::default()),
+            )
+        };
+        let w = app.world_mut();
+        let robot = w
+            .spawn(Robot {
+                kind: super::super::RobotKind::Walker,
+                wrecked: false,
+            })
+            .id();
+        let part = w.spawn(ChildOf(robot)).id();
+        let mark = w.spawn((ChildOf(part), MeshMaterial3d(lamp.clone()))).id();
+        let plate = w.spawn((ChildOf(part), MeshMaterial3d(shell))).id();
+        let loose = w.spawn(MeshMaterial3d(lamp.clone())).id();
+        // A mark spawned bare and lit later, as `weak_points` does.
+        let late = w.spawn(ChildOf(part)).id();
+        w.entity_mut(late).insert(MeshMaterial3d(lamp));
+        w.flush();
+        let reach = |e: Entity| app.world().get::<LodReach>(e).map(|r| r.0);
+        assert_eq!(reach(mark), Some(LAMP_REACH));
+        assert_eq!(reach(late), Some(LAMP_REACH));
+        assert_eq!(
+            reach(plate),
+            None,
+            "the shell's small parts keep the budget's"
+        );
+        assert_eq!(reach(loose), None, "only a robot's lamps");
+        // Fully drawn to 60 m, where a mark's size alone had it gone.
+        assert!(LAMP_REACH * 0.8 >= 60.0);
+        assert!(small_range(0.19) < 40.0);
     }
 }
