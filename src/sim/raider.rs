@@ -4538,13 +4538,19 @@ mod run_tests {
             )
             .unwrap();
         let mine = &plans[plans.iter().position(|p| p.name == "mine_kettle").unwrap()];
+        // Points picked with the mine placed at (-55, 36), carried with it
+        // to wherever the map puts it now (same heading), on its floor.
+        let site = |x: f32, z: f32| {
+            let p = mine.xf.translation.xz() + Vec2::new(x, z) - Vec2::new(-55.0, 36.0);
+            mine.to_world(mine.to_local(Vec3::new(p.x, 0.0, p.y)).xz())
+        };
         // From the refuge's table, out by its door and along the drift,
-        // past the Lift at (-88, 24) that caught it on the way in.
-        let from = Vec3::new(-96.4, 15.5, 30.8);
-        let exit = mine.to_local(Vec3::new(-79.875, from.y, 24.375)).xz();
+        // past the Lift that caught it on the way in.
+        let from = site(-96.4, 30.8);
+        let exit = mine.to_local(site(-79.875, 24.375)).xz();
         let mut tasks: std::collections::VecDeque<Task> =
             indoor_route(mine, from, exit, 0.35).unwrap().into();
-        let (lift, berth) = (Vec2::new(-88.0, 24.0), 3.0);
+        let (lift, berth) = (site(-88.0, 24.0).xz(), 3.0);
         assert!(
             tasks
                 .iter()

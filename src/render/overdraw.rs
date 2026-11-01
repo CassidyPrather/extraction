@@ -93,6 +93,47 @@ fn both_sides(w: &World, e: Entity) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the mesh's material is opaque (writes depth wherever it
+/// covers, so an opaque thing behind it is rejected before shading).
+/// Alpha-tested and blended materials aren't: the sky shows, and is
+/// shaded, through a card's holes.
+fn opaque(w: &World, e: Entity) -> bool {
+    fn mode<M: Asset>(w: &World, e: Entity, base: impl Fn(&M) -> &StandardMaterial) -> Option<bool>
+    where
+        MeshMaterial3d<M>: Component,
+        M: Material,
+    {
+        let h = w.get::<MeshMaterial3d<M>>(e)?;
+        let m = w.resource::<Assets<M>>().get(&h.0)?;
+        Some(matches!(base(m).alpha_mode, AlphaMode::Opaque))
+    }
+    use crate::world::{cover, impostors, trees};
+    mode::<StandardMaterial>(w, e, |m| m)
+        .or_else(|| mode::<crate::render::terrain_material::TerrainMaterial>(w, e, |m| &m.base))
+        .or_else(|| mode::<trees::TreeSwayMaterial>(w, e, |m| &m.base))
+        .or_else(|| mode::<trees::FarCrownMaterial>(w, e, |m| &m.base))
+        .or_else(|| mode::<cover::SwayMaterial>(w, e, |m| &m.base))
+        .or_else(|| mode::<impostors::ImpostorMaterial>(w, e, |m| &m.base))
+        .unwrap_or(false)
+}
+
+/// The sky, counted as the GPU shades it: one layer on the pixels it
+/// covers that nothing opaque does. It's an opaque dome drawn behind
+/// everything, so early-z rejects it under anything opaque; through
+/// alpha-tested cards, blended things or nothing, it's shaded. Counted
+/// as a full layer everywhere (no depth test), a dense spruce view paid
+/// for a sky its trees hide.
+fn add_sky(layers: &mut [u16], sky: &[u16], cover: &[u16]) -> u64 {
+    let mut n = 0;
+    for ((l, s), c) in layers.iter_mut().zip(sky).zip(cover) {
+        if *s > 0 && *c == 0 {
+            *l = l.saturating_add(1);
+            n += 1;
+        }
+    }
+    n
+}
+
 /// For an impostor mesh: the eye (x, z), the near cut, and each vertex's
 /// tree base.
 fn impostor_cut(
@@ -134,6 +175,9 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         .get(std::any::TypeId::of::<Mesh3d>())
         .to_vec();
     let mut layers = vec![0u16; RES * RES];
+    // The sky, and what opaque covers, apart: see `add_sky`.
+    let mut sky = vec![0u16; RES * RES];
+    let mut cover = vec![0u16; RES * RES];
     let mut by: HashMap<String, u64> = HashMap::new();
     for e in seen {
         let Some(m) = w.get::<Mesh3d>(e) else {
@@ -199,6 +243,10 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
         // Impostor quads of trees within the near cut collapse in the
         // vertex shader (`impostor.wgsl`): they make no fragments.
         let cut = impostor_cut(w, e, mesh, eye);
+        let is_sky = w
+            .get::<MeshMaterial3d<crate::world::sky::SkyMaterial>>(e)
+            .is_some();
+        let occludes = !is_sky && opaque(w, e);
         let mut covered = 0u64;
         for t in idx.chunks_exact(3) {
             if let Some((eye, near, bases)) = &cut {
@@ -207,11 +255,22 @@ pub fn measure(w: &mut World, cam: Entity) -> Overdraw {
                 }
             }
             let tri = [vs[t[0]], vs[t[1]], vs[t[2]]];
+            if is_sky {
+                raster(&tri, near, f, two, &mut sky);
+                continue;
+            }
             covered += raster(&tri, near, f, two, &mut layers);
+            if occludes {
+                raster(&tri, near, f, two, &mut cover);
+            }
         }
         if covered > 0 {
             *by.entry(class(w, e)).or_default() += covered;
         }
+    }
+    let shown = add_sky(&mut layers, &sky, &cover);
+    if shown > 0 {
+        *by.entry("sky".into()).or_default() += shown;
     }
     // The worst weather, wherever the gauge's own is: a downpour's
     // streaks, or (in a burnt valley, when it isn't raining) the ash.
@@ -451,5 +510,29 @@ mod tests {
         raster(&[q[0], q[2], q[1]], 0.03, f, true, &mut back);
         raster(&[q[0], q[3], q[2]], 0.03, f, true, &mut back);
         assert!(back.iter().all(|&l| l == 1), "two-sided from behind");
+    }
+
+    /// The sky counts a layer only where nothing opaque covers it: a
+    /// wall over the left half leaves it the right half (it counted the
+    /// whole screen, a full layer, before), and an alpha-tested card,
+    /// which shades the sky through its holes, hides none of it.
+    #[test]
+    fn the_sky_counts_where_nothing_opaque_hides_it() {
+        let n = RES * RES;
+        let sky = vec![1u16; n];
+        let mut wall = vec![0u16; n];
+        for (i, c) in wall.iter_mut().enumerate() {
+            if i % RES < RES / 2 {
+                *c = 1;
+            }
+        }
+        let mut layers = wall.clone();
+        let shown = add_sky(&mut layers, &sky, &wall);
+        assert_eq!(shown as usize, n / 2, "the sky past the wall");
+        assert!(layers.iter().all(|&l| l == 1), "one layer everywhere");
+        // A card over everything, not opaque: nothing in the cover.
+        let mut layers = vec![1u16; n];
+        let shown = add_sky(&mut layers, &sky, &vec![0u16; n]);
+        assert_eq!(shown as usize, n, "through a card, the whole sky");
     }
 }

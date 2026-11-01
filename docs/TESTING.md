@@ -28,6 +28,13 @@ GPU-less gauges can't do:
   from 50, 150 and 300 m, bright and in its own colour. It takes about
   25 minutes a valley.
 
+- `scripts/held_check.py scripts/held_views.txt`: what's in your hand,
+  readable in the dimmest rooms. Each view (the Rime Fell mill, the
+  first jobs' dimmest rooms, the yard) is shot with its `--gallery` gun
+  at 30 cm and without: where they differ is the gun, and its median
+  brightness must reach 26 of 255 (the yard's PM is at 31). The exit
+  status is the number under. About 20 minutes.
+
 Run one at a time: two at once, with a build, run out of memory.
 
 ## The gauge tier's time

@@ -9,7 +9,7 @@
 //! few per cent longer than a straight line, so the numbers err long.
 
 use crate::geom::{self, P2, dist};
-use crate::map::{MapDef, prefab_base, prefab_entrances};
+use crate::map::{MapDef, prefab_entrances, prefab_shell};
 use crate::map_lint::{ENTERABLE, Finding, Rect, Report, Route, Rule, Solid, inside_fence, solids};
 use crate::nav::{BLOCKED, NavGrid};
 use crate::terrain::Heightmap;
@@ -90,7 +90,7 @@ pub fn roofed(prefab: &str) -> bool {
     if prefab.ends_with("_burnt") || prefab.ends_with("_drowned") {
         return false;
     }
-    ENTERABLE.contains(&prefab_base(prefab)) || !prefab_entrances(prefab).is_empty()
+    ENTERABLE.contains(&prefab_shell(prefab)) || !prefab_entrances(prefab).is_empty()
 }
 
 /// A door's middle on the outside face, and the way out, in the map.

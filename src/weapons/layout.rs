@@ -529,8 +529,13 @@ fn nagant() -> GunLayout {
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
         // The palm on the grip, which sits back behind the hammer
-        // (art/guns/nagant.py): it was under the hammer, a long pole.
-        grip: Transform::from_xyz(0.0, 0.0, 0.035),
+        // (art/guns/nagant.py), 8 mm forward of its middle: the trigger
+        // sat 116 mm out in the hand's frame, against 63-89. A hand on a
+        // raked revolver grip sits higher still (y 0.014), but that cuts
+        // the bore's lever over the palm to 60 mm and the Nagant's kick
+        // reads as the PM's (`weapons::signature`), so the height waits
+        // on weapon feel.
+        grip: Transform::from_xyz(0.0, 0.0, 0.027),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -565,7 +570,7 @@ fn nagant() -> GunLayout {
             ),
             part(
                 bx(0.004, 0.024, 0.005),
-                at(0.0, 0.016, -0.04),
+                at(0.0, 0.016, -0.036),
                 Black,
                 Trigger,
             ),
@@ -830,7 +835,7 @@ fn toz8() -> GunLayout {
 fn rpk74() -> GunLayout {
     let mut l = ak74();
     let bore = 0.058;
-    l.muzzle = Vec3::new(0.0, bore, -0.82);
+    l.muzzle = Vec3::new(0.0, bore, -0.795);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
     // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
     // was before the AK was measured.
