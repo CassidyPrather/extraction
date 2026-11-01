@@ -175,11 +175,16 @@ loop = [(SW_F + 0.0095 * math.cos(a), TUBE - 0.0165 + 0.0095 * math.sin(a))
         for a in [math.pi + math.pi * i / 10 for i in range(11)]]
 tube.sweep(loop, section_rect(0.0028, 0.0028, 0.0008), "Steel")
 
-# --- Buttstock: straight wrist, birch, rubber pad -------------------------------------------
+# --- Buttstock: semi-pistol grip, birch, rubber pad --------------------------------------------
+# The MP-133's neck dips into a grip behind the guard, where the raked hand
+# (the layout's grip, 0.35 rad) closes on it, and rises to a butt 118 mm
+# deep. (It was the older IZh-81's straight wrist and a 135 mm butt:
+# docs/craft/guns/mp133.)
 TOP = catmull([(-0.026, 0.0645), (-0.012, 0.0615), (0.015, 0.050), (0.06, 0.037), (0.12, 0.030),
                (0.20, 0.0195), (0.31, 0.0085)], 4, closed=False)
-BOT = catmull([(-0.026, -0.006), (-0.006, -0.0075), (0.025, -0.015), (0.07, -0.030),
-               (0.20, -0.082), (0.31, -0.127)], 4, closed=False)
+BOT = catmull([(-0.026, -0.006), (-0.006, -0.0075), (0.022, -0.030), (0.046, -0.060),
+               (0.064, -0.064), (0.09, -0.054), (0.13, -0.056), (0.20, -0.075), (0.31, -0.110)],
+              4, closed=False)
 WIDTH = [(-0.026, 0.0179), (-0.006, 0.0172), (0.02, 0.0158), (0.06, 0.0162), (0.13, 0.0192),
          (0.31, 0.0205)]
 POWER = [(-0.026, 3.6), (0.0, 3.0), (0.03, 2.3), (0.13, 2.5), (0.31, 2.9)]

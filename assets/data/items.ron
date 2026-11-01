@@ -863,7 +863,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_mp133", dims: Some((0.04, 0.192, 0.358)), name: "MP-133 stock",
+            id: "stock_mp133", dims: Some((0.04, 0.176, 0.358)), name: "MP-133 stock",
             description: "The pump's polymer butt, unscrewed.",
             category: Material, size: Medium, mass: 0.55, bulk: 0.8,
             tags: ["wood", "gun_part"],
