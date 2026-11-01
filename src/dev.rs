@@ -197,26 +197,36 @@ fn sights_to_the_eye(
 #[derive(Resource)]
 struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
 
-/// Holds a line-up's machines where their spawns stood them, facing the
-/// way they were asked: their minds would turn and walk them (a heavy
-/// walked up to the camera). A walker-bodied machine is posed from its
-/// `Walker::yaw`, so that's what is held; a drone flies, and faces as it
-/// flies. Their limbs and lamps still move.
+/// Holds a line-up's machines still, facing the way they were asked.
+/// A walker-bodied one is held by its walk: no mind, no path, its
+/// `Walker::yaw` set, so its legs stay under it (snapping its body back
+/// each frame left its drawn legs striding on, and its knee marks hanging
+/// off them). Anything else (a drone) is pinned where it came.
 fn turn_line_up(
+    mut commands: Commands,
     line_up: Option<ResMut<LineUp>>,
-    mut placed: Query<&mut Transform>,
+    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
     for (e, yaw, at) in line_up.0.iter_mut() {
+        if let Ok(mut w) = walkers.get_mut(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            w.yaw = *yaw;
+            w.path.clear();
+            continue;
+        }
         if let Ok(mut t) = placed.get_mut(*e) {
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
-        }
-        if let Ok(mut w) = walkers.get_mut(*e) {
-            w.yaw = *yaw;
         }
     }
 }
