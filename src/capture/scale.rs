@@ -60,7 +60,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ),
     ("mp133", 1.13, Fit, "MP-133, 1130 mm"),
     ("svd", 1.225, Fit, "SVD, 1225 mm"),
-    ("toz8", 1.11, Fit, "TOZ-8M, 1110 mm"),
+    ("toz8", 1.113, Fit, "TOZ-8M, 1113 mm, 640 mm barrel"),
     ("rpk74", 1.06, Fit, "RPK-74, 1060 mm (bipod down)"),
     ("flare_pistol", 0.22, Fit, "SPSh-44, 220 mm"),
     ("crossbow", 0.9, Made, "a home-made crossbow"),
