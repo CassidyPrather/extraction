@@ -883,6 +883,17 @@ pub(super) fn direct_raid(
                         && carried(&world, &view, player, world.id(*e).unwrap_or("")).contains(e)
                 })
                 .count();
+            let every: Vec<String> = guns()
+                .filter(|(_, by, _)| *by == player)
+                .map(|(g, _, packed)| {
+                    format!(
+                        "{}{}",
+                        g.firearm.magazine.as_ref().map_or(0, |m| m.rounds),
+                        if packed { " packed" } else { "" }
+                    )
+                })
+                .collect();
+            info!("first hour: unready: every gun on it, rounds in its magazine: {every:?}");
             state.note(
                 now,
                 Kind::Unready,
