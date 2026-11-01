@@ -286,7 +286,10 @@ fn break_line_up(
 fn gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
-    zone: Option<Res<crate::world::Zone>>,
+    (zone, stood): (
+        Option<Res<crate::world::Zone>>,
+        Res<crate::render::StoodEye>,
+    ),
     catalog: Res<crate::items::Catalog>,
     mut guns: Query<&mut crate::weapons::Gun>,
     mut sockets: Query<&mut crate::interact::Socket>,
@@ -306,6 +309,12 @@ fn gallery(
     else {
         return;
     };
+    // Standing there (y 0), the eye is put once the player is on their
+    // feet (`render::StandingEye`): what goes in front of it waits.
+    let standing = cam.y <= 0.0 && crate::world::underground::floor_under(&zone, cam).is_none();
+    if standing && stood.0.is_none() {
+        return;
+    }
     *stage += 1;
     if *stage == 3 {
         let mut parts = spec.split(',');
@@ -338,13 +347,12 @@ fn gallery(
         let turn: f32 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
         let dist: Option<f32> = parts.next().and_then(|v| v.parse().ok());
         let shift: f32 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0.0);
-        // The camera as `render` places it.
-        // As the camera places itself: y 0 stands you there, eyes 1.7 m up.
+        // The camera as `render` places it: standing, 1.7 m over the
+        // player's feet; else as given.
         let ground = zone.ground(cam.x, cam.z);
-        let eye_y = if cam.y == 0.0 {
-            ground + 1.7
-        } else {
-            cam.y.max(ground + 0.3)
+        let eye_y = match stood.0.filter(|_| standing) {
+            Some(y) => y,
+            None => cam.y.max(ground + 0.3),
         };
         let eye = Vec3::new(cam.x, eye_y, cam.z);
         let rot = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
