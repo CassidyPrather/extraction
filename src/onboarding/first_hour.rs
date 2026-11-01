@@ -828,7 +828,28 @@ pub(super) fn direct_raid(
         if one_up(guns(), player) {
             state.note(now, Kind::Learned, "noticed, with a round up");
         } else {
-            state.note(now, Kind::Unready, "noticed, with nothing chambered");
+            // What it had to load: the gun's magazine, and the full ones on
+            // it (out of them after a fight, a reload had nothing in it).
+            let in_gun = guns()
+                .find(|(_, by, p)| *by == player && !p)
+                .map(|(g, ..)| g.firearm.magazine.as_ref().map_or(0, |m| m.rounds));
+            let spares = world
+                .items
+                .iter()
+                .filter(|(e, it, ..)| {
+                    world.id(*e).is_some_and(|id| id.ends_with("_mag"))
+                        && it.rounds > 0
+                        && carried(&world, &view, player, world.id(*e).unwrap_or("")).contains(e)
+                })
+                .count();
+            state.note(
+                now,
+                Kind::Unready,
+                format!(
+                    "noticed, with nothing chambered (in the gun's magazine {}, loaded spares on it {spares})",
+                    in_gun.map_or("none".to_string(), |r| r.to_string())
+                ),
+            );
         }
     }
     if !again.is_empty() {
