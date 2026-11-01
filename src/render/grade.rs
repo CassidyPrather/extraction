@@ -245,7 +245,10 @@ impl Adaptation {
     pub fn step(&mut self, target: f32, dt: f32) {
         let tau = if target <= self.stops {
             ADAPT_TO_LIGHT
-        } else if self.stops < 1.0 {
+        } else if self.stops < 1.0 + self.indoors * ROOM_ADAPT {
+            // A room's own stops (`ROOM_ADAPT`) come at the first stop's
+            // pace: stepping in by day, the table reads in seconds, not
+            // after the night's half a minute.
             ADAPT_TO_DARK
         } else {
             ADAPT_TO_DARK_LATE
@@ -785,6 +788,21 @@ mod tests {
         assert!(rgb(fog.color).abs_diff_eq(Vec3::new(0.4, 0.5, 0.6), 1e-5));
         let amb = app.world().resource::<GlobalAmbientLight>();
         assert_eq!((amb.brightness, amb.color.alpha()), (100.0, 1.0));
+    }
+
+    /// Into a room by day: within ten seconds the eyes are most of the
+    /// way to the room's stops, its own included.
+    #[test]
+    fn a_room_by_day_is_read_in_seconds() {
+        let target = Adaptation::target(INTERIOR_LIGHT) + ROOM_ADAPT;
+        let mut a = Adaptation {
+            indoors: 1.0,
+            ..default()
+        };
+        for _ in 0..100 {
+            a.step(target, 0.1);
+        }
+        assert!(a.stops > 0.75 * target, "{} of {target}", a.stops);
     }
 
     #[test]
