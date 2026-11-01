@@ -273,10 +273,16 @@ fn one_up(
         return;
     }
     said.0 = true;
-    let empty = guns
-        .iter()
-        .find(|(_, by, packed)| by.0 == me && !packed)
-        .is_some_and(|(g, _, _)| g.firearm.chambers.iter().all(|c| c.is_none()));
+    let gun = guns.iter().find(|(_, by, packed)| by.0 == me && !packed);
+    let empty = gun.is_some_and(|(g, _, _)| g.firearm.chambers.iter().all(|c| c.is_none()));
+    info!(
+        "off the truck: {}",
+        match (gun.is_some(), empty) {
+            (false, _) => "no gun on you",
+            (true, true) => "nothing chambered",
+            (true, false) => "a round up",
+        }
+    );
     if empty {
         raid.say(ONE_UP);
     }
