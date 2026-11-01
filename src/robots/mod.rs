@@ -106,7 +106,7 @@ mod tells_tests {
     /// Each machine's tell before it hurts: the drone's lock, the walker's
     /// aim and its fire through a wall, the sentry's chirp, the hound's
     /// crouch, the crawler's charge, the heavy's raised arm, the grappler's
-    /// wind-up, the sorter's.
+    /// wind-up, the sorter's; and the cage's bell before it drops.
     #[test]
     fn every_machines_tell_is_long_enough_to_read() {
         let tells = [
@@ -119,6 +119,9 @@ mod tells_tests {
             ("heavy's raised arm", super::heavy::RAISE_TIME),
             ("grappler wind-up", super::grappler::WINDUP),
             ("sorter wind-up", super::sorter::WINDUP),
+            // Not a machine's, but the same rule: the cage's bell, then the
+            // wait before it comes down on whoever's under it (Underground's).
+            ("cage bell's wait", crate::world::cage::BELL_WAIT),
         ];
         let short: Vec<_> = tells
             .iter()
