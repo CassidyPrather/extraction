@@ -248,7 +248,7 @@
             tags: ["metal"],
         ),
         (
-            id: "ak_mag", dims: Some((0.026, 0.2, 0.09)), name: "AK-74 magazine",
+            id: "ak_mag", dims: Some((0.026, 0.17, 0.13)), name: "AK-74 magazine",
             description: "Thirty rounds, plum-coloured polymer.",
             category: Magazine, size: Small, mass: 0.23, bulk: 0.35,
             magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 30)),
@@ -269,7 +269,7 @@
             tags: ["metal"],
         ),
         (
-            id: "rpk_mag", dims: Some((0.026, 0.27, 0.13)), name: "RPK-74 magazine",
+            id: "rpk_mag", dims: Some((0.026, 0.27, 0.15)), name: "RPK-74 magazine",
             description: "Forty-five rounds of 5.45x39, a long curve of plum polymer. Fits any AK-74.",
             category: Magazine, size: Small, mass: 0.33, bulk: 0.5,
             magazine: Some((fits: "ak545", cartridge: "5.45x39", capacity: 45)),
@@ -555,7 +555,7 @@
             tags: ["electronics", "metal"],
         ),
         (
-            id: "power_cell", dims: Some((0.02, 0.06, 0.02)), name: "Power cell",
+            id: "power_cell", dims: Some((0.02, 0.02, 0.06)), name: "Power cell",
             description: "A rechargeable cell. Lights, radios and the clever stuff all drink from these.",
             category: Gadget, size: Tiny, mass: 0.05, bulk: 0.03, battery_wh: 10.0, mount: Some(Cell),
             tags: ["electronics"],
@@ -869,7 +869,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_ak74", dims: Some((0.046, 0.163, 0.29)), name: "AK-74 stock",
+            id: "stock_ak74", dims: Some((0.046, 0.11, 0.26)), name: "AK-74 stock",
             description: "The AK's laminated butt, off its tang screws.",
             category: Material, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood", "gun_part"],

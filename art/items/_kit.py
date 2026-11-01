@@ -88,8 +88,7 @@ def wanted(item_id):
 
 def cell_cradle(p, r_tube, mat, z0, z1, wall=0.0022):
     """A power cell's bay along the body: the tube between z0 and z1 cut
-    open on top to a cradle the cell lies in, along Z (`gadgets`'s cell
-    mount turns it so), its ends the body's own walls with a contact on
+    open on top to a cradle the cell lies in, along Z (as its model lies), its ends the body's own walls with a contact on
     each. The cell is 0.02 across, so the cradle's bore is 0.0206."""
     r_in = 0.0103
     r_out = max(r_tube, r_in + wall)

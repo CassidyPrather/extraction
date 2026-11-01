@@ -1,0 +1,34 @@
+[package]
+name = "gunsmith"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "The guns on their own: mechanisms as state machines, how each part moves, and a bench to judge a model at hand distance."
+publish = false
+
+# The library is engine-free (the game's core depends on it, and core has
+# no Bevy). Bevy is a dev-dependency: only the bench example draws.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+ron = "0.10"
+# Wayland loaded at run time, as in the game (no libwayland-dev to build).
+wayland-sys = { version = "0.31", features = ["dlopen"] }
+bevy = { version = "0.19", default-features = false, features = [
+    "3d",
+    "ui",
+    "default_platform",
+    "png",
+    "jpeg",
+    "ktx2",
+    "zstd_rust",
+    "tonemapping_luts",
+    "bevy_gizmos",
+    "serialize",
+] }
+
+[lints]
+workspace = true

@@ -61,7 +61,10 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("crossbow", 0.9, Made, "a home-made crossbow"),
     // Magazines: height along the curve or diameter.
     ("pm_mag", 0.1, Fit, "PM magazine"),
-    ("ak_mag", 0.2, Fit, "AK-74 magazine"),
+    // (Its bounds' longest side: about 0.2 m along its curve, 0.17 m
+    // top to foot in its own frame, off a side photograph of the real
+    // gun, docs/craft/guns/ak74.)
+    ("ak_mag", 0.17, Fit, "AK-74 magazine, curved"),
     (
         "mosin_clip",
         0.077,
@@ -164,7 +167,9 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("stock_sks", 0.242, Fit, "the SKS's butt"),
     ("stock_toz_double", 0.306, Fit, "the TOZ's butt"),
     ("stock_mp133", 0.358, Fit, "the MP-133's butt"),
-    ("stock_ak74", 0.29, Fit, "the AK's butt"),
+    // Receiver to butt plate, off the same photograph (it was drawn 30 mm
+    // long and 35 mm deep).
+    ("stock_ak74", 0.26, Fit, "the AK's butt"),
     ("stock_rpk74", 0.29, Fit, "the RPK's butt"),
     (
         "bolt_mosin",
