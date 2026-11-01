@@ -539,7 +539,11 @@ mod puffs {
 /// apparent half-width (20: 60.3M; 12: 38.0M), measured before
 /// `render::puff` faced the right eye. Now `face_puffs` caps each puff at
 /// `MAX_HALF_ANGLE` (12 degrees) from the eye: the wreck 27.5M, the
-/// firefight 24.5M, the cloud 60.9M (`docs/PERFORMANCE.md`).
+/// firefight 24.5M, the cloud 60.9M (`docs/PERFORMANCE.md`). Those were
+/// all taken with the sky dome centred on another camera (an image
+/// camera taken for the eye, until `render::mark_offscreen`): with its
+/// layer counted the bare view is 27.0M, and the cloud at 12 degrees
+/// 67.2M. The budget stands; the cloud keeps at least 5% under it.
 #[test]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();

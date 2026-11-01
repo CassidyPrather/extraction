@@ -50,6 +50,20 @@ In the game, at the walk's spot, in the valley's reference weather:
   read too light on a prop. Look at it in reach; scale the model's UVs
   (`Part.uv_scale`) rather than copy the material, which lights unlike
   the shared one.
+- **Lettering must read, not only be there**: at its reading distance
+  (a crate's about 2 m) in the game's light. Strokes a sixth of the
+  height, stopped short at the joints as a stencil is; paint that
+  contrasts with what it's on (dark on the pale concrete); words in
+  glyphs that read at that size. No two glyphs twins at reading size:
+  `blender -b --python art/check_glyphs.py` rasterises each as the props
+  draw it, 24 px high, and fails on a pair whose masks overlap by more
+  than 0.8 (the shared font's В was the 8's strokes; Б was the 6's; 0
+  was О; S was 5; C an E without its bar).
+- **Blank plates for lettering**: a pale rectangle where a stencil,
+  number or label should be reads as a placeholder (or a decal fighting
+  the face), not as paint. Letter it (`_kit.lettering`, the items'
+  stencil glyphs); a plate the game writes on carries a label point
+  instead (`depot_sign`'s `pt_label`).
 - **Primitives standing in for nature**: a box of the concrete scan is a
   sawn slab, whatever it's called. Stones are the field's
   (`world::rocks::stone_mesh`), wood is a model.
@@ -157,3 +171,43 @@ house's 0.5 m plinth is a crouch: give the floor's height).
   (`docs/shots/rooms/*_{before,after}.jpg`).
 - **The front rooms are dark** at 11:00, the window's light hardly
   reaching the table: lighting, not the models.
+
+### House plans (1 November)
+
+A house's furniture is a plan now (`buildings::HousePlan`,
+`house_layout`): where its table, shelves, counter, stove, bed and crate
+stand. The builder furnishes from it and the clutter dresses from the
+same places (`clutter::slots`), so moving a table moves its dishes. Each
+plan keeps the common plan's loot spots; a ruin keeps the common plan.
+
+- **Farm** (every farmhouse; the Old farm first): a kitchen-living room.
+  The stove in the front room's back corner, its firewood basket and
+  drying boots beside it; the long table end on to the door with its
+  plank bench (`bench_yard`) and a chair at its head; the churn by the
+  door; the back left a pantry, its flour sacks and the crate where the
+  stove was (`docs/shots/rooms/farmhouse_*_plan_{before,after}.jpg`). The
+  door, windows and footprint as they were (the Old farm's arrival frame
+  looks at that front).
+- **Post office, plank B and C**: built, waiting on their prefab ids
+  (Map design's shell table in core, and their map edits).
+
+### Blank plates (1 November)
+
+The coordinator's find in Weapon feel's `impact_burst_concrete.jpg`: the
+yard's road block had two blank pale rectangles on its face, its
+"stencilled number". The same pattern: every crate's `stencil` (pale
+bars), the wheelie bin's house number. Now lettered
+(`art/props/_kit.py`'s `lettering`): the block's ФБС 24.4.6, the crates'
+ВЕРХ and lot numbers, the bin's 14 (`docs/shots/props/stencils_after.png`,
+the line-up turned to their fronts: `art/lineup.py`'s `turn`). The
+Custodian's tag (a card with a stripe) and the depot's sign (the game
+writes on it) are what they are.
+
+The coordinator on the first pass (`stencils_after.png`): at that size
+the font drew В as an 8 (its glyph *was* the 8's) and Н, Т blurred; the
+block's cream on its pale concrete nearly vanished. Now
+(`stencils_after2.png`, 2 m): stencil-cut strokes, the crates' ТАРА,
+НЕТТО 30 and lot number; the block's ФБС 24.3.6 in a dark matte paint
+(the game's `Black` is a grey). In game the block's face reads grey; the
+line-up's window light blows it out. Marrow's gate block wears ivy over
+its face.

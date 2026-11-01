@@ -870,7 +870,11 @@ pub(super) fn direct_raid(
             );
         }
         let answer: Vec<Task> = match f {
-            First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
+            // (Out first: the jammed gun may be back on the hip by now.)
+            First::Jam(_) => vec![
+                Task::DrawGun,
+                Task::Gun(crate::weapons::flat::MacroKind::Rack),
+            ],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
             // "Its eye's still good: shoot that": the one to take on (bar
             // the lost one, who goes anywhere but at it).
@@ -1087,6 +1091,22 @@ pub(super) fn direct_raid(
         |x: f32, z: f32| truck.map_or(here, |t| t.transform_point(Vec3::new(x, 0.0, z)).xz());
     let mut tasks: Vec<Task> = Vec::new();
     match state.leg {
+        // Resumed out in the valley ("Back where you were": the last stage
+        // ended mid-raid): not at the camp, and no kit in the crate. Home
+        // from here (it went to the crate for a radio that was out there
+        // with it, and told no one).
+        Leg::Camp if !matches!(raid.phase, Phase::AtBase | Phase::Down { .. }) => {
+            state.note(
+                now,
+                Kind::Learned,
+                "back where it was out there: home from here",
+            );
+            state.leg = match raid.phase {
+                Phase::TruckWaiting { .. } => Leg::Rendezvous,
+                Phase::TruckCalled { .. } => Leg::Rendezvous,
+                _ => Leg::Call,
+            };
+        }
         Leg::Camp => {
             if p.reads {
                 tasks.push(Task::Wait(4.0));
@@ -2056,17 +2076,15 @@ const ROUND: f32 = 2.0;
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
 /// there): the waypoints after `from`.
-fn round_buildings(view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
-    let mut boxes: Vec<(Transform, Vec2)> = view
-        .entrances
-        .as_deref()
-        .map(|en| en.shells.iter().map(|s| (s.xf, s.half)).collect())
-        .unwrap_or_default();
+fn round_buildings(world: &World2, from: Vec2, to: Vec2) -> Vec<Vec2> {
+    let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(&world.zone);
+    boxes.extend(world.entrances.shells.iter().map(|s| (s.xf, s.half)));
     boxes.extend(
-        view.buildings
+        world
+            .buildings
             .iter()
-            .filter(|(_, b, _)| solid(&b.prefab))
-            .map(|(_, b, xf)| {
+            .filter(|(b, _)| solid(&b.prefab))
+            .map(|(b, xf)| {
                 let s = crate::robots::doors::Shell::of(Entity::PLACEHOLDER, &b.prefab, *xf);
                 (s.xf, s.half)
             }),
@@ -2074,19 +2092,46 @@ fn round_buildings(view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
     round_boxes(&boxes, from, to)
 }
 
+/// The quarantine fence's runs as boxes (`structures::fence_runs`): the
+/// way in or out is through a gap, where a road crosses it. (From the
+/// camp, outside it, a newcomer resumed there walked at the fence to the
+/// south-west and pressed against it for the rest of the raid.)
+fn fence_boxes(zone: &crate::world::Zone) -> Vec<(Transform, Vec2)> {
+    crate::world::structures::fence_runs(zone)
+        .into_iter()
+        .filter(|r| r.a.distance(r.b) > 0.5)
+        .map(|r| {
+            let d = r.b - r.a;
+            let mid = (r.a + r.b) * 0.5;
+            let xf = Transform::from_xyz(mid.x, 0.0, mid.y)
+                .with_rotation(Quat::from_rotation_y((-d.y).atan2(d.x)));
+            (xf, Vec2::new(d.length() * 0.5, 0.2))
+        })
+        .collect()
+}
+
 /// Something with no way in that a body can't walk through, over or under,
 /// small enough to have no blocked run on the grid worth going round
 /// (`SOLID_RUN`): a log pile, a wreck, the Custodian's stock, a staged
 /// scene's crates, a chimney or a mast. (A log pile on the way from the
 /// drop held the reckless newcomer a minute.) Not gates, fences, dams or
-/// gantries: those are walked through or under.
+/// gantries: those are walked through or under. A garden's fence is
+/// one (its panels stand till they're broken).
 fn solid(prefab: &str) -> bool {
     prefab.starts_with(crate::world::scenes::PREFIX)
         || prefab.starts_with("wreck_")
         || prefab.starts_with("stock_")
         || matches!(
             prefab,
-            "log_pile" | "chimney" | "radio_mast" | "water_tower" | "steeple" | "target"
+            "log_pile"
+                | "chimney"
+                | "radio_mast"
+                | "water_tower"
+                | "steeple"
+                | "target"
+                // A garden's fence panels: 1.3 m, over no step (the second
+                // hour walked into one and stayed).
+                | "fence_garden"
         )
 }
 
@@ -2191,7 +2236,7 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
 }
 
 /// Where along a→b (0..1) it first enters the box |x| < half, if it does.
-fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
+pub(super) fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
     let d = b - a;
     let (mut t0, mut t1) = (0.0f32, 1.0f32);
     for i in 0..2 {
@@ -2382,10 +2427,18 @@ fn one_up<'a>(
 }
 
 /// `legs`, round the buildings in the way.
-fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+fn route(world: &World2, _view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
+    walk(world, from, to)
+}
+
+/// The way on foot outdoors from `from` to `to`, as `legs`: round the
+/// buildings and solids in the way, through the fence's gaps, round the
+/// banks (`route`'s; the second hour's walked straight, into a garden's
+/// fence and the wire).
+pub(super) fn walk(world: &World2, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
-    for p in round_buildings(view, from, to) {
+    for p in round_buildings(world, from, to) {
         // Something solid in the way that has no doors (the stoves at Cinder
         // Works' blast furnace held a newcomer twenty minutes): the
         // machines' grid's way round it.
@@ -2402,19 +2455,41 @@ fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
                 blocked_run(&n.0, at, p) > SOLID_RUN || steep_run(&world.zone, at, p) > STEEP_RUN
             })
             .and_then(|n| n.0.path(at.to_array(), p.to_array()));
-        match round {
-            Some(way) => {
-                for q in way.into_iter().skip(1).map(Vec2::from) {
-                    t.extend(world.legs(at, q));
-                    at = q;
-                }
-                t.extend(world.legs(at, p));
+        let mut way: Vec<Vec2> = round
+            .map(|w| w.into_iter().skip(1).map(Vec2::from).collect())
+            .unwrap_or_default();
+        way.push(p);
+        // The grid's cells are too coarse to see a short bank: its way can
+        // still go up one (the radio mast's, again). Round each that's left.
+        for q in way {
+            for r in round_banks(&world.zone, at, q, 3) {
+                t.extend(world.legs(at, r));
+                at = r;
             }
-            None => t.extend(world.legs(at, p)),
         }
         at = p;
     }
     t
+}
+
+/// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
+/// point off to one side of its middle, the nearest that clears it both
+/// ways, as far as `depth` deep. The points after `a`, to `b`.
+fn round_banks(zone: &crate::world::Zone, a: Vec2, b: Vec2, depth: u32) -> Vec<Vec2> {
+    if depth == 0 || steep_run(zone, a, b) <= STEEP_RUN {
+        return vec![b];
+    }
+    let mid = (a + b) * 0.5;
+    let side = (b - a).perp().normalize_or(Vec2::X);
+    let clear = |m: Vec2| steep_run(zone, a, m) <= STEEP_RUN && steep_run(zone, m, b) <= STEEP_RUN;
+    let off = [4.0f32, 8.0, 12.0, 18.0, 25.0, 35.0]
+        .into_iter()
+        .flat_map(|d| [mid + side * d, mid - side * d])
+        .find(|m| clear(*m))
+        .unwrap_or(mid + side * 12.0);
+    let mut out = round_banks(zone, a, off, depth - 1);
+    out.extend(round_banks(zone, off, b, depth - 1));
+    out
 }
 
 /// What the newcomer carries that `want` stands for: in a hand, a pocket
@@ -3101,7 +3176,8 @@ the Hollow.";
 #[cfg(test)]
 mod indoor_tests {
     use super::{
-        STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, shot_warns, solid, steep_run,
+        STEEP_RUN, Stop, indoor_stops, round_banks, round_boxes, segment_hits_box, shot_warns,
+        solid, steep_run,
     };
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
@@ -3213,8 +3289,22 @@ mod indoor_tests {
         for (xf, half) in &boxes {
             let c = xf.translation.xz();
             let reach = half.length() + 6.0;
+            // (An end inside a solid has no way to it: two garden panels
+            // end to end, walked along their line.)
+            let inside = |q: Vec2| {
+                boxes.iter().any(|(bx, h)| {
+                    let l = bx
+                        .compute_affine()
+                        .inverse()
+                        .transform_point3(Vec3::new(q.x, 0.0, q.y));
+                    l.x.abs() < h.x + 1.0 && l.z.abs() < h.y + 1.0
+                })
+            };
             for dir in [Vec2::X, Vec2::Y, Vec2::new(1.0, 1.0).normalize()] {
                 let (from, to) = (c - dir * reach, c + dir * reach);
+                if inside(from) || inside(to) {
+                    continue;
+                }
                 let mut at = from;
                 for p in round_boxes(&boxes, from, to) {
                     let inv = xf.compute_affine().inverse();
@@ -3234,10 +3324,57 @@ mod indoor_tests {
             through.join("\n")
         );
         let zone = w.resource::<crate::world::Zone>();
+        // From the camp, outside the fence, into the valley: through a gap
+        // (the gate), not into the wire.
+        let fence = super::fence_boxes(zone);
+        assert!(!fence.is_empty(), "Marrow has a fence");
+        for (from, to) in [
+            (Vec2::new(12.1, 165.0), Vec2::new(-104.1, -43.0)),
+            (Vec2::new(22.0, 177.6), Vec2::new(-108.0, -50.0)),
+        ] {
+            assert!(
+                fence.iter().any(|(xf, half)| {
+                    let inv = xf.compute_affine().inverse();
+                    let a = inv.transform_point3(Vec3::new(from.x, 0.0, from.y)).xz();
+                    let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
+                    segment_hits_box(a, b, *half).is_some()
+                }),
+                "{from} -> {to} straight crosses the fence"
+            );
+            let mut at = from;
+            for p in round_boxes(&fence, from, to) {
+                for (xf, half) in &fence {
+                    let inv = xf.compute_affine().inverse();
+                    let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                    let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                    assert!(
+                        segment_hits_box(a, b, *half).is_none(),
+                        "{from} -> {to}: {at} -> {p} goes through the fence"
+                    );
+                }
+                at = p;
+            }
+        }
         let bank = steep_run(zone, Vec2::new(-38.1, -41.7), Vec2::new(-39.97, -45.04));
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
         assert!(road <= STEEP_RUN, "the way from the drop: {road} m steep");
+        // Straight over the bank (as the grid's way went), it's rounded:
+        // no stretch of the way left steep.
+        // (On past the bank, to ground a body stands on: the leg's own end
+        // was at its foot.)
+        let a = Vec2::new(-36.47, -41.82);
+        let b = (1..=12)
+            .map(|k| a + (Vec2::new(-45.56, -53.54) - a) * (1.5 + k as f32 * 0.25))
+            .find(|q| zone.hm.slope_deg(q.to_array()) < 20.0)
+            .expect("flat ground past the bank");
+        assert!(steep_run(zone, a, b) > STEEP_RUN, "the bank's on that line");
+        let mut at = a;
+        for p in round_banks(zone, a, b, 3) {
+            let s = steep_run(zone, at, p);
+            assert!(s <= STEEP_RUN, "{at} -> {p}: {s} m steep");
+            at = p;
+        }
     }
 
     /// A machine's rounds warn of later hits only: the first round that

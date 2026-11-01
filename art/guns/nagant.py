@@ -58,7 +58,7 @@ EJECT_TRAVEL = 0.042
 # right: with the cylinder at rest that's chamber 5.
 GATE_OFFSET = 5
 GATE_CH = GATE_OFFSET
-TRIG_PIN = (0.0, 0.032, -0.036)
+TRIG_PIN = (0.0, 0.032, -0.032)
 GRIP_SCREW = (0.0, -0.0025, 0.040)
 
 
@@ -284,7 +284,8 @@ rod.lathe(head, "Steel", segs=24, xf=T(0, ROD_Y, 0))
 
 # Its origin on its pin: the game turns it about it (`Moves::Trigger`).
 trig = Part("trigger", origin=TRIG_PIN)
-trig.sweep(catmull([(-0.038, 0.028), (-0.042, 0.018), (-0.041, 0.009), (-0.036, 0.004)], 6,
+# (Its face at about -0.038 at mid-height, the photograph's.)
+trig.sweep(catmull([(-0.034, 0.028), (-0.038, 0.018), (-0.037, 0.009), (-0.032, 0.004)], 6,
                    closed=False), section_rect(0.0045, 0.003, 0.0011, 3), "Blued")
 
 join("static_frame", frame, static, rsight, grip, grip_check, worn={})

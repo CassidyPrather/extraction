@@ -529,8 +529,13 @@ fn nagant() -> GunLayout {
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
         // The palm on the grip, which sits back behind the hammer
-        // (art/guns/nagant.py): it was under the hammer, a long pole.
-        grip: Transform::from_xyz(0.0, 0.0, 0.035),
+        // (art/guns/nagant.py), 8 mm forward of its middle: the trigger
+        // sat 116 mm out in the hand's frame, against 63-89. A hand on a
+        // raked revolver grip sits higher still (y 0.014), but that cuts
+        // the bore's lever over the palm to 60 mm and the Nagant's kick
+        // reads as the PM's (`weapons::signature`), so the height waits
+        // on weapon feel.
+        grip: Transform::from_xyz(0.0, 0.0, 0.027),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -565,7 +570,7 @@ fn nagant() -> GunLayout {
             ),
             part(
                 bx(0.004, 0.024, 0.005),
-                at(0.0, 0.016, -0.04),
+                at(0.0, 0.016, -0.036),
                 Black,
                 Trigger,
             ),
@@ -771,7 +776,7 @@ fn toz8() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.4)),
-        muzzle: Vec3::new(0.0, bore, -0.84),
+        muzzle: Vec3::new(0.0, bore, -0.81),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
         sight: at(0.0, 0.062, -0.03),
@@ -798,8 +803,8 @@ fn toz8() -> GunLayout {
                 Static,
             ),
             part(
-                Shape::Cylinder(0.008, 0.64),
-                at(0.0, bore, -0.52),
+                Shape::Cylinder(0.008, 0.61),
+                at(0.0, bore, -0.505),
                 Blued,
                 Static,
             ),
@@ -830,7 +835,7 @@ fn toz8() -> GunLayout {
 fn rpk74() -> GunLayout {
     let mut l = ak74();
     let bore = 0.058;
-    l.muzzle = Vec3::new(0.0, bore, -0.82);
+    l.muzzle = Vec3::new(0.0, bore, -0.795);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
     // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
     // was before the AK was measured.
@@ -960,7 +965,7 @@ fn toz() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.36)),
-        muzzle: Vec3::new(0.0, 0.035, -0.82),
+        muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
         sight: at(0.0, 0.0534, -0.05),
@@ -976,8 +981,8 @@ fn toz() -> GunLayout {
             // Stock and wrist.
             part(bx(0.04, 0.045, 0.14), at(0.0, -0.005, 0.02), Wood, Static),
             part(
-                bx(0.042, 0.13, 0.28),
-                Transform::from_xyz(0.0, -0.035, 0.22).with_rotation(Quat::from_rotation_x(0.12)),
+                bx(0.042, 0.13, 0.23),
+                Transform::from_xyz(0.0, -0.035, 0.195).with_rotation(Quat::from_rotation_x(0.12)),
                 Wood,
                 Static,
             ),
@@ -999,18 +1004,18 @@ fn toz() -> GunLayout {
             part(bx(0.01, 0.006, 0.04), at(0.0, 0.045, -0.04), Blued, Static),
             // Barrels, rib and forend: all of it tips at the hinge.
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(-0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(-0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
-            part(bx(0.008, 0.006, 0.68), at(0.0, 0.05, -0.46), Blued, Barrels),
+            part(bx(0.008, 0.006, 0.70), at(0.0, 0.05, -0.47), Blued, Barrels),
             part(bx(0.044, 0.035, 0.24), at(0.0, 0.008, -0.31), Wood, Barrels),
         ],
     }

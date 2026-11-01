@@ -6,7 +6,8 @@ nothing else in the model.
     blender -b --factory-startup --python art/check.py -- assets/models/vehicles/truck.glb ...
 
 A directory checks every .glb under it. Prints each fault with where it
-is, in game space (metres, +Y up), and exits 1 if any model has one.
+is, in game space (metres, +Y up), and exits 1 if any model has one, or
+if two of the lettering's stencil glyphs are twins (`check_glyphs.py`).
 """
 
 import os
@@ -200,7 +201,15 @@ def main():
             print("    " + f)
         bad += bool(faults)
     print(f"{len(paths) - bad} of {len(paths)} models clean")
-    sys.exit(1 if bad else 0)
+    # The stencil glyphs the models' lettering is drawn in: none two alike
+    # at reading size (art/check_glyphs.py).
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import check_glyphs
+    found, n = check_glyphs.twins()
+    for iou, a, b in found:
+        print(f"FAIL glyphs {a} and {b} alike ({iou:.2f})")
+    print(f"{n} glyphs, {len(found)} twin pairs")
+    sys.exit(1 if bad or found else 0)
 
 
 main()

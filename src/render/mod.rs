@@ -142,6 +142,7 @@ impl Plugin for RenderPlugin {
         )
         .init_resource::<StoodEye>()
         .add_systems(Update, (attach_flat_camera, stand_the_eye))
+        .add_systems(PostUpdate, mark_offscreen)
         .add_systems(
             Update,
             grade::adapt_eyes.after(crate::world::sky::WeatherLook),
@@ -153,6 +154,64 @@ impl Plugin for RenderPlugin {
 /// view, so systems looking for "the camera" skip it.
 #[derive(Component)]
 pub struct OffscreenCamera;
+
+/// Every 3D camera drawing into an image (the impostors' capture rig,
+/// the warm-up's proxy eye, a scope's lens, the bench's second eye) is
+/// marked [`OffscreenCamera`] as it comes, so the systems looking for
+/// "the eye" (`EyeCamera`: puffs facing it, rain round it, the sky,
+/// sound) never take one for the player's. Unmarked, the capture rig's
+/// and the proxy eye's cameras turned the puffs edge-on to a point off to
+/// the side (Weapon feel, 2026-11-01). The headset's eyes draw into
+/// their swapchain's views, not images: they stay eyes.
+fn mark_offscreen(
+    mut commands: Commands,
+    cams: Query<
+        (Entity, &bevy::camera::RenderTarget),
+        (
+            With<Camera3d>,
+            Without<OffscreenCamera>,
+            Or<(
+                Added<bevy::camera::RenderTarget>,
+                Changed<bevy::camera::RenderTarget>,
+            )>,
+        ),
+    >,
+) {
+    for (e, target) in &cams {
+        if matches!(target, bevy::camera::RenderTarget::Image(_)) {
+            commands.entity(e).try_insert(OffscreenCamera);
+        }
+    }
+}
+
+#[cfg(test)]
+mod offscreen_tests {
+    use super::*;
+
+    /// A camera drawing into an image is no eye; a window's camera is.
+    #[test]
+    fn a_camera_drawing_into_an_image_is_offscreen() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
+            .init_asset::<Image>()
+            .add_systems(PostUpdate, mark_offscreen);
+        let image = app
+            .world_mut()
+            .resource_mut::<Assets<Image>>()
+            .add(Image::default());
+        let capture = app
+            .world_mut()
+            .spawn((
+                Camera3d::default(),
+                bevy::camera::RenderTarget::Image(image.into()),
+            ))
+            .id();
+        let eye = app.world_mut().spawn(Camera3d::default()).id();
+        app.update();
+        assert!(app.world().get::<OffscreenCamera>(capture).is_some());
+        assert!(app.world().get::<OffscreenCamera>(eye).is_none());
+    }
+}
 
 /// The camera `--camera` puts anywhere (screenshots, the tour).
 #[derive(Component)]
