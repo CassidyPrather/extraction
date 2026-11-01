@@ -156,8 +156,35 @@ fn convert(
     })
 }
 
-/// The scan's tile on blued and stamped gun steel, metres.
-const BLUED_TILE: f32 = 0.075;
+/// A gun-steel finish (`gunsmith::finish`) on the gun-metal scan `m`, as
+/// the bench builds it.
+pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
+    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / f.tile));
+    let scanned = m.base_color_texture.is_some();
+    match f.gain {
+        // On the scan's albedo; without the scan, on its average (0.045).
+        Some([r, g, b]) if scanned => m.base_color = Color::linear_rgb(r, g, b),
+        Some([r, g, b]) => m.base_color = Color::linear_rgb(0.045 * r, 0.045 * g, 0.045 * b),
+        None => {
+            m.base_color_texture = None;
+            let [r, g, b] = f.flat;
+            m.base_color = Color::linear_rgb(r, g, b);
+        }
+    }
+    if f.keep_scan_metal && m.metallic_roughness_texture.is_some() {
+        m.metallic = f.metallic;
+        m.perceptual_roughness = f.roughness;
+    } else {
+        m.metallic_roughness_texture = None;
+        m.metallic = f.metallic;
+        // A multiplier on the scan's 0.31 where kept; flat, as itself.
+        m.perceptual_roughness = if f.keep_scan_metal {
+            (0.31 * f.roughness).min(1.0)
+        } else {
+            f.roughness
+        };
+    }
+}
 
 /// Every material name [`ModelMaterials::get`] knows; any other name renders
 /// a flat grey. `art/common.py` must list the same names (a test checks it,
@@ -266,24 +293,10 @@ impl ModelMaterials {
             materials.add(m)
         };
         let h = match name {
-            // Machined steel, polished and blued: the scan's grain at half
-            // its tile (at 0.15 m it read as a casting's at 30 cm), a little
-            // glossier (docs/craft/GUNSMITHING.md, "Finishes").
-            "Blued" => derive(Mat::GunMetal, &|m| {
-                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-                m.perceptual_roughness *= 0.8;
-            }),
-            // Stamped sheet under black lacquer (an AK-74's receiver and
-            // cover): near black, little metal showing, the scan's relief
-            // only as a fine orange peel.
-            "Stamped" => derive(Mat::GunMetal, &|m| {
-                m.base_color_texture = None;
-                m.base_color = Color::srgb(0.065, 0.065, 0.068);
-                m.metallic = 0.2;
-                m.metallic_roughness_texture = None;
-                m.perceptual_roughness = 0.5;
-                m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-            }),
+            // Gun steel: the finishes the gunsmith's crate holds
+            // (`gunsmith::finish`), the bench's too.
+            "Blued" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLUED)),
+            "Stamped" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::STAMPED)),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
@@ -300,10 +313,7 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.27, 0.105, 0.055);
                 m.metallic = 0.0;
             }),
-            "Black" => derive(Mat::GunMetal, &|m| {
-                m.base_color = Color::srgb(0.45, 0.45, 0.45);
-                m.perceptual_roughness = m.perceptual_roughness.max(0.6);
-            }),
+            "Black" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLACK)),
             "Brass" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.72, 0.52, 0.24),
                 metallic: 1.0,

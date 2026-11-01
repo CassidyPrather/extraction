@@ -153,6 +153,37 @@ mod tests {
         }
     }
 
+    /// How steady the load yardstick is: single samples, and medians of
+    /// `n`, one after another for about a minute. The spread within a
+    /// median is jitter (a longer sample helps); between medians, drift
+    /// (only sampling across the load helps).
+    #[test]
+    #[ignore = "calibration: cargo test --lib reference_load_noise -- --ignored --nocapture"]
+    fn reference_load_noise() {
+        use super::fight::{median_ms, reference_load_ms};
+        let spread = |v: &[f64]| {
+            let lo = v.iter().copied().fold(f64::MAX, f64::min);
+            let hi = v.iter().copied().fold(0.0, f64::max);
+            (lo, hi, hi / lo - 1.0)
+        };
+        let singles: Vec<f64> = (0..60).map(|_| reference_load_ms()).collect();
+        let (lo, hi, s) = spread(&singles);
+        println!("60 single: {lo:.2}-{hi:.2} ms ({:.0}%)", s * 100.0);
+        for n in [9, 25] {
+            let t = std::time::Instant::now();
+            let mut medians = Vec::new();
+            while t.elapsed().as_secs() < 30 {
+                medians.push(median_ms(n, reference_load_ms));
+            }
+            let (lo, hi, s) = spread(&medians);
+            println!(
+                "{} medians of {n}: {lo:.2}-{hi:.2} ms ({:.0}%)",
+                medians.len(),
+                s * 100.0
+            );
+        }
+    }
+
     #[test]
     #[ignore = "timing: run in release with --nocapture"]
     fn tick_cost_in_a_firefight() {

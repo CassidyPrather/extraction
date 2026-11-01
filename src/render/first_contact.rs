@@ -509,8 +509,10 @@ fn gauge_every_valley_loads_fits_and_meets_no_first_sight_stutter() {
         // the load (ground cover, the forest's pieces: a third of the
         // meshes).
         // Timed just before, with nothing else running (`heavy`): the
-        // machine as the load finds it.
-        let reference = crate::perf::fight::median_ms(9, crate::perf::fight::reference_load_ms);
+        // machine as the load finds it. A median of 25: single samples
+        // here ran 12.5-36 ms, medians of 9 drifted 35% apart, of 25 12%
+        // (`perf::tests::reference_load_noise`).
+        let reference = crate::perf::fight::median_ms(25, crate::perf::fight::reference_load_ms);
         let (mut app, l) = loaded_app(&map, true);
         let budget = load_ceiling(&map, reference, slack);
         println!(
