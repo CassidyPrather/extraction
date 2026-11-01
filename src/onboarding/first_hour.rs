@@ -1995,9 +1995,14 @@ fn under_a_roof(
         Some(pl) => {
             let from = pl.to_local(Vec3::new(inside.x, d.mid.y, inside.y)).xz();
             let to = pl.to_local(Vec3::new(p.x, d.mid.y, p.y)).xz();
-            pl.path(from, to)
-                .and_then(|path| path.last().copied())
-                .is_some_and(|end| end.distance(to) < 0.4)
+            // ...and walked to straight from just in (it's one walk: a way
+            // round the shop's shelf on the plan left the newcomer against
+            // the shelf, the drone at the door).
+            pl.grid.line_clear(from.to_array(), to.to_array())
+                && pl
+                    .path(from, to)
+                    .and_then(|path| path.last().copied())
+                    .is_some_and(|end| end.distance(to) < 0.4)
         }
         None => entrances.building_at(Vec3::new(p.x, d.mid.y, p.y)) == Some(d.building),
     };
