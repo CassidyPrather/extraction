@@ -1645,8 +1645,9 @@ fn plate_hits_for_gallery(
 
 /// `--gallery impact`: three rifle rounds from the camera along its line
 /// of sight, a frame apart, into whatever it looks at (the ground, a
-/// wall): what each throws up as it flies. Shoot with `--frames` a few
-/// past 62 to catch it young, a dozen or more to see it spread.
+/// wall): what each throws up as it flies. The clock runs a sixtieth of
+/// a second a frame: the rounds land at frames 60 to 62, so `--frames 75`
+/// shows them a quarter of a second on.
 fn impact_hits_for_gallery(
     mut commands: Commands,
     opts: Res<LaunchOptions>,
@@ -1670,6 +1671,14 @@ fn impact_hits_for_gallery(
         cam
     };
     state.0 += 1;
+    if state.0 == 1 {
+        // The clock a sixtieth of a second a frame, however slowly the
+        // frames render, so a frame count is an age: a puff a quarter of a
+        // second after the shot is frame 75.
+        commands.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 60.0),
+        ));
+    }
     if state.0 == 3 {
         state.1 = Some(commands.spawn(Name::new("Gallery rifle")).id());
     }
