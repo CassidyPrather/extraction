@@ -290,11 +290,58 @@ fn burst(
     }
 }
 
+/// How a puff rises: up at `rise` m/s (give or take a fifth), wandering
+/// by `wander`, for `life` seconds (give or take a fifth).
+#[derive(Clone, Copy)]
+struct Rise {
+    rise: f32,
+    wander: f32,
+    life: f32,
+}
+
+/// A wound's puff: a short, loose curl.
+const WISP: Rise = Rise {
+    rise: 0.65,
+    wander: 0.18,
+    life: 3.25,
+};
+
+/// A dead weapon's: a tall dark column, straight up, to read from 60 m
+/// in fog and to walk toward (`DEAD_GUN_SMOKE` a second).
+const COLUMN: Rise = Rise {
+    rise: 1.6,
+    wander: 0.06,
+    life: 5.5,
+};
+
+/// Puffs a second off a weapon that's been shot off (and the robot still
+/// standing): the column's density.
+const DEAD_GUN_SMOKE: f32 = 2.5;
+
+/// How high a puff rising as `r` climbs before it's gone, m (its rise
+/// slows by `drift_puffs`' drag).
+fn climbs(r: Rise) -> f32 {
+    r.rise * (1.0 - (-0.3 * r.life).exp()) / 0.3
+}
+
 fn puff(commands: &mut Commands, a: &FxAssets, dice: &mut Dice, at: Vec3, dark: bool, size: f32) {
-    let max = 2.5 + dice.f() * 1.5;
+    puff_rising(commands, a, dice, at, dark, size, WISP);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn puff_rising(
+    commands: &mut Commands,
+    a: &FxAssets,
+    dice: &mut Dice,
+    at: Vec3,
+    dark: bool,
+    size: f32,
+    r: Rise,
+) {
+    let max = r.life * (0.8 + dice.f() * 0.4);
     commands.spawn((
         Puff {
-            vel: Vec3::Y * (0.5 + dice.f() * 0.3) + dice.signed() * 0.18,
+            vel: Vec3::Y * r.rise * (0.8 + dice.f() * 0.4) + dice.signed() * r.wander,
             life: max,
             max,
             size,
@@ -340,7 +387,12 @@ fn sputter(
         if robots.get(part.robot).map_or(true, |r| r.wrecked) {
             continue;
         }
-        let tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        let mut tell = super::damage::tell(part.role, part.hp / part.max_hp.max(1.0));
+        // A gun shot off sends up a column, every robot's alike.
+        let column = dead_gun(part);
+        if column {
+            tell.smoke = DEAD_GUN_SMOKE;
+        }
         if tell.sparks <= 0.0 && tell.smoke <= 0.0 && tell.coolant <= 0.0 {
             continue;
         }
@@ -369,7 +421,20 @@ fn sputter(
             if n_puffs < MAX_PUFFS {
                 // A gas cell's vent is pale; a burning part's is grey.
                 let size = 0.3 * at_range(eye, at).sqrt();
-                puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                if column {
+                    let size = size * 1.3;
+                    puff_rising(
+                        &mut commands,
+                        a,
+                        &mut dice,
+                        at + Vec3::Y * 0.2,
+                        true,
+                        size,
+                        COLUMN,
+                    );
+                } else {
+                    puff(&mut commands, a, &mut dice, at + Vec3::Y * 0.2, false, size);
+                }
                 n_puffs += 1;
             }
         }
@@ -381,6 +446,11 @@ fn sputter(
             }
         }
     }
+}
+
+/// Whether `part` is a weapon that's been shot off.
+fn dead_gun(part: &RobotPart) -> bool {
+    part.role == PartRole::Weapon && !part.alive()
 }
 
 /// Coolant spattering from a wound: a couple of pale-green drops, out and
@@ -1388,5 +1458,40 @@ mod splash_tests {
         assert!(!splashes(10.0, None, 0.1), "damp ground");
         assert!(!splashes(10.0, Some(6.0), 0.0), "over the water");
         assert!(!splashes(10.0, None, 0.0), "dry");
+    }
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    /// A gun shot off sends up a dark column that climbs well past a
+    /// wound's curl (and a muzzle's smoke, which `weapons::muzzle` drags
+    /// to a stop within a metre): tall enough to show over a walker, and
+    /// over low trees, from 60 m. A gun still on sends up none.
+    #[test]
+    fn a_dead_guns_column_stands_over_a_wound() {
+        let (wound, column) = (climbs(WISP), climbs(COLUMN));
+        assert!(
+            column > 2.5 * wound,
+            "{column:.1} m over a wound's {wound:.1}"
+        );
+        assert!(column >= 4.0, "{column:.1} m: it has to clear the walker");
+        assert!(COLUMN.wander < WISP.wander, "a column, not a curl");
+        let part = |role: PartRole, hp: f32| RobotPart {
+            robot: Entity::PLACEHOLDER,
+            role,
+            hp,
+            max_hp: 40.0,
+        };
+        assert!(dead_gun(&part(PartRole::Weapon, 0.0)));
+        assert!(
+            !dead_gun(&part(PartRole::Weapon, 5.0)),
+            "a gun still on: no column"
+        );
+        // Every robot's gun alike: the rule reads the part, not the kind.
+        assert!(!dead_gun(&part(PartRole::Core, 0.0)));
+        // Within the shared cap: a column's steady state.
+        assert!(DEAD_GUN_SMOKE * COLUMN.life * 1.2 < MAX_PUFFS as f32 / 3.0);
     }
 }

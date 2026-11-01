@@ -27,7 +27,9 @@ from common import (Part, RX, RY, RZ, T, arc, catmull, empty, export, fillet, jo
 main_guard()
 
 BORE = 0.040
-MUZZLE = -0.84
+# A 640 mm barrel from the bolt face (it was 670: the rifle 1143 mm, the
+# published 1113; `docs/craft/guns/toz8/README.md`).
+MUZZLE = -0.81
 RECV0, RECV1 = -0.20, -0.03     # receiver front and rear
 BREECH = -0.170                 # the bolt face, closed
 HANDLE_Z = -0.060
@@ -127,14 +129,15 @@ barrel.lathe([(0.0029, MUZZLE + 0.0022), (0.0071, MUZZLE), (0.0085, MUZZLE + 0.0
 # The bore, dark in the crowned muzzle.
 barrel.cyl(0.0028, MUZZLE + 0.0021, MUZZLE + 0.006, "Black", segs=12, xf=T(0, BORE, 0))
 # Front sight: a ring on the barrel, a block, the post and its hood.
-barrel.cyl(0.0095, -0.8365, -0.8115, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.0008)
-barrel.box((0.010, 0.0082, 0.022), (0.0, 0.0498, -0.824), "Blued", bevel=0.0008, segs=1)
-barrel.prism([(-0.8276, 0.053), (-0.8204, 0.053), (-0.8228, SIGHT_Y), (-0.8252, SIGHT_Y)],
+barrel.cyl(0.0095, MUZZLE + 0.0035, MUZZLE + 0.0285, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.0008)
+barrel.box((0.010, 0.0082, 0.022), (0.0, 0.0498, MUZZLE + 0.016), "Blued", bevel=0.0008, segs=1)
+barrel.prism([(MUZZLE + 0.0124, 0.053), (MUZZLE + 0.0196, 0.053), (MUZZLE + 0.0172, SIGHT_Y),
+              (MUZZLE + 0.0148, SIGHT_Y)],
              -0.0009, 0.0009, "Blued", axis="x")
 HOOD_Y = 0.0565
 hood = ([(0.0085, 0.0442)] + arc(0.0, HOOD_Y, 0.0085, 0, 180, 14) + [(-0.0085, 0.0442),
         (-0.0075, 0.0442)] + arc(0.0, HOOD_Y, 0.0075, 180, 0, 14) + [(0.0075, 0.0442)])
-barrel.prism(hood, -0.8335, -0.8145, "Blued", axis="z")
+barrel.prism(hood, MUZZLE + 0.0065, MUZZLE + 0.0255, "Blued", axis="z")
 
 # Rear sight: a base on the barrel, the tangent leaf hinged at its front
 # lying back, the slider on it and the notch plate at its rear end.

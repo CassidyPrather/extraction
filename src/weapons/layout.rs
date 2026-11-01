@@ -771,7 +771,7 @@ fn toz8() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.4)),
-        muzzle: Vec3::new(0.0, bore, -0.84),
+        muzzle: Vec3::new(0.0, bore, -0.81),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
         sight: at(0.0, 0.062, -0.03),
@@ -798,8 +798,8 @@ fn toz8() -> GunLayout {
                 Static,
             ),
             part(
-                Shape::Cylinder(0.008, 0.64),
-                at(0.0, bore, -0.52),
+                Shape::Cylinder(0.008, 0.61),
+                at(0.0, bore, -0.505),
                 Blued,
                 Static,
             ),

@@ -59,7 +59,8 @@ now and then a gun, left out in the Zone for you to fetch: 150 m or more
 from the truck, and off your usual ways if anywhere is, since the machines
 walk those now, `robots::memory`). A finished job
 is replaced by the next one straight away, so you read the next job before
-you set off.
+you set off. A rolled job goes somewhere other than the job just done, when
+anywhere else will do (`Progress::last_place`).
 
 ### This session (3-6 raids, about one Surge cycle): a tier
 
