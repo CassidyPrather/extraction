@@ -11,7 +11,10 @@
 //! armed machine is sent out (`director`). Its mind is the walker's
 //! (`walker::walker_brain`, the [`Broken`] branch); its gun is held dead
 //! there and in `walker::walker_guns` (a mender's weld doesn't bring it
-//! back). `docs/FIRST_HOUR.md`, "The first fight": every armed machine
+//! back). It has no systems of its own: its parts are broken as it's
+//! made and its shove is a command (one more system, or even message,
+//! moved the order of others not pinned to one, and rounds stopped on a
+//! heavy's gone vents). `docs/FIRST_HOUR.md`, "The first fight": every armed machine
 //! killed every newcomer it met first; this one fights back but can't.
 
 use bevy::prelude::*;
@@ -91,32 +94,6 @@ pub fn second_job_meet(
 pub struct Broken {
     /// Till it can shove again (s).
     pub cooldown: f32,
-    /// Its parts broken yet (they're spawned with it, a frame on).
-    pub set: bool,
-    /// Shoving now (set by its brain, done by [`shove`]).
-    pub shoving: bool,
-}
-
-/// A broken walker shoved someone (for sound and the first-fight check).
-#[derive(Message, Clone, Copy, Debug)]
-pub struct Shoved {
-    pub robot: Entity,
-    pub player: Entity,
-    pub at: Vec3,
-}
-
-pub struct BrokenPlugin;
-
-impl Plugin for BrokenPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_message::<Shoved>().add_systems(
-            FixedUpdate,
-            (
-                break_parts.before(super::walker::walker_brain),
-                shove.after(super::walker::walker_brain),
-            ),
-        );
-    }
 }
 
 /// A broken walker at `at`, standing about there till it notices someone
@@ -136,69 +113,61 @@ pub fn spawn_broken_walker(commands: &mut Commands, zone: &Zone, at: Vec3, exit:
     commands
         .entity(e)
         .insert((Broken::default(), Name::new("Broken walker")));
+    // (Its parts are spawned by the commands before this one.)
+    commands.queue(move |w: &mut World| break_parts(w, e));
     e
 }
 
-/// Its gun at nothing, its bad leg at [`LEG_LEFT`]; and kept that way (a
-/// mender's weld leaves the gun dead).
-fn break_parts(mut walkers: Query<(Entity, &mut Broken)>, mut parts: Query<&mut RobotPart>) {
-    for (e, mut b) in &mut walkers {
-        for mut p in &mut parts {
-            if p.robot != e {
-                continue;
-            }
-            match p.role {
-                PartRole::Weapon => p.hp = 0.0,
-                PartRole::Leg(i) if !b.set && i as usize == BAD_LEG => {
-                    p.hp = p.max_hp * LEG_LEFT;
-                    b.set = true;
-                }
-                _ => {}
-            }
+/// Its gun at nothing, its bad leg at [`LEG_LEFT`]. (Its gun stays dead
+/// whatever's done to the part: `walker::walker_guns` never fires a
+/// broken walker's.)
+fn break_parts(w: &mut World, robot: Entity) {
+    let mut parts = w.query::<&mut RobotPart>();
+    for mut p in parts.iter_mut(w) {
+        if p.robot != robot {
+            continue;
+        }
+        match p.role {
+            PartRole::Weapon => p.hp = 0.0,
+            PartRole::Leg(i) if i as usize == BAD_LEG => p.hp = p.max_hp * LEG_LEFT,
+            _ => {}
         }
     }
 }
 
-/// The shove: whoever's within reach of one shoving now (its brain says
-/// so: `walker_brain`) loses a few hp and is pushed back a step.
-fn shove(
-    mut walkers: Query<(Entity, &mut Broken, &GlobalTransform, &super::Robot)>,
-    mut players: Query<
-        (
-            Entity,
-            &GlobalTransform,
-            &mut crate::health::Health,
-            &mut crate::player::Body,
-        ),
-        With<crate::player::Player>,
-    >,
-    mut hurt: MessageWriter<crate::health::Hurt>,
-    mut shoved: MessageWriter<Shoved>,
-) {
-    for (e, mut b, gt, robot) in &mut walkers {
-        if !std::mem::take(&mut b.shoving) || robot.wrecked {
+/// The shove, as its brain makes it (a command: `walker_brain`): whoever's
+/// within reach of `robot` loses a few hp and is pushed back a step.
+pub fn shove(w: &mut World, robot: Entity) {
+    let Some(at) = w.get::<GlobalTransform>(robot).map(|g| g.translation()) else {
+        return;
+    };
+    if w.get::<super::Robot>(robot).is_none_or(|r| r.wrecked) {
+        return;
+    }
+    let mut players = w.query_filtered::<(
+        Entity,
+        &GlobalTransform,
+        &mut crate::health::Health,
+        &mut crate::player::Body,
+    ), With<crate::player::Player>>();
+    let mut hit = Vec::new();
+    for (p, pt, mut health, mut body) in players.iter_mut(w) {
+        let d = pt.translation() - at;
+        if d.with_y(0.0).length() > SHOVE_RANGE + 0.3 || health.down {
             continue;
         }
-        let at = gt.translation();
-        for (p, pt, mut health, mut body) in &mut players {
-            let d = pt.translation() - at;
-            if d.with_y(0.0).length() > SHOVE_RANGE + 0.3 || health.down {
-                continue;
-            }
-            health.hp -= SHOVE_DAMAGE;
-            health.since_hit = 0.0;
-            body.velocity += d.with_y(0.0).normalize_or(Vec3::X) * SHOVE_PUSH;
-            hurt.write(crate::health::Hurt {
-                player: p,
-                amount: SHOVE_DAMAGE,
-                from: at,
-            });
-            shoved.write(Shoved {
-                robot: e,
-                player: p,
-                at,
-            });
-        }
+        health.hp -= SHOVE_DAMAGE;
+        health.since_hit = 0.0;
+        body.velocity += d.with_y(0.0).normalize_or(Vec3::X) * SHOVE_PUSH;
+        hit.push(p);
+    }
+    // (A hurt from where it stands: the first-fight check's warned hit.)
+    for player in hit {
+        w.write_message(crate::health::Hurt {
+            player,
+            amount: SHOVE_DAMAGE,
+            from: at,
+        });
     }
 }
 
@@ -418,7 +387,7 @@ mod tests {
 
     fn count(
         mut shots: MessageReader<crate::weapons::ballistics::Shot>,
-        mut shoved: MessageReader<Shoved>,
+        mut hurt: MessageReader<crate::health::Hurt>,
         mut struck: MessageReader<super::super::damage::RobotStruck>,
         mut seen: ResMut<Seen>,
     ) {
@@ -426,7 +395,7 @@ mod tests {
             seen.all_shots += 1;
             seen.shots.extend(s.shooter);
         }
-        seen.shoves += shoved.read().count() as u32;
+        seen.shoves += hurt.read().filter(|h| h.amount == SHOVE_DAMAGE).count() as u32;
         let hits: Vec<(PartRole, f32)> = struck.read().map(|h| (h.role, h.dealt)).collect();
         seen.struck.extend(hits);
     }

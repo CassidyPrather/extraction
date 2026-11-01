@@ -29,6 +29,13 @@ const ROSTER: &[(&str, Option<&str>)] = &[
         Some("a walker (unarmed, or the collector): walker_brain, tried as the walker"),
     ),
     (
+        "broken_walker",
+        Some(
+            "a walker, its gun dead: walker_brain, tried as the walker; it limps at you, \
+             its eye on you, and shoves (broken's tests)",
+        ),
+    ),
+    (
         "walker_sized",
         Some("a walker at another size: walker_brain, tried as the walker"),
     ),

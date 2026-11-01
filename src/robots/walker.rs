@@ -937,7 +937,7 @@ pub(super) fn walker_brain(
                         } else {
                             if b.cooldown <= 0.0 {
                                 b.cooldown = super::broken::SHOVE_COOLDOWN;
-                                b.shoving = true;
+                                commands.queue(move |w: &mut World| super::broken::shove(w, e));
                             }
                             None
                         }
