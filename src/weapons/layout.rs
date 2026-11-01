@@ -960,7 +960,7 @@ fn toz() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.36)),
-        muzzle: Vec3::new(0.0, 0.035, -0.82),
+        muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
         sight: at(0.0, 0.0534, -0.05),
@@ -976,8 +976,8 @@ fn toz() -> GunLayout {
             // Stock and wrist.
             part(bx(0.04, 0.045, 0.14), at(0.0, -0.005, 0.02), Wood, Static),
             part(
-                bx(0.042, 0.13, 0.28),
-                Transform::from_xyz(0.0, -0.035, 0.22).with_rotation(Quat::from_rotation_x(0.12)),
+                bx(0.042, 0.13, 0.23),
+                Transform::from_xyz(0.0, -0.035, 0.195).with_rotation(Quat::from_rotation_x(0.12)),
                 Wood,
                 Static,
             ),
@@ -999,18 +999,18 @@ fn toz() -> GunLayout {
             part(bx(0.01, 0.006, 0.04), at(0.0, 0.045, -0.04), Blued, Static),
             // Barrels, rib and forend: all of it tips at the hinge.
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(-0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(-0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
-            part(bx(0.008, 0.006, 0.68), at(0.0, 0.05, -0.46), Blued, Barrels),
+            part(bx(0.008, 0.006, 0.70), at(0.0, 0.05, -0.47), Blued, Barrels),
             part(bx(0.044, 0.035, 0.24), at(0.0, 0.008, -0.31), Wood, Barrels),
         ],
     }
