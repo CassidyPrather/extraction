@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| 50d1900 | 2026-11-01 08:00 (gate 129, release check) | 40/40 exit 0, no timeouts, 35 extracted (Cinder 8/8, Marrow 8/8, Rime 7/8, Kettle 6/8, Sallow 6/8); stucks 47; stowing: all taken carried out, 0 room drops, kit 40/40, 2 stuck while stowing; 13/13 scenarios; `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1294 lib, 315 + 47 core, 0 FAILED | gauges 19/19 |
 | 90afc8b | 2026-11-01 01:30 (gate 119, release check) | 40/40 exit 0, no timeouts, 36 extracted (Marrow 8/8, Sallow 8/8, Kettle 7/8, Rime 7/8, Cinder 5/8); stucks 40 (145); stowing: all taken carried out, 0 room drops, kit 40/40, 3 stuck while stowing; 12/13 scenarios (contract_scour_key: PickUp of the key times out, also on bc66f9a); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1285 lib, 357 core, 0 FAILED | gauges 19/19 |
 | 15eadf3 | 2026-10-31 20:30 (gate 112, release check) | 40/40 exit 0, no timeouts, 37 extracted (Kettle 8/8, Marrow 8/8, Cinder 7/8, Rime 7/8, Sallow 7/8); stucks 145 (Kettle seed 4: 25 at the (-95, 30) pocket); 13/13 scenarios; `--check-buildings` 1 flagged (the cellars false positive); sim_guards pass | fast-profile workspace suite: 1 FAILED (part_rest a_part_gone_leaves_no_ghost, a test race fixed in 0735b5e8); 1268 lib, 356 core | gauges 19/19 in 2779 s |
 | c9b3662 | 2026-10-31 15:00 (gate 105, release check) | 40/40 exit 0, no timeouts, 33 extracted (Cinder 8/8, Marrow 7/8, Rime 7/8, Kettle 6/8, Sallow 5/8); stucks 124 (Kettle seed 6 at the underground pocket (-95, 30)); 13/13 scenarios; `--check-buildings` 42 checked, 1 flagged (cellars_cinder at night, behind the shed and dark), 4 skipped | fast-profile workspace suite: 1254 lib, 354 core, 0 FAILED (63 min, a slow container) | gauges 18/19: first_contact Kettle 10.43 > 7.5 s, Rime 10.34 > 9.0 s |
@@ -74,13 +75,10 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 90afc8b (gate 119) and bc66f9a.
+As of 50d1900 (gate 129): nothing failing.
 
 | test / run | class | owner | status |
 | - | - | - | - |
-| `render::part_rest::tests::a_part_gone_leaves_no_ghost` (15eadf3): the merge on the async pool, the test waiting fixed frames | a test race | Performance | fixed in 0735b5e8 (gate 116) |
-| `contract_scour_key` (Sallow): `timed out on PickUp { id: "scour_key", side: Right }` (deterministic; passed on 15eadf3) | Models' a44221f5 (outside-doors-only Entrances), bisected by Hands; not the body slots | Models | routed |
-| Sim: Kettle's underground take pocket at (-80..-95, 25-30) (seed 6: 25 stucks); all recover | | Robot minds / Underground | open |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -88,6 +86,7 @@ As of 90afc8b (gate 119) and bc66f9a.
 
 | test / run | fixed in | by |
 | - | - | - |
+| `contract_scour_key` (outside-doors-only Entrances, a44221f5); part_rest's test race; the cellars_cinder probe flag; first_contact's Kettle/Rime load | 50d1900 / 90afc8b | Models, Performance, Capture |
 | Kettle's stucks (69 on cc4d02c, 11 on be68fdf) and seed 1's surface stucks; Sallow's early hound deaths (the raider's ammo) | 4a7eaed / be68fdf | Robot minds |
 | Rime seed 1's plough death | 4a7eaed (c080fbc3) | Robot minds |
 | the Marrow five after the warp (m05_spruce overdraw and fragments, trees after_a_jump); Marrow's stucks and 2/8 extracts | 2ea48de (b619140e) | Map design |
