@@ -30,8 +30,10 @@ pub struct Known(pub std::collections::HashSet<Hint>);
 
 impl Plugin for HintsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Hints>()
-            .add_systems(Update, (on_safe, dry_click, slide_back, radio_at_base));
+        app.init_resource::<Hints>().add_systems(
+            Update,
+            (on_safe, dry_click, slide_back, radio_at_base, one_up),
+        );
     }
 }
 
@@ -224,5 +226,58 @@ mod tests {
                 assert!(n <= 3, "{n} lines: {l}");
             }
         }
+    }
+}
+
+/// What the driver says as you step off the truck with nothing chambered.
+pub const ONE_UP: &str = "Truck: \"One up the spout before you go. Safety on till you need it.\"";
+
+/// Off the truck's steps at base (as `progression`'s tailgate: the raid
+/// begins 14 m off).
+const OFF_THE_TRUCK: f32 = 3.0;
+
+/// Stepping off the truck at base with the gun on you and nothing in its
+/// chamber: the driver reminds you of what the range taught, once each
+/// time home. On the first job that's always so (a new career's PM has its
+/// magazine in, nothing up, and the safety on); after, only if you leave
+/// that way again. Not a step: nothing waits on it. Not in the yard.
+#[allow(clippy::type_complexity)]
+fn one_up(
+    mut raid: ResMut<Raid>,
+    opts: Res<crate::launch::LaunchOptions>,
+    players: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
+    trucks: Query<&GlobalTransform, With<crate::raid::truck::Truck>>,
+    guns: Query<(
+        &Gun,
+        &crate::anomaly::artifacts::CarriedBy,
+        Has<crate::interact::body::InBackpack>,
+    )>,
+    // Said this time home; how far off the truck you were last frame.
+    mut said: Local<(bool, Option<f32>)>,
+) {
+    if raid.phase != Phase::AtBase {
+        *said = (false, None);
+        return;
+    }
+    if said.0 || opts.map == crate::camp::TRAINING_YARD {
+        return;
+    }
+    let (Some((me, at)), Some(truck)) = (players.iter().next(), trucks.iter().next()) else {
+        return;
+    };
+    let d = at.translation().xz().distance(truck.translation().xz());
+    let was = said.1.replace(d);
+    // Walked off the steps, a step at a time (not put at camp).
+    let stepped = was.is_some_and(|w| w < OFF_THE_TRUCK && d - w < 1.0);
+    if d < OFF_THE_TRUCK || !stepped {
+        return;
+    }
+    said.0 = true;
+    let empty = guns
+        .iter()
+        .find(|(_, by, packed)| by.0 == me && !packed)
+        .is_some_and(|(g, _, _)| g.firearm.chambers.iter().all(|c| c.is_none()));
+    if empty {
+        raid.say(ONE_UP);
     }
 }
