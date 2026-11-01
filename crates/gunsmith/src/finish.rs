@@ -10,13 +10,12 @@
 //! leaves a metal black but for the sun's glint, and a curve has nothing
 //! to show itself by. `docs/craft/GUNSMITHING.md`, "Finishes".
 //!
-//! **The values here are still the second pass's.** The game has no
-//! environment light yet; one is coming (Visual design), and finishes
-//! tuned without it would be wrong once it lands. Tried on the bench
-//! without it, blued steel at an even 0.1 reflectance showed the PM's
-//! arched slide and the Mosin's round receiver; lacquered stamped steel as
-//! a paint (metallic 0, roughness 0.38) showed the AK's receiver. Re-tune
-//! against the environment light, in the yard and the mill.
+//! Tuned against Visual design's sky light (`render::sky_light`), in the
+//! game in the yard at noon and in the Rime Fell mill: blued steel at
+//! about 0.1 reflectance and 0.28 roughness grades from the horizon's
+//! band to a darker top; at 0.13 the scan's variation went blotchy, and
+//! even at 0.1 it showed as grain on the PM, so the albedo is flat. The
+//! bench has no sky light, so it shows these flatter than the game does.
 
 /// How a finish is made from the gun-metal scan.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -41,34 +40,48 @@ pub struct SteelFinish {
 /// 0.15 m it read as a casting's grain at 30 cm).
 pub const TILE: f32 = 0.075;
 
-/// Machined steel, polished and blued: the scan at half its tile, a little
-/// glossier.
+/// Machined steel, polished and blued: an even 0.09 reflectance, a touch
+/// blue, on the scan's roughness and relief at half its tile. (On the
+/// scan's albedo, lifted to match, its variation read as a casting's grain
+/// at 30 cm.)
 pub const BLUED: SteelFinish = SteelFinish {
-    gain: Some([1.0, 1.0, 1.0]),
-    flat: [0.0; 3],
+    gain: None,
+    flat: [0.088, 0.09, 0.102],
     metallic: 1.0,
-    roughness: 0.8,
+    roughness: 0.9,
     keep_scan_metal: true,
     tile: TILE,
 };
 
-/// Stamped sheet under black lacquer over phosphate: near black, little
-/// metal showing, the scan's relief only.
+/// Stamped sheet under black lacquer over phosphate: a semi-gloss black
+/// paint, its sheen from the sky, no metal showing.
 pub const STAMPED: SteelFinish = SteelFinish {
     gain: None,
-    flat: [0.0054, 0.0054, 0.0057],
-    metallic: 0.2,
-    roughness: 0.5,
+    flat: [0.02, 0.02, 0.021],
+    metallic: 0.0,
+    roughness: 0.35,
+    keep_scan_metal: false,
+    tile: TILE,
+};
+
+/// Aluminium alloy, anodised or painted black: the MP-133's receiver. A
+/// satin black, a little lighter than bluing and with no blue in it, no
+/// metal showing; the scan's relief only.
+pub const ALLOY: SteelFinish = SteelFinish {
+    gain: None,
+    flat: [0.032, 0.032, 0.032],
+    metallic: 0.0,
+    roughness: 0.36,
     keep_scan_metal: false,
     tile: TILE,
 };
 
 /// Blackened steel, matt: butt plates and small fittings.
 pub const BLACK: SteelFinish = SteelFinish {
-    gain: Some([0.173, 0.173, 0.173]),
+    gain: Some([1.5, 1.5, 1.5]),
     flat: [0.0; 3],
     metallic: 1.0,
-    roughness: 1.0,
+    roughness: 1.6,
     keep_scan_metal: true,
     tile: 0.15,
 };

@@ -194,6 +194,7 @@ pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
     "Stamped",
+    "Alloy",
     "Wood",
     "Polymer",
     "Shell",
@@ -299,6 +300,7 @@ impl ModelMaterials {
             // (`gunsmith::finish`), the bench's too.
             "Blued" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLUED)),
             "Stamped" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::STAMPED)),
+            "Alloy" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::ALLOY)),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),

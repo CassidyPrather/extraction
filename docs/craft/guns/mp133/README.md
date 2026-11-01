@@ -62,11 +62,11 @@ scored here (weapon feel owns them).
 | Parts present | 2 | 2 | the action release is there; no bolt face to see in the port |
 | Parts move | 2 | 2 | forend, bars and bolt as one, the crossbolt, the trigger on its pin |
 | Controls | 2 | 2 | the crossbolt where it is |
-| Finish | 1 | 1 | the alloy receiver is in `Blued`; its black is anodising or paint |
+| Finish | 1 | 2 | the receiver and guard in their own `Alloy` (GUNSMITHING.md, "Finishes", fourth pass) |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 2 | 2 | МР-133 and 12x76 on the left |
-| **Total (of 30)** | **19** | **20** | |
+| **Total (of 30)** | **19** | **21** | |
 
 ## What's wrong, worst first
 
@@ -75,9 +75,9 @@ scored here (weapon feel owns them).
    Redrawn: the neck dips into a grip behind the guard where the
    layout's raked hold (0.35 rad) already closes, and the butt is 118 mm.
    The layout is unchanged (Hands agreed; their poses read it).
-2. **The receiver's finish**: it's alloy, anodised or painted black, not
-   blued steel. It wants its own finish (the `Stamped` lacquer is close),
-   tuned once the environment light lands.
+2. ~~**The receiver's finish**~~ was blued steel, where it's alloy,
+   anodised or painted black: it and the guard are in `Alloy` now, tuned
+   against the sky light.
 3. ~~**The trigger guard**~~ was 8 mm shallower than the photograph's:
    deepened.
 4. **No bolt face** to see through the ejection port with the action back.
