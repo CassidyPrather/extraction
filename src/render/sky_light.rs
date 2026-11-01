@@ -9,7 +9,9 @@
 //! - The horizon is the fog's colour, which is the sky dome's horizon and
 //!   follows the valley, the hour, the weather and the Surge.
 //! - The zenith is the dome's darker top ([`ZENITH`] of the horizon).
-//! - Below the horizon is the ground's bounce ([`GROUND`] of the ambient).
+//! - Below the horizon is far ground in the air (the horizon's colour),
+//!   giving way to the ground's bounce straight down ([`GROUND`] of the
+//!   ambient).
 //!
 //! A rough surface reads it blurred toward the half-sky its normal sees.
 //! Rough enough ([`ROUGH_FLAT`]: foliage, bark, plaster, most of a forest's
@@ -90,7 +92,10 @@ const XS_WALLS: f32 = {WALLS:.3};
 // dome's horizon as drawn, after the exposure).
 fn extraction_sky(d: vec3<f32>, horizon: vec3<f32>, ground: vec3<f32>) -> vec3<f32> {{
     let up = mix(horizon, horizon * XS_ZENITH, sqrt(clamp(d.y, 0.0, 1.0)));
-    return mix(ground, up, smoothstep(-0.12, 0.0, d.y));
+    // Just under the horizon is far ground, in the air: the horizon's
+    // colour; straight down, the ground at your feet.
+    let down = mix(horizon, ground, smoothstep(0.0, 0.5, -d.y));
+    return select(down, up, d.y >= 0.0);
 }}
 
 // What a surface's specular reflects: the sky along the reflection,
@@ -193,7 +198,8 @@ pub fn sky(d: Vec3, horizon: Vec3, ground: Vec3) -> Vec3 {
         t * t * (3.0 - 2.0 * t)
     };
     let up = horizon.lerp(horizon * Vec3::from(ZENITH), d.y.clamp(0.0, 1.0).sqrt());
-    ground.lerp(up, s(-0.12, 0.0, d.y))
+    let down = horizon.lerp(ground, s(0.0, 0.5, -d.y));
+    if d.y >= 0.0 { up } else { down }
 }
 
 #[cfg(test)]
