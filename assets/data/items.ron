@@ -142,7 +142,7 @@
             tags: ["metal", "wood"],
         ),
         (
-            id: "rpk74", dims: Some((0.106, 0.23, 1.15)),
+            id: "rpk74", dims: Some((0.106, 0.23, 1.08)),
             name: "RPK-74",
             description: "An AK with a long, heavy barrel and a folding bipod. Swing the legs down and set them on a wall, a sill or the ground, and it lies still. Takes AK magazines and its own forty-fives.",
             category: Firearm, size: Bulky, mass: 5.0, bulk: 8.0,
@@ -744,7 +744,7 @@
             category: Medical, size: Small, mass: 0.08, bulk: 0.1,
         ),
         (
-            id: "splint", dims: Some((0.06, 0.03, 0.45)), name: "Splint",
+            id: "splint", dims: Some((0.062, 0.018, 0.45)), name: "Splint",
             description: "Two slats and three straps. Bind it along a broken shin and you can walk on it.",
             category: Medical, size: Medium, mass: 0.35, bulk: 0.8,
             tags: ["wood"],
@@ -875,7 +875,7 @@
             tags: ["wood", "gun_part"],
         ),
         (
-            id: "stock_rpk74", dims: Some((0.046, 0.193, 0.29)), name: "RPK-74 stock",
+            id: "stock_rpk74", dims: Some((0.046, 0.193, 0.245)), name: "RPK-74 stock",
             description: "The RPK's club-footed butt, unscrewed.",
             category: Material, size: Medium, mass: 0.4, bulk: 0.8,
             tags: ["wood", "gun_part"],

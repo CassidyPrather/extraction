@@ -439,13 +439,33 @@ pub fn prefab_base(id: &str) -> &str {
         .unwrap_or(id)
 }
 
+/// Buildings with a plan of their own inside another's walls: the same
+/// footprint, doors and windows, so the map's rules take them as that
+/// one (`buildings` builds each its own rooms and furniture).
+pub const SHELLS: [(&str, &str); 3] = [
+    ("post_office", "house_brick"),
+    ("house_plank_b", "house_plank"),
+    ("house_plank_c", "house_plank"),
+];
+
+/// The prefab whose walls a placement stands in: a ruin's house, a
+/// variant's shell (any other id as it is). What footprints, doors and
+/// the lint go by; [`prefab_base`] still tells a ruin from its house.
+pub fn prefab_shell(id: &str) -> &str {
+    let base = prefab_base(id);
+    SHELLS
+        .iter()
+        .find(|(v, _)| *v == base)
+        .map_or(base, |(_, shell)| shell)
+}
+
 /// Walls a prefab builds out past its footprint, as centre and half
 /// extents (x, z) in the prefab's own frame, unrotated. They aren't
 /// footprint (the lint doesn't count them as standing anywhere), but the
 /// nav grid blocks them: nothing walks through a wall it can't see. The
 /// prefab's own tests check these agree with what it builds.
 pub fn prefab_walls(id: &str) -> &'static [([f32; 2], [f32; 2])] {
-    match prefab_base(id) {
+    match prefab_shell(id) {
         // The face stair's walls (world::dam::stair_wall): along the
         // stair and the landing's south side, and the landing's east side.
         "dam_face" => &[([79.0, 10.6], [66.5, 1.5]), ([144.0, 5.55], [1.5, 3.55])],
@@ -476,7 +496,7 @@ pub fn prefab_wheels(id: &str) -> Option<[[f32; 2]; 4]> {
 }
 
 pub fn prefab_footprint(id: &str) -> [f32; 3] {
-    let mut f = match prefab_base(id) {
+    let mut f = match prefab_shell(id) {
         "quarantine_gate" => [12.0, 7.0, 3.0],
         "guard_booth" => [2.6, 2.7, 2.6],
         "sawmill" => [24.0, 6.3, 12.0],
@@ -602,14 +622,14 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
             width: 2.0,
             clear: 3.6,
         }];
-        return match base {
+        return match prefab_shell(base) {
             "house_plank" => &PLANK,
             "farmhouse" | "house_brick" => &WIDE,
             "chapel" => &CHAPEL,
             _ => &[],
         };
     }
-    match prefab_base(id) {
+    match prefab_shell(id) {
         "house_plank" => &[Entrance {
             at: [0.0, -3.59],
             out: [0.0, -1.0],
@@ -868,7 +888,7 @@ pub fn prefab_entrances(id: &str) -> &'static [Entrance] {
 /// under it, less a margin, and still be footed. `qa` in the game checks
 /// this against the models.
 pub fn prefab_foundation(id: &str) -> f32 {
-    match prefab_base(id) {
+    match prefab_shell(id) {
         "house_plank" | "farmhouse" | "house_brick" | "cabin_log" | "shop" | "shed"
         | "mast_hut" | "guard_booth" | "pump_station" | "signal_box" | "chapel" => 1.5,
         "bus_depot" | "rail_shed" | "factory_hall" => 0.92,
@@ -1105,6 +1125,32 @@ mod tests {
     use super::*;
     use crate::terrain::Heightmap;
 
+    /// A building with a plan of its own in another's walls stands on
+    /// that one's footprint, doors and foundation, and counts as a
+    /// building you can go into; it isn't taken for a ruin of it.
+    #[test]
+    fn a_variant_stands_in_its_shell() {
+        for (variant, shell) in SHELLS {
+            assert_eq!(prefab_shell(variant), shell);
+            assert_eq!(prefab_base(variant), variant, "{variant} read as a ruin");
+            assert_eq!(prefab_footprint(variant), prefab_footprint(shell));
+            assert_eq!(prefab_entrances(variant), prefab_entrances(shell));
+            assert_eq!(prefab_foundation(variant), prefab_foundation(shell));
+            assert_eq!(prefab_walls(variant), prefab_walls(shell));
+            assert!(crate::progression::is_building(variant), "{variant}");
+            assert!(crate::map_lint::ENTERABLE.contains(&prefab_shell(variant)));
+            // Its ruins are its shell's.
+            for s in RUIN_STATES {
+                let ruin = format!("{variant}{s}");
+                assert_eq!(prefab_shell(&ruin), shell);
+                assert_eq!(
+                    prefab_entrances(&ruin),
+                    prefab_entrances(&format!("{shell}{s}"))
+                );
+            }
+        }
+    }
+
     /// A road's avalanche galleries read like its bridges, and a road
     /// written before galleries existed has none.
     #[test]
@@ -1189,13 +1235,13 @@ mod tests {
         assert_eq!(map.markers_of(&MarkerKind::Rendezvous).count(), 3);
         let hm = Heightmap::build(&map);
         assert!(
-            hm.water_level([40.0, 130.0]).is_some(),
+            hm.water_level([40.0, 103.7]).is_some(),
             "the beck under the bridge"
         );
-        assert!(hm.water_level([-42.0, 125.0]).is_none(), "the Row is dry");
+        assert!(hm.water_level([-30.5, 93.0]).is_none(), "the Row is dry");
         // It climbs: the pass is well above the gate.
-        let gate = hm.height([120.0, 270.0]);
-        let pass = hm.height([10.0, -250.0]);
+        let gate = hm.height([90.9, 202.4]);
+        let pass = hm.height([9.6, -190.0]);
         assert!(pass - gate > 15.0, "gate {gate:.1}, pass {pass:.1}");
         for m in map.markers.iter().filter(|m| {
             matches!(

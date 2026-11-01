@@ -27,8 +27,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import UP, Wear, board, bolt, prop, rod  # noqa: E402
-from common import Part, T, fillet  # noqa: E402
+from _kit import UP, Wear, board, bolt, lettering, prop, rod  # noqa: E402
+from common import RY, Part, T, fillet  # noqa: E402
 from crates import frame_battens, lid_boards, rope_handle, side_boards  # noqa: E402
 
 
@@ -216,8 +216,13 @@ def road_block():
         pts = [(x - 0.07, 1.19), (x - 0.06, 1.27), (x, 1.3), (x + 0.06, 1.27), (x + 0.07, 1.19)]
         for a_, b_ in zip(pts, pts[1:]):
             rod(p, (a_[0], a_[1], 0.0), (b_[0], b_[1], 0.0), 0.012, "Rusty", segs=6)
-    p.box((0.32, 0.12, 0.004), (0.25, 0.75, -0.702), "Cream")
-    p.box((0.18, 0.08, 0.004), (0.3, 0.58, -0.702), "Cream")
+    # Its type and mark stencilled on its face (-Z): the block's code and
+    # its size, as precast blocks were (two blank plates read as
+    # placeholders).
+    # In a dark matte paint: the concrete scan is pale, and cream on it
+    # hardly showed (the game's "Black" is a grey).
+    lettering(p, "ФБС", 0.12, "Char", T(0.2, 0.78, -0.7) @ RY(math.pi))
+    lettering(p, "24.3.6", 0.07, "Char", T(0.2, 0.6, -0.7) @ RY(math.pi))
     return [p]
 
 

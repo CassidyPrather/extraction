@@ -167,3 +167,11 @@ back hooks it, the fist along a pistol's slide. Before, a hand on a
 handle was drawn at its controller, turned however the hand happened to
 be, a few centimetres off the knob. (The gallery's fifth `fp` field,
 TILT, tips a gun to show it from below.)
+`30_nagant_grip.jpg` (`fp:nagant,2.2,90,1`; below `fp:nagant,3.0,90,0` and
+`,1`): top, the Nagant's new grip model held at the old grip point (left:
+the fist closes on the air ahead of the grip) and at the new one (right,
+Gunsmith 29287b4: the fist on the grip). Below, the index released (along
+the frame, off the trigger) and pulled: `gun_index_curl` reaches the blade,
+but at 116 mm ahead of the hand (the other guns' 63-89 mm) only with a
+near-straight finger (curl 0.17; theirs 0.35-0.77), its tip hidden behind
+the blade from this side.

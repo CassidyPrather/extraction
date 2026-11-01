@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from _kit import ALONG_X, UP, centred, cube, item, ring, text, transform, tube_path, wanted
+from _kit import ALONG_X, LIFT, UP, centred, cube, item, ring, text, transform, tube_path, wanted
 from common import Part, RX, RY, RZ, T, S, fillet, section_rect
 
 
@@ -120,7 +120,8 @@ def spare_parts():
     lid = fillet([(-0.0265, -0.0205), (0.0265, -0.0205), (0.0265, 0.0205), (-0.0265, 0.0205)],
                  0.0055, 2)
     p.prism(lid, yb + 0.014, yb + 0.02, "Blued", axis="y", bevel=0.0015, segs=1)
-    p.box((0.03, 0.0005, 0.018), (0.0, yb + 0.0203, 0.0), "Paper")
+    # The label on the lid, LIFT thick from its face.
+    p.box((0.03, LIFT, 0.018), (0.0, yb + 0.02 + LIFT / 2, 0.0), "Paper")
     # Coiled spring lying across the lid.
     # On the lid (its end coils stood 0.7 mm off it, 1.5 mm drawn).
     ys = yb + 0.0247
@@ -227,8 +228,12 @@ def splint():
     for x in (-0.021, 0.021):
         p.box((0.017, 0.011, L), (x, y + 0.0055, 0.0), "Wood", bevel=0.002, segs=1)
     for z in (-0.16, 0.0, 0.16):
-        p.box((0.062, 0.015, 0.026), (0.0, y + 0.0075, z), "Olive", bevel=0.0012, segs=1)
-        p.box((0.014, 0.004, 0.02), (0.0, y + 0.0165, z), "Steel", bevel=0.0008, segs=1)
+        # The strap round both slats, LIFT proud of them all round (its
+        # underside lay in the slats' undersides' plane).
+        p.box((0.062, 0.011 + 2 * LIFT, 0.026), (0.0, y + 0.0055, z), "Olive", bevel=0.0012,
+              segs=1)
+        p.box((0.014, 0.004, 0.02), (0.0, y + 0.011 + LIFT + 0.0015, z), "Steel", bevel=0.0008,
+              segs=1)
     return centred([p])
 
 
