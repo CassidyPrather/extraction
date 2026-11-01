@@ -1087,6 +1087,22 @@ pub(super) fn direct_raid(
         |x: f32, z: f32| truck.map_or(here, |t| t.transform_point(Vec3::new(x, 0.0, z)).xz());
     let mut tasks: Vec<Task> = Vec::new();
     match state.leg {
+        // Resumed out in the valley ("Back where you were": the last stage
+        // ended mid-raid): not at the camp, and no kit in the crate. Home
+        // from here (it went to the crate for a radio that was out there
+        // with it, and told no one).
+        Leg::Camp if !matches!(raid.phase, Phase::AtBase | Phase::Down { .. }) => {
+            state.note(
+                now,
+                Kind::Learned,
+                "back where it was out there: home from here",
+            );
+            state.leg = match raid.phase {
+                Phase::TruckWaiting { .. } => Leg::Rendezvous,
+                Phase::TruckCalled { .. } => Leg::Rendezvous,
+                _ => Leg::Call,
+            };
+        }
         Leg::Camp => {
             if p.reads {
                 tasks.push(Task::Wait(4.0));
@@ -3263,7 +3279,13 @@ mod indoor_tests {
         assert!(road <= STEEP_RUN, "the way from the drop: {road} m steep");
         // Straight over the bank (as the grid's way went), it's rounded:
         // no stretch of the way left steep.
-        let (a, b) = (Vec2::new(-36.47, -41.82), Vec2::new(-45.56, -53.54));
+        // (On past the bank, to ground a body stands on: the leg's own end
+        // was at its foot.)
+        let a = Vec2::new(-36.47, -41.82);
+        let b = (1..=12)
+            .map(|k| a + (Vec2::new(-45.56, -53.54) - a) * (1.5 + k as f32 * 0.25))
+            .find(|q| zone.hm.slope_deg(q.to_array()) < 20.0)
+            .expect("flat ground past the bank");
         assert!(steep_run(zone, a, b) > STEEP_RUN, "the bank's on that line");
         let mut at = a;
         for p in round_banks(zone, a, b, 3) {
