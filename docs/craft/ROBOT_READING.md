@@ -49,6 +49,11 @@ In the game, with the game's own light and weather:
   the machine when it's looking at you.
 - **Harmless reads as broken, not as dark**: a dead part should change
   shape (a gun that droops, a leg that drags), not only go dark.
+- **Marks and the eye tell the truth, not comfort**: a weak-point mark
+  means "shoot here" and stays lit while the part's there (a 5% leg is
+  still the best target); the eye reports awareness (a disarmed walker
+  still sees you and calls the others). So "harmless" is carried by the
+  dead part itself (Robot bodies' rule).
 
 ## 4. Reviews
 
@@ -80,5 +85,5 @@ at 5%), 5, 15 and 30 m.
   fog past 15 m.
 - **The failing leg looks whole** standing: its knee mark still lit, and
   the limp shows only in motion.
-- **Its eye stays lit and faces you**: everything a newcomer reads as
-  "dangerous" is still there.
+- **Its eye stays lit and faces you**, rightly (it still sees you): so
+  the dead gun has to say "harmless" on its own, and today it doesn't.
