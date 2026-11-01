@@ -139,6 +139,128 @@ mod tests {
         );
     }
 
+    /// What a settled valley's loose items are doing: how many dynamic
+    /// items, how many still awake (anywhere, and within 15 m of where the
+    /// truck drops you), the awake by kind, and the worst creeps (mm a
+    /// frame over 30 frames, by name).
+    fn awake_items(
+        map: &str,
+    ) -> (
+        usize,
+        usize,
+        usize,
+        Vec<(String, usize)>,
+        Vec<(f32, String)>,
+    ) {
+        use avian3d::prelude::*;
+        let _counting = crate::render::budget::tests::counted();
+        let mut app = crate::render::budget::tests::client_threads(map, "clearing", None);
+        crate::render::budget::tests::settle(&mut app);
+        for _ in 0..120 {
+            app.update();
+        }
+        let drop = {
+            let zone = app.world().resource::<crate::world::Zone>();
+            zone.map
+                .markers_of(&extraction_core::map::MarkerKind::Insertion)
+                .next()
+                .map(|m| Vec2::from(m.at))
+        };
+        let positions = |w: &mut World| -> Vec<(Entity, Vec3)> {
+            w.query_filtered::<(Entity, &GlobalTransform, &RigidBody), With<crate::items::Item>>()
+                .iter(w)
+                .filter(|(_, _, b)| b.is_dynamic())
+                .map(|(e, g, _)| (e, g.translation()))
+                .collect()
+        };
+        let before = positions(app.world_mut());
+        for _ in 0..30 {
+            app.update();
+        }
+        let w = app.world_mut();
+        let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut creep = Vec::new();
+        let (mut awake, mut awake_at_drop) = (0, 0);
+        for (e, was) in &before {
+            let Some(g) = w.get::<GlobalTransform>(*e) else {
+                continue;
+            };
+            let now = g.translation();
+            let name = w.get::<Name>(*e).map_or("?".into(), |n| n.to_string());
+            let mm = (now - *was).length() * 1000.0 / 30.0;
+            if w.get::<Sleeping>(*e).is_none() {
+                awake += 1;
+                if drop.is_some_and(|d| now.xz().distance(d) < 15.0) {
+                    awake_at_drop += 1;
+                }
+                *kinds.entry(name.clone()).or_default() += 1;
+                creep.push((mm, name));
+            }
+        }
+        let mut kinds: Vec<(String, usize)> = kinds.into_iter().collect();
+        kinds.sort_by(|a, b| b.1.cmp(&a.1));
+        creep.sort_by(|a, b| b.0.total_cmp(&a.0));
+        (before.len(), awake, awake_at_drop, kinds, creep)
+    }
+
+    /// Of a settled valley's dynamic items, at most this share awake: a
+    /// settled item should be asleep (`soak::census`).
+    const AWAKE_SHARE: f32 = 0.02;
+
+    /// Every valley and the yard, settled: loose items asleep, at the
+    /// drop and across the valley. Awake items keep the physics step
+    /// solving their contacts every frame, and nothing that builds on
+    /// rest (a merge, a cheaper tick) can. First measure (2026-11-01):
+    /// 7-12 awake a valley (2-3%), 4-7 of them within 15 m of the drop,
+    /// creeping up to 0.04 mm a frame, a Featherstone in every one; the
+    /// yard 17 of 30, most not moving at all.
+    #[test]
+    #[ignore = "known failing (2026-11-01): stacked items never sleep; Hands un-ignores it with the fix. \
+                cargo test --lib gauge_items_fall_asleep -- --ignored --nocapture"]
+    fn gauge_items_fall_asleep() {
+        let mut over = Vec::new();
+        let maps = extraction_core::map::VALLEYS
+            .iter()
+            .map(|v| v.0)
+            .chain([crate::camp::TRAINING_YARD]);
+        for map in maps {
+            let (n, awake, at_drop, kinds, creep) = awake_items(map);
+            let share = awake as f32 / n.max(1) as f32;
+            println!(
+                "{map}: {awake} of {n} dynamic items awake ({:.0}%), {at_drop} within 15 m of the drop",
+                share * 100.0
+            );
+            let top = |v: &[(String, usize)]| {
+                v.iter()
+                    .take(8)
+                    .map(|(k, c)| format!("{k} {c}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            println!("    awake by kind: {}", top(&kinds));
+            println!(
+                "    worst creep (mm a frame): {}",
+                creep
+                    .iter()
+                    .take(8)
+                    .map(|(mm, k)| format!("{k} {mm:.3}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            if share > AWAKE_SHARE || at_drop > 0 {
+                over.push(format!(
+                    "{map}: {awake} of {n} awake ({:.0}%), {at_drop} at the drop",
+                    share * 100.0
+                ));
+            }
+        }
+        assert!(
+            over.is_empty(),
+            "items still awake once settled:\n{}",
+            over.join("\n")
+        );
+    }
+
     /// The ceiling for `headless_ticks_hold_their_floor`.
     const HEADLESS_TICK_UNITS: f64 = 60.0;
 

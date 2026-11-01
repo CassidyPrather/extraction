@@ -321,6 +321,31 @@ largest side). The valley's far loot (1,400 item meshes past 100 m)
 isn't drawn already, so it saved 6-8 draws in clear weather and none in
 drizzle.
 
+### Items at rest, asleep
+
+Tried and left (2026-11-01): merging resting items per material in 8 m
+cells, as `part_rest` does for breakables. Items share few materials (a
+gun model's own, a box's kind), so Cinder Works' merged cells drew 672
+meshes for 914: 26% fewer, and nothing measurable at the drop.
+
+What it found instead: some items never sleep. `perf::tests::
+gauge_items_fall_asleep` settles each valley and the yard, then counts
+the dynamic items still awake, across the valley and within 15 m of
+the drop, with the worst by kind and by creep a frame. It's ignored as
+known failing until the physics fix (Hands'):
+
+| | dynamic items | awake | at the drop | worst creep |
+| - | - | - | - | - |
+| Marrow Creek | 437 | 8 (2%) | 5 | 0.011 mm/frame |
+| Kettle Pass | 378 | 8 (2%) | 4 | 0.044 |
+| Cinder Works | 351 | 7 (2%) | 5 | 0.011 |
+| Sallow Reservoir | 319 | 10 (3%) | 7 | 0.009 |
+| Rime Fell | 420 | 12 (3%) | 5 | 0.017 |
+| the yard | 30 | 17 (57%) | 0 | 0.017; most 0.000 |
+
+A Featherstone is awake in every valley; the yard's awake items mostly
+don't move at all.
+
 ## CPU: a busy raid moment
 
 `render::cpu` splits every frame by schedule (marker schedules between
