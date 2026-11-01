@@ -580,11 +580,11 @@ fn ppsh() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
         support: Some(Vec3::new(0.0, 0.03, -0.3)),
-        muzzle: Vec3::new(0.0, bore, -0.52),
+        muzzle: Vec3::new(0.0, bore, -0.5143),
         port: Vec3::new(0.004, 0.062, -0.16),
         eject: Vec3::new(0.9, 0.7, 0.1),
         sight: at(0.0, 0.08, 0.0),
-        magwell: Some(Transform::from_xyz(0.0, 0.03, -0.152)),
+        magwell: Some(Transform::from_xyz(0.0, 0.03, -0.187)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
             grab: Vec3::new(0.04, 0.046, -0.115),
@@ -593,8 +593,8 @@ fn ppsh() -> GunLayout {
         load_port: Vec3::new(0.004, 0.062, -0.16),
         hinge: Vec3::ZERO,
         parts: vec![
-            // Stock from the well to the butt.
-            part(bx(0.04, 0.04, 0.2), at(0.0, 0.015, -0.1), Wood, Static),
+            // Stock from behind the well to the butt.
+            part(bx(0.04, 0.04, 0.13), at(0.0, 0.015, -0.065), Wood, Static),
             part(
                 bx(0.04, 0.115, 0.27),
                 Transform::from_xyz(0.0, -0.04, 0.18).with_rotation(Quat::from_rotation_x(0.1)),
@@ -602,10 +602,10 @@ fn ppsh() -> GunLayout {
                 Static,
             ),
             // Receiver and the perforated jacket.
-            part(bx(0.033, 0.04, 0.21), at(0.0, 0.05, -0.094), Blued, Static),
+            part(bx(0.033, 0.06, 0.244), at(0.0, 0.04, -0.11), Blued, Static),
             part(
-                Shape::Cylinder(0.0175, 0.34),
-                at(0.0, bore, -0.375),
+                Shape::Cylinder(0.0175, 0.288),
+                at(0.0, bore, -0.370),
                 Blued,
                 Static,
             ),
