@@ -37,6 +37,14 @@ pub const SHOVE_PUSH: f32 = 2.5;
 /// ...and again after this long (s).
 pub const SHOVE_COOLDOWN: f32 = 3.0;
 
+/// Someone's middle is at least this far from a walker of `size` whose
+/// feet don't touch them (m): its feet's reach, and a body's width. It
+/// stops there to shove ([`SHOVE_RANGE`] is how far its shove reaches past
+/// that).
+pub fn clear_of_you(size: f32) -> f32 {
+    super::anim::FOOT_RADIUS * size + 0.3
+}
+
 /// A broken walker shoved someone (for Lev's line and the first-fight
 /// check).
 #[derive(Message, Clone, Copy, Debug)]
@@ -490,6 +498,64 @@ mod tests {
             "{lost} hp lost to {} shoves",
             seen.shoves
         );
+    }
+
+    /// Up to someone crouched where it can reach them (keeping low, as
+    /// the driver says), it stops with its body clear of them and shoves
+    /// from there: never on top of them, so never pressing them down
+    /// through the ground (a crouched newcomer it limped up to sank under
+    /// the field and fell: first_fight_broken, one-handed, 1 November).
+    #[test]
+    fn it_never_stands_on_someone_crouched() {
+        let mut vr = crate::vr_harness::Vr::new(extraction_core::map::TEST_FIELD_ID);
+        vr.app
+            .init_resource::<Seen>()
+            .add_systems(PostUpdate, count);
+        let zone = vr.app.world().resource::<Zone>().clone();
+        let me = zone.on_ground(40.0, 255.0);
+        vr.stand(me, 0.0);
+        vr.head(Vec3::new(0.0, 0.9, 0.0));
+        vr.step(10);
+        let at = zone.on_ground(me.x + 9.0, me.z);
+        let robot = vr
+            .app
+            .world_mut()
+            .run_system_once(move |mut c: Commands, zone: Res<Zone>| {
+                spawn_broken_walker(&mut c, &zone, at, at + Vec3::Z * 300.0)
+            })
+            .unwrap();
+        let (mut closest, mut sank) = (f32::MAX, f32::MIN);
+        for _ in 0..90 * 40 {
+            vr.head(Vec3::new(0.0, 0.9, 0.0));
+            let mut h = vr
+                .app
+                .world_mut()
+                .get_mut::<crate::health::Health>(vr.player)
+                .unwrap();
+            h.hp = h.max;
+            h.down = false;
+            vr.step(1);
+            let r = vr
+                .app
+                .world()
+                .get::<GlobalTransform>(robot)
+                .unwrap()
+                .translation();
+            let feet = vr.feet();
+            closest = closest.min(r.xz().distance(feet.xz()));
+            sank = sank.max(zone.ground(feet.x, feet.z) - feet.y);
+        }
+        let seen = vr.app.world().resource::<Seen>();
+        assert!(
+            seen.shoves > 0,
+            "it never shoved: {closest:.2} m at closest"
+        );
+        assert!(
+            closest >= clear_of_you(1.0) - 0.05,
+            "on top of you: {closest:.2} m from its middle (its feet reach {:.2})",
+            super::super::anim::FOOT_RADIUS
+        );
+        assert!(sank < 0.3, "pressed {sank:.2} m under the ground");
     }
 
     /// A newcomer kills it: the reckless one, on its first raid, meets it
