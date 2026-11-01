@@ -64,7 +64,8 @@ the dust cover and the trigger, slowly, with a pause at each end. `-` and
 | `exploded_1m` | every moving part pulled clear: is each a part, and is it the right part |
 | `bolt_back_30cm`, `safety_fire_30cm`, `mag_release_30cm`, `cover_off_30cm`, `trigger_pulled_30cm` | each motion at its end |
 
-Close shots aim at the action over the grip; far ones at the whole gun.
+Close shots aim at the action over the grip; far ones at the whole gun,
+backing off as far as a long gun needs to fit the frame.
 `--screenshot FILE --view V --dist D --focus x,y,z` takes any other. Keep
 before and after shots from the same command so they compare.
 
@@ -147,7 +148,8 @@ the real length and registers it on the butt (or the muzzle) and the
 bore. Before trusting the photograph, check one part of known size in it
 (the AK's brake is 24-25 mm across). The photograph is for measuring; it
 goes in the repo only if it's public domain or CC0, credited in the
-review.
+review. `--hide NODE` leaves a top-level node out (the Mosin's bayonet,
+when the photograph has it off).
 
 ### 4. Surface
 
