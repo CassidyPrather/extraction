@@ -96,26 +96,23 @@ scored here (weapon feel owns them).
 | Parts present | 2 | 2 | no red dot under the safety; the slide stop's shape is a plain tab |
 | Parts move | 2 | 2 | the heel catch is its own part, the trigger turns on its pin; the guard can't swing down |
 | Controls | 2 | 2 | |
-| Finish | 2 | 2 | as the AK's: the gun-metal scan reads as a casting at 30 cm |
+| Finish | 2 | 3 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): the slide blue-black, its arch graded by the sky, no grain at 30 cm |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 1 | 2 | serial and year on the left of the slide; the star moved low, where it is |
-| **Total (of 30)** | **16** | **22** | |
+| **Total (of 30)** | **16** | **23** | |
 
 ## What's still wrong, worst first
 
-1. **The finish** at 30 cm: near-black, so the slide's arch and the
-   grip's rounds hardly show in the game's light. It waits for the
-   environment light (GUNSMITHING.md, "Finishes").
-2. **The frame's lower edge** before the guard sits about 5 mm low, and
+1. **The frame's lower edge** before the guard sits about 5 mm low, and
    the **hammer's spur** stands up more than the real one's.
-3. **The width** counts the safety lever and lanyard ring: 34 mm against
+2. **The width** counts the safety lever and lanyard ring: 34 mm against
    29.4; the grip panels may be a millimetre thick a side.
-4. **The frame's front strap and trigger guard** are square-edged steel
+3. **The frame's front strap and trigger guard** are square-edged steel
    under rounded bakelite.
-5. **The trigger guard can't swing down**, so the gun can't be stripped
+4. **The trigger guard can't swing down**, so the gun can't be stripped
    as the real one is. It's welded into `static_frame`.
-6. **No red dot** on the frame under the safety, which shows when it's
+5. **No red dot** on the frame under the safety, which shows when it's
    off safe: the one thing the eye checks on a PM.
 
 ## What changed

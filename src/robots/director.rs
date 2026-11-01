@@ -360,7 +360,12 @@ fn run_director(
             .as_ref()
             .and_then(|p| super::broken::second_job_meet(&zone, &p.0))
         {
-            info!("director: broken walker on the second job's way, at {at:?}");
+            // (The Verifier's release check reads this line.)
+            let job = progression.as_ref().map_or(0, |p| p.0.done + 1);
+            info!(
+                "broken walker placed at ({:.1}, {:.1}) for job {job}",
+                at.x, at.z
+            );
             super::broken::spawn_broken_walker(&mut commands, &zone, at, exit);
             director.quiet = super::broken::QUIET_MAX;
         }

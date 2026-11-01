@@ -4,6 +4,7 @@
 pub mod impacts;
 pub mod loot;
 pub mod lost;
+pub mod rest;
 pub mod usage;
 
 use avian3d::prelude::*;
@@ -51,6 +52,7 @@ impl Plugin for ItemsPlugin {
             usage::UsagePlugin,
             impacts::ImpactPlugin,
             lost::LostItemsPlugin,
+            rest::RestPlugin,
         ));
     }
 }

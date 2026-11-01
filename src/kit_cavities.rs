@@ -82,7 +82,8 @@ pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
     ("pm_pistol", Vec3::new(0.0, 0.020, -0.039)),
     // Its curve sweeps forward of its top (docs/craft/guns/ak74).
     ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
-    ("nagant", Vec3::new(0.0, -0.004, -0.061)),
+    // Its grip is short and set back now (docs/craft/guns/nagant).
+    ("nagant", Vec3::new(0.0, 0.015, -0.060)),
     ("flare_pistol", Vec3::new(0.0, 0.0, -0.074)),
     ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
     ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
