@@ -79,7 +79,7 @@ pub fn cavity(slot: SlotKind) -> Option<Cavity> {
 /// Everything else is centred on its origin. `capture::stowed` holds this
 /// to the models.
 pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
-    ("pm_pistol", Vec3::new(0.0, 0.015, -0.039)),
+    ("pm_pistol", Vec3::new(0.0, 0.020, -0.039)),
     // Its curve sweeps forward of its top (docs/craft/guns/ak74).
     ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
     ("nagant", Vec3::new(0.0, -0.004, -0.061)),
