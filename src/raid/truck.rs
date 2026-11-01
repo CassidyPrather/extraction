@@ -659,6 +659,17 @@ fn drive_truck(
     }
 }
 
+/// The truck and its rear steps, truck space, a little over: a hold in
+/// here is a hold on the truck (`park_truck`).
+const HOLD_MIN: Vec3 = Vec3::new(-1.6, -0.5, -5.4);
+const HOLD_MAX: Vec3 = Vec3::new(1.6, 3.6, 3.6);
+
+/// Yaw, radians, of a rotation's forward on the level.
+fn heading(r: Quat) -> f32 {
+    let f = r * Vec3::NEG_Z;
+    (-f.x).atan2(-f.z)
+}
+
 /// Where the truck last stood still (`park_truck`).
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Parked(pub Transform);
@@ -667,7 +678,8 @@ pub struct Parked(pub Transform);
 /// Parked kinematic, every body touching it shared one contact island, so
 /// the hands (never still) kept whatever lay in the bed awake for good.
 /// When it moves, whatever lies loose in the bed goes with it, the same
-/// turn and shift, so none of it hangs where the truck was.
+/// turn and shift, so none of it hangs where the truck was; so does
+/// whoever's standing in the bed, and a hand holding on to it lets go.
 #[allow(clippy::type_complexity)]
 fn park_truck(
     mut commands: Commands,
@@ -687,6 +699,11 @@ fn park_truck(
             Without<RigidBodyDisabled>,
         ),
     >,
+    mut riders: Query<
+        (&mut Transform, &crate::rig::RigInput, &mut Body),
+        (With<Player>, Without<Truck>, Without<crate::items::Item>),
+    >,
+    holds: Query<(Entity, &crate::interact::hand_climb::HandHold)>,
 ) {
     for (e, truck, t, mut parked, body) in &mut trucks {
         if *t == parked.0 {
@@ -709,6 +726,31 @@ fn park_truck(
             }
             if let Some(mut w) = w {
                 w.0 = Vec3::ZERO;
+            }
+        }
+        // Whoever stands in the bed rides: their feet go where the bed
+        // goes, the room turned only by the truck's turn (never tilted
+        // with it).
+        let turn = heading(t.rotation) - heading(parked.0.rotation);
+        for (mut root, input, mut body) in &mut riders {
+            let feet = crate::player::standing_at(&GlobalTransform::from(*root), input);
+            if !truck.in_bed(&was, feet + Vec3::Y * 0.1) {
+                continue;
+            }
+            let to = moved.transform_point3(feet);
+            root.rotate_y(turn);
+            let now = crate::player::standing_at(&GlobalTransform::from(*root), input);
+            root.translation += to - now;
+            body.velocity = Vec3::ZERO;
+        }
+        // And a hand holding on to it (its ladder, its tailgate, a side)
+        // lets go: the hold is where the truck was.
+        for (hand, hold) in &holds {
+            let l = was.affine().inverse().transform_point3(hold.at);
+            if l.cmpge(HOLD_MIN).all() && l.cmple(HOLD_MAX).all() {
+                commands
+                    .entity(hand)
+                    .remove::<crate::interact::hand_climb::HandHold>();
             }
         }
         if !body.is_kinematic() {

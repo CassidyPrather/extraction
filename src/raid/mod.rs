@@ -372,6 +372,8 @@ pub(crate) fn tick_raid(
         With<LocalPlayer>,
     >,
     spatial: avian3d::prelude::SpatialQuery,
+    aboard: Query<(&GlobalTransform, &crate::rig::RigInput), With<Player>>,
+    trucks: Query<(&GlobalTransform, &truck::Truck)>,
 ) {
     let dt = time.delta_secs();
     for l in &mut raid.log {
@@ -418,7 +420,18 @@ pub(crate) fn tick_raid(
         }
         Phase::TruckWaiting { rv, left } => {
             let left = left - dt;
-            if left <= 0.0 {
+            // Someone in the back: it doesn't leave them, it takes them
+            // (as the bell would).
+            let in_bed = aboard.iter().any(|(p, input)| {
+                let at = crate::player::standing_at(p, input) + Vec3::Y * 0.1;
+                trucks.iter().any(|(t, truck)| truck.in_bed(t, at))
+            });
+            if left <= 0.0 && in_bed {
+                raid.extractions += 1;
+                let n = raid.extractions;
+                raid.say(lines::pick(lines::PULLING_OUT, n));
+                raid.phase = Phase::Extracting { left: 4.0 };
+            } else if left <= 0.0 {
                 let n = raid.clock as u32;
                 raid.say(lines::pick(lines::GAVE_UP, n));
                 raid.phase = Phase::Out;
