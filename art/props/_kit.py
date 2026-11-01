@@ -26,6 +26,26 @@ UP = RX(-math.pi / 2)       # lathe/cyl axis (Z) -> +Y
 ALONG_X = RY(math.pi / 2)   # lathe/cyl axis (Z) -> +X
 
 
+# The items' stencil lettering (`art/items/_kit.py`), for a prop's painted
+# marks: a blank pale plate where a stencil should be reads as a
+# placeholder (docs/craft/PROP_READING.md).
+_items_kit = None
+
+
+def lettering(p, s, h, mat, xf, depth=0.002, align="centre"):
+    """Stencil letters `h` high painted on a face: drawn in XY facing +Z,
+    then placed by `xf` (`items_kit.text`)."""
+    global _items_kit
+    if _items_kit is None:
+        import importlib.util
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location(
+            "items_kit_lettering", os.path.join(here, "..", "items", "_kit.py"))
+        _items_kit = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_items_kit)
+    _items_kit.text(p, s, h, mat, xf, depth=depth, align=align)
+
+
 def prop(name, build):
     """Build one prop in a fresh scene and write its .glb. `build` returns
     the Parts to make."""

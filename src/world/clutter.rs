@@ -143,14 +143,31 @@ fn ledges(prefab: &str) -> Vec<Ledge> {
 }
 
 fn slots(w: f32, d: f32, prefab: &str) -> Slots {
+    use super::buildings::{HousePlan, house_layout};
     let f = 0.5;
     // The floorboards' top (`Builder::plinth`'s 3 cm floor): what stands
     // on the floor stood 3 cm into it (`capture::footing`).
     let floor = f + 0.03;
-    let (x, z) = (w * 0.5, d * 0.5);
+    let z = d * 0.5;
     let pz = z - d * 0.42;
-    let table = Vec3::new(-x * 0.4, f + 0.785, -z * 0.2);
-    let shelf = Vec3::new(x - 0.3, f, -z * 0.75);
+    // The furniture where the house's plan stood it (a ruin's is the
+    // common plan).
+    let plan = HousePlan::of(prefab);
+    let l = house_layout(plan, w, d);
+    // The table's top, or the post office's counter's (`Builder::counter`
+    // 0.9 high; its loot at 0.95), its two ends along it.
+    let (table, along) = {
+        let (at, yaw) = l.table;
+        let along = Quat::from_rotation_y(yaw) * Vec3::X;
+        if plan == HousePlan::PostOffice {
+            (at + Vec3::Y * 0.92, along * 2.2)
+        } else {
+            (at + Vec3::Y * 0.785, along)
+        }
+    };
+    let shelf = l.shelf.0;
+    // The counter's far end from its middle (the back wall's way).
+    let counter_end = l.counter.0 + Vec3::new(0.0, 0.9, -0.6);
     let sills = ledges(prefab);
     let mut front: Vec<Ledge> = sills
         .iter()
@@ -160,13 +177,10 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
     front.sort_by(|a, b| a.at.x.total_cmp(&b.at.x));
     let front = [front[0], front[front.len() - 1]];
     Slots {
-        table: [table - Vec3::X * 0.4, table + Vec3::X * 0.42],
+        table: [table - along * 0.4, table + along * 0.42],
         shelf: [shelf + Vec3::Y * 0.315, shelf + Vec3::Y * 1.665],
-        kitchen: [
-            Vec3::new(-x + 0.6, f + 0.315, z - 0.3),
-            Vec3::new(-x + 0.4, f + 0.9, z - 1.4 - 0.6),
-        ],
-        bed: Vec3::new(x - 0.6, f + 0.56, z - 1.4),
+        kitchen: [l.kitchen_shelf + Vec3::Y * 0.315, counter_end],
+        bed: l.bed + Vec3::new(0.0, 0.56, -0.2),
         door_floor: [
             Vec3::new(-0.95, floor, -z + 0.45),
             Vec3::new(0.95, floor, -z + 0.45),
@@ -175,7 +189,7 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
             Vec3::new(-1.1, f + 1.7, -z + 0.09),
             Vec3::new(1.1, f + 1.7, -z + 0.09),
         ],
-        room_floor: Vec3::new(x * 0.25, floor, -z * 0.45),
+        room_floor: l.room_floor,
         partition: Vec3::new(0.0, f + 1.05, pz - 0.05),
         sills,
         front,
@@ -354,6 +368,31 @@ pub fn dress(
                 }
             }
         }
+    }
+    // A farm's kitchen-living room (`buildings::HousePlan::Farm`): the
+    // corner by the stove where the boots dry and the wood waits, the
+    // churn by the door, the flour in the pantry.
+    if ruin.is_none()
+        && super::buildings::HousePlan::of(prefab) == super::buildings::HousePlan::Farm
+    {
+        let l = super::buildings::house_layout(super::buildings::HousePlan::Farm, w, d);
+        let (stove, f) = (l.stove.0, l.room_floor.y);
+        out.push(on(
+            "firewood_basket",
+            Vec3::new(stove.x + 0.75, f, stove.z),
+            0.3,
+        ));
+        out.push(on(
+            "felt_boots",
+            Vec3::new(stove.x + 0.15, f, stove.z - 0.75),
+            0.2,
+        ));
+        out.push(on(
+            "milk_churn",
+            s.door_floor[1] + Vec3::new(0.35, 0.0, 0.0),
+            0.0,
+        ));
+        out.push(on("flour_sacks", Vec3::new(-w * 0.25 + 1.3, f, 1.3), 0.4));
     }
     // Who lived here (`Resident`), in a whole house Story hasn't written
     // about: a few of their things where the valley's leave room.
