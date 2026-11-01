@@ -409,6 +409,28 @@ pub const SURVEY_SIGHT: f32 = 90.0;
 /// ...has something to wait behind this near where the truck stops: a
 /// roof, or solid cover (anything 1.2 m tall but a garden fence).
 pub const WAIT_COVER: f32 = 15.0;
+/// Coming home: how far out from a rendezvous its ways in are judged (m)...
+pub const RV_APPROACH: f32 = 150.0;
+/// ...cover counts within a dash of the way (m, about 2.5 s at a run)...
+pub const DASH: f32 = 12.0;
+/// ...a place goes home to a rendezvous at most this much further off than
+/// its nearest...
+pub const HOME_SLACK: f32 = 1.3;
+/// ...a survey drone keeps this far off the rendezvous
+/// (`robots::director::SURVEY_CLEAR`)...
+pub const SURVEY_CLEAR: f32 = 80.0;
+/// ...and a walker standing at its work site watches this far, over the
+/// land, for something this tall.
+pub const WALKER_WATCH: f32 = 60.0;
+/// On a way in, no longer than this with nothing a dash off (m, about five
+/// seconds at a run)...
+pub const RV_OPEN: f32 = 24.0;
+/// ...and a second way in besides the busiest, parting from it before this
+/// far out from where the truck stops (m)...
+pub const RV_MEET: f32 = 20.0;
+/// ...and at most this much longer.
+pub const RV_DETOUR: f32 = 1.5;
+pub const FIGURE_TALL: f32 = 1.75;
 pub const WAIT_HEIGHT: f32 = 1.2;
 /// How far off a shelter's wall its lee is, metres.
 pub const WAIT_LEE: f32 = 0.8;
@@ -2084,6 +2106,183 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                         ),
                         *last.last().unwrap_or(&at),
                     );
+                }
+            }
+            // Coming home: the last RV_APPROACH m into each rendezvous from
+            // every place whose way home it is, the lines they make, the
+            // longest run with no cover a dash away, and how much of it
+            // something's watching (a spotter; a survey drone's circle out
+            // of the trees; a walker standing at its work site).
+            let dash = |p: P2| {
+                rects.iter().any(|(_, rc)| rc.sdf(p) <= DASH)
+                    || boulders.count_within(p, DASH, 1) > 0
+                    || tree_b.count_within(p, DASH, STAND) >= STAND
+            };
+            let under_trees = |p: P2| tree_b.count_within(p, 4.0, 2) >= 2;
+            let homes: Vec<P2> = map
+                .markers_of(&MarkerKind::Rendezvous)
+                .map(|m| m.at)
+                .collect();
+            let surveyed: Vec<P2> = map
+                .markers_of(&MarkerKind::Poi)
+                .map(|m| m.at)
+                .filter(|p| homes.iter().all(|h| dist(*h, *p) > SURVEY_CLEAR))
+                .collect();
+            let posts: Vec<P2> = map
+                .markers_of(&MarkerKind::WorkSite)
+                .map(|m| m.at)
+                .collect();
+            let drone = |p: P2| {
+                !under_trees(p)
+                    && surveyed
+                        .iter()
+                        .any(|s| dist(*s, p) <= crate::map_sentry::SURVEY_ORBIT + SURVEY_SIGHT)
+            };
+            let walker = |p: P2| {
+                posts
+                    .iter()
+                    .any(|w| dist(*w, p) <= WALKER_WATCH && sees(hm, *w, p, FIGURE_TALL))
+            };
+            for m in map.markers_of(&MarkerKind::Rendezvous) {
+                let mut lasts: Vec<(String, Vec<P2>)> = Vec::new();
+                for poi in map.markers_of(&MarkerKind::Poi) {
+                    let near = homes
+                        .iter()
+                        .map(|h| dist(*h, poi.at))
+                        .fold(f32::INFINITY, f32::min);
+                    if dist(m.at, poi.at) > near * HOME_SLACK + 1.0 {
+                        continue;
+                    }
+                    let Some(path) = comfy.path(poi.at, m.at) else {
+                        continue;
+                    };
+                    let pts = resample(&path);
+                    let k = pts.len().saturating_sub((RV_APPROACH / STEP) as usize + 1);
+                    lasts.push((poi.name.clone(), pts[k..].to_vec()));
+                }
+                if lasts.is_empty() {
+                    continue;
+                }
+                // Two ways in are one line unless each starts CHOICE_APART
+                // off the other.
+                let mut lines: Vec<Vec<usize>> = Vec::new();
+                for (i, (_, a)) in lasts.iter().enumerate() {
+                    let same = lines.iter_mut().find(|l| {
+                        let b = &lasts[l[0]].1;
+                        geom::polyline_closest(b, a[0]).0 <= CHOICE_APART
+                            || geom::polyline_closest(a, b[0]).0 <= CHOICE_APART
+                    });
+                    match same {
+                        Some(l) => l.push(i),
+                        None => lines.push(vec![i]),
+                    }
+                }
+                let line_notes: Vec<String> = lines
+                    .iter()
+                    .map(|l| {
+                        let (name, pts) = &lasts[l[0]];
+                        let (gap, at) = longest_gap(pts, dash);
+                        if std::env::var_os("RV_DEBUG").is_some() {
+                            let open: Vec<String> = pts
+                                .iter()
+                                .map(|p| if dash(*p) { "c" } else { "." })
+                                .map(String::from)
+                                .collect();
+                            eprintln!(
+                                "RVLINE {} {} {} {}",
+                                m.name,
+                                name,
+                                open.concat(),
+                                pts.iter()
+                                    .map(|p| format!("{:.0},{:.0}", p[0], p[1]))
+                                    .collect::<Vec<_>>()
+                                    .join(";")
+                            );
+                        }
+                        let share = |f: &dyn Fn(P2) -> bool| {
+                            pts.iter().filter(|p| f(**p)).count() as f32 / pts.len() as f32 * 100.0
+                        };
+                        format!(
+                            "from {name}{} by ({:.0}, {:.0}): open {gap:.0} m at ({:.0}, {:.0}), watched {:.0}% (spotter {:.0}%, drone {:.0}%, walker {:.0}%)",
+                            if l.len() > 1 {
+                                format!(" (+{})", l.len() - 1)
+                            } else {
+                                String::new()
+                            },
+                            pts[0][0],
+                            pts[0][1],
+                            at[0],
+                            at[1],
+                            share(&|p| {
+                                spotters.iter().any(|s| s.sees(map, hm, p)) || drone(p) || walker(p)
+                            }),
+                            share(&|p| spotters.iter().any(|s| s.sees(map, hm, p))),
+                            share(&drone),
+                            share(&walker),
+                        )
+                    })
+                    .collect();
+                // A second way in: with the busiest line's last stretch shut
+                // (all but where the ways meet at the truck), a way from where
+                // it starts that's not much longer.
+                let main = &lasts[lines.iter().max_by_key(|l| l.len()).unwrap()[0]].1;
+                let length = |p: &[P2]| p.windows(2).map(|w| dist(w[0], w[1])).sum::<f32>();
+                let mut shut = comfy.clone();
+                for (k, p) in main.iter().enumerate() {
+                    let out = (main.len() - 1 - k) as f32 * STEP;
+                    if (RV_MEET..=RV_APPROACH - CHOICE_APART).contains(&out) {
+                        shut.block(
+                            crate::nav::Obstacle::Circle {
+                                at: *p,
+                                radius: CHOICE_APART * 0.5,
+                            },
+                            0.0,
+                        );
+                    }
+                }
+                let other = shut
+                    .path(main[0], m.at)
+                    .map(|p| length(&p))
+                    .filter(|l| *l <= length(main) * RV_DETOUR);
+                r.measures.push(format!(
+                    "coming home to {}: {} line(s) in over the last {RV_APPROACH} m, {}; {}",
+                    m.name,
+                    lines.len(),
+                    match other {
+                        Some(l) => format!("another way in {l:.0} m"),
+                        None => "no other way in".into(),
+                    },
+                    line_notes.join("; ")
+                ));
+                if lines.len() < 2 && other.is_none() {
+                    find(
+                        &mut r,
+                        Rule::Choice,
+                        format!(
+                            "one way in to {} over its last {RV_APPROACH} m (from {})",
+                            m.name,
+                            lasts
+                                .iter()
+                                .map(|l| l.0.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                        main[0],
+                    );
+                }
+                for (name, pts) in &lasts {
+                    let (gap, at) = longest_gap(pts, dash);
+                    if gap > RV_OPEN {
+                        find(
+                            &mut r,
+                            Rule::Cover,
+                            format!(
+                                "{gap:.0} m with nothing a dash off on the way home to {} from {name}",
+                                m.name
+                            ),
+                            at,
+                        );
+                    }
                 }
             }
             let _ = worst;
