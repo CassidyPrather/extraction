@@ -1379,6 +1379,8 @@ impl World2<'_, '_> {
     /// Home: radio called (by the Surge step); wait for the truck, walk to
     /// it, ring.
     pub(super) fn go_home(&self, here: Vec2, raid: &Raid, tries: u32) -> Vec<Task> {
+        // The truck within this of the rendezvous is the one waiting there (m).
+        const RV_NEAR: f32 = 40.0;
         match raid.phase {
             Phase::Out => match self.radio_in_hand() {
                 true => vec![Task::Use(Side::Left), Task::Wait(1.0)],
@@ -1394,14 +1396,34 @@ impl World2<'_, '_> {
                 },
             },
             Phase::TruckCalled { .. } => vec![Task::Wait(20.0)],
-            Phase::TruckWaiting { .. } => {
+            Phase::TruckWaiting { rv, .. } => {
+                let Some(truck) = self.trucks.iter().next() else {
+                    return vec![Task::Wait(1.0)];
+                };
+                // Waiting at a rendezvous, it pulls in there unseen, up to
+                // `truck::UNSEEN_FOR` after it says so: till then it's
+                // still at base. To the rendezvous, and wait for it (it
+                // went back to the base truck, 250 m, and was left there).
+                let waiting_at = (rv != crate::raid::SHORT_EXFIL)
+                    .then(|| {
+                        self.zone
+                            .map
+                            .markers_of(&MarkerKind::Rendezvous)
+                            .nth(rv)
+                            .map(|m| Vec2::from(m.at))
+                    })
+                    .flatten();
+                if let Some(p) = waiting_at
+                    && truck.translation().xz().distance(p) > RV_NEAR
+                {
+                    let mut t = self.legs(here, p);
+                    t.push(Task::Wait(2.0));
+                    return t;
+                }
                 // Round to the back and up its steps, as a person would
                 // (straight at it, the bot met the truck's side).
                 // Then up the middle of the bed, left of the bench, to just
                 // past its front: the cord is in reach there.
-                let Some(truck) = self.trucks.iter().next() else {
-                    return vec![Task::Wait(1.0)];
-                };
                 let at = |x: f32, z: f32| truck.transform_point(Vec3::new(x, 0.0, z)).xz();
                 let mut t = self.legs(here, at(0.0, 4.0));
                 for (x, z) in [(0.05, 0.3), (0.05, -1.2)] {
