@@ -170,6 +170,16 @@ pub use crate::world::weather::INTERIOR_LIGHT;
 const ADAPT_SHARE: f32 = 0.6;
 /// The most they open up, in stops.
 const ADAPT_MAX: f32 = 3.0;
+/// Stops more the eyes open in a room by day than its cut alone would
+/// open them (scaled by the day's light: little at dusk, none at night).
+/// A room isn't lit evenly: they settle on its dim middle and far side,
+/// not its windows. With the cut alone (about a stop) the first houses'
+/// front rooms at 11:00 had their tables at 19-24 of 255 and their floors
+/// near black, and the loot a newcomer comes for on the table unread; at
+/// 1.3 more the tables come to 33-39 and the floors to 18-29, the windows
+/// still blazing. (More, and a room by day out-lit the day outside, sun
+/// and all: `tests::loot_indoors_is_seen_by_day_not_at_night`.)
+pub const ROOM_ADAPT: f32 = 1.3;
 /// Opening up to the dark is slow; closing down to the light is quick (s).
 /// Into the dark, the first stop comes in a few seconds (out of a lit room
 /// into the night you start to see again), the rest over a minute or so.
@@ -281,7 +291,9 @@ pub fn adapt_eyes(
     adapt.lamps += (at_eye - adapt.lamps) * (1.0 - (-dt / LAMP_EASE).exp());
     let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) * (1.0 - below)
         + adapt.lamps;
-    let target = Adaptation::target_below(light, below);
+    let room = adapt.indoors * ROOM_ADAPT * conditions.light.min(1.0) * (1.0 - below);
+    let target =
+        (Adaptation::target_below(light, below) + room).min(ADAPT_MAX - BELOW_ADAPT_CUT * below);
     // A new raid starts with the eyes already used to its light.
     if !adapt.settled || conditions.is_changed() {
         adapt.stops = target;
@@ -372,7 +384,10 @@ pub fn lamp_light<'a>(
 /// grade (the training yard's is a shade brighter).
 pub fn indoor_seen(conditions: &crate::world::weather::Conditions) -> f32 {
     let sky = crate::world::sky::sky_dim(conditions) * conditions.light * INTERIOR_LIGHT;
-    sky * Adaptation::target(conditions.light * INTERIOR_LIGHT).exp2()
+    let room = ROOM_ADAPT * conditions.light.min(1.0);
+    sky * (Adaptation::target(conditions.light * INTERIOR_LIGHT) + room)
+        .min(ADAPT_MAX)
+        .exp2()
 }
 
 /// The least [`indoor_seen`] that lets you tell a thing you came for
@@ -653,10 +668,19 @@ mod tests {
             worst.1,
             worst.0
         );
-        // A day indoors is darker than outside, and brighter than dusk.
-        let day = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1));
+        // A day indoors is darker than a day outside (its sky and its sun,
+        // which the room keeps out), and brighter than dusk.
+        let c = Conditions::compose(WeatherKind::Drizzle, Hour::Day, 1);
+        let day = indoor_seen(&c);
+        let outside = 1.0 + c.sun / DAY_LUX;
         let dusk = indoor_seen(&Conditions::compose(WeatherKind::Drizzle, Hour::Dusk, 1));
-        assert!(day < 1.0 && dusk < day, "{day} {dusk}");
+        assert!(
+            day < outside && dusk < day,
+            "{day} (outside {outside}) {dusk}"
+        );
+        // And light enough to read a table by: the eyes open past the
+        // room's cut (`ROOM_ADAPT`), to at least the day's sky's own light.
+        assert!(day >= 1.0, "a day indoors: {day}");
         // Under cloud the night is dark indoors. (A clear night under a
         // full moon isn't: the eyes open all the way to it.)
         for kind in &kinds[..3] {
