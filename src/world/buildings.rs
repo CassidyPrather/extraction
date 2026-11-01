@@ -5486,6 +5486,10 @@ const LOG_STACK: [(f32, f32, f32, f32, f32, f32); 10] = [
     (0.027, 1.023, 0.13, 5.0, 0.5, -0.03),
 ];
 
+/// A log pile's stakes (x, z), each against its outer log near an end of
+/// it (the right one is short): `art/props/yards.py`'s `LOG_STAKES`.
+const LOG_STAKES: [(f32, f32); 4] = [(-1.12, -2.4), (-1.12, 2.4), (1.06, -1.0), (1.11, 2.4)];
+
 /// Felled trunks stacked to season by a road. Within its footprint (2.5 x
 /// 1.6 x 7.0, `extraction_core::map`). Ten even 7 m tubes read as a
 /// blockout at arm's length, and logs all one length and girth as long
@@ -5502,15 +5506,13 @@ fn log_pile(b: &mut Builder) {
             true,
         );
     }
-    // Stakes driven in at the bottom row's outer logs, both ends.
-    for side in [-1.0, 1.0] {
-        for end in [-1.0, 1.0] {
-            b.bx(
-                Vec3::new(0.09, 1.0, 0.09),
-                Vec3::new(side * 1.13, 0.5, end * 2.4),
-                Mat::Timber,
-            );
-        }
+    // Stakes driven in against the bottom row's outer logs.
+    for (x, z) in LOG_STAKES {
+        b.bx(
+            Vec3::new(0.09, 1.0, 0.09),
+            Vec3::new(x, 0.5, z),
+            Mat::Timber,
+        );
     }
     b.dress_structure(from, vec![("log_stack", Transform::IDENTITY)]);
 }

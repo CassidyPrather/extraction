@@ -311,6 +311,8 @@ LOG_STACK = (
     (0.223, 0.809, 0.16, 4.6, -1.0, 0.02),
     (0.027, 1.023, 0.13, 5.0, 0.5, -0.03),
 )
+# The stakes (x, z), each against its outer log: `LOG_STAKES` there too.
+LOG_STAKES = ((-1.12, -2.4), (-1.12, 2.4), (1.06, -1.0), (1.11, 2.4))
 
 
 def log_stack():
@@ -337,11 +339,10 @@ def log_stack():
             face = rr * 0.86
             a, b = (z - 0.004, z + 0.002) if sgn < 0 else (z - 0.002, z + 0.004)
             p.cyl(face, a, b, "Straw", segs=12, xf=xf)
-    # Stakes driven in at the bottom row's outer logs, both ends: a split
-    # pole, its top cut slant.
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            board(p, (0.09, 1.0, 0.09), (sx * 1.13, 0.5, sz * 2.4), "Timber", w, bevel=0.006)
+    # Stakes driven in against the bottom row's outer logs, near each end
+    # of each (the right one is short).
+    for x, z in LOG_STAKES:
+        board(p, (0.09, 1.0, 0.09), (x, 0.5, z), "Timber", w, bevel=0.006)
     return [p]
 
 
