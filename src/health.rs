@@ -36,6 +36,9 @@ pub struct Hurt {
     pub player: Entity,
     pub amount: f32,
     pub from: Vec3,
+    /// Who did it, when anyone did (a machine, another player, the player
+    /// themselves): what a hit's warning is owed by.
+    pub by: Option<Entity>,
 }
 
 /// A hit was turned aside by the aegis knot.
@@ -118,6 +121,7 @@ fn take_hits(
             player,
             amount: damage,
             from: hit.point - hit.velocity.normalize_or_zero() * 5.0,
+            by: hit.shooter,
         });
         if h.hp <= 0.0 {
             h.down = true;

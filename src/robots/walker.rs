@@ -51,7 +51,7 @@ pub const BLIND_AFTER: f32 = 0.3;
 pub const BLIND_WITHIN: f32 = 4.0;
 pub const BLIND_SURE: f32 = 3.0;
 pub const BLIND_RANGE: f32 = 12.0;
-pub const BLIND_TELL: f32 = 0.4;
+pub const BLIND_TELL: f32 = super::MIN_TELL;
 pub const BLIND_ROUNDS: u8 = 3;
 /// Seconds between them, and their spread (wider than aimed fire).
 const BLIND_EVERY: f32 = 0.25;
