@@ -381,6 +381,19 @@ degrees gave 61.7M, short of that, so the cap is 10:
 | a firefight's wounds, 6-15 m | 64 | 30.8M | 16 |
 | standing in a hazard's cloud | 64 | 56.4M | 23 |
 
+### m05, the spruce view, after the sky
+
+With the sky counted where nothing opaque hides it
+(`overdraw::add_sky`), m05_spruce was the one view over: 10.16 layers
+of 10 one eye, 65.7M of 64.8M both. A spruce now draws its upright fin
+card on every other plate, not every plate (`trees::build_tree`). The
+drooping plates carry the skirt's outline, and the textured core its
+density. That's a quarter fewer cards a near spruce. m05: 8.37 layers,
+54.2M (-18%); m06 3.67, m08 3.12.
+
+Before and after, settled (`docs/shots/performance/spruce_fins_*`):
+0.8-4% of pixels change, and the stand reads as dense as before.
+
 ### Items at rest, asleep
 
 Tried and left (2026-11-01): merging resting items per material in 8 m

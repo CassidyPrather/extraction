@@ -1508,15 +1508,24 @@ fn build_tree(
                         centre,
                         false,
                     );
-                    cards.card(
-                        base + Vec3::Y * 0.05,
-                        along * 0.85,
-                        Vec3::Y,
-                        len * 0.6,
-                        SPRIGS[2 + crng.below(2)],
-                        centre,
-                        false,
-                    );
+                    // An upright fin on every other plate: the drooping
+                    // plates carry the skirt's outline, the textured core
+                    // its density, and a fin on each was a quarter of a
+                    // dense spruce view's fragments for little to see
+                    // (m05_spruce over its overdraw budget). The draw is
+                    // taken either way, so each variant keeps its shape.
+                    let fin = SPRIGS[2 + crng.below(2)];
+                    if i % 2 == 0 {
+                        cards.card(
+                            base + Vec3::Y * 0.05,
+                            along * 0.85,
+                            Vec3::Y,
+                            len * 0.6,
+                            fin,
+                            centre,
+                            false,
+                        );
+                    }
                 }
             }
         }
