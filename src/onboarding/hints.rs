@@ -259,13 +259,11 @@ fn one_up(
         &crate::anomaly::artifacts::CarriedBy,
         Has<crate::interact::body::InBackpack>,
     )>,
-    mags: Query<
-        (
-            &crate::items::Item,
-            Option<&crate::anomaly::artifacts::CarriedBy>,
-        ),
-        With<crate::weapons::Mag>,
-    >,
+    mags: Query<(
+        &crate::items::Item,
+        Option<&crate::anomaly::artifacts::CarriedBy>,
+        &crate::weapons::Mag,
+    )>,
     ammo: Query<&crate::items::Item>,
     stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
     catalog: Res<crate::items::Catalog>,
@@ -306,12 +304,18 @@ fn one_up(
     // the crate.
     let in_gun =
         gun.is_some_and(|(g, _, _)| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
+    // (One that fits it: an AK's magazine on you is no help to the PM, and
+    // "Mag in" sent the newcomer out with none it could use.)
+    let family = gun.and_then(|(g, _, _)| g.firearm.def.magazine_family.clone());
+    let fits = |m: &crate::weapons::Mag| family.as_deref() == Some(m.family.as_str());
     let spare = mags
         .iter()
-        .any(|(it, by)| it.rounds > 0 && by.is_some_and(|b| b.0 == me));
+        .any(|(it, by, m)| it.rounds > 0 && fits(m) && by.is_some_and(|b| b.0 == me));
     let in_crate = stash.iter().flat_map(|b| b.contents.iter()).any(|e| {
         ammo.get(*e).is_ok_and(|it| {
-            it.rounds > 0 && (mags.contains(*e) || catalog.get(it.kind()).id.starts_with("ammo_"))
+            it.rounds > 0
+                && (mags.get(*e).is_ok_and(|(_, _, m)| fits(m))
+                    || catalog.get(it.kind()).id.starts_with("ammo_"))
         })
     });
     if empty {
