@@ -180,6 +180,18 @@ const ADAPT_MAX: f32 = 3.0;
 /// still blazing. (More, and a room by day out-lit the day outside, sun
 /// and all: `tests::loot_indoors_is_seen_by_day_not_at_night`.)
 pub const ROOM_ADAPT: f32 = 1.3;
+
+/// [`ROOM_ADAPT`], or none with `EXTRACTION_ROOM_ADAPT=0` (the A/B for
+/// shots and the headset: the rooms as they were).
+fn room_adapt() -> f32 {
+    use std::sync::OnceLock;
+    static ON: OnceLock<bool> = OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("EXTRACTION_ROOM_ADAPT").is_none_or(|v| v != "0")) {
+        ROOM_ADAPT
+    } else {
+        0.0
+    }
+}
 /// Opening up to the dark is slow; closing down to the light is quick (s).
 /// Into the dark, the first stop comes in a few seconds (out of a lit room
 /// into the night you start to see again), the rest over a minute or so.
@@ -245,7 +257,7 @@ impl Adaptation {
     pub fn step(&mut self, target: f32, dt: f32) {
         let tau = if target <= self.stops {
             ADAPT_TO_LIGHT
-        } else if self.stops < 1.0 + self.indoors * ROOM_ADAPT {
+        } else if self.stops < 1.0 + self.indoors * room_adapt() {
             // A room's own stops (`ROOM_ADAPT`) come at the first stop's
             // pace: stepping in by day, the table reads in seconds, not
             // after the night's half a minute.
@@ -294,7 +306,7 @@ pub fn adapt_eyes(
     adapt.lamps += (at_eye - adapt.lamps) * (1.0 - (-dt / LAMP_EASE).exp());
     let light = conditions.light * (1.0 - adapt.indoors * (1.0 - INTERIOR_LIGHT)) * (1.0 - below)
         + adapt.lamps;
-    let room = adapt.indoors * ROOM_ADAPT * conditions.light.min(1.0) * (1.0 - below);
+    let room = adapt.indoors * room_adapt() * conditions.light.min(1.0) * (1.0 - below);
     let target =
         (Adaptation::target_below(light, below) + room).min(ADAPT_MAX - BELOW_ADAPT_CUT * below);
     // A new raid starts with the eyes already used to its light.
