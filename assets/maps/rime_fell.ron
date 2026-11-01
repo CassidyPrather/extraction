@@ -219,6 +219,12 @@
                    (282.0, 120.0), (100.0, 150.0), (-60.0, 196.0), (-282.0, 196.0)]),
     ],
 
+    // Coming home: outcrops where a way in to a rendezvous was open for
+    // more than a dash (map_lint, coming home).
+    outcrops: [
+        // On the way up to the saddle.
+        (at: (-109.0, -187.0), radius: 1.8, stones: 4),
+    ],
     placements: [
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
@@ -326,6 +332,10 @@
         (prefab: "log_pile", at: (-10.5, -50.7), rot: 278.0),
         (prefab: "log_pile", at: (-23.1, -68.1), rot: 291.0),
         (prefab: "log_pile", at: (-113.0, 145.0), rot: 235.0),
+        // Coming home: cover where a way in to a rendezvous was open for
+        // more than a dash (map_lint, coming home).
+        // The roadmen's woodpile under the saddle.
+        (prefab: "log_pile", at: (-96.5, -210.0), rot: 3.0),
     ],
 
     markers: [

@@ -2163,6 +2163,22 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                 if lasts.is_empty() {
                     continue;
                 }
+                if std::env::var_os("RV_DEBUG").is_some() {
+                    for (name, pts) in &lasts {
+                        let open: String = pts
+                            .iter()
+                            .map(|p| if dash(*p) { 'c' } else { '.' })
+                            .collect();
+                        eprintln!(
+                            "RVLINE {}|{name}|{open}|{}",
+                            m.name,
+                            pts.iter()
+                                .map(|p| format!("{:.0},{:.0}", p[0], p[1]))
+                                .collect::<Vec<_>>()
+                                .join(";")
+                        );
+                    }
+                }
                 // Two ways in are one line unless each starts CHOICE_APART
                 // off the other.
                 let mut lines: Vec<Vec<usize>> = Vec::new();
@@ -2182,23 +2198,6 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
                     .map(|l| {
                         let (name, pts) = &lasts[l[0]];
                         let (gap, at) = longest_gap(pts, dash);
-                        if std::env::var_os("RV_DEBUG").is_some() {
-                            let open: Vec<String> = pts
-                                .iter()
-                                .map(|p| if dash(*p) { "c" } else { "." })
-                                .map(String::from)
-                                .collect();
-                            eprintln!(
-                                "RVLINE {} {} {} {}",
-                                m.name,
-                                name,
-                                open.concat(),
-                                pts.iter()
-                                    .map(|p| format!("{:.0},{:.0}", p[0], p[1]))
-                                    .collect::<Vec<_>>()
-                                    .join(";")
-                            );
-                        }
                         let share = |f: &dyn Fn(P2) -> bool| {
                             pts.iter().filter(|p| f(**p)).count() as f32 / pts.len() as f32 * 100.0
                         };
