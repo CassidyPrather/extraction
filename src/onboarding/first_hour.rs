@@ -805,11 +805,12 @@ pub(super) fn direct_raid(
     let has_gun = guns().any(|(_, by, p)| by == player && !p);
     // (What it's told is by the gun it holds: a round up, a magazine in
     // first, load up from the crate, or no rounds at all.)
-    use super::hints::{LOAD_UP, MAG_IN, NO_ROUNDS, ONE_UP};
+    use super::hints::{IN_PACK, LOAD_UP, MAG_IN, NO_ROUNDS, ONE_UP};
     let told = |l: &str, heard: &[String]| heard.iter().any(|h| h == l);
     let no_rounds = told(NO_ROUNDS, &state.heard);
     let load_up = told(LOAD_UP, &state.heard);
-    let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up;
+    let in_pack = told(IN_PACK, &state.heard);
+    let ready_told = told(ONE_UP, &state.heard) || told(MAG_IN, &state.heard) || load_up || in_pack;
     if !state.racked && has_gun && ready_told {
         state.racked = true;
         // "Load up from the crate": the loaded magazines in it, first.
@@ -841,7 +842,45 @@ pub(super) fn direct_raid(
             }
             super::second_hour::cut_in(&mut bot, t);
         }
-        if !one_up(guns(), player) {
+        // "Your loaded one's in your pack: swap them": the loaded one out
+        // of the pack into the holster, the empty one into the pack.
+        let loaded = world
+            .packed_guns
+            .iter()
+            .find(|(_, g, by)| {
+                by.0 == player && g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0)
+            })
+            .map(|(e, ..)| e);
+        if let Some(e) = loaded.filter(|_| in_pack) {
+            state.note(
+                now,
+                Kind::Learned,
+                "swapped in the loaded one from the pack",
+            );
+            super::second_hour::cut_in(
+                &mut bot,
+                vec![
+                    Task::Stow(Side::Left),
+                    Task::DrawGun,
+                    Task::ToggleBackpack,
+                    Task::Wait(0.6),
+                    Task::GrabFromHere {
+                        item: e,
+                        side: Side::Left,
+                    },
+                    Task::ToggleBackpack,
+                    Task::Wait(0.5),
+                    // (A body slot first: the holster, free with the empty
+                    // one out; then the empty one finds it full, and goes
+                    // in the pack.)
+                    Task::Stow(Side::Left),
+                    Task::Stow(Side::Right),
+                    Task::DrawGun,
+                    Task::Ready { off_safe: false },
+                    Task::Stow(Side::Right),
+                ],
+            );
+        } else if !one_up(guns(), player) {
             state.note(now, Kind::Learned, "one up the spout, as the driver said");
             // Readied by the one drawn (a magazine in if it has none with
             // rounds, then a round up), the safety left on.

@@ -1104,6 +1104,17 @@ pub(super) struct World2<'w, 's> {
             Has<crate::interact::body::InBackpack>,
         ),
     >,
+    /// Guns down in someone's pack, and whose.
+    pub(super) packed_guns: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static crate::weapons::Gun,
+            &'static crate::anomaly::artifacts::CarriedBy,
+        ),
+        With<crate::interact::body::InBackpack>,
+    >,
     pub(super) hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     pub(super) anomalies:
         Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
