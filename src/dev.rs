@@ -1035,7 +1035,13 @@ fn first_person_hands(
                     .and_then(|(g, at)| {
                         crate::render::props::catch_index_curl(Side::Right, &g.layout, at)
                             .is_none()
-                            .then(|| crate::render::props::catch_thumb(Side::Left, hold, at))
+                            .then(|| {
+                                crate::render::props::catch_thumb(
+                                    Side::Left,
+                                    hold,
+                                    crate::render::props::catch_face(&g.layout, at),
+                                )
+                            })
                             .flatten()
                     });
                 if thumb.is_some() {

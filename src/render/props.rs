@@ -1418,6 +1418,21 @@ pub(crate) fn catch_thumb(side: Side, hold: Transform, at: Vec3) -> Option<(Vec3
     (thumb_tip(side, dir, bend).distance(goal) < CATCH_REACH).then_some((dir, bend))
 }
 
+/// A thumb tip's radius (its last bone's capsule, `spawn_hand`).
+const THUMB_TIP_R: f32 = 0.0105 * 0.9;
+/// How far a catch stands proud of its middle, metres (the models' are 6
+/// mm blocks).
+const CATCH_HALF: f32 = 0.003;
+
+/// Where a thumb's tip goes to work a catch at `at` (gun space): on its
+/// outer face, away from the grip, the pad against it and not inside the
+/// gun.
+pub(crate) fn catch_face(gun: &crate::weapons::layout::GunLayout, at: Vec3) -> Vec3 {
+    let out = (at - gun.grip.translation).normalize_or(Vec3::NEG_Y);
+    // (A little over: off a corner, the way out isn't square to a face.)
+    at + out * (CATCH_HALF + THUMB_TIP_R + 0.002)
+}
+
 /// How close the index must pass a magazine catch to press it, metres.
 const CATCH_REACH: f32 = 0.012;
 
@@ -1677,7 +1692,7 @@ fn pose_hands(
             let hold = Transform::from_matrix(
                 (igt.compute_affine().inverse() * pose.compute_affine()).into(),
             );
-            thumb = catch_thumb(v.side, hold, at);
+            thumb = catch_thumb(v.side, hold, catch_face(&gun.layout, at));
         }
         for (c, want) in v.curl.iter_mut().zip(target) {
             *c += (want - *c) * ease;
@@ -2814,11 +2829,38 @@ mod glove_tests {
         let hold = cup_pose(&pm)
             .unwrap()
             .mul_transform(support_pose(&pm, Side::Left));
-        let (dir, bend) = catch_thumb(Side::Left, hold, heel).expect("the thumb reaches the heel");
+        let (dir, bend) = catch_thumb(Side::Left, hold, catch_face(&pm, heel))
+            .expect("the thumb reaches the heel");
         let tip = hold
             .mul_transform(glove_frame(Side::Left))
             .transform_point(thumb_tip(Side::Left, dir, bend));
-        assert!(tip.distance(heel) < 0.012, "tip at {tip}, catch at {heel}");
+        // The model's frame and catch, as boxes (`pm_pistol.glb`:
+        // `static_frame`, `mag_catch_heel`). The tip's pad touches the
+        // catch and is inside neither.
+        let gap = |lo: Vec3, hi: Vec3| (tip - tip.clamp(lo, hi)).length() - THUMB_TIP_R;
+        let frame = gap(
+            Vec3::new(-0.0122, -0.042, -0.1197),
+            Vec3::new(0.0112, 0.0705, 0.0378),
+        );
+        let catch = gap(
+            heel - Vec3::new(0.005, 0.003, 0.003),
+            heel + Vec3::new(0.005, 0.003, 0.003),
+        );
+        assert!(
+            frame > -0.001,
+            "the thumb's tip {:.1} mm into the frame",
+            -frame * 1000.0
+        );
+        assert!(
+            catch > -0.001,
+            "the thumb's tip {:.1} mm into the catch",
+            -catch * 1000.0
+        );
+        assert!(
+            catch < 0.004,
+            "the thumb's tip {:.1} mm off the catch",
+            catch * 1000.0
+        );
     }
 
     /// An AK in the hand with the magazine release held: the index goes
