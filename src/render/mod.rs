@@ -37,6 +37,7 @@ pub mod part_rest;
 pub mod prepass;
 pub mod props;
 pub mod pry_cue;
+pub mod puff;
 pub mod readback;
 pub mod rv_beacons;
 pub mod screen;

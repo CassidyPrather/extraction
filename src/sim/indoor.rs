@@ -2150,6 +2150,33 @@ mod tests {
     /// works hall was, and a raider in the tunnel walked for the hall's
     /// way out into the tunnel's wall (seed 11, 31 October: 40 stucks).
     #[test]
+    fn every_door_stays_on_its_hinge() {
+        let opts = LaunchOptions {
+            robots: false,
+            map: "kettle_pass".into(),
+            seed: 10,
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        for _ in 0..90 * 60 {
+            app.update();
+        }
+        let mut q = app.world_mut().query::<(Entity, &DoorLeaf, &Transform)>();
+        let off: Vec<String> = q
+            .iter(app.world())
+            .filter(|(_, leaf, t)| t.translation.distance(leaf.0.hinge) > 0.005)
+            .map(|(e, leaf, t)| format!("{e:?} {:.3} m off", t.translation.distance(leaf.0.hinge)))
+            .collect();
+        assert!(
+            off.is_empty(),
+            "doors off their hinges after a minute: {off:?}"
+        );
+    }
+
+    #[test]
     fn a_site_under_a_building_isnt_in_it() {
         let (mut under, mut failed) = (0, Vec::new());
         for map in crate::test_maps() {

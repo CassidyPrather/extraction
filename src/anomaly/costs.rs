@@ -14,8 +14,8 @@
 
 use bevy::prelude::*;
 use extraction_core::anomaly::{
-    AEGIS_FLOOR, AEGIS_SHOCK, AnomalyKind, HEARTH_TIRE, SHARD_GLINT_RADIUS, aegis_shock_in,
-    aegis_wet, feather_wake, shard_glint_in,
+    AEGIS_FLOOR, AEGIS_SHOCK, AEGIS_TELL, AnomalyKind, HEARTH_TIRE, SHARD_GLINT_RADIUS,
+    aegis_shock_in, aegis_wet, feather_wake, shard_glint_in,
 };
 use extraction_core::noise::Rng;
 
@@ -38,6 +38,8 @@ pub struct ArtifactBite {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bite {
+    /// A wet aegis is about to shock its carrier, `AEGIS_TELL` from now.
+    Fizz,
     /// A wet aegis shocked its carrier.
     Shock,
     /// A shard's late reflection glinted.
@@ -55,6 +57,8 @@ pub struct Bites {
     /// told it's killing you this wet spell.
     since_shock: f32,
     told_dying: bool,
+    /// The coming shock has fizzed.
+    fizzed: bool,
 }
 
 impl Bites {
@@ -66,6 +70,7 @@ impl Bites {
             dice,
             since_shock: f32::INFINITY,
             told_dying: false,
+            fizzed: false,
         }
     }
 }
@@ -157,7 +162,20 @@ pub fn bites(
         b.since_shock += dt;
         if aegis.contains(&p) && aegis_wet(wet, body.wading) {
             b.shock -= dt;
+            if b.shock <= AEGIS_TELL && !b.fizzed {
+                // The tell: however the clock fell, the shock is a full
+                // `AEGIS_TELL` behind its fizz.
+                b.fizzed = true;
+                b.shock = AEGIS_TELL;
+                out.write(ArtifactBite {
+                    player: p,
+                    at,
+                    what: Bite::Fizz,
+                    damage: 0.0,
+                });
+            }
             if b.shock <= 0.0 {
+                b.fizzed = false;
                 b.shock = aegis_shock_in(b.dice.f32());
                 let before = health.hp;
                 if !health.down && health.hp > AEGIS_FLOOR {
@@ -191,6 +209,9 @@ pub fn bites(
                     damage: took,
                 });
             }
+        } else {
+            // Dry, it holds its charge; wet again, it fizzes again first.
+            b.fizzed = false;
         }
         if shard.contains(&p) {
             b.glint -= dt;
@@ -307,6 +328,66 @@ mod tests {
                 .count();
         }
         n
+    }
+
+    /// (seconds in, what) for each of `p`'s bites over `frames` at 90 Hz,
+    /// counting from `from` seconds.
+    fn bites(app: &mut App, p: Entity, frames: usize, from: f32) -> Vec<(f32, Bite)> {
+        let mut cursor = app
+            .world()
+            .resource::<Messages<ArtifactBite>>()
+            .get_cursor_current();
+        let mut seen = Vec::new();
+        for i in 0..frames {
+            app.update();
+            let t = from + (i + 1) as f32 / 90.0;
+            seen.extend(
+                cursor
+                    .read(app.world().resource::<Messages<ArtifactBite>>())
+                    .filter(|b| b.player == p)
+                    .map(|b| (t, b.what)),
+            );
+        }
+        seen
+    }
+
+    #[test]
+    fn a_wet_aegis_fizzes_long_enough_before_every_shock() {
+        let (mut app, p) = app();
+        carry(&mut app, p, "art_aegis");
+        soak(&mut app, 1.0);
+        let mut seen = bites(&mut app, p, 50 * 90, 0.0);
+        // Soaked to the next fizz, then dried before its shock, then soaked
+        // again: the shock still waits on a fresh fizz.
+        let mut t = 50.0;
+        while seen.last().map(|(_, w)| *w) != Some(Bite::Fizz) {
+            seen.extend(bites(&mut app, p, 1, t));
+            t += 1.0 / 90.0;
+            assert!(t < 80.0, "it never fizzed");
+        }
+        soak(&mut app, 0.0);
+        seen.extend(bites(&mut app, p, 5 * 90, t));
+        t += 5.0;
+        soak(&mut app, 1.0);
+        seen.extend(bites(&mut app, p, 40 * 90, t));
+        let shocks = seen.iter().filter(|(_, w)| *w == Bite::Shock).count();
+        assert!(shocks >= 4, "soaked, it bites ({shocks})");
+        let mut fizzed: Option<f32> = None;
+        for &(t, what) in &seen {
+            match what {
+                Bite::Fizz => fizzed = Some(t),
+                Bite::Shock => {
+                    let f = fizzed.take().expect("a shock with no fizz first");
+                    assert!(
+                        t - f >= AEGIS_TELL - 0.02,
+                        "fizzed only {:.2} s before the shock at {t:.1}",
+                        t - f
+                    );
+                }
+                Bite::Glint => {}
+            }
+        }
+        assert!(AEGIS_TELL >= crate::robots::MIN_TELL);
     }
 
     #[test]

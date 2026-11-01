@@ -10,11 +10,18 @@ turns it about that axis and slides it back.
 a socket round the barrel behind the front sight, a cranked neck, and a
 cruciform spike under the barrel, its point at the empty `pt_bayonet_tip`.
 It's its own node so the game can leave it off.
+
+Laid out against two side photographs of 91/30s scaled to the published
+1232 mm (`docs/craft/guns/mosin/README.md`): the barrel 730 mm from the
+bolt face, the receiver ring, rear sight and bolt handle well forward of
+where they were, over the magazine.
 """
 
 import math
 import os
 import sys
+
+import bmesh
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "items"))
@@ -25,18 +32,22 @@ from _kit import text  # noqa: E402
 main_guard()
 
 BORE = 0.045
-MUZZLE = -0.98
+MUZZLE = -0.90
+# The receiver ring (round, as from 1936), where the barrel comes out of it.
+RING_F, RING_R = -0.226, -0.175
+# The rear sight was drawn 0.116 further back; it's moved as a piece.
+SIGHT_DZ = -0.116
 
 # --- Stock ------------------------------------------------------------------------
 stock_prof = [
-    (-0.866, 0.037), (-0.20, 0.037),          # forend top (barrel channel edge)
-    (-0.19, 0.031), (-0.012, 0.031),          # under the receiver
+    (-0.810, 0.037), (-0.236, 0.037),         # forend top (barrel channel edge)
+    (-0.226, 0.031), (-0.012, 0.031),         # under the receiver
     (0.004, 0.030), (0.035, 0.0215),          # wrist top, down to the comb
     (0.326, 0.0145),                          # heel
     (0.326, -0.107),                          # toe
     (0.24, -0.090), (0.11, -0.060), (0.045, -0.038), (0.0, -0.031),  # belly to wrist
     (-0.05, -0.027), (-0.20, -0.026),         # under the magazine
-    (-0.60, -0.020), (-0.858, -0.011), (-0.868, 0.004),
+    (-0.60, -0.020), (-0.802, -0.011), (-0.812, 0.004),
 ]
 stock_prof = fillet(stock_prof, [0.004, 0.002, 0.002, 0.004, 0.01, 0.03, 0.006, 0.006, 0.05,
                                  0.05, 0.03, 0.02, 0.01, 0.01, 0.01, 0.006, 0.006], 4)
@@ -63,7 +74,7 @@ def screw(p, cutter, r, pos, xf, turn=0.6, mat="Blued", segs=12):
     cutter.box((r * 2.4, h * 1.4, r * 0.32), (0.0, h, 0.0), mat, xf=T(*pos) @ xf @ RY(turn))
 
 
-WIDTH = [(-0.9, 0.0155), (-0.6, 0.0185), (-0.25, 0.0205), (-0.19, 0.022), (-0.06, 0.022),
+WIDTH = [(-0.84, 0.0155), (-0.6, 0.0185), (-0.28, 0.0205), (-0.226, 0.022), (-0.06, 0.022),
          (-0.02, 0.0175), (0.03, 0.0165), (0.09, 0.0195), (0.33, 0.0215)]
 
 
@@ -80,7 +91,7 @@ def stock_wt(z, yc, h):
     # The butt's belly a little narrower than its comb; the forend's top
     # as wide as the channel the barrel lies in.
     belly = k - (0.003 if z > 0.06 else 0.0)
-    return (belly, k * (0.96 if z < -0.19 else 0.9))
+    return (belly, k * (0.96 if z < RING_F else 0.9))
 
 
 def stock_power(z):
@@ -98,7 +109,7 @@ BUTT_Z = 0.07
 
 def stock_piece(name, lo, hi):
     piece = Part(name)
-    piece.stock(stock_prof, -0.8675, 0.3285, "Wood", stock_wt, stations=120, segs=24,
+    piece.stock(stock_prof, -0.8115, 0.3285, "Wood", stock_wt, stations=120, segs=24,
                 power=stock_power)
     sc = Part("cut")
     # Sling slots through the butt and the forend.
@@ -134,13 +145,14 @@ butt_slots = Part("cut")
 for y in (0.002, -0.088):
     screw(butt_screws, butt_slots, 0.0036, (0.0, y, 0.3335), RX(math.pi / 2), turn=0.3 + y * 9)
 
-# Upper handguard over the barrel.
+# Upper handguard over the barrel, from the rear sight to the nose cap,
+# under both bands.
 hg_sec = fillet([(-0.0145, 0.0365), (0.0145, 0.0365), (0.0145, 0.052), (0.0, 0.0615),
                  (-0.0145, 0.052)], [0.0042, 0.0042, 0.006, 0.011, 0.006], 6)
-furn.prism(hg_sec, -0.47, -0.245, "Wood", axis="z", bevel=0.004, segs=3)
+furn.prism(hg_sec, -0.797, -0.372, "Wood", axis="z", bevel=0.004, segs=3)
 
 # Barrel bands, with sling swivels on the left.
-for z, top in ((-0.70, 0.0585), (-0.49, 0.0655)):
+for z, top in ((-0.725, 0.0655), (-0.40, 0.0655)):
     band = fillet([(-0.0215, -0.025), (0.0215, -0.025), (0.0215, top - 0.012), (0.0, top),
                    (-0.0215, top - 0.012)], [0.012, 0.012, 0.009, 0.014, 0.009], 6)
     furn.prism(band, z - 0.007, z + 0.007, "Blued", axis="z", bevel=0.0012, segs=1)
@@ -156,27 +168,37 @@ for z, top in ((-0.70, 0.0585), (-0.49, 0.0655)):
     furn.cyl(0.0016, x, x + 0.0019, "Steel", segs=12, chamfer=0.0005,
              xf=T(0, 0.0095, z + 0.0105) @ RY(math.pi / 2))
 # Nose cap.
-nose = fillet([(-0.0168, -0.013), (0.0168, -0.013), (0.0168, 0.039), (-0.0168, 0.039)],
-              [0.008, 0.008, 0.004, 0.004], 5)
-furn.prism(nose, -0.874, -0.858, "Blued", axis="z", bevel=0.0012, segs=1)
+# It caps the handguard's end as well as the forend's.
+nose = fillet([(-0.0168, -0.013), (0.0168, -0.013), (0.0168, 0.050), (0.0, 0.0638),
+               (-0.0168, 0.050)], [0.008, 0.008, 0.006, 0.012, 0.006], 5)
+furn.prism(nose, -0.812, -0.796, "Blued", axis="z", bevel=0.0012, segs=1)
 
 # --- Barrel and sights ---------------------------------------------------------------------
 # Its origin at the breech face, on the bore: a cut barrel is drawn as
 # this scaled back along the bore toward it.
-barrel = Part("barrel", origin=(0.0, BORE, -0.208))
+barrel = Part("barrel", origin=(0.0, BORE, RING_F))
+# Stepped up to the chamber's reinforce behind the rear sight, where the
+# maker's marks go, and into the ring.
 barrel.lathe([(0.0042, MUZZLE + 0.002), (0.0095, MUZZLE), (0.0105, MUZZLE + 0.003),
-              (0.0105, -0.60), (0.0118, -0.45), (0.0128, -0.26), (0.0138, -0.245),
-              (0.0145, -0.205), (0.0, -0.205)], "Blued", segs=28, xf=T(0, BORE, 0))
+              (0.0105, -0.55), (0.0118, -0.43), (0.0128, -0.37), (0.0132, -0.292),
+              (0.0155, -0.287), (0.0155, RING_F + 0.012), (0.0, RING_F + 0.012)], "Blued",
+             segs=28, xf=T(0, BORE, 0))
 # Front sight: a ring base, the post and its hood.
-barrel.cyl(0.0122, -0.972, -0.952, "Blued", segs=32, xf=T(0, BORE, 0), chamfer=0.0015)
-barrel.prism(fillet([(-0.968, 0.054), (-0.956, 0.054), (-0.958, 0.084), (-0.964, 0.084)],
-                    0.001, 1), -0.0012, 0.0012, "Blued", axis="x", bevel=0.0003, segs=1)
-barrel.tube(0.0118, 0.0104, -0.971, -0.951, "Blued", segs=32, xf=T(0, 0.0645, 0))
+FS = MUZZLE + 0.022  # the front sight base's front: its post 30 mm back
+barrel.cyl(0.0122, FS, FS + 0.02, "Blued", segs=32, xf=T(0, BORE, 0), chamfer=0.0015)
+barrel.prism(fillet([(FS + 0.004, 0.054), (FS + 0.016, 0.054), (FS + 0.014, 0.084),
+                     (FS + 0.008, 0.084)], 0.001, 1), -0.0012, 0.0012, "Blued", axis="x",
+             bevel=0.0003, segs=1)
+barrel.tube(0.0118, 0.0104, FS + 0.001, FS + 0.021, "Blued", segs=32, xf=T(0, 0.0645, 0))
 # Cleaning rod, ahead of the nose cap.
-barrel.cyl(0.0029, -0.94, -0.85, "Steel", segs=12, xf=T(0, 0.026, 0))
-barrel.lathe([(0.0, -0.952), (0.0045, -0.952), (0.0045, -0.938), (0.003, -0.936), (0.0, -0.936)],
-             "Steel", segs=14, xf=T(0, 0.026, 0))
-# Rear sight: the ramp base on the barrel and the tangent leaf.
+barrel.cyl(0.0029, MUZZLE + 0.04, MUZZLE + 0.13, "Steel", segs=12, xf=T(0, 0.026, 0))
+barrel.lathe([(0.0, MUZZLE + 0.028), (0.0045, MUZZLE + 0.028), (0.0045, MUZZLE + 0.042),
+              (0.003, MUZZLE + 0.044), (0.0, MUZZLE + 0.044)], "Steel", segs=14,
+             xf=T(0, 0.026, 0))
+# Rear sight: the ramp base on the barrel and the tangent leaf. Drawn where
+# it was and moved forward as a piece (`SIGHT_DZ`).
+barrel_part = barrel
+barrel = Part("rsight", origin=(0.0, BORE, RING_F))
 rs = fillet([(-0.252, BORE + 0.009), (-0.162, BORE + 0.009), (-0.162, 0.0705), (-0.180, 0.0735),
              (-0.245, 0.067), (-0.252, 0.062)], [0.002, 0.002, 0.003, 0.004, 0.004, 0.003], 2)
 barrel.prism(rs, -0.0145, 0.0145, "Blued", axis="x", bevel=0.0012, segs=2)
@@ -211,16 +233,28 @@ barrel.prism([(-0.170, 0.081), (-0.164, 0.081), (-0.164, 0.0855), (-0.170, 0.085
 nc = Part("cut")
 nc.box((0.0022, 0.004, 0.02), (0, 0.0855, -0.167), "Blued")
 barrel.cut(nc)
+rsight = barrel
+barrel = barrel_part
+
+
+def moved(part, dz):
+    bmesh.ops.translate(part.bm, verts=part.bm.verts[:], vec=(0.0, 0.0, dz))
+    for c in part.cutters:
+        moved(c, dz)
+
+
+moved(rsight, SIGHT_DZ)
 
 # --- Receiver -------------------------------------------------------------------------
 recv = Part("receiver")
-# Hexagonal receiver ring.
-hexa = [(0.0172 * math.cos(math.radians(60 * i)), BORE + 0.0172 * math.sin(math.radians(60 * i)))
-        for i in range(6)]
-recv.prism(fillet(hexa, 0.0015, 2), -0.208, -0.168, "Blued", axis="z", bevel=0.0012, segs=2)
+# The bolt handle, closed: over the magazine's rear, well ahead of the
+# trigger.
+HANDLE_Z = -0.102
+# The receiver ring: round, as made from 1936 (the hexagonal one before).
+recv.cyl(0.0168, RING_F, RING_R, "Blued", segs=40, xf=T(0, BORE, 0), chamfer=0.0012)
 # The receiver body: a round tube around the bolt, flattened underneath.
-recv.tube(0.0148, 0.0094, -0.170, -0.014, "Blued", segs=32, xf=T(0, BORE, 0))
-recv.box((0.025, 0.018, 0.156), (0, BORE - 0.012, -0.092), "Blued", bevel=0.002)
+recv.tube(0.0148, 0.0094, RING_R - 0.002, -0.014, "Blued", segs=32, xf=T(0, BORE, 0))
+recv.box((0.025, 0.018, 0.163), (0, BORE - 0.012, -0.0955), "Blued", bevel=0.002)
 # Rear tang running down onto the wrist.
 tang = fillet([(-0.016, BORE - 0.014), (0.004, BORE - 0.014), (0.045, 0.024), (0.05, 0.0275),
                (0.04, 0.0305), (-0.016, 0.034)], [0.0014, 0.003, 0.003, 0.003, 0.003, 0.0014], 3)
@@ -228,17 +262,20 @@ recv.prism(tang, -0.0075, 0.0075, "Blued", axis="x", bevel=0.0012, segs=2)
 # The tang screw through the wrist, and the ejector screw on the left.
 screw(screws, slots, 0.0033, (0.0, 0.0311, 0.027), RX(math.atan2(0.0035, 0.056)), turn=1.1)
 ey = BORE - 0.005
-screw(screws, slots, 0.0028, (-math.sqrt(0.0148 ** 2 - 0.005 ** 2) + 0.0002, ey, -0.052),
+screw(screws, slots, 0.0028, (-math.sqrt(0.0148 ** 2 - 0.005 ** 2) + 0.0002, ey, -0.075),
       RZ(math.pi / 2), turn=0.4)
 rcut = Part("cut")
-# Loading/ejection opening on top, and the bolt-handle slot on the right.
-rcut.box((0.0135, 0.02, 0.090), (0, BORE + 0.014, -0.090), "Blued", bevel=0.002, segs=1)
-rcut.box((0.02, 0.022, 0.016), (0.012, BORE + 0.006, -0.031), "Blued")
-rcut.box((0.02, 0.0085, 0.115), (0.012, BORE + 0.0005, -0.075), "Blued")
+# Loading/ejection opening on top, over the magazine; the bolt handle's
+# notch on the right; the right lug's raceway; and the handle's raceway
+# back along the top right, which it slides in turned up.
+rcut.box((0.0135, 0.02, 0.082), (0, BORE + 0.014, -0.136), "Blued", bevel=0.002, segs=1)
+rcut.box((0.02, 0.022, 0.016), (0.012, BORE + 0.006, HANDLE_Z + 0.003), "Blued")
+rcut.box((0.02, 0.0085, 0.115), (0.012, BORE + 0.0005, -0.1125), "Blued")
+rcut.box((0.012, 0.012, 0.10), (0.006, BORE + 0.014, -0.06), "Blued")
 # Serial number and year, stamped along the left of the receiver.
 LEFT = T(-0.0148 + 0.0006, BORE, 0) @ RY(-math.pi / 2)
-text(rcut, "ГБ 2817", 0.0034, "Blued", LEFT @ T(-0.115, 0.0, 0.0), depth=0.0012)
-text(rcut, "1942", 0.0034, "Blued", LEFT @ T(-0.085, 0.0, 0.0), depth=0.0012)
+text(rcut, "ГБ 2817", 0.0034, "Blued", LEFT @ T(-0.150, 0.0, 0.0), depth=0.0012)
+text(rcut, "1942", 0.0034, "Blued", LEFT @ T(-0.120, 0.0, 0.0), depth=0.0012)
 recv.cut(rcut)
 
 # Magazine box with its floorplate, and the trigger guard behind it.
@@ -274,31 +311,31 @@ for z, turn in ((0.014, 0.9), (-0.178, 2.0)):
     screw(screws, slots, 0.0034, (0.0, belly(z) + 0.0004, z), RX(math.pi), turn=turn)
 
 # --- Bolt (turns about the bore, then slides) -------------------------------------------
-HANDLE_Z = -0.034
 bolt = Part("turnbolt", origin=(0.0, BORE, HANDLE_Z))
 # (The groove ahead of the lugs is where the separate bolt head joins the
 # body.)
-bolt.lathe([(0.0, -0.162), (0.0075, -0.162), (0.0086, -0.159), (0.0086, -0.1405),
-            (0.0079, -0.1398), (0.0079, -0.1382), (0.0086, -0.1375), (0.0086, -0.026),
-            (0.0074, -0.022), (0.0, -0.022)], "Steel", segs=28, xf=T(0, BORE, 0))
+bolt.lathe([(0.0, -0.170), (0.0075, -0.170), (0.0086, -0.167), (0.0086, -0.1485),
+            (0.0079, -0.1478), (0.0079, -0.1462), (0.0086, -0.1455), (0.0086, -0.038),
+            (0.0074, -0.034), (0.0, -0.034)], "Steel", segs=28, xf=T(0, BORE, 0))
 # Locking lugs at the bolt head.
 for sx in (-1, 1):
-    bolt.box((0.004, 0.006, 0.016), (sx * 0.0088, BORE, -0.152), "Steel", bevel=0.001, segs=2)
+    bolt.box((0.004, 0.006, 0.016), (sx * 0.0088, BORE, -0.160), "Steel", bevel=0.001, segs=2)
 # Extractor along the right.
-bolt.box((0.0025, 0.004, 0.06), (0.0088, BORE + 0.0035, -0.13), "Steel", bevel=0.0008, segs=2)
+bolt.box((0.0025, 0.004, 0.06), (0.0088, BORE + 0.0035, -0.138), "Steel", bevel=0.0008, segs=2)
 # Cocking piece knob at the rear: round and knurled. Its own node: it
 # stands back from the bolt when cocked and sits in when not, the tell
 # you look for (`weapons::visuals`, `CockingPiece`).
 # Its rear face is dished, with the firing pin's end in the middle.
-cock = Part("cocking_piece", origin=(0.0, BORE, -0.022))
+CK = -0.012  # the knob's shift from where it was drawn
+cock = Part("cocking_piece", origin=(0.0, BORE, -0.022 + CK))
 cock.lathe([(0.0, -0.022), (0.0055, -0.022), (0.0055, -0.012), (0.0102, -0.009), (0.0108, -0.002),
             (0.0108, 0.006), (0.0098, 0.0105), (0.0082, 0.0118), (0.0064, 0.0112),
             (0.0028, 0.0106), (0.0024, 0.0118), (0.0, 0.0121)], "Steel", segs=32,
-           xf=T(0, BORE, 0))
+           xf=T(0, BORE, CK))
 for i in range(18):
     a = 2 * math.pi * i / 18
-    cock.box((0.0013, 0.0012, 0.012), (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002),
-             "Steel", xf=RZ(a, about=(0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002)))
+    c = (0.0108 * math.cos(a), BORE + 0.0108 * math.sin(a), 0.002 + CK)
+    cock.box((0.0013, 0.0012, 0.012), c, "Steel", xf=RZ(a, about=c))
 # The straight handle with its ball knob.
 knob = (0.061, 0.031, HANDLE_Z)
 root = (0.008, BORE, HANDLE_Z)
@@ -320,14 +357,16 @@ trig.sweep(catmull([(-0.044, -0.020), (-0.0445, -0.030), (-0.042, -0.039), (-0.0
 
 # --- Socket bayonet ----------------------------------------------------------------------
 SPIKE_Y = BORE - 0.021
-SPIKE_Z0, SPIKE_TIP = -0.99, -1.425
-bayonet = Part("bayonet", origin=(0.0, BORE, -0.92))
-bayonet.tube(0.0128, 0.0108, -0.948, -0.888, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.001)
+# Its socket over the front sight's base and the barrel behind it.
+BZ = MUZZLE + 0.025
+SPIKE_Z0, SPIKE_TIP = BZ - 0.042, -1.332
+bayonet = Part("bayonet", origin=(0.0, BORE, BZ + 0.028))
+bayonet.tube(0.0128, 0.0108, BZ, BZ + 0.06, "Blued", segs=20, xf=T(0, BORE, 0), chamfer=0.001)
 # The locking ring round the socket's back end.
-bayonet.tube(0.0138, 0.0127, -0.9, -0.89, "Blued", segs=20, xf=T(0, BORE, 0))
+bayonet.tube(0.0138, 0.0127, BZ + 0.048, BZ + 0.058, "Blued", segs=20, xf=T(0, BORE, 0))
 # The neck: down from the socket's front and forward to the spike.
-bayonet.sweep([(-0.93, BORE - 0.011), (-0.948, BORE - 0.015), (-0.962, SPIKE_Y + 0.001),
-               (-0.98, SPIKE_Y), (SPIKE_Z0 + 0.002, SPIKE_Y)],
+bayonet.sweep([(BZ + 0.018, BORE - 0.011), (BZ, BORE - 0.015), (BZ - 0.014, SPIKE_Y + 0.001),
+               (BZ - 0.032, SPIKE_Y), (SPIKE_Z0 + 0.002, SPIKE_Y)],
               section_rect(0.0065, 0.006, 0.0015), "Blued")
 # The spike: four fluted fins, tapering to the point.
 rings = []
@@ -345,14 +384,14 @@ bayonet.loft(rings, "Steel")
 screws.cut(slots)
 butt_screws.cut(butt_slots)
 join("static", stock, recv, mag, screws, worn={})
-join("static_barrel", barrel, stock_fore, furn, worn={})
+join("static_barrel", barrel, rsight, stock_fore, furn, worn={})
 join("static_butt", stock_butt, butt_furn, butt_screws, worn={})
 for p in (bolt, cock, trig, bayonet):
     make(p, worn={})
 
 empty("pt_muzzle", (0.0, BORE, MUZZLE))
 empty("pt_sight", (0.0, 0.084, -0.02))
-empty("pt_load_port", (0.0, 0.07, -0.09))
+empty("pt_load_port", (0.0, 0.07, -0.136))
 empty("pt_bayonet_tip", (0.0, SPIKE_Y, SPIKE_TIP))
 
 # Where a sling attaches: the slots through the forend and the butt (the 91/30's sling runs through them).

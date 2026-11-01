@@ -194,6 +194,21 @@ fn gone_parts_let_rounds_by(
     }
 }
 
+/// The weak-point marks' one material: "shoot here" orange.
+pub(super) fn mark_material() -> StandardMaterial {
+    StandardMaterial {
+        base_color: SHOOT_HERE,
+        // (Lit enough to carry through fog, not so much it washes out to
+        // white: it must read orange.)
+        emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
+        perceptual_roughness: 0.5,
+        // A signal lamp, like the eye: its true size, its brightness held
+        // through fog.
+        fog_enabled: false,
+        ..default()
+    }
+}
+
 #[derive(Resource, Clone)]
 struct MarkAssets {
     ball: Handle<Mesh>,
@@ -253,14 +268,7 @@ fn mark_weak_points(
             let m = MarkAssets {
                 ball: meshes.add(Sphere::new(0.5).mesh().ico(3).unwrap()),
                 ring: meshes.add(Torus::new(0.5 - RING, 0.5)),
-                mat: materials.add(StandardMaterial {
-                    base_color: SHOOT_HERE,
-                    // (Lit enough to carry through fog, not so much it
-                    // washes out to white: it must read orange.)
-                    emissive: LinearRgba::rgb(1.6, 0.42, 0.0),
-                    perceptual_roughness: 0.5,
-                    ..default()
-                }),
+                mat: materials.add(mark_material()),
             };
             commands.insert_resource(m.clone());
             m
@@ -689,5 +697,99 @@ mod tests {
             stopped.is_empty(),
             "rounds stopped on gone parts: {stopped:?}"
         );
+    }
+
+    /// A mark rides its joint: a walker, a crawler and a hound walked
+    /// about, every leg's knee mark stays on the knee the leg is drawn
+    /// with (`walker::LegPoses`), frame by frame, moving or not.
+    #[test]
+    fn marks_ride_their_joints() {
+        use super::super::walker::{LegPoses, Walker, WalkerLeg};
+        let mut app = crate::headless_app(
+            crate::LaunchOptions {
+                robots: false,
+                ..Default::default()
+            },
+            false,
+        );
+        app.finish();
+        app.cleanup();
+        app.update();
+        let zone = app.world().resource::<crate::world::Zone>().clone();
+        let job = |at: Vec3| super::super::Job {
+            kind: super::super::JobKind::Survey,
+            site: at,
+            duration: 999.0,
+            exit: at,
+        };
+        let mut bodies = Vec::new();
+        {
+            let mut q = bevy::ecs::system::SystemState::<Commands>::new(app.world_mut());
+            let mut c = q.get_mut(app.world_mut()).unwrap();
+            for (k, size) in [1.0f32, super::super::indoor::CRAWLER_SIZE]
+                .into_iter()
+                .enumerate()
+            {
+                let at = zone.on_ground(40.0 + 8.0 * k as f32, 230.0);
+                let e = super::super::walker::spawn_walker_sized(
+                    &mut c,
+                    &zone,
+                    at,
+                    job(at),
+                    true,
+                    1.0e6,
+                    size,
+                    None,
+                );
+                c.entity(e)
+                    .remove::<super::super::Senses>()
+                    .remove::<super::super::Brain>();
+                bodies.push((e, at));
+            }
+            let at = zone.on_ground(56.0, 230.0);
+            let e = super::super::hound::spawn_hound(&mut c, &zone, at, job(at));
+            c.entity(e)
+                .remove::<super::super::Senses>()
+                .remove::<super::super::Brain>();
+            bodies.push((e, at));
+            q.apply(app.world_mut());
+        }
+        for _ in 0..20 {
+            app.update();
+        }
+        for (e, at) in &bodies {
+            if let Some(mut w) = app.world_mut().get_mut::<Walker>(*e) {
+                w.path = vec![
+                    *at + Vec3::new(6.0, 0.0, 4.0),
+                    *at + Vec3::new(0.0, 0.0, 8.0),
+                ];
+            }
+        }
+        let mut worst = 0.0f32;
+        let mut checked = 0;
+        for _ in 0..(60 * 6) {
+            app.update();
+            let mut marks = app.world_mut().query::<(&WeakMark, &GlobalTransform)>();
+            let marks: Vec<(Entity, Vec3)> = marks
+                .iter(app.world())
+                .map(|(m, g)| (m.part, g.translation()))
+                .collect();
+            for (part, at) in marks {
+                let world = app.world();
+                let (Some(p), Some(leg)) =
+                    (world.get::<RobotPart>(part), world.get::<WalkerLeg>(part))
+                else {
+                    continue;
+                };
+                let Some(poses) = world.get::<LegPoses>(p.robot) else {
+                    continue;
+                };
+                let knee = poses.0[leg.index][1];
+                worst = worst.max(at.distance(knee));
+                checked += 1;
+            }
+        }
+        assert!(checked > 1000, "{checked} mark-frames");
+        assert!(worst < 0.03, "a knee mark came {worst:.2} m off its knee");
     }
 }
