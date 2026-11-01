@@ -109,7 +109,10 @@ fn cell_of(p: Vec3) -> (i32, i32) {
 }
 
 impl Cells {
-    /// Wakes `part`: its cell is parts again (and waits to settle).
+    /// Wakes `part`: its cell is parts again, and every part in it waits
+    /// to settle afresh. (Only the woken one's wait was reset, so a part
+    /// gone, which leaves its cell, left the rest settled: the cell was
+    /// merged again the same frame, beside whatever its going disturbed.)
     fn wake(&mut self, part: Entity, vis: &mut Query<&mut Visibility>, commands: &mut Commands) {
         let Some(key) = self.part_cell.get(&part).copied() else {
             return;
@@ -117,7 +120,7 @@ impl Cells {
         let Some(cell) = self.cells.get_mut(&key) else {
             return;
         };
-        if let Some(q) = cell.quiet.get_mut(&part) {
+        for q in cell.quiet.values_mut() {
             *q = 0;
         }
         cell.building = None;
@@ -574,7 +577,7 @@ mod tests {
                 })
             })
             .collect();
-        settled();
+        let _settled = settled();
         for b in busy {
             bevy::tasks::block_on(b);
         }
@@ -631,6 +634,36 @@ mod tests {
                 .add(crate::render::materials::metric_box(Vec3::splat(0.3)));
             w.entity_mut(parts[0].1).insert(Mesh3d(mesh));
         });
+    }
+
+    /// Woken, a cell waits for every part in it to settle again, the part
+    /// gone too: nothing merged or being merged until then. (It was
+    /// merged again the same frame a part went, the rest still counted
+    /// settled: a ghost for as long as the pool took, 1 run in 12.)
+    #[test]
+    fn a_woken_cell_waits_whole_before_it_merges_again() {
+        for case in ["gone", "hit"] {
+            let (mut app, parts) = settled();
+            match case {
+                "gone" => {
+                    app.world_mut().entity_mut(parts[0].0).despawn();
+                }
+                _ => {
+                    app.world_mut().get_mut::<Timber>(parts[0].0).unwrap().hp -= 1.0;
+                }
+            }
+            for frame in 0..SETTLE - 1 {
+                app.update();
+                let building = app
+                    .world()
+                    .resource::<Cells>()
+                    .cells
+                    .values()
+                    .any(|c| c.building.is_some());
+                assert!(!building, "{case}: merging again at frame {frame}");
+                assert_eq!(resting(&mut app), 0, "{case}: merged at frame {frame}");
+            }
+        }
     }
 
     /// The last nut off takes its wheel: no merged ghost of it left, and

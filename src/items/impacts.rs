@@ -225,16 +225,20 @@ mod tests {
         );
     }
 
-    /// A magazine dropped in the yard's grass lands soft (the ground takes
-    /// it: heard as grass, carrying half as far); the same magazine dropped
-    /// on a supply crate's lid lands hard.
+    /// A magazine dropped in grass lands soft (the ground takes it: heard
+    /// as grass, carrying half as far); the same magazine dropped on a
+    /// supply crate's lid lands hard. (In Marrow: the yard has no loot
+    /// lying about now, so no supply crate.)
+    /// A meadow in Marrow, off the roads and away from the buildings.
+    const GRASS: (f32, f32) = (-60.0, 150.0);
+
     #[test]
     fn grass_takes_a_fall_and_a_crate_rings() {
         #[derive(Resource, Default)]
         struct Heard(Vec<ItemImpact>);
         let opts = crate::LaunchOptions {
             robots: false,
-            map: crate::camp::TRAINING_YARD.into(),
+            map: "marrow_creek".into(),
             ..Default::default()
         };
         let mut app = crate::headless_app(opts, false);
@@ -257,7 +261,7 @@ mod tests {
             .query_filtered::<&GlobalTransform, With<crate::items::loot::SupplyCrate>>()
             .iter(app.world())
             .next()
-            .expect("a supply crate in the yard")
+            .expect("a supply crate in the valley")
             .translation()
             + Vec3::Y * crate::items::loot::SUPPLY_CRATE.y * 0.5;
         let mut drop = |at: Vec3| {
@@ -287,7 +291,7 @@ mod tests {
                 .copied()
                 .expect("it landed")
         };
-        let grass = drop(zone.on_ground(12.0, 40.0) + Vec3::Y * 1.2);
+        let grass = drop(zone.on_ground(GRASS.0, GRASS.1) + Vec3::Y * 1.2);
         let lid = drop(crate_top + Vec3::Y * 1.2);
         assert!(soft(grass.ground), "grass: {:?}", grass.ground);
         assert!(!soft(lid.ground), "the crate: {:?}", lid.ground);

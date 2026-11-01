@@ -17,6 +17,7 @@ pub mod ammo;
 pub mod build;
 pub mod cartridge;
 pub mod dice;
+pub mod finish;
 pub mod firearm;
 pub mod parts;
 pub mod spec;

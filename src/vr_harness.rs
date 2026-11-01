@@ -2053,8 +2053,8 @@ mod tests {
     }
 
     /// Everything there is to pick up in the yard starts at a standing
-    /// reach: the kit in the truck's crate, on its shelf; the yard's loot
-    /// on crates. Floors are for what you drop. (The first playtest spent
+    /// reach: the kit in the truck's crate, on its shelf; any loot marker's
+    /// on its crate. Floors are for what you drop. (The first playtest spent
     /// it sitting on the ground picking things up.)
     #[test]
     fn nothing_to_pick_up_starts_on_the_floor() {
@@ -2130,10 +2130,9 @@ mod tests {
             .map(|(name, _)| name.clone())
             .collect();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(
-            !markers.is_empty() && bare.is_empty(),
-            "nothing at {bare:?}"
-        );
+        // (The yard has no loot markers now: what's there is what the
+        // stations put out. Any it gets back must have its loot on them.)
+        assert!(bare.is_empty(), "nothing at {bare:?}");
         assert!(in_crate >= 8, "the kit is in the crate ({in_crate} items)");
         assert!(low.is_empty(), "within a stoop of the floor: {low:#?}");
     }

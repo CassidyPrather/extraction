@@ -3152,7 +3152,11 @@ fn pump_station(b: &mut Builder) {
         &[door(3.5)],
     );
     b.table(Vec3::new(5.5, f, -3.0), 0.0, Some("tools"));
-    b.chair(Vec3::new(5.4, f, -2.35), -0.2);
+    // Pushed in under the table's far end, not out beside it: a body stands
+    // at the table's side to reach the far end of what's on it (the full
+    // lib suite's `every_thing_in_a_building_is_taken_from_where_it_stops`:
+    // a second thing on it lay out of reach behind the chair).
+    b.chair(Vec3::new(5.6, f, -2.55), -0.2);
     b.locker(Vec3::new(6.6, f, -4.45), 0.0);
     for (x, z) in [(-6.3, 4.2), (-5.6, 4.35), (-6.2, 3.55)] {
         b.barrel(Vec3::new(x, f, z));
