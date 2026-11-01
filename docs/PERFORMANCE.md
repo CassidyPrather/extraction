@@ -342,7 +342,7 @@ does nothing, since none is.
 
 **Fixed (Weapon feel, 2026-11-01):** `render::puff`'s `face_puffs` clamps
 each puff, after its owner sets its scale, to span no more than
-`MAX_HALF_ANGLE` (12 degrees) from the eye: near the eye a puff looks
+`MAX_HALF_ANGLE` from the eye: near the eye a puff looks
 smaller, not thicker. On the way: the eye `face_puffs` faced was the
 middle of every active 3D camera, an impostor's capture rig and warmup's
 proxy eye among them, so puffs were turned partly edge-on and none read
@@ -355,7 +355,18 @@ drawing to a screen or headset. With both:
 | a firefight's wounds, 6-15 m | 64 | 24.5M | 15 |
 | standing in a hazard's cloud | 64 | 60.9M | 26 |
 
-At 14 degrees the cloud was 72.2M; the gauge holds 12.
+That was at 12 degrees (at 14 the cloud was 72.2M). Then
+`render::mark_offscreen` put the sky dome on the real eye too, a
+full-screen layer the gauge had missed (6.48M an eye): the bare view
+went from 20.6M to 27.0M and the cloud to 67.2M, over. That's a cost
+play always pays, not a regression, so the cap came down to 10 degrees
+(11 gave 61.7M, under 5% of headroom):
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 32.2M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 30.8M | 16 |
+| standing in a hazard's cloud | 64 | 56.4M | 23 |
 
 ### Items at rest, asleep
 

@@ -27,7 +27,7 @@ pub const QUAD: f32 = 1.6;
 /// a hazard's cloud put 64 quads each across most of the view, 39 layers
 /// of blended fragments through both eyes (`render::vr_budget`'s puff
 /// gauge); in VR a wall of grey against the face reads worse besides.
-pub const MAX_HALF_ANGLE: f32 = 12.0 * std::f32::consts::PI / 180.0;
+pub const MAX_HALF_ANGLE: f32 = 10.0 * std::f32::consts::PI / 180.0;
 
 /// The largest scale a puff `dist` m from the eye may have
 /// ([`MAX_HALF_ANGLE`]).
@@ -385,10 +385,10 @@ mod tests {
             let angle = (half / dist).atan();
             assert!((angle - MAX_HALF_ANGLE).abs() < 1e-4, "{dist} m: {angle}");
         }
-        // A hazard puff at its fullest (1.8) is clamped within 6.8 m, and a
-        // wound's (0.5) only within 1.9 m.
-        assert!(max_scale(6.5) < 1.8 && max_scale(7.0) > 1.8);
-        assert!(max_scale(1.8) < 0.5 && max_scale(2.0) > 0.5);
+        // A hazard puff at its fullest (1.8) is clamped within 8.2 m, and a
+        // wound's (0.5) only within 2.3 m.
+        assert!(max_scale(7.5) < 1.8 && max_scale(8.5) > 1.8);
+        assert!(max_scale(2.0) < 0.5 && max_scale(2.5) > 0.5);
         assert_eq!(max_scale(-1.0), 0.0);
     }
 

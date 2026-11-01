@@ -538,8 +538,10 @@ mod puffs {
 /// hides one the eye is in (82.2M: none is), `angle:<deg>` caps a puff's
 /// apparent half-width (20: 60.3M; 12: 38.0M), measured before
 /// `render::puff` faced the right eye. Now `face_puffs` caps each puff at
-/// `MAX_HALF_ANGLE` (12 degrees) from the eye: the wreck 27.5M, the
-/// firefight 24.5M, the cloud 60.9M (`docs/PERFORMANCE.md`).
+/// `MAX_HALF_ANGLE` (10 degrees) from the eye, and the sky dome follows
+/// the real eye (a layer the old numbers missed): the bare view 27.0M,
+/// the wreck 32.2M, the firefight 30.8M, the cloud 56.4M
+/// (`docs/PERFORMANCE.md`).
 #[test]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();
