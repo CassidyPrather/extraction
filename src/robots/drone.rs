@@ -961,8 +961,10 @@ mod tests {
         let f = app.world().resource::<Fight>();
         assert!(
             !f.locks.is_empty() && !f.hurts.is_empty(),
-            "no fight: {:?}",
-            f.locks
+            "no fight: locks {:?}, shots {:?} ({} warnings)",
+            f.locks,
+            f.shots,
+            f.warnings
         );
         assert!(
             f.warnings >= BURST as usize,
