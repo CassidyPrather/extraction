@@ -110,6 +110,11 @@ part visible from outside and every part a hand can work, and for each:
 - What do you see when it's worked? (The bolt back: the bolt face, the
   extractor, the empty chamber, the follower. The dust cover off: the
   recoil spring and carrier.)
+- Is every control a hand works its own named part where the real one
+  is, so the hands find it from the model? Above all the magazine catch
+  or latch: `mag_catch` (a paddle tipping about its pin, the AK's and
+  RPK's) or `mag_catch_heel` (drawn back at the butt, the PM's). The hand
+  rule picks which finger reaches it from where the part sits.
 
 ### 3. Proportions
 

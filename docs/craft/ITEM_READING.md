@@ -180,3 +180,49 @@ camera:
 
 Sheets re-shot on main 2ee65c62 (the same camera, `art/lineup.py` now
 building the bolt's and detector's new looks as the game does).
+
+### The shared lettering font (1 November)
+
+`docs/shots/items/water_bottle_label_before_after.png` (in hand, pixels
+x5): the font's В was the 8's strokes, so the water bottle read "8ОДА".
+The font's twins are fixed (`art/check_glyphs.py`, run with
+`art/check.py`); the labelled items rebuilt (only those whose geometry
+changed: the ammo boxes, tins, packets, tapes and records). At in-hand
+sharpness a 1.3 cm label is still soft: labels stay bonus legibility,
+never the only difference. Not rebuilt: the depot's conveyor and
+cradle (rebuilt here they lost their rollers' baked AO; their only
+change is the C in their codes) and the guns (Gunsmith's, mid-edit).
+The rice bag's and sugar box's label z-fighting predates this.
+
+### Prints that stand off their faces (1 November)
+
+`art/check.py` flagged label z-fighting on the rice bag and the sugar box
+(the coordinator: check the class). No item shared a lift: each script
+laid its prints, labels and bands 0.2 to 0.8 mm off the face under them,
+and the ones with a big overlap fought (the rice bag's print 0.05 mm off
+its label; the sugar box's bands 0.2 mm; the spare parts' lid label; the
+splint's straps' undersides in the slats'; the car bonnet's brace arms
+0.5 mm apart where they cross). Now a print, label or band stands
+`art/items/_kit.py`'s `LIFT` (1.2 mm) off what it's on, and `art/check.py`
+judges items at 1 mm (held 0.3 to 3 m from the eye; props stay at 3 mm).
+All 192 item models check clean.
+
+### The truck's crate, as a newcomer opens it (1 November)
+
+The crate shows only what the first stations use (`onboarding::
+stash_station`): the PM pistol (its magazine in it), the radio, and at
+the first station the cleaning kit. In game, from the truck's bed, about
+a metre away, under the room's light (`render::grade` `ROOM_ADAPT`):
+
+- **The pistol**: laid on its side already (stood on its grip it was a
+  stick); black and bakelite, its ring round it. Reads.
+- **The radio stood up**: from above an olive stub and an aerial on the
+  crate's dark floor, its face (grille, tuning window, lamp) unseen. Now
+  it lies on its back, its face up (`persist::fresh_save`'s `turn`, as
+  the pistol's): `docs/shots/items/truck_crate_radio_before_after.png`.
+- **The cleaning kit**: a dark canvas roll, leather straps, brass rod
+  ends: distinct on the boards (`truck_crate_first_three.png`, the kit
+  shown early for the shot).
+
+**How it rests is part of its silhouette**, again, and so is which face is
+up: an item in a crate is seen from above.

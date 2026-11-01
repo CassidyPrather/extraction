@@ -589,7 +589,11 @@ fn valley_air(
 ) -> HeightFogTarget {
     use super::weather::WeatherKind;
     let (ground, base, cap, lift) = match map.name.as_str() {
-        "Kettle Pass" => (1.0, 16.0, 0.009, 52.0),
+        // The cap's lift scaled with the relief when the valley was pulled
+        // in (its tops came down a quarter over the 24 m base: 24 + (52 - 24)
+        // x 0.75), so the summits still go into it and the pass is in its
+        // skirts (`docs/MAP_DESIGN.md`, Tight).
+        "Kettle Pass" => (1.0, 16.0, 0.009, 45.0),
         // The practice ground is kinder: you should see what you're shown.
         "Training Yard" => (0.55, 8.0, 0.0, 0.0),
         // The drained reservoir: wet fog pooling from the bed's floor (31-34 m

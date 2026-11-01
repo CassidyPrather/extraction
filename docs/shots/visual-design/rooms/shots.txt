@@ -1,0 +1,17 @@
+# Interior light (render::grade::ROOM_ADAPT, render::sky_light's near
+# fill): the first jobs' front rooms at 11:00 in drizzle, an A/B on one
+# build (before: EXTRACTION_ROOM_ADAPT=0 EXTRACTION_NEAR_FILL=0), from the
+# same cameras (the room's
+# middle, looking at its table, away from the doors, whose state isn't
+# the same launch to launch).
+#
+#   scripts/before_after.py docs/shots/visual-design/rooms/shots.txt
+
+before HEAD
+after HEAD
+size 1280x720
+
+farm_table | Visual design | Marrow's Old farm farmhouse, the front room's table: the papers and the tin on it read, the floor round it isn't black; the windows still blaze | --map marrow_creek --camera 109,0,80,180,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1 | EXTRACTION_ROOM_ADAPT=0 EXTRACTION_NEAR_FILL=0 --map marrow_creek --camera 109,0,80,180,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1
+post_table | Visual design | Marrow's post office: the table under the side window | --map marrow_creek --camera -22.2,0,33.5,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1 | EXTRACTION_ROOM_ADAPT=0 EXTRACTION_NEAR_FILL=0 --map marrow_creek --camera -22.2,0,33.5,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1
+village_table | Visual design | A Marrow village house: the table by the window | --map marrow_creek --camera -20.2,0,63.5,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1 | EXTRACTION_ROOM_ADAPT=0 EXTRACTION_NEAR_FILL=0 --map marrow_creek --camera -20.2,0,63.5,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1
+ash_row_table | Visual design | Cinder's Ash Row, the foreman's house | --map cinder_works --camera -73,0,120.6,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1 | EXTRACTION_ROOM_ADAPT=0 EXTRACTION_NEAR_FILL=0 --map cinder_works --camera -73,0,120.6,0,-8 --frames 90 --hour day --weather drizzle --no-robots --hide-hands 1 --seed 1

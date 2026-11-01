@@ -31,12 +31,21 @@ BORE = 0.058
 RX_HW = 0.0165          # receiver half width
 RX_Z0, RX_Z1 = -0.236, 0.021
 RX_Y0, RX_Y1 = 0.022, 0.078
-MUZZLE = -0.82          # end of the brake
-BRAKE_Z = MUZZLE + 0.08  # where the brake starts (barrel ends 2 mm into it)
+# Against a side photograph scaled to the published 1060 mm
+# (`docs/craft/guns/rpk74/README.md`): the muzzle device was 80 mm (the
+# photograph's 55) and the stock 45 mm long.
+MUZZLE = -0.795         # end of the brake
+BRAKE_Z = MUZZLE + 0.055  # where the brake starts (barrel ends 2 mm into it)
+SK = 0.834              # the stock, drawn this much shorter behind the wrist
+
+
+def sz(z):
+    """z on the shortened stock."""
+    return z if z <= 0.025 else 0.025 + (z - 0.025) * SK
 FS_Z = BRAKE_Z + 0.004  # front sight block, behind the brake
 PIVOT = (0.0, 0.038, -0.60)   # bipod hinge pin
 LEG_SPLAY = 0.047        # leg axis x at the foot (each side)
-LEG_FOOT = (0.0, 0.0275, -0.822)  # foot centre (on the leg axis), folded, x set per side
+LEG_FOOT = (0.0, 0.0275, -0.797)  # foot centre (on the leg axis), folded, x set per side
 RAKE = math.radians(14)  # deployed legs lean forward this far from vertical
 
 
@@ -122,9 +131,16 @@ grip.cyl(0.004, -0.0935, -0.091, "Blued", segs=12, xf=T(0, 0, 0.034) @ RX(-math.
 guard_path = catmull([(-0.090, 0.0225), (-0.0925, 0.012), (-0.086, 0.0045), (-0.072, 0.002),
                       (-0.035, 0.002), (-0.019, 0.004), (-0.013, 0.0115)], samples=4, closed=False)
 parts_static.sweep(guard_path, section_rect(0.0085, 0.0028, 0.0010), "Blued")
-parts_static.prism(fillet([(-0.097, 0.0225), (-0.093, 0.0225), (-0.0905, 0.008), (-0.095, 0.006),
-                           (-0.098, 0.012)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
-                   bevel=0.0006, segs=1)
+# The magazine catch paddle, just ahead of the guard, the AK's: its own
+# object, tipping about its pin (`Moves::MagCatch`) as the thumb pushes it.
+catch = Part("mag_catch", origin=(0.0, 0.0195, -0.095))
+catch.prism(fillet([(-0.097, 0.0225), (-0.093, 0.0225), (-0.0905, 0.008), (-0.095, 0.006),
+                    (-0.098, 0.012)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
+            bevel=0.0006, segs=1)
+for k in range(4):
+    y = 0.0105 + k * 0.0026
+    catch.box((0.0098, 0.0008, 0.0012), (0, y, -0.0978 + (y - 0.012) * 0.06), "Blued",
+              bevel=0.0003, segs=1)
 
 # --- Barrel, gas system, sights ---------------------------------------------------------
 barrel = Part("barrel")
@@ -221,10 +237,10 @@ clamp.sweep(sling, section_rect(0.0025, 0.0025, 0.0007), "Steel",
 brake = Part("brake")
 brake.tube(0.0122, 0.0034, MUZZLE, BRAKE_Z, "Blued", segs=24, xf=T(0, BORE, 0), chamfer=0.0012)
 bc = Part("cut")
-bc.box((0.04, 0.0105, 0.017), (0, BORE, MUZZLE + 0.022), "Blued", bevel=0.003, segs=2)
-bc.box((0.008, 0.04, 0.009), (0.0, BORE, MUZZLE + 0.046), "Blued", bevel=0.002, segs=1,
-       xf=RZ(math.radians(90), about=(0, BORE, MUZZLE + 0.046)))
-bc.box((0.012, 0.03, 0.004), (0.0, BORE + 0.012, MUZZLE + 0.056), "Blued")
+bc.box((0.04, 0.0105, 0.012), (0, BORE, MUZZLE + 0.015), "Blued", bevel=0.003, segs=2)
+bc.box((0.008, 0.04, 0.007), (0.0, BORE, MUZZLE + 0.032), "Blued", bevel=0.002, segs=1,
+       xf=RZ(math.radians(90), about=(0, BORE, MUZZLE + 0.032)))
+bc.box((0.012, 0.03, 0.004), (0.0, BORE + 0.012, MUZZLE + 0.0385), "Blued")
 bc.box((0.05, 0.05, 0.03), (0.0, BORE + 0.016, MUZZLE - 0.01), "Blued",
        xf=RX(math.radians(-25), about=(0, BORE, MUZZLE)))
 brake.cut(bc)
@@ -241,20 +257,22 @@ for sx in (-1, 1):
     lc.box((0.006, 0.006, 0.14), (sx * 0.0262, 0.050, -0.337), "Wood", bevel=0.0025, segs=2)
 lower.cut(lc)
 
-upper_sec = fillet([(-0.0155, 0.0755), (0.0155, 0.0755), (0.0155, 0.091), (0.0, 0.0985),
+# Its foot down on the lower one's top, a seam between (it stood 4.5 mm
+# clear, and read at 1 m as floating over a gap).
+upper_sec = fillet([(-0.0155, 0.072), (0.0155, 0.072), (0.0155, 0.091), (0.0, 0.0985),
                     (-0.0155, 0.091)], [0.0042, 0.0042, 0.008, 0.012, 0.008], 4)
 upper = Part("upper_hg")
 upper.prism(upper_sec, -0.392, -0.247, "Wood", axis="z", bevel=0.004, segs=2)
-upper.prism([(x * 1.05, y + (y - 0.0755) * 0.04) for x, y in upper_sec], -0.2465, -0.236, "Blued",
+upper.prism([(x * 1.05, y + (y - 0.072) * 0.04) for x, y in upper_sec], -0.2465, -0.236, "Blued",
             axis="z", bevel=0.0008, segs=1)
 
 # --- Club-foot buttstock ------------------------------------------------------------------
 # A straight comb, the wrist line dropping from the grip, then the scoop
 # for the off hand and the deep toe of the "club foot".
-bottom = [(0.296, -0.116)] + catmull([(0.272, -0.115), (0.258, -0.104), (0.246, -0.082),
-                  (0.226, -0.066), (0.19, -0.054), (0.10, -0.028), (0.025, 0.004)], 4,
-                 closed=False)
-stock_prof = [(0.019, 0.0765), (0.296, 0.041)] + bottom + [(0.019, 0.022)]
+bottom = [(sz(0.296), -0.116)] + catmull([(sz(z), y) for z, y in (
+    (0.272, -0.115), (0.258, -0.104), (0.246, -0.082), (0.226, -0.066), (0.19, -0.054),
+    (0.10, -0.028), (0.025, 0.004))], 4, closed=False)
+stock_prof = [(0.019, 0.0765), (sz(0.296), 0.041)] + bottom + [(0.019, 0.022)]
 radii = [0.0, 0.0] + [0.0] * len(bottom) + [0.0]
 radii[2] = 0.0
 stock_prof = fillet(stock_prof, radii, 4)
@@ -262,25 +280,28 @@ stock_prof = fillet(stock_prof, radii, 4)
 
 def stock_w(z, yc, h):
     # Half widths at the belly (narrowing into the foot) and the comb.
-    k = 0.0168 + (z - 0.02) / 0.28 * 0.0052
+    k = 0.0168 + (z - 0.02) / (sz(0.30) - 0.02) * 0.0052
     return (k - max(0.0, -0.06 - (yc - h)) * 0.03, k * 0.85)
 
 
 # Rounded across (as the AK's): the extruded outline read as a plank.
 stock = Part("stock")
-stock.stock(stock_prof, 0.0192, 0.2958, "Wood", stock_w, stations=90, segs=28, power=2.8)
+stock.stock(stock_prof, 0.0192, sz(0.296) - 0.0002, "Wood", stock_w, stations=90, segs=28, power=2.8)
 butt = Part("butt")
-butt_prof = fillet([(0.2955, 0.0425), (0.306, 0.0425), (0.306, -0.1175), (0.2955, -0.1175)],
+BZ = sz(0.296) - 0.296  # the butt plate's shift
+butt_prof = fillet([(0.2955 + BZ, 0.0425), (0.306 + BZ, 0.0425), (0.306 + BZ, -0.1175),
+                    (0.2955 + BZ, -0.1175)],
                    [0.002, 0.004, 0.004, 0.002], 2)
 butt.prism(butt_prof, -0.0235, 0.0235, "Blued", axis="x", bevel=0.002, segs=2)
-butt.box((0.032, 0.056, 0.004), (0, -0.026, 0.307), "Blued", bevel=0.0015)  # trapdoor
-butt.cyl(0.0022, 0.306, 0.3085, "Steel", segs=8, xf=T(0, 0.028, 0))
-butt.cyl(0.0022, 0.306, 0.3085, "Steel", segs=8, xf=T(0, -0.104, 0))
+butt.box((0.032, 0.056, 0.004), (0, -0.026, 0.307 + BZ), "Blued", bevel=0.0015)  # trapdoor
+butt.cyl(0.0022, 0.306 + BZ, 0.3085 + BZ, "Steel", segs=8, xf=T(0, 0.028, 0))
+butt.cyl(0.0022, 0.306 + BZ, 0.3085 + BZ, "Steel", segs=8, xf=T(0, -0.104, 0))
 # Sling loop on the left of the stock, ahead of the foot.
-loop = catmull([(0.205, -0.054), (0.211, -0.04), (0.225, -0.04), (0.231, -0.054)], 3, closed=False)
+loop = catmull([(sz(0.205), -0.054), (sz(0.211), -0.04), (sz(0.225), -0.04), (sz(0.231), -0.054)],
+               3, closed=False)
 butt.sweep(loop, section_rect(0.003, 0.003, 0.0008), "Steel", xf=T(-0.0205, -0.008, 0.0))
 # Its two studs into the wood, where the rounded stock falls away under it.
-for z in (0.205, 0.231):
+for z in (sz(0.205), sz(0.231)):
     butt.cyl(0.0016, -0.022, -0.010, "Steel", segs=10, xf=T(0, -0.062, z) @ RY(math.pi / 2))
 
 # --- Moving parts -------------------------------------------------------------------------
@@ -341,7 +362,7 @@ join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper,
      worn={"mats": ("Blued", "Stamped")})
 # The butt, off its tang screws at the vice (`weapons::gunsmith`).
 join("static_butt", stock, butt, worn={})
-for p in (carrier, selector, trig):
+for p in (carrier, selector, trig, catch):
     make(p, worn={})
 make(bipod, worn=None)  # thin legs: edge wear would turn them all bare steel
 
@@ -367,7 +388,7 @@ empty("magwell", (0.0, 0.0265, -0.1415))
 empty("pt_bipod", PIVOT)
 empty("pt_bipod_feet", tuple(tip))
 empty("pt_sling_front", (-0.0172, 0.0435, PIVOT[2]))
-empty("pt_sling_rear", (-0.0205, -0.048, 0.218))
+empty("pt_sling_rear", (-0.0205, -0.048, sz(0.218)))
 report()
 export("assets/models/guns/rpk74.glb")
 export_part("static_butt", "assets/models/items/stock_rpk74.glb")

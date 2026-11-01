@@ -1578,8 +1578,11 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 52] = [
+pub const PREFABS: [&str; 55] = [
     "house_plank",
+    "house_plank_b",
+    "house_plank_c",
+    "post_office",
     "farmhouse",
     "house_brick",
     "cabin_log",
@@ -1678,10 +1681,31 @@ pub fn prefab(id: &str) -> Option<Geo> {
         return Some(b.finish());
     }
     match id {
-        "house_plank" => house(&mut b, 8.0, 7.0, Mat::Planks, Mat::Shingles),
-        "farmhouse" => house(&mut b, 10.0, 8.0, Mat::Planks, Mat::Corrugated),
-        "house_brick" => {
-            house(&mut b, 10.0, 8.0, Mat::Brick, Mat::Shingles);
+        "house_plank" | "house_plank_b" | "house_plank_c" => house(
+            &mut b,
+            8.0,
+            7.0,
+            Mat::Planks,
+            Mat::Shingles,
+            HousePlan::of(id),
+        ),
+        "farmhouse" => house(
+            &mut b,
+            10.0,
+            8.0,
+            Mat::Planks,
+            Mat::Corrugated,
+            HousePlan::Farm,
+        ),
+        "house_brick" | "post_office" => {
+            house(
+                &mut b,
+                10.0,
+                8.0,
+                Mat::Brick,
+                Mat::Shingles,
+                HousePlan::of(id),
+            );
             b.loot(Vec3::new(3.5, 0.6, 2.8), "medical");
         }
         "cabin_log" => cabin(&mut b),
@@ -1748,7 +1772,7 @@ pub fn prefab(id: &str) -> Option<Geo> {
     Some(b.finish())
 }
 
-fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
+fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat, plan: HousePlan) {
     let f = 0.5;
     let h = 2.7;
     let (x, z) = (w * 0.5, d * 0.5);
@@ -1788,32 +1812,165 @@ fn house(b: &mut Builder, w: f32, d: f32, wall: Mat, roof: Mat) {
         &[],
     );
     b.gable_roof(w + 0.36, d + 0.36, f + h, 32.0, 0.5, roof, wall);
-    // Front room.
-    b.table(Vec3::new(-x * 0.4, f, -z * 0.2), 0.0, Some("house"));
-    b.chair(
-        Vec3::new(-x * 0.4 - 0.3, f, -z * 0.2 - 0.6),
-        std::f32::consts::PI,
-    );
-    b.chair(Vec3::new(-x * 0.4 + 0.25, f, -z * 0.2 + 0.6), 0.1);
-    // Between the front wall and the +X wall's window, not before it.
-    b.shelf(
-        Vec3::new(x - 0.3, f, -z * 0.75),
-        std::f32::consts::FRAC_PI_2,
-        Some("house"),
-    );
-    // Kitchen (back left).
-    b.counter(
-        Vec3::new(-x + 0.4, f, z - 1.4),
-        std::f32::consts::FRAC_PI_2,
-        1.8,
-        Some("kitchen"),
-    );
-    b.stove(Vec3::new(-x * 0.35, f, z - 0.45), 0.0);
-    // In the corner past the counter's end, clear of the back window.
-    b.shelf(Vec3::new(-x + 0.6, f, z - 0.3), 0.0, Some("kitchen"));
-    // Bedroom (back right).
-    b.bed(Vec3::new(x - 0.6, f, z - 1.2), 0.0);
-    b.crate_box(Vec3::new(x * 0.35, f, z - 0.5), 0.5, Some("house"));
+    let l = house_layout(plan, w, d);
+    let (table, ty) = l.table;
+    // Front room: the table (the post office's is its counter), the shelf.
+    if plan == HousePlan::PostOffice {
+        // The public counter across the front room, the way in past its
+        // open end; the pigeonholes behind it on the partition.
+        b.counter(table, ty, 6.0, Some("house"));
+    } else {
+        b.table(table, ty, Some("house"));
+        let rot = Quat::from_rotation_y(ty);
+        if plan == HousePlan::Farm {
+            // A long table's bench along it (the yard's plank bench,
+            // `art/props/yards.py`), a chair at its head.
+            let from = b.geo.pieces.len();
+            let bench = table + rot * Vec3::new(0.0, 0.0, 0.62);
+            b.bx_rot(
+                Vec3::new(1.5, 0.45, 0.34),
+                bench + Vec3::Y * 0.225,
+                ty,
+                Mat::Timber,
+            );
+            b.dress(
+                from,
+                vec![(
+                    "bench_yard",
+                    Transform::from_translation(bench).with_rotation(rot),
+                )],
+            );
+            b.chair(
+                table + rot * Vec3::new(0.85, 0.0, 0.0),
+                ty - std::f32::consts::FRAC_PI_2,
+            );
+        } else {
+            b.chair(
+                table + rot * Vec3::new(-0.3, 0.0, -0.6),
+                ty + std::f32::consts::PI,
+            );
+            b.chair(table + rot * Vec3::new(0.25, 0.0, 0.6), ty + 0.1);
+        }
+    }
+    b.shelf(l.shelf.0, l.shelf.1, Some("house"));
+    // Kitchen (the back room on the counter's side).
+    b.counter(l.counter.0, l.counter.1, 1.8, Some("kitchen"));
+    b.stove(l.stove.0, l.stove.1);
+    b.shelf(l.kitchen_shelf, 0.0, Some("kitchen"));
+    // Bedroom (the other back room).
+    b.bed(l.bed, 0.0);
+    b.crate_box(l.crate_at, 0.5, Some("house"));
+}
+
+/// Which plan a house is furnished to, inside `house`'s one shell: the
+/// first jobs' houses were one room three times (`docs/craft/
+/// PROP_READING.md`). A ruin keeps the common plan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HousePlan {
+    /// Front room with a table and a shelf; kitchen back left, bedroom
+    /// back right.
+    Common,
+    /// A farm's kitchen-living room: the stove in the front room, a long
+    /// table and its bench; the back left a pantry.
+    Farm,
+    /// A public counter across the front room, the sorting behind it.
+    PostOffice,
+    /// The common plan the other way round: kitchen back right, bedroom
+    /// back left, the table and shelf on the other sides.
+    PlankB,
+    /// The front room arranged round its side window: the table out in
+    /// the room, the shelf on the far wall.
+    PlankC,
+}
+
+impl HousePlan {
+    pub fn of(prefab: &str) -> Self {
+        match prefab {
+            "farmhouse" => Self::Farm,
+            "post_office" => Self::PostOffice,
+            "house_plank_b" => Self::PlankB,
+            "house_plank_c" => Self::PlankC,
+            _ => Self::Common,
+        }
+    }
+}
+
+/// Where a house's furniture stands, `w` x `d`, its floor 0.5 up: the
+/// builder furnishes it (`house`), the clutter dresses it
+/// (`clutter::slots`) from the same places.
+#[derive(Clone, Copy, Debug)]
+pub struct HouseLayout {
+    /// The table's (or the post office's counter's) middle on the floor,
+    /// and its turn.
+    pub table: (Vec3, f32),
+    /// The front room's shelf.
+    pub shelf: (Vec3, f32),
+    /// The kitchen counter's middle and turn.
+    pub counter: (Vec3, f32),
+    pub kitchen_shelf: Vec3,
+    pub stove: (Vec3, f32),
+    pub bed: Vec3,
+    pub crate_at: Vec3,
+    /// A clear spot of the front room's floor (its boards' top).
+    pub room_floor: Vec3,
+}
+
+pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
+    use std::f32::consts::FRAC_PI_2;
+    let f = 0.5;
+    let (x, z) = (w * 0.5, d * 0.5);
+    let pz = z - d * 0.42;
+    let common = HouseLayout {
+        table: (Vec3::new(-x * 0.4, f, -z * 0.2), 0.0),
+        // Between the front wall and the +X wall's window, not before it.
+        shelf: (Vec3::new(x - 0.3, f, -z * 0.75), FRAC_PI_2),
+        counter: (Vec3::new(-x + 0.4, f, z - 1.4), FRAC_PI_2),
+        // In the corner past the counter's end, clear of the back window.
+        kitchen_shelf: Vec3::new(-x + 0.6, f, z - 0.3),
+        stove: (Vec3::new(-x * 0.35, f, z - 0.45), 0.0),
+        bed: Vec3::new(x - 0.6, f, z - 1.2),
+        crate_at: Vec3::new(x * 0.35, f, z - 0.5),
+        room_floor: Vec3::new(x * 0.25, f + 0.03, -z * 0.45),
+    };
+    let flip = |v: Vec3| Vec3::new(-v.x, v.y, v.z);
+    match plan {
+        HousePlan::Common => common,
+        HousePlan::Farm => HouseLayout {
+            // The long table end on to the door, its bench on the stove's
+            // side; the stove in the front room's back corner, clear of
+            // the partition's doorway; the crate in the pantry where the
+            // stove was.
+            table: (Vec3::new(-x * 0.3, f, -z * 0.45), FRAC_PI_2),
+            stove: (Vec3::new(-x + 0.5, f, pz - 0.4), 0.0),
+            crate_at: Vec3::new(-x * 0.35, f, z - 0.5),
+            room_floor: Vec3::new(x * 0.3, f + 0.03, -z * 0.3),
+            ..common
+        },
+        HousePlan::PostOffice => HouseLayout {
+            table: (Vec3::new(x * 0.15, f, -0.5), 0.0),
+            room_floor: Vec3::new(x * 0.25, f + 0.03, -z * 0.55),
+            ..common
+        },
+        HousePlan::PlankB => HouseLayout {
+            table: (flip(common.table.0), 0.0),
+            shelf: (flip(common.shelf.0), -FRAC_PI_2),
+            // 10 cm forward: mirrored, its end lay in the +X window's
+            // jamb's plane (10 cm back, it hid the kitchen shelf's
+            // bottom board).
+            counter: (flip(common.counter.0) - Vec3::Z * 0.1, -FRAC_PI_2),
+            kitchen_shelf: flip(common.kitchen_shelf),
+            stove: (flip(common.stove.0), 0.0),
+            bed: flip(common.bed),
+            crate_at: flip(common.crate_at),
+            room_floor: flip(common.room_floor),
+        },
+        HousePlan::PlankC => HouseLayout {
+            table: (Vec3::new(x * 0.3, f, -z * 0.1), 0.4),
+            shelf: (Vec3::new(-x + 0.3, f, -z * 0.7), -FRAC_PI_2),
+            room_floor: Vec3::new(-x * 0.3, f + 0.03, -z * 0.5),
+            ..common
+        },
+    }
 }
 
 /// A house in ruins, from `house`'s plan (same footprint, same doors).
@@ -5761,6 +5918,13 @@ pub fn swing_doors(
         // its doorway, and stood open across half of it: Kettle's mine,
         // pulled-in map, raiders jammed against it for ten minutes, Robot
         // minds' sims, 1 November.)
+        // TODO: find what moves them and take this pin out. Two of Kettle
+        // mine's doors (seed 10: the refuge -> raise_foot one and the one
+        // before it) creep about 1.4 mm/s off their hinges from the raid's
+        // start, at zero linear and angular velocity, held by nothing, no
+        // one near; one stops 0.46 m off, at its doorway's middle. Not the
+        // rotation write here, nor lockdown or underground code.
+        // `sim::indoor::tests::every_door_stays_on_its_hinge` catches it.
         if t.translation != leaf.0.hinge {
             t.translation = leaf.0.hinge;
         }

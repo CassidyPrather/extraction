@@ -90,7 +90,41 @@ here (weapon feel owns them).
   - **Grip**: short, set back behind the hammer and raked, with the
     lanyard ring at its butt. Its screw and checkering moved with it.
   - **Side plate**: its screws and outline moved onto the new frame.
-- **`src/weapons/layout.rs`** (`nagant()`): `grip` is at z 0.035, the
-  middle of the new grip at the palm's height (it was the origin, the
-  middle of the old one). The blockout's frame, grip and trigger were
-  redrawn.
+- **`src/weapons/layout.rs`** (`nagant()`): `grip` is at (0, 0, 0.027),
+  on the new grip (see the second pass). The blockout's frame, grip and
+  trigger were redrawn.
+
+### Second pass: the hold
+
+The first pass put `grip` at the middle of the grip at the old origin's
+height (z 0.035, y 0): only 11 mm in front of the backstrap, and low.
+Hands measured the trigger 116 mm out in the hand's frame, against 63–89
+mm on every other gun.
+
+The trigger itself was nearly right. The photograph's reach, backstrap to
+the trigger's face at mid-height, is about 86 mm, about 16 mm more than
+the PM's. The model had 88.
+
+So `grip` moved 8 mm forward, to (0, 0, 0.027), and the trigger 4 mm back
+onto the photograph's (pin at z −0.032). That puts the trigger about 65 mm
+ahead of the grip point along the bore, as on the PM.
+
+A hand on a raked revolver grip also sits higher, with the web up under
+the hammer, at about y 0.014. That height cuts the bore's lever over the
+palm from 74 mm to 60. With it, `weapons::signature`'s gauge found the
+Nagant's kick too like the PM's (1.3 apart), and at y 0.008 too like the
+IZh-43's (2.7). So the height stays at 0 until weapon feel gives the
+Nagant a kick of its own at the higher hold.
+
+### Third pass: the heel
+
+The build now fails a bevelled outline whose corner is tighter than its
+bevel, since the bevel folds over itself there. The grip's heel, at the
+butt's back corner, was one. It's now rounded over about 4 mm instead of 1,
+and the butt's length and depth are unchanged.
+
+### Fourth pass: the hold's height
+
+Weapon feel gave the Nagant a kick of its own (items.ron: a straight shove,
+less climb), so `grip` rose to (0, 0.014, 0.027), the web up under the
+hammer. The bore's lever over the palm is 60 mm.
