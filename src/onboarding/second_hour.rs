@@ -166,7 +166,11 @@ pub(super) fn direct(
         let (response, tasks): (&'static str, Vec<Task>) = match f {
             // (Out first: by the time it's said, the jammed gun may be
             // back on the hip, and a rack with an empty hand fails.)
-            First::Jam(_) => ("rack it", vec![Task::DrawGun, Task::Gun(MacroKind::Rack)]),
+            First::Jam(_) if world.armed(player) => {
+                ("rack it", vec![Task::DrawGun, Task::Gun(MacroKind::Rack)])
+            }
+            // Said after a fall that took the gun: nothing to rack.
+            First::Jam(_) => ("(no gun on it to rack)", vec![]),
             First::Worn => ("carry on; mend it at the bench later", vec![]),
             // Not on into it: back out the way it came, a few steps.
             First::Anomaly if world.nearest_is_burner(here) => {
@@ -325,7 +329,7 @@ pub(super) fn direct(
         });
         bot.log.push(format!("  radio: {f:?} -> {response}"));
         if !tasks.is_empty() {
-            cut_in(&mut bot, tasks);
+            cut_in(&mut bot, routed(&world, here, tasks));
             let wait = match f {
                 First::DroneLock => 60.0,
                 First::Underground | First::Lamed => 25.0,
@@ -913,6 +917,45 @@ pub(super) fn direct(
 /// Tasks ahead of whatever the bot was doing. A shot it was taking is
 /// done with (resumed later, it would only be noise), and the trigger
 /// and the aim are let go: held through a walk, a rifle keeps firing.
+/// `tasks` from `here` with each walk outdoors (neither end under a
+/// roof, a few strides or more) by the routed way (`first_hour::walk`):
+/// the answers' own straight walks ("move off low", out round the house)
+/// went into a garden's fence. Walks indoors, by a door, are as they were.
+fn routed(world: &World2, here: Vec2, tasks: Vec<Task>) -> Vec<Task> {
+    // (At chest height over the ground there: a shell's box is from its
+    // floor up.)
+    let indoors = |p: Vec2| {
+        let y = world.zone.ground(p.x, p.y) + 1.0;
+        world
+            .entrances
+            .building_at(Vec3::new(p.x, y, p.y))
+            .is_some()
+    };
+    let mut at = here;
+    let mut out = Vec::new();
+    for t in tasks {
+        match t {
+            Task::WalkTo { to, within }
+                if within >= 1.0 && to.distance(at) > 4.0 && !indoors(at) && !indoors(to) =>
+            {
+                let mut way = super::first_hour::walk(world, at, to);
+                // The last stretch as asked (how near counts as there).
+                if let Some(Task::WalkTo { within: w, .. }) = way.last_mut() {
+                    *w = within;
+                }
+                out.extend(way);
+                at = to;
+            }
+            Task::WalkTo { to, .. } => {
+                at = to;
+                out.push(t);
+            }
+            t => out.push(t),
+        }
+    }
+    out
+}
+
 pub(super) fn cut_in(bot: &mut Bot, tasks: Vec<Task>) {
     if matches!(bot.tasks.front(), Some(Task::Fire { .. })) {
         bot.tasks.pop_front();
