@@ -114,9 +114,29 @@ pub(super) fn measure(app: &mut App, eyes: (Entity, Entity)) -> (ViewLoad, ViewL
 }
 
 fn holds(map: &str) {
+    let file = crate::asset_root_path()
+        .join("..")
+        .join(format!("scripts/lookbook/{map}.views"));
+    let over = holds_views(map, "clearing", |zone| {
+        crate::tour::scripted_views(zone, &file)
+    });
+    assert!(
+        over.is_empty(),
+        "{map}, both eyes over the frame budget:\n{}",
+        over.join("\n")
+    );
+}
+
+/// Each view through both eyes in `weather`, settled; what's over the
+/// stereo budget, a line a view.
+fn holds_views(
+    map: &str,
+    weather: &str,
+    views: impl FnOnce(&crate::world::Zone) -> Vec<crate::tour::View>,
+) -> Vec<String> {
     // Counts: draws, shadow draws, fragments.
     let _counting = super::budget::tests::counted();
-    let mut app = super::budget::tests::client_threads(map, "clearing", None);
+    let mut app = super::budget::tests::client_threads(map, weather, None);
     // (The flat camera comes a few frames in.)
     for _ in 0..300 {
         app.update();
@@ -126,11 +146,8 @@ fn holds(map: &str) {
         app.update();
     }
     let zone = app.world().resource::<crate::world::Zone>().clone();
-    let file = crate::asset_root_path()
-        .join("..")
-        .join(format!("scripts/lookbook/{map}.views"));
-    let views = crate::tour::scripted_views(&zone, &file);
-    assert!(!views.is_empty());
+    let views = views(&zone);
+    assert!(!views.is_empty(), "{map}: no views");
     let b = budget();
     let px = eye_px();
     let mut over = Vec::new();
@@ -183,6 +200,27 @@ fn holds(map: &str) {
              {fragments_m:.1}M fragments at {px:.0}² an eye (overdraw {:.2} / {:.2}); {views_drawing} views drawing",
             l.draws, r.draws, l.shadow_draws, r.shadow_draws, od_l.mean, od_r.mean
         );
+        // Near its budget: what it's spent on (one eye; the other's the
+        // same), to know what to cut.
+        let near = |n: usize, of: usize| n as f32 > of as f32 * 0.75;
+        if near(draws, b.draws) || near(shadow_draws, b.shadow_draws) {
+            let top = |by: &[(String, usize, usize)]| {
+                let mut most = by.to_vec();
+                most.sort_by(|a, b| b.1.cmp(&a.1));
+                most.iter()
+                    .take(
+                        std::env::var("WALK_TOP")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(6),
+                    )
+                    .map(|(w, c, _)| format!("{w} {c}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            println!("    drawn: {}", top(&l.by));
+            println!("    shadow: {}", top(&l.shadow_by));
+        }
         let mut o = Vec::new();
         if draws > b.draws {
             o.push(format!("draws {draws} > {}", b.draws));
@@ -214,9 +252,101 @@ fn holds(map: &str) {
             over.push(format!("{name}: {}", o.join(", ")));
         }
     }
+    over
+}
+
+/// Where Map design's walk reviews live: a valley's `walk.stills`, its
+/// stops ahead and to the side (`docs/craft/WALK_REVIEW.md`).
+/// `WALKS_DIR` reads them from elsewhere.
+fn walks_dir() -> std::path::PathBuf {
+    std::env::var_os("WALKS_DIR").map_or_else(
+        || crate::asset_root_path().join("../docs/craft/walks"),
+        std::path::PathBuf::from,
+    )
+}
+
+/// The walks' weather: the reference look (drizzle), or `WALK_WEATHER`.
+fn walk_weather() -> String {
+    std::env::var("WALK_WEATHER").unwrap_or_else(|_| "drizzle".into())
+}
+
+/// The walks the designer takes, stop by stop, ahead and to the side,
+/// in the reference weather (drizzle), through both eyes: every stop
+/// within the stereo budget. A valley without a walk review is skipped.
+#[test]
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_every_walk_holds_the_stereo_budget() {
+    let mut over = Vec::new();
+    let mut walked = 0;
+    for (map, _) in extraction_core::map::VALLEYS {
+        let file = walks_dir().join(map).join("walk.stills");
+        if !file.exists() {
+            println!("{map}: no walk review");
+            continue;
+        }
+        walked += 1;
+        over.extend(
+            holds_views(map, &walk_weather(), |zone| {
+                crate::tour::scripted_views(zone, &file)
+            })
+            .into_iter()
+            .map(|o| format!("{map} {o}")),
+        );
+    }
+    println!("{walked} walks");
     assert!(
         over.is_empty(),
-        "{map}, both eyes over the frame budget:\n{}",
+        "stops over the frame budget:\n{}",
+        over.join("\n")
+    );
+}
+
+/// The yard's stations, where a newcomer's first minutes go: from in
+/// front of each post, looking at it and turned a quarter to the right;
+/// the truck's (the kit, the settings, calling it) from where it drops
+/// you, the same two ways.
+fn station_views(zone: &crate::world::Zone) -> Vec<crate::tour::View> {
+    use extraction_core::map::MarkerKind;
+    let eye = |x: f32, z: f32| Vec3::new(x, zone.ground(x, z) + 1.7, z);
+    let mut out = Vec::new();
+    let mut two = |name: String, at: Vec3, yaw: f32| {
+        for (side, a) in [("ahead", yaw), ("side", yaw - 90.0)] {
+            let r = a.to_radians();
+            // Marker convention: 0 faces +Z, 90 faces -X.
+            let dir = Vec3::new(-r.sin(), 0.0, r.cos());
+            out.push(crate::tour::View {
+                file: format!("{name}_{side}.png"),
+                what: name.clone(),
+                at: at.to_array(),
+                look: (at + dir * 10.0).to_array(),
+            });
+        }
+    };
+    if let Some(m) = zone.map.markers_of(&MarkerKind::Insertion).next() {
+        two("truck".into(), eye(m.at[0], m.at[1]), m.rot + 180.0);
+    }
+    for (i, st) in crate::onboarding::STATIONS.iter().enumerate() {
+        if st.at == [0.0, 0.0] {
+            continue;
+        }
+        let r = st.rot.to_radians();
+        let facing = Vec3::new(-r.sin(), 0.0, r.cos());
+        let stand = Vec3::new(st.at[0], 0.0, st.at[1]) + facing * 2.0;
+        // Looking back at the board, the way its face looks out reversed.
+        two(format!("st{i:02}"), eye(stand.x, stand.z), st.rot + 180.0);
+    }
+    out
+}
+
+/// The yard's stations through both eyes, in its weather: within the
+/// stereo budget where a newcomer spends their first minutes.
+#[test]
+#[ignore = "gauge: cargo test --lib -- --ignored gauge_"]
+fn gauge_yard_stations_hold_the_stereo_budget() {
+    let over = holds_views(crate::camp::TRAINING_YARD, "drizzle", station_views);
+    assert!(
+        over.is_empty(),
+        "yard stations over the frame budget:\n{}",
         over.join("\n")
     );
 }
@@ -406,8 +536,10 @@ mod puffs {
 /// to 39 layers: each near quad covers most of the view). `PUFF_RULE`
 /// tries a rule on the scenes' puffs before they're drawn: `inside`
 /// hides one the eye is in (82.2M: none is), `angle:<deg>` caps a puff's
-/// apparent half-width (20: 60.3M; 12: 38.0M). Ignored as known failing
-/// until `render::puff` takes a rule (Weapon feel's).
+/// apparent half-width (20: 60.3M; 12: 38.0M), measured before
+/// `render::puff` faced the right eye. Now `face_puffs` caps each puff at
+/// `MAX_HALF_ANGLE` (12 degrees) from the eye: the wreck 27.5M, the
+/// firefight 24.5M, the cloud 60.9M (`docs/PERFORMANCE.md`).
 #[test]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();

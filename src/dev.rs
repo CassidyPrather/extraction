@@ -198,26 +198,36 @@ fn sights_to_the_eye(
 #[derive(Resource)]
 struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
 
-/// Holds a line-up's machines where their spawns stood them, facing the
-/// way they were asked: their minds would turn and walk them (a heavy
-/// walked up to the camera). A walker-bodied machine is posed from its
-/// `Walker::yaw`, so that's what is held; a drone flies, and faces as it
-/// flies. Their limbs and lamps still move.
+/// Holds a line-up's machines still, facing the way they were asked.
+/// A walker-bodied one is held by its walk: no mind, no path, its
+/// `Walker::yaw` set, so its legs stay under it (snapping its body back
+/// each frame left its drawn legs striding on, and its knee marks hanging
+/// off them). Anything else (a drone) is pinned where it came.
 fn turn_line_up(
+    mut commands: Commands,
     line_up: Option<ResMut<LineUp>>,
-    mut placed: Query<&mut Transform>,
+    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
     for (e, yaw, at) in line_up.0.iter_mut() {
+        if let Ok(mut w) = walkers.get_mut(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            w.yaw = *yaw;
+            w.path.clear();
+            continue;
+        }
         if let Ok(mut t) = placed.get_mut(*e) {
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
-        }
-        if let Ok(mut w) = walkers.get_mut(*e) {
-            w.yaw = *yaw;
         }
     }
 }
@@ -264,7 +274,8 @@ fn break_line_up(
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
 /// `--camera` to look at, held still. SUBJECT is a gun id (shown from its
 /// right side with its magazine seated), a magazine id, `guns` (all four
-/// stacked), `drone` or `walker`; `<gun>+open` works its action instead of
+/// stacked), `drone`, `walker` or `metals` (a roughness ladder of metal
+/// spheres); `<gun>+open` works its action instead of
 /// seating a magazine. YAW turns it about the vertical (degrees),
 /// DIST is how far ahead it sits (metres), SHIFT slides it along its own
 /// Z so another part of a long gun is centred (-0.4 frames an AK's muzzle).
@@ -467,6 +478,39 @@ fn gallery(
                     commands
                         .entity(e)
                         .insert(Transform::from_translation(at).with_rotation(look));
+                }
+            }
+            "metals" => {
+                // A roughness ladder of metal spheres, to judge the light
+                // on metal by (`render::sky_light`): blued steel above
+                // (albedo 0.13, gun steel's), bright steel below, rough
+                // 0.1 to 0.7 left to right.
+                let at = eye + fwd * dist.unwrap_or(1.2);
+                let right = flat.cross(Vec3::Y).normalize_or(Vec3::X);
+                let ball = meshes.add(Sphere::new(0.07).mesh().uv(32, 16));
+                for (row, base) in [
+                    Color::linear_rgb(0.12, 0.13, 0.16),
+                    Color::linear_rgb(0.56, 0.57, 0.58),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    for (i, rough) in [0.1, 0.25, 0.4, 0.55, 0.7].into_iter().enumerate() {
+                        let m = materials.add(StandardMaterial {
+                            base_color: base,
+                            metallic: 1.0,
+                            perceptual_roughness: rough,
+                            ..default()
+                        });
+                        let p = at
+                            + right * ((i as f32 - 2.0) * 0.18)
+                            + Vec3::Y * (0.1 - row as f32 * 0.2);
+                        commands.spawn((
+                            Mesh3d(ball.clone()),
+                            MeshMaterial3d(m),
+                            Transform::from_translation(p),
+                        ));
+                    }
                 }
             }
             "pylon" => {

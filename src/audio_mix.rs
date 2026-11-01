@@ -212,6 +212,7 @@ pub const MIX: &[Cue] = &[
     cue!("flock.land", "wildlife/wings", -10.0, 62.0, 20.0, Event, 8.0),
     cue!("flock.call", "ambience/crow", -3.5, 75.0, 25.0, Event, 15.0),
     cue!("detector.ping", "device/stone_ping", -14.0, 60.0, 0.5, Signal),
+    cue!("bite.fizz", "device/crackle", -16.0, 85.0, 0.8, Signal),
     cue!("bite.shock", "device/crackle", -8.0, 85.0, 0.4, Action),
     cue!("bite.glint", "physical/chime", -22.0, 45.0, 0.5, Detail),
     cue!("burn.sizzle", "anomaly/burner_roar", -6.0, 65.0, 0.5, Detail),

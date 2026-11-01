@@ -172,6 +172,8 @@ struct Bench {
     /// Set up and settling: the next frame past `wait` takes it.
     armed: bool,
     closing: bool,
+    /// Top-level nodes not drawn (`--hide`: the Mosin's bayonet, say).
+    hide: Vec<String>,
 }
 
 const CYCLE: f32 = 4.0;
@@ -382,6 +384,7 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
         // As the game's (src/models.rs, `steel`).
         "Blued" => steel(gun_metal(), &gunsmith::finish::BLUED),
         "Stamped" => steel(gun_metal(), &gunsmith::finish::STAMPED),
+        "Alloy" => steel(gun_metal(), &gunsmith::finish::ALLOY),
         "Wood" => scanned(
             "gun_wood",
             0.25,
@@ -458,6 +461,7 @@ fn main() {
     let mut out = None;
     let mut shots_dir = None;
     let mut t = 1.0;
+    let mut hide = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
@@ -478,6 +482,7 @@ fn main() {
             "--t" => t = val().parse().expect("--t 0..1"),
             "--exploded" => one.exploded = true,
             "--ortho" => one.ortho = Some(val().parse().expect("--ortho metres")),
+            "--hide" => hide.push(val()),
             _ if !a.starts_with("--") => id = Some(a.to_string()),
             _ => panic!("unknown argument {a}"),
         }
@@ -543,6 +548,7 @@ fn main() {
         taken: 0,
         armed: false,
         closing: false,
+        hide,
     })
     .init_resource::<Finishes>()
     .init_resource::<Bounds>()
@@ -653,6 +659,9 @@ fn spawn_model(
         let Some(moves) = moves_for(&node.name) else {
             continue;
         };
+        if bench.hide.contains(&node.name) {
+            continue;
+        }
         let piece = commands
             .spawn((
                 Piece {
@@ -944,7 +953,18 @@ fn frame_camera(
     } else {
         Vec3::Y
     };
-    *cam = Transform::from_translation(focus + dir * bench.dist).looking_at(focus, up);
+    // Far off, back far enough that the whole gun fits the frame (a Mosin
+    // with its bayonet is 1.7 m: at 1 m the 50-degree lens cut it off).
+    // The frame is 1.6 wide for 1 high.
+    let dist = if bench.dist >= 0.6 && bench.ortho.is_none() {
+        let long = (bounds.hi - bounds.lo).max_element();
+        bench
+            .dist
+            .max(long * 0.55 / (1.6 * 25f32.to_radians().tan()))
+    } else {
+        bench.dist
+    };
+    *cam = Transform::from_translation(focus + dir * dist).looking_at(focus, up);
 }
 
 // --- Input and shots ------------------------------------------------------------

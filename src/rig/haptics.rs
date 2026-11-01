@@ -277,10 +277,14 @@ fn machine_tick(
     }
 }
 
-/// The Zone biting: a wet aegis's shock is a kick in both hands
+/// The Zone biting: a wet aegis's shock is a kick in both hands, a
+/// tremor while it fizzes first
 /// (`anomaly::costs::ArtifactBite`); a hot stone held is a tick in the
 /// hand holding it every half second (`anomaly::harvest::Burned`).
 pub const SHOCK: (f32, f32) = (0.7, 0.06);
+/// Its fizz before each shock: a faint tremor in both hands for as long as
+/// the fizz lasts (`extraction_core::anomaly::AEGIS_TELL`).
+pub const FIZZ: (f32, f32) = (0.2, extraction_core::anomaly::AEGIS_TELL);
 pub const BURN_EVERY: f32 = 0.5;
 
 fn zone_haptics(
@@ -293,10 +297,16 @@ fn zone_haptics(
     mut out: MessageWriter<Haptic>,
 ) {
     for b in bites.read() {
-        if b.what == crate::anomaly::costs::Bite::Shock && locals.contains(b.player) {
-            for side in Side::BOTH {
-                pulse(&mut out, side, SHOCK);
-            }
+        if !locals.contains(b.player) {
+            continue;
+        }
+        let felt = match b.what {
+            crate::anomaly::costs::Bite::Fizz => FIZZ,
+            crate::anomaly::costs::Bite::Shock => SHOCK,
+            crate::anomaly::costs::Bite::Glint => continue,
+        };
+        for side in Side::BOTH {
+            pulse(&mut out, side, felt);
         }
     }
     let now = time.elapsed_secs();

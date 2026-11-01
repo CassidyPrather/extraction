@@ -38,6 +38,13 @@ pub const BOGIE: f32 = 4.5;
 /// high pair no more than a hair over, both inside 5 cm.
 pub const WRECK_SEAT: f32 = 0.015;
 
+/// How far a wreck has settled into the soil on its flat tyres: years by
+/// the road, its rims down to the ground and its sills a hand over it.
+/// Standing on full tyres at its ride height, a wreck read as floating
+/// from in front (its wheels hide under its wings; daylight under its
+/// sills): `docs/craft/PROP_READING.md`.
+pub const WRECK_SETTLE: f32 = 0.09;
+
 /// Past a road's end the ground rises or falls no more than this in any
 /// half metre: walkable, not a bank (the body steps 0.4 m).
 pub const ROAD_END_LEDGE: f32 = 0.35;
@@ -892,7 +899,7 @@ impl Heightmap {
             return (a + b) * 0.5;
         }
         if let Some(h) = self.wheels(prefab, at, rot_deg) {
-            return h.iter().sum::<f32>() * 0.25 + 0.02 - WRECK_SEAT;
+            return h.iter().sum::<f32>() * 0.25 + 0.02 - WRECK_SEAT - WRECK_SETTLE;
         }
         // The funicular's car is built on the grade through its middle.
         if prefab == "funicular_car" {
@@ -1438,8 +1445,9 @@ mod tests {
         [p.at[0] + x, y0 + y, p.at[1] + z]
     }
 
-    /// Every wreck in every valley stands on its four wheels: each tyre's
-    /// bottom within 5 cm of the ground under it, none in the air.
+    /// Every wreck in every valley sits on its four flat tyres: each
+    /// tyre's bottom settled `WRECK_SETTLE` into the ground under it, to
+    /// within 5 cm, none in the air.
     #[test]
     fn wrecks_stand_on_their_wheels() {
         let mut bad = Vec::new();
@@ -1455,7 +1463,7 @@ mod tests {
                 n += 1;
                 for [x, z] in w {
                     let q = posed(&hm, p, [x, -0.02, z]);
-                    let off = q[1] - hm.height([q[0], q[2]]);
+                    let off = q[1] - hm.height([q[0], q[2]]) + WRECK_SETTLE;
                     if off.abs() > 0.05 {
                         bad.push(format!(
                             "{name} {} at ({:.1}, {:.1}): wheel ({x}, {z}) {off:+.3} m",

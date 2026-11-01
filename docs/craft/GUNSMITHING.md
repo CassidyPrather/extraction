@@ -64,7 +64,8 @@ the dust cover and the trigger, slowly, with a pause at each end. `-` and
 | `exploded_1m` | every moving part pulled clear: is each a part, and is it the right part |
 | `bolt_back_30cm`, `safety_fire_30cm`, `mag_release_30cm`, `cover_off_30cm`, `trigger_pulled_30cm` | each motion at its end |
 
-Close shots aim at the action over the grip; far ones at the whole gun.
+Close shots aim at the action over the grip; far ones at the whole gun,
+backing off as far as a long gun needs to fit the frame.
 `--screenshot FILE --view V --dist D --focus x,y,z` takes any other. Keep
 before and after shots from the same command so they compare.
 
@@ -147,7 +148,8 @@ the real length and registers it on the butt (or the muzzle) and the
 bore. Before trusting the photograph, check one part of known size in it
 (the AK's brake is 24-25 mm across). The photograph is for measuring; it
 goes in the repo only if it's public domain or CC0, credited in the
-review.
+review. `--hide NODE` leaves a top-level node out (the Mosin's bayonet,
+when the photograph has it off).
 
 ### 4. Surface
 
@@ -177,6 +179,7 @@ line-up, not on one gun: take every gun's `threeq_30cm` into one sheet
 | - | - | - |
 | `Blued` | machined steel, polished and blued: the gun-metal scan at a 75 mm tile, a little glossy | barrels, sight blocks, bolts, slides, milled receivers |
 | `Stamped` | stamped sheet under black lacquer over phosphate: near black, little metal, the scan's relief only | the AK-74's and RPK-74's receivers and dust covers |
+| `Alloy` | aluminium alloy, anodised or painted black: a satin charcoal, no blue, no metal | the MP-133's receiver and trigger guard |
 | `Steel` | bright steel, in the white | carriers, pins, springs |
 | `Black` | blackened steel, matt | butt plates, small fittings |
 | `Worn` | bare steel where the finish has rubbed off | edges, by `wear` |
@@ -200,6 +203,39 @@ numbers are now in one table, `gunsmith::finish`, which the game
 (`models::steel`) and the bench both build from.
 
 ![](finishes/lineup_after.jpg)
+
+Fourth pass (1 November), against Visual design's sky light
+(`render::sky_light`), in the game in the yard at noon and inside the
+Rime Fell mill: smooth metal now reflects a horizon brighter than its
+zenith, so a curve grades from a light band to a dark top. Changes:
+
+- **Blued**: an even 0.09 reflectance, a touch blue, on the scan's
+  roughness (about 0.28) and relief.
+- **Stamped**: a lacquer at 0.02, roughness 0.35.
+- **Black**: about 0.07, matt.
+
+- **Alloy** (new): the MP-133's black aluminium receiver and guard, a
+  satin charcoal paint at 0.032 and roughness 0.36, apart from its blued
+  barrel.
+
+A first try at about 0.13 (gain 3 on the scan's albedo) went blue-grey
+and blotchy, like a dusty casting: the scan's variation, tripled. Even at
+0.1 it showed on the PM's slide at 30 cm as grain, so blued steel's
+albedo is now flat and the scan gives only its roughness and relief. In the mill the metal stays
+dark, reflecting the room. The bench has no sky light, so it shows these
+finishes flatter and lighter than the game does; judge finishes in the
+game.
+
+| Yard, before | Yard, after |
+| - | - |
+| ![](finishes/sky_yard_ak_before.jpg) | ![](finishes/sky_yard_ak_after.jpg) |
+| ![](finishes/sky_yard_pm_before.jpg) | ![](finishes/sky_yard_pm_after.jpg) |
+
+| Mill, before | Mill, after |
+| - | - |
+| ![](finishes/sky_mill_before.jpg) | ![](finishes/sky_mill_after.jpg) |
+
+![The MP-133: Alloy receiver, blued barrel](finishes/sky_yard_mp133_alloy.jpg)
 
 ### 5. Hands
 

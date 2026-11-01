@@ -988,6 +988,16 @@ pub(super) struct World2<'w, 's> {
         ),
     >,
     pub(super) guns: Query<'w, 's, (&'static crate::weapons::Gun, &'static Held)>,
+    /// Every gun on someone, and whether it's down in their pack.
+    pub(super) carried_guns: Query<
+        'w,
+        's,
+        (
+            &'static crate::weapons::Gun,
+            &'static crate::anomaly::artifacts::CarriedBy,
+            Has<crate::interact::body::InBackpack>,
+        ),
+    >,
     pub(super) hands: Query<'w, 's, (&'static crate::rig::RigHand, &'static crate::interact::Hand)>,
     pub(super) anomalies:
         Query<'w, 's, (&'static crate::anomaly::Anomaly, &'static GlobalTransform)>,
@@ -1001,6 +1011,9 @@ pub(super) struct World2<'w, 's> {
             &'static crate::robots::Brain,
         ),
     >,
+    /// Broken walkers (`robots::broken`), and whether each is wrecked.
+    pub(super) broken:
+        Query<'w, 's, &'static crate::robots::Robot, With<crate::robots::broken::Broken>>,
     pub(super) health: Query<'w, 's, &'static crate::health::Health>,
     pub(super) bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pub(super) pressables: Query<'w, 's, (Entity, &'static Pressable)>,

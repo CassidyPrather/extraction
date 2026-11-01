@@ -52,6 +52,12 @@ pub struct Director {
     pub heat: f32,
     /// Seconds before another shot adds heat.
     pub heat_gap: f32,
+    /// A career's second job's broken walker set out yet (`broken`)...
+    pub broken_placed: bool,
+    /// ...and how long nothing else is sent out (s): while it stands, and
+    /// a little after (`broken::QUIET_AFTER`), so nothing armed answers the
+    /// newcomer's first fight.
+    pub quiet: f32,
     /// The relays' network: jams, silent relays, distrusted ones
     /// (`network`). Reports go through `queue_report`.
     pub net: super::network::RelayNet,
@@ -159,6 +165,8 @@ fn init_director(mut commands: Commands, opts: Res<LaunchOptions>) {
         visits: Vec::new(),
         heat: 0.0,
         heat_gap: 0.0,
+        broken_placed: false,
+        quiet: 0.0,
         net: Default::default(),
     });
 }
@@ -306,6 +314,7 @@ fn run_director(
         ),
     >,
     pylons: Query<(), With<super::pylon::Pylon>>,
+    brokens: Query<&Robot, With<super::broken::Broken>>,
     time: Res<Time>,
     // What the valley remembers of your ways (`memory`): patrols lean on it.
     mind: Option<Res<super::memory::ZoneMind>>,
@@ -343,6 +352,33 @@ fn run_director(
     director.next_job -= dt;
     let active = robots.iter().filter(|r| !r.wrecked).count();
     let exit = gate(&zone);
+    // A career's second job: a broken walker on its way, the first fight a
+    // newcomer can win, and nothing else sent out till it's done.
+    if !director.broken_placed {
+        director.broken_placed = true;
+        if let Some(at) = progression
+            .as_ref()
+            .and_then(|p| super::broken::second_job_meet(&zone, &p.0))
+        {
+            // (The Verifier's release check reads this line.)
+            let job = progression.as_ref().map_or(0, |p| p.0.done + 1);
+            info!(
+                "broken walker placed at ({:.1}, {:.1}) for job {job}",
+                at.x, at.z
+            );
+            super::broken::spawn_broken_walker(&mut commands, &zone, at, exit);
+            director.quiet = super::broken::QUIET_MAX;
+        }
+    }
+    if director.quiet > 0.0 {
+        director.quiet -= dt;
+        // (Spawned this tick, it isn't in the query yet.)
+        if !brokens.is_empty() && brokens.iter().all(|r| r.wrecked) {
+            director.quiet = director.quiet.min(super::broken::QUIET_AFTER);
+        }
+        director.responses.clear();
+        return;
+    }
     // Responses first.
     let mut dispatch = Vec::new();
     for r in &mut director.responses {
