@@ -175,7 +175,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     // Receiver to butt plate, off the same photograph (it was drawn 30 mm
     // long and 35 mm deep).
     ("stock_ak74", 0.26, Fit, "the AK's butt"),
-    ("stock_rpk74", 0.29, Fit, "the RPK's butt"),
+    ("stock_rpk74", 0.245, Fit, "the RPK's butt"),
     (
         "bolt_mosin",
         0.14,
