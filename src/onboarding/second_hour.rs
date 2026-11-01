@@ -870,6 +870,18 @@ pub(super) fn direct(
                     side: Side::Left,
                 }));
                 tasks.extend([Stow(Side::Left), Gun(MacroKind::Reload), Wait(1.0)]);
+            } else if let Some(leg) = leg
+                && run.tries > 0
+                && run.tries % 8 == 0
+                && leg.xz().distance(here) > 6.0
+            {
+                // Missing it from 12 m (all 25, one run): a few strides
+                // nearer every eight shots (a leg is thin).
+                tasks.push(WalkTo {
+                    to: here + (leg.xz() - here).normalize_or_zero() * 3.0,
+                    within: 0.8,
+                });
+                run.tries += 1;
             } else if let Some(leg) = leg {
                 // Single aimed shots at a leg (a leg is thin).
                 if world.gun_clear(player) == Some(false) {
