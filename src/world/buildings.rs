@@ -5468,69 +5468,53 @@ fn boxcar(b: &mut Builder) {
     b.crate_box(Vec3::new(-0.6, f + 0.06, -3.0), 0.7, Some("food_common"));
 }
 
-/// Felled trunks stacked to season: four, three, two, one, each a
-/// different girth and length, their sawn ends showing (a ring of bark
-/// round each), stakes holding the bottom row. Within its footprint (2.5 x 1.6 x
-/// 7.0, `extraction_core::map`): ten even 7 m tubes read as a blockout at
-/// arm's length (`docs/craft/PROP_READING.md`).
+/// Each felled trunk of a log pile: (x, y of its axis, mean radius,
+/// length, middle along z, yaw). Bottom-up four, three, two, one, thick
+/// butts low and thin tops high, each resting on the two under it. Its
+/// look is `log_stack` (`art/props/yards.py`, the same table): tapered,
+/// sawn ends pale in a ring of bark, stakes at the bottom row.
+const LOG_STACK: [(f32, f32, f32, f32, f32, f32); 10] = [
+    (-0.785, 0.26, 0.26, 6.7, 0.05, 0.0),
+    (-0.275, 0.24, 0.24, 5.6, -0.6, 0.02),
+    (0.255, 0.28, 0.28, 6.4, 0.25, -0.015),
+    (0.795, 0.25, 0.25, 4.8, 1.0, 0.025),
+    (-0.497, 0.631, 0.21, 6.1, -0.25, -0.02),
+    (-0.071, 0.619, 0.19, 5.2, 0.8, 0.015),
+    (0.574, 0.665, 0.22, 4.3, -0.9, 0.03),
+    (-0.258, 0.926, 0.17, 5.8, 0.3, -0.025),
+    (0.223, 0.809, 0.16, 4.6, -1.0, 0.02),
+    (0.027, 1.023, 0.13, 5.0, 0.5, -0.03),
+];
+
+/// A log pile's stakes (x, z), each against its outer log near an end of
+/// it (the right one is short): `art/props/yards.py`'s `LOG_STAKES`.
+const LOG_STAKES: [(f32, f32); 4] = [(-1.12, -2.4), (-1.12, 2.4), (1.06, -1.0), (1.11, 2.4)];
+
+/// Felled trunks stacked to season by a road. Within its footprint (2.5 x
+/// 1.6 x 7.0, `extraction_core::map`). Ten even 7 m tubes read as a
+/// blockout at arm's length, and logs all one length and girth as long
+/// pipes at 5 m (`docs/craft/PROP_READING.md`).
 fn log_pile(b: &mut Builder) {
-    use std::f32::consts::FRAC_PI_2;
-    // (radius, length, how far its middle sits off the pile's), per log.
-    const LOGS: [(f32, f32, f32); 10] = [
-        (0.23, 6.6, 0.15),
-        (0.20, 6.9, -0.05),
-        (0.24, 6.2, -0.4),
-        (0.21, 6.4, 0.3),
-        (0.19, 6.4, -0.25),
-        (0.22, 6.6, 0.2),
-        (0.18, 5.9, 0.5),
-        (0.20, 6.3, -0.35),
-        (0.17, 6.0, 0.1),
-        (0.16, 5.4, -0.6),
-    ];
-    let (span, rise) = (0.45, 0.39);
-    let mut k = 0;
-    for (row, count) in [4, 3, 2, 1].into_iter().enumerate() {
-        for col in 0..count {
-            let (r, len, along) = LOGS[k];
-            k += 1;
-            let x = -0.675 + (col as f32 + row as f32 * 0.5) * span;
-            // The bottom row on the ground; a thinner log higher up sits
-            // down between its two.
-            let y = if row == 0 {
-                r
-            } else {
-                0.22 + row as f32 * rise - (0.22 - r) * 0.5
-            };
-            let turn = Quat::from_rotation_x(FRAC_PI_2);
-            b.piece(
-                Shape::Cylinder(r, len),
-                Transform::from_xyz(x, y, along).with_rotation(turn),
-                Mat::BarkSpruce,
-                true,
-            );
-            // The sawn faces: bare wood, a ring of bark left round them.
-            for end in [-1.0, 1.0] {
-                b.piece(
-                    Shape::Cylinder(r - 0.025, 0.012),
-                    Transform::from_xyz(x, y, along + end * (len * 0.5 + 0.002))
-                        .with_rotation(turn),
-                    Mat::Timber,
-                    false,
-                );
-            }
-        }
+    let from = b.geo.pieces.len();
+    for (x, y, r, len, along, yaw) in LOG_STACK {
+        b.piece(
+            Shape::Cylinder(r, len),
+            Transform::from_xyz(x, y, along).with_rotation(
+                Quat::from_rotation_y(yaw) * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            ),
+            Mat::BarkSpruce,
+            true,
+        );
     }
-    // Stakes driven in at the bottom row's outer logs, both ends.
-    for side in [-1.0, 1.0] {
-        for end in [-1.0, 1.0] {
-            b.bx(
-                Vec3::new(0.09, 1.0, 0.09),
-                Vec3::new(side * 0.97, 0.5, end * 2.4),
-                Mat::Timber,
-            );
-        }
+    // Stakes driven in against the bottom row's outer logs.
+    for (x, z) in LOG_STAKES {
+        b.bx(
+            Vec3::new(0.09, 1.0, 0.09),
+            Vec3::new(x, 0.5, z),
+            Mat::Timber,
+        );
     }
+    b.dress_structure(from, vec![("log_stack", Transform::IDENTITY)]);
 }
 
 fn anomaly(b: &mut Builder) {
@@ -6752,6 +6736,33 @@ mod tests {
     }
 
     use super::*;
+
+    /// A log pile collides with the logs its model draws: `LOG_STACK` is
+    /// `art/props/yards.py`'s table, number for number.
+    #[test]
+    fn log_pile_collides_where_its_logs_are_drawn() {
+        let art = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("art/props/yards.py"),
+        )
+        .unwrap();
+        let table = art.split("LOG_STACK = (").nth(1).unwrap();
+        let table = table.split("\n)").next().unwrap();
+        let rows: Vec<Vec<f32>> = table
+            .lines()
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix('(')?
+                    .strip_suffix("),")
+                    .map(str::to_owned)
+            })
+            .map(|l| l.split(',').map(|v| v.trim().parse().unwrap()).collect())
+            .collect();
+        let ours: Vec<Vec<f32>> = LOG_STACK
+            .iter()
+            .map(|&(a, b, c, d, e, f)| vec![a, b, c, d, e, f])
+            .collect();
+        assert_eq!(rows, ours);
+    }
 
     /// What a free-standing prop (a fence, a wreck, a log pile: the
     /// `map_lint::VIEW_LIGHT` set, which stand by the roads) builds solid

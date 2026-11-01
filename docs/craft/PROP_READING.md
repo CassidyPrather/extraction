@@ -41,6 +41,18 @@ In the game, at the walk's spot, in the valley's reference weather:
   for labels (`Blue`, `Red`, `Yellow`) read as a toy on a car or a door.
   Big painted surfaces take a scan's relief and wear (`Paint`,
   `CarBlue`: `src/models.rs`).
+- **Floating**: a thing that has stood for years has settled. A wreck on
+  full tyres at its ride height hides its wheels under its wings, and
+  from in front shows daylight under its sills: it hovers. Wrecks sit
+  on flat tyres, settled into the soil (`terrain::WRECK_SETTLE`).
+- **A scan's tile on a model**: a model's UVs are in metres; a texture
+  built for a building's walls (or a tree's trunk) may tile too fine or
+  read too light on a prop. Look at it in reach; scale the model's UVs
+  (`Part.uv_scale`) rather than copy the material, which lights unlike
+  the shared one.
+- **Primitives standing in for nature**: a box of the concrete scan is a
+  sawn slab, whatever it's called. Stones are the field's
+  (`world::rocks::stone_mesh`), wood is a model.
 - **Growing into the road**: a reworked prop must keep inside its
   footprint (`map::prefab_footprint`), which the map's lints and the
   clutter keep clear; a test holds the free-standing ones to it
@@ -85,3 +97,34 @@ shed, a log pile and the blue wreck by the works yard.
   the edges.
 - **The lorry wreck's footprint** was 6.4 m long for a 7.0 m body (the
   footprint test found it); now 7.0 m. The valleys' lints pass.
+
+### The designer's notes on the pair (1 November)
+
+- **The Lada floated**, before and after: no wheels showing from in
+  front, daylight under the sills, its shadow apart from it. Every wreck
+  (Lada, UAZ, lorry: no tractor stands in a valley; the bus stands
+  indoors on concrete, a corner on a block) now settles 9 cm into the
+  soil on flat tyres, rims to the ground, sills a hand over it
+  (`*_lada*_after2.jpg`). The wheels test and the map lint's footing
+  measure from where the flat tyres meet the ground.
+- **The log pile still read as long even pipes** at 5 m: the logs were
+  all one length and nearly one girth. It's now drawn by a model
+  (`log_stack`, `art/props/yards.py`): each trunk tapers 15% either way,
+  butts at alternate ends; girth 0.13 to 0.28 m graded thick at the
+  bottom to thin on top, lengths 4.3 to 6.9 m, a little askew; sawn ends
+  pale in a ring of bark; stakes. It collides with the same ten logs
+  (`buildings::LOG_STACK`, held to the art script's table by
+  `log_pile_collides_where_its_logs_are_drawn`).
+- On the model the spruce bark scan, at its 1.2 m tile box-projected,
+  read pale and fine-streaked: straw bales, not logs. A copy of the
+  material darkened shone as black pipe (it lit unlike the scan the
+  trees share). The model now stretches the scan's tile itself
+  (`Part.uv_scale`, `art/common.py`), on the shared material: plated
+  grey-brown bark with lichen (`marrow_logs*_after2.jpg`).
+- Also not shot before: the crest block (s09). It was the Stone ring's
+  nearest standing stone (`render/offering.rs`): seven boxes and an altar
+  of the concrete scan, a sawn slab at arm's length
+  (`marrow_s09_crest_before.jpg`). They're the field's rough stones now
+  (`world::rocks::stone_mesh`: faceted, the boulder scan, moss on top),
+  tall and broad-faced to the altar, a low slab for it
+  (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`).

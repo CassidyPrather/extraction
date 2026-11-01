@@ -1341,9 +1341,13 @@ fn haul_lines(
 /// device (`devices::Hunting`) it swings onto that, slow and deliberate,
 /// and holds there through its aim: the tell before the shot.
 #[allow(clippy::type_complexity)]
-/// How far a dead gun sags (radians of pitch, barrel down): past the
-/// lowest a live one aims (-0.5), and how fast it settles there.
-pub const DEAD_GUN_DROOP: f32 = -0.85;
+/// How a dead gun slumps: its barrel down as far as it goes clear of the
+/// orb (the turret sits 6 cm over it: any lower and the barrel's in the
+/// shell), slewed off its line and listing over on its ring, which no
+/// live gun does; and how fast it settles there.
+pub const DEAD_GUN_DROOP: f32 = -0.42;
+pub const DEAD_GUN_SLEW: f32 = 0.6;
+pub const DEAD_GUN_LIST: f32 = 0.38;
 const DEAD_GUN_SAG: f32 = 2.5;
 
 pub(crate) fn aim_turrets(
@@ -1375,8 +1379,9 @@ pub(crate) fn aim_turrets(
             if let Ok((mut tt, part)) = turrets.get_mut(c) {
                 if part.is_some_and(|p| !p.alive()) {
                     dead = true;
-                    let sag =
-                        Quat::from_rotation_y(w.turret_yaw) * Quat::from_rotation_x(DEAD_GUN_DROOP);
+                    let sag = Quat::from_rotation_y(w.turret_yaw + DEAD_GUN_SLEW)
+                        * Quat::from_rotation_z(DEAD_GUN_LIST)
+                        * Quat::from_rotation_x(DEAD_GUN_DROOP);
                     tt.rotation = tt.rotation.slerp(sag, (DEAD_GUN_SAG * dt).min(1.0));
                 }
             }
@@ -1654,13 +1659,23 @@ mod tests {
     #[test]
     fn a_dead_gun_droops_and_stops_tracking() {
         let (mut app, walker) = standing_walker();
-        let barrel = |app: &mut App| {
+        // The barrel in the world: its mount (the turret's pivot), its
+        // muzzle (walker.py: the barrel runs to z -0.53 off the pivot), the
+        // orb it sits on, and how far it lists off the body's up.
+        let gun = |app: &mut App| {
             let mut q = app
                 .world_mut()
-                .query_filtered::<&Transform, With<WalkerTurret>>();
-            q.iter(app.world()).next().unwrap().rotation * Vec3::NEG_Z
+                .query_filtered::<&GlobalTransform, With<WalkerTurret>>();
+            let g = *q.iter(app.world()).next().unwrap();
+            let body = *app.world().get::<GlobalTransform>(walker).unwrap();
+            let mount = g.translation();
+            let muzzle = g.transform_point(Vec3::new(0.0, -0.005, -0.53));
+            // (A list is a roll: the ring's side axis tipped off level, which
+            // turning and aiming never do.)
+            let side = body.rotation().inverse() * (g.rotation() * Vec3::X);
+            let list = side.y.clamp(-1.0, 1.0).asin().abs();
+            (mount, muzzle, body.translation(), list)
         };
-        // Something to look at, off to one side, then the other.
         let here = app.world().get::<Transform>(walker).unwrap().translation;
         let look = |app: &mut App, x: f32| {
             app.world_mut()
@@ -1672,25 +1687,55 @@ mod tests {
         for _ in 0..120 {
             app.update();
         }
-        let live = barrel(&mut app);
-        assert!(live.y > -0.48, "a live gun sits within its aim ({live:?})");
+        let (mount, muzzle, _, list) = gun(&mut app);
+        assert!(
+            muzzle.y > mount.y - 0.2,
+            "a live gun aims ahead ({:.2})",
+            muzzle.y - mount.y
+        );
+        assert!(list < 0.05, "a live gun sits square ({list:.2} rad)");
         set_hp(&mut app, walker, super::super::PartRole::Weapon, 0.0);
         for _ in 0..120 {
             app.update();
         }
-        let dead = barrel(&mut app);
+        let (mount, muzzle, orb, list) = gun(&mut app);
+        // (Down, and listing: a live gun aimed low hangs as far, but never
+        // lists, so it's the two together that read as dead.)
         assert!(
-            dead.y < -0.7,
-            "a dead gun sags barrel down, past any aim ({dead:?})"
+            muzzle.y < mount.y - 0.15,
+            "a dead gun's muzzle hangs below its mount ({:.2} m)",
+            muzzle.y - mount.y
         );
+        assert!(list > 0.25, "and it lists over on its ring ({list:.2} rad)");
+        // All along the barrel, clear of the orb (0.4) by its own radius.
+        for k in 0..=8 {
+            let r = 0.17 + 0.36 * k as f32 / 8.0;
+            let p = mount + (muzzle - mount) * (r / 0.53);
+            assert!(
+                p.distance(orb) > 0.415,
+                "the barrel's in the shell ({:.3} m from the orb's middle)",
+                p.distance(orb)
+            );
+        }
+        // (The body may turn to look; the gun doesn't turn on it.)
+        let on_body = |app: &App, p: Vec3| {
+            app.world()
+                .get::<GlobalTransform>(walker)
+                .unwrap()
+                .affine()
+                .inverse()
+                .transform_point3(p)
+        };
+        let before = on_body(&app, muzzle);
         look(&mut app, -4.0);
         for _ in 0..120 {
             app.update();
         }
-        let after = barrel(&mut app);
+        let (_, after, _, _) = gun(&mut app);
+        let after = on_body(&app, after);
         assert!(
-            after.distance(dead) < 0.05,
-            "and doesn't follow ({dead:?} -> {after:?})"
+            after.distance(before) < 0.02,
+            "and doesn't follow ({before:?} -> {after:?})"
         );
     }
 

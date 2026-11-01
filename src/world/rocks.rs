@@ -165,6 +165,37 @@ fn rock_mesh(r: &RockSpot, shapes: &Shapes, detail: u32, burnt: bool) -> RockFac
     (pos, nrm, uv, col)
 }
 
+/// One rock's own mesh, placed at `r` in its parent's space: the field's
+/// faceted look (flat faces, the boulder scan by the axis each faces, a
+/// tone of its own, moss on what looks at the sky) for a stone that
+/// isn't the field's, a standing stone or an altar slab.
+pub fn stone_mesh(r: &RockSpot, burnt: bool) -> Mesh {
+    let shapes: Shapes = (0..=2)
+        .map(|d| {
+            (0..ROCK_VARIANTS)
+                .map(|v| {
+                    if d == 2 && v == r.variant {
+                        rock_points(v, 2)
+                    } else {
+                        Default::default()
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let (pos, nrm, uv, col) = rock_mesh(r, &shapes, 2, burnt);
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nrm)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col);
+    let _ = mesh.generate_tangents();
+    mesh
+}
+
 /// Logic: a compound collider of convex hulls per chunk, for the rocks big
 /// enough to matter.
 pub fn spawn_rock_colliders(mut commands: Commands, zone: Res<Zone>) {
