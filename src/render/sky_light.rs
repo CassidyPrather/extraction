@@ -56,12 +56,15 @@ impl Plugin for SkyLightPlugin {
     }
 }
 
-/// The dome's zenith against its horizon, per channel (linear): the
-/// default sky's (`world::sky::Weather`), darker and bluer overhead.
-pub const ZENITH: [f32; 3] = [0.44, 0.47, 0.54];
-/// The ground's light against the sky's ambient: a share of it bounced
-/// back up off earth and grass (albedo about a quarter).
-pub const GROUND: f32 = 0.25;
+/// The sky overhead against its horizon, per channel (linear): darker and
+/// a little bluer. (The dome's own zenith colour is darker still, but its
+/// cloud lifts it: at 0.44-0.54 a sphere's top came out darker than the
+/// sky behind it.)
+pub const ZENITH: [f32; 3] = [0.68, 0.70, 0.76];
+/// The ground's light against the sky's ambient: what earth and grass
+/// (albedo about a fifth) give back of the sky's light and the sun's,
+/// about as much again under cloud.
+pub const GROUND: f32 = 0.4;
 /// A room's walls against its ambient, for metal near the eye indoors.
 pub const WALLS: f32 = 0.35;
 /// From this perceptual roughness the sky fades into the flat ambient,
@@ -288,7 +291,7 @@ fn ambient_light(
 
     /// Metal reflects the sky you see. Under the default sky at the
     /// game's exposure, the reflection is graded: the horizon (the dome's
-    /// own, through the fog's colour) half as bright again as the zenith, the
+    /// own, through the fog's colour) a fifth again as bright as the zenith, the
     /// ground darker still. Its level is that of the flat ambient it
     /// replaces (a half to one and a half of it, sideways), so metal
     /// neither went dark nor glows.
@@ -303,7 +306,7 @@ fn ambient_light(
         let side = luma(sky(Vec3::new(1.0, 0.02, 0.0).normalize(), horizon, ground));
         let top = luma(sky(Vec3::Y, horizon, ground));
         let down = luma(sky(-Vec3::Y, horizon, ground));
-        assert!(side > 1.5 * top, "horizon {side} vs zenith {top}");
+        assert!(side > 1.2 * top, "horizon {side} vs zenith {top}");
         assert!(top > down, "zenith {top} vs ground {down}");
         let flat = luma(ambient);
         assert!(
