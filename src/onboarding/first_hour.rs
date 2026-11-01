@@ -565,6 +565,8 @@ pub(super) struct Newcomer {
     shots: Vec<f32>,
     /// When a drone locked on to it again, lately (`PINNED_AFTER`).
     relocks: Vec<f32>,
+    /// Pinned by one: it calls from where it is, not the gate.
+    pinned: bool,
     /// Racked at the driver's "one up the spout".
     racked: bool,
     /// The broken walker wrecked (job 2's first fight, won).
@@ -805,14 +807,19 @@ pub(super) fn direct_raid(
         state.racked = true;
         if !one_up(guns(), player) {
             state.note(now, Kind::Learned, "one up the spout, as the driver said");
-            super::second_hour::cut_in(
-                &mut bot,
-                vec![
-                    Task::DrawGun,
-                    Task::Gun(crate::weapons::flat::MacroKind::Rack),
-                    Task::Stow(Side::Right),
-                ],
-            );
+            // A magazine in first if it has none with rounds (racked
+            // empty, the last raid's spent one in, it chambered nothing),
+            // then a round up; the safety stays on.
+            let mut t = vec![Task::DrawGun];
+            if let Some((g, _, _)) = guns().find(|(_, by, p)| *by == player && !p) {
+                t.extend(
+                    readying(&g.firearm)
+                        .into_iter()
+                        .filter(|t| !matches!(t, Task::Gun(crate::weapons::flat::MacroKind::Mode))),
+                );
+            }
+            t.push(Task::Stow(Side::Right));
+            super::second_hour::cut_in(&mut bot, t);
         }
     }
     // The first machine to have it: a round up by then, or not.
@@ -929,16 +936,14 @@ pub(super) fn direct_raid(
                     state.relocks.retain(|t| now - t < PINNED_FOR);
                     state.relocks.push(now);
                     if state.relocks.len() >= PINNED_AFTER
-                        && !matches!(
-                            state.leg,
-                            Leg::Call | Leg::Rendezvous | Leg::Board | Leg::Done
-                        )
+                        && !matches!(state.leg, Leg::Rendezvous | Leg::Board | Leg::Done)
+                        && !state.pinned
                     {
-                        state.note(
-                            now,
-                            Kind::Learned,
-                            "pinned by a drone: the job given up, home",
-                        );
+                        // (Already on its way to the gate to call, as the
+                        // card said: from here instead; it never got out of
+                        // the post office's door.)
+                        state.pinned = true;
+                        state.note(now, Kind::Learned, "pinned by a drone: home from here");
                         state.relocks.clear();
                         state.leg = Leg::Call;
                     }
@@ -1596,6 +1601,7 @@ pub(super) fn direct_raid(
                 .map(|m| Vec2::from(m.at));
             if state.card.contains("from the gate")
                 && !state.at_gate
+                && !state.pinned
                 && raid.phase == Phase::Out
                 && let Some(drop) = drop
             {
@@ -2452,13 +2458,15 @@ fn take_it_on<'a>(
     tasks
 }
 
-/// Whether the gun on `player`'s body has a round up.
+/// Whether a gun on `player`'s body has a round up (any: a rifle picked
+/// up on the job, empty, beside the racked pistol, read as unready).
 fn one_up<'a>(
     mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
     player: Entity,
 ) -> bool {
-    guns.find(|(_, by, packed)| *by == player && !packed)
-        .is_some_and(|(g, _, _)| g.firearm.chambers.iter().any(|c| c.is_some()))
+    guns.any(|(g, by, packed)| {
+        by == player && !packed && g.firearm.chambers.iter().any(|c| c.is_some())
+    })
 }
 
 /// `legs`, round the buildings in the way.
