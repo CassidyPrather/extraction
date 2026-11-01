@@ -87,3 +87,26 @@ at 5%), 5, 15 and 30 m.
   the limp shows only in motion.
 - **Its eye stays lit and faces you**, rightly (it still sees you): so
   the dead gun has to say "harmless" on its own, and today it doesn't.
+
+### After the geometry (1 November)
+
+`docs/shots/robots/*_after.jpg`, the same cameras (`--gallery robots:` now
+holds a walker still the way `robots::reel` does: no mind, no path, its
+yaw held; snapping its body back each frame had its drawn legs stride on
+and its knee marks hang off them).
+
+- **Walker: a dark brow** over the orb's upper front (`core`, clear of the
+  eye: its orange ring keeps pale shell about it). Facing you: brow and
+  red eye; away: a plain pale orb. Reads at 30 m; at 60 m only just. The
+  crawler shares it, rightly (indoors it comes round a corner at you).
+- **Grappler: a grapnel spar** standing behind the reel, three claws at
+  its top (`harpoon.glb`). At 30 m a dark upright no walker has; at 60 m
+  a hairline.
+- **Hound: a tail mast** with a teal lamp (teal: the robots' own glow, off
+  the "shoot here" orange). It lifts the hound off the grass at 30 m; at
+  60 m it's still small. What's left is its size, which is gameplay
+  (`HOUND_SIZE`), and its marks at range (Robot bodies).
+- **The broken walker**: its gun's droop and the failing leg held up are
+  Robot bodies'; the line-ups follow when they land. The grey discs over
+  it are the smoke being replaced by a soft puff (`render::puff`, Weapon
+  feel).
