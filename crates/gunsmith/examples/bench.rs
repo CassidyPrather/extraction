@@ -944,7 +944,18 @@ fn frame_camera(
     } else {
         Vec3::Y
     };
-    *cam = Transform::from_translation(focus + dir * bench.dist).looking_at(focus, up);
+    // Far off, back far enough that the whole gun fits the frame (a Mosin
+    // with its bayonet is 1.7 m: at 1 m the 50-degree lens cut it off).
+    // The frame is 1.6 wide for 1 high.
+    let dist = if bench.dist >= 0.6 && bench.ortho.is_none() {
+        let long = (bounds.hi - bounds.lo).max_element();
+        bench
+            .dist
+            .max(long * 0.55 / (1.6 * 25f32.to_radians().tan()))
+    } else {
+        bench.dist
+    };
+    *cam = Transform::from_translation(focus + dir * dist).looking_at(focus, up);
 }
 
 // --- Input and shots ------------------------------------------------------------
