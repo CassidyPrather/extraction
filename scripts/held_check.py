@@ -6,15 +6,14 @@
 Each line of LIST is `name | game arguments`, with a `--gallery` putting
 the thing in front of the camera (`pm_pistol,0,0.3`: the PM at 30 cm).
 Each view is shot twice by the software renderer, with the gallery and
-without it. Where the two differ is the thing; its contrast is
-
-    |L_thing - L_behind| / L_behind
-
-on linear luminance, medians over that mask, L_behind from the shot
-without it: the Weber contrast of the thing against the room it's held
-in. A view under its floor (`--floor`, or ` | floor=0.5` at the line's end)
-fails; the exit status is the number that failed. Shots are kept in
-target/held/<name>{,_bare}.png.
+without it. Where the two differ is the thing. What's read is its own
+median brightness (sRGB, of 255): a dark gun against a lit wall is a
+black silhouette, its slide and grip unread, however much it stands out.
+The yard at noon, where a gun reads, has the PM at 31. A view under its
+floor (`--floor`, default 26, or ` | floor=N` at the line's end) fails;
+the exit status is the number that failed. The Weber contrast against
+the room behind (linear luminance, medians) is reported beside it. Shots
+are kept in target/held/<name>{,_bare}.png.
 """
 
 import argparse
@@ -31,8 +30,8 @@ ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=Tr
                       check=True).stdout.strip()
 # Where the two shots differ by more than this (of 255, sRGB) is the thing.
 MASK_STEP = 10
-# The contrast a thing in your hand must have against the room behind it.
-FLOOR = 0.5
+# The least median brightness (sRGB, of 255) a thing in your hand reads at.
+FLOOR = 26.0
 
 
 def linear(a):
@@ -104,10 +103,11 @@ def main():
             continue
         li, lbg = float(np.median(la[mask])), float(np.median(lb[mask]))
         c = abs(li - lbg) / max(lbg, 1e-4)
-        ok = c >= floor
+        level = float(np.median(a.mean(axis=2)[mask]))
+        ok = level >= floor
         failed += not ok
-        print(f"{'ok  ' if ok else 'LOW '} {name}: thing {li:.4f}, behind {lbg:.4f}, contrast {c:.2f}"
-              f" (floor {floor}) over {int(mask.sum())} px")
+        print(f"{'ok  ' if ok else 'LOW '} {name}: the thing at {level:.0f} of 255 (floor {floor:.0f});"
+              f" against the room behind, contrast {c:.2f}, over {int(mask.sum())} px")
     return failed
 
 
