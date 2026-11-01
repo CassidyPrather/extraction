@@ -140,30 +140,18 @@ pub fn falloff_image() -> Image {
     image
 }
 
-/// The cameras [`eye`] reads.
-pub type Eyes<'w, 's> = Query<
-    'w,
-    's,
-    (
-        &'static GlobalTransform,
-        &'static Camera,
-        Option<&'static bevy::camera::RenderTarget>,
-    ),
-    crate::render::EyeCamera,
->;
+/// The cameras [`eye`] reads: the eyes, not a camera drawing into an
+/// image (`render::mark_offscreen` marks those).
+pub type Eyes<'w, 's> =
+    Query<'w, 's, (&'static GlobalTransform, &'static Camera), crate::render::EyeCamera>;
 
-/// Where the eye is: the middle of the active cameras that draw to a
-/// screen or a headset (both eyes in VR, the one camera on a screen or in
-/// a capture). One drawing into an image is no eye: an impostor's capture
-/// rig, warmup's proxy eye (they had pulled the middle off to the side, so
-/// no puff looked near).
+/// Where the eye is: the middle of the active eye cameras (both eyes in
+/// VR, the one camera on a screen or in a capture).
 pub fn eye(cams: &Eyes) -> Option<Vec3> {
     let (sum, n) = cams
         .iter()
-        .filter(|(_, c, target)| {
-            c.is_active && !matches!(target, Some(bevy::camera::RenderTarget::Image(_)))
-        })
-        .fold((Vec3::ZERO, 0.0), |(s, n), (g, ..)| {
+        .filter(|(_, c)| c.is_active)
+        .fold((Vec3::ZERO, 0.0), |(s, n), (g, _)| {
             (s + g.translation(), n + 1.0)
         });
     (n > 0.0).then(|| sum / n)
