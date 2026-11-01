@@ -26,6 +26,7 @@
 //! Logic here runs headless; the posts, lamps and props are dressed by
 //! [`visuals`].
 
+pub mod census;
 pub mod first_hour;
 pub mod firsts;
 pub mod hints;
@@ -749,6 +750,10 @@ impl Plugin for OnboardingPlugin {
                     .chain(),
             )
             .add_systems(
+                Update,
+                (census::census, census::houses).run_if(|| census::on()),
+            )
+            .add_systems(
                 PostStartup,
                 (setup, bot_in_the_bed, dev_start_at).run_if(in_yard),
             )
@@ -770,7 +775,14 @@ impl Plugin for OnboardingPlugin {
                     the_scratch,
                     the_rooks,
                     the_rats,
-                    (lamps, signs, checklist, one_thing_to_read, mark_the_step),
+                    (
+                        lamps,
+                        signs,
+                        checklist,
+                        one_thing_to_read,
+                        stash_by_station,
+                        mark_the_step,
+                    ),
                     warn_near_anomalies,
                     hurry_the_truck,
                     out_of_the_truck.after(crate::raid::tick_raid),
@@ -875,6 +887,72 @@ fn one_thing_to_read(
                     .remove::<Folded>();
             }
             _ => {}
+        }
+    }
+}
+
+/// The station whose lesson a starter-kit kind belongs to: the crate in the
+/// truck shows only what's been reached (the designer, after the yard:
+/// "bombarded with too many item types at once"; the crate held thirteen
+/// kinds at the first step). `None`: from the start.
+pub fn stash_station(id: &str) -> Option<usize> {
+    let at = |g: Goal| Some(station_of(g));
+    match id {
+        "pm_pistol" | "radio" => None,
+        "cleaning_kit" => at(Goal::FarGrab),
+        "pm_mag" | "ammo_9x18" => at(Goal::FillMag),
+        "flashlight" | "power_cell" => at(Goal::OpenDoor),
+        "field_dressing" | "canned_stew" => at(Goal::Wrist),
+        "detector" | "bolt" => at(Goal::Probe),
+        // The map and the compass, for the way home and the first job.
+        _ => at(Goal::CallTruck),
+    }
+}
+
+/// Folds the stash crate's starter kit away till its station
+/// ([`stash_station`]), and unfolds it all once the yard's done.
+#[allow(clippy::type_complexity)]
+fn stash_by_station(
+    mut commands: Commands,
+    ob: Res<Onboarding>,
+    bags: Query<&Backpack, With<Stash>>,
+    items: Query<(&Item, Option<&Folded>, Option<&CollisionLayers>)>,
+    children: Query<&Children>,
+    catalog: Res<Catalog>,
+) {
+    let reached = |s: Option<usize>| match (s, ob.current()) {
+        (None, _) | (_, None) => true,
+        (Some(s), Some(c)) => c >= s,
+    };
+    for bag in &bags {
+        for &e in &bag.contents {
+            let Ok((item, _, _)) = items.get(e) else {
+                continue;
+            };
+            let show = reached(stash_station(&catalog.get(item.kind()).id));
+            // It, and what's seated in it (the torch's cell, the pistol's
+            // magazine).
+            for e in std::iter::once(e).chain(children.iter_descendants(e)) {
+                let Ok((_, folded, layers)) = items.get(e) else {
+                    continue;
+                };
+                match (show, folded) {
+                    (false, None) => {
+                        commands.entity(e).insert((
+                            Folded(layers.copied().unwrap_or_default()),
+                            Visibility::Hidden,
+                            CollisionLayers::NONE,
+                        ));
+                    }
+                    (true, Some(f)) => {
+                        commands
+                            .entity(e)
+                            .insert((f.0, Visibility::Inherited))
+                            .remove::<Folded>();
+                    }
+                    _ => {}
+                }
+            }
         }
     }
 }
@@ -2307,6 +2385,38 @@ pub mod bot;
 mod tests {
     use super::*;
     use crate::render::legibility::{TextSource, check_panel, panel_deg};
+
+    /// The truck's crate shows the first station's kit and nothing else
+    /// (the designer: "bombarded with too many item types at once"); every
+    /// other starter kind waits for the station that teaches it, in order.
+    #[test]
+    fn the_crate_shows_only_what_the_first_station_uses() {
+        let kit = [
+            "pm_pistol",
+            "radio",
+            "pm_mag",
+            "ammo_9x18",
+            "flashlight",
+            "power_cell",
+            "field_dressing",
+            "canned_stew",
+            "cleaning_kit",
+            "map_case",
+            "compass",
+            "detector",
+            "bolt",
+        ];
+        let first: Vec<_> = kit
+            .iter()
+            .filter(|id| stash_station(id).is_none())
+            .collect();
+        assert!(first.len() <= 3, "at the start: {first:?}");
+        for id in kit {
+            if let Some(s) = stash_station(id) {
+                assert!(s > station_of(Goal::Pocket), "{id} before the kit's done");
+            }
+        }
+    }
 
     /// The rooks by the truck sit where walking off the tailgate to
     /// GETTING ABOUT leaves them be, standing up or crouched, and a run
