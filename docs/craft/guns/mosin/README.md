@@ -110,25 +110,22 @@ here (weapon feel owns them).
 | Parts present | 2 | 2 | no interrupter screw or bolt-stop on the left; no cleaning rod's nut |
 | Parts move | 2 | 2 | the bolt turns, slides and cocks; the handle has a raceway; the floorplate doesn't open |
 | Controls | 2 | 2 | |
-| Finish | 1 | 1 | the bluing is near-black (waits for the environment light) |
+| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; the scan's grain still shows at 30 cm |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 1 | 1 | serial and year on the left; the real ones are on the barrel's reinforce, with the arsenal's mark |
-| **Total (of 30)** | **16** | **20** | |
+| **Total (of 30)** | **16** | **21** | |
 
 ## What's still wrong, worst first
 
-1. **The finish.** The bluing is near-black in the game's light, as it is
-   on the other guns; it waits for the environment light
-   (GUNSMITHING.md, "Finishes").
-2. **The markings** belong on top of the barrel's reinforce: the arsenal's
+1. **The markings** belong on top of the barrel's reinforce: the arsenal's
    mark, the year and the serial. The reinforce is there now to take them.
-3. **The left side** lacks the interrupter-ejector's two screws and its
+2. **The left side** lacks the interrupter-ejector's two screws and its
    plate, which the close-up shows plainly.
-4. **The butt's toe** may be about 10 mm shallow. The dealer's photograph
+3. **The butt's toe** may be about 10 mm shallow. The dealer's photograph
    says so, but Modern Firearms' doesn't, and the dealer's was taken from a
    little above.
-5. **The floorplate** can't swing open to empty the magazine.
+4. **The floorplate** can't swing open to empty the magazine.
 
 ## What changed
 

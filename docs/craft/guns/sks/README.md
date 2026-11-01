@@ -97,23 +97,21 @@ here (weapon feel owns them).
 | Parts present | 2 | 2 | the front swivel is on the band, where the photograph has it under the gas cylinder; no takedown pin through the stock |
 | Parts move | 2 | 2 | carrier, bayonet, trigger, safety; the cover can't come off |
 | Controls | 2 | 2 | |
-| Finish | 1 | 1 | the bluing is near-black (waits for the environment light) |
+| Finish | 1 | 2 | after the sky light (GUNSMITHING.md, "Finishes", fourth pass): blue-black, graded by the sky; the scan's grain still shows at 30 cm |
 | Wear | 2 | 2 | |
 | Edges and making | 2 | 2 | |
 | Markings | 2 | 2 | |
-| **Total (of 30)** | **16** | **21** | |
+| **Total (of 30)** | **16** | **22** | |
 
 ## What's still wrong, worst first
 
-1. **The finish**: it waits for the environment light, as on the other
-   guns.
-2. **The front sling swivel** belongs under the gas cylinder's front, on
+1. **The front sling swivel** belongs under the gas cylinder's front, on
    the lug's assembly, hanging below the folded bayonet, not on the band.
    The game's sling point moves with it, so I left it on the band for
    now.
-3. **The receiver** is a slab in section; the real one is milled, with
+2. **The receiver** is a slab in section; the real one is milled, with
    flats and a step along each side.
-4. **The bolt stop's tab** and the **takedown lever** are boxes.
+3. **The bolt stop's tab** and the **takedown lever** are boxes.
 
 ## What changed
 
