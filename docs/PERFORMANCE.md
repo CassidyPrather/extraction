@@ -321,6 +321,38 @@ largest side). The valley's far loot (1,400 item meshes past 100 m)
 isn't drawn already, so it saved 6-8 draws in clear weather and none in
 drizzle.
 
+### Items at rest, asleep
+
+Tried and left (2026-11-01): merging resting items per material in 8 m
+cells, as `part_rest` does for breakables. Items share few materials (a
+gun model's own, a box's kind), so Cinder Works' merged cells drew 672
+meshes for 914: 26% fewer, and nothing measurable at the drop.
+
+What it found instead: some items never sleep. `perf::tests::
+gauge_items_fall_asleep` settles each valley and the yard, then counts
+the dynamic items still awake, across the valley and within 15 m of
+the drop, with the worst by kind and by creep a frame. It counts only
+bodies the physics step simulates (not stowed, disabled, or held), and
+not those pushed on every frame by design: items that lift (a
+Featherstone hovers on a force), and whatever's within twice an
+anomaly's radius (lifts, snares and wells push on what's in them). It's
+ignored as known failing until the physics fix (Hands'):
+
+| | dynamic items | awake | at the drop |
+| - | - | - | - |
+| Marrow Creek | 425 | 4 (1%) | 4 |
+| Kettle Pass | 367 | 4 (1%) | 3 |
+| Cinder Works | 343 | 4 (1%) | 4 |
+| Sallow Reservoir | 313 | 4 (1%) | 4 |
+| Rime Fell | 411 | 4 (1%) | 3 |
+| the yard | 12 | 0 | 0 |
+
+The awake are the truck bed's pile: guns, magazines, clips and boxes,
+creeping up to 0.04 mm a frame. The parked truck is kinematic, so
+avian's islands join everything touching it, and the hand bodies,
+driven every frame, touch it: the whole bed never sleeps (Hands). The
+fix is the truck static while parked.
+
 ## CPU: a busy raid moment
 
 `render::cpu` splits every frame by schedule (marker schedules between
