@@ -135,6 +135,47 @@ mod tells_tests {
         // And a drone that goes quiet tells again before it fires.
         assert!(super::drone::RETELL > super::drone::BURST_GAP);
     }
+
+    /// The gunners, each to its own rule for what comes after its tell
+    /// before a round can hurt you (Robot minds' fair first fights, 1
+    /// November): the sentry's and the drone's first burst after every
+    /// tell is a harmless warning; the walker's warning is its full aim,
+    /// the machine you're meant to respect. The behaviour is held in each
+    /// one's own tests (`it_chirps_before_it_fires`, `its_first_burst_warns`,
+    /// `a_drones_first_burst_after_a_lock_warns`,
+    /// `every_walker_round_comes_a_full_aim_after_its_tell`).
+    #[test]
+    fn every_gunner_warns_before_it_hurts() {
+        use extraction_core::sentry;
+        // (who, what hurts first comes this long after its tell at least, s)
+        let gunners = [
+            (
+                "sentry",
+                sentry::CHIRP + sentry::ROUND_GAP * (sentry::BURST - 1) as f32 + sentry::BURST_GAP,
+            ),
+            ("drone", super::drone::LOCK_TIME + super::drone::BURST_GAP),
+            ("walker", super::walker::AIM_TIME),
+        ];
+        let floors = [("sentry", 2.5), ("drone", 3.3), ("walker", 1.5)];
+        for ((who, first), (_, floor)) in gunners.iter().zip(floors) {
+            assert!(
+                *first >= floor - 1e-4,
+                "{who}: first harm {first} s after its tell"
+            );
+        }
+        // The sentry's first burst after its chirp is its warning.
+        let mut g = sentry::Gun::default();
+        assert_eq!(g.step(true, 0.01), sentry::GunAct::Chirp);
+        let first = (0..1000)
+            .find_map(|_| (g.step(true, 0.01) == sentry::GunAct::Fire).then(|| g.warning()));
+        assert_eq!(
+            first,
+            Some(true),
+            "the sentry's first round wasn't a warning"
+        );
+        // The drone's warning is a whole burst, landing short of you.
+        assert!(super::drone::WARNING_SHORT > 1.0 && super::drone::BURST > 0);
+    }
 }
 
 #[derive(Component, Debug)]
