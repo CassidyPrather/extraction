@@ -96,6 +96,14 @@ def lat_arc(r0, r1, l0, l1, n=4):
     return out
 
 
+# The face: a dark brow over the front of the orb above the visor, so a
+# walker shows which way it faces from 30 m (a white orb reads the same from
+# every side: docs/craft/ROBOT_READING.md). Clear of the eye: its orange
+# ring needs pale shell about it to read. On the core (the eye's weak point
+# stays its own part), proud of the panels.
+core.lathe(lat_arc(R + 0.006, R + 0.011, 33, 62, 8), "Dark", segs=24, xf=UP, start=34,
+           sweep=112, closed=True)
+
 # Dark visor housing proud of the orb, the glowing slit inside it.
 sensor.lathe(lat_arc(R - 0.01, R + 0.022, 8, 28), "Dark", segs=12, xf=UP, start=67, sweep=46,
              closed=True)
@@ -208,6 +216,12 @@ for sx in (-1, 1):
     for sz in (-1, 1):
         hb.sphere(0.06, (sx * 0.2, -0.06, sz * 0.42), "Dark", segs=16, rings=8)
 hb.cyl(0.06, -0.62, -0.38, "Dark", segs=14, xf=T(0, 0.06, 0))
+# A tail mast standing up off its back end, a lamp at the tip: a hound is
+# low and grey, and was all but lost at 60 m (docs/craft/ROBOT_READING.md).
+tail = T(0, 0.1, 0.4) @ RX(-0.35)
+hb.cyl(0.026, 0.0, 0.46, "Dark", segs=10, xf=tail @ UP)
+hb.sphere(0.055, (0.0, 0.1 + 0.46 * math.cos(0.35), 0.4 + 0.46 * math.sin(0.35)), "Glow",
+          segs=14, rings=8)
 
 HEAD = (0.0, 0.1, -0.62)
 head = Part("hound_head", origin=HEAD)

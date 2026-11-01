@@ -38,12 +38,15 @@ def scrap_metal():
     p.prism([(z - 0.012, yb + y) for z, y in ang], -0.034, 0.033, "Iron", axis="x")
     p.prism([(z + 0.004, yb + y) for z, y in ang], -0.03, 0.031, "Iron", axis="x",
             xf=T(0, 0, 0) @ RY(0.08))
-    # The plate: painted olive, bent up at one end, paint gone at the edges.
+    # The plate: painted blue, bent up at one end, paint gone at the
+    # edges to bright metal. The first thing worth bringing home has to be
+    # seen across a room (it was a dark crumple: docs/craft/ITEM_READING.md).
     xf = T(-0.004, yb + 0.0175, 0.0) @ RY(-0.35) @ RZ(0.06)
-    p.box((0.044, 0.003, 0.03), (0.0, 0.0, 0.0), "Paint", xf=xf)
-    p.box((0.02, 0.003, 0.03), (0.0, 0.0, 0.0), "Paint",
-          xf=xf @ T(0.022, 0.0, 0.0) @ RZ(0.6) @ T(0.0095, 0.0, 0.0))
-    p.box((0.044, 0.0032, 0.004), (0.0, 0.0, -0.0135), "Steel", xf=xf)
+    p.box((0.056, 0.003, 0.04), (0.0, 0.0, 0.0), "Blue", xf=xf)
+    p.box((0.024, 0.003, 0.04), (0.0, 0.0, 0.0), "Blue",
+          xf=xf @ T(0.028, 0.0, 0.0) @ RZ(0.6) @ T(0.0115, 0.0, 0.0))
+    p.box((0.056, 0.0032, 0.004), (0.0, 0.0, -0.0185), "Zinc", xf=xf)
+    p.box((0.004, 0.0032, 0.04), (-0.028, 0.0, 0.0), "Zinc", xf=xf)
     for x, z, w in ((-0.012, 0.006, 0.012), (0.008, -0.004, 0.008)):
         p.box((w, 0.0034, w * 0.7), (x, 0.0, z), "Bakelite", xf=xf)
     # Rebar, ribbed and bent.

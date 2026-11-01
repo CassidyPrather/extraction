@@ -234,6 +234,18 @@ impl Vr {
             .expect("a hand")
     }
 
+    /// Whether the hand's last letting go was refused by a body slot
+    /// (`interact::StowRefused`).
+    pub fn stow_refused(&mut self, side: Side) -> bool {
+        let mut q = self
+            .app
+            .world_mut()
+            .query::<(&RigHand, Has<crate::interact::StowRefused>)>();
+        q.iter(self.app.world())
+            .find(|(rh, _)| rh.side == side)
+            .is_some_and(|(_, r)| r)
+    }
+
     pub fn spawn(&mut self, id: &str, at: Transform) -> Entity {
         let catalog = self.app.world().resource::<Catalog>().clone();
         let kind = catalog.kind(id).expect("an item id");
@@ -293,6 +305,38 @@ mod tests {
             .world()
             .resource::<crate::world::Zone>()
             .on_ground(x, z)
+    }
+
+    /// A power cell let fall comes to rest lying on its side, as its
+    /// model lies: stood on end it read as a magazine from across a room
+    /// (`docs/craft/ITEM_READING.md`). Dropped level, tilted, and nearly
+    /// on end.
+    #[test]
+    fn a_dropped_cell_comes_to_rest_lying_down() {
+        let mut vr = Vr::new("training_yard");
+        let feet = on_ground(&vr, OPEN.x, OPEN.z);
+        vr.stand(feet, 0.0);
+        let mut cells = Vec::new();
+        for (k, tilt) in [0.0f32, 30.0, 60.0].into_iter().enumerate() {
+            let at = feet + Vec3::new(-0.6 + k as f32 * 0.6, 0.4, -1.5);
+            let turn = Quat::from_rotation_x(tilt.to_radians()) * Quat::from_rotation_y(0.4);
+            cells.push((
+                tilt,
+                vr.spawn(
+                    "power_cell",
+                    Transform::from_translation(at).with_rotation(turn),
+                ),
+            ));
+        }
+        vr.step(240);
+        for (tilt, cell) in cells {
+            let gt = vr.app.world().get::<GlobalTransform>(cell).unwrap();
+            let along = gt.rotation() * Vec3::Z;
+            assert!(
+                along.y.abs() < 0.3,
+                "dropped at {tilt} degrees, it rests with its length {along:.2} (not lying down)"
+            );
+        }
     }
 
     /// Reach a hand to an item resting in front of you and squeeze: it's
@@ -1252,6 +1296,132 @@ mod tests {
         }
     }
 
+    /// Takes `id` in the right hand and lets it go at the player's first
+    /// empty mag pouch; the pouch.
+    fn let_go_at_a_pouch(vr: &mut Vr, id: &str) -> (Entity, Entity) {
+        let feet = vr.root().translation;
+        vr.step(10);
+        let at = feet + Vec3::new(0.2, 1.0, -0.4);
+        let thing = vr.spawn(id, Transform::from_translation(at));
+        vr.app
+            .world_mut()
+            .entity_mut(thing)
+            .insert(RigidBody::Static);
+        vr.hand(Side::Right, at, Quat::IDENTITY, 0.0, 0.0);
+        vr.step(2);
+        vr.grip(Side::Right, 1.0);
+        vr.step(4);
+        assert_eq!(vr.hand_state(Side::Right).holding, Some(thing));
+        let (pouch, there) = {
+            let mut q = vr.app.world_mut().query::<(
+                Entity,
+                &crate::interact::Socket,
+                &crate::interact::SocketOwner,
+                &GlobalTransform,
+            )>();
+            q.iter(vr.app.world())
+                .find(|(_, s, o, _)| {
+                    o.0 == vr.player
+                        && s.occupant.is_none()
+                        && s.kind
+                            == crate::interact::SocketKind::Body(
+                                extraction_core::inventory::SlotKind::Pouch,
+                            )
+                })
+                .map(|(e, _, _, g)| (e, g.translation()))
+                .expect("a pouch")
+        };
+        vr.move_hand(Side::Right, there);
+        vr.step(2);
+        vr.app.world_mut().resource_mut::<Seen>().0.clear();
+        vr.grip(Side::Right, 0.0);
+        vr.step(4);
+        (thing, pouch)
+    }
+
+    /// A magazine let go at a mag pouch stands in it as the pouch is made
+    /// for: on its floor, thin side across, inside its walls
+    /// (`interact::body::slot_fit`), not hung by its origin at the slot's.
+    #[test]
+    fn a_magazine_in_a_pouch_stands_in_it() {
+        let mut vr = Vr::new("training_yard");
+        let (mag, pouch) = let_go_at_a_pouch(&mut vr, "ak_mag");
+        let on = vr.app.world().get::<crate::interact::InSocket>(mag);
+        assert_eq!(on.map(|s| s.socket), Some(pouch), "pouched");
+        let slot = vr
+            .app
+            .world()
+            .get::<crate::interact::body::BodySlot>(pouch)
+            .unwrap()
+            .0;
+        let catalog = vr.app.world().resource::<crate::items::Catalog>();
+        let def = catalog.get(catalog.kind("ak_mag").unwrap());
+        let want =
+            crate::interact::body::slot_fit(extraction_core::inventory::SlotKind::Pouch, slot, def)
+                .expect("an AK magazine fits a mag pouch");
+        let got = *vr.app.world().get::<Transform>(mag).unwrap();
+        assert!(
+            got.translation.distance(want.translation) < 1e-4
+                && got.rotation.dot(want.rotation).abs() > 0.9999,
+            "seated at {got:?}, the pouch fits it at {want:?}"
+        );
+    }
+
+    /// A can of stew let go at a mag pouch doesn't go in (it couldn't), and
+    /// isn't dropped either: it stays in the hand, and the hand is told
+    /// (`InteractEvent::Refused`, a short tick).
+    #[test]
+    fn a_can_let_go_at_a_mag_pouch_stays_in_the_hand() {
+        let mut vr = Vr::new("training_yard");
+        let (can, _) = let_go_at_a_pouch(&mut vr, "canned_stew");
+        assert!(
+            vr.app
+                .world()
+                .get::<crate::interact::InSocket>(can)
+                .is_none(),
+            "a can in a mag pouch"
+        );
+        assert_eq!(
+            vr.hand_state(Side::Right).holding,
+            Some(can),
+            "dropped, not kept in the hand"
+        );
+        assert!(
+            vr.app
+                .world()
+                .resource::<Seen>()
+                .0
+                .iter()
+                .any(|e| matches!(e, InteractEvent::Refused { item } if *item == can)),
+            "no refusal felt"
+        );
+        // It's still held: it moves with the hand.
+        let feet = vr.root().translation;
+        vr.move_hand(Side::Right, feet + Vec3::new(0.3, 1.2, -0.4));
+        vr.step(10);
+        let at = vr
+            .app
+            .world()
+            .get::<GlobalTransform>(can)
+            .unwrap()
+            .translation();
+        assert!(
+            at.distance(feet + Vec3::new(0.3, 1.2, -0.4)) < 0.15,
+            "it didn't come with the hand: {at}"
+        );
+        assert!(
+            vr.stow_refused(Side::Right),
+            "the hand isn't marked refused"
+        );
+        // Closed and opened again, away from the slots: it drops, as ever.
+        vr.grip(Side::Right, 1.0);
+        vr.step(3);
+        vr.grip(Side::Right, 0.0);
+        vr.step(3);
+        assert_eq!(vr.hand_state(Side::Right).holding, None, "it won't let go");
+        assert!(!vr.stow_refused(Side::Right));
+    }
+
     /// One-handed: the pistol's empty well brought down onto a magazine in a
     /// pouch takes it, and the second button racks a round in; no second
     /// hand anywhere. With two hands, the same move does nothing.
@@ -1883,8 +2053,8 @@ mod tests {
     }
 
     /// Everything there is to pick up in the yard starts at a standing
-    /// reach: the kit in the truck's crate, on its shelf; the yard's loot
-    /// on crates. Floors are for what you drop. (The first playtest spent
+    /// reach: the kit in the truck's crate, on its shelf; any loot marker's
+    /// on its crate. Floors are for what you drop. (The first playtest spent
     /// it sitting on the ground picking things up.)
     #[test]
     fn nothing_to_pick_up_starts_on_the_floor() {
@@ -1960,10 +2130,9 @@ mod tests {
             .map(|(name, _)| name.clone())
             .collect();
         let _ = std::fs::remove_dir_all(&dir);
-        assert!(
-            !markers.is_empty() && bare.is_empty(),
-            "nothing at {bare:?}"
-        );
+        // (The yard has no loot markers now: what's there is what the
+        // stations put out. Any it gets back must have its loot on them.)
+        assert!(bare.is_empty(), "nothing at {bare:?}");
         assert!(in_crate >= 8, "the kit is in the crate ({in_crate} items)");
         assert!(low.is_empty(), "within a stoop of the floor: {low:#?}");
     }
@@ -2314,7 +2483,7 @@ mod onboarding {
             .entity_mut(radio)
             .insert(RigidBody::Static);
         take(&mut vr, Side::Right, radio);
-        // The nearest free body slot that takes it.
+        // The chest mount: the radio's sleeve (it fits no pocket or pouch).
         let slots: Vec<Vec3> = {
             let mut q = vr.app.world_mut().query::<(
                 &crate::interact::Socket,
@@ -2328,15 +2497,14 @@ mod onboarding {
                         && matches!(
                             s.kind,
                             crate::interact::SocketKind::Body(
-                                extraction_core::inventory::SlotKind::Pocket
-                                    | extraction_core::inventory::SlotKind::Pouch
+                                extraction_core::inventory::SlotKind::Mount
                             )
                         )
                 })
                 .map(|(_, _, g)| g.translation())
                 .collect()
         };
-        assert!(!slots.is_empty(), "a pocket");
+        assert!(!slots.is_empty(), "a chest mount");
         let from = at(&vr, radio);
         for i in 0..=12 {
             vr.move_hand(Side::Right, from.lerp(slots[0], i as f32 / 12.0));
@@ -2344,7 +2512,7 @@ mod onboarding {
         }
         vr.grip(Side::Right, 0.0);
         vr.step(4);
-        assert!(done(&vr, Goal::Pocket), "pocketed");
+        assert!(done(&vr, Goal::Pocket), "on the chest");
         assert!(!done(&vr, Goal::Pack));
         // The pack comes with the far box.
         at_station(

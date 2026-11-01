@@ -208,9 +208,14 @@ fn gun_mounts(
     }
 }
 
-/// A cell (its length along Y) turned to lie along a light (along Z).
-const CELL_ALONG: Quat = Quat::from_xyzw(
-    std::f32::consts::FRAC_1_SQRT_2,
+/// A cell lying along a light (along Z): as its model lies. The cell's
+/// model lies along Z, on its side, as a cell rests on a shelf (it stood
+/// on end, and read as a magazine from across a room:
+/// `docs/craft/ITEM_READING.md`).
+const CELL_ALONG: Quat = Quat::IDENTITY;
+/// A cell standing in an upright bay (along Y).
+const CELL_UPRIGHT: Quat = Quat::from_xyzw(
+    -std::f32::consts::FRAC_1_SQRT_2,
     0.0,
     0.0,
     std::f32::consts::FRAC_1_SQRT_2,
@@ -244,7 +249,7 @@ fn item_mounts(
                 "flashlight" => (0.02, CELL_ALONG),
                 "weapon_light" => (0.008, CELL_ALONG),
                 "laser_module" => (0.0025, CELL_ALONG),
-                _ => (0.02, Quat::IDENTITY),
+                _ => (0.02, CELL_UPRIGHT),
             };
             spawn_mount(
                 &mut commands,

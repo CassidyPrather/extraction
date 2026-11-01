@@ -20,8 +20,9 @@ use std::path::PathBuf;
 use super::glb;
 
 /// How deep a vertex of the thing may lie inside the kit, or the kit's in
-/// the thing (m): canvas gives, a little.
-pub const DEPTH: f32 = 0.004;
+/// the thing (m): what the cloth gives as a thing settles in its slot
+/// (`interact::body::SLOT_GIVE`), and a millimetre.
+pub const DEPTH: f32 = crate::interact::body::SLOT_GIVE + 0.001;
 
 /// How far below a bag's top its mouth is (m): its rim's bevel.
 const MOUTH: f32 = 0.006;
@@ -88,7 +89,7 @@ pub fn stowed() -> Vec<Stowed> {
         if piece(*slot).is_none() || !done.insert(*slot) {
             continue;
         }
-        let (pos, seat, _) = crate::interact::body::slot_layout(*slot, index);
+        let (pos, _, _) = crate::interact::body::slot_layout(*slot, index);
         let place = Mat4::from_translation(pos);
         let kind = crate::interact::SocketKind::Body(*slot);
         let mut seen = std::collections::HashSet::new();
@@ -96,6 +97,10 @@ pub fn stowed() -> Vec<Stowed> {
             if !crate::interact::accepts_item(&kind, def.size, None, def.firearm.is_some(), None) {
                 continue;
             }
+            // As the game seats it, or not at all if it doesn't fit.
+            let Some(seat) = crate::interact::body::slot_fit(*slot, index, def) else {
+                continue;
+            };
             let Some(path) = model(def) else {
                 continue;
             };
@@ -202,7 +207,15 @@ pub fn check(s: &Stowed) -> Vec<String> {
         // Out of its walls or its bottom, under the mouth.
         let mouth = bh.y - MOUTH;
         let (mut worst, mut at) = (0.0f32, Vec3::ZERO);
-        for p in pts.iter().filter(|p| p.y < mouth) {
+        // The holster's back is open above the trigger guard: a grip
+        // stands out of it there (`kit_cavities::HOLSTER_BACK_MOUTH`).
+        let back_open = |p: &Vec3| {
+            let l = s.place.inverse().transform_point3(*p);
+            s.slot == SlotKind::Holster
+                && l.y > crate::kit_cavities::HOLSTER_BACK_MOUTH
+                && l.z > crate::kit_cavities::HOLSTER.centre().z
+        };
+        for p in pts.iter().filter(|p| p.y < mouth && !back_open(p)) {
             let out_by = (bl - *p).max(*p - bh).max_element();
             if out_by > worst {
                 worst = out_by;
@@ -238,7 +251,6 @@ mod tests {
     /// Everything stowed on the body sits in its slot's piece of the kit,
     /// and through none of it.
     #[test]
-    #[ignore = "body-slot seats are the slot's origin, not fitted: waiting on slot_fit (Hands, B1)"]
     fn stowed_things_sit_in_their_kit() {
         let all = stowed();
         assert!(all.len() > 10, "only {} stowed", all.len());
@@ -260,6 +272,49 @@ mod tests {
     }
 
     const KNOWN: &[&str] = &[];
+
+    /// Writes the poses for the before/after shots of stowed kit
+    /// (`docs/shots/models/`): a few things, each at the slot's origin
+    /// (before) and as `slot_fit` seats it (after), torso space, as
+    /// column-major matrices. `STOW_SHOTS=<file>`.
+    #[test]
+    #[ignore]
+    fn write_stow_shot_poses() {
+        let Ok(out) = std::env::var("STOW_SHOTS") else {
+            return;
+        };
+        let catalog = crate::items::Catalog::load();
+        let mut rows = Vec::new();
+        for (slot, index, id) in [
+            (SlotKind::Pouch, 3, "ak_mag"),
+            (SlotKind::Pouch, 4, "canned_stew"),
+            (SlotKind::Pouch, 5, "knife"),
+            (SlotKind::Holster, 2, "pm_pistol"),
+            (SlotKind::Pocket, 7, "compass"),
+            (SlotKind::Mount, 9, "radio"),
+        ] {
+            let def = catalog.get(catalog.kind(id).unwrap());
+            let (pos, seat, _) = crate::interact::body::slot_layout(slot, index);
+            let place = Mat4::from_translation(pos);
+            let folder = if def.firearm.is_some() {
+                "guns"
+            } else if def.category == extraction_core::items::Category::Magazine {
+                "mags"
+            } else {
+                "items"
+            };
+            let path = crate::asset_root_path().join(format!("models/{folder}/{id}.glb"));
+            let before = (place * seat.to_matrix()).to_cols_array();
+            let after = crate::interact::body::slot_fit(slot, index, def)
+                .map(|t| (place * t.to_matrix()).to_cols_array());
+            rows.push(format!(
+                "{{\"id\":\"{id}\",\"path\":\"{}\",\"before\":{before:?},\"after\":{}}}",
+                path.display(),
+                after.map_or("null".to_string(), |a| format!("{a:?}"))
+            ));
+        }
+        std::fs::write(out, format!("[{}]", rows.join(","))).unwrap();
+    }
 
     /// Each distinct body-slot item once: (id, model bounds).
     fn items() -> Vec<(String, Vec3, Vec3)> {

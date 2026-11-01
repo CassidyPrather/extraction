@@ -503,7 +503,9 @@ pub fn prefab_footprint(id: &str) -> [f32; 3] {
         // Kit's car wrecks (`art/vehicles/wrecks.py`).
         "wreck_lada" => [1.8, 1.45, 4.3],
         "wreck_uaz" => [1.9, 2.0, 4.1],
-        "wreck_lorry" => [2.6, 2.2, 6.4],
+        // (Its body is 7.0 m nose to tail: `buildings::tests::
+        // solid_pieces_stay_in_the_footprint`.)
+        "wreck_lorry" => [2.6, 2.2, 7.0],
         "robot_gate" => [17.6, 14.0, 4.0],
         "factory_hall" => [36.0, 13.8, 20.0],
         "chimney" => [5.0, 38.0, 5.0],

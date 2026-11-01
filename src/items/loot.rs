@@ -64,6 +64,19 @@ pub fn roll_zone_loot(world: &mut World) {
 /// so the same loot.
 pub const ROLL_STEPS: usize = 5;
 
+/// Which raid of a career this is, for the loot's `from_raid` (the first is
+/// raid 0: raids set off before it, every valley's), or `None` with no
+/// career in play: a sim, a test's world, a gallery (every entry rolls, as
+/// before; a test app counted as a career's raid 0 rolled other loot, and
+/// the gate failed on two bugs that loot showed up).
+fn career_raid(world: &World, opts: &LaunchOptions) -> Option<u32> {
+    if opts.sim_run.is_some() || crate::persist::career_path(opts).is_none() {
+        return None;
+    }
+    let p = world.get_resource::<crate::progression::Progression>()?;
+    Some(p.0.raids_by_map.iter().map(|(_, n)| *n).sum())
+}
+
 /// One part of `roll_zone_loot`: the markers' loot, the scenes' things,
 /// the buildings' loot, the tapes, the artifacts.
 pub fn roll_zone_loot_step(world: &mut World, step: usize) {
@@ -74,6 +87,7 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
     let opts = world.resource::<LaunchOptions>().clone();
     let cycle = world.resource::<crate::raid::Raid>().cycle;
     let seed = cycle_seed(&opts, cycle);
+    let raid = career_raid(world, &opts);
     let mut queue = bevy::ecs::world::CommandQueue::default();
     {
         let zone = world.resource::<Zone>();
@@ -82,7 +96,7 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
         let mut commands =
             Commands::new_from_entities(&mut queue, world.entity_allocator(), world.entities());
         match step {
-            0 => spawn_marker_loot(&mut commands, zone, loot, catalog, seed),
+            0 => spawn_marker_loot(&mut commands, zone, loot, catalog, seed, raid),
             1 => crate::world::scenes::spawn_things(
                 &mut commands,
                 &opts.map,
@@ -92,7 +106,7 @@ pub fn roll_zone_loot_step(world: &mut World, step: usize) {
             ),
             2 => {
                 if let Some(spots) = world.get_resource::<crate::world::buildings::BuildingLoot>() {
-                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed);
+                    spawn_building_loot(&mut commands, zone, spots, loot, catalog, seed, raid);
                 }
             }
             _ => crate::radio::places::lay_tapes(&mut commands, zone, catalog, &opts.map),
@@ -204,6 +218,7 @@ fn spawn_marker_loot(
     loot: &Loot,
     catalog: &Catalog,
     seed: u64,
+    raid: Option<u32>,
 ) {
     let mut rng = Rng::new(seed ^ 0x100);
     let notes = notes_lying(zone);
@@ -223,7 +238,10 @@ fn spawn_marker_loot(
         // A marker is a place someone meant to leave something: never bare.
         let rolls = rolls_for(zone.map.richness_at(m.at), &mut rng).max(1);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll_in(table, Some(&valley), catalog, &mut rng))
+            .flat_map(|_| {
+                loot.0
+                    .roll_at(table, Some(&valley), raid, catalog, &mut rng)
+            })
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let offset = marker_roll(i);
@@ -274,6 +292,7 @@ fn spawn_building_loot(
     loot: &Loot,
     catalog: &Catalog,
     seed: u64,
+    raid: Option<u32>,
 ) {
     let mut rng = Rng::new(seed ^ 0xB11D);
     let mut n = 0;
@@ -282,7 +301,10 @@ fn spawn_building_loot(
     for spot in &spots.0 {
         let rolls = rolls_for(zone.map.richness_at([spot.at.x, spot.at.z]), &mut rng);
         let drops: Vec<_> = (0..rolls)
-            .flat_map(|_| loot.0.roll_in(spot.table, Some(&valley), catalog, &mut rng))
+            .flat_map(|_| {
+                loot.0
+                    .roll_at(spot.table, Some(&valley), raid, catalog, &mut rng)
+            })
             .collect();
         for (i, drop) in drops.into_iter().enumerate() {
             let at = clear_of_notes(spot.at + building_roll(i), &notes);

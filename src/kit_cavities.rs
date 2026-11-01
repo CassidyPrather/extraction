@@ -26,10 +26,13 @@ impl Cavity {
     }
 }
 
-/// A chest pouch: a magazine stands in it, thin side across X.
+/// A chest pouch: a magazine stands in it, thin side across X; deep
+/// enough for an AK-74 magazine's curve (130 mm front to back), and
+/// taller than deep, so a magazine stands in it (`slot_fit` matches sides
+/// by size).
 pub const POUCH: Cavity = Cavity {
-    floor: Vec3::new(0.0, -0.105, -0.0065),
-    half: Vec3::new(0.018, 0.065, 0.0535),
+    floor: Vec3::new(0.0, -0.115, -0.02),
+    half: Vec3::new(0.018, 0.07, 0.067),
 };
 
 /// A hip pocket: rounds, a clip, a cell.
@@ -42,14 +45,19 @@ pub const POCKET: Cavity = Cavity {
 /// back and up out of the mouth.
 pub const HOLSTER: Cavity = Cavity {
     floor: Vec3::new(0.0, -0.152, -0.0465),
-    half: Vec3::new(0.016, 0.082, 0.0505),
+    half: Vec3::new(0.0205, 0.082, 0.0505),
 };
 
-/// The chest mount: an open loop on the strap (a light or radio slides
-/// down through it; open at the bottom, so `floor` is only the loop's).
+/// The holster's back is cut away above this (slot y), over the trigger
+/// guard as a real one's is: a grip stands out of it there, back (+Z).
+pub const HOLSTER_BACK_MOUTH: f32 = -0.042;
+
+/// The chest mount: a webbing sleeve on the left strap, open top and
+/// bottom. The radio slides down into it, thin side out; a chemlight or a
+/// compass hangs in it (so `floor` is only the sleeve's foot).
 pub const MOUNT: Cavity = Cavity {
-    floor: Vec3::new(0.0, -0.05, -0.008),
-    half: Vec3::new(0.019, 0.026, 0.019),
+    floor: Vec3::new(0.0, -0.08, -0.015),
+    half: Vec3::new(0.036, 0.055, 0.025),
 };
 
 /// A slot's cavity (`None`: the slings, the vest and the head, which hold
@@ -71,21 +79,16 @@ pub fn cavity(slot: SlotKind) -> Option<Cavity> {
 /// Everything else is centred on its origin. `capture::stowed` holds this
 /// to the models.
 pub const ORIGIN_OFFSET: &[(&str, Vec3)] = &[
-    ("pm_pistol", Vec3::new(-0.001, 0.015, -0.044)),
+    ("pm_pistol", Vec3::new(0.0, 0.020, -0.039)),
+    // Its curve sweeps forward of its top (docs/craft/guns/ak74).
+    ("ak_mag", Vec3::new(0.0, 0.0, -0.016)),
     ("nagant", Vec3::new(0.0, -0.004, -0.061)),
     ("flare_pistol", Vec3::new(0.0, 0.0, -0.074)),
-    ("rpk_mag", Vec3::new(0.0, 0.001, -0.026)),
     ("ammo_762x25", Vec3::new(0.0, -0.006, -0.001)),
     ("bolt_bundle", Vec3::new(0.0, -0.009, 0.0)),
     ("robot_ammo_belt", Vec3::new(0.0, -0.021, -0.002)),
     ("artifact_adapter", Vec3::new(-0.003, 0.015, 0.0)),
-    ("map_case", Vec3::new(0.005, 0.003, 0.011)),
-    ("lead_case", Vec3::new(0.0, 0.009, 0.0)),
-    ("emp_trap", Vec3::new(0.0, -0.012, 0.0)),
-    ("electronics", Vec3::new(0.0, -0.017, 0.002)),
     ("brass", Vec3::new(0.0, -0.01, 0.0)),
-    ("rotor_assembly", Vec3::new(-0.006, -0.006, 0.011)),
-    ("field_recorder", Vec3::new(0.0, 0.006, 0.0)),
 ];
 
 /// An item's model's middle off its origin (zero for most).

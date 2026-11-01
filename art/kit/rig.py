@@ -151,20 +151,24 @@ def harness():
 # --- Holster ---------------------------------------------------------------
 
 def holster():
-    """Slot space: a PM hung barrel down (slide along slot -Z, its rear at
-    y 0.02), grip back (+Z) out of the mouth."""
+    """Slot space: a pistol hung barrel down (slide along slot -Z, its rear
+    at y 0.02), grip back (+Z) out of the mouth. Its cavity is
+    `src/kit_cavities.rs` HOLSTER: 41 mm across, for a Nagant's cylinder;
+    its back cut away above the trigger guard (HOLSTER_BACK_MOUTH), so the
+    grip stands clear of it rather than through it."""
     p = Part("holster")
-    # Side profile (z, y): round the slide and the trigger guard.
+    # Side profile (z, y): round the slide and the trigger guard, the back
+    # sloping away from the guard up to the front of the mouth.
     prof = fillet([(-0.1, 0.012), (-0.1, -0.125), (-0.075, -0.155), (-0.035, -0.155),
-                   (0.006, -0.075), (0.012, 0.012)], 0.012, 3)
-    p.prism(prof, -0.019, 0.019, "Leather", axis="x", bevel=0.007, segs=2)
+                   (0.006, -0.075), (0.010, -0.042), (-0.002, 0.012)], 0.012, 3)
+    p.prism(prof, -0.0235, 0.0235, "Leather", axis="x", bevel=0.007, segs=2)
     # A welt round its front edge, sewn.
     welt = fillet([(-0.103, 0.006), (-0.103, -0.127), (-0.077, -0.158), (-0.035, -0.158),
                    (-0.015, -0.12)], 0.01, 2)
     pts = [Vector((0.0, y, z)) for z, y in welt]
     strap(p, pts, 0.008, 0.006, "Leather", up=(1, 0, 0))
     # The loop it hangs from the belt by, on its inner side.
-    p.box((0.008, 0.07, 0.034), (-0.022, -0.005, -0.03), "Leather", bevel=0.002, segs=1)
+    p.box((0.008, 0.07, 0.034), (-0.0275, -0.005, -0.03), "Leather", bevel=0.002, segs=1)
     return p
 
 
@@ -172,23 +176,24 @@ def holster_flap(open_):
     p = Part("holster_flap_open" if open_ else "holster_flap_closed")
     if not open_:
         # Over the mouth, and down the front to a stud.
-        p.box((0.042, 0.007, 0.118), (0.0, 0.016, -0.043), "Leather", bevel=0.0025, segs=2)
-        p.box((0.04, 0.05, 0.007), (0.0, -0.009, -0.106), "Leather", bevel=0.0025, segs=2)
+        p.box((0.051, 0.007, 0.104), (0.0, 0.016, -0.05), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.05, 0.007), (0.0, -0.009, -0.106), "Leather", bevel=0.0025, segs=2)
         p.cyl(0.005, 0.0, 0.004, "Iron", segs=10, xf=T(0.0, -0.025, -0.109) @ RX(math.pi))
     else:
         # Thrown forward off the mouth and lying flat down the front, on the
         # welt (it stood out from it: the 28 October playtest, 0:35:26).
-        p.box((0.04, 0.006, 0.012), (0.0, 0.016, -0.1), "Leather", bevel=0.0025, segs=2)
-        p.box((0.04, 0.11, 0.006), (0.0, -0.039, -0.11), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.006, 0.012), (0.0, 0.016, -0.1), "Leather", bevel=0.0025, segs=2)
+        p.box((0.049, 0.11, 0.006), (0.0, -0.039, -0.11), "Leather", bevel=0.0025, segs=2)
     return p
 
 
 # --- Pouches ---------------------------------------------------------------
 
 # A magazine stands in it centred on its cavity (`src/kit_cavities.rs`,
-# POUCH): an AK's is 0.026 x 0.2 x 0.104 with its curve.
-PH = (-0.108, 0.025)  # bottom, mouth (slot y)
-PZ = -0.063  # its front (slot z); its back is on the chest panel
+# POUCH): an AK-74's curves forward, 130 mm front to back over what's in
+# the pouch (Gunsmith's, shaped from the gun). Deep enough for that.
+PH = (-0.118, 0.025)  # bottom, mouth (slot y)
+PZ = -0.090  # its front (slot z); its back is on the chest panel
 
 
 def pouch():
@@ -196,7 +201,8 @@ def pouch():
     prof = fillet([(PZ, PH[0]), (0.05, PH[0]), (0.05, PH[1]), (PZ, PH[1])], 0.008, 2)
     p.prism(prof, -0.021, 0.021, "Canvas", axis="x", bevel=0.005, segs=2)
     # A band of webbing round it, and a seam down its front.
-    p.box((0.052, 0.016, 0.122), (0.0, -0.07, -0.0065), "Olive", bevel=0.002, segs=1)
+    p.box((0.052, 0.016, 0.05 - PZ + 0.002), (0.0, -0.07, (0.05 + PZ) / 2), "Olive", bevel=0.002,
+          segs=1)
     p.box((0.003, 0.11, 0.004), (0.0, -0.04, PZ - 0.0015), "Canvas", bevel=0.001, segs=1)
     return p
 
@@ -204,7 +210,8 @@ def pouch():
 def pouch_flap(open_):
     p = Part("pouch_flap_open" if open_ else "pouch_flap_closed")
     if not open_:
-        p.box((0.046, 0.006, 0.116), (0.0, PH[1] + 0.0025, -0.0065), "Canvas", bevel=0.002, segs=1)
+        p.box((0.046, 0.006, 0.05 - PZ - 0.004), (0.0, PH[1] + 0.0025, (0.05 + PZ) / 2), "Canvas",
+              bevel=0.002, segs=1)
         p.box((0.044, 0.04, 0.006), (0.0, PH[1] - 0.016, PZ - 0.004), "Canvas", bevel=0.002, segs=1)
         p.cyl(0.004, 0.0, 0.003, "Iron", segs=10, xf=T(0.0, PH[1] - 0.026, PZ - 0.0075) @ RX(math.pi))
     else:
@@ -236,12 +243,30 @@ def pocket_flap(open_):
 
 
 def mount():
-    """An open loop (a light or radio slides down into it), on the left
-    shoulder strap."""
+    """A webbing sleeve on the left shoulder strap, open top and bottom: the
+    radio slides down into it, thin side out (its cavity is
+    `src/kit_cavities.rs` MOUNT: 72 x 110 x 50 mm inside); a chemlight or a
+    compass hangs in it."""
     p = Part("mount")
-    p.tube(0.024, 0.019, -0.05, 0.002, "Olive", segs=16,
-           xf=T(0.0, 0.0, -0.008) @ RX(-math.pi / 2))
-    p.box((0.03, 0.06, 0.006), (0.0, -0.02, 0.016), "Olive", bevel=0.0015, segs=1)
+    ix, iz0, iz1 = 0.036, -0.04, 0.01  # inside: half width, front, back (slot z)
+    y0, y1 = -0.08, 0.03  # bottom, top (slot y)
+    t = 0.004
+    h, ym = y1 - y0, (y0 + y1) / 2
+    # Front and back panels, the sides between them.
+    p.box((2 * ix + 2 * t, h, t), (0.0, ym, iz0 - t / 2), "Olive", bevel=0.0015, segs=1)
+    p.box((2 * ix + 2 * t, h, t), (0.0, ym, iz1 + t / 2), "Olive", bevel=0.0015, segs=1)
+    for sx in (-1, 1):
+        p.box((t, h, iz1 - iz0), (sx * (ix + t / 2), ym, (iz0 + iz1) / 2), "Olive",
+              bevel=0.0015, segs=1)
+    # Webbing bands round it, and the tab it's sewn to the strap by.
+    b, zm, d = 0.002, (iz0 + iz1) / 2, iz1 - iz0
+    for y in (y0 + 0.018, y1 - 0.018):
+        for z in (iz0 - t - b / 2, iz1 + t + b / 2):
+            p.box((2 * ix + 2 * t + 2 * b, 0.016, b), (0.0, y, z), "Olive", bevel=0.0007, segs=1)
+        for sx in (-1, 1):
+            p.box((b, 0.016, d + 2 * t), (sx * (ix + t + b / 2), y, zm), "Olive", bevel=0.0007,
+                  segs=1)
+    p.box((0.03, 0.06, 0.006), (0.0, y1 + 0.02, iz1 + 0.006), "Olive", bevel=0.0015, segs=1)
     return p
 
 

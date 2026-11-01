@@ -36,6 +36,8 @@ TO_BLENDER = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
 MATERIALS = {
     "Steel": ((0.42, 0.42, 0.43), 1.0, 0.35, None),
     "Blued": ((0.05, 0.055, 0.065), 0.9, 0.38, None),
+    # Black lacquer over phosphate: a stamped receiver's (AK-74, RPK-74).
+    "Stamped": ((0.065, 0.065, 0.068), 0.2, 0.5, None),
     "Wood": ((0.30, 0.13, 0.05), 0.0, 0.5, None),
     "Polymer": ((0.24, 0.08, 0.09), 0.0, 0.55, None),
     "Bakelite": ((0.17, 0.06, 0.035), 0.0, 0.42, None),
@@ -67,6 +69,8 @@ MATERIALS = {
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
+    # A car's weathered paint (src/models.rs: the painted-metal relief).
+    "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),
     "Leaf": ((0.2, 0.4, 0.1), 0.0, 0.7, None),
     "Enamel": ((0.88, 0.88, 0.85), 0.0, 0.3, None),
     "Worn": ((0.5, 0.5, 0.5), 1.0, 0.45, None),

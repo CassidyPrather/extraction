@@ -226,7 +226,8 @@ bolt.box((0.0062, 0.0074, 0.0105), (0.0098, BORE - 0.0003, HANDLE_Z), "Steel", b
 bolt.sphere(0.0074, KNOB, "Steel", segs=16, rings=10)
 
 # --- Trigger ------------------------------------------------------------------------------
-trig = Part("trigger", origin=(0.0, -0.013, -0.052))
+# Its origin on its pin: the game turns it about it (`Moves::Trigger`).
+trig = Part("trigger", origin=(0.0, -0.0065, -0.0515))
 trig.sweep(catmull([(-0.0515, -0.0125), (-0.0518, -0.0225), (-0.0492, -0.0310),
                     (-0.0440, -0.0362)], 3, closed=False),
            section_rect(0.0048, 0.0032, 0.0011), "Blued")

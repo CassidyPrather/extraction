@@ -81,9 +81,11 @@ pub fn audit(world: &mut World) -> Vec<String> {
         if s.occupant != Some(e) {
             out.push(format!("{what} is in a pouch that doesn't hold it"));
         }
+        let seat =
+            crate::interact::body::seat_of(world.get::<crate::interact::body::SlotSeat>(e), s);
         if matches!(s.kind, SocketKind::Body(_))
-            && (t.translation.distance(s.seat.translation) > 0.005
-                || t.rotation.angle_between(s.seat.rotation) > 0.02)
+            && (t.translation.distance(seat.translation) > 0.005
+                || t.rotation.angle_between(seat.rotation) > 0.02)
         {
             out.push(format!("{what} has moved in its pouch"));
         }
@@ -738,14 +740,20 @@ mod tests {
             .single(w)
             .unwrap();
         let in_pouches: Vec<(String, bool)> = w
-            .query::<(&crate::items::Item, &InSocket, &Transform)>()
+            .query::<(
+                &crate::items::Item,
+                &InSocket,
+                &Transform,
+                Option<&crate::interact::body::SlotSeat>,
+            )>()
             .iter(w)
-            .filter_map(|(it, ins, t)| {
+            .filter_map(|(it, ins, t, own)| {
                 let s = w.get::<Socket>(ins.socket)?;
                 let mine = w.get::<SocketOwner>(ins.socket).is_some_and(|o| o.0 == me);
                 (mine && matches!(s.kind, SocketKind::Body(_))).then(|| {
-                    let sat = t.translation.distance(s.seat.translation) < 0.005
-                        && t.rotation.angle_between(s.seat.rotation) < 0.02;
+                    let seat = crate::interact::body::seat_of(own, s);
+                    let sat = t.translation.distance(seat.translation) < 0.005
+                        && t.rotation.angle_between(seat.rotation) < 0.02;
                     (catalog.get(it.kind()).id.clone(), sat)
                 })
             })
