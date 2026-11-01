@@ -62,6 +62,28 @@ pub struct Drone {
     /// past [`RETELL`] it locks on afresh, chirp and all, before it fires
     /// again (`lose_a_quiet_lock`).
     pub quiet: f32,
+    /// Rounds of its warning burst left: set at every lock, the first
+    /// burst after it kicks up the ground short of you and hurts no one
+    /// ([`WARNING_SHORT`]).
+    pub warning_left: u32,
+}
+
+/// The first burst after every lock is a warning, as the sentry's is: its
+/// rounds land this far short of your feet (m), wider, and do no harm. A
+/// newcomer hears the chirp and sees the dirt kick up, and the first round
+/// that hurts comes no sooner than [`LOCK_TIME`] + [`BURST_GAP`] after the
+/// chirp (two bursts, 54 hp, landed in 2 s on a newcomer who only moved
+/// when the first one hit: Onboarding's first_jobs_cautious).
+pub const WARNING_SHORT: f32 = 2.5;
+/// Rounds in a burst, and each one's harm (hp).
+pub const BURST: u32 = 3;
+pub const DAMAGE: f32 = 9.0;
+
+/// Whether someone standing at `feet` is under a roof, out of any
+/// drone's reach (`drone_guns`; `drone_brain` sends one going home off
+/// them by the same test).
+pub fn under_a_roof(entrances: &super::doors::Entrances, feet: Vec3) -> bool {
+    entrances.building_at(feet + Vec3::Y * 0.5).is_some()
 }
 
 /// How long a locked drone may go without firing before its next burst
@@ -176,6 +198,7 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 last_engaged: -1.0,
                 broke_off_until: 0.0,
                 quiet: 0.0,
+                warning_left: 0,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -416,11 +439,7 @@ fn drone_brain(
                 let indoors = aware
                     .target
                     .and_then(|p| targets.get(p).ok())
-                    .is_some_and(|g| {
-                        entrances
-                            .building_at(g.translation() + Vec3::Y * 0.5)
-                            .is_some()
-                    });
+                    .is_some_and(|g| under_a_roof(&entrances, g.translation()));
                 if now > until || indoors {
                     off_duty.remove(&e);
                     *brain = Brain::Leave { to: job.exit };
@@ -601,17 +620,21 @@ fn drone_guns(
     mut seed: Local<u64>,
     minds: Query<&super::senses::MindSeed>,
     mut fighting_since: Local<std::collections::HashMap<Entity, f32>>,
-    (bodies, roles, mut hits, parents): (
+    (bodies, roles, mut hits, parents, entrances): (
         Query<&crate::player::Body>,
         Query<&super::squad::SquadRole>,
         MessageReader<crate::weapons::ballistics::Hit>,
         Query<&ChildOf>,
+        Res<super::doors::Entrances>,
     ),
 ) {
     let dt = time.delta_secs();
     // A round of its own in the one it's fighting: that fight's going on.
     for h in hits.read() {
-        let Some(shooter) = h.shooter else { continue };
+        // A warning round in them isn't a fight being won.
+        let Some(shooter) = h.shooter.filter(|_| h.damage > 0.0) else {
+            continue;
+        };
         let Ok((_, mut d, _, aware, ..)) = drones.get_mut(shooter) else {
             continue;
         };
@@ -651,6 +674,18 @@ fn drone_guns(
         else {
             continue;
         };
+        // Only a roof stops it, and a roof always does: someone under one
+        // it neither locks on to nor fires at, whatever gap it sees them
+        // through (a door, a window). It hangs about over the building
+        // till its fight wears out (`FIGHT_FOR`) and it goes back to its
+        // job. (Through the post office's door it killed a newcomer who'd
+        // taken cover as the driver said: first_jobs_cautious, seed 1.)
+        if under_a_roof(&entrances, target - Vec3::Y * 1.2) {
+            d.lock = 0.0;
+            d.quiet = 0.0;
+            d.burst_left = 0;
+            continue;
+        }
         let Some((gun_gt, part)) = children.iter().find_map(|c| guns.get(c).ok()) else {
             continue;
         };
@@ -666,6 +701,7 @@ fn drone_guns(
         if d.lock < LOCK_TIME {
             if d.lock == 0.0 {
                 d.locks_unhit = d.locks_unhit.saturating_add(1);
+                d.warning_left = BURST;
                 locks.write(DroneLock {
                     drone: e,
                     at: t.translation,
@@ -687,8 +723,19 @@ fn drone_guns(
             continue;
         }
         if d.burst_left == 0 {
-            d.burst_left = 3;
+            d.burst_left = BURST;
         }
+        // The warning: at the ground short of your feet, on the line from
+        // it to you, wide, harmless.
+        let warning = d.warning_left > 0;
+        let to = if warning {
+            d.warning_left -= 1;
+            let feet = target - Vec3::Y * 1.2;
+            let back = (muzzle - feet).with_y(0.0).normalize_or_zero();
+            (feet + back * WARNING_SHORT - muzzle).normalize_or(to)
+        } else {
+            to
+        };
         // Someone running across its line is hard to hit from up here.
         let crossing = aware
             .target
@@ -704,9 +751,13 @@ fn drone_guns(
             origin: muzzle,
             direction: to,
             speed: 380.0,
-            damage: 9.0,
+            damage: if warning { 0.0 } else { DAMAGE },
             projectiles: 1,
-            spread: 0.035 + CROSSING_SPREAD * crossing,
+            spread: if warning {
+                0.035 * 2.0
+            } else {
+                0.035 + CROSSING_SPREAD * crossing
+            },
             recoil: 0.0,
             seed: *seed,
         });
@@ -778,6 +829,7 @@ mod tests {
             looted: false,
             lock: LOCK_TIME,
             quiet: 0.0,
+            warning_left: 0,
             locks_unhit: 0,
             engaged_at: -1.0,
             last_engaged: -1.0,
@@ -804,22 +856,133 @@ mod tests {
     struct Fight {
         locks: Vec<f32>,
         shots: Vec<f32>,
+        /// Harmless rounds it fired (its warnings).
+        warnings: usize,
+        /// When it hurt you, and how much.
+        hurts: Vec<(f32, f32)>,
     }
 
     fn tally(
         mut locks: MessageReader<DroneLock>,
         mut shots: MessageReader<Shot>,
+        mut hurts: MessageReader<crate::health::Hurt>,
         drones: Query<(), With<Drone>>,
         time: Res<Time>,
         mut fight: ResMut<Fight>,
     ) {
         let t = time.elapsed_secs();
         fight.locks.extend(locks.read().map(|_| t));
-        fight.shots.extend(
-            shots
-                .read()
-                .filter(|s| s.shooter.is_some_and(|e| drones.contains(e)))
-                .map(|_| t),
+        for s in shots.read() {
+            if s.shooter.is_some_and(|e| drones.contains(e)) {
+                fight.shots.push(t);
+                fight.warnings += (s.damage <= 0.0) as usize;
+            }
+        }
+        for h in hurts.read() {
+            if h.by.is_some_and(|e| drones.contains(e)) {
+                fight.hurts.push((t, h.amount));
+            }
+        }
+    }
+
+    /// Only a roof stops it, and a roof always does: someone in the post
+    /// office a step in and aside from its door, where three newcomers who'd
+    /// taken cover from a drone were shot through the doorway, is never
+    /// locked on to or fired at by a drone coming at them from any side
+    /// (first_jobs_cautious, seed 1).
+    #[test]
+    fn no_drone_fires_at_someone_under_a_roof() {
+        for k in 0..8 {
+            let (mut app, player, drone, _) = drone_on_you();
+            let zone = app.world().resource::<crate::world::Zone>().clone();
+            let me = zone.on_ground(-19.4, 35.3);
+            assert!(
+                under_a_roof(app.world().resource::<super::super::doors::Entrances>(), me),
+                "the spot isn't in the post office: {me}"
+            );
+            let ang = k as f32 * std::f32::consts::TAU / 8.0;
+            app.world_mut()
+                .get_mut::<Transform>(drone)
+                .unwrap()
+                .translation = me + Vec3::new(ang.sin() * 20.0, 8.0, ang.cos() * 20.0);
+            for i in 0..90 * 40 {
+                if i % 90 == 0 {
+                    let mut a = app.world_mut().get_mut::<Awareness>(drone).unwrap();
+                    a.target = Some(player);
+                    a.last_known = Some(me);
+                    a.suspicion = 1.0;
+                    *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Engage;
+                }
+                app.world_mut()
+                    .get_mut::<Transform>(player)
+                    .unwrap()
+                    .translation = me;
+                let mut h = app
+                    .world_mut()
+                    .get_mut::<crate::health::Health>(player)
+                    .unwrap();
+                h.hp = h.max;
+                h.down = false;
+                app.update();
+            }
+            let f = app.world().resource::<Fight>();
+            assert!(
+                f.locks.is_empty() && f.shots.is_empty(),
+                "from bearing {k}: {} locks, {} shots",
+                f.locks.len(),
+                f.shots.len()
+            );
+        }
+    }
+
+    /// Its first burst after every lock warns and hurts no one: standing
+    /// in plain view, nothing hurts you sooner than `LOCK_TIME` +
+    /// `BURST_GAP` after its chirp, and never more than one burst's harm
+    /// in any two seconds (two bursts in 2 s killed the cautious newcomer
+    /// who moved only once the first hit: first_jobs_cautious, seed 1).
+    #[test]
+    fn a_drones_first_burst_after_a_lock_warns() {
+        let (mut app, player, _drone, at) = drone_on_you();
+        for i in 0..90 * 60 {
+            step(&mut app, player, at, true, i);
+        }
+        let f = app.world().resource::<Fight>();
+        assert!(
+            !f.locks.is_empty() && !f.hurts.is_empty(),
+            "no fight: {:?}",
+            f.locks
+        );
+        assert!(
+            f.warnings >= BURST as usize,
+            "it never warned: {} shots",
+            f.shots.len()
+        );
+        // The floor itself: 1.5 s chirp, then a harmless burst, then 1.8 s.
+        const FIRST_HARM: f32 = 3.3;
+        let soon: Vec<String> = f
+            .hurts
+            .iter()
+            .filter_map(|(t, _)| {
+                let l = f.locks.iter().rev().find(|l| **l <= *t)?;
+                (t - l < FIRST_HARM - 0.05).then(|| format!("hurt {:.2} s after a lock", t - l))
+            })
+            .collect();
+        assert!(soon.is_empty(), "{soon:?}");
+        let worst = f
+            .hurts
+            .iter()
+            .map(|(t0, _)| {
+                f.hurts
+                    .iter()
+                    .filter(|(t, _)| *t >= *t0 && *t < t0 + 2.0)
+                    .map(|(_, a)| a)
+                    .sum::<f32>()
+            })
+            .fold(0.0, f32::max);
+        assert!(
+            worst <= BURST as f32 * DAMAGE + 0.01,
+            "{worst} hp in 2 s (a burst is {})",
+            BURST as f32 * DAMAGE
         );
     }
 
