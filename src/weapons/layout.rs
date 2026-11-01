@@ -380,21 +380,21 @@ fn mosin() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.45)),
-        muzzle: Vec3::new(0.0, bore, -0.98),
-        port: Vec3::new(0.0, 0.07, -0.09),
+        muzzle: Vec3::new(0.0, bore, -0.90),
+        port: Vec3::new(0.0, 0.07, -0.136),
         eject: Vec3::new(0.7, 0.8, 0.2),
         sight: at(0.0, 0.084, -0.02),
         magwell: None,
         handle: Some(HandleLayout {
             kind: HandleKind::TurnBolt,
-            grab: Vec3::new(0.065, 0.03, -0.035),
+            grab: Vec3::new(0.065, 0.03, -0.103),
             travel: 0.09,
         }),
-        load_port: Vec3::new(0.0, 0.07, -0.09),
+        load_port: Vec3::new(0.0, 0.07, -0.136),
         hinge: Vec3::ZERO,
         parts: vec![
             // The long wooden stock, wrist at the origin.
-            part(bx(0.042, 0.06, 0.62), at(0.0, 0.0, -0.4), Wood, Static),
+            part(bx(0.042, 0.06, 0.72), at(0.0, 0.0, -0.45), Wood, Static),
             part(
                 bx(0.04, 0.12, 0.3),
                 Transform::from_xyz(0.0, -0.03, 0.17).with_rotation(Quat::from_rotation_x(0.1)),
@@ -403,7 +403,7 @@ fn mosin() -> GunLayout {
             ),
             part(bx(0.036, 0.04, 0.12), at(0.0, -0.005, 0.0), Wood, Static),
             // Receiver and magazine box.
-            part(bx(0.036, 0.04, 0.17), at(0.0, 0.045, -0.1), Blued, Static),
+            part(bx(0.036, 0.04, 0.21), at(0.0, 0.045, -0.12), Blued, Static),
             part(bx(0.03, 0.05, 0.08), at(0.0, -0.01, -0.12), Blued, Static),
             part(
                 bx(0.005, 0.022, 0.006),
@@ -413,32 +413,32 @@ fn mosin() -> GunLayout {
             ),
             // Barrel and its bands; the upper handguard.
             part(
-                Shape::Cylinder(0.011, 0.82),
-                at(0.0, bore, -0.57),
+                Shape::Cylinder(0.011, 0.70),
+                at(0.0, bore, -0.55),
                 Blued,
                 Static,
             ),
-            part(bx(0.032, 0.02, 0.3), at(0.0, 0.057, -0.3), Wood, Static),
-            part(bx(0.046, 0.07, 0.012), at(0.0, 0.02, -0.5), Blued, Static),
-            part(bx(0.046, 0.07, 0.012), at(0.0, 0.02, -0.7), Blued, Static),
-            part(bx(0.006, 0.02, 0.012), at(0.0, 0.07, -0.96), Blued, Static),
-            part(bx(0.03, 0.018, 0.08), at(0.0, 0.065, -0.2), Blued, Static),
+            part(bx(0.032, 0.02, 0.43), at(0.0, 0.057, -0.585), Wood, Static),
+            part(bx(0.046, 0.07, 0.012), at(0.0, 0.02, -0.40), Blued, Static),
+            part(bx(0.046, 0.07, 0.012), at(0.0, 0.02, -0.725), Blued, Static),
+            part(bx(0.006, 0.02, 0.012), at(0.0, 0.07, -0.88), Blued, Static),
+            part(bx(0.03, 0.018, 0.08), at(0.0, 0.065, -0.325), Blued, Static),
             // The bolt: body on the bore axis, the straight handle to the right.
             part(
                 Shape::Cylinder(0.009, 0.14),
-                at(0.0, 0.064, -0.08),
+                at(0.0, 0.064, -0.10),
                 Steel,
                 TurnBolt,
             ),
             part(
                 bx(0.06, 0.008, 0.008),
-                at(0.035, 0.064, -0.035),
+                at(0.035, 0.064, -0.103),
                 Steel,
                 TurnBolt,
             ),
             part(
                 Shape::Cylinder(0.009, 0.014),
-                Transform::from_xyz(0.066, 0.064, -0.035)
+                Transform::from_xyz(0.066, 0.064, -0.103)
                     .with_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)),
                 Steel,
                 TurnBolt,
