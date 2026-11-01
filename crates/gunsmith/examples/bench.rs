@@ -172,6 +172,8 @@ struct Bench {
     /// Set up and settling: the next frame past `wait` takes it.
     armed: bool,
     closing: bool,
+    /// Top-level nodes not drawn (`--hide`: the Mosin's bayonet, say).
+    hide: Vec<String>,
 }
 
 const CYCLE: f32 = 4.0;
@@ -458,6 +460,7 @@ fn main() {
     let mut out = None;
     let mut shots_dir = None;
     let mut t = 1.0;
+    let mut hide = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
@@ -478,6 +481,7 @@ fn main() {
             "--t" => t = val().parse().expect("--t 0..1"),
             "--exploded" => one.exploded = true,
             "--ortho" => one.ortho = Some(val().parse().expect("--ortho metres")),
+            "--hide" => hide.push(val()),
             _ if !a.starts_with("--") => id = Some(a.to_string()),
             _ => panic!("unknown argument {a}"),
         }
@@ -543,6 +547,7 @@ fn main() {
         taken: 0,
         armed: false,
         closing: false,
+        hide,
     })
     .init_resource::<Finishes>()
     .init_resource::<Bounds>()
@@ -653,6 +658,9 @@ fn spawn_model(
         let Some(moves) = moves_for(&node.name) else {
             continue;
         };
+        if bench.hide.contains(&node.name) {
+            continue;
+        }
         let piece = commands
             .spawn((
                 Piece {

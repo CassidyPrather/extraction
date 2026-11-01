@@ -148,7 +148,8 @@ the real length and registers it on the butt (or the muzzle) and the
 bore. Before trusting the photograph, check one part of known size in it
 (the AK's brake is 24-25 mm across). The photograph is for measuring; it
 goes in the repo only if it's public domain or CC0, credited in the
-review.
+review. `--hide NODE` leaves a top-level node out (the Mosin's bayonet,
+when the photograph has it off).
 
 ### 4. Surface
 
