@@ -17,6 +17,8 @@ impl Plugin for DevPlugin {
                     count_frames,
                     screenshot_when_ready,
                     gallery,
+                    turn_line_up.after(gallery),
+                    break_line_up.after(gallery),
                     first_person_hands,
                     wear_kit,
                     sights_to_the_eye,
@@ -189,6 +191,75 @@ fn sights_to_the_eye(
     }
 }
 
+/// A `--gallery robots:` line-up: each machine, the yaw it faces (a
+/// walker's `yaw`), and where it stood when it came (taken on its first
+/// frame).
+#[derive(Resource)]
+struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
+
+/// Holds a line-up's machines where their spawns stood them, facing the
+/// way they were asked: their minds would turn and walk them (a heavy
+/// walked up to the camera). A walker-bodied machine is posed from its
+/// `Walker::yaw`, so that's what is held; a drone flies, and faces as it
+/// flies. Their limbs and lamps still move.
+fn turn_line_up(
+    line_up: Option<ResMut<LineUp>>,
+    mut placed: Query<&mut Transform>,
+    mut walkers: Query<&mut crate::robots::walker::Walker>,
+) {
+    let Some(mut line_up) = line_up else {
+        return;
+    };
+    for (e, yaw, at) in line_up.0.iter_mut() {
+        if let Ok(mut t) = placed.get_mut(*e) {
+            let at = *at.get_or_insert(t.translation);
+            t.translation = at;
+        }
+        if let Ok(mut w) = walkers.get_mut(*e) {
+            w.yaw = *yaw;
+        }
+    }
+}
+
+/// `walker!broken` in a line-up: the job-2 walker, its gun dead and one
+/// leg failing (5%), as `robots::reel` breaks a walker. Broken a few frames
+/// in, so it has its parts, and left a second for the smoke and limp.
+#[derive(Resource)]
+struct BrokenWalkers(Vec<Entity>, u32);
+
+fn break_line_up(
+    broken: Option<ResMut<BrokenWalkers>>,
+    mut parts: Query<(Entity, &mut crate::robots::RobotPart, &GlobalTransform)>,
+    mut destroyed: MessageWriter<crate::robots::PartDestroyed>,
+) {
+    use crate::robots::PartRole;
+    let Some(mut broken) = broken else {
+        return;
+    };
+    broken.1 += 1;
+    if broken.1 != 4 {
+        return;
+    }
+    for (e, mut p, gt) in &mut parts {
+        if !broken.0.contains(&p.robot) {
+            continue;
+        }
+        match p.role {
+            PartRole::Weapon => {
+                p.hp = 0.0;
+                destroyed.write(crate::robots::PartDestroyed {
+                    robot: p.robot,
+                    part: e,
+                    role: p.role,
+                    at: gt.translation(),
+                });
+            }
+            PartRole::Leg(1) => p.hp = p.max_hp * 0.05,
+            _ => {}
+        }
+    }
+}
+
 /// `--gallery SUBJECT[,YAW[,DIST[,SHIFT]]]`: puts something in front of the
 /// `--camera` to look at, held still. SUBJECT is a gun id (shown from its
 /// right side with its magazine seated), a magazine id, `guns` (all four
@@ -308,6 +379,77 @@ fn gallery(
                     Transform::from_translation(Vec3::new(at.x, ground + 1.15, at.z))
                         .with_rotation(facing),
                 );
+            }
+            s if s.starts_with("robots:") => {
+                // A line-up of machines side by side, DIST ahead, each
+                // turned YAW from facing the camera, for reading them at a
+                // glance (`docs/craft/ROBOT_READING.md`):
+                // `robots:walker+drone+grappler+sentry+hound+heavy`;
+                // `walker!broken` is a walker with its gun dead and a leg
+                // failing.
+                let ids: Vec<&str> = s["robots:".len()..].split('+').collect();
+                let mut line_up = Vec::new();
+                let mut broken = Vec::new();
+                let d = dist.unwrap_or(30.0);
+                let right = Vec3::new(-flat.z, 0.0, flat.x);
+                let gap = (d * 0.16).max(3.5);
+                // Facing the camera (as `robots::reel` turns a walker to
+                // you), then turned YAW.
+                let face_cam = flat.x.atan2(flat.z) + turn.to_radians();
+                for (i, id) in ids.iter().enumerate() {
+                    let off = (i as f32 - (ids.len() as f32 - 1.0) * 0.5) * gap;
+                    let at = eye + flat * d + right * off;
+                    let at = zone.on_ground(at.x, at.z);
+                    let e = match *id {
+                        "walker" | "walker!broken" => {
+                            crate::robots::walker::spawn_walker(&mut commands, &zone, at, job(at))
+                        }
+                        "drone" => crate::robots::drone::spawn_drone(
+                            &mut commands,
+                            at + Vec3::Y * 2.5,
+                            job(at),
+                        ),
+                        "grappler" => crate::robots::grappler::spawn_grappler(
+                            &mut commands,
+                            &zone,
+                            at,
+                            job(at),
+                        ),
+                        "hound" => {
+                            crate::robots::hound::spawn_hound(&mut commands, &zone, at, job(at))
+                        }
+                        "heavy" => crate::robots::heavy::spawn_heavy(
+                            &mut commands,
+                            &zone,
+                            &catalog,
+                            at,
+                            job(at),
+                        ),
+                        "sentry" => {
+                            let toward = -flat;
+                            let centre = toward.x.atan2(-toward.z) + turn.to_radians();
+                            crate::robots::sentry::spawn_sentry(
+                                &mut commands,
+                                &zone,
+                                at.xz(),
+                                centre,
+                                0.0,
+                                at.xz(),
+                            )
+                        }
+                        _ => continue,
+                    };
+                    // Turned once it stands where its spawn put it (its
+                    // own height over the ground).
+                    if *id != "sentry" {
+                        line_up.push((e, face_cam, None));
+                    }
+                    if *id == "walker!broken" {
+                        broken.push(e);
+                    }
+                }
+                commands.insert_resource(LineUp(line_up));
+                commands.insert_resource(BrokenWalkers(broken, 0));
             }
             s if s == "scopeview" || s.starts_with("scopeview:") => {
                 // The scope held to the eye: its eyepiece just in front of
