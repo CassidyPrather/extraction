@@ -73,6 +73,9 @@ pub const WALLS: f32 = 0.35;
 /// and from [`ROUGH_FLAT`] it isn't looked up at all.
 pub const ROUGH_FADE: f32 = 0.55;
 pub const ROUGH_FLAT: f32 = 0.7;
+/// Under this much ambient (summed, cd/m²) there is no sky to reflect (deep
+/// in the workings, `world::underground::go_dark`): not looked up.
+pub const DARK: f32 = 0.5;
 
 const MARKER: &str = "// EXTRACTION_SKY_LIGHT";
 const IMPORT_ANCHOR: &str = "    mesh_view_bindings::lights,\n";
@@ -134,7 +137,7 @@ fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> 
 
 fn return_patched() -> String {
     format!(
-        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion;\n#else\n{RETURN_ANCHOR}#endif\n"
+        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3} && dot(env, vec3<f32>(1.0)) > {DARK:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion;\n#else\n{RETURN_ANCHOR}#endif\n"
     )
 }
 
