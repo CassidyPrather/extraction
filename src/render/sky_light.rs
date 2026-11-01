@@ -12,7 +12,10 @@
 //! - Below the horizon is the ground's bounce ([`GROUND`] of the ambient).
 //!
 //! A rough surface reads it blurred toward the half-sky its normal sees.
-//! The diffuse half is untouched: the flat ambient every gauge is tuned to.
+//! Rough enough ([`ROUGH_FLAT`]: foliage, bark, plaster, most of a forest's
+//! fragments) it skips the sky and keeps the flat ambient, which is close
+//! to the blurred sky there and costs nothing. The diffuse half is
+//! untouched: the flat ambient every gauge is tuned to.
 //!
 //! Indoors it follows the room (`grade::dim_indoors`). The fog and ambient
 //! it is made from are the room's, dimmed, and past the room the shader
@@ -20,8 +23,24 @@
 //! the eye in a room, metal reflects the room's walls ([`WALLS`] of its
 //! ambient), not open sky.
 //!
+//! `EXTRACTION_FLAT_AMBIENT=1` leaves Bevy's ambient as it was (the A/B
+//! for frame cost, `scripts/bench.sh`).
+//!
 //! A source edit against a pinned Bevy, like `render::fog`: if the anchors
 //! stop matching, it warns once and the ambient stays flat.
+//!
+//! On a Bevy upgrade, `tests::bevys_ambient_is_the_one_we_patch` fails
+//! until this is redone:
+//! 1. Read the new `bevy_pbr/src/render/pbr_ambient.wgsl`.
+//! 2. If `ambient_light` still multiplies one flat `lights.ambient_color`
+//!    into both its diffuse and specular halves, move the anchors
+//!    (`IMPORT_ANCHOR`, `RETURN_ANCHOR`) to the new lines, and check that
+//!    `fog`, `view` and `lights` are still in `mesh_view_bindings`, with
+//!    `fog` under `DISTANCE_FOG`.
+//! 3. If Bevy now has environment light of its own here (light probes on
+//!    by default), weigh dropping this patch for it.
+//! 4. Paste the new file into `UPSTREAM` and shoot
+//!    `docs/shots/visual-design/envlight/shots.txt` against the old build.
 
 use bevy::prelude::*;
 use bevy::shader::{Shader, ShaderImport, Source};
@@ -30,6 +49,9 @@ pub struct SkyLightPlugin;
 
 impl Plugin for SkyLightPlugin {
     fn build(&self, app: &mut App) {
+        if std::env::var_os("EXTRACTION_FLAT_AMBIENT").is_some_and(|v| v != "0") {
+            return;
+        }
         app.add_systems(Update, patch_ambient);
     }
 }
@@ -42,6 +64,10 @@ pub const ZENITH: [f32; 3] = [0.44, 0.47, 0.54];
 pub const GROUND: f32 = 0.25;
 /// A room's walls against its ambient, for metal near the eye indoors.
 pub const WALLS: f32 = 0.35;
+/// From this perceptual roughness the sky fades into the flat ambient,
+/// and from [`ROUGH_FLAT`] it isn't looked up at all.
+pub const ROUGH_FADE: f32 = 0.55;
+pub const ROUGH_FLAT: f32 = 0.7;
 
 const MARKER: &str = "// EXTRACTION_SKY_LIGHT";
 const IMPORT_ANCHOR: &str = "    mesh_view_bindings::lights,\n";
@@ -96,7 +122,7 @@ fn extraction_env(at: vec3<f32>, N: vec3<f32>, V: vec3<f32>, roughness: f32) -> 
 
 fn return_patched() -> String {
     format!(
-        "#ifdef DISTANCE_FOG\n    let env = extraction_env(world_position.xyz, world_normal, V, perceptual_roughness);\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion;\n#else\n{RETURN_ANCHOR}#endif\n"
+        "#ifdef DISTANCE_FOG\n    var env = lights.ambient_color.rgb;\n    if (perceptual_roughness < {ROUGH_FLAT:.3}) {{\n        env = mix(extraction_env(world_position.xyz, world_normal, V, perceptual_roughness), env, smoothstep({ROUGH_FADE:.3}, {ROUGH_FLAT:.3}, perceptual_roughness));\n    }}\n    return (diffuse_ambient * lights.ambient_color.rgb + specular_ambient * specular_occlusion * env) * occlusion;\n#else\n{RETURN_ANCHOR}#endif\n"
     )
 }
 
@@ -171,12 +197,42 @@ pub fn sky(d: Vec3, horizon: Vec3, ground: Vec3) -> Vec3 {
 mod tests {
     use super::*;
 
-    /// Bevy 0.19.1's `pbr_ambient.wgsl`, as far as the patch reads it.
-    const SAMPLE: &str = "#define_import_path bevy_pbr::ambient\n\n#import bevy_pbr::{\n    lighting::{EnvBRDFApprox, F_AB},\n    mesh_view_bindings::lights,\n}\n\nfn ambient_light(\n    world_position: vec4<f32>,\n) -> vec3<f32> {\n    return (diffuse_ambient + specular_ambient * specular_occlusion) * lights.ambient_color.rgb * occlusion;\n}\n";
+    /// Bevy 0.19.1's `pbr_ambient.wgsl`, whole: the shape the patch is
+    /// written against.
+    const UPSTREAM: &str = r#"#define_import_path bevy_pbr::ambient
+
+#import bevy_pbr::{
+    lighting::{EnvBRDFApprox, F_AB},
+    mesh_view_bindings::lights,
+}
+
+// A precomputed `NdotV` is provided because it is computed regardless,
+// but `world_normal` and the view vector `V` are provided separately for more advanced uses.
+fn ambient_light(
+    world_position: vec4<f32>,
+    world_normal: vec3<f32>,
+    V: vec3<f32>,
+    NdotV: f32,
+    diffuse_color: vec3<f32>,
+    specular_color: vec3<f32>,
+    perceptual_roughness: f32,
+    occlusion: vec3<f32>,
+) -> vec3<f32> {
+    let diffuse_ambient = EnvBRDFApprox(diffuse_color, F_AB(1.0, NdotV));
+    let specular_ambient = EnvBRDFApprox(specular_color, F_AB(perceptual_roughness, NdotV));
+
+    // No real world material has specular values under 0.02, so we use this range as a
+    // "pre-baked specular occlusion" that extinguishes the fresnel term, for artistic control.
+    // See: https://google.github.io/filament/Filament.md.html#specularocclusion
+    let specular_occlusion = saturate(dot(specular_color, vec3(50.0 * 0.33)));
+
+    return (diffuse_ambient + specular_ambient * specular_occlusion) * lights.ambient_color.rgb * occlusion;
+}
+"#;
 
     #[test]
     fn the_patch_takes_once_and_keeps_the_flat_ambient_without_fog() {
-        let out = patch(SAMPLE).expect("anchors");
+        let out = patch(UPSTREAM).expect("anchors");
         assert!(out.contains(MARKER) && out.contains(IMPORT_PATCHED));
         assert!(out.find("fn extraction_env").unwrap() < out.find("fn ambient_light").unwrap());
         // A view without fog (the impostors' capture) keeps Bevy's own line.
@@ -184,28 +240,50 @@ mod tests {
         assert!(patch(&out).is_none(), "patched twice");
     }
 
-    /// Against the pinned Bevy's real source: the anchors are there.
+    /// Bevy's real `pbr_ambient.wgsl` is the one pinned in `UPSTREAM`:
+    /// an upgrade that changes it fails here (see the module's notes).
     #[test]
-    fn the_anchors_are_in_bevys_ambient() {
+    fn bevys_ambient_is_the_one_we_patch() {
         let home = std::env::var("CARGO_HOME")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
                 std::path::PathBuf::from(std::env::var("HOME").unwrap()).join(".cargo")
             });
-        let Some(src) = std::fs::read_dir(home.join("registry/src"))
+        let found: Vec<(std::path::PathBuf, String)> = std::fs::read_dir(home.join("registry/src"))
             .into_iter()
             .flatten()
             .flatten()
-            .map(|d| d.path().join("bevy_pbr-0.19.1/src/render/pbr_ambient.wgsl"))
-            .find_map(|p| std::fs::read_to_string(p).ok())
+            .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten())
+            .filter(|d| d.file_name().to_string_lossy().starts_with("bevy_pbr-"))
+            .filter_map(|d| {
+                let p = d.path().join("src/render/pbr_ambient.wgsl");
+                std::fs::read_to_string(&p).ok().map(|s| (d.path(), s))
+            })
+            .collect();
+        let Some((dir, src)) = found
+            .iter()
+            .find(|(d, _)| d.ends_with(format!("bevy_pbr-{}", bevy_pbr_version())))
         else {
-            eprintln!("bevy_pbr 0.19.1 source not found: skipped");
+            eprintln!("bevy_pbr {} source not found: skipped", bevy_pbr_version());
             return;
         };
-        assert!(
-            patch(&src).is_some(),
-            "pbr_ambient.wgsl changed: re-anchor the sky light"
+        assert_eq!(
+            src.as_str(),
+            UPSTREAM,
+            "{} changed: redo the sky light (src/render/sky_light.rs's notes)",
+            dir.display()
         );
+    }
+
+    /// The bevy_pbr the game builds against, from Cargo.lock.
+    fn bevy_pbr_version() -> String {
+        let lock =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.lock")).unwrap();
+        let at = lock
+            .find("name = \"bevy_pbr\"\nversion = \"")
+            .expect("bevy_pbr in Cargo.lock");
+        let rest = &lock[at + "name = \"bevy_pbr\"\nversion = \"".len()..];
+        rest[..rest.find('"').unwrap()].to_owned()
     }
 
     /// Metal reflects the sky you see. Under the default sky at the
