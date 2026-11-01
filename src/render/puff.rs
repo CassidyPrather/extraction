@@ -22,6 +22,19 @@ const SIDE: u32 = 64;
 /// The quad's side, m, at scale 1 (see [`PuffAssets`]).
 pub const QUAD: f32 = 1.6;
 
+/// The most of the view one puff may span from its middle, radians: a
+/// puff near the eye looks smaller, not thicker. Without it, standing in
+/// a hazard's cloud put 64 quads each across most of the view, 39 layers
+/// of blended fragments through both eyes (`render::vr_budget`'s puff
+/// gauge); in VR a wall of grey against the face reads worse besides.
+pub const MAX_HALF_ANGLE: f32 = 14.0 * std::f32::consts::PI / 180.0;
+
+/// The largest scale a puff `dist` m from the eye may have
+/// ([`MAX_HALF_ANGLE`]).
+pub fn max_scale(dist: f32) -> f32 {
+    dist.max(0.0) * MAX_HALF_ANGLE.tan() / (QUAD * 0.5)
+}
+
 /// Turned to face the eye each frame (`face_puffs`).
 #[derive(Component, Default)]
 pub struct SoftPuff;
@@ -170,6 +183,12 @@ fn face_puffs(
             None => (t.translation, Quat::IDENTITY),
         };
         t.rotation = turn.inverse() * facing(at, eye);
+        // Its owner wrote its scale this frame; near the eye, no wider
+        // than `MAX_HALF_ANGLE`.
+        let most = max_scale(at.distance(eye));
+        if t.scale.max_element() > most {
+            t.scale = t.scale.min(Vec3::splat(most));
+        }
     }
 }
 
@@ -348,6 +367,23 @@ mod tests {
             "say what each is (a puff is `render::puff`):\n{}",
             bad.join("\n")
         );
+    }
+
+    /// A puff near the eye looks smaller, not thicker: clamped, it spans
+    /// no more than `MAX_HALF_ANGLE` from its middle, however close; far
+    /// off, an owner's scale stands.
+    #[test]
+    fn a_puff_near_the_eye_looks_smaller_not_thicker() {
+        for dist in [0.3, 1.0, 2.0, 3.0] {
+            let half = max_scale(dist) * QUAD * 0.5;
+            let angle = (half / dist).atan();
+            assert!((angle - MAX_HALF_ANGLE).abs() < 1e-4, "{dist} m: {angle}");
+        }
+        // A hazard puff at its fullest (1.8) is clamped within 6 m, and a
+        // wound's (0.5) only within 1.6 m.
+        assert!(max_scale(5.0) < 1.8 && max_scale(6.5) > 1.8);
+        assert!(max_scale(1.5) < 0.5 && max_scale(1.8) > 0.5);
+        assert_eq!(max_scale(-1.0), 0.0);
     }
 
     /// A puff faces the eye from wherever it is, upright, its face (+Z)
