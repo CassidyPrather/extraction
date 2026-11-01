@@ -220,9 +220,11 @@ pub struct FreeCamera;
 /// A free camera standing there (`--camera X,0,Z`): its eye goes 1.7 m
 /// over whatever the player stands on once they're on their feet, not over
 /// the terrain (a house's floor can stand a metre above it: the lens was
-/// at bed height, the player's hands above it). Once, then left alone.
+/// at bed height, the player's hands above it). Once, then left alone;
+/// and not at all if something else has placed the camera first (a
+/// gauge's views, the tour): it holds where it put the camera.
 #[derive(Component)]
-pub struct StandingEye;
+pub struct StandingEye(pub Vec3);
 
 /// Where a standing free camera's eye ended up (`StandingEye`), once it
 /// has: what's put in front of the camera waits for it (`dev::gallery`).
@@ -234,7 +236,7 @@ pub const EYE_OVER_FEET: f32 = 1.7;
 
 fn stand_the_eye(
     mut commands: Commands,
-    mut cams: Query<(Entity, &mut Transform), (With<StandingEye>, Without<LocalPlayer>)>,
+    mut cams: Query<(Entity, &mut Transform, &StandingEye), Without<LocalPlayer>>,
     players: Query<(&Transform, &crate::player::Body), With<LocalPlayer>>,
     mut stood: ResMut<StoodEye>,
 ) {
@@ -244,7 +246,12 @@ fn stand_the_eye(
     if !body.grounded {
         return;
     }
-    for (e, mut t) in &mut cams {
+    for (e, mut t, put) in &mut cams {
+        // Placed by something else meanwhile: that's where it's wanted.
+        if t.translation.distance(put.0) > 1e-3 {
+            commands.entity(e).remove::<StandingEye>();
+            continue;
+        }
         let y = feet.translation.y + EYE_OVER_FEET;
         if (y - t.translation.y).abs() > 0.05 {
             info!(
@@ -319,7 +326,7 @@ fn attach_flat_camera(
             camera_bundle(&weather),
         ));
         if standing {
-            cam.insert(StandingEye);
+            cam.insert(StandingEye(Vec3::new(pos.x, y, pos.z)));
         }
         let cam = cam.id();
         commands.entity(cam).with_children(|c| {
@@ -424,7 +431,7 @@ mod eye_tests {
             .world_mut()
             .spawn((
                 FreeCamera,
-                StandingEye,
+                StandingEye(Vec3::new(0.0, terrain + EYE_OVER_FEET, 0.0)),
                 Transform::from_xyz(0.0, terrain + EYE_OVER_FEET, 0.0),
             ))
             .id();
@@ -458,5 +465,22 @@ mod eye_tests {
             .y = 50.0;
         app.update();
         assert_eq!(y(&app), 50.0);
+        // A camera placed by something else before the player lands (a
+        // gauge's views) stays where it was put.
+        let placed = Vec3::new(5.0, 30.0, 5.0);
+        let other = app
+            .world_mut()
+            .spawn((
+                FreeCamera,
+                StandingEye(Vec3::new(0.0, terrain + EYE_OVER_FEET, 0.0)),
+                Transform::from_translation(placed),
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<Transform>(other).unwrap().translation,
+            placed
+        );
+        assert!(app.world().get::<StandingEye>(other).is_none());
     }
 }
