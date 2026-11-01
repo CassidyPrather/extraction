@@ -194,6 +194,7 @@ pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
     "Stamped",
+    "Alloy",
     "Wood",
     "Polymer",
     "Shell",
@@ -238,6 +239,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // World props (art/props).
     "Timber",
     "Rusty",
+    "Bark",
     "Painted",
     "Plaster",
     "Concrete",
@@ -298,6 +300,7 @@ impl ModelMaterials {
             // (`gunsmith::finish`), the bench's too.
             "Blued" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLUED)),
             "Stamped" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::STAMPED)),
+            "Alloy" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::ALLOY)),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
@@ -337,6 +340,9 @@ impl ModelMaterials {
             // World props (art/props).
             "Timber" => lib.get(Mat::Timber, server, materials),
             "Rusty" => lib.get(Mat::RustyMetal, server, materials),
+            // A felled trunk's bark: the spruce bark scan (a log stack;
+            // `art/props/yards.py` coarsens its tile in the model's UVs).
+            "Bark" => lib.get(Mat::BarkSpruce, server, materials),
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
@@ -438,7 +444,13 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
-            "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
+            // A robot's eye is a signal lamp: fog doesn't wash it out.
+            "Eye" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.1, 0.02, 0.02),
+                emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+                fog_enabled: false,
+                ..default()
+            }),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),
                 emissive: LinearRgba::rgb(0.6, 0.35, 1.2),

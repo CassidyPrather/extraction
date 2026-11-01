@@ -561,8 +561,12 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// When machines after it fired at it, the last half minute.
+    shots: Vec<f32>,
     /// Racked at the driver's "one up the spout".
     racked: bool,
+    /// The broken walker wrecked (job 2's first fight, won).
+    broke_it: bool,
     /// A machine has noticed it this raid (and whether a round was up).
     noticed: bool,
 }
@@ -785,6 +789,12 @@ pub(super) fn direct_raid(
     }) {
         again.push(First::Sentry);
     }
+    let noticed_now = tells.noticed.read().any(|ev| on_me(ev.robot));
+    // The first fight it can win: the broken walker wrecked.
+    if !state.broke_it && world.broken.iter().any(|r| r.wrecked) {
+        state.broke_it = true;
+        state.note(now, Kind::Learned, "wrecked the broken walker");
+    }
     // "One up the spout": out, racked, back in the holster (the safety
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
@@ -804,7 +814,7 @@ pub(super) fn direct_raid(
         }
     }
     // The first machine to have it: a round up by then, or not.
-    if tells.noticed.read().any(|ev| on_me(ev.robot)) && !state.noticed && has_gun {
+    if noticed_now && !state.noticed && has_gun {
         state.noticed = true;
         if one_up(guns(), player) {
             state.note(now, Kind::Learned, "noticed, with a round up");
@@ -815,6 +825,27 @@ pub(super) fn direct_raid(
     if !again.is_empty() {
         // Warned: by the machine itself.
         state.said_at = now;
+    }
+    // The other machines' own tells on it warn as well (Legibility's
+    // survey: a hound's coil, a crawler's charge, a heavy's raised arm, a
+    // grappler's windup), and a machine noticing it.
+    let coiled = tells.hounds.read().any(|ev| on_me(ev.hound));
+    let charged = tells.crawlers.read().any(|ev| on_me(ev.crawler));
+    let raised = tells
+        .heavies
+        .read()
+        .any(|ev| ev.what == crate::robots::heavy::HeavyAct::Raise && on_me(ev.heavy));
+    let wound = tells.harpoons.read().any(|ev| ev.to == player);
+    // A machine still firing at it, hit or miss: one fight, heard all
+    // through (a drone's bursts 1.8 s apart never let it re-lock).
+    // (Not the round that hits: only those before it, `shot_warns`.)
+    let fired_on = tells.shots.read().any(|s| s.shooter.is_some_and(on_me));
+    if coiled || charged || raised || wound || noticed_now {
+        state.said_at = now;
+    }
+    if fired_on {
+        state.shots.retain(|t| now - t < 30.0);
+        state.shots.push(now);
     }
     again.retain(|f| !firsts.contains(f));
     again.truncate(1);
@@ -841,6 +872,33 @@ pub(super) fn direct_raid(
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Its eye's still good: shoot that": the one to take on (bar
+            // the lost one, who goes anywhere but at it).
+            First::BrokenNoticed if !p.lost => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "a broken walker: took it on, as the driver said",
+                );
+                take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                )
+            }
+            // "Keep your distance": back off it, and at it again.
+            First::Shoved if !p.lost => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y);
+                let away = (here - from).normalize_or(Vec2::Y);
+                let mut t = vec![Task::WalkTo {
+                    to: here + away * 4.0,
+                    within: 1.0,
+                }];
+                t.extend(take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                ));
+                t
+            }
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
             // "Down, out of its sweep": low, and away from it (a sentry
@@ -929,8 +987,11 @@ pub(super) fn direct_raid(
             // the same fight still going (hit again within 15 s of a warned
             // hit: a drone that locked on keeps at it without locking again).
             let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
-                Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
-                None => now - state.said_at < 30.0,
+                Some(f) => {
+                    f.last_tell().is_some_and(|t| now - t < 15.0)
+                        || shot_warns(&state.shots, now, 15.0)
+                }
+                None => now - state.said_at < 30.0 || shot_warns(&state.shots, now, 30.0),
             } || now < state.warned_fight_until;
             if warned {
                 state.warned_fight_until = now + 15.0;
@@ -1800,6 +1861,11 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
             )
         })
         .count();
+    // What the hurt count can't see: it compares hp a tick at a time.
+    bot.log.push(
+        "(hurt counts drops over 5 hp in one tick: smaller hits and damage over time aren't in it)"
+            .into(),
+    );
     let home = moments.iter().any(|(_, _, w)| w == "in the truck and away");
     if home && bad == 0 {
         bot.passed += 1;
@@ -1825,6 +1891,7 @@ pub struct Fight {
     /// Running for cover until then.
     pub flee_until: f32,
     pub tells: Vec<(f32, String)>,
+    last_any: Option<f32>,
     pub first_hit: Option<f32>,
     reacted: bool,
     hp: f32,
@@ -1834,11 +1901,14 @@ pub struct Fight {
 
 impl Fight {
     /// The last tell, if any.
+    /// When any tell last came (a second lock, a later aim): what warns of
+    /// a hit. `tells` keeps each kind's first, for the report.
     pub fn last_tell(&self) -> Option<f32> {
-        self.tells.last().map(|(t, _)| *t)
+        self.last_any
     }
 
     fn tell(&mut self, now: f32, what: &str) -> bool {
+        self.last_any = Some(now);
         if self.tells.iter().any(|(_, w)| w == what) {
             return false;
         }
@@ -1854,6 +1924,16 @@ pub(super) struct Tells<'w, 's> {
     aims: MessageReader<'w, 's, crate::robots::walker::WalkerAim>,
     locks: MessageReader<'w, 's, crate::robots::drone::DroneLock>,
     sentries: MessageReader<'w, 's, crate::robots::sentry::SentryEvent>,
+    /// A hound coiling (0.6 s before the bite).
+    hounds: MessageReader<'w, 's, crate::robots::hound::HoundCrouch>,
+    /// A crawler's spark gun charging (0.5 s before each zap).
+    crawlers: MessageReader<'w, 's, crate::robots::indoor::CrawlerCharge>,
+    /// A heavy's arm rising (1.2 s before the slam), among its other news.
+    heavies: MessageReader<'w, 's, crate::robots::heavy::HeavyEvent>,
+    /// A grappler winding up a throw.
+    harpoons: MessageReader<'w, 's, crate::robots::grappler::HarpoonWindup>,
+    /// Rounds fired (each heard, the crack and the tracer, hit or miss).
+    shots: MessageReader<'w, 's, crate::weapons::ballistics::Shot>,
     hushed: Query<'w, 's, (), (With<LocalPlayer>, With<crate::anomaly::hush::InHush>)>,
 }
 
@@ -2242,6 +2322,20 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
         }
     }
     best
+}
+
+/// A round in flight is this long at most (s): a shot this recent may be
+/// the one that hit, and warns of nothing.
+const SHOT_LEAD: f32 = 0.6;
+
+/// Whether rounds fired at it warn of a hit `now`: one fired at least
+/// `SHOT_LEAD` before (heard, the crack and the tracer), within `window`.
+/// The round that lands first, with no tell before it, isn't warned by
+/// itself.
+fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
+    shots
+        .iter()
+        .any(|t| now - t >= SHOT_LEAD && now - t < window)
 }
 
 /// What readies `f` to fire: a reload when it has no magazine or none
@@ -2816,6 +2910,20 @@ pub(super) fn first_fight(
             came.push("a sentry's chirp (its lens flares)");
         }
     }
+    for _ in tells.hounds.read() {
+        came.push("a hound coiling (haunches down)");
+    }
+    for _ in tells.crawlers.read() {
+        came.push("a crawler's spark gun charging (crackle, glow)");
+    }
+    for ev in tells.heavies.read() {
+        if ev.what == crate::robots::heavy::HeavyAct::Raise {
+            came.push("a heavy's arm rising");
+        }
+    }
+    for _ in tells.harpoons.read() {
+        came.push("a grappler winding up (the reel)");
+    }
     if !tells.hushed.is_empty() {
         came.push("inside a hush (the sound goes dull)");
     }
@@ -2845,7 +2953,10 @@ pub(super) fn first_fight(
     let from = fight.machine.as_ref().map_or(here, |(_, at)| *at);
     let away = (here - from).normalize_or(Vec2::Y);
     let hush = what.contains("hush");
-    let answer: Vec<Task> = if p.reckless && !hush {
+    // The broken walker is the one the driver says to take on (bar the
+    // lost one).
+    let broken = kind == "broken" && !p.lost;
+    let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
     } else if p.lost {
         // Off, anywhere.
@@ -2989,7 +3100,9 @@ the Hollow.";
 
 #[cfg(test)]
 mod indoor_tests {
-    use super::{STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, solid, steep_run};
+    use super::{
+        STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, shot_warns, solid, steep_run,
+    };
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
 
@@ -3125,5 +3238,20 @@ mod indoor_tests {
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
         assert!(road <= STEEP_RUN, "the way from the drop: {road} m steep");
+    }
+
+    /// A machine's rounds warn of later hits only: the first round that
+    /// lands, with nothing before it, is unwarned; once it's firing (a
+    /// burst 1.8 s back), the next hit is warned.
+    #[test]
+    fn a_shot_warns_only_of_hits_after_it() {
+        // The first round, fired now (or a moment ago) and hitting now.
+        assert!(!shot_warns(&[100.0], 100.0, 30.0));
+        assert!(!shot_warns(&[99.7], 100.0, 30.0));
+        // Fired 1.8 s before this hit: heard first.
+        assert!(shot_warns(&[98.2, 100.0], 100.0, 30.0));
+        // Long ago: no longer the same fight.
+        assert!(!shot_warns(&[60.0], 100.0, 30.0));
+        assert!(!shot_warns(&[], 100.0, 30.0));
     }
 }

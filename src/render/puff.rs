@@ -253,6 +253,7 @@ mod tests {
                 3,
                 "a lamp, the EMP's flash, the bubble's shell",
             ),
+            ("dev.rs", 1, "the metals gallery's roughness ladder"),
             ("render/arms.rs", 2, "elbow and shoulder joints"),
             ("render/bench.rs", 1, "a knob"),
             ("render/body.rs", 1, "a knee"),

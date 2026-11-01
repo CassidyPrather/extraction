@@ -182,6 +182,7 @@ pub fn shove(w: &mut World, robot: Entity) {
             player,
             amount: SHOVE_DAMAGE,
             from: at,
+            by: Some(robot),
         });
         w.write_message(Shoved { robot, player, at });
     }

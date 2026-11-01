@@ -134,6 +134,7 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
                 engaged_at: -1.0,
                 last_engaged: -1.0,
                 broke_off_until: 0.0,
+                quiet: 0.0,
             },
             Mender {
                 patient: None,
