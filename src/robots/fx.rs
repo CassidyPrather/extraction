@@ -318,6 +318,7 @@ const DEAD_GUN_SMOKE: f32 = 2.5;
 
 /// How high a puff rising as `r` climbs before it's gone, m (its rise
 /// slows by `drift_puffs`' drag).
+#[cfg(test)]
 fn climbs(r: Rise) -> f32 {
     r.rise * (1.0 - (-0.3 * r.life).exp()) / 0.3
 }
