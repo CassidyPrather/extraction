@@ -19,12 +19,17 @@ use bevy::transform::TransformSystems;
 /// The texture's side, pixels.
 const SIDE: u32 = 64;
 
+/// The quad's side, m, at scale 1 (see [`PuffAssets`]).
+pub const QUAD: f32 = 1.6;
+
 /// Turned to face the eye each frame (`face_puffs`).
 #[derive(Component, Default)]
 pub struct SoftPuff;
 
-/// The quad (1 m, as the unit sphere it replaced was 1 m across) and its
-/// falloff, shared by every puff.
+/// The quad and its falloff, shared by every puff. The quad is [`QUAD`]
+/// across so that its body (where it's at least half as thick as its
+/// heart) is 1 m across, as the unit sphere it replaced was: owners scale
+/// it as they scaled that.
 #[derive(Resource, Clone)]
 pub struct PuffAssets {
     pub quad: Handle<Mesh>,
@@ -35,7 +40,7 @@ impl FromWorld for PuffAssets {
     fn from_world(world: &mut World) -> Self {
         let quad = world
             .get_resource_mut::<Assets<Mesh>>()
-            .map(|mut meshes| meshes.add(Rectangle::new(1.0, 1.0)))
+            .map(|mut meshes| meshes.add(Rectangle::new(QUAD, QUAD)))
             .unwrap_or_default();
         let falloff = world
             .get_resource_mut::<Assets<Image>>()
@@ -86,7 +91,9 @@ pub fn thickness(r: f32, x: f32, y: f32) -> f32 {
     if r >= 1.0 {
         return 0.0;
     }
-    let body = (1.0 - r * r).powi(2);
+    // (The last twentieth of the way out eases it to nothing: the quad's
+    // own edge is clear.)
+    let body = (1.0 - r * r).powf(1.5) * ((1.0 - r) / 0.05).min(1.0);
     // Fixed lumps (sines at odd angles), strongest toward the edge.
     let cloud = ((x * 7.3 + y * 2.1).sin() * (y * 6.7 - x * 3.9).sin()
         + 0.5 * (x * 13.1 - y * 11.3).sin())
@@ -206,10 +213,13 @@ mod tests {
     use super::*;
 
     /// The falloff is full at the heart, nothing at and past the edge, and
-    /// never steps: no rim.
+    /// never steps: no rim. Half as thick as its heart 1 m across at scale
+    /// 1, as the sphere it replaced was.
     #[test]
     fn a_puff_is_soft_to_its_edge() {
         assert!(thickness(0.0, 0.0, 0.0) > 0.95);
+        let half = (1.0 - 0.5f32.powf(1.0 / 1.5)).sqrt() * QUAD;
+        assert!((half - 1.0).abs() < 0.05, "its body is {half} m across");
         assert_eq!(thickness(1.0, 0.7, 0.7), 0.0);
         let img = falloff_image();
         let data = img.data.as_ref().unwrap();
