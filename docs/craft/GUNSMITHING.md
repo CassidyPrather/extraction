@@ -179,6 +179,17 @@ the art direction's value floor (median about 20-22 at 30 cm on the
 bench): lifting either further takes a decision on the whole line-up's
 values, not one gun's.
 
+Third pass (1 November): the coordinator saw every gun's steel go
+near-black at 30 cm, so the PM's arched slide didn't show. Two causes.
+The game has no environment light, so a metal reflects only the sun and
+the flat ambient. And the scan's albedo, which is a metal's reflectance,
+is 0.045: darker than charcoal, where blued steel is about 0.1-0.2. On
+the bench, blued steel at an even 0.1 and stamped steel as a glossy paint
+showed the form. But values tuned without an environment light are wrong
+once one lands, so they wait for Visual design's. The finishes'
+numbers are now in one table, `gunsmith::finish`, which the game
+(`models::steel`) and the bench both build from.
+
 ![](finishes/lineup_after.jpg)
 
 ### 5. Hands
