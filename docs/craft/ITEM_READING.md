@@ -180,3 +180,29 @@ camera:
 
 Sheets re-shot on main 2ee65c62 (the same camera, `art/lineup.py` now
 building the bolt's and detector's new looks as the game does).
+
+### The shared lettering font (1 November)
+
+`docs/shots/items/water_bottle_label_before_after.png` (in hand, pixels
+x5): the font's В was the 8's strokes, so the water bottle read "8ОДА".
+The font's twins are fixed (`art/check_glyphs.py`, run with
+`art/check.py`); the labelled items rebuilt (only those whose geometry
+changed: the ammo boxes, tins, packets, tapes and records). At in-hand
+sharpness a 1.3 cm label is still soft: labels stay bonus legibility,
+never the only difference. Not rebuilt: the depot's conveyor and
+cradle (rebuilt here they lost their rollers' baked AO; their only
+change is the C in their codes) and the guns (Gunsmith's, mid-edit).
+The rice bag's and sugar box's label z-fighting predates this.
+
+### Prints that stand off their faces (1 November)
+
+`art/check.py` flagged label z-fighting on the rice bag and the sugar box
+(the coordinator: check the class). No item shared a lift: each script
+laid its prints, labels and bands 0.2 to 0.8 mm off the face under them,
+and the ones with a big overlap fought (the rice bag's print 0.05 mm off
+its label; the sugar box's bands 0.2 mm; the spare parts' lid label; the
+splint's straps' undersides in the slats'; the car bonnet's brace arms
+0.5 mm apart where they cross). Now a print, label or band stands
+`art/items/_kit.py`'s `LIFT` (1.2 mm) off what it's on, and `art/check.py`
+judges items at 1 mm (held 0.3 to 3 m from the eye; props stay at 3 mm).
+All 192 item models check clean.

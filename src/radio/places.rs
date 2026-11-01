@@ -54,13 +54,13 @@ pub const PLACES: &[Place] = &[
         -0.35,
     ),
     // The Kettle chapel, by the sexton's note.
-    by("kettle_pass", "tape_hymns", [-7.70, 155.40], 356.8, 0.3),
+    by("kettle_pass", "tape_hymns", [-7.10, 128.80], 356.8, 0.3),
     // The hunting lodge, by Fiala's book.
-    by("kettle_pass", "tape_lodge", [205.30, -204.45], 331.4, 0.3),
+    by("kettle_pass", "tape_lodge", [149.40, -151.60], 331.4, 0.3),
     by(
         "kettle_pass",
         "record_augustin",
-        [205.30, -204.45],
+        [149.40, -151.60],
         331.4,
         -0.35,
     ),
@@ -113,14 +113,14 @@ pub const FIXTURES: &[Fixture] = &[
     Fixture {
         map: "kettle_pass",
         what: Standing::Gramophone,
-        at: [201.81, 36.63, -206.00],
+        at: [145.90, 34.00, -153.20],
         rot: 90.0,
     },
     // The sexton's harmonium, by the altar against the east wall.
     Fixture {
         map: "kettle_pass",
         what: Standing::Harmonium,
-        at: [-11.00, 12.65, 156.52],
+        at: [-10.40, 16.25, 129.90],
         rot: 0.0,
     },
     // Old Sallow's drowned church, open to the sky: an organ in the silt

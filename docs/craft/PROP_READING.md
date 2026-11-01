@@ -50,6 +50,15 @@ In the game, at the walk's spot, in the valley's reference weather:
   read too light on a prop. Look at it in reach; scale the model's UVs
   (`Part.uv_scale`) rather than copy the material, which lights unlike
   the shared one.
+- **Lettering must read, not only be there**: at its reading distance
+  (a crate's about 2 m) in the game's light. Strokes a sixth of the
+  height, stopped short at the joints as a stencil is; paint that
+  contrasts with what it's on (dark on the pale concrete); words in
+  glyphs that read at that size. No two glyphs twins at reading size:
+  `blender -b --python art/check_glyphs.py` rasterises each as the props
+  draw it, 24 px high, and fails on a pair whose masks overlap by more
+  than 0.8 (the shared font's В was the 8's strokes; Б was the 6's; 0
+  was О; S was 5; C an E without its bar).
 - **Blank plates for lettering**: a pale rectangle where a stencil,
   number or label should be reads as a placeholder (or a decal fighting
   the face), not as paint. Letter it (`_kit.lettering`, the items'
@@ -193,3 +202,12 @@ bars), the wheelie bin's house number. Now lettered
 the line-up turned to their fronts: `art/lineup.py`'s `turn`). The
 Custodian's tag (a card with a stripe) and the depot's sign (the game
 writes on it) are what they are.
+
+The coordinator on the first pass (`stencils_after.png`): at that size
+the font drew В as an 8 (its glyph *was* the 8's) and Н, Т blurred; the
+block's cream on its pale concrete nearly vanished. Now
+(`stencils_after2.png`, 2 m): stencil-cut strokes, the crates' ТАРА,
+НЕТТО 30 and lot number; the block's ФБС 24.3.6 in a dark matte paint
+(the game's `Black` is a grey). In game the block's face reads grey; the
+line-up's window light blows it out. Marrow's gate block wears ivy over
+its face.

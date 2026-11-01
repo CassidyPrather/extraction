@@ -1974,6 +1974,23 @@ mod glove_tests {
     /// right way round, not as a mirror image.
     /// Merged into one skinned mesh, every piece keeps its vertices and
     /// triangles, each vertex wholly on its piece's joint.
+    /// Every gun with a layout (`weapons::layout::layout`).
+    const GUNS: [&str; 13] = [
+        "pm_pistol",
+        "ak74",
+        "mosin",
+        "toz_double",
+        "sks",
+        "nagant",
+        "ppsh",
+        "mp133",
+        "svd",
+        "toz8",
+        "rpk74",
+        "flare_pistol",
+        "crossbow",
+    ];
+
     #[test]
     fn skinning_merges_the_pieces_onto_their_joints() {
         use bevy::mesh::VertexAttributeValues as V;
@@ -2538,23 +2555,8 @@ mod glove_tests {
     /// 27, the 28 October playtest's M2).
     #[test]
     fn every_supporting_palm_faces_up_into_its_gun() {
-        let ids = [
-            "pm_pistol",
-            "ak74",
-            "mosin",
-            "toz_double",
-            "sks",
-            "nagant",
-            "ppsh",
-            "mp133",
-            "svd",
-            "toz8",
-            "rpk74",
-            "flare_pistol",
-            "crossbow",
-        ];
         let mut checked = 0;
-        for id in ids {
+        for id in GUNS {
             let layout = crate::weapons::layout::layout(id).unwrap();
             let Some(at) = layout
                 .support
@@ -2654,13 +2656,14 @@ mod glove_tests {
     #[test]
     fn a_pulled_index_meets_each_guns_trigger() {
         use crate::weapons::layout::{Moves, layout};
-        for id in ["pm_pistol", "ak74", "mosin", "toz_double"] {
+        let mut misses = Vec::new();
+        let mut checked = 0;
+        for id in GUNS {
             let gun = layout(id).unwrap();
-            let trigger = gun
-                .parts
-                .iter()
-                .find(|p| p.moves == Moves::Trigger)
-                .unwrap();
+            let Some(trigger) = gun.parts.iter().find(|p| p.moves == Moves::Trigger) else {
+                continue;
+            };
+            checked += 1;
             let c = gun_index_curl(Side::Right, &gun, 1.0);
             // The trigger in the unrolled glove, against the curled index
             // (about 8 mm in radius), in its plane: how high the trigger sits
@@ -2675,8 +2678,15 @@ mod glove_tests {
                 .inverse()
                 .transform_point3(in_hand);
             let miss = index_miss(Side::Right, c, Vec2::new(at.y, at.z));
-            assert!(miss < 0.012, "{id}: the index misses the trigger by {miss}");
+            if miss >= 0.012 {
+                misses.push(format!("{id}: by {:.1} mm", miss * 1000.0));
+            }
         }
+        assert!(checked >= 10, "only {checked} guns have a trigger");
+        assert!(
+            misses.is_empty(),
+            "the index misses the trigger: {misses:?}"
+        );
     }
 
     /// Tracked fingers drive a free glove, curl and spread; a held gun

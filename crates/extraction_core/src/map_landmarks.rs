@@ -16,7 +16,7 @@
 //! a chapel.
 
 use crate::geom::{self, P2, dist};
-use crate::map::{MapDef, Placement, prefab_base, prefab_footprint};
+use crate::map::{MapDef, Placement, prefab_footprint, prefab_shell};
 use crate::map_lint::{LANDMARK_HEIGHT, sees};
 use crate::terrain::Heightmap;
 
@@ -29,7 +29,7 @@ pub const JOIN: f32 = 30.0;
 /// What a landmark looks like from afar: two of one kind in sight and you
 /// can't tell which is which.
 pub fn kind(prefab: &str) -> &str {
-    match prefab_base(prefab) {
+    match prefab_shell(prefab) {
         "dam_face" | "dam_face_end" | "dam_back" | "dam_back_end" => "dam",
         // The chapel's bell tower is the steeple, built and dressed as one.
         "chapel" | "steeple" => "steeple",
@@ -50,7 +50,7 @@ pub fn tall_parts(prefab: &str) -> Vec<[f32; 3]> {
             .map(|i| [-len * 0.5 + len * i as f32 / n as f32, 0.0, h])
             .collect()
     };
-    match prefab_base(prefab) {
+    match prefab_shell(prefab) {
         // The downstream face: its parapet along the crest, and a turret
         // 3 m in from each end to 28.6 m (dam.rs `face`).
         "dam_face" => {
