@@ -54,8 +54,11 @@ In the game, at the walk's spot, in the valley's reference weather:
   (a crate's about 2 m) in the game's light. Strokes a sixth of the
   height, stopped short at the joints as a stencil is; paint that
   contrasts with what it's on (dark on the pale concrete); words in
-  glyphs that read at that size (the shared font's В was an 8: now its
-  own).
+  glyphs that read at that size. No two glyphs twins at reading size:
+  `blender -b --python art/check_glyphs.py` rasterises each as the props
+  draw it, 24 px high, and fails on a pair whose masks overlap by more
+  than 0.8 (the shared font's В was the 8's strokes; Б was the 6's; 0
+  was О; S was 5; C an E without its bar).
 - **Blank plates for lettering**: a pale rectangle where a stencil,
   number or label should be reads as a placeholder (or a decal fighting
   the face), not as paint. Letter it (`_kit.lettering`, the items'
