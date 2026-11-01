@@ -71,7 +71,7 @@
             firearm: Some((
                 action: Revolver, cartridge: "7.62x38R", internal_capacity: 7,
                 modes: [Semi], double_action: true, gate_offset: 5,
-                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.9, walk: -0.3),
+                muzzle_velocity: 272.0, damage: 36.0, spread_moa: 9.0, recoil: 1.1, kick: (climb: 0.56, walk: -0.3, push: 2.2),
                 wear_per_shot: 0.0004,
             )),
             tags: ["metal", "wood"],
