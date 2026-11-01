@@ -2236,7 +2236,7 @@ fn round_boxes(boxes: &[(Transform, Vec2)], from: Vec2, to: Vec2) -> Vec<Vec2> {
 }
 
 /// Where along a→b (0..1) it first enters the box |x| < half, if it does.
-fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
+pub(super) fn segment_hits_box(a: Vec2, b: Vec2, half: Vec2) -> Option<f32> {
     let d = b - a;
     let (mut t0, mut t1) = (0.0f32, 1.0f32);
     for i in 0..2 {

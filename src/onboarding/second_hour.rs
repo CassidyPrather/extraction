@@ -839,8 +839,26 @@ pub(super) fn direct(
                 }
                 advance(&mut run, Step::Home2);
             } else if run.walker.is_none() {
-                // A walker at work in the open, 12 m off.
-                let at = here + Vec2::new(-12.0, 0.0);
+                // A walker at work in the open, 12 m off: in a direction
+                // with no building on the line or under the spot (due west,
+                // it stood in the post office, and all 25 shots went into
+                // its wall).
+                let open = |p: Vec2| {
+                    world.entrances.shells.iter().all(|s| {
+                        let inv = s.xf.compute_affine().inverse();
+                        let a = inv.transform_point3(Vec3::new(here.x, 0.0, here.y)).xz();
+                        let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                        super::first_hour::segment_hits_box(a, b, s.half + Vec2::splat(1.0))
+                            .is_none()
+                    })
+                };
+                let at = (0..8)
+                    .map(|k| {
+                        let a = std::f32::consts::PI + k as f32 * std::f32::consts::FRAC_PI_4;
+                        here + Vec2::new(a.cos(), a.sin()) * 12.0
+                    })
+                    .find(|p| open(*p))
+                    .unwrap_or(here + Vec2::new(-12.0, 0.0));
                 let site = world.zone.on_ground(at.x, at.y);
                 run.walker = Some(crate::robots::walker::spawn_walker(
                     &mut commands,
