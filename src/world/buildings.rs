@@ -5777,6 +5777,13 @@ pub fn swing_doors(
         // its doorway, and stood open across half of it: Kettle's mine,
         // pulled-in map, raiders jammed against it for ten minutes, Robot
         // minds' sims, 1 November.)
+        // TODO: find what moves them and take this pin out. Two of Kettle
+        // mine's doors (seed 10: the refuge -> raise_foot one and the one
+        // before it) creep about 1.4 mm/s off their hinges from the raid's
+        // start, at zero linear and angular velocity, held by nothing, no
+        // one near; one stops 0.46 m off, at its doorway's middle. Not the
+        // rotation write here, nor lockdown or underground code.
+        // `sim::indoor::tests::every_door_stays_on_its_hinge` catches it.
         if t.translation != leaf.0.hinge {
             t.translation = leaf.0.hinge;
         }
