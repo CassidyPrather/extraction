@@ -136,6 +136,7 @@ pub fn spawn_mender(commands: &mut Commands, at: Vec3, home: Vec3) -> Entity {
                 broke_off_until: 0.0,
                 quiet: 0.0,
                 warning_left: 0,
+                last_shot: f32::NEG_INFINITY,
             },
             Mender {
                 patient: None,

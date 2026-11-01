@@ -62,13 +62,22 @@ pub struct Drone {
     /// past [`RETELL`] it locks on afresh, chirp and all, before it fires
     /// again (`lose_a_quiet_lock`).
     pub quiet: f32,
-    /// Rounds of its warning burst left: set at every lock, the first
-    /// burst after it kicks up the ground short of you and hurts no one
-    /// ([`WARNING_SHORT`]).
+    /// Rounds of its warning burst left: set at a lock after a lull
+    /// ([`WARN_AFTER`]), the first burst after it kicks up the ground short
+    /// of you and hurts no one ([`WARNING_SHORT`])...
     pub warning_left: u32,
+    /// ...and when it last fired (s, `Time::elapsed`).
+    pub last_shot: f32,
 }
 
-/// The first burst after every lock is a warning, as the sentry's is: its
+/// A lock after this long without firing (or its first) warns before it
+/// hurts (s). In a fight it's already in, a lock lost and found again
+/// between bursts doesn't start the warning over (or every burst of a drone
+/// that dodges about between them would be one).
+pub const WARN_AFTER: f32 = 10.0;
+
+/// The first burst after a lock that comes after a lull ([`WARN_AFTER`]) is
+/// a warning, as the sentry's is: its
 /// rounds land this far short of your feet (m), wider, and do no harm. A
 /// newcomer hears the chirp and sees the dirt kick up, and the first round
 /// that hurts comes no sooner than [`LOCK_TIME`] + [`BURST_GAP`] after the
@@ -199,6 +208,8 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 broke_off_until: 0.0,
                 quiet: 0.0,
                 warning_left: 0,
+                last_shot: f32::NEG_INFINITY,
+                last_shot: f32::NEG_INFINITY,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -701,7 +712,9 @@ fn drone_guns(
         if d.lock < LOCK_TIME {
             if d.lock == 0.0 {
                 d.locks_unhit = d.locks_unhit.saturating_add(1);
-                d.warning_left = BURST;
+                if time.elapsed_secs() - d.last_shot > WARN_AFTER {
+                    d.warning_left = BURST;
+                }
                 locks.write(DroneLock {
                     drone: e,
                     at: t.translation,
@@ -763,6 +776,7 @@ fn drone_guns(
         });
         d.burst_left -= 1;
         d.quiet = 0.0;
+        d.last_shot = time.elapsed_secs();
         d.gun_cooldown = if d.burst_left == 0 { BURST_GAP } else { 0.11 };
     }
 }
@@ -830,6 +844,7 @@ mod tests {
             lock: LOCK_TIME,
             quiet: 0.0,
             warning_left: 0,
+            last_shot: f32::NEG_INFINITY,
             locks_unhit: 0,
             engaged_at: -1.0,
             last_engaged: -1.0,
@@ -995,12 +1010,17 @@ mod tests {
         );
         // The floor itself: 1.5 s chirp, then a harmless burst, then 1.8 s.
         const FIRST_HARM: f32 = 3.3;
+        // Every lock after a lull (none of its rounds in the WARN_AFTER
+        // before it): nothing hurts you within FIRST_HARM of it.
         let soon: Vec<String> = f
-            .hurts
+            .locks
             .iter()
-            .filter_map(|(t, _)| {
-                let l = f.locks.iter().rev().find(|l| **l <= *t)?;
-                (t - l < FIRST_HARM - 0.05).then(|| format!("hurt {:.2} s after a lock", t - l))
+            .filter(|l| !f.shots.iter().any(|s| *s < **l && *s > **l - WARN_AFTER))
+            .flat_map(|l| {
+                f.hurts
+                    .iter()
+                    .filter(move |(t, _)| *t >= *l && *t < l + FIRST_HARM - 0.05)
+                    .map(move |(t, _)| format!("hurt {:.2} s after a lock", t - l))
             })
             .collect();
         assert!(soon.is_empty(), "{soon:?}");
