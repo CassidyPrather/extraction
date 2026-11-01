@@ -12,9 +12,7 @@
 //! (`walker::walker_brain`, the [`Broken`] branch); its gun is held dead
 //! there and in `walker::walker_guns` (a mender's weld doesn't bring it
 //! back). It has no systems of its own: its parts are broken as it's
-//! made and its shove is a command (one more system, or even message,
-//! moved the order of others not pinned to one, and rounds stopped on a
-//! heavy's gone vents). `docs/FIRST_HOUR.md`, "The first fight": every armed machine
+//! made and its shove is a command. `docs/FIRST_HOUR.md`, "The first fight": every armed machine
 //! killed every newcomer it met first; this one fights back but can't.
 
 use bevy::prelude::*;
@@ -38,6 +36,23 @@ pub const SHOVE_DAMAGE: f32 = 4.0;
 pub const SHOVE_PUSH: f32 = 2.5;
 /// ...and again after this long (s).
 pub const SHOVE_COOLDOWN: f32 = 3.0;
+
+/// A broken walker shoved someone (for Lev's line and the first-fight
+/// check).
+#[derive(Message, Clone, Copy, Debug)]
+pub struct Shoved {
+    pub robot: Entity,
+    pub player: Entity,
+    pub at: Vec3,
+}
+
+pub struct BrokenPlugin;
+
+impl Plugin for BrokenPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_message::<Shoved>();
+    }
+}
 
 /// Where along the way to the job it stands: this share of the way from
 /// the drop to the job's place...
@@ -168,6 +183,7 @@ pub fn shove(w: &mut World, robot: Entity) {
             amount: SHOVE_DAMAGE,
             from: at,
         });
+        w.write_message(Shoved { robot, player, at });
     }
 }
 
@@ -497,30 +513,8 @@ mod tests {
         app.cleanup();
         app.update();
         let mut verdict = None;
-        let mut loaded = false;
         for _ in 0..90 * 400 {
             app.update();
-            // Its pistol comes out of the crate empty and on safe, its
-            // magazine in a pocket, and the reckless one's answer to a
-            // machine (`onboarding::first_hour::first_fight`) is to draw
-            // and pull the trigger: here it loads, racks and takes the
-            // safety off first, as a person would (once).
-            if !loaded {
-                let w = app.world_mut();
-                let mut q = w.query_filtered::<&mut crate::bot::Bot, With<LocalPlayer>>();
-                if let Some(mut b) = q.iter_mut(w).next()
-                    && let Some(k) = b
-                        .tasks
-                        .iter()
-                        .position(|t| matches!(t, crate::bot::Task::Engage { .. }))
-                {
-                    loaded = true;
-                    use crate::weapons::flat::MacroKind;
-                    b.tasks.insert(k, crate::bot::Task::Gun(MacroKind::Mode));
-                    b.tasks.insert(k, crate::bot::Task::Gun(MacroKind::Rack));
-                    b.tasks.insert(k, crate::bot::Task::Gun(MacroKind::Reload));
-                }
-            }
             let (wrecked, down) = app
                 .world_mut()
                 .run_system_once(

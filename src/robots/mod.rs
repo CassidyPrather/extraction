@@ -289,6 +289,7 @@ impl Plugin for RobotsPlugin {
                 squad::SquadPlugin,
                 subjects::SubjectsPlugin,
                 hazards::HazardsPlugin,
+                broken::BrokenPlugin,
             ))
             .add_plugins((
                 drone::DronePlugin,
