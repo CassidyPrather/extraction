@@ -61,6 +61,18 @@ pub const STAMPED: SteelFinish = SteelFinish {
     tile: TILE,
 };
 
+/// Aluminium alloy, anodised or painted black: the MP-133's receiver. A
+/// satin black, a little lighter than bluing and with no blue in it, no
+/// metal showing; the scan's relief only.
+pub const ALLOY: SteelFinish = SteelFinish {
+    gain: None,
+    flat: [0.03, 0.03, 0.03],
+    metallic: 0.0,
+    roughness: 0.48,
+    keep_scan_metal: false,
+    tile: TILE,
+};
+
 /// Blackened steel, matt: butt plates and small fittings.
 pub const BLACK: SteelFinish = SteelFinish {
     gain: Some([1.5, 1.5, 1.5]),
