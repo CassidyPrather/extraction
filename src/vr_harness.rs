@@ -345,6 +345,112 @@ mod tests {
     /// rendezvous and home again, settled on the boards, none of it left
     /// hanging where the truck was or dropped through the floor as it
     /// parks (`raid::truck::park_truck`).
+    /// Whoever's in the bed rides with the truck. Called out from base
+    /// with you sitting in it, you arrive in the bed at the rendezvous;
+    /// giving up waiting with you aboard, it takes you home (you're
+    /// extracting), never leaves you where the bed was. And a hand holding
+    /// on to it (its ladder, its tailgate) lets go as it goes. Onboarding's
+    /// first_jobs_reckless: a newcomer in the base truck's bed when it was
+    /// called out was left behind in the compound, its walks to the far
+    /// bell pinned against the fence.
+    #[test]
+    fn whoever_rides_in_the_bed_goes_with_the_truck() {
+        use crate::interact::hand_climb::{HandHold, Hold};
+        use crate::raid::truck::{FLOOR, Truck, UNSEEN_FOR};
+        use crate::raid::{Phase, Raid, TRUCK_WAIT};
+        let mut vr = Vr::new("marrow_creek");
+        let truck_at = |vr: &mut Vr| {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<Truck>>();
+            *q.iter(vr.app.world()).next().unwrap()
+        };
+        let in_bed = |vr: &mut Vr| {
+            let gt = truck_at(vr);
+            let feet = vr.root().translation;
+            let mut q = vr.app.world_mut().query::<&Truck>();
+            let truck = q.iter(vr.app.world()).next().unwrap();
+            (
+                truck.in_bed(&gt, feet + Vec3::Y * 0.1),
+                feet,
+                gt.translation(),
+            )
+        };
+        let base = truck_at(&mut vr);
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        vr.stand(base.transform_point(Vec3::new(0.0, FLOOR + 0.02, 0.5)), 0.0);
+        vr.step(30);
+        assert!(in_bed(&mut vr).0, "sat in the bed at base");
+        // Called out: it pulls in at the rendezvous with you in the back.
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - UNSEEN_FOR - 2.0,
+        };
+        vr.step(2);
+        let rv = truck_at(&mut vr);
+        assert!(
+            rv.translation().distance(base.translation()) > 20.0,
+            "it went out"
+        );
+        vr.step(90);
+        let (aboard, feet, at) = in_bed(&mut vr);
+        assert!(aboard, "rode out: feet at {feet:.2}, the truck at {at:.2}");
+        // It gives up waiting with you aboard: you're going home.
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting { rv: 0, left: 0.01 };
+        vr.step(2);
+        let phase = vr.app.world().resource::<Raid>().phase.clone();
+        assert!(
+            matches!(phase, Phase::Extracting { .. } | Phase::AtBase),
+            "aboard as it gave up, you're extracting, not left: {phase:?}"
+        );
+        vr.step(600);
+        let (aboard, feet, at) = in_bed(&mut vr);
+        assert!(
+            aboard,
+            "home in the bed: feet at {feet:.2}, the truck at {at:.2}"
+        );
+        // Holding on to its tailgate as it's called out: the hands let go.
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        let home = truck_at(&mut vr);
+        vr.stand(home.transform_point(Vec3::new(0.0, 0.0, 3.2)), 0.0);
+        let tailgate = home.transform_point(Vec3::new(0.0, FLOOR, 2.0));
+        let hands: Vec<Entity> = {
+            let mut q = vr.app.world_mut().query_filtered::<Entity, With<RigHand>>();
+            q.iter(vr.app.world()).collect()
+        };
+        let now = vr.app.world().resource::<Time>().elapsed_secs();
+        for h in &hands {
+            vr.app.world_mut().entity_mut(*h).insert(HandHold {
+                on: Hold::Edge { top: tailgate.y },
+                at: tailgate,
+                since: now,
+            });
+        }
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - UNSEEN_FOR - 2.0,
+        };
+        vr.step(2);
+        let holding = hands
+            .iter()
+            .filter(|h| vr.app.world().get::<HandHold>(**h).is_some())
+            .count();
+        assert_eq!(holding, 0, "still holding where the truck was");
+        vr.step(90);
+        let feet = vr.root().translation;
+        let ground = vr
+            .app
+            .world()
+            .resource::<crate::world::Zone>()
+            .on_ground(feet.x, feet.z)
+            .y;
+        assert!(
+            (feet.y - ground).abs() < 0.3,
+            "down on the ground: feet {feet:.2}, ground {ground:.2}"
+        );
+    }
+
     #[test]
     fn the_truck_carries_whats_in_its_bed() {
         use crate::raid::truck::{FLOOR, Truck, UNSEEN_FOR};

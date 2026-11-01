@@ -143,14 +143,31 @@ fn ledges(prefab: &str) -> Vec<Ledge> {
 }
 
 fn slots(w: f32, d: f32, prefab: &str) -> Slots {
+    use super::buildings::{HousePlan, house_layout};
     let f = 0.5;
     // The floorboards' top (`Builder::plinth`'s 3 cm floor): what stands
     // on the floor stood 3 cm into it (`capture::footing`).
     let floor = f + 0.03;
-    let (x, z) = (w * 0.5, d * 0.5);
+    let z = d * 0.5;
     let pz = z - d * 0.42;
-    let table = Vec3::new(-x * 0.4, f + 0.785, -z * 0.2);
-    let shelf = Vec3::new(x - 0.3, f, -z * 0.75);
+    // The furniture where the house's plan stood it (a ruin's is the
+    // common plan).
+    let plan = HousePlan::of(prefab);
+    let l = house_layout(plan, w, d);
+    // The table's top, or the post office's counter's (`Builder::counter`
+    // 0.9 high; its loot at 0.95), its two ends along it.
+    let (table, along) = {
+        let (at, yaw) = l.table;
+        let along = Quat::from_rotation_y(yaw) * Vec3::X;
+        if plan == HousePlan::PostOffice {
+            (at + Vec3::Y * 0.92, along * 2.2)
+        } else {
+            (at + Vec3::Y * 0.785, along)
+        }
+    };
+    let shelf = l.shelf.0;
+    // The counter's far end from its middle (the back wall's way).
+    let counter_end = l.counter.0 + Vec3::new(0.0, 0.9, -0.6);
     let sills = ledges(prefab);
     let mut front: Vec<Ledge> = sills
         .iter()
@@ -160,13 +177,10 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
     front.sort_by(|a, b| a.at.x.total_cmp(&b.at.x));
     let front = [front[0], front[front.len() - 1]];
     Slots {
-        table: [table - Vec3::X * 0.4, table + Vec3::X * 0.42],
+        table: [table - along * 0.4, table + along * 0.42],
         shelf: [shelf + Vec3::Y * 0.315, shelf + Vec3::Y * 1.665],
-        kitchen: [
-            Vec3::new(-x + 0.6, f + 0.315, z - 0.3),
-            Vec3::new(-x + 0.4, f + 0.9, z - 1.4 - 0.6),
-        ],
-        bed: Vec3::new(x - 0.6, f + 0.56, z - 1.4),
+        kitchen: [l.kitchen_shelf + Vec3::Y * 0.315, counter_end],
+        bed: l.bed + Vec3::new(0.0, 0.56, -0.2),
         door_floor: [
             Vec3::new(-0.95, floor, -z + 0.45),
             Vec3::new(0.95, floor, -z + 0.45),
@@ -175,7 +189,7 @@ fn slots(w: f32, d: f32, prefab: &str) -> Slots {
             Vec3::new(-1.1, f + 1.7, -z + 0.09),
             Vec3::new(1.1, f + 1.7, -z + 0.09),
         ],
-        room_floor: Vec3::new(x * 0.25, floor, -z * 0.45),
+        room_floor: l.room_floor,
         partition: Vec3::new(0.0, f + 1.05, pz - 0.05),
         sills,
         front,
@@ -355,6 +369,31 @@ pub fn dress(
             }
         }
     }
+    // A farm's kitchen-living room (`buildings::HousePlan::Farm`): the
+    // corner by the stove where the boots dry and the wood waits, the
+    // churn by the door, the flour in the pantry.
+    if ruin.is_none()
+        && super::buildings::HousePlan::of(prefab) == super::buildings::HousePlan::Farm
+    {
+        let l = super::buildings::house_layout(super::buildings::HousePlan::Farm, w, d);
+        let (stove, f) = (l.stove.0, l.room_floor.y);
+        out.push(on(
+            "firewood_basket",
+            Vec3::new(stove.x + 0.75, f, stove.z),
+            0.3,
+        ));
+        out.push(on(
+            "felt_boots",
+            Vec3::new(stove.x + 0.15, f, stove.z - 0.75),
+            0.2,
+        ));
+        out.push(on(
+            "milk_churn",
+            s.door_floor[1] + Vec3::new(0.35, 0.0, 0.0),
+            0.0,
+        ));
+        out.push(on("flour_sacks", Vec3::new(-w * 0.25 + 1.3, f, 1.3), 0.4));
+    }
     // Who lived here (`Resident`), in a whole house Story hasn't written
     // about: a few of their things where the valley's leave room.
     if let (None, None, None) = (ruin, story, &named) {
@@ -514,7 +553,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             ])
         }
         // The crossing keeper: the railwayman, his flags.
-        ("kettle", "house_plank") if here(76.0, 222.0) => house(
+        ("kettle", "house_plank") if here(49.0, 157.7) => house(
             |s| {
                 let mut v = Resident::Railwayman.things(s, 8.0, 7.0);
                 v.push(on(
@@ -527,7 +566,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The weir book's keeper.
-        ("kettle", "house_plank") if here(-99.0, 154.0) => house(
+        ("kettle", "house_plank") if here(-74.2, 115.5) => house(
             |s| {
                 vec![
                     wall("waders", s.door_wall[1] + Vec3::Y * 0.1),
@@ -537,7 +576,7 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // The Nováks, who hid in the deep mine: small boots, a drawing.
-        ("kettle", "house_plank") if here(-42.0, 125.0) => house(
+        ("kettle", "house_plank") if here(-30.5, 93.0) => house(
             |s| {
                 let mut v = Resident::Family.things(s, 8.0, 7.0);
                 v.push(on(
@@ -550,14 +589,14 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             &[],
         ),
         // Old Fiala's lodge.
-        ("kettle", "cabin_log") if here(205.0, -205.0) => things(vec![
+        ("kettle", "cabin_log") if here(149.1, -152.2) => things(vec![
             facing("traps_hook", Vec3::new(-0.4, cf + 1.6, -cz), pz),
             facing("antlers", Vec3::new(1.0, cf + 1.85, cz), nz),
             facing("hide_frame", Vec3::new(cx, cf + 1.3, -1.2), nx),
         ]),
         // Mirek Hájek, the charcoal burner: "my name's on the frame so you
         // know whose it was".
-        ("kettle", "cabin_log") if here(119.0, -138.0) => things(vec![
+        ("kettle", "cabin_log") if here(89.2, -103.5) => things(vec![
             on(
                 "bed_name_mirek",
                 Vec3::new(-2.8, cf + 0.32, 1.5 - 0.975 - 0.03),
@@ -566,13 +605,13 @@ fn named(map: &MapDef, base: &str, prefab: &str, at: Vec2) -> Option<Named> {
             on("charcoal_sack", Vec3::new(-0.45, cf, -2.4), 0.5),
         ]),
         // The sexton's chapel: the hymns still up from the last Sunday.
-        ("kettle", "chapel") if here(-8.0, 150.0) => things(vec![facing(
+        ("kettle", "chapel") if here(-7.4, 123.4) => things(vec![facing(
             "hymn_board",
             Vec3::new(3.0, 0.5 + 1.9, 7.0 - 0.175),
             nz,
         )]),
         // The scavenger off Lev's truck: a bedroll, a tin, lately.
-        ("cinder", "house_plank_damaged") if here(15.0, 103.5) => house(
+        ("cinder", "house_plank_damaged") if here(-13.0, 98.0) => house(
             |_| {
                 vec![
                     on("bedroll", Vec3::new(-4.0 + 0.95, 0.5, -3.5 + 1.1), PI * 0.5),
@@ -1037,7 +1076,7 @@ fn special(valley: Valley, base: &str, tag: &str, at: Vec2) -> Option<Story> {
         (_, _, "mine_office") => Some(Story::MineOffice),
         (_, _, "foreman") => Some(Story::Foreman),
         (Valley::Marrow, "house_plank", _) if here(-20.2, 63.5) => Some(Story::Hana),
-        (Valley::Kettle, "house_plank", _) if here(-30.0, 72.0) => Some(Story::ShotFirer),
+        (Valley::Kettle, "house_plank", _) if here(-22.1, 54.9) => Some(Story::ShotFirer),
         _ => None,
     }
 }
@@ -1565,13 +1604,13 @@ mod tests {
             ("marrow", "cabin_log", -110.8, 113.5),
             ("marrow", "cabin_log", -70.8, 113.5),
             ("marrow", "pump_station", -110.0, 12.1),
-            ("kettle", "house_plank", 76.0, 222.0),
-            ("kettle", "house_plank", -99.0, 154.0),
-            ("kettle", "house_plank", -42.0, 125.0),
-            ("kettle", "cabin_log", 205.0, -205.0),
-            ("kettle", "cabin_log", 119.0, -138.0),
-            ("kettle", "chapel", -8.0, 150.0),
-            ("cinder", "house_plank_damaged", 15.0, 103.5),
+            ("kettle", "house_plank", 49.0, 157.7),
+            ("kettle", "house_plank", -74.2, 115.5),
+            ("kettle", "house_plank", -30.5, 93.0),
+            ("kettle", "cabin_log", 149.1, -152.2),
+            ("kettle", "cabin_log", 89.2, -103.5),
+            ("kettle", "chapel", -7.4, 123.4),
+            ("cinder", "house_plank_damaged", -13.0, 98.0),
             ("cinder", "cabin_log", -51.9, -111.2),
             ("sallow", "house_brick", -58.0, 206.0),
             ("sallow", "shop", -180.0, -222.0),
@@ -1605,7 +1644,7 @@ mod tests {
             &map,
             "cabin_log",
             "",
-            &Transform::from_xyz(119.0, 0.0, -138.0),
+            &Transform::from_xyz(89.2, 0.0, -103.5),
             false,
         );
         assert!(mirek.iter().any(|(m, _)| *m == "bed_name_mirek"));
