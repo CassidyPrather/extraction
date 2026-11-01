@@ -77,10 +77,12 @@ pub const ROUGH_FLAT: f32 = 0.7;
 /// (as a body's own bounce would give it): within [`NEAR_IN`] of the eye
 /// the cut is given back by [`NEAR_SHARE`] of its stops, fading out by
 /// [`NEAR_OUT`]. Out of doors (no room) nothing changes. On the Rime Fell
-/// mill's ground floor the PM at 30 cm all but vanished against the room.
+/// mill's ground floor the PM at 30 cm all but vanished against the room
+/// (15 of 255, the yard's 31: `scripts/held_check.py`). At 0.75 it came to
+/// 43 but looked lit, and a bed at your knee glowed against the rest.
 pub const NEAR_IN: f32 = 0.55;
 pub const NEAR_OUT: f32 = 0.9;
-pub const NEAR_SHARE: f32 = 0.75;
+pub const NEAR_SHARE: f32 = 0.5;
 /// Under this much ambient (summed, cd/m²) there is no sky to reflect (deep
 /// in the workings, `world::underground::go_dark`): not looked up.
 pub const DARK: f32 = 0.5;
@@ -335,13 +337,13 @@ fn ambient_light(
         rest[..rest.find('"').unwrap()].to_owned()
     }
 
-    /// In a room, a gun at 30 cm gets twice the room's light or more; the
+    /// In a room, a gun at 30 cm gets 1.6 times the room's light or more; the
     /// room past arm's length nothing; out of doors (the yard) nothing at
     /// all.
     #[test]
     fn in_a_room_what_you_hold_keeps_its_light_and_out_of_doors_nothing_changes() {
         let k = crate::world::weather::INTERIOR_LIGHT;
-        assert!(near(0.3, Some(k)) >= 2.0, "{}", near(0.3, Some(k)));
+        assert!(near(0.3, Some(k)) >= 1.6, "{}", near(0.3, Some(k)));
         assert_eq!(near(1.5, Some(k)), 1.0);
         for d in [0.1, 0.3, 0.6, 2.0] {
             assert_eq!(near(d, None), 1.0);
