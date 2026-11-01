@@ -310,9 +310,9 @@
 
         // Village: houses along the district road, south of the bridge.
         (prefab: "house_plank", at: (-20.2, 63.5), rot: 90.0),
-        (prefab: "house_plank", at: (19.8, 53.5), rot: 270.0),
-        (prefab: "house_brick", at: (-22.2, 33.5), rot: 90.0, tag: "post_office"),
-        (prefab: "house_plank", at: (22.8, 23.5), rot: 270.0),
+        (prefab: "house_plank_b", at: (19.8, 53.5), rot: 270.0),
+        (prefab: "post_office", at: (-22.2, 33.5), rot: 90.0, tag: "post_office"),
+        (prefab: "house_plank_c", at: (22.8, 23.5), rot: 270.0),
         (prefab: "shop", at: (-18.2, 3.5), rot: 90.0),
         (prefab: "house_plank", at: (-47.2, 43.5), rot: 0.0),
         (prefab: "shed", at: (37.8, 38.5), rot: 0.0),

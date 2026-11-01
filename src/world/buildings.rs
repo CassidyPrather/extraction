@@ -1578,8 +1578,11 @@ impl Builder {
 
 /// Builds a prefab's geometry. `None` for prefabs drawn elsewhere.
 /// Every generated prefab's id.
-pub const PREFABS: [&str; 52] = [
+pub const PREFABS: [&str; 55] = [
     "house_plank",
+    "house_plank_b",
+    "house_plank_c",
+    "post_office",
     "farmhouse",
     "house_brick",
     "cabin_log",
@@ -1951,7 +1954,9 @@ pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
         HousePlan::PlankB => HouseLayout {
             table: (flip(common.table.0), 0.0),
             shelf: (flip(common.shelf.0), -FRAC_PI_2),
-            counter: (flip(common.counter.0), -FRAC_PI_2),
+            // 10 cm further back: mirrored, its end lay in the +X window's
+            // jamb's plane.
+            counter: (flip(common.counter.0) + Vec3::Z * 0.1, -FRAC_PI_2),
             kitchen_shelf: flip(common.kitchen_shelf),
             stove: (flip(common.stove.0), 0.0),
             bed: flip(common.bed),
