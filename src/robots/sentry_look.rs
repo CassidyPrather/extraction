@@ -249,7 +249,7 @@ fn light_sentries(
         l.flare = (l.flare - dt).max(0.0);
         let on = s.powered && !robot.wrecked;
         let (glow, eye, lamp) = if on {
-            let f = 1.0 + 4.0 * l.flare / rules::CHIRP;
+            let f = chirp_gain(rules::CHIRP - l.flare, rules::CHIRP, l.flare > 0.0);
             (
                 LinearRgba::rgb(1.2, 4.8, 6.0),
                 LinearRgba::rgb(9.0 * f, 1.0, 0.5),
@@ -266,6 +266,28 @@ fn light_sentries(
             }
         }
     }
+}
+
+/// How bright the lens burns `since` seconds into a chirp `chirp` long
+/// (`flaring` while it runs): a slow pulse that quickens and swells, from
+/// about 1.5 to 8 a second, and a hard flash as the first round goes. It
+/// reads "about to fire", not "lamp on", however long the chirp is. At
+/// rest, 1.
+pub fn chirp_gain(since: f32, chirp: f32, flaring: bool) -> f32 {
+    if !flaring || chirp <= 0.0 {
+        return 1.0;
+    }
+    let p = (since / chirp).clamp(0.0, 1.0);
+    // The last tenth of a second: the flash.
+    if chirp - since < 0.1 {
+        return 7.0;
+    }
+    // Phase from a rate rising 1.5 -> 8 Hz over the chirp; starting on a
+    // crest, so the chirp is seen the moment it's heard.
+    let (f0, f1) = (1.5, 8.0);
+    let phase = f0 * since + (f1 - f0) * since * since / (2.0 * chirp);
+    let wave = 0.5 + 0.5 * (std::f32::consts::TAU * phase + std::f32::consts::FRAC_PI_2).sin();
+    1.0 + (1.5 + 3.0 * p) * wave * wave
 }
 
 /// At night, a powered sentry's searchlight burns down its line of sight.
@@ -397,6 +419,55 @@ fn gallery(
                     by: Entity::PLACEHOLDER,
                 });
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod chirp_tests {
+    use super::chirp_gain;
+
+    /// The lens's pulses, sampled at 240 a second over a chirp `c` long:
+    /// the times of its crests, and its gain at each sample.
+    fn sample(c: f32) -> (Vec<f32>, Vec<f32>) {
+        let g: Vec<f32> = (0..=(c * 240.0) as usize)
+            .map(|i| chirp_gain(i as f32 / 240.0, c, true))
+            .collect();
+        let crests = (1..g.len() - 1)
+            .filter(|&i| g[i] > g[i - 1] && g[i] >= g[i + 1] && g[i] > 2.0)
+            .map(|i| i as f32 / 240.0)
+            .collect();
+        (crests, g)
+    }
+
+    /// Through a chirp the lens pulses faster and brighter, and flashes
+    /// hardest as the first round goes; it's lit from the first instant
+    /// (the chirp is seen as it's heard) and at rest after. True for the
+    /// old 1.6 s chirp and the 2.5 s one alike.
+    #[test]
+    fn the_chirp_quickens_into_the_shot() {
+        for c in [1.6f32, 2.5] {
+            let (crests, g) = sample(c);
+            let first = crests.iter().filter(|t| **t < c * 0.5).count();
+            let second = crests.iter().filter(|t| **t >= c * 0.5).count();
+            assert!(second > first, "{c} s: {first} pulses then {second}");
+            let gaps: Vec<f32> = crests.windows(2).map(|w| w[1] - w[0]).collect();
+            assert!(
+                gaps.last().unwrap() < &(gaps[0] * 0.5),
+                "{c} s: pulses quicken ({gaps:?})"
+            );
+            assert!(g[0] > 2.0, "{c} s: lit as it's heard");
+            let (peak_at, peak) = g
+                .iter()
+                .enumerate()
+                .fold((0, 0.0f32), |b, (i, v)| if *v > b.1 { (i, *v) } else { b });
+            assert!(
+                peak_at as f32 / 240.0 >= c - 0.1 - 1.0 / 240.0,
+                "{c} s: the hardest flash is at the shot, not before"
+            );
+            let early = g[..g.len() / 4].iter().cloned().fold(0.0, f32::max);
+            assert!(peak > early * 2.0, "{c} s: it swells ({early} to {peak})");
+            assert_eq!(chirp_gain(c + 0.5, c, false), 1.0, "{c} s: at rest after");
         }
     }
 }
