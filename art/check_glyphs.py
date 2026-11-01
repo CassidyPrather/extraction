@@ -47,26 +47,30 @@ def mask(ch):
     return on
 
 
-glyphs, lookalike = _kit._glyphs()
-chars = sorted(set(glyphs) | set(lookalike))
-masks = {c: mask(c) for c in chars}
-twins = []
-for i, a in enumerate(chars):
-    for b in chars[i + 1:]:
-        if lookalike.get(a) == b or lookalike.get(b) == a or frozenset((a, b)) in SAME:
-            continue
-        if lookalike.get(a, a) == lookalike.get(b, b):
-            continue
-        ma, mb = masks[a], masks[b]
-        if not ma or not mb:
-            continue
-        iou = len(ma & mb) / len(ma | mb)
-        if iou > TWIN:
-            twins.append((iou, a, b))
-near = sorted(((len(masks[a] & masks[b]) / max(len(masks[a] | masks[b]), 1), a, b) for a, b in (("H", "K"), ("П", "Л"), ("Ш", "Ц"), ("3", "З"), ("0", "О")) if a in masks and b in masks), reverse=True)
-for iou, a, b in near:
-    print(f"asked: {a} {b} ({iou:.2f})")
-for iou, a, b in sorted(twins, reverse=True):
-    print(f"twins: {a} {b} ({iou:.2f})")
-print(f"{len(chars)} glyphs, {len(twins)} twin pairs")
-sys.exit(1 if twins else 0)
+def twins():
+    """The pairs of glyphs too alike at reading size: (overlap, a, b)."""
+    glyphs, lookalike = _kit._glyphs()
+    chars = sorted(set(glyphs) | set(lookalike))
+    masks = {c: mask(c) for c in chars}
+    out = []
+    for i, a in enumerate(chars):
+        for b in chars[i + 1:]:
+            if lookalike.get(a) == b or lookalike.get(b) == a or frozenset((a, b)) in SAME:
+                continue
+            if lookalike.get(a, a) == lookalike.get(b, b):
+                continue
+            ma, mb = masks[a], masks[b]
+            if not ma or not mb:
+                continue
+            iou = len(ma & mb) / len(ma | mb)
+            if iou > TWIN:
+                out.append((iou, a, b))
+    return sorted(out, reverse=True), len(chars)
+
+
+if __name__ == "__main__":
+    found, n = twins()
+    for iou, a, b in found:
+        print(f"twins: {a} {b} ({iou:.2f})")
+    print(f"{n} glyphs, {len(found)} twin pairs")
+    sys.exit(1 if found else 0)
