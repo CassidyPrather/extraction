@@ -24,6 +24,7 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 | main | when (UTC) | smoke | suite | notes |
 | - | - | - | - | - |
+| d2be4d5 | 2026-11-01 14:30 (gates 135-138, release check) | 40/40 exit 0, no timeouts, 34 extracted; stucks 34 (47); stowing unchanged (all carried out, 0 room drops, kit 40/40); 13/13 contract scenarios; second_hour 0/40 (no gun, a door at x -12.2 out of reach; first run, no baseline); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1310 lib, 315 + 47 core, 0 FAILED | gauges 18/19: gauge_items_fall_asleep (known; 41e780da) |
 | 50d1900 | 2026-11-01 08:00 (gate 129, release check) | 40/40 exit 0, no timeouts, 35 extracted (Cinder 8/8, Marrow 8/8, Rime 7/8, Kettle 6/8, Sallow 6/8); stucks 47; stowing: all taken carried out, 0 room drops, kit 40/40, 2 stuck while stowing; 13/13 scenarios; `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1294 lib, 315 + 47 core, 0 FAILED | gauges 19/19 |
 | 90afc8b | 2026-11-01 01:30 (gate 119, release check) | 40/40 exit 0, no timeouts, 36 extracted (Marrow 8/8, Sallow 8/8, Kettle 7/8, Rime 7/8, Cinder 5/8); stucks 40 (145); stowing: all taken carried out, 0 room drops, kit 40/40, 3 stuck while stowing; 12/13 scenarios (contract_scour_key: PickUp of the key times out, also on bc66f9a); `--check-buildings` 0 flagged; sim_guards pass | fast-profile workspace suite: 1285 lib, 357 core, 0 FAILED | gauges 19/19 |
 | 15eadf3 | 2026-10-31 20:30 (gate 112, release check) | 40/40 exit 0, no timeouts, 37 extracted (Kettle 8/8, Marrow 8/8, Cinder 7/8, Rime 7/8, Sallow 7/8); stucks 145 (Kettle seed 4: 25 at the (-95, 30) pocket); 13/13 scenarios; `--check-buildings` 1 flagged (the cellars false positive); sim_guards pass | fast-profile workspace suite: 1 FAILED (part_rest a_part_gone_leaves_no_ghost, a test race fixed in 0735b5e8); 1268 lib, 356 core | gauges 19/19 in 2779 s |
@@ -75,10 +76,11 @@ Note: rounds 18ba914 to 85c9d1f were first reported with 0 failed. `scripts/test
 
 ## Open failures
 
-As of 50d1900 (gate 129): nothing failing.
+As of d2be4d5 (gates 135-138).
 
 | test / run | class | owner | status |
 | - | - | - | - |
+| `--scenario second_hour` (Marrow): 0 passed, 40 failed: no gun in hand, WalkTo to a door at (-12.2, 33-48) out of reach, a Grab timed out, moments PackFull and Underground missing | first run (no baseline) | Onboarding | routed |
 | `bot::scenarios::stoppage_tests::a_drill_gun_that_jams_still_finishes_its_drill` 154 s > 120 (801a952, debug timing) | | Weapon feel | routed |
 | `scripts/lamp_check.sh` (needs a GPU), `scripts/xr_check.sh` (needs Monado) | | Visual design, Performance | parked |
 
@@ -127,6 +129,8 @@ As of 50d1900 (gate 129): nothing failing.
   `heavy()`, so one that queues behind the long gauges looks slow
   (gun_rest: 440 s in the tier, 9 s alone). The tier's wall time is
   about the sum of the heavy gauges' own times.
+- Release checks run `--scenario second_hour` (a short career: job 2) from
+  d2be4d5, and grep it for `broken walker placed at (` once e335fbc9 lands.
 - Release checks report stowing from smoke (`stow_report.py`: taken, carried
   out, dropped for room, kit, stuck while stowing) from gate 119.
 - Release checks run `scripts/sim_guards.sh` after smoke from gate 112.
