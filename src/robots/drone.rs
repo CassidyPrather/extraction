@@ -955,8 +955,28 @@ mod tests {
     #[test]
     fn a_drones_first_burst_after_a_lock_warns() {
         let (mut app, player, _drone, at) = drone_on_you();
-        for i in 0..90 * 60 {
+        // Walking about till it's seen you, then standing still in plain
+        // view (someone crossing its line is hard to hit, and this is about
+        // what hits you).
+        for i in 0..90 * 5 {
             step(&mut app, player, at, true, i);
+        }
+        for _ in 0..90 * 55 {
+            app.world_mut()
+                .get_mut::<Transform>(player)
+                .unwrap()
+                .translation = at;
+            app.world_mut()
+                .get_mut::<crate::player::Body>(player)
+                .unwrap()
+                .velocity = Vec3::ZERO;
+            let mut h = app
+                .world_mut()
+                .get_mut::<crate::health::Health>(player)
+                .unwrap();
+            h.hp = h.max;
+            h.down = false;
+            app.update();
         }
         let f = app.world().resource::<Fight>();
         assert!(
