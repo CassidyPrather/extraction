@@ -1954,9 +1954,10 @@ pub fn house_layout(plan: HousePlan, w: f32, d: f32) -> HouseLayout {
         HousePlan::PlankB => HouseLayout {
             table: (flip(common.table.0), 0.0),
             shelf: (flip(common.shelf.0), -FRAC_PI_2),
-            // 10 cm further back: mirrored, its end lay in the +X window's
-            // jamb's plane.
-            counter: (flip(common.counter.0) + Vec3::Z * 0.1, -FRAC_PI_2),
+            // 10 cm forward: mirrored, its end lay in the +X window's
+            // jamb's plane (10 cm back, it hid the kitchen shelf's
+            // bottom board).
+            counter: (flip(common.counter.0) - Vec3::Z * 0.1, -FRAC_PI_2),
             kitchen_shelf: flip(common.kitchen_shelf),
             stove: (flip(common.stove.0), 0.0),
             bed: flip(common.bed),
