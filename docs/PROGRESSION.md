@@ -208,7 +208,7 @@ says whose it is ("CONTRACT: HAJEK'S TIN - 1 OF 2. For Vera Hajkova."):
 
 | Contract | For | Offered | Steps | Pays | Opens |
 | - | - | - | - | - | - |
-| The post counter | the Holm boy | the second odd job | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
+| The post counter | the Holm boy | the third odd job (no contract is a career's first two jobs: `GENTLE_JOBS`) | bring Jan Holm's post office watch from the counter (Marrow village) | a dressing, 2 matches, trust 1 | |
 | The mast relay | Lev | head of Errands | plant a relay up the Radio mast (Marrow); a radio | 2 power cells, 2 boxes 5.45, trust 1 | re-pack 5.45 AP |
 | Anna's tape | Anna | the third Errand | bring Anna's practice tape from Hana's house by the well (Marrow village) | 2 tins of stew, a tea tin, trust 1 | |
 | Hajek's tin | Vera Hajkova | head of Runs | bring Mirek Hajek's tin from the Charcoal hut; look in on the Weir cottage (Kettle) | an injector, 2 dressings, trust 2 | re-pack 7.62x39 AP |
