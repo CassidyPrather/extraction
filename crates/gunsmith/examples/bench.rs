@@ -330,8 +330,33 @@ fn scanned(
     m
 }
 
-/// The scan's tile on blued and stamped gun steel (the game's).
-const BLUED_TILE: f32 = 0.075;
+/// A gun-steel finish on the gun-metal scan, as the game's `models::steel`.
+fn steel(mut m: StandardMaterial, f: &gunsmith::finish::SteelFinish) -> StandardMaterial {
+    m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / gunsmith::finish::TILE));
+    let scanned = m.base_color_texture.is_some();
+    match f.gain {
+        Some([r, g, b]) if scanned => m.base_color = Color::linear_rgb(r, g, b),
+        Some([r, g, b]) => m.base_color = Color::linear_rgb(0.045 * r, 0.045 * g, 0.045 * b),
+        None => {
+            m.base_color_texture = None;
+            let [r, g, b] = f.flat;
+            m.base_color = Color::linear_rgb(r, g, b);
+        }
+    }
+    if f.keep_scan_metal && m.metallic_roughness_texture.is_some() {
+        m.metallic = f.metallic;
+        m.perceptual_roughness = f.roughness;
+    } else {
+        m.metallic_roughness_texture = None;
+        m.metallic = f.metallic;
+        m.perceptual_roughness = if f.keep_scan_metal {
+            (0.31 * f.roughness).min(1.0)
+        } else {
+            f.roughness
+        };
+    }
+    m
+}
 
 fn flat(color: Color, metallic: f32, rough: f32) -> StandardMaterial {
     StandardMaterial {
@@ -354,23 +379,9 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
         )
     };
     match name {
-        // As the game's (src/models.rs): the scan at a finer tile, glossier.
-        "Blued" => {
-            let mut m = gun_metal();
-            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-            m.perceptual_roughness *= 0.8;
-            m
-        }
-        "Stamped" => {
-            let mut m = gun_metal();
-            m.base_color_texture = None;
-            m.base_color = Color::srgb(0.065, 0.065, 0.068);
-            m.metallic = 0.2;
-            m.metallic_roughness_texture = None;
-            m.perceptual_roughness = 0.5;
-            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-            m
-        }
+        // As the game's (src/models.rs, `steel`).
+        "Blued" => steel(gun_metal(), &gunsmith::finish::BLUED),
+        "Stamped" => steel(gun_metal(), &gunsmith::finish::STAMPED),
         "Wood" => scanned(
             "gun_wood",
             0.25,
@@ -408,12 +419,7 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
             m.metallic = 0.0;
             m
         }
-        "Black" => {
-            let mut m = gun_metal();
-            m.base_color = Color::srgb(0.45, 0.45, 0.45);
-            m.perceptual_roughness = m.perceptual_roughness.max(0.6);
-            m
-        }
+        "Black" => steel(gun_metal(), &gunsmith::finish::BLACK),
         "Brass" => flat(Color::srgb(0.72, 0.52, 0.24), 1.0, 0.35),
         "Worn" => flat(Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
         "Rubber" => flat(Color::srgb(0.07, 0.07, 0.07), 0.0, 0.88),
