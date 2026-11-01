@@ -115,7 +115,8 @@ def stencil(p, x, y, z, sz, rows=((0.3, 0.05), (0.18, 0.035)), gap=0.025,
     for (w, h), word in zip(rows, words):
         # A letter's advance is 0.725 h: shrink a line to its width.
         hh = min(h, w / max(0.725 * len(word), 0.1))
-        lettering(p, word, hh, "Cream", T(x, yy, z + sz * 0.002) @ face)
+        # From 1 mm inside the face, so the paint stands on it.
+        lettering(p, word, hh, "Cream", T(x, yy, z - sz * 0.001) @ face)
         yy -= h + gap
 
 
