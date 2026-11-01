@@ -219,8 +219,10 @@ def road_block():
     # Its type and mark stencilled on its face (-Z): the block's code and
     # its size, as precast blocks were (two blank plates read as
     # placeholders).
-    lettering(p, "ФБС", 0.1, "Cream", T(0.25, 0.76, -0.7) @ RY(math.pi))
-    lettering(p, "24.4.6", 0.06, "Cream", T(0.25, 0.6, -0.7) @ RY(math.pi))
+    # In a dark matte paint: the concrete scan is pale, and cream on it
+    # hardly showed (the game's "Black" is a grey).
+    lettering(p, "ФБС", 0.12, "Char", T(0.2, 0.78, -0.7) @ RY(math.pi))
+    lettering(p, "24.3.6", 0.07, "Char", T(0.2, 0.6, -0.7) @ RY(math.pi))
     return [p]
 
 

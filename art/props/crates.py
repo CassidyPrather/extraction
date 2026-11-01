@@ -105,8 +105,8 @@ def rope_handle(p, x, y, sx, span=0.17):
 
 
 
-def stencil(p, x, y, z, sz, rows=((0.3, 0.05), (0.18, 0.035)), gap=0.025,
-            words=("ВЕРХ", "17-4")):
+def stencil(p, x, y, z, sz, rows=((0.42, 0.08), (0.26, 0.05)), gap=0.025,
+            words=("ТАРА", "17-6")):
     """Painted stencil lettering on a front at z (facing sz): a line per
     row, each `h` high and no wider than its `w` (blank pale bars read as
     placeholder plates)."""
@@ -167,8 +167,8 @@ def crate_army():
     corner_plates(p, W, D, Hb - 0.104)
     for sx in (-1, 1):
         rope_handle(p, sx * W / 2, 0.62, sx)
-    stencil(p, 0.0, 0.62, -(D / 2), -1, rows=((0.42, 0.06), (0.3, 0.04), (0.16, 0.04)),
-            words=("ВЕРХ", "НЕТТО 40", "17-4"))
+    stencil(p, 0.0, 0.62, -(D / 2), -1, rows=((0.56, 0.09), (0.4, 0.05), (0.26, 0.05)),
+            words=("ТАРА", "НЕТТО 30", "17-6"))
     return [p]
 
 
@@ -211,8 +211,8 @@ def supply_crate():
             segs=6)
     for sx in (-1, 1):
         rope_handle(p, sx * W / 2, y0 + Hb * 0.62, sx, span=0.15)
-    stencil(p, 0.0, 0.06, -(D / 2), -1, rows=((0.46, 0.06), (0.26, 0.04)))
-    stencil(p, -0.12, 0.06 + 0.005, D / 2, 1, rows=((0.2, 0.04),), words=("Г-41",))
+    stencil(p, 0.0, 0.06, -(D / 2), -1, rows=((0.56, 0.08), (0.34, 0.05)))
+    stencil(p, -0.12, 0.06 + 0.005, D / 2, 1, rows=((0.26, 0.06),), words=("Г-41",))
     return [p]
 
 
