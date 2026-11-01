@@ -338,8 +338,24 @@ measures both eyes from Marrow's meadow, in drizzle (bare: 20.6M of
 The cloud's near quads each cover most of the view. Capping a puff's
 apparent half-width (`PUFF_RULE=angle:<deg>`, a trial on the scene):
 20 degrees gives 60.3M, 12 gives 38.0M. Hiding a puff the eye is inside
-does nothing, since none is. It's ignored as known failing until
-`render::puff` takes a rule (Weapon feel's).
+does nothing, since none is.
+
+**Fixed (Weapon feel, 2026-11-01):** `render::puff`'s `face_puffs` clamps
+each puff, after its owner sets its scale, to span no more than
+`MAX_HALF_ANGLE` (12 degrees) from the eye: near the eye a puff looks
+smaller, not thicker. On the way: the eye `face_puffs` faced was the
+middle of every active 3D camera, an impostor's capture rig and warmup's
+proxy eye among them, so puffs were turned partly edge-on and none read
+as near (so the numbers above are low). It now reads only the cameras
+drawing to a screen or headset. With both:
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 27.5M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 24.5M | 15 |
+| standing in a hazard's cloud | 64 | 60.9M | 26 |
+
+At 14 degrees the cloud was 72.2M; the gauge holds 12.
 
 ### Items at rest, asleep
 

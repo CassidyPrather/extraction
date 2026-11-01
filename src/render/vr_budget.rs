@@ -536,11 +536,11 @@ mod puffs {
 /// to 39 layers: each near quad covers most of the view). `PUFF_RULE`
 /// tries a rule on the scenes' puffs before they're drawn: `inside`
 /// hides one the eye is in (82.2M: none is), `angle:<deg>` caps a puff's
-/// apparent half-width (20: 60.3M; 12: 38.0M). Ignored as known failing
-/// until `render::puff` takes a rule (Weapon feel's).
+/// apparent half-width (20: 60.3M; 12: 38.0M), measured before
+/// `render::puff` faced the right eye. Now `face_puffs` caps each puff at
+/// `MAX_HALF_ANGLE` (12 degrees) from the eye: the wreck 27.5M, the
+/// firefight 24.5M, the cloud 60.9M (`docs/PERFORMANCE.md`).
 #[test]
-#[ignore = "known failing (2026-11-01): a hazard's cloud near the eye is over; Weapon feel un-ignores it with render::puff's fix. \
-            cargo test --lib gauge_puffs_hold -- --ignored --nocapture"]
 fn gauge_puffs_hold_the_stereo_budget() {
     let _counting = super::budget::tests::counted();
     let mut app = super::budget::tests::client_threads("marrow_creek", "drizzle", None);

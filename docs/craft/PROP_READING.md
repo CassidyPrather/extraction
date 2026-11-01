@@ -126,5 +126,34 @@ shed, a log pile and the blue wreck by the works yard.
   of the concrete scan, a sawn slab at arm's length
   (`marrow_s09_crest_before.jpg`). They're the field's rough stones now
   (`world::rocks::stone_mesh`: faceted, the boulder scan, moss on top),
-  tall and broad-faced to the altar, a low slab for it
-  (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`).
+  tall and broad-faced to the altar. The altar is one set upside down,
+  its planed base the level top where gifts are set down, at the
+  offering lip's height (Anomalies': nothing on top for a gift to roll
+  off) (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`,
+  `marrow_stone_ring_altar_after.jpg`).
+
+### The first jobs' interiors (1 November)
+
+`docs/shots/rooms/first_job_rooms_before.jpg`: Marrow's Old farm
+farmhouse, the post office and a village plank house (the doorway, the
+front room, the kitchen, the bedroom), Cinder's Ash Row plank house (a
+ruin) and the shop (the doorway, the counter, the back room). The eye at
+the floor + 1.6 m (`y` 0 stands it 1.7 over the terrain, which under a
+house's 0.5 m plinth is a crouch: give the floor's height).
+
+- **Read well**: the beds, the kitchen counters and stoves, the shop's
+  shelving and counter, the ruin's rubble and fallen beam. Nothing floats
+  or clips at these distances.
+- **The same house three times**: the three Marrow houses are one plan
+  with the same furniture in the same places, the same coat, crate and
+  rug (`buildings::house`, the clutter's house kit); only the post
+  office's pigeonholes differ. A layout call: put to the coordinator.
+- **Print colours on soft and natural things**, again: the rag rug at
+  every door was flat red, cream, olive and blue stripes, a flag on the
+  floor; the fox pelt on its stretcher (`hide_frame`) showed only its
+  print-cream belly and print-red brush on the dark wall, a red-and-white
+  stick. Now the rug is rag in faded dyes on the canvas weave
+  (`RagRed`, `RagBlue`), the pelt russet with a pale belly (`Russet`)
+  (`docs/shots/rooms/*_{before,after}.jpg`).
+- **The front rooms are dark** at 11:00, the window's light hardly
+  reaching the table: lighting, not the models.

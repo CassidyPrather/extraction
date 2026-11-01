@@ -194,6 +194,7 @@ pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
 pub const MATERIAL_NAMES: &[&str] = &[
     "Blued",
     "Stamped",
+    "Alloy",
     "Wood",
     "Polymer",
     "Shell",
@@ -213,6 +214,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Orange",
     "Blue",
     "CarBlue",
+    "RagRed",
+    "RagBlue",
+    "Russet",
     "Leaf",
     "Enamel",
     "Worn",
@@ -299,6 +303,7 @@ impl ModelMaterials {
             // (`gunsmith::finish`), the bench's too.
             "Blued" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::BLUED)),
             "Stamped" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::STAMPED)),
+            "Alloy" => derive(Mat::GunMetal, &|m| steel(m, &gunsmith::finish::ALLOY)),
             "Wood" => lib.get(Mat::GunWood, server, materials),
             "Polymer" => lib.get(Mat::Polymer, server, materials),
             "Shell" => lib.get(Mat::RobotShell, server, materials),
@@ -407,6 +412,24 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.21, 0.29, 0.4);
                 m.metallic = 0.25;
             }),
+            // Rag cloth: the canvas scan's weave, its own colour gone, in a
+            // dye faded by years of floors (a rag rug's stripes). In the
+            // print colours a rug at the door read as a flag
+            // (docs/craft/PROP_READING.md).
+            "RagRed" | "RagBlue" => {
+                let c = if name == "RagRed" {
+                    Color::srgb(0.42, 0.2, 0.16)
+                } else {
+                    Color::srgb(0.22, 0.26, 0.33)
+                };
+                derive(Mat::Canvas, &move |m| {
+                    m.base_color_texture = None;
+                    m.base_color = c;
+                    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+                })
+            }
+            // A fox's fur: russet, not the print red.
+            "Russet" => flat(materials, Color::srgb(0.46, 0.23, 0.11), 0.0, 0.92),
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
             // White enamel: mugs, bowls, the kettle, labels' white print, and the
             // houses' stoves and sinks.
@@ -442,7 +465,13 @@ impl ModelMaterials {
             "Warn" => glow(materials, Color::srgb(0.9, 0.6, 0.1), (3.0, 1.6, 0.2)),
             // A robot's beacon (robots blink theirs; see robots::visuals).
             "Beacon" => glow(materials, Color::srgb(1.0, 0.75, 0.4), (6.0, 3.6, 1.2)),
-            "Eye" => glow(materials, Color::srgb(0.1, 0.02, 0.02), (9.0, 1.2, 0.6)),
+            // A robot's eye is a signal lamp: fog doesn't wash it out.
+            "Eye" => materials.add(StandardMaterial {
+                base_color: Color::srgb(0.1, 0.02, 0.02),
+                emissive: LinearRgba::rgb(9.0, 1.2, 0.6),
+                fog_enabled: false,
+                ..default()
+            }),
             "Strange" => materials.add(StandardMaterial {
                 base_color: Color::srgb(0.45, 0.35, 0.7),
                 emissive: LinearRgba::rgb(0.6, 0.35, 1.2),
