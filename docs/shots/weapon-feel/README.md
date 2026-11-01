@@ -47,4 +47,11 @@ named passes there.
     is a soft column, not a stack of circles, and not a black ball.
   - `hazards_reel` (`reel:hazards,12,5`): the hazard clouds (frost
     shown) are soft hazes.
+- `impact_burst_*`: up close a round's dust read as soft balls left
+  hanging, not a hit. Now masonry and soil throw a burst of five small
+  puffs out of the face (3 m/s, braked and blooming), then three that
+  linger. Before (left) is 219dc6da, after this change; top row frame 63,
+  just after the rounds land, bottom frame 75, a quarter of a second on
+  (`--gallery impact`, as above). On concrete the dust now bursts from
+  the marks; on dirt it's still brown on brown.
 - `safety_*`, `jam_*`, `eyebox_*`, and the rest: earlier waves.

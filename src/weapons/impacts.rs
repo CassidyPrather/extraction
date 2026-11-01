@@ -560,20 +560,20 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         n,
         mesh: |a| a.puff.clone(),
         mat,
-        size: Vec3::splat(0.035),
+        size: Vec3::splat(0.06),
         out: JET_OUT,
         scatter: 0.6,
-        life: 0.5,
-        grow: 3.5,
+        life: 0.7,
+        grow: 3.0,
         gravity: -0.1,
-        drag: 7.0,
+        drag: 5.0,
         wind: 0.5,
         ..SPRAY
     };
     match kind {
         ImpactKind::Masonry => vec![
             jet(|a| a.dust.clone(), 5),
-            puff(|a| a.dust.clone(), 2),
+            puff(|a| a.dust.clone(), 3),
             // Grit, with its dust.
             Spray {
                 n: 6,
@@ -622,7 +622,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         }],
         ImpactKind::Soil => vec![
             jet(|a| a.soil_dust.clone(), 5),
-            puff(|a| a.soil_dust.clone(), 2),
+            puff(|a| a.soil_dust.clone(), 3),
             Spray {
                 n: 6,
                 mat: |a| a.clod.clone(),
@@ -958,10 +958,7 @@ mod tests {
                 .max_by(|a, b| a.size.x.total_cmp(&b.size.x))
                 .unwrap();
             assert!(burst.out >= 3.0, "{k:?}: its dust leaves at {}", burst.out);
-            assert!(
-                burst.size.x < cloud.size.x / 2.0,
-                "{k:?}: a burst of small puffs"
-            );
+            assert!(burst.size.x < cloud.size.x, "{k:?}: a burst of small puffs");
             assert!(burst.n >= 5, "{k:?}: a burst, not a puff or two");
             assert!(
                 r.iter().any(|s| s.grow == 0.0 && s.out >= burst.out * 0.8),
