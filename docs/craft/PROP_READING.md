@@ -188,8 +188,19 @@ plan keeps the common plan's loot spots; a ruin keeps the common plan.
   stove was (`docs/shots/rooms/farmhouse_*_plan_{before,after}.jpg`). The
   door, windows and footprint as they were (the Old farm's arrival frame
   looks at that front).
-- **Post office, plank B and C**: built, waiting on their prefab ids
-  (Map design's shell table in core, and their map edits).
+- **Post office** (Marrow's, `post_office` in `house_brick`'s walls): a
+  public counter across the front room, the way in past its open end,
+  the pigeonholes behind it and the parcel scales on it.
+- **Plank B** (`house_plank_b`: the village house opposite Hana's): the
+  common plan mirrored across the door's axis. Its things are set out as
+  the common plan's and mirrored with it, so every resident's kit keeps
+  to its walls.
+- **Plank C** (`house_plank_c`: beside the post office): the front room
+  round its side window, the table out in the room, the shelf on the
+  far wall.
+- Map design's shell table (`map::prefab_shell`) lets the core read each
+  as its shell (footprint, doors, walls, lint, nav); the game's clutter
+  and window boards read it too. `docs/shots/rooms/house_plans_before_after.jpg`.
 
 ### Blank plates (1 November)
 
