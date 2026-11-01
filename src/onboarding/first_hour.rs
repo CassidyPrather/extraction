@@ -2402,19 +2402,41 @@ fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
                 blocked_run(&n.0, at, p) > SOLID_RUN || steep_run(&world.zone, at, p) > STEEP_RUN
             })
             .and_then(|n| n.0.path(at.to_array(), p.to_array()));
-        match round {
-            Some(way) => {
-                for q in way.into_iter().skip(1).map(Vec2::from) {
-                    t.extend(world.legs(at, q));
-                    at = q;
-                }
-                t.extend(world.legs(at, p));
+        let mut way: Vec<Vec2> = round
+            .map(|w| w.into_iter().skip(1).map(Vec2::from).collect())
+            .unwrap_or_default();
+        way.push(p);
+        // The grid's cells are too coarse to see a short bank: its way can
+        // still go up one (the radio mast's, again). Round each that's left.
+        for q in way {
+            for r in round_banks(&world.zone, at, q, 3) {
+                t.extend(world.legs(at, r));
+                at = r;
             }
-            None => t.extend(world.legs(at, p)),
         }
         at = p;
     }
     t
+}
+
+/// `a`..`b` round any bank too steep to walk up on it (`steep_run`): by a
+/// point off to one side of its middle, the nearest that clears it both
+/// ways, as far as `depth` deep. The points after `a`, to `b`.
+fn round_banks(zone: &crate::world::Zone, a: Vec2, b: Vec2, depth: u32) -> Vec<Vec2> {
+    if depth == 0 || steep_run(zone, a, b) <= STEEP_RUN {
+        return vec![b];
+    }
+    let mid = (a + b) * 0.5;
+    let side = (b - a).perp().normalize_or(Vec2::X);
+    let clear = |m: Vec2| steep_run(zone, a, m) <= STEEP_RUN && steep_run(zone, m, b) <= STEEP_RUN;
+    let off = [4.0f32, 8.0, 12.0, 18.0, 25.0, 35.0]
+        .into_iter()
+        .flat_map(|d| [mid + side * d, mid - side * d])
+        .find(|m| clear(*m))
+        .unwrap_or(mid + side * 12.0);
+    let mut out = round_banks(zone, a, off, depth - 1);
+    out.extend(round_banks(zone, off, b, depth - 1));
+    out
 }
 
 /// What the newcomer carries that `want` stands for: in a hand, a pocket
@@ -3101,7 +3123,8 @@ the Hollow.";
 #[cfg(test)]
 mod indoor_tests {
     use super::{
-        STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, shot_warns, solid, steep_run,
+        STEEP_RUN, Stop, indoor_stops, round_banks, round_boxes, segment_hits_box, shot_warns,
+        solid, steep_run,
     };
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
@@ -3238,6 +3261,16 @@ mod indoor_tests {
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
         assert!(road <= STEEP_RUN, "the way from the drop: {road} m steep");
+        // Straight over the bank (as the grid's way went), it's rounded:
+        // no stretch of the way left steep.
+        let (a, b) = (Vec2::new(-36.47, -41.82), Vec2::new(-45.56, -53.54));
+        assert!(steep_run(zone, a, b) > STEEP_RUN, "the bank's on that line");
+        let mut at = a;
+        for p in round_banks(zone, a, b, 3) {
+            let s = steep_run(zone, at, p);
+            assert!(s <= STEEP_RUN, "{at} -> {p}: {s} m steep");
+            at = p;
+        }
     }
 
     /// A machine's rounds warn of later hits only: the first round that
