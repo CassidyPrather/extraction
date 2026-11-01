@@ -18,7 +18,8 @@
 //! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
 //! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
 //! `knockdown` (a heavy round into a walker's
-//! side: down, and up again), `strikes` (four walkers at 15 m shot in the
+//! side: down, and up again), `broken` (a walker standing, its gun shot
+//! dead and a leg at 5%: harmless at a glance), `strikes` (four walkers at 15 m shot in the
 //! front plate, the core, the eye and a knee: a shrug, a wound and two
 //! hits that tell, `damage::strike`), `wall` (a walker along a wall nearer
 //! than its legs reach: its feet come down short of it), `rubble` (a walker over a heap of broken
@@ -296,7 +297,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" => {
+            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" | "broken" => {
                 let at = eye
                     + flat
                         * match what {
@@ -582,7 +583,9 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" => vec![],
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "broken" => {
+                    vec![]
+                }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
                 "hound" => vec![p(eye + flat * 6.0 + right * 14.0)],
                 "damaged" => vec![p(eye + flat * 5.0 + right * 3.0)],
@@ -595,6 +598,7 @@ fn reel(
         for (e, mut p, gt) in &mut parts {
             let shot_off = match what {
                 "crawl" => matches!(p.role, PartRole::Leg(0) | PartRole::Leg(1)),
+                "broken" => matches!(p.role, PartRole::Leg(1) | PartRole::Weapon),
                 _ => p.role == PartRole::Leg(1),
             };
             if p.robot != subject || !shot_off {
@@ -612,6 +616,17 @@ fn reel(
                     });
                 }
                 "hurt" => p.hp = p.max_hp * 0.2,
+                // Models' broken walker: its gun dead, a leg at 5%.
+                "broken" if role == PartRole::Weapon => {
+                    p.hp = 0.0;
+                    destroyed.write(PartDestroyed {
+                        robot: subject,
+                        part: e,
+                        role,
+                        at: gt.translation(),
+                    });
+                }
+                "broken" => p.hp = p.max_hp * 0.05,
                 _ => {}
             }
         }
