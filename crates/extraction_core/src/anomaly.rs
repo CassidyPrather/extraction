@@ -491,6 +491,10 @@ pub fn aegis_shock_in(roll: f32) -> f32 {
     8.0 + 7.0 * roll
 }
 
+/// Seconds a wet aegis fizzes before each shock: a hiss and a tremor in
+/// both hands, so the shock is never the first you know of it.
+pub const AEGIS_TELL: f32 = 0.8;
+
 /// Health a wet aegis's shock takes.
 pub const AEGIS_SHOCK: f32 = 5.0;
 /// A wet aegis's shocks don't take you below this: they still hurt, crack

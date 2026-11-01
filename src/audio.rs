@@ -3205,6 +3205,17 @@ fn anomaly_voices(
                 0.0,
                 0.1,
             ),
+            Bite::Fizz => play_at_speed(
+                &mut commands,
+                &bank,
+                &mut rng.0,
+                "device/crackle",
+                Some(b.at),
+                "bite.fizz",
+                0.0,
+                0.7,
+                0.1,
+            ),
             Bite::Glint => play_at_speed(
                 &mut commands,
                 &bank,

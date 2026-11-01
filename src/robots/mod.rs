@@ -122,6 +122,8 @@ mod tells_tests {
             // Not a machine's, but the same rule: the cage's bell, then the
             // wait before it comes down on whoever's under it (Underground's).
             ("cage bell's wait", crate::world::cage::BELL_WAIT),
+            // And an artifact's: the wet aegis fizzes before it shocks.
+            ("aegis fizz", extraction_core::anomaly::AEGIS_TELL),
         ];
         let short: Vec<_> = tells
             .iter()
