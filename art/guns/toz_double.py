@@ -1,4 +1,4 @@
-"""TOZ side-by-side double-barrel 12 gauge, boxlock, double triggers.
+"""IZh-43 side-by-side double-barrel 12 gauge, boxlock, double triggers.
 Writes assets/models/guns/toz_double.glb.
 
 Gun space as in src/weapons/layout.rs (`toz()`): origin at the palm on the
@@ -19,7 +19,10 @@ main_guard()
 
 HINGE = (0.0, 0.012, -0.11)
 BX, BY = 0.0128, 0.035
-BREECH, MUZZLE = -0.1165, -0.82
+# 722 mm barrels (the IZh-43's 720-725), a 362 mm (14.25 in) length of
+# pull: `docs/craft/guns/toz_double/README.md`.
+BREECH, MUZZLE = -0.1165, -0.8385
+BUTT_K = 0.736  # the butt behind z 0.14 drawn this much shorter: 58 mm off the pull
 
 # --- Barrels (tip at the hinge) -----------------------------------------------------
 bar = Part("barrels", origin=HINGE)
@@ -141,17 +144,22 @@ act.sweep(catmull([(-0.033, -0.017), (-0.0345, -0.025), (-0.032, -0.032), (-0.02
                   closed=False), section_rect(0.0045, 0.003, 0.0011), "Blued")
 
 # --- Stock --------------------------------------------------------------------------------
+def bz(z):
+    """z on the shortened butt."""
+    return z if z <= 0.14 else 0.14 + (z - 0.14) * BUTT_K
+
+
 stock_prof = [
-    (-0.029, 0.0385), (0.025, 0.0265), (0.06, 0.0215), (0.14, 0.019), (0.36, 0.006),
-    (0.36, -0.118),
-    (0.27, -0.098), (0.14, -0.066), (0.085, -0.058), (0.062, -0.054),   # semi-pistol grip
+    (-0.029, 0.0385), (0.025, 0.0265), (0.06, 0.0215), (0.14, 0.019), (bz(0.36), 0.006),
+    (bz(0.36), -0.118),
+    (bz(0.27), -0.098), (0.14, -0.066), (0.085, -0.058), (0.062, -0.054),   # semi-pistol grip
     (0.035, -0.032), (0.0, -0.024), (-0.029, -0.0155), (-0.046, -0.010), (-0.046, 0.036),
 ]
 stock_prof = fillet(stock_prof, [0.002, 0.012, 0.02, 0.02, 0.005, 0.005, 0.05, 0.03, 0.01, 0.008,
                                  0.012, 0.008, 0.002, 0.0, 0.0], 4)
 # The head of the stock runs on into the action, flush with its sides.
 WIDTH = [(-0.046, 0.0222), (-0.03, 0.0215), (0.0, 0.0166), (0.05, 0.0172), (0.13, 0.0205),
-         (0.37, 0.0215)]
+         (bz(0.37), 0.0215)]
 
 
 def lerp_table(t, table):
@@ -178,22 +186,23 @@ def stock_piece(name, lo, hi):
     # Rounded all over, oval through the wrist, the comb a little narrower
     # than the belly; the butt end square to the bore under its pad.
     piece = Part(name)
-    piece.stock(stock_prof, -0.0455, 0.3595, "Wood",
+    piece.stock(stock_prof, -0.0455, bz(0.3595), "Wood",
                 lambda z, yc, h: (lerp_table(z, WIDTH), lerp_table(z, WIDTH) * 0.82),
                 stations=56, power=2.4)
     if lo is None:
         # (The checkering is all on the wrist.)
         piece.cut(sc)
     # Rubber butt pad.
-    pad = fillet([(0.357, 0.0075), (0.372, 0.0055), (0.376, -0.120), (0.357, -0.1205)],
+    pad = fillet([(bz(0.357), 0.0075), (bz(0.357) + 0.015, 0.0055), (bz(0.357) + 0.019, -0.120),
+                  (bz(0.357), -0.1205)],
                  [0.0032, 0.004, 0.004, 0.0032], 3)
     piece.prism(pad, -0.0215, 0.0215, "Black", axis="x", bevel=0.003, segs=2)
     # Rear sling swivel under the butt.
-    loop = [(0.25 + 0.009 * math.cos(a), -0.104 + 0.009 * math.sin(a))
+    loop = [(bz(0.25) + 0.009 * math.cos(a), -0.104 + 0.009 * math.sin(a))
             for a in [math.pi + math.pi * i / 8 for i in range(9)]]
     piece.sweep(loop, section_rect(0.0025, 0.0025, 0.0007), "Steel", xf=RX(0.0))
-    piece.box((0.006, 0.006, 0.02), (0.0, -0.097, 0.25), "Steel", bevel=0.0015,
-              xf=RX(math.atan2(0.032, 0.13), about=(0, -0.097, 0.25)))
+    piece.box((0.006, 0.006, 0.02), (0.0, -0.097, bz(0.25)), "Steel", bevel=0.0015,
+              xf=RX(math.atan2(0.032, 0.13), about=(0, -0.097, bz(0.25))))
     side = Part("cut")
     if lo is not None:
         side.box((0.2, 0.4, 1.0), (0.0, 0.0, lo - 0.5), "Wood")
@@ -225,13 +234,13 @@ join("static_butt", stock_butt)
 join("barrels", bar, fe_check)
 make(trig)
 
-empty("pt_muzzle", (0.0, 0.035, -0.82))
+empty("pt_muzzle", (0.0, 0.035, MUZZLE))
 empty("pt_sight", (0.0, 0.0534, -0.05))
 empty("pt_hinge", HINGE)
 
 # Where a sling attaches: the swivels under the barrels' rib and the butt.
 empty("pt_sling_front", (0.0, 0.006, -0.62))
-empty("pt_sling_rear", (0.0, -0.111, 0.25))
+empty("pt_sling_rear", (0.0, -0.111, bz(0.25)))
 report()
 export("assets/models/guns/toz_double.glb")
 export_part("static_butt", "assets/models/items/stock_toz_double.glb")
