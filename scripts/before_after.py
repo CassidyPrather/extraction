@@ -25,7 +25,10 @@ a picture taken elsewhere in that half, for a fix the rig can't stage;
 say so in what to look for. `--crop x0,y0,x1,y1` (pixels) crops both
 halves on the sheet, for something small in frame; the game never sees
 it. Shots are kept in target/before_after/<sha>/ and taken again only
-when their arguments change. `--try BINARY` shoots the list with your
+when their arguments change. The same commit as both `before` and
+`after` is an A/B on a switch: give the before its own arguments (an
+environment word, `EXTRACTION_FLAT_AMBIENT=1`) in the fifth field.
+`--try BINARY` shoots the list with your
 own build only, into target/before_after/try/, to stage a line.
 
 `--dolly X,Y,Z,YAW,PITCH:X,Y,Z[:SECONDS[:FPS]]` in place of `--camera`
@@ -412,9 +415,13 @@ def main():
         subprocess.run(["git", "fetch", "-q", "origin", ref_a[len("origin/"):]], cwd=ROOT)
     before, after = sha8(ref_b), sha8(ref_a)
     bins = {before: build(before), after: build(after)}
-    jobs = [(sha, s, s.before_args if sha == before else s.args) for s in shots for sha in (before, after)]
+    # The same build both sides (an A/B on a switch in the before's
+    # arguments): each side's shots in a folder of its own.
+    side = (lambda sha, k: f"{sha}-{k}") if before == after else (lambda sha, k: sha)
+    jobs = [(sha, side(sha, k), s, s.before_args if k == "before" else s.args)
+            for s in shots for sha, k in ((before, "before"), (after, "after"))]
     with concurrent.futures.ThreadPoolExecutor(max(1, o.jobs)) as pool:
-        done = list(pool.map(lambda j: shoot(bins[j[0]], j[0], j[1], j[2], settings["size"]), jobs))
+        done = list(pool.map(lambda j: shoot(bins[j[0]], j[1], j[2], j[3], settings["size"]), jobs))
     rows = [(s, done[2 * i], done[2 * i + 1]) for i, s in enumerate(shots)]
     for s, b, a in rows:
         state = "ok" if b[0] and a[0] else "MISSING"
