@@ -27,7 +27,8 @@
 //! than its legs reach: its feet come down short of it), `rubble` (a walker over a heap of broken
 //! blocks), `crawler` (a crawler across), `eyes` (calm, suspicious and seeing walkers and a drone, for judging eyes
 //! and lights at `--hour dusk` or `night`), `eyesfar` (calm walkers at
-//! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `zap` (a crawler charging and
+//! 30, 60 and 80 m and an alert one, for eyes at range after dark), `shot` (rounds into a walker: the marks they leave), `chirp` (a sentry 7 m off, facing you, chirping: its lens through the
+//! chirp, frame by frame), `zap` (a crawler charging and
 //! zapping past you), `drone` (a drone circling in front of you), `wreck`/`dronewreck` (killed
 //! in view, then left to settle).
 
@@ -122,6 +123,7 @@ fn reel(
     mut levels: Query<(&EyeLevel, &mut super::Awareness)>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     cases: Query<&TellCase>,
+    mut sentry_acts: MessageWriter<super::sentry::SentryEvent>,
 ) {
     let (Some(spec), Some((cam, yaw, pitch)), Some(zone), Some(out)) =
         (&opts.gallery, opts.camera, zone, &opts.screenshot)
@@ -472,6 +474,22 @@ fn reel(
                 commands.entity(w).remove::<Senses>().remove::<Brain>();
                 w
             }
+            "chirp" => {
+                // A sentry 7 m off, facing you, its chirp set off by the
+                // reel (below) so the frames run through it: the lens's
+                // tell (`sentry_look::chirp_gain`).
+                let at = eye + flat * 7.0;
+                let toward = extraction_core::sentry::bearing([at.x, at.z], [eye.x, eye.z]);
+                let power = Vec2::new(at.x, at.z) + Vec2::new(right.x, right.z) * 6.0;
+                super::sentry::spawn_sentry(
+                    &mut commands,
+                    &zone,
+                    Vec2::new(at.x, at.z),
+                    toward,
+                    0.0,
+                    power,
+                )
+            }
             "scan" => {
                 // A walker 6 m off that notices a device in front of you
                 // (devices::DeviceNoticed): its scan beam, red, then
@@ -528,6 +546,10 @@ fn reel(
         };
         // Deaf and blind: it's here to be looked at, not to hunt.
         commands.entity(e).remove::<Senses>();
+        if what == "chirp" {
+            state.subject = Some(e);
+            return;
+        }
         if what.starts_with("drone") {
             // No brain: the reel flies it (below).
             commands.entity(e).remove::<Brain>();
@@ -927,6 +949,13 @@ fn reel(
                 });
             }
         }
+    }
+    if what == "chirp" && frame == WARMUP + 1 {
+        sentry_acts.write(super::sentry::SentryEvent {
+            sentry: subject,
+            at: eye + flat * 7.0,
+            what: super::sentry::SentryAct::Chirp,
+        });
     }
     if frame < WARMUP || (frame - WARMUP) % state.every != 0 || state.taken >= state.shots {
         return;
