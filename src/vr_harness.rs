@@ -300,9 +300,9 @@ mod tests {
     /// sleeps only when all of it does, and a kinematic body (the parked
     /// truck) links every body touching it into one: the hands' bodies,
     /// never still, on the truck's side kept the pile on its bed awake
-    /// (Performance's `perf::tests::gauge_items_fall_asleep`).
+    /// (Performance's `perf::tests::gauge_items_fall_asleep`). Parked, the
+    /// truck is static (`raid::truck::park_truck`).
     #[test]
-    #[ignore = "a parked truck (kinematic) joins every body touching it into one contact island, so the always-moving hand bodies keep its bed's pile awake; the fix is for the coordinator to place"]
     fn a_pile_of_kit_falls_asleep() {
         use avian3d::prelude::Sleeping;
         let mut vr = Vr::new("training_yard");
@@ -339,6 +339,74 @@ mod tests {
             .map(|(id, _)| *id)
             .collect();
         assert!(awake.is_empty(), "awake after 10 s at rest: {awake:?}");
+    }
+
+    /// What's left lying in the bed goes where the truck goes: out to the
+    /// rendezvous and home again, settled on the boards, none of it left
+    /// hanging where the truck was or dropped through the floor as it
+    /// parks (`raid::truck::park_truck`).
+    #[test]
+    fn the_truck_carries_whats_in_its_bed() {
+        use crate::raid::truck::{FLOOR, Truck, UNSEEN_FOR};
+        use crate::raid::{Phase, Raid, TRUCK_WAIT};
+        let mut vr = Vr::new("marrow_creek");
+        let truck_at = |vr: &mut Vr| {
+            let mut q = vr
+                .app
+                .world_mut()
+                .query_filtered::<&GlobalTransform, With<Truck>>();
+            *q.iter(vr.app.world()).next().unwrap()
+        };
+        let base = truck_at(&mut vr);
+        let mut kit = Vec::new();
+        for (k, id) in ["ak_mag", "radio", "canned_stew"].iter().enumerate() {
+            let at = base.transform_point(Vec3::new(-0.5 + 0.5 * k as f32, FLOOR + 0.2, -1.0));
+            kit.push((*id, vr.spawn(id, Transform::from_translation(at))));
+        }
+        vr.step(120);
+        // Out, away from the bed and looking elsewhere.
+        let zone = vr.app.world().resource::<crate::world::Zone>().clone();
+        let away = zone.on_ground(base.translation().x + 30.0, base.translation().z + 30.0);
+        vr.stand(away, 0.0);
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Out;
+        vr.step(2);
+        let check = |vr: &mut Vr, leg: &str| {
+            let gt = truck_at(vr);
+            let mut q = vr.app.world_mut().query::<(&Truck, &GlobalTransform)>();
+            let (truck, tgt) = q.iter(vr.app.world()).next().unwrap();
+            let truck_floor = tgt.translation().y + FLOOR - 0.05;
+            for (id, e) in &kit {
+                let p = vr
+                    .app
+                    .world()
+                    .get::<GlobalTransform>(*e)
+                    .unwrap()
+                    .translation();
+                assert!(
+                    truck.in_bed(&gt, p) && p.y > truck_floor,
+                    "{leg}: the {id} is at {p:.2}, the truck at {:.2}",
+                    gt.translation()
+                );
+            }
+        };
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::TruckWaiting {
+            rv: 0,
+            left: TRUCK_WAIT - UNSEEN_FOR - 2.0,
+        };
+        vr.step(2);
+        let rv = truck_at(&mut vr);
+        assert!(
+            rv.translation().distance(base.translation()) > 20.0,
+            "the truck went out"
+        );
+        check(&mut vr, "pulled in");
+        vr.step(180);
+        check(&mut vr, "parked at the rendezvous");
+        vr.app.world_mut().resource_mut::<Raid>().phase = Phase::Extracting { left: 0.0 };
+        vr.step(2);
+        check(&mut vr, "home");
+        vr.step(180);
+        check(&mut vr, "parked at home");
     }
 
     use super::*;
