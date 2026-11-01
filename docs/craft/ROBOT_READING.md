@@ -135,3 +135,16 @@ the same cameras on Robot bodies' fix (f539576b, on main 87afa914).
   from its shape, as the rule asks.
 - **The failing leg** still holds its foot clear.
 - **The smoke** is Weapon feel's soft puff now, not grey discs.
+
+### The lamps through fog (1 November)
+
+`docs/shots/robots/family_fog_{colour,grey}_lamps.jpg`, the family's
+cameras on main 1123f737 (Robot bodies' eyes and marks: unfogged, and no
+longer culled by the render budget's size fade).
+
+- **60 m**: the walker's and grappler's orange knee marks, the walker's
+  red eye when it faces you (none facing away), the heavy's eye lamps,
+  the hound's marks low on the grass and the sentry's teal lamp all
+  read, where the 60 m family was grey shapes before.
+- **30 m**: the same, sharper; facing still reads from the walker's brow
+  and eye.
