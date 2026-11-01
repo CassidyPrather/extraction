@@ -5725,6 +5725,14 @@ pub fn swing_doors(
         }
     }
     for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+        // A leaf turns about its hinge and never leaves it. (Kinematic, it
+        // crept off it a millimetre or so a second, round to the middle of
+        // its doorway, and stood open across half of it: Kettle's mine,
+        // pulled-in map, raiders jammed against it for ten minutes, Robot
+        // minds' sims, 1 November.)
+        if t.translation != leaf.0.hinge {
+            t.translation = leaf.0.hinge;
+        }
         if held {
             continue;
         }
