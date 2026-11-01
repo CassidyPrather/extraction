@@ -17,7 +17,7 @@ post office), ledger_open (the mine office).
 
 Materials: Canvas, Leather, Wool, Ticking, Enamel, Brass, Paper, Cream,
 Glass, Iron, Rusty, Timber, Planks, Char, Red, Olive, Black, Rope, Steel,
-Yellow, Blue, Plaster.
+Yellow, Blue, Plaster, DarkWool, RagRed, RagBlue, Russet, Pale.
 """
 
 import math
@@ -295,7 +295,9 @@ def rug():
     # Stripes of torn rag woven across, each its own width and a little
     # thicker or thinner (braided, not cut from one sheet), their edges
     # softened; a knotted fringe at both ends.
-    mats = ("Red", "Cream", "Olive", "Wool", "Blue", "Cream", "Red", "Olive", "Red")
+    # Rag in faded dyes and undyed cloth; the print colours read as a flag.
+    mats = ("RagRed", "Ticking", "Canvas", "DarkWool", "RagBlue", "Ticking", "RagRed", "Wool",
+            "RagRed")
     ws = [1.0 + w.j(0.35) for _ in mats]
     total = sum(ws)
     x = -0.7
@@ -309,9 +311,9 @@ def rug():
         for k in range(18):
             z = -0.425 + k * 0.05 + w.j(0.006)
             L = 0.05 + w.j(0.012)
-            p.box((L, 0.004, 0.012), (sx * (0.7 + L / 2 - 0.003), 0.002, z), "Cream",
+            p.box((L, 0.004, 0.012), (sx * (0.7 + L / 2 - 0.003), 0.002, z), "Ticking",
                   xf=T(sx * 0.7, 0, z) @ RY(w.j(0.25)) @ T(-sx * 0.7, 0, -z))
-    p.box((0.22, 0.008, 0.3), (0.62, 0.03, 0.33), "Red",
+    p.box((0.22, 0.008, 0.3), (0.62, 0.03, 0.33), "RagRed",
           xf=T(0.6, 0.0, 0.33) @ RZ(0.35) @ T(-0.6, 0.0, -0.33))
     return [p]
 

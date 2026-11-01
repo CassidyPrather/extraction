@@ -561,8 +561,12 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// When machines after it fired at it, the last half minute.
+    shots: Vec<f32>,
     /// Racked at the driver's "one up the spout".
     racked: bool,
+    /// The broken walker wrecked (job 2's first fight, won).
+    broke_it: bool,
     /// A machine has noticed it this raid (and whether a round was up).
     noticed: bool,
 }
@@ -786,6 +790,11 @@ pub(super) fn direct_raid(
         again.push(First::Sentry);
     }
     let noticed_now = tells.noticed.read().any(|ev| on_me(ev.robot));
+    // The first fight it can win: the broken walker wrecked.
+    if !state.broke_it && world.broken.iter().any(|r| r.wrecked) {
+        state.broke_it = true;
+        state.note(now, Kind::Learned, "wrecked the broken walker");
+    }
     // "One up the spout": out, racked, back in the holster (the safety
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
@@ -829,14 +838,14 @@ pub(super) fn direct_raid(
     let wound = tells.harpoons.read().any(|ev| ev.to == player);
     // A machine still firing at it, hit or miss: one fight, heard all
     // through (a drone's bursts 1.8 s apart never let it re-lock).
+    // (Not the round that hits: only those before it, `shot_warns`.)
     let fired_on = tells.shots.read().any(|s| s.shooter.is_some_and(on_me));
-    if coiled || charged || raised || wound || noticed_now || fired_on {
+    if coiled || charged || raised || wound || noticed_now {
         state.said_at = now;
     }
     if fired_on {
-        if let Some(f) = fight.as_mut() {
-            f.last_any = Some(now);
-        }
+        state.shots.retain(|t| now - t < 30.0);
+        state.shots.push(now);
     }
     again.retain(|f| !firsts.contains(f));
     again.truncate(1);
@@ -863,6 +872,33 @@ pub(super) fn direct_raid(
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Its eye's still good: shoot that": the one to take on (bar
+            // the lost one, who goes anywhere but at it).
+            First::BrokenNoticed if !p.lost => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "a broken walker: took it on, as the driver said",
+                );
+                take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                )
+            }
+            // "Keep your distance": back off it, and at it again.
+            First::Shoved if !p.lost => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y);
+                let away = (here - from).normalize_or(Vec2::Y);
+                let mut t = vec![Task::WalkTo {
+                    to: here + away * 4.0,
+                    within: 1.0,
+                }];
+                t.extend(take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                ));
+                t
+            }
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
             // "Down, out of its sweep": low, and away from it (a sentry
@@ -951,8 +987,11 @@ pub(super) fn direct_raid(
             // the same fight still going (hit again within 15 s of a warned
             // hit: a drone that locked on keeps at it without locking again).
             let warned = match fight.as_ref().filter(|f| f.machine.is_some()) {
-                Some(f) => f.last_tell().is_some_and(|t| now - t < 15.0),
-                None => now - state.said_at < 30.0,
+                Some(f) => {
+                    f.last_tell().is_some_and(|t| now - t < 15.0)
+                        || shot_warns(&state.shots, now, 15.0)
+                }
+                None => now - state.said_at < 30.0 || shot_warns(&state.shots, now, 30.0),
             } || now < state.warned_fight_until;
             if warned {
                 state.warned_fight_until = now + 15.0;
@@ -2285,6 +2324,20 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
     best
 }
 
+/// A round in flight is this long at most (s): a shot this recent may be
+/// the one that hit, and warns of nothing.
+const SHOT_LEAD: f32 = 0.6;
+
+/// Whether rounds fired at it warn of a hit `now`: one fired at least
+/// `SHOT_LEAD` before (heard, the crack and the tracer), within `window`.
+/// The round that lands first, with no tell before it, isn't warned by
+/// itself.
+fn shot_warns(shots: &[f32], now: f32, window: f32) -> bool {
+    shots
+        .iter()
+        .any(|t| now - t >= SHOT_LEAD && now - t < window)
+}
+
 /// What readies `f` to fire: a reload when it has no magazine or none
 /// left in it, a rack when nothing's chambered, the selector when it's on
 /// safe.
@@ -2900,7 +2953,10 @@ pub(super) fn first_fight(
     let from = fight.machine.as_ref().map_or(here, |(_, at)| *at);
     let away = (here - from).normalize_or(Vec2::Y);
     let hush = what.contains("hush");
-    let answer: Vec<Task> = if p.reckless && !hush {
+    // The broken walker is the one the driver says to take on (bar the
+    // lost one).
+    let broken = kind == "broken" && !p.lost;
+    let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
     } else if p.lost {
         // Off, anywhere.
@@ -3044,7 +3100,9 @@ the Hollow.";
 
 #[cfg(test)]
 mod indoor_tests {
-    use super::{STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, solid, steep_run};
+    use super::{
+        STEEP_RUN, Stop, indoor_stops, round_boxes, segment_hits_box, shot_warns, solid, steep_run,
+    };
     use bevy::ecs::system::SystemState;
     use bevy::prelude::*;
 
@@ -3180,5 +3238,20 @@ mod indoor_tests {
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
         assert!(road <= STEEP_RUN, "the way from the drop: {road} m steep");
+    }
+
+    /// A machine's rounds warn of later hits only: the first round that
+    /// lands, with nothing before it, is unwarned; once it's firing (a
+    /// burst 1.8 s back), the next hit is warned.
+    #[test]
+    fn a_shot_warns_only_of_hits_after_it() {
+        // The first round, fired now (or a moment ago) and hitting now.
+        assert!(!shot_warns(&[100.0], 100.0, 30.0));
+        assert!(!shot_warns(&[99.7], 100.0, 30.0));
+        // Fired 1.8 s before this hit: heard first.
+        assert!(shot_warns(&[98.2, 100.0], 100.0, 30.0));
+        // Long ago: no longer the same fight.
+        assert!(!shot_warns(&[60.0], 100.0, 30.0));
+        assert!(!shot_warns(&[], 100.0, 30.0));
     }
 }

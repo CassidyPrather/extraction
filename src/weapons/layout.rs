@@ -528,7 +528,9 @@ fn nagant() -> GunLayout {
     let bore = 0.074;
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
-        grip: Transform::IDENTITY,
+        // The palm on the grip, which sits back behind the hammer
+        // (art/guns/nagant.py): it was under the hammer, a long pole.
+        grip: Transform::from_xyz(0.0, 0.0, 0.035),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -540,11 +542,11 @@ fn nagant() -> GunLayout {
         hinge: Vec3::ZERO,
         parts: vec![
             // Frame and grip.
-            part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
-            // The grip, raked back below the palm (the model's `RAKE`).
+            part(bx(0.022, 0.06, 0.11), at(0.0, 0.055, -0.02), Blued, Static),
+            // The grip, set back behind the hammer and raked.
             part(
-                bx(0.026, 0.085, 0.032),
-                Transform::from_xyz(0.0, -0.04, 0.022).with_rotation(Quat::from_rotation_x(-0.4)),
+                bx(0.027, 0.077, 0.034),
+                Transform::from_xyz(0.0, -0.004, 0.038).with_rotation(Quat::from_rotation_x(-0.22)),
                 Wood,
                 Static,
             ),
@@ -562,8 +564,8 @@ fn nagant() -> GunLayout {
                 Static,
             ),
             part(
-                bx(0.004, 0.02, 0.005),
-                at(0.0, -0.005, -0.024),
+                bx(0.004, 0.024, 0.005),
+                at(0.0, 0.016, -0.04),
                 Black,
                 Trigger,
             ),
@@ -705,7 +707,7 @@ fn svd() -> GunLayout {
         port: Vec3::new(0.0175, 0.0705, -0.148),
         eject: Vec3::new(1.0, 0.4, 0.1),
         sight: at(0.0, 0.1071, 0.0),
-        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.124)),
+        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.185)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
             grab: Vec3::new(0.047, 0.0645, -0.2),
@@ -730,7 +732,7 @@ fn svd() -> GunLayout {
                 Black,
                 Trigger,
             ),
-            part(bx(0.05, 0.05, 0.23), at(0.0, 0.055, -0.405), Wood, Static),
+            part(bx(0.05, 0.05, 0.275), at(0.0, 0.055, -0.425), Wood, Static),
             part(
                 Shape::Cylinder(0.01, 0.44),
                 at(0.0, bore, -0.735),
