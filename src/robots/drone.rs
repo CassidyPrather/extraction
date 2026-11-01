@@ -892,33 +892,29 @@ mod tests {
     /// (first_jobs_cautious, seed 1).
     #[test]
     fn no_drone_fires_at_someone_under_a_roof() {
-        for k in 0..8 {
-            let (mut app, player, drone, _) = drone_on_you();
-            let zone = app.world().resource::<crate::world::Zone>().clone();
-            // Onboarding's (-19.4, 35.3) on Marrow Creek, from its post office
-            // at (-22.2, 33.5); the test field has it at (-20, 65), turned the same.
-            // On its floor (a step above the ground outside).
-            let me = zone.on_ground(-17.2, 66.8) + Vec3::Y * 0.65;
+        // Onboarding's (-19.4, 35.3) on Marrow Creek, from its post office at
+        // (-22.2, 33.5); the test field has it at (-20, 65), turned the same.
+        // On its floor (a step above the ground outside). And the control:
+        // in the open 12 m east of its door, where the same drone does fire
+        // (else this would pass on a drone that never fires at all).
+        let spot = |zone: &crate::world::Zone| zone.on_ground(-17.2, 66.8) + Vec3::Y * 0.65;
+        let open = |zone: &crate::world::Zone| zone.on_ground(-5.0, 66.8);
+        let fight = |k: usize, indoors: bool| {
+            let ang = k as f32 * std::f32::consts::TAU / 8.0;
+            let (mut app, player, _drone, me) = drone_over(|zone| {
+                let me = if indoors { spot(zone) } else { open(zone) };
+                (me, me + Vec3::new(ang.sin() * 15.0, 6.0, ang.cos() * 15.0))
+            });
             for _ in 0..30 {
                 app.update();
             }
-            assert!(
-                under_a_roof(app.world().resource::<super::super::doors::Entrances>(), me),
-                "the spot isn't in the post office: {me}"
-            );
-            let ang = k as f32 * std::f32::consts::TAU / 8.0;
-            app.world_mut()
-                .get_mut::<Transform>(drone)
-                .unwrap()
-                .translation = me + Vec3::new(ang.sin() * 20.0, 8.0, ang.cos() * 20.0);
-            for i in 0..90 * 40 {
-                if i % 90 == 0 {
-                    let mut a = app.world_mut().get_mut::<Awareness>(drone).unwrap();
-                    a.target = Some(player);
-                    a.last_known = Some(me);
-                    a.suspicion = 1.0;
-                    *app.world_mut().get_mut::<Brain>(drone).unwrap() = Brain::Engage;
-                }
+            if indoors {
+                assert!(
+                    under_a_roof(app.world().resource::<super::super::doors::Entrances>(), me),
+                    "the spot isn't in the post office: {me}"
+                );
+            }
+            for _ in 0..90 * 40 {
                 app.world_mut()
                     .get_mut::<Transform>(player)
                     .unwrap()
@@ -932,13 +928,16 @@ mod tests {
                 app.update();
             }
             let f = app.world().resource::<Fight>();
-            assert!(
-                f.locks.is_empty() && f.shots.is_empty(),
-                "from bearing {k}: {} locks, {} shots",
-                f.locks.len(),
-                f.shots.len()
-            );
-        }
+            (f.locks.len(), f.shots.len())
+        };
+        let (_, shots) = fight(0, false);
+        assert!(shots > 0, "the control: no shots at someone in the open");
+        let fired: Vec<String> = (0..8)
+            .map(|k| (k, fight(k, true)))
+            .filter(|(_, (l, s))| *l > 0 || *s > 0)
+            .map(|(k, (l, s))| format!("bearing {k}: {l} locks, {s} shots"))
+            .collect();
+        assert!(fired.is_empty(), "under the post office roof: {fired:?}");
     }
 
     /// Its first burst after every lock warns and hurts no one: standing
@@ -995,6 +994,16 @@ mod tests {
     /// A drone over the test field with you walking under it; your
     /// health kept up (a fight, not a death, is what's tested).
     fn drone_on_you() -> (App, Entity, Entity, Vec3) {
+        drone_over(|zone| {
+            let at = zone.on_ground(40.0, 255.0);
+            (at, at + Vec3::new(0.0, 6.0, -15.0))
+        })
+    }
+
+    /// The same, with you at and its job's site where `place` says.
+    fn drone_over(
+        place: impl Fn(&crate::world::Zone) -> (Vec3, Vec3),
+    ) -> (App, Entity, Entity, Vec3) {
         let opts = crate::LaunchOptions {
             robots: false,
             ..Default::default()
@@ -1011,8 +1020,7 @@ mod tests {
             .iter(app.world())
             .next()
             .unwrap();
-        let at = zone.on_ground(40.0, 255.0);
-        let site = at + Vec3::new(0.0, 6.0, -15.0);
+        let (at, site) = place(&zone);
         let mut queue = bevy::ecs::world::CommandQueue::default();
         let drone = {
             let mut c = Commands::new(&mut queue, app.world());
