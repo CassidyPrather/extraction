@@ -5468,22 +5468,53 @@ fn boxcar(b: &mut Builder) {
     b.crate_box(Vec3::new(-0.6, f + 0.06, -3.0), 0.7, Some("food_common"));
 }
 
+/// Each felled trunk of a log pile: (x, y of its axis, mean radius,
+/// length, middle along z, yaw). Bottom-up four, three, two, one, thick
+/// butts low and thin tops high, each resting on the two under it. Its
+/// look is `log_stack` (`art/props/yards.py`, the same table): tapered,
+/// sawn ends pale in a ring of bark, stakes at the bottom row.
+const LOG_STACK: [(f32, f32, f32, f32, f32, f32); 10] = [
+    (-0.785, 0.26, 0.26, 6.7, 0.05, 0.0),
+    (-0.275, 0.24, 0.24, 5.6, -0.6, 0.02),
+    (0.255, 0.28, 0.28, 6.4, 0.25, -0.015),
+    (0.795, 0.25, 0.25, 4.8, 1.0, 0.025),
+    (-0.497, 0.631, 0.21, 6.1, -0.25, -0.02),
+    (-0.071, 0.619, 0.19, 5.2, 0.8, 0.015),
+    (0.574, 0.665, 0.22, 4.3, -0.9, 0.03),
+    (-0.258, 0.926, 0.17, 5.8, 0.3, -0.025),
+    (0.223, 0.809, 0.16, 4.6, -1.0, 0.02),
+    (0.027, 1.023, 0.13, 5.0, 0.5, -0.03),
+];
+
+/// A log pile's stakes (x, z), each against its outer log near an end of
+/// it (the right one is short): `art/props/yards.py`'s `LOG_STAKES`.
+const LOG_STAKES: [(f32, f32); 4] = [(-1.12, -2.4), (-1.12, 2.4), (1.06, -1.0), (1.11, 2.4)];
+
+/// Felled trunks stacked to season by a road. Within its footprint (2.5 x
+/// 1.6 x 7.0, `extraction_core::map`). Ten even 7 m tubes read as a
+/// blockout at arm's length, and logs all one length and girth as long
+/// pipes at 5 m (`docs/craft/PROP_READING.md`).
 fn log_pile(b: &mut Builder) {
-    for k in 0..10 {
-        let row = k / 4;
-        let col = k % 4;
+    let from = b.geo.pieces.len();
+    for (x, y, r, len, along, yaw) in LOG_STACK {
         b.piece(
-            Shape::Cylinder(0.22, 7.0),
-            Transform::from_xyz(
-                -0.7 + col as f32 * 0.45 + row as f32 * 0.22,
-                0.22 + row as f32 * 0.4,
-                0.0,
-            )
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            Shape::Cylinder(r, len),
+            Transform::from_xyz(x, y, along).with_rotation(
+                Quat::from_rotation_y(yaw) * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+            ),
             Mat::BarkSpruce,
             true,
         );
     }
+    // Stakes driven in against the bottom row's outer logs.
+    for (x, z) in LOG_STAKES {
+        b.bx(
+            Vec3::new(0.09, 1.0, 0.09),
+            Vec3::new(x, 0.5, z),
+            Mat::Timber,
+        );
+    }
+    b.dress_structure(from, vec![("log_stack", Transform::IDENTITY)]);
 }
 
 fn anomaly(b: &mut Builder) {
@@ -5725,6 +5756,14 @@ pub fn swing_doors(
         }
     }
     for (e, mut d, mut t, leaf, _, _, held, resting) in &mut doors {
+        // A leaf turns about its hinge and never leaves it. (Kinematic, it
+        // crept off it a millimetre or so a second, round to the middle of
+        // its doorway, and stood open across half of it: Kettle's mine,
+        // pulled-in map, raiders jammed against it for ten minutes, Robot
+        // minds' sims, 1 November.)
+        if t.translation != leaf.0.hinge {
+            t.translation = leaf.0.hinge;
+        }
         if held {
             continue;
         }
@@ -6697,6 +6736,75 @@ mod tests {
     }
 
     use super::*;
+
+    /// A log pile collides with the logs its model draws: `LOG_STACK` is
+    /// `art/props/yards.py`'s table, number for number.
+    #[test]
+    fn log_pile_collides_where_its_logs_are_drawn() {
+        let art = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("art/props/yards.py"),
+        )
+        .unwrap();
+        let table = art.split("LOG_STACK = (").nth(1).unwrap();
+        let table = table.split("\n)").next().unwrap();
+        let rows: Vec<Vec<f32>> = table
+            .lines()
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix('(')?
+                    .strip_suffix("),")
+                    .map(str::to_owned)
+            })
+            .map(|l| l.split(',').map(|v| v.trim().parse().unwrap()).collect())
+            .collect();
+        let ours: Vec<Vec<f32>> = LOG_STACK
+            .iter()
+            .map(|&(a, b, c, d, e, f)| vec![a, b, c, d, e, f])
+            .collect();
+        assert_eq!(rows, ours);
+    }
+
+    /// What a free-standing prop (a fence, a wreck, a log pile: the
+    /// `map_lint::VIEW_LIGHT` set, which stand by the roads) builds solid
+    /// stays inside the footprint the map, its lints and the clutter keep
+    /// clear (`map::prefab_footprint`): a prop reworked to read better must
+    /// not grow into the road it stands by. (A building's plinth and steps
+    /// stand a little past its walls' footprint, by design.)
+    #[test]
+    fn solid_pieces_stay_in_the_footprint() {
+        let mut out = Vec::new();
+        for &id in extraction_core::map_lint::VIEW_LIGHT {
+            let geo = prefab(id).unwrap();
+            let [w, _, d] = extraction_core::map::prefab_footprint(id);
+            for p in geo.pieces.iter().filter(|p| p.collide) {
+                let half = match p.shape {
+                    Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                let reach = (0..8).fold(Vec2::ZERO, |m, i| {
+                    let c = Vec3::new(
+                        if i & 1 == 0 { -half.x } else { half.x },
+                        if i & 2 == 0 { -half.y } else { half.y },
+                        if i & 4 == 0 { -half.z } else { half.z },
+                    );
+                    let w = p.at.transform_point(c);
+                    m.max(Vec2::new(w.x.abs(), w.z.abs()))
+                });
+                if reach.x > w * 0.5 + 0.01 || reach.y > d * 0.5 + 0.01 {
+                    out.push(format!(
+                        "{id}: a {:?} reaches ({:.2}, {:.2}) of ({:.2}, {:.2})",
+                        p.mat,
+                        reach.x,
+                        reach.y,
+                        w * 0.5,
+                        d * 0.5
+                    ));
+                }
+            }
+        }
+        out.dedup_by(|a, b| a.split(':').next() == b.split(':').next());
+        assert!(out.is_empty(), "{}", out.join("\n"));
+    }
 
     /// Every model a recipe dresses with is built (`art/props`), and
     /// replaces only pieces of its own: a renamed or missing model would

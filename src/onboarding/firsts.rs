@@ -67,6 +67,11 @@ pub enum First {
     /// (`robots::search::ComingBack`): a moving shape behind low cover is
     /// glimpsed, and each glimpse moves its guess; a still one isn't.
     ComingToLook,
+    /// A broken walker noticed you (`robots::broken`): its gun's dead, its
+    /// eye isn't. The first machine you can win against.
+    BrokenNoticed,
+    /// A broken walker shoved you: it can still hurt, close in.
+    Shoved,
 }
 
 /// `Malfunction`, with an order (for the saved set).
@@ -117,6 +122,8 @@ pub const ALL: &[First] = &[
     First::Hush,
     First::Payday,
     First::ComingToLook,
+    First::BrokenNoticed,
+    First::Shoved,
 ];
 
 impl First {
@@ -144,6 +151,8 @@ impl First {
                 | First::Sentry
                 | First::Hush
                 | First::ComingToLook
+                | First::BrokenNoticed
+                | First::Shoved
         )
     }
 
@@ -207,6 +216,12 @@ impl First {
             First::Payday => &["Truck: \"Home. Now press the card: that's the job paid.\""],
             First::ComingToLook => {
                 &["Truck: \"Low behind it, and keep still. It only finds what moves.\""]
+            }
+            First::BrokenNoticed => {
+                &["Truck: \"That one's lost its gun. Its eye's still good: shoot that.\""]
+            }
+            First::Shoved => {
+                &["Truck: \"It can still shove. Keep your distance, aim for the eye.\""]
             }
         }
     }
@@ -373,6 +388,8 @@ fn robots_heard(
     mut lost: MessageReader<crate::robots::search::LostYou>,
     mut back: MessageReader<crate::robots::search::ComingBack>,
     minds: Query<&Awareness>,
+    broken: Query<(), With<crate::robots::broken::Broken>>,
+    mut shoves: MessageReader<crate::robots::broken::Shoved>,
     locals: Query<(Entity, &GlobalTransform), With<LocalPlayer>>,
     mut m: Meet,
 ) {
@@ -380,6 +397,9 @@ fn robots_heard(
         return;
     };
     let about_me = |robot: Entity| minds.get(robot).is_ok_and(|a| a.target == Some(me));
+    if shoves.read().any(|s| s.player == me) {
+        m.meet(First::Shoved);
+    }
     let looked: Vec<Entity> = looking.read().map(|e| e.robot).collect();
     // One that was shooting at you, coming to look (or back past you).
     if back.read().any(|b| b.about == me) {
@@ -389,7 +409,16 @@ fn robots_heard(
         .into_iter()
         .chain(noticed.read().map(|e| e.robot))
         .collect();
-    if robots.into_iter().any(about_me) {
+    // A broken walker's is its own line (shoot its eye), not "go still":
+    // it's the one to take on.
+    let (wrecks, others): (Vec<Entity>, Vec<Entity>) = robots
+        .into_iter()
+        .filter(|r| about_me(*r))
+        .partition(|r| broken.contains(*r));
+    if !wrecks.is_empty() {
+        m.meet(First::BrokenNoticed);
+    }
+    if !others.is_empty() {
         m.meet(First::Heard);
     }
     for ev in lost.read() {

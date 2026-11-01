@@ -71,6 +71,12 @@ MATERIALS = {
     "Yellow": ((0.9, 0.74, 0.16), 0.0, 0.55, None),
     "Orange": ((0.86, 0.38, 0.08), 0.0, 0.6, None),
     "Blue": ((0.1, 0.24, 0.55), 0.0, 0.5, None),
+    # A car's weathered paint (src/models.rs: the painted-metal relief).
+    "CarBlue": ((0.21, 0.29, 0.4), 0.25, 0.6, None),
+    # Rag cloth in faded dyes, and a fox's fur (src/models.rs).
+    "RagRed": ((0.42, 0.2, 0.16), 0.0, 0.95, None),
+    "RagBlue": ((0.22, 0.26, 0.33), 0.0, 0.95, None),
+    "Russet": ((0.46, 0.23, 0.11), 0.0, 0.92, None),
     "Leaf": ((0.2, 0.4, 0.1), 0.0, 0.7, None),
     "Enamel": ((0.88, 0.88, 0.85), 0.0, 0.3, None),
     "Worn": ((0.5, 0.5, 0.5), 1.0, 0.45, None),
@@ -81,6 +87,7 @@ MATERIALS = {
     "Paper": ((0.85, 0.83, 0.76), 0.0, 0.9, None),
     "Strange": ((0.5, 0.35, 0.8), 0.6, 0.15, (0.6, 0.35, 1.0)),
     # World props (art/props; src/models.rs maps them).
+    "Bark": ((0.22, 0.17, 0.13), 0.0, 0.95, None),
     "Timber": ((0.55, 0.45, 0.33), 0.0, 0.8, None),
     "Rusty": ((0.4, 0.25, 0.15), 0.6, 0.7, None),
     "Painted": ((0.3, 0.38, 0.35), 0.3, 0.6, None),
@@ -275,6 +282,8 @@ class Part:
         self.bm = bmesh.new()
         self.mats = []
         self.cutters = []
+        # Box-projected UVs per metre (`box_uv`).
+        self.uv_scale = 1.0
 
     def _mi(self, mat):
         if mat not in self.mats:
@@ -767,8 +776,10 @@ def _apply_boolean(obj, cutter_obj, paint=False):
     bpy.data.objects.remove(cutter_obj, do_unlink=True)
 
 
-def box_uv(me, origin_b):
-    """Per-face box projection in metres, in game axes, U along the gun."""
+def box_uv(me, origin_b, scale=1.0):
+    """Per-face box projection in metres (times `scale`: under 1 stretches
+    a texture's tile over more of the part), in game axes, U along the
+    gun."""
     bm = bmesh.new()
     bm.from_mesh(me)
     uv = bm.loops.layers.uv.verify()
@@ -784,7 +795,7 @@ def box_uv(me, origin_b):
                 u, v = p.z, p.x
             else:
                 u, v = p.x, -p.y
-            loop[uv].uv = (u, v)
+            loop[uv].uv = (u * scale, v * scale)
     bm.to_mesh(me)
     bm.free()
 
@@ -843,7 +854,7 @@ def make(part, sharp_angle=40.0, worn=None):
         cobj.location = obj.location
         _apply_boolean(obj, cobj, getattr(c, "paint", False))
     me = obj.data
-    box_uv(me, obj.location)
+    box_uv(me, obj.location, part.uv_scale)
     me.shade_smooth()
     me.set_sharp_from_angle(angle=math.radians(sharp_angle))
     # Big flat faces own their vertex normals, so bevels read crisp and

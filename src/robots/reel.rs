@@ -13,13 +13,15 @@
 //! WHAT is `walk` (across the view), `turn` (a right angle in front of
 //! you), `damaged` (plates on their last bolt, the core smoking, its
 //! eye guttering, walking across), `limp` (a leg shot off, then across), `crawl` (two legs shot
-//! off: it drags itself across), `hurt` (a leg at a fifth),
+//! off: it drags itself across), `hurt` (a leg at a fifth), `broken`
+//! (the broken walker: its gun dead and a leg all but gone, across),
 //! `sorter` (the Depot's gantry at its sorting, in the open), `hound` (a
 //! hound running across), `tells`/`tellsbefore` (a shot leg, a dead
 //! eye, a failing core and a hit rotor at 24-36 m, and the same whole),
 //! `knockdown` (a heavy round into a walker's
-//! side: down, and up again), `broken` (a walker standing, its gun shot
-//! dead and a leg at 5%: harmless at a glance), `strikes` (four walkers at 15 m shot in the
+//! side: down, and up again), `disarmed` (a walker standing still, its
+//! gun shot dead and a leg at 5%: harmless at a glance; Robot minds'
+//! `broken` is the same walker coming at you), `strikes` (four walkers at 15 m shot in the
 //! front plate, the core, the eye and a knee: a shrug, a wound and two
 //! hits that tell, `damage::strike`), `wall` (a walker along a wall nearer
 //! than its legs reach: its feet come down short of it), `rubble` (a walker over a heap of broken
@@ -297,7 +299,7 @@ fn reel(
                 }
                 first.unwrap()
             }
-            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" | "broken" => {
+            "wreck" | "shot" | "knockdown" | "damaged" | "salvage" | "disarmed" => {
                 let at = eye
                     + flat
                         * match what {
@@ -583,7 +585,7 @@ fn reel(
                     p(eye + flat * 4.5 - right * 3.5),
                     p(eye + flat * 4.5 + right * 5.0),
                 ],
-                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "broken" => {
+                "wreck" | "zap" | "shot" | "eyesfar" | "knockdown" | "strikes" | "disarmed" => {
                     vec![]
                 }
                 "wall" => vec![p(eye + flat * 6.0 + right * 5.0)],
@@ -598,7 +600,7 @@ fn reel(
         for (e, mut p, gt) in &mut parts {
             let shot_off = match what {
                 "crawl" => matches!(p.role, PartRole::Leg(0) | PartRole::Leg(1)),
-                "broken" => matches!(p.role, PartRole::Leg(1) | PartRole::Weapon),
+                "disarmed" => matches!(p.role, PartRole::Leg(1) | PartRole::Weapon),
                 _ => p.role == PartRole::Leg(1),
             };
             if p.robot != subject || !shot_off {
@@ -617,7 +619,7 @@ fn reel(
                 }
                 "hurt" => p.hp = p.max_hp * 0.2,
                 // Models' broken walker: its gun dead, a leg at 5%.
-                "broken" if role == PartRole::Weapon => {
+                "disarmed" if role == PartRole::Weapon => {
                     p.hp = 0.0;
                     destroyed.write(PartDestroyed {
                         robot: subject,
@@ -626,7 +628,7 @@ fn reel(
                         at: gt.translation(),
                     });
                 }
-                "broken" => p.hp = p.max_hp * 0.05,
+                "disarmed" => p.hp = p.max_hp * 0.05,
                 _ => {}
             }
         }

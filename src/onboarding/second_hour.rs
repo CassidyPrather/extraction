@@ -1011,6 +1011,9 @@ pub(super) struct World2<'w, 's> {
             &'static crate::robots::Brain,
         ),
     >,
+    /// Broken walkers (`robots::broken`), and whether each is wrecked.
+    pub(super) broken:
+        Query<'w, 's, &'static crate::robots::Robot, With<crate::robots::broken::Broken>>,
     pub(super) health: Query<'w, 's, &'static crate::health::Health>,
     pub(super) bags: Query<'w, 's, (&'static Backpack, Option<&'static crate::raid::Remains>)>,
     pub(super) pressables: Query<'w, 's, (Entity, &'static Pressable)>,

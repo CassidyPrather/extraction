@@ -19,7 +19,7 @@ Objects (each one node; its origin is its pivot):
   `wheel_rl`, `wheel_rr`
 - `pt_seat_driver`            the driver's seat cushion (left-hand drive)
 
-Materials: Blue, Rusty, Steel, Black, Dark, Iron, Rubber, Glass, Lens,
+Materials: CarBlue, Rusty, Steel, Black, Dark, Iron, Rubber, Glass, Lens,
 LampRed, Padding, Leather.
 """
 
@@ -134,7 +134,7 @@ def lada():
     HUB_Y, R = 0.27, 0.29    # the hubs sit low on flat tyres
     BELT, ROOF = 0.82, 1.36
     ZA, ZB, ZC = -0.965, 0.065, 0.955   # front door, rear door, the doors' ends
-    paint = "Blue"
+    paint = "CarBlue"
     b = Part("body")
 
     # The nose and tail: solid over the floor, their tops under the bonnet
