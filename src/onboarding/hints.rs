@@ -229,8 +229,15 @@ mod tests {
     }
 }
 
-/// What the driver says as you step off the truck with nothing chambered.
+/// What the driver says as you step off the truck with nothing chambered
+/// and rounds in the gun's magazine.
 pub const ONE_UP: &str = "Truck: \"One up the spout before you go. Safety on till you need it.\"";
+/// ...its magazine empty, a loaded one on you.
+pub const MAG_IN: &str = "Truck: \"Mag in, then one up the spout. Safety on till you need it.\"";
+/// ...the gun and every magazine on you empty, rounds in the crate.
+pub const LOAD_UP: &str = "Truck: \"That's empty, your spares too. Load up from the crate.\"";
+/// ...and none in the crate either.
+pub const NO_ROUNDS: &str = "Truck: \"That's empty, and you've no rounds. Go careful.\"";
 
 /// Off the truck's steps at base (as `progression`'s tailgate: the raid
 /// begins 14 m off).
@@ -252,6 +259,16 @@ fn one_up(
         &crate::anomaly::artifacts::CarriedBy,
         Has<crate::interact::body::InBackpack>,
     )>,
+    mags: Query<
+        (
+            &crate::items::Item,
+            Option<&crate::anomaly::artifacts::CarriedBy>,
+        ),
+        With<crate::weapons::Mag>,
+    >,
+    ammo: Query<&crate::items::Item>,
+    stash: Query<&crate::interact::body::Backpack, With<crate::raid::truck::Stash>>,
+    catalog: Res<crate::items::Catalog>,
     // Said this time home; how far off the truck you were last frame.
     mut said: Local<(bool, Option<f32>)>,
 ) {
@@ -283,7 +300,26 @@ fn one_up(
             (true, false) => "a round up",
         }
     );
+    // What there is to load, by what you're holding (never advice wrong for
+    // it: "one up the spout" to an empty gun with empty spares racked
+    // nothing): in the gun's magazine, a loaded one on you, or rounds in
+    // the crate.
+    let in_gun =
+        gun.is_some_and(|(g, _, _)| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
+    let spare = mags
+        .iter()
+        .any(|(it, by)| it.rounds > 0 && by.is_some_and(|b| b.0 == me));
+    let in_crate = stash.iter().flat_map(|b| b.contents.iter()).any(|e| {
+        ammo.get(*e).is_ok_and(|it| {
+            it.rounds > 0 && (mags.contains(*e) || catalog.get(it.kind()).id.starts_with("ammo_"))
+        })
+    });
     if empty {
-        raid.say(ONE_UP);
+        raid.say(match (in_gun, spare, in_crate) {
+            (true, ..) => ONE_UP,
+            (false, true, _) => MAG_IN,
+            (false, false, true) => LOAD_UP,
+            (false, false, false) => NO_ROUNDS,
+        });
     }
 }
