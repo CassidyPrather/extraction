@@ -32,9 +32,11 @@ pub const BEAM_REACH: f32 = 45.0;
 /// The searchlight's cone, half-angle in degrees.
 pub const BEAM_HALF: f32 = 9.0;
 
-/// The warning: seconds from the chirp to the first round (about two
-/// metres at a walk to get out of its sight).
-pub const CHIRP: f32 = 1.6;
+/// The warning: seconds from the chirp to the first round, time for a
+/// newcomer to hear it, look, and step out of its sight. (At 1.6 s the
+/// newcomer who froze at the chirp was hit before they moved: Robot
+/// minds' fairness runs, 1 November.)
+pub const CHIRP: f32 = 2.5;
 /// Rounds in a burst, seconds between them, and between bursts.
 pub const BURST: u32 = 3;
 pub const ROUND_GAP: f32 = 0.12;
@@ -255,17 +257,18 @@ mod tests {
         assert_eq!(g.step(true, dt), GunAct::Chirp);
         let mut first = None;
         let mut fired = 0;
-        for k in 1..400 {
+        for k in 1..600 {
             if g.step(true, dt) == GunAct::Fire {
                 first.get_or_insert(k as f32 * dt);
                 fired += 1;
             }
         }
         let first = first.expect("it fired");
-        assert!(first >= CHIRP - 0.02, "first round at {first}");
+        // The fairness floor itself, not `CHIRP`: tuned under 2.5 s, this fails.
+        assert!(first >= 2.5 - 0.02, "first round at {first}");
         // About a burst every burst cycle.
         let cycle = ROUND_GAP * (BURST - 1) as f32 + BURST_GAP;
-        let bursts = ((4.0 - CHIRP) / cycle).floor() as u32;
+        let bursts = ((6.0 - CHIRP) / cycle).floor() as u32;
         assert!(
             fired >= bursts * BURST && fired <= (bursts + 1) * BURST,
             "{fired}"
