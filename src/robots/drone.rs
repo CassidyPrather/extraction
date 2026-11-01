@@ -49,6 +49,29 @@ pub struct Drone {
     /// Seconds it has held a firing solution on its target: it fires only
     /// once this reaches [`LOCK_TIME`].
     pub lock: f32,
+    /// Seconds locked on without a shot (its gun swung off you, a pause):
+    /// past [`RETELL`] it locks on afresh, chirp and all, before it fires
+    /// again (`lose_a_quiet_lock`).
+    pub quiet: f32,
+}
+
+/// How long a locked drone may go without firing before its next burst
+/// needs a fresh lock (and its chirp): longer than a burst's gap. One that
+/// went quiet 24 s and then fired again, with nothing new to see or hear,
+/// hit a newcomer four times unwarned (Onboarding's first_jobs_reckless).
+pub const RETELL: f32 = 4.0;
+
+/// Locked on and not firing: past [`RETELL`] the lock goes, so the next
+/// burst comes after a fresh chirp. Whether it went.
+pub fn lose_a_quiet_lock(d: &mut Drone, dt: f32) -> bool {
+    d.quiet += dt;
+    if d.quiet > RETELL {
+        d.lock = 0.0;
+        d.quiet = 0.0;
+        true
+    } else {
+        false
+    }
 }
 
 /// A drone settling its gun on someone, before the first burst: the chirp
@@ -128,6 +151,7 @@ pub fn spawn_drone(commands: &mut Commands, at: Vec3, job: Job) -> Entity {
                 phase: 0.0,
                 looted: false,
                 lock: 0.0,
+                quiet: 0.0,
             },
             Senses {
                 // A camera dome: sees almost all round, not so far.
@@ -546,6 +570,7 @@ fn drone_guns(
         let moving_up = super::squad::repositioning(roles.get(e).ok(), t.translation);
         if robot.wrecked || !matches!(brain, Brain::Engage) || moving_up {
             d.lock = 0.0;
+            d.quiet = 0.0;
             continue;
         }
 
@@ -553,6 +578,7 @@ fn drone_guns(
             // A moment behind cover doesn't shake it; a while does.
             if aware.unseen > 1.5 {
                 d.lock = 0.0;
+                d.quiet = 0.0;
             }
             continue;
         }
@@ -583,6 +609,9 @@ fn drone_guns(
                 });
             }
             d.lock += dt;
+            continue;
+        }
+        if lose_a_quiet_lock(&mut d, dt) {
             continue;
         }
         if d.gun_cooldown > 0.0 {
@@ -619,6 +648,7 @@ fn drone_guns(
             seed: *seed,
         });
         d.burst_left -= 1;
+        d.quiet = 0.0;
         d.gun_cooldown = if d.burst_left == 0 { BURST_GAP } else { 0.11 };
     }
 }
@@ -667,6 +697,40 @@ mod tests {
             "{} goals in a building: {inside:#?}",
             inside.len()
         );
+    }
+
+    /// Firing steadily (bursts 1.8 s apart) it keeps its lock; gone quiet
+    /// past [`RETELL`], it locks on afresh, so its next burst comes after a
+    /// chirp.
+    #[test]
+    fn a_drone_gone_quiet_chirps_again_before_it_fires() {
+        let mut d = Drone {
+            thrust: [0.0; 4],
+            rotor_alive: [true; 4],
+            gun_cooldown: 0.0,
+            burst_left: 0,
+            grounded: 0.0,
+            goal: Vec3::ZERO,
+            phase: 0.0,
+            looted: false,
+            lock: LOCK_TIME,
+            quiet: 0.0,
+        };
+        let dt = 1.0 / 90.0;
+        // Bursts: the gap between them, then a shot (which resets `quiet`).
+        for _ in 0..5 {
+            for _ in 0..(BURST_GAP / dt) as usize {
+                assert!(
+                    !lose_a_quiet_lock(&mut d, dt),
+                    "lost its lock between bursts"
+                );
+            }
+            d.quiet = 0.0;
+        }
+        assert_eq!(d.lock, LOCK_TIME);
+        // Its gun off you for a while: the lock goes.
+        let lost = (0..(RETELL / dt) as usize + 10).any(|_| lose_a_quiet_lock(&mut d, dt));
+        assert!(lost && d.lock == 0.0, "still locked after {RETELL} s quiet");
     }
 
     #[derive(Resource, Default)]

@@ -212,6 +212,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Yellow",
     "Orange",
     "Blue",
+    "CarBlue",
     "Leaf",
     "Enamel",
     "Worn",
@@ -237,6 +238,7 @@ pub const MATERIAL_NAMES: &[&str] = &[
     // World props (art/props).
     "Timber",
     "Rusty",
+    "Bark",
     "Painted",
     "Plaster",
     "Concrete",
@@ -336,6 +338,9 @@ impl ModelMaterials {
             // World props (art/props).
             "Timber" => lib.get(Mat::Timber, server, materials),
             "Rusty" => lib.get(Mat::RustyMetal, server, materials),
+            // A felled trunk's bark: the spruce bark scan (a log stack;
+            // `art/props/yards.py` coarsens its tile in the model's UVs).
+            "Bark" => lib.get(Mat::BarkSpruce, server, materials),
             "Painted" => lib.get(Mat::PaintedMetal, server, materials),
             "Plaster" => lib.get(Mat::Plaster, server, materials),
             "Concrete" => lib.get(Mat::Concrete, server, materials),
@@ -393,6 +398,15 @@ impl ModelMaterials {
             "Yellow" => flat(materials, Color::srgb(0.9, 0.74, 0.16), 0.0, 0.55),
             "Orange" => flat(materials, Color::srgb(0.86, 0.38, 0.08), 0.0, 0.6),
             "Blue" => flat(materials, Color::srgb(0.1, 0.24, 0.55), 0.0, 0.5),
+            // A car's paint after years in the weather: the painted-metal
+            // scan's relief and wear, in a blue gone chalky and grey. (The
+            // print blue above, on a whole car, read as a toy at arm's
+            // length: docs/craft/PROP_READING.md.)
+            "CarBlue" => derive(Mat::PaintedMetal, &|m| {
+                m.base_color_texture = None;
+                m.base_color = Color::srgb(0.21, 0.29, 0.4);
+                m.metallic = 0.25;
+            }),
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
             // White enamel: mugs, bowls, the kettle, labels' white print, and the
             // houses' stoves and sinks.

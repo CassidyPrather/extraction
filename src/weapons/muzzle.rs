@@ -88,7 +88,7 @@ pub(crate) fn muzzle_fx(
         // Smoke out of the muzzle, slowing, spreading, off on the wind.
         let smoke = Spray {
             n: 2 + (r as usize).min(3),
-            mesh: |a| a.ball.clone(),
+            mesh: |a| a.puff.clone(),
             mat: |a| a.smoke.clone(),
             size: Vec3::splat(0.05 + 0.01 * r),
             out: 1.2 + 0.3 * r,
@@ -120,7 +120,7 @@ pub(crate) fn muzzle_fx(
         let at = gt.transform_point(gun.layout.muzzle);
         let wisp = Spray {
             n: 1,
-            mesh: |a| a.ball.clone(),
+            mesh: |a| a.puff.clone(),
             mat: |a| a.smoke.clone(),
             size: Vec3::splat(0.02),
             out: 0.15,

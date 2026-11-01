@@ -34,6 +34,7 @@ impl Plugin for DevPlugin {
                     treat_for_gallery,
                     spall_for_gallery,
                     plate_hits_for_gallery,
+                    impact_hits_for_gallery,
                     present_for_gallery,
                 )
                     .chain()
@@ -197,26 +198,36 @@ fn sights_to_the_eye(
 #[derive(Resource)]
 struct LineUp(Vec<(Entity, f32, Option<Vec3>)>);
 
-/// Holds a line-up's machines where their spawns stood them, facing the
-/// way they were asked: their minds would turn and walk them (a heavy
-/// walked up to the camera). A walker-bodied machine is posed from its
-/// `Walker::yaw`, so that's what is held; a drone flies, and faces as it
-/// flies. Their limbs and lamps still move.
+/// Holds a line-up's machines still, facing the way they were asked.
+/// A walker-bodied one is held by its walk: no mind, no path, its
+/// `Walker::yaw` set, so its legs stay under it (snapping its body back
+/// each frame left its drawn legs striding on, and its knee marks hanging
+/// off them). Anything else (a drone) is pinned where it came.
 fn turn_line_up(
+    mut commands: Commands,
     line_up: Option<ResMut<LineUp>>,
-    mut placed: Query<&mut Transform>,
+    mut placed: Query<&mut Transform, Without<crate::robots::walker::Walker>>,
     mut walkers: Query<&mut crate::robots::walker::Walker>,
 ) {
     let Some(mut line_up) = line_up else {
         return;
     };
     for (e, yaw, at) in line_up.0.iter_mut() {
+        if let Ok(mut w) = walkers.get_mut(*e) {
+            if at.is_none() {
+                commands
+                    .entity(*e)
+                    .remove::<crate::robots::Senses>()
+                    .remove::<crate::robots::Brain>();
+                *at = Some(Vec3::ZERO);
+            }
+            w.yaw = *yaw;
+            w.path.clear();
+            continue;
+        }
         if let Ok(mut t) = placed.get_mut(*e) {
             let at = *at.get_or_insert(t.translation);
             t.translation = at;
-        }
-        if let Ok(mut w) = walkers.get_mut(*e) {
-            w.yaw = *yaw;
         }
     }
 }
@@ -1638,6 +1649,72 @@ fn plate_hits_for_gallery(
             spread: 0.0,
             recoil: 0.0,
             seed: i as u64,
+        });
+    }
+}
+
+/// `--gallery impact`: three rifle rounds from the camera along its line
+/// of sight, a frame apart, into whatever it looks at (the ground, a
+/// wall): what each throws up as it flies. The clock runs a sixtieth of
+/// a second a frame: the rounds land at frames 60 to 62, so `--frames 75`
+/// shows them a quarter of a second on.
+fn impact_hits_for_gallery(
+    mut commands: Commands,
+    opts: Res<LaunchOptions>,
+    zone: Option<Res<crate::world::Zone>>,
+    mut shots: MessageWriter<crate::weapons::ballistics::Shot>,
+    mut impacts: MessageReader<crate::weapons::impacts::Impact>,
+    mut state: Local<(u32, Option<Entity>)>,
+) {
+    if opts.gallery.as_deref() != Some("impact") {
+        return;
+    }
+    for im in impacts.read() {
+        info!("gallery impact: {:?} at {}", im.kind, im.point);
+    }
+    let (Some((cam, yaw, pitch)), Some(zone)) = (opts.camera, zone) else {
+        return;
+    };
+    let eye = if cam.y <= 0.0 {
+        Vec3::new(cam.x, zone.ground(cam.x, cam.z) + 1.7, cam.z)
+    } else {
+        cam
+    };
+    state.0 += 1;
+    if state.0 == 1 {
+        // The clock a sixtieth of a second a frame, however slowly the
+        // frames render, so a frame count is an age: a puff a quarter of a
+        // second after the shot is frame 75.
+        commands.insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+            std::time::Duration::from_secs_f64(1.0 / 60.0),
+        ));
+    }
+    if state.0 == 3 {
+        state.1 = Some(commands.spawn(Name::new("Gallery rifle")).id());
+    }
+    let Some(gun) = state.1 else {
+        return;
+    };
+    // The camera's own turn (`render`'s free camera).
+    let turn = Quat::from_euler(EulerRot::YXZ, -yaw.to_radians(), pitch.to_radians(), 0.0);
+    const ON_LINE: [(f32, f32); 3] = [(0.0, 0.0), (0.012, 0.006), (-0.01, 0.01)];
+    // Late enough that the colliders are in.
+    const FROM: u32 = 60;
+    if (FROM..FROM + ON_LINE.len() as u32).contains(&state.0) {
+        let (x, y) = ON_LINE[(state.0 - FROM) as usize];
+        let dir = (turn * Vec3::new(x, y, -1.0)).normalize();
+        shots.write(crate::weapons::ballistics::Shot {
+            gun,
+            shooter: Some(gun),
+            // From in front of the camera's own body, which would take it.
+            origin: eye + dir * 0.6,
+            direction: dir,
+            speed: 715.0,
+            damage: 30.0,
+            projectiles: 1,
+            spread: 0.0,
+            recoil: 0.0,
+            seed: u64::from(state.0),
         });
     }
 }
