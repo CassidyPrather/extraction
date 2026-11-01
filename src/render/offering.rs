@@ -77,24 +77,63 @@ fn dress_offerings(
                 Transform::from_xyz(0.0, 0.8, 0.0),
             );
         } else {
-            // Standing stones round a flat altar (the altar takes the gifts).
+            // Standing stones round a flat altar (the altar takes the gifts):
+            // rough stones, the field's (`world::rocks`). Boxes of the
+            // concrete scan read as a sawn slab at arm's length: the walk's
+            // crest block (docs/craft/PROP_READING.md).
+            use crate::world::rocks::stone_mesh;
+            use extraction_core::rocks::{ROCK_VARIANTS, RockSpot};
+            let burnt = zone.map.ash > 0.0;
+            let rough = library.get(Mat::Boulder, &server, &mut materials);
+            // A stone at (x, z) of half-height `hh`, its flat base
+            // (`rock_points` planes it at 0.55 under its middle) 15 cm into
+            // the ground at `ground` (in the site's space).
+            let stone = |x: f32,
+                         z: f32,
+                         ground: f32,
+                         hh: f32,
+                         radius: f32,
+                         stretch: f32,
+                         yaw: f32,
+                         v: usize| {
+                stone_mesh(
+                    &RockSpot {
+                        pos: [x, ground + 0.55 * hh - 0.15, z],
+                        radius,
+                        squash: hh / radius,
+                        stretch,
+                        yaw,
+                        variant: v % ROCK_VARIANTS,
+                    },
+                    burnt,
+                )
+            };
+            // The altar: a low slab, its top where the box's was.
             part(
-                metric_box(Vec3::new(1.1, 0.5, 0.8)),
-                &stone,
-                Transform::from_xyz(0.0, -0.45, 0.0),
+                stone(0.0, 0.0, -0.7, 0.4, 0.5, 1.2, 0.4, 5),
+                &rough,
+                Transform::IDENTITY,
             );
             for i in 0..7 {
                 let a = i as f32 / 7.0 * std::f32::consts::TAU + 0.3;
                 let h = 1.6 + (i as f32 * 1.7).sin() * 0.5;
                 let (x, z) = (a.cos() * 3.2, a.sin() * 3.2);
-                // Each stone stands on its own patch of hillside, sunk a little.
+                // Each stone stands on its own patch of hillside, broad
+                // face to the altar.
                 let ground = zone.ground(origin.x + x, origin.z + z) - origin.y;
                 part(
-                    metric_box(Vec3::new(0.55, h, 0.35)),
-                    &stone,
-                    Transform::from_xyz(x, ground + h * 0.5 - 0.3, z).with_rotation(
-                        Quat::from_rotation_y(-a) * Quat::from_rotation_z(0.05 * (i as f32).sin()),
+                    stone(
+                        x,
+                        z,
+                        ground,
+                        h / 1.55,
+                        0.26,
+                        1.35,
+                        -a + std::f32::consts::FRAC_PI_2,
+                        i,
                     ),
+                    &rough,
+                    Transform::IDENTITY,
                 );
             }
         }

@@ -47,8 +47,12 @@ In the game, at the walk's spot, in the valley's reference weather:
   on flat tyres, settled into the soil (`terrain::WRECK_SETTLE`).
 - **A scan's tile on a model**: a model's UVs are in metres; a texture
   built for a building's walls (or a tree's trunk) may tile too fine or
-  read too light on a prop. Look at it in reach, and give the prop its
-  own derived material (`Bark`: `src/models.rs`).
+  read too light on a prop. Look at it in reach; scale the model's UVs
+  (`Part.uv_scale`) rather than copy the material, which lights unlike
+  the shared one.
+- **Primitives standing in for nature**: a box of the concrete scan is a
+  sawn slab, whatever it's called. Stones are the field's
+  (`world::rocks::stone_mesh`), wood is a model.
 - **Growing into the road**: a reworked prop must keep inside its
   footprint (`map::prefab_footprint`), which the map's lints and the
   clutter keep clear; a test holds the free-standing ones to it
@@ -111,6 +115,16 @@ shed, a log pile and the blue wreck by the works yard.
   pale in a ring of bark; stakes. It collides with the same ten logs
   (`buildings::LOG_STACK`, held to the art script's table by
   `log_pile_collides_where_its_logs_are_drawn`).
-- On the model the spruce bark scan, at its 1.2 m tile and tint, read
-  pale and fine-streaked: straw bales, not logs. `Bark` darkens it and
-  coarsens its plates to a 2.4 m tile.
+- On the model the spruce bark scan, at its 1.2 m tile box-projected,
+  read pale and fine-streaked: straw bales, not logs. A copy of the
+  material darkened shone as black pipe (it lit unlike the scan the
+  trees share). The model now stretches the scan's tile itself
+  (`Part.uv_scale`, `art/common.py`), on the shared material: plated
+  grey-brown bark with lichen (`marrow_logs*_after2.jpg`).
+- Also not shot before: the crest block (s09). It was the Stone ring's
+  nearest standing stone (`render/offering.rs`): seven boxes and an altar
+  of the concrete scan, a sawn slab at arm's length
+  (`marrow_s09_crest_before.jpg`). They're the field's rough stones now
+  (`world::rocks::stone_mesh`: faceted, the boulder scan, moss on top),
+  tall and broad-faced to the altar, a low slab for it
+  (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`).

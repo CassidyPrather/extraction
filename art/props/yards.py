@@ -316,6 +316,9 @@ LOG_STACK = (
 def log_stack():
     w = Wear(351)
     p = Part("static")
+    # The bark scan's plates at a felled trunk's size: at its own 1.2 m
+    # tile, box-projected, a stack read as straw bales.
+    p.uv_scale = 0.4
     for k, (x, y, r, ln, mid, yaw) in enumerate(LOG_STACK):
         # A trunk tapers, butt to top, 15% either way of its mean; the
         # butts lie at alternate ends, as a stack is built.
