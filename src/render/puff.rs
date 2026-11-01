@@ -27,7 +27,7 @@ pub const QUAD: f32 = 1.6;
 /// a hazard's cloud put 64 quads each across most of the view, 39 layers
 /// of blended fragments through both eyes (`render::vr_budget`'s puff
 /// gauge); in VR a wall of grey against the face reads worse besides.
-pub const MAX_HALF_ANGLE: f32 = 14.0 * std::f32::consts::PI / 180.0;
+pub const MAX_HALF_ANGLE: f32 = 12.0 * std::f32::consts::PI / 180.0;
 
 /// The largest scale a puff `dist` m from the eye may have
 /// ([`MAX_HALF_ANGLE`]).
@@ -140,13 +140,30 @@ pub fn falloff_image() -> Image {
     image
 }
 
-/// Where the eye is: the middle of the active cameras (both eyes in VR,
-/// the one camera on a screen or in a capture).
-pub fn eye(cams: &Query<(&GlobalTransform, &Camera), crate::render::EyeCamera>) -> Option<Vec3> {
+/// The cameras [`eye`] reads.
+pub type Eyes<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static GlobalTransform,
+        &'static Camera,
+        Option<&'static bevy::camera::RenderTarget>,
+    ),
+    crate::render::EyeCamera,
+>;
+
+/// Where the eye is: the middle of the active cameras that draw to a
+/// screen or a headset (both eyes in VR, the one camera on a screen or in
+/// a capture). One drawing into an image is no eye: an impostor's capture
+/// rig, warmup's proxy eye (they had pulled the middle off to the side, so
+/// no puff looked near).
+pub fn eye(cams: &Eyes) -> Option<Vec3> {
     let (sum, n) = cams
         .iter()
-        .filter(|(_, c)| c.is_active)
-        .fold((Vec3::ZERO, 0.0), |(s, n), (g, _)| {
+        .filter(|(_, c, target)| {
+            c.is_active && !matches!(target, Some(bevy::camera::RenderTarget::Image(_)))
+        })
+        .fold((Vec3::ZERO, 0.0), |(s, n), (g, ..)| {
             (s + g.translation(), n + 1.0)
         });
     (n > 0.0).then(|| sum / n)
@@ -169,7 +186,7 @@ pub fn facing(at: Vec3, eye: Vec3) -> Quat {
 }
 
 fn face_puffs(
-    cams: Query<(&GlobalTransform, &Camera), crate::render::EyeCamera>,
+    cams: Eyes,
     mut puffs: Query<(&mut Transform, Option<&ChildOf>), With<SoftPuff>>,
     parents: Query<&GlobalTransform>,
 ) {
@@ -379,10 +396,10 @@ mod tests {
             let angle = (half / dist).atan();
             assert!((angle - MAX_HALF_ANGLE).abs() < 1e-4, "{dist} m: {angle}");
         }
-        // A hazard puff at its fullest (1.8) is clamped within 6 m, and a
-        // wound's (0.5) only within 1.6 m.
-        assert!(max_scale(5.0) < 1.8 && max_scale(6.5) > 1.8);
-        assert!(max_scale(1.5) < 0.5 && max_scale(1.8) > 0.5);
+        // A hazard puff at its fullest (1.8) is clamped within 6.8 m, and a
+        // wound's (0.5) only within 1.9 m.
+        assert!(max_scale(6.5) < 1.8 && max_scale(7.0) > 1.8);
+        assert!(max_scale(1.8) < 0.5 && max_scale(2.0) > 0.5);
         assert_eq!(max_scale(-1.0), 0.0);
     }
 
