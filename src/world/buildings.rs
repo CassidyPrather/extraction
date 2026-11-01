@@ -5468,21 +5468,68 @@ fn boxcar(b: &mut Builder) {
     b.crate_box(Vec3::new(-0.6, f + 0.06, -3.0), 0.7, Some("food_common"));
 }
 
+/// Felled trunks stacked to season: four, three, two, one, each a
+/// different girth and length, their sawn ends showing (a ring of bark
+/// round each), stakes holding the bottom row. Within its footprint (2.5 x 1.6 x
+/// 7.0, `extraction_core::map`): ten even 7 m tubes read as a blockout at
+/// arm's length (`docs/craft/PROP_READING.md`).
 fn log_pile(b: &mut Builder) {
-    for k in 0..10 {
-        let row = k / 4;
-        let col = k % 4;
-        b.piece(
-            Shape::Cylinder(0.22, 7.0),
-            Transform::from_xyz(
-                -0.7 + col as f32 * 0.45 + row as f32 * 0.22,
-                0.22 + row as f32 * 0.4,
-                0.0,
-            )
-            .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
-            Mat::BarkSpruce,
-            true,
-        );
+    use std::f32::consts::FRAC_PI_2;
+    // (radius, length, how far its middle sits off the pile's), per log.
+    const LOGS: [(f32, f32, f32); 10] = [
+        (0.23, 6.6, 0.15),
+        (0.20, 6.9, -0.05),
+        (0.24, 6.2, -0.4),
+        (0.21, 6.4, 0.3),
+        (0.19, 6.4, -0.25),
+        (0.22, 6.6, 0.2),
+        (0.18, 5.9, 0.5),
+        (0.20, 6.3, -0.35),
+        (0.17, 6.0, 0.1),
+        (0.16, 5.4, -0.6),
+    ];
+    let (span, rise) = (0.45, 0.39);
+    let mut k = 0;
+    for (row, count) in [4, 3, 2, 1].into_iter().enumerate() {
+        for col in 0..count {
+            let (r, len, along) = LOGS[k];
+            k += 1;
+            let x = -0.675 + (col as f32 + row as f32 * 0.5) * span;
+            // The bottom row on the ground; a thinner log higher up sits
+            // down between its two.
+            let y = if row == 0 {
+                r
+            } else {
+                0.22 + row as f32 * rise - (0.22 - r) * 0.5
+            };
+            let turn = Quat::from_rotation_x(FRAC_PI_2);
+            b.piece(
+                Shape::Cylinder(r, len),
+                Transform::from_xyz(x, y, along).with_rotation(turn),
+                Mat::BarkSpruce,
+                true,
+            );
+            // The sawn faces: bare wood, a ring of bark left round them.
+            for end in [-1.0, 1.0] {
+                b.piece(
+                    Shape::Cylinder(r - 0.025, 0.012),
+                    Transform::from_xyz(x, y, along + end * (len * 0.5 + 0.002))
+                        .with_rotation(turn),
+                    Mat::Timber,
+                    false,
+                );
+            }
+        }
+    }
+    // Stakes driven in at the bottom row's outer logs, both ends.
+    for side in [-1.0, 1.0] {
+        for end in [-1.0, 1.0] {
+            b.bx(
+                Vec3::new(0.09, 1.0, 0.09),
+                Vec3::new(side * 0.97, 0.5, end * 2.4),
+                Mat::Timber,
+            );
+        }
     }
 }
 
@@ -6697,6 +6744,48 @@ mod tests {
     }
 
     use super::*;
+
+    /// What a free-standing prop (a fence, a wreck, a log pile: the
+    /// `map_lint::VIEW_LIGHT` set, which stand by the roads) builds solid
+    /// stays inside the footprint the map, its lints and the clutter keep
+    /// clear (`map::prefab_footprint`): a prop reworked to read better must
+    /// not grow into the road it stands by. (A building's plinth and steps
+    /// stand a little past its walls' footprint, by design.)
+    #[test]
+    fn solid_pieces_stay_in_the_footprint() {
+        let mut out = Vec::new();
+        for &id in extraction_core::map_lint::VIEW_LIGHT {
+            let geo = prefab(id).unwrap();
+            let [w, _, d] = extraction_core::map::prefab_footprint(id);
+            for p in geo.pieces.iter().filter(|p| p.collide) {
+                let half = match p.shape {
+                    Shape::Box(s) | Shape::Prism(s) => s * 0.5,
+                    Shape::Cylinder(r, h) => Vec3::new(r, h * 0.5, r),
+                };
+                let reach = (0..8).fold(Vec2::ZERO, |m, i| {
+                    let c = Vec3::new(
+                        if i & 1 == 0 { -half.x } else { half.x },
+                        if i & 2 == 0 { -half.y } else { half.y },
+                        if i & 4 == 0 { -half.z } else { half.z },
+                    );
+                    let w = p.at.transform_point(c);
+                    m.max(Vec2::new(w.x.abs(), w.z.abs()))
+                });
+                if reach.x > w * 0.5 + 0.01 || reach.y > d * 0.5 + 0.01 {
+                    out.push(format!(
+                        "{id}: a {:?} reaches ({:.2}, {:.2}) of ({:.2}, {:.2})",
+                        p.mat,
+                        reach.x,
+                        reach.y,
+                        w * 0.5,
+                        d * 0.5
+                    ));
+                }
+            }
+        }
+        out.dedup_by(|a, b| a.split(':').next() == b.split(':').next());
+        assert!(out.is_empty(), "{}", out.join("\n"));
+    }
 
     /// Every model a recipe dresses with is built (`art/props`), and
     /// replaces only pieces of its own: a renamed or missing model would
