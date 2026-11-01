@@ -164,7 +164,9 @@ pub(super) fn direct(
     // The radio: each first time met gets the bot's answer, now.
     for FirstMet(f) in met.read() {
         let (response, tasks): (&'static str, Vec<Task>) = match f {
-            First::Jam(_) => ("rack it", vec![Task::Gun(MacroKind::Rack)]),
+            // (Out first: by the time it's said, the jammed gun may be
+            // back on the hip, and a rack with an empty hand fails.)
+            First::Jam(_) => ("rack it", vec![Task::DrawGun, Task::Gun(MacroKind::Rack)]),
             First::Worn => ("carry on; mend it at the bench later", vec![]),
             // Not on into it: back out the way it came, a few steps.
             First::Anomaly if world.nearest_is_burner(here) => {

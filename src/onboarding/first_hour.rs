@@ -870,7 +870,11 @@ pub(super) fn direct_raid(
             );
         }
         let answer: Vec<Task> = match f {
-            First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
+            // (Out first: the jammed gun may be back on the hip by now.)
+            First::Jam(_) => vec![
+                Task::DrawGun,
+                Task::Gun(crate::weapons::flat::MacroKind::Rack),
+            ],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
             // "Its eye's still good: shoot that": the one to take on (bar
             // the lost one, who goes anywhere but at it).
