@@ -332,7 +332,7 @@ fn scanned(
 
 /// A gun-steel finish on the gun-metal scan, as the game's `models::steel`.
 fn steel(mut m: StandardMaterial, f: &gunsmith::finish::SteelFinish) -> StandardMaterial {
-    m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / gunsmith::finish::TILE));
+    m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / f.tile));
     let scanned = m.base_color_texture.is_some();
     match f.gain {
         Some([r, g, b]) if scanned => m.base_color = Color::linear_rgb(r, g, b),

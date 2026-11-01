@@ -159,7 +159,7 @@ fn convert(
 /// A gun-steel finish (`gunsmith::finish`) on the gun-metal scan `m`, as
 /// the bench builds it.
 pub fn steel(m: &mut StandardMaterial, f: &gunsmith::finish::SteelFinish) {
-    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / gunsmith::finish::TILE));
+    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(1.0 / f.tile));
     let scanned = m.base_color_texture.is_some();
     match f.gain {
         // On the scan's albedo; without the scan, on its average (0.045).
