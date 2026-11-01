@@ -288,8 +288,18 @@ fn one_up(
         return;
     }
     said.0 = true;
-    let gun = guns.iter().find(|(_, by, packed)| by.0 == me && !packed);
-    let empty = gun.is_some_and(|(g, _, _)| g.firearm.chambers.iter().all(|c| c.is_none()));
+    // Every gun on you (two pistols: the first found was the empty one,
+    // and the advice was for it, not the one drawn).
+    let mine: Vec<&Gun> = guns
+        .iter()
+        .filter(|(_, by, packed)| by.0 == me && !packed)
+        .map(|(g, ..)| g)
+        .collect();
+    let gun = mine.first().copied();
+    let empty = !mine.is_empty()
+        && mine
+            .iter()
+            .all(|g| g.firearm.chambers.iter().all(|c| c.is_none()));
     info!(
         "off the truck: {}",
         match (gun.is_some(), empty) {
@@ -302,12 +312,15 @@ fn one_up(
     // it: "one up the spout" to an empty gun with empty spares racked
     // nothing): in the gun's magazine, a loaded one on you, or rounds in
     // the crate.
-    let in_gun =
-        gun.is_some_and(|(g, _, _)| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
+    let in_gun = mine
+        .iter()
+        .any(|g| g.firearm.magazine.as_ref().is_some_and(|m| m.rounds > 0));
     // (One that fits it: an AK's magazine on you is no help to the PM, and
     // "Mag in" sent the newcomer out with none it could use.)
-    let family = gun.and_then(|(g, _, _)| g.firearm.def.magazine_family.clone());
-    let fits = |m: &crate::weapons::Mag| family.as_deref() == Some(m.family.as_str());
+    let fits = |m: &crate::weapons::Mag| {
+        mine.iter()
+            .any(|g| g.firearm.def.magazine_family.as_deref() == Some(m.family.as_str()))
+    };
     let spare = mags
         .iter()
         .any(|(it, by, m)| it.rounds > 0 && fits(m) && by.is_some_and(|b| b.0 == me));
