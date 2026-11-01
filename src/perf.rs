@@ -166,12 +166,21 @@ mod tests {
                 .next()
                 .map(|m| Vec2::from(m.at))
         };
+        // Only bodies the physics step simulates: a stowed item (a pack,
+        // the crate, a socket) is disabled, never asleep. And not one that
+        // lifts (a Featherstone hovers on a force every frame, by design,
+        // and a force keeps a body awake).
+        let catalog = app.world().resource::<crate::items::Catalog>().clone();
         let positions = |w: &mut World| -> Vec<(Entity, Vec3)> {
-            w.query_filtered::<(Entity, &GlobalTransform, &RigidBody), With<crate::items::Item>>()
-                .iter(w)
-                .filter(|(_, _, b)| b.is_dynamic())
-                .map(|(e, g, _)| (e, g.translation()))
-                .collect()
+            w.query_filtered::<(Entity, &GlobalTransform, &RigidBody, &crate::items::Item), (
+                Without<RigidBodyDisabled>,
+                Without<ColliderDisabled>,
+                Without<crate::interact::Held>,
+            )>()
+            .iter(w)
+            .filter(|(_, _, b, i)| b.is_dynamic() && catalog.get(i.kind()).lift_kg <= 0.0)
+            .map(|(e, g, _, _)| (e, g.translation()))
+            .collect()
         };
         let before = positions(app.world_mut());
         for _ in 0..30 {
@@ -211,9 +220,10 @@ mod tests {
     /// drop and across the valley. Awake items keep the physics step
     /// solving their contacts every frame, and nothing that builds on
     /// rest (a merge, a cheaper tick) can. First measure (2026-11-01):
-    /// 7-12 awake a valley (2-3%), 4-7 of them within 15 m of the drop,
-    /// creeping up to 0.04 mm a frame, a Featherstone in every one; the
-    /// yard 17 of 30, most not moving at all.
+    /// 4-8 awake a valley (1-2%), 3-4 of them within 15 m of the drop,
+    /// piled guns, magazines and boxes rocking on their contacts; the yard
+    /// none. (Stowed items, disabled, and Featherstones, which hover on a
+    /// force, aren't counted.)
     #[test]
     #[ignore = "known failing (2026-11-01): stacked items never sleep; Hands un-ignores it with the fix. \
                 cargo test --lib gauge_items_fall_asleep -- --ignored --nocapture"]

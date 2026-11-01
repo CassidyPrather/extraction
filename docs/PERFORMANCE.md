@@ -331,20 +331,24 @@ meshes for 914: 26% fewer, and nothing measurable at the drop.
 What it found instead: some items never sleep. `perf::tests::
 gauge_items_fall_asleep` settles each valley and the yard, then counts
 the dynamic items still awake, across the valley and within 15 m of
-the drop, with the worst by kind and by creep a frame. It's ignored as
-known failing until the physics fix (Hands'):
+the drop, with the worst by kind and by creep a frame. It counts only
+bodies the physics step simulates (not stowed, disabled, or held), and
+not items that lift (a Featherstone hovers on a force, by design). It's
+ignored as known failing until the physics fix (Hands'):
 
-| | dynamic items | awake | at the drop | worst creep |
-| - | - | - | - | - |
-| Marrow Creek | 437 | 8 (2%) | 5 | 0.011 mm/frame |
-| Kettle Pass | 378 | 8 (2%) | 4 | 0.044 |
-| Cinder Works | 351 | 7 (2%) | 5 | 0.011 |
-| Sallow Reservoir | 319 | 10 (3%) | 7 | 0.009 |
-| Rime Fell | 420 | 12 (3%) | 5 | 0.017 |
-| the yard | 30 | 17 (57%) | 0 | 0.017; most 0.000 |
+| | dynamic items | awake | at the drop |
+| - | - | - | - |
+| Marrow Creek | 433 | 4 (1%) | 4 |
+| Kettle Pass | 376 | 6 (2%) | 3 |
+| Cinder Works | 348 | 4 (1%) | 4 |
+| Sallow Reservoir | 316 | 5 (2%) | 4 |
+| Rime Fell | 417 | 8 (2%) | 3 |
+| the yard | 13 | 0 | 0 |
 
-A Featherstone is awake in every valley; the yard's awake items mostly
-don't move at all.
+The awake are guns, magazines, clips and boxes in piles, creeping up to
+0.04 mm a frame. They rock on their contacts above Avian's angular
+sleep threshold (0.15 rad/s), and one rocker keeps its whole pile's
+island awake.
 
 ## CPU: a busy raid moment
 
