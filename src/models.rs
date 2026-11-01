@@ -214,6 +214,9 @@ pub const MATERIAL_NAMES: &[&str] = &[
     "Orange",
     "Blue",
     "CarBlue",
+    "RagRed",
+    "RagBlue",
+    "Russet",
     "Leaf",
     "Enamel",
     "Worn",
@@ -409,6 +412,24 @@ impl ModelMaterials {
                 m.base_color = Color::srgb(0.21, 0.29, 0.4);
                 m.metallic = 0.25;
             }),
+            // Rag cloth: the canvas scan's weave, its own colour gone, in a
+            // dye faded by years of floors (a rag rug's stripes). In the
+            // print colours a rug at the door read as a flag
+            // (docs/craft/PROP_READING.md).
+            "RagRed" | "RagBlue" => {
+                let c = if name == "RagRed" {
+                    Color::srgb(0.42, 0.2, 0.16)
+                } else {
+                    Color::srgb(0.22, 0.26, 0.33)
+                };
+                derive(Mat::Canvas, &move |m| {
+                    m.base_color_texture = None;
+                    m.base_color = c;
+                    m.uv_transform = bevy::math::Affine2::from_scale(Vec2::splat(4.0));
+                })
+            }
+            // A fox's fur: russet, not the print red.
+            "Russet" => flat(materials, Color::srgb(0.46, 0.23, 0.11), 0.0, 0.92),
             "Leaf" => flat(materials, Color::srgb(0.2, 0.4, 0.1), 0.0, 0.7),
             // White enamel: mugs, bowls, the kettle, labels' white print, and the
             // houses' stoves and sinks.

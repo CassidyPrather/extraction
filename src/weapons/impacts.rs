@@ -535,6 +535,9 @@ fn robot_recipe(part: Option<crate::robots::PartRole>, hurt: bool) -> Vec<Spray>
     }
 }
 
+/// How hard an impact's burst of dust leaves the face, m/s (`recipe`).
+const JET_OUT: f32 = 3.0;
+
 fn recipe(kind: ImpactKind) -> Vec<Spray> {
     let puff = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
         n,
@@ -550,13 +553,32 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
         wind: 0.7,
         ..SPRAY
     };
+    // The burst: small puffs thrown hard out of the face along its normal,
+    // braked by the air within a few tenths of a second and blooming as
+    // they stop (a ball left hanging didn't read as a hit).
+    let jet = |mat: fn(&FxAssets) -> Handle<StandardMaterial>, n| Spray {
+        n,
+        mesh: |a| a.puff.clone(),
+        mat,
+        size: Vec3::splat(0.06),
+        out: JET_OUT,
+        scatter: 0.6,
+        life: 0.7,
+        grow: 3.0,
+        gravity: -0.1,
+        drag: 5.0,
+        wind: 0.5,
+        ..SPRAY
+    };
     match kind {
         ImpactKind::Masonry => vec![
-            puff(|a| a.dust.clone(), 4),
+            jet(|a| a.dust.clone(), 5),
+            puff(|a| a.dust.clone(), 3),
+            // Grit, with its dust.
             Spray {
                 n: 6,
                 size: Vec3::splat(0.022),
-                out: 2.5,
+                out: 2.6,
                 scatter: 1.5,
                 life: 0.7,
                 spin: 20.0,
@@ -599,6 +621,7 @@ fn recipe(kind: ImpactKind) -> Vec<Spray> {
             ..SPRAY
         }],
         ImpactKind::Soil => vec![
+            jet(|a| a.soil_dust.clone(), 5),
             puff(|a| a.soil_dust.clone(), 3),
             Spray {
                 n: 6,
@@ -916,6 +939,33 @@ fn age_decals(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A round into masonry or soil throws its dust: a burst of small
+    /// puffs out of the face, faster and smaller than the cloud that
+    /// lingers after, with grit thrown with it (and the far side's spall
+    /// still harder, `spall_is_thrown_on_harder_than_the_entry_splash`).
+    #[test]
+    fn an_impact_throws_its_dust() {
+        for k in [ImpactKind::Masonry, ImpactKind::Soil] {
+            let r = recipe(k);
+            let puffs: Vec<_> = r.iter().filter(|s| s.grow > 0.0).collect();
+            let burst = puffs
+                .iter()
+                .max_by(|a, b| a.out.total_cmp(&b.out))
+                .expect("dust");
+            let cloud = puffs
+                .iter()
+                .max_by(|a, b| a.size.x.total_cmp(&b.size.x))
+                .unwrap();
+            assert!(burst.out >= 3.0, "{k:?}: its dust leaves at {}", burst.out);
+            assert!(burst.size.x < cloud.size.x, "{k:?}: a burst of small puffs");
+            assert!(burst.n >= 5, "{k:?}: a burst, not a puff or two");
+            assert!(
+                r.iter().any(|s| s.grow == 0.0 && s.out >= burst.out * 0.8),
+                "{k:?}: grit thrown with it"
+            );
+        }
+    }
 
     /// Every spray that spreads (dust, smoke, gas: `grow`) is a soft puff
     /// (`render::puff`), and only those are: every impact, every exit,
