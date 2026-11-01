@@ -372,6 +372,9 @@ pub enum Kind {
     HurtUnwarned,
     /// Went down.
     Killed,
+    /// A machine had it with nothing chambered, the driver's "one up the
+    /// spout" not done.
+    Unready,
 }
 
 /// Where the raid has got to.
@@ -557,6 +560,10 @@ pub(super) struct Newcomer {
     told_back: bool,
     /// When the reckless one last picked a fight.
     fought_at: f32,
+    /// Racked at the driver's "one up the spout".
+    racked: bool,
+    /// A machine has noticed it this raid (and whether a round was up).
+    noticed: bool,
 }
 
 impl Newcomer {
@@ -777,6 +784,33 @@ pub(super) fn direct_raid(
     }) {
         again.push(First::Sentry);
     }
+    // "One up the spout": out, racked, back in the holster (the safety
+    // stays on).
+    let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
+    let has_gun = guns().any(|(_, by, p)| by == player && !p);
+    if !state.racked && has_gun && state.heard.iter().any(|l| l == super::hints::ONE_UP) {
+        state.racked = true;
+        if !one_up(guns(), player) {
+            state.note(now, Kind::Learned, "one up the spout, as the driver said");
+            super::second_hour::cut_in(
+                &mut bot,
+                vec![
+                    Task::DrawGun,
+                    Task::Gun(crate::weapons::flat::MacroKind::Rack),
+                    Task::Stow(Side::Right),
+                ],
+            );
+        }
+    }
+    // The first machine to have it: a round up by then, or not.
+    if tells.noticed.read().any(|ev| on_me(ev.robot)) && !state.noticed && has_gun {
+        state.noticed = true;
+        if one_up(guns(), player) {
+            state.note(now, Kind::Learned, "noticed, with a round up");
+        } else {
+            state.note(now, Kind::Unready, "noticed, with nothing chambered");
+        }
+    }
     if !again.is_empty() {
         // Warned: by the machine itself.
         state.said_at = now;
@@ -970,7 +1004,8 @@ pub(super) fn direct_raid(
     {
         state.fought_at = now;
         state.note(now, Kind::Learned, "a machine in range: took it on");
-        super::second_hour::cut_in(&mut bot, vec![Task::DrawGun, Task::Engage { shots: 12 }]);
+        let guns = world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
+        super::second_hour::cut_in(&mut bot, take_it_on(guns, player));
         return;
     }
     // The truck's there: whatever the walk, to it now.
@@ -1757,7 +1792,12 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
     }
     let bad = moments
         .iter()
-        .filter(|(_, k, _)| matches!(k, Kind::Stuck | Kind::HurtUnwarned | Kind::Killed))
+        .filter(|(_, k, _)| {
+            matches!(
+                k,
+                Kind::Stuck | Kind::HurtUnwarned | Kind::Killed | Kind::Unready
+            )
+        })
         .count();
     let home = moments.iter().any(|(_, _, w)| w == "in the truck and away");
     if home && bad == 0 {
@@ -1766,7 +1806,7 @@ fn report(bot: &mut Bot, p: &Persona, moments: &[(f32, Kind, String)]) {
     } else {
         bot.failed += 1;
         bot.log.push(format!(
-            "FAIL {}: {}{bad} stuck, hurt unwarned or killed",
+            "FAIL {}: {}{bad} stuck, hurt unwarned, killed or unready",
             p.name,
             if home { "" } else { "never got home; " }
         ));
@@ -1829,7 +1869,7 @@ fn under_a_roof(
     let d = entrances
         .doors
         .iter()
-        .filter(|d| !skip.contains(&d.building))
+        .filter(|d| d.outside && !skip.contains(&d.building))
         .filter(|d| {
             // A way in from outside: its far side is under that roof.
             let inside = d.mid - d.out.normalize_or(Vec3::Z) * 1.5;
@@ -2112,6 +2152,49 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
 }
 
 /// `legs`, round the buildings in the way.
+/// What readies `f` to fire: a reload when it has no magazine or none
+/// left in it, a rack when nothing's chambered, the selector when it's on
+/// safe.
+fn readying(f: &extraction_core::firearm::Firearm) -> Vec<Task> {
+    use crate::weapons::flat::MacroKind;
+    use extraction_core::firearm::FireMode;
+    let mut tasks = Vec::new();
+    if f.def.magazine_family.is_some() && f.magazine.as_ref().is_none_or(|m| m.rounds == 0) {
+        tasks.push(Task::Gun(MacroKind::Reload));
+    }
+    if f.chambers.iter().all(|c| c.is_none()) {
+        tasks.push(Task::Gun(MacroKind::Rack));
+    }
+    if f.fire_mode() == FireMode::Safe {
+        tasks.push(Task::Gun(MacroKind::Mode));
+    }
+    tasks
+}
+
+/// A fight, for the reckless one: the gun out, readied (`readying`, from
+/// the one on `player`'s body, not in the pack), and fired. The PM comes
+/// out of the crate on safe; pulling the trigger on that does nothing.
+fn take_it_on<'a>(
+    mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
+    player: Entity,
+) -> Vec<Task> {
+    let mut tasks = vec![Task::DrawGun];
+    if let Some((g, _, _)) = guns.find(|(_, by, packed)| *by == player && !packed) {
+        tasks.extend(readying(&g.firearm));
+    }
+    tasks.push(Task::Engage { shots: 12 });
+    tasks
+}
+
+/// Whether the gun on `player`'s body has a round up.
+fn one_up<'a>(
+    mut guns: impl Iterator<Item = (&'a crate::weapons::Gun, Entity, bool)>,
+    player: Entity,
+) -> bool {
+    guns.find(|(_, by, packed)| *by == player && !packed)
+        .is_some_and(|(g, _, _)| g.firearm.chambers.iter().any(|c| c.is_some()))
+}
+
 fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
@@ -2215,6 +2298,57 @@ fn way_out(world: &World2, view: &RaidView, here: Vec2) -> (Vec<Task>, Vec2) {
     )
 }
 
+/// A place a newcomer walks to on the way through a building
+/// (building-local).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Stop {
+    /// Walk to it.
+    At(Vec2),
+    /// Up to this side of the door, then open it.
+    Door(Entity, Vec2),
+}
+
+/// The stops along an indoor `path` from `o`: each door the way crosses,
+/// and the waypoints a straight walk can't skip. A waypoint is left out
+/// only where the walk from the last stop on to the next stays clear
+/// (dropping three in four cut a corner through the post office's table
+/// and chair, and the newcomer climbed onto the table and stuck there).
+fn indoor_stops(plan: &crate::sim::indoor::BuildingPlan, o: Vec2, path: &[Vec2]) -> Vec<Stop> {
+    let mut out = Vec::new();
+    let (mut prev, mut kept) = (o, o);
+    let last = path.len().saturating_sub(1);
+    for (i, &w) in path.iter().enumerate() {
+        let doors = plan.doors_on(prev, w);
+        if doors.is_empty()
+            && i != last
+            && plan
+                .grid
+                .line_clear(kept.to_array(), path[i + 1].to_array())
+        {
+            prev = w;
+            continue;
+        }
+        for (door, cross) in doors {
+            // This side of where the way crosses it; where that's past a
+            // jamb (by a bunker's narrow door), the waypoint before it.
+            let mut before = cross + (prev - cross).normalize_or_zero() * 0.8;
+            let clear = |a: Vec2, b: Vec2| plan.grid.line_clear(a.to_array(), b.to_array());
+            if !clear(kept, before) && prev != kept {
+                out.push(Stop::At(prev));
+                kept = prev;
+            }
+            if !clear(kept, before) {
+                before = kept;
+            }
+            out.push(Stop::Door(door, before));
+        }
+        out.push(Stop::At(w));
+        prev = w;
+        kept = w;
+    }
+    out
+}
+
 /// To `p` from `here`: indoors, round to its building's door, open it, in,
 /// and through the rooms to it (the building's plan, doors opened on the
 /// way: a find in a back room isn't reached through the wall).
@@ -2235,29 +2369,20 @@ fn way_to(
             .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)));
         if let Some((o, path)) = entry.and_then(|o| Some((o, plan.path(o, goal)?))) {
             t.extend(route(world, view, here, plan.world2(o)));
-            let mut prev = o;
-            let last = path.len().saturating_sub(1);
-            for (i, w) in path.into_iter().enumerate() {
-                let doors = plan.doors_on(prev, w);
-                // Every few cells, and at each door and the end.
-                if doors.is_empty() && i % 4 != 0 && i != last {
-                    continue;
-                }
-                for (door, cross) in doors {
-                    // Up to it first (the last waypoint kept may be a few
-                    // strides back): this side of where the way crosses it.
-                    let back = (prev - cross).normalize_or_zero() * 0.8;
-                    t.push(Task::WalkTo {
-                        to: plan.world2(cross + back),
+            for stop in indoor_stops(plan, o, &path) {
+                match stop {
+                    Stop::Door(door, before) => {
+                        t.push(Task::WalkTo {
+                            to: plan.world2(before),
+                            within: 0.4,
+                        });
+                        t.push(Task::OpenDoor(door));
+                    }
+                    Stop::At(w) => t.push(Task::WalkTo {
+                        to: plan.world2(w),
                         within: 0.4,
-                    });
-                    t.push(Task::OpenDoor(door));
+                    }),
                 }
-                t.push(Task::WalkTo {
-                    to: plan.world2(w),
-                    within: 0.4,
-                });
-                prev = w;
             }
             return t;
         }
@@ -2266,7 +2391,7 @@ fn way_to(
         let b = en.building_at(p)?;
         en.doors
             .iter()
-            .filter(|d| d.building == b)
+            .filter(|d| d.outside && d.building == b)
             .filter(|d| en.building_at(d.mid - d.out.normalize_or(Vec3::Z) * 1.5) == Some(b))
             .min_by(|a, c| a.mid.distance(p).total_cmp(&c.mid.distance(p)))
             .copied()
@@ -2492,9 +2617,14 @@ pub(super) fn first_fight(
     raid: Res<Raid>,
     mut fight: ResMut<Fight>,
     mut tells: Tells,
-    mut bots: Query<(&mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
+    mut bots: Query<(Entity, &mut Bot, &Transform, &mut crate::rig::RigInput), With<LocalPlayer>>,
     health: Query<&crate::health::Health, With<LocalPlayer>>,
     entrances: Option<Res<crate::robots::doors::Entrances>>,
+    guns: Query<(
+        &crate::weapons::Gun,
+        &crate::anomaly::artifacts::CarriedBy,
+        Has<crate::interact::body::InBackpack>,
+    )>,
     time: Res<Time>,
 ) {
     let Some(kind) = opts.encounter.as_deref() else {
@@ -2600,7 +2730,7 @@ pub(super) fn first_fight(
     let Some(what) = first_tell.filter(|_| !fight.reacted) else {
         return;
     };
-    let Ok((mut bot, root, _)) = bots.single_mut() else {
+    let Ok((player, mut bot, root, _)) = bots.single_mut() else {
         return;
     };
     fight.reacted = true;
@@ -2609,7 +2739,7 @@ pub(super) fn first_fight(
     let away = (here - from).normalize_or(Vec2::Y);
     let hush = what.contains("hush");
     let answer: Vec<Task> = if p.reckless && !hush {
-        vec![Task::DrawGun, Task::Engage { shots: 12 }]
+        take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
     } else if p.lost {
         // Off, anywhere.
         vec![Task::WalkTo {
@@ -2746,6 +2876,90 @@ the Hollow.";
         assert_eq!(
             place_on_card(card, &zone).map(|(n, _)| n).as_deref(),
             Some("Village")
+        );
+    }
+}
+
+#[cfg(test)]
+mod indoor_tests {
+    use super::{Stop, indoor_stops};
+    use bevy::ecs::system::SystemState;
+    use bevy::prelude::*;
+
+    /// Indoors, each straight walk between a newcomer's stops stays on the
+    /// building plan's open cells (furniture and its clearance kept out):
+    /// from the door nearest each loot spot in every building on Marrow, to
+    /// the spot. (The post office's table and chair were walked through,
+    /// and climbed.)
+    #[test]
+    fn indoor_walks_go_round_the_furniture() {
+        let opts = crate::launch::LaunchOptions {
+            robots: false,
+            map: "marrow_creek".into(),
+            ..Default::default()
+        };
+        let mut app = crate::headless_app(opts, false);
+        app.finish();
+        app.cleanup();
+        app.update();
+        let w = app.world_mut();
+        let mut st: SystemState<(
+            Query<(Entity, &crate::world::buildings::Building, &Transform)>,
+            Query<(Entity, &crate::world::buildings::DoorLeaf, &ChildOf)>,
+        )> = SystemState::new(w);
+        let (b, d) = st.get(w).unwrap();
+        let plans = crate::sim::indoor::plan_buildings(&b, &d);
+        let spots: Vec<Vec3> = w
+            .get_resource::<crate::world::buildings::BuildingLoot>()
+            .map(|l| l.0.iter().map(|s| s.at).collect())
+            .unwrap_or_default();
+        let (mut walks, mut cut) = (0, Vec::new());
+        for plan in &plans {
+            for spot in spots.iter().filter(|s| plan.contains(**s, 0.3)) {
+                let goal = plan.to_local(*spot).xz();
+                let Some(o) = plan
+                    .doors
+                    .iter()
+                    .filter_map(|d| d.outside)
+                    .min_by(|a, b| a.distance(goal).total_cmp(&b.distance(goal)))
+                else {
+                    continue;
+                };
+                let Some(path) = plan.path(o, goal) else {
+                    continue;
+                };
+                walks += 1;
+                let mut from = Some(o);
+                for stop in indoor_stops(plan, o, &path) {
+                    match stop {
+                        Stop::Door(_, before) => {
+                            if let Some(f) = from {
+                                if !plan.grid.line_clear(f.to_array(), before.to_array()) {
+                                    cut.push(format!("{} {f} -> {before}", plan.name));
+                                }
+                            }
+                            // Through the door: its leaf is in the way till
+                            // it's open.
+                            from = None;
+                        }
+                        Stop::At(p) => {
+                            if let Some(f) = from {
+                                if !plan.grid.line_clear(f.to_array(), p.to_array()) {
+                                    cut.push(format!("{} {f} -> {p}", plan.name));
+                                }
+                            }
+                            from = Some(p);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(walks > 50, "only {walks} indoor walks tried");
+        assert!(
+            cut.is_empty(),
+            "{} of {walks} indoor walks cut through furniture:\n{}",
+            cut.len(),
+            cut.join("\n")
         );
     }
 }

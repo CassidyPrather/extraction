@@ -478,12 +478,15 @@ fn ring_marked(
             (_, Some(a)) => ((a.max - a.min).xz().length() * 0.5 + 0.04).clamp(0.08, 0.6),
             _ => 0.15,
         };
-        let scale = gt.compute_transform().scale.max_element().max(1e-3);
+        let t = gt.compute_transform();
+        let scale = t.scale.max_element().max(1e-3);
         commands.spawn((
             MarkRing,
             Mesh3d(meshes.add(Torus::new(r - 0.006, r + 0.006))),
             MeshMaterial3d(handle.clone()),
-            Transform::from_scale(Vec3::splat(1.0 / scale)),
+            // Flat on the ground whatever lies in it (a pistol on its side
+            // turned the ring on edge with it).
+            Transform::from_scale(Vec3::splat(1.0 / scale)).with_rotation(t.rotation.inverse()),
             ChildOf(e),
         ));
     }

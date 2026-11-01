@@ -172,6 +172,8 @@ struct Bench {
     /// Set up and settling: the next frame past `wait` takes it.
     armed: bool,
     closing: bool,
+    /// Top-level nodes not drawn (`--hide`: the Mosin's bayonet, say).
+    hide: Vec<String>,
 }
 
 const CYCLE: f32 = 4.0;
@@ -330,8 +332,33 @@ fn scanned(
     m
 }
 
-/// The scan's tile on blued and stamped gun steel (the game's).
-const BLUED_TILE: f32 = 0.075;
+/// A gun-steel finish on the gun-metal scan, as the game's `models::steel`.
+fn steel(mut m: StandardMaterial, f: &gunsmith::finish::SteelFinish) -> StandardMaterial {
+    m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / f.tile));
+    let scanned = m.base_color_texture.is_some();
+    match f.gain {
+        Some([r, g, b]) if scanned => m.base_color = Color::linear_rgb(r, g, b),
+        Some([r, g, b]) => m.base_color = Color::linear_rgb(0.045 * r, 0.045 * g, 0.045 * b),
+        None => {
+            m.base_color_texture = None;
+            let [r, g, b] = f.flat;
+            m.base_color = Color::linear_rgb(r, g, b);
+        }
+    }
+    if f.keep_scan_metal && m.metallic_roughness_texture.is_some() {
+        m.metallic = f.metallic;
+        m.perceptual_roughness = f.roughness;
+    } else {
+        m.metallic_roughness_texture = None;
+        m.metallic = f.metallic;
+        m.perceptual_roughness = if f.keep_scan_metal {
+            (0.31 * f.roughness).min(1.0)
+        } else {
+            f.roughness
+        };
+    }
+    m
+}
 
 fn flat(color: Color, metallic: f32, rough: f32) -> StandardMaterial {
     StandardMaterial {
@@ -354,23 +381,9 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
         )
     };
     match name {
-        // As the game's (src/models.rs): the scan at a finer tile, glossier.
-        "Blued" => {
-            let mut m = gun_metal();
-            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-            m.perceptual_roughness *= 0.8;
-            m
-        }
-        "Stamped" => {
-            let mut m = gun_metal();
-            m.base_color_texture = None;
-            m.base_color = Color::srgb(0.065, 0.065, 0.068);
-            m.metallic = 0.2;
-            m.metallic_roughness_texture = None;
-            m.perceptual_roughness = 0.5;
-            m.uv_transform = Affine2::from_scale(Vec2::splat(1.0 / BLUED_TILE));
-            m
-        }
+        // As the game's (src/models.rs, `steel`).
+        "Blued" => steel(gun_metal(), &gunsmith::finish::BLUED),
+        "Stamped" => steel(gun_metal(), &gunsmith::finish::STAMPED),
         "Wood" => scanned(
             "gun_wood",
             0.25,
@@ -408,12 +421,7 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
             m.metallic = 0.0;
             m
         }
-        "Black" => {
-            let mut m = gun_metal();
-            m.base_color = Color::srgb(0.45, 0.45, 0.45);
-            m.perceptual_roughness = m.perceptual_roughness.max(0.6);
-            m
-        }
+        "Black" => steel(gun_metal(), &gunsmith::finish::BLACK),
         "Brass" => flat(Color::srgb(0.72, 0.52, 0.24), 1.0, 0.35),
         "Worn" => flat(Color::srgb(0.5, 0.5, 0.5), 1.0, 0.45),
         "Rubber" => flat(Color::srgb(0.07, 0.07, 0.07), 0.0, 0.88),
@@ -452,6 +460,7 @@ fn main() {
     let mut out = None;
     let mut shots_dir = None;
     let mut t = 1.0;
+    let mut hide = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
@@ -472,6 +481,7 @@ fn main() {
             "--t" => t = val().parse().expect("--t 0..1"),
             "--exploded" => one.exploded = true,
             "--ortho" => one.ortho = Some(val().parse().expect("--ortho metres")),
+            "--hide" => hide.push(val()),
             _ if !a.starts_with("--") => id = Some(a.to_string()),
             _ => panic!("unknown argument {a}"),
         }
@@ -537,6 +547,7 @@ fn main() {
         taken: 0,
         armed: false,
         closing: false,
+        hide,
     })
     .init_resource::<Finishes>()
     .init_resource::<Bounds>()
@@ -647,6 +658,9 @@ fn spawn_model(
         let Some(moves) = moves_for(&node.name) else {
             continue;
         };
+        if bench.hide.contains(&node.name) {
+            continue;
+        }
         let piece = commands
             .spawn((
                 Piece {
@@ -938,7 +952,18 @@ fn frame_camera(
     } else {
         Vec3::Y
     };
-    *cam = Transform::from_translation(focus + dir * bench.dist).looking_at(focus, up);
+    // Far off, back far enough that the whole gun fits the frame (a Mosin
+    // with its bayonet is 1.7 m: at 1 m the 50-degree lens cut it off).
+    // The frame is 1.6 wide for 1 high.
+    let dist = if bench.dist >= 0.6 && bench.ortho.is_none() {
+        let long = (bounds.hi - bounds.lo).max_element();
+        bench
+            .dist
+            .max(long * 0.55 / (1.6 * 25f32.to_radians().tan()))
+    } else {
+        bench.dist
+    };
+    *cam = Transform::from_translation(focus + dir * dist).looking_at(focus, up);
 }
 
 // --- Input and shots ------------------------------------------------------------
