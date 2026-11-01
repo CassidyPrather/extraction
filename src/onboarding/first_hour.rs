@@ -563,6 +563,8 @@ pub(super) struct Newcomer {
     fought_at: f32,
     /// Racked at the driver's "one up the spout".
     racked: bool,
+    /// The broken walker wrecked (job 2's first fight, won).
+    broke_it: bool,
     /// A machine has noticed it this raid (and whether a round was up).
     noticed: bool,
 }
@@ -786,6 +788,11 @@ pub(super) fn direct_raid(
         again.push(First::Sentry);
     }
     let noticed_now = tells.noticed.read().any(|ev| on_me(ev.robot));
+    // The first fight it can win: the broken walker wrecked.
+    if !state.broke_it && world.broken.iter().any(|r| r.wrecked) {
+        state.broke_it = true;
+        state.note(now, Kind::Learned, "wrecked the broken walker");
+    }
     // "One up the spout": out, racked, back in the holster (the safety
     // stays on).
     let guns = || world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p));
@@ -863,6 +870,33 @@ pub(super) fn direct_raid(
         let answer: Vec<Task> = match f {
             First::Jam(_) => vec![Task::Gun(crate::weapons::flat::MacroKind::Rack)],
             First::Heard if !p.reckless => vec![Task::Wait(15.0)],
+            // "Its eye's still good: shoot that": the one to take on (bar
+            // the lost one, who goes anywhere but at it).
+            First::BrokenNoticed if !p.lost => {
+                state.note(
+                    now,
+                    Kind::Learned,
+                    "a broken walker: took it on, as the driver said",
+                );
+                take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                )
+            }
+            // "Keep your distance": back off it, and at it again.
+            First::Shoved if !p.lost => {
+                let from = world.nearest_robot(here).unwrap_or(here + Vec2::Y);
+                let away = (here - from).normalize_or(Vec2::Y);
+                let mut t = vec![Task::WalkTo {
+                    to: here + away * 4.0,
+                    within: 1.0,
+                }];
+                t.extend(take_it_on(
+                    world.carried_guns.iter().map(|(g, by, p)| (g, by.0, p)),
+                    player,
+                ));
+                t
+            }
             // "Run across it, to cover", "Break its line", "Down, out of
             // its sweep": for it, as told.
             // "Down, out of its sweep": low, and away from it (a sentry
@@ -2900,7 +2934,10 @@ pub(super) fn first_fight(
     let from = fight.machine.as_ref().map_or(here, |(_, at)| *at);
     let away = (here - from).normalize_or(Vec2::Y);
     let hush = what.contains("hush");
-    let answer: Vec<Task> = if p.reckless && !hush {
+    // The broken walker is the one the driver says to take on (bar the
+    // lost one).
+    let broken = kind == "broken" && !p.lost;
+    let answer: Vec<Task> = if (p.reckless || broken) && !hush {
         take_it_on(guns.iter().map(|(g, by, p)| (g, by.0, p)), player)
     } else if p.lost {
         // Off, anywhere.
