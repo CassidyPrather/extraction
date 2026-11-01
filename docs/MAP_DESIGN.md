@@ -683,7 +683,8 @@ door". The tester's ask: designed, busy places with the machines' activity
 broken up by big patches of near nothing, and sightlines broken by the
 land. `map_openness` measures it for every valley (the map lint's
 `openness:` line); `TIGHT` lists the valleys held to it (Marrow Creek, the
-prototype, and Cinder Works; the others join as they're reworked).
+prototype, Cinder Works and Kettle Pass; the others join as they're
+reworked).
 
 - **Close enough to walk.** Each place's walk to its nearest neighbour,
   on the gentle grid, is about 40-45 s at a walking pace (2.4 m/s),
@@ -777,6 +778,47 @@ notice is capped at 45 m.
 
 ![Cinder Works from overhead, as it was](shots/map-design/cinder_warp_before.jpg)
 ![Cinder Works from overhead, pulled in](shots/map-design/cinder_warp_after.jpg)
+
+Kettle Pass was the last over the walk (139 m, 58 s to the nearest place;
+open ground at the 16% limit). Pulled in by 0.75, 640 -> 500 m, the
+south gate and the mine head held whole, its ground was a squeezed copy
+of the old only once everything with a size came in with it: the rim
+(70 -> 52.5 m wide, 16 -> 12 m high), the ground's noise (its height and
+its wavelength both: sampled at world positions, a shorter wavelength
+pulls its pattern in too) and the mine yard's declared terrace (5 m over
+the base, now 3.75). Left out, the slopes came out a third steeper: paths
+over their grade, wrecks off their wheels, the gate on the rim. What
+doesn't scale had to be put back: the gate's cluster at its old offsets
+(the truck stop 15 m out, past the gate's post pads), garden fences at
+their old offsets from their houses, woodpiles thinned where they ran
+into each other, and the deep kettle's way down moved to where its exit
+67 m off stands its layout's 2.4 m over it. Trees don't come down with
+the land: the pass's pines were thinned so its beacon is seen from 81%
+of the way in. Water doesn't either: where the pass road met the beck at
+a slant it ran 15 m along the falling water, its deck under it; it
+crosses square now. The valley's cloud cap is set in metres
+(`sky::valley_air`), so it came down with the tops: it lifts at 45 m,
+not 52, and the west summit (57 m) still goes into it while the pass
+(34 m) is in its skirts, as they were at 68 and 37 m under 52.
+
+![From the pass toward the west summit: the cap at 52 m (left) and 45 m (right)](shots/map-design/kettle_cap_from_pass.jpg)
+
+| Kettle Pass | as it was | pulled in |
+|---|---|---|
+| nearest-place walk, mean | 139 m (58 s) | 99 m (41 s) |
+| open ground seen past 70 m | 16% | 9% |
+| sightline, 90th percentile | 78 m | 68 m |
+| longest empty walk | 44 m | 22 m |
+| a hot spot's fight heard by, on average | 1.1 | 1.4 |
+| two landmarks in sight, day / fog | 94% / 93% | 99% / 98% |
+| night fix | 98.5% | 99.7% |
+
+Kettle's cloud cap (`sky::valley_air`, from 52 m up) hides the valley
+from a camera over it, so these are `scripts/map_preview.py`'s design
+previews, each to its own scale (the 100 m bar):
+
+![Kettle Pass from overhead, as it was](shots/map-design/kettle_warp_before.jpg)
+![Kettle Pass from overhead, pulled in](shots/map-design/kettle_warp_after.jpg)
 
 A tight valley has no spare field for a test to stage a fight on. A test
 that needs open ground and no particular place loads the test field

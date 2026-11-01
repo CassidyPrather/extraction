@@ -10,6 +10,8 @@ headset's sharpness. The review procedure is docs/craft/ITEM_READING.md.
 - down: look down at the items from DIST away, 55 degrees below level
   (a crate at your feet, a table you lean over), not across a room.
   Flags combine: `1 grey down`.
+- turn: turn each item half round first (a prop's -Z face, its front,
+  to the eye).
 - an item `proc:bolt` or `proc:detector`: built as `src/anomaly/visuals.rs`
   builds it (those have no model file).
 
@@ -40,6 +42,7 @@ grey = "grey" in flags
 # Looking down into a crate or onto a table at your feet: the eye DIST
 # from the items, 55 degrees below level.
 down = "down" in flags
+turn = "turn" in flags
 paths = argv[argv.index("--") + 1:] if "--" in argv else argv[3 if grey else 2:]
 
 SHELF_Y = 0.9  # game y of the shelf's top
@@ -148,6 +151,11 @@ def proc(name):
 
 # Blender space: x right, y away from the eye (game -z), z up.
 items = [proc(p[5:]) if p.startswith("proc:") else import_glb(p) for p in paths]
+if turn:
+    # Half round about the vertical: its bounds mirror in x and y.
+    for root, lo, hi in items:
+        root.rotation_euler = (0.0, 0.0, math.pi)
+    items = [(r, Vector((-hi.x, -hi.y, lo.z)), Vector((-lo.x, -lo.y, hi.z))) for r, lo, hi in items]
 width = sum(hi.x - lo.x for _, lo, hi in items) + GAP * (len(items) - 1)
 x = -width / 2
 depth = max(hi.y - lo.y for _, lo, hi in items)
