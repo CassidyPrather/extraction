@@ -108,11 +108,26 @@ fn dress_offerings(
                     burnt,
                 )
             };
-            // The altar: a low slab, its top where the box's was.
+            // The altar: a low slab set upside down, its planed base for a
+            // level top where gifts are set down: the lip's top
+            // (`anomaly::offering`: a cylinder 0.6 high, its middle 0.4
+            // under the site's), its rough underside sunk in the ground.
+            let (hh, top) = (0.4, -0.1);
             part(
-                stone(0.0, 0.0, -0.7, 0.4, 0.5, 1.2, 0.4, 5),
+                stone_mesh(
+                    &RockSpot {
+                        pos: [0.0; 3],
+                        radius: 0.5,
+                        squash: hh / 0.5,
+                        stretch: 1.2,
+                        yaw: 0.4,
+                        variant: 5 % ROCK_VARIANTS,
+                    },
+                    burnt,
+                ),
                 &rough,
-                Transform::IDENTITY,
+                Transform::from_xyz(0.0, top - 0.55 * hh, 0.0)
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::PI)),
             );
             for i in 0..7 {
                 let a = i as f32 / 7.0 * std::f32::consts::TAU + 0.3;

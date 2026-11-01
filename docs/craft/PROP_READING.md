@@ -126,5 +126,8 @@ shed, a log pile and the blue wreck by the works yard.
   of the concrete scan, a sawn slab at arm's length
   (`marrow_s09_crest_before.jpg`). They're the field's rough stones now
   (`world::rocks::stone_mesh`: faceted, the boulder scan, moss on top),
-  tall and broad-faced to the altar, a low slab for it
-  (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`).
+  tall and broad-faced to the altar. The altar is one set upside down,
+  its planed base the level top where gifts are set down, at the
+  offering lip's height (Anomalies': nothing on top for a gift to roll
+  off) (`marrow_s09_crest_after.jpg`, `marrow_stone_ring_after.jpg`,
+  `marrow_stone_ring_altar_after.jpg`).
