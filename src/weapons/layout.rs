@@ -528,7 +528,9 @@ fn nagant() -> GunLayout {
     let bore = 0.074;
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
-        grip: Transform::IDENTITY,
+        // The palm on the grip, which sits back behind the hammer
+        // (art/guns/nagant.py): it was under the hammer, a long pole.
+        grip: Transform::from_xyz(0.0, 0.0, 0.035),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -540,11 +542,11 @@ fn nagant() -> GunLayout {
         hinge: Vec3::ZERO,
         parts: vec![
             // Frame and grip.
-            part(bx(0.022, 0.08, 0.08), at(0.0, 0.045, -0.03), Blued, Static),
-            // The grip, raked back below the palm (the model's `RAKE`).
+            part(bx(0.022, 0.06, 0.11), at(0.0, 0.055, -0.02), Blued, Static),
+            // The grip, set back behind the hammer and raked.
             part(
-                bx(0.026, 0.085, 0.032),
-                Transform::from_xyz(0.0, -0.04, 0.022).with_rotation(Quat::from_rotation_x(-0.4)),
+                bx(0.027, 0.077, 0.034),
+                Transform::from_xyz(0.0, -0.004, 0.038).with_rotation(Quat::from_rotation_x(-0.22)),
                 Wood,
                 Static,
             ),
@@ -562,8 +564,8 @@ fn nagant() -> GunLayout {
                 Static,
             ),
             part(
-                bx(0.004, 0.02, 0.005),
-                at(0.0, -0.005, -0.024),
+                bx(0.004, 0.024, 0.005),
+                at(0.0, 0.016, -0.04),
                 Black,
                 Trigger,
             ),
@@ -580,11 +582,11 @@ fn ppsh() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.3)),
         support: Some(Vec3::new(0.0, 0.03, -0.3)),
-        muzzle: Vec3::new(0.0, bore, -0.52),
+        muzzle: Vec3::new(0.0, bore, -0.5143),
         port: Vec3::new(0.004, 0.062, -0.16),
         eject: Vec3::new(0.9, 0.7, 0.1),
         sight: at(0.0, 0.08, 0.0),
-        magwell: Some(Transform::from_xyz(0.0, 0.03, -0.152)),
+        magwell: Some(Transform::from_xyz(0.0, 0.03, -0.187)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
             grab: Vec3::new(0.04, 0.046, -0.115),
@@ -593,8 +595,8 @@ fn ppsh() -> GunLayout {
         load_port: Vec3::new(0.004, 0.062, -0.16),
         hinge: Vec3::ZERO,
         parts: vec![
-            // Stock from the well to the butt.
-            part(bx(0.04, 0.04, 0.2), at(0.0, 0.015, -0.1), Wood, Static),
+            // Stock from behind the well to the butt.
+            part(bx(0.04, 0.04, 0.13), at(0.0, 0.015, -0.065), Wood, Static),
             part(
                 bx(0.04, 0.115, 0.27),
                 Transform::from_xyz(0.0, -0.04, 0.18).with_rotation(Quat::from_rotation_x(0.1)),
@@ -602,10 +604,10 @@ fn ppsh() -> GunLayout {
                 Static,
             ),
             // Receiver and the perforated jacket.
-            part(bx(0.033, 0.04, 0.21), at(0.0, 0.05, -0.094), Blued, Static),
+            part(bx(0.033, 0.06, 0.244), at(0.0, 0.04, -0.11), Blued, Static),
             part(
-                Shape::Cylinder(0.0175, 0.34),
-                at(0.0, bore, -0.375),
+                Shape::Cylinder(0.0175, 0.288),
+                at(0.0, bore, -0.370),
                 Blued,
                 Static,
             ),
@@ -705,7 +707,7 @@ fn svd() -> GunLayout {
         port: Vec3::new(0.0175, 0.0705, -0.148),
         eject: Vec3::new(1.0, 0.4, 0.1),
         sight: at(0.0, 0.1071, 0.0),
-        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.124)),
+        magwell: Some(Transform::from_xyz(0.0, 0.025, -0.185)),
         handle: Some(HandleLayout {
             kind: HandleKind::ChargingHandle,
             grab: Vec3::new(0.047, 0.0645, -0.2),
@@ -730,7 +732,7 @@ fn svd() -> GunLayout {
                 Black,
                 Trigger,
             ),
-            part(bx(0.05, 0.05, 0.23), at(0.0, 0.055, -0.405), Wood, Static),
+            part(bx(0.05, 0.05, 0.275), at(0.0, 0.055, -0.425), Wood, Static),
             part(
                 Shape::Cylinder(0.01, 0.44),
                 at(0.0, bore, -0.735),
@@ -769,7 +771,7 @@ fn toz8() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.4)),
-        muzzle: Vec3::new(0.0, bore, -0.84),
+        muzzle: Vec3::new(0.0, bore, -0.81),
         port: Vec3::new(0.0, 0.05, -0.15),
         eject: Vec3::new(0.7, 0.8, 0.2),
         sight: at(0.0, 0.062, -0.03),
@@ -796,8 +798,8 @@ fn toz8() -> GunLayout {
                 Static,
             ),
             part(
-                Shape::Cylinder(0.008, 0.64),
-                at(0.0, bore, -0.52),
+                Shape::Cylinder(0.008, 0.61),
+                at(0.0, bore, -0.505),
                 Blued,
                 Static,
             ),
@@ -958,7 +960,7 @@ fn toz() -> GunLayout {
     GunLayout {
         grip: Transform::from_rotation(Quat::from_rotation_x(0.35)),
         support: Some(Vec3::new(0.0, 0.0, -0.36)),
-        muzzle: Vec3::new(0.0, 0.035, -0.82),
+        muzzle: Vec3::new(0.0, 0.035, -0.8385),
         port: Vec3::new(0.0, 0.04, -0.12),
         eject: Vec3::new(0.0, 0.9, 0.9),
         sight: at(0.0, 0.0534, -0.05),
@@ -974,8 +976,8 @@ fn toz() -> GunLayout {
             // Stock and wrist.
             part(bx(0.04, 0.045, 0.14), at(0.0, -0.005, 0.02), Wood, Static),
             part(
-                bx(0.042, 0.13, 0.28),
-                Transform::from_xyz(0.0, -0.035, 0.22).with_rotation(Quat::from_rotation_x(0.12)),
+                bx(0.042, 0.13, 0.23),
+                Transform::from_xyz(0.0, -0.035, 0.195).with_rotation(Quat::from_rotation_x(0.12)),
                 Wood,
                 Static,
             ),
@@ -997,18 +999,18 @@ fn toz() -> GunLayout {
             part(bx(0.01, 0.006, 0.04), at(0.0, 0.045, -0.04), Blued, Static),
             // Barrels, rib and forend: all of it tips at the hinge.
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(-0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(-0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
             part(
-                Shape::Cylinder(0.0125, 0.7),
-                at(0.0128, 0.035, -0.47),
+                Shape::Cylinder(0.0125, 0.72),
+                at(0.0128, 0.035, -0.478),
                 Blued,
                 Barrels,
             ),
-            part(bx(0.008, 0.006, 0.68), at(0.0, 0.05, -0.46), Blued, Barrels),
+            part(bx(0.008, 0.006, 0.70), at(0.0, 0.05, -0.47), Blued, Barrels),
             part(bx(0.044, 0.035, 0.24), at(0.0, 0.008, -0.31), Wood, Barrels),
         ],
     }

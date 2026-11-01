@@ -52,10 +52,15 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     ("sks", 1.02, Fit, "SKS, 1020 mm"),
     ("nagant", 0.235, Fit, "M1895, 235 mm"),
     ("ppsh", 0.843, Fit, "PPSh-41, 843 mm"),
-    ("toz_double", 1.14, Fit, "TOZ-34, about 1140 mm"),
+    (
+        "toz_double",
+        1.15,
+        Fit,
+        "IZh-43, 720-725 mm barrels: about 1150 mm",
+    ),
     ("mp133", 1.13, Fit, "MP-133, 1130 mm"),
     ("svd", 1.225, Fit, "SVD, 1225 mm"),
-    ("toz8", 1.11, Fit, "TOZ-8M, 1110 mm"),
+    ("toz8", 1.113, Fit, "TOZ-8M, 1113 mm, 640 mm barrel"),
     ("rpk74", 1.06, Fit, "RPK-74, 1060 mm (bipod down)"),
     ("flare_pistol", 0.22, Fit, "SPSh-44, 220 mm"),
     ("crossbow", 0.9, Made, "a home-made crossbow"),
@@ -165,7 +170,7 @@ pub const REAL: &[(&str, f32, Rule, &str)] = &[
     // Gun parts: the gun's own.
     ("stock_mosin", 0.265, Fit, "the Mosin's butt"),
     ("stock_sks", 0.242, Fit, "the SKS's butt"),
-    ("stock_toz_double", 0.306, Fit, "the TOZ's butt"),
+    ("stock_toz_double", 0.249, Fit, "the IZh-43's butt"),
     ("stock_mp133", 0.358, Fit, "the MP-133's butt"),
     // Receiver to butt plate, off the same photograph (it was drawn 30 mm
     // long and 35 mm deep).

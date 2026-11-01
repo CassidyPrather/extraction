@@ -384,6 +384,7 @@ fn finish(name: &str, server: &AssetServer) -> StandardMaterial {
         // As the game's (src/models.rs, `steel`).
         "Blued" => steel(gun_metal(), &gunsmith::finish::BLUED),
         "Stamped" => steel(gun_metal(), &gunsmith::finish::STAMPED),
+        "Alloy" => steel(gun_metal(), &gunsmith::finish::ALLOY),
         "Wood" => scanned(
             "gun_wood",
             0.25,

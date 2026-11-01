@@ -321,6 +321,42 @@ largest side). The valley's far loot (1,400 item meshes past 100 m)
 isn't drawn already, so it saved 6-8 draws in clear weather and none in
 drizzle.
 
+### Puffs where they stack
+
+Soft puffs (`render::puff`) are 1.6 m blended quads, so each one across
+the view is a whole layer of fragments. `gauge_puffs_hold_the_stereo_budget`
+places them as `robots::fx`'s emitters keep them in steady state and
+measures both eyes from Marrow's meadow, in drizzle (bare: 20.6M of
+64.8M):
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 21.8M | 14 |
+| a firefight's wounds, 6-15 m | 64 | 20.8M | 14 |
+| standing in a hazard's cloud | 64 | 82.2M, over | 39 |
+
+The cloud's near quads each cover most of the view. Capping a puff's
+apparent half-width (`PUFF_RULE=angle:<deg>`, a trial on the scene):
+20 degrees gives 60.3M, 12 gives 38.0M. Hiding a puff the eye is inside
+does nothing, since none is.
+
+**Fixed (Weapon feel, 2026-11-01):** `render::puff`'s `face_puffs` clamps
+each puff, after its owner sets its scale, to span no more than
+`MAX_HALF_ANGLE` (12 degrees) from the eye: near the eye a puff looks
+smaller, not thicker. On the way: the eye `face_puffs` faced was the
+middle of every active 3D camera, an impostor's capture rig and warmup's
+proxy eye among them, so puffs were turned partly edge-on and none read
+as near (so the numbers above are low). It now reads only the cameras
+drawing to a screen or headset. With both:
+
+| | puffs | fragments | p95 layers |
+| - | - | - | - |
+| a wreck smoking 3 m ahead | 19 | 27.5M | 15 |
+| a firefight's wounds, 6-15 m | 64 | 24.5M | 15 |
+| standing in a hazard's cloud | 64 | 60.9M | 26 |
+
+At 14 degrees the cloud was 72.2M; the gauge holds 12.
+
 ### Items at rest, asleep
 
 Tried and left (2026-11-01): merging resting items per material in 8 m
@@ -333,22 +369,25 @@ gauge_items_fall_asleep` settles each valley and the yard, then counts
 the dynamic items still awake, across the valley and within 15 m of
 the drop, with the worst by kind and by creep a frame. It counts only
 bodies the physics step simulates (not stowed, disabled, or held), and
-not items that lift (a Featherstone hovers on a force, by design). It's
+not those pushed on every frame by design: items that lift (a
+Featherstone hovers on a force), and whatever's within twice an
+anomaly's radius (lifts, snares and wells push on what's in them). It's
 ignored as known failing until the physics fix (Hands'):
 
 | | dynamic items | awake | at the drop |
 | - | - | - | - |
-| Marrow Creek | 433 | 4 (1%) | 4 |
-| Kettle Pass | 376 | 6 (2%) | 3 |
-| Cinder Works | 348 | 4 (1%) | 4 |
-| Sallow Reservoir | 316 | 5 (2%) | 4 |
-| Rime Fell | 417 | 8 (2%) | 3 |
-| the yard | 13 | 0 | 0 |
+| Marrow Creek | 425 | 4 (1%) | 4 |
+| Kettle Pass | 367 | 4 (1%) | 3 |
+| Cinder Works | 343 | 4 (1%) | 4 |
+| Sallow Reservoir | 313 | 4 (1%) | 4 |
+| Rime Fell | 411 | 4 (1%) | 3 |
+| the yard | 12 | 0 | 0 |
 
-The awake are guns, magazines, clips and boxes in piles, creeping up to
-0.04 mm a frame. They rock on their contacts above Avian's angular
-sleep threshold (0.15 rad/s), and one rocker keeps its whole pile's
-island awake.
+The awake are the truck bed's pile: guns, magazines, clips and boxes,
+creeping up to 0.04 mm a frame. The parked truck is kinematic, so
+avian's islands join everything touching it, and the hand bodies,
+driven every frame, touch it: the whole bed never sleeps (Hands). The
+fix is the truck static while parked.
 
 ## CPU: a busy raid moment
 

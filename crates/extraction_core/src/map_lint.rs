@@ -506,7 +506,7 @@ pub const VIEW_MAX: usize = 16;
 /// They stand by the roads in ones and twos; counted as buildings, every
 /// wreck on a road through a village would cost it a house.
 ///
-/// A log pile is one too: ten logs (their sawn ends) and four stakes, no
+/// A log pile is one too: ten logs and four stakes drawn as one model, no
 /// roof, nothing inside.
 pub const VIEW_LIGHT: &[&str] = &[
     "fence_garden",
@@ -2618,7 +2618,9 @@ pub fn lint(map: &MapDef, hm: &Heightmap) -> Report {
             continue;
         }
         let rc = Rect::of(&p.prefab, p.at, p.rot);
-        let foot = hm.footing(&p.prefab, p.at, p.rot);
+        // Where its flat tyres meet the ground: it has settled into the
+        // soil on purpose (`terrain::WRECK_SETTLE`).
+        let foot = hm.footing(&p.prefab, p.at, p.rot) + crate::terrain::WRECK_SETTLE;
         // Every half metre under it, edges included.
         let (nx, nz) = (
             (rc.half[0] * 4.0).ceil() as usize,
