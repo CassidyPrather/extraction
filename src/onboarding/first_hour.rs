@@ -2072,12 +2072,14 @@ const ROUND: f32 = 2.0;
 /// From `from` to `to` on foot, round any building in the way (the
 /// straight line through the village went into a house wall and stayed
 /// there): the waypoints after `from`.
-fn round_buildings(view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
-    let mut boxes: Vec<(Transform, Vec2)> = view
-        .entrances
-        .as_deref()
-        .map(|en| en.shells.iter().map(|s| (s.xf, s.half)).collect())
-        .unwrap_or_default();
+fn round_buildings(zone: &crate::world::Zone, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
+    let mut boxes: Vec<(Transform, Vec2)> = fence_boxes(zone);
+    boxes.extend(
+        view.entrances
+            .as_deref()
+            .map(|en| en.shells.iter().map(|s| (s.xf, s.half)).collect::<Vec<_>>())
+            .unwrap_or_default(),
+    );
     boxes.extend(
         view.buildings
             .iter()
@@ -2088,6 +2090,24 @@ fn round_buildings(view: &RaidView, from: Vec2, to: Vec2) -> Vec<Vec2> {
             }),
     );
     round_boxes(&boxes, from, to)
+}
+
+/// The quarantine fence's runs as boxes (`structures::fence_runs`): the
+/// way in or out is through a gap, where a road crosses it. (From the
+/// camp, outside it, a newcomer resumed there walked at the fence to the
+/// south-west and pressed against it for the rest of the raid.)
+fn fence_boxes(zone: &crate::world::Zone) -> Vec<(Transform, Vec2)> {
+    crate::world::structures::fence_runs(zone)
+        .into_iter()
+        .filter(|r| r.a.distance(r.b) > 0.5)
+        .map(|r| {
+            let d = r.b - r.a;
+            let mid = (r.a + r.b) * 0.5;
+            let xf = Transform::from_xyz(mid.x, 0.0, mid.y)
+                .with_rotation(Quat::from_rotation_y((-d.y).atan2(d.x)));
+            (xf, Vec2::new(d.length() * 0.5, 0.2))
+        })
+        .collect()
 }
 
 /// Something with no way in that a body can't walk through, over or under,
@@ -2401,7 +2421,7 @@ fn one_up<'a>(
 fn route(world: &World2, view: &RaidView, from: Vec2, to: Vec2) -> Vec<Task> {
     let mut at = from;
     let mut t = vec![];
-    for p in round_buildings(view, from, to) {
+    for p in round_buildings(&world.zone, view, from, to) {
         // Something solid in the way that has no doors (the stoves at Cinder
         // Works' blast furnace held a newcomer twenty minutes): the
         // machines' grid's way round it.
@@ -3273,6 +3293,37 @@ mod indoor_tests {
             through.join("\n")
         );
         let zone = w.resource::<crate::world::Zone>();
+        // From the camp, outside the fence, into the valley: through a gap
+        // (the gate), not into the wire.
+        let fence = super::fence_boxes(zone);
+        assert!(!fence.is_empty(), "Marrow has a fence");
+        for (from, to) in [
+            (Vec2::new(12.1, 165.0), Vec2::new(-104.1, -43.0)),
+            (Vec2::new(22.0, 177.6), Vec2::new(-108.0, -50.0)),
+        ] {
+            assert!(
+                fence.iter().any(|(xf, half)| {
+                    let inv = xf.compute_affine().inverse();
+                    let a = inv.transform_point3(Vec3::new(from.x, 0.0, from.y)).xz();
+                    let b = inv.transform_point3(Vec3::new(to.x, 0.0, to.y)).xz();
+                    segment_hits_box(a, b, *half).is_some()
+                }),
+                "{from} -> {to} straight crosses the fence"
+            );
+            let mut at = from;
+            for p in round_boxes(&fence, from, to) {
+                for (xf, half) in &fence {
+                    let inv = xf.compute_affine().inverse();
+                    let a = inv.transform_point3(Vec3::new(at.x, 0.0, at.y)).xz();
+                    let b = inv.transform_point3(Vec3::new(p.x, 0.0, p.y)).xz();
+                    assert!(
+                        segment_hits_box(a, b, *half).is_none(),
+                        "{from} -> {to}: {at} -> {p} goes through the fence"
+                    );
+                }
+                at = p;
+            }
+        }
         let bank = steep_run(zone, Vec2::new(-38.1, -41.7), Vec2::new(-39.97, -45.04));
         assert!(bank > STEEP_RUN, "the radio mast's bank: {bank} m steep");
         let road = steep_run(zone, Vec2::new(22.0, 148.5), Vec2::new(9.25, 109.69));
