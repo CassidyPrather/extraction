@@ -102,7 +102,16 @@ pub const SNOW_CODE: f32 = 0.01;
 /// A snow line no ground reaches.
 pub const NO_SNOW: f32 = 1.0e5;
 
+/// The wet patch's source, for `render::held_light`'s test.
+#[cfg(test)]
+pub(crate) fn wet_wgsl_for_tests() -> &'static str {
+    WET_WGSL
+}
+
 const WET_WGSL: &str = r#"
+// `render::held_light::MARK` and `SHARE` (a test holds them equal).
+const XS_HELD_MARK: f32 = 3.0e33;
+const XS_HELD_SHARE: f32 = 0.5;
 // The room the eye is in (`render::grade::dim_indoors`): how far its walls
 // cut the sky's light (1 out of doors) and how far it reaches (m), off the
 // ambient's alpha, which the lighting never reads.
@@ -152,6 +161,13 @@ fn extraction_wet(p: pbr_types::PbrInput) -> pbr_types::PbrInput {
         let sky = select(open, 1.0, opaque && p.material.base_color.a < -0.5);
         let back = extraction_outdoors(room, p.world_position.xyz) * smoothstep(0.8, 0.95, sky);
         o.diffuse_occlusion = p.diffuse_occlusion * mix(1.0, 1.0 / room.x, back);
+        // What a hand holds, and the gloves (`render::held_light` marks
+        // their materials): it keeps half the stops the room cuts, so the
+        // slide and the grip read in the dimmest room. Walls, beds and props
+        // beside you don't.
+        if (p.material.attenuation_distance == XS_HELD_MARK) {
+            o.diffuse_occlusion = o.diffuse_occlusion * pow(1.0 / room.x, XS_HELD_SHARE);
+        }
     }
 #ifdef DISTANCE_FOG
     if (snow > 0.002 && HF_SNOW_LINE < 1.0e4) {

@@ -701,6 +701,14 @@ fn gallery(
                     warn!("gallery: no item {id}");
                     return;
                 };
+                // At arm's length it stands in for one in your hand: lit as
+                // one (`render::held_light`).
+                let in_hand = at.distance(eye) <= 0.8;
+                if in_hand {
+                    commands
+                        .entity(gun)
+                        .insert(crate::render::held_light::ShownInHand);
+                }
                 let family = catalog
                     .kind(id)
                     .and_then(|k| catalog.get(k).firearm.as_ref())
@@ -718,6 +726,11 @@ fn gallery(
                 if open || jam {
                     opening.push(gun);
                 } else if let Some(mag) = mag.and_then(|m| spawn_static(&mut commands, &m, at)) {
+                    if in_hand {
+                        commands
+                            .entity(mag)
+                            .insert(crate::render::held_light::ShownInHand);
+                    }
                     pending_mags.push((gun, mag));
                     if dry {
                         told.push((gun, 4));

@@ -18,6 +18,7 @@ pub mod gpu_lost;
 pub mod grade;
 pub mod gun_rest;
 pub mod hand_push;
+pub mod held_light;
 pub mod hold_rate;
 pub mod hurt;
 pub mod kit;
@@ -80,6 +81,7 @@ impl Plugin for RenderPlugin {
             app.add_plugins(stress::StressPlugin);
         }
         app.add_plugins(sky_light::SkyLightPlugin);
+        app.add_plugins(held_light::HeldLightPlugin);
         app.add_plugins((
             terrain_material::TerrainMaterialPlugin,
             water_material::WaterMaterialPlugin,
