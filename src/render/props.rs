@@ -1346,13 +1346,15 @@ pub(crate) fn gun_index_curl(
     else {
         return hold_curl(Some(GripRole::Primary), trigger, 0.0)[0];
     };
-    // The trigger in the unrolled glove's frame, where the index curls in
-    // its own (y, z) plane.
-    let in_hand = gun
-        .grip
-        .compute_affine()
-        .inverse()
-        .transform_point3(part.at.translation);
+    let (reach, _) = index_reach(side, gun, part.at.translation);
+    rest + (reach - rest) * trigger
+}
+
+/// The gun hand's index curled to lie on a point of the gun (gun space):
+/// the curl, and how far the finger then passes from the point. In the
+/// unrolled glove's frame, where the index curls in its own (y, z) plane.
+fn index_reach(side: Side, gun: &crate::weapons::layout::GunLayout, point: Vec3) -> (f32, f32) {
+    let in_hand = gun.grip.compute_affine().inverse().transform_point3(point);
     let at = glove_frame(side)
         .compute_affine()
         .inverse()
@@ -1362,8 +1364,37 @@ pub(crate) fn gun_index_curl(
     let reach = (0..=100)
         .map(|i| i as f32 / 100.0)
         .min_by(|a, b| miss(*a).total_cmp(&miss(*b)))
-        .unwrap_or(rest);
-    rest + (reach - rest) * trigger
+        .unwrap_or(0.0);
+    (reach, miss(reach))
+}
+
+/// Where a gun's magazine catch is, gun space: its model's `mag_catch`
+/// (or `mag_catch_heel`) part at rest.
+fn catch_of(
+    gun: Entity,
+    parts: &Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
+) -> Option<Vec3> {
+    use ::gunsmith::parts::Moves;
+    parts
+        .iter()
+        .find(|(p, c)| c.parent() == gun && matches!(p.moves, Moves::MagCatch | Moves::HeelCatch))
+        .map(|(p, _)| p.rest.translation)
+}
+
+/// How close the index must pass a magazine catch to press it, metres.
+const CATCH_REACH: f32 = 0.012;
+
+/// The gun hand's index curl to press a magazine catch at `at` (gun
+/// space, the model's `mag_catch`) while the release is held, if the index
+/// gets there: the AK's paddle, just ahead of the guard. A heel catch (the
+/// PM's) is under the hand, past any finger of it: the other hand's.
+pub(crate) fn catch_index_curl(
+    side: Side,
+    gun: &crate::weapons::layout::GunLayout,
+    at: Vec3,
+) -> Option<f32> {
+    let (curl, miss) = index_reach(side, gun, at);
+    (miss < CATCH_REACH).then_some(curl)
 }
 
 /// How far the index's last two segments, curled `c`, pass from `p` in the
@@ -1430,6 +1461,7 @@ fn curl_targets(
     held: &Query<(&Held, &Transform, &Grabbable), (Without<HandVisual>, Without<Finger>)>,
     bounds: &Query<&avian3d::prelude::ColliderAabb>,
     guns: &Query<&crate::weapons::Gun>,
+    parts: &Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
 ) -> [f32; 5] {
     // [index, middle, ring, little, thumb]
     if let Some(item) = hand.holding {
@@ -1448,6 +1480,16 @@ fn curl_targets(
         if role == Some(GripRole::Primary) {
             if let Ok(gun) = guns.get(item) {
                 curl[0] = gun_index_curl(side, &gun.layout, trigger);
+                // The release held: the index presses the catch, if it
+                // reaches (the AK's paddle). Let go, it eases back to the
+                // trigger; a drawn finger never pulls it (the gun reads the
+                // controller's trigger, not the glove).
+                if gun.catch
+                    && let Some(c) =
+                        catch_of(item, parts).and_then(|at| catch_index_curl(side, &gun.layout, at))
+                {
+                    curl[0] = c;
+                }
             }
         }
         return curl;
@@ -1489,6 +1531,7 @@ fn pose_hands(
     buttons: Query<&GlobalTransform, With<crate::interact::poke::PokeButton>>,
     guns: Query<&crate::weapons::Gun>,
     supports: Query<&crate::interact::Supported>,
+    parts: Query<(&crate::weapons::visuals::GunPart, &ChildOf)>,
     gun_at: Query<
         &Transform,
         (
@@ -1559,7 +1602,7 @@ fn pose_hands(
         *t = pose;
         let thumb_rest = input.is_ok_and(|i| i.thumb_rest);
         let mut target = curl_targets(
-            hand, v.side, grip, trigger, thumb_rest, &held, &bounds, &guns,
+            hand, v.side, grip, trigger, thumb_rest, &held, &bounds, &guns, &parts,
         );
         let mut spread = std::array::from_fn(rest_spread);
         let free = hand.holding.is_none() && hand.handle.is_none() && hand.supporting.is_none();
@@ -2687,6 +2730,141 @@ mod glove_tests {
             misses.is_empty(),
             "the index misses the trigger: {misses:?}"
         );
+    }
+
+    /// With the magazine release held, the gun hand's index goes to the
+    /// AK's paddle catch (the model's `mag_catch`, just ahead of the
+    /// guard), and no finger of it to the PM's heel catch, under the hand.
+    #[test]
+    fn the_gun_hands_index_presses_a_catch_it_reaches() {
+        use crate::weapons::layout::layout;
+        // From the models (`assets/models/guns/*.glb`, nodes `mag_catch`
+        // and `mag_catch_heel`).
+        let ak = layout("ak74").unwrap();
+        let paddle = Vec3::new(0.0, 0.0195, -0.095);
+        let c = catch_index_curl(Side::Right, &ak, paddle);
+        assert!(c.is_some(), "the index reaches the AK's paddle");
+        let pm = layout("pm_pistol").unwrap();
+        let heel = Vec3::new(0.0, -0.0385, 0.0405);
+        assert_eq!(catch_index_curl(Side::Right, &pm, heel), None);
+    }
+
+    /// An AK in the hand with the magazine release held: the index goes
+    /// from the trigger to the paddle catch, and back to the trigger, the
+    /// trigger untouched, when the release is let go.
+    #[test]
+    fn the_index_works_the_aks_catch_and_comes_back() {
+        use crate::weapons::visuals::GunPart;
+        use ::gunsmith::parts::Moves as PartMoves;
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(bevy::time::TimeUpdateStrategy::ManualDuration(
+                std::time::Duration::from_millis(11),
+            ))
+            .add_systems(Update, pose_hands);
+        let player = app
+            .world_mut()
+            .spawn((Transform::default(), RigInput::default()))
+            .id();
+        let hand = app
+            .world_mut()
+            .spawn((Hand::default(), Transform::default(), ChildOf(player)))
+            .id();
+        let glove = app
+            .world_mut()
+            .spawn((
+                HandVisual {
+                    hand,
+                    side: Side::Right,
+                    curl: [0.0; 5],
+                    spread: std::array::from_fn(rest_spread),
+                    thumb: None,
+                },
+                Transform::default(),
+            ))
+            .id();
+        let catalog = crate::items::Catalog::load();
+        let def = catalog
+            .iter()
+            .find(|(_, d)| d.id == "ak74")
+            .and_then(|(_, d)| d.firearm.clone())
+            .unwrap();
+        let layout = crate::weapons::layout::layout("ak74").unwrap();
+        let gun = app
+            .world_mut()
+            .spawn((
+                crate::weapons::Gun {
+                    firearm: extraction_core::firearm::Firearm::new(def, 1.0),
+                    layout: layout.clone(),
+                    magwell: None,
+                    trigger: 0.0,
+                    pulled: false,
+                    catch: false,
+                    dice: extraction_core::noise::Rng::new(1),
+                    mass: None,
+                },
+                Grabbable {
+                    points: vec![crate::interact::GrabPoint {
+                        local: layout.grip,
+                        role: GripRole::Primary,
+                        radius: 0.1,
+                    }],
+                },
+                Held {
+                    player,
+                    hand,
+                    side: Side::Right,
+                    point: 0,
+                    offset: Transform::IDENTITY,
+                },
+                Transform::default(),
+            ))
+            .id();
+        // The model's paddle (`assets/models/guns/ak74.glb`, `mag_catch`).
+        let paddle = Vec3::new(0.0, 0.0195, -0.095);
+        app.world_mut().spawn((
+            GunPart {
+                moves: PartMoves::MagCatch,
+                rest: Transform::from_translation(paddle),
+                pivot: paddle,
+            },
+            Transform::from_translation(paddle),
+            ChildOf(gun),
+        ));
+        app.world_mut().get_mut::<Hand>(hand).unwrap().holding = Some(gun);
+        let settle = |app: &mut App| {
+            for _ in 0..200 {
+                app.update();
+            }
+            app.world().get::<HandVisual>(glove).unwrap().curl[0]
+        };
+        let on_trigger = gun_index_curl(Side::Right, &layout, 0.0);
+        let at_rest = settle(&mut app);
+        assert!(
+            (at_rest - on_trigger).abs() < 0.02,
+            "by the trigger: {at_rest}"
+        );
+        app.world_mut()
+            .get_mut::<crate::weapons::Gun>(gun)
+            .unwrap()
+            .catch = true;
+        let pressing = settle(&mut app);
+        let want = catch_index_curl(Side::Right, &layout, paddle).unwrap();
+        assert!(
+            (pressing - want).abs() < 0.02,
+            "on the paddle: {pressing}, want {want}"
+        );
+        app.world_mut()
+            .get_mut::<crate::weapons::Gun>(gun)
+            .unwrap()
+            .catch = false;
+        let back = settle(&mut app);
+        assert!(
+            (back - on_trigger).abs() < 0.02,
+            "back by the trigger: {back}"
+        );
+        let g = app.world().get::<crate::weapons::Gun>(gun).unwrap();
+        assert!(g.trigger == 0.0 && !g.pulled, "the trigger never moved");
     }
 
     /// Tracked fingers drive a free glove, curl and spread; a held gun
