@@ -284,6 +284,72 @@ the headset's `cpu:` line shows the render world over budget, the
 cheaper levers are fewer entities a view (the draw budget) first; watch
 upstream Bevy for multiview, and take it when it lands rather than fork.
 
+### Along the walks the designer takes
+
+`vr_budget` holds Map design's walk reviews to the stereo budget:
+
+- `gauge_every_walk_holds_the_stereo_budget` reads every valley's
+  `docs/craft/walks/<map>/walk.stills`, each stop ahead and to the side,
+  in the reference weather (drizzle; `WALK_WEATHER` for another).
+  `WALKS_DIR` reads the walks from elsewhere.
+- `gauge_yard_stations_hold_the_stereo_budget` covers the yard's
+  stations: from in front of each post, looking at it and turned a
+  quarter right, and from the truck.
+
+A view at 75% or more of a budget prints what it spends on, the six
+kinds most drawn and most shadowed (`WALK_TOP` for more).
+
+First measure (2026-11-01; Marrow Creek and Cinder Works, 12 and 11
+stops; the yard, 9 posts). Nothing is over:
+
+| | worst draws (of 2,400) | worst shadow draws (of 1,800) | worst fragments (of 64.8M) |
+| - | - | - | - |
+| Marrow | s01 ahead, 1,606 | s01 ahead, 1,494 (83%) | s03 side, 26.0M |
+| Cinder | s01 ahead, 1,821 (76%) | s01 ahead, 1,188 | s09 side, 20.5M |
+| yard | st02 ahead, 512 | st02 ahead, 841 | st08 ahead, 14.3M |
+
+The drop is the dearest stop in both valleys, and it's every raid's
+first view. At Cinder's, of 906 draws an eye:
+
+- about half are items: the kit beside the truck (750 meshes within
+  10 m), each drawn on its own;
+- the rest are buildings (155), the forest (82), and the truck, which
+  casts 48 shadow meshes, plus 11 for its bench and 7 for its stash.
+
+Tried and left: a draw range on loose items by size (600x their
+largest side). The valley's far loot (1,400 item meshes past 100 m)
+isn't drawn already, so it saved 6-8 draws in clear weather and none in
+drizzle.
+
+### Items at rest, asleep
+
+Tried and left (2026-11-01): merging resting items per material in 8 m
+cells, as `part_rest` does for breakables. Items share few materials (a
+gun model's own, a box's kind), so Cinder Works' merged cells drew 672
+meshes for 914: 26% fewer, and nothing measurable at the drop.
+
+What it found instead: some items never sleep. `perf::tests::
+gauge_items_fall_asleep` settles each valley and the yard, then counts
+the dynamic items still awake, across the valley and within 15 m of
+the drop, with the worst by kind and by creep a frame. It counts only
+bodies the physics step simulates (not stowed, disabled, or held), and
+not items that lift (a Featherstone hovers on a force, by design). It's
+ignored as known failing until the physics fix (Hands'):
+
+| | dynamic items | awake | at the drop |
+| - | - | - | - |
+| Marrow Creek | 433 | 4 (1%) | 4 |
+| Kettle Pass | 376 | 6 (2%) | 3 |
+| Cinder Works | 348 | 4 (1%) | 4 |
+| Sallow Reservoir | 316 | 5 (2%) | 4 |
+| Rime Fell | 417 | 8 (2%) | 3 |
+| the yard | 13 | 0 | 0 |
+
+The awake are guns, magazines, clips and boxes in piles, creeping up to
+0.04 mm a frame. They rock on their contacts above Avian's angular
+sleep threshold (0.15 rad/s), and one rocker keeps its whole pile's
+island awake.
+
 ## CPU: a busy raid moment
 
 `render::cpu` splits every frame by schedule (marker schedules between
