@@ -2308,7 +2308,7 @@ mod scan_tests {
 }
 
 #[cfg(test)]
-mod lamp_tests {
+mod signal_lamp_tests {
     use super::*;
 
     /// A robot's eye and its weak-point marks are signal lamps: drawn at
@@ -2331,7 +2331,7 @@ mod lamp_tests {
             Res<AssetServer>,
             ResMut<Assets<StandardMaterial>>,
         )>::new(w);
-        let (mut model_mats, mut lib, server, mut materials) = q.get_mut(w);
+        let (mut model_mats, mut lib, server, mut materials) = q.get_mut(w).unwrap();
         let robot = mats(&mut materials);
         let model_eye = model_mats.get("Eye", &mut lib, &server, &mut materials);
         let lamps = [
