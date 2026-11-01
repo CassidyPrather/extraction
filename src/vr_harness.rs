@@ -295,6 +295,52 @@ impl Vr {
 }
 
 mod tests {
+    /// A pile of kit dropped together settles and goes to sleep: nothing
+    /// at rest keeps the physics solving it. In Avian a contact island
+    /// sleeps only when all of it does, and a kinematic body (the parked
+    /// truck) links every body touching it into one: the hands' bodies,
+    /// never still, on the truck's side kept the pile on its bed awake
+    /// (Performance's `perf::tests::gauge_items_fall_asleep`).
+    #[test]
+    #[ignore = "a parked truck (kinematic) joins every body touching it into one contact island, so the always-moving hand bodies keep its bed's pile awake; the fix is for the coordinator to place"]
+    fn a_pile_of_kit_falls_asleep() {
+        use avian3d::prelude::Sleeping;
+        let mut vr = Vr::new("training_yard");
+        let feet = vr.root().translation;
+        vr.step(10);
+        let ids = [
+            "ak_mag",
+            "ak_mag",
+            "ammo_22lr",
+            "sks_clip",
+            "rpk74",
+            "ak_mag",
+            "ammo_22lr",
+            "sks_clip",
+            "radio",
+            "canned_stew",
+            "mosin_clip",
+            "pm_mag",
+        ];
+        let mut pile = Vec::new();
+        for (k, id) in ids.iter().enumerate() {
+            let at = feet
+                + Vec3::new(
+                    0.6 + 0.05 * (k % 3) as f32,
+                    0.15 + 0.06 * k as f32,
+                    -1.0 + 0.03 * (k % 2) as f32,
+                );
+            pile.push((*id, vr.spawn(id, Transform::from_translation(at))));
+        }
+        vr.step(900);
+        let awake: Vec<&str> = pile
+            .iter()
+            .filter(|(_, e)| vr.app.world().get::<Sleeping>(*e).is_none())
+            .map(|(id, _)| *id)
+            .collect();
+        assert!(awake.is_empty(), "awake after 10 s at rest: {awake:?}");
+    }
+
     use super::*;
     use crate::weapons::Gun;
 
