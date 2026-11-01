@@ -563,6 +563,8 @@ pub(super) struct Newcomer {
     fought_at: f32,
     /// When machines after it fired at it, the last half minute.
     shots: Vec<f32>,
+    /// When a drone locked on to it again, lately (`PINNED_AFTER`).
+    relocks: Vec<f32>,
     /// Racked at the driver's "one up the spout".
     racked: bool,
     /// The broken walker wrecked (job 2's first fight, won).
@@ -918,6 +920,29 @@ pub(super) fn direct_raid(
                     f.flee_until = now + 12.0;
                 }
                 let overhead = f == First::DroneLock;
+                // Pinned: a drone that keeps finding it however often it
+                // goes under a roof (re-locked every 23 s for 20 minutes at
+                // the post office, worn down and killed, three raids). A
+                // person gives the job up: home from here, after this one
+                // in cover.
+                if overhead {
+                    state.relocks.retain(|t| now - t < PINNED_FOR);
+                    state.relocks.push(now);
+                    if state.relocks.len() >= PINNED_AFTER
+                        && !matches!(
+                            state.leg,
+                            Leg::Call | Leg::Rendezvous | Leg::Board | Leg::Done
+                        )
+                    {
+                        state.note(
+                            now,
+                            Kind::Learned,
+                            "pinned by a drone: the job given up, home",
+                        );
+                        state.relocks.clear();
+                        state.leg = Leg::Call;
+                    }
+                }
                 let roof = overhead
                     .then(|| under_a_roof(view.entrances.as_deref(), &plans, here, &state.no_roof))
                     .flatten();
@@ -2373,6 +2398,11 @@ fn blocked_run(nav: &extraction_core::nav::NavGrid, a: Vec2, b: Vec2) -> f32 {
     }
     best
 }
+
+/// This many drone locks within `PINNED_FOR` (s), cover taken each time:
+/// pinned, and home.
+const PINNED_AFTER: usize = 3;
+const PINNED_FOR: f32 = 120.0;
 
 /// A round in flight is this long at most (s): a shot this recent may be
 /// the one that hit, and warns of nothing.
