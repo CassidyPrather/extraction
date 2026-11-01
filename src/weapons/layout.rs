@@ -830,7 +830,7 @@ fn toz8() -> GunLayout {
 fn rpk74() -> GunLayout {
     let mut l = ak74();
     let bore = 0.058;
-    l.muzzle = Vec3::new(0.0, bore, -0.82);
+    l.muzzle = Vec3::new(0.0, bore, -0.795);
     l.support = Some(Vec3::new(0.0, 0.03, -0.34));
     // Its own model (art/guns/rpk74.py) keeps the receiver where the AK's
     // was before the AK was measured.
