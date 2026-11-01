@@ -90,7 +90,22 @@ here (weapon feel owns them).
   - **Grip**: short, set back behind the hammer and raked, with the
     lanyard ring at its butt. Its screw and checkering moved with it.
   - **Side plate**: its screws and outline moved onto the new frame.
-- **`src/weapons/layout.rs`** (`nagant()`): `grip` is at z 0.035, the
-  middle of the new grip at the palm's height (it was the origin, the
-  middle of the old one). The blockout's frame, grip and trigger were
+- **`src/weapons/layout.rs`** (`nagant()`): `grip` is at (0, 0.014,
+  0.027), high on the new grip with the web under the hammer, as a hand
+  holds a raked revolver grip. The blockout's frame, grip and trigger were
   redrawn.
+
+### Second pass: the hold
+
+The first pass put `grip` at the middle of the grip at the old origin's
+height (z 0.035, y 0): only 11 mm in front of the backstrap, and low.
+Hands measured the trigger 116 mm out in the hand's frame, against 63–89
+mm on every other gun.
+
+The trigger itself was nearly right. The photograph's reach, backstrap to
+the trigger's face at mid-height, is about 86 mm, about 16 mm more than
+the PM's. The model had 88.
+
+So `grip` moved up and forward to (0, 0.014, 0.027), and the trigger 4 mm
+back onto the photograph's (pin at z −0.032). That puts the trigger about
+65 mm ahead of the grip point along the bore, as on the PM.

@@ -529,8 +529,10 @@ fn nagant() -> GunLayout {
     let gate = Vec3::new(0.016, 0.053, -0.012);
     GunLayout {
         // The palm on the grip, which sits back behind the hammer
-        // (art/guns/nagant.py): it was under the hammer, a long pole.
-        grip: Transform::from_xyz(0.0, 0.0, 0.035),
+        // (art/guns/nagant.py): high, the web up under the hammer, as a
+        // hand holds a raked revolver grip. (At the grip's middle, low, the
+        // trigger sat 116 mm out in the hand's frame, against 63-89.)
+        grip: Transform::from_xyz(0.0, 0.014, 0.027),
         support: None,
         muzzle: Vec3::new(0.0, bore, -0.178),
         port: gate,
@@ -565,7 +567,7 @@ fn nagant() -> GunLayout {
             ),
             part(
                 bx(0.004, 0.024, 0.005),
-                at(0.0, 0.016, -0.04),
+                at(0.0, 0.016, -0.036),
                 Black,
                 Trigger,
             ),

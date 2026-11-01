@@ -77,6 +77,8 @@ here (weapon feel owns them).
     butt plate, sling loop and studs moved with it.
   - **Muzzle device**: 55 mm, its muzzle at −0.795.
   - **Bipod**: its folded legs are 25 mm shorter, ending at the muzzle.
+  - **Magazine catch**: its own part, `mag_catch` (the AK's paddle, tipping
+    about its pin), so the hands find it from the model.
 - **`src/weapons/layout.rs`** (`rpk74()`): the muzzle is at −0.795.
 - **`src/weapons/sling.rs`**: the rear point moved with the loop.
 - **`assets/data/items.ron`** and **`src/capture/scale.rs`**: the gun's box

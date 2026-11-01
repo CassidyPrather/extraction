@@ -131,9 +131,16 @@ grip.cyl(0.004, -0.0935, -0.091, "Blued", segs=12, xf=T(0, 0, 0.034) @ RX(-math.
 guard_path = catmull([(-0.090, 0.0225), (-0.0925, 0.012), (-0.086, 0.0045), (-0.072, 0.002),
                       (-0.035, 0.002), (-0.019, 0.004), (-0.013, 0.0115)], samples=4, closed=False)
 parts_static.sweep(guard_path, section_rect(0.0085, 0.0028, 0.0010), "Blued")
-parts_static.prism(fillet([(-0.097, 0.0225), (-0.093, 0.0225), (-0.0905, 0.008), (-0.095, 0.006),
-                           (-0.098, 0.012)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
-                   bevel=0.0006, segs=1)
+# The magazine catch paddle, just ahead of the guard, the AK's: its own
+# object, tipping about its pin (`Moves::MagCatch`) as the thumb pushes it.
+catch = Part("mag_catch", origin=(0.0, 0.0195, -0.095))
+catch.prism(fillet([(-0.097, 0.0225), (-0.093, 0.0225), (-0.0905, 0.008), (-0.095, 0.006),
+                    (-0.098, 0.012)], 0.0012, 2), -0.0055, 0.0055, "Blued", axis="x",
+            bevel=0.0006, segs=1)
+for k in range(4):
+    y = 0.0105 + k * 0.0026
+    catch.box((0.0098, 0.0008, 0.0012), (0, y, -0.0978 + (y - 0.012) * 0.06), "Blued",
+              bevel=0.0003, segs=1)
 
 # --- Barrel, gas system, sights ---------------------------------------------------------
 barrel = Part("barrel")
@@ -353,7 +360,7 @@ join("static", recv, parts_static, grip, barrel, clamp, brake, lower, upper,
      worn={"mats": ("Blued", "Stamped")})
 # The butt, off its tang screws at the vice (`weapons::gunsmith`).
 join("static_butt", stock, butt, worn={})
-for p in (carrier, selector, trig):
+for p in (carrier, selector, trig, catch):
     make(p, worn={})
 make(bipod, worn=None)  # thin legs: edge wear would turn them all bare steel
 
