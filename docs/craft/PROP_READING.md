@@ -157,3 +157,22 @@ house's 0.5 m plinth is a crouch: give the floor's height).
   (`docs/shots/rooms/*_{before,after}.jpg`).
 - **The front rooms are dark** at 11:00, the window's light hardly
   reaching the table: lighting, not the models.
+
+### House plans (1 November)
+
+A house's furniture is a plan now (`buildings::HousePlan`,
+`house_layout`): where its table, shelves, counter, stove, bed and crate
+stand. The builder furnishes from it and the clutter dresses from the
+same places (`clutter::slots`), so moving a table moves its dishes. Each
+plan keeps the common plan's loot spots; a ruin keeps the common plan.
+
+- **Farm** (every farmhouse; the Old farm first): a kitchen-living room.
+  The stove in the front room's back corner, its firewood basket and
+  drying boots beside it; the long table end on to the door with its
+  plank bench (`bench_yard`) and a chair at its head; the churn by the
+  door; the back left a pantry, its flour sacks and the crate where the
+  stove was (`docs/shots/rooms/farmhouse_*_plan_{before,after}.jpg`). The
+  door, windows and footprint as they were (the Old farm's arrival frame
+  looks at that front).
+- **Post office, plank B and C**: built, waiting on their prefab ids
+  (Map design's shell table in core, and their map edits).
