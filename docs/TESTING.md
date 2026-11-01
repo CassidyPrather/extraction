@@ -1,5 +1,8 @@
 # Testing: the tiers
 
+A new session or machine: run `python3 scripts/fetch_assets.py` first.
+Tier 1 fails without the downloaded textures (below).
+
 Four tiers, fastest first. Run the first two before you push; the
 Verifier runs the rest on every main push (`docs/HEALTH.md`).
 
