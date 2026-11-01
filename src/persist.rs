@@ -479,7 +479,12 @@ fn fresh_save(map: &str) -> SaveGame {
         inserted: Vec::new(),
         loads: Default::default(),
     };
-    let mut pistol = item("pm_pistol", 0, [0.2, 0.05, -0.4]);
+    // On its side, the grip up and toward you, the muzzle away (stood on
+    // its grip, from above it was a stick: the top of the slide).
+    let mut pistol = item("pm_pistol", 0, [0.2, 0.068, -0.4]);
+    let side = Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+        * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+    pistol.turn = side.to_array();
     pistol.inserted.push(item("pm_mag", 8, [0.0; 3]));
     let mut torch = item("flashlight", 0, [0.0, 0.05, 0.2]);
     torch.inserted.push(item("power_cell", 0, [0.0; 3]));
