@@ -954,10 +954,11 @@ mod tests {
     /// who moved only once the first hit: first_jobs_cautious, seed 1).
     #[test]
     fn a_drones_first_burst_after_a_lock_warns() {
-        let (mut app, player, _drone, at) = drone_on_you();
-        // Walking about till it's seen you, then standing still in plain
-        // view (someone crossing its line is hard to hit, and this is about
-        // what hits you).
+        let (mut app, player, drone, at) = drone_on_you();
+        // Walking about till it's seen you, then on the spot, stepping
+        // toward it (moving, so it sees you: standing still hides you from
+        // a drone; but not across its line, which is hard to hit, and this
+        // is about what hits you).
         for i in 0..90 * 5 {
             step(&mut app, player, at, true, i);
         }
@@ -966,10 +967,11 @@ mod tests {
                 .get_mut::<Transform>(player)
                 .unwrap()
                 .translation = at;
+            let to = app.world().get::<Transform>(drone).unwrap().translation - at;
             app.world_mut()
                 .get_mut::<crate::player::Body>(player)
                 .unwrap()
-                .velocity = Vec3::ZERO;
+                .velocity = to.with_y(0.0).normalize_or_zero() * 1.4;
             let mut h = app
                 .world_mut()
                 .get_mut::<crate::health::Health>(player)
