@@ -22,6 +22,7 @@ pub struct RobotVisualsPlugin;
 impl Plugin for RobotVisualsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(dress_pylon_cable)
+            .add_observer(lamps_reach_far)
             .add_observer(dirigible_tally)
             .add_systems(Update, scan_beams)
             .add_plugins((
@@ -56,7 +57,6 @@ impl Plugin for RobotVisualsPlugin {
                     super::weathering::weather_meshes,
                     part_plants,
                     drone_lamps,
-                    lamps_reach_far,
                 ),
             );
     }
@@ -2317,34 +2317,33 @@ mod scan_tests {
 /// mark at 38, in clear air as in fog.)
 pub const LAMP_REACH: f32 = 150.0;
 
-/// A lamp's draw range, if `mat` is a lamp's.
-fn lamp_range(mat: &StandardMaterial) -> Option<bevy::camera::visibility::VisibilityRange> {
-    (!mat.fog_enabled).then(|| bevy::camera::visibility::VisibilityRange {
-        start_margin: 0.0..0.0,
-        end_margin: (LAMP_REACH * 0.8)..LAMP_REACH,
-        use_aabb: false,
-    })
+/// Whether `mat` is a lamp's: the fog can't touch it.
+fn is_lamp(mat: &StandardMaterial) -> bool {
+    !mat.fog_enabled
 }
 
-/// Every lamp on a robot is drawn to [`LAMP_REACH`], whatever range the
-/// render budget gave it for its size (put on before or after this).
+/// Every lamp on a robot is drawn to [`LAMP_REACH`]: the render budget's
+/// own marker (`LodReach`), put on as its material goes on, so it's there
+/// before the budget ranges the mesh by its size (once its bounds are
+/// known, later in the frame).
 fn lamps_reach_far(
+    on: On<Insert, MeshMaterial3d<StandardMaterial>>,
     mut commands: Commands,
-    changed: Query<
-        (Entity, &MeshMaterial3d<StandardMaterial>),
-        Changed<MeshMaterial3d<StandardMaterial>>,
-    >,
+    lit: Query<&MeshMaterial3d<StandardMaterial>>,
     parents: Query<&ChildOf>,
     robots: Query<(), With<Robot>>,
     materials: Res<Assets<StandardMaterial>>,
 ) {
-    for (e, mat) in &changed {
-        let Some(range) = materials.get(&mat.0).and_then(lamp_range) else {
-            continue;
-        };
-        if parents.iter_ancestors(e).any(|a| robots.contains(a)) {
-            commands.entity(e).try_insert(range);
-        }
+    let e = on.event_target();
+    let lamp = lit
+        .get(e)
+        .ok()
+        .and_then(|m| materials.get(&m.0))
+        .is_some_and(is_lamp);
+    if lamp && parents.iter_ancestors(e).any(|a| robots.contains(a)) {
+        commands
+            .entity(e)
+            .try_insert(crate::render::budget::LodReach(LAMP_REACH));
     }
 }
 
@@ -2398,29 +2397,23 @@ mod signal_lamp_tests {
         assert!(materials.get(&robot.eye_dead).unwrap().fog_enabled);
     }
 
-    /// A lamp on a robot is drawn as far as the machine is, though the
-    /// render budget would fade a mesh its size out at under 40 m; the
-    /// shell beside it, and a lamp on nothing, keep the budget's range.
+    /// A lamp on a robot is drawn as far as the machine is: it carries
+    /// the budget's `LodReach`, which the budget ranges it by (fading over
+    /// the last fifth) in place of its size, which would have it gone
+    /// under 40 m. The shell beside it, and a lamp on nothing, don't.
     #[test]
     fn a_robots_lamps_are_drawn_to_range() {
-        use crate::render::budget::small_range;
-        use bevy::camera::visibility::VisibilityRange;
+        use crate::render::budget::{LodReach, small_range};
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()))
             .init_asset::<StandardMaterial>()
-            .add_systems(Update, lamps_reach_far);
+            .add_observer(lamps_reach_far);
         let (lamp, shell) = {
             let mut materials = app.world_mut().resource_mut::<Assets<StandardMaterial>>();
             (
                 materials.add(super::super::weak_points::mark_material()),
                 materials.add(StandardMaterial::default()),
             )
-        };
-        // As the budget ranges a 19 cm knee mark.
-        let budget = |size: f32| VisibilityRange {
-            start_margin: 0.0..0.0,
-            end_margin: (small_range(size) * 0.8)..small_range(size),
-            use_aabb: true,
         };
         let w = app.world_mut();
         let robot = w
@@ -2430,24 +2423,24 @@ mod signal_lamp_tests {
             })
             .id();
         let part = w.spawn(ChildOf(robot)).id();
-        let mark = w
-            .spawn((ChildOf(part), MeshMaterial3d(lamp.clone()), budget(0.19)))
-            .id();
-        let plate = w
-            .spawn((ChildOf(part), MeshMaterial3d(shell), budget(0.19)))
-            .id();
-        let loose = w.spawn((MeshMaterial3d(lamp), budget(0.19))).id();
-        app.update();
-        let far = |e: Entity| {
-            app.world()
-                .get::<VisibilityRange>(e)
-                .map_or(f32::INFINITY, |r| r.end_margin.start)
-        };
-        assert!(far(mark) >= 60.0, "the mark fades out at {} m", far(mark));
-        assert!(
-            far(plate) < 40.0,
+        let mark = w.spawn((ChildOf(part), MeshMaterial3d(lamp.clone()))).id();
+        let plate = w.spawn((ChildOf(part), MeshMaterial3d(shell))).id();
+        let loose = w.spawn(MeshMaterial3d(lamp.clone())).id();
+        // A mark spawned bare and lit later, as `weak_points` does.
+        let late = w.spawn(ChildOf(part)).id();
+        w.entity_mut(late).insert(MeshMaterial3d(lamp));
+        w.flush();
+        let reach = |e: Entity| app.world().get::<LodReach>(e).map(|r| r.0);
+        assert_eq!(reach(mark), Some(LAMP_REACH));
+        assert_eq!(reach(late), Some(LAMP_REACH));
+        assert_eq!(
+            reach(plate),
+            None,
             "the shell's small parts keep the budget's"
         );
-        assert!(far(loose) < 40.0, "only a robot's lamps");
+        assert_eq!(reach(loose), None, "only a robot's lamps");
+        // Fully drawn to 60 m, where a mark's size alone had it gone.
+        assert!(LAMP_REACH * 0.8 >= 60.0);
+        assert!(small_range(0.19) < 40.0);
     }
 }
