@@ -267,7 +267,7 @@
         (prefab: "log_pile", at: (-173.0, -15.0), rot: 15.0),
         (prefab: "log_pile", at: (-162.0, 6.0), rot: 100.0),
         // The first jobs' cover on the tight valley's ways: woodpiles.
-        (prefab: "log_pile", at: (-17.9, 103.6), rot: 40.0),
+        (prefab: "log_pile", at: (-21.0, 105.2), rot: 90.0),
         // Landmarks to steer by: two you can tell apart in sight from nearly
         // anywhere you walk (map_lint, "two landmarks in sight").
         // The burnt chapel's tower, standing over what the fire left.
@@ -287,10 +287,10 @@
         // Ash Row: the workers' houses, either side of the works road. Long
         // since picked over; the works themselves are another matter.
         (prefab: "house_plank_burnt", at: (-46.1, 99.0), rot: 90.0),
-        (prefab: "house_brick_damaged", at: (-24.9, 128.5), rot: 0.0),
+        (prefab: "house_brick_damaged", at: (-38.5, 153.0), rot: 270.0),
         (prefab: "house_brick", at: (-73.0, 120.6), rot: 90.0, tag: "foreman"),
-        (prefab: "house_plank_damaged", at: (15.0, 103.5), rot: 270.0),
-        (prefab: "shop", at: (10.0, 118.5), rot: 270.0),
+        (prefab: "house_plank_damaged", at: (-13.0, 98.0), rot: 270.0),
+        (prefab: "shop", at: (-22.0, 113.0), rot: 270.0),
         (prefab: "shed", at: (-40.0, 73.5), rot: 0.0),
 
         // Cutter's farm, out west.
@@ -360,7 +360,7 @@
         (prefab: "wreck_lorry", at: (13.0, 14.6), rot: 358.0),
         (prefab: "wreck_lada", at: (16.2, -8.9), rot: 65.0),
         (prefab: "wreck_uaz", at: (32.6, -30.1), rot: 132.0),
-        (prefab: "wreck_lada", at: (63.7, 19.2), rot: 266.0),
+        (prefab: "wreck_lada", at: (63.7, 15.2), rot: 266.0),
         (prefab: "log_pile", at: (130.6, 53.0), rot: 333.0),
         (prefab: "log_pile", at: (-97.8, 56.4), rot: 40.0),
         (prefab: "log_pile", at: (-91.7, -8.4), rot: 107.0),
@@ -425,7 +425,7 @@
         (kind: Terminal(pages: ["WORKS LOG - R. KRAL\n\nAuthority contract: burn all\nmaterial the machines deliver.\n\nNov: cars, bedding, furniture.\nDec: more. Toys. A piano.\nJan: we stopped asking.", "12 Feb. Furnace three blew\nback into the yard. The wood\ncaught by evening.\n\nThe machines kept delivering\nall through the fire.", "The inspector locked the\nCinder depot key in the\nstrongbox at the foot of the\nchimney, and kept our keys.\n\nKEY-C is down there still.\nHe sits in the garage with\nthe radio, waiting."]), at: (44.00, -2.50), rot: -119.8, name: "Foreman's terminal"),
         (kind: Terminal(pages: ["CUSTODIAN NETWORK - CINDER\n\nDepot GATE-C: ACTIVE\nMode: SWEEP (heat damage)\n\nRecall requires KEY-M, KEY-K,\nKEY-C at any depot lock.", "SESSION LOG\n\nP.RUS   status       ACTIVE\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   review date  NOT SET\nP.RUS   recall       KEYS 0/3\n\nNo session since 9 JUN."]), at: (-32.50, -10.30), rot: -152.0, name: "Garage terminal"),
         (kind: Note(text: "Ruben says the ash is from the fire. The fire was out by March. I sweep the step every morning, and every morning there's more, and it isn't coming down. It's coming up, out of the cracks, worst by the slag heaps.\nThe chimney is the best landmark: walk toward it in the fog and you'll find the road.\n- V."), at: (-72.20, 118.90), rot: 205.2, name: "Foreman's house note"),
-        (kind: Note(text: "Came in on the driver's truck, same as you, I expect. He's all right. He won't come past the fence. I asked him why once. He said he tried, the first day, and they turned him back, and now he's used to it.\nPull the cord in the back when you want out. Don't be late for the Surge.\nHe keeps a count of us. Don't add to it."), at: (14.30, 104.80), rot: 28.3, name: "House note"),
+        (kind: Note(text: "Came in on the driver's truck, same as you, I expect. He's all right. He won't come past the fence. I asked him why once. He said he tried, the first day, and they turned him back, and now he's used to it.\nPull the cord in the back when you want out. Don't be late for the Surge.\nHe keeps a count of us. Don't add to it."), at: (-13.70, 99.30), rot: 28.3, name: "House note"),
         (kind: Note(text: "FIRE LOOKOUT - CINDER, 12 FEB\n1540. Black smoke, works yard.\n1610. Flame in the north-west wood. Phoned the works. No answer.\n1700. Wind south-east. Lamp to Marrow and Kettle: three short.\n2300. Machines walking into the fire with their arms full, and out empty.\nMarta answered. Kettle didn't."), at: (-126.20, -115.90), rot: 333.4, y: 8.5, name: "Lookout log"),
         (kind: Note(text: "SLUICE HOUSE - ASH PIT\nWorks order: drain the pit to the canal.\nThe pit won't drain. The ash floats. It drifts against the current, back toward the slag heaps.\nSluice shut. I'm not opening it again."), at: (-114.60, 19.40), rot: 242.7, name: "Sluice house note"),
         (kind: Terminal(pages: ["RELAY LOG - MAST C3\n\nHeat damage: housing, cabling.\nPylon reports: degraded.\nRepair requested: 1 FEB.\nRepair requested: 1 MAR.\nRepair requested: 1 APR.\n...\n\nRequests held for uplink."]), at: (73.03, -162.56), rot: 140.3, name: "Mast terminal"),

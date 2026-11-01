@@ -1,13 +1,13 @@
 # Kettle Pass lookbook: name x,y,z,yaw,pitch (y 0 = eye height 1.7 m; ~h over the ground; =y as given, underground too).
-k01_gate        120,0,255,345,-1     # from the insertion, up the valley
-k02_row         0,0,175,0,-3         # Miners' Row
-k03_road        40,0,0,0,4           # up toward the pass
-k04_beck        -110,0,60,240,-6     # Kettle Beck
-k05_quarry      145,0,11,28,-6       # into the quarry (5 m west of the spruce clump since the forest reshuffled)
-k06_mine        -170,0,0,311,-3      # the mine yard
-k07_pines       180,0,-120,90,0      # east slope pines
-k08_pass        10,0,-245,180,-6     # from the pass, back down the valley
-k09_lodge       210,0,-190,34,-2     # the hunting lodge
-k10_summit      -120,0,-235,90,-6    # summit vista, east
-k11_aerial      120,45,300,350,-6    # over the gate, up toward the pass
-k13_deep_haulage -54.0,=2.48,128.5,180,-2  # the deep workings: down the haulage from the cage landing
+k01_gate        93.3,0,190.6,345.0,-1     # from the insertion, up the valley
+k02_row         -2.6,0,141.7,0.0,-3         # Miners' Row
+k03_road        30.0,0,0.0,0.0,4           # up toward the pass
+k04_beck        -84.4,0,46.1,240.0,-6     # Kettle Beck
+k05_quarry      104.6,0,15.2,28.0,-6       # into the quarry (5 m west of the spruce clump since the forest reshuffled)
+k06_mine        -120.8,0,12.3,311.0,-3      # the mine yard
+k07_pines       141.4,0,-94.3,90.0,0      # east slope pines
+k08_pass        9.7,0,-185.0,180.0,-6     # from the pass, back down the valley
+k09_lodge       154.1,0,-137.2,34.0,-2     # the hunting lodge
+k10_summit      -101.0,0,-176.6,90.0,-6    # summit vista, east
+k11_aerial      90.9,45,232.4,350.0,-6    # over the gate, up toward the pass
+k13_deep_haulage -18.0,=4.36,116.5,180.0,-2  # the deep workings: down the haulage from the cage landing

@@ -391,7 +391,7 @@ pub const CONTRACTS: &[Contract] = &[
             item: "canary",
             // The cage landing, at the deep workings' shaft foot (the
             // layout keeps a canary on its bench every cycle).
-            near: Some([-56.2, 123.6]),
+            near: Some([-20.2, 111.6]),
         }],
         kit: &[],
         pay: &[("tea_tin", 1), ("regen_injector", 1)],
@@ -414,7 +414,7 @@ pub const CONTRACTS: &[Contract] = &[
             place: "Miners' Row",
             item: "deputy_lamp",
             // The old heading, in the deep workings.
-            near: Some([-65.0, 135.5]),
+            near: Some([-29.0, 123.5]),
         }],
         kit: &[],
         pay: &[("regen_injector", 1), ("chemlight", 2)],
